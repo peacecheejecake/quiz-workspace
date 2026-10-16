@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+playwright/.auth/
+playwright-report/
+test-results/
+node_modules/
+.next/
+__pycache__/
+*.pyc
+.DS_Store

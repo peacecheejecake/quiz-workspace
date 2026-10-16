@@ -1,0 +1,145 @@
+# Deployment & Operations — v1.0 (Platform v1.2)
+
+**결론:** Supabase는 Auth, PostgreSQL, private Storage의 managed backbone으로 채택한다. Next.js/FastAPI/Python Worker/Qdrant/Redis까지 **Supabase 한 플랫폼에서 실행하지는 않는다**. 기존 기술 스택을 바꾸지 않는 최소 관리형 구성으로 배포한다.
+
+## 1. Target topology
+
+```mermaid
+flowchart TD
+  B[Browser] -->|HTTPS| W[Next.js Web @ Vercel]
+  B -->|Supabase Auth login| A[Supabase Auth]
+  B -->|Bearer JWT over HTTPS| API[FastAPI @ Railway or VM]
+  API -->|JWKS or verification| A
+  API --> P[(Supabase Postgres)]
+  API --> S[(Supabase Storage, private)]
+  B -->|authz-scoped presigned upload or TUS| S
+  API -->|enqueue| R[(Redis)]
+  R --> WK[Python Worker - Celery]
+  WK -->|PDF/parsed artifacts| S
+  WK -->|document revisions, jobs| P
+  API --> Q[(Qdrant Cloud)]
+  WK -->|index/embeddings| Q
+  WK -->|Docling, Qwen embedding/reranker, LLM provider| MODELS[Core/Models]
+```
+
+- Frontend: Vercel의 Next.js 웹 호스팅(비상용·개인 프로젝트 여부에 따라 플랜 확인). API는 인증 외 비즈니스 데이터 요청을 FastAPI로 전달한다.
+- Supabase: 사용자·메일 인증, Postgres metadata + canonical text/revisions, 비공개 `source-pdfs`와 `parsed-artifacts` 버킷을 제공한다.
+- API: Railway 또는 Docker VM에 별도 FastAPI 컨테이너. Worker와 `packages/core` 코드 공유. 인증용 JWT만 받아 resource-scoped 권한 판단.
+- Worker: `Celery + Redis`; 파싱/OCR/임베딩/LLM 추출/변형 처리. API 서버의 메모리를 무거운 모델이 차지하지 않도록 분리한다.
+- Qdrant Cloud: `documents_v1`, `questions_v1`의 검색 인덱스. 원본이 아니므로 인덱스 재생성 가능.
+- HTTPS/CORS: Web↔API 허용 origin을 production/preview 범위로 한정한다. localhost 제외하고 HTTP 금지.
+
+## 2. Supabase 역할과 비역할
+
+| 기능 | 결정 | 이유 |
+|---|---|---|
+| Supabase Auth | 채택 | 가입·로그인·이메일 확인·세션·재설정 |
+| PostgreSQL | 채택 | Workspace, 문서/문제, revision, attempt, job, audit |
+| Storage | 채택(private) | PDF/파싱 파일, 권한 있는 signed URL, TUS resume |
+| Supabase Edge Functions | 기본 비사용 | Deno isolate의 CPU·메모리 제약과 Python 패키지/모델 실행 요구가 충돌 |
+| Supabase pgvector / Vector buckets | MVP 미채택 | 현재 명시된 Qdrant BM25+Dense+RRF 설계를 유지; 대체 시 검색 품질·운영을 별도 비교 |
+| Supabase Realtime | MVP 선택사항 | 작업 상태는 FastAPI SSE로 충분 |
+
+### 파일 업로드·검색 세부 흐름
+
+1. 브라우저가 FastAPI `POST /workspaces/{id}/documents/upload-intent` 호출; API가 user/workspace/파일명/크기/확장자 확인 후 안전한 object key와 짧은 수명의 업로드 URL을 발급.
+2. 브라우저가 **private bucket**으로 직접 업로드(작은 파일 standard, 큰 PDF는 TUS resumable). UI에는 진행률·취소·재시도 표기.
+3. 업로드 성공 시 `POST /documents/complete-upload`가 checksum·소유자·storage object 존재 여부를 재검증하고 `202/job_id` 반환. Storage 이벤트만으로 권한 결정을 하지 않는다.
+4. Worker가 파일 내용을 검증하고 sandbox/cpu/memory/time 제한 내 파싱, canonical text 저장, 색인 작업을 수행. 작업 실패 시 이전 published revision 유지.
+5. PDF 열람은 검증된 membership에 대한 서버 발급의 짧은 만료 signed read URL 사용; 만료되면 재발급.
+
+## 3. 대안 비교
+
+| 방안 | 장점 | 단점 | 용도 |
+|---|---|---|---|
+| **A. Vercel + Supabase + Railway + Qdrant Cloud** | 빠른 배포, 관리형 Auth/DB, API·Worker 분리 | 서비스가 여러 개, 추론 CPU 비용 측정 필요 | **추천 MVP/베타** |
+| B. Supabase + Docker VM(API/Worker/Qdrant/Redis) + Vercel | 인프라 비용 예측·자원 통제 | 운영·백업·TLS·보안·모니터링 직접 관리 | 소수 사용자/자체 운영 선호 |
+| C. 단일 VM에 Web/API/Qdrant/Redis + Supabase Auth/DB/Storage | 운영 서비스 수 적음 | 단일 장애점, 자체 서버 유지 관리 | 개인 용도/프로토타입 |
+| D. Supabase만 사용하면서 pgvector로 전환 | 서비스 수 감소 | 별도 FastAPI/Worker 실행 불가, BM25 및 Qdrant 검색 전략 변경 | 현재 설계 변경을 수용할 때만 재검토 |
+
+## 4. 운영 환경 / IaC
+
+- `local`: `supabase start`(Postgres/Auth/Storage/Mailpit), Docker Compose(Qdrant/Redis), FastAPI/Worker/Next.js 로컬. 테스트 사용자/문서 fixture 및 비공개 모델 테스트용 adapter.
+- `preview`: Vercel preview, 공유 또는 분기별 staging Supabase **주의: staging/production DB 분리**, Railway staging API/Worker, 테스트용 Qdrant. redirect URL allowlist 관리.
+- `production`: 각 managed 서비스 production project, migration/health check, 모니터링, 알림 및 백업.
+- DB schema migrations: **한 가지 owner 경로만 사용**. MVP는 `supabase/migrations`의 SQL을 기준으로 하고 SQLAlchemy는 query/model 매핑용으로 사용; Alembic으로 이중 마이그레이션 금지. Alembic 채택 시 `supabase/migrations`와 책임을 분리해 인증/RLS/schema 충돌을 방지해야 함.
+- object key 예: `workspaces/{workspace_id}/documents/{document_id}/revisions/{revision_id}/source.pdf`(uuid 등 서버 생성 ID 사용). path 기반 URL 임의 조합 금지.
+- Supabase local은 development 전용; production용 설정 없이 인터넷에 노출하지 않는다.
+
+## 5. CI/CD 단계 (main 보호)
+
+```text
+PR opened
+ → lint/typecheck/unit
+ → schema/contracts validation
+ → start supabase local + qdrant + redis
+ → seed deterministic data and test accounts
+ → Playwright E2E (screen acceptance IDs)
+ → security isolation E2E + a11y + visual snapshots
+ → build web/api/worker containers
+ → preview deploy + smoke
+ → merge to main
+ → controlled SQL migration
+ → API/Worker deploy → Web deploy
+ → post-deploy smoke + alerts
+```
+
+- 변경사항은 screen requirements + E2E tests **먼저 작성**되어야 merge 가능한 PR로 본다. 테스트는 최초 RED 실행의 실패 이유를 PR에 기록한다.
+- 스테이징·프로덕션 환경의 Auth redirect domain, JWKS issuer, CORS, secrets, SMTP, Storage 정책을 별도로 설정.
+- 배포 시 API/schema 호환 기간을 유지하고 worker는 idempotent job 및 task schema version을 사용한다.
+- SQL migration은 additive-first → 코드 deploy → cleanup 방식. 컬렉션 업그레이드는 `documents_v2`/`questions_v2` 구축 후 alias/active index 전환. 실패 시 rollback 경로 보존.
+
+## 6. Secrets / Security
+
+- Public: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`는 공개 가능한 값. 접근 권한 자체는 JWT/RLS/API에서 판정.
+- Server only: `DATABASE_URL`, `SUPABASE_SECRET_KEY`, `QDRANT_API_KEY`, `REDIS_URL`, `LLM_API_KEY`, Storage 관리 권한. 절대로 `NEXT_PUBLIC_` 접두사 사용 금지.
+- Qdrant API key와 Redis는 내부 서비스에서만 사용; 프론트가 Qdrant 직접 검색하지 않는다.
+- 메일·파일 저장·LLM 공급자와 콘텐츠의 데이터 처리 지역, 기록·보존 정책을 점검. 저작권 있는 도서는 비공개 storage + 최소 권한 + 접근 로그.
+- 로그에 검색 원문·비밀번호·JWT·원본 PDF 본문을 기본으로 남기지 않는다. 임베딩/LLM 외부 API로 책 원문을 전송할 때 프라이버시·저작권 조건을 확인한다.
+- Rate limit: 인증 요청, 업로드 요청, 문제 생성 LLM 호출, 검색 및 공개 API 별도 제한.
+
+## 7. 가용성, 백업, 복원
+
+- 매일 DB 백업(사용 플랜 지원/외부 `pg_dump` 점검), Supabase Storage 객체 version/별도 백업, 주요 workspace의 export 정기 검증.
+- Qdrant는 파생 인덱스이므로 재색인 스크립트 제공. 대량 재생성 시간은 recovery 시간에 포함.
+- Worker job은 at-least-once 실행될 수 있으므로 checksum/idempotency/dedup 적용. stuck/failed job 재시도·격리 큐 모니터링.
+- API `/health/live`, `/health/ready`(DB, Redis, Qdrant 등 필수 의존성), readiness timeout, 일별 검색 smoke query.
+- metrics: 인증 오류, PDF 성공률/시간, 검색 p50/p95, reranker latency, worker queue age, LLM 사용량, DB pool, storage·Qdrant 용량.
+- 비용 알림: managed project당 예산 경고, Worker 최대 동시성 1부터 시작, 모델 지연/메모리 측정 후 scale.
+
+## 8. 비용과 플랜 검토 (2026-10-16 기준 공개 문서 확인)
+
+- Supabase Free는 저활동 시 프로젝트 pause 및 메일 제한 등이 있어 지속 운영 보장용으로 간주하지 않는다. Production에서는 Custom SMTP와 백업 가능 여부를 먼저 확인한다.
+- Qdrant Cloud Free: 문서상 0.5 vCPU/1GB RAM/4GB 디스크, 비활성 시 pause 또는 삭제 정책이 있어 개발/테스트 한정 사용. 운영에는 유료 plan을 검토한다.
+- Railway는 Hobby 최소 요금과 사용량 기반 추가 청구가 있다. **Embedding+Reranker Worker의 RAM/CPU가 실제 비용의 주요 변수**이므로 1~2권으로 측정한 뒤 확정.
+- Vercel Hobby는 개인·비상업 목적 제한이 있다. 외부 사용자에게 상용 서비스를 제공한다면 적절한 유료 플랜을 선택해야 한다.
+- 월 비용은 서비스 조합, 사용량, 모델 배치에 따라 크게 달라지므로 고정 총액을 추정하지 않는다. 비용 게이트는 staging 7일 load test 후 확정한다.
+
+## 9. 배포 수용 테스트 (DEP)
+
+- `DEP-01`: HTTPS와 정확한 allowed origins/redirects로 로그인·재설정이 정상 작동.
+- `DEP-02`: 비공개 PDF URL은 서명 또는 적법한 user auth 없이 접근 불가.
+- `DEP-03`: API/Worker 재시작에도 job 상태·문제풀이·문서 revision 유지.
+- `DEP-04`: 색인 실패/rollback 후 이전 published revision으로 검색 가능.
+- `DEP-05`: 다른 사용자의 document upload/download/query/attempt API 차단.
+- `DEP-06`: backup에서 Postgres/Storage 복원 후 재색인 가능한 절차 확인.
+- `DEP-07`: secrets, direct DB/Qdrant access, CORS, redirect allowlist 노출 테스트 통과.
+
+### 공식 참고
+
+- https://supabase.com/docs/guides/functions/limits
+- https://supabase.com/docs/guides/storage/buckets/fundamentals
+- https://supabase.com/docs/guides/storage/uploads/resumable-uploads
+- https://supabase.com/docs/guides/deployment/going-into-prod
+- https://qdrant.tech/documentation/cloud/create-cluster/
+- https://docs.railway.com/guides/fastapi
+- https://vercel.com/legal/terms
+
+
+## Workspace 공유·Fork 배포 및 운영 (v1.3 추가)
+- 웹/ API 공개 주소에는 HTTPS를 강제한다. share link secret은 URL fragment로만 전달하고 요청 로그·분석·OpenGraph/메타 정보에 포함하지 않는다.
+- 공유 페이지 및 PDF 프록시 응답에는 `Cache-Control: private, no-store`, `Referrer-Policy: no-referrer`, `robots=noindex,nofollow`를 적용한다.
+- Supabase Storage PDF는 private bucket으로 유지하며, FastAPI에서 공유 session을 검증한 뒤 짧은 signed URL 또는 프록시 접근을 제공한다. 단순 접근 가능 URL을 영구 공개하지 않는다.
+- Fork는 Celery 비동기 작업으로 immutable published snapshot을 독립 복제한다. 대상 Workspace는 완료 전 숨기고, 취소·실패 시 객체 스토리지 임시 복제본도 정리한다.
+- CORS/CSRF, rate limit, 다운로드 비용 및 Fork quota, per-Workspace DB·Qdrant 필터를 검증한다. 공유 데이터의 저작권/재배포 책임을 Owner UI에 안내한다.
+- staging E2E에 비로그인 읽기, revoke/expire, Fork ON/OFF, 재시도·동시성·Storage ID 격리 시나리오를 추가한다. 상세: [workspace-sharing.md](workspace-sharing.md).
