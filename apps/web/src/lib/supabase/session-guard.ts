@@ -10,9 +10,17 @@ export function isSessionCookie(name: string): boolean {
   return SESSION_COOKIE.test(name);
 }
 
+/** The JWT claims the web app reads (all verified by getClaims()). */
+export interface VerifiedClaims {
+  readonly sub: string;
+  readonly email?: unknown;
+  readonly session_id?: unknown;
+  readonly amr?: unknown;
+}
+
 export interface ClaimsResult {
-  /** Verified `sub`/`email` claims, or null when signed out or unverifiable. */
-  readonly claims: { readonly sub: string; readonly email?: unknown } | null;
+  /** Verified claims, or null when signed out or unverifiable. */
+  readonly claims: VerifiedClaims | null;
   /** True when reading the session threw (corrupt cookie): callers should clear the cookies. */
   readonly corrupt: boolean;
 }

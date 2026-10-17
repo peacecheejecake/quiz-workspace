@@ -155,9 +155,19 @@ export async function isEmailConfirmed(id: string): Promise<boolean> {
   return !!body.email_confirmed_at;
 }
 
-/** Public password-recovery request (the Auth call behind AUTH-05); sends the recovery mail. */
+/**
+ * Public password-recovery request (the Auth call behind AUTH-05); sends the recovery mail.
+ * Auth refuses a second mail to the same user within `[auth.email] max_frequency` (1 s locally)
+ * with 429, so a back-to-back request for the same user waits that out once.
+ */
 export async function requestPasswordRecovery(email: string): Promise<void> {
-  const res = await authFetch('/recover', { method: 'POST', key: 'publishable', body: { email } });
+  const send = () => authFetch('/recover', { method: 'POST', key: 'publishable', body: { email } });
+  let res = await send();
+  if (res.status === 429) {
+    await res.body?.cancel();
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    res = await send();
+  }
   if (!res.ok) throw await failure('recover', res);
 }
 

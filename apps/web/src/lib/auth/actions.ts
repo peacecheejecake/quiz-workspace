@@ -15,6 +15,8 @@ export interface SignInState {
   readonly error?: string;
   /** Echoed back so the form keeps the address after a failed attempt (never the password). */
   readonly email?: string;
+  /** Correct password but unconfirmed address: the form offers the verification screen. */
+  readonly emailNotConfirmed?: boolean;
 }
 
 export async function signInAction(_prev: SignInState, formData: FormData): Promise<SignInState> {
@@ -27,7 +29,14 @@ export async function signInAction(_prev: SignInState, formData: FormData): Prom
   try {
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) failure = { error: SIGN_IN_MESSAGES[classifySignInError(error)], email };
+    if (error) {
+      const kind = classifySignInError(error);
+      failure = {
+        error: SIGN_IN_MESSAGES[kind],
+        email,
+        ...(kind === 'emailNotConfirmed' ? { emailNotConfirmed: true } : {}),
+      };
+    }
   } catch {
     failure = { error: SIGN_IN_MESSAGES.unavailable, email };
   }

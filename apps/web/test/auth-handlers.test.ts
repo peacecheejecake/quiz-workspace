@@ -185,6 +185,46 @@ describe('proxy with a malformed session cookie (getClaims throws)', () => {
   });
 });
 
+describe('callback recovery marker (AUTH-06 gate)', () => {
+  const token = (claims: Record<string, unknown>) =>
+    `h.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.s`;
+  const markerCookie = (res: Response) =>
+    (res.headers.get('set-cookie') ?? '')
+      .split(/,(?=\s*[\w-]+=)/)
+      .find((c) => c.trim().startsWith('qz_recovery='));
+
+  it('marks the new session after a recovery link (HttpOnly, path-scoped, short-lived)', async () => {
+    auth.verifyOtp.mockResolvedValue({
+      data: { session: { access_token: token({ session_id: 'sess-1' }) } },
+      error: null,
+    });
+    const res = await GET(request('/auth/callback?token_hash=h&type=recovery'));
+    const cookie = markerCookie(res) ?? '';
+    expect(cookie).toContain('qz_recovery=sess-1');
+    expect(cookie).toMatch(/HttpOnly/i);
+    expect(cookie).toContain('Path=/reset-password');
+    expect(cookie).toContain('Max-Age=900');
+    expect(res.headers.get('location')).not.toContain('sess-1');
+  });
+
+  it('clears any marker after a non-recovery link', async () => {
+    auth.verifyOtp.mockResolvedValue({
+      data: { session: { access_token: token({ session_id: 'sess-2' }) } },
+      error: null,
+    });
+    const res = await GET(request('/auth/callback?token_hash=h&type=email'));
+    const cookie = markerCookie(res) ?? '';
+    expect(cookie).toMatch(/^\s*qz_recovery=;/);
+    expect(cookie).toContain('Max-Age=0');
+  });
+
+  it('sets no marker when the recovery link fails', async () => {
+    auth.verifyOtp.mockResolvedValue({ error: { code: 'otp_expired', status: 403 } });
+    const res = await GET(request('/auth/callback?token_hash=h&type=recovery'));
+    expect(markerCookie(res)).toBeUndefined();
+  });
+});
+
 describe('callback when the SDK throws', () => {
   it('goes to /auth/error without setting cookies', async () => {
     auth.verifyOtp.mockRejectedValue(new SyntaxError('Unexpected token'));
