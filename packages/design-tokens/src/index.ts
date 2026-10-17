@@ -23,3 +23,21 @@ export function questionStatusVar<S extends QuestionStatus>(
 ): `var(--question-status-${S})` {
   return cssVar(`question-status-${status}`);
 }
+
+/**
+ * Layout breakpoints in px (docs/design-system.md §4): mobile < md, tablet md..lg-1, desktop ≥ lg.
+ * CSS custom properties cannot be used inside media queries, so stylesheets write the same px
+ * literal with range syntax (`@media (width >= 768px)`); a @quiz/ui test pins those literals to
+ * these values. Use `mediaQueries` with `matchMedia` in TS.
+ */
+export const breakpoints = {
+  md: Number.parseInt(staticTokens['breakpoint-md'], 10),
+  lg: Number.parseInt(staticTokens['breakpoint-lg'], 10),
+} as const;
+export type BreakpointName = keyof typeof breakpoints;
+
+export const mediaQueries = {
+  mobile: `(width < ${breakpoints.md}px)`,
+  tabletUp: `(width >= ${breakpoints.md}px)`,
+  desktop: `(width >= ${breakpoints.lg}px)`,
+} as const;
