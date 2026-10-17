@@ -131,6 +131,7 @@ class FakeJwksEndpoint:
         self.status = 200
         self.error: Exception | None = None
         self.body: Any = None
+        self.stream: httpx.AsyncByteStream | None = None
         self.calls = 0
         self.transport = httpx.MockTransport(self._handle)
 
@@ -139,6 +140,8 @@ class FakeJwksEndpoint:
         assert str(request.url) == TEST_JWKS_URL
         if self.error is not None:
             raise self.error
+        if self.stream is not None:
+            return httpx.Response(self.status, stream=self.stream)
         body = self.body
         if body is None:
             body = {"keys": [k.public_jwk() for k in self.keys]}

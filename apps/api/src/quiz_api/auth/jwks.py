@@ -2,17 +2,21 @@
 
 Keys are cached for `ttl_seconds`. A token whose `kid` is not cached triggers one refetch (key
 rotation), but refetches are rate-limited to one per `min_refresh_interval_seconds` so forged
-`kid`s cannot turn the API into a JWKS amplifier. Fetches have a hard timeout and a size cap.
+`kid`s cannot turn the API into a JWKS amplifier. A fetch (connect + whole body) has one overall
+deadline, and the body is streamed with a byte cap, so a slow or huge response cannot hold the
+refresh lock.
 
 When the JWKS cannot be fetched, the last good key set keeps being served for up to
 `max_stale_seconds`; beyond that (or before the first successful fetch) `JwksUnavailableError`
 is raised, which the API maps to 503 so an Auth outage is never reported as a bad token (401).
-Fetch failures are logged by exception type only: URLs and response bodies are not logged.
+Every fetch or parse failure takes that path (never a 500) and is logged by exception type or
+status only: URLs and response bodies are not logged.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from collections import Counter
@@ -22,7 +26,6 @@ from typing import Any
 
 import httpx
 from jwt import PyJWK
-from jwt.exceptions import PyJWTError
 
 logger = logging.getLogger(__name__)
 
@@ -46,27 +49,51 @@ class JwksMetrics:
         self.counts[name] += 1
 
 
+# Members copied into the key handed to PyJWT; every one must be a string when present.
+_STRING_MEMBERS = ("kty", "kid", "alg", "use", "crv", "x", "y", "n", "e")
+
+
+def _sanitize_jwk(jwk: Any) -> dict[str, Any] | None:
+    """A copy of the public-key members of `jwk`, or `None` if any member has a wrong type."""
+    if not isinstance(jwk, Mapping):
+        return None
+    clean: dict[str, Any] = {}
+    for name in _STRING_MEMBERS:
+        value = jwk.get(name)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            return None
+        clean[name] = value
+    key_ops = jwk.get("key_ops")
+    if key_ops is not None:
+        if not isinstance(key_ops, list) or not all(isinstance(op, str) for op in key_ops):
+            return None
+        if "verify" not in key_ops:
+            return None
+    return clean
+
+
 def parse_jwks(document: Any) -> dict[str, PyJWK]:
-    """Usable signing keys by `kid`. Keys without a kid, with a symmetric/unknown type or an
-    algorithm outside the allowlist, or not meant for signatures, are dropped."""
+    """Usable signing keys by `kid`. Entries with a wrong member type, without a kid, with a
+    symmetric/unknown type or an algorithm outside the allowlist, or not meant for verifying
+    signatures, are dropped; one bad entry never invalidates the others."""
     if not isinstance(document, Mapping) or not isinstance(document.get("keys"), list):
         raise JwksUnavailableError("JWKS document has no `keys` list")
     keys: dict[str, PyJWK] = {}
-    for jwk in document["keys"]:
-        if not isinstance(jwk, Mapping):
+    for entry in document["keys"]:
+        jwk = _sanitize_jwk(entry)
+        if jwk is None:
             continue
-        kid, kty, alg = jwk.get("kid"), jwk.get("kty"), jwk.get("alg")
-        if not isinstance(kid, str) or not kid:
+        kid, kty = jwk.get("kid"), jwk.get("kty")
+        if not kid or jwk.get("use", "sig") != "sig":
             continue
-        if jwk.get("use", "sig") != "sig":
-            continue
-        if alg is None:
-            alg = {"EC": "ES256", "RSA": "RS256"}.get(kty) if isinstance(kty, str) else None
+        alg = jwk.get("alg") or {"EC": "ES256", "RSA": "RS256"}.get(kty or "")
         if alg not in ALLOWED_ALGORITHMS or _ALLOWED_KEY_TYPES[alg] != kty:
             continue
         try:
-            key = PyJWK(dict(jwk), algorithm=alg)
-        except (PyJWTError, ValueError, TypeError):
+            key = PyJWK(jwk, algorithm=alg)
+        except Exception:  # malformed key material in any form: skip the entry
             logger.warning("Ignoring malformed JWKS entry (kty=%s)", kty)
             continue
         if key.algorithm_name != alg:
@@ -145,16 +172,15 @@ class JwksCache:
     async def _refresh(self) -> None:
         self._last_attempt_at = self._clock()
         try:
-            keys = await self._fetch()
+            async with asyncio.timeout(self._timeout):
+                keys = await self._fetch()
         except JwksUnavailableError as exc:
-            self._last_attempt_failed = True
-            self.metrics.incr("jwks_fetch_failure")
-            logger.warning("JWKS fetch failed: %s", exc)
+            self._record_failure(str(exc))
             return
-        except (httpx.HTTPError, ValueError) as exc:
-            self._last_attempt_failed = True
-            self.metrics.incr("jwks_fetch_failure")
-            logger.warning("JWKS fetch failed: %s", type(exc).__name__)
+        except Exception as exc:
+            # Network errors, the overall deadline, bad JSON or anything unexpected in parsing:
+            # all take the same back-off / stale-keys path, never a 500.
+            self._record_failure(type(exc).__name__)
             return
         self._keys = keys
         self._fetched_at = self._clock()
@@ -163,13 +189,28 @@ class JwksCache:
         if not keys:
             logger.warning("JWKS contains no usable asymmetric signing keys")
 
+    def _record_failure(self, reason: str) -> None:
+        self._last_attempt_failed = True
+        self.metrics.incr("jwks_fetch_failure")
+        logger.warning("JWKS fetch failed: %s", reason)
+
     async def _fetch(self) -> dict[str, PyJWK]:
-        async with httpx.AsyncClient(
-            timeout=self._timeout, follow_redirects=False, transport=self._transport
-        ) as client:
-            response = await client.get(self._url, headers={"Accept": "application/json"})
+        """Fetch and parse the JWKS. The caller bounds the total duration; the body is streamed
+        and abandoned as soon as it exceeds `MAX_JWKS_BYTES`."""
+        async with (
+            httpx.AsyncClient(
+                timeout=self._timeout, follow_redirects=False, transport=self._transport
+            ) as client,
+            client.stream("GET", self._url, headers={"Accept": "application/json"}) as response,
+        ):
             if response.status_code != 200:
                 raise JwksUnavailableError(f"JWKS endpoint answered HTTP {response.status_code}")
-            if len(response.content) > MAX_JWKS_BYTES:
+            declared = response.headers.get("content-length")
+            if declared is not None and declared.isdigit() and int(declared) > MAX_JWKS_BYTES:
                 raise JwksUnavailableError("JWKS document too large")
-            return parse_jwks(response.json())
+            body = bytearray()
+            async for chunk in response.aiter_bytes():
+                body.extend(chunk)
+                if len(body) > MAX_JWKS_BYTES:
+                    raise JwksUnavailableError("JWKS document too large")
+        return parse_jwks(json.loads(body))
