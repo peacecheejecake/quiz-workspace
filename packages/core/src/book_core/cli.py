@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
-import re
+import os
 import tempfile
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -38,6 +38,7 @@ NOT_IMPLEMENTED_EXIT_CODE = 1
 PROCESSING_ERROR_EXIT_CODE = 1
 STDIO = "-"
 STDIN_SOURCE_PATH = "document.pdf"
+SOURCE_LABEL = "<source>"
 _MAX_ERROR_CHARS = 300
 _MAX_LABEL_CHARS = 80
 
@@ -79,23 +80,19 @@ def _fail(message: str, sensitive: Sequence[str] = ()) -> NoReturn:
 
 
 def _label(path: str) -> str:
-    """Credential-free name of a path or URL for diagnostics: the last path segment only, with
-    no directories, scheme, host, userinfo, query or fragment, control characters replaced,
-    redacted and capped. A ``--source-path`` may be a storage key or signed URL, so the value
-    itself is never printed. Plain string operations only, so it never raises on malformed
-    input (``urlsplit`` rejects e.g. an unclosed IPv6 host)."""
+    """Diagnostic name of a *local* input/output argument: its basename (``<stdin>`` for ``-``),
+    control characters replaced, redacted and capped. Never raises.
+
+    Only for files the CLI itself reads or writes. ``--source-path`` (a storage key or signed
+    URL) is never passed here: diagnostics never derive anything from it.
+    """
     if path == STDIO:
         return "<stdin>"
-    rest = re.split(r"[?#]", path, maxsplit=1)[0].replace("\\", "/")
-    scheme, sep, after = rest.partition("://")
-    if sep and "/" not in scheme:
-        rest = after.partition("/")[2]  # drop the authority (userinfo, host, port)
-    name = rest.rstrip("/").rsplit("/", 1)[-1]
-    name = "".join(c if c.isprintable() else "?" for c in name)
-    name = redact(name)
+    name = os.path.basename(path.replace("\\", "/").rstrip("/"))
+    name = redact("".join(c if c.isprintable() else "?" for c in name))
     if len(name) > _MAX_LABEL_CHARS:
         name = name[: _MAX_LABEL_CHARS - 1] + "…"
-    return name or "<source>"
+    return name or "<unnamed>"
 
 
 def _same_file(a: str, b: str) -> bool:
@@ -227,8 +224,8 @@ def diff_to_json(diff: ChunkDiff) -> dict[str, Any]:
 def _errors(sensitive: Sequence[str] = ()) -> Iterator[None]:
     """Map processing failures to exit code 1 with a sanitized one-line message.
 
-    ``sensitive`` values (paths, the supplied source path) are replaced by their ``_label``
-    wherever an underlying error message quotes them.
+    ``sensitive`` local paths are replaced by their ``_label`` wherever an underlying error
+    message quotes them.
     """
     try:
         yield
@@ -308,14 +305,19 @@ def parse(
     _require_input(pdf, "PDF")
     truth_paths = [str(t) for t in truth or []]
     _check_destinations([(output, "--output")], [pdf, *truth_paths])
-    with _errors([pdf, *truth_paths, *([source_path] if source_path else []), output or STDIO]):
+    # The parser only ever sees a local name, so its errors cannot quote --source-path; the
+    # supplied value is recorded on the result afterwards and never echoed in diagnostics.
+    local_name = STDIN_SOURCE_PATH if pdf == STDIO else Path(pdf).name
+    shown = SOURCE_LABEL if pdf == STDIO and source_path else _label(pdf)
+    with _errors([pdf, *truth_paths, output or STDIO]):
         engine = _make_parser(parser, truth or [], ocr=ocr, ocr_lang=ocr_lang)
-        name = source_path or (STDIN_SOURCE_PATH if pdf == STDIO else Path(pdf).name)
         with _pdf_path(pdf) as path:
-            document = engine.parse(path, source_path=name)
+            document = engine.parse(path, source_path=local_name or STDIN_SOURCE_PATH)
+        if source_path:
+            document = document.model_copy(update={"source_path": source_path})
         _write_text(output, dump_json(document, compact=compact, sort_keys=sort_keys))
     typer.echo(
-        f"parsed {_label(document.source_path)}: {len(document.pages)} pages, "
+        f"parsed {shown}: {len(document.pages)} pages, "
         f"{len(document.blocks)} blocks, ocr_applied={str(document.ocr_applied).lower()}, "
         f"parser {document.parser_version}",
         err=True,

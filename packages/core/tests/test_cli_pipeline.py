@@ -131,7 +131,7 @@ def test_stdin_stdout_pipeline_matches_files(tmp_path: Path) -> None:
     parsed, err = _ok(
         ["parse", "-", *_fake_args(book), "--source-path", f"{book}.pdf"], _pdf(book).read_bytes()
     )
-    assert f"parsed {book}.pdf" in err
+    assert "parsed <source>:" in err
     revision, err = _ok(
         ["structure", "-", "--document-id", "doc-1", "--revision-id", "rev-1"], parsed
     )
@@ -452,39 +452,6 @@ def test_cli_docling_parse_to_chunks_book_ko(tmp_path: Path) -> None:
 # diagnostics never carry the supplied source path; outputs never clobber inputs or each other
 
 FAKE_JWT = "eyJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiL2sucGRmIn0.c2lnbmF0dXJlLXZhbHVl"
-SIGNED_URL = f"https://x.supabase.co/storage/v1/object/sign/b/k.pdf?token={FAKE_JWT}#frag"
-
-
-def test_signed_url_source_path_stays_out_of_diagnostics(tmp_path: Path) -> None:
-    output = tmp_path / "parsed.json"
-    code, out, err = _invoke(
-        [
-            "parse",
-            str(_pdf("book-ko")),
-            *_fake_args("book-ko"),
-            "--source-path",
-            SIGNED_URL,
-            "-o",
-            str(output),
-        ]
-    )
-    assert code == 0, err
-    assert out == b""
-    assert "parsed k.pdf:" in err
-    for fragment in (FAKE_JWT, "token=", "supabase.co", "/sign/", "#frag"):
-        assert fragment not in err
-    # The value itself is recorded as given; only diagnostics are scrubbed.
-    assert ParsedDocument.model_validate_json(output.read_bytes()).source_path == SIGNED_URL
-
-
-def test_signed_url_source_path_stays_out_of_parser_errors() -> None:
-    # The fake parser's UnknownDocumentError quotes the source path it was given.
-    err = _assert_failed(
-        ["parse", str(_pdf("book-ko")), "--parser", "fake", "--source-path", SIGNED_URL]
-    )
-    assert "registered for k.pdf" in err
-    for fragment in (FAKE_JWT, "token=", "supabase.co", "/sign/"):
-        assert fragment not in err
 
 
 def test_error_labels_drop_directories(tmp_path: Path) -> None:
@@ -550,58 +517,86 @@ def test_colliding_outputs_are_rejected_before_writing(tmp_path: Path) -> None:
         assert {p: p.read_bytes() for p in watched} == before
 
 
-MALFORMED_SOURCE_PATHS = {
-    "unclosed-ipv6": ("https://[invalid/x.pdf", "x.pdf", ("[invalid",)),
-    "userinfo-ipv6": ("http://a:b@[::1", "<source>", ("a:b", "[::1")),
-    "long": ("s3://bucket/" + "d/" * 500 + "y" * 5000 + ".pdf?token=" + FAKE_JWT, None, ()),
-    "control-chars": ("ws/\x1b[31mbook\x00\x07\n.pdf", "?[31mbook???.pdf", ("\x1b", "\x00")),
+# (source path, fragments that must appear nowhere in stdout/stderr)
+MALICIOUS_SOURCE_PATHS = {
+    "signed-url": (
+        f"https://x.supabase.co/storage/v1/object/sign/b/k.pdf?token={FAKE_JWT}#frag",
+        ("supabase", "/sign/", "k.pdf", "token", "frag"),
+    ),
+    "backslash-userinfo": (
+        "https://alice:prefix\\secret@storage.example?token=abc",
+        ("alice", "prefix", "secret", "storage.example", "token", "abc"),
+    ),
+    "unclosed-ipv6": ("https://[invalid/x.pdf", ("invalid", "x.pdf", "https")),
+    "userinfo-ipv6": ("http://a:b@[::1", ("a:b", "::1", "http")),
+    "long": (
+        "s3://bucket/" + "d/" * 500 + "y" * 5000 + ".pdf?token=" + FAKE_JWT,
+        ("bucket", "yyyy", "token"),
+    ),
+    "control-chars": ("ws/\x1b[31mbook\x00\x07\n.pdf", ("\x1b", "\x00", "\x07", "[31m")),
 }
 
 
 @pytest.mark.parametrize(
-    ("source_path", "label", "absent"),
-    MALFORMED_SOURCE_PATHS.values(),
-    ids=MALFORMED_SOURCE_PATHS.keys(),
+    ("source_path", "forbidden"),
+    MALICIOUS_SOURCE_PATHS.values(),
+    ids=MALICIOUS_SOURCE_PATHS.keys(),
 )
-def test_malformed_source_paths_get_safe_labels(
-    source_path: str, label: str | None, absent: tuple[str, ...], tmp_path: Path
+def test_source_path_never_reaches_diagnostics(
+    source_path: str, forbidden: tuple[str, ...], tmp_path: Path
 ) -> None:
-    def check(err: str) -> str:
-        assert len(err.splitlines()) == 1
-        line = err.splitlines()[0]
-        assert len(line) <= 320
-        assert all(c.isprintable() for c in line)
-        for fragment in (*absent, FAKE_JWT, "token="):
-            assert fragment not in line
-        if label is not None:
-            assert label in line
-        return line
+    def check(code: int, out: bytes, err: str, expected: int, prefix: str) -> None:
+        assert code == expected, err
+        assert out == b""
+        lines = err.splitlines()
+        assert len(lines) == 1
+        assert lines[0].startswith(prefix)
+        assert len(lines[0]) <= 320
+        assert all(c.isprintable() for c in lines[0])
+        for fragment in (*forbidden, FAKE_JWT):
+            assert fragment not in err
 
-    # Summary path: the parse succeeds and the summary names the label.
+    pdf = str(_pdf("book-ko"))
+    source = ["--source-path", source_path]
     output = tmp_path / "parsed.json"
-    code, out, err = _invoke(
-        [
-            "parse",
-            str(_pdf("book-ko")),
-            *_fake_args("book-ko"),
-            "--source-path",
-            source_path,
-            "-o",
-            str(output),
-        ]
+
+    # Success from a local file: the summary names the local file, not the source path.
+    check(
+        *_invoke(["parse", pdf, *_fake_args("book-ko"), *source, "-o", str(output)]),
+        0,
+        "parsed book-ko.pdf: ",
     )
-    assert code == 0, err
-    assert out == b""
-    assert check(err).startswith("parsed ")
+    # The value itself is recorded as given; only diagnostics leave it out.
     assert ParsedDocument.model_validate_json(output.read_bytes()).source_path == source_path
 
-    # Error path: the sanitized error is still emitted.
-    code, out, err = _invoke(
-        ["parse", str(_pdf("book-ko")), "--parser", "fake", "--source-path", source_path]
+    # Success from stdin: the source path is the only name, so the fixed label is shown.
+    check(
+        *_invoke(
+            ["parse", "-", *_fake_args("book-ko"), *source, "-o", str(output)],
+            _pdf("book-ko").read_bytes(),
+        ),
+        0,
+        "parsed <source>: ",
     )
-    assert code == FAILED
-    assert out == b""
-    assert check(err).startswith("error: parse failed (UnknownDocumentError)")
+
+    # Parser failures (the fake parser's error quotes the name it was given).
+    check(
+        *_invoke(["parse", pdf, "--parser", "fake", *source]),
+        FAILED,
+        "error: parse failed (UnknownDocumentError): no fake document registered for book-ko.pdf",
+    )
+    check(
+        *_invoke(["parse", "-", "--parser", "fake", *source], _pdf("book-ko").read_bytes()),
+        FAILED,
+        "error: parse failed (UnknownDocumentError)",
+    )
+
+
+def test_local_path_labels_are_basenames() -> None:
+    assert cli._label("/home/me/private-dir/book.pdf") == "book.pdf"
+    assert cli._label("C:\\Users\\me\\book.pdf") == "book.pdf"
+    assert cli._label("./dir/") == "dir"
+    assert cli._label("-") == "<stdin>"
 
 
 @pytest.mark.parametrize(
