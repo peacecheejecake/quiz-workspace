@@ -35,9 +35,6 @@ importers:
 
   apps/web:
     dependencies:
-      '@next/env':
-        specifier: 16.3.8
-        version: 16.3.8
       '@quiz/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
@@ -51,6 +48,9 @@ importers:
         specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
     devDependencies:
+      '@next/env':
+        specifier: 16.3.8
+        version: 16.3.8
       '@types/node':
         specifier: ^24
         version: 24.19.2

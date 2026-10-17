@@ -1,17 +1,10 @@
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import type * as NextEnv from '@next/env';
 import type { NextConfig } from 'next';
+import { loadRootEnvFallback } from './load-root-env';
 
-// The monorepo keeps one git-ignored `.env` at the repo root (AGENTS.md §7). Load it as a
-// fallback; values from the environment or apps/web/.env* keep precedence.
-// `@next/env` is CommonJS; require() keeps this working whether Next compiles this file to CJS
-// or Node loads it as ESM.
-const { loadEnvConfig } = createRequire(import.meta.url)('@next/env') as typeof NextEnv;
-loadEnvConfig(
-  fileURLToPath(new URL('../..', import.meta.url)),
-  process.env.NODE_ENV !== 'production',
-);
+// The monorepo keeps its git-ignored `.env*` at the repo root (AGENTS.md §7). Fill only keys that
+// the process environment and apps/web/.env* (already loaded by Next) left unset.
+loadRootEnvFallback(fileURLToPath(new URL('../..', import.meta.url)));
 
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
