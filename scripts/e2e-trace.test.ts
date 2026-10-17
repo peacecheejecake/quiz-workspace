@@ -68,6 +68,7 @@ describe('parsers', () => {
       "test.skip('AUTH-01-AC03 later', async () => {});",
       "test('no id here', async () => { await test.step('AUTH-01-AC09 step', () => {}); });",
       "test('HARNESS-01 self check', () => {});",
+      "test('A11Y-03 axe on a screen', () => {});",
     ].join('\n');
     const { tests, violations } = parsePlaywrightTests('tests/e2e/auth/login.spec.ts', src);
     assert.deepEqual(
@@ -78,6 +79,7 @@ describe('parsers', () => {
         [5, 'AUTH-01-AC03', 'AUTH-01-AC03 later'],
         [6, undefined, 'no id here'],
         [7, 'HARNESS-01', 'HARNESS-01 self check'],
+        [8, 'A11Y-03', 'A11Y-03 axe on a screen'],
       ],
     );
     assert.deepEqual(
@@ -204,6 +206,8 @@ describe('analyze + strict', () => {
     { file: 'tests/e2e/auth/login.spec.ts', line: 9, title: 'QOV-01-AC99 c', id: 'QOV-01-AC99' },
     { file: 'tests/e2e/harness/app.spec.ts', line: 1, title: 'HARNESS-01 d', id: 'HARNESS-01' },
     { file: 'tests/e2e/auth/login.spec.ts', line: 3, title: 'HARNESS-02 e', id: 'HARNESS-02' },
+    { file: 'tests/e2e/quality/a11y.spec.ts', line: 1, title: 'A11Y-01 g', id: 'A11Y-01' },
+    { file: 'tests/e2e/harness/app.spec.ts', line: 7, title: 'VISUAL-01 h', id: 'VISUAL-01' },
   ];
   const report = analyze([LOGIN, API], tests, []);
 
@@ -219,6 +223,7 @@ describe('analyze + strict', () => {
         ['AUTH-01-AC02', 'tests/e2e/auth/login.spec.ts'],
         ['AUTH-API-AC01', 'tests/integration/'],
         ['HARNESS-02', 'tests/e2e/harness/'],
+        ['VISUAL-01', 'tests/e2e/quality/'],
       ],
     );
   });

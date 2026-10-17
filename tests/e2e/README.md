@@ -9,6 +9,7 @@ E2E는 `docs/screens/*.md`의 AC를 먼저 테스트로 옮기고(RED) 구현으
 | `harness/*.spec.ts` | harness 자체 검사(`HARNESS-nn`). stub route·헤더·locale/timezone·fixture 동작 확인 |
 | `fixtures/` | `test.ts`(공용 `test`/`expect`), `auth.ts`(사용자 팩토리·로그인), `mailpit.ts`(메일 링크), `local-env.ts`(로컬 URL·키, 비로컬 거부) |
 | `setup/` | `auth.setup.ts`/`auth.teardown.ts`: authenticated 프로젝트용 공용 사용자와 `storageState` |
+| `quality/` | M7.2 화면 횡단 품질 검사: `A11Y-nn`(axe), `VISUAL-nn`(visual baseline), `SMOKE-nn`(WebKit/모바일), `PERF-nn`(성능). AC가 아니므로 `e2e:trace`가 이 디렉터리에서만 허용하는 예약 ID를 쓴다 |
 | `_pending/` | harness 이전 starter spec. **실행·lint·format 대상 아님**. 각 RED Task가 화면 명세 경로로 옮겨 확장한다 |
 | 그 외 `auth/`, `workspaces/`, `documents/`, `questions/` … | 화면 명세에 선언된 경로의 AC spec (RED Task가 생성) |
 
@@ -36,6 +37,11 @@ make infra-down
 | `harness-chromium` / `harness-webkit` | `harness/*.spec.ts` | 없음 |
 | `unauthenticated-chromium` / `unauthenticated-webkit` | `auth/*.spec.ts`(단, `account-security.spec.ts` 제외), `workspaces/share-public.spec.ts` | 없음(cookie 없는 새 context) |
 | `setup` → `authenticated-chromium` / `authenticated-webkit` → `teardown` | 위 이외의 모든 spec | `playwright/.auth/user.json` |
+
+| `a11y-chromium` | `quality/a11y*.spec.ts` | 없음(테스트마다 사용자 생성) |
+| `smoke-ipad-webkit` / `smoke-iphone-webkit` / `smoke-mobile-chrome` | `quality/smoke.spec.ts` | 없음 |
+| `visual-desktop` / `visual-ipad` | `quality/visual.spec.ts` — 고정 renderer가 있을 때만 등록(아래) | 없음 |
+| `perf-chromium` | `quality/perf.spec.ts` — `E2E_PERF=1`일 때만 등록(`pnpm e2e:perf`) | 없음 |
 
 `setup`/`authenticated-*`/`teardown`은 **authenticated spec이 하나라도 생겼을 때만** 등록된다. `setup`은 사용자 팩토리로 확인 완료 사용자를 만들고 실제 `/login` UI로 로그인해 `storageState`를 저장하므로, `/login`이 stub인 지금은 통과할 수 없다. 세션 형식(Supabase SSR cookie)은 A2.1이 정하며 그때 `setup/auth.setup.ts`를 마무리한다. 가짜 cookie 형식을 만들어 넣지 않는다.
 
@@ -67,6 +73,20 @@ test('AUTH-01-AC02 ...', async ({ page, userFactory }) => {
 - Playwright trace는 `page`/`request`의 네트워크 본문과 `fill` 입력값을 기록한다. 그래서 fixture는 Auth/Mailpit 호출에 **Node `fetch`만** 쓰고, admin 키·세션 토큰·메일 링크는 trace에 들어가지 않는다(실패 trace를 직접 검사해 확인). 메일 링크·토큰을 test title, `console.log`, attachment에 넣지 않는다.
 - 남는 위험: UI 로그인(`setup`, AUTH 화면 테스트)의 trace에는 입력한 비밀번호와 응답 cookie가 포함된다. 모두 **로컬/CI 일회용 스택의 합성 사용자**(테스트 후 삭제, 로컬 전용 서명 키, 1시간 만료)이므로 실사용 비밀이 아니다. 실제 계정·운영 URL은 E2E에 절대 쓰지 않는다.
 - 공유 링크 비밀값은 이 예외에 포함되지 않는다. 공유 spec(`workspaces/{sharing-owner,share-public,fork}.spec.ts`)은 trace·screenshot·video를 끄고, 실패 시 비밀값을 가린 페이지 텍스트(`page-text-redacted`)만 첨부한다. 실행 직후 `pnpm e2e:artifact-audit`가 `test-results/`·`playwright-report/`(trace zip, report 내장 zip 포함)에서 알려진 비밀값과 `#k=` fragment를 찾아 있으면 실패한다(규칙: `fixtures/sharing.ts` 머리 주석).
+
+## 품질 검사 (M7.2)
+
+- **접근성**(`fixtures/a11y.ts` `expectAccessible`): axe-core(`@axe-core/playwright` 고정)로 WCAG 2.0/2.1/2.2 A·AA + best-practice 전체를 light/dark 두 테마에서 검사한다. 규칙 비활성화·영역 제외는 없다. 예외는 `EXEMPTIONS` 한 건뿐: best-practice `region` 규칙을 Radix popper layer(`[data-radix-popper-content-wrapper]`, body로 portal되는 menu/popover/tooltip) 안 노드에만 면제(이유는 파일 주석). 새 화면·상태를 추가하면 `quality/a11y*.spec.ts`에 그 상태의 scan을 추가한다.
+- **WebKit·모바일 smoke**: iPad Pro 11·iPhone 14(WebKit)·Pixel 7(Chrome)에서 tap으로 핵심 흐름(로그인, drawer 내비게이션, Workspace 생성, PDF 업로드→READY, 검색 발췌, heatmap→풀이 패널, 공유 보기)과 해당 viewport의 axe(light). Desktop WebKit은 모든 AC spec이 이미 `*-webkit` 프로젝트로 돈다.
+- **성능**(`pnpm e2e:perf`, 1 worker): 300문항 Workspace로 주요 화면 Web Vitals(LCP/CLS/TTFB/JS 크기)와 overview·문제은행 목록·검색 API p95. 문서에 수치 목표가 없어 web.dev "good" 기준과 느슨한 API 예산으로 회귀만 잡는다. 결과는 test attachment `perf.json`.
+
+### Visual baselines
+
+- 기준(baseline of record)은 **고정 Playwright Linux image**(`mcr.microsoft.com/playwright:v<@playwright/test 버전>-noble`)의 렌더링이다. 폰트·anti-aliasing이 OS마다 달라 macOS 렌더를 기준으로 쓰지 않는다(플랫폼별 baseline도 두지 않음).
+- `pnpm e2e:visual`(= `scripts/visual-run.sh`)이 그 image에서 `playwright run-server`를 띄우고 `E2E_VISUAL_WS_ENDPOINT`를 넘긴다. 테스트 runner·fixture·웹/API 서버는 호스트에 그대로 있고, 브라우저의 loopback 요청만 `exposeNetwork: '<loopback>'`로 호스트에 터널된다(fixture의 loopback 전용 규칙 유지). 의도한 변경 후 `pnpm e2e:visual --update-snapshots`, 다른 E2E 서버를 쓸 때는 평소처럼 `E2E_BASE_URL`/`NEXT_PUBLIC_API_BASE_URL`.
+- 그 image 안에서 직접 돌리는 CI job은 `E2E_VISUAL=1`. 둘 다 없으면 `visual-*` 프로젝트는 등록되지 않는다(로컬 `pnpm e2e`는 Docker 없이도 GREEN; visual은 `pnpm e2e:visual`로 따로 실행).
+- 결정론: ko-KR·Asia/Seoul·reduced motion·animation disabled·caret hide·`document.fonts.ready`, 데이터는 테스트별이지만 보이는 텍스트는 고정(Workspace 이름, 문제 label, 합성 PDF), 시간(`<time>`, `[data-visual-dynamic]`)은 mask. 공유 비밀값은 화면에 없는 상태만 찍는다. baseline: `quality/__screenshots__/<name>-<light|dark>-visual-<desktop|ipad>.png`.
+- `@quiz/ui` Storybook visual(`pnpm --filter @quiz/ui test:visual`)도 같은 renderer를 쓴다.
 
 ## RED Task가 할 일
 

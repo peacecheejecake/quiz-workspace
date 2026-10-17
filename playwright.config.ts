@@ -50,12 +50,36 @@ const UNAUTHENTICATED_SPECS = [
   /workspaces\/share-public\.spec\.ts$/,
 ];
 const HARNESS_SPECS = /harness\/[^/]+\.spec\.ts$/;
+// M7.2 cross-screen quality checks (tests/e2e/quality/, IDs A11Y/VISUAL/SMOKE/PERF-nn): every
+// test signs in its own per-test user, so these projects start without a session.
+const A11Y_SPECS = /quality\/a11y[^/]*\.spec\.ts$/;
+const SMOKE_SPECS = /quality\/smoke\.spec\.ts$/;
+const VISUAL_SPECS = /quality\/visual\.spec\.ts$/;
+const PERF_SPECS = /quality\/perf\.spec\.ts$/;
+const QUALITY_SPECS = /quality\/[^/]+\.spec\.ts$/;
+
+// Visual baselines are Linux renders from the pinned Playwright image (fonts and rasterizer
+// differ per OS; tests/e2e/README.md "Visual baselines"). The visual projects exist only where
+// that renderer is available: `E2E_VISUAL_WS_ENDPOINT` (a `playwright run-server` in the image,
+// started by `pnpm e2e:visual`; page traffic to loopback is tunnelled back to this host) or
+// `E2E_VISUAL=1` (this runner *is* the image, e.g. a CI job container).
+const VISUAL_WS = process.env.E2E_VISUAL_WS_ENDPOINT?.trim();
+const VISUAL_ENABLED = !!VISUAL_WS || process.env.E2E_VISUAL === '1';
+const visualBrowser = VISUAL_WS
+  ? { connectOptions: { wsEndpoint: VISUAL_WS, exposeNetwork: '<loopback>' } }
+  : {};
+// Web Vitals and API latency are timing measurements: opt-in (`E2E_PERF=1`, `pnpm e2e:perf`) so a
+// loaded parallel run never turns them into flaky failures.
+const PERF_ENABLED = process.env.E2E_PERF === '1';
 const AUTH_STATE = 'playwright/.auth/user.json';
 
 // The authenticated projects (and their `setup`/`teardown`) exist only once a phase adds
 // authenticated specs: setup signs in through the real /login, which is a stub until A2.
 const hasAuthenticatedSpecs = globSync('**/*.spec.ts', { cwd: TEST_DIR, exclude: [PENDING] }).some(
-  (file) => !HARNESS_SPECS.test(file) && !UNAUTHENTICATED_SPECS.some((re) => re.test(file)),
+  (file) =>
+    !HARNESS_SPECS.test(file) &&
+    !QUALITY_SPECS.test(file) &&
+    !UNAUTHENTICATED_SPECS.some((re) => re.test(file)),
 );
 
 // Deterministic browser environment for every project (docs/e2e-strategy.md §3).
@@ -69,12 +93,31 @@ const noSession = { storageState: { cookies: [], origins: [] } };
 
 const chromium = { ...devices['Desktop Chrome'], ...pinned };
 const webkit = { ...devices['Desktop Safari'], ...pinned };
+// Visual: Chromium for both form factors (one rasterizer per baseline); the iPad project keeps
+// the iPad Pro 11 portrait viewport and touch but a 1× scale so baselines stay small.
+const visualDesktop = { ...chromium, viewport: { width: 1280, height: 800 }, ...visualBrowser };
+const visualIpad = {
+  ...chromium,
+  viewport: { width: 834, height: 1194 },
+  hasTouch: true,
+  ...visualBrowser,
+};
+const visualSnapshots = '{testDir}/{testFileDir}/__screenshots__/{arg}-{projectName}{ext}';
 
 export default defineConfig({
   testDir: TEST_DIR,
   testIgnore: [PENDING],
   timeout: 45_000,
-  expect: { timeout: 10_000 },
+  expect: {
+    timeout: 10_000,
+    // Visual baselines (quality/visual.spec.ts): same renderer, so only antialiasing noise.
+    toHaveScreenshot: {
+      maxDiffPixelRatio: 0.002,
+      animations: 'disabled',
+      caret: 'hide',
+      scale: 'css',
+    },
+  },
   fullyParallel: true,
   forbidOnly: CI,
   retries: CI ? 1 : 0,
@@ -115,6 +158,42 @@ export default defineConfig({
   projects: [
     { name: 'harness-chromium', testMatch: HARNESS_SPECS, use: { ...chromium, ...noSession } },
     { name: 'harness-webkit', testMatch: HARNESS_SPECS, use: { ...webkit, ...noSession } },
+    { name: 'a11y-chromium', testMatch: A11Y_SPECS, use: { ...chromium, ...noSession } },
+    // WebKit/mobile smoke of the key flows (docs/e2e-strategy.md §3: WebKit/iPad + Mobile Chrome).
+    {
+      name: 'smoke-ipad-webkit',
+      testMatch: SMOKE_SPECS,
+      use: { ...devices['iPad Pro 11'], ...pinned, ...noSession },
+    },
+    {
+      name: 'smoke-iphone-webkit',
+      testMatch: SMOKE_SPECS,
+      use: { ...devices['iPhone 14'], ...pinned, ...noSession },
+    },
+    {
+      name: 'smoke-mobile-chrome',
+      testMatch: SMOKE_SPECS,
+      use: { ...devices['Pixel 7'], ...pinned, ...noSession },
+    },
+    ...(VISUAL_ENABLED
+      ? [
+          {
+            name: 'visual-desktop',
+            testMatch: VISUAL_SPECS,
+            snapshotPathTemplate: visualSnapshots,
+            use: { ...visualDesktop, ...noSession },
+          },
+          {
+            name: 'visual-ipad',
+            testMatch: VISUAL_SPECS,
+            snapshotPathTemplate: visualSnapshots,
+            use: { ...visualIpad, ...noSession },
+          },
+        ]
+      : []),
+    ...(PERF_ENABLED
+      ? [{ name: 'perf-chromium', testMatch: PERF_SPECS, use: { ...chromium, ...noSession } }]
+      : []),
     {
       name: 'unauthenticated-chromium',
       testMatch: UNAUTHENTICATED_SPECS,
@@ -132,14 +211,14 @@ export default defineConfig({
           {
             name: 'authenticated-chromium',
             testMatch: SPEC,
-            testIgnore: [PENDING, HARNESS_SPECS, ...UNAUTHENTICATED_SPECS],
+            testIgnore: [PENDING, HARNESS_SPECS, QUALITY_SPECS, ...UNAUTHENTICATED_SPECS],
             use: { ...chromium, storageState: AUTH_STATE },
             dependencies: ['setup'],
           },
           {
             name: 'authenticated-webkit',
             testMatch: SPEC,
-            testIgnore: [PENDING, HARNESS_SPECS, ...UNAUTHENTICATED_SPECS],
+            testIgnore: [PENDING, HARNESS_SPECS, QUALITY_SPECS, ...UNAUTHENTICATED_SPECS],
             use: { ...webkit, storageState: AUTH_STATE },
             dependencies: ['setup'],
           },

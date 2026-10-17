@@ -12,11 +12,12 @@
 // `--list-specs` prints the existing spec files of the selected screens, one per line.
 // `--list-specs --exclude-phase <phases>` prints the spec files of every *other* phase's screens
 // that no listed phase also declares (CI runs all of tests/e2e minus these: the not-yet-GREEN ones).
-// HARNESS-nn titles are reserved for harness self-tests in tests/e2e/harness/.
+// Reserved non-AC IDs: HARNESS-nn for harness self-tests in tests/e2e/harness/, and the M7.2
+// cross-screen quality checks A11Y-nn / VISUAL-nn / SMOKE-nn / PERF-nn in tests/e2e/quality/.
 //
 // Runs on plain Node (type stripping): only erasable TypeScript syntax. Test calls are found with
 // the TypeScript parser (root devDependency), not regexes, so comments and strings never count.
-import { existsSync, globSync, readFileSync } from 'node:fs';
+import { existsSync, globSync, readFileSync, statSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import ts from 'typescript';
 
@@ -32,7 +33,7 @@ export interface TestCase {
   readonly file: string;
   readonly line: number;
   readonly title: string;
-  /** Leading AC or HARNESS ID, if any. */
+  /** Leading AC or reserved (HARNESS/A11Y/VISUAL/SMOKE/PERF) ID, if any. */
   readonly id: string | undefined;
 }
 
@@ -44,6 +45,15 @@ export interface Violation {
 
 export const API_SCREEN_ID = 'AUTH-API';
 export const HARNESS_DIR = 'tests/e2e/harness/';
+export const QUALITY_DIR = 'tests/e2e/quality/';
+/** Reserved non-AC test ID families → the only directory their tests may live in. */
+export const RESERVED_FAMILIES: Readonly<Record<string, string>> = {
+  HARNESS: HARNESS_DIR,
+  A11Y: QUALITY_DIR,
+  VISUAL: QUALITY_DIR,
+  SMOKE: QUALITY_DIR,
+  PERF: QUALITY_DIR,
+};
 export const CONTRACT_DIR = 'tests/integration/';
 
 /** RED Task → screens it introduces (docs/implementation-plan.md §3). */
@@ -69,7 +79,15 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   S0: ['WS-SHARE-01', 'WS-VIEW-01', 'WS-FORK-01'],
 };
 
-const LEADING_ID = /^([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*?-AC\d+|HARNESS-\d+)\b/;
+const LEADING_ID = new RegExp(
+  `^([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*?-AC\\d+|(?:${Object.keys(RESERVED_FAMILIES).join('|')})-\\d+)\\b`,
+);
+
+/** The directory a reserved (non-AC) ID must live in; undefined for AC IDs. */
+export function reservedDir(id: string): string | undefined {
+  const family = /^([A-Z0-9]+)-\d+$/.exec(id)?.[1];
+  return family === undefined ? undefined : RESERVED_FAMILIES[family];
+}
 
 function lineAt(text: string, index: number): number {
   return text.slice(0, index).split('\n').length;
@@ -220,8 +238,9 @@ export function analyze(
   for (const t of tests) {
     if (!t.id) {
       untitledTests.push(t);
-    } else if (t.id.startsWith('HARNESS-')) {
-      if (!t.file.startsWith(HARNESS_DIR)) misplacedTests.push({ ...t, expected: HARNESS_DIR });
+    } else if (reservedDir(t.id) !== undefined) {
+      const dir = reservedDir(t.id) as string;
+      if (!t.file.startsWith(dir)) misplacedTests.push({ ...t, expected: dir });
     } else {
       const screen = acToScreen.get(t.id);
       if (!screen) {
@@ -297,7 +316,7 @@ export function strictProblems(report: Report, selected: ReadonlySet<string>): s
       problems.push(`orphan AC ${ac}: no test title starts with it`);
   }
   for (const t of report.misplacedTests) {
-    if (t.id?.startsWith('HARNESS-') || (t.id && selected.has(screenOfAc(t.id)))) {
+    if ((t.id && reservedDir(t.id) !== undefined) || (t.id && selected.has(screenOfAc(t.id)))) {
       problems.push(`misplaced test ${t.file}:${t.line} "${t.title}" (expected in ${t.expected})`);
     }
   }
@@ -317,10 +336,11 @@ export function formatReport(report: Report): string {
     .reduce((n, s) => n + s.acs.length, 0);
   const api = report.screens.find((s) => s.id === API_SCREEN_ID);
   const harness = report.tests.filter((t) => t.id?.startsWith('HARNESS-')).length;
+  const quality = report.tests.filter((t) => t.id && reservedDir(t.id) === QUALITY_DIR).length;
   lines.push(
     `e2e:trace: ${acCount} screen ACs in ${report.screens.length - (api ? 1 : 0)} screens` +
       (api ? ` + ${api.acs.length} API contract ACs` : '') +
-      `; ${report.tests.length} tests (${harness} HARNESS)`,
+      `; ${report.tests.length} tests (${harness} HARNESS, ${quality} quality)`,
     '',
     `${'screen'.padEnd(12)} ${'covered'.padStart(7)}  declared test path`,
   );
@@ -378,7 +398,11 @@ export function loadReport(root: string): Report {
     cwd: root,
     exclude: ['tests/e2e/_pending/**'],
   });
-  for (const file of specs.map(toPosix).sort()) {
+  // Only files: a directory can match the pattern too (e.g. a snapshot folder named after a spec).
+  for (const file of specs
+    .filter((f) => statSync(join(root, f)).isFile())
+    .map(toPosix)
+    .sort()) {
     const parsed = parsePlaywrightTests(file, read(file));
     // setup/teardown steps are infrastructure, not AC tests; only check them for .only/.skip.
     if (file.endsWith('.spec.ts')) tests.push(...parsed.tests);
