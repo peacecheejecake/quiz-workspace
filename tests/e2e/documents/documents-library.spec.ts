@@ -8,6 +8,7 @@
 // assertions, never sleeps. The worker and fake model adapters must run for READY (M3.2b).
 import { truncateSync, writeFileSync } from 'node:fs';
 import type { Page, Route } from '@playwright/test';
+import { sha256 } from '../fixtures/documents.ts';
 import { localEndpoints } from '../fixtures/local-env.ts';
 import {
   book,
@@ -128,11 +129,13 @@ test(
     await expect(docUi.alert(page)).toContainText(/50\s?MB|50\s?MiB|크기|용량|too large|size/i);
     expect(intents, 'the browser never asked the API for an upload URL').toEqual([]);
 
-    // The server enforces the same rules on a direct call and says why.
+    // The server enforces the same rules on a direct call and says why. The bodies are otherwise
+    // valid (the M3.2a API requires `sha256`), so the rejection is about the type and the size.
     const txt = await owner.api.request('POST', `/workspaces/${ws.id}/documents/upload-intent`, {
       filename: 'notes.txt',
       size_bytes: 9,
       content_type: 'text/plain',
+      sha256: sha256(Buffer.from('not a pdf')),
     });
     expect([415, 422]).toContain(txt.status);
     expect((txt.body as Problem).detail).toMatch(/pdf/i);
@@ -140,6 +143,7 @@ test(
       filename: 'too-large.pdf',
       size_bytes: MAX_UPLOAD_BYTES + 1,
       content_type: 'application/pdf',
+      sha256: 'f'.repeat(64),
     });
     expect([413, 422]).toContain(big.status);
     expect((big.body as Problem).detail).toBeTruthy();

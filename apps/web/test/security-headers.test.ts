@@ -81,6 +81,7 @@ describe('buildContentSecurityPolicy', () => {
   });
 
   it('locks framing, base, plugins and form targets', () => {
+    expect(csp.get('worker-src')).toEqual(["'self'"]);
     expect(csp.get('frame-ancestors')).toEqual(["'none'"]);
     expect(csp.get('base-uri')).toEqual(["'self'"]);
     expect(csp.get('object-src')).toEqual(["'none'"]);
