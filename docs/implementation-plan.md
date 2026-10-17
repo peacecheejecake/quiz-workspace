@@ -367,7 +367,8 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | P0.4 UI kit | ✅ | 66f6466 (merge 7bc9440, React 19.2.8로 정렬) · 12158b7 | P1(RSC client boundary 누락)·P2(숨김 요소로 Tab handoff) → 반영(RSC build fixture 추가) → 지적 없음 |
 | P0.7 worker | ◐ | 981a1bf (merge 3cb0c83) | P1×2(publish 실패·hard timeout 시 job 고착)·P2(취소 시 cleanup 누락) + API redaction 공백 수정 중 |
 | A1.1 Supabase Auth local | ✅ | e8768f3 | 지적 없음 |
-| M1.2 | ◐ | — | 진행 중 |
+| P0.3b 토큰 보강 | ✅ | 9df4496 | 지적 없음. 대비 test 추가(light unseen/retry marker는 outline 필요 → M5.3) |
+| M1.2 Docling parser | ◐ | 9cd16d6 (merge e1c27d1) | P2×2(OCR 엔진 부재 시 ocr_applied 오보고, 실모델 test가 기본 suite에 포함) 수정 중 |
 | P0.8 core 골격 | ✅ | 163e9ea · bc78ce6 · 1c56c17 | P2(LLM 검증 오류에 원문 노출) → 반영 → P2(식별자형 key 노출) → 반영 → 지적 없음 |
 | (통합) worktree 제외 설정 | ✅ | 6704d1c | 사소한 설정 수정, 리뷰 생략 |
 
