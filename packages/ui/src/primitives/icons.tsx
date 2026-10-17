@@ -30,6 +30,15 @@ export function CloseIcon(props: IconProps) {
   );
 }
 
+/** Horizontal ellipsis for "더보기" action menus. */
+export function MoreIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth="3" />
+    </BaseIcon>
+  );
+}
+
 export function MenuIcon(props: IconProps) {
   return (
     <BaseIcon {...props}>
