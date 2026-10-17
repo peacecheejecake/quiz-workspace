@@ -168,13 +168,15 @@ select is(
   'async_jobs.quiz_worker_insert:INSERT,async_jobs.quiz_worker_select:SELECT,'
     || 'async_jobs.quiz_worker_update:UPDATE',
   'quiz_worker policies on async_jobs');
--- M3.2a adds quiz_worker policies on the document tables (07_documents.test.sql); nothing else.
+-- M3.2a adds quiz_worker policies on the document tables (07_documents.test.sql), M4.4a on the
+-- import runs/drafts (11_question_import_worker.test.sql); nothing else.
 select is_empty(
   $$ select tablename from pg_policies
       where schemaname = 'public' and 'quiz_worker' = any(roles)
         and tablename not in ('async_jobs', 'documents', 'document_revisions', 'chapters',
-                              'content_blocks', 'document_uploads') $$,
-  'quiz_worker has policies on async_jobs and the M3.2a document tables only');
+                              'content_blocks', 'document_uploads', 'question_import_runs',
+                              'question_drafts') $$,
+  'quiz_worker has policies on async_jobs, the M3.2a document tables and M4.4a imports only');
 
 -- quiz_worker works within its grants -----------------------------------------------------------
 grant quiz_worker to postgres;

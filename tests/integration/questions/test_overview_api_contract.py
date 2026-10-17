@@ -15,8 +15,8 @@ from typing import Any
 
 import pytest
 
-# Study state is driven through the M5.2 practice/my-state API. AC01 also needs the M4.4a
-# import API and stays RED (remove its `red` marker in M4.4a).
+# Study state is driven through the M5.2 practice/my-state API; AC01 also imports drafts through
+# the M4.4a import API.
 pytestmark = pytest.mark.infra
 
 ANSWER_KEYS = {"correct_option_ids", "accepted_answers", "explanation", "rubric", "correct_answer"}
@@ -64,7 +64,6 @@ def numbered(seed: Any, n: int) -> dict[str, Any]:
     return {**body, "question_number": n}
 
 
-@pytest.mark.red
 def test_qov_01_ac01_one_item_per_confirmed_question_drafts_and_shuffles_add_none(
     seed: Any,
 ) -> None:

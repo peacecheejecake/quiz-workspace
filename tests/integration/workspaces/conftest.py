@@ -41,7 +41,11 @@ PDF_DIR = REPO_ROOT / "tests" / "fixtures" / "pdfs"
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "http://127.0.0.1:54321").rstrip("/")
 ISSUER = f"{SUPABASE_URL}/auth/v1"
 JWKS_URL = f"{ISSUER}/.well-known/jwks.json"
-DB_ADMIN_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+# Superuser of the local stack (teardown, documented seeds); QUIZ_DB_ADMIN_URL points the suite at
+# another local stack (e.g. a throwaway one with unmerged migrations).
+DB_ADMIN_URL = os.environ.get(
+    "QUIZ_DB_ADMIN_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+)
 API_DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://quiz_api:change-me-local@127.0.0.1:54322/postgres"
 )

@@ -52,7 +52,8 @@ class ProblemType(StrEnum):
     PRACTICE_SESSION_SUBMITTED = "urn:quiz-workspace:problem:practice-session-submitted"
     # 409: self-grade of a session that is not awaiting a grade (still open or already graded).
     PRACTICE_SESSION_NOT_PENDING = "urn:quiz-workspace:problem:practice-session-not-pending"
-    # 409: the document has no published revision yet (first parse pending or failed).
+    # 409: the document has no published revision yet (first parse pending or failed); also a
+    # question import needs a `question_paper` document that finished processing.
     DOCUMENT_NOT_READY = "urn:quiz-workspace:problem:document-not-ready"
     # 409: a correction was based on block text (or a draft) that changed since it was loaded.
     EDIT_CONFLICT = "urn:quiz-workspace:problem:edit-conflict"
@@ -60,6 +61,12 @@ class ProblemType(StrEnum):
     PUBLISH_IN_PROGRESS = "urn:quiz-workspace:problem:publish-in-progress"
     # 409: there is no correction draft, or it does not differ from the published revision.
     NOTHING_TO_PUBLISH = "urn:quiz-workspace:problem:nothing-to-publish"
+    # 409: only a failed or cancelled import run can be retried.
+    IMPORT_NOT_RETRYABLE = "urn:quiz-workspace:problem:import-not-retryable"
+    # 409: a draft edit was based on an outdated version of the draft (reload and retry).
+    STALE_DRAFT = "urn:quiz-workspace:problem:stale-draft"
+    # 409: the draft is already published as a question; edit the question instead.
+    DRAFT_PUBLISHED = "urn:quiz-workspace:problem:draft-published"
 
 
 class ProblemException(StarletteHTTPException):

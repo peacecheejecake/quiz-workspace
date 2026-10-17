@@ -7,6 +7,14 @@ response shapes mirror tests/e2e/fixtures/questions.ts (its header lists every a
 both in sync). The `postgres` superuser is used for teardown and two documented cases only: a
 `viewer` membership (no membership API before S1/S2) and seeding/reading a graded attempt on a
 question revision (practice API arrives in M5).
+
+Jobs (`document.parse` for the uploaded paper, `question.import`) run in this process
+(`JobWorker`, M4.4a): `wait_for_job` drives the job with the worker's `JobRunner` and real
+dependencies (Postgres as the least-privilege `quiz_worker` role from WORKER_DATABASE_URL, Supabase
+Storage, Qdrant under a per-module collection prefix, APP_ENV=test adapters: fixture-truth parser,
+fake embedder, the import fault injection of A7), then reads the outcome through `GET /jobs/{id}`
+like any client. No Celery worker has to be running; one that is running is harmless (job claims
+are idempotent).
 """
 
 from __future__ import annotations
@@ -25,7 +33,26 @@ from urllib.parse import urlsplit
 import httpx
 import psycopg
 import pytest
+from book_core.embedding import FakeEmbedder
+from book_core.indexing import CollectionNames, QdrantIndexStore
 from fastapi.testclient import TestClient
+from qdrant_client import QdrantClient
+from qdrant_client import models as qm
+from quiz_worker.adapters import FailureInjectingEmbedder, build_parser
+from quiz_worker.document_job import (
+    DocumentJobDeps,
+    Limits,
+    document_parse_definition,
+    index_sync_definition,
+)
+from quiz_worker.document_store import PostgresDocumentStore
+from quiz_worker.pg_store import PostgresJobStore, create_job_store_engine
+from quiz_worker.question_import_job import ImportJobDeps, question_import_definition
+from quiz_worker.question_import_store import PostgresImportStore
+from quiz_worker.runner import JobDefinition, JobRunner
+from quiz_worker.settings import Environment, WorkerSettings
+from quiz_worker.storage import SupabaseStorage
+from quiz_worker.store import TERMINAL_STATUSES
 
 _M3_CONFTEST = Path(__file__).resolve().parents[1] / "workspaces" / "conftest.py"
 _spec = importlib.util.spec_from_file_location("_m3_contract_conftest", _M3_CONFTEST)
@@ -66,8 +93,101 @@ def mcq(stem: str, texts: list[str], answer: int = 0, **extra: Any) -> dict[str,
     }
 
 
+class JobWorker:
+    """Runs this suite's jobs in-process (see the module docstring); built on first use."""
+
+    def __init__(self) -> None:
+        self._built: tuple[PostgresJobStore, JobRunner, dict[str, JobDefinition[Any]]] | None = None
+        self._closers: list[Any] = []
+        self._names = CollectionNames(prefix=f"it_m44a_{uuid.uuid4().hex[:8]}_")
+        self._qdrant: QdrantClient | None = None
+
+    def _build(self) -> tuple[PostgresJobStore, JobRunner, dict[str, JobDefinition[Any]]]:
+        if self._built is not None:
+            return self._built
+        env = WorkerSettings(_env_file=str(_m3.REPO_ROOT / ".env"))  # type: ignore[call-arg]
+        env = env.model_copy(update={"app_env": Environment.TEST})
+        secret = env.supabase_secret_key
+        url = env.worker_database_url
+        if url is None or secret is None or not env.supabase_url:
+            pytest.fail("WORKER_DATABASE_URL / SUPABASE_URL / SUPABASE_SECRET_KEY missing (.env)")
+        for value in (url.get_secret_value(), env.supabase_url):
+            host = urlsplit(value).hostname
+            assert host in LOOPBACK, f"refusing non-local {host}"
+        engine = create_job_store_engine(url, pool_size=4)
+        storage = SupabaseStorage(env.supabase_url, secret.get_secret_value())
+        self._qdrant = QdrantClient(url=env.qdrant_url or "http://127.0.0.1:6333", timeout=30)
+        self._closers += [engine.dispose, storage.close]
+        documents = PostgresDocumentStore(engine)
+        document_deps = DocumentJobDeps(
+            documents=documents,
+            storage=storage,
+            index=QdrantIndexStore(
+                self._qdrant, FailureInjectingEmbedder(FakeEmbedder()), names=self._names
+            ),
+            parser=build_parser(env),
+            limits=Limits(lock_wait_seconds=30),
+        )
+        import_deps = ImportJobDeps(
+            imports=PostgresImportStore(engine),
+            documents=documents,
+            storage=storage,
+            inject_failures=True,
+            lock_wait_seconds=30,
+        )
+        definitions: list[JobDefinition[Any]] = [
+            document_parse_definition(lambda: document_deps),
+            index_sync_definition(lambda: document_deps),
+            question_import_definition(lambda: import_deps),
+        ]
+        jobs = PostgresJobStore(engine)
+        runner = JobRunner(jobs, worker_id="it-m44a", lease_seconds=600)
+        self._built = (jobs, runner, {d.job_type: d for d in definitions})
+        return self._built
+
+    def drain(self, job_id: str, max_runs: int = 10) -> None:
+        """Run the job (retries included) until it is terminal."""
+        jobs, runner, definitions = self._build()
+        for _ in range(max_runs):
+            record = jobs.get(uuid.UUID(job_id))
+            assert record is not None, "job row missing"
+            if record.status in TERMINAL_STATUSES:
+                return
+            runner.run(definitions[record.job_type], record.to_envelope().to_message())
+
+    def close(self) -> None:
+        for close in self._closers:
+            close()
+        if self._qdrant is not None:
+            client = self._qdrant
+            for alias in client.get_aliases().aliases:
+                if alias.alias_name == self._names.alias:
+                    client.update_collection_aliases(
+                        change_aliases_operations=[
+                            qm.DeleteAliasOperation(
+                                delete_alias=qm.DeleteAlias(alias_name=alias.alias_name)
+                            )
+                        ]
+                    )
+            for collection in client.get_collections().collections:
+                if self._names.owns(collection.name):
+                    client.delete_collection(collection.name)
+            client.close()
+
+
+@pytest.fixture(scope="module")
+def job_worker(stack: Any) -> Iterator[JobWorker]:
+    worker = JobWorker()
+    try:
+        yield worker
+    finally:
+        worker.close()
+
+
 class QuestionClient(_m3.Client):
     """`Client` plus the question bank and import endpoints."""
+
+    worker: JobWorker | None = None
 
     def create_question(self, workspace_id: str, body: dict[str, Any]) -> dict[str, Any]:
         out: dict[str, Any] = self.ok("POST", f"/workspaces/{workspace_id}/questions", body, (201,))
@@ -130,6 +250,8 @@ class QuestionClient(_m3.Client):
         return str(done["document_id"])
 
     def wait_for_job(self, job_id: str, expected: str = "succeeded") -> None:
+        if self.worker is not None:
+            self.worker.drain(job_id)
         deadline = time.monotonic() + JOB_TIMEOUT_S
         status = ""
         while time.monotonic() < deadline:
@@ -197,9 +319,13 @@ class QuestionSeed(_m3.Seed):
     QUESTION_TRUTH = QUESTION_TRUTH
     IMPORT_FAILURE_MARKER = IMPORT_FAILURE_MARKER
 
+    worker: JobWorker | None = None
+
     def client(self, label: str) -> QuestionClient:
         base = super().client(f"m4-{label}")
-        return QuestionClient(self._http, base.user)
+        client = QuestionClient(self._http, base.user)
+        client.worker = self.worker
+        return client
 
     def graded_attempt(
         self, workspace_id: str, question_id: str, revision_id: str, user_id: str
@@ -234,13 +360,24 @@ class QuestionSeed(_m3.Seed):
         return str(row[0]), int(row[1]), str(row[2])
 
     @staticmethod
+    def worker_database_url() -> str:
+        """The `quiz_worker` role's URL (grant checks)."""
+        env = WorkerSettings(_env_file=str(_m3.REPO_ROOT / ".env"))  # type: ignore[call-arg]
+        if env.worker_database_url is None:
+            pytest.fail("WORKER_DATABASE_URL missing (.env)")
+        url = env.worker_database_url.get_secret_value()
+        assert urlsplit(url).hostname in LOOPBACK, "refusing a non-local database"
+        return url
+
+    @staticmethod
     def new_id() -> str:
         return str(uuid.uuid4())
 
 
 @pytest.fixture
-def seed(stack: Any, app_client: TestClient) -> Iterator[QuestionSeed]:
+def seed(stack: Any, app_client: TestClient, job_worker: JobWorker) -> Iterator[QuestionSeed]:
     s = QuestionSeed(stack, app_client)
+    s.worker = job_worker
     try:
         yield s
     finally:

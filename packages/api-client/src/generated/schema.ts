@@ -334,6 +334,110 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/question-drafts/{draft_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Update Question Draft
+     * @description Edit a draft (e.g. enter the answer the source did not give), approve or reject it.
+     *     409 `stale-draft` when `base_version` is outdated, 409 `draft-published` once published.
+     */
+    patch: operations['updateQuestionDraft'];
+    trace?: never;
+  };
+  '/api/v1/question-imports/{import_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Question Import */
+    get: operations['getQuestionImport'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/question-imports/{import_id}/drafts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Question Import Drafts
+     * @description The run's drafts in source order, with validations, provenance pages and answer flags.
+     *     Drafts a failed job persisted are listed too (they are kept for the retry).
+     */
+    get: operations['listQuestionImportDrafts'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/question-imports/{import_id}/publish': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Publish Question Import Drafts
+     * @description Approve and register exactly these drafts as CONFIRMED questions (QIMPORT-01-AC03).
+     *     All or nothing: an id that is not a draft of this import is 404, a draft that cannot be
+     *     confirmed (e.g. an MCQ without an answer) is 422. Already published drafts return their
+     *     question (idempotent).
+     */
+    post: operations['publishQuestionImportDrafts'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/question-imports/{import_id}/retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Retry Question Import
+     * @description Run a failed (or cancelled) import again as a new job of the same run
+     *     (QIMPORT-01-AC04). The new job keeps the drafts the failed one persisted and adds only the
+     *     missing ones. 409 `import-not-retryable` unless the run failed or was cancelled.
+     */
+    post: operations['retryQuestionImport'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/questions/{question_id}': {
     parameters: {
       query?: never;
@@ -552,6 +656,31 @@ export type paths = {
      *     Each call is a new intent; an intent that is never completed creates no document.
      */
     post: operations['createDocumentUploadIntent'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/question-imports': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Question Imports
+     * @description The workspace's import runs, newest first.
+     */
+    get: operations['listQuestionImports'];
+    put?: never;
+    /**
+     * Create Question Import
+     * @description Start extracting draft questions from a question paper (QIMPORT-01-AC01). 409
+     *     `document-not-ready` while the paper is still processing (or failed).
+     */
+    post: operations['createQuestionImport'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1073,6 +1202,297 @@ export type components = {
        * Format: uuid
        */
       workspace_id: string;
+    };
+    /** DraftBBox */
+    DraftBBox: {
+      /** X0 */
+      x0: number;
+      /** X1 */
+      x1: number;
+      /** Y0 */
+      y0: number;
+      /** Y1 */
+      y1: number;
+    };
+    /** DraftEvidence */
+    DraftEvidence: {
+      /** Block Ids */
+      block_ids?: string[];
+      /** Document Id */
+      document_id: string;
+      /** Locations */
+      locations: components['schemas']['DraftLocation'][];
+      /**
+       * Quote
+       * @description Figure caption text, when any.
+       */
+      quote?: string | null;
+      /** Revision Id */
+      revision_id?: string | null;
+    };
+    /** DraftGenerator */
+    DraftGenerator: {
+      /** Model */
+      model: string;
+      /** Prompt Version */
+      prompt_version: string;
+    };
+    /** DraftLocation */
+    DraftLocation: {
+      bbox?: components['schemas']['DraftBBox'] | null;
+      /** Block Id */
+      block_id?: string | null;
+      /** Page */
+      page: number;
+    };
+    /**
+     * DraftPayload
+     * @description book_core `QuestionDraft` (schema_version 1).
+     */
+    DraftPayload: {
+      /**
+       * Accepted Answers
+       * @description null = the source has no answer.
+       */
+      accepted_answers: string[] | null;
+      /**
+       * Correct Option Ids
+       * @description null = the source has no answer.
+       */
+      correct_option_ids: string[] | null;
+      /**
+       * Evidence
+       * @description Page/area provenance in the source PDF.
+       */
+      evidence: components['schemas']['DraftEvidence'][];
+      /** Explanation */
+      explanation?: string | null;
+      generator?: components['schemas']['DraftGenerator'] | null;
+      /**
+       * Id
+       * @description Extractor id `{document_id}-q{NNN}` (not the draft row id).
+       */
+      id: string;
+      /** Justification */
+      justification?: string | null;
+      /** Options */
+      options: components['schemas']['QuestionOption'][];
+      /**
+       * Origin
+       * @enum {string}
+       */
+      origin: 'pdf_import' | 'generation';
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * Review Status
+       * @enum {string}
+       */
+      review_status: 'pending' | 'approved' | 'rejected';
+      /** Schema Version */
+      schema_version: number;
+      /** Stem */
+      stem: string;
+      /** Validations */
+      validations: components['schemas']['DraftValidation'][];
+    };
+    /** DraftPublishError */
+    DraftPublishError: {
+      /** Field */
+      field: string | null;
+      /** Message */
+      message: string;
+    };
+    /** DraftValidation */
+    DraftValidation: {
+      /** Code */
+      code: string;
+      /** Field */
+      field?: string | null;
+      /** Message */
+      message: string;
+      /**
+       * Severity
+       * @description `error` blocks approval.
+       * @enum {string}
+       */
+      severity: 'warning' | 'error';
+    };
+    /** ImportCreate */
+    ImportCreate: {
+      /**
+       * Document Id
+       * Format: uuid
+       * @description A `question_paper` document of this workspace whose processing finished.
+       */
+      document_id: string;
+    };
+    /** ImportDraft */
+    ImportDraft: {
+      /**
+       * Answer Missing
+       * @description Neither option answers nor accepted answers.
+       */
+      answer_missing: boolean;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Import Id */
+      import_id: string | null;
+      /** Is Multi Answer */
+      is_multi_answer: boolean;
+      /**
+       * Pages
+       * @description Source PDF pages (1-based) of the draft.
+       */
+      pages: number[];
+      payload: components['schemas']['DraftPayload'];
+      /**
+       * Position
+       * @description 0-based order in the source.
+       */
+      position: number;
+      /**
+       * Publish Errors
+       * @description Why it cannot be confirmed yet.
+       */
+      publish_errors: components['schemas']['DraftPublishError'][];
+      /**
+       * Publishable
+       * @description Can be confirmed as it is.
+       */
+      publishable: boolean;
+      /** Published Question Id */
+      published_question_id: string | null;
+      /**
+       * Question Number
+       * @description Number printed in the source.
+       */
+      question_number: number | null;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * Review Status
+       * @enum {string}
+       */
+      review_status: 'pending' | 'approved' | 'rejected';
+      /** Reviewed At */
+      reviewed_at: string | null;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      /** Validations */
+      validations: components['schemas']['DraftValidation'][];
+      /**
+       * Version
+       * @description Send as `base_version` when editing.
+       */
+      version: string;
+    };
+    /** ImportDraftList */
+    ImportDraftList: {
+      /** Items */
+      items: components['schemas']['ImportDraft'][];
+    };
+    /** ImportPublishedDraft */
+    ImportPublishedDraft: {
+      /**
+       * Draft Id
+       * Format: uuid
+       */
+      draft_id: string;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+    };
+    /** ImportPublishRequest */
+    ImportPublishRequest: {
+      /** Draft Ids */
+      draft_ids: string[];
+    };
+    /** ImportPublishResult */
+    ImportPublishResult: {
+      /**
+       * Items
+       * @description In request order.
+       */
+      items: components['schemas']['ImportPublishedDraft'][];
+    };
+    /** ImportRun */
+    ImportRun: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Document Title */
+      document_title: string | null;
+      /** Draft Count */
+      draft_count: number;
+      /**
+       * Error Code
+       * @description Why the last job failed (stable code).
+       */
+      error_code: string | null;
+      /** Finished At */
+      finished_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Job Id
+       * @description The run's current job; poll `GET /jobs/{id}`.
+       */
+      job_id: string | null;
+      /** Published Count */
+      published_count: number;
+      /** Source Document Id */
+      source_document_id: string | null;
+      /**
+       * Source Document Revision Id
+       * @description The document revision the import reads (active when it started).
+       */
+      source_document_revision_id: string | null;
+      /**
+       * Status
+       * @description queued | running | succeeded | failed | cancelled
+       * @enum {string}
+       */
+      status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /** ImportRunList */
+    ImportRunList: {
+      /** Items */
+      items: components['schemas']['ImportRun'][];
     };
     /** IssuedShareLink */
     IssuedShareLink: {
@@ -1768,6 +2188,39 @@ export type components = {
        * Format: uuid
        */
       workspace_id: string;
+    };
+    /**
+     * QuestionDraftUpdate
+     * @description Partial update: omitted fields are kept; `null` clears a nullable field (an answer set
+     *     to null means unknown).
+     */
+    QuestionDraftUpdate: {
+      /** Accepted Answers */
+      accepted_answers?: string[] | null;
+      /**
+       * Base Version
+       * @description `version` of the draft being edited.
+       */
+      base_version: string;
+      /** Correct Option Ids */
+      correct_option_ids?: string[] | null;
+      /** Explanation */
+      explanation?: string | null;
+      /** Is Multi Answer */
+      is_multi_answer?: boolean | null;
+      /** Options */
+      options?: components['schemas']['QuestionOption'][] | null;
+      /** Question Number */
+      question_number?: number | null;
+      /** Question Type */
+      question_type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      /**
+       * Review Status
+       * @description approve (needs a publishable draft) / reject / back to pending. A content edit without it returns an approved draft to pending.
+       */
+      review_status?: ('pending' | 'approved' | 'rejected') | null;
+      /** Stem */
+      stem?: string | null;
     };
     /** QuestionList */
     QuestionList: {
@@ -3629,6 +4082,379 @@ export interface operations {
       };
     };
   };
+  updateQuestionDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        draft_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['QuestionDraftUpdate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportDraft'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getQuestionImport: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        import_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportRun'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listQuestionImportDrafts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        import_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportDraftList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  publishQuestionImportDrafts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        import_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ImportPublishRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportPublishResult'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  retryQuestionImport: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        import_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportRun'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getQuestion: {
     parameters: {
       query?: never;
@@ -4696,6 +5522,158 @@ export interface operations {
       };
       /** @description Unsupported Media Type */
       415: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listQuestionImports: {
+    parameters: {
+      query?: {
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportRunList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createQuestionImport: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ImportCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportRun'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };

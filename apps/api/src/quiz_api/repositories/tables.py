@@ -289,6 +289,9 @@ question_drafts = Table(
     Column("import_run_id", Uuid),
     Column("position", Integer, nullable=False),
     Column("question_type", Text, nullable=False),
+    # M4.4a (20261018100000_question_import_worker.sql).
+    Column("question_number", Integer),
+    Column("is_multi_answer", Boolean, nullable=False),
     Column("payload", JSONB, nullable=False),
     Column("validations", JSONB, nullable=False),
     Column("review_status", Text, nullable=False),

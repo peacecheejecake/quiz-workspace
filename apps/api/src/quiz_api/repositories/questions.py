@@ -542,6 +542,7 @@ class QuestionRepository:
         question_number: int | None,
         sources: Sequence[SourceInputRecord],
         source_revisions: dict[uuid.UUID, uuid.UUID | None],
+        origin: Literal["manual", "import", "generation"] = "manual",
     ) -> uuid.UUID:
         """Question + revision 1 (+ sources) + `question.created`.
 
@@ -556,7 +557,7 @@ class QuestionRepository:
                 workspace_id=workspace_id,
                 chapter_id=chapter_id,
                 question_type=content.question_type,
-                origin="manual",
+                origin=origin,
                 question_number=question_number,
                 publication_status="DRAFT",
                 created_by=actor_id,
@@ -574,7 +575,12 @@ class QuestionRepository:
             actor_id,
             "question.created",
             question_id,
-            {"question_type": content.question_type, "publication_status": status, "version": 1},
+            {
+                "question_type": content.question_type,
+                "publication_status": status,
+                "version": 1,
+                "origin": origin,
+            },
         )
         return question_id
 
