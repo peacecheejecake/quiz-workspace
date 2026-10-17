@@ -2,6 +2,7 @@
 
 from book_core.question.labels import (
     CIRCLED_DIGITS,
+    HANGUL_LABELS,
     answer_option_keys,
     canonical_key,
     loose_text,
@@ -12,6 +13,7 @@ from book_core.question.validation import issue, structural_issues
 
 __all__ = [
     "CIRCLED_DIGITS",
+    "HANGUL_LABELS",
     "answer_option_keys",
     "canonical_key",
     "issue",

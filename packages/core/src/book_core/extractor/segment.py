@@ -154,8 +154,13 @@ _ANSWER_LABEL = re.compile(r"^(?:정답|답|answer|answers|ans\.?)$", re.IGNOREC
 
 
 def _cell_number(cell: str) -> int | None:
+    """A question number cell (``3``, ``3.``, ``3번``, fullwidth digits), else ``None``.
+
+    Decimal digits only: ``str.isdigit`` also accepts circled digits and superscripts, which
+    ``int`` rejects, and a circled digit in a table is an answer, never a question number.
+    """
     cell = cell.strip().rstrip(".번").strip()
-    return int(cell) if cell.isdigit() else None
+    return int(cell) if cell.isdecimal() and len(cell) <= 4 else None
 
 
 def _increasing(cells: Sequence[str], after: int) -> int | None:

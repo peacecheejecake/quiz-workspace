@@ -59,6 +59,7 @@ from book_core.llm import (
 )
 from book_core.question import (
     CIRCLED_DIGITS,
+    HANGUL_LABELS,
     answer_option_keys,
     canonical_key,
     issue,
@@ -296,14 +297,11 @@ def _options(raw: RawQuestion) -> tuple[list[tuple[str, str]], list[ValidationIs
     return options, issues
 
 
-_HANGUL_LABELS = "가나다라마바사아자차"
-
-
 def _is_sequence(keys: Sequence[str]) -> bool:
     """Labels run 1, 2, 3... / A, B, C... / 가, 나, 다... from the first label."""
-    if keys and all(k in _HANGUL_LABELS for k in keys):
-        return "".join(keys) == _HANGUL_LABELS[: len(keys)]
-    if all(k.isdigit() for k in keys):
+    if keys and all(len(k) == 1 and k in HANGUL_LABELS for k in keys):
+        return "".join(keys) == HANGUL_LABELS[: len(keys)]
+    if all(k.isdecimal() and len(k) <= 4 for k in keys):
         return [int(k) for k in keys] == list(range(1, len(keys) + 1))
     if all(len(k) == 1 and k.isalpha() for k in keys):
         return [ord(k) for k in keys] == list(range(ord("A"), ord("A") + len(keys)))

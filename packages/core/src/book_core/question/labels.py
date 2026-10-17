@@ -23,7 +23,8 @@ _OPTION_MARKER = re.compile(
     re.VERBOSE,
 )
 _ANSWER_SPLIT = re.compile(r"[,\uff0c\u3001/\u00b7;\s]+|\b(?:and|or)\b|및|와|과")
-_ANSWER_TOKEN = re.compile(r"^\(?\s*(10|[1-9]|[A-Ea-e])\s*\)?\.?(?:번)?$")
+HANGUL_LABELS = "가나다라마바사아자차"
+_ANSWER_TOKEN = re.compile(rf"^\(?\s*(10|[1-9]|[A-Ea-e]|[{HANGUL_LABELS}])\s*\)?\.?(?:번)?$")
 
 
 def canonical_key(label: str) -> str:
@@ -61,7 +62,7 @@ def split_option_line(text: str) -> list[tuple[str, str]] | None:
 
 
 def answer_option_keys(text: str) -> tuple[str, ...] | None:
-    """Canonical option keys of an MCQ answer (``②``, ``A, C, D``, ``2, 4``, ``3번``).
+    """Canonical option keys of an MCQ answer (``②``, ``A, C, D``, ``2, 4``, ``3번``, ``나``).
 
     ``None`` when the text is not purely a list of option labels (e.g. a written answer).
     """
