@@ -63,6 +63,8 @@ flowchart LR
 | P0.7 | `apps/worker`: Celery 앱, 멱등 task base(`async_jobs` 연동 인터페이스), 테스트용 eager 모드 | P0.6 | 샘플 task unit test |
 | P0.8 | `packages/core`(`book_core`): 모듈 골격, Pydantic 계약(`ParsedDocument`, `DocumentRevision`, `SearchChunk`, `SearchHit`, `Excerpt`, `QuestionDraft`), Typer CLI stub, 모델/LLM **fake adapter 인터페이스** | P0.1 | 계약 직렬화 unit test, `core --help` |
 | P0.9 | DB baseline migration(`supabase/migrations`): `profiles`, `workspaces`, `workspace_memberships`, `activity_events`, `async_jobs` + 최소 grants/RLS, seed 골격 | P0.2 | `supabase db reset` 성공, migration lint |
+| P0.3b | 토큰 보강: feedback(danger/success/warning, 텍스트 대비 충족), on-accent, scrim, typography scale, breakpoint 토큰 추가 후 `packages/ui` 내부 alias 교체 | P0.4 | 토큰 test + ui test/axe 통과, alias 제거 |
+| P0.7b | Postgres `JobStore` + `async_jobs` 정합 migration(max_attempts, lease/locked_by, cancel_requested_at, publication 상태, idempotency 범위 결정) | P0.7, P0.9 | 실 DB 통합 test(claim 경쟁·lease 회수·reconciler), pgTAP 갱신 |
 | P0.10 | E2E harness: Playwright 설치, `tests/e2e/fixtures/`(사용자·workspace 고유 fixture 팩토리), test-only seed 경로(production 빌드 제외), `e2e:trace` 스크립트(AC ↔ test title 대조, orphan 검출), CI workflow 골격(lint→unit→contract→e2e) | P0.5, P0.6, P0.9 | `pnpm e2e:trace` 동작. 기존 starter spec은 `tests/e2e/_pending/`(실행 제외)로 옮기고, 각 Phase RED Task가 화면 명세 경로로 가져와 확장 |
 
 ### A — Auth track (auth.md §6)
@@ -107,7 +109,7 @@ flowchart LR
 | M3.1a | Workspace API: CRUD/archive/restore/soft delete, 멱등 키, activity 기록 | M3.0, A1.3 | contract test GREEN |
 | M3.1b | WS-01 화면 (`WorkspaceSwitcher`, 탭 Active/Archived, 빈 상태) | M3.1a, A2.1, P0.4 | WS-01-AC01~05 GREEN (AC06은 S2) |
 | M3.2a | 문서 schema(`documents`, `document_revisions`, `chapters`, `content_blocks`), upload-intent / complete-upload, private Storage 버킷 | M3.1a | 업로드 인가 integration test |
-| M3.2b | Worker 파싱·색인 job, `GET /jobs/{id}`, SSE events, 실패 시 이전 revision 유지 | M3.2a, M1.5, M2.2, P0.7 | job 재시도·멱등 test |
+| M3.2b | Worker 파싱·색인 job, `GET /jobs/{id}`(DB 기준, Celery result 미사용), SSE events, 실패 시 이전 revision 유지 | M3.2a, M1.5, M2.2, P0.7b | job 재시도·멱등 test |
 | M3.3 | DOC-01 화면: 목록·업로드(TUS)·진행률·취소·재시도 | M3.2b | DOC-01 AC GREEN |
 | M3.4 | outline/blocks/publish API, 교정 → 신규 revision → 재색인 → rollback | M3.2b | revision/재색인 test |
 | M3.5 | DOC-02 화면: PDF.js viewer, `DocumentOutlineTree`, `TextBlockEditor`, signed read URL | M3.4 | DOC-02 AC GREEN |
@@ -180,6 +182,9 @@ flowchart TB
     P03 --> P05
     P01 --> P06[P0.6 api] --> P07[P0.7 worker]
     P01 --> P08[P0.8 core]
+  P04 --> P03b[P0.3b token 보강]
+  P07 --> P07b[P0.7b PG JobStore]
+  P09 --> P07b
     P02 --> P09[P0.9 db baseline]
     P05 --> P010[P0.10 e2e harness]
     P06 --> P010
@@ -230,7 +235,7 @@ flowchart TB
   P04 --> M31b
   M15 --> M32b
   M22 --> M32b
-  P07 --> M32b
+  P07b --> M32b
   M26 --> M36a
 
   subgraph M4[M4 Bank·Import]
@@ -356,7 +361,9 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | P0.5 web stub routes | ✅ | c28cc7a · 40a9aed · d074397 | P2(root .env 미로딩) → 반영 → P1(확장자 없는 config import, native TS loader) → 반영 → 지적 없음. `agentRules: false`(next dev가 apps/web/AGENTS.md 생성 방지) |
 | P0.9 DB baseline | ✅ | 0e1d8c0 (merge a78f172) · ac9fa6a | P2(quiz_api LOGIN 시 db-test 실패) → 반영 → 지적 없음 |
 | M1.1 PDF fixtures | ✅ | eea3957 | 지적 없음. Noto Sans KR subset(OFL) 임베드 |
-| W3 잔여: P0.4 · P0.7 | ◐ | — | 병렬 진행 중 |
+| P0.4 UI kit | ◐ | 66f6466 (merge 7bc9440, React 19.2.8로 정렬) | P1(RSC에서 client boundary 누락)·P2(숨김 요소로 Tab handoff) 수정 중 |
+| P0.7 worker | ◐ | 981a1bf (merge 3cb0c83) | P1×2(publish 실패·hard timeout 시 job 고착)·P2(취소 시 cleanup 누락) + API redaction 공백 수정 중 |
+| A1.1 · M1.2 | ◐ | — | 병렬 진행 중 |
 | P0.8 core 골격 | ✅ | 163e9ea · bc78ce6 · 1c56c17 | P2(LLM 검증 오류에 원문 노출) → 반영 → P2(식별자형 key 노출) → 반영 → 지적 없음 |
 | (통합) worktree 제외 설정 | ✅ | 6704d1c | 사소한 설정 수정, 리뷰 생략 |
 
