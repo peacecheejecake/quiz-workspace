@@ -18,14 +18,24 @@ vi.mock('next/navigation', () => ({
 
 const createWorkspaceAction =
   vi.fn<(prev: WorkspaceFormState, data: FormData) => Promise<WorkspaceFormState>>();
+const renameWorkspaceAction =
+  vi.fn<(prev: WorkspaceFormState, data: FormData) => Promise<WorkspaceFormState>>();
 vi.mock('../src/lib/workspaces/actions', () => ({
   createWorkspaceAction: (prev: WorkspaceFormState, data: FormData) =>
     createWorkspaceAction(prev, data),
+  renameWorkspaceAction: (prev: WorkspaceFormState, data: FormData) =>
+    renameWorkspaceAction(prev, data),
+  archiveWorkspaceAction: vi.fn(),
+  restoreWorkspaceAction: vi.fn(),
+  deleteWorkspaceAction: vi.fn(),
 }));
 
 const { CreateWorkspaceButton, CreateWorkspaceProvider } =
   await import('../src/components/workspaces/create-workspace');
 const { AppFrame, drawerFor } = await import('../src/components/app-shell/app-frame');
+const { WorkspaceListItem } = await import('../src/components/workspaces/workspace-list-item');
+
+const WS_ID = '3f2b6f0e-8a4c-4d7e-9a51-1c2d3e4f5a6b';
 
 function Home() {
   return (
@@ -47,6 +57,7 @@ function deferred<T>() {
 
 beforeEach(() => {
   createWorkspaceAction.mockReset();
+  renameWorkspaceAction.mockReset();
   nav.pathname = '/workspaces';
 });
 
@@ -143,6 +154,120 @@ describe('create workspace dialog', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(cta).toHaveFocus();
   });
+});
+
+describe('responses for an earlier dialog session (dialog reopened before they arrived)', () => {
+  async function openCreate(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Workspace 만들기' }));
+    return screen.findByRole('dialog', { name: 'Workspace 만들기' });
+  }
+
+  it.each([
+    [
+      'success',
+      { status: 'done', attempt: 1, workspace: { id: WS_ID, name: '첫 번째' } },
+      '‘첫 번째’ Workspace를 만들었습니다.',
+    ],
+    [
+      'failure',
+      { status: 'error', failure: 'unavailable', attempt: 1, error: '서버 오류' },
+      '서버 오류',
+    ],
+  ] as const)(
+    'create: an old %s toasts but leaves the new session alone',
+    async (_, result, toast) => {
+      const user = userEvent.setup();
+      const first = deferred<WorkspaceFormState>();
+      createWorkspaceAction.mockReturnValueOnce(first.promise);
+      render(<Home />);
+
+      let dialog = await openCreate(user);
+      await user.type(within(dialog).getByRole('textbox', { name: /이름/ }), '첫 번째');
+      await user.click(within(dialog).getByRole('button', { name: '만들기' }));
+      await waitFor(() => expect(createWorkspaceAction).toHaveBeenCalledTimes(1));
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+      dialog = await openCreate(user);
+      const input = within(dialog).getByRole('textbox', { name: /이름/ });
+      await user.type(input, '두 번째');
+      // The new session is not busy with the old request.
+      expect(within(dialog).getByRole('button', { name: '만들기' })).toBeEnabled();
+
+      await act(async () => {
+        first.resolve(result);
+      });
+      expect(await screen.findByText(toast, { selector: '.qz-toast__title' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Workspace 만들기' })).toBe(dialog);
+      expect(input).toHaveValue('두 번째');
+      expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    [
+      'success',
+      { status: 'done', attempt: 1, workspace: { id: WS_ID, name: '첫 이름' } },
+      '이름을 ‘첫 이름’(으)로 바꿨습니다.',
+    ],
+    [
+      'failure',
+      { status: 'error', failure: 'archived', attempt: 1, error: '보관됨 오류' },
+      '보관됨 오류',
+    ],
+  ] as const)(
+    'rename: an old %s toasts but leaves the new session alone',
+    async (_, result, toast) => {
+      const user = userEvent.setup();
+      const first = deferred<WorkspaceFormState>();
+      renameWorkspaceAction.mockReturnValueOnce(first.promise);
+      render(
+        <ToastProvider>
+          <ul>
+            <WorkspaceListItem
+              workspace={{
+                id: WS_ID,
+                name: '운영체제',
+                role: 'owner',
+                status: 'active',
+                archived_at: null,
+                created_at: '2026-10-17T00:00:00Z',
+                updated_at: '2026-10-17T00:00:00Z',
+              }}
+            />
+          </ul>
+        </ToastProvider>,
+      );
+      async function openRename() {
+        await user.click(screen.getByRole('button', { name: /더보기/ }));
+        await user.click(await screen.findByRole('menuitem', { name: '이름 변경' }));
+        return screen.findByRole('dialog', { name: 'Workspace 이름 변경' });
+      }
+
+      let dialog = await openRename();
+      let input = within(dialog).getByRole('textbox', { name: /이름/ });
+      await user.clear(input);
+      await user.type(input, '첫 이름');
+      await user.click(within(dialog).getByRole('button', { name: '저장' }));
+      await waitFor(() => expect(renameWorkspaceAction).toHaveBeenCalledTimes(1));
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+      dialog = await openRename();
+      input = within(dialog).getByRole('textbox', { name: /이름/ });
+      await user.clear(input);
+      await user.type(input, '둘째 이름');
+      expect(within(dialog).getByRole('button', { name: '저장' })).toBeEnabled();
+
+      await act(async () => {
+        first.resolve(result);
+      });
+      expect(await screen.findByText(toast, { selector: '.qz-toast__title' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Workspace 이름 변경' })).toBe(dialog);
+      expect(input).toHaveValue('둘째 이름');
+      expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    },
+  );
 });
 
 describe('AppFrame mobile drawer', () => {

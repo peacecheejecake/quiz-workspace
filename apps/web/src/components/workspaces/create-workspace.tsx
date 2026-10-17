@@ -18,7 +18,7 @@ import {
 } from 'react';
 import { createWorkspaceAction, type WorkspaceFormState } from '@/lib/workspaces/actions';
 import { keyForAttempt, type PendingCreate } from '@/lib/workspaces/idempotency';
-import { useNameSubmit } from './use-name-submit';
+import { useNameSubmit, type NameResultContext } from './use-name-submit';
 import { WorkspaceNameForm } from './workspace-name-form';
 
 const CREATE_LABEL = 'Workspace 만들기';
@@ -40,19 +40,23 @@ export function CreateWorkspaceProvider({ children }: { children: ReactNode }) {
     setOpen(next);
   }, []);
 
-  function onResult(state: WorkspaceFormState) {
+  function onResult(state: WorkspaceFormState, { current, formData }: NameResultContext) {
+    const sentKey = formData.get('idempotencyKey');
+    const sentWithCurrentKey = pendingKey.current?.key === sentKey;
     if (state.status === 'done' && state.workspace) {
-      pendingKey.current = null;
-      changeOpen(false);
+      // That creation is complete: its key must never be replayed for a new one.
+      if (sentWithCurrentKey) pendingKey.current = null;
       toast({ tone: 'success', title: `‘${state.workspace.name}’ Workspace를 만들었습니다.` });
+      if (!current) return;
+      changeOpen(false);
       // New workspaces are active: show that tab.
       if (pathname === '/workspaces') window.history.replaceState(null, '', '/workspaces');
       else router.push('/workspaces');
       return;
     }
-    if (state.failure === 'idempotencyKeyReused') pendingKey.current = null;
-    // Dismissed while in flight: the form is gone, so report the failure here.
-    if (!openRef.current && state.error) toast({ tone: 'error', title: state.error });
+    if (state.failure === 'idempotencyKeyReused' && sentWithCurrentKey) pendingKey.current = null;
+    // Dismissed (or reopened) while in flight: no form shows this result, so report it here.
+    if ((!current || !openRef.current) && state.error) toast({ tone: 'error', title: state.error });
   }
 
   const submission = useNameSubmit(createWorkspaceAction, onResult);

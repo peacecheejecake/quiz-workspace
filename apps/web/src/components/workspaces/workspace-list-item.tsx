@@ -29,7 +29,7 @@ import {
 } from '@/lib/workspaces/actions';
 import { keyForAttempt, type PendingCreate } from '@/lib/workspaces/idempotency';
 import { ROLE_LABELS, sharingHref, workspaceHref } from './labels';
-import { useNameSubmit } from './use-name-submit';
+import { useNameSubmit, type NameResultContext } from './use-name-submit';
 import { WorkspaceNameForm } from './workspace-name-form';
 import styles from './workspaces.module.css';
 
@@ -86,12 +86,13 @@ function OwnerActions({ workspace }: { workspace: Workspace }) {
     });
   }
 
-  function onRenamed(state: WorkspaceFormState) {
+  function onRenamed(state: WorkspaceFormState, { current }: NameResultContext) {
     if (state.status === 'done' && state.workspace) {
-      setRenameOpen(false);
       toast({ tone: 'success', title: `이름을 ‘${state.workspace.name}’(으)로 바꿨습니다.` });
-    } else if (!renameOpenRef.current && state.error) {
-      // Dismissed while in flight: the form is gone, so report the failure here.
+      // A response for an earlier dialog session must not close the one now open.
+      if (current) setRenameOpen(false);
+    } else if ((!current || !renameOpenRef.current) && state.error) {
+      // Dismissed (or reopened) while in flight: no form shows this result, so report it here.
       toast({ tone: 'error', title: state.error });
     }
   }
@@ -99,8 +100,7 @@ function OwnerActions({ workspace }: { workspace: Workspace }) {
   const resetRename = renameSubmission.reset;
   useEffect(() => {
     renameOpenRef.current = renameOpen;
-    if (renameOpen) resetRename();
-  }, [renameOpen, resetRename]);
+  }, [renameOpen]);
 
   return (
     <>
@@ -117,7 +117,15 @@ function OwnerActions({ workspace }: { workspace: Workspace }) {
         </DropdownMenuTrigger>
         <DropdownMenuContent aria-label={`${workspace.name} 작업`}>
           {archived ? null : (
-            <DropdownMenuItem onSelect={() => setRenameOpen(true)}>이름 변경</DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                // A new dialog session: results of earlier submissions stay out of it.
+                resetRename();
+                setRenameOpen(true);
+              }}
+            >
+              이름 변경
+            </DropdownMenuItem>
           )}
           <DropdownMenuItem asChild>
             <Link href={sharingHref(workspace.id)}>공유 설정</Link>
