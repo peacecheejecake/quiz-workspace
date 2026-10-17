@@ -367,6 +367,33 @@ describe('upload state machine', () => {
     expect(h.client.createUploadIntent).toHaveBeenCalledTimes(1);
   });
 
+  it('replays complete-upload with the original intent after a lost response, even past its expiry', async () => {
+    const h = harness(['ok']);
+    // The first completion commits server-side but its response is lost.
+    h.client.completeUpload
+      .mockRejectedValueOnce(new DocumentApiError('network'))
+      .mockResolvedValueOnce({ document_id: 'doc-1', job_id: 'job-1' });
+    const context: UploadContext = {};
+    const item = fresh();
+    let state = await drive(h, item, context, [item]);
+    expect(only(state)).toMatchObject({ stored: true, failure: { kind: 'network' } });
+    const firstUploadId = only(state).uploadId;
+
+    // By the time the user retries, the intent has expired on the client clock.
+    state = state.map((i) => ({ ...i, intentExpiresAt: Date.now() - 1 }));
+    expect(resumePhase(only(state))).toBe('completing');
+    state = uploadsReducer(state, { type: 'retry', localId: 'local-1' });
+    state = await drive(h, only(state), context, state);
+
+    expect(only(state)).toMatchObject({ phase: 'ready', documentId: 'doc-1' });
+    expect(h.client.createUploadIntent).toHaveBeenCalledTimes(1);
+    expect(h.transferRuns).toHaveBeenCalledTimes(1);
+    expect(h.client.completeUpload.mock.calls.map(([id]) => id as string)).toEqual([
+      firstUploadId,
+      firstUploadId,
+    ]);
+  });
+
   it('does not offer retry for a mismatched upload or a failed job', async () => {
     const h = harness(['ok']);
     h.client.completeUpload.mockRejectedValueOnce(new DocumentApiError('mismatch', 422));

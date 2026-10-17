@@ -200,6 +200,21 @@ describe('tusTransfer', () => {
     expect(tus.instances).toHaveLength(1);
     expect(firstInstance(tus.instances).starts).toBe(2);
   });
+
+  it('does not start the upload when cancelled while the tus module is loading', async () => {
+    const tus = fakeTus(['success']);
+    let release!: () => void;
+    const loaded = new Promise<void>((resolve) => (release = resolve));
+    const controller = new AbortController();
+    const run = tusTransfer(file, tusIntent, async () => {
+      await loaded;
+      return tus.module;
+    }).run({ signal: controller.signal, onProgress: () => undefined });
+    controller.abort();
+    release();
+    await expect(run).rejects.toBeInstanceOf(UploadAbortedError);
+    expect(tus.instances).toHaveLength(0);
+  });
 });
 
 // --- SSE ----------------------------------------------------------------------------------------

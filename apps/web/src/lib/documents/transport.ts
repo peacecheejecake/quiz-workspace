@@ -107,6 +107,8 @@ export function tusTransfer(
     async run({ onProgress, signal }) {
       if (signal.aborted) throw new UploadAbortedError();
       const tus = await loadTus();
+      // Cancelled while the module was loading: the abort event has already fired.
+      if (signal.aborted) throw new UploadAbortedError();
       return new Promise<void>((resolve, reject) => {
         const onAbort = () => {
           void upload?.abort(false);
@@ -145,6 +147,11 @@ export function tusTransfer(
         if (upload) Object.assign(upload.options, options);
         else upload = new tus.Upload(file, options);
         signal.addEventListener('abort', onAbort, { once: true });
+        if (signal.aborted) {
+          signal.removeEventListener('abort', onAbort);
+          reject(new UploadAbortedError());
+          return;
+        }
         upload.start();
       });
     },

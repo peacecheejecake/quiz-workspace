@@ -238,6 +238,8 @@ export function uploadsReducer(state: readonly UploadItem[], action: UploadActio
 /** First unfinished step of an item (where a run or a retry starts). */
 export function resumePhase(item: UploadItem, now = Date.now()): UploadPhase {
   if (!item.sha256) return 'hashing';
+  // Stored bytes are completed with their original intent, even past its client-side expiry.
+  if (item.stored && item.uploadId && (!item.documentId || !item.jobId)) return 'completing';
   if (!item.uploadId || (item.intentExpiresAt !== undefined && item.intentExpiresAt <= now)) {
     return 'requesting';
   }
@@ -314,7 +316,8 @@ export async function runUpload({
 }: RunUploadArgs): Promise<void> {
   const now = deps.now ?? Date.now;
   const id = item.localId;
-  let { sha256, stored, documentId, jobId } = item;
+  const { stored } = item;
+  let { sha256, documentId, jobId } = item;
   try {
     if (!sha256) {
       dispatch({ type: 'hashing', localId: id });
@@ -322,29 +325,33 @@ export async function runUpload({
       dispatch({ type: 'hashed', localId: id, sha256 });
     }
     if (!documentId || !jobId) {
-      let intent = context.intent;
-      const expired = item.intentExpiresAt !== undefined && item.intentExpiresAt <= now();
-      // The reducer drops `uploadId` when an intent can no longer be used (expired, rejected).
-      if (!intent || !item.uploadId || intent.upload_id !== item.uploadId || expired) {
-        dispatch({ type: 'requesting', localId: id });
-        intent = await deps.client.createUploadIntent(
-          workspaceId,
-          {
-            filename: item.filename,
-            size_bytes: item.size,
-            content_type: PDF_CONTENT_TYPE,
-            sha256,
-            document_type: item.documentType,
-          },
-          signal,
-        );
-        context.intent = intent;
-        context.transfer = undefined;
-        stored = false;
-        const expiresAt = Date.parse(intent.expires_at);
-        dispatch({ type: 'intent', localId: id, uploadId: intent.upload_id, expiresAt });
-      }
-      if (!stored) {
+      // Bytes already stored under an intent: complete-upload may have committed with its
+      // response lost. Always ask again with the ORIGINAL upload id — the API replays a
+      // completed intent before checking expiry — and only start over after an explicit
+      // `upload-expired` answer (the reducer then drops `uploadId` and `stored`).
+      let uploadId = stored ? item.uploadId : undefined;
+      if (!uploadId) {
+        let intent = context.intent;
+        const expired = item.intentExpiresAt !== undefined && item.intentExpiresAt <= now();
+        // The reducer drops `uploadId` when an intent can no longer be used (expired, rejected).
+        if (!intent || !item.uploadId || intent.upload_id !== item.uploadId || expired) {
+          dispatch({ type: 'requesting', localId: id });
+          intent = await deps.client.createUploadIntent(
+            workspaceId,
+            {
+              filename: item.filename,
+              size_bytes: item.size,
+              content_type: PDF_CONTENT_TYPE,
+              sha256,
+              document_type: item.documentType,
+            },
+            signal,
+          );
+          context.intent = intent;
+          context.transfer = undefined;
+          const expiresAt = Date.parse(intent.expires_at);
+          dispatch({ type: 'intent', localId: id, uploadId: intent.upload_id, expiresAt });
+        }
         const transfer = context.transfer ?? deps.createTransfer(file, intent);
         context.transfer = transfer;
         dispatch({ type: 'progress', localId: id, loaded: 0 });
@@ -353,8 +360,9 @@ export async function runUpload({
           onProgress: (loaded) => dispatch({ type: 'progress', localId: id, loaded }),
         });
         dispatch({ type: 'stored', localId: id });
+        uploadId = intent.upload_id;
       }
-      const done = await deps.client.completeUpload(intent.upload_id, sha256, signal);
+      const done = await deps.client.completeUpload(uploadId, sha256, signal);
       documentId = done.document_id;
       jobId = done.job_id;
       // The signed URL is no longer needed once the document exists.
