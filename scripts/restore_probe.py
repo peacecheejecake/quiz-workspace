@@ -52,10 +52,19 @@ def _worker_settings() -> Any:
     return settings.model_copy(update={"app_env": Environment.TEST})
 
 
-def _local(url: str | None) -> str:
+def _local(url: str | None, what: str = "stack") -> str:
     if not url or urlsplit(url).hostname not in LOOPBACK:
-        raise SystemExit("restore-probe: refusing a non-local stack")
+        raise SystemExit(f"restore-probe: refusing a non-local {what}")
     return url
+
+
+def _preflight(settings: Any, supabase_url: str) -> None:
+    """Every endpoint the probe touches resolves to loopback, checked before anything is created
+    or read: Supabase (Auth/Storage), the worker's Postgres and Qdrant."""
+    _local(supabase_url, "Supabase")
+    worker_db = settings.worker_database_url
+    _local(worker_db.get_secret_value() if worker_db is not None else None, "WORKER_DATABASE_URL")
+    _local(settings.qdrant_url, "QDRANT_URL")
 
 
 def seed(state: Path) -> int:
@@ -68,14 +77,25 @@ def seed(state: Path) -> int:
     from quiz_worker.storage_backup import _dotenv, storage_config
 
     config = storage_config(dotenv=REPO / ".env")
-    supabase = _local(config.url)
+    supabase = config.url
+    settings = _worker_settings()
+    _preflight(settings, supabase)
+    issuer = f"{supabase}/auth/v1"
+    app_settings = Settings(
+        _env_file=str(REPO / ".env"),  # type: ignore[call-arg]
+        SUPABASE_JWT_ISSUER=issuer,
+        SUPABASE_JWKS_URL=f"{issuer}/.well-known/jwks.json",
+    )
+    _local(
+        app_settings.database_url.get_secret_value() if app_settings.database_url else None,
+        "DATABASE_URL",
+    )
     env = _dotenv(REPO / ".env")
     publishable = os.environ.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") or env.get(
         "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", ""
     )
     if not publishable:
         return _fail("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is not set")
-    issuer = f"{supabase}/auth/v1"
     email = f"restore-probe-{uuid.uuid4().hex}@example.test"
     password = secrets.token_urlsafe(24)
     admin = {"apikey": config.secret_key, "Authorization": f"Bearer {config.secret_key}"}
@@ -98,12 +118,6 @@ def seed(state: Path) -> int:
         return _fail(f"sign in: HTTP {signed_in.status_code}")
     bearer = {"Authorization": f"Bearer {signed_in.json()['access_token']}"}
 
-    app_settings = Settings(
-        _env_file=str(REPO / ".env"),  # type: ignore[call-arg]
-        SUPABASE_JWT_ISSUER=issuer,
-        SUPABASE_JWKS_URL=f"{issuer}/.well-known/jwks.json",
-    )
-    _local(app_settings.database_url.get_secret_value() if app_settings.database_url else None)
     pdf = PDF.read_bytes()
     sha256 = hashlib.sha256(pdf).hexdigest()
     with TestClient(create_app(app_settings, readiness_checkers=[])) as api:
@@ -142,10 +156,6 @@ def seed(state: Path) -> int:
             202,
         )
 
-        settings = _worker_settings()
-        if settings.worker_database_url is None:
-            return _fail("WORKER_DATABASE_URL is not set")
-        _local(settings.worker_database_url.get_secret_value())
         deps = deps_from_settings(settings)
         engine = create_job_store_engine(settings.worker_database_url, pool_size=2)
         try:
@@ -183,11 +193,10 @@ def verify(state: Path) -> int:
     from quiz_worker.storage import SOURCE_BUCKET, SupabaseStorage
     from quiz_worker.storage_backup import storage_config
 
-    probe = json.loads(state.read_text(encoding="utf-8"))
+    config = storage_config(dotenv=REPO / ".env")
     settings = _worker_settings()
-    if settings.worker_database_url is None:
-        return _fail("WORKER_DATABASE_URL is not set")
-    _local(settings.worker_database_url.get_secret_value())
+    _preflight(settings, config.url)
+    probe = json.loads(state.read_text(encoding="utf-8"))
     engine = create_job_store_engine(settings.worker_database_url, pool_size=1)
     try:
         with engine.connect() as conn:
@@ -215,8 +224,7 @@ def verify(state: Path) -> int:
     ):
         return _fail("document row differs after restore")
 
-    config = storage_config(dotenv=REPO / ".env")
-    storage = SupabaseStorage(_local(config.url), config.secret_key)
+    storage = SupabaseStorage(config.url, config.secret_key)
     try:
         with tempfile.TemporaryDirectory() as tmp:
             got = storage.download(
