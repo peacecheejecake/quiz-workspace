@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10",
+    "@next/eslint-plugin-next": "16.3.8",
     "eslint": "^10",
     "globals": "^17",
     "prettier": "^3",

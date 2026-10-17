@@ -21,3 +21,4 @@ coverage/
 storybook-static/
 *.tsbuildinfo
 .eslintcache
+next-env.d.ts
