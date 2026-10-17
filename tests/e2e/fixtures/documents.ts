@@ -148,11 +148,16 @@ export async function uploadBook(
   return uploadPdf(owner, workspaceId, book(id));
 }
 
-/** upload-intent → direct Storage upload → complete-upload for any synthetic PDF fixture. */
+/**
+ * upload-intent → direct Storage upload → complete-upload for any synthetic PDF fixture.
+ * `type` is the document type (`question_paper` for question PDFs, implementation-plan §7);
+ * omitted for books, which keep the server default.
+ */
 export async function uploadPdf(
   owner: Member,
   workspaceId: string,
   fixture: PdfFile,
+  type?: 'question_paper',
 ): Promise<UploadedDocument> {
   const bytes = readFileSync(fixture.path);
   const intent = await owner.api.ok<{
@@ -167,6 +172,7 @@ export async function uploadPdf(
       size_bytes: fixture.size,
       content_type: 'application/pdf',
       sha256: fixture.sha256,
+      ...(type ? { type } : {}),
     },
     [200, 201],
   );

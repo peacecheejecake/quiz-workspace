@@ -28,15 +28,18 @@ def test_qbank_01_ac02_mcq_is_validated_and_confirmed_on_save(seed: Any) -> None
     assert alice.list_questions(ws["id"]) == []
 
     base = seed.mcq(_stem("물이 기체로 변하는 과정은?"), ["응결", "증발", "강수", "침전"], 1)
+    # Each payload is `base` (valid; answer opt-2) with exactly one property broken, so a 422 can
+    # only come from the rule under test.
+    opts = base["options"]
     invalid = [
         {**base, "correct_option_ids": []},  # MCQ without an answer
         {**base, "correct_option_ids": ["opt-9"]},  # answer not among the options
-        {**base, "options": [{"id": "dup", "text": "a"}, {"id": "dup", "text": "b"}]},
-        {**base, "options": [{"id": "opt-1", "text": "   "}]},  # blank option
-        {**base, "options": []},
+        {**base, "options": [*opts, {"id": "opt-2", "text": "중복 id"}]},  # duplicate option id
+        {**base, "options": [*opts[:2], {"id": "opt-3", "text": "   "}, opts[3]]},  # blank text
+        {**base, "options": [*opts[:2], {"id": "opt 3", "text": "공백 id"}, opts[3]]},  # bad id
         {**base, "stem": "  "},
         {**base, "question_type": "TRUE_FALSE"},
-        {**base, "correct_option_ids": ["opt-1", "opt-2"], "is_multi_answer": False},
+        {**base, "correct_option_ids": ["opt-1", "opt-2"]},  # two answers, single-answer MCQ
     ]
     for body in invalid:
         res = alice.call("POST", f"/workspaces/{ws['id']}/questions", body)

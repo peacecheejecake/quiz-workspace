@@ -206,3 +206,41 @@ def test_qimport_01_ac04_retries_do_not_duplicate_runs_drafts_or_questions(seed:
     bank = alice.list_questions(ws["id"])
     assert sorted(q["id"] for q in bank) == sorted(mapping(once).values())
     assert len(alice.drafts(first["id"])) == len(drafts)
+
+
+def test_qimport_01_ac04_retrying_a_failed_import_job_does_not_duplicate_drafts(seed: Any) -> None:
+    alice = seed.client("qimport01-ac04-job")
+    ws = alice.create_workspace()
+    _no_imports_yet(alice, ws["id"])
+    # Same bytes as questions-ko.pdf; the marker makes the fake extractor fail the first job
+    # after it persisted part of the drafts (A7).
+    document_id = alice.upload_question_paper(
+        ws["id"], f"questions-ko-{seed.IMPORT_FAILURE_MARKER}.pdf"
+    )
+    run = alice.ok_response(alice.start_import(ws["id"], document_id), "POST", "import", (202,))
+    alice.wait_for_job(str(run["job_id"]), expected="failed")
+    assert alice.ok("GET", f"/question-imports/{run['id']}")["status"] == "failed"
+    partial = alice.drafts(run["id"])
+    assert len(partial) < len(seed.QUESTION_TRUTH["questions"])
+    assert all(d["published_question_id"] is None for d in partial)
+
+    retried = alice.retry_import(str(run["id"]))
+    assert retried["id"] == run["id"]
+    assert retried["job_id"] != run["job_id"]
+    alice.wait_for_job(str(retried["job_id"]))
+    assert alice.ok("GET", f"/question-imports/{run['id']}")["status"] == "succeeded"
+    runs = alice.ok("GET", f"/workspaces/{ws['id']}/question-imports")["items"]
+    assert [r["id"] for r in runs] == [run["id"]]
+
+    drafts = alice.drafts(run["id"])
+    truth = seed.QUESTION_TRUTH["questions"]
+    assert len(drafts) == len(truth)
+    assert len({d["position"] for d in drafts}) == len(drafts)
+    for t in truth:
+        seed.draft_for(drafts, t["number"])  # asserts exactly one draft per question
+
+    ids = [seed.draft_for(drafts, 1)["id"], seed.draft_for(drafts, 2)["id"]]
+    published = alice.ok_response(alice.publish(run["id"], ids), "POST", "publish", (200,))
+    question_ids = [p["question_id"] for p in published["items"]]
+    assert len(set(question_ids)) == len(ids)
+    assert sorted(q["id"] for q in alice.list_questions(ws["id"])) == sorted(question_ids)

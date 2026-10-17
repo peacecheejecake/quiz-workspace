@@ -8,8 +8,10 @@
 // screen and waits for the import job; E2E runs the worker with the deterministic fake LLM adapter
 // (docs/e2e-strategy.md §3, §6). Draft/bank state is checked through the public API
 // (fixtures/questions.ts, whose header lists the endpoint/label assumptions, incl. A5: the AC's
-// "5 questions" becomes the paper's 8). Network failures are injected only by dropping a response
-// the server already produced; nothing is faked.
+// "5 questions" becomes the paper's 8). Failures: a job failure comes from the APP_ENV=test fake
+// extractor via the IMPORT_FAILURE_MARKER file name (A7); a network failure drops a response the
+// server already produced.
+import { mkdirSync } from 'node:fs';
 import type { Page, Route } from '@playwright/test';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 import {
@@ -17,9 +19,11 @@ import {
   bankUi,
   draftFor,
   expect,
+  failingOnceCopy,
   importPath,
   importUi,
   JOB_TIMEOUT_MS,
+  waitForImportStatus,
   listDrafts,
   listImports,
   listQuestions,
@@ -209,6 +213,65 @@ test(
     await expect(bankUi.items(page)).toHaveCount(approved.length);
     for (const t of PAPER.questions.filter((x) => !approved.includes(x))) {
       await expect(bankUi.item(page, t.stem), `question ${t.number}`).toHaveCount(0);
+    }
+  },
+);
+
+test(
+  'QIMPORT-01-AC04 retrying a failed import job yields each draft once and publishing registers unique questions',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('qimport01-ac04-job');
+    const ws = await workspaceFactory.create(owner);
+    expect(await listImports(owner, ws.id)).toEqual([]);
+    mkdirSync(test.info().outputDir, { recursive: true });
+    const failing = failingOnceCopy(PAPER, test.info().outputDir);
+
+    await signInAs(page, owner.user);
+    await page.goto(importPath(ws.id));
+    await uploadQuestionPaper(page, failing);
+
+    // The first job fails after persisting part of the drafts (fake extractor, A7).
+    await expect
+      .poll(async () => (await listImports(owner, ws.id)).length, { timeout: JOB_TIMEOUT_MS })
+      .toBe(1);
+    const [run] = await listImports(owner, ws.id);
+    if (!run) throw new Error('no import run');
+    await waitForImportStatus(owner, run.id, 'failed');
+    await expect(importUi.alert(page)).toContainText(/실패|오류|failed|error/i, {
+      timeout: JOB_TIMEOUT_MS,
+    });
+
+    await importUi.retry(page).click();
+    await waitForImportStatus(owner, run.id, 'succeeded');
+    await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length, {
+      timeout: JOB_TIMEOUT_MS,
+    });
+    for (const q of PAPER.questions) {
+      await expect(importUi.draft(page, q.stem), `question ${q.number}`).toHaveCount(1);
+    }
+
+    // Server: still one run; one draft per question, none left over from the failed attempt.
+    expect((await listImports(owner, ws.id)).map((r) => r.id)).toEqual([run.id]);
+    const drafts = await listDrafts(owner, run.id);
+    expect(drafts).toHaveLength(PAPER.questions.length);
+    expect(new Set(drafts.map((d) => d.position)).size).toBe(drafts.length);
+    for (const q of PAPER.questions) {
+      const copies = drafts.filter((d) => d.payload.stem.includes(q.stem));
+      expect(copies, `drafts of question ${q.number}`).toHaveLength(1);
+    }
+
+    const approved = [Q(1), Q(2)];
+    for (const t of approved) await importUi.approve(importUi.draft(page, t.stem)).check();
+    await importUi.publish(page).click();
+    await expect(importUi.alert(page).or(page.getByRole('status')).first()).toContainText(
+      /2\s*(개|문제).*(등록|확정)|registered 2|2 (questions )?(registered|published)/i,
+    );
+    const bank = await listQuestions(owner, ws.id);
+    expect(bank).toHaveLength(approved.length);
+    expect(new Set(bank.map((q) => q.id)).size).toBe(approved.length);
+    for (const t of approved) {
+      expect(bank.filter((q) => q.revision.stem.includes(t.stem))).toHaveLength(1);
     }
   },
 );

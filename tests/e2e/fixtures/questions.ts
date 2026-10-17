@@ -30,7 +30,9 @@
 //      correct option id (migration comment: "CONFIRMED MCQ needs an answer", validated by API),
 //      otherwise 422.
 //   A3 `chapter_id` is a document outline node id (GET /documents/{id}/outline, M3.0 assumption).
-//   A4 Question PDF import reuses the document upload flow (documents.ts `uploadPdf`), then
+//   A4 Question PDFs reuse the document upload flow (decided, implementation-plan §7): the
+//      upload-intent body carries `type: "question_paper"` (documents.type; such documents are
+//      excluded from book search by default), then
 //      POST /workspaces/{id}/question-imports {document_id} (+ optional `Idempotency-Key`
 //           header: same key → same run) → 202 ImportRun
 //      GET  /workspaces/{id}/question-imports → 200 {items: ImportRun[]}  (newest first; the
@@ -40,6 +42,8 @@
 //      POST /question-imports/{id}/publish {draft_ids} → 200 {items: [{draft_id, question_id}]}
 //           approves + publishes exactly those drafts; idempotent per draft (unique
 //           published_question_id); an unedited MCQ draft without an answer → 422.
+//      POST /question-imports/{id}/retry      → 202 ImportRun (same run, new job_id) after the
+//           run failed; the retried job must not duplicate drafts persisted by the failed attempt
 //      ImportRun = {id, status, job_id, source_document_id}; the job is polled at GET /jobs/{id}.
 //      Draft = {id, position, question_type, review_status, published_question_id, validations,
 //               payload: QuestionDraft (book_core schema_version 1)}
@@ -50,6 +54,10 @@
 //   A6 "Heatmap marker +N" (QIMPORT-01-AC03) is asserted as +N CONFIRMED questions in the bank
 //      (questions.md §3.1: one marker = one CONFIRMED question); the heatmap UI/overview API is
 //      QOV-01 (M5).
+//   A7 Fault injection (decided, implementation-plan §7): fake adapters active only with
+//      APP_ENV=test fail deterministically on an `E2E-FAIL-…` marker. IMPORT_FAILURE_MARKER in the
+//      uploaded file name (a copy of questions-ko.pdf, same bytes) makes the fake extractor fail
+//      the run's FIRST job after persisting part of the drafts; the retried job succeeds.
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
 //   QBANK-01  h1 "문제은행"; empty-state heading "등록된 문제가 없습니다" with a "문제 직접 등록" button
@@ -67,8 +75,8 @@
 //             the stem, a page link (pageLabel) and "원본 비교" (opens a region/dialog "원본"
 //             showing that page); "정답 없음" when the key has no answer; checkbox "승인"; "편집"
 //             opens the same question editor; button "승인한 문제 등록" publishes; a failed
-//             publish shows role=alert + "다시 시도".
-import { readFileSync, statSync } from 'node:fs';
+//             import job or publish shows role=alert + "다시 시도".
+import { copyFileSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { JOB_TIMEOUT_MS, PDF_DIR, waitForJob, type PdfFile } from './documents.ts';
@@ -114,6 +122,17 @@ export function questionPaper(): QuestionPaper {
   };
 }
 
+/** A7: file-name marker that makes the APP_ENV=test fake extractor fail a run's first job. */
+export const IMPORT_FAILURE_MARKER = 'E2E-FAIL-IMPORT-ONCE';
+
+/** Same bytes as `paper`, copied to `dir` under a file name carrying IMPORT_FAILURE_MARKER. */
+export function failingOnceCopy(paper: QuestionPaper, dir: string): QuestionPaper {
+  const file = `questions-ko-${IMPORT_FAILURE_MARKER}.pdf`;
+  const path = join(dir, file);
+  copyFileSync(paper.path, path);
+  return { ...paper, file, path };
+}
+
 export function truthQuestion(paper: QuestionPaper, n: number): TruthQuestion {
   const q = paper.questions.find((x) => x.number === n);
   if (!q) throw new Error(`questions-ko has no question ${n}`);
@@ -121,7 +140,7 @@ export function truthQuestion(paper: QuestionPaper, n: number): TruthQuestion {
 }
 
 // ---------------------------------------------------------------------------------------------
-// API (A1–A4)
+// API (A1–A4, A7)
 // ---------------------------------------------------------------------------------------------
 
 export interface QuestionOption {
@@ -271,6 +290,27 @@ export async function listDrafts(member: Member, importId: string): Promise<Draf
     [200],
   );
   return [...body.items].sort((a, b) => a.position - b.position);
+}
+
+export async function getImport(member: Member, importId: string): Promise<ImportRun> {
+  return member.api.ok<ImportRun>('GET', `/question-imports/${importId}`, undefined, [200]);
+}
+
+/** Polls the import run (no sleeps) until it reaches `status`. */
+export async function waitForImportStatus(
+  member: Member,
+  importId: string,
+  status: 'succeeded' | 'failed',
+): Promise<ImportRun> {
+  let run: ImportRun | undefined;
+  await expect
+    .poll(async () => (run = await getImport(member, importId)).status, {
+      message: `import run reaches ${status}`,
+      timeout: JOB_TIMEOUT_MS,
+    })
+    .toBe(status);
+  if (!run) throw new Error('no import run');
+  return run;
 }
 
 /** Waits for the newest import run of the workspace and its job; returns the run. */

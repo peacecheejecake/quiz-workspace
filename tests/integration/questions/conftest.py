@@ -47,6 +47,9 @@ QUESTION_TRUTH: dict[str, Any] = json.loads(
     (PDF_DIR / "questions-ko.truth.json").read_text(encoding="utf-8")
 )
 JOB_TIMEOUT_S = 120.0
+# A7: file-name marker that makes the APP_ENV=test fake extractor fail a run's first job after
+# persisting part of the drafts (implementation-plan §7 fault-injection decision).
+IMPORT_FAILURE_MARKER = "E2E-FAIL-IMPORT-ONCE"
 TERMINAL = {"succeeded", "failed", "cancelled"}
 
 
@@ -89,18 +92,22 @@ class QuestionClient(_m3.Client):
             headers={"Authorization": f"Bearer {self.user.token}", **headers},
         )
 
-    def upload_question_paper(self, workspace_id: str) -> str:
-        """Upload flow for questions-ko.pdf (assumption A4); returns the ready document id."""
+    def upload_question_paper(self, workspace_id: str, filename: str = QUESTION_PAPER.name) -> str:
+        """Upload flow for questions-ko.pdf as a `question_paper` document (A4); returns its id.
+
+        `filename` may carry IMPORT_FAILURE_MARKER (A7); the bytes are always questions-ko.pdf.
+        """
         pdf = QUESTION_PAPER.read_bytes()
         sha256 = hashlib.sha256(pdf).hexdigest()
         intent: dict[str, Any] = self.ok(
             "POST",
             f"/workspaces/{workspace_id}/documents/upload-intent",
             {
-                "filename": QUESTION_PAPER.name,
+                "filename": filename,
                 "size_bytes": len(pdf),
                 "content_type": "application/pdf",
                 "sha256": sha256,
+                "type": "question_paper",
             },
             (200, 201),
         )
@@ -122,7 +129,7 @@ class QuestionClient(_m3.Client):
         self.wait_for_job(str(done["job_id"]))
         return str(done["document_id"])
 
-    def wait_for_job(self, job_id: str) -> None:
+    def wait_for_job(self, job_id: str, expected: str = "succeeded") -> None:
         deadline = time.monotonic() + JOB_TIMEOUT_S
         status = ""
         while time.monotonic() < deadline:
@@ -130,7 +137,7 @@ class QuestionClient(_m3.Client):
             if status in TERMINAL:
                 break
             time.sleep(0.5)
-        assert status == "succeeded", f"job ended as {status or 'timeout'}"
+        assert status == expected, f"job ended as {status or 'timeout'}, expected {expected}"
 
     def start_import(
         self, workspace_id: str, document_id: str, idempotency_key: str | None = None
@@ -151,6 +158,11 @@ class QuestionClient(_m3.Client):
         )
         self.wait_for_job(str(run["job_id"]))
         return run, self.drafts(str(run["id"]))
+
+    def retry_import(self, import_id: str) -> dict[str, Any]:
+        """Retries a failed run (A4): same run id, new job id."""
+        run: dict[str, Any] = self.ok("POST", f"/question-imports/{import_id}/retry", {}, (202,))
+        return run
 
     def drafts(self, import_id: str) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = self.ok("GET", f"/question-imports/{import_id}/drafts")[
@@ -183,6 +195,7 @@ class QuestionSeed(_m3.Seed):
     truth_question = staticmethod(truth_question)
     draft_for = staticmethod(draft_for)
     QUESTION_TRUTH = QUESTION_TRUTH
+    IMPORT_FAILURE_MARKER = IMPORT_FAILURE_MARKER
 
     def client(self, label: str) -> QuestionClient:
         base = super().client(f"m4-{label}")
