@@ -101,6 +101,8 @@ export const IMPORT_BFF_PATHS = {
 
 export interface ImportClient {
   startImport(workspaceId: string, documentId: string, idempotencyKey: string): Promise<ImportRun>;
+  /** The workspace's newest run, or null when it has none. */
+  latestRun(workspaceId: string, signal?: AbortSignal): Promise<ImportRun | null>;
   getRun(importId: string, signal?: AbortSignal): Promise<ImportRun>;
   listDrafts(importId: string, signal?: AbortSignal): Promise<ImportDraft[]>;
   retryImport(importId: string, idempotencyKey: string): Promise<ImportRun>;
@@ -150,6 +152,12 @@ export function createImportClient(fetchImpl: FetchLike = (...a) => fetch(...a))
   }
 
   return {
+    latestRun: async (workspaceId, signal) =>
+      (
+        await call<{ items: ImportRun[] }>(`${IMPORT_BFF_PATHS.imports(workspaceId)}?limit=1`, {
+          signal,
+        })
+      ).items[0] ?? null,
     startImport: (workspaceId, documentId, idempotencyKey) =>
       call(IMPORT_BFF_PATHS.imports(workspaceId), {
         method: 'POST',

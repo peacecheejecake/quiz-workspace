@@ -112,6 +112,14 @@ describe('createImportClient', () => {
     expect((error as Error).message).toMatch(/[가-힣]/);
   });
 
+  it('reads the newest run of the workspace (null when there is none)', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => json(200, { items: [{ id: RUN }] }));
+    await expect(createImportClient(fetchImpl).latestRun(WS)).resolves.toEqual({ id: RUN });
+    expect(firstCall(fetchImpl)[0]).toBe(`${IMPORT_BFF_PATHS.imports(WS)}?limit=1`);
+    const empty = createImportClient(async () => json(200, { items: [] }));
+    await expect(empty.latestRun(WS)).resolves.toBeNull();
+  });
+
   it('rethrows an abort as is', async () => {
     const controller = new AbortController();
     controller.abort();

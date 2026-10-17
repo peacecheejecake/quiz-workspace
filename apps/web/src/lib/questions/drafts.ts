@@ -244,6 +244,44 @@ export function publishedMessage(count: number): string {
   return `${count}개 문제를 문제은행에 등록했습니다.`;
 }
 
+/** The API registers at most this many drafts per publish request (`MAX_PUBLISH`). */
+export const PUBLISH_BATCH_SIZE = 200;
+
+export function publishBatches(
+  selection: readonly ReviewedDraftRef[],
+  size = PUBLISH_BATCH_SIZE,
+): ReviewedDraftRef[][] {
+  const batches: ReviewedDraftRef[][] = [];
+  for (let i = 0; i < selection.length; i += size) batches.push(selection.slice(i, i + size));
+  return batches;
+}
+
+export interface PublishedItem {
+  readonly draft_id: string;
+  readonly question_id: string;
+}
+
+/**
+ * Publishes `selection` in sequential batches of at most `size`. Each batch is idempotent on the
+ * server, so after a failure the caller retries with what is still unpublished (the drafts that
+ * `onBatch` marked as published drop out of the next selection). Resolves with every registered
+ * item, or rejects with the first failure after reporting the batches that succeeded.
+ */
+export async function publishInBatches(
+  selection: readonly ReviewedDraftRef[],
+  send: (batch: readonly ReviewedDraftRef[]) => Promise<PublishedItem[]>,
+  onBatch: (items: readonly PublishedItem[]) => void,
+  size = PUBLISH_BATCH_SIZE,
+): Promise<PublishedItem[]> {
+  const all: PublishedItem[] = [];
+  for (const batch of publishBatches(selection, size)) {
+    const items = await send(batch);
+    all.push(...items);
+    onBatch(items);
+  }
+  return all;
+}
+
 /** Replaces one draft (after an edit or a review change) and keeps the order. */
 export function replaceDraft(drafts: readonly ReviewDraft[], next: ReviewDraft): ReviewDraft[] {
   return drafts.map((d) => (d.id === next.id ? next : d));

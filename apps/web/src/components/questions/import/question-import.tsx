@@ -33,6 +33,7 @@ import {
   applyPublished,
   draftUpdateBody,
   publishedMessage,
+  publishInBatches,
   publishSelection,
   replaceDraft,
   reviewBody,
@@ -146,6 +147,9 @@ export function QuestionImport({
   const startKeys = useRef(new Map<string, string>());
   /** Idempotency-Key of the retry of a failed run, per failed job. */
   const retryKeys = useRef(new Map<string, string>());
+  /** Drafts registered by the current publish round (kept across retries of failed batches). */
+  const publishRound = useRef(new Set<string>());
+  const [reloadingList, setReloadingList] = useState(false);
 
   const onUnauthenticated = useCallback(
     (error: unknown) => {
@@ -259,6 +263,7 @@ export function QuestionImport({
         return;
       }
       setDrafts([]);
+      publishRound.current.clear();
       setStates({});
       await followRun(started, signal);
     },
@@ -489,6 +494,45 @@ export function QuestionImport({
     }
   }
 
+  /**
+   * "목록 새로고침" after a failed load: reads the newest run (when the first render could not)
+   * and its drafts into state, and resumes following a run that is still working.
+   */
+  async function reloadList() {
+    setReloadingList(true);
+    try {
+      let latest = run;
+      if (!latest) {
+        try {
+          latest = await client.latestRun(workspaceId);
+        } catch (error) {
+          onUnauthenticated(error);
+          return;
+        }
+        if (!latest) {
+          setListFailed(false);
+          return;
+        }
+        setRun(latest);
+        if (latest.status === 'failed' || latest.status === 'cancelled') {
+          setFailure({
+            step: 'extract',
+            message: extractFailureMessage(latest.error_code),
+            retryable: true,
+          });
+        }
+      }
+      if (isWorking(latest)) {
+        setListFailed(false);
+        void followRun(latest, newController().signal);
+        return;
+      }
+      await refreshDrafts(latest.id);
+    } finally {
+      setReloadingList(false);
+    }
+  }
+
   // --- publish ------------------------------------------------------------------------------
 
   const selection = publishSelection(drafts);
@@ -499,18 +543,29 @@ export function QuestionImport({
     setPublishing(true);
     setPublishFailure(null);
     setStatus(null);
+    const importId = run.id;
+    // Drafts registered in this round (across retries of failed batches), counted once each.
+    const round = publishRound.current;
     try {
-      const items = await client.publish(run.id, selection);
-      setDrafts((list) => applyPublished(list, items));
-      setStatus({ text: publishedMessage(items.length), bank: true });
-      void refreshDrafts(run.id);
+      await publishInBatches(
+        selection,
+        (batch) => client.publish(importId, batch),
+        (items) => {
+          for (const item of items) round.add(item.draft_id);
+          setDrafts((list) => applyPublished(list, items));
+        },
+      );
+      setStatus({ text: publishedMessage(round.size), bank: true });
+      round.clear();
+      void refreshDrafts(importId);
     } catch (error) {
       if (onUnauthenticated(error)) return;
       const kind = error instanceof ImportApiError ? error.kind : 'unavailable';
       const message =
         error instanceof ImportApiError ? error.message : '문제를 등록하지 못했습니다.';
-      setPublishFailure(`승인한 문제를 등록하지 못했습니다. ${message}`);
-      if (kind !== 'network' && kind !== 'unavailable') void refreshDrafts(run.id);
+      const partial = round.size > 0 ? ` 지금까지 ${round.size}개를 등록했습니다.` : '';
+      setPublishFailure(`승인한 문제를 모두 등록하지 못했습니다.${partial} ${message}`);
+      if (kind !== 'network' && kind !== 'unavailable') void refreshDrafts(importId);
     } finally {
       setPublishing(false);
     }
@@ -599,7 +654,7 @@ export function QuestionImport({
       {listFailed ? (
         <div role="alert" className={styles.failure}>
           <p>가져온 초안을 불러오지 못했습니다.</p>
-          <Button size="sm" onClick={() => (run ? void refreshDrafts(run.id) : router.refresh())}>
+          <Button size="sm" onClick={() => void reloadList()} loading={reloadingList}>
             목록 새로고침
           </Button>
         </div>

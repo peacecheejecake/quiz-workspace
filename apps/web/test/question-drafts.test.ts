@@ -2,14 +2,17 @@
 // draft editor's validation and request bodies, and the approve-then-publish selection — logic
 // the E2E specs only observe indirectly (which version is sent, that an unknown answer stays null,
 // that the API's English validation text never reaches the UI).
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   applyPublished,
   approvalBlocker,
   draftUpdateBody,
   formFromDraft,
   issueMessage,
+  PUBLISH_BATCH_SIZE,
+  publishBatches,
   publishedMessage,
+  publishInBatches,
   publishSelection,
   replaceDraft,
   reviewBody,
@@ -252,5 +255,50 @@ describe('approve then publish', () => {
       { ...at(drafts, 1), position: 0 },
     ]);
     expect(sorted.map((d) => d.id)).toEqual(['b', 'a']);
+  });
+});
+
+describe('publish batches (API MAX_PUBLISH = 200)', () => {
+  const refs = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ draft_id: `d${i}`, version: `v${i}` }));
+
+  it('splits a selection into requests of at most 200 drafts', () => {
+    expect(PUBLISH_BATCH_SIZE).toBe(200);
+    expect(publishBatches(refs(450)).map((b) => b.length)).toEqual([200, 200, 50]);
+    expect(publishBatches(refs(200)).map((b) => b.length)).toEqual([200]);
+    expect(publishBatches([])).toEqual([]);
+  });
+
+  it('sends batches in order and reports each success', async () => {
+    const send = vi.fn(async (batch: readonly { draft_id: string }[]) =>
+      batch.map((r) => ({ draft_id: r.draft_id, question_id: `q-${r.draft_id}` })),
+    );
+    const onBatch = vi.fn();
+    const items = await publishInBatches(refs(401), send, onBatch);
+    expect(send.mock.calls.map(([b]) => b.length)).toEqual([200, 200, 1]);
+    expect(onBatch).toHaveBeenCalledTimes(3);
+    expect(items).toHaveLength(401);
+  });
+
+  it('stops at a failed batch after reporting the earlier ones; the retry sends only the rest', async () => {
+    let calls = 0;
+    const send = vi.fn(async (batch: readonly { draft_id: string }[]) => {
+      calls += 1;
+      if (calls === 2) throw new Error('lost');
+      return batch.map((r) => ({ draft_id: r.draft_id, question_id: `q-${r.draft_id}` }));
+    });
+    const done = new Set<string>();
+    const onBatch = (items: readonly { draft_id: string }[]) => {
+      for (const i of items) done.add(i.draft_id);
+    };
+    const all = refs(450);
+    await expect(publishInBatches(all, send, onBatch)).rejects.toThrow('lost');
+    expect(done.size).toBe(200);
+
+    // The screen recomputes the selection from drafts not yet marked published.
+    const rest = all.filter((r) => !done.has(r.draft_id));
+    await publishInBatches(rest, send, onBatch);
+    expect(send.mock.calls.slice(2).map(([b]) => b.length)).toEqual([200, 50]);
+    expect(done.size).toBe(450);
   });
 });
