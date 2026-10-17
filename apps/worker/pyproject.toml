@@ -21,6 +21,11 @@ dependencies = [
   "httpx>=0.28,<1",
 ]
 
+# Deployed images (apps/worker/Dockerfile) install this extra: Docling parsing, Qwen3 embedding and
+# the real LLM provider outside APP_ENV=test. Local dev gets it through the root dev group.
+[project.optional-dependencies]
+models = ["book-core[parser,models,llm]"]
+
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"

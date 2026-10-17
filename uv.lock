@@ -1589,9 +1589,15 @@ dependencies = [
     { name = "uvicorn" },
 ]
 
+[package.optional-dependencies]
+models = [
+    { name = "book-core", extra = ["models"] },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "book-core", editable = "packages/core" },
+    { name = "book-core", extras = ["models"], marker = "extra == 'models'", editable = "packages/core" },
     { name = "celery", specifier = ">=5.6.3,<5.7" },
     { name = "fastapi", specifier = ">=0.143,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
@@ -1604,6 +1610,7 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.1,<3" },
     { name = "uvicorn", specifier = ">=0.54" },
 ]
+provides-extras = ["models"]
 
 [[package]]
 name = "quiz-worker"
@@ -1621,9 +1628,15 @@ dependencies = [
     { name = "sqlalchemy" },
 ]
 
+[package.optional-dependencies]
+models = [
+    { name = "book-core", extra = ["llm", "models", "parser"] },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "book-core", editable = "packages/core" },
+    { name = "book-core", extras = ["parser", "models", "llm"], marker = "extra == 'models'", editable = "packages/core" },
     { name = "celery", specifier = ">=5.6.3,<5.7" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "kombu", specifier = ">=5.6.2,<5.7" },
@@ -1633,6 +1646,7 @@ requires-dist = [
     { name = "redis", specifier = ">=8.1,<9" },
     { name = "sqlalchemy", specifier = ">=2.1,<3" },
 ]
+provides-extras = ["models"]
 
 [[package]]
 name = "quiz-workspace"

@@ -1,0 +1,43 @@
+# Build context of apps/{api,worker,web}/Dockerfile is the repo root. Allowlist: only what the
+# images build from enters the context, so `.env*`, `supabase/signing_keys.json`, test fixtures,
+# reports and local caches can never be copied into a layer (AGENTS.md §5, no baked secrets).
+*
+
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!.npmrc
+!tsconfig.base.json
+!pyproject.toml
+!uv.lock
+!apps/api/
+!apps/worker/
+!apps/web/
+!packages/core/
+!packages/ui/
+!packages/design-tokens/
+!packages/api-client/
+
+# Re-excluded inside the allowed directories.
+**/.env*
+**/node_modules
+**/.next
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+**/*.tsbuildinfo
+**/storybook-static
+**/test-results
+**/playwright-report
+**/coverage
+**/Dockerfile
+apps/*/tests
+apps/*/test
+packages/*/tests
+packages/*/test
+packages/core/scripts
+packages/ui/.storybook
+packages/ui/visual

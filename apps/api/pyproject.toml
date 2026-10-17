@@ -22,6 +22,12 @@ dependencies = [
   "book-core",
 ]
 
+# Deployed images (apps/api/Dockerfile) install this extra: workspace search embeds queries with
+# Qwen3-Embedding outside APP_ENV=test (implementation-plan §7, M3.6a). Local dev gets it through
+# the root dev group.
+[project.optional-dependencies]
+models = ["book-core[models]"]
+
 [project.scripts]
 quiz-api-openapi = "quiz_api.openapi_export:main"
 

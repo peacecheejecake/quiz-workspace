@@ -4,7 +4,13 @@ import { loadRootEnvFallback } from './load-root-env.ts';
 
 // The monorepo keeps its git-ignored `.env*` at the repo root (AGENTS.md §7). Fill only keys that
 // the process environment and apps/web/.env* (already loaded by Next) left unset.
-loadRootEnvFallback(fileURLToPath(new URL('../..', import.meta.url)));
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+loadRootEnvFallback(repoRoot);
+
+// apps/web/Dockerfile builds with NEXT_OUTPUT=standalone: a self-contained server.js plus only the
+// traced node_modules (workspace packages included, hence the repo-root tracing root). Local runs
+// and E2E keep the default output so `next start` behaves as before.
+const standalone = process.env.NEXT_OUTPUT === 'standalone';
 
 // Static headers for every response. The Content-Security-Policy (nonce-based, per request) and
 // HSTS come from `src/proxy.ts` (src/lib/http/security-headers.ts).
@@ -25,6 +31,7 @@ const shareHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  ...(standalone ? { output: 'standalone' as const, outputFileTracingRoot: repoRoot } : {}),
   poweredByHeader: false,
   reactStrictMode: true,
   // `next dev` would otherwise generate apps/web/AGENTS.md + CLAUDE.md; agent rules live in the
