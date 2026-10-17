@@ -129,37 +129,67 @@ def _alpha(numbering: Numbering) -> Numbering:
     return replace(numbering, kind=NumberingKind.UPPER_ALPHA, numbers=(ord(label) - 64,))
 
 
+def _is_ambiguous(numbering: Numbering | None) -> bool:
+    return (
+        numbering is not None
+        and numbering.kind is NumberingKind.ROMAN
+        and len(numbering.label) == 1
+    )
+
+
+def _candidate_value(numbering: Numbering, kind: NumberingKind) -> int | None:
+    """Value of a heading if read as ``kind`` (an ambiguous letter can be read either way)."""
+    if _is_ambiguous(numbering):
+        roman = _roman(numbering.label)
+        return roman if kind is NumberingKind.ROMAN else ord(numbering.label) - 64
+    return numbering.numbers[-1] if numbering.kind is kind else None
+
+
 def disambiguate_letters(numberings: Sequence[Numbering | None]) -> list[Numbering | None]:
     """Resolve single-letter ``I.``/``V.``/``X.`` headings, which read as Roman numerals or as
-    letters, from the neighbouring letter/Roman headings in document order.
+    letters, by which sequence they continue.
 
-    ``H.`` before ``I.`` (or ``J.`` after it) makes it a letter; ``II.`` after it (or ``H.``
-    missing while other Roman headings exist) keeps it Roman. Without neighbours, it is a letter
-    if the document uses letter headings and no multi-letter Roman numerals, else Roman.
+    Each reading is scored against its own sequence in document order: +1 if the nearest earlier
+    heading of that sequence is its predecessor (earlier ambiguous headings count as resolved),
+    +1 if the nearest later heading that can be read in that sequence is its successor. The
+    higher score wins (``IV. V. VI.`` is Roman, ``H. I. J.`` and ``U. V.`` are letters, and
+    ``V.`` after ``IV.`` > ``A.`` ... ``U.`` and before ``VI.`` stays Roman). On a tie it is a
+    letter if the document uses letter headings and no multi-letter Roman numerals, else Roman.
     """
     result = list(numberings)
-    letter_kinds = (NumberingKind.ROMAN, NumberingKind.UPPER_ALPHA)
-    seq = [i for i, n in enumerate(result) if n is not None and n.kind in letter_kinds]
+    seq = [
+        i
+        for i, n in enumerate(result)
+        if n is not None and n.kind in (NumberingKind.ROMAN, NumberingKind.UPPER_ALPHA)
+    ]
     uses_alpha = any(n is not None and n.kind is NumberingKind.UPPER_ALPHA for n in numberings)
     uses_multi_roman = any(
         n is not None and n.kind is NumberingKind.ROMAN and len(n.label) > 1 for n in numberings
     )
+
+    def score(current: Numbering, pos: int, kind: NumberingKind) -> int:
+        value = _candidate_value(current, kind) or 0
+        total = 0
+        for i in reversed(seq[:pos]):  # earlier headings are already resolved
+            n = result[i]
+            if n is not None and n.kind is kind:
+                total += n.numbers[-1] == value - 1
+                break
+        for i in seq[pos + 1 :]:
+            n = result[i]
+            later = _candidate_value(n, kind) if n is not None else None
+            if later is not None:
+                total += later == value + 1
+                break
+        return total
+
     for pos, i in enumerate(seq):
         n = result[i]
-        if n is None or n.kind is not NumberingKind.ROMAN or len(n.label) != 1:
+        if n is None or not _is_ambiguous(n):
             continue
-        letter = ord(n.label) - 64
-        prev = result[seq[pos - 1]] if pos > 0 else None
-        nxt = result[seq[pos + 1]] if pos + 1 < len(seq) else None
-        if prev is not None and prev.kind is NumberingKind.UPPER_ALPHA:
-            alpha = prev.numbers[-1] == letter - 1
-        elif nxt is not None and nxt.kind is NumberingKind.ROMAN and len(nxt.label) > 1:
-            alpha = False
-        elif nxt is not None and nxt.kind is NumberingKind.UPPER_ALPHA:
-            alpha = nxt.numbers[-1] == letter + 1
-        else:
-            alpha = uses_alpha and not uses_multi_roman
-        if alpha:
+        roman = score(n, pos, NumberingKind.ROMAN)
+        alpha = score(n, pos, NumberingKind.UPPER_ALPHA)
+        if alpha > roman or (alpha == roman and uses_alpha and not uses_multi_roman):
             result[i] = _alpha(n)
     return result
 

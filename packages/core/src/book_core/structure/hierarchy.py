@@ -94,7 +94,8 @@ def _toc_pages(drafts: Sequence[CanonicalDraft], page_count: int) -> set[int]:
     Leader evidence is counted per page across blocks (a TOC parsed one entry per block, some
     entries labelled as headings). A run starts on a page with a TOC title, or with at least
     ``_TOC_LEADER_MIN`` leaders and no body-length paragraph (so a leader table inside a chapter
-    is not a TOC), and continues over following pages that are made up mostly of leader entries.
+    is not a TOC), and continues over following pages that have a TOC title or are made up
+    mostly of leader entries.
     """
     leaders: dict[int, int] = {}
     entries: dict[int, int] = {}
@@ -115,6 +116,8 @@ def _toc_pages(drafts: Sequence[CanonicalDraft], page_count: int) -> set[int]:
         return page in titled or (leaders.get(page, 0) >= _TOC_LEADER_MIN and page not in prose)
 
     def continues(page: int) -> bool:
+        if page in titled:
+            return True
         if page not in blocks or page in prose:
             return False
         return leaders[page] >= _TOC_LEADER_MIN or 2 * entries[page] > blocks[page]

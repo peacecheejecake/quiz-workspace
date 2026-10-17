@@ -15,6 +15,7 @@ from book_core.contracts import (
     TableContent,
 )
 from book_core.parser import document_from_pages
+from book_core.parser._blocks import table_text as _table_text
 from book_core.structure import (
     NumberingKind,
     StructureResult,
@@ -22,8 +23,15 @@ from book_core.structure import (
     normalize_block_text,
     parse_numbering,
 )
+from book_core.structure.numbering import disambiguate_letters
 
 SHA = "0" * 64
+
+
+def table_text_of(table: TableContent) -> str:
+    return _table_text(table.rows)
+
+
 LONG_KO = "본문 문장이 이어진다. " * 20
 LONG_EN = "This sentence belongs to the body text. " * 8
 
@@ -341,101 +349,173 @@ def test_document_without_headings_has_no_sections() -> None:
     assert all(b.section_id is None for b in result.revision.blocks)
 
 
-def test_leader_table_inside_a_chapter_is_not_a_toc() -> None:
-    leaders = "\n".join(f"Step {n} | ........ | {n}" for n in range(1, 5))
-    rows = tuple((f"Step {n}", "........", str(n)) for n in range(1, 5))
-    result = _manual(
+def _body(*pages: list[str]) -> list[list[str]]:
+    """Pages where every title becomes a heading followed by a body paragraph."""
+    return [[text for title in page for text in (f"# {title}", LONG_EN)] for page in pages]
+
+
+ALPHA_TO_U = [f"{ch}. Item {ch}" for ch in "ABCDEFGHIJKLMNOPQRSTU"]
+LEADER_TABLE = TableContent(rows=tuple((f"Step {n}", "........", str(n)) for n in range(1, 5)))
+
+# (pages or manual blocks, expected tree as (title, level, parent, heading page), TOC blocks,
+#  front-matter blocks)
+StructureCase = tuple[list[list[str]] | list[B], list[tuple[str, int, str | None, int]], int, int]
+STRUCTURE_CASES: dict[str, StructureCase] = {
+    "alpha A-J flat": (
+        _body([f"{ch}. Topic {ch}" for ch in "ABCDE"], [f"{ch}. Topic {ch}" for ch in "FGHIJ"]),
+        [(f"{ch}. Topic {ch}", 1, None, 1 if ch < "F" else 2) for ch in "ABCDEFGHIJ"],
+        0,
+        0,
+    ),
+    "roman I II III": (
+        _body(["I. One", "II. Two", "III. Three"]),
+        [("I. One", 1, None, 1), ("II. Two", 1, None, 1), ("III. Three", 1, None, 1)],
+        0,
+        0,
+    ),
+    "alpha H I J": (
+        _body(["H. Eight", "I. Nine", "J. Ten"]),
+        [("H. Eight", 1, None, 1), ("I. Nine", 1, None, 1), ("J. Ten", 1, None, 1)],
+        0,
+        0,
+    ),
+    "alpha I J": (
+        _body(["I. Nine", "J. Ten"]),
+        [("I. Nine", 1, None, 1), ("J. Ten", 1, None, 1)],
+        0,
+        0,
+    ),
+    "roman IV V VI": (
+        _body(["IV. Four", "V. Five", "VI. Six"]),
+        [("IV. Four", 1, None, 1), ("V. Five", 1, None, 1), ("VI. Six", 1, None, 1)],
+        0,
+        0,
+    ),
+    "alpha U V": (
+        _body(["U. Twenty-one", "V. Twenty-two"]),
+        [("U. Twenty-one", 1, None, 1), ("V. Twenty-two", 1, None, 1)],
+        0,
+        0,
+    ),
+    "lone I": (_body(["I. Only"]), [("I. Only", 1, None, 1)], 0, 0),
+    "roman parts IV with A..U then V VI": (
+        _body(["IV. Part four", *ALPHA_TO_U], ["V. Part five"], ["VI. Part six"]),
+        [
+            ("IV. Part four", 1, None, 1),
+            *[(title, 2, "IV. Part four", 1) for title in ALPHA_TO_U],
+            ("V. Part five", 1, None, 2),
+            ("VI. Part six", 1, None, 3),
+        ],
+        0,
+        0,
+    ),
+    "roman I with A B then II with A": (
+        _body(["I. Overview", "A. First", "B. Second"], ["II. Methods", "A. Data"]),
+        [
+            ("I. Overview", 1, None, 1),
+            ("A. First", 2, "I. Overview", 1),
+            ("B. Second", 2, "I. Overview", 1),
+            ("II. Methods", 1, None, 2),
+            ("A. Data", 2, "II. Methods", 2),
+        ],
+        0,
+        0,
+    ),
+    "leadered multi-page TOC, one entry per block": (
+        [
+            ["# Contents", "# Chapter 1 Start ........ 3", "1.1 Scope ........ 3"],
+            ["Chapter 2 Middle ........ 4", "# Chapter 3 End ........ 5"],
+            *_body(["Chapter 1 Start", "1.1 Scope"], ["Chapter 2 Middle"], ["Chapter 3 End"]),
+        ],
+        [
+            ("Chapter 1 Start", 1, None, 3),
+            ("1.1 Scope", 2, "Chapter 1 Start", 3),
+            ("Chapter 2 Middle", 1, None, 4),
+            ("Chapter 3 End", 1, None, 5),
+        ],
+        5,
+        5,
+    ),
+    "titled leader-free TOC continuation": (
+        [
+            ["# 목차", "# 1장 시작", "# 2장 중간"],
+            ["# 목차", "# 3장 끝"],
+            *_body(["1장 시작"], ["2장 중간"], ["3장 끝"]),
+        ],
+        [("1장 시작", 1, None, 3), ("2장 중간", 1, None, 4), ("3장 끝", 1, None, 5)],
+        5,
+        5,
+    ),
+    "leader table inside a chapter is not a TOC": (
         [
             B(BlockType.HEADING, "Chapter 1 Steps", 1),
             B(BlockType.TEXT, LONG_EN, 1),
-            B(BlockType.TABLE, leaders, 1, table=TableContent(rows=rows)),
+            B(BlockType.TABLE, table_text_of(LEADER_TABLE), 1, table=LEADER_TABLE),
             B(BlockType.HEADING, "Chapter 2 More", 2),
-        ]
+        ],
+        [("Chapter 1 Steps", 1, None, 1), ("Chapter 2 More", 1, None, 2)],
+        0,
+        0,
+    ),
+    "first page of short paragraphs is not a title page": (
+        [
+            ["# Introduction", *["A short paragraph of body text here."] * 10],
+            *_body(["Background"], ["Methods"]),
+        ],
+        [("Introduction", 1, None, 1), ("Background", 1, None, 2), ("Methods", 1, None, 3)],
+        0,
+        0,
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(STRUCTURE_CASES))
+def test_structure_case_matrix(case: str) -> None:
+    source, tree, toc_blocks, front_blocks = STRUCTURE_CASES[case]
+    if source and isinstance(source[0], B):
+        result = _manual([b for b in source if isinstance(b, B)])
+    else:
+        result = _structure([page for page in source if isinstance(page, list)])
+    blocks = {b.id: b for b in result.revision.blocks}
+    titles = {s.id: s.title for s in result.revision.sections}
+    got = [
+        (
+            s.title,
+            s.level,
+            titles[s.parent_id] if s.parent_id else None,
+            blocks[s.heading_block_id].locations[0].page if s.heading_block_id else 0,
+        )
+        for s in result.revision.sections
+    ]
+    assert got == tree
+    assert len(result.toc_block_ids) == toc_blocks
+    assert len(result.front_matter_block_ids) == front_blocks
+    assert all(
+        b.section_id is not None
+        for b in result.revision.blocks
+        if b.id not in result.front_matter_block_ids
     )
-    assert result.toc_block_ids == ()
-    assert _tree(result) == [("Chapter 1 Steps", 1, None), ("Chapter 2 More", 1, None)]
-
-
-def test_letter_i_in_an_alphabetic_sequence_is_not_roman() -> None:
-    letters = "ABCDEFGHIJ"
-
-    def page(chars: str) -> list[str]:
-        return [text for ch in chars for text in (f"# {ch}. Topic {ch}", LONG_EN)]
-
-    result = _structure([page(letters[:5]), page(letters[5:])])
-    assert _tree(result) == [(f"{ch}. Topic {ch}", 1, None) for ch in letters]
-    assert result.front_matter_block_ids == ()
-    assert result.warnings == ()
 
 
 @pytest.mark.parametrize(
     ("labels", "kinds"),
     [
-        (["I", "II", "III"], [NumberingKind.ROMAN] * 3),
-        (["H", "I", "J"], [NumberingKind.UPPER_ALPHA] * 3),
-        (["I", "J"], [NumberingKind.UPPER_ALPHA] * 2),
-        (["IV", "V", "VI"], [NumberingKind.ROMAN] * 3),
-        (["U", "V"], [NumberingKind.UPPER_ALPHA] * 2),
-        (["I"], [NumberingKind.ROMAN]),
+        ("I II III", "R R R"),
+        ("H I J", "A A A"),
+        ("I J", "A A"),
+        ("IV V VI", "R R R"),
+        ("U V", "A A"),
+        ("I", "R"),
+        ("A B C D E F G H I J", "A A A A A A A A A A"),
+        ("IV A B C D E F G H I J K L M N O P Q R S T U V VI", "R" + " A" * 21 + " R R"),
+        ("I A B II A", "R A A R A"),
+        ("W X Y", "A A A"),
+        ("IX X XI", "R R R"),
     ],
 )
-def test_disambiguate_single_letter_roman(labels: list[str], kinds: list[NumberingKind]) -> None:
-    from book_core.structure.numbering import disambiguate_letters
-
-    resolved = disambiguate_letters([parse_numbering(f"{label}. Title") for label in labels])
-    assert [n.kind if n else None for n in resolved] == kinds
-
-
-def test_roman_parts_with_letter_subsections() -> None:
-    result = _structure(
-        [
-            ["# I. Overview", LONG_EN, "# A. First", LONG_EN, "# B. Second", LONG_EN],
-            ["# II. Methods", LONG_EN, "# A. Data", LONG_EN],
-        ]
+def test_disambiguate_letters_matrix(labels: str, kinds: str) -> None:
+    resolved = disambiguate_letters(
+        [parse_numbering(f"{label}. Title") for label in labels.split()]
     )
-    assert _tree(result) == [
-        ("I. Overview", 1, None),
-        ("A. First", 2, "I. Overview"),
-        ("B. Second", 2, "I. Overview"),
-        ("II. Methods", 1, None),
-        ("A. Data", 2, "II. Methods"),
-    ]
-
-
-def test_first_page_of_short_paragraphs_is_not_a_title_page() -> None:
-    short = "A short paragraph of body text here."
-    result = _structure(
-        [["# Introduction", *[short] * 10], ["# Background", LONG_EN], ["# Methods", LONG_EN]]
-    )
-    assert [s.title for s in result.revision.sections] == ["Introduction", "Background", "Methods"]
-    assert result.front_matter_block_ids == ()
-    assert all(b.section_id is not None for b in result.revision.blocks)
-
-
-def test_multi_page_toc_with_one_entry_per_block() -> None:
-    toc1 = ["# Contents", "# Chapter 1 Start ........ 3", "1.1 Scope ........ 3"]
-    toc2 = ["Chapter 2 Middle ........ 4", "# Chapter 3 End ........ 5"]
-    result = _structure(
-        [
-            toc1,
-            toc2,
-            ["# Chapter 1 Start", LONG_EN, "# 1.1 Scope", LONG_EN],
-            ["# Chapter 2 Middle", LONG_EN],
-            ["# Chapter 3 End", LONG_EN],
-        ]
-    )
-    assert _tree(result) == [
-        ("Chapter 1 Start", 1, None),
-        ("1.1 Scope", 2, "Chapter 1 Start"),
-        ("Chapter 2 Middle", 1, None),
-        ("Chapter 3 End", 1, None),
-    ]
-    blocks = {b.id: b for b in result.revision.blocks}
-    pages = [
-        blocks[s.heading_block_id].locations[0].page
-        for s in result.revision.sections
-        if s.heading_block_id
-    ]
-    assert pages == [3, 3, 4, 5]
-    assert len(result.toc_block_ids) == 5
-    assert result.warnings == ()
+    short = {NumberingKind.ROMAN: "R", NumberingKind.UPPER_ALPHA: "A"}
+    assert " ".join(short[n.kind] for n in resolved if n is not None) == kinds
