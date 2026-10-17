@@ -16,7 +16,6 @@ from quiz_api.settings import (
     Environment,
     InsecureConfigurationError,
     Settings,
-    normalize_origin,
 )
 
 WEB = "https://app.example.com"
@@ -273,14 +272,9 @@ def test_error_never_echoes_configured_values(env: pytest.MonkeyPatch) -> None:
         ("HTTPS://APP.Example.COM", "https://app.example.com"),
         ("http://[::1]:3000", "http://[::1]:3000"),
         ("http://[::1]:80", "http://[::1]"),
-        ("https://Bücher.example", "https://xn--bcher-kva.example"),
-        # UTS #46 non-transitional, as browsers: ß kept (IDNA 2003 would give `fass`)...
-        ("https://faß.example", "https://xn--fa-hia.example"),
-        # ...and a final capital sigma maps to U+03C3 (lowercasing first would give U+03C2).
-        ("https://ΣΑ.example", "https://xn--mxa9a.example"),
-        ("https://ΑΣ.example", "https://xn--mxa0b.example"),
-        ("https://BÜCHER.Example:443", "https://xn--bcher-kva.example"),
+        # IDN hosts are configured in punycode and passed through unchanged (no IDNA here).
         ("https://xn--fa-hia.example", "https://xn--fa-hia.example"),
+        ("https://XN--53H.ws:443", "https://xn--53h.ws"),
     ],
 )
 def test_configured_origins_use_browser_serialization(
@@ -294,18 +288,22 @@ def test_non_numeric_port_is_refused(env: pytest.MonkeyPatch) -> None:
         _settings(env, CORS_ALLOWED_ORIGINS="https://app.example.com:abc")
 
 
-@pytest.mark.parametrize(
-    "host", ["xn--zz.example", "b\u00fc\uffffx.example", "-b\u00fccher.example", "\u00fc..example"]
-)
-def test_invalid_idn_labels_are_refused_without_echoing_them(host: str) -> None:
-    with pytest.raises(ValueError, match="valid host name") as info:
-        normalize_origin(f"https://{host}")
-    assert host not in str(info.value)
+@pytest.mark.parametrize("host", ["faß.example", "☕.ws", "Bücher.example"])
+def test_unicode_configured_origins_are_refused_with_a_punycode_hint(
+    env: pytest.MonkeyPatch, host: str
+) -> None:
+    with pytest.raises(ValidationError) as info:
+        _settings(env, CORS_ALLOWED_ORIGINS=f"https://app.example.com,https://{host}")
+    message = str(info.value)
+    assert "CORS_ALLOWED_ORIGINS" in message
+    assert "punycode" in message
+    assert "new URL(origin).origin" in message
+    assert host not in message
 
 
-def test_guard_rejects_non_ascii_origin_headers(env: pytest.MonkeyPatch) -> None:
+def test_guard_rejects_unicode_origin_headers(env: pytest.MonkeyPatch) -> None:
     # Browsers always send the punycode form; a raw Unicode Origin is not a browser Origin.
-    settings = _settings(env, CORS_ALLOWED_ORIGINS="https://faß.example")
+    settings = _settings(env, CORS_ALLOWED_ORIGINS="https://xn--fa-hia.example")
     with TestClient(create_app(settings, readiness_checkers=[])) as client:
         raw = client.get("/health/live", headers={"Origin": "https://faß.example".encode()})
         fass = client.get("/health/live", headers={"Origin": "https://fass.example"})
@@ -320,9 +318,8 @@ def test_guard_rejects_non_ascii_origin_headers(env: pytest.MonkeyPatch) -> None
     [
         ("https://app.example.com:443", "https://app.example.com"),
         ("http://[::1]:3000", "http://[::1]:3000"),
-        ("https://bücher.example", "https://xn--bcher-kva.example"),
-        ("https://faß.example", "https://xn--fa-hia.example"),
-        ("https://ΣΑ.example", "https://xn--mxa9a.example"),
+        ("https://xn--fa-hia.example", "https://xn--fa-hia.example"),
+        ("https://xn--53h.ws", "https://xn--53h.ws"),
         ("https://app.example.com", "HTTPS://APP.EXAMPLE.COM"),
     ],
 )
@@ -333,7 +330,7 @@ def test_guard_and_cors_match_the_browser_origin(
     with TestClient(create_app(settings, readiness_checkers=[])) as client:
         guarded = client.post("/api/v1/nope", headers={"Origin": sent})
         assert guarded.status_code == 404  # past the guard
-        preflight = _preflight(client, sent.lower() if sent.isascii() else sent)
+        preflight = _preflight(client, sent.lower())
         assert preflight.status_code == 200
 
 

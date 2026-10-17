@@ -151,6 +151,13 @@ describe('isCrossOriginWrite', () => {
     expect(host('ΣΑ.example')).toBe('xn--mxa9a.example');
     expect(host('ΑΣ.example')).toBe('xn--mxa0b.example');
     expect(host('BÜCHER.Example')).toBe('xn--bcher-kva.example');
+    expect(host('☕.ws')).toBe('xn--53h.ws'); // symbol domains stay valid (no IDNA2008 rules)
+    expect(
+      isCrossOriginWrite(
+        'POST',
+        new Headers({ host: 'XN--53H.ws:443', origin: 'https://xn--53h.ws' }),
+      ),
+    ).toBe(false);
     const write = (origin: string, ownHost: string) =>
       isCrossOriginWrite('POST', new Headers({ host: ownHost, origin }));
     expect(write('https://xn--fa-hia.example', 'xn--fa-hia.example')).toBe(false);

@@ -107,10 +107,11 @@ PR opened
 | `APP_ENV` | `local` | `preview` 또는 `production` (HSTS 강제, `/api/v1/docs` 비활성은 production) |
 | `SUPABASE_JWT_ISSUER` | `.env` | 필수, `https://<project>.supabase.co/auth/v1` |
 | `SUPABASE_JWKS_URL` | `.env` | 필수, `https://…/auth/v1/.well-known/jwks.json` |
-| `CORS_ALLOWED_ORIGINS` | `http://127.0.0.1:3000,http://localhost:3000` | 필수, 쉼표 구분 `https://host[:port]` 목록(웹 production 도메인 + 필요 시 고정 preview 도메인). `*`·wildcard·path 금지(모든 환경) |
+| `CORS_ALLOWED_ORIGINS` | `http://127.0.0.1:3000,http://localhost:3000` | 필수, 쉼표 구분 `https://host[:port]` 목록(웹 production 도메인 + 필요 시 고정 preview 도메인). `*`·wildcard·path 금지(모든 환경). **브라우저 ASCII 직렬화로만 기재**: 국제화 도메인은 punycode(`https://xn--fa-hia.example`, 브라우저에서 `new URL(origin).origin`이 출력하는 값). 비ASCII 값은 모든 환경에서 기동 거부 |
 | `CORS_MAX_AGE_SECONDS` | `600` | 0–7200 (preflight cache 상한) |
 
 - CORS: allowlist origin만 `Access-Control-Allow-Origin`으로 응답, `allow_credentials=false`(브라우저→API는 Bearer header, cookie 없음), 허용 header는 `Authorization, Content-Type, Idempotency-Key, X-Request-ID`, 노출 header는 `X-Request-ID`.
+- Origin 비교: API는 IDNA 변환을 하지 않는다. 설정값과 들어오는 `Origin` 모두 scheme·host 소문자화, 기본 port(80/443) 제거, IPv6 bracket 유지만 하고 비교한다. 비ASCII `Origin` header는 거부(브라우저는 항상 punycode로 보냄).
 - Origin guard: `Origin` header가 allowlist에도 API 자신의 host에도 없으면(`Origin: null` 포함) preflight·본 요청 모두 route 실행 전 `403 application/problem+json`. `Origin`이 없는 server-to-server 호출(Next.js 서버)은 영향 없음.
 - 모든 응답 header: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`(로컬 `/api/v1/docs` 제외), HTTPS 또는 preview/production에서 `Strict-Transport-Security: max-age=63072000; includeSubDomains`. `/api/v1/**`와 `Authorization` 요청 응답은 `Cache-Control: no-store`. `quiz_api.serve`가 uvicorn `Server` header를 끈다.
 - Vercel preview URL은 배포마다 host가 바뀌므로 wildcard 대신 고정 preview alias 도메인을 `CORS_ALLOWED_ORIGINS`에 넣는다.

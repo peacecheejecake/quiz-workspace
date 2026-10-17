@@ -11,7 +11,6 @@ from functools import lru_cache
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
-import idna
 from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -37,32 +36,26 @@ MAX_CORS_MAX_AGE_SECONDS = 7200
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
-def _ascii_host(hostname: str) -> str:
-    """The host as browsers serialize it (WHATWG URL host parser): IPv6 in brackets, ASCII names
-    lowercased, Unicode names through UTS #46 *non-transitional* processing (`faß` stays `ß` →
-    `xn--fa-hia`, unlike IDNA 2003). Mapping runs on the original case: lowercasing first would
-    turn a final capital sigma (U+03A3) into U+03C2 where browsers map it to U+03C3.
-    """
-    if ":" in hostname:  # IPv6 literal (urlsplit strips the brackets)
-        return f"[{hostname.lower()}]"
-    if hostname.isascii() and "xn--" not in hostname.lower():
-        return hostname.lower()
-    try:
-        return idna.encode(hostname, uts46=True, transitional=False).decode("ascii")
-    except (idna.IDNAError, UnicodeError):
-        raise ValueError("each origin must have a valid host name") from None
+ASCII_ORIGIN_HINT = (
+    "use the ASCII (punycode) serialization, e.g. https://xn--fa-hia.example; "
+    "a browser prints it for `new URL(origin).origin`"
+)
 
 
 def normalize_origin(value: str) -> str:
-    """The browser's ASCII serialization of an origin (`Origin` header form): lowercase scheme and
-    host, IDNA-encoded host, IPv6 in brackets, default port (80/443) omitted. Raises ValueError
-    for anything that is not an origin.
+    """Canonical form of an origin that is already in the browser's ASCII serialization (the
+    `Origin` header form): lowercase scheme and host, IPv6 in brackets, default port (80/443)
+    omitted. No IDNA conversion happens here: internationalized hosts must be configured as
+    punycode, and non-ASCII values are refused. Raises ValueError for anything that is not an
+    origin.
 
     The message names the problem, never the value (configuration errors end up in logs).
     """
     raw = value.strip()
     if raw == "*":
         raise ValueError("wildcard origin '*' is not allowed (explicit allowlist only)")
+    if not raw.isascii():
+        raise ValueError(f"CORS_ALLOWED_ORIGINS entries must be ASCII: {ASCII_ORIGIN_HINT}")
     parts = urlsplit(raw.rstrip("/"))
     scheme = parts.scheme.lower()
     if scheme not in _DEFAULT_PORTS or not parts.hostname:
@@ -75,14 +68,10 @@ def normalize_origin(value: str) -> str:
     except ValueError:
         raise ValueError("each origin must have a numeric port") from None
     port = "" if port_number in (None, _DEFAULT_PORTS[scheme]) else f":{port_number}"
-    return f"{scheme}://{_ascii_host(_original_case_host(parts.netloc))}{port}"
-
-
-def _original_case_host(netloc: str) -> str:
-    """Host part of `host[:port]` / `[v6]:port` as written (`SplitResult.hostname` lowercases)."""
-    if netloc.startswith("["):
-        return netloc[1 : netloc.index("]")]
-    return netloc.rpartition(":")[0] if ":" in netloc else netloc
+    host = parts.hostname  # lowercased, IPv6 brackets stripped by urlsplit
+    if ":" in host:
+        host = f"[{host}]"
+    return f"{scheme}://{host}{port}"
 
 
 def origin_authority(scheme: str, host: str) -> str | None:
@@ -108,6 +97,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        # Validation errors never print input values (URLs with credentials, secrets).
+        hide_input_in_errors=True,
     )
 
     app_env: Environment = Field(default=Environment.LOCAL, validation_alias="APP_ENV")
