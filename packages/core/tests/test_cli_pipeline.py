@@ -548,3 +548,80 @@ def test_colliding_outputs_are_rejected_before_writing(tmp_path: Path) -> None:
         assert not (tmp_path / "new.jsonl").exists()
         assert not (tmp_path / "d.json").exists()
         assert {p: p.read_bytes() for p in watched} == before
+
+
+MALFORMED_SOURCE_PATHS = {
+    "unclosed-ipv6": ("https://[invalid/x.pdf", "x.pdf", ("[invalid",)),
+    "userinfo-ipv6": ("http://a:b@[::1", "<source>", ("a:b", "[::1")),
+    "long": ("s3://bucket/" + "d/" * 500 + "y" * 5000 + ".pdf?token=" + FAKE_JWT, None, ()),
+    "control-chars": ("ws/\x1b[31mbook\x00\x07\n.pdf", "?[31mbook???.pdf", ("\x1b", "\x00")),
+}
+
+
+@pytest.mark.parametrize(
+    ("source_path", "label", "absent"),
+    MALFORMED_SOURCE_PATHS.values(),
+    ids=MALFORMED_SOURCE_PATHS.keys(),
+)
+def test_malformed_source_paths_get_safe_labels(
+    source_path: str, label: str | None, absent: tuple[str, ...], tmp_path: Path
+) -> None:
+    def check(err: str) -> str:
+        assert len(err.splitlines()) == 1
+        line = err.splitlines()[0]
+        assert len(line) <= 320
+        assert all(c.isprintable() for c in line)
+        for fragment in (*absent, FAKE_JWT, "token="):
+            assert fragment not in line
+        if label is not None:
+            assert label in line
+        return line
+
+    # Summary path: the parse succeeds and the summary names the label.
+    output = tmp_path / "parsed.json"
+    code, out, err = _invoke(
+        [
+            "parse",
+            str(_pdf("book-ko")),
+            *_fake_args("book-ko"),
+            "--source-path",
+            source_path,
+            "-o",
+            str(output),
+        ]
+    )
+    assert code == 0, err
+    assert out == b""
+    assert check(err).startswith("parsed ")
+    assert ParsedDocument.model_validate_json(output.read_bytes()).source_path == source_path
+
+    # Error path: the sanitized error is still emitted.
+    code, out, err = _invoke(
+        ["parse", str(_pdf("book-ko")), "--parser", "fake", "--source-path", source_path]
+    )
+    assert code == FAILED
+    assert out == b""
+    assert check(err).startswith("error: parse failed (UnknownDocumentError)")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "/",
+        "://",
+        "https://",
+        "https://[",
+        "a://b://c",
+        "?#",
+        "\\\\server\\share\\f.pdf",
+        "x" * 10_000,
+        "\ud800",
+        "https://[invalid/x.pdf",
+    ],
+)
+def test_label_never_raises(value: str) -> None:
+    label = cli._label(value)
+    assert label
+    assert len(label) <= 80
+    assert all(c.isprintable() for c in label)

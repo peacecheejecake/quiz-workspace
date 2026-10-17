@@ -21,7 +21,6 @@ from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, NoReturn
-from urllib.parse import urlsplit
 
 import typer
 from pydantic import BaseModel, ValidationError
@@ -81,17 +80,22 @@ def _fail(message: str, sensitive: Sequence[str] = ()) -> NoReturn:
 
 def _label(path: str) -> str:
     """Credential-free name of a path or URL for diagnostics: the last path segment only, with
-    no directories, host, userinfo, query or fragment, redacted. A ``--source-path`` may be a
-    storage key or signed URL, so the value itself is never printed."""
+    no directories, scheme, host, userinfo, query or fragment, control characters replaced,
+    redacted and capped. A ``--source-path`` may be a storage key or signed URL, so the value
+    itself is never printed. Plain string operations only, so it never raises on malformed
+    input (``urlsplit`` rejects e.g. an unclosed IPv6 host)."""
     if path == STDIO:
         return "<stdin>"
-    parts = urlsplit(path) if "://" in path else None
-    tail = parts.path if parts is not None else path
-    name = re.split(r"[?#]", tail.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1], maxsplit=1)[0]
+    rest = re.split(r"[?#]", path, maxsplit=1)[0].replace("\\", "/")
+    scheme, sep, after = rest.partition("://")
+    if sep and "/" not in scheme:
+        rest = after.partition("/")[2]  # drop the authority (userinfo, host, port)
+    name = rest.rstrip("/").rsplit("/", 1)[-1]
+    name = "".join(c if c.isprintable() else "?" for c in name)
     name = redact(name)
     if len(name) > _MAX_LABEL_CHARS:
         name = name[: _MAX_LABEL_CHARS - 1] + "…"
-    return name or "<unnamed>"
+    return name or "<source>"
 
 
 def _same_file(a: str, b: str) -> bool:
@@ -100,7 +104,7 @@ def _same_file(a: str, b: str) -> bool:
         if first.exists() and second.exists():
             return first.samefile(second)
         return first.resolve() == second.resolve()
-    except OSError:
+    except (OSError, ValueError):
         return False
 
 
