@@ -29,6 +29,7 @@ from quiz_api.repositories.forks import (
     FORK_JOB_TYPE,
     ForkJob,
     ForkRecord,
+    PinnedQuestion,
     Snapshot,
     fork_job_key,
 )
@@ -51,7 +52,8 @@ class World:
     created: list[dict[str, Any]] = field(default_factory=list)
     snapshot_value: Snapshot = field(
         default_factory=lambda: Snapshot(
-            documents=[(uuid.uuid4(), uuid.uuid4())], questions=[(uuid.uuid4(), uuid.uuid4())]
+            documents=[(uuid.uuid4(), uuid.uuid4())],
+            questions=[PinnedQuestion(uuid.uuid4(), uuid.uuid4(), [])],
         )
     )
     stored: dict[tuple[uuid.UUID, str, str], StoredResponse] = field(default_factory=dict)
@@ -327,13 +329,15 @@ def test_fork_starts_are_rate_limited_per_user(
         assert _fork(api, link.id, auth=other, cookie=cookie).status_code == 202
 
 
+@pytest.mark.parametrize("limit", ["MAX_FORK_QUESTIONS", "MAX_FORK_MANIFEST_CHARS"])
 def test_a_too_large_snapshot_is_refused(
     api: TestClient,
     world: World,
     bearer: Callable[[uuid.UUID], dict[str, str]],
     monkeypatch: pytest.MonkeyPatch,
+    limit: str,
 ) -> None:
-    monkeypatch.setattr(forks_api, "MAX_FORK_QUESTIONS", 0)
+    monkeypatch.setattr(forks_api, limit, 0)
     link = world.add_link()
     res = _fork(api, link.id, auth=bearer(uuid.uuid4()), cookie=_session(api, world, link))
     assert (res.status_code, _type(res)) == (409, ProblemType.FORK_TOO_LARGE)
@@ -375,3 +379,13 @@ def test_fork_jobs_are_not_workspace_job_resources() -> None:
     condition = RESOURCES[ResourceType.JOB].visible_when
     assert condition is not None
     assert "job_type" in str(condition)
+
+
+def test_the_manifest_pins_each_question_with_its_sources() -> None:
+    doc, rev, q, qrev, src = (uuid.uuid4() for _ in range(5))
+    source = {"id": str(src), "document_id": str(doc), "page_start": 3, "block_ids": ["b1"]}
+    snapshot = Snapshot(documents=[(doc, rev)], questions=[PinnedQuestion(q, qrev, [source])])
+    documents, questions = snapshot.manifest_entries()
+    assert documents == [{"document_id": str(doc), "revision_id": str(rev)}]
+    assert questions == [{"question_id": str(q), "revision_id": str(qrev), "sources": [source]}]
+    assert snapshot.encoded_size() > len(str(src))

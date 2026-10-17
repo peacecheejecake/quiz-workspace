@@ -15,7 +15,7 @@ DB), plus an allowlisted `Origin` (CSRF). Order of checks:
   6. more than SHARE_FORK_RATE_LIMIT_PER_MINUTE starts per user        → 429 + Retry-After
   7. `Idempotency-Key`: same key + same body → the same fork (202, current state); same key +
      another body → 409 idempotency-key-reused
-  8. snapshot larger than MAX_FORK_DOCUMENTS / MAX_FORK_QUESTIONS        → 409 fork-too-large
+  8. snapshot over MAX_FORK_DOCUMENTS / _QUESTIONS / _MANIFEST_CHARS     → 409 fork-too-large
 
 The request pins the published snapshot and enqueues the `workspace.fork` job
 (`quiz_api.repositories.forks`); the worker copies it and re-checks the link right before its
@@ -62,6 +62,8 @@ router = APIRouter(tags=["forks"], responses=problem_responses(503))
 FORK_NOT_FOUND = "Fork not found."
 MAX_FORK_DOCUMENTS = 500
 MAX_FORK_QUESTIONS = 20_000
+# Pinned entries as JSON; below the manifest's 4 MiB column check (stored size <= JSON size).
+MAX_FORK_MANIFEST_CHARS = 3_500_000
 _CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 
@@ -244,7 +246,11 @@ def start_fork(
                 return _out(existing)
 
     snapshot = repo.snapshot(link.workspace_id)
-    if len(snapshot.documents) > MAX_FORK_DOCUMENTS or len(snapshot.questions) > MAX_FORK_QUESTIONS:
+    if (
+        len(snapshot.documents) > MAX_FORK_DOCUMENTS
+        or len(snapshot.questions) > MAX_FORK_QUESTIONS
+        or snapshot.encoded_size() > MAX_FORK_MANIFEST_CHARS
+    ):
         raise ProblemException(
             409,
             ProblemType.FORK_TOO_LARGE,

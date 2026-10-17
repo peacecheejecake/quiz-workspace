@@ -20,8 +20,10 @@ Pipeline (docs/workspace-sharing.md §6):
 5. `worker_fork_commit`: re-check the link under a lock and write the whole copy in one
    transaction (or nothing: an unusable link → CANCELLED). The commit also enqueues one
    `document.index_sync` obligation per copied revision;
-6. mirror the switch in Qdrant (`activate_revision`) and resolve the obligations; a failure here
-   is left to them (the fork is already COMPLETED).
+6. mirror the switch in Qdrant (`activate_revision`) under each copied document's lock, only
+   while the copied revision is still the document's active revision in the DB (a retry after
+   the new owner published a newer revision must not re-activate revision 1), and resolve the
+   obligations; a failure here is left to them (the fork is already COMPLETED).
 
 Every step is idempotent (deterministic target ids and keys, upserting copies, idempotent
 indexing, an idempotent commit), so a redelivery or a retry resumes. Cancellation and failure:
@@ -109,6 +111,7 @@ class ForkJobDeps:
     inject_failures: bool = False
     pause_seconds: float = 60.0
     poll_seconds: float = 0.25
+    lock_wait_seconds: float = 30.0
     sleep: Callable[[float], None] = field(default=time.sleep)
     clock: Callable[[], float] = field(default=time.monotonic)
 
@@ -251,12 +254,7 @@ def _finish(deps: ForkJobDeps, fork: ForkRow, documents: list[ForkDocument]) -> 
     synced = True
     for doc in documents:
         try:
-            deps.index.activate_revision(
-                str(doc.target_workspace_id),
-                str(doc.target_document_id),
-                str(doc.target_revision_id),
-            )
-            deps.documents.resolve_index_sync(doc.target_workspace_id, doc.target_revision_id)
+            _activate_copy(deps, doc)
         except Exception as exc:
             synced = False
             logger.warning("fork index activation left to index_sync: %s", sanitize_error(exc))
@@ -268,6 +266,30 @@ def _finish(deps: ForkJobDeps, fork: ForkRow, documents: list[ForkDocument]) -> 
     if not synced:
         result["index_sync"] = "pending"
     return result
+
+
+def _activate_copy(deps: ForkJobDeps, doc: ForkDocument) -> None:
+    """Mirror the commit for one copied document, like `document.index_sync`: under the
+    document's lock and only while the copied revision is still the DB's active revision. A
+    retried (or late) fork job must never re-activate revision 1 after the new owner published
+    a newer revision; PostgreSQL is authoritative and the newer publish owns the mirror."""
+    with deps.documents.document_lock(
+        doc.target_document_id, wait_seconds=deps.lock_wait_seconds, check=lambda: None
+    ):
+        found = deps.documents.load(
+            doc.target_workspace_id, doc.target_document_id, doc.target_revision_id
+        )
+        if found is None:
+            return  # not committed, or removed since
+        document, revision = found
+        if revision.published and document.active_revision_id == revision.id:
+            deps.index.activate_revision(
+                str(doc.target_workspace_id),
+                str(doc.target_document_id),
+                str(doc.target_revision_id),
+            )
+    # Done either way: activated now, or superseded by a newer publish (its own obligation).
+    deps.documents.resolve_index_sync(doc.target_workspace_id, doc.target_revision_id)
 
 
 # --------------------------------------------------------------------------------------------
@@ -345,6 +367,7 @@ def deps_from_settings(settings: WorkerSettings) -> ForkJobDeps:
         ),
         index=build_index_store(settings),
         inject_failures=settings.is_test,
+        lock_wait_seconds=settings.document_lock_wait_seconds,
     )
 
 

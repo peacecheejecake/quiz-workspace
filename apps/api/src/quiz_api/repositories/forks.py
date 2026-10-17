@@ -5,7 +5,8 @@ The API side of a fork only *records* the request, in one transaction with its j
 1. `snapshot()` pins the published snapshot of the link's workspace: the active published
    revision of every live document and the active revision of every CONFIRMED live question
    (exactly what the shared view shows; drafts, archived/deleted questions and import drafts are
-   never pinned);
+   never pinned), each question with its source records as they are now (`question_sources` is
+   replaced on edit, so sources are pinned by value and not read again at commit);
 2. `create()` inserts the `workspace.fork` job (in the *source* workspace, `created_by` = the
    forking user, payload `{fork_id}`) and the PENDING fork row with the manifest, a random id
    salt and the id the new workspace will get.
@@ -17,28 +18,55 @@ exist before the worker commits, so `target_workspace_id` stays null until COMPL
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, cast
 
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import func, insert, select, text, update
 from sqlalchemy.orm import Session
 
 from quiz_api.repositories.search import SearchRepository
-from quiz_api.repositories.tables import async_jobs, questions, workspace_forks
+from quiz_api.repositories.tables import async_jobs, workspace_forks
 
 FORK_JOB_TYPE = "workspace.fork"
 FORK_JOB_SCHEMA_VERSION = 1
-MANIFEST_VERSION = 1
+# 2: questions carry their pinned sources (20261018200000_workspace_fork_source_snapshot.sql).
+MANIFEST_VERSION = 2
 
 ForkStatus = Literal["PENDING", "COPYING", "COMPLETED", "FAILED", "CANCELLED"]
 
 
 @dataclass(frozen=True)
+class PinnedQuestion:
+    question_id: uuid.UUID
+    revision_id: uuid.UUID
+    # The question's `question_sources` rows as they were with this revision (JSON-ready).
+    sources: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
 class Snapshot:
     documents: list[tuple[uuid.UUID, uuid.UUID]]  # (document id, published revision id)
-    questions: list[tuple[uuid.UUID, uuid.UUID]]  # (question id, active revision id)
+    questions: list[PinnedQuestion]
+
+    def manifest_entries(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        return (
+            [{"document_id": str(d), "revision_id": str(r)} for d, r in self.documents],
+            [
+                {
+                    "question_id": str(q.question_id),
+                    "revision_id": str(q.revision_id),
+                    "sources": q.sources,
+                }
+                for q in self.questions
+            ],
+        )
+
+    def encoded_size(self) -> int:
+        """Characters of the pinned entries as JSON (an upper bound of the stored size)."""
+        return len(json.dumps(self.manifest_entries(), separators=(",", ":")))
 
 
 @dataclass(frozen=True)
@@ -84,6 +112,27 @@ _COLUMNS = (
 )
 
 
+_PINNED_QUESTIONS = text(
+    """
+    select q.id, q.active_revision_id,
+           coalesce(jsonb_agg(jsonb_build_object(
+             'id', s.id, 'document_id', s.document_id,
+             'document_revision_id', s.document_revision_id,
+             'page_start', s.page_start, 'page_end', s.page_end,
+             'block_ids', to_jsonb(s.block_ids), 'locations', s.locations)
+             order by s.created_at, s.id) filter (where s.id is not null),
+             '[]'::jsonb) as sources
+      from public.questions q
+      left join public.question_sources s
+        on s.question_id = q.id and s.workspace_id = q.workspace_id
+     where q.workspace_id = :ws and q.publication_status = 'CONFIRMED'
+       and q.deleted_at is null and q.active_revision_id is not null
+     group by q.id
+     order by q.created_at, q.id
+    """
+)
+
+
 def fork_job_key(fork_id: uuid.UUID) -> str:
     return f"fork:{fork_id}"
 
@@ -100,19 +149,12 @@ class ForkRepository:
 
     def snapshot(self, workspace_id: uuid.UUID) -> Snapshot:
         docs = SearchRepository(self._session).searchable_documents(workspace_id)
-        rows = self._session.execute(
-            select(questions.c.id, questions.c.active_revision_id)
-            .where(
-                questions.c.workspace_id == workspace_id,
-                questions.c.publication_status == "CONFIRMED",
-                questions.c.deleted_at.is_(None),
-                questions.c.active_revision_id.is_not(None),
-            )
-            .order_by(questions.c.created_at, questions.c.id)
-        ).all()
+        # One statement: each question's active revision and its sources come from the same
+        # snapshot (an edit replaces both in one transaction), so the copy never mixes versions.
+        rows = self._session.execute(_PINNED_QUESTIONS, {"ws": workspace_id}).all()
         return Snapshot(
             documents=[(d.id, d.revision_id) for d in docs],
-            questions=[(r.id, r.active_revision_id) for r in rows],
+            questions=[PinnedQuestion(r.id, r.active_revision_id, list(r.sources)) for r in rows],
         )
 
     def create(
@@ -126,16 +168,13 @@ class ForkRepository:
         snapshot: Snapshot,
     ) -> tuple[ForkRecord, ForkJob]:
         fork_id, job_id = uuid.uuid4(), uuid.uuid4()
+        pinned_documents, pinned_questions = snapshot.manifest_entries()
         manifest = {
             "version": MANIFEST_VERSION,
             "id_salt": str(uuid.uuid4()),
             "target_workspace_id": str(uuid.uuid4()),
-            "documents": [
-                {"document_id": str(d), "revision_id": str(r)} for d, r in snapshot.documents
-            ],
-            "questions": [
-                {"question_id": str(q), "revision_id": str(r)} for q, r in snapshot.questions
-            ],
+            "documents": pinned_documents,
+            "questions": pinned_questions,
         }
         self._session.execute(
             insert(async_jobs).values(

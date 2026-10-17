@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
+from book_core.chunker import chunk_revision
 from book_core.parser import FakeParser
 from book_core.structure import build_revision
 from quiz_worker.celery_app import default_definitions
@@ -52,6 +53,8 @@ class FakeForks:
     # Called on every usability check (e.g. to revoke the link mid-copy).
     on_check: Callable[[], None] | None = None
     commits: int = 0
+    # Writes the committed copy into the document store (what worker_fork_commit does in SQL).
+    on_commit: Callable[[list[ForkDocument]], None] | None = None
 
     def get(self, fork_id: uuid.UUID) -> ForkRow | None:
         return self.rows.get(fork_id)
@@ -96,6 +99,8 @@ class FakeForks:
         self.rows[fork_id] = dataclasses.replace(
             row, status="COMPLETED", target_workspace_id=target or uuid.uuid4()
         )
+        if self.on_commit is not None:
+            self.on_commit(self.plans[fork_id])
         return "completed"
 
 
@@ -140,12 +145,55 @@ class World:
             sleep=self._sleep,
             clock=lambda: self.ticks,
         )
+        self.deps.lock_wait_seconds = 0
+        self.forks.on_commit = self._commit_copies
         self.jobs = InMemoryJobStore(clock=self.clock)
         self.documents.job_source = self._job_row
         self.runner = JobRunner(self.jobs, worker_id="unit", lease_seconds=60, clock=self.clock)
         self.definition = workspace_fork_definition(lambda: self.deps)
         self.source_ws = uuid.uuid4()
         self.user = uuid.uuid4()
+
+    def _commit_copies(self, plan: list[ForkDocument]) -> None:
+        for doc in plan:
+            source = self.documents.documents[doc.source_document_id]
+            self.documents.documents[doc.target_document_id] = dataclasses.replace(
+                source,
+                id=doc.target_document_id,
+                workspace_id=doc.target_workspace_id,
+                source_object_key=doc.target_object_key,
+                active_revision_id=doc.target_revision_id,
+            )
+            self.documents.revisions[doc.target_revision_id] = RevisionRow(
+                doc.target_revision_id, doc.target_document_id, 1, None, "published", None, None
+            )
+
+    def publish_newer_copy_revision(self, doc: ForkDocument) -> uuid.UUID:
+        """The new owner corrects the copy: revision 2 is indexed, published and activated."""
+        source = self.documents.load_content(
+            self.documents.documents[doc.source_document_id],
+            self.documents.revisions[doc.source_revision_id],
+        )
+        newer = uuid.uuid4()
+        content = target_content(source, doc).model_copy(update={"revision_id": str(newer)})
+        ws, tdoc = str(doc.target_workspace_id), str(doc.target_document_id)
+        chunks = list(chunk_revision(content, document_title=doc.title).chunks)
+        self.index.index_revision(ws, tdoc, str(newer), chunks)
+        self.index.activate_revision(ws, tdoc, str(newer))
+        self.documents.revisions[newer] = RevisionRow(
+            newer, doc.target_document_id, 2, doc.target_revision_id, "published", None, None
+        )
+        self.documents.documents[doc.target_document_id] = dataclasses.replace(
+            self.documents.documents[doc.target_document_id], active_revision_id=newer
+        )
+        return newer
+
+    def redeliver(self, envelope: JobEnvelope) -> Any:
+        """A new attempt of the same request (e.g. the job row was reset after a lost ack)."""
+        self.jobs = InMemoryJobStore(clock=self.clock)
+        self.runner = JobRunner(self.jobs, worker_id="unit", lease_seconds=60, clock=self.clock)
+        self.jobs.create(envelope, max_attempts=3)
+        return self.run(envelope)
 
     def _sleep(self, seconds: float) -> None:
         self.sleeps.append(seconds)
@@ -411,12 +459,8 @@ def test_a_redelivered_completed_fork_only_activates(world: World) -> None:
     (doc,) = world.forks.plans[fork.id]
     assert world.run(envelope).outcome is RunOutcome.SUCCEEDED
     copies = list(world.copier.copies)
-    # A new attempt of the same request (e.g. the job row was reset after a lost ack).
-    world.jobs = InMemoryJobStore(clock=world.clock)
-    world.runner = JobRunner(world.jobs, worker_id="unit", lease_seconds=60, clock=world.clock)
-    world.jobs.create(envelope, max_attempts=3)
 
-    assert world.run(envelope).outcome is RunOutcome.SUCCEEDED
+    assert world.redeliver(envelope).outcome is RunOutcome.SUCCEEDED
     assert world.copier.copies == copies
     assert world.forks.commits == 1
     assert world.target_points(doc)
@@ -456,3 +500,36 @@ def test_a_missing_source_pdf_fails_the_fork_and_a_missing_parse_artifact_does_n
 def test_the_worker_registers_the_fork_job() -> None:
     settings = WorkerSettings.model_construct(app_env=Environment.TEST, task_always_eager=True)
     assert JOB_TYPE in {d.job_type for d in default_definitions(settings)}
+
+
+def test_a_late_retry_never_reactivates_revision_1_over_a_newer_publish(world: World) -> None:
+    fork, envelope = world.request()
+    (doc,) = world.forks.plans[fork.id]
+    assert world.run(envelope).outcome is RunOutcome.SUCCEEDED
+    newer = world.publish_newer_copy_revision(doc)
+
+    result = world.redeliver(envelope)
+
+    assert result.outcome is RunOutcome.SUCCEEDED
+    assert "index_sync" not in (result.record.result or {})
+    assert world.index.active_revision(
+        str(doc.target_workspace_id), str(doc.target_document_id)
+    ) == str(newer), "the retry re-activated the superseded revision 1"
+
+
+def test_activation_waits_for_the_document_lock_and_else_leaves_it_to_index_sync(
+    world: World,
+) -> None:
+    fork, envelope = world.request()
+    (doc,) = world.forks.plans[fork.id]
+    world.documents.locked.add(doc.target_document_id)  # a publish of the copy is running
+
+    result = world.run(envelope)
+
+    assert result.outcome is RunOutcome.SUCCEEDED
+    assert world.status(fork) == "COMPLETED"
+    assert result.record.result["index_sync"] == "pending"
+    assert (
+        world.index.active_revision(str(doc.target_workspace_id), str(doc.target_document_id))
+        is None
+    )

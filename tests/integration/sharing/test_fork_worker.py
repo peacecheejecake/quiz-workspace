@@ -22,9 +22,14 @@ import psycopg
 import pytest
 from qdrant_client import models as qm
 from quiz_worker.errors import JobError
-from quiz_worker.fork_job import workspace_fork_definition
+from quiz_worker.fork_job import (
+    WorkspaceForkPayloadV1,
+    run_workspace_fork,
+    workspace_fork_definition,
+)
 from quiz_worker.fork_store import ForkStore, PostgresForkStore
 from quiz_worker.pg_store import create_job_store_engine
+from quiz_worker.runner import context_for
 from quiz_worker.settings import WorkerSettings
 from quiz_worker.storage import ObjectCopier
 from quiz_worker.store import TERMINAL_STATUSES
@@ -404,3 +409,76 @@ def test_a_cancelled_fork_removes_its_storage_copies_and_index_points(seed: Any)
     assert not _object_exists(seed, key), "the copied PDF was left behind"
     assert _points(seed, target_ws) == 0, "the copy's Qdrant points were left behind"
     assert seed.workspaces_owned_by(recipient.user.id) == 0
+
+
+# --- review fixes: late retries and pinned sources ----------------------------------------------
+
+
+def test_a_late_fork_retry_never_reactivates_revision_1_over_a_newer_publish(seed: Any) -> None:
+    owner, ws, link, recipient, cookie = _shared(seed, "s3a-late")
+    _book(owner, ws["id"])
+    res = recipient.fork(link["id"], cookie, "S3a 늦은 재시도")
+    seed.assert_status(res, 202, "fork start")
+    fork = recipient.wait_fork(res.json()["id"], "COMPLETED")
+    seed.worker.join()
+    target = str(fork["target_workspace_id"])
+    (copy,) = recipient.ok("GET", f"/workspaces/{target}/documents")["items"]
+
+    # The new owner corrects and publishes the copy: revision 2 becomes active.
+    search = f"/workspaces/{target}/search"
+    hits = recipient.ok("POST", search, {"query": "강수", "mode": "keyword"})
+    corrected = "S3a 새 주인이 발행한 교정 문장"
+    recipient.ok(
+        "PATCH",
+        f"/documents/{copy['id']}/blocks/{hits['items'][0]['block_id']}",
+        {"text": corrected},
+        (200, 201),
+    )
+    published = recipient.ok("POST", f"/documents/{copy['id']}/publish", {}, (202,))
+    recipient.wait_for_job(str(published["job_id"]))
+    newer = recipient.ok("GET", f"/documents/{copy['id']}")["active_revision_id"]
+    assert newer != copy["active_revision_id"]
+
+    # A late attempt of the fork job (e.g. after a lost ack) runs its post-commit step again.
+    jobs, _, _ = seed.worker._build()
+    deps = seed.worker.fork_deps
+    record = jobs.get(uuid.UUID(res.json()["job_id"]))
+    assert record is not None
+    run_workspace_fork(
+        deps, context_for(record, jobs), WorkspaceForkPayloadV1(fork_id=res.json()["id"])
+    )
+
+    assert deps.index.active_revision(target, copy["id"]) == newer
+    found = recipient.ok("POST", search, {"query": corrected, "mode": "keyword"})
+    assert found["items"], "the newer published revision is no longer searchable"
+
+
+def test_question_sources_are_pinned_at_request_time(seed: Any, worker_engine: Engine) -> None:
+    owner, ws, link, recipient, cookie = _shared(seed, "s3a-srcpin")
+    doc = _book(owner, ws["id"])
+    question = owner.ok(
+        "POST",
+        f"/workspaces/{ws['id']}/questions",
+        {
+            "question_type": "ESSAY",
+            "stem": "S3a 출처 고정 문제",
+            "sources": [{"document_id": doc, "page_start": 1}],
+        },
+        (201,),
+    )
+    fork = _request_fork(seed, recipient, link, cookie, "S3a 출처 고정")
+    # The owner re-cites the question after the request, before the worker commits.
+    owner.ok(
+        "PATCH",
+        f"/questions/{question['id']}",
+        {
+            "base_revision_id": question["revision"]["id"],
+            "sources": [{"document_id": doc, "page_start": 2}],
+        },
+    )
+    assert PostgresForkStore(worker_engine).commit(fork["id"]) == "completed"
+
+    done = recipient.ok("GET", f"/me/forks/{fork['id']}")
+    (copied,) = recipient.list_questions(str(done["target_workspace_id"]))
+    assert [(s["page_start"], s["page_end"]) for s in copied["sources"]] == [(1, 1)]
+    assert copied["revision"]["stem"] == "S3a 출처 고정 문제"
