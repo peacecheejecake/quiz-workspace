@@ -305,13 +305,14 @@ def test_truncation_inside_a_long_paragraph_keeps_the_window(book: str) -> None:
     result = excerpt.resolve_hit(chunk)
     assert result.truncated_start
     assert not result.truncated_end
-    assert result.text == chunk.content
+    assert result.text.endswith(chunk.content)
+    assert len(result.text) <= len(chunk.content) + 5
+    assert block.text.endswith(result.text)
     assert _spans(result, result.highlights) == [chunk.content]
 
 
-def test_truncation_of_one_overlong_sentence_cuts_at_words() -> None:
-    words = " ".join(f"word{i}" for i in range(200))
-    revision = DocumentRevision(
+def _one_block(text: str) -> DocumentRevision:
+    return DocumentRevision(
         document_id="d",
         revision_id="r",
         revision_number=1,
@@ -321,22 +322,79 @@ def test_truncation_of_one_overlong_sentence_cuts_at_words() -> None:
             Block(
                 id="b",
                 type=BlockType.TEXT,
-                text=words,
+                text=text,
                 section_id="s",
                 locations=(SourceLocation(page=1, bbox=BBox(x0=1, y0=1, x1=2, y1=2)),),
             ),
         ),
     )
-    resolver = ExcerptResolver(revision, config=ExcerptConfig(max_chars=60))
-    excerpt = resolver.resolve(["b"], passage="word150 word151")
+
+
+WORDS = " ".join(f"word{i}" for i in range(200))
+
+
+def _word_excerpt(text: str, passage: str, limit: int) -> Excerpt:
+    resolver = ExcerptResolver(_one_block(text), config=ExcerptConfig(max_chars=limit))
+    return resolver.resolve(["b"], passage=passage)
+
+
+def test_truncation_of_one_overlong_sentence_cuts_at_words() -> None:
+    excerpt = _word_excerpt(WORDS, "word150 word151", 60)
     assert len(excerpt.text) <= 60
     assert excerpt.truncated_start
     assert excerpt.truncated_end
     assert _spans(excerpt, excerpt.highlights) == ["word150 word151"]
-    assert excerpt.text.split(" ")[0] in words.split(" ")
-    assert excerpt.text.split(" ")[-1] in words.split(" ")
+    assert excerpt.text.split(" ")[0] in WORDS.split(" ")
+    assert excerpt.text.split(" ")[-1] in WORDS.split(" ")
     assert excerpt.breadcrumb == ("S",)
     assert excerpt.locations[0].block_id == "b"
+
+
+@pytest.mark.parametrize(
+    ("passage", "limit", "starts", "ends"),
+    [
+        # The passage fits in the budget although its sentence does not: kept whole.
+        (" ".join(f"word{i}" for i in range(150, 157)), 60, True, True),
+        (" ".join(f"word{i}" for i in range(150, 157)), 55, True, True),
+        # At the paragraph start / end.
+        ("word0 word1 word2", 40, False, True),
+        ("word197 word198 word199", 40, True, False),
+    ],
+)
+def test_word_window_keeps_the_whole_match(
+    passage: str, limit: int, starts: bool, ends: bool
+) -> None:
+    assert len(passage) <= limit
+    excerpt = _word_excerpt(WORDS, passage, limit)
+    assert len(excerpt.text) <= limit
+    assert _spans(excerpt, excerpt.highlights) == [passage]
+    assert excerpt.truncated_start is starts
+    assert excerpt.truncated_end is ends
+    assert f" {excerpt.text} " in f" {WORDS} "  # whole words only
+
+
+def test_word_window_match_longer_than_budget_keeps_its_start() -> None:
+    passage = " ".join(f"word{i}" for i in range(100, 120))
+    excerpt = _word_excerpt(WORDS, passage, 50)
+    assert len(excerpt.text) <= 50
+    assert excerpt.text.startswith("word100 ")
+    assert not excerpt.truncated_start or WORDS.index(excerpt.text) > 0
+    assert excerpt.truncated_end
+    assert f" {excerpt.text} " in f" {WORDS} "
+    assert _spans(excerpt, excerpt.highlights) == [excerpt.text]
+
+
+def test_word_window_on_unspaced_cjk_keeps_the_match() -> None:
+    text = "".join(chr(0xAC00 + 7 * i) for i in range(140))  # one unspaced run, no sentence end
+    passage = text[70:82]
+    excerpt = _word_excerpt(text, passage, 20)
+    assert len(excerpt.text) <= 20
+    assert _spans(excerpt, excerpt.highlights) == [passage]
+    assert excerpt.truncated_start
+    assert excerpt.truncated_end
+    longer = _word_excerpt(text, text[70:100], 20)
+    assert longer.text == text[70:90]
+    assert longer.truncated_end
 
 
 # --- revisions, hits, determinism --------------------------------------------------------------

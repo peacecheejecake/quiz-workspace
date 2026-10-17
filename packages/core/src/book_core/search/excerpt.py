@@ -541,14 +541,14 @@ def term_spans(text: str, query: str) -> list[Span]:
 
 def _window(text: str, match_start: int, match_end: int, limit: int) -> Span:
     """``[start, end)`` of at most ``limit`` characters around the match: whole sentences, grown
-    alternately before and after the match; when even the match's sentences do not fit, a cut
-    at word boundaries starting at (or shortly before) the match."""
+    alternately before and after the match; when even the match's sentences do not fit, whole
+    words around the match instead (see ``_word_window``)."""
     spans = sentence_spans(text)
     lo = next(k for k, (_, e) in enumerate(spans) if e > match_start)
     hi = max(k for k, (s, _) in enumerate(spans) if s < match_end)
     hi = max(hi, lo)
     if spans[hi][1] - spans[lo][0] > limit:
-        return _word_window(text, spans[lo][0], match_start, limit)
+        return _word_window(text, match_start, match_end, limit)
     grow_before = True
     can_before = can_after = True
     while can_before or can_after:
@@ -566,22 +566,53 @@ def _window(text: str, match_start: int, match_end: int, limit: int) -> Span:
     return spans[lo][0], spans[hi][1]
 
 
-def _word_window(text: str, sentence_start: int, match_start: int, limit: int) -> Span:
-    start = sentence_start
-    if match_start - start > limit // 4:
-        # Start a little before the match, at a word boundary.
-        start = match_start - limit // 4
-        while start < match_start and not text[start - 1].isspace():
-            start += 1
-    end = min(start + limit, len(text))
-    if end < len(text) and not text[end].isspace():
-        cut = end
-        while cut > start and not text[cut - 1].isspace():
-            cut -= 1
-        if cut > match_start:
-            end = cut
-    while end > start and text[end - 1].isspace():
-        end -= 1
+def _word_window(text: str, match_start: int, match_end: int, limit: int) -> Span:
+    """The whole match plus whole words of context, added alternately before and after it
+    while the window stays within ``limit``. A match longer than ``limit`` keeps its start and
+    is cut at the last word boundary that fits (mid-word only for an unspaced run)."""
+    if match_end - match_start > limit:
+        end = match_start + limit
+        if not text[end].isspace():
+            cut = end
+            while cut > match_start and not text[cut - 1].isspace():
+                cut -= 1
+            if cut > match_start:
+                end = cut
+        while end > match_start and text[end - 1].isspace():
+            end -= 1
+        return match_start, end
+
+    def word_before(pos: int) -> int:
+        while pos > 0 and text[pos - 1].isspace():
+            pos -= 1
+        while pos > 0 and not text[pos - 1].isspace():
+            pos -= 1
+        return pos
+
+    def word_after(pos: int) -> int:
+        while pos < len(text) and text[pos].isspace():
+            pos += 1
+        while pos < len(text) and not text[pos].isspace():
+            pos += 1
+        return pos
+
+    start, end = match_start, match_end
+    can_before = can_after = True
+    grow_before = True
+    while can_before or can_after:
+        if grow_before and can_before:
+            nxt = word_before(start)
+            if nxt < start and end - nxt <= limit:
+                start = nxt
+            else:
+                can_before = False
+        elif can_after:
+            nxt = word_after(end)
+            if nxt > end and nxt - start <= limit:
+                end = nxt
+            else:
+                can_after = False
+        grow_before = not grow_before
     return start, end
 
 
