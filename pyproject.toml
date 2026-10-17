@@ -29,6 +29,15 @@ dev = [
   "mypy>=2.4",
   "pytest>=9.1",
   "ruff>=0.17",
+  # M1.1 synthetic PDF fixtures (packages/core/scripts/make_fixture_*.py and their tests).
+  # Dev-only, never a book-core runtime dependency. reportlab and fonttools are pinned exactly
+  # because their output bytes are part of the committed fixtures; pillow (pulled in by
+  # reportlab) is held below 13 until that release has aged.
+  "reportlab==5.0.1",
+  "pypdf==6.19.0",
+  "fonttools==4.66.1",
+  "types-reportlab==5.0.0.20260911",
+  "pillow>=12.3,<13",
 ]
 
 [tool.ruff]
@@ -69,4 +78,6 @@ strict = true
 
 [tool.pytest.ini_options]
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+# Dev-only fixture generator modules (M1.1) imported by packages/core/tests/test_fixture_pdfs.py.
+pythonpath = ["packages/core/scripts"]
 norecursedirs = [".*", "*.egg", "venv", "node_modules", "dist", "build"]

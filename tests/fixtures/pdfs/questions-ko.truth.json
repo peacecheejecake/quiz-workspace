@@ -1,0 +1,369 @@
+{
+  "schema_version": 1,
+  "fixture_id": "questions-ko",
+  "file": "questions-ko.pdf",
+  "language": "ko",
+  "sha256": "1d1a29ccc36a408922bc058fbd8c444625ceca02905d5f95a9034cfedfd8af54",
+  "synthetic": true,
+  "title": "제1회 합성 확인 평가 — 물의 순환과 정수 처리",
+  "page_count": 3,
+  "pages": [
+    {
+      "page": 1,
+      "width": 595.28,
+      "height": 841.89,
+      "noise": [
+        {
+          "kind": "running_header",
+          "text": "합성 확인 평가 · 테스트용",
+          "bbox": {
+            "x0": 64.0,
+            "y0": 36.52,
+            "x1": 154.58,
+            "y1": 45.02
+          }
+        },
+        {
+          "kind": "page_number",
+          "text": "- 1 -",
+          "bbox": {
+            "x0": 290.43,
+            "y0": 798.41,
+            "x1": 304.85,
+            "y1": 806.91
+          }
+        }
+      ]
+    },
+    {
+      "page": 2,
+      "width": 595.28,
+      "height": 841.89,
+      "noise": [
+        {
+          "kind": "running_header",
+          "text": "합성 확인 평가 · 테스트용",
+          "bbox": {
+            "x0": 64.0,
+            "y0": 36.52,
+            "x1": 154.58,
+            "y1": 45.02
+          }
+        },
+        {
+          "kind": "page_number",
+          "text": "- 2 -",
+          "bbox": {
+            "x0": 290.43,
+            "y0": 798.41,
+            "x1": 304.85,
+            "y1": 806.91
+          }
+        }
+      ]
+    },
+    {
+      "page": 3,
+      "width": 595.28,
+      "height": 841.89,
+      "noise": [
+        {
+          "kind": "running_header",
+          "text": "합성 확인 평가 · 테스트용",
+          "bbox": {
+            "x0": 64.0,
+            "y0": 36.52,
+            "x1": 154.58,
+            "y1": 45.02
+          }
+        },
+        {
+          "kind": "page_number",
+          "text": "- 3 -",
+          "bbox": {
+            "x0": 290.43,
+            "y0": 798.41,
+            "x1": 304.85,
+            "y1": 806.91
+          }
+        }
+      ]
+    }
+  ],
+  "kind": "questions",
+  "instructions": "※ 이 평가지는 소프트웨어 테스트를 위해 작성된 합성 자료입니다. 다음 물음에 답하시오.",
+  "answer_key_page": 3,
+  "answer_key_lines": [
+    "1. ②",
+    "2. A, C, D",
+    "4. 응결",
+    "5. ②",
+    "8. B, D"
+  ],
+  "questions": [
+    {
+      "number": 1,
+      "question_type": "MCQ",
+      "multi_select": false,
+      "stem": "물이 액체에서 기체로 변하는 과정을 무엇이라 하는가?",
+      "option_style": "circled",
+      "options": [
+        {
+          "label": "①",
+          "text": "응결"
+        },
+        {
+          "label": "②",
+          "text": "증발"
+        },
+        {
+          "label": "③",
+          "text": "강수"
+        },
+        {
+          "label": "④",
+          "text": "침전"
+        }
+      ],
+      "answer": {
+        "correct_option_labels": [
+          "②"
+        ],
+        "accepted_answers": null
+      },
+      "page": 1,
+      "bbox": {
+        "x0": 64.0,
+        "y0": 138.0,
+        "x1": 337.67,
+        "y1": 229.5
+      },
+      "figure": null
+    },
+    {
+      "number": 2,
+      "question_type": "MCQ",
+      "multi_select": true,
+      "stem": "다음 중 정수 처리 단계에 해당하는 것을 모두 고르시오.",
+      "option_style": "latin",
+      "options": [
+        {
+          "label": "A",
+          "text": "응집"
+        },
+        {
+          "label": "B",
+          "text": "증산"
+        },
+        {
+          "label": "C",
+          "text": "여과"
+        },
+        {
+          "label": "D",
+          "text": "소독"
+        }
+      ],
+      "answer": {
+        "correct_option_labels": [
+          "A",
+          "C",
+          "D"
+        ],
+        "accepted_answers": null
+      },
+      "page": 1,
+      "bbox": {
+        "x0": 64.0,
+        "y0": 253.0,
+        "x1": 340.56,
+        "y1": 344.5
+      },
+      "figure": null
+    },
+    {
+      "number": 3,
+      "question_type": "MCQ",
+      "multi_select": false,
+      "stem": "[그림 1]에서 바다 표면의 물이 대기로 이동하는 과정으로 가장 알맞은 것은?",
+      "option_style": "circled",
+      "options": [
+        {
+          "label": "①",
+          "text": "유출"
+        },
+        {
+          "label": "②",
+          "text": "응결"
+        },
+        {
+          "label": "③",
+          "text": "증발"
+        },
+        {
+          "label": "④",
+          "text": "침투"
+        }
+      ],
+      "answer": null,
+      "page": 1,
+      "bbox": {
+        "x0": 64.0,
+        "y0": 368.0,
+        "x1": 436.19,
+        "y1": 601.5
+      },
+      "figure": {
+        "caption": "[그림 1] 물 순환 단면 모식도 (자리표시자)",
+        "page": 1,
+        "bbox": {
+          "x0": 124.0,
+          "y0": 391.0,
+          "x1": 364.0,
+          "y1": 501.0
+        },
+        "caption_bbox": {
+          "x0": 124.0,
+          "y0": 509.0,
+          "x1": 294.51,
+          "y1": 519.0
+        }
+      }
+    },
+    {
+      "number": 4,
+      "question_type": "SHORT_ANSWER",
+      "multi_select": false,
+      "stem": "수증기가 냉각되어 작은 물방울로 변하는 과정을 쓰시오.",
+      "option_style": null,
+      "options": [],
+      "answer": {
+        "correct_option_labels": null,
+        "accepted_answers": [
+          "응결"
+        ]
+      },
+      "page": 1,
+      "bbox": {
+        "x0": 64.0,
+        "y0": 625.0,
+        "x1": 345.99,
+        "y1": 640.5
+      },
+      "figure": null
+    },
+    {
+      "number": 5,
+      "question_type": "MCQ",
+      "multi_select": false,
+      "stem": "염소 소독의 주된 목적으로 옳은 것은?",
+      "option_style": "circled",
+      "options": [
+        {
+          "label": "①",
+          "text": "물의 색을 진하게 한다."
+        },
+        {
+          "label": "②",
+          "text": "병원성 미생물을 줄인다."
+        },
+        {
+          "label": "③",
+          "text": "물의 온도를 높인다."
+        },
+        {
+          "label": "④",
+          "text": "침전물의 양을 늘린다."
+        }
+      ],
+      "answer": {
+        "correct_option_labels": [
+          "②"
+        ],
+        "accepted_answers": null
+      },
+      "page": 2,
+      "bbox": {
+        "x0": 64.0,
+        "y0": 84.0,
+        "x1": 261.03,
+        "y1": 175.5
+      },
+      "figure": null
+    },
+    {
+      "number": 6,
+      "question_type": "SHORT_ANSWER",
+      "multi_select": false,
+      "stem": "모래와 자갈 층을 통과시켜 작은 입자를 걸러 내는 정수 단계의 이름을 쓰시오.",
+      "option_style": null,
+      "options": [],
+      "answer": null,
+      "page": 2,
+      "bbox": {
+        "x0": 64.0,
+        "y0": 199.0,
+        "x1": 443.51,
+        "y1": 214.5
+      },
+      "figure": null
+    },
+    {
+      "number": 7,
+      "question_type": "ESSAY",
+      "multi_select": false,
+      "stem": "도시화가 지표면 유출량에 미치는 영향을 침투와 관련지어 서술하시오.",
+      "option_style": null,
+      "options": [],
+      "answer": null,
+      "page": 2,
+      "bbox": {
+        "x0": 64.0,
+        "y0": 238.0,
+        "x1": 531.28,
+        "y1": 327.0
+      },
+      "figure": null
+    },
+    {
+      "number": 8,
+      "question_type": "MCQ",
+      "multi_select": true,
+      "stem": "응집 단계에 대한 설명으로 옳은 것을 모두 고르시오.",
+      "option_style": "latin",
+      "options": [
+        {
+          "label": "A",
+          "text": "응집제는 물을 빠르게 증발시킨다."
+        },
+        {
+          "label": "B",
+          "text": "작은 입자들이 달라붙어 플록이 된다."
+        },
+        {
+          "label": "C",
+          "text": "응집은 소독 이후에 진행된다."
+        },
+        {
+          "label": "D",
+          "text": "응집이 잘 되어야 침전 효율이 높아진다."
+        }
+      ],
+      "answer": {
+        "correct_option_labels": [
+          "B",
+          "D"
+        ],
+        "accepted_answers": null
+      },
+      "page": 2,
+      "bbox": {
+        "x0": 64.0,
+        "y0": 347.0,
+        "x1": 327.41,
+        "y1": 438.5
+      },
+      "figure": null
+    }
+  ]
+}

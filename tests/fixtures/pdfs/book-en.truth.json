@@ -1,0 +1,724 @@
+{
+  "schema_version": 1,
+  "fixture_id": "book-en",
+  "file": "book-en.pdf",
+  "language": "en",
+  "sha256": "bb0db8ba069f22914e8bd2904e5d854128f3ba2c91c631c397735343a198bc3d",
+  "synthetic": true,
+  "title": "The Water Cycle and Water Treatment",
+  "page_count": 4,
+  "pages": [
+    {
+      "page": 1,
+      "width": 595.28,
+      "height": 841.89,
+      "noise": []
+    },
+    {
+      "page": 2,
+      "width": 595.28,
+      "height": 841.89,
+      "noise": [
+        {
+          "kind": "running_header",
+          "text": "The Water Cycle and Water Treatment · Synthetic test document",
+          "bbox": {
+            "x0": 64.0,
+            "y0": 36.52,
+            "x1": 320.0,
+            "y1": 45.02
+          }
+        },
+        {
+          "kind": "page_number",
+          "text": "- 2 -",
+          "bbox": {
+            "x0": 290.43,
+            "y0": 798.41,
+            "x1": 304.85,
+            "y1": 806.91
+          }
+        }
+      ]
+    },
+    {
+      "page": 3,
+      "width": 595.28,
+      "height": 841.89,
+      "noise": [
+        {
+          "kind": "running_header",
+          "text": "The Water Cycle and Water Treatment · Synthetic test document",
+          "bbox": {
+            "x0": 64.0,
+            "y0": 36.52,
+            "x1": 320.0,
+            "y1": 45.02
+          }
+        },
+        {
+          "kind": "page_number",
+          "text": "- 3 -",
+          "bbox": {
+            "x0": 290.43,
+            "y0": 798.41,
+            "x1": 304.85,
+            "y1": 806.91
+          }
+        }
+      ]
+    },
+    {
+      "page": 4,
+      "width": 595.28,
+      "height": 841.89,
+      "noise": [
+        {
+          "kind": "running_header",
+          "text": "The Water Cycle and Water Treatment · Synthetic test document",
+          "bbox": {
+            "x0": 64.0,
+            "y0": 36.52,
+            "x1": 320.0,
+            "y1": 45.02
+          }
+        },
+        {
+          "kind": "page_number",
+          "text": "- 4 -",
+          "bbox": {
+            "x0": 290.43,
+            "y0": 798.41,
+            "x1": 304.85,
+            "y1": 806.91
+          }
+        }
+      ]
+    }
+  ],
+  "kind": "book",
+  "toc_page": 1,
+  "toc": [
+    {
+      "section_id": "ch1",
+      "title": "Chapter 1. The Water Cycle",
+      "level": 1,
+      "page": 2,
+      "bbox": {
+        "x0": 64.0,
+        "y0": 268.0,
+        "x1": 531.28,
+        "y1": 279.5
+      }
+    },
+    {
+      "section_id": "ch1-s1",
+      "title": "1.1 Evaporation and Condensation",
+      "level": 2,
+      "page": 2,
+      "bbox": {
+        "x0": 82.0,
+        "y0": 290.0,
+        "x1": 531.28,
+        "y1": 301.5
+      }
+    },
+    {
+      "section_id": "ch1-s2",
+      "title": "1.2 Precipitation and Runoff",
+      "level": 2,
+      "page": 2,
+      "bbox": {
+        "x0": 82.0,
+        "y0": 312.0,
+        "x1": 531.28,
+        "y1": 323.5
+      }
+    },
+    {
+      "section_id": "ch2",
+      "title": "Chapter 2. Water Treatment",
+      "level": 1,
+      "page": 4,
+      "bbox": {
+        "x0": 64.0,
+        "y0": 334.0,
+        "x1": 531.28,
+        "y1": 345.5
+      }
+    },
+    {
+      "section_id": "ch2-s1",
+      "title": "2.1 Coagulation and Sedimentation",
+      "level": 2,
+      "page": 4,
+      "bbox": {
+        "x0": 82.0,
+        "y0": 356.0,
+        "x1": 531.28,
+        "y1": 367.5
+      }
+    },
+    {
+      "section_id": "ch2-s2",
+      "title": "2.2 Filtration and Disinfection",
+      "level": 2,
+      "page": 4,
+      "bbox": {
+        "x0": 82.0,
+        "y0": 378.0,
+        "x1": 531.28,
+        "y1": 389.5
+      }
+    }
+  ],
+  "sections": [
+    {
+      "id": "ch1",
+      "title": "Chapter 1. The Water Cycle",
+      "level": 1,
+      "parent_id": null,
+      "page": 2
+    },
+    {
+      "id": "ch1-s1",
+      "title": "1.1 Evaporation and Condensation",
+      "level": 2,
+      "parent_id": "ch1",
+      "page": 2
+    },
+    {
+      "id": "ch1-s2",
+      "title": "1.2 Precipitation and Runoff",
+      "level": 2,
+      "parent_id": "ch1",
+      "page": 2
+    },
+    {
+      "id": "ch2",
+      "title": "Chapter 2. Water Treatment",
+      "level": 1,
+      "parent_id": null,
+      "page": 4
+    },
+    {
+      "id": "ch2-s1",
+      "title": "2.1 Coagulation and Sedimentation",
+      "level": 2,
+      "parent_id": "ch2",
+      "page": 4
+    },
+    {
+      "id": "ch2-s2",
+      "title": "2.2 Filtration and Disinfection",
+      "level": 2,
+      "parent_id": "ch2",
+      "page": 4
+    }
+  ],
+  "blocks": [
+    {
+      "id": "ch1-heading",
+      "type": "heading",
+      "text": "Chapter 1. The Water Cycle",
+      "section_id": "ch1",
+      "parts": [
+        {
+          "page": 2,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 84.0,
+            "x1": 302.27,
+            "y1": 102.0
+          },
+          "text": "Chapter 1. The Water Cycle"
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch1-p1",
+      "type": "text",
+      "text": "Water on Earth moves constantly between the oceans, the atmosphere and the land. This chapter follows that journey step by step and explains how each step connects to everyday life.",
+      "section_id": "ch1",
+      "parts": [
+        {
+          "page": 2,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 115.0,
+            "x1": 522.87,
+            "y1": 164.5
+          },
+          "text": "Water on Earth moves constantly between the oceans, the atmosphere and the land. This chapter follows that journey step by step and explains how each step connects to everyday life."
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch1-s1-heading",
+      "type": "heading",
+      "text": "1.1 Evaporation and Condensation",
+      "section_id": "ch1-s1",
+      "parts": [
+        {
+          "page": 2,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 188.1,
+            "x1": 293.51,
+            "y1": 201.6
+          },
+          "text": "1.1 Evaporation and Condensation"
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch1-s1-p1",
+      "type": "text",
+      "text": "When sunlight warms the surface of seas and lakes, some water molecules gain enough energy to become water vapor. This process is called evaporation. Plants also release water vapor through their leaves; this is called transpiration, and together with evaporation it is the main source of moisture in the air.",
+      "section_id": "ch1-s1",
+      "parts": [
+        {
+          "page": 2,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 212.35,
+            "x1": 529.98,
+            "y1": 280.85
+          },
+          "text": "When sunlight warms the surface of seas and lakes, some water molecules gain enough energy to become water vapor. This process is called evaporation. Plants also release water vapor through their leaves; this is called transpiration, and together with evaporation it is the main source of moisture in the air."
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch1-s1-p2",
+      "type": "text",
+      "text": "As moist air rises, the surrounding pressure drops, so the air expands and cools. Once its temperature falls below the dew point, the vapor gathers around tiny particles such as dust or sea salt and forms droplets. This process is called condensation, and a cloud is simply a huge number of these droplets.",
+      "section_id": "ch1-s1",
+      "parts": [
+        {
+          "page": 2,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 296.35,
+            "x1": 526.6,
+            "y1": 364.85
+          },
+          "text": "As moist air rises, the surrounding pressure drops, so the air expands and cools. Once its temperature falls below the dew point, the vapor gathers around tiny particles such as dust or sea salt and forms droplets. This process is called condensation, and a cloud is simply a huge number of these droplets."
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch1-s1-fig1",
+      "type": "image",
+      "text": "",
+      "section_id": "ch1-s1",
+      "parts": [
+        {
+          "page": 2,
+          "bbox": {
+            "x0": 104.0,
+            "y0": 380.35,
+            "x1": 491.28,
+            "y1": 500.35
+          },
+          "text": ""
+        }
+      ],
+      "table": null,
+      "caption_block_id": "ch1-s1-fig1-caption"
+    },
+    {
+      "id": "ch1-s1-fig1-caption",
+      "type": "text",
+      "text": "Figure 1. Diagram of the water cycle (placeholder)",
+      "section_id": "ch1-s1",
+      "parts": [
+        {
+          "page": 2,
+          "bbox": {
+            "x0": 104.0,
+            "y0": 508.35,
+            "x1": 335.06,
+            "y1": 518.35
+          },
+          "text": "Figure 1. Diagram of the water cycle (placeholder)"
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch1-s1-p3",
+      "type": "text",
+      "text": "Condensation also releases heat. The heat given off when vapor turns into droplets warms the surrounding air and strengthens the updraft, which lets clouds grow taller. Sudden showers on summer afternoons are closely related to this process.",
+      "section_id": "ch1-s1",
+      "parts": [
+        {
+          "page": 2,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 532.35,
+            "x1": 520.49,
+            "y1": 581.85
+          },
+          "text": "Condensation also releases heat. The heat given off when vapor turns into droplets warms the surrounding air and strengthens the updraft, which lets clouds grow taller. Sudden showers on summer afternoons are closely related to this process."
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch1-s2-heading",
+      "type": "heading",
+      "text": "1.2 Precipitation and Runoff",
+      "section_id": "ch1-s2",
+      "parts": [
+        {
+          "page": 2,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 605.45,
+            "x1": 251.11,
+            "y1": 618.95
+          },
+          "text": "1.2 Precipitation and Runoff"
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch1-s2-p1",
+      "type": "text",
+      "text": "Droplets inside a cloud collide and merge, and when they become heavy enough they fall to the ground as rain or snow. This is called precipitation. Its form depends on temperature: the same cloud may produce snow when the air near the ground is cold and rain when it is warm.",
+      "section_id": "ch1-s2",
+      "parts": [
+        {
+          "page": 2,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 629.7,
+            "x1": 519.92,
+            "y1": 698.2
+          },
+          "text": "Droplets inside a cloud collide and merge, and when they become heavy enough they fall to the ground as rain or snow. This is called precipitation. Its form depends on temperature: the same cloud may produce snow when the air near the ground is cold and rain when it is warm."
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch1-s2-p2",
+      "type": "text",
+      "text": "Part of the rain that reaches the ground soaks into the soil and becomes groundwater, while the rest flows downhill into streams. Soaking into the ground is called infiltration, and water flowing over the surface is called runoff. Soft soils in forests and wetlands allow a lot of infiltration, whereas cities covered with paved roads produce much more runoff. For this reason cities build detention basins that hold rainwater for a while and use permeable pavement to reduce sudden floods.",
+      "section_id": "ch1-s2",
+      "parts": [
+        {
+          "page": 2,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 713.7,
+            "x1": 530.78,
+            "y1": 763.2
+          },
+          "text": "Part of the rain that reaches the ground soaks into the soil and becomes groundwater, while the rest flows downhill into streams. Soaking into the ground is called infiltration, and water flowing over the surface is called runoff. Soft soils in forests and wetlands"
+        },
+        {
+          "page": 3,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 84.0,
+            "x1": 526.48,
+            "y1": 133.5
+          },
+          "text": "allow a lot of infiltration, whereas cities covered with paved roads produce much more runoff. For this reason cities build detention basins that hold rainwater for a while and use permeable pavement to reduce sudden floods."
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch1-s2-p3",
+      "type": "text",
+      "text": "Rivers and groundwater eventually flow back to the sea, and sea water evaporates again. Because water keeps changing its form and place in an endless cycle, the total amount of water on Earth stays almost constant.",
+      "section_id": "ch1-s2",
+      "parts": [
+        {
+          "page": 3,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 149.0,
+            "x1": 516.46,
+            "y1": 198.5
+          },
+          "text": "Rivers and groundwater eventually flow back to the sea, and sea water evaporates again. Because water keeps changing its form and place in an endless cycle, the total amount of water on Earth stays almost constant."
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch2-heading",
+      "type": "heading",
+      "text": "Chapter 2. Water Treatment",
+      "section_id": "ch2",
+      "parts": [
+        {
+          "page": 4,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 84.0,
+            "x1": 311.91,
+            "y1": 102.0
+          },
+          "text": "Chapter 2. Water Treatment"
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch2-p1",
+      "type": "text",
+      "text": "Raw water taken from rivers or lakes contains soil particles, organic matter and microorganisms, so it is not safe to drink as it is. A water treatment plant removes these substances in several stages to produce drinking water.",
+      "section_id": "ch2",
+      "parts": [
+        {
+          "page": 4,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 115.0,
+            "x1": 530.76,
+            "y1": 164.5
+          },
+          "text": "Raw water taken from rivers or lakes contains soil particles, organic matter and microorganisms, so it is not safe to drink as it is. A water treatment plant removes these substances in several stages to produce drinking water."
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch2-s1-heading",
+      "type": "heading",
+      "text": "2.1 Coagulation and Sedimentation",
+      "section_id": "ch2-s1",
+      "parts": [
+        {
+          "page": 4,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 188.1,
+            "x1": 299.03,
+            "y1": 201.6
+          },
+          "text": "2.1 Coagulation and Sedimentation"
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch2-s1-p1",
+      "type": "text",
+      "text": "When a coagulant is added to raw water and the water is stirred slowly, very small particles stick together and form visible clumps. These clumps are called flocs, and this stage is called coagulation. Particles that are too small never settle, so coagulation determines how well the next stage works.",
+      "section_id": "ch2-s1",
+      "parts": [
+        {
+          "page": 4,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 212.35,
+            "x1": 528.53,
+            "y1": 280.85
+          },
+          "text": "When a coagulant is added to raw water and the water is stirred slowly, very small particles stick together and form visible clumps. These clumps are called flocs, and this stage is called coagulation. Particles that are too small never settle, so coagulation determines how well the next stage works."
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch2-s1-p2",
+      "type": "text",
+      "text": "The water with flocs is moved into wide, deep sedimentation basins where it stays for several hours. The heavy flocs sink to the bottom and only the clear water on top moves on to the next stage. The sludge collected at the bottom is removed regularly and treated separately.",
+      "section_id": "ch2-s1",
+      "parts": [
+        {
+          "page": 4,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 296.35,
+            "x1": 519.85,
+            "y1": 364.85
+          },
+          "text": "The water with flocs is moved into wide, deep sedimentation basins where it stays for several hours. The heavy flocs sink to the bottom and only the clear water on top moves on to the next stage. The sludge collected at the bottom is removed regularly and treated separately."
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch2-s1-table1-caption",
+      "type": "text",
+      "text": "Table 1. Example treatment stages (synthetic data)",
+      "section_id": "ch2-s1",
+      "parts": [
+        {
+          "page": 4,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 380.35,
+            "x1": 300.47,
+            "y1": 390.35
+          },
+          "text": "Table 1. Example treatment stages (synthetic data)"
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch2-s1-table1",
+      "type": "table",
+      "text": "Stage | Main action | Example retention time\nCoagulation | Binds fine particles | about 30 min\nSedimentation | Settles flocs | about 3 h\nFiltration | Removes remaining particles | about 1 h\nDisinfection | Suppresses microbes | about 30 min",
+      "section_id": "ch2-s1",
+      "parts": [
+        {
+          "page": 4,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 400.35,
+            "x1": 531.28,
+            "y1": 510.35
+          },
+          "text": "Stage | Main action | Example retention time\nCoagulation | Binds fine particles | about 30 min\nSedimentation | Settles flocs | about 3 h\nFiltration | Removes remaining particles | about 1 h\nDisinfection | Suppresses microbes | about 30 min"
+        }
+      ],
+      "table": {
+        "rows": [
+          [
+            "Stage",
+            "Main action",
+            "Example retention time"
+          ],
+          [
+            "Coagulation",
+            "Binds fine particles",
+            "about 30 min"
+          ],
+          [
+            "Sedimentation",
+            "Settles flocs",
+            "about 3 h"
+          ],
+          [
+            "Filtration",
+            "Removes remaining particles",
+            "about 1 h"
+          ],
+          [
+            "Disinfection",
+            "Suppresses microbes",
+            "about 30 min"
+          ]
+        ],
+        "header_rows": 1
+      },
+      "caption_block_id": null
+    },
+    {
+      "id": "ch2-s2-heading",
+      "type": "heading",
+      "text": "2.2 Filtration and Disinfection",
+      "section_id": "ch2-s2",
+      "parts": [
+        {
+          "page": 4,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 530.45,
+            "x1": 261.6,
+            "y1": 543.95
+          },
+          "text": "2.2 Filtration and Disinfection"
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch2-s2-p1",
+      "type": "text",
+      "text": "After sedimentation the water passes through filter beds made of layers of sand and gravel. The filter catches small particles that did not settle, and it is cleaned regularly by pumping water through it in the opposite direction.",
+      "section_id": "ch2-s2",
+      "parts": [
+        {
+          "page": 4,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 554.7,
+            "x1": 516.69,
+            "y1": 604.2
+          },
+          "text": "After sedimentation the water passes through filter beds made of layers of sand and gravel. The filter catches small particles that did not settle, and it is cleaned regularly by pumping water through it in the opposite direction."
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "ch2-s2-p2",
+      "type": "text",
+      "text": "Finally a disinfectant such as chlorine is added to reduce the remaining pathogenic microorganisms. Chlorine keeps working while the water travels through the pipes, but too much of it causes an unpleasant smell, so its concentration must be controlled carefully.",
+      "section_id": "ch2-s2",
+      "parts": [
+        {
+          "page": 4,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 619.7,
+            "x1": 528.97,
+            "y1": 688.2
+          },
+          "text": "Finally a disinfectant such as chlorine is added to reduce the remaining pathogenic microorganisms. Chlorine keeps working while the water travels through the pipes, but too much of it causes an unpleasant smell, so its concentration must be controlled carefully."
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    },
+    {
+      "id": "source-note",
+      "type": "text",
+      "text": "Source: this document is synthetic material written for software testing. The text and the numbers in the table are illustrative examples and are not quoted from any publication or statistics.",
+      "section_id": "ch2-s2",
+      "parts": [
+        {
+          "page": 4,
+          "bbox": {
+            "x0": 64.0,
+            "y0": 711.7,
+            "x1": 516.9,
+            "y1": 761.2
+          },
+          "text": "Source: this document is synthetic material written for software testing. The text and the numbers in the table are illustrative examples and are not quoted from any publication or statistics."
+        }
+      ],
+      "table": null,
+      "caption_block_id": null
+    }
+  ],
+  "cross_page_block_ids": [
+    "ch1-s2-p2"
+  ],
+  "source_note_block_id": "source-note"
+}
