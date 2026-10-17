@@ -4,7 +4,9 @@ A generation draft is re-validated with the same rules the worker applied
 (`book_core.generation.validate_variant`): schema/structure, answer count against the source,
 the inverted answer of an INVERT_POLARITY that keeps the options, duplicate fingerprints (the
 workspace's live questions and the run's other drafts), and citations (quotes must stay verbatim
-excerpts of the passages the run gave the LLM, stored on the run). The LLM's declared answer is
+excerpts of the passages the run gave the LLM, stored on the run; a draft that inherited the
+source question's provenance is checked against the evidence snapshot the run stored, not the
+source's current sources). The LLM's declared answer is
 never trusted: an `error` blocks approval until a reviewer edits the draft or, for
 `ACKNOWLEDGEABLE_CODES`, explicitly confirms the change.
 
@@ -29,6 +31,7 @@ from book_core.contracts import (
     QuestionDraft,
     QuestionOption,
     QuestionType,
+    SourceEvidence,
     ValidationIssue,
 )
 from book_core.generation import (
@@ -52,10 +55,8 @@ from quiz_api.repositories.question_generations import (
 from quiz_api.repositories.question_imports import DraftRecord
 
 
-def source_question(
-    revision: SourceRevisionRecord, sources: Iterable[StoredSourceRecord]
-) -> SourceQuestion:
-    """The core view of a run's pinned source revision (same as the worker's)."""
+def stored_evidence(sources: Iterable[StoredSourceRecord]) -> list[SourceEvidence]:
+    """The source question's current sources as evidence (the worker's construction)."""
     evidence = []
     for source in sources:
         if source.document_id is None:
@@ -70,6 +71,23 @@ def source_question(
         )
         if found is not None:
             evidence.append(found)
+    return evidence
+
+
+def snapshot_evidence(raw: Sequence[object]) -> list[SourceEvidence]:
+    out = []
+    for item in raw:
+        try:
+            out.append(SourceEvidence.model_validate(item))
+        except ValidationError:
+            continue
+    return out
+
+
+def source_question(
+    revision: SourceRevisionRecord, evidence: Sequence[SourceEvidence]
+) -> SourceQuestion:
+    """The core view of a run's pinned source revision (same as the worker's)."""
     return SourceQuestion(
         question_id=str(revision.question_id),
         revision_id=str(revision.revision_id),
@@ -119,6 +137,17 @@ def content_fingerprints(contents: Iterable[ContentRecord]) -> frozenset[str]:
         for c in contents
     )
     return frozenset(f for f in out if f is not None)
+
+
+def content_fingerprint(content: QuestionContent) -> str | None:
+    """The fingerprint of reviewed content (as it would be registered)."""
+    return _fingerprint(
+        content.question_type,
+        content.stem,
+        [QuestionOption(id=oid, text=text) for oid, text in content.options],
+        content.correct_option_ids,
+        content.accepted_answers,
+    )
 
 
 def draft_fingerprints(drafts: Iterable[DraftRecord], *, exclude: uuid.UUID) -> frozenset[str]:
@@ -192,8 +221,15 @@ def generation_validations(
             passages.append(Excerpt.model_validate(raw))
         except ValidationError:
             continue
-    stored = repo.stored_sources(record.workspace_id, revision.question_id)
-    source = source_question(revision, stored)
+    # The evidence the job generated with (snapshot); runs from before the snapshot existed
+    # fall back to the source question's current sources.
+    snapshot = repo.source_evidence(run.id)
+    evidence = (
+        snapshot_evidence(snapshot)
+        if snapshot is not None
+        else stored_evidence(repo.stored_sources(record.workspace_id, revision.question_id))
+    )
+    source = source_question(revision, evidence)
     edited = with_review(draft, content, (), "pending")
     return validate_variant(
         edited,

@@ -35,6 +35,7 @@ import psycopg
 import pytest
 from book_core.embedding import FakeEmbedder
 from book_core.indexing import CollectionNames, QdrantIndexStore
+from book_core.search import SearchService
 from fastapi.testclient import TestClient
 from qdrant_client import QdrantClient
 from qdrant_client import models as qm
@@ -149,6 +150,8 @@ class JobWorker:
             documents=documents,
             llm=build_generation_llm(env),
             lock_wait_seconds=30,
+            # ANALOGOUS_CONCEPT related passages from this suite's index (fake embedder).
+            search=SearchService(document_deps.index),
         )
         self.generation_deps = generation_deps
         definitions: list[JobDefinition[Any]] = [

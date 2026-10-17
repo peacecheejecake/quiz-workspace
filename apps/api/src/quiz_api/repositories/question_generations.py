@@ -222,6 +222,27 @@ class QuestionGenerationRepository:
         ).scalar_one_or_none()
         return list(found) if isinstance(found, list) else []
 
+    def source_evidence(self, run_id: uuid.UUID) -> list[dict[str, Any]] | None:
+        """The source question's evidence the job generated with (NULL: not snapshotted)."""
+        found = self._session.execute(
+            select(question_generation_runs.c.source_evidence).where(
+                question_generation_runs.c.id == run_id
+            )
+        ).scalar_one_or_none()
+        return list(found) if isinstance(found, list) else None
+
+    def lock_dedupe(self, workspace_id: uuid.UUID) -> None:
+        """Serialise generation publishes of one workspace until the transaction ends, so the
+        duplicate check and the inserts it guards are atomic (a second publisher reads the first
+        one's committed questions)."""
+        self._session.execute(
+            select(
+                func.pg_advisory_xact_lock(
+                    func.hashtextextended(f"quiz.generation_publish:{workspace_id}", 0)
+                )
+            )
+        )
+
     def create_run(
         self,
         *,

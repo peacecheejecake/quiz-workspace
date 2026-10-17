@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +29,7 @@ NOT_APPROVED = "urn:quiz-workspace:problem:draft-not-approved"
 NOT_CONFIRMED = "urn:quiz-workspace:problem:question-not-confirmed"
 KEY_REUSED = "urn:quiz-workspace:problem:idempotency-key-reused"
 DRAFT_PUBLISHED = "urn:quiz-workspace:problem:draft-published"
+DUPLICATE = "urn:quiz-workspace:problem:duplicate-question"
 
 
 def _source_input(name: str, document_id: str) -> dict[str, Any]:
@@ -77,6 +80,77 @@ def _generate(client: Any, question_id: str, types: list[str]) -> tuple[dict[str
     run = res.json()
     client.wait_for_job(str(run["job_id"]))
     return client.ok("GET", f"/question-generations/{run['id']}"), _drafts(client, run["id"])
+
+
+class CitingLLM:
+    """Answers any generation task with one candidate citing the first sentence of P1 (whatever
+    the passages are: cited pages or search hits), or citing nothing without passages."""
+
+    model_name = "fake-citing-llm"
+
+    def complete(self, request: Any, schema: Any) -> Any:
+        from book_core.llm import LLMCallInfo, LLMResult
+
+        citations = []
+        options = [
+            {"label": "1", "text": "지문과 일치하는 설명"},
+            {"label": "2", "text": "틀린 설명"},
+        ]
+        if "[P1]" in request.prompt:
+            passage = request.prompt.split("[P1]", 1)[1].split("\n", 2)[1]
+            quote = passage.split(". ")[0][:60]
+            citations = [{"passage_id": "P1", "quote": quote}]
+            options[0]["text"] = quote
+        candidate = {
+            "question_type": "MCQ",
+            "multi_select": False,
+            "stem": "다음 중 옳은 설명은? (생성된 변형)",
+            "options": options,
+            "correct_option_labels": ["1"],
+            "accepted_answers": None,
+            "explanation": None,
+            "justification": "지문(또는 원본 문제의 출처)에 근거한다.",
+            "citations": citations,
+        }
+        info = LLMCallInfo(
+            task=request.task,
+            prompt_version=request.prompt_version,
+            model=self.model_name,
+            request_fingerprint="citing",
+        )
+        return LLMResult(output=schema.model_validate({"candidates": [candidate]}), info=info)
+
+    def generate(self, request: Any, schema: Any) -> Any:
+        return self.complete(request, schema).output
+
+
+@pytest.fixture
+def citing_llm(seed: Any) -> Iterator[None]:
+    """Swaps the in-process worker's LLM for CitingLLM during one test."""
+    seed.worker._build()
+    deps = seed.worker.generation_deps
+    original = deps.llm
+    deps.llm = CitingLLM()
+    try:
+        yield
+    finally:
+        deps.llm = original
+
+
+def _plain_source(client: Any, workspace_id: str, sources: list[dict[str, Any]]) -> dict[str, Any]:
+    body = {**_mcq_body("정수 처리 과정에 관한 원본 문제"), "sources": sources}
+    out: dict[str, Any] = client.create_question(workspace_id, body)
+    return out
+
+
+def _mcq_body(stem: str) -> dict[str, Any]:
+    return {
+        "question_type": "MCQ",
+        "stem": stem,
+        "options": [{"id": "a", "text": "응집"}, {"id": "b", "text": "증발"}],
+        "correct_option_ids": ["a"],
+        "is_multi_answer": False,
+    }
 
 
 def _drafts(client: Any, run_id: str) -> list[dict[str, Any]]:
@@ -202,13 +276,16 @@ def test_generation_starts_only_from_a_confirmed_question(seed: Any) -> None:
     )
     seed.problem(_start(owner, draft_q["id"], ["PARAPHRASE"]), 409, NOT_CONFIRMED)
     confirmed = owner.create_question(ws["id"], seed.mcq("출처 없는 문제", ["가", "나"], 0))
-    # Analogous concepts come from the source's document pages.
-    res = _start(owner, confirmed["id"], ["ANALOGOUS_CONCEPT"])
-    assert seed.problem(res, 422)["errors"][0]["loc"] == ["body", "variation_types"]
     seed.problem(_start(owner, confirmed["id"], ["PARAPHRASE", "PARAPHRASE"]), 422)
     seed.problem(_start(owner, confirmed["id"], ["PARAPHRASE"], candidate_count=21), 422)
     seed.problem(_start(owner, confirmed["id"], []), 422)
     assert owner.ok("GET", f"/workspaces/{ws['id']}/question-generations")["items"] == []
+    # No cited page and nothing indexed in the workspace: no passage for an analogous concept.
+    res = _start(owner, confirmed["id"], ["ANALOGOUS_CONCEPT"])
+    assert res.status_code == 202, res.text[:300]
+    owner.wait_for_job(str(res.json()["job_id"]), "failed")
+    run = owner.ok("GET", f"/question-generations/{res.json()['id']}")
+    assert (run["status"], run["error_code"]) == ("failed", "source_passages_missing")
 
 
 # --- idempotency ----------------------------------------------------------------------------------
@@ -378,3 +455,87 @@ def test_generated_answers_never_leave_the_workspace(seed: Any) -> None:
     stored = " ".join([*result, *activity])
     assert not any(s in stored for s in secrets)
     assert "opt-1" not in result[0]
+
+
+# --- review fixes: publish-time duplicates, evidence snapshot, related passages -----------------
+
+
+def test_identical_candidates_of_two_runs_register_only_once(seed: Any) -> None:
+    owner, ws_id, source = _with_source(seed, "m62-dup")
+    run_a, [draft_a] = _generate(owner, source["id"], ["PARAPHRASE"])
+    run_b, [draft_b] = _generate(owner, source["id"], ["PARAPHRASE"])
+    # Both were valid when generated and approved (neither was a question yet).
+    approved_a = _patch(owner, draft_a, review_status="approved").json()
+    approved_b = _patch(owner, draft_b, review_status="approved").json()
+
+    assert _publish(owner, run_a["id"], [approved_a]).status_code == 200
+    seed.problem(_publish(owner, run_b["id"], [approved_b]), 409, DUPLICATE)
+    assert _dots(owner, ws_id) == 2
+    [still] = _drafts(owner, run_b["id"])
+    assert still["published_question_id"] is None
+    # Re-reviewing it now flags the duplicate, so it cannot be approved again.
+    rejected = _patch(owner, still, review_status="pending").json()
+    assert "duplicate_of_existing" in {v["code"] for v in rejected["validations"]}
+    seed.problem(_patch(owner, rejected, review_status="approved"), 422)
+
+
+def test_concurrent_publishes_of_identical_candidates_register_one(seed: Any) -> None:
+    owner, ws_id, source = _with_source(seed, "m62-dup-race")
+    runs = [_generate(owner, source["id"], ["PARAPHRASE"]) for _ in range(2)]
+    approved = [
+        (run["id"], _patch(owner, draft, review_status="approved").json()) for run, [draft] in runs
+    ]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda r: _publish(owner, r[0], [r[1]]), approved))
+    assert sorted(r.status_code for r in results) == [200, 409]
+    assert _dots(owner, ws_id) == 2
+
+
+def test_inherited_provenance_is_checked_against_the_run_snapshot(
+    seed: Any, citing_llm: None
+) -> None:
+    owner = seed.client("m62-snapshot")
+    ws = owner.create_workspace()
+    _upload, _sha, done = owner.upload_book(ws["id"])
+    owner.wait_for_job(str(done["job_id"]))
+    document_id = str(done["document_id"])
+    # p.1 of book-ko has no body text: no passage, so the draft inherits the source's page.
+    source = _plain_source(owner, ws["id"], [{"document_id": document_id, "page_start": 1}])
+    run, [draft] = _generate(owner, source["id"], ["PARAPHRASE"])
+    assert [loc["page"] for e in draft["payload"]["evidence"] for loc in e["locations"]] == [1]
+    assert {v["code"] for v in draft["validations"] if v["severity"] == "error"} == set()
+
+    # The source question's sources are edited afterwards (metadata, same revision).
+    owner.ok(
+        "PATCH",
+        f"/questions/{source['id']}",
+        {
+            "base_revision_id": source["revision"]["id"],
+            "sources": [{"document_id": document_id, "page_start": 4}],
+        },
+    )
+    approved = _patch(owner, draft, review_status="approved")
+    assert approved.status_code == 200, approved.text[:300]
+    assert approved.json()["publishable"] is True
+    assert _publish(owner, run["id"], [approved.json()]).status_code == 200
+
+
+def test_analogous_concept_without_cited_pages_uses_related_indexed_passages(
+    seed: Any, citing_llm: None
+) -> None:
+    owner = seed.client("m62-related")
+    ws = owner.create_workspace()
+    _upload, _sha, done = owner.upload_book(ws["id"])
+    owner.wait_for_job(str(done["job_id"]))
+    source = _plain_source(owner, ws["id"], [])
+    run, [draft] = _generate(owner, source["id"], ["ANALOGOUS_CONCEPT"])
+    assert run["status"] == "succeeded"
+    [evidence] = draft["payload"]["evidence"]
+    assert evidence["document_id"] == str(done["document_id"])
+    assert evidence["block_ids"]
+    assert {v["code"] for v in draft["validations"] if v["severity"] == "error"} == set()
+    approved = _patch(owner, draft, review_status="approved").json()
+    [item] = _publish(owner, run["id"], [approved]).json()["items"]
+    created = owner.get_question(item["question_id"])
+    assert created["lineage"]["variation_type"] == "ANALOGOUS_CONCEPT"
+    assert [s["document_id"] for s in created["sources"]] == [str(done["document_id"])]

@@ -10,17 +10,22 @@ Pipeline, serialised per run by an advisory lock:
 1. load the run; refuse a run of another job and a workspace that is archived/deleted or that the
    job's user can no longer edit (`workspace_unavailable`, re-checked under a lock in step 5);
    the source question must still be live (`source_question_deleted`); mark the run `running`;
-2. passages: the published blocks of the source question's `sources` pages, read from each live
-   document's *active* revision, one paragraph-complete excerpt per section on those pages in
-   reading order (tagged P1..Pn for the LLM, at most `MAX_PASSAGES`);
+2. passages (tagged P1..Pn for the LLM, at most `MAX_PASSAGES`): the published blocks of the
+   source question's `sources` pages, read from each live document's *active* revision, one
+   paragraph-complete excerpt per section on those pages in reading order; for
+   ANALOGOUS_CONCEPT then related passages from a hybrid search (docs/questions.md §5:
+   "document semantic search") over the workspace's published active revisions (scope from the
+   DB, as M3.6a), each hit expanded to a paragraph-complete excerpt, overlaps skipped. A source
+   without cited pages therefore works when related indexed material exists;
 3. `VariantGenerator` (book_core.generation): one structured LLM call per variation type, then
    schema, answer-count, duplicate-fingerprint (against every live question of the workspace)
    and citation checks. The LLM's declared answer is never trusted: blocking validations stay
    on the draft and only a human approval (API) can make it a question;
 4. each cited quote is narrowed to the block(s) it occurs in (block ids + their locations);
 5. in one transaction: re-check workspace access (rows locked FOR SHARE), insert the drafts
-   (pending; position = order of generation), record model/prompt provenance and the passages
-   (for re-validation of reviewer edits) and mark the run `succeeded`.
+   (pending; position = order of generation), record model/prompt provenance, the passages and
+   the source question's evidence (snapshots for re-validating reviewer edits) and mark the run
+   `succeeded`.
 
 A run where no candidate survives fails with the most specific code: `llm_output_invalid` (the
 model output did not match the schema), `llm_unavailable` (provider errors; retried), or
@@ -51,6 +56,7 @@ from book_core.contracts import (
     QuestionDraft,
     QuestionOption,
     QuestionType,
+    SearchMode,
     SourceEvidence,
     VariationType,
 )
@@ -65,8 +71,10 @@ from book_core.generation import (
     VariantRequest,
     stored_source_evidence,
 )
+from book_core.indexing import SearchScope
 from book_core.llm import LLMClient
 from book_core.question import normalize_text, question_fingerprint
+from book_core.search import RerankMode, SearchLimits, SearchService
 from book_core.search.excerpt import ExcerptConfig, ExcerptError, ExcerptResolver
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -96,6 +104,8 @@ _REPO_SCENARIOS = (
 )
 # One passage is a section's text on the source pages; generous so a page is rarely cut.
 PASSAGE_MAX_CHARS = 6000
+# Search hits considered for ANALOGOUS_CONCEPT related passages (overlaps are skipped).
+RELATED_HITS = 2 * MAX_PASSAGES
 
 
 class GenerationNotFoundError(NonRetryableJobError):
@@ -128,6 +138,12 @@ class NoValidCandidatesError(NonRetryableJobError):
     code = "no_valid_candidates"
 
 
+class SearchUnavailableError(JobError):
+    """The document index could not be searched and no other passage exists (retried)."""
+
+    code = "search_unavailable"
+
+
 class QuestionGeneratePayloadV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -140,6 +156,9 @@ class GenerationJobDeps:
     documents: DocumentStore
     llm: LLMClient | None
     lock_wait_seconds: float = 60
+    # ANALOGOUS_CONCEPT related passages (docs/questions.md §5: document semantic search). None
+    # (no index configured): only the source question's cited pages are used.
+    search: SearchService | None = None
 
 
 # --------------------------------------------------------------------------------------------
@@ -365,16 +384,20 @@ def _pipeline(
 
     deps.generations.mark_running(run.id, ctx.job_id)
     progress("loading", 10)
-    passages, revisions = _passages(deps, ctx, source_row)
     variations = tuple(VariationType(v) for v in run.variation_types)
-    if VariationType.ANALOGOUS_CONCEPT in variations and not passages:
-        raise SourcePassagesMissingError("the source question cites no readable document page")
+    analogous = VariationType.ANALOGOUS_CONCEPT in variations
+    passages, revisions = _passages(deps, ctx, source_row, related=analogous)
+    if analogous and not passages:
+        raise SourcePassagesMissingError(
+            "no cited page and no related indexed passage for the source question"
+        )
     fingerprints = workspace_fingerprints(deps.generations.workspace_questions(ctx.workspace_id))
     ctx.check_cancelled()
 
     progress("generating", 30)
+    source = source_question(source_row)
     request = VariantRequest(
-        source=source_question(source_row),
+        source=source,
         variation_types=variations,
         candidate_count=run.candidate_count,
         passages=tuple(passages),
@@ -402,6 +425,7 @@ def _pipeline(
         llm_model=model[:200],
         prompt_version=run_prompt_version(run.variation_types),
         passages=[p.model_dump(mode="json") for p in passages],
+        source_evidence=[e.model_dump(mode="json") for e in source.evidence],
         before_commit=ctx.check_cancelled,
     )
     return {
@@ -414,24 +438,116 @@ def _pipeline(
 
 
 def _passages(
-    deps: GenerationJobDeps, ctx: JobContext, source: SourceQuestionRow
+    deps: GenerationJobDeps, ctx: JobContext, source: SourceQuestionRow, *, related: bool
 ) -> tuple[list[Excerpt], dict[str, DocumentRevision]]:
+    """The source question's cited pages first; with `related` (ANALOGOUS_CONCEPT), then
+    passages found by a hybrid search of the workspace's published documents."""
     pages = source_pages(source)
     passages: list[Excerpt] = []
-    revisions: dict[str, DocumentRevision] = {}
+    contents = _Contents(deps, ctx.workspace_id)
     for document in deps.generations.live_documents(ctx.workspace_id, list(pages)):
         if document.active_revision_id is None or len(passages) >= MAX_PASSAGES:
             continue
-        found = deps.documents.load(ctx.workspace_id, document.id, document.active_revision_id)
+        found = contents.get(document.id, document.active_revision_id)
         if found is None:
             continue
-        row, revision = found
-        if row.deleted or not revision.published or revision.content_hash is None:
+        content, title = found
+        passages += build_passages(content, pages[document.id], title=title)
+    passages = passages[:MAX_PASSAGES]
+    if related and len(passages) < MAX_PASSAGES and deps.search is not None:
+        try:
+            passages += _related_passages(deps, deps.search, ctx, source, passages, contents)
+        except JobError:
+            raise
+        except Exception as exc:
+            # Type only: search errors can carry URLs. Cited pages alone still work.
+            logger.warning("related passages unavailable (%s)", type(exc).__name__)
+            if not passages:
+                raise SearchUnavailableError("the document index could not be searched") from None
+    return passages[:MAX_PASSAGES], contents.revisions
+
+
+class _Contents:
+    """Published active revisions loaded once per job (`document:revision` -> content)."""
+
+    def __init__(self, deps: GenerationJobDeps, workspace_id: uuid.UUID) -> None:
+        self._deps = deps
+        self._workspace_id = workspace_id
+        self.revisions: dict[str, DocumentRevision] = {}
+        self._titles: dict[str, str] = {}
+
+    def get(
+        self, document_id: uuid.UUID, revision_id: uuid.UUID
+    ) -> tuple[DocumentRevision, str] | None:
+        key = f"{document_id}:{revision_id}"
+        if key not in self.revisions:
+            found = self._deps.documents.load(self._workspace_id, document_id, revision_id)
+            if found is None:
+                return None
+            row, revision = found
+            if row.deleted or not revision.published or revision.content_hash is None:
+                return None
+            if row.active_revision_id != revision.id:
+                return None
+            self.revisions[key] = self._deps.documents.load_content(row, revision)
+            self._titles[key] = row.title
+        return self.revisions[key], self._titles[key]
+
+
+def related_query(source: SourceQuestionRow) -> str:
+    """What the source question is about: its stem and correct answer(s)."""
+    correct = set(source.correct_option_ids or ())
+    parts = [source.stem]
+    parts += [o["text"] for o in source.options if o.get("id") in correct]
+    parts += list(source.accepted_answers or ())
+    return "\n".join(p for p in parts if p.strip())
+
+
+def _related_passages(
+    deps: GenerationJobDeps,
+    search: SearchService,
+    ctx: JobContext,
+    source: SourceQuestionRow,
+    existing: Sequence[Excerpt],
+    contents: _Contents,
+) -> list[Excerpt]:
+    """Hybrid search over the workspace's published active revisions (books, never question
+    papers), scope built from the database like M3.6a; each hit becomes a paragraph-complete
+    excerpt of its revision. Passages overlapping one already given are skipped."""
+    revisions = deps.generations.searchable_revisions(ctx.workspace_id)
+    if not revisions:
+        return []
+    scope = SearchScope(
+        workspace_id=str(ctx.workspace_id),
+        revision_ids=tuple(str(r.revision_id) for r in revisions),
+        document_ids=tuple(str(r.document_id) for r in revisions),
+    )
+    result = search.search(
+        related_query(source),
+        scope,
+        mode=SearchMode.HYBRID,
+        limits=SearchLimits(results=RELATED_HITS, rerank=RerankMode.OFF),
+    )
+    used = {(p.revision_id, b) for p in existing for b in p.block_ids}
+    out: list[Excerpt] = []
+    config = ExcerptConfig(max_chars=PASSAGE_MAX_CHARS)
+    for hit in result.hits:
+        if len(existing) + len(out) >= MAX_PASSAGES:
+            break
+        found = contents.get(uuid.UUID(hit.chunk.document_id), uuid.UUID(hit.chunk.revision_id))
+        if found is None:
             continue
-        content = deps.documents.load_content(row, revision)
-        revisions[f"{content.document_id}:{content.revision_id}"] = content
-        passages += build_passages(content, pages[document.id], title=row.title)
-    return passages[:MAX_PASSAGES], revisions
+        content, title = found
+        try:
+            excerpt = ExcerptResolver(content, document_title=title).resolve_hit(hit, config=config)
+        except ExcerptError:
+            continue
+        keys = {(excerpt.revision_id, b) for b in excerpt.block_ids}
+        if keys & used:
+            continue
+        used |= keys
+        out.append(excerpt)
+    return out
 
 
 # --------------------------------------------------------------------------------------------
@@ -509,7 +625,18 @@ def deps_from_settings(settings: WorkerSettings) -> GenerationJobDeps:
         documents=PostgresDocumentStore(engine),
         llm=build_generation_llm(settings),
         lock_wait_seconds=settings.document_lock_wait_seconds,
+        search=_build_search(settings),
     )
+
+
+def _build_search(settings: WorkerSettings) -> SearchService | None:
+    """The same index the document jobs write (collection prefix, embedder: fake in
+    APP_ENV=test); None without QDRANT_URL. Interactive-style: no reranker."""
+    if not settings.qdrant_url:
+        return None
+    from quiz_worker.adapters import build_index_store
+
+    return SearchService(build_index_store(settings))
 
 
 class LazyGenerationDeps:

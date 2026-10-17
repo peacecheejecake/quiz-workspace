@@ -22,7 +22,9 @@ isolated drafts in `question_drafts` (never questions: the bank, the overview an
 see them) carrying lineage, generator provenance, cited book passages and machine validations.
 The LLM's declared answer is never trusted: a draft with an `error` validation cannot be
 approved, and only approved drafts at the reviewed version are registered (409 `stale-draft` /
-`draft-not-approved` otherwise; all or nothing).
+`draft-not-approved` otherwise; all or nothing). Duplicates are re-checked at publish time
+against the workspace's current questions under a workspace-scoped lock (409
+`duplicate-question`), since approval-time validations can be outdated.
 
 Publishing a draft creates a CONFIRMED question (origin `generation`, revision 1 from the draft,
 the source question's current chapter, one `question_sources` row per cited document with the
@@ -80,6 +82,7 @@ from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.idempotency import IdempotencyKey, replay, request_hash
 from quiz_api.jobs import JobPublisher
 from quiz_api.question_drafts import parse_payload, publish_issues
+from quiz_api.question_generation_review import content_fingerprint, content_fingerprints
 from quiz_api.question_rules import Issues, QuestionContent
 from quiz_api.repositories.idempotency import IdempotencyStore
 from quiz_api.repositories.question_generations import (
@@ -293,8 +296,9 @@ def create_question_generation(
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
     """Start generating variant drafts of a CONFIRMED question (QGEN-01-AC02..AC04). 409
-    `question-not-confirmed` for a draft/archived question. ANALOGOUS_CONCEPT needs a source
-    question that cites document pages (422 otherwise): its passages come from those pages."""
+    `question-not-confirmed` for a draft/archived question. ANALOGOUS_CONCEPT passages are the
+    source's cited pages plus related passages from a search of the workspace's published
+    documents; with neither, the job fails `source_passages_missing`."""
     user_id = access.workspace.user_id
     workspace_id = access.workspace.workspace_id
     if "OPTION_SHUFFLE" in body.variation_types:
@@ -329,14 +333,6 @@ def create_question_generation(
             ProblemType.QUESTION_NOT_CONFIRMED,
             detail="Variants are generated from confirmed questions only.",
         )
-    if "ANALOGOUS_CONCEPT" in body.variation_types and not any(
-        s.document_id is not None and s.page_start is not None for s in question.sources
-    ):
-        raise _invalid(
-            "variation_types",
-            "ANALOGOUS_CONCEPT needs a source question that cites document pages.",
-        )
-
     run_id = repo.create_run(
         workspace_id=workspace_id,
         actor_id=user_id,
@@ -422,8 +418,10 @@ def publish_question_generation_drafts(
     """Register exactly these approved drafts as CONFIRMED questions with lineage
     (QGEN-01-AC04). Same contract as the import publish: all or nothing; 404 for an id that is
     not a draft of this run, 409 `stale-draft` for a draft changed since review, 409
-    `draft-not-approved` for a pending/rejected draft, 422 when a draft cannot be confirmed;
-    already published drafts return their question (idempotent replay)."""
+    `draft-not-approved` for a pending/rejected draft, 422 when a draft cannot be confirmed,
+    409 `duplicate-question` when a draft duplicates a current question of the workspace or
+    another draft of the request; already published drafts return their question (idempotent
+    replay)."""
     run = _load_run(repo, access.resource_id)
     user_id = access.workspace.user_id
     versions: dict[uuid.UUID, str] = {}
@@ -457,6 +455,8 @@ def publish_question_generation_drafts(
         issues.items.extend(blockers.items)
         plans.append((record, draft, content))
     issues.raise_if_any()
+    if plans:
+        _refuse_duplicates(repo, run.workspace_id, plans)
 
     mapping = {d.id: d.published_question_id for d in locked.values()}
     try:
@@ -472,6 +472,36 @@ def publish_question_generation_drafts(
             if (q := mapping[d]) is not None
         ]
     )
+
+
+def _refuse_duplicates(
+    repo: QuestionGenerationRepository,
+    workspace_id: uuid.UUID,
+    plans: list[tuple[DraftRecord, QuestionDraft, QuestionContent]],
+) -> None:
+    """Publish-time duplicate check (questions.md §5 "duplicate fingerprint").
+
+    The approval-time validation saw the workspace as it was then; another run's identical
+    candidate may have been registered since, or be in this same request. Under a
+    workspace-scoped transaction lock (held until this publish commits, so concurrent
+    generation publishes see each other's questions), each draft's fingerprint is compared with
+    every live question of the workspace and with the other drafts of the request; any match
+    refuses the whole publish (409 `duplicate-question`).
+    """
+    repo.lock_dedupe(workspace_id)
+    existing = set(content_fingerprints(repo.workspace_contents(workspace_id)))
+    for _record, _draft, content in plans:
+        found = content_fingerprint(content)
+        if found is None:
+            continue
+        if found in existing:
+            raise ProblemException(
+                409,
+                ProblemType.DUPLICATE_QUESTION,
+                detail="A draft duplicates a question already in this workspace (or another "
+                "draft of this request). Edit or reject it, then try again.",
+            )
+        existing.add(found)
 
 
 def _register(

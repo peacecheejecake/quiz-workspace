@@ -20,9 +20,10 @@ from typing import Any
 import pytest
 from book_core.contracts import QuestionDraft, ValidationSeverity
 from book_core.generation import PROMPT_VERSIONS, source_fingerprint
-from book_core.llm import LLMProviderError, LLMRequest, LLMResult
+from book_core.llm import LLMCallInfo, LLMProviderError, LLMRequest, LLMResult
 from book_core.llm.scenarios import ScenarioLLMClient
 from book_core.parser import FakeParser
+from book_core.search import SearchService
 from pydantic import BaseModel
 from quiz_worker.celery_app import default_definitions
 from quiz_worker.document_job import DocumentJobDeps, Limits, document_parse_definition
@@ -41,6 +42,7 @@ from quiz_worker.question_generation_store import (
     GenerationRunRow,
     LiveDocument,
     QuestionContentRow,
+    SearchableRevision,
     SourceQuestionRow,
     SourceRow,
     TerminalRunStatus,
@@ -68,6 +70,7 @@ class FakeGenerationStore:
     provenance: dict[uuid.UUID, tuple[str | None, str | None, list[dict[str, Any]]]] = field(
         default_factory=dict
     )
+    evidence: dict[uuid.UUID, list[dict[str, Any]]] = field(default_factory=dict)
     payloads: dict[uuid.UUID, dict[str, Any]] = field(default_factory=dict)
     writable: bool = True
     statuses: list[str] = field(default_factory=list)
@@ -96,6 +99,15 @@ class FakeGenerationStore:
     ) -> SourceQuestionRow | None:
         found = self.sources.get(question_id)
         return found if found is not None and found.revision_id == revision_id else None
+
+    def searchable_revisions(self, workspace_id: uuid.UUID) -> list[SearchableRevision]:
+        out = []
+        for doc in self.documents.documents.values():
+            rev = self.documents.revisions.get(doc.active_revision_id)  # type: ignore[arg-type]
+            live = doc.workspace_id == workspace_id and not doc.deleted
+            if live and rev is not None and rev.published and doc.document_type != "question_paper":
+                out.append(SearchableRevision(doc.id, rev.id))
+        return out
 
     def live_documents(
         self, workspace_id: uuid.UUID, document_ids: Sequence[uuid.UUID]
@@ -133,6 +145,7 @@ class FakeGenerationStore:
         llm_model: str | None,
         prompt_version: str | None,
         passages: list[dict[str, Any]],
+        source_evidence: list[dict[str, Any]],
         before_commit: Callable[[], None],
     ) -> int:
         if not self.writable:
@@ -147,6 +160,7 @@ class FakeGenerationStore:
                 created += 1
         self._set(run_id, "succeeded")
         self.provenance[run_id] = (llm_model, prompt_version, passages)
+        self.evidence[run_id] = source_evidence
         return created
 
     def mark_terminal(
@@ -192,6 +206,7 @@ class World:
             documents=self.documents,
             llm=self.llm,
             lock_wait_seconds=0,
+            search=SearchService(index),
         )
         self.definition = question_generate_definition(lambda: self.deps)
         self.user = uuid.uuid4()
@@ -224,7 +239,9 @@ class World:
     def workspace_id(self) -> uuid.UUID:
         return self.book.workspace_id
 
-    def source(self, name: str, *, page: int | None = None) -> SourceQuestionRow:
+    def source(
+        self, name: str, *, page: int | None = None, cited: bool = True
+    ) -> SourceQuestionRow:
         """The scenario source question (marker at the end of the stem) citing book-ko p.4."""
         s = SCENARIOS["sources"][name]
         page = s["source_page"] if page is None else page
@@ -238,7 +255,9 @@ class World:
             accepted_answers=None,
             is_multi_answer=s["is_multi_answer"],
             explanation=s["explanation"],
-            sources=(SourceRow(self.book.id, self.book.active_revision_id, page, page, (), []),),
+            sources=(SourceRow(self.book.id, self.book.active_revision_id, page, page, (), []),)
+            if cited
+            else (),
         )
         self.generations.sources[row.question_id] = row
         return row
@@ -482,7 +501,13 @@ def test_refusals_before_any_llm_call(world: World) -> None:
     assert (world.run(world.submit(run)).error or "").startswith("source_question_deleted")
 
     # ANALOGOUS_CONCEPT needs passages: the source cites a page without text.
+    world.deps.search = None
     run = world.start(world.source("disinfection", page=99), "ANALOGOUS_CONCEPT")
+    assert (world.run(world.submit(run)).error or "").startswith("source_passages_missing")
+
+    # Nothing indexed in the workspace either (another workspace's book is out of scope).
+    world.deps.search = SearchService(memory_index("empty_")[0])
+    run = world.start(world.source("disinfection", cited=False), "ANALOGOUS_CONCEPT")
     assert (world.run(world.submit(run)).error or "").startswith("source_passages_missing")
 
     # No LLM configured.
@@ -505,3 +530,100 @@ def test_the_job_is_registered_with_the_scenario_llm_in_test_only() -> None:
     assert JOB_TYPE in {d.job_type for d in default_definitions(settings)}
     test_env = WorkerSettings.model_construct(app_env=Environment.TEST, llm_scenario_file=None)
     assert isinstance(build_generation_llm(test_env), ScenarioLLMClient)
+
+
+class CitingLLM:
+    """Answers ANALOGOUS_CONCEPT with a candidate citing the first sentence of passage `tag`
+    (whatever the search ranked there), so the test does not depend on ranking."""
+
+    model_name = "fake-citing-llm"
+
+    def __init__(self, tag: str = "P1") -> None:
+        self.tag = tag
+        self.prompts: list[str] = []
+
+    def complete[T: BaseModel](self, request: LLMRequest, schema: type[T]) -> LLMResult[T]:
+        self.prompts.append(request.prompt)
+        passage = request.prompt.split(f"[{self.tag}]", 1)[1].split("\n", 2)[1]
+        quote = passage.split(". ")[0][:60]
+        candidate = {
+            "question_type": "MCQ",
+            "multi_select": False,
+            "stem": "다음 중 지문의 내용과 일치하는 것은? (유사 개념)",
+            "options": [
+                {"label": "1", "text": quote},
+                {"label": "2", "text": "지문에 없는 설명"},
+            ],
+            "correct_option_labels": ["1"],
+            "accepted_answers": None,
+            "explanation": None,
+            "justification": "지문에 그대로 나온다.",
+            "citations": [{"passage_id": self.tag, "quote": quote}],
+        }
+        output = schema.model_validate({"candidates": [candidate]})
+        info = LLMCallInfo(
+            task=request.task,
+            prompt_version=request.prompt_version,
+            model=self.model_name,
+            request_fingerprint="x",
+        )
+        return LLMResult(output=output, info=info)
+
+    def generate[T: BaseModel](self, request: LLMRequest, schema: type[T]) -> T:
+        return self.complete(request, schema).output
+
+
+def test_analogous_without_cited_pages_uses_related_indexed_passages(world: World) -> None:
+    world.deps.llm = CitingLLM()
+    source = world.source("disinfection", cited=False)
+    run = world.start(source, "ANALOGOUS_CONCEPT")
+
+    result = world.run(world.submit(run))
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    _model, _version, passages = world.generations.provenance[run.id]
+    assert 1 <= len(passages) <= 8
+    assert {p["document_id"] for p in passages} == {str(world.book.id)}
+    # Related passages are distinct regions of the book.
+    blocks = [b for p in passages for b in p["block_ids"]]
+    assert len(blocks) == len(set(blocks))
+    [row] = world.generations.run_drafts(run.id)
+    [evidence] = _payload(row).evidence
+    assert evidence.document_id == str(world.book.id)
+    assert set(evidence.block_ids) <= set(passages[0]["block_ids"])
+    assert _errors(row) == set()
+    assert world.generations.evidence[run.id] == []
+
+
+def test_analogous_with_cited_pages_appends_related_passages(world: World) -> None:
+    run = world.start(world.source("disinfection"), "ANALOGOUS_CONCEPT")
+    assert world.run(world.submit(run)).outcome is RunOutcome.SUCCEEDED
+    _model, _version, passages = world.generations.provenance[run.id]
+    # P1..P3 stay the cited page's sections; search adds other regions after them (cap 8).
+    assert "염소와 같은 소독제" in passages[2]["text"]
+    assert 3 < len(passages) <= 8
+    blocks = [(p["revision_id"], b) for p in passages for b in p["block_ids"]]
+    assert len(blocks) == len(set(blocks))
+    # The source evidence snapshot is what re-validation of reviewer edits uses.
+    [evidence] = world.generations.evidence[run.id]
+    assert evidence["document_id"] == str(world.book.id)
+    assert [loc["page"] for loc in evidence["locations"]] == [4]
+
+
+class BrokenSearch:
+    def search(self, *args: Any, **kwargs: Any) -> Any:
+        raise ConnectionError("index down")
+
+
+def test_a_failing_index_is_retried_only_when_no_other_passage_exists(world: World) -> None:
+    world.deps.search = BrokenSearch()  # type: ignore[assignment]
+    run = world.start(world.source("disinfection", cited=False), "ANALOGOUS_CONCEPT")
+    result = world.run(world.submit(run))
+    assert result.outcome is RunOutcome.RETRY
+    assert (result.error or "").startswith("search_unavailable")
+
+    # With cited pages the run goes on with them.
+    run = world.start(world.source("disinfection"), "ANALOGOUS_CONCEPT")
+    assert world.run(world.submit(run)).outcome is RunOutcome.SUCCEEDED
+    _model, _version, passages = world.generations.provenance[run.id]
+    assert len(passages) == 3

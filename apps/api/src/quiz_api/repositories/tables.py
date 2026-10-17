@@ -257,6 +257,8 @@ question_generation_runs = Table(
     Column("params", JSONB, nullable=False),
     # M6.2 (20261018150000_question_generation_worker.sql): the Excerpt[] given to the LLM.
     Column("passages", JSONB, nullable=False),
+    # 20261018190000_generation_source_evidence.sql: SourceEvidence[] snapshot (NULL = none).
+    Column("source_evidence", JSONB),
     _ts("finished_at"),
     _ts("created_at", nullable=False),
     _ts("updated_at", nullable=False),

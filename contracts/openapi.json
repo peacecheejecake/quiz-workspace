@@ -8661,7 +8661,7 @@
     },
     "/api/v1/question-generations/{generation_id}/publish": {
       "post": {
-        "description": "Register exactly these approved drafts as CONFIRMED questions with lineage\n(QGEN-01-AC04). Same contract as the import publish: all or nothing; 404 for an id that is\nnot a draft of this run, 409 `stale-draft` for a draft changed since review, 409\n`draft-not-approved` for a pending/rejected draft, 422 when a draft cannot be confirmed;\nalready published drafts return their question (idempotent replay).",
+        "description": "Register exactly these approved drafts as CONFIRMED questions with lineage\n(QGEN-01-AC04). Same contract as the import publish: all or nothing; 404 for an id that is\nnot a draft of this run, 409 `stale-draft` for a draft changed since review, 409\n`draft-not-approved` for a pending/rejected draft, 422 when a draft cannot be confirmed,\n409 `duplicate-question` when a draft duplicates a current question of the workspace or\nanother draft of the request; already published drafts return their question (idempotent\nreplay).",
         "operationId": "publishQuestionGenerationDrafts",
         "parameters": [
           {
@@ -9567,7 +9567,7 @@
     },
     "/api/v1/questions/{question_id}/generations": {
       "post": {
-        "description": "Start generating variant drafts of a CONFIRMED question (QGEN-01-AC02..AC04). 409\n`question-not-confirmed` for a draft/archived question. ANALOGOUS_CONCEPT needs a source\nquestion that cites document pages (422 otherwise): its passages come from those pages.",
+        "description": "Start generating variant drafts of a CONFIRMED question (QGEN-01-AC02..AC04). 409\n`question-not-confirmed` for a draft/archived question. ANALOGOUS_CONCEPT passages are the\nsource's cited pages plus related passages from a search of the workspace's published\ndocuments; with neither, the job fails `source_passages_missing`.",
         "operationId": "createQuestionGeneration",
         "parameters": [
           {

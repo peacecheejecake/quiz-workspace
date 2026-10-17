@@ -431,8 +431,10 @@ export type paths = {
      * @description Register exactly these approved drafts as CONFIRMED questions with lineage
      *     (QGEN-01-AC04). Same contract as the import publish: all or nothing; 404 for an id that is
      *     not a draft of this run, 409 `stale-draft` for a draft changed since review, 409
-     *     `draft-not-approved` for a pending/rejected draft, 422 when a draft cannot be confirmed;
-     *     already published drafts return their question (idempotent replay).
+     *     `draft-not-approved` for a pending/rejected draft, 422 when a draft cannot be confirmed,
+     *     409 `duplicate-question` when a draft duplicates a current question of the workspace or
+     *     another draft of the request; already published drafts return their question (idempotent
+     *     replay).
      */
     post: operations['publishQuestionGenerationDrafts'];
     delete?: never;
@@ -587,8 +589,9 @@ export type paths = {
     /**
      * Create Question Generation
      * @description Start generating variant drafts of a CONFIRMED question (QGEN-01-AC02..AC04). 409
-     *     `question-not-confirmed` for a draft/archived question. ANALOGOUS_CONCEPT needs a source
-     *     question that cites document pages (422 otherwise): its passages come from those pages.
+     *     `question-not-confirmed` for a draft/archived question. ANALOGOUS_CONCEPT passages are the
+     *     source's cited pages plus related passages from a search of the workspace's published
+     *     documents; with neither, the job fails `source_passages_missing`.
      */
     post: operations['createQuestionGeneration'];
     delete?: never;

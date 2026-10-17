@@ -101,6 +101,14 @@ class LiveDocument:
 
 
 @dataclass(frozen=True)
+class SearchableRevision:
+    """A live, non-question-paper document's published active revision (search scope)."""
+
+    document_id: uuid.UUID
+    revision_id: uuid.UUID
+
+
+@dataclass(frozen=True)
 class GenerationDraftRow:
     """One `question_drafts` row the job writes (source_type `generation`, review `pending`)."""
 
@@ -130,6 +138,11 @@ class GenerationStore(Protocol):
 
     def workspace_questions(self, workspace_id: uuid.UUID) -> list[QuestionContentRow]: ...
 
+    def searchable_revisions(self, workspace_id: uuid.UUID) -> list[SearchableRevision]:
+        """The search scope from the database (M3.6a rule): live documents of the workspace
+        whose active revision is published; question papers are not book material."""
+        ...
+
     def workspace_writable(self, workspace_id: uuid.UUID, user_id: uuid.UUID | None) -> bool: ...
 
     def mark_running(self, run_id: uuid.UUID, job_id: uuid.UUID) -> None: ...
@@ -145,6 +158,7 @@ class GenerationStore(Protocol):
         llm_model: str | None,
         prompt_version: str | None,
         passages: list[dict[str, Any]],
+        source_evidence: list[dict[str, Any]],
         before_commit: Callable[[], None],
     ) -> int:
         """In one transaction: re-check (and lock) workspace access, insert the drafts whose
@@ -339,6 +353,22 @@ class PostgresGenerationStore:
             for r in rows
         ]
 
+    def searchable_revisions(self, workspace_id: uuid.UUID) -> list[SearchableRevision]:
+        with self._engine.begin() as conn:
+            rows = conn.execute(
+                text(
+                    "select d.id, r.id as revision_id from public.documents d "
+                    "join public.document_revisions r "
+                    "  on r.id = d.active_revision_id and r.document_id = d.id "
+                    "where d.workspace_id = :w and r.workspace_id = :w "
+                    "  and d.deleted_at is null and r.status = 'published' "
+                    "  and d.document_type <> 'question_paper' "
+                    "order by d.created_at, d.id"
+                ),
+                {"w": workspace_id},
+            ).all()
+        return [SearchableRevision(r.id, r.revision_id) for r in rows]
+
     @staticmethod
     def _writable(
         conn: Connection, workspace_id: uuid.UUID, user_id: uuid.UUID | None, *, lock: bool
@@ -377,6 +407,7 @@ class PostgresGenerationStore:
         llm_model: str | None,
         prompt_version: str | None,
         passages: list[dict[str, Any]],
+        source_evidence: list[dict[str, Any]],
         before_commit: Callable[[], None],
     ) -> int:
         with self._engine.begin() as conn:
@@ -412,9 +443,16 @@ class PostgresGenerationStore:
                 text(
                     "update public.question_generation_runs set status = 'succeeded', "
                     "finished_at = now(), llm_model = :m, prompt_version = :p, "
-                    "passages = cast(:passages as jsonb) where id = :r"
+                    "passages = cast(:passages as jsonb), "
+                    "source_evidence = cast(:evidence as jsonb) where id = :r"
                 ),
-                {"r": run_id, "m": llm_model, "p": prompt_version, "passages": _json(passages)},
+                {
+                    "r": run_id,
+                    "m": llm_model,
+                    "p": prompt_version,
+                    "passages": _json(passages),
+                    "evidence": _json(source_evidence),
+                },
             )
             before_commit()
         return created

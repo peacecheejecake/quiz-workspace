@@ -38,7 +38,9 @@ select columns_are('public', 'question_generation_runs',
         'variation_types', 'candidate_count', 'async_job_id', 'status', 'llm_model',
         'prompt_version', 'params', 'finished_at', 'created_at', 'updated_at',
         -- M6.2 (20261018150000)
-        'passages']);
+        'passages',
+        -- M6.2 review fix (20261018190000)
+        'source_evidence']);
 select columns_are('public', 'question_import_runs',
   array['id', 'workspace_id', 'created_by', 'source_document_id', 'source_document_revision_id',
         'target_chapter_id', 'async_job_id', 'status', 'llm_model', 'prompt_version', 'params',

@@ -79,6 +79,9 @@ class ProblemType(StrEnum):
     DRAFT_PUBLISHED = "urn:quiz-workspace:problem:draft-published"
     # 409: publishing a draft that is not approved (pending or rejected); approve it first.
     DRAFT_NOT_APPROVED = "urn:quiz-workspace:problem:draft-not-approved"
+    # 409: a generated draft duplicates a question already in the workspace (or another draft of
+    # the same publish request); edit or reject it.
+    DUPLICATE_QUESTION = "urn:quiz-workspace:problem:duplicate-question"
 
 
 class ProblemException(StarletteHTTPException):

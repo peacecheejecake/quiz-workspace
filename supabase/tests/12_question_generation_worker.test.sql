@@ -1,11 +1,12 @@
 -- M6.2 (20261018150000): generation drafts are unique per (run, position), carry the reviewer's
--- acknowledged codes, runs keep their passages, and quiz_worker may only read runs and questions,
--- move a run's state, and insert pending, unreviewed, unpublished generation drafts.
+-- acknowledged codes, runs keep their passages and source evidence (20261018190000), and
+-- quiz_worker may only read runs and questions, move a run's state, and insert pending,
+-- unreviewed, unpublished generation drafts.
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(20);
+select plan(22);
 
 insert into auth.users (id, email) values
   ('00000000-0000-4000-8000-0000006b6201', 'm62-owner@example.test');
@@ -33,6 +34,12 @@ select throws_ok(
   $$ update public.question_generation_runs set passages = '{}'
       where id = '20000000-0000-4000-8000-0000006b6201' $$,
   '23514', null, 'passages is a JSON array');
+select col_is_null('public', 'question_generation_runs', 'source_evidence',
+  'source evidence is null until a run snapshots it (20261018190000)');
+select throws_ok(
+  $$ update public.question_generation_runs set source_evidence = '{}'
+      where id = '20000000-0000-4000-8000-0000006b6201' $$,
+  '23514', null, 'source evidence is a JSON array');
 select col_default_is('public', 'question_drafts', 'acknowledged_codes', '{}',
   'drafts start with nothing acknowledged');
 select lives_ok(
@@ -61,7 +68,8 @@ select is(
      from information_schema.column_privileges
     where table_schema = 'public' and table_name = 'question_generation_runs'
       and grantee = 'quiz_worker' and privilege_type = 'UPDATE'),
-  array['finished_at', 'llm_model', 'passages', 'prompt_version', 'status', 'updated_at'],
+  array['finished_at', 'llm_model', 'passages', 'prompt_version', 'source_evidence', 'status',
+        'updated_at'],
   'quiz_worker moves only the run state (never its source revision, job or creator)');
 select table_privs_are('public', t, 'quiz_worker', array['SELECT'],
   format('quiz_worker only reads %s', t))
