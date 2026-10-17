@@ -1,6 +1,7 @@
-// QGEN-01 first render (Server Component): the source question of `?source=`, its newest
-// generation run and that run's drafts, so a reload shows the same review and registration
-// state. Without a (valid) source it loads the workspace's CONFIRMED questions to pick one from.
+// QGEN-01 first render (Server Component): the source question of `?source=`, its recent
+// generation runs, the selected run (`?run=`, else the newest) with its drafts and the source
+// revision that run was generated from (the diff original), so a reload shows the same review and
+// registration state and earlier runs' unregistered drafts stay reachable. Without a (valid) source it loads the workspace's CONFIRMED questions to pick one from.
 // Unknown/foreign workspaces never get here (the workspace layout already answered 404).
 import { notFound, redirect } from 'next/navigation';
 import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
@@ -8,6 +9,9 @@ import { loginRedirectPath } from '@/lib/auth/routes';
 import type { ImportDraft } from './drafts';
 import type { Question, QuestionDetail } from './form';
 import { classifyGenerationFailure, generatePath, type GenerationRun } from './generation-client';
+import { RUN_HISTORY_LIMIT } from './generation-model';
+
+export type SourceRevision = QuestionDetail['revision'];
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -18,7 +22,13 @@ export type GenerationScreenData =
   | {
       readonly kind: 'source';
       readonly source: QuestionDetail;
+      /** Recent runs of the source, newest first. */
+      readonly runs: readonly GenerationRun[];
+      /** The selected run (`?run=` when it is one of `runs`, else the newest). */
       readonly run: GenerationRun | null;
+      /** The source revision `run` was generated from, when it is not the current one (null =
+       * the current revision, or it could not be loaded: the screen loads it). */
+      readonly runRevision: SourceRevision | null;
       readonly drafts: readonly ImportDraft[];
       /** The newest run or its drafts could not be loaded (the screen offers a reload). */
       readonly loadFailed: boolean;
@@ -31,7 +41,7 @@ export type GenerationScreenData =
       readonly loadFailed: boolean;
     };
 
-export function sourceParam(value: string | string[] | undefined): string | null {
+export function idParam(value: string | string[] | undefined): string | null {
   const raw = Array.isArray(value) ? value[0] : value;
   return raw && UUID.test(raw) ? raw.toLowerCase() : null;
 }
@@ -39,8 +49,9 @@ export function sourceParam(value: string | string[] | undefined): string | null
 export async function loadGenerationScreen(
   workspaceId: string,
   sourceId: string | null,
+  runId: string | null = null,
 ): Promise<GenerationScreenData> {
-  const returnTo = generatePath(workspaceId, sourceId);
+  const returnTo = generatePath(workspaceId, sourceId, runId);
   let api;
   try {
     api = await createServerApiClient();
@@ -87,29 +98,51 @@ export async function loadGenerationScreen(
   if (question.data.workspace_id !== workspaceId) return pick(true);
   const source = question.data;
 
+  const empty = {
+    kind: 'source',
+    source,
+    runs: [],
+    run: null,
+    runRevision: null,
+    drafts: [],
+  } as const;
   const runs = await api
     .GET('/api/v1/workspaces/{workspace_id}/question-generations', {
       params: {
         path: { workspace_id: workspaceId },
-        query: { source_question_id: source.id, limit: 1 },
+        query: { source_question_id: source.id, limit: RUN_HISTORY_LIMIT },
       },
     })
     .catch(() => null);
   if (!runs?.data) {
     if (runs) kindOf(runs.response.status, runs.error, { workspace: true });
-    return { kind: 'source', source, run: null, drafts: [], loadFailed: true };
+    return { ...empty, loadFailed: true };
   }
-  const run = runs.data.items[0] ?? null;
-  if (!run) return { kind: 'source', source, run: null, drafts: [], loadFailed: false };
+  const list = runs.data.items;
+  const run = list.find((r) => r.id === runId) ?? list[0] ?? null;
+  if (!run) return { ...empty, loadFailed: false };
 
-  const drafts = await api
-    .GET('/api/v1/question-generations/{generation_id}/drafts', {
-      params: { path: { generation_id: run.id } },
-    })
-    .catch(() => null);
+  const [drafts, pinned] = await Promise.all([
+    api
+      .GET('/api/v1/question-generations/{generation_id}/drafts', {
+        params: { path: { generation_id: run.id } },
+      })
+      .catch(() => null),
+    run.source_question_revision_id === source.revision.id
+      ? null
+      : api
+          .GET('/api/v1/questions/{question_id}/revisions/{revision_id}', {
+            params: {
+              path: { question_id: source.id, revision_id: run.source_question_revision_id },
+            },
+          })
+          .then((r) => r.data ?? null)
+          .catch(() => null),
+  ]);
+  const base = { kind: 'source', source, runs: list, run, runRevision: pinned } as const;
   if (!drafts?.data) {
     if (drafts) kindOf(drafts.response.status, drafts.error);
-    return { kind: 'source', source, run, drafts: [], loadFailed: true };
+    return { ...base, drafts: [], loadFailed: true };
   }
-  return { kind: 'source', source, run, drafts: drafts.data.items, loadFailed: false };
+  return { ...base, drafts: drafts.data.items, loadFailed: false };
 }

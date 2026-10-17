@@ -21,9 +21,13 @@ import {
   bodyKey,
   generationRequest,
   parseCandidateCount,
+  runLabel,
   toggleVariation,
+  unregisteredCount,
+  upsertRun,
   variationBlocker,
 } from '../src/lib/questions/generation-model';
+import { generatePath, type GenerationRun } from '../src/lib/questions/generation-client';
 import {
   diffOptions,
   diffWords,
@@ -124,7 +128,7 @@ describe('diffOptions', () => {
 });
 
 describe('generation form model', () => {
-  const mcq = { questionType: 'MCQ' as const, confirmed: true, hasSources: true };
+  const mcq = { questionType: 'MCQ' as const, confirmed: true };
 
   it('keeps 보기 섞기 exclusive with the LLM variations', () => {
     expect(toggleVariation(['PARAPHRASE'], 'OPTION_SHUFFLE', true)).toEqual(['OPTION_SHUFFLE']);
@@ -182,7 +186,8 @@ describe('generation form model', () => {
     expect(variationBlocker('PARAPHRASE', mcq)).toBeNull();
     expect(variationBlocker('PARAPHRASE', { ...mcq, confirmed: false })).toMatch(/확정/);
     expect(variationBlocker('OPTION_SHUFFLE', { ...mcq, questionType: 'ESSAY' })).toMatch(/객관식/);
-    expect(variationBlocker('ANALOGOUS_CONCEPT', { ...mcq, hasSources: false })).toMatch(/출처/);
+    // A source without cited pages can still be varied: the worker searches related passages.
+    expect(variationBlocker('ANALOGOUS_CONCEPT', mcq)).toBeNull();
   });
 });
 
@@ -194,6 +199,7 @@ describe('generation client', () => {
     expect(classifyGenerationFailure(403, problem('insufficient-role'))).toBe('forbidden');
     expect(classifyGenerationFailure(409, problem('stale-draft'))).toBe('staleDraft');
     expect(classifyGenerationFailure(422, {})).toBe('invalid');
+    expect(classifyGenerationFailure(409, problem('duplicate-question'))).toBe('duplicateQuestion');
     expect(classifyGenerationFailure(404, undefined)).toBe('notFound');
     expect(classifyGenerationFailure(500, undefined)).toBe('unavailable');
   });
@@ -201,6 +207,8 @@ describe('generation client', () => {
   it('explains failed runs by error code without the API text', () => {
     expect(runFailureMessage('llm_output_invalid')).toMatch(/응답 형식.*\(llm_output_invalid\)/);
     expect(runFailureMessage('something_new')).toMatch(/알 수 없는 오류/);
+    expect(runFailureMessage('source_passages_missing')).toMatch(/원문을 찾지 못했습니다/);
+    expect(runFailureMessage('search_unavailable')).toMatch(/검색하지 못했습니다/);
   });
 
   it('sends the Idempotency-Key on start and reads the newest run of the source', async () => {
@@ -218,9 +226,9 @@ describe('generation client', () => {
     const [path, init] = fetchImpl.mock.calls[0] ?? [];
     expect(path).toBe(GENERATION_BFF_PATHS.start('q-1'));
     expect((init?.headers as Record<string, string>)['idempotency-key']).toBe('key-1');
-    expect(await client.latestRun('ws', 'q-1')).toEqual({ id: 'run-1' });
+    expect(await client.listRuns('ws', 'q-1', 20)).toEqual([{ id: 'run-1' }]);
     expect(String(fetchImpl.mock.calls[1]?.[0])).toBe(
-      '/api/workspaces/ws/question-generations?source_question_id=q-1&limit=1',
+      '/api/workspaces/ws/question-generations?source_question_id=q-1&limit=20',
     );
   });
 
@@ -356,5 +364,43 @@ describe('generation drafts in the shared review model', () => {
       generationDraftUpdateBody({ ...values, type: 'SHORT_ANSWER' }, draft, 'v1'),
     ).toMatchObject({ question_type: 'SHORT_ANSWER' });
     expect(confirmTypeBody(draft)).toEqual({ base_version: 'v1', question_type: 'MCQ' });
+  });
+});
+
+describe('run history', () => {
+  function run(id: string, createdAt: string, overrides: Partial<GenerationRun> = {}) {
+    return {
+      id,
+      created_at: createdAt,
+      status: 'succeeded',
+      variation_types: ['PARAPHRASE'],
+      draft_count: 3,
+      published_count: 1,
+      ...overrides,
+    } as GenerationRun;
+  }
+
+  it('keeps earlier runs, newest first, replacing an updated run in place', () => {
+    const older = run('a', '2026-10-17T00:00:00Z');
+    const newer = run('b', '2026-10-18T00:00:00Z', { status: 'running' });
+    const list = upsertRun(upsertRun([older], newer), { ...newer, status: 'failed' });
+    expect(list.map((r) => [r.id, r.status])).toEqual([
+      ['b', 'failed'],
+      ['a', 'succeeded'],
+    ]);
+  });
+
+  it('labels each run with its variations, outcome and unregistered drafts', () => {
+    expect(unregisteredCount(run('a', 'x'))).toBe(2);
+    expect(runLabel(run('a', 'T'), (t) => t)).toBe('T · 문구 변형 · 완료 · 미등록 초안 2개');
+    expect(runLabel(run('a', 'T', { published_count: 3 }), (t) => t)).toMatch(/모두 등록$/);
+    expect(runLabel(run('a', 'T', { status: 'failed', draft_count: 0 }), (t) => t)).toBe(
+      'T · 문구 변형 · 실패',
+    );
+  });
+
+  it('puts the selected run into the screen URL', () => {
+    expect(generatePath('ws', 'q', 'r')).toBe('/workspaces/ws/questions/generate?source=q&run=r');
+    expect(generatePath('ws', 'q')).toBe('/workspaces/ws/questions/generate?source=q');
   });
 });

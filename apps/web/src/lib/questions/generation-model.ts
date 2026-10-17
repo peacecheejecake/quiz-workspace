@@ -8,6 +8,7 @@ import type { QuestionType } from './form';
 import type {
   GenerationCreate,
   GenerationDifficulty,
+  GenerationRun,
   LlmVariationType,
   VariationType,
 } from './generation-client';
@@ -31,7 +32,8 @@ export const VARIATION_DESCRIPTIONS: Readonly<Record<VariationType, string>> = {
   PARAPHRASE: '개념과 정답은 그대로 두고 문제 문구를 바꾼 초안을 만듭니다.',
   INVERT_POLARITY:
     "'옳지 않은 것'을 '옳은 것'처럼 뒤집습니다. 정답 개수가 달라질 수 있어 검토가 필요합니다.",
-  ANALOGOUS_CONCEPT: '원본의 출처 쪽 원문을 근거로 비슷한 개념을 묻는 새 초안을 만듭니다.',
+  ANALOGOUS_CONCEPT:
+    '원본의 출처 쪽과 Workspace 문서에서 찾은 관련 원문을 근거로 비슷한 개념을 묻는 새 초안을 만듭니다.',
 };
 
 export const DIFFICULTY_LABELS: Readonly<Record<GenerationDifficulty, string>> = {
@@ -46,8 +48,6 @@ export const CANDIDATE_COUNT_MAX = 20;
 export interface GenerationSourceFacts {
   readonly questionType: QuestionType;
   readonly confirmed: boolean;
-  /** The source cites document pages (ANALOGOUS_CONCEPT takes its passages from them). */
-  readonly hasSources: boolean;
 }
 
 /** Why `type` cannot be chosen for this source (null = it can). */
@@ -58,9 +58,6 @@ export function variationBlocker(
   if (!source.confirmed) return '확정된 문제만 변형할 수 있습니다.';
   if (type === 'OPTION_SHUFFLE' && source.questionType !== 'MCQ') {
     return '보기 섞기는 객관식 문제에만 쓸 수 있습니다.';
-  }
-  if (type === 'ANALOGOUS_CONCEPT' && !source.hasSources) {
-    return '유사 개념은 원본 문제에 문서 출처 쪽이 있어야 만들 수 있습니다.';
   }
   return null;
 }
@@ -129,4 +126,39 @@ export function generationRequest(
 /** Stable JSON of a request body: a retry with the same body reuses its Idempotency-Key. */
 export function bodyKey(body: GenerationCreate): string {
   return JSON.stringify([body.variation_types, body.candidate_count, body.difficulty ?? null]);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Run history (earlier runs stay reachable: their unregistered drafts are not lost)
+// ---------------------------------------------------------------------------------------------
+
+/** How many runs of a source the screen offers in its history. */
+export const RUN_HISTORY_LIMIT = 20;
+
+export const RUN_STATUS_LABELS: Readonly<Record<GenerationRun['status'], string>> = {
+  queued: '대기 중',
+  running: '생성 중',
+  succeeded: '완료',
+  failed: '실패',
+  cancelled: '취소됨',
+};
+
+/** Drafts of the run that are not registered yet (pending, approved or rejected). */
+export function unregisteredCount(run: Pick<GenerationRun, 'draft_count' | 'published_count'>) {
+  return Math.max(0, run.draft_count - run.published_count);
+}
+
+/** Inserts or replaces `run`, newest first. */
+export function upsertRun(runs: readonly GenerationRun[], run: GenerationRun): GenerationRun[] {
+  const rest = runs.filter((r) => r.id !== run.id);
+  return [run, ...rest].sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+/** One line per run in the history picker: when, what, how it ended, what is left to review. */
+export function runLabel(run: GenerationRun, formatTime: (iso: string) => string): string {
+  const types = run.variation_types.map((t) => VARIATION_LABELS[t]).join('·');
+  const left = unregisteredCount(run);
+  const tail =
+    run.status === 'succeeded' ? (left > 0 ? ` · 미등록 초안 ${left}개` : ' · 모두 등록') : '';
+  return `${formatTime(run.created_at)} · ${types} · ${RUN_STATUS_LABELS[run.status]}${tail}`;
 }

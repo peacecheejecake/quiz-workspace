@@ -18,6 +18,7 @@ export const GENERATION_PROBLEMS = {
   staleDraft: 'urn:quiz-workspace:problem:stale-draft',
   draftPublished: 'urn:quiz-workspace:problem:draft-published',
   draftNotApproved: 'urn:quiz-workspace:problem:draft-not-approved',
+  duplicateQuestion: 'urn:quiz-workspace:problem:duplicate-question',
 } as const;
 
 export type GenerationFailureKind =
@@ -30,6 +31,7 @@ export type GenerationFailureKind =
   | 'staleDraft'
   | 'draftPublished'
   | 'draftNotApproved'
+  | 'duplicateQuestion'
   | 'idempotencyKeyReused'
   | 'invalid'
   | 'unavailable';
@@ -46,6 +48,8 @@ export const GENERATION_FAILURE_MESSAGES: Readonly<Record<GenerationFailureKind,
     '다른 곳에서 초안이 먼저 바뀌었습니다. 최신 초안을 불러왔으니 내용을 확인한 뒤 다시 승인해 주세요.',
   draftPublished: '이미 문제은행에 등록된 초안입니다. 문제은행에서 수정해 주세요.',
   draftNotApproved: '승인되지 않은 초안이 있어 등록하지 못했습니다. 승인 상태를 확인해 주세요.',
+  duplicateQuestion:
+    '문제은행에 이미 같은 문제가 있거나 같은 내용의 초안을 함께 등록하려 해서 등록하지 못했습니다. 초안을 새로 불러왔으니 "이미 같은 문제가 있습니다" 표시를 확인해 주세요.',
   idempotencyKeyReused: '요청이 겹쳐 처리하지 못했습니다. 다시 시도해 주세요.',
   invalid:
     '요청을 처리할 수 없습니다. 변형 유형과 원본 문제의 출처를 확인하고, 초안은 검증 항목을 고친 뒤 승인해 주세요.',
@@ -80,6 +84,8 @@ export function classifyGenerationFailure(status: number, body: unknown): Genera
         return 'draftPublished';
       case GENERATION_PROBLEMS.draftNotApproved:
         return 'draftNotApproved';
+      case GENERATION_PROBLEMS.duplicateQuestion:
+        return 'duplicateQuestion';
       case GENERATION_PROBLEMS.idempotencyKeyReused:
         return 'idempotencyKeyReused';
       default:
@@ -97,7 +103,9 @@ const RUN_FAILURES: Readonly<Record<string, string>> = {
   llm_unavailable: '생성 모델에 연결하지 못했습니다.',
   llm_not_configured: '생성 모델이 설정되어 있지 않습니다. 관리자에게 문의해 주세요.',
   source_question_deleted: '원본 문제가 삭제되었습니다.',
-  source_passages_missing: '원본 문제의 출처 쪽에서 근거로 쓸 원문을 찾지 못했습니다.',
+  source_passages_missing:
+    '근거로 쓸 원문을 찾지 못했습니다. 원본 문제에 출처 쪽을 연결하거나 관련 문서를 올려 처리한 뒤 다시 시도해 주세요.',
+  search_unavailable: '관련 원문을 검색하지 못했습니다. 잠시 후 다시 시도해 주세요.',
   workspace_unavailable: 'Workspace가 보관되었거나 접근할 수 없습니다.',
   cancelled: '작업이 취소되었습니다.',
 };
@@ -113,15 +121,20 @@ export function isRunWorking(run: Pick<GenerationRun, 'status'>): boolean {
 
 const enc = encodeURIComponent;
 
-export function generatePath(workspaceId: string, sourceQuestionId?: string | null): string {
+export function generatePath(
+  workspaceId: string,
+  sourceQuestionId?: string | null,
+  runId?: string | null,
+): string {
   const base = `/workspaces/${workspaceId}/questions/generate`;
-  return sourceQuestionId ? `${base}?source=${enc(sourceQuestionId)}` : base;
+  if (!sourceQuestionId) return base;
+  return `${base}?source=${enc(sourceQuestionId)}${runId ? `&run=${enc(runId)}` : ''}`;
 }
 
 export const GENERATION_BFF_PATHS = {
   start: (questionId: string) => `/api/questions/${enc(questionId)}/generations`,
-  runs: (workspaceId: string, sourceQuestionId: string) =>
-    `/api/workspaces/${enc(workspaceId)}/question-generations?source_question_id=${enc(sourceQuestionId)}&limit=1`,
+  runs: (workspaceId: string, sourceQuestionId: string, limit: number) =>
+    `/api/workspaces/${enc(workspaceId)}/question-generations?source_question_id=${enc(sourceQuestionId)}&limit=${limit}`,
   run: (runId: string) => `/api/question-generations/${enc(runId)}`,
   drafts: (runId: string) => `/api/question-generations/${enc(runId)}/drafts`,
   publish: (runId: string) => `/api/question-generations/${enc(runId)}/publish`,
@@ -134,12 +147,13 @@ export interface GenerationClient {
     body: GenerationCreate,
     idempotencyKey: string,
   ): Promise<GenerationRun>;
-  /** The newest run of `sourceQuestionId`, or null. */
-  latestRun(
+  /** The newest `limit` runs of `sourceQuestionId` (newest first). */
+  listRuns(
     workspaceId: string,
     sourceQuestionId: string,
+    limit: number,
     signal?: AbortSignal,
-  ): Promise<GenerationRun | null>;
+  ): Promise<GenerationRun[]>;
   getRun(runId: string, signal?: AbortSignal): Promise<GenerationRun>;
   listDrafts(runId: string, signal?: AbortSignal): Promise<ImportDraft[]>;
   updateDraft(draftId: string, body: DraftUpdateBody): Promise<ImportDraft>;
@@ -198,13 +212,13 @@ export function createGenerationClient(
         body: JSON.stringify(body),
         idempotencyKey,
       }),
-    latestRun: async (workspaceId, sourceQuestionId, signal) =>
+    listRuns: async (workspaceId, sourceQuestionId, limit, signal) =>
       (
         await call<{ items: GenerationRun[] }>(
-          GENERATION_BFF_PATHS.runs(workspaceId, sourceQuestionId),
+          GENERATION_BFF_PATHS.runs(workspaceId, sourceQuestionId, limit),
           { signal },
         )
-      ).items[0] ?? null,
+      ).items,
     getRun: (runId, signal) => call(GENERATION_BFF_PATHS.run(runId), { signal }),
     listDrafts: async (runId, signal) =>
       (await call<{ items: ImportDraft[] }>(GENERATION_BFF_PATHS.drafts(runId), { signal })).items,

@@ -27,8 +27,11 @@ export interface VariationOriginal {
 }
 
 export interface VariationDiffViewerProps {
-  readonly original: VariationOriginal;
+  /** The source revision the run was generated from; null while it loads (or failed). */
+  readonly original: VariationOriginal | null;
   readonly draft: ReviewDraft;
+  /** Shown instead of the diff while `original` is null. */
+  readonly originalPending?: string;
   /** Deep link of a cited page (document viewer at `?page=`); null = plain text. */
   readonly pageHref?: (documentId: string, page: number) => string | null;
   /** Heading level of the block titles inside (default 4: under the draft's h3). */
@@ -87,16 +90,10 @@ export function VariationDiffViewer({
   pageHref,
   headingLevel = 4,
   actions,
+  originalPending,
 }: VariationDiffViewerProps) {
   const H = `h${headingLevel}` as const;
   const info = draft.generation;
-  const stem = diffWords(original.stem, draft.stem);
-  const options =
-    draft.type === 'MCQ' || original.options.length > 0
-      ? diffOptions(original.options, draft.options)
-      : [];
-  const optionsChanged = options.some((o) => o.change !== 'same' || o.answerChanged);
-
   return (
     <div className={styles.diff}>
       <div className={styles.diffHeader}>
@@ -107,6 +104,59 @@ export function VariationDiffViewer({
       </div>
       <p className={styles.legend}>밑줄은 추가된 말, 취소선은 빠진 말입니다.</p>
 
+      {original ? (
+        <Changes original={original} draft={draft} />
+      ) : (
+        <p className={styles.muted}>{originalPending ?? '생성 당시 원본을 불러오는 중입니다.'}</p>
+      )}
+
+      {info?.justification ? (
+        <p className={styles.note}>
+          <span className={styles.noteLabel}>정답 근거</span> {info.justification}
+        </p>
+      ) : null}
+
+      {info && info.evidence.length > 0 ? (
+        <div className={styles.evidence}>
+          <H className={styles.diffTitle}>문서 근거</H>
+          {info.evidence.map((e, index) => (
+            <div key={`${e.documentId}-${index}`} className={styles.evidenceItem}>
+              {e.quote ? <blockquote className={styles.quote}>{e.quote}</blockquote> : null}
+              <p className={styles.evidencePages}>
+                {e.pages.map((page) => {
+                  const href = pageHref?.(e.documentId, page) ?? null;
+                  return href ? (
+                    <Link key={page} href={href} className={styles.link}>
+                      {page}쪽
+                    </Link>
+                  ) : (
+                    <span key={page}>{page}쪽</span>
+                  );
+                })}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className={styles.validationRow}>
+        <ValidationState draft={draft} />
+        {actions}
+      </div>
+    </div>
+  );
+}
+
+/** Stem and option changes of `draft` against `original`. */
+function Changes({ original, draft }: { original: VariationOriginal; draft: ReviewDraft }) {
+  const stem = diffWords(original.stem, draft.stem);
+  const options =
+    draft.type === 'MCQ' || original.options.length > 0
+      ? diffOptions(original.options, draft.options)
+      : [];
+  const optionsChanged = options.some((o) => o.change !== 'same' || o.answerChanged);
+  return (
+    <>
       <p className={styles.diffStem}>
         {unchanged(stem) ? <span className={styles.muted}>문제 문구 변경 없음: </span> : null}
         <DiffText segments={stem} />
@@ -145,40 +195,6 @@ export function VariationDiffViewer({
           <p className={styles.muted}>보기와 정답은 원본과 같습니다.</p>
         )
       ) : null}
-
-      {info?.justification ? (
-        <p className={styles.note}>
-          <span className={styles.noteLabel}>정답 근거</span> {info.justification}
-        </p>
-      ) : null}
-
-      {info && info.evidence.length > 0 ? (
-        <div className={styles.evidence}>
-          <H className={styles.diffTitle}>문서 근거</H>
-          {info.evidence.map((e, index) => (
-            <div key={`${e.documentId}-${index}`} className={styles.evidenceItem}>
-              {e.quote ? <blockquote className={styles.quote}>{e.quote}</blockquote> : null}
-              <p className={styles.evidencePages}>
-                {e.pages.map((page) => {
-                  const href = pageHref?.(e.documentId, page) ?? null;
-                  return href ? (
-                    <Link key={page} href={href} className={styles.link}>
-                      {page}쪽
-                    </Link>
-                  ) : (
-                    <span key={page}>{page}쪽</span>
-                  );
-                })}
-              </p>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      <div className={styles.validationRow}>
-        <ValidationState draft={draft} />
-        {actions}
-      </div>
-    </div>
+    </>
   );
 }

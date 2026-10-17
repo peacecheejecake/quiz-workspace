@@ -10,7 +10,7 @@
 //                cited pages, validation state) → review (편집 / 원본 비교 / 승인) → "승인한 문제
 //                등록" registers exactly the approved versions as new CONFIRMED questions with
 //                lineage (the API decides; the LLM's declared answer is never trusted).
-import { Badge, Button, CheckIcon, PageHeader, useToast } from '@quiz/ui';
+import { Badge, Button, CheckIcon, PageHeader, Select, useToast } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -45,10 +45,19 @@ import {
   type GenerationCreate,
   type GenerationRun,
 } from '@/lib/questions/generation-client';
-import { bodyKey, VARIATION_LABELS } from '@/lib/questions/generation-model';
+import type { SourceRevision } from '@/lib/questions/generation-data';
+import {
+  bodyKey,
+  RUN_HISTORY_LIMIT,
+  runLabel,
+  upsertRun,
+  VARIATION_LABELS,
+} from '@/lib/questions/generation-model';
+import { getQuestionRevisionAction } from '@/lib/questions/actions';
 import { placedTitle } from '@/lib/questions/overview-placement';
 import { lookupOverviewQuestionAction, setMyStateAction } from '@/lib/questions/practice-actions';
 import { DraftEditor, type DraftSaveResult } from '../drafts/draft-editor';
+import { formatDateTime } from '../labels';
 import { QuestionDraftReview, type DraftReviewState } from '../drafts/question-draft-review';
 import { PracticePanel, type PracticeQuestion } from '../practice/practice-panel';
 import { GenerationComparePanel } from './generation-compare-panel';
@@ -62,7 +71,11 @@ export interface QuestionGenerationProps {
   readonly workspaceId: string;
   readonly readOnly: GenerationReadOnly;
   readonly source: QuestionDetail;
+  /** Recent runs of the source, newest first. */
+  readonly initialRuns: readonly GenerationRun[];
   readonly initialRun: GenerationRun | null;
+  /** The source revision `initialRun` was generated from, when it is not the current one. */
+  readonly initialRunRevision: SourceRevision | null;
   readonly initialDrafts: readonly ImportDraft[];
   readonly loadFailed: boolean;
 }
@@ -81,11 +94,27 @@ function messageOf(error: unknown, fallback: string): string {
   return error instanceof GenerationApiError ? error.message : fallback;
 }
 
+function originalOf(revision: SourceRevision): VariationOriginal {
+  const correct = new Set(revision.correct_option_ids ?? []);
+  return {
+    stem: revision.stem,
+    options: revision.options.map((o) => ({ id: o.id, text: o.text, correct: correct.has(o.id) })),
+  };
+}
+
+function failureOf(run: GenerationRun | null) {
+  return run && (run.status === 'failed' || run.status === 'cancelled')
+    ? { message: runFailureMessage(run.error_code ?? run.status), retry: null }
+    : null;
+}
+
 export function QuestionGeneration({
   workspaceId,
   readOnly,
   source,
+  initialRuns,
   initialRun,
+  initialRunRevision,
   initialDrafts,
   loadFailed,
 }: QuestionGenerationProps) {
@@ -95,19 +124,22 @@ export function QuestionGeneration({
   const canEdit = readOnly === null;
   const revision = source.revision;
 
-  const original = useMemo<VariationOriginal>(() => {
-    const correct = new Set(revision.correct_option_ids ?? []);
-    return {
-      stem: revision.stem,
-      options: revision.options.map((o) => ({
-        id: o.id,
-        text: o.text,
-        correct: correct.has(o.id),
-      })),
-    };
-  }, [revision]);
-
+  const [runs, setRuns] = useState<GenerationRun[]>(() => [...initialRuns]);
   const [run, setRun] = useState<GenerationRun | null>(initialRun);
+  /** Source revisions by id: the current one and those runs were generated from. */
+  const [revisions, setRevisions] = useState<Record<string, SourceRevision>>(() => ({
+    [revision.id]: revision,
+    ...(initialRunRevision ? { [initialRunRevision.id]: initialRunRevision } : {}),
+  }));
+  const [revisionFailed, setRevisionFailed] = useState<string | null>(null);
+  // Diffs compare with the revision the run was generated from (pinned on the run), never with
+  // whatever the source says now.
+  const pinnedId = run?.source_question_revision_id ?? revision.id;
+  const pinned = revisions[pinnedId] ?? null;
+  const original = useMemo<VariationOriginal | null>(
+    () => (pinned ? originalOf(pinned) : null),
+    [pinned],
+  );
   const [drafts, setDrafts] = useState<ReviewDraft[]>(() =>
     sortDrafts(initialDrafts.map(reviewDraftFromImport)),
   );
@@ -119,11 +151,7 @@ export function QuestionGeneration({
   const [failure, setFailure] = useState<{
     message: string;
     retry: GenerationCreate | null;
-  } | null>(() =>
-    initialRun && (initialRun.status === 'failed' || initialRun.status === 'cancelled')
-      ? { message: runFailureMessage(initialRun.error_code ?? initialRun.status), retry: null }
-      : null,
-  );
+  } | null>(() => failureOf(initialRun));
   const [states, setStates] = useState<Record<string, DraftReviewState>>({});
   const [publishing, setPublishing] = useState(false);
   const [publishFailure, setPublishFailure] = useState<string | null>(null);
@@ -208,6 +236,7 @@ export function QuestionGeneration({
         onUnauthenticated(error);
       }
       setRun(latest);
+      setRuns((list) => upsertRun(list, latest));
       await refreshDrafts(latest.id, signal);
       if (signal.aborted) return;
       setWorking(null);
@@ -259,6 +288,8 @@ export function QuestionGeneration({
     }
     // The run exists: a later "생성" with the same settings is a new run.
     startKeys.current.delete(keyOf);
+    setRuns((list) => upsertRun(list, started));
+    showRunInUrl(started.id);
     setDrafts([]);
     setStates({});
     publishRound.current.clear();
@@ -279,14 +310,17 @@ export function QuestionGeneration({
   async function reloadList() {
     setReloadingList(true);
     try {
-      let latest = run;
+      let list: GenerationRun[];
       try {
-        latest = await client.latestRun(workspaceId, source.id);
+        list = await client.listRuns(workspaceId, source.id, RUN_HISTORY_LIMIT);
       } catch (error) {
         onUnauthenticated(error);
         return;
       }
+      setRuns(list);
+      const latest = list.find((r) => r.id === run?.id) ?? list[0] ?? null;
       setRun(latest);
+      setFailure(failureOf(latest));
       if (!latest) {
         setDrafts([]);
         setListFailed(false);
@@ -300,6 +334,64 @@ export function QuestionGeneration({
       await refreshDrafts(latest.id);
     } finally {
       setReloadingList(false);
+    }
+  }
+
+  function showRunInUrl(runId: string) {
+    // The selected run is part of the URL (reload / share), without a server round trip.
+    window.history.replaceState(null, '', generatePath(workspaceId, source.id, runId));
+  }
+
+  /** Shows an earlier (or the newest) run: its drafts, review state and failure. */
+  async function selectRun(runId: string) {
+    const next = runs.find((r) => r.id === runId);
+    if (!next || next.id === run?.id || working) return;
+    const { signal } = newController();
+    showRunInUrl(next.id);
+    setRun(next);
+    setDrafts([]);
+    setStates({});
+    setStatus(null);
+    setPublishFailure(null);
+    setFailure(failureOf(next));
+    publishRound.current.clear();
+    if (isRunWorking(next)) {
+      void followRun(next, signal);
+      return;
+    }
+    await refreshDrafts(next.id, signal);
+  }
+
+  /** Loads the source revision the selected run was generated from (when not loaded yet). */
+  const loadRevision = useCallback(
+    async (revisionId: string) => {
+      setRevisionFailed(null);
+      let result: Awaited<ReturnType<typeof getQuestionRevisionAction>>;
+      try {
+        result = await getQuestionRevisionAction(workspaceId, source.id, revisionId);
+      } catch {
+        setRevisionFailed(revisionId);
+        return;
+      }
+      if (result.ok) setRevisions((r) => ({ ...r, [revisionId]: result.data }));
+      else setRevisionFailed(revisionId);
+    },
+    [workspaceId, source.id],
+  );
+
+  useEffect(() => {
+    if (pinned || revisionFailed === pinnedId) return;
+    void Promise.resolve().then(() => loadRevision(pinnedId));
+  }, [pinned, pinnedId, revisionFailed, loadRevision]);
+
+  /** Re-reads the run (counts) after a publish, so the history shows what is left. */
+  async function refreshRun(runId: string) {
+    try {
+      const latest = await client.getRun(runId);
+      setRuns((list) => upsertRun(list, latest));
+      setRun((current) => (current?.id === latest.id ? latest : current));
+    } catch {
+      // Counts in the history stay as they were; the drafts themselves are up to date.
     }
   }
 
@@ -468,6 +560,7 @@ export function QuestionGeneration({
       setStatus({ text: publishedMessage(round.size), bank: true });
       round.clear();
       void refreshDrafts(runId);
+      void refreshRun(runId);
     } catch (error) {
       if (onUnauthenticated(error)) return;
       const kind = error instanceof GenerationApiError ? error.kind : 'unavailable';
@@ -475,7 +568,9 @@ export function QuestionGeneration({
       setPublishFailure(
         `승인한 초안을 모두 등록하지 못했습니다.${partial} ${messageOf(error, '문제를 등록하지 못했습니다.')}`,
       );
+      // A refusal (e.g. 409 duplicate-question) re-validated the drafts: show why.
       if (kind !== 'network' && kind !== 'unavailable') void refreshDrafts(runId);
+      if (round.size > 0) void refreshRun(runId);
     } finally {
       setPublishing(false);
     }
@@ -484,6 +579,10 @@ export function QuestionGeneration({
   // --- render -------------------------------------------------------------------------------
 
   const busy = working !== null;
+  const originalPending =
+    revisionFailed === pinnedId
+      ? '생성 당시 원본을 불러오지 못해 비교를 보여 줄 수 없습니다.'
+      : undefined;
   const registered = drafts.filter((d) => d.publishedQuestionId !== null).length;
   const docHref = (documentId: string, page: number) =>
     `/workspaces/${workspaceId}/documents/${documentId}?page=${page}`;
@@ -559,7 +658,8 @@ export function QuestionGeneration({
           </p>
         ) : (
           <p className={styles.muted}>
-            문서 출처가 없는 문제입니다. 유사 개념 변형은 출처 쪽이 있어야 만들 수 있습니다.
+            문서 출처가 없는 문제입니다. 유사 개념 변형은 Workspace 문서에서 관련 원문을 찾아 근거로
+            씁니다.
           </p>
         )}
       </section>
@@ -568,7 +668,6 @@ export function QuestionGeneration({
         source={{
           questionType: source.question_type,
           confirmed: source.publication_status === 'CONFIRMED',
-          hasSources: sourcePages.length > 0,
         }}
         canGenerate={canEdit}
         canShuffle={readOnly !== 'archived'}
@@ -682,6 +781,32 @@ export function QuestionGeneration({
               </Button>
             ) : null}
           </div>
+          {runs.length > 1 ? (
+            <Select
+              label="생성 기록"
+              description="이전에 만든 초안도 여기서 다시 열어 검토하고 등록할 수 있습니다."
+              value={run?.id ?? ''}
+              disabled={busy}
+              options={runs.map((r) => ({ value: r.id, label: runLabel(r, formatDateTime) }))}
+              onValueChange={(value) => void selectRun(value)}
+              fieldClassName={styles.historyField}
+            />
+          ) : null}
+          {run && pinnedId !== revision.id ? (
+            <p className={styles.pinnedNotice}>
+              {pinned
+                ? `이 초안들은 원본 문제의 이전 판(${pinned.version}판)으로 만들었습니다. 원본은 그 뒤 ${revision.version}판으로 수정되어 지금 보이는 원본 문제와 다릅니다. 아래 비교는 생성 당시 원본 기준입니다.`
+                : '이 초안들은 원본 문제의 이전 판으로 만들었습니다. 지금 보이는 원본 문제와 다르며, 비교는 생성 당시 원본 기준입니다.'}
+              {revisionFailed === pinnedId ? (
+                <>
+                  {' '}
+                  <Button size="sm" onClick={() => void loadRevision(pinnedId)}>
+                    생성 당시 원본 다시 불러오기
+                  </Button>
+                </>
+              ) : null}
+            </p>
+          ) : null}
           {drafts.length === 0 && !busy && run?.status === 'succeeded' ? (
             <p className={styles.muted}>검증을 통과해 저장된 초안이 없습니다.</p>
           ) : null}
@@ -702,6 +827,7 @@ export function QuestionGeneration({
             renderExtra={(draft) => (
               <VariationDiffViewer
                 original={original}
+                {...(originalPending ? { originalPending } : {})}
                 draft={draft}
                 pageHref={docHref}
                 actions={
@@ -734,6 +860,7 @@ export function QuestionGeneration({
       />
       <GenerationComparePanel
         original={original}
+        {...(originalPending ? { originalPending } : {})}
         draft={comparing}
         onClose={() => setComparing(null)}
         pageHref={docHref}

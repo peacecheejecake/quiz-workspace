@@ -97,7 +97,7 @@ describe('VariationDiffViewer', () => {
 });
 
 describe('QuestionGenerationForm', () => {
-  const source = { questionType: 'MCQ' as const, confirmed: true, hasSources: true };
+  const source = { questionType: 'MCQ' as const, confirmed: true };
 
   it('opens the practice panel for 보기 섞기 instead of starting a run', async () => {
     const onShuffle = vi.fn();
@@ -147,10 +147,10 @@ describe('QuestionGenerationForm', () => {
     });
   });
 
-  it('disables what the source or role does not allow, with the reason as text', () => {
+  it('disables what the role does not allow, with the reason as text', () => {
     render(
       <QuestionGenerationForm
-        source={{ ...source, hasSources: false }}
+        source={source}
         canGenerate={false}
         canShuffle
         busy={false}
@@ -159,8 +159,33 @@ describe('QuestionGenerationForm', () => {
       />,
     );
     expect(screen.getByRole('checkbox', { name: '유사 개념' })).toBeDisabled();
-    expect(screen.getByText(/문서 출처 쪽이 있어야/)).toBeInTheDocument();
+    expect(screen.getAllByText(/편집 권한이 있어야/)).toHaveLength(3);
     expect(screen.getByRole('checkbox', { name: '문구 변형' })).toBeDisabled();
     expect(screen.getByRole('checkbox', { name: '보기 섞기' })).toBeEnabled();
+  });
+});
+
+describe('QuestionGenerationForm without cited pages', () => {
+  it('still offers 유사 개념 (the worker searches related passages)', () => {
+    render(
+      <QuestionGenerationForm
+        source={{ questionType: 'MCQ', confirmed: true }}
+        canGenerate
+        canShuffle
+        busy={false}
+        onShuffle={vi.fn()}
+        onGenerate={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('checkbox', { name: '유사 개념' })).toBeEnabled();
+  });
+});
+
+describe('VariationDiffViewer while the pinned original loads', () => {
+  it('keeps justification and validation but shows no diff against another revision', () => {
+    render(<VariationDiffViewer original={null} originalPending="불러오지 못함" draft={draft()} />);
+    expect(screen.queryByRole('deletion')).toBeNull();
+    expect(screen.getByText('불러오지 못함')).toBeInTheDocument();
+    expect(screen.getByText('검증 통과')).toBeInTheDocument();
   });
 });

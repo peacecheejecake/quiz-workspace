@@ -9,7 +9,10 @@ import { VariationDiffViewer, type VariationOriginal } from './variation-diff-vi
 import styles from './question-generation.module.css';
 
 export interface GenerationComparePanelProps {
-  readonly original: VariationOriginal;
+  /** The source revision the run was generated from; null while it loads (or failed). */
+  readonly original: VariationOriginal | null;
+  /** Shown instead of the original while it is null. */
+  readonly originalPending?: string;
   /** Null while closed. */
   readonly draft: ReviewDraft | null;
   readonly onClose: () => void;
@@ -18,6 +21,7 @@ export interface GenerationComparePanelProps {
 
 export function GenerationComparePanel({
   original,
+  originalPending,
   draft,
   onClose,
   pageHref,
@@ -43,8 +47,13 @@ export function GenerationComparePanel({
             <h3 id="qgen-compare-original" className={styles.diffTitle}>
               원본
             </h3>
-            <p className={styles.compareStem}>{original.stem}</p>
-            {original.options.length > 0 ? (
+            {original ? null : (
+              <p className={styles.muted}>
+                {originalPending ?? '생성 당시 원본을 불러오는 중입니다.'}
+              </p>
+            )}
+            {original ? <p className={styles.compareStem}>{original.stem}</p> : null}
+            {original && original.options.length > 0 ? (
               <ol className={styles.compareOptions}>
                 {original.options.map((o) => (
                   <li key={o.id}>
@@ -74,6 +83,7 @@ export function GenerationComparePanel({
           <div className={styles.compareDiff}>
             <VariationDiffViewer
               original={original}
+              {...(originalPending ? { originalPending } : {})}
               draft={draft}
               pageHref={pageHref}
               headingLevel={3}
