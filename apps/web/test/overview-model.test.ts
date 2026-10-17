@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyOverrides,
+  findPlaced,
   heatmapChapters,
   optimisticStatus,
   placedTitle,
@@ -104,5 +105,16 @@ describe('applyOverrides', () => {
     expect(applyOverrides(fresh, settled)[0]?.status).toBe('unseen');
     // ... but a change still in flight survives a new list.
     expect(applyOverrides(fresh, pending)[0]?.is_favorite).toBe(true);
+  });
+});
+
+describe('findPlaced', () => {
+  it('places one question as in the unfiltered heatmap (deep links outside the filters)', () => {
+    const all = {
+      chapters,
+      items: [item('a', C2, 12), item('c', null, null), item('d', null, null)],
+    };
+    expect(findPlaced(all, 'd')).toMatchObject({ number: '2', chapterTitle: '챕터 없음' });
+    expect(findPlaced(all, 'zz')).toBeNull();
   });
 });

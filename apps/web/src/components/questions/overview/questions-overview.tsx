@@ -26,6 +26,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -43,7 +44,7 @@ import {
   QUESTION_PARAM,
   type OverviewFilters,
 } from '@/lib/questions/overview-filters';
-import { setMyStateAction } from '@/lib/questions/practice-actions';
+import { lookupOverviewQuestionAction, setMyStateAction } from '@/lib/questions/practice-actions';
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from '@/lib/questions/problems';
 import { PracticePanel, type PracticeQuestion } from '../practice/practice-panel';
 import {
@@ -52,7 +53,6 @@ import {
   optimisticStatus,
   placedTitle,
   placeQuestions,
-  withOverride,
   type PlacedQuestion,
   type StudyOverride,
   type StudyPatch,
@@ -71,18 +71,55 @@ export interface QuestionsOverviewProps {
   readonly failure: QuestionFailureKind | null;
   /** Screen id of the practice panel (`data-screen-id`, docs/screens/index.md). */
   readonly panelScreenId?: string;
+  /** `?question=` resolved outside the current filters by the server render (deep link). */
+  readonly requested?: PlacedQuestion | null;
 }
 
 const ALL = '__all__';
 const TYPES: readonly QuestionType[] = ['MCQ', 'SHORT_ANSWER', 'ESSAY'];
 
-/** `[data-question-id="<id>"]` inside the heatmap: where focus returns after the panel. */
-export function focusQuestionDot(root: ParentNode, questionId: string): boolean {
+function dotOf(root: ParentNode, questionId: string): HTMLElement | null {
   const id = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(questionId) : questionId;
-  const dot = root.querySelector<HTMLElement>(`[data-question-id="${id}"]`);
-  if (!dot) return false;
-  dot.focus();
-  return true;
+  return root.querySelector<HTMLElement>(`[data-question-id="${id}"]`);
+}
+
+/**
+ * Focus after the practice panel closes: the dot that opened it; if that dot left the heatmap
+ * (filtered out meanwhile, or a deep link outside the filters), the nearest surviving dot in the
+ * heatmap order the panel was opened on, else the heatmap's tab stop, else `fallback` (a stable
+ * control, e.g. the search box, for an empty heatmap). Returns the focused element.
+ */
+export function focusAfterPanel(
+  root: ParentNode,
+  openedId: string | null,
+  order: readonly string[],
+  fallback: HTMLElement | null,
+): HTMLElement | null {
+  const candidates: string[] = [];
+  if (openedId) {
+    candidates.push(openedId);
+    const at = order.indexOf(openedId);
+    if (at >= 0) {
+      for (let d = 1; d < order.length; d += 1) {
+        const after = order[at + d];
+        const before = order[at - d];
+        if (after !== undefined) candidates.push(after);
+        if (before !== undefined) candidates.push(before);
+        if (after === undefined && before === undefined) break;
+      }
+    }
+  }
+  let target: HTMLElement | null = null;
+  for (const id of candidates) {
+    target = dotOf(root, id);
+    if (target) break;
+  }
+  target ??=
+    root.querySelector<HTMLElement>('[data-question-id][tabindex="0"]') ??
+    root.querySelector<HTMLElement>('[data-question-id]') ??
+    fallback;
+  target?.focus();
+  return target;
 }
 
 export function QuestionsOverview({
@@ -93,6 +130,7 @@ export function QuestionsOverview({
   chapterChoices,
   failure,
   panelScreenId,
+  requested = null,
 }: QuestionsOverviewProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -133,25 +171,74 @@ export function QuestionsOverview({
   );
   const chapters = useMemo(() => heatmapChapters(placed), [placed]);
 
-  // The practice panel follows `?question=`. A question that leaves the filtered list while open
-  // (e.g. un-favorited under the favorites filter) stays in the panel until it is closed.
+  // The practice panel follows `?question=`, independently of the filters: a question the
+  // filtered list does not show (deep link under other filters, or one that left the list while
+  // open, e.g. un-favorited under the favorites filter) is resolved without the filters —
+  // by the server render (`requested`) or, after client-side navigation, a lookup action.
   const openId = openQuestionId(searchParams);
   const found = openId ? (placed.find((p) => p.item.question_id === openId) ?? null) : null;
+  const [outside, setOutside] = useState<ReadonlyMap<string, PlacedQuestion>>(() =>
+    requested ? new Map([[requested.item.question_id, requested]]) : new Map(),
+  );
+  const [seenRequested, setSeenRequested] = useState(requested);
+  if (requested !== seenRequested) {
+    setSeenRequested(requested);
+    if (requested) setOutside((prev) => new Map(prev).set(requested.item.question_id, requested));
+  }
   const [pinned, setPinned] = useState<PlacedQuestion | null>(found);
   if (found && found !== pinned) setPinned(found);
-  const openPlaced = found ?? (pinned && pinned.item.question_id === openId ? pinned : null);
+  const openPlaced =
+    found ??
+    (openId ? outside.get(openId) : undefined) ??
+    (pinned && pinned.item.question_id === openId ? pinned : null);
   const openedId = openPlaced?.item.question_id ?? null;
+
+  const lookedUp = useRef(new Set<string>());
+  const needsLookup = openId !== null && openPlaced === null;
+  useEffect(() => {
+    if (!needsLookup || !openId || lookedUp.current.has(openId)) return;
+    lookedUp.current.add(openId);
+    lookupOverviewQuestionAction(workspaceId, openId).then(
+      (result) => {
+        const placedQuestion = result.ok ? result.data : null;
+        if (placedQuestion) setOutside((prev) => new Map(prev).set(openId, placedQuestion));
+      },
+      () => {
+        // Transport failure: the panel stays closed; a later navigation may retry.
+        lookedUp.current.delete(openId);
+      },
+    );
+  }, [needsLookup, openId, workspaceId]);
+
+  // Where focus returns on close: the opening dot and the heatmap order it was opened on.
   const lastOpened = useRef<string | null>(null);
+  const openOrder = useRef<readonly string[]>([]);
+  const placedRef = useRef(placed);
   useLayoutEffect(() => {
-    if (openedId) lastOpened.current = openedId;
+    placedRef.current = placed;
+  }, [placed]);
+  useLayoutEffect(() => {
+    if (!openedId) return;
+    lastOpened.current = openedId;
+    openOrder.current = placedRef.current.map((p) => p.item.question_id);
   }, [openedId]);
 
   const panelQuestion = useMemo<PracticeQuestion | null>(() => {
     if (!openPlaced) return null;
-    // A pinned question (no longer in the list) still shows its local changes.
-    const item = found
-      ? openPlaced.item
-      : withOverride(openPlaced.item, overrides.get(openPlaced.item.question_id), serverItems);
+    // The panel toggles show the CONFIRMED study state (server item + settled changes), so their
+    // label flips once the change is saved; the dot alone is optimistic. While a change is in
+    // flight the toggles are busy. Outside the list the server overview can never catch up, so
+    // a settled change always applies there.
+    const id = openPlaced.item.question_id;
+    const override = overrides.get(id);
+    const pending = override?.settledOn === null;
+    const serverItem = found ? serverItems.find((i) => i.question_id === id) : undefined;
+    const base = serverItem ?? openPlaced.item;
+    const settled =
+      override && !pending && (!serverItem || override.settledOn === serverItems)
+        ? override.patch
+        : undefined;
+    const item = { ...base, ...settled };
     return {
       id: item.question_id,
       title: placedTitle(openPlaced),
@@ -160,10 +247,11 @@ export function QuestionsOverview({
       preview: item.preview,
       isFavorite: item.is_favorite,
       needsRetry: item.needs_retry,
+      savingFlags: pending,
     };
   }, [openPlaced, found, overrides, serverItems]);
 
-  const heatmapRef = useRef<HTMLDivElement>(null);
+  const screenRef = useRef<HTMLDivElement>(null);
 
   function setQuestionParam(questionId: string | null) {
     const params = new URLSearchParams(window.location.search);
@@ -215,12 +303,11 @@ export function QuestionsOverview({
   }
 
   function currentItem(questionId: string): OverviewItem | undefined {
-    return (
-      items.find((i) => i.question_id === questionId) ??
-      (pinned?.item.question_id === questionId
-        ? withOverride(pinned.item, overrides.get(questionId), serverItems)
-        : undefined)
-    );
+    const listed = items.find((i) => i.question_id === questionId);
+    if (listed) return listed;
+    return openPlaced?.item.question_id === questionId
+      ? { ...openPlaced.item, ...overrides.get(questionId)?.patch }
+      : undefined;
   }
 
   async function changeFlags(
@@ -238,7 +325,13 @@ export function QuestionsOverview({
       status: optimisticStatus(item, flags),
     };
     putOverride(questionId, seq, { patch: optimistic, settledOn: null });
-    const result = await setMyStateAction(workspaceId, questionId, flags);
+    let result: Awaited<ReturnType<typeof setMyStateAction>>;
+    try {
+      result = await setMyStateAction(workspaceId, questionId, flags);
+    } catch {
+      // The request itself failed (network): roll this change back.
+      result = { ok: false, kind: 'unavailable', message: QUESTION_FAILURE_MESSAGES.unavailable };
+    }
     if (!result.ok) {
       putOverride(questionId, seq, null);
       toast({ tone: 'error', title: result.message });
@@ -274,7 +367,7 @@ export function QuestionsOverview({
   ];
 
   return (
-    <div className={styles.screen}>
+    <div ref={screenRef} className={styles.screen}>
       <PageHeader
         title="문제 Heatmap"
         description="문제 하나가 점 하나입니다. 점을 눌러 바로 풀어 보세요."
@@ -423,7 +516,7 @@ export function QuestionsOverview({
           />
         )
       ) : (
-        <div ref={heatmapRef} className={styles.heatmap} aria-busy={navigating || undefined}>
+        <div className={styles.heatmap} aria-busy={navigating || undefined}>
           <QuestionHeatmap
             chapters={chapters}
             selectedQuestionId={openPlaced?.item.question_id ?? null}
@@ -442,8 +535,10 @@ export function QuestionsOverview({
         onFlagsChange={(questionId, flags) => void changeFlags(questionId, flags)}
         onViewed={markViewed}
         onCloseAutoFocus={(event) => {
-          const id = lastOpened.current;
-          if (id && heatmapRef.current && focusQuestionDot(heatmapRef.current, id)) {
+          const root = screenRef.current;
+          if (!root) return;
+          const search = root.querySelector<HTMLElement>('input[type="search"]');
+          if (focusAfterPanel(root, lastOpened.current, openOrder.current, search)) {
             event.preventDefault();
           }
         }}

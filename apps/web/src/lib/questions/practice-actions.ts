@@ -7,6 +7,7 @@ import type { Schemas } from '@quiz/api-client';
 import { revalidatePath } from 'next/cache';
 import { isWorkspaceId } from '@/lib/workspaces/validation';
 import { overviewPath } from './overview-data';
+import { findPlaced, type PlacedQuestion } from './overview-placement';
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from './problems';
 import { callQuestionApi, type ApiOutcome } from './server';
 
@@ -85,4 +86,23 @@ export async function setMyStateAction(
   );
   if (outcome.ok) refresh(workspaceId);
   return fromOutcome(outcome);
+}
+
+/**
+ * The open question of a deep link (`?question=`) that the filtered heatmap does not show,
+ * placed as in the unfiltered heatmap; null when it is not a CONFIRMED question of the
+ * workspace. Read-only: never records a view.
+ */
+export async function lookupOverviewQuestionAction(
+  workspaceId: string,
+  questionId: string,
+): Promise<StudyActionResult<PlacedQuestion | null>> {
+  if (!isWorkspaceId(workspaceId) || !isWorkspaceId(questionId)) return failed('notFound');
+  const outcome = await callQuestionApi(overviewPath(workspaceId), (api) =>
+    api.GET('/api/v1/workspaces/{workspace_id}/questions/overview', {
+      params: { path: { workspace_id: workspaceId } },
+    }),
+  );
+  if (!outcome.ok) return failed(outcome.failure.kind);
+  return { ok: true, data: findPlaced(outcome.data, questionId.toLowerCase()) };
 }

@@ -11,6 +11,7 @@ import {
   overviewApiQuery,
   type OverviewFilters,
 } from './overview-filters';
+import { findPlaced, type PlacedQuestion } from './overview-placement';
 import { classifyQuestionFailure, type QuestionFailureKind } from './problems';
 
 export type QuestionOverview = Schemas['QuestionOverview'];
@@ -29,6 +30,11 @@ export interface OverviewData {
   readonly chapterChoices: readonly ChapterChoice[];
   /** Set when the heatmap could not be loaded (the screen shows a retryable error). */
   readonly failure: QuestionFailureKind | null;
+  /**
+   * The `?question=` deep link resolved without the filters (placed as in the unfiltered
+   * heatmap) when the filtered list does not contain it, so the panel opens on reload/share.
+   */
+  readonly requested: PlacedQuestion | null;
 }
 
 const EMPTY: QuestionOverview = {
@@ -48,6 +54,7 @@ export function chapterChoices(chapters: readonly OverviewChapter[]): ChapterCho
 export async function loadOverview(
   workspaceId: string,
   filters: OverviewFilters,
+  questionId: string | null = null,
 ): Promise<OverviewData> {
   let api;
   try {
@@ -88,5 +95,11 @@ export async function loadOverview(
     const current = overview.chapters.find((c) => (c.id ?? 'none') === filters.chapter);
     choices.push({ value: filters.chapter, title: current?.title ?? '선택한 챕터' });
   }
-  return { overview, chapterChoices: choices, failure };
+  let requested: PlacedQuestion | null = null;
+  if (questionId && !overview.items.some((i) => i.question_id === questionId)) {
+    // Only a filtered list can miss an existing question; unfiltered, it is gone or foreign.
+    const all = filtered ? unfiltered?.data : null;
+    requested = all ? findPlaced(all, questionId) : null;
+  }
+  return { overview, chapterChoices: choices, failure, requested };
 }

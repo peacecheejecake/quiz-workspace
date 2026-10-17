@@ -8,8 +8,11 @@ import userEvent from '@testing-library/user-event';
 import { ToastProvider } from '@quiz/ui';
 import { useSyncExternalStore } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { QuestionOverview } from '../src/lib/questions/overview-data';
+import type { OverviewItem, QuestionOverview } from '../src/lib/questions/overview-data';
 import { EMPTY_OVERVIEW_FILTERS } from '../src/lib/questions/overview-filters';
+import type { PlacedQuestion } from '../src/lib/questions/overview-placement';
+
+const FAVORITES = { ...EMPTY_OVERVIEW_FILTERS, favorite: true };
 
 // `useSearchParams` follows window.location like Next.js does for history.pushState.
 const subscribe = (notify: () => void) => {
@@ -29,9 +32,11 @@ vi.mock('next/navigation', () => ({
 
 const openPracticeSessionAction = vi.fn();
 const setMyStateAction = vi.fn();
+const lookupOverviewQuestionAction = vi.fn();
 vi.mock('../src/lib/questions/practice-actions', () => ({
   openPracticeSessionAction: (...a: unknown[]) => openPracticeSessionAction(...a),
   setMyStateAction: (...a: unknown[]) => setMyStateAction(...a),
+  lookupOverviewQuestionAction: (...a: unknown[]) => lookupOverviewQuestionAction(...a),
 }));
 
 const { QuestionsOverview } =
@@ -79,17 +84,46 @@ function session(n: number) {
   };
 }
 
-function Screen() {
+function only(...numbers: number[]): QuestionOverview {
+  const items = overview.items.filter((i) => numbers.includes(Number(i.question_id.slice(-2))));
+  return {
+    ...overview,
+    chapters: items.length
+      ? overview.chapters.map((c) => ({ ...c, question_count: items.length }))
+      : [],
+    items,
+  };
+}
+
+/** Question `n` placed as in the unfiltered heatmap (what the server lookups return). */
+function outsidePlaced(n: number): PlacedQuestion {
+  return {
+    item: overview.items.find((i) => i.question_id === id(n)) as OverviewItem,
+    number: String(n),
+    chapterKey: 'none',
+    chapterTitle: '챕터 없음',
+    chapterNumber: undefined,
+  };
+}
+
+function Screen({
+  data = overview,
+  requested = null,
+}: {
+  data?: QuestionOverview;
+  requested?: PlacedQuestion | null;
+}) {
   return (
     <ToastProvider>
       <main>
         <QuestionsOverview
           workspaceId={WS}
           readOnly={null}
-          filters={EMPTY_OVERVIEW_FILTERS}
-          overview={overview}
+          filters={data === overview ? EMPTY_OVERVIEW_FILTERS : FAVORITES}
+          overview={data}
           chapterChoices={[{ value: 'none', title: '챕터 없음' }]}
           failure={null}
+          requested={requested}
         />
       </main>
     </ToastProvider>
@@ -101,6 +135,8 @@ const realPushState = window.history.pushState.bind(window.history);
 beforeEach(() => {
   openPracticeSessionAction.mockReset();
   setMyStateAction.mockReset();
+  lookupOverviewQuestionAction.mockReset();
+  lookupOverviewQuestionAction.mockResolvedValue({ ok: true, data: null });
   openPracticeSessionAction.mockImplementation((_ws: string, qid: string) =>
     Promise.resolve(session(Number(qid.slice(-2)))),
   );
@@ -203,5 +239,73 @@ describe('QuestionsOverview practice panel', () => {
     await user.unhover(dot(1));
     expect(openPracticeSessionAction).not.toHaveBeenCalled();
     expect(window.location.search).toBe('');
+  });
+});
+
+describe('QuestionsOverview review fixes', () => {
+  it('a deep link outside the filtered list opens from the server-resolved question', async () => {
+    realPushState(null, '', `${PATH}?favorite=true&question=${id(2)}`);
+    render(<Screen data={only(1, 3)} requested={outsidePlaced(2)} />);
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    await waitFor(() => expect(within(panel).getByText('문제 2 본문')).toBeInTheDocument());
+    expect(lookupOverviewQuestionAction).not.toHaveBeenCalled();
+  });
+
+  it('back/forward to a question outside the filters looks it up without the filters', async () => {
+    lookupOverviewQuestionAction.mockResolvedValue({ ok: true, data: outsidePlaced(2) });
+    render(<Screen data={only(1, 3)} />);
+    await act(async () => {
+      realPushState(null, '', `${PATH}?favorite=true&question=${id(2)}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    expect(await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' })).toBeVisible();
+    expect(lookupOverviewQuestionAction).toHaveBeenCalledWith(WS, id(2));
+  });
+
+  it('an unknown question id never opens the panel', async () => {
+    realPushState(null, '', `${PATH}?question=${id(9)}`);
+    render(<Screen />);
+    await waitFor(() => expect(lookupOverviewQuestionAction).toHaveBeenCalledWith(WS, id(9)));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('focus goes to the nearest surviving dot when the opening dot left the heatmap', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<Screen />);
+    await user.click(dot(2));
+    await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    // The question leaves the (favorites) list while the panel is open.
+    rerender(<Screen data={only(1, 3)} />);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(dot(3)).toHaveFocus();
+  });
+
+  it('focus goes to the search box when the heatmap is empty after closing', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<Screen />);
+    await user.click(dot(1));
+    await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    rerender(<Screen data={only()} />);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('searchbox', { name: '문제 검색' })).toHaveFocus();
+  });
+
+  it('a rejected my-state request rolls the optimistic change back and reports it', async () => {
+    const user = userEvent.setup();
+    setMyStateAction.mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<Screen />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await user.click(within(panel).getByRole('button', { name: '즐겨찾기 추가' }));
+    await waitFor(() =>
+      expect(within(panel).getByRole('button', { name: '즐겨찾기 추가' })).toBeInTheDocument(),
+    );
+    expect(setMyStateAction).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/일시적인 오류/)).toBeInTheDocument();
+    await user.click(within(panel).getByRole('button', { name: '패널 닫기' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(within(dot(1)).getByTestId('question-marker')).toHaveAttribute('data-shape', 'square');
   });
 });

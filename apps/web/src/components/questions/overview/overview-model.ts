@@ -1,18 +1,17 @@
 // Pure QOV-01 view model: overview API response → heatmap chapters, optimistic study-state
 // overrides, and the practice panel's title. Unit-tested without a browser.
 import { deriveDotStatus, type HeatmapChapter, type QuestionDotStatus } from '@quiz/ui';
-import type { OverviewChapter, OverviewItem } from '@/lib/questions/overview-data';
+import type { OverviewItem } from '@/lib/questions/overview-data';
+import type { PlacedQuestion } from '@/lib/questions/overview-placement';
 
-export const NO_CHAPTER_KEY = 'none';
-
-/** A heatmap question with the chapter it is shown under (panel title, labels). */
-export interface PlacedQuestion {
-  readonly item: OverviewItem;
-  readonly number: string;
-  readonly chapterKey: string;
-  readonly chapterTitle: string;
-  readonly chapterNumber: number | undefined;
-}
+export {
+  chapterKey,
+  findPlaced,
+  NO_CHAPTER_KEY,
+  placedTitle,
+  placeQuestions,
+  type PlacedQuestion,
+} from '@/lib/questions/overview-placement';
 
 export type StudyPatch = Partial<
   Pick<OverviewItem, 'status' | 'is_favorite' | 'needs_retry' | 'last_graded_result'>
@@ -26,10 +25,6 @@ export type StudyPatch = Partial<
 export interface StudyOverride {
   readonly patch: StudyPatch;
   readonly settledOn: readonly OverviewItem[] | null;
-}
-
-export function chapterKey(id: string | null): string {
-  return id ?? NO_CHAPTER_KEY;
 }
 
 /** `item` with its override, unless the server list moved on since the override settled. */
@@ -65,41 +60,6 @@ export function optimisticStatus(
   });
 }
 
-/** Questions in heatmap order, grouped by the response's `chapters` (API order). */
-export function placeQuestions(
-  chapters: readonly OverviewChapter[],
-  items: readonly OverviewItem[],
-): PlacedQuestion[] {
-  const byChapter = new Map<string, OverviewItem[]>();
-  for (const item of items) {
-    const key = chapterKey(item.chapter_id);
-    const list = byChapter.get(key);
-    if (list) list.push(item);
-    else byChapter.set(key, [item]);
-  }
-  const placed: PlacedQuestion[] = [];
-  const seen = new Set<string>();
-  const place = (key: string, title: string, number: number | null) => {
-    seen.add(key);
-    (byChapter.get(key) ?? []).forEach((item, index) => {
-      placed.push({
-        item,
-        // Unnumbered questions fall back to their position in the chapter.
-        number: String(item.question_number ?? index + 1),
-        chapterKey: key,
-        chapterTitle: title,
-        chapterNumber: number ?? undefined,
-      });
-    });
-  };
-  for (const chapter of chapters) place(chapterKey(chapter.id), chapter.title, chapter.number);
-  // Defensive: items whose group is missing from `chapters` still get a dot.
-  for (const key of byChapter.keys()) {
-    if (!seen.has(key)) place(key, key === NO_CHAPTER_KEY ? '챕터 없음' : '챕터', null);
-  }
-  return placed;
-}
-
 export function heatmapChapters(placed: readonly PlacedQuestion[]): HeatmapChapter[] {
   const chapters: HeatmapChapter[] = [];
   let current: HeatmapChapter | undefined;
@@ -126,13 +86,4 @@ export function heatmapChapters(placed: readonly PlacedQuestion[]): HeatmapChapt
     });
   }
   return chapters;
-}
-
-/**
- * `3장 12번 문제` (or `<chapter title> 12번 문제`): the panel title, matching the dot label's
- * title (@quiz/ui `questionDotLabel`) so the panel names the question the dot announced.
- */
-export function placedTitle(p: PlacedQuestion): string {
-  const chapter = p.chapterNumber !== undefined ? `${p.chapterNumber}장` : p.chapterTitle;
-  return `${chapter} ${p.number}번 문제`;
 }

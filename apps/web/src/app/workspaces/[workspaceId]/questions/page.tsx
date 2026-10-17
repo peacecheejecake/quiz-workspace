@@ -5,7 +5,7 @@
 import type { Metadata } from 'next';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
 import { loadOverview } from '@/lib/questions/overview-data';
-import { parseOverviewFilters } from '@/lib/questions/overview-filters';
+import { openQuestionId, parseOverviewFilters } from '@/lib/questions/overview-filters';
 import { requireWorkspace } from '@/lib/workspaces/data';
 
 export const metadata: Metadata = { title: '문제 Heatmap' };
@@ -21,7 +21,7 @@ export default async function Page({
   const filters = parseOverviewFilters(query);
   const [workspace, data] = await Promise.all([
     requireWorkspace(workspaceId),
-    loadOverview(workspaceId, filters),
+    loadOverview(workspaceId, filters, openQuestionId(query)),
   ]);
   const readOnly =
     workspace.status === 'archived' ? 'archived' : workspace.role === 'viewer' ? 'viewer' : null;
@@ -35,6 +35,7 @@ export default async function Page({
         overview={data.overview}
         chapterChoices={data.chapterChoices}
         failure={data.failure}
+        requested={data.requested}
         panelScreenId="QPLAY-01"
       />
     </div>

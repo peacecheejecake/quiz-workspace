@@ -29,6 +29,8 @@ export interface PracticeQuestion {
   readonly preview: string;
   readonly isFavorite: boolean;
   readonly needsRetry: boolean;
+  /** A favorite/retry change is being saved: the toggles show the saved state and wait. */
+  readonly savingFlags?: boolean;
 }
 
 export interface PracticePanelProps {
@@ -139,11 +141,17 @@ export function PracticePanel({
           <>
             <FavoriteToggle
               pressed={view.isFavorite}
-              onPressedChange={(pressed) => onFlagsChange(view.id, { is_favorite: pressed })}
+              aria-disabled={view.savingFlags || undefined}
+              onPressedChange={(pressed) => {
+                if (!view.savingFlags) onFlagsChange(view.id, { is_favorite: pressed });
+              }}
             />
             <RetryToggle
               pressed={view.needsRetry}
-              onPressedChange={(pressed) => onFlagsChange(view.id, { needs_retry: pressed })}
+              aria-disabled={view.savingFlags || undefined}
+              onPressedChange={(pressed) => {
+                if (!view.savingFlags) onFlagsChange(view.id, { needs_retry: pressed });
+              }}
             />
           </>
         ) : undefined
