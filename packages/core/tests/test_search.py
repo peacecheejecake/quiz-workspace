@@ -15,7 +15,13 @@ relevant hit (0 when none in the top 10). Measured (default limits, no reranker)
   0.667 / 0.917. Per direction (one book at a time) hybrid R@5 is 1.0 for KO->KO, KO->EN,
   EN->KO and EN->EN (MRR 0.833 / 1.0 / 1.0 / 1.0). Over both books together, plain RRF lets
   same-language keyword hits push the cross-language section below rank 5, so hybrid trails
-  semantic there: a tuning item for M2.4/M2.6 (reranker, weighted fusion).
+  semantic there.
+- With Qwen3-Reranker-0.6B on the top 20 (M2.4, reranker input = chunk ``content``): semantic
+  and hybrid both reach R@5 1.000 / MRR 0.917 over both books (the reranker restores the
+  cross-language section); per direction R@5 stays 1.0 everywhere, MRR 0.833 / 0.833 / 1.0 / 1.0
+  (KO->EN drops from 1.0: one query ranks a same-chapter sibling first). Keyword is unchanged
+  (0.500 / 0.917: the reranker cannot add cross-language candidates BM25 never returned). With
+  ``search_text`` (breadcrumb) as reranker input hybrid MRR was 0.889, so ``content`` is used.
 """
 
 from __future__ import annotations
@@ -49,6 +55,7 @@ from book_core.reranker import FakeReranker
 from book_core.search import (
     MAX_RESULTS,
     InvalidQueryError,
+    RerankMode,
     SearchFilters,
     SearchLimits,
     SearchResult,
@@ -465,6 +472,99 @@ def test_reranker_sees_the_fused_top_n_and_decides_the_final_order() -> None:
     assert any("rerank_top" in w for w in result.warnings)
 
 
+class FailingReranker(FakeReranker):
+    def __init__(self, scores: BaseException | list[float]) -> None:
+        super().__init__()
+        self.scores = scores
+
+    def score(self, query: str, passages: Sequence[str]) -> list[float]:
+        if isinstance(self.scores, BaseException):
+            raise self.scores
+        return self.scores
+
+
+def _six() -> CannedStore:
+    chunks = [_child(f"c{i}") for i in range(6)]
+    return CannedStore(
+        [Candidate(c, 10.0 - i) for i, c in enumerate(chunks)],
+        [Candidate(c, 1.0 - i / 10) for i, c in enumerate(chunks)],
+    )
+
+
+@pytest.mark.parametrize(
+    ("scores", "error"),
+    [
+        (RuntimeError("model crashed"), "RuntimeError"),
+        (MemoryError(), "MemoryError"),
+        ([1.0], "RuntimeError"),  # wrong count
+        ([1.0, math.nan, 0.0], "RuntimeError"),  # non-finite
+    ],
+)
+def test_reranker_failure_keeps_the_first_stage_order(
+    scores: BaseException | list[float], error: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    limits = SearchLimits(rerank_top=3, results=5)
+    baseline = SearchService(_six(), limits=limits).search("secret query", _scope())
+    service = SearchService(_six(), reranker=FailingReranker(scores), limits=limits)
+    with caplog.at_level("WARNING", logger="book_core.search.service"):
+        result = service.search("secret query", _scope())
+    # Not cut to rerank_top: the full first-stage list up to `results`, with its own scores.
+    assert _ids(result) == _ids(baseline) == ["c0", "c1", "c2", "c3", "c4"]
+    assert {h.hit.score_type for h in result.hits} == {ScoreType.RRF}
+    assert all("rerank" not in h.scores for h in result.hits)
+    assert result.warnings == (f"reranker failed ({error}); first-stage order kept",)
+    assert "reranker" in caplog.text
+    assert "secret query" not in caplog.text
+    assert "passage c0" not in caplog.text
+
+
+def test_rerank_mode_off_skips_the_reranker() -> None:
+    reranker = RecordingReranker({"passage c5": 1.0})
+    off = SearchLimits(rerank=RerankMode.OFF, rerank_top=3, results=5)
+    result = SearchService(_six(), reranker=reranker, limits=off).search("q", _scope())
+    assert reranker.seen == []
+    assert _ids(result) == ["c0", "c1", "c2", "c3", "c4"]
+    assert result.warnings == ()
+    assert SearchLimits(rerank="off").rerank is RerankMode.OFF  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="always"):
+        SearchLimits(rerank="always")  # type: ignore[arg-type]
+    # Per-request limits override the service default in both directions.
+    on = SearchService(_six(), reranker=reranker, limits=off).search(
+        "q", _scope(), limits=SearchLimits(rerank_top=6, results=3)
+    )
+    assert _ids(on) == ["c5", "c0", "c1"]
+
+
+def test_reranker_ties_keep_the_first_stage_order_in_every_mode() -> None:
+    reranker = RecordingReranker({})  # every passage scores 0.0
+    for mode in SearchMode:
+        plain = SearchService(_six()).search("q", _scope(), mode=mode)
+        tied = SearchService(_six(), reranker=reranker).search("q", _scope(), mode=mode)
+        assert _ids(tied) == _ids(plain), mode
+        assert [h.hit.rank for h in tied.hits] == list(range(1, 7))
+        assert {h.hit.score for h in tied.hits} == {0.0}
+
+
+def test_rerank_top_bounds_what_the_reranker_sees() -> None:
+    reranker = RecordingReranker({"passage c4": 2.0, "passage c5": 3.0})
+    # rerank_top above the candidate count: every candidate is reranked, no warning.
+    wide = SearchService(_six(), reranker=reranker, limits=SearchLimits(rerank_top=50, results=4))
+    result = wide.search("q", _scope())
+    assert reranker.seen[-1] == [f"passage c{i}" for i in range(6)]
+    assert _ids(result) == ["c5", "c4", "c0", "c1"]
+    assert result.warnings == ()
+    # rerank_top below: the tail is never seen, so it cannot be promoted.
+    narrow = SearchService(_six(), reranker=reranker, limits=SearchLimits(rerank_top=4))
+    assert _ids(narrow.search("q", _scope())) == ["c0", "c1", "c2", "c3"]
+    assert reranker.seen[-1] == [f"passage c{i}" for i in range(4)]
+    # The reranker sees the passage content, not the breadcrumb-prefixed search_text.
+    crumbed = _child("x").model_copy(update={"search_text": "Ch > Sec\nbody", "content": "body"})
+    SearchService(CannedStore([Candidate(crumbed, 1.0)], []), reranker=reranker).search(
+        "q", _scope(), mode="keyword"
+    )
+    assert reranker.seen[-1] == ["body"]
+
+
 def test_limits_are_validated_and_capped(memory_store: QdrantIndexStore) -> None:
     with pytest.raises(ValueError, match="results"):
         SearchLimits(results=0)
@@ -621,17 +721,24 @@ def _qwen3() -> Embedder:
     return Qwen3Embedder(Qwen3EmbedderConfig(dimension=256))
 
 
-@pytest.mark.models
-def test_search_seed_with_qwen3_hybrid() -> None:
+@pytest.fixture(scope="module")
+def qwen3_store() -> Iterator[QdrantIndexStore]:
     client = QdrantClient(":memory:")
     store = QdrantIndexStore(client, _qwen3())
     _index(store)
-    service = SearchService(store)
+    yield store
+    client.close()
+
+
+def _seed_report(
+    service: SearchService, modes: Sequence[SearchMode]
+) -> dict[str, dict[str, float]]:
+    """Seed metrics over both books (``<mode>``) and per direction, one book at a time
+    (``<mode> <query language>-><book language>``)."""
     report: dict[str, dict[str, float]] = {}
-    for mode in (SearchMode.KEYWORD, SearchMode.SEMANTIC, SearchMode.HYBRID):
+    for mode in modes:
         metrics = _seed_metrics(service, mode, _scope())
         report[mode.value] = {"R@5": metrics.recall_at_5, "MRR": metrics.mrr}
-        # Per direction: query language -> book language.
         for query in SEED:
             for book, lang in (("book-ko", "ko"), ("book-en", "en")):
                 result = service.search(
@@ -646,12 +753,41 @@ def test_search_seed_with_qwen3_hybrid() -> None:
                 bucket = report.setdefault(f"{mode.value} {query['language']}->{lang}", {})
                 bucket["MRR"] = bucket.get("MRR", 0.0) + rr / 3
                 bucket["R@5"] = bucket.get("R@5", 0.0) + (bool(relevant & set(judged[:5]))) / 3
+    return report
+
+
+DIRECTIONS = ("ko->ko", "ko->en", "en->ko", "en->en")
+
+
+@pytest.mark.models
+def test_search_seed_with_qwen3_hybrid(qwen3_store: QdrantIndexStore) -> None:
+    report = _seed_report(SearchService(qwen3_store), list(SearchMode))
     print(json.dumps(report, indent=1, sort_keys=True))
-    client.close()
     assert report["hybrid"]["R@5"] >= SEED_QWEN3_MIN["hybrid R@5"]
     assert report["hybrid"]["MRR"] >= SEED_QWEN3_MIN["hybrid MRR"]
-    for direction in ("ko->ko", "ko->en", "en->ko", "en->en"):
+    for direction in DIRECTIONS:
         assert report[f"hybrid {direction}"]["R@5"] == 1.0, direction
 
 
+@pytest.mark.models
+def test_qwen3_reranker_lifts_hybrid_on_the_seed_set(qwen3_store: QdrantIndexStore) -> None:
+    from book_core.reranker import Qwen3Reranker
+
+    modes = (SearchMode.SEMANTIC, SearchMode.HYBRID)
+    plain = _seed_report(SearchService(qwen3_store), modes)
+    reranked = _seed_report(SearchService(qwen3_store, reranker=Qwen3Reranker()), modes)
+    print(json.dumps({"plain": plain, "reranked": reranked}, indent=1, sort_keys=True))
+    for mode in ("semantic", "hybrid"):
+        assert reranked[mode]["R@5"] >= SEED_RERANK_MIN[f"{mode} R@5"], mode
+        assert reranked[mode]["MRR"] >= SEED_RERANK_MIN[f"{mode} MRR"], mode
+        assert reranked[mode]["MRR"] >= plain[mode]["MRR"], mode
+        assert reranked[mode]["R@5"] >= plain[mode]["R@5"], mode
+        for direction in DIRECTIONS:
+            assert reranked[f"{mode} {direction}"]["R@5"] == 1.0, (mode, direction)
+    # Over both books the reranker restores the cross-language section RRF pushed out.
+    assert reranked["hybrid"]["R@5"] > plain["hybrid"]["R@5"]
+
+
 SEED_QWEN3_MIN = {"hybrid R@5": 0.66, "hybrid MRR": 0.9}
+# Measured with Qwen3-Reranker-0.6B on `content`: semantic and hybrid R@5 1.000 / MRR 0.917.
+SEED_RERANK_MIN = {"semantic R@5": 1.0, "semantic MRR": 0.9, "hybrid R@5": 1.0, "hybrid MRR": 0.9}

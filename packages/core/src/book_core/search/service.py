@@ -3,7 +3,9 @@
 Flow (docs/architecture.md §4): BM25 sparse and/or dense candidates from Qdrant, restricted by the
 server-built ``SearchScope`` (workspace + published revision ids) and the request filters, both
 applied inside the Qdrant filter; hybrid fuses the two candidate lists with RRF; an optional
-reranker rescores the top ``rerank_top``; the first ``results`` are returned.
+reranker rescores the top ``rerank_top`` (M2.4; ``SearchLimits.rerank`` = ``off`` skips it); the
+first ``results`` are returned. A failing reranker never fails the search: the first-stage order
+is kept and the result carries a warning.
 
 Scores are reported as what they are (``bm25`` = Qdrant sparse dot product with IDF, ``cosine``,
 ``rrf``, ``rerank``); they are never normalised into a common scale. The raw component scores of
@@ -20,6 +22,8 @@ import logging
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import Any
 
 from book_core.contracts import (
     ChunkLevel,
@@ -43,6 +47,14 @@ ChunkKey = tuple[str, str, str]
 """(document_id, revision_id, chunk_id): one indexed point within a scope."""
 
 
+class RerankMode(StrEnum):
+    """``top_k``: rerank the first ``rerank_top`` first-stage candidates (when the service has a
+    reranker); ``off``: the first-stage order is final."""
+
+    OFF = "off"
+    TOP_K = "top_k"
+
+
 class SearchScopeError(ValueError):
     """The request has no valid server-built scope (no workspace or no published revision)."""
 
@@ -59,8 +71,10 @@ class SearchLimits:
     rerank_top: int = 20
     results: int = 10
     rrf_k: int = DEFAULT_RRF_K
+    rerank: RerankMode = RerankMode.TOP_K
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "rerank", RerankMode(self.rerank))
         for name in ("dense_candidates", "keyword_candidates", "rerank_top", "results"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -70,7 +84,7 @@ class SearchLimits:
 
     def capped(self) -> tuple[SearchLimits, list[str]]:
         warnings: list[str] = []
-        values: dict[str, int] = {}
+        values: dict[str, Any] = {}
         for name, cap in (
             ("dense_candidates", MAX_CANDIDATES),
             ("keyword_candidates", MAX_CANDIDATES),
@@ -139,9 +153,14 @@ class SearchResult:
 class SearchService:
     """Runs scoped searches over an ``IndexStore``.
 
-    ``reranker`` (``Reranker`` protocol; M2.4 supplies the real one) rescores the top
-    ``SearchLimits.rerank_top`` candidates of every mode; without it the first-stage order is
-    final. Rerankers see each chunk's ``search_text`` (breadcrumb-prefixed).
+    ``reranker`` (``Reranker`` protocol, e.g. ``Qwen3Reranker``) rescores the top
+    ``SearchLimits.rerank_top`` candidates of every mode unless ``SearchLimits.rerank`` is
+    ``off``; without it the first-stage order is final. Rerankers see each chunk's ``content``
+    (the passage text without the breadcrumb that ``search_text`` adds for BM25 and embeddings):
+    on the seed set with Qwen3-Reranker it ranked as well or better on every slice (hybrid MRR
+    0.917 vs 0.889 over both books; the shared chapter breadcrumb makes sibling sections look
+    alike). If the reranker raises or returns unusable scores, the first-stage order is kept and
+    the result carries a warning.
     """
 
     def __init__(
@@ -213,12 +232,22 @@ class SearchService:
         counts = {name: len(items) for name, items in lists.items()}
 
         ranked = _first_stage(mode, lists, limits.rrf_k)
-        if self._reranker is not None and ranked:
-            ranked = _rerank(self._reranker, prepared.text, ranked[: limits.rerank_top])
-            if limits.results > limits.rerank_top:
-                warnings.append(
-                    f"results limited to rerank_top ({limits.rerank_top}) when reranking"
+        if self._reranker is not None and ranked and limits.rerank is RerankMode.TOP_K:
+            try:
+                ranked = _rerank(self._reranker, prepared.text, ranked[: limits.rerank_top])
+            except Exception as exc:
+                # Never log the query or passages; the exception type is enough to triage.
+                logger.warning(
+                    "search: reranker %s failed (%s); keeping first-stage order",
+                    self._reranker.model_name,
+                    type(exc).__name__,
                 )
+                warnings.append(f"reranker failed ({type(exc).__name__}); first-stage order kept")
+            else:
+                if limits.results > limits.rerank_top:
+                    warnings.append(
+                        f"results limited to rerank_top ({limits.rerank_top}) when reranking"
+                    )
         ranked = ranked[: limits.results]
 
         parents: dict[str, SearchChunk] = {}
@@ -425,7 +454,7 @@ def _first_stage(mode: SearchMode, lists: Mapping[str, list[Candidate]], k: int)
 
 def _rerank(reranker: Reranker, query: str, items: list[_Scored]) -> list[_Scored]:
     """Rescore ``items``; ties keep the first-stage order."""
-    scores = reranker.score(query, [item.chunk.search_text for item in items])
+    scores = reranker.score(query, [item.chunk.content for item in items])
     if len(scores) != len(items):
         raise RuntimeError("reranker returned the wrong number of scores")
     rescored = []
