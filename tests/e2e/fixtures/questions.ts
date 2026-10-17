@@ -31,7 +31,7 @@
 //      otherwise 422.
 //   A3 `chapter_id` is a document outline node id (GET /documents/{id}/outline, M3.0 assumption).
 //   A4 Question PDFs reuse the document upload flow (decided, implementation-plan §7): the
-//      upload-intent body carries `type: "question_paper"` (documents.type; such documents are
+//      upload-intent body carries `document_type: "question_paper"` (documents.type; such documents are
 //      excluded from book search by default), then
 //      POST /workspaces/{id}/question-imports {document_id} (+ optional `Idempotency-Key`
 //           header: same key → same run) → 202 ImportRun

@@ -107,7 +107,7 @@ class QuestionClient(_m3.Client):
                 "size_bytes": len(pdf),
                 "content_type": "application/pdf",
                 "sha256": sha256,
-                "type": "question_paper",
+                "document_type": "question_paper",
             },
             (200, 201),
         )

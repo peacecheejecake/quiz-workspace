@@ -150,7 +150,7 @@ export async function uploadBook(
 
 /**
  * upload-intent → direct Storage upload → complete-upload for any synthetic PDF fixture.
- * `type` is the document type (`question_paper` for question PDFs, implementation-plan §7);
+ * `type` is sent as `document_type` (`question_paper` for question PDFs, implementation-plan §7);
  * omitted for books, which keep the server default.
  */
 export async function uploadPdf(
@@ -172,7 +172,7 @@ export async function uploadPdf(
       size_bytes: fixture.size,
       content_type: 'application/pdf',
       sha256: fixture.sha256,
-      ...(type ? { type } : {}),
+      ...(type ? { document_type: type } : {}),
     },
     [200, 201],
   );
