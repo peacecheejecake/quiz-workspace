@@ -23,7 +23,8 @@ COMPOSE := docker compose -f infra/compose.yaml
 SUPABASE := pnpm exec supabase
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
-	test test-ts test-py infra-up infra-down infra-status infra-reset
+	test test-ts test-py infra-up infra-down infra-status infra-reset \
+	contracts contracts-check api-dev
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -32,7 +33,7 @@ install: ## Install JS (pnpm) and Python (uv) dependencies
 	pnpm install
 	uv sync
 
-lint: lint-ts lint-py ## Lint + format check (TS and Python)
+lint: lint-ts lint-py contracts-check ## Lint + format check (TS and Python) + contract staleness
 
 lint-ts:
 	pnpm exec eslint .
@@ -91,3 +92,15 @@ infra-status: ## Show compose service health and Supabase local URLs
 infra-reset: ## Stop local infra and DELETE its data volumes (Postgres, Storage, Qdrant, Redis)
 	$(SUPABASE) stop --no-backup
 	$(COMPOSE) down --volumes
+
+# OpenAPI contract: FastAPI app -> contracts/openapi.json -> packages/api-client TS types.
+contracts: ## Export contracts/openapi.json and regenerate the TS API client
+	uv run python -m quiz_api.openapi_export
+	pnpm --filter @quiz/api-client run generate
+
+contracts-check: ## Fail if contracts/openapi.json or the TS API client is stale
+	uv run python -m quiz_api.openapi_export --check
+	pnpm --filter @quiz/api-client run check:generated
+
+api-dev: ## Run the API locally with reload (reads .env)
+	uv run python -m quiz_api.serve --reload
