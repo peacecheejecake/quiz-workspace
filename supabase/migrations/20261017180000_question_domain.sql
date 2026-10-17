@@ -220,6 +220,12 @@ alter table public.questions
   references public.question_revisions (workspace_id, question_id, id);
 
 -- ---------------------------------------------------------------------------------------------
+-- async_jobs (workspace_id, id): target of the runs' workspace-scoped job FKs. Additive; id is
+-- already the primary key, so this never rejects an existing row.
+-- ---------------------------------------------------------------------------------------------
+create unique index async_jobs_workspace_id_id_key on public.async_jobs (workspace_id, id);
+
+-- ---------------------------------------------------------------------------------------------
 -- question_import_runs: one question-PDF import (questions.md §6). Document columns get their FK
 -- from M3.2a. Model/prompt are recorded for provenance; the job row carries retries/errors.
 -- ---------------------------------------------------------------------------------------------
@@ -231,7 +237,7 @@ create table public.question_import_runs (
   source_document_id uuid,
   source_document_revision_id uuid,
   target_chapter_id uuid,
-  async_job_id uuid references public.async_jobs (id) on delete set null,
+  async_job_id uuid,
   status text not null default 'queued',
   llm_model text,
   prompt_version text,
@@ -240,6 +246,9 @@ create table public.question_import_runs (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint question_import_runs_workspace_id_id_key unique (workspace_id, id),
+  -- The job must belong to the run's workspace; losing the job only clears the reference.
+  constraint question_import_runs_async_job_fk foreign key (workspace_id, async_job_id)
+    references public.async_jobs (workspace_id, id) on delete set null (async_job_id),
   constraint question_import_runs_status_valid
     check (status in ('queued', 'running', 'succeeded', 'failed', 'cancelled')),
   constraint question_import_runs_finished_iff_terminal
@@ -255,7 +264,8 @@ create table public.question_import_runs (
 create index question_import_runs_workspace_created_idx
   on public.question_import_runs (workspace_id, created_at desc);
 create index question_import_runs_created_by_idx on public.question_import_runs (created_by);
-create index question_import_runs_async_job_id_idx on public.question_import_runs (async_job_id);
+create index question_import_runs_async_job_idx
+  on public.question_import_runs (workspace_id, async_job_id) where async_job_id is not null;
 
 create trigger question_import_runs_set_updated_at
   before update on public.question_import_runs
@@ -273,7 +283,7 @@ create table public.question_generation_runs (
   source_question_revision_id uuid not null,
   variation_types text[] not null,
   candidate_count integer not null default 1,
-  async_job_id uuid references public.async_jobs (id) on delete set null,
+  async_job_id uuid,
   status text not null default 'queued',
   llm_model text,
   prompt_version text,
@@ -283,6 +293,8 @@ create table public.question_generation_runs (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint question_generation_runs_workspace_id_id_key unique (workspace_id, id),
+  constraint question_generation_runs_async_job_fk foreign key (workspace_id, async_job_id)
+    references public.async_jobs (workspace_id, id) on delete set null (async_job_id),
   constraint question_generation_runs_source_revision_fk
     foreign key (workspace_id, source_question_id, source_question_revision_id)
     references public.question_revisions (workspace_id, question_id, id),
@@ -310,8 +322,8 @@ create index question_generation_runs_source_idx
   on public.question_generation_runs (workspace_id, source_question_id, source_question_revision_id);
 create index question_generation_runs_created_by_idx
   on public.question_generation_runs (created_by);
-create index question_generation_runs_async_job_id_idx
-  on public.question_generation_runs (async_job_id);
+create index question_generation_runs_async_job_idx
+  on public.question_generation_runs (workspace_id, async_job_id) where async_job_id is not null;
 
 create trigger question_generation_runs_set_updated_at
   before update on public.question_generation_runs
@@ -403,7 +415,8 @@ create table public.question_sources (
     references public.question_import_runs (workspace_id, id),
   constraint question_sources_page_range check (
     (page_start is null and page_end is null)
-    or (page_start >= 1 and page_end >= page_start)
+    or (page_start is not null and page_end is not null
+        and page_start >= 1 and page_end >= page_start)
   ),
   constraint question_sources_block_ids_valid check (public.question_ids_valid(block_ids)),
   constraint question_sources_locations_array check (jsonb_typeof(locations) = 'array'),
@@ -505,12 +518,16 @@ create table public.question_attempts (
   constraint question_attempts_result_valid check (result in ('correct', 'incorrect', 'pending')),
   constraint question_attempts_grading_method_valid
     check (grading_method is null or grading_method in ('auto', 'self', 'reviewer')),
+  -- Every term is null-safe, so the expression is TRUE only for a valid row (a NULL result
+  -- would let the CHECK pass).
   constraint question_attempts_grading_consistent check (
     (result = 'pending' and grading_method is null and graded_at is null
        and grades_attempt_id is null and graded_by is null)
     or (result in ('correct', 'incorrect') and graded_at is not null and (
-          (grading_method = 'auto' and grades_attempt_id is null and graded_by is null)
-          or (grading_method in ('self', 'reviewer') and grades_attempt_id is not null)
+          (coalesce(grading_method = 'auto', false)
+             and grades_attempt_id is null and graded_by is null)
+          or (coalesce(grading_method in ('self', 'reviewer'), false)
+             and grades_attempt_id is not null)
        ))
   )
 );
@@ -554,7 +571,8 @@ create table public.question_user_states (
   constraint question_user_states_viewed_pair
     check ((first_viewed_at is null) = (last_viewed_at is null)),
   constraint question_user_states_viewed_order
-    check (last_viewed_at is null or last_viewed_at >= first_viewed_at)
+    check (last_viewed_at is null
+           or (first_viewed_at is not null and last_viewed_at >= first_viewed_at))
 );
 
 -- Overview: the caller's states for one workspace.

@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(152);
+select plan(164);
 
 -- Structure -------------------------------------------------------------------------------------
 select columns_are('public', 'questions',
@@ -271,6 +271,26 @@ select throws_ok(
   $$ insert into public.question_sources (workspace_id, question_id, page_start, page_end)
      values ('10000000-0000-4000-8000-0000000041b1', '20000000-0000-4000-8000-0000000041c1', 5, 4) $$,
   '23514', null, 'page range must be ordered');
+select throws_ok(
+  $$ insert into public.question_sources (workspace_id, question_id, page_start, page_end)
+     values ('10000000-0000-4000-8000-0000000041b1', '20000000-0000-4000-8000-0000000041c1',
+             null, -1) $$,
+  '23514', null, 'page range rejects a missing start with a negative end');
+select throws_ok(
+  $$ insert into public.question_sources (workspace_id, question_id, page_start, page_end)
+     values ('10000000-0000-4000-8000-0000000041b1', '20000000-0000-4000-8000-0000000041c1',
+             3, null) $$,
+  '23514', null, 'page range rejects a start without an end');
+select throws_ok(
+  $$ insert into public.question_sources (workspace_id, question_id, page_start, page_end)
+     values ('10000000-0000-4000-8000-0000000041b1', '20000000-0000-4000-8000-0000000041c1',
+             null, 5) $$,
+  '23514', null, 'page range rejects an end without a start');
+select throws_ok(
+  $$ insert into public.question_sources (workspace_id, question_id, page_start, page_end)
+     values ('10000000-0000-4000-8000-0000000041b1', '20000000-0000-4000-8000-0000000041c1',
+             0, 1) $$,
+  '23514', null, 'pages start at 1');
 
 -- Practice sessions -----------------------------------------------------------------------------
 insert into public.practice_sessions
@@ -339,6 +359,24 @@ select throws_ok(
              '30000000-0000-4000-8000-0000000041d1', '40000000-0000-4000-8000-0000000041e1',
              '00000000-0000-4000-8000-0000000041a1', '{}', 'correct', 'auto') $$,
   '23514', null, 'a graded attempt needs graded_at');
+select throws_ok(
+  $$ insert into public.question_attempts
+       (workspace_id, question_id, question_revision_id, practice_session_id, user_id,
+        submitted_answer, result, graded_at)
+     values ('10000000-0000-4000-8000-0000000041b1', '20000000-0000-4000-8000-0000000041c1',
+             '30000000-0000-4000-8000-0000000041d1', '40000000-0000-4000-8000-0000000041e1',
+             '00000000-0000-4000-8000-0000000041a1', '{}', 'correct', now()) $$,
+  '23514', null, 'a graded attempt needs a grading method (null-safe CHECK)');
+select throws_ok(
+  $$ insert into public.question_attempts
+       (workspace_id, question_id, question_revision_id, practice_session_id, user_id,
+        submitted_answer, result, graded_at, grades_attempt_id,
+        graded_by)
+     values ('10000000-0000-4000-8000-0000000041b2', '20000000-0000-4000-8000-0000000041c3',
+             '30000000-0000-4000-8000-0000000041d3', '40000000-0000-4000-8000-0000000041e2',
+             '00000000-0000-4000-8000-0000000041a1', '{}', 'incorrect', now(),
+             '50000000-0000-4000-8000-0000000041f2', '00000000-0000-4000-8000-0000000041a1') $$,
+  '23514', null, 'a grade of a pending attempt still needs a grading method');
 select throws_ok(
   $$ insert into public.question_attempts
        (workspace_id, question_id, question_revision_id, practice_session_id, user_id,
@@ -444,6 +482,11 @@ select throws_ok(
      values ('00000000-0000-4000-8000-0000000041a1', '20000000-0000-4000-8000-0000000041c2',
              '10000000-0000-4000-8000-0000000041b2') $$,
   '23503', null, 'user state workspace must match the question');
+select throws_ok(
+  $$ insert into public.question_user_states (user_id, question_id, workspace_id, last_viewed_at)
+     values ('00000000-0000-4000-8000-0000000041a1', '20000000-0000-4000-8000-0000000041c2',
+             '10000000-0000-4000-8000-0000000041b1', now()) $$,
+  '23514', null, 'last_viewed_at requires first_viewed_at');
 
 -- Generation / import runs, drafts and lineage -------------------------------------------------
 insert into public.question_generation_runs
@@ -461,6 +504,42 @@ select throws_ok(
      values ('10000000-0000-4000-8000-0000000041b1', '20000000-0000-4000-8000-0000000041c1',
              '30000000-0000-4000-8000-0000000041d1', array['OPTION_SHUFFLE']) $$,
   '23514', null, 'OPTION_SHUFFLE never creates a generation run');
+select throws_ok(
+  $$ insert into public.question_generation_runs
+       (workspace_id, source_question_id, source_question_revision_id, variation_types)
+     values ('10000000-0000-4000-8000-0000000041b1', '20000000-0000-4000-8000-0000000041c1',
+             '30000000-0000-4000-8000-0000000041d1', array['PARAPHRASE', null]) $$,
+  '23514', null, 'variation types cannot contain null');
+
+insert into public.async_jobs (id, workspace_id, job_type) values
+  ('80000000-0000-4000-8000-000000004101', '10000000-0000-4000-8000-0000000041b1', 'question.import'),
+  ('80000000-0000-4000-8000-000000004102', '10000000-0000-4000-8000-0000000041b2', 'question.import');
+select throws_ok(
+  $$ update public.question_import_runs set async_job_id = '80000000-0000-4000-8000-000000004102'
+      where id = '60000000-0000-4000-8000-000000004102' $$,
+  '23503', null, 'an import run cannot reference another workspace''s job');
+select throws_ok(
+  $$ update public.question_generation_runs
+        set async_job_id = '80000000-0000-4000-8000-000000004102'
+      where id = '60000000-0000-4000-8000-000000004101' $$,
+  '23503', null, 'a generation run cannot reference another workspace''s job');
+select lives_ok(
+  $$ update public.question_import_runs set async_job_id = '80000000-0000-4000-8000-000000004101'
+      where id = '60000000-0000-4000-8000-000000004102';
+     update public.question_generation_runs
+        set async_job_id = '80000000-0000-4000-8000-000000004101'
+      where id = '60000000-0000-4000-8000-000000004101' $$,
+  'runs reference a job of their own workspace');
+delete from public.async_jobs where id = '80000000-0000-4000-8000-000000004101';
+select results_eq(
+  $$ select workspace_id, async_job_id from public.question_import_runs
+      where id = '60000000-0000-4000-8000-000000004102'
+     union all
+     select workspace_id, async_job_id from public.question_generation_runs
+      where id = '60000000-0000-4000-8000-000000004101' $$,
+  $$ values ('10000000-0000-4000-8000-0000000041b1'::uuid, null::uuid),
+            ('10000000-0000-4000-8000-0000000041b1'::uuid, null::uuid) $$,
+  'deleting a job clears only the run''s job reference');
 select throws_ok(
   $$ insert into public.question_generation_runs
        (workspace_id, source_question_id, source_question_revision_id, variation_types)
