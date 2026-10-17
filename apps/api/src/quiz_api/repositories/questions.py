@@ -254,6 +254,10 @@ class QuestionRepository:
     def commit(self) -> None:
         self._session.commit()
 
+    def savepoint(self) -> Any:
+        """A SAVEPOINT context: rolled back (with the locks taken inside it) on an exception."""
+        return self._session.begin_nested()
+
     def rollback(self) -> None:
         self._session.rollback()
 
@@ -402,13 +406,48 @@ class QuestionRepository:
                 documents.c.deleted_at.is_(None),
                 documents.c.active_revision_id == chapters.c.document_revision_id,
             )
-            # FOR SHARE of the document: a concurrent publish (which switches the active revision
-            # and remaps question chapters in one transaction, 20261018003400) either committed
-            # before this check or waits until this question is saved, so no question keeps a
-            # chapter of a superseded revision.
-            .with_for_update(read=True, of=documents)
         ).first()
         return found is not None
+
+    def lock_chapter_documents(
+        self, workspace_id: uuid.UUID, chapter_ids: Iterable[uuid.UUID | None]
+    ) -> None:
+        """FOR SHARE on the documents of these chapters, in document id order.
+
+        Lock order for question writes that set or keep a chapter: documents first, then the
+        question row. A publish holds the document FOR UPDATE and then (remap trigger,
+        20261018003400) updates the questions of its chapters; taking the document before the
+        question means the two never wait on each other in opposite orders. Holding it also makes
+        `chapter_is_current` and the save atomic with respect to a publish: a publish either
+        committed before (the check sees the new active revision) or waits until this question is
+        saved (and then remaps it).
+        """
+        ids = sorted({c for c in chapter_ids if c is not None})
+        if not ids:
+            return
+        self._session.execute(
+            select(documents.c.id)
+            .select_from(
+                chapters.join(
+                    documents,
+                    and_(
+                        documents.c.workspace_id == chapters.c.workspace_id,
+                        documents.c.id == chapters.c.document_id,
+                    ),
+                )
+            )
+            .where(chapters.c.workspace_id == workspace_id, chapters.c.id.in_(ids))
+            .order_by(documents.c.id)
+            .with_for_update(read=True, of=documents)
+        ).all()
+
+    def chapter_of(self, question_id: uuid.UUID) -> uuid.UUID | None:
+        """The question's current chapter (unlocked read, to choose the locks to take first;
+        a remap never moves a question to another document's chapter)."""
+        found = self._session.execute(
+            select(questions.c.chapter_id).where(questions.c.id == question_id)
+        ).scalar_one_or_none()
+        return cast(uuid.UUID | None, found)
 
     def live_documents(
         self, workspace_id: uuid.UUID, document_ids: Iterable[uuid.UUID]

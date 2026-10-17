@@ -52,11 +52,13 @@ import base64
 import binascii
 import json
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from fastapi.exceptions import RequestValidationError
+from psycopg import errors as pg_errors
 from pydantic import (
     AwareDatetime,
     BaseModel,
@@ -67,7 +69,7 @@ from pydantic import (
     ValidationError,
     field_validator,
 )
-from sqlalchemy.exc import DataError, IntegrityError
+from sqlalchemy.exc import DataError, DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from quiz_api.auth import CurrentUser
@@ -424,6 +426,34 @@ def _check_chapter(
         )
 
 
+# Lock conflicts that a retry resolves: a deadlock victim or a serialization failure. The lock
+# order (documents, then the question) avoids the known cycle with a publish; this is the safety
+# net for anything else.
+_RETRYABLE_LOCK_ERRORS = (pg_errors.DeadlockDetected, pg_errors.SerializationFailure)
+MAX_LOCK_ATTEMPTS = 3
+
+
+def _with_lock_retry[T](repo: QuestionRepository, attempt: Callable[[], T]) -> T:
+    """Run `attempt` in a SAVEPOINT; on a deadlock / serialization failure roll back to it
+    (releasing the locks it took, keeping the request's authorization locks) and run it again,
+    at most MAX_LOCK_ATTEMPTS times, then 503."""
+    for n in range(1, MAX_LOCK_ATTEMPTS + 1):
+        try:
+            with repo.savepoint():
+                return attempt()
+        except DBAPIError as exc:
+            if not isinstance(exc.orig, _RETRYABLE_LOCK_ERRORS):
+                raise
+            if n == MAX_LOCK_ATTEMPTS:
+                repo.rollback()
+                raise HTTPException(
+                    status_code=503,
+                    detail="The question is busy (a document is being published). Try again.",
+                    headers={"Retry-After": "1"},
+                ) from None
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 def _constraint_violation(
     repo: QuestionRepository, loc: tuple[str, ...] = ("body",)
 ) -> RequestValidationError:
@@ -531,13 +561,15 @@ def create_question(
         body.rubric,
     )
     issues.items.extend(content_issues(content, body.publication_status).items)
-    if body.chapter_id is not None:
-        _check_chapter(repo, access.workspace_id, body.chapter_id, issues)
     sources, revisions = _sources(repo, access.workspace_id, body.sources, issues)
-    issues.raise_if_any()
 
-    try:
-        question_id = repo.create(
+    def attempt() -> uuid.UUID:
+        # Same lock order as an edit: the chapter's document before anything else.
+        repo.lock_chapter_documents(access.workspace_id, [body.chapter_id])
+        if body.chapter_id is not None:
+            _check_chapter(repo, access.workspace_id, body.chapter_id, issues)
+        issues.raise_if_any()
+        return repo.create(
             workspace_id=access.workspace_id,
             actor_id=access.user_id,
             content=content,
@@ -547,6 +579,9 @@ def create_question(
             sources=sources,
             source_revisions=revisions,
         )
+
+    try:
+        question_id = _with_lock_retry(repo, attempt)
         created = repo.get(question_id)
         assert created is not None  # noqa: S101 - inserted above in this transaction
         result = _out(created)
@@ -651,68 +686,78 @@ def update_question(access: EditQuestion, body: QuestionUpdate, repo: QuestionRe
     """Edit (QBANK-01-AC03): a content change appends a revision and keeps option ids; a stale
     `base_revision_id` is 409 `stale-revision`."""
     _reject_unstorable(body)
-    current = _load(repo, access.resource_id, lock=True)
-    if body.base_revision_id != current.revision.id:
-        raise ProblemException(
-            409,
-            ProblemType.STALE_REVISION,
-            detail="The question changed since this edit started. Reload it and try again.",
-        )
-    sent = body.model_fields_set
-    issues = Issues()
-    if "question_type" in sent and body.question_type != current.question_type:
-        issues.add(
-            ("question_type",),
-            "The type of an existing question cannot change; create a new question instead.",
-        )
-    target: PublicationStatus = (
-        body.publication_status
-        if "publication_status" in sent and body.publication_status is not None
-        else current.publication_status
-    )
-    if not transition_allowed(current.publication_status, target):
-        issues.add(
-            ("publication_status",),
-            f"Cannot change publication status from {current.publication_status} to {target}.",
-        )
+    question_id = access.resource_id
 
-    old = current.content()
-    rev = current.revision
-    content = _content(
-        current.question_type,
-        body.stem if "stem" in sent and body.stem is not None else rev.stem,
-        body.options
-        if "options" in sent and body.options is not None
-        else [QuestionOption(id=o["id"], text=o["text"]) for o in rev.options],
-        body.correct_option_ids if "correct_option_ids" in sent else rev.correct_option_ids,
-        body.is_multi_answer
-        if "is_multi_answer" in sent and body.is_multi_answer is not None
-        else rev.is_multi_answer,
-        body.accepted_answers if "accepted_answers" in sent else rev.accepted_answers,
-        body.explanation if "explanation" in sent else rev.explanation,
-        body.rubric if "rubric" in sent else rev.rubric,
-    )
-    content_changed = content != old
-    if content_changed or target != current.publication_status:
-        issues.items.extend(content_issues(content, target).items)
+    def attempt() -> QuestionRecord:
+        # Lock order: the documents of the current and the requested chapter, then the question
+        # (QuestionRepository.lock_chapter_documents), as a publish does.
+        requested = body.chapter_id if "chapter_id" in body.model_fields_set else None
+        repo.lock_chapter_documents(
+            access.workspace.workspace_id, [repo.chapter_of(question_id), requested]
+        )
+        current = _load(repo, question_id, lock=True)
+        if body.base_revision_id != current.revision.id:
+            raise ProblemException(
+                409,
+                ProblemType.STALE_REVISION,
+                detail="The question changed since this edit started. Reload it and try again.",
+            )
+        sent = body.model_fields_set
+        issues = Issues()
+        if "question_type" in sent and body.question_type != current.question_type:
+            issues.add(
+                ("question_type",),
+                "The type of an existing question cannot change; create a new question instead.",
+            )
+        target: PublicationStatus = (
+            body.publication_status
+            if "publication_status" in sent and body.publication_status is not None
+            else current.publication_status
+        )
+        if not transition_allowed(current.publication_status, target):
+            issues.add(
+                ("publication_status",),
+                f"Cannot change publication status from {current.publication_status} to {target}.",
+            )
 
-    metadata: dict[str, Any] = {}
-    if "chapter_id" in sent and body.chapter_id != current.chapter_id:
-        if body.chapter_id is not None:
-            _check_chapter(repo, current.workspace_id, body.chapter_id, issues)
-        metadata["chapter_id"] = body.chapter_id
-    if "question_number" in sent and body.question_number != current.question_number:
-        metadata["question_number"] = body.question_number
-    if target != current.publication_status:
-        metadata["publication_status"] = target
-    new_sources: list[SourceInputRecord] | None = None
-    source_revisions: dict[uuid.UUID, uuid.UUID | None] = {}
-    if "sources" in sent and body.sources is not None:
-        new_sources, source_revisions = _sources(repo, current.workspace_id, body.sources, issues)
-    issues.raise_if_any()
+        old = current.content()
+        rev = current.revision
+        content = _content(
+            current.question_type,
+            body.stem if "stem" in sent and body.stem is not None else rev.stem,
+            body.options
+            if "options" in sent and body.options is not None
+            else [QuestionOption(id=o["id"], text=o["text"]) for o in rev.options],
+            body.correct_option_ids if "correct_option_ids" in sent else rev.correct_option_ids,
+            body.is_multi_answer
+            if "is_multi_answer" in sent and body.is_multi_answer is not None
+            else rev.is_multi_answer,
+            body.accepted_answers if "accepted_answers" in sent else rev.accepted_answers,
+            body.explanation if "explanation" in sent else rev.explanation,
+            body.rubric if "rubric" in sent else rev.rubric,
+        )
+        content_changed = content != old
+        if content_changed or target != current.publication_status:
+            issues.items.extend(content_issues(content, target).items)
 
-    changed = [k for k in metadata if k != "publication_status"]
-    try:
+        metadata: dict[str, Any] = {}
+        if "chapter_id" in sent and body.chapter_id != current.chapter_id:
+            if body.chapter_id is not None:
+                _check_chapter(repo, current.workspace_id, body.chapter_id, issues)
+            metadata["chapter_id"] = body.chapter_id
+        if "question_number" in sent and body.question_number != current.question_number:
+            metadata["question_number"] = body.question_number
+        if target != current.publication_status:
+            metadata["publication_status"] = target
+        new_sources: list[SourceInputRecord] | None = None
+        source_revisions: dict[uuid.UUID, uuid.UUID | None] = {}
+        if "sources" in sent and body.sources is not None:
+            new_sources, source_revisions = _sources(
+                repo, current.workspace_id, body.sources, issues
+            )
+        issues.raise_if_any()
+
+        changed = [k for k in metadata if k != "publication_status"]
         version = current.revision.version
         if content_changed:
             version = repo.append_revision(current, content, access.workspace.user_id)
@@ -739,7 +784,10 @@ def update_question(access: EditQuestion, body: QuestionUpdate, repo: QuestionRe
                 current.id,
                 {"from": current.publication_status, "to": target, "version": version},
             )
-        updated = _load(repo, current.id)
+        return _load(repo, current.id)
+
+    try:
+        updated = _with_lock_retry(repo, attempt)
         repo.commit()
     except (IntegrityError, DataError):
         raise _constraint_violation(repo) from None
