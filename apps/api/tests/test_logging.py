@@ -36,9 +36,14 @@ def test_authorization_header_never_reaches_logs(
     access_lines = [r.getMessage() for r in caplog.records if r.name == "quiz_api.access"]
     assert len(access_lines) == 3
     assert access_lines[2].startswith("GET /api/v1/nope 404 ")
-    assert TOKEN not in caplog.text
-    # `httpx` records are TestClient's own client-side request lines, not the server's.
-    server_text = "\n".join(r.getMessage() for r in caplog.records if r.name != "httpx")
+    # httpx/httpcore records are TestClient's own client-side request lines, not the server's.
+    # Everything else (app, uvicorn, starlette) is checked raw, with exception text, so the
+    # result does not depend on whether the redacting handler ran before caplog's.
+    plain = logging.Formatter()
+    server_records = [r for r in caplog.records if not r.name.startswith(("httpx", "httpcore"))]
+    server_text = "\n".join(plain.format(r) for r in server_records)
+    assert server_records
+    assert TOKEN not in server_text
     assert "Authorization" not in server_text
     assert "access_token" not in server_text
 
