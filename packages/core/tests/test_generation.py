@@ -358,6 +358,29 @@ def test_analogous_concept_needs_passages_and_cites_them() -> None:
     assert not draft.has_blocking_issues
 
 
+def test_citing_a_passage_already_in_the_source_evidence_counts_as_cited() -> None:
+    # The source was itself generated: its evidence is the very passage+quote cited again.
+    first, _ = run(candidate())
+    cited = first.drafts[0].evidence
+    source = SOURCE.model_copy(update={"evidence": cited})
+
+    result, _ = run(candidate(), source=source)
+    assert result.rejected == ()
+    (draft,) = result.drafts
+    assert draft.evidence == cited
+    assert "source_not_cited" not in codes(draft.validations)
+    assert validate_variant(draft, source=source, passages=(PASSAGE,)) == draft.validations
+
+    # Inherited provenance alone still does not cite a supplied passage.
+    other = SOURCE.model_copy(update={"evidence": (*SOURCE.evidence, *cited)})
+    issues = validate_variant(
+        draft.model_copy(update={"evidence": SOURCE.evidence}),
+        source=other,
+        passages=(PASSAGE,),
+    )
+    assert "source_not_cited" in codes(issues)
+
+
 def test_without_passages_the_draft_inherits_the_source_provenance() -> None:
     result, _ = run(candidate(citations=[]), passages=())
     (draft,) = result.drafts

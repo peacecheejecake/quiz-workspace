@@ -520,8 +520,9 @@ def _evidence_issues(
     issues: list[ValidationIssue] = []
     cited = False
     for n, evidence in enumerate(content.evidence, start=1):
-        if evidence in source.evidence:
-            continue
+        # The original's own provenance is accepted as is, but still counts as a citation
+        # when it is a supplied passage (e.g. the source was itself a generated question).
+        inherited = evidence in source.evidence
         candidates = [
             p
             for p in passages
@@ -530,6 +531,8 @@ def _evidence_issues(
             and set(evidence.block_ids) <= set(p.block_ids)
         ]
         if not candidates:
+            if inherited:
+                continue
             issues.append(
                 issue(
                     "evidence_not_in_passages",
@@ -545,7 +548,7 @@ def _evidence_issues(
         problems = [_quote_problem(evidence.quote.strip(), p) for p in candidates]
         if any(p is None for p in problems):
             cited = True
-        else:
+        elif not inherited:
             issues.append(next(p for p in problems if p is not None))
     if passages and not cited and not issues:
         issues.append(
