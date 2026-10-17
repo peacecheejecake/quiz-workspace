@@ -21,6 +21,7 @@ from book_core.contracts import (
     QuestionType,
     Section,
     SourceLocation,
+    TableContent,
 )
 from book_core.contracts.common import (
     CoreModel,
@@ -120,13 +121,20 @@ class TruthBlock(CoreModel):
             raise ValueError(f"block {self.id!r}: parts must be on increasing pages")
         return self
 
-    def to_contract(self) -> Block:
+    def to_contract(self, heading_level: int | None = None) -> Block:
         return Block(
             id=self.id,
             type=self.type,
             text=self.text,
             section_id=self.section_id,
             locations=tuple(SourceLocation(page=p.page, bbox=p.bbox) for p in self.parts),
+            heading_level=heading_level if self.type is BlockType.HEADING else None,
+            table=(
+                TableContent(rows=self.table.rows, header_rows=self.table.header_rows)
+                if self.table is not None
+                else None
+            ),
+            caption_block_id=self.caption_block_id,
         )
 
 
@@ -190,13 +198,17 @@ class BookTruth(_FixtureBase):
         return self
 
     def to_parsed_document(self) -> ParsedDocument:
+        levels = {s.id: s.level for s in self.sections}
         return ParsedDocument(
             source_path=self.file,
             source_sha256=self.sha256,
             parser_version=TRUTH_PARSER_VERSION,
             pages=tuple(PageInfo(page=p.page, width=p.width, height=p.height) for p in self.pages),
             sections=tuple(s.to_contract() for s in self.sections),
-            blocks=tuple(b.to_contract() for b in self.blocks),
+            blocks=tuple(
+                b.to_contract(levels.get(b.section_id) if b.section_id else None)
+                for b in self.blocks
+            ),
         )
 
 

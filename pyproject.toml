@@ -18,6 +18,9 @@ constraint-dependencies = [
   "click-repl<0.4.1",
   "wcwidth<0.9.2",
 ]
+# M1.2 parser stack: hold Docling's transitive dependencies to releases at least two weeks older
+# than the Task (2026-10-17), so a fresh `uv lock` never picks up days-old versions.
+exclude-newer-package = { docling-core = "2026-10-03T00:00:00Z", docling-parse = "2026-10-03T00:00:00Z", docling-ibm-models = "2026-10-03T00:00:00Z", transformers = "2026-10-03T00:00:00Z", tokenizers = "2026-10-03T00:00:00Z", numpy = "2026-10-03T00:00:00Z", pypdfium2 = "2026-10-03T00:00:00Z", rpds-py = "2026-10-03T00:00:00Z", hf-xet = "2026-10-03T00:00:00Z", shapely = "2026-10-03T00:00:00Z", rapidocr = "2026-10-03T00:00:00Z", onnxruntime = "2026-10-03T00:00:00Z", omegaconf = "2026-10-03T00:00:00Z", filelock = "2026-10-03T00:00:00Z", cuda-bindings = "2026-10-03T00:00:00Z", markupsafe = "2026-10-03T00:00:00Z", cuda-pathfinder = "2026-10-03T00:00:00Z" }
 
 [tool.uv.workspace]
 # Members are added by their Tasks (P0.6 api, P0.7 worker, P0.8 core). uv tolerates listed
@@ -29,11 +32,21 @@ members = ["apps/api", "apps/worker", "packages/core"]
 book-core = { workspace = true }
 quiz-api = { workspace = true }
 quiz-worker = { workspace = true }
+# Docling's torch: CPU-only wheels on Linux (CI, workers) instead of the multi-GB CUDA build.
+# macOS wheels on PyPI are already CPU/MPS-only.
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [dependency-groups]
 dev = [
   # Workspace members installed into the shared venv so pytest/mypy can import them.
-  "book-core",
+  # `parser` (Docling + CPU torch) is part of the dev install so the parser tests always run.
+  "book-core[parser]",
   "quiz-api",
   "quiz-worker",
   # Type stubs for Celery/kombu (they ship no inline types).

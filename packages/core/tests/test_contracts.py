@@ -27,6 +27,7 @@ from book_core.contracts import (
     Section,
     SourceEvidence,
     SourceLocation,
+    TableContent,
     TextSpan,
     ValidationIssue,
     ValidationSeverity,
@@ -58,6 +59,17 @@ def _parsed_document() -> ParsedDocument:
                 text="A paragraph spanning two pages.",
                 section_id="ch1.1",
                 locations=(SourceLocation(page=1), SourceLocation(page=2, block_id="b2")),
+            ),
+            Block(
+                id="b3",
+                type=BlockType.TABLE,
+                text="a | b\n1 | 2",
+                locations=(LOC.model_copy(update={"block_id": None}),),
+                table=TableContent(rows=(("a", "b"), ("1", "2")), header_rows=1),
+                caption_block_id="b4",
+            ),
+            Block(
+                id="b4", type=BlockType.TEXT, text="Table 1.", locations=(SourceLocation(page=2),)
             ),
         ),
     )
@@ -285,6 +297,30 @@ def test_duplicate_block_ids_are_rejected() -> None:
     blocks = [b.model_dump() for b in revision.blocks]
     with pytest.raises(ValidationError, match="duplicate block id"):
         DocumentRevision.model_validate({**revision.model_dump(), "blocks": [*blocks, blocks[0]]})
+
+
+@pytest.mark.parametrize(
+    ("block", "message"),
+    [
+        ({"type": "text", "heading_level": 1}, "heading_level"),
+        ({"type": "text", "table": {"rows": [["a"]]}}, "table cells"),
+        ({"type": "heading", "caption_block_id": "b4"}, "captions"),
+        ({"type": "image", "caption_block_id": "x"}, "own caption"),
+        ({"type": "table", "table": {"rows": [["a", "b"], ["c"]]}}, "same number"),
+        ({"type": "table", "table": {"rows": [["a"]], "header_rows": 2}}, "header_rows"),
+    ],
+)
+def test_block_extras_are_type_checked(block: dict[str, Any], message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Block.model_validate({"id": "x", "text": "", "locations": [{"page": 1}], **block})
+
+
+def test_caption_must_reference_an_existing_block() -> None:
+    doc = _parsed_document()
+    blocks = [b.model_dump() for b in doc.blocks]
+    blocks[2]["caption_block_id"] = "missing"
+    with pytest.raises(ValidationError, match="unknown caption block"):
+        ParsedDocument.model_validate({**doc.model_dump(), "blocks": blocks})
 
 
 def test_revision_cannot_be_its_own_parent() -> None:
