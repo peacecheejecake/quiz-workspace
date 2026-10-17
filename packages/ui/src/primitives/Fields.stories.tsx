@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Checkbox } from './Checkbox';
 import { Input } from './Input';
+import { RadioGroup } from './RadioGroup';
+import { Select } from './Select';
 import { Textarea } from './Textarea';
 
 const stack = { display: 'grid', gap: 'var(--space-5)', maxWidth: 360 } as const;
@@ -64,4 +66,40 @@ export const CheckboxStates: Story = {
 export const CheckboxFocus: Story = {
   ...CheckboxStates,
   parameters: { pseudo: { focusVisible: true } },
+};
+
+const TYPE_OPTIONS = [
+  { value: 'ALL', label: '전체 유형' },
+  { value: 'MCQ', label: '객관식' },
+  { value: 'SHORT_ANSWER', label: '단답형' },
+  { value: 'ESSAY', label: '서술형' },
+];
+
+/** Select: Radix combobox + listbox; the selected option carries a check mark. */
+export const SelectStates: Story = {
+  render: () => (
+    <div style={stack}>
+      <Select label="유형" options={TYPE_OPTIONS} defaultValue="ALL" />
+      <Select label="챕터" options={TYPE_OPTIONS} placeholder="챕터 선택" />
+      <Select label="오류" options={TYPE_OPTIONS} error="챕터를 선택해 주세요." />
+      <Select label="비활성" options={TYPE_OPTIONS} defaultValue="MCQ" disabled />
+    </div>
+  ),
+};
+
+/** RadioGroup: one tab stop, Arrow keys move and select. */
+export const RadioGroupStates: Story = {
+  render: () => (
+    <div style={stack}>
+      <RadioGroup label="문제 유형" options={TYPE_OPTIONS.slice(1)} defaultValue="MCQ" />
+      <RadioGroup
+        label="세로 배치"
+        orientation="vertical"
+        options={TYPE_OPTIONS.slice(1)}
+        defaultValue="ESSAY"
+        error="유형을 선택해 주세요."
+      />
+      <RadioGroup label="비활성" options={TYPE_OPTIONS.slice(1)} defaultValue="MCQ" disabled />
+    </div>
+  ),
 };

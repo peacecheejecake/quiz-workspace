@@ -8,6 +8,7 @@ import {
   Button,
   CheckIcon,
   Checkbox,
+  ChevronDownIcon,
   CloseIcon,
   ConfirmDialog,
   DialogClose,
@@ -39,8 +40,10 @@ import {
   QuestionHeatmap,
   QuestionMarker,
   QuestionPreviewPopover,
+  RadioGroup,
   RetryIcon,
   RetryToggle,
+  Select,
   Skeleton,
   StarIcon,
   StatusSummary,
@@ -105,9 +108,26 @@ export default function Page() {
             <Input label="이메일" error="오류" />
             <Textarea label="메모" />
             <Checkbox label="동의" />
+            <Select
+              label="유형"
+              defaultValue="MCQ"
+              options={[
+                { value: 'MCQ', label: '객관식' },
+                { value: 'ESSAY', label: '서술형' },
+              ]}
+            />
+            <RadioGroup
+              label="문제 유형"
+              defaultValue="MCQ"
+              options={[
+                { value: 'MCQ', label: '객관식' },
+                { value: 'ESSAY', label: '서술형' },
+              ]}
+            />
             <Skeleton width="4rem" />
             <AlertIcon />
             <CheckIcon />
+            <ChevronDownIcon />
             <MenuIcon />
             <MinusIcon />
             <MoreIcon />

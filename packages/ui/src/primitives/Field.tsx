@@ -49,11 +49,22 @@ export function FieldFrame({
   description,
   error,
   className,
+  labelId,
   children,
-}: FieldOwnProps & { ids: FieldIds; className?: string | undefined; children: ReactNode }) {
+}: FieldOwnProps & {
+  ids: FieldIds;
+  className?: string | undefined;
+  /** Id for the label, for controls named through `aria-labelledby` (e.g. Select). */
+  labelId?: string | undefined;
+  children: ReactNode;
+}) {
   return (
     <div className={cx('qz-field', className)} data-invalid={ids.hasError || undefined}>
-      <label htmlFor={ids.id} className={cx('qz-field__label', hideLabel && 'qz-visually-hidden')}>
+      <label
+        id={labelId}
+        htmlFor={ids.id}
+        className={cx('qz-field__label', hideLabel && 'qz-visually-hidden')}
+      >
         {label}
       </label>
       {children}
