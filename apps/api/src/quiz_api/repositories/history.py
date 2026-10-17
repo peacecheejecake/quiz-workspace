@@ -89,6 +89,8 @@ class JobTarget:
     target_id: uuid.UUID | None
     target_label: str | None
     retryable: bool
+    # Document jobs: the revision the job parsed/indexed (a retry pins the publish to it).
+    target_revision_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -590,7 +592,9 @@ class _JobTargets:
                 and revision_id is not None
                 and revision_id == doc.draft_revision_id
             )
-            return JobTarget("document", doc_id, doc.title, retryable=retryable)
+            return JobTarget(
+                "document", doc_id, doc.title, retryable=retryable, target_revision_id=revision_id
+            )
         if row.job_type == IMPORT_JOB_TYPE:
             run_id = as_uuid(payload.get("import_id"))
             run = self._imports.get(run_id) if run_id is not None else None

@@ -96,6 +96,12 @@ class WorkspaceJob(Job):
         "/documents/{target_id}/publish, `question_import` → POST "
         "/question-imports/{target_id}/retry. The retry is a new job."
     )
+    target_revision_id: uuid.UUID | None = Field(
+        default=None,
+        description="Document jobs: the revision the job parsed/indexed. A retry sends it as "
+        "`revision_id` to POST /documents/{target_id}/publish, so a draft that changed since "
+        "(published, replaced) is refused with 409 `edit-conflict` instead of being published.",
+    )
 
 
 class WorkspaceJobPage(BaseModel):
@@ -194,6 +200,7 @@ def _workspace_job(record: WorkspaceJobRecord) -> WorkspaceJob:
         target_id=t.target_id,
         target_label=t.target_label,
         retryable=t.retryable,
+        target_revision_id=t.target_revision_id,
     )
 
 

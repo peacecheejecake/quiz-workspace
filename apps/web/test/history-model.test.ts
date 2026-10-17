@@ -1,7 +1,14 @@
 // HISTORY-01 display model and browser client: labels, the "나" actor, revision labels, job cause
 // and retryability text, page merging, and that the retry/list calls go to the BFF relays.
 import { describe, expect, it, vi } from 'vitest';
-import { createHistoryClient, historyListPath, retryPath } from '../src/lib/history/client';
+import {
+  createHistoryClient,
+  EDIT_CONFLICT,
+  HistoryRequestError,
+  historyListPath,
+  retryFailureMessage,
+  retryPath,
+} from '../src/lib/history/client';
 import { HISTORY_QUERY } from '../src/lib/history/bff';
 import {
   actorLabel,
@@ -20,6 +27,7 @@ import {
 const WS = '3f2b6f0e-8a4c-4d7e-9a51-1c2d3e4f5a6b';
 const ME = '0b6a5c0e-1d2f-4a3b-8c4d-5e6f7a8b9c0d';
 const DOC = '1c7b6d1f-2e3a-4b4c-9d5e-6f7a8b9c0d1e';
+const REV = '2d8c7e2a-3f4b-4c5d-8e6f-7a8b9c0d1e2f';
 
 function job(overrides: Partial<WorkspaceJob> = {}): WorkspaceJob {
   return {
@@ -40,6 +48,7 @@ function job(overrides: Partial<WorkspaceJob> = {}): WorkspaceJob {
     target_id: DOC,
     target_label: 'book-ko',
     retryable: true,
+    target_revision_id: REV,
     ...overrides,
   };
 }
@@ -134,19 +143,31 @@ describe('history client', () => {
       `/api/documents/${DOC}/publish`,
       expect.objectContaining({
         method: 'POST',
-        body: '{}',
+        body: JSON.stringify({ revision_id: REV }),
         headers: expect.objectContaining({ 'idempotency-key': 'key-12345678' }),
       }),
     );
   });
 
-  it('surfaces a refused retry as an error', async () => {
+  it('reports a stale draft (409 edit-conflict) with its own message', async () => {
     const fetchImpl = vi.fn(async () =>
-      Response.json({ status: 409 }, { status: 409 }),
+      Response.json({ type: EDIT_CONFLICT, status: 409 }, { status: 409 }),
     ) as unknown as typeof fetch;
-    await expect(createHistoryClient(fetchImpl).retry(job(), 'key-12345678')).rejects.toThrow(
-      /409/,
-    );
+    const error = await createHistoryClient(fetchImpl)
+      .retry(job(), 'key-12345678')
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(HistoryRequestError);
+    expect((error as HistoryRequestError).problemType).toBe(EDIT_CONFLICT);
+    expect(retryFailureMessage(error)).toMatch(/게시되었거나 새 교정본/);
+    expect(retryFailureMessage(new HistoryRequestError(503))).toMatch(/다시 시작하지 못했습니다/);
+  });
+
+  it('never retries a document job without the revision it indexed', async () => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    await expect(
+      createHistoryClient(fetchImpl).retry(job({ target_revision_id: null }), 'key-12345678'),
+    ).rejects.toBeInstanceOf(HistoryRequestError);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('forwards only a page size and a URL-safe cursor to FastAPI', () => {

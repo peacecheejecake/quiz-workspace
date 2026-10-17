@@ -11,8 +11,15 @@ import {
 
 export type HistoryKind = 'activities' | 'jobs' | 'attempts';
 
+export const EDIT_CONFLICT = 'urn:quiz-workspace:problem:edit-conflict';
+export const NOTHING_TO_PUBLISH = 'urn:quiz-workspace:problem:nothing-to-publish';
+
 export class HistoryRequestError extends Error {
-  constructor(readonly status: number | null) {
+  constructor(
+    readonly status: number | null,
+    /** RFC 9457 `type` of the problem answer, when there was one. */
+    readonly problemType: string | null = null,
+  ) {
     super(
       status === null
         ? 'History request failed (network)'
@@ -54,7 +61,17 @@ async function request(fetchImpl: Fetch, path: string, init: RequestInit): Promi
   } catch {
     throw new HistoryRequestError(null);
   }
-  if (!response.ok) throw new HistoryRequestError(response.status);
+  if (!response.ok) {
+    let problemType: string | null = null;
+    try {
+      const body: unknown = await response.json();
+      const type = (body as { type?: unknown } | null)?.type;
+      if (typeof type === 'string') problemType = type;
+    } catch {
+      // Not a problem body; the status alone describes the failure.
+    }
+    throw new HistoryRequestError(response.status, problemType);
+  }
   try {
     return await response.json();
   } catch {
@@ -95,16 +112,28 @@ export function createHistoryClient(fetchImpl: Fetch = (...a) => fetch(...a)): H
       const path = retryPath(job);
       if (!path) throw new HistoryRequestError(409);
       const isDocument = job.target_type === 'document';
+      if (isDocument && !job.target_revision_id) throw new HistoryRequestError(409, EDIT_CONFLICT);
       await request(fetchImpl, path, {
         method: 'POST',
         headers: {
           'idempotency-key': idempotencyKey,
           ...(isDocument ? { 'content-type': 'application/json' } : {}),
         },
-        // Publishing the document's current correction draft (no revision pin: the draft the
-        // failed job indexed is still the current one, or the API answers 409).
-        ...(isDocument ? { body: '{}' } : {}),
+        // Pinned to the revision the failed job indexed: if that draft was published or replaced
+        // since the list was loaded, FastAPI answers 409 instead of publishing a newer draft.
+        ...(isDocument ? { body: JSON.stringify({ revision_id: job.target_revision_id }) } : {}),
       });
     },
   };
+}
+
+/** Korean message for a failed retry; a stale draft (409) says why nothing was started. */
+export function retryFailureMessage(error: unknown): string {
+  if (
+    error instanceof HistoryRequestError &&
+    (error.problemType === EDIT_CONFLICT || error.problemType === NOTHING_TO_PUBLISH)
+  ) {
+    return '이 작업의 교정본이 그사이 게시되었거나 새 교정본으로 바뀌어 다시 시도하지 않았습니다. 목록을 새로 고쳤으니 최신 상태를 확인하세요.';
+  }
+  return '작업을 다시 시작하지 못했습니다. 목록을 새로 고친 뒤 다시 시도하세요.';
 }

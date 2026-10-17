@@ -8,7 +8,12 @@
 import { Badge, Button, PageHeader } from '@quiz/ui';
 import Link from 'next/link';
 import { useId, useMemo, useState, type ReactNode } from 'react';
-import { createHistoryClient, type HistoryItems, type HistoryKind } from '@/lib/history/client';
+import {
+  createHistoryClient,
+  retryFailureMessage,
+  type HistoryItems,
+  type HistoryKind,
+} from '@/lib/history/client';
 import type { HistoryLoads } from '@/lib/history/data';
 import {
   actorLabel,
@@ -295,12 +300,9 @@ export function HistoryScreen({ workspaceId, viewerId, initial }: HistoryScreenP
         text: '새 작업을 시작했습니다. 실패한 작업 기록은 그대로 남습니다.',
       });
       await Promise.all([jobs.reload(), activities.reload()]);
-    } catch {
-      setRetryMessage({
-        tone: 'alert',
-        text: '작업을 다시 시작하지 못했습니다. 목록을 새로 고친 뒤 다시 시도하세요.',
-      });
-      await jobs.reload();
+    } catch (error) {
+      setRetryMessage({ tone: 'alert', text: retryFailureMessage(error) });
+      await Promise.all([jobs.reload(), activities.reload()]);
     } finally {
       setRetryingId(null);
     }

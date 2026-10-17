@@ -4031,6 +4031,11 @@ export type components = {
        */
       target_label: string | null;
       /**
+       * Target Revision Id
+       * @description Document jobs: the revision the job parsed/indexed. A retry sends it as `revision_id` to POST /documents/{target_id}/publish, so a draft that changed since (published, replaced) is refused with 409 `edit-conflict` instead of being published.
+       */
+      target_revision_id?: string | null;
+      /**
        * Target Type
        * @description What the job works on.
        */

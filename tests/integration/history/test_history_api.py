@@ -240,6 +240,52 @@ def test_job_retry_is_offered_to_editors_of_an_active_workspace_only(
         assert seed.problem(outsider.call("GET", f"/workspaces/{ws['id']}/{kind}"), 404)
 
 
+def test_document_retry_is_pinned_to_the_failed_jobs_revision(
+    seed: Any, failed_reindex: tuple[Any, dict[str, Any], str, str, str]
+) -> None:
+    """A History retry publishes the revision the failed job indexed, never a newer draft that
+    replaced it while the page was open (another editor published the fix and started again)."""
+    owner, ws, document_id, _upload_job, failed = failed_reindex
+    path = f"/workspaces/{ws['id']}/jobs?limit=100"
+    listed = {j["id"]: j for j in owner.ok("GET", path)["items"]}[failed]
+    failed_revision = listed["target_revision_id"]
+    assert failed_revision
+    assert listed["retryable"] is True
+
+    # Another editor fixes the draft and publishes it, then opens a new correction draft.
+    page = owner.ok("GET", f"/documents/{document_id}/blocks?revision=latest&page=4&limit=200")
+    [marked] = [b for b in page["items"] if INDEX_FAILURE_MARKER in b["text"]]
+    owner.ok(
+        "PATCH",
+        f"/documents/{document_id}/blocks/{marked['block_id']}",
+        {"text": "교정 완료", "base_version": marked["version"]},
+    )
+    published = owner.ok(
+        "POST", f"/documents/{document_id}/publish", {"revision_id": failed_revision}, (202,)
+    )
+    owner.wait_for_job(str(published["job_id"]))
+    page = owner.ok("GET", f"/documents/{document_id}/blocks?revision=latest&page=4&limit=200")
+    other = next(b for b in page["items"] if b["block_id"] != marked["block_id"])
+    newer = owner.ok(
+        "PATCH",
+        f"/documents/{document_id}/blocks/{other['block_id']}",
+        {"text": f"{other['text']} (새 교정)", "base_version": other["version"]},
+    )
+    assert newer["revision"]["id"] != failed_revision
+
+    # The stale retry (what the History button sends) is refused and publishes nothing.
+    jobs_before = {j["id"] for j in owner.ok("GET", path)["items"]}
+    stale = owner.call(
+        "POST", f"/documents/{document_id}/publish", {"revision_id": failed_revision}
+    )
+    seed.problem(stale, 409, "urn:quiz-workspace:problem:edit-conflict")
+    assert {j["id"] for j in owner.ok("GET", path)["items"]} == jobs_before
+    # A refreshed list no longer offers the retry.
+    after = {j["id"]: j for j in owner.ok("GET", path)["items"]}[failed]
+    assert after["retryable"] is False
+    assert after["target_revision_id"] == failed_revision
+
+
 # --- index-bounded page queries -------------------------------------------------------------------
 
 
