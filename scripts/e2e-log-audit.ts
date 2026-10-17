@@ -1,9 +1,12 @@
-// `pnpm e2e:log-audit [--web-port 3160] [--api-port 8160] [--no-build] -- <playwright args>`
+// `pnpm e2e:log-audit [--web-port 3160] [--api-port 8160] [--no-build] [--worker] -- <playwright args>`
 //
 // A3 (docs/auth.md §3/§5, AGENTS.md §5): runs Playwright specs against a web server and an API
 // started here with their logs captured to files (API at LOG_LEVEL=INFO, `next start`), then fails
-// if either log contains a JWT, a bearer/refresh/access token, a Supabase session cookie value or
-// an email address. Example:
+// if either log contains a JWT, a bearer/refresh/access token, a Supabase session cookie value, an
+// email address, or (S4) a share session token, a share-link secret (`#k=` fragment or a `secret`
+// JSON value), a signed Storage URL token or a password value. `--worker` also starts the Celery
+// worker (`python -m quiz_worker.serve`, same environment, e.g. APP_ENV=test for the fork specs)
+// and scans its log too. Example:
 //
 //   pnpm e2e:log-audit -- tests/e2e/auth/login.spec.ts tests/e2e/auth/callback.spec.ts \
 //     --project unauthenticated-chromium
@@ -26,7 +29,14 @@ const PATTERNS: readonly (readonly [string, RegExp])[] = [
   ['bearer token', /\bBearer\s+[\w.~+/-]{8,}/i],
   ['token parameter', /\b(?:access|refresh)_token["']?\s*[=:]\s*["']?[\w.~+/-]{8,}/i],
   ['session cookie', /\bsb-[\w-]+-auth-token(?:\.\d+)?=[^;\s]{8,}/],
-  ['email address', /\b[\w.+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b/],
+  // Celery names its node `celery@<hostname>`; that is not an address.
+  ['email address', /\b(?!celery@)[\w.+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b/],
+  // S4: the guest share capability and Storage credentials.
+  ['share session token', /\bv1\.[0-9a-f]{32}\.\d{9,12}\.[\w-]{43}\b/],
+  ['share link secret', /(?:#|%23)k(?:=|%3D)[\w-]{16,}/i],
+  ['share link secret', /["']secret["']\s*:\s*["'][\w-]{16,}/],
+  ['signed url token', /[?&](?:amp;)?token=[\w.~+/%-]{16,}/],
+  ['password', /\bpassword["']?\s*[=:]\s*["']?[^\s"'&,;[\]{}]{6,}/i],
 ];
 
 /** Sensitive values in a log text: line numbers and kinds only, never the value itself. */
@@ -44,6 +54,7 @@ interface Options {
   webPort: number;
   apiPort: number;
   build: boolean;
+  worker: boolean;
   playwrightArgs: string[];
 }
 
@@ -54,11 +65,13 @@ export function parseArgs(argv: readonly string[]): Options {
     webPort: 3160,
     apiPort: 8160,
     build: true,
+    worker: false,
     playwrightArgs: split === -1 ? [] : argv.slice(split + 1),
   };
   for (let i = 0; i < own.length; i++) {
     const arg = own[i];
     if (arg === '--no-build') options.build = false;
+    else if (arg === '--worker') options.worker = true;
     else if (arg === '--web-port') options.webPort = Number(own[++i]);
     else if (arg === '--api-port') options.apiPort = Number(own[++i]);
     else throw new Error(`unknown option ${arg}`);
@@ -172,6 +185,16 @@ async function main(): Promise<number> {
     webLog,
   );
 
+  const workerLog = join(dir, 'worker.log');
+  const worker = options.worker
+    ? startLogged(
+        'uv',
+        ['run', 'python', '-m', 'quiz_worker.serve'],
+        { ...env, LOG_LEVEL: 'INFO', PYTHONUNBUFFERED: '1' },
+        workerLog,
+      )
+    : null;
+
   let status: number;
   try {
     await waitFor(`${apiUrl}/health/live`, api, 'API');
@@ -180,6 +203,7 @@ async function main(): Promise<number> {
   } finally {
     stop(api);
     stop(web);
+    if (worker) stop(worker);
     await new Promise((r) => setTimeout(r, 500));
   }
 
@@ -191,6 +215,14 @@ async function main(): Promise<number> {
     return 1;
   }
   const findings = [...scanLog(apiLog, apiText), ...scanLog(webLog, webText)];
+  if (worker) {
+    const workerText = readFileSync(workerLog, 'utf8');
+    if (!/celery@|ready\./i.test(workerText)) {
+      console.error('log-audit: worker log was not captured');
+      return 1;
+    }
+    findings.push(...scanLog(workerLog, workerText));
+  }
   for (const f of findings) console.error(`log-audit: ${f.kind} in ${f.file}:${f.line}`);
   const apiLines = apiText.split('\n').filter((l) => l.includes(' INFO ')).length;
   console.log(

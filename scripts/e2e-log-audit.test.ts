@@ -87,6 +87,41 @@ describe('scanLog', () => {
     );
     assert.ok(!JSON.stringify(findings).includes('example.test'));
   });
+
+  it('flags share sessions, share secrets, signed Storage URLs and passwords (S4)', () => {
+    const secret = 'Qk3x9v_T-8bZpW2mR7yLc4Nd6Hf1Js0Ga5Ue2Io9Kt';
+    const session = `v1.${'0123456789abcdef'.repeat(2)}.1800000000.${'m'.repeat(43)}`;
+    const text = [
+      `GET /share/abc#k=${secret}`,
+      `cookie quiz_share_session=${session}`,
+      `payload {"secret": "${secret}"}`,
+      'url http://127.0.0.1:54321/storage/v1/object/sign/source-pdfs/x.pdf?token=eyJhbGciOiJIUzI1NiJ9',
+      'GET /object/upload/sign/source-pdfs/k?token=abcdefghijklmnopqrstuv',
+      'form password=hunter2hunter2&x=1',
+    ].join('\n');
+    const kinds = scanLog('worker.log', text).map((f) => [f.line, f.kind]);
+    assert.deepEqual(
+      kinds.filter(([, k]) => k !== 'jwt'),
+      [
+        [1, 'share link secret'],
+        [2, 'share session token'],
+        [3, 'share link secret'],
+        [4, 'signed url token'],
+        [5, 'signed url token'],
+        [6, 'password'],
+      ],
+    );
+    // What our services print instead stays clean: ids, redactions, problem types.
+    const clean = [
+      'INFO quiz_api.access [request_id=a] POST /api/v1/shared/11111111-2222-4333-8444-555555555555/sessions 404 2.1ms',
+      'WARNING quiz_api.api.shared shared pdf: source object missing',
+      'password=[REDACTED] token=[REDACTED]',
+      'INFO quiz_worker.fork_job fork 1b2c finished COMPLETED',
+      ' -------------- celery@Mins-MacBook-Pro.local v5.6.3 (recovery)',
+      'INFO celery.apps.worker [job_id=-] celery@worker-1.internal ready.',
+    ].join('\n');
+    assert.deepEqual(scanLog('api.log', clean), []);
+  });
 });
 
 describe('parseArgs', () => {
@@ -97,8 +132,10 @@ describe('parseArgs', () => {
         webPort: 3170,
         apiPort: 8160,
         build: false,
+        worker: false,
         playwrightArgs: ['a.spec.ts', '--project', 'p'],
       },
     );
+    assert.equal(parseArgs(['--worker', '--', 'x']).worker, true);
   });
 });

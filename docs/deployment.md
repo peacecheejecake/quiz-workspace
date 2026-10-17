@@ -127,7 +127,9 @@ PR opened
 
 **Supabase Auth / 메일 (M7.4에서 적용).** `site_url` = 웹 production origin(HTTPS), `additional_redirect_urls` = `https://<web>/auth/callback`(및 고정 preview alias)만, wildcard 금지. 외부 SMTP(발신 도메인 SPF/DKIM), Auth rate limit·CAPTCHA, JWT signing key는 비대칭(ES256/RS256), access token 만료 ≤ 1h. `AUTH_RECOVERY_MARKER_SECRET`(32 byte random)은 환경별로 다르게.
 
-**로그 검사.** `pnpm e2e:log-audit -- <specs> --project …`는 API(INFO)·웹 서버 로그를 캡처해 Playwright를 실행하고 JWT·Bearer/refresh/access token·session cookie 값·email 주소가 있으면 실패한다(DEP-07 staging smoke에서도 같은 명령을 쓴다).
+**로그 검사.** `pnpm e2e:log-audit [--worker] -- <specs> --project …`는 API(INFO)·웹 서버(`--worker`면 Celery worker도) 로그를 캡처해 Playwright를 실행하고 JWT·Bearer/refresh/access token·session cookie 값·email 주소, 공유 session token·공유 링크 비밀값(`#k=`, `"secret"`)·signed Storage URL token·password 값이 있으면 실패한다(DEP-07 staging smoke에서도 같은 명령을 쓴다).
+
+**Client 주소(S4).** `quiz_api.serve`는 uvicorn `proxy_headers=False`로 실행한다: `X-Forwarded-For`/`Forwarded`는 client 주소·scheme이 되지 않는다(uvicorn 기본값은 127.0.0.1 또는 `FORWARDED_ALLOW_IPS`에서 신뢰). per-client rate limit은 socket peer 또는 서명된 relay client id만 쓴다. 웹 `src/proxy.ts`의 matcher는 `/api/**`를 항상 포함한다(마지막 segment가 `.png` 등이어도 cross-site write guard를 건너뛰지 않음).
 
 ## 7. 가용성, 백업, 복원
 
