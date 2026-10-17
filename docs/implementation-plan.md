@@ -17,6 +17,7 @@ Phase  (P0, A, M1 … M7, S)        — architecture.md §8 마일스톤 / auth 
 ```
 
 - **Task = 리뷰 단위.** Task는 RED 증거(해당 시)·구현·GREEN·커밋까지 완결되어야 하며, 끝나면 `codex review`를 받는다 (AGENTS.md §4).
+- **구현 Task는 자기 Phase의 RED Task에 반드시 의존한다** (그래프의 굵은 화살표 `==>`). RED 없이 구현 착수 금지.
 - **RED Task (`*.0`)** 는 각 Phase의 화면 AC를 Playwright/contract test로 먼저 작성하고, 실패 원인이 "미구현"임을 확인해 커밋한다. 구현 Task는 이 테스트를 GREEN으로 만든다.
 - 상태 표기: `☐` 대기 · `◐` 진행 · `✅` 완료(GREEN + 리뷰 반영) · `⛔` 사람의 결정/계정 필요.
 
@@ -70,9 +71,9 @@ flowchart LR
 |---|---|---|---|
 | A0 | RED: `auth/*.spec.ts`(AUTH-01~07, ACCOUNT-01 = 24 AC) + API contract test(AUTH-API-AC01~03) | P0.10 | RED 증거 커밋, trace 통과 |
 | A1.1 | Supabase Auth local 설정: 이메일 확인 필수, redirect allowlist, 비대칭 JWT signing key, Mailpit | P0.2 | 로컬 가입→메일 수신 수동/자동 확인 |
-| A1.2 | FastAPI JWT/JWKS 검증(kid·alg allowlist·iss·aud·exp·sub, 키 캐시/rotation), `GET /me`, `GET /me/workspaces`, 401/403 구분 | P0.6, A1.1 | AUTH-API-AC01 GREEN |
+| A1.2 | FastAPI JWT/JWKS 검증(kid·alg allowlist·iss·aud·exp·sub, 키 캐시/rotation), `GET /me`, `GET /me/workspaces`, 401/403 구분 | A0, P0.6, A1.1 | AUTH-API-AC01 GREEN |
 | A1.3 | 인가 dependency: resource → workspace → membership, archived 쓰기 거부, soft-deleted 차단, profile upsert | A1.2, P0.9 | 교차 사용자 403/404 integration test |
-| A2.1 | Next.js 세션: `proxy.ts`/`middleware.ts` refresh, `getClaims()` 기반 서버 판단, 보호 라우트, `next` 내부경로 allowlist, API client Bearer 주입 | P0.5, A1.1 | AUTH-01-AC01, open redirect AC GREEN |
+| A2.1 | Next.js 세션: `proxy.ts`/`middleware.ts` refresh, `getClaims()` 기반 서버 판단, 보호 라우트, `next` 내부경로 allowlist, API client Bearer 주입 | A0, P0.5, A1.1 | AUTH-01-AC01, open redirect AC GREEN |
 | A2.2 | 화면 AUTH-01~07 (`AuthLayout`, `SignInForm`, `SignUpForm`, `PasswordResetForm`, `VerificationNotice`) | A2.1, P0.4 | AUTH-01~07 AC GREEN |
 | A2.3 | ACCOUNT-01 보안 설정 화면 | A2.2 | ACCOUNT-01 AC GREEN |
 | A3 | 릴리즈 준비(로컬 범위): AUTH-API-AC02/03, CORS·CSRF·쿠키 정책, 로그 마스킹. staging SMTP/도메인은 M7.4로 이월 | A1.3, A2.3 | Auth 전 AC + API AC GREEN |
@@ -103,7 +104,7 @@ flowchart LR
 | ID | 내용 | 의존 | DoD |
 |---|---|---|---|
 | M3.0 | RED: WS-01(6), DOC-01(4), DOC-02(5), SEARCH-01(5) | P0.10 | RED 증거 |
-| M3.1a | Workspace API: CRUD/archive/restore/soft delete, 멱등 키, activity 기록 | A1.3 | contract test GREEN |
+| M3.1a | Workspace API: CRUD/archive/restore/soft delete, 멱등 키, activity 기록 | M3.0, A1.3 | contract test GREEN |
 | M3.1b | WS-01 화면 (`WorkspaceSwitcher`, 탭 Active/Archived, 빈 상태) | M3.1a, A2.1, P0.4 | WS-01-AC01~05 GREEN (AC06은 S2) |
 | M3.2a | 문서 schema(`documents`, `document_revisions`, `chapters`, `content_blocks`), upload-intent / complete-upload, private Storage 버킷 | M3.1a | 업로드 인가 integration test |
 | M3.2b | Worker 파싱·색인 job, `GET /jobs/{id}`, SSE events, 실패 시 이전 revision 유지 | M3.2a, M1.5, M2.2, P0.7 | job 재시도·멱등 test |
@@ -119,10 +120,10 @@ flowchart LR
 |---|---|---|---|
 | M4.0 | RED: QBANK-01(4), QIMPORT-01(4) | M3.0 | RED 증거 |
 | M4.1 | 문제 schema: `questions`, `question_revisions`, `question_sources`, `question_user_states`, `question_attempts`, `question_lineage`, `question_drafts`, generation/import runs | P0.9 | migration + 제약 test |
-| M4.2a | Question CRUD API(유형 MCQ/SHORT_ANSWER/ESSAY, 챕터·출처, revision) | M4.1, M3.4 | contract test |
+| M4.2a | Question CRUD API(유형 MCQ/SHORT_ANSWER/ESSAY, 챕터·출처, revision) | M4.0, M4.1, M3.4 | contract test |
 | M4.2b | QBANK-01 화면 | M4.2a | QBANK-01 AC GREEN |
 | M4.3 | Core `llm` adapter(structured output, fake 포함) + `extractor`(문제 PDF → `QuestionDraft`, 정답 생성 금지) | M1.5 | fake 기반 추출 test |
-| M4.4a | Import run API/worker, drafts 격리, 승인분만 publish | M4.3, M4.2a, P0.7 | 미승인 미등록 test |
+| M4.4a | Import run API/worker, drafts 격리, 승인분만 publish | M4.0, M4.3, M4.2a, P0.7 | 미승인 미등록 test |
 | M4.4b | QIMPORT-01 화면 + 공용 `QuestionDraftReview` | M4.4a | QIMPORT-01 AC GREEN |
 
 ### M5 — Practice·Heatmap
@@ -130,7 +131,7 @@ flowchart LR
 | ID | 내용 | 의존 | DoD |
 |---|---|---|---|
 | M5.0 | RED: QOV-01(6), QPLAY-01(5) + 정답 비노출 contract test | M4.0 | RED 증거 |
-| M5.1 | `deriveDotStatus`(TS/Python 공통 규칙), overview API(CONFIRMED만, 상호배타 집계 + favorite overlap, 필터) | M4.2a | 우선순위 unit test |
+| M5.1 | `deriveDotStatus`(TS/Python 공통 규칙), overview API(CONFIRMED만, 상호배타 집계 + favorite overlap, 필터) | M5.0, M4.2a | 우선순위 unit test |
 | M5.2 | practice-session(정답·해설 미전송, option ID 순서 저장), submit, self-grade, `my-state`, viewed는 패널 open에서만 | M5.1 | 정답 유출·shuffle 100회 test |
 | M5.3 | `QuestionMarker`/`QuestionDot`/`QuestionHeatmap`/`HeatmapLegend`/`QuestionPreviewPopover` + Storybook 5상태×favorite×hover/focus/selected, roving tabindex, visual regression | P0.4 | 스냅샷·axe 통과 |
 | M5.4 | QOV-01 화면 (필터·URL state·집계 chips) | M5.2, M5.3 | QOV-01 AC GREEN |
@@ -142,7 +143,7 @@ flowchart LR
 |---|---|---|---|
 | M6.0 | RED: QGEN-01(4) + fake LLM valid/invalid 시나리오 | M5.0 | RED 증거 |
 | M6.1 | Core `generation`: PARAPHRASE / INVERT_POLARITY / ANALOGOUS_CONCEPT, schema·정답 개수·중복 fingerprint·출처 검증 (OPTION_SHUFFLE은 M5.2에서 완료) | M4.3, M2.5 | validation unit test |
-| M6.2 | generation run API/worker, drafts, 승인 → CONFIRMED + lineage | M6.1, M4.4a | 승인 전 dot 수 불변 test |
+| M6.2 | generation run API/worker, drafts, 승인 → CONFIRMED + lineage | M6.0, M6.1, M4.4a | 승인 전 dot 수 불변 test |
 | M6.3 | QGEN-01 화면(`QuestionGenerationForm`, `VariationDiffViewer`, ≥600px drawer) | M6.2, M4.4b | QGEN-01 AC GREEN |
 
 ### S — Workspace Sharing·Fork (workspace-sharing.md)
@@ -150,7 +151,7 @@ flowchart LR
 | ID | 내용 | 의존 | DoD |
 |---|---|---|---|
 | S0 | RED: WS-SHARE-01(5), WS-VIEW-01(6), WS-FORK-01(6) + 보안 contract test, owner/guest/recipient fixture | P0.10 | RED 증거 |
-| S1a | `workspace_share_links` + owner API(발급·조회·PATCH·revoke·rotate), digest 저장 | A3, M3.1a | 비밀값 미저장 test |
+| S1a | `workspace_share_links` + owner API(발급·조회·PATCH·revoke·rotate), digest 저장 | S0, A3, M3.1a | 비밀값 미저장 test |
 | S1b | shared session 교환(fragment → HttpOnly cookie), shared read API(문서/PDF/검색/문제), 매 요청 재검증, no-store/no-referrer 헤더 | S1a, M3.6a, M4.2a | revoke 즉시 차단 test |
 | S2a | WS-SHARE-01 화면(`WorkspaceSharingPanel`) + WS-01-AC06 | S1a, M3.1b | WS-SHARE-01 AC GREEN |
 | S2b | WS-VIEW-01 화면(`SharedWorkspaceView`, 읽기 전용) | S1b | WS-VIEW-01 AC GREEN |
@@ -193,6 +194,8 @@ flowchart TB
     A23 --> A3
   end
   P010 --> A0
+  A0 ==> A12
+  A0 ==> A21
   P02 --> A11
   P06 --> A12
   P09 --> A13
@@ -221,6 +224,7 @@ flowchart TB
     M35 --> M36b
   end
   P010 --> M30
+  M30 ==> M31a
   A13 --> M31a
   A21 --> M31b
   P04 --> M31b
@@ -236,6 +240,8 @@ flowchart TB
     M42a --> M44a
   end
   M30 --> M40
+  M40 ==> M42a
+  M40 ==> M44a
   P09 --> M41
   M34 --> M42a
   M15 --> M43
@@ -246,6 +252,7 @@ flowchart TB
     M53[M5.3 heatmap comps] --> M54
   end
   M40 --> M50
+  M50 ==> M51
   M42a --> M51
   P04 --> M53
 
@@ -254,6 +261,7 @@ flowchart TB
     M61[M6.1 core generation] --> M62[M6.2 run api] --> M63[M6.3 QGEN-01]
   end
   M50 --> M60
+  M60 ==> M62
   M43 --> M61
   M25 --> M61
   M44a --> M62
@@ -267,6 +275,7 @@ flowchart TB
     S2b --> S3b
   end
   P010 --> S0
+  S0 ==> S1a
   A3 --> S1a
   M31a --> S1a
   M36a --> S1b
@@ -279,6 +288,7 @@ flowchart TB
     M72 --> M73[M7.3 CI/containers] --> M74[M7.4 deploy ⛔]
   end
   M30 --> M70
+  M70 ==> M71
   M52 --> M71
   M55 --> M72
   M63 --> M72
@@ -295,9 +305,9 @@ flowchart TB
 | W2 | P0.2 · P0.3 · P0.6 · P0.8 | 서로 다른 디렉터리 |
 | W3 | P0.4 · P0.5 · P0.7 · P0.9 · M1.1 | |
 | W4 | P0.10 · A1.1 · M1.2 | |
-| W5 | A0 · A1.2 · M1.3 | Auth RED는 Auth 트랙 시작 시점 |
-| W6 | A1.3 · A2.1 · M1.4 · M5.3 | M5.3은 순수 UI 컴포넌트라 선행 가능 |
-| W7 | A2.2 · M1.5 · M2.1 | |
+| W5 | A0 · M1.3 | Auth RED는 Auth 구현 직전 |
+| W6 | A1.2 · A2.1 · M1.4 · M5.3 | M5.3은 순수 UI 컴포넌트(Storybook)라 선행 가능 |
+| W7 | A1.3 · A2.2 · M1.5 · M2.1 | |
 | W8 | A2.3 · M2.2 · M3.0 · M4.1 · M4.3 | M3 RED는 M3 착수 직전 |
 | W9 | A3 · M2.3 · M3.1a | |
 | W10 | M3.1b · M2.4 · M2.5 · M3.2a | M3.1b는 A3 이후 |
@@ -305,11 +315,12 @@ flowchart TB
 | W12 | M3.3 · M3.4 · S1a | |
 | W13 | M3.5 · M3.6a · M4.0 · S2a | |
 | W14 | M3.6b · M4.2a · M4.4a | |
-| W15 | M4.2b · M4.4b · M5.0 · M5.1 · S1b | |
-| W16 | M5.2 · M6.0 · M6.1 · S2b · S3a · M7.0 | |
-| W17 | M5.4 · M6.2 · S3b · M7.1 | |
-| W18 | M5.5 · M6.3 · S4 | |
-| W19 | M7.2 → M7.3 → M7.4⛔ | |
+| W15 | M4.2b · M4.4b · M5.0 · S1b | |
+| W16 | M5.1 · M6.0 · M6.1 · S2b · S3a · M7.0 | |
+| W17 | M5.2 · M6.2 · S3b | |
+| W18 | M5.4 · M6.3 · M7.1 · S4 | |
+| W19 | M5.5 | |
+| W20 | M7.2 → M7.3 → M7.4⛔ | |
 
 Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 Task를 즉시 착수한다.
 
@@ -333,6 +344,6 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 
 | Task | 상태 | 커밋 | 리뷰 |
 |---|---|---|---|
-| (계획 수립) | ✅ | — | — |
+| PLAN (계획·AGENTS.md·리뷰 스크립트) | ✅ | 7f11b19 + fix | codex P2×3 → 반영 (RED 의존 edge, 리뷰 exit status, 원자적 lock) |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.

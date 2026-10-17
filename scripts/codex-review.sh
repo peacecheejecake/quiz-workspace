@@ -18,7 +18,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 SELF="$ROOT/scripts/codex-review.sh"
 REVIEW_DIR="$ROOT/.reviews"
 PANE_FILE="$REVIEW_DIR/.pane-id"
-LOCK_FILE="$REVIEW_DIR/.lock"
+LOCK_DIR="$REVIEW_DIR/.lock"
 DONE_MARK="__CODEX_REVIEW_DONE__"
 mkdir -p "$REVIEW_DIR"
 
@@ -26,7 +26,6 @@ mkdir -p "$REVIEW_DIR"
 if [[ "${1:-}" == "--inner" ]]; then
   shift
   token="$1" log="$2"; shift 2
-  trap 'rm -f "$LOCK_FILE"' EXIT
   clear
   echo "== codex review $* =="
   set +e
@@ -34,7 +33,7 @@ if [[ "${1:-}" == "--inner" ]]; then
   status=${PIPESTATUS[0]}
   set -e
   echo "${DONE_MARK} ${token} exit=${status}"
-  exit 0
+  exit "$status"
 fi
 
 target=() title=""
@@ -47,6 +46,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ ${#target[@]} -gt 0 ]] || { echo "one of --commit/--base/--uncommitted is required" >&2; exit 2; }
+# codex itself exits 0 on an unknown revision, so validate it here.
+if [[ ${#target[@]} -eq 2 ]] && ! git rev-parse --verify --quiet "${target[1]}^{commit}" >/dev/null; then
+  echo "unknown revision: ${target[1]}" >&2; exit 2
+fi
 
 args=("${target[@]}")
 [[ -n "$title" ]] && args+=(--title "$title")
@@ -55,14 +58,17 @@ slug="$(printf '%s' "${title:-${target[*]}}" | tr -cs 'A-Za-z0-9._-' '-' | cut -
 log="$REVIEW_DIR/$(date +%Y%m%d-%H%M%S)-${slug}.log"
 token="$(date +%s)-$$"
 
-if [[ "${HERDR_ENV:-}" != "1" ]]; then
-  "$SELF" --inner "$token" "$log" "${args[@]}"
-  echo "REVIEW_LOG=$log"
-  exit 0
+# mkdir is atomic: only one review (and one pane command) at a time. Released by its owner.
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  echo "a codex review is already running (lock: $LOCK_DIR)" >&2; exit 3
 fi
+trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
 
-if [[ -e "$LOCK_FILE" ]]; then
-  echo "a codex review is already running (lock: $LOCK_FILE)" >&2; exit 3
+if [[ "${HERDR_ENV:-}" != "1" ]]; then
+  status=0
+  "$SELF" --inner "$token" "$log" "${args[@]}" || status=$?
+  echo "REVIEW_LOG=$log"
+  exit "$status"
 fi
 
 pane=""
@@ -78,9 +84,11 @@ if [[ -z "$pane" ]]; then
   herdr pane wait-output "$pane" --regex '[%$#>❯] ?$' --source visible --timeout 15000 >/dev/null 2>&1 || true
 fi
 
-touch "$LOCK_FILE"
 quoted="$(printf '%q ' "$SELF" --inner "$token" "$log" "${args[@]}")"
 herdr pane run "$pane" "$quoted" >/dev/null
-herdr pane wait-output "$pane" --match "${DONE_MARK} ${token}" --source recent-unwrapped \
+herdr pane wait-output "$pane" --regex "${DONE_MARK} ${token} exit=[0-9]+" --source recent-unwrapped \
   --timeout "${CODEX_REVIEW_TIMEOUT_MS:-1800000}" >/dev/null
+status="$(herdr pane read "$pane" --source recent-unwrapped --lines 400 \
+  | sed -n "s/.*${DONE_MARK} ${token} exit=\([0-9][0-9]*\).*/\1/p" | tail -1)"
 echo "REVIEW_LOG=$log"
+[[ "$status" == "0" ]] || { echo "codex review failed (exit=${status:-unknown})" >&2; exit "${status:-1}"; }
