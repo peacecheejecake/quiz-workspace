@@ -1,4 +1,7 @@
-"""``core`` CLI stub (P0.8): help works, every command reports "not implemented"."""
+"""``core`` CLI (P0.8): help works, commands without their Task report "not implemented".
+
+``parse``/``structure``/``chunk`` (M1.5) are covered in ``test_cli_pipeline.py``.
+"""
 
 from __future__ import annotations
 
@@ -12,8 +15,6 @@ from typer.testing import CliRunner
 runner = CliRunner()
 
 COMMANDS = [
-    (["parse"], "M1.5"),
-    (["chunk"], "M1.5"),
     (["index"], "M2.6"),
     (["search"], "M2.6"),
     (["excerpt"], "M2.6"),
@@ -26,7 +27,7 @@ COMMANDS = [
 def test_help_lists_every_command() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for name in ("parse", "chunk", "index", "search", "excerpt", "eval", "questions"):
+    for name in ("parse", "structure", "chunk", "index", "search", "excerpt", "eval", "questions"):
         assert name in result.output
 
 
