@@ -293,3 +293,72 @@ export const UUID_PARAM = UUID;
 export const INT_PARAM = /^-?[0-9]{1,9}$/;
 export const CURSOR_PARAM = /^[A-Za-z0-9_-]{1,500}$/;
 export const QUESTION_TYPE_PARAM = /^[A-Z_]{1,32}$/;
+
+// --- WS-FORK-01 (S3b) ---------------------------------------------------------------------------
+//
+// Starting a fork needs both capabilities at once: the guest's share session (the cookie scoped to
+// this relay path, which is why the fork start is relayed here) and the signed-in user, whose
+// access token the route handler reads from the HttpOnly Supabase session only after `getClaims()`
+// verified it. The token is added here as `Authorization: Bearer` and never reaches the browser.
+// The browser's `Origin` is forwarded (FastAPI's CSRF check), and so is a well-formed
+// `Idempotency-Key`. Fork status is the user's own resource (`/api/me/forks/{id}`), not a shared
+// read, so it is not relayed here.
+
+/** `{"name": "<≤ 200 characters>"}` (≤ 800 UTF-8 bytes) plus slack. */
+export const MAX_FORK_BODY_BYTES = 4 * 1024;
+/** Idempotency-Key: 1-200 visible ASCII characters (FastAPI checks the same pattern). */
+const IDEMPOTENCY_KEY = /^[\x21-\x7e]{1,200}$/;
+const ACCESS_TOKEN = /^[A-Za-z0-9._-]{1,8192}$/;
+const RETRY_AFTER = /^[\w ,:+-]{1,64}$/;
+
+/**
+ * `POST /api/shared/{id}/forks` → `POST /api/v1/shared/{id}/forks` with the share cookie, the
+ * user's Bearer token (`accessToken`, verified by the caller; null = signed out → 401) and the
+ * browser's Origin. FastAPI's answer (202 Fork, 401/403/404/409/429 problems) passes through.
+ */
+export async function relayForkStart(
+  request: Request,
+  shareId: string,
+  ctx: RelayContext,
+  accessToken: string | null,
+): Promise<Response> {
+  if (!isUuid(shareId)) return sharedProblem(404, 'Not Found');
+  if (accessToken === null || !ACCESS_TOKEN.test(accessToken)) {
+    return sharedProblem(401, 'Unauthorized', 'Sign in to fork this workspace.');
+  }
+  const body = await readJsonObject(request, MAX_FORK_BODY_BYTES);
+  if (body === null) return sharedProblem(400, 'Bad Request', 'Expected a JSON object body.');
+  const idempotencyKey = request.headers.get('idempotency-key');
+  if (idempotencyKey !== null && !IDEMPOTENCY_KEY.test(idempotencyKey)) {
+    return sharedProblem(400, 'Bad Request', 'Malformed Idempotency-Key header.');
+  }
+  const origin = request.headers.get('origin');
+  const session = readCookie(request.headers.get('cookie'));
+  let upstream: Response;
+  try {
+    upstream = await (ctx.fetch ?? fetch)(`${ctx.apiBaseUrl}/api/v1/shared/${shareId}/forks`, {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+        ...ctx.clientHeaders,
+        authorization: `Bearer ${accessToken}`,
+        ...(origin ? { origin } : {}),
+        ...(session ? { cookie: `${SHARE_COOKIE}=${session}` } : {}),
+        ...(idempotencyKey !== null ? { 'idempotency-key': idempotencyKey } : {}),
+      },
+      body,
+      cache: 'no-store',
+      redirect: 'manual',
+    });
+  } catch {
+    return sharedProblem(503, 'Service Unavailable', 'The API is temporarily unavailable.');
+  }
+  const headers = withSharedHeaders(upstream);
+  const retryAfter = upstream.headers.get('retry-after');
+  if (retryAfter && RETRY_AFTER.test(retryAfter)) headers.set('Retry-After', retryAfter);
+  if (session !== null && (await isSessionOver(upstream))) {
+    headers.append('Set-Cookie', clearedSessionCookie(shareId, { secure: ctx.secure }));
+  }
+  return new Response(await upstream.arrayBuffer(), { status: upstream.status, headers });
+}

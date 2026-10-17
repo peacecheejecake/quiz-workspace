@@ -11,6 +11,7 @@
 // practises or shows personal data, and the API refuses such requests regardless.
 import { Badge, Button } from '@quiz/ui';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createSharedClient,
@@ -20,7 +21,13 @@ import {
   type SharedWorkspace,
 } from '@/lib/shared/client';
 import { sharedFailureMessage } from '@/lib/shared/messages';
-import { forkPanelHref, sharedDocumentHref, type SharedViewState } from '@/lib/shared/view-state';
+import {
+  forkPanelHref,
+  sharedDocumentHref,
+  sharePath,
+  type SharedViewState,
+} from '@/lib/shared/view-state';
+import { ForkWorkspaceDialog } from './fork-workspace-dialog';
 import { SharedDocumentView } from './shared-document-view';
 import { SharedQuestions } from './shared-questions';
 import { SharedSearch } from './shared-search';
@@ -55,6 +62,7 @@ export function SharedWorkspaceView({
   signedIn,
   forkLoginHref,
 }: SharedWorkspaceViewProps) {
+  const router = useRouter();
   const client = useMemo(() => (shareId ? createSharedClient(shareId) : null), [shareId]);
   const [phase, setPhase] = useState<Phase>(shareId ? LOADING : UNAVAILABLE);
   const [attempt, setAttempt] = useState(0);
@@ -232,18 +240,17 @@ export function SharedWorkspaceView({
         </div>
       </div>
 
-      {view.forkPanel && workspace.allow_fork && signedIn ? (
-        // WS-FORK-01 (S3b) turns this entry into the Fork dialog.
-        <section
-          className={styles.card}
-          aria-labelledby="shared-fork-entry-title"
-          data-screen-id={forkScreenId}
-        >
-          <h2 id="shared-fork-entry-title" className={styles.cardTitle}>
-            Workspace Fork
-          </h2>
-          <p className={styles.note}>Fork 기능은 준비 중입니다.</p>
-        </section>
+      {workspace.allow_fork && signedIn ? (
+        // WS-FORK-01: mounted while the link allows forking so a running fork survives closing.
+        <ForkWorkspaceDialog
+          shareId={shareId}
+          screenId={forkScreenId}
+          open={view.forkPanel}
+          onOpenChange={(next) => {
+            if (!next) router.replace(sharePath(shareId), { scroll: false });
+          }}
+          sourceName={workspace.workspace.name}
+        />
       ) : null}
     </main>
   );

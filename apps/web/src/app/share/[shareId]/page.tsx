@@ -3,7 +3,7 @@
 // (`/api/shared/{id}/…`), because the share session cookie is HttpOnly and scoped to that relay
 // path, so this server component cannot (and must not) read it. It only decides whether the
 // viewer is signed in (where the Fork entry leads) and passes the address-bar state.
-// `?panel=fork` (WS-FORK-01) is the Fork dialog of S3b.
+// `?panel=fork` (WS-FORK-01) opens `ForkWorkspaceDialog` for signed-in viewers of a Fork-ON link.
 import type { Metadata } from 'next';
 import { SharedWorkspaceView } from '@/components/shared/shared-workspace-view';
 import { loginRedirectPath } from '@/lib/auth/routes';
