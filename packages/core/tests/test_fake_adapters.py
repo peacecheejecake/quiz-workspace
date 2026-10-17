@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import subprocess
 import sys
+import traceback
 
 import pytest
 from book_core.embedding import Embedder, FakeEmbedder
@@ -15,9 +17,10 @@ from book_core.llm import (
     LLMClient,
     LLMOutputError,
     LLMRequest,
+    parse_structured_output,
 )
 from book_core.reranker import FakeReranker, Reranker
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -118,3 +121,37 @@ def test_llm_request_fingerprint_is_stable() -> None:
     same = LLMRequest(task="questions.extract", prompt_version="v1", prompt="Extract page 1")
     assert REQUEST.fingerprint() == same.fingerprint()
     assert REQUEST.fingerprint() != REQUEST.model_copy(update={"system": "s"}).fingerprint()
+
+
+BOOK_TEXT = "PRIVATE BOOK PASSAGE 비공개 본문"
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    stem: str
+    option_count: int
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        json.dumps({"stem": "Q?", "option_count": BOOK_TEXT}, ensure_ascii=False),
+        json.dumps({"stem": ["not", BOOK_TEXT], "option_count": 1}, ensure_ascii=False),
+        json.dumps({"stem": "Q?", "option_count": 1, BOOK_TEXT: "extra"}, ensure_ascii=False),
+        f"{BOOK_TEXT} is not JSON",
+    ],
+    ids=["wrong-type", "nested-input", "extra-key", "invalid-json"],
+)
+def test_llm_output_error_never_exposes_raw_output(raw: str) -> None:
+    with pytest.raises(LLMOutputError) as info:
+        parse_structured_output(raw, _Strict)
+    err = info.value
+    rendered = "".join(traceback.format_exception(err))
+
+    assert err.raw_output == raw
+    assert err.__cause__ is None
+    assert err.__suppress_context__
+    for text in (str(err), repr(err), repr(err.args), err.detail, rendered):
+        assert "PRIVATE" not in text
+        assert "비공개" not in text
+    assert "_Strict" in str(err)
