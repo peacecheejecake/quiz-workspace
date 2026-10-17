@@ -6,6 +6,8 @@ Source: docs/architecture.md §4 (``ParsedDocument``, ``DocumentRevision``, inde
 
 from __future__ import annotations
 
+import hashlib
+import itertools
 from collections.abc import Sequence
 from enum import StrEnum
 from typing import Annotated, Literal, Self
@@ -55,12 +57,17 @@ class PageInfo(CoreModel):
 
 
 class Section(CoreModel):
-    """A chapter (level 1) or nested section. Parents must precede their children."""
+    """A chapter (level 1) or nested section. Parents must precede their children.
+
+    ``heading_block_id`` is the heading block that opens the section (its page is the page of
+    the heading), when known.
+    """
 
     id: Identifier
     title: NonEmptyText
     level: Annotated[int, Field(ge=1)]
     parent_id: Identifier | None = None
+    heading_block_id: Identifier | None = None
 
 
 class TableContent(CoreModel):
@@ -89,6 +96,12 @@ class Block(CoreModel):
     ``a | b | c`` lines in ``text`` and the cells in ``table``. ``heading_level`` is the level the
     parser detected for a heading (1 = top); it is a hint, the section tree lives in
     ``sections``. ``caption_block_id`` links an image or table to its caption block.
+
+    Canonical blocks (``DocumentRevision``) also carry their provenance and edit state:
+    ``source_block_ids[i]`` is the ``ParsedDocument`` block that ``locations[i]`` came from (a
+    paragraph merged across pages has one entry per part), ``ordinal`` is the reading-order key
+    and ``edited`` marks text a user corrected in this or an earlier revision. Parser output
+    leaves them at their defaults.
     """
 
     id: Identifier
@@ -99,9 +112,14 @@ class Block(CoreModel):
     heading_level: Annotated[int, Field(ge=1)] | None = None
     table: TableContent | None = None
     caption_block_id: Identifier | None = None
+    source_block_ids: tuple[Identifier, ...] = ()
+    ordinal: Annotated[int, Field(ge=0)] | None = None
+    edited: bool = False
 
     @model_validator(mode="after")
     def _check(self) -> Self:
+        if self.source_block_ids and len(self.source_block_ids) != len(self.locations):
+            raise ValueError(f"block {self.id!r}: source_block_ids must align with locations")
         if self.heading_level is not None and self.type is not BlockType.HEADING:
             raise ValueError(f"block {self.id!r}: heading_level is only valid for headings")
         if self.table is not None and self.type is not BlockType.TABLE:
@@ -140,6 +158,15 @@ def _check_structure(
 
     page_sizes = {p.page: p for p in pages} if pages is not None else None
     block_ids = {b.id for b in blocks}
+    block_types = {b.id: b.type for b in blocks}
+    for section in sections:
+        if section.heading_block_id is None:
+            continue
+        if block_types.get(section.heading_block_id) is not BlockType.HEADING:
+            raise ValueError(
+                f"section {section.id!r} heading block {section.heading_block_id!r} "
+                "is not a heading block of this document"
+            )
     for block in blocks:
         if block.caption_block_id is not None and block.caption_block_id not in block_ids:
             raise ValueError(
@@ -178,11 +205,29 @@ class ParsedDocument(CoreModel):
         return self
 
 
+def revision_content_hash(sections: Sequence[Section], blocks: Sequence[Block]) -> str:
+    """SHA-256 over the revision's sections and blocks, ignoring the ``edited`` flags.
+
+    Two revisions with the same hash have identical canonical content, structure and provenance.
+    """
+    digest = hashlib.sha256()
+    for section in sections:
+        digest.update(section.model_dump_json().encode())
+        digest.update(b"\x1e")
+    digest.update(b"\x1d")
+    for block in blocks:
+        digest.update(block.model_dump_json(exclude={"edited"}).encode())
+        digest.update(b"\x1e")
+    return digest.hexdigest()
+
+
 class DocumentRevision(CoreModel):
     """Corrected canonical blocks of a document plus their publication state.
 
     Block ids are stable across revisions of the same document so that chunks, search hits and
-    question sources keep pointing at the same logical block after a correction.
+    question sources keep pointing at the same logical block after a correction. Blocks are in
+    reading order; when ``ordinal`` is set it must be strictly increasing. ``content_hash``
+    (``revision_content_hash``), when set, must match the content.
     """
 
     schema_version: Literal[1] = 1
@@ -194,10 +239,21 @@ class DocumentRevision(CoreModel):
     status: RevisionStatus = RevisionStatus.DRAFT
     sections: tuple[Section, ...] = ()
     blocks: tuple[Block, ...] = ()
+    content_hash: Sha256Hex | None = None
 
     @model_validator(mode="after")
     def _check(self) -> Self:
         if self.parent_revision_id == self.revision_id:
             raise ValueError("revision cannot be its own parent")
         _check_structure(self.sections, self.blocks, None)
+        ordinals = [b.ordinal for b in self.blocks if b.ordinal is not None]
+        if ordinals and (
+            len(ordinals) != len(self.blocks)
+            or any(a >= b for a, b in itertools.pairwise(ordinals))
+        ):
+            raise ValueError("block ordinals must be set on every block and strictly increase")
+        if self.content_hash is not None and self.content_hash != revision_content_hash(
+            self.sections, self.blocks
+        ):
+            raise ValueError("content_hash does not match the revision content")
         return self
