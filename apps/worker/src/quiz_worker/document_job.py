@@ -351,10 +351,19 @@ def sync_index(deps: DocumentJobDeps, document: DocumentRow, revision: RevisionR
 
 
 def _mirror(deps: DocumentJobDeps, document: DocumentRow, revision: RevisionRow) -> None:
+    mirror_active_revision(deps.documents, deps.index, document, revision)
+
+
+def mirror_active_revision(
+    documents: DocumentStore, index: IndexWriter, document: DocumentRow, revision: RevisionRow
+) -> None:
+    """Activate `revision` in Qdrant and collect older revisions except the newest other
+    published one (kept for a quick rollback). Also used by the index rebuild
+    (quiz_worker.reindex)."""
     ws, doc_id, rev_id = str(document.workspace_id), str(document.id), str(revision.id)
-    deps.index.activate_revision(ws, doc_id, rev_id)
-    previous = deps.documents.previous_published(document.id, revision.id)
-    deps.index.delete_inactive_revisions(
+    index.activate_revision(ws, doc_id, rev_id)
+    previous = documents.previous_published(document.id, revision.id)
+    index.delete_inactive_revisions(
         ws, doc_id, keep={str(previous)} if previous is not None else set()
     )
 

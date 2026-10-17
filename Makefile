@@ -27,7 +27,7 @@ SIGNING_KEYS := supabase/signing_keys.json
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
 	test test-ts test-py test-infra test-models test-llm eval eval-models auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
-	e2e e2e-browsers e2e-trace test-red
+	e2e e2e-browsers e2e-trace test-red images image-api image-worker image-web reindex backup restore
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -178,3 +178,34 @@ e2e: ## Run Playwright E2E, e.g. ARGS="--project harness-chromium"
 
 e2e-trace: ## AC <-> test traceability report; ARGS="--strict --phase A0" gates a phase
 	pnpm e2e:trace $(ARGS)
+
+# Container images (M7.3; build context = repo root, .dockerignore is an allowlist). Local tags
+# only, nothing is pushed. The web image inlines NEXT_PUBLIC_* at build time: override WEB_ARGS
+# per environment (public values only, docs/deployment.md §6).
+IMAGE_TAG ?= dev
+WEB_ARGS ?= --build-arg NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 \
+	--build-arg NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=local-placeholder \
+	--build-arg NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+
+images: image-api image-worker image-web ## Build the api/worker/web container images (local tags)
+
+image-api:
+	docker build -f apps/api/Dockerfile -t quiz-api:$(IMAGE_TAG) .
+
+image-worker:
+	docker build -f apps/worker/Dockerfile -t quiz-worker:$(IMAGE_TAG) .
+
+image-web:
+	docker build -f apps/web/Dockerfile -t quiz-web:$(IMAGE_TAG) $(WEB_ARGS) .
+
+# Operations (M7.3, docs/deployment.md §7). Qdrant is a derived index: rebuild it from Postgres.
+reindex: ## Rebuild Qdrant from published active revisions, ARGS="--all [--dry-run]" or "--workspace <uuid>"
+	scripts/reindex $(ARGS)
+
+backup: ## Postgres dump + Storage objects into DIR (needs infra-up locally), e.g. DIR=/secure/backups/2026-10-18
+	@test -n "$(DIR)" || { echo 'usage: make backup DIR=<new directory>'; exit 2; }
+	scripts/backup "$(DIR)"
+
+restore: ## Restore DIR into an EMPTY target at the same migration version (RESTORE_DB_URL), ARGS="--yes --reindex"
+	@test -n "$(DIR)" || { echo 'usage: make restore DIR=<backup directory> ARGS="--yes [--reindex]"'; exit 2; }
+	scripts/restore "$(DIR)" $(ARGS)

@@ -205,6 +205,10 @@ make web-dev     # Next.js dev server on http://127.0.0.1:3000 (reads root .env)
 pnpm --filter @quiz/web build  # production build of apps/web
 pnpm --filter @quiz/ui build-storybook  # static Storybook (also: storybook, check:rsc)
 uv run python packages/core/scripts/make_fixture_pdfs.py [--check]  # regenerate/check tests/fixtures/pdfs
+make images      # docker build api/worker/web images (local tags, no push; WEB_ARGS = public NEXT_PUBLIC_* build args)
+make reindex ARGS="--all --dry-run"   # rebuild Qdrant from Postgres published active revisions (idempotent; --workspace <uuid>, --after <doc>)
+make backup DIR=<new dir>             # pg data/schema/roles dump + Storage objects + SHA256SUMS (holds user data: keep it off the repo)
+make restore DIR=<dir> ARGS="--yes --reindex"  # into an EMPTY target at the same migration version (RESTORE_DB_URL); never the shared stack
 pnpm --filter <pkg> <script>   # run one TS package's script
 uv run pytest apps/api         # run one Python member's tests
 scripts/codex-review.sh --commit HEAD --title "<Task ID>: <summary>"

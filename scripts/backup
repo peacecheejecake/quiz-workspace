@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Logical backup of the canonical stores (M7.3, docs/deployment.md §7, DEP-06):
+#
+#   scripts/backup <empty-or-new-dir>
+#
+# Writes
+#   db/roles.sql db/schema.sql   cluster roles and schema (forensics / manual recovery)
+#   db/data.sql                  data of every non-platform schema (public, auth, storage, …),
+#                                COPY format, from `supabase db dump --data-only`
+#   db/migrations.txt            applied supabase/migrations versions (restore precondition)
+#   storage/                     every Storage object, content-addressed + manifest.jsonl
+#                                (python -m quiz_worker.storage_backup dump)
+#   SHA256SUMS                   checksums of everything above
+#
+# Qdrant is NOT backed up: it is a derived index, rebuilt after a restore with
+# `scripts/reindex --all` (python -m quiz_worker.reindex).
+#
+# Environment
+#   BACKUP_DB_URL        admin connection (local default: the stack's postgres superuser; hosted:
+#                        the project's `postgres` user, session pooler or direct connection)
+#   SUPABASE_URL         Storage API origin (or NEXT_PUBLIC_SUPABASE_URL; local default)
+#   SUPABASE_SECRET_KEY  server-only Storage key (read from the environment / .env)
+#
+# The backup directory holds user data, Auth password hashes and session tokens: it is created
+# 0700, must stay on encrypted, access-controlled storage and is never committed or attached to
+# CI artifacts. Nothing secret is printed.
+#
+# Recovery objectives (docs/deployment.md §7 "매일 DB 백업", Storage 별도 백업, Qdrant 재색인):
+#   RPO  <= 24 h for Postgres and Storage (daily run of this script, in addition to the hosted
+#        project's own daily backups/PITR where the plan has them); Qdrant has no RPO (derived).
+#   RTO  = restore DB + upload Storage + full reindex ("대량 재생성 시간은 recovery 시간에 포함").
+#        Each phase prints its duration; the local/CI rehearsal (scripts/restore) measures it.
+#        A production RTO target is set with the M7.4 staging measurements.
+set -euo pipefail
+
+usage() {
+  sed -n '2,4p' "$0" | sed 's/^# \{0,1\}//'
+  exit 2
+}
+[[ $# -eq 1 && $1 != -* ]] || usage
+
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+out="$1"
+if [[ -e $out && -n "$(ls -A "$out" 2>/dev/null)" ]]; then
+  echo "backup: $out exists and is not empty" >&2
+  exit 2
+fi
+umask 077
+mkdir -p "$out/db" "$out/storage"
+out="$(cd "$out" && pwd)"
+
+# Local stack defaults; .env (git-ignored) fills SUPABASE_SECRET_KEY like the app does.
+if [[ -f $repo/.env && -z ${SUPABASE_SECRET_KEY:-} ]]; then
+  SUPABASE_SECRET_KEY="$(sed -n 's/^SUPABASE_SECRET_KEY=//p' "$repo/.env" | tail -n 1)"
+fi
+export BACKUP_DB_URL="${BACKUP_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}"
+export SUPABASE_URL="${SUPABASE_URL:-${NEXT_PUBLIC_SUPABASE_URL:-http://127.0.0.1:54321}}"
+export SUPABASE_SECRET_KEY="${SUPABASE_SECRET_KEY:-}"
+
+phase() { printf 'backup: %-28s %ss\n' "$1" "$2"; }
+supabase() { (cd "$repo" && pnpm exec supabase "$@"); }
+
+start=$SECONDS
+supabase db dump --db-url "$BACKUP_DB_URL" --role-only -f "$out/db/roles.sql" >/dev/null
+supabase db dump --db-url "$BACKUP_DB_URL" -f "$out/db/schema.sql" >/dev/null
+supabase db dump --db-url "$BACKUP_DB_URL" --data-only --use-copy -f "$out/db/data.sql" >/dev/null
+psql "$BACKUP_DB_URL" -X -At -v ON_ERROR_STOP=1 \
+  -c "select version from supabase_migrations.schema_migrations order by version" \
+  >"$out/db/migrations.txt"
+phase "postgres dump" $((SECONDS - start))
+
+start=$SECONDS
+(cd "$repo" && uv run --no-sync python -m quiz_worker.storage_backup dump --out "$out/storage")
+phase "storage objects" $((SECONDS - start))
+
+sums="$(mktemp)"
+(cd "$out" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 >"$sums")
+mv "$sums" "$out/SHA256SUMS"
+echo "backup: done -> $out ($(du -sh "$out" | cut -f1))"
