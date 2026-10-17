@@ -37,6 +37,8 @@ export interface LocalEndpoints {
   readonly baseUrl: string;
   readonly supabaseUrl: string;
   readonly mailpitUrl: string;
+  /** FastAPI (`NEXT_PUBLIC_API_BASE_URL`); data fixtures create workspaces/documents through it. */
+  readonly apiUrl: string;
 }
 
 export function localEndpoints(): LocalEndpoints {
@@ -44,7 +46,28 @@ export function localEndpoints(): LocalEndpoints {
     baseUrl: envUrl('E2E_BASE_URL', 'http://127.0.0.1:3000'),
     supabaseUrl: envUrl('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:54321'),
     mailpitUrl: envUrl('E2E_MAILPIT_URL', 'http://127.0.0.1:54324'),
+    apiUrl: envUrl('NEXT_PUBLIC_API_BASE_URL', 'http://127.0.0.1:8000'),
   };
+}
+
+/**
+ * Local Postgres superuser URL (`E2E_DB_ADMIN_URL`, default: the Supabase CLI local database).
+ * Only fixture cleanup and the few documented seeds that no public API can create use it.
+ */
+export function localDbAdminUrl(): string {
+  const name = 'E2E_DB_ADMIN_URL';
+  const raw =
+    process.env[name]?.trim() || 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`${name} is not a valid URL`);
+  }
+  if (!['postgres:', 'postgresql:'].includes(url.protocol) || !LOOPBACK_HOSTS.has(url.hostname)) {
+    throw new Error(`${name} must point at the local database (127.0.0.1/localhost)`);
+  }
+  return raw;
 }
 
 export interface SupabaseKeys {

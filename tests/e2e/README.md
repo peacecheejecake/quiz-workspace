@@ -56,7 +56,10 @@ test('AUTH-01-AC02 ...', async ({ page, userFactory }) => {
 - 사용자 생성·삭제는 Supabase Auth admin API를 쓴다. 키는 `SUPABASE_SECRET_KEY`/`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` 환경 변수 또는 `pnpm exec supabase status -o json`에서 실행 시 읽고 메모리에만 둔다. 커밋·로그·에러 메시지에 남기지 않는다.
 - 모든 fixture는 `E2E_BASE_URL`·`NEXT_PUBLIC_SUPABASE_URL`·`E2E_MAILPIT_URL`이 loopback(127.0.0.1/localhost)이 아니면 즉시 실패한다(운영 프로젝트 보호).
 - 앱에 test 전용 seed/reset endpoint를 만들지 않는다. 데이터는 공개 API(또는 로컬 Auth admin API)로 만든다.
-- **확장 지점**(`fixtures/test.ts`): M3.1a `workspaceFactory`, M3.2a `documentFactory`(합성 PDF `tests/fixtures/pdfs`), S0 owner/guest/recipient 공유 fixture. 같은 패턴(생성 → 추적 → teardown 삭제)으로 추가한다.
+- **데이터 fixture**(M3.0): `workspaceFactory`(`fixtures/workspaces.ts`) — `member(label)`은 사용자 + API 세션, `create/list/archive/softDelete`는 공개 Workspace API를 호출한다. `fixtures/documents.ts` — 합성 PDF를 공개 업로드 흐름(upload-intent → Storage 직접 업로드 → complete-upload)으로 올리고 `GET /jobs/{id}`를 `expect.poll`로 기다리며, 검색 API를 호출한다. API 호출은 `fixtures/api.ts`(Node `fetch`, trace에 토큰 미기록)로 하고, 엔드포인트가 없으면 `POST /api/v1/workspaces not implemented (404)`처럼 실패한다. 요청/응답 형태와 UI label 계약은 각 파일 머리 주석(`workspace-ui.ts` 포함)에 있다.
+- **DB superuser**(`fixtures/db.ts`, `psql`): teardown에서 테스트 사용자가 소유한 Workspace를 hard delete(`owner_id`가 `on delete restrict`, API는 soft delete만 함)하고, 공개 API가 없는 상태 중 서버 거부가 AC인 경우(DOC-02-AC05 viewer membership)에만 seed한다.
+- **FastAPI**: `playwright.config.ts`가 웹 서버와 함께 `python -m quiz_api.serve`를 `NEXT_PUBLIC_API_BASE_URL`(기본 :8000)에 띄운다(로컬은 이미 떠 있으면 재사용). 병렬 worktree와 포트가 겹치면 `E2E_BASE_URL`/`NEXT_PUBLIC_API_BASE_URL`을 다른 포트로 지정한다(인증 메일 링크는 Supabase `site_url` :3000을 가리키므로 HARNESS-09·메일 기반 AUTH 테스트는 기본 포트에서만 통과).
+- **확장 지점**(`fixtures/test.ts`): S0 owner/guest/recipient 공유 fixture. 같은 패턴(생성 → 추적 → teardown 삭제)으로 추가한다.
 
 ## Trace/artifact와 비밀값
 
