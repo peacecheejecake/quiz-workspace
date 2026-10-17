@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "name": "retrieval-seed",
+  "description": "KO/EN seed set: 6 queries over the synthetic book-ko and book-en fixtures. Queries and judgements are read from tests/fixtures/pdfs/retrieval-seed.json (the single source of truth) and expanded with the truth files' blocks and page/bbox.",
+  "synthetic": true,
+  "documents": [
+    { "id": "book-ko", "truth": "../../tests/fixtures/pdfs/book-ko.truth.json" },
+    { "id": "book-en", "truth": "../../tests/fixtures/pdfs/book-en.truth.json" }
+  ],
+  "seed_queries": "../../tests/fixtures/pdfs/retrieval-seed.json"
+}

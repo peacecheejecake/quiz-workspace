@@ -1,6 +1,7 @@
 """``core`` CLI (P0.8): help works, commands without their Task report "not implemented".
 
-``parse``/``structure``/``chunk`` (M1.5) are covered in ``test_cli_pipeline.py``.
+``parse``/``structure``/``chunk`` (M1.5) are covered in ``test_cli_pipeline.py``,
+``index``/``search``/``excerpt``/``eval`` (M2.6) in ``test_cli_retrieval.py``.
 """
 
 from __future__ import annotations
@@ -15,10 +16,6 @@ from typer.testing import CliRunner
 runner = CliRunner()
 
 COMMANDS = [
-    (["index"], "M2.6"),
-    (["search"], "M2.6"),
-    (["excerpt"], "M2.6"),
-    (["eval"], "M2.6"),
     (["questions", "extract"], "M4.3"),
     (["questions", "generate"], "M6.1"),
 ]

@@ -25,7 +25,7 @@ SUPABASE := pnpm exec supabase
 SIGNING_KEYS := supabase/signing_keys.json
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
-	test test-ts test-py test-infra test-models test-llm auth-keys infra-up infra-down infra-status infra-reset \
+	test test-ts test-py test-infra test-models test-llm eval eval-models auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
 	e2e e2e-browsers e2e-trace test-red
 
@@ -103,6 +103,20 @@ test-models: ## Tests on real model weights (downloads into HF_HOME on first run
 # fails, never skips, without them. Sends only synthetic text, never book content.
 test-llm: ## Tests against the real LLM provider (needs LLM_API_KEY, LLM_MODEL)
 	uv run pytest -m llm
+
+# Retrieval evaluation (M2.6) on the KO/EN seed set: JSON + Markdown reports in eval/reports/
+# (gitignored except the committed sample-* report). `eval` uses the deterministic fakes and runs
+# offline in seconds; `eval-models` uses Qwen3-Embedding (MRL 256) + Qwen3-Reranker on CPU
+# (minutes; weights in HF_HOME). Both index into an in-process Qdrant.
+EVAL_DATASET := eval/datasets/retrieval-seed.json
+
+eval: ## Retrieval evaluation with fake models (fast, offline) -> eval/reports/seed-fake.{json,md}
+	uv run core eval $(EVAL_DATASET) --config eval/configs/fake.json \
+		-o eval/reports/seed-fake.json --markdown eval/reports/seed-fake.md
+
+eval-models: ## Retrieval evaluation with Qwen3 embedder + reranker -> eval/reports/seed-qwen3.{json,md}
+	uv run core eval $(EVAL_DATASET) --config eval/configs/models.json \
+		-o eval/reports/seed-qwen3.json --markdown eval/reports/seed-qwen3.md
 
 auth-keys: $(SIGNING_KEYS) ## Generate the local Auth JWT signing key if missing (idempotent)
 

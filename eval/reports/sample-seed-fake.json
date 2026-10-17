@@ -1,0 +1,1763 @@
+{
+  "schema_version": 1,
+  "name": "seed-fake",
+  "dataset": {
+    "name": "retrieval-seed",
+    "source": "retrieval-seed.json",
+    "synthetic": true,
+    "queries": 6,
+    "query_languages": {
+      "en": 3,
+      "ko": 3
+    },
+    "documents": [
+      {
+        "id": "book-ko",
+        "language": "ko",
+        "revision_id": "r1",
+        "children": 11
+      },
+      {
+        "id": "book-en",
+        "language": "en",
+        "revision_id": "r1",
+        "children": 9
+      }
+    ]
+  },
+  "config": {
+    "name": "seed-fake",
+    "embedder": "fake",
+    "embedding_dimension": null,
+    "reranker": "fake",
+    "modes": [
+      "keyword",
+      "semantic",
+      "hybrid"
+    ],
+    "rerank": [
+      "off",
+      "top_k"
+    ],
+    "dense_candidates": 30,
+    "keyword_candidates": 30,
+    "rerank_top": 20,
+    "results": 10,
+    "rrf_k": 60,
+    "directions": true,
+    "check_locations": true,
+    "latency": false,
+    "sweep": {
+      "rrf_ks": [
+        0,
+        10,
+        30,
+        60,
+        100
+      ],
+      "depths": [
+        5,
+        10,
+        20,
+        30,
+        50
+      ],
+      "modes": [
+        "hybrid"
+      ],
+      "rerank": [
+        "off"
+      ]
+    }
+  },
+  "models": {
+    "embedder": "fake-embedder",
+    "reranker": "fake-reranker"
+  },
+  "index": {
+    "backend": "memory",
+    "points": 32
+  },
+  "runs": [
+    {
+      "mode": "keyword",
+      "rerank": "off",
+      "limits": {
+        "dense_candidates": 30,
+        "keyword_candidates": 30,
+        "rerank_top": 20,
+        "results": 10,
+        "rrf_k": 60
+      },
+      "overall": {
+        "queries": 6,
+        "R@5": 0.5,
+        "R@10": 0.5,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.5754
+      },
+      "by_query_language": {
+        "en": {
+          "queries": 3,
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131
+        },
+        "ko": {
+          "queries": 3,
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 0.8333,
+          "nDCG@10": 0.5377
+        }
+      },
+      "directions": {
+        "en->en": {
+          "queries": 3,
+          "R@5": 1.0,
+          "R@10": 1.0,
+          "MRR@10": 1.0,
+          "nDCG@10": 1.0
+        },
+        "en->ko": {
+          "queries": 3,
+          "R@5": 0.0,
+          "R@10": 0.0,
+          "MRR@10": 0.0,
+          "nDCG@10": 0.0
+        },
+        "ko->en": {
+          "queries": 3,
+          "R@5": 0.0,
+          "R@10": 0.0,
+          "MRR@10": 0.0,
+          "nDCG@10": 0.0
+        },
+        "ko->ko": {
+          "queries": 3,
+          "R@5": 1.0,
+          "R@10": 1.0,
+          "MRR@10": 0.8333,
+          "nDCG@10": 0.877
+        }
+      },
+      "locations": {
+        "checked": 6,
+        "ok": 6,
+        "accuracy": 1.0,
+        "failures": []
+      },
+      "queries": [
+        {
+          "id": "q-ko-01",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch2-s2": 2,
+            "book-en#ch2-s2": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 0.5,
+          "nDCG@10": 0.3869,
+          "directions": {
+            "ko->en": {
+              "R@5": 0.0,
+              "R@10": 0.0,
+              "MRR@10": 0.0,
+              "nDCG@10": 0.0
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.5,
+              "nDCG@10": 0.6309
+            }
+          }
+        },
+        {
+          "id": "q-ko-02",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch1-s2": 1,
+            "book-en#ch1-s2": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "ko->en": {
+              "R@5": 0.0,
+              "R@10": 0.0,
+              "MRR@10": 0.0,
+              "nDCG@10": 0.0
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-ko-03",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch1-s1": 1,
+            "book-en#ch1-s1": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "ko->en": {
+              "R@5": 0.0,
+              "R@10": 0.0,
+              "MRR@10": 0.0,
+              "nDCG@10": 0.0
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-en-01",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch2-s1": null,
+            "book-en#ch2-s1": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 0.0,
+              "R@10": 0.0,
+              "MRR@10": 0.0,
+              "nDCG@10": 0.0
+            }
+          }
+        },
+        {
+          "id": "q-en-02",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch1-s2": null,
+            "book-en#ch1-s2": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 0.0,
+              "R@10": 0.0,
+              "MRR@10": 0.0,
+              "nDCG@10": 0.0
+            }
+          }
+        },
+        {
+          "id": "q-en-03",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch2-s1": null,
+            "book-en#ch2-s1": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 0.0,
+              "R@10": 0.0,
+              "MRR@10": 0.0,
+              "nDCG@10": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "keyword",
+      "rerank": "top_k",
+      "limits": {
+        "dense_candidates": 30,
+        "keyword_candidates": 30,
+        "rerank_top": 20,
+        "results": 10,
+        "rrf_k": 60
+      },
+      "overall": {
+        "queries": 6,
+        "R@5": 0.5,
+        "R@10": 0.5,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.5754
+      },
+      "by_query_language": {
+        "en": {
+          "queries": 3,
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131
+        },
+        "ko": {
+          "queries": 3,
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 0.8333,
+          "nDCG@10": 0.5377
+        }
+      },
+      "directions": {
+        "en->en": {
+          "queries": 3,
+          "R@5": 1.0,
+          "R@10": 1.0,
+          "MRR@10": 1.0,
+          "nDCG@10": 1.0
+        },
+        "en->ko": {
+          "queries": 3,
+          "R@5": 0.0,
+          "R@10": 0.0,
+          "MRR@10": 0.0,
+          "nDCG@10": 0.0
+        },
+        "ko->en": {
+          "queries": 3,
+          "R@5": 0.0,
+          "R@10": 0.0,
+          "MRR@10": 0.0,
+          "nDCG@10": 0.0
+        },
+        "ko->ko": {
+          "queries": 3,
+          "R@5": 1.0,
+          "R@10": 1.0,
+          "MRR@10": 0.8333,
+          "nDCG@10": 0.877
+        }
+      },
+      "locations": {
+        "checked": 6,
+        "ok": 6,
+        "accuracy": 1.0,
+        "failures": []
+      },
+      "queries": [
+        {
+          "id": "q-ko-01",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch2-s2": 2,
+            "book-en#ch2-s2": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 0.5,
+          "nDCG@10": 0.3869,
+          "directions": {
+            "ko->en": {
+              "R@5": 0.0,
+              "R@10": 0.0,
+              "MRR@10": 0.0,
+              "nDCG@10": 0.0
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.5,
+              "nDCG@10": 0.6309
+            }
+          }
+        },
+        {
+          "id": "q-ko-02",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch1-s2": 1,
+            "book-en#ch1-s2": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "ko->en": {
+              "R@5": 0.0,
+              "R@10": 0.0,
+              "MRR@10": 0.0,
+              "nDCG@10": 0.0
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-ko-03",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch1-s1": 1,
+            "book-en#ch1-s1": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "ko->en": {
+              "R@5": 0.0,
+              "R@10": 0.0,
+              "MRR@10": 0.0,
+              "nDCG@10": 0.0
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-en-01",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch2-s1": null,
+            "book-en#ch2-s1": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 0.0,
+              "R@10": 0.0,
+              "MRR@10": 0.0,
+              "nDCG@10": 0.0
+            }
+          }
+        },
+        {
+          "id": "q-en-02",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch1-s2": null,
+            "book-en#ch1-s2": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 0.0,
+              "R@10": 0.0,
+              "MRR@10": 0.0,
+              "nDCG@10": 0.0
+            }
+          }
+        },
+        {
+          "id": "q-en-03",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch2-s1": null,
+            "book-en#ch2-s1": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 0.0,
+              "R@10": 0.0,
+              "MRR@10": 0.0,
+              "nDCG@10": 0.0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "semantic",
+      "rerank": "off",
+      "limits": {
+        "dense_candidates": 30,
+        "keyword_candidates": 30,
+        "rerank_top": 20,
+        "results": 10,
+        "rrf_k": 60
+      },
+      "overall": {
+        "queries": 6,
+        "R@5": 0.5,
+        "R@10": 0.6667,
+        "MRR@10": 0.7361,
+        "nDCG@10": 0.5767
+      },
+      "by_query_language": {
+        "en": {
+          "queries": 3,
+          "R@5": 0.6667,
+          "R@10": 0.6667,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.7153
+        },
+        "ko": {
+          "queries": 3,
+          "R@5": 0.3333,
+          "R@10": 0.6667,
+          "MRR@10": 0.4722,
+          "nDCG@10": 0.438
+        }
+      },
+      "directions": {
+        "en->en": {
+          "queries": 3,
+          "R@5": 1.0,
+          "R@10": 1.0,
+          "MRR@10": 1.0,
+          "nDCG@10": 1.0
+        },
+        "en->ko": {
+          "queries": 3,
+          "R@5": 0.6667,
+          "R@10": 1.0,
+          "MRR@10": 0.5417,
+          "nDCG@10": 0.6488
+        },
+        "ko->en": {
+          "queries": 3,
+          "R@5": 0.6667,
+          "R@10": 1.0,
+          "MRR@10": 0.2056,
+          "nDCG@10": 0.3912
+        },
+        "ko->ko": {
+          "queries": 3,
+          "R@5": 0.6667,
+          "R@10": 1.0,
+          "MRR@10": 0.4722,
+          "nDCG@10": 0.5956
+        }
+      },
+      "locations": {
+        "checked": 8,
+        "ok": 8,
+        "accuracy": 1.0,
+        "failures": []
+      },
+      "queries": [
+        {
+          "id": "q-ko-01",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch2-s2": 4,
+            "book-en#ch2-s2": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 0.25,
+          "nDCG@10": 0.2641,
+          "directions": {
+            "ko->en": {
+              "R@5": 0.0,
+              "R@10": 1.0,
+              "MRR@10": 0.1667,
+              "nDCG@10": 0.3562
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.25,
+              "nDCG@10": 0.4307
+            }
+          }
+        },
+        {
+          "id": "q-ko-02",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch1-s2": 1,
+            "book-en#ch1-s2": 6
+          },
+          "R@5": 0.5,
+          "R@10": 1.0,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.8316,
+          "directions": {
+            "ko->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.25,
+              "nDCG@10": 0.4307
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-ko-03",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch1-s1": 6,
+            "book-en#ch1-s1": null
+          },
+          "R@5": 0.0,
+          "R@10": 0.5,
+          "MRR@10": 0.1667,
+          "nDCG@10": 0.2184,
+          "directions": {
+            "ko->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.2,
+              "nDCG@10": 0.3869
+            },
+            "ko->ko": {
+              "R@5": 0.0,
+              "R@10": 1.0,
+              "MRR@10": 0.1667,
+              "nDCG@10": 0.3562
+            }
+          }
+        },
+        {
+          "id": "q-en-01",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch2-s1": null,
+            "book-en#ch2-s1": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 0.0,
+              "R@10": 1.0,
+              "MRR@10": 0.125,
+              "nDCG@10": 0.3155
+            }
+          }
+        },
+        {
+          "id": "q-en-02",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch1-s2": 3,
+            "book-en#ch1-s2": 1
+          },
+          "R@5": 1.0,
+          "R@10": 1.0,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.9197,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-en-03",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch2-s1": null,
+            "book-en#ch2-s1": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.5,
+              "nDCG@10": 0.6309
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "semantic",
+      "rerank": "top_k",
+      "limits": {
+        "dense_candidates": 30,
+        "keyword_candidates": 30,
+        "rerank_top": 20,
+        "results": 10,
+        "rrf_k": 60
+      },
+      "overall": {
+        "queries": 6,
+        "R@5": 0.5,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.605
+      },
+      "by_query_language": {
+        "en": {
+          "queries": 3,
+          "R@5": 0.5,
+          "R@10": 0.6667,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6722
+        },
+        "ko": {
+          "queries": 3,
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 0.8333,
+          "nDCG@10": 0.5377
+        }
+      },
+      "directions": {
+        "en->en": {
+          "queries": 3,
+          "R@5": 1.0,
+          "R@10": 1.0,
+          "MRR@10": 1.0,
+          "nDCG@10": 1.0
+        },
+        "en->ko": {
+          "queries": 3,
+          "R@5": 0.6667,
+          "R@10": 1.0,
+          "MRR@10": 0.5417,
+          "nDCG@10": 0.6488
+        },
+        "ko->en": {
+          "queries": 3,
+          "R@5": 0.6667,
+          "R@10": 1.0,
+          "MRR@10": 0.2056,
+          "nDCG@10": 0.3912
+        },
+        "ko->ko": {
+          "queries": 3,
+          "R@5": 1.0,
+          "R@10": 1.0,
+          "MRR@10": 0.8333,
+          "nDCG@10": 0.877
+        }
+      },
+      "locations": {
+        "checked": 7,
+        "ok": 7,
+        "accuracy": 1.0,
+        "failures": []
+      },
+      "queries": [
+        {
+          "id": "q-ko-01",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch2-s2": 2,
+            "book-en#ch2-s2": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 0.5,
+          "nDCG@10": 0.3869,
+          "directions": {
+            "ko->en": {
+              "R@5": 0.0,
+              "R@10": 1.0,
+              "MRR@10": 0.1667,
+              "nDCG@10": 0.3562
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.5,
+              "nDCG@10": 0.6309
+            }
+          }
+        },
+        {
+          "id": "q-ko-02",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch1-s2": 1,
+            "book-en#ch1-s2": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "ko->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.25,
+              "nDCG@10": 0.4307
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-ko-03",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch1-s1": 1,
+            "book-en#ch1-s1": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "ko->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.2,
+              "nDCG@10": 0.3869
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-en-01",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch2-s1": null,
+            "book-en#ch2-s1": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 0.0,
+              "R@10": 1.0,
+              "MRR@10": 0.125,
+              "nDCG@10": 0.3155
+            }
+          }
+        },
+        {
+          "id": "q-en-02",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch1-s2": 10,
+            "book-en#ch1-s2": 1
+          },
+          "R@5": 0.5,
+          "R@10": 1.0,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.7904,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-en-03",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch2-s1": null,
+            "book-en#ch2-s1": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.5,
+              "nDCG@10": 0.6309
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "hybrid",
+      "rerank": "off",
+      "limits": {
+        "dense_candidates": 30,
+        "keyword_candidates": 30,
+        "rerank_top": 20,
+        "results": 10,
+        "rrf_k": 60
+      },
+      "overall": {
+        "queries": 6,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615
+      },
+      "by_query_language": {
+        "en": {
+          "queries": 3,
+          "R@5": 0.6667,
+          "R@10": 0.6667,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6922
+        },
+        "ko": {
+          "queries": 3,
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 0.8333,
+          "nDCG@10": 0.5377
+        }
+      },
+      "directions": {
+        "en->en": {
+          "queries": 3,
+          "R@5": 1.0,
+          "R@10": 1.0,
+          "MRR@10": 1.0,
+          "nDCG@10": 1.0
+        },
+        "en->ko": {
+          "queries": 3,
+          "R@5": 0.6667,
+          "R@10": 1.0,
+          "MRR@10": 0.5417,
+          "nDCG@10": 0.6488
+        },
+        "ko->en": {
+          "queries": 3,
+          "R@5": 0.6667,
+          "R@10": 1.0,
+          "MRR@10": 0.2056,
+          "nDCG@10": 0.3912
+        },
+        "ko->ko": {
+          "queries": 3,
+          "R@5": 1.0,
+          "R@10": 1.0,
+          "MRR@10": 0.8333,
+          "nDCG@10": 0.877
+        }
+      },
+      "locations": {
+        "checked": 7,
+        "ok": 7,
+        "accuracy": 1.0,
+        "failures": []
+      },
+      "queries": [
+        {
+          "id": "q-ko-01",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch2-s2": 2,
+            "book-en#ch2-s2": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 0.5,
+          "nDCG@10": 0.3869,
+          "directions": {
+            "ko->en": {
+              "R@5": 0.0,
+              "R@10": 1.0,
+              "MRR@10": 0.1667,
+              "nDCG@10": 0.3562
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.5,
+              "nDCG@10": 0.6309
+            }
+          }
+        },
+        {
+          "id": "q-ko-02",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch1-s2": 1,
+            "book-en#ch1-s2": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "ko->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.25,
+              "nDCG@10": 0.4307
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-ko-03",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch1-s1": 1,
+            "book-en#ch1-s1": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "ko->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.2,
+              "nDCG@10": 0.3869
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-en-01",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch2-s1": null,
+            "book-en#ch2-s1": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 0.0,
+              "R@10": 1.0,
+              "MRR@10": 0.125,
+              "nDCG@10": 0.3155
+            }
+          }
+        },
+        {
+          "id": "q-en-02",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch1-s2": 5,
+            "book-en#ch1-s2": 1
+          },
+          "R@5": 1.0,
+          "R@10": 1.0,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.8503,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-en-03",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch2-s1": null,
+            "book-en#ch2-s1": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.5,
+              "nDCG@10": 0.6309
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "hybrid",
+      "rerank": "top_k",
+      "limits": {
+        "dense_candidates": 30,
+        "keyword_candidates": 30,
+        "rerank_top": 20,
+        "results": 10,
+        "rrf_k": 60
+      },
+      "overall": {
+        "queries": 6,
+        "R@5": 0.5,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.605
+      },
+      "by_query_language": {
+        "en": {
+          "queries": 3,
+          "R@5": 0.5,
+          "R@10": 0.6667,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6722
+        },
+        "ko": {
+          "queries": 3,
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 0.8333,
+          "nDCG@10": 0.5377
+        }
+      },
+      "directions": {
+        "en->en": {
+          "queries": 3,
+          "R@5": 1.0,
+          "R@10": 1.0,
+          "MRR@10": 1.0,
+          "nDCG@10": 1.0
+        },
+        "en->ko": {
+          "queries": 3,
+          "R@5": 0.6667,
+          "R@10": 1.0,
+          "MRR@10": 0.5417,
+          "nDCG@10": 0.6488
+        },
+        "ko->en": {
+          "queries": 3,
+          "R@5": 0.6667,
+          "R@10": 1.0,
+          "MRR@10": 0.2056,
+          "nDCG@10": 0.3912
+        },
+        "ko->ko": {
+          "queries": 3,
+          "R@5": 1.0,
+          "R@10": 1.0,
+          "MRR@10": 0.8333,
+          "nDCG@10": 0.877
+        }
+      },
+      "locations": {
+        "checked": 7,
+        "ok": 7,
+        "accuracy": 1.0,
+        "failures": []
+      },
+      "queries": [
+        {
+          "id": "q-ko-01",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch2-s2": 2,
+            "book-en#ch2-s2": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 0.5,
+          "nDCG@10": 0.3869,
+          "directions": {
+            "ko->en": {
+              "R@5": 0.0,
+              "R@10": 1.0,
+              "MRR@10": 0.1667,
+              "nDCG@10": 0.3562
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.5,
+              "nDCG@10": 0.6309
+            }
+          }
+        },
+        {
+          "id": "q-ko-02",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch1-s2": 1,
+            "book-en#ch1-s2": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "ko->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.25,
+              "nDCG@10": 0.4307
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-ko-03",
+          "language": "ko",
+          "ranks": {
+            "book-ko#ch1-s1": 1,
+            "book-en#ch1-s1": null
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "ko->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.2,
+              "nDCG@10": 0.3869
+            },
+            "ko->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-en-01",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch2-s1": null,
+            "book-en#ch2-s1": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 0.0,
+              "R@10": 1.0,
+              "MRR@10": 0.125,
+              "nDCG@10": 0.3155
+            }
+          }
+        },
+        {
+          "id": "q-en-02",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch1-s2": 10,
+            "book-en#ch1-s2": 1
+          },
+          "R@5": 0.5,
+          "R@10": 1.0,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.7904,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            }
+          }
+        },
+        {
+          "id": "q-en-03",
+          "language": "en",
+          "ranks": {
+            "book-ko#ch2-s1": null,
+            "book-en#ch2-s1": 1
+          },
+          "R@5": 0.5,
+          "R@10": 0.5,
+          "MRR@10": 1.0,
+          "nDCG@10": 0.6131,
+          "directions": {
+            "en->en": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 1.0,
+              "nDCG@10": 1.0
+            },
+            "en->ko": {
+              "R@5": 1.0,
+              "R@10": 1.0,
+              "MRR@10": 0.5,
+              "nDCG@10": 0.6309
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "sweep": {
+    "grid": {
+      "rrf_ks": [
+        0,
+        10,
+        30,
+        60,
+        100
+      ],
+      "depths": [
+        5,
+        10,
+        20,
+        30,
+        50
+      ],
+      "modes": [
+        "hybrid"
+      ],
+      "rerank": [
+        "off"
+      ]
+    },
+    "rows": [
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 0,
+        "depth": 5,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 0,
+        "depth": 10,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 0,
+        "depth": 20,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 0,
+        "depth": 30,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 0,
+        "depth": 50,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 10,
+        "depth": 5,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.8333,
+        "nDCG@10": 0.5772,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 10,
+        "depth": 10,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 10,
+        "depth": 20,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 10,
+        "depth": 30,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 10,
+        "depth": 50,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 30,
+        "depth": 5,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.8333,
+        "nDCG@10": 0.5772,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 30,
+        "depth": 10,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 30,
+        "depth": 20,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 30,
+        "depth": 30,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 30,
+        "depth": 50,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 60,
+        "depth": 5,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.8333,
+        "nDCG@10": 0.5772,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 60,
+        "depth": 10,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 60,
+        "depth": 20,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 60,
+        "depth": 30,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 60,
+        "depth": 50,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 100,
+        "depth": 5,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.8333,
+        "nDCG@10": 0.5772,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 100,
+        "depth": 10,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 100,
+        "depth": 20,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 100,
+        "depth": 30,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      },
+      {
+        "mode": "hybrid",
+        "rerank": "off",
+        "rrf_k": 100,
+        "depth": 50,
+        "R@5": 0.5833,
+        "R@10": 0.5833,
+        "MRR@10": 0.9167,
+        "nDCG@10": 0.615,
+        "cross R@5": 0.6667
+      }
+    ],
+    "best": {
+      "mode": "hybrid",
+      "rerank": "off",
+      "rrf_k": 0,
+      "depth": 5,
+      "R@5": 0.5833,
+      "R@10": 0.5833,
+      "MRR@10": 0.9167,
+      "nDCG@10": 0.615,
+      "cross R@5": 0.6667
+    }
+  }
+}
