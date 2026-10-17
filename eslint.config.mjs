@@ -16,6 +16,8 @@ export default defineConfig(
       '**/coverage/**',
       '**/storybook-static/**',
       '**/.venv/**',
+      // Agent worktrees (other checkouts of this repo).
+      '.claude/**',
       'playwright-report/**',
       'test-results/**',
       // Owned by P0.10 (Playwright harness); @playwright/test is not installed yet.
@@ -31,6 +33,8 @@ export default defineConfig(
       ecmaVersion: 'latest',
       sourceType: 'module',
       globals: { ...globals.node },
+      // Pin the root so nested checkouts (.claude/worktrees) are never tsconfig candidates.
+      parserOptions: { tsconfigRootDir: import.meta.dirname },
     },
     rules: {
       '@typescript-eslint/no-unused-vars': [

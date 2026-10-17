@@ -10,6 +10,7 @@ __pycache__/
 *.pyc
 .DS_Store
 .reviews/
+.claude/worktrees/
 .venv/
 .mypy_cache/
 .ruff_cache/

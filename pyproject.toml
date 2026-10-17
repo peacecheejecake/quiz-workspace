@@ -26,7 +26,9 @@ dev = [
 target-version = "py312"
 line-length = 100
 # Markdown is excluded so tooling never rewrites the hand-written docs.
-extend-exclude = ["node_modules", ".next", "dist", "build", "storybook-static", "*.md"]
+extend-exclude = [
+  "node_modules", ".next", "dist", "build", "storybook-static", "*.md", ".claude",
+]
 
 [tool.ruff.lint]
 select = [
@@ -58,3 +60,4 @@ strict = true
 
 [tool.pytest.ini_options]
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+norecursedirs = [".*", "*.egg", "venv", "node_modules", "dist", "build"]
