@@ -175,6 +175,9 @@ make infra-status  # compose health + Supabase local URLs (keys go only into .en
 make infra-down  # stop infra, keep data volumes
 make infra-reset # stop infra and DELETE local data volumes
 pnpm exec supabase <cmd>       # pinned Supabase CLI; never a global install
+make auth-keys   # generate gitignored local Auth ES256 signing key (run by infra-up; idempotent)
+make test-infra  # pytest -m infra against the running stack (errors, not skips, if it's down)
+make worker-dev  # Celery worker via python -m quiz_worker.serve (never bare `celery worker`)
 make db-reset    # recreate local DB from supabase/migrations + seed.sql (needs infra-up)
 make db-lint     # supabase db lint --fail-on warning
 make db-test     # pgTAP tests in supabase/tests
