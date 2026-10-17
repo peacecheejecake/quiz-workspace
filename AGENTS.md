@@ -47,7 +47,9 @@ summary of the rules for carrying out the implementation plan.
 - Never marks a Task done with failing, skipped, or deleted tests.
 - Shared local stack: the orchestrator keeps `make infra-up` running from the main checkout.
   Subagents use it but never run `infra-up/down/reset` or `db-reset` unless their brief says so
-  (only migration-changing Tasks, with orchestrator approval). Isolate data with per-test users.
+  Never apply migrations to the shared DB: verify them in a rolled-back transaction
+  (`begin; \i <migration>; \i <pgTAP>; rollback;`). The orchestrator applies merged migrations
+  with `supabase migration up`. Isolate data with per-test users and workspaces.
 
 **Reviewer (Codex)**
 - Runs via `scripts/codex-review.sh` (§4) on the Task's commit(s) with the default model.
