@@ -6,7 +6,9 @@ workspace only.
 
 Pipeline (docs/architecture.md §4 indexing flow), serialised per document by an advisory lock:
 
-1. load the document + draft revision (`quiz_worker` role); a deleted document fails the job;
+1. load the document + draft revision (`quiz_worker` role); a deleted document fails the job, and
+   so does a workspace that is archived/deleted or that the job's user can no longer edit
+   (`workspace_unavailable`, re-checked under a lock in step 4);
 2. if the draft has no content yet: download the original from the private `source-pdfs`
    bucket, check it (stored size + SHA-256, PDF signature, page limit), parse it (Docling, CPU,
    with a conversion timeout), store `parsed_document.json` in `parsed-artifacts`, build the
@@ -15,10 +17,14 @@ Pipeline (docs/architecture.md §4 indexing flow), serialised per document by an
    the DB instead;
 3. chunk (`chunk_revision`) and index into Qdrant as an *inactive* revision (payload carries
    workspace / document / revision ids and `document_type`);
-4. in one DB transaction: publish the revision, make it the document's active revision and set
-   the document `ready` — the DB is the authority search filters on;
+4. in one DB transaction: re-check workspace access (rows locked FOR SHARE), publish the
+   revision, make it the document's active revision, set the document `ready` and enqueue a
+   `document.index_sync` obligation — the DB is the authority search filters on, so once this
+   commits the job succeeds;
 5. mirror the switch in Qdrant (`activate_revision`) and garbage-collect older revisions except the
-   previous active one (kept for a quick rollback).
+   newest other published one (kept for a quick rollback), then resolve the obligation. If this
+   fails (or the worker dies right after step 4) the job still succeeds (`index_sync: pending`)
+   and the obligation, handed to the broker by the reconciler, retries the mirror with backoff.
 
 Every step is idempotent, so an at-least-once redelivery or a retry resumes where the last attempt
 stopped: a published+active revision only re-runs step 5, content in the DB is not parsed again,
@@ -55,11 +61,14 @@ from quiz_worker.adapters import (
     page_count,
 )
 from quiz_worker.document_store import (
+    INDEX_SYNC_JOB_TYPE,
+    INDEX_SYNC_MAX_ATTEMPTS,
     DocumentDeletedError,
     DocumentRow,
     DocumentStore,
     PostgresDocumentStore,
     RevisionRow,
+    WorkspaceUnavailableError,
 )
 from quiz_worker.errors import (
     JobCancelledError,
@@ -104,6 +113,10 @@ class DocumentParsePayloadV1(BaseModel):
 
     document_id: uuid.UUID
     revision_id: uuid.UUID
+
+
+class DocumentIndexSyncPayloadV1(DocumentParsePayloadV1):
+    """`document.index_sync` v1 (enqueued by the publish transaction)."""
 
 
 class IndexWriter(Protocol):
@@ -204,14 +217,15 @@ def _pipeline(
 
     if revision.published:
         if document.active_revision_id == revision.id:
-            # A previous attempt committed the switch; finish the index side only (older
-            # revisions are collected by the next publish: the rollback target is unknown here).
-            deps.index.activate_revision(ws, doc_id, rev_id)
-            return _result(document, revision, chunks=None)
+            # A previous attempt committed the switch; finish the index side only.
+            synced = sync_index(deps, document, revision)
+            return _result(document, revision, chunks=None, synced=synced)
         # Published but no longer active (superseded or rolled back): nothing to do.
         return _result(document, revision, chunks=None)
     if document.deleted:
         raise DocumentDeletedError("the document was deleted")
+    if not deps.documents.workspace_writable(ctx.workspace_id, ctx.created_by):
+        raise WorkspaceUnavailableError("the workspace is no longer writable")
 
     deps.documents.mark_processing(document.id)
     if revision.content_hash is None:
@@ -232,11 +246,20 @@ def _pipeline(
 
     progress("publishing", 90)
     assert content.content_hash is not None  # noqa: S101 - build_revision / DB always set it
-    previous = deps.documents.publish(
-        document.id, revision.id, content.content_hash, before_commit=ctx.check_cancelled
+    # The authoritative switch (search filters on DB-published revisions). It re-checks workspace
+    # access under a lock and enqueues the durable `document.index_sync` obligation.
+    deps.documents.publish(
+        ctx.workspace_id,
+        ctx.created_by,
+        document.id,
+        revision.id,
+        content.content_hash,
+        before_commit=ctx.check_cancelled,
     )
-    _activate(deps, ws, doc_id, rev_id, previous=previous)
-    return _result(document, revision, chunks=len(chunks))
+    # From here on the job cannot fail: the Qdrant mirror is synced inline when possible, else
+    # by the obligation (retried with backoff, published by the reconciler).
+    synced = sync_index(deps, document, revision)
+    return _result(document, revision, chunks=len(chunks), synced=synced)
 
 
 def _parse_and_store(
@@ -306,18 +329,44 @@ def _parse_and_store(
     return content
 
 
-def _activate(
-    deps: DocumentJobDeps, ws: str, doc_id: str, rev_id: str, *, previous: uuid.UUID | None
-) -> None:
+def sync_index(deps: DocumentJobDeps, document: DocumentRow, revision: RevisionRow) -> bool:
+    """Mirror the DB switch into Qdrant (`activate_revision`) and collect older revisions, keeping
+    the newest other published revision for a quick rollback. Never raises: a failure is left to
+    the revision's `document.index_sync` obligation. Returns whether the mirror is in sync."""
+    try:
+        _mirror(deps, document, revision)
+    except Exception as exc:
+        logger.warning(
+            "index sync after publish failed; left to %s: %s",
+            INDEX_SYNC_JOB_TYPE,
+            sanitize_error(exc),
+        )
+        return False
+    try:
+        deps.documents.resolve_index_sync(document.workspace_id, revision.id)
+    except Exception as exc:
+        # The obligation then runs once more; syncing is idempotent.
+        logger.warning("could not resolve the index sync obligation: %s", type(exc).__name__)
+    return True
+
+
+def _mirror(deps: DocumentJobDeps, document: DocumentRow, revision: RevisionRow) -> None:
+    ws, doc_id, rev_id = str(document.workspace_id), str(document.id), str(revision.id)
     deps.index.activate_revision(ws, doc_id, rev_id)
-    keep = {str(previous)} if previous is not None and str(previous) != rev_id else set()
-    deps.index.delete_inactive_revisions(ws, doc_id, keep=keep)
+    previous = deps.documents.previous_published(document.id, revision.id)
+    deps.index.delete_inactive_revisions(
+        ws, doc_id, keep={str(previous)} if previous is not None else set()
+    )
 
 
-def _result(document: DocumentRow, revision: RevisionRow, *, chunks: int | None) -> JobResult:
+def _result(
+    document: DocumentRow, revision: RevisionRow, *, chunks: int | None, synced: bool = True
+) -> JobResult:
     result: dict[str, Any] = {"document_id": str(document.id), "revision_id": str(revision.id)}
     if chunks is not None:
         result["chunks"] = chunks
+    if not synced:
+        result["index_sync"] = "pending"
     return result
 
 
@@ -356,6 +405,37 @@ def cleanup_document_parse(deps: DocumentJobDeps, ctx: JobContext, reason: Termi
 # --------------------------------------------------------------------------------------------
 
 DepsProvider = Callable[[], DocumentJobDeps]
+
+
+def run_index_sync(
+    deps: DocumentJobDeps, ctx: JobContext, payload: DocumentIndexSyncPayloadV1
+) -> JobResult:
+    """`document.index_sync` v1: re-run the Qdrant mirror of a published switch until it
+    succeeds (retryable errors, backoff). A revision that is no longer the active one has been
+    superseded: its successor's own obligation owns the mirror, so this one is done."""
+    with deps.documents.document_lock(
+        payload.document_id, wait_seconds=deps.limits.lock_wait_seconds, check=ctx.check_cancelled
+    ):
+        found = deps.documents.load(ctx.workspace_id, payload.document_id, payload.revision_id)
+        if found is None:
+            return {"skipped": "not_found"}
+        document, revision = found
+        if not revision.published or document.active_revision_id != revision.id:
+            return {"skipped": "not_active"}
+        _mirror(deps, document, revision)
+        return {"document_id": str(document.id), "revision_id": str(revision.id), "synced": True}
+
+
+def index_sync_definition(provider: DepsProvider) -> JobDefinition[DocumentIndexSyncPayloadV1]:
+    return JobDefinition(
+        job_type=INDEX_SYNC_JOB_TYPE,
+        payload_models={1: DocumentIndexSyncPayloadV1},
+        handler=lambda ctx, payload: run_index_sync(provider(), ctx, payload),
+        # Matches the max_attempts the publish transaction inserts the obligation with.
+        retry_policy=RetryPolicy(
+            max_attempts=INDEX_SYNC_MAX_ATTEMPTS, base_delay_seconds=30, max_delay_seconds=1800
+        ),
+    )
 
 
 def document_parse_definition(provider: DepsProvider) -> JobDefinition[DocumentParsePayloadV1]:

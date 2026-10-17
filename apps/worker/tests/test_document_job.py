@@ -7,6 +7,7 @@ test_document_job_models.py.
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from collections.abc import Callable
 from typing import Any
@@ -33,15 +34,23 @@ from quiz_worker.document_job import (
     DocumentParsePayloadV1,
     Limits,
     document_parse_definition,
+    index_sync_definition,
     parsed_object_key,
 )
-from quiz_worker.document_store import DocumentRow, JobRow, RevisionRow
+from quiz_worker.document_store import (
+    INDEX_SYNC_JOB_TYPE,
+    INDEX_SYNC_MAX_ATTEMPTS,
+    DocumentRow,
+    JobRow,
+    RevisionRow,
+)
 from quiz_worker.envelope import JobEnvelope
 from quiz_worker.runner import JobRunner, RunOutcome
 from quiz_worker.settings import EmbedderMode, Environment, ParserMode, WorkerSettings
 from quiz_worker.storage import PARSED_BUCKET
 from quiz_worker.store import InMemoryJobStore, JobStatus
 
+from .conftest import FakeClock
 from .document_fakes import PDF_DIR, FakeDocumentStore, FakeStorage, memory_index, points
 
 BOOK = (PDF_DIR / "book-ko.pdf").read_bytes()
@@ -73,17 +82,31 @@ class FlakyIndex:
         self.inner = inner
         self.crash_after_index = False
         self.index_calls = 0
+        # Raised by every activate_revision call while set (Qdrant down / worker killed).
+        self.fail_activate: BaseException | None = None
+        self.after_index: Callable[[], None] | None = None
 
     def index_revision(self, *args: Any, **kwargs: Any) -> Any:
         self.index_calls += 1
         report = self.inner.index_revision(*args, **kwargs)
+        if self.after_index is not None:
+            self.after_index()
         if self.crash_after_index:
             self.crash_after_index = False
             raise ConnectionError("worker lost")
         return report
 
+    def activate_revision(self, *args: Any) -> None:
+        if self.fail_activate is not None:
+            raise self.fail_activate
+        self.inner.activate_revision(*args)
+
     def __getattr__(self, name: str) -> Any:
         return getattr(self.inner, name)
+
+
+class WorkerKilled(BaseException):
+    """Stands in for the process dying (not an Exception: nothing in the worker catches it)."""
 
 
 class World:
@@ -100,10 +123,37 @@ class World:
             parser=self.parser,
             limits=Limits(max_bytes=10_000_000, max_pages=max_pages, lock_wait_seconds=0),
         )
-        self.jobs = InMemoryJobStore()
+        self.clock = FakeClock()
+        self.jobs = InMemoryJobStore(clock=self.clock)
         self.store.job_source = self._job_row
-        self.runner = JobRunner(self.jobs, worker_id="unit", lease_seconds=60)
+        self.runner = JobRunner(self.jobs, worker_id="unit", lease_seconds=60, clock=self.clock)
         self.definition = document_parse_definition(lambda: self.deps)
+        self.sync_definition = index_sync_definition(lambda: self.deps)
+        self.sync_envelopes: dict[uuid.UUID, JobEnvelope] = {}
+        self.store.on_sync_enqueued = self._enqueue_sync
+
+    def _enqueue_sync(
+        self,
+        workspace_id: uuid.UUID,
+        user_id: uuid.UUID | None,
+        document_id: uuid.UUID,
+        revision_id: uuid.UUID,
+        job_id: uuid.UUID,
+    ) -> None:
+        envelope = JobEnvelope(
+            job_id=job_id,
+            job_type=INDEX_SYNC_JOB_TYPE,
+            schema_version=1,
+            idempotency_key=f"index_sync:{revision_id}",
+            workspace_id=workspace_id,
+            created_by=user_id,
+            payload={"document_id": str(document_id), "revision_id": str(revision_id)},
+        )
+        self.jobs.create(envelope, max_attempts=INDEX_SYNC_MAX_ATTEMPTS)
+        self.sync_envelopes[revision_id] = envelope
+
+    def run_sync(self, revision_id: uuid.UUID) -> Any:
+        return self.runner.run(self.sync_definition, self.sync_envelopes[revision_id].to_message())
 
     def _job_row(self, job_id: uuid.UUID) -> JobRow | None:
         record = self.jobs.get(job_id)
@@ -428,3 +478,136 @@ def test_memory_qdrant_is_isolated_per_world() -> None:
     a.run(a.submit(document, revision.id))
     assert isinstance(b.client, QdrantClient)
     assert points(b.index.inner, b.client, document.id) == []
+
+
+# -- workspace access (review P1) ---------------------------------------------------------------
+
+
+def test_archived_or_revoked_before_start_fails_without_work(world: World) -> None:
+    document, revision = world.upload()
+    world.store.writable = lambda _w, _u: False
+
+    result = world.run(world.submit(document, revision.id))
+
+    assert result.outcome is RunOutcome.FAILED
+    assert result.error == "workspace_unavailable: the workspace is no longer writable"
+    assert world.parser.calls == 0
+    assert world.storage.downloads == 0
+    assert world.store.revisions[revision.id].status == "draft"
+    assert world.store.documents[document.id].status == "failed"
+    assert world.points(document) == []
+
+
+def test_access_lost_during_indexing_never_publishes_and_cleans_the_draft(world: World) -> None:
+    document, revision = world.upload()
+    # Archive / delete / membership revocation lands while the draft is being indexed.
+    world.index.after_index = lambda: setattr(world.store, "writable", lambda _w, _u: False)
+
+    result = world.run(world.submit(document, revision.id))
+
+    assert result.outcome is RunOutcome.FAILED
+    assert (result.error or "").startswith("workspace_unavailable")
+    assert world.store.revisions[revision.id].status == "draft"
+    doc = world.store.documents[document.id]
+    assert (doc.status, doc.active_revision_id) == ("failed", None)
+    assert world.store.sync_jobs == {}
+    # Cleanup obligation: the draft's points are gone.
+    assert world.points(document) == []
+
+
+def test_access_is_checked_for_the_jobs_creator(world: World) -> None:
+    document, revision = world.upload()
+    envelope = world.submit(document, revision.id)
+    seen: list[tuple[uuid.UUID, uuid.UUID | None]] = []
+
+    def writable(ws: uuid.UUID, user: uuid.UUID | None) -> bool:
+        seen.append((ws, user))
+        return True
+
+    world.store.writable = writable
+    assert world.run(envelope).outcome is RunOutcome.SUCCEEDED
+    # Before starting and again inside the publish transaction.
+    assert seen == [(document.workspace_id, envelope.created_by)] * 2
+
+
+# -- index sync after publish (review P2) -------------------------------------------------------
+
+
+def test_inline_sync_resolves_the_obligation(world: World) -> None:
+    document, revision = world.upload()
+
+    result = world.run(world.submit(document, revision.id))
+
+    assert result.outcome is RunOutcome.SUCCEEDED
+    assert "index_sync" not in result.record.result
+    sync_id = world.store.sync_jobs[revision.id]
+    assert world.store.sync_status[sync_id] == "resolved"
+
+
+def test_activation_failing_after_publish_still_succeeds_and_the_obligation_syncs(
+    world: World,
+) -> None:
+    document, revision = world.upload()
+    world.index.fail_activate = ConnectionError("qdrant down")
+
+    result = world.run(world.submit(document, revision.id))
+
+    # The DB switch committed: the job succeeded, with the mirror pending.
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    assert result.record.result["index_sync"] == "pending"
+    doc = world.store.documents[document.id]
+    assert (doc.status, doc.active_revision_id) == ("ready", revision.id)
+    assert {p["active"] for p in world.points(document)} == {False}
+    assert world.store.sync_status[world.store.sync_jobs[revision.id]] == "queued"
+
+    # The obligation retries while Qdrant is still down ...
+    assert world.run_sync(revision.id).outcome is RunOutcome.RETRY
+    # ... and syncs once it is back.
+    world.index.fail_activate = None
+    world.clock.advance(3600)
+    synced = world.run_sync(revision.id)
+    assert synced.outcome is RunOutcome.SUCCEEDED, synced.error
+    assert synced.record.result["synced"] is True
+    assert {p["active"] for p in world.points(document)} == {True}
+
+
+def test_worker_death_right_after_publish_is_recovered(world: World) -> None:
+    document, revision = world.upload()
+    envelope = world.submit(document, revision.id)
+    world.index.fail_activate = WorkerKilled()
+
+    with pytest.raises(WorkerKilled):
+        world.run(envelope)
+
+    # Committed in the DB, obligation durable, Qdrant not switched yet.
+    assert world.store.documents[document.id].active_revision_id == revision.id
+    assert world.store.sync_status[world.store.sync_jobs[revision.id]] == "queued"
+    assert {p["active"] for p in world.points(document)} == {False}
+
+    world.index.fail_activate = None
+    # Either the obligation (handed to the broker by the reconciler) ...
+    assert world.run_sync(revision.id).outcome is RunOutcome.SUCCEEDED
+    assert {p["active"] for p in world.points(document)} == {True}
+    # ... or the parse job's own redelivery after its lease ran out finishes cleanly.
+    world.clock.advance(120)
+    again = world.run(envelope)
+    assert again.outcome is RunOutcome.SUCCEEDED, again.error
+    assert world.parser.calls == 1
+
+
+def test_sync_of_a_superseded_revision_does_nothing(world: World) -> None:
+    document, revision = world.upload()
+    world.index.fail_activate = ConnectionError("qdrant down")
+    assert world.run(world.submit(document, revision.id)).outcome is RunOutcome.SUCCEEDED
+    world.index.fail_activate = None
+    # Another revision became active before the obligation ran: its own obligation owns the
+    # mirror, so this one must not re-activate the old revision.
+    world.store.documents[document.id] = dataclasses.replace(
+        world.store.documents[document.id], active_revision_id=uuid.uuid4()
+    )
+
+    result = world.run_sync(revision.id)
+
+    assert result.outcome is RunOutcome.SUCCEEDED
+    assert result.record.result == {"skipped": "not_active"}
+    assert {p["active"] for p in world.points(document)} == {False}

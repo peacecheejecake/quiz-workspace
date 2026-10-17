@@ -17,6 +17,14 @@ Row encoding of a revision's content (the contract M3.4 writers follow too):
   transaction as the rows, after them: a draft with a hash has complete content, a draft without
   one has none (a retried attempt replaces any stray rows).
 
+Workspace access: the worker has no privileges on workspaces / memberships; it asks
+`public.worker_workspace_writable(workspace, user, lock)` (20261017230000) before a job starts and,
+with the rows locked FOR SHARE, inside the publish transaction.
+
+The publish transaction also inserts a `document.index_sync` job (unpublished; the reconciler hands
+it to the broker after its grace period) as the durable obligation to mirror the switch into
+Qdrant. The publishing job resolves it itself (`resolve_index_sync`) when its inline sync works.
+
 Job progress is stored in the running job's `async_jobs.result` as
 `{"progress": {"stage", "percent"}}` (fenced on the attempt); the terminal transition replaces
 it with the job's result (or NULL), so it is only ever read while the job runs.
@@ -42,7 +50,7 @@ from book_core.contracts import (
     TableContent,
 )
 from pydantic import ValidationError
-from sqlalchemy import Engine, text
+from sqlalchemy import Connection, Engine, text
 from sqlalchemy.exc import IntegrityError
 
 from quiz_worker.errors import JobError, NonRetryableJobError
@@ -75,6 +83,29 @@ class ContentChangedError(JobError):
 
 class DocumentDeletedError(NonRetryableJobError):
     code = "document_deleted"
+
+
+class WorkspaceUnavailableError(NonRetryableJobError):
+    """The workspace was archived or deleted, or the job's user can no longer edit it."""
+
+    code = "workspace_unavailable"
+
+
+INDEX_SYNC_JOB_TYPE = "document.index_sync"
+INDEX_SYNC_MAX_ATTEMPTS = 8
+
+
+def index_sync_key(revision_id: uuid.UUID) -> str:
+    return f"index_sync:{revision_id}"
+
+
+@dataclass(frozen=True)
+class PublishOutcome:
+    """`previous`: the revision that was active before; `sync_job_id`: the durable
+    `document.index_sync` obligation created with the publish (None if it was already live)."""
+
+    previous: uuid.UUID | None
+    sync_job_id: uuid.UUID | None
 
 
 @dataclass(frozen=True)
@@ -138,16 +169,31 @@ class DocumentStore(Protocol):
 
     def load_content(self, document: DocumentRow, revision: RevisionRow) -> DocumentRevision: ...
 
+    def workspace_writable(self, workspace_id: uuid.UUID, user_id: uuid.UUID | None) -> bool:
+        """Active workspace and `user_id` still an owner/editor member of it."""
+        ...
+
     def publish(
         self,
+        workspace_id: uuid.UUID,
+        user_id: uuid.UUID | None,
         document_id: uuid.UUID,
         revision_id: uuid.UUID,
         content_hash: str,
         *,
         before_commit: Callable[[], None],
-    ) -> uuid.UUID | None:
-        """Publish the draft and make it the document's active revision (status `ready`).
-        Returns the previously active revision."""
+    ) -> PublishOutcome:
+        """In one transaction: re-check (and lock) workspace access, publish the draft, make it
+        the document's active revision (status `ready`) and enqueue the `document.index_sync`
+        obligation that mirrors the switch into Qdrant."""
+        ...
+
+    def previous_published(self, document_id: uuid.UUID, exclude: uuid.UUID) -> uuid.UUID | None:
+        """The newest published revision other than `exclude` (the rollback target to keep)."""
+        ...
+
+    def resolve_index_sync(self, workspace_id: uuid.UUID, revision_id: uuid.UUID) -> None:
+        """Mark the revision's still-unclaimed sync obligation done (synced inline)."""
         ...
 
     def record_failure(self, document_id: uuid.UUID, revision_id: uuid.UUID, error: str) -> None:
@@ -519,15 +565,37 @@ class PostgresDocumentStore:
             ]
         return revision_from_rows(document, revision, chapters, blocks)
 
+    def workspace_writable(self, workspace_id: uuid.UUID, user_id: uuid.UUID | None) -> bool:
+        with self._engine.begin() as conn:
+            return self._writable(conn, workspace_id, user_id, lock=False)
+
+    @staticmethod
+    def _writable(
+        conn: Connection, workspace_id: uuid.UUID, user_id: uuid.UUID | None, *, lock: bool
+    ) -> bool:
+        # supabase/migrations/20261017230000_worker_workspace_access.sql
+        return bool(
+            conn.execute(
+                text("select public.worker_workspace_writable(:w, :u, :l)"),
+                {"w": workspace_id, "u": user_id, "l": lock},
+            ).scalar_one()
+        )
+
     def publish(
         self,
+        workspace_id: uuid.UUID,
+        user_id: uuid.UUID | None,
         document_id: uuid.UUID,
         revision_id: uuid.UUID,
         content_hash: str,
         *,
         before_commit: Callable[[], None],
-    ) -> uuid.UUID | None:
+    ) -> PublishOutcome:
         with self._engine.begin() as conn:
+            # Workspace first (FOR SHARE): an archive/delete/membership change commits before
+            # this check or waits for this transaction.
+            if not self._writable(conn, workspace_id, user_id, lock=True):
+                raise WorkspaceUnavailableError("the workspace is no longer writable")
             document = (
                 conn.execute(
                     text(
@@ -554,7 +622,7 @@ class PostgresDocumentStore:
             )
             previous: uuid.UUID | None = document["active_revision_id"]
             if revision["status"] == "published" and previous == revision_id:
-                return None
+                return PublishOutcome(previous=None, sync_job_id=None)
             if revision["content_hash"] != content_hash:
                 raise ContentChangedError("the draft changed while it was indexed")
             if revision["status"] != "published":
@@ -572,8 +640,81 @@ class PostgresDocumentStore:
                 ),
                 {"r": revision_id, "d": document_id},
             )
+            sync_job_id = self._enqueue_index_sync(
+                conn, workspace_id, user_id, document_id, revision_id
+            )
             before_commit()
-        return previous
+        return PublishOutcome(previous=previous, sync_job_id=sync_job_id)
+
+    @staticmethod
+    def _enqueue_index_sync(
+        conn: Connection,
+        workspace_id: uuid.UUID,
+        user_id: uuid.UUID | None,
+        document_id: uuid.UUID,
+        revision_id: uuid.UUID,
+    ) -> uuid.UUID:
+        """Insert (unpublished) in the publish transaction, so the obligation exists iff the
+        switch committed; the reconciler hands it to the broker if nobody resolves it first."""
+        values = {
+            "id": uuid.uuid4(),
+            "w": workspace_id,
+            "u": user_id,
+            "t": INDEX_SYNC_JOB_TYPE,
+            "k": index_sync_key(revision_id),
+            "p": _json({"document_id": str(document_id), "revision_id": str(revision_id)}),
+            "m": INDEX_SYNC_MAX_ATTEMPTS,
+        }
+        inserted = conn.execute(
+            text(
+                "insert into public.async_jobs (id, workspace_id, created_by, job_type, "
+                "schema_version, idempotency_key, payload, max_attempts) "
+                "values (:id, :w, :u, :t, 1, :k, cast(:p as jsonb), :m) "
+                "on conflict do nothing returning id"
+            ),
+            values,
+        ).scalar_one_or_none()
+        if inserted is not None:
+            return uuid.UUID(str(inserted))
+        existing = conn.execute(
+            text(
+                "select id from public.async_jobs where workspace_id = :w and job_type = :t "
+                "and idempotency_key = :k order by created_at desc limit 1"
+            ),
+            values,
+        ).scalar_one()
+        return uuid.UUID(str(existing))
+
+    def previous_published(self, document_id: uuid.UUID, exclude: uuid.UUID) -> uuid.UUID | None:
+        with self._engine.begin() as conn:
+            found = conn.execute(
+                text(
+                    "select id from public.document_revisions where document_id = :d "
+                    "and status = 'published' and id <> :r "
+                    "order by revision_number desc limit 1"
+                ),
+                {"d": document_id, "r": exclude},
+            ).scalar_one_or_none()
+        return uuid.UUID(str(found)) if found is not None else None
+
+    def resolve_index_sync(self, workspace_id: uuid.UUID, revision_id: uuid.UUID) -> None:
+        # Only a row nobody claimed yet: a running/finished obligation is left alone (a later
+        # delivery of a resolved one sees it finished and does nothing).
+        with self._engine.begin() as conn:
+            conn.execute(
+                text(
+                    "update public.async_jobs set status = 'succeeded', finished_at = now(), "
+                    "result = cast(:res as jsonb) "
+                    "where workspace_id = :w and job_type = :t and idempotency_key = :k "
+                    "and status = 'queued' and attempts = 0"
+                ),
+                {
+                    "w": workspace_id,
+                    "t": INDEX_SYNC_JOB_TYPE,
+                    "k": index_sync_key(revision_id),
+                    "res": _json({"synced_by": "publishing_job"}),
+                },
+            )
 
     def record_failure(self, document_id: uuid.UUID, revision_id: uuid.UUID, error: str) -> None:
         with self._engine.begin() as conn:

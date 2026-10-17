@@ -272,6 +272,13 @@ def test_m32b_upload_is_parsed_indexed_and_published(seed: Any, worker: Worker) 
     assert {p["revision_id"] for p in points} == {revision_id}
     assert {p["document_type"] for p in points} == {"book"}
     assert {p["active"] for p in points} == {True}
+    # The Qdrant mirror was synced inline, so its durable obligation is already resolved.
+    sync = _admin(
+        "select status, attempts from public.async_jobs where job_type = 'document.index_sync' "
+        "and idempotency_key = %s",
+        f"index_sync:{revision_id}",
+    )
+    assert sync == [("succeeded", 0)]
 
     # The SSE stream of a finished job: one `job` event with the terminal status, then the end.
     res = alice.call("GET", f"/jobs/{job_id}/events")

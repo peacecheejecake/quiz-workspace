@@ -28,7 +28,9 @@ from quiz_worker.document_store import (
     DocumentDeletedError,
     DocumentRow,
     JobRow,
+    PublishOutcome,
     RevisionRow,
+    WorkspaceUnavailableError,
     block_rows,
     chapter_rows,
     revision_from_rows,
@@ -53,6 +55,13 @@ class FakeDocumentStore:
     last_errors: dict[uuid.UUID, str | None] = field(default_factory=dict)
     jobs: dict[uuid.UUID, JobRow] = field(default_factory=dict)
     progress: list[tuple[str, int]] = field(default_factory=list)
+    # Workspace access (P1): (workspace_id, user_id) -> may the job still write?
+    writable: Callable[[uuid.UUID, uuid.UUID | None], bool] = lambda _w, _u: True
+    access_checks: int = 0
+    # Index sync obligations (P2): revision -> job id, job id -> queued | resolved.
+    sync_jobs: dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
+    sync_status: dict[uuid.UUID, str] = field(default_factory=dict)
+    on_sync_enqueued: Callable[..., None] | None = None
     writes: int = 0
     busy: bool = False
     locked: set[uuid.UUID] = field(default_factory=set)
@@ -162,14 +171,22 @@ class FakeDocumentStore:
             document, revision, self.chapters[revision.id], self.blocks[revision.id]
         )
 
+    def workspace_writable(self, workspace_id: uuid.UUID, user_id: uuid.UUID | None) -> bool:
+        self.access_checks += 1
+        return self.writable(workspace_id, user_id)
+
     def publish(
         self,
+        workspace_id: uuid.UUID,
+        user_id: uuid.UUID | None,
         document_id: uuid.UUID,
         revision_id: uuid.UUID,
         content_hash: str,
         *,
         before_commit: Callable[[], None],
-    ) -> uuid.UUID | None:
+    ) -> PublishOutcome:
+        if not self.workspace_writable(workspace_id, user_id):
+            raise WorkspaceUnavailableError("the workspace is no longer writable")
         document = self.documents[document_id]
         if document.deleted:
             raise DocumentDeletedError("the document was deleted")
@@ -183,7 +200,24 @@ class FakeDocumentStore:
             document, status="ready", active_revision_id=revision_id
         )
         self.last_errors[document_id] = None
-        return previous
+        sync_id = self.sync_jobs.setdefault(revision_id, uuid.uuid4())
+        self.sync_status[sync_id] = "queued"
+        if self.on_sync_enqueued is not None:
+            self.on_sync_enqueued(workspace_id, user_id, document_id, revision_id, sync_id)
+        return PublishOutcome(previous=previous, sync_job_id=sync_id)
+
+    def previous_published(self, document_id: uuid.UUID, exclude: uuid.UUID) -> uuid.UUID | None:
+        published = [
+            r
+            for r in self.revisions.values()
+            if r.document_id == document_id and r.status == "published" and r.id != exclude
+        ]
+        return max(published, key=lambda r: r.revision_number).id if published else None
+
+    def resolve_index_sync(self, workspace_id: uuid.UUID, revision_id: uuid.UUID) -> None:
+        sync_id = self.sync_jobs.get(revision_id)
+        if sync_id is not None and self.sync_status.get(sync_id) == "queued":
+            self.sync_status[sync_id] = "resolved"
 
     def record_failure(self, document_id: uuid.UUID, revision_id: uuid.UUID, error: str) -> None:
         document = self.documents[document_id]

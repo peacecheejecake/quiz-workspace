@@ -23,7 +23,11 @@ from uuid import UUID
 
 from celery import Celery, Task, signals
 
-from quiz_worker.document_job import LazyDeps, document_parse_definition
+from quiz_worker.document_job import (
+    LazyDeps,
+    document_parse_definition,
+    index_sync_definition,
+)
 from quiz_worker.envelope import JobEnvelope
 from quiz_worker.errors import JobOutcomeError, JobRetryError
 from quiz_worker.jobs import ECHO_JOB
@@ -341,4 +345,5 @@ def default_definitions(settings: WorkerSettings) -> list[JobDefinition[Any]]:
     """Every job type the worker runs. Dependencies of the document jobs (DB, Storage, Qdrant,
     models) are built on their first run, so a worker without that configuration still starts
     (those jobs then fail as `worker_not_configured`)."""
-    return [ECHO_JOB, document_parse_definition(LazyDeps(settings))]
+    deps = LazyDeps(settings)
+    return [ECHO_JOB, document_parse_definition(deps), index_sync_definition(deps)]
