@@ -31,27 +31,39 @@ function link(id: string, status: ShareLink['status'], createdAt: string): Share
 
 describe('sharingState', () => {
   it('is off without links', () => {
-    expect(sharingState([])).toEqual({ current: null, otherActive: [], lastEnded: null });
+    expect(sharingState([])).toEqual({
+      current: null,
+      active: false,
+      others: [],
+      lastEnded: null,
+    });
   });
 
-  it('picks the newest active link as current, whatever the input order', () => {
+  it('manages the newest active link; other non-revoked links are revoked with it', () => {
     const older = link('a', 'active', '2026-10-01T00:00:00Z');
     const newer = link('b', 'active', '2026-10-02T00:00:00Z');
     const revoked = link('c', 'revoked', '2026-10-03T00:00:00Z');
-    const state = sharingState([older, revoked, newer]);
+    const expired = link('d', 'expired', '2026-10-04T00:00:00Z');
+    const state = sharingState([older, revoked, newer, expired]);
     expect(state.current?.id).toBe('b');
-    expect(state.otherActive.map((l) => l.id)).toEqual(['a']);
+    expect(state.active).toBe(true);
+    expect(state.others.map((l) => l.id)).toEqual(['d', 'a']);
     expect(state.lastEnded).toBeNull();
   });
 
-  it('reports why the newest link stopped working', () => {
-    expect(sharingState([link('a', 'revoked', '2026-10-01T00:00:00Z')]).lastEnded).toBe('revoked');
-    expect(
-      sharingState([
-        link('a', 'revoked', '2026-10-01T00:00:00Z'),
-        link('b', 'expired', '2026-10-02T00:00:00Z'),
-      ]).lastEnded,
-    ).toBe('expired');
+  it('keeps an expired, non-revoked link manageable so its expiry can be extended', () => {
+    const state = sharingState([
+      link('a', 'expired', '2026-10-01T00:00:00Z'),
+      link('b', 'revoked', '2026-10-02T00:00:00Z'),
+    ]);
+    expect(state.current?.id).toBe('a');
+    expect(state.active).toBe(false);
+    expect(state.lastEnded).toBe('expired');
+  });
+
+  it('is revoked when every link is revoked', () => {
+    const state = sharingState([link('a', 'revoked', '2026-10-01T00:00:00Z')]);
+    expect(state).toMatchObject({ current: null, active: false, lastEnded: 'revoked' });
   });
 });
 

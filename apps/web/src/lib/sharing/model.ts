@@ -39,21 +39,30 @@ function newestFirst(links: readonly ShareLink[]): ShareLink[] {
 }
 
 export interface SharingState {
-  /** The link the screen manages: the newest active one. */
+  /**
+   * The link the screen manages: the newest active link, else the newest expired (not revoked)
+   * one — its policy can still be edited, and a later expiry reopens the URL already handed out.
+   */
   readonly current: ShareLink | null;
-  /** Other active links (e.g. issued through the API); "링크 철회" turns these off, too. */
-  readonly otherActive: readonly ShareLink[];
-  /** Without a current link: why the newest link stopped working, if there is one. */
+  /** Sharing is on: `current` is active. */
+  readonly active: boolean;
+  /** Other links that are not revoked (e.g. issued through the API); "링크 철회" revokes them too. */
+  readonly others: readonly ShareLink[];
+  /** While sharing is off: why the managed (or newest) link stopped working, if there is one. */
   readonly lastEnded: 'revoked' | 'expired' | null;
 }
 
 export function sharingState(links: readonly ShareLink[]): SharingState {
   const sorted = newestFirst(links);
-  const active = sorted.filter((link) => link.status === 'active');
-  const [current = null, ...otherActive] = active;
-  const newest = sorted[0];
-  const lastEnded = current || !newest ? null : newest.status === 'expired' ? 'expired' : 'revoked';
-  return { current, otherActive, lastEnded };
+  const live = sorted.filter((link) => link.status !== 'revoked');
+  const current =
+    live.find((link) => link.status === 'active') ??
+    live.find((link) => link.status === 'expired') ??
+    null;
+  const active = current?.status === 'active';
+  const others = live.filter((link) => link !== current);
+  const lastEnded = active ? null : current ? 'expired' : sorted.length > 0 ? 'revoked' : null;
+  return { current, active, others, lastEnded };
 }
 
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;

@@ -1,8 +1,10 @@
 'use client';
 
 // WS-SHARE-01 `WorkspaceSharingPanel` (docs/design-system.md: owner share link create / revoke /
-// rotate, expiry, Fork switch on the shared FloatingSidePanel). Sharing is one current link (the
-// newest active one). Policy controls save on change; revoke and rotate are confirmed.
+// rotate, expiry, Fork switch on the shared FloatingSidePanel). The screen manages one link: the
+// newest active one, else the newest expired one, whose policy stays editable (a later expiry
+// reopens a URL already handed out, also while archived). Policy controls save on change; revoke
+// and rotate are confirmed.
 //
 // Secret handling (docs/workspace-sharing.md §2): the share URL with `#k=` comes back once from
 // create/rotate and lives only in this component's state while the link stays current — never in
@@ -81,7 +83,7 @@ export function WorkspaceSharingPanel({
   const rotateRef = useRef<HTMLButtonElement>(null);
   const statusId = useId();
 
-  const { current, otherActive, lastEnded } = sharingState(links);
+  const { current, active, others, lastEnded } = sharingState(links);
   const shownUrl = issued && current?.id === issued.linkId ? issued.shareUrl : null;
   const savedExpiry = current ? expiryDateValue(current.expires_at) : '';
   const expiryValue = expiryDraft ?? (isClient ? savedExpiry : '');
@@ -131,12 +133,12 @@ export function WorkspaceSharingPanel({
   }
 
   function rotate() {
-    if (!current) return;
+    if (!current || !active) return;
     issue(`rotate:${current.id}`, (key) => rotateShareLinkAction(workspaceId, current.id, key));
   }
 
   function revoke() {
-    const ids = [current, ...otherActive].flatMap((link) => (link ? [link.id] : []));
+    const ids = [current, ...others].flatMap((link) => (link ? [link.id] : []));
     if (ids.length === 0) return;
     startTransition(async () => {
       const result = await revokeShareLinksAction(workspaceId, ids);
@@ -215,7 +217,7 @@ export function WorkspaceSharingPanel({
         footer={
           current ? (
             <>
-              {archived ? null : (
+              {archived || !active ? null : (
                 <Button ref={rotateRef} disabled={pending} onClick={() => setConfirm('rotate')}>
                   링크 재발급
                 </Button>
@@ -237,7 +239,7 @@ export function WorkspaceSharingPanel({
               공유 상태
             </h3>
             <div role="status" className={styles.statusLine}>
-              {current ? (
+              {active ? (
                 <>
                   <Badge tone="success">공유 중</Badge>
                   <span>링크를 가진 사람은 로그인 없이 볼 수 있습니다.</span>
@@ -251,7 +253,7 @@ export function WorkspaceSharingPanel({
                     {lastEnded === 'revoked'
                       ? '최근 링크가 철회되어 더 이상 열리지 않습니다.'
                       : lastEnded === 'expired'
-                        ? '최근 링크가 만료되어 더 이상 열리지 않습니다.'
+                        ? '최근 링크가 만료되어 더 이상 열리지 않습니다. 만료일을 오늘 이후로 바꾸면 이미 보낸 링크가 다시 열립니다.'
                         : '아직 공유 링크가 없습니다.'}
                   </span>
                 </>
@@ -263,10 +265,10 @@ export function WorkspaceSharingPanel({
                 허용·만료일 변경만 할 수 있습니다.
               </p>
             ) : null}
-            {otherActive.length > 0 ? (
+            {others.length > 0 ? (
               <p className={styles.note}>
-                이 화면 밖에서 만든 활성 링크 {otherActive.length}개가 더 있습니다. 링크를 철회하면
-                함께 철회됩니다.
+                철회되지 않은 다른 링크 {others.length}개가 더 있습니다. 링크를 철회하면 함께
+                철회됩니다.
               </p>
             ) : null}
           </section>

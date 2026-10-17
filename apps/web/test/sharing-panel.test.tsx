@@ -159,7 +159,7 @@ describe('WorkspaceSharingPanel', () => {
     });
     renderScreen([link(L1), other]);
     const panel = await within(main()).findByRole('dialog', { name: '링크 공유' });
-    expect(within(panel).getByText(/활성 링크 1개/)).toBeVisible();
+    expect(within(panel).getByText(/다른 링크 1개/)).toBeVisible();
 
     await user.click(within(panel).getByRole('button', { name: '링크 재발급' }));
     const rotateDialog = await screen.findByRole('alertdialog', { name: '링크 재발급' });
@@ -184,6 +184,57 @@ describe('WorkspaceSharingPanel', () => {
     expect(within(panel).queryByRole('button', { name: '링크 재발급' })).toBeNull();
     expect(within(panel).getByRole('button', { name: '링크 철회' })).toBeEnabled();
     expect(within(panel).getByRole('switch', { name: 'Fork 허용' })).toBeEnabled();
+  });
+
+  it('an expired link stays editable (also archived): a later expiry reopens it', async () => {
+    const user = userEvent.setup();
+    const past = '2026-10-01T14:59:59.999Z';
+    actions.update.mockImplementation(async (_ws, _id, policy) => ({
+      ok: true,
+      links: [link(L1, { expires_at: (policy as { expiresAt: string }).expiresAt })],
+    }));
+    renderScreen([link(L1, { status: 'expired', expires_at: past })], true);
+    const panel = await within(main()).findByRole('dialog', { name: '링크 공유' });
+    expect(within(panel).getByText('만료됨')).toBeVisible();
+    expect(within(panel).queryByText('공유 중')).toBeNull();
+    expect(within(panel).queryByRole('button', { name: '링크 재발급' })).toBeNull();
+    expect(within(panel).queryByRole('button', { name: '링크 만들기' })).toBeNull();
+    expect(within(panel).getByRole('button', { name: '링크 철회' })).toBeEnabled();
+    expect(within(panel).getByRole('switch', { name: 'Fork 허용' })).toBeEnabled();
+
+    const expiry = within(panel).getByLabelText('만료일');
+    expect(expiry).toBeEnabled();
+    const next = new Date(Date.now() + 7 * 86_400_000);
+    const date = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+    await user.clear(expiry);
+    await user.type(expiry, date);
+    await user.tab();
+    await waitFor(() => expect(actions.update).toHaveBeenCalledTimes(1));
+    expect(actions.update.mock.calls[0]?.[1]).toBe(L1);
+    expect(await within(panel).findByText('공유 중')).toBeVisible();
+  });
+
+  it('revoke covers the managed link and every other non-revoked link', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({ length: 24 }, (_, i) =>
+      link(`00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, {
+        created_at: `2026-09-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+      }),
+    );
+    actions.revoke.mockResolvedValue({ ok: true, links: [] });
+    renderScreen([
+      link(L1),
+      link(L2, { status: 'expired', created_at: '2026-10-17T00:00:00Z' }),
+      ...many,
+    ]);
+    const panel = await within(main()).findByRole('dialog', { name: '링크 공유' });
+    await user.click(within(panel).getByRole('button', { name: '링크 철회' }));
+    const dialog = await screen.findByRole('alertdialog', { name: '링크 철회' });
+    await user.click(within(dialog).getByRole('button', { name: '철회' }));
+    await waitFor(() => expect(actions.revoke).toHaveBeenCalledTimes(1));
+    const sent = actions.revoke.mock.calls[0]?.[1] as string[];
+    expect(sent).toHaveLength(26);
+    expect(new Set(sent)).toEqual(new Set([L1, L2, ...many.map((l) => l.id)]));
   });
 
   it('archived without a link: nothing to create, controls disabled', async () => {

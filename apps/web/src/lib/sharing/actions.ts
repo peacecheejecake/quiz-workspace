@@ -194,17 +194,19 @@ export async function updateShareLinkAction(
   return withList(workspaceId, {});
 }
 
-/** Revokes the given links at once (owner; also while archived). Repeating it is a no-op. */
+/**
+ * Revokes every given link (owner; also while archived). Repeating it is a no-op. No count limit:
+ * the owner may hold any number of links, and "링크 철회" must turn all of them off. Each id is
+ * still authorized by the API, exactly as if the owner revoked it directly.
+ */
 export async function revokeShareLinksAction(
   workspaceId: string,
   linkIds: readonly string[],
 ): Promise<ShareActionResult> {
   if (!isUuid(workspaceId)) return failed('notFound');
-  if (!Array.isArray(linkIds) || linkIds.length === 0 || linkIds.length > 20) {
-    return failed('invalid');
-  }
+  if (!Array.isArray(linkIds) || linkIds.length === 0) return failed('invalid');
   if (!linkIds.every(isUuid)) return failed('notFound');
-  for (const linkId of linkIds) {
+  for (const linkId of new Set(linkIds)) {
     const result = await callApi(workspaceId, (api) =>
       api.POST('/api/v1/workspaces/{workspace_id}/share-links/{link_id}/revoke', {
         params: { path: { workspace_id: workspaceId, link_id: linkId } },
