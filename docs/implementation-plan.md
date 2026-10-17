@@ -345,5 +345,6 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | Task | 상태 | 커밋 | 리뷰 |
 |---|---|---|---|
 | PLAN (계획·AGENTS.md·리뷰 스크립트) | ✅ | 7f11b19 · e223735 · fix 2건 | 4회 리뷰: P2×3 반영(RED 의존 edge, exit status, 원자적 lock) → P2 lock 수명 반영 → P2 상태 경합 반영(status file) → 지적 없음 |
+| P0.1 monorepo 골격 | ✅ | 704c61a | 지적 없음 |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.
