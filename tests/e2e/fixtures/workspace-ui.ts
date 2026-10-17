@@ -13,7 +13,7 @@
 //              labelled source highlight, text editor region "원문" whose current block carries
 //              aria-current="true"; block "편집"/"저장", revision status "초안"/"발행됨", "발행".
 //   SEARCH-01  searchbox "검색", radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes "문서"/"장",
-//              list "검색 결과"; excerpt in a non-modal FloatingSidePanel (role=dialog without
+//              list "검색 결과" whose items quote the source text in a <blockquote>; excerpt in a non-modal FloatingSidePanel (role=dialog without
 //              aria-modal) with "PDF에서 보기".
 import { expect, type Locator, type Page } from '@playwright/test';
 import { PROTECTED_LANDING, submitLogin } from './auth-ui.ts';
@@ -45,8 +45,11 @@ export const wsUi = {
   nameField: (scope: Locator) => scope.getByRole('textbox', { name: /이름|name/i }),
   submitCreate: (dialog: Locator) =>
     dialog.getByRole('button', { name: /^(만들기|생성|create)$/i }),
-  activeTab: (page: Page) => page.getByRole('tab', { name: /^(활성|active)\b/i }),
-  archivedTab: (page: Page) => page.getByRole('tab', { name: /^(보관됨|보관|archived)\b/i }),
+  // `\b` is ASCII-only in JS regexes and never matches next to Hangul; use a letter lookahead
+  // (Unicode-aware) so "활성", "활성 (2)" and "Active" match but "활성화" does not.
+  activeTab: (page: Page) => page.getByRole('tab', { name: /^(활성|active)(?!\p{L})/iu }),
+  archivedTab: (page: Page) =>
+    page.getByRole('tab', { name: /^(보관됨|보관|archived)(?!\p{L})/iu }),
   tabPanel: (page: Page) => page.getByRole('tabpanel'),
   item: (scope: Locator, name: string) =>
     scope
@@ -141,6 +144,8 @@ export const searchUi = {
   chapterFilter: (page: Page) => main(page).getByRole('combobox', { name: /^(장|챕터|chapter)/i }),
   results: (page: Page) => main(page).getByRole('list', { name: /검색 결과|search results/i }),
   resultItems: (page: Page) => searchUi.results(page).getByRole('listitem'),
+  /** The quoted source text of each result (the part whose language is the book's). */
+  excerpt: (items: Locator) => items.getByRole('blockquote'),
   emptyState: (page: Page) =>
     main(page).getByRole('heading', { name: /검색 결과가 없|결과 없음|no results/i }),
   excerptPanel: (page: Page) => page.getByRole('dialog', { name: /발췌|원문|excerpt|source/i }),
@@ -152,7 +157,11 @@ export const searchUi = {
 
 /** "p. 4" / "4쪽" / "페이지 4" / "page 4" for page `n`. */
 export function pageLabel(n: number): RegExp {
-  return new RegExp(`(p\\.\\s*${n}\\b|${n}\\s*쪽|페이지\\s*${n}\\b|page\\s*${n}\\b)`, 'i');
+  // Digit lookarounds instead of `\b`, which is ASCII-only and fails next to Hangul ("4쪽에서").
+  return new RegExp(
+    `(p\\.\\s*${n}(?!\\d)|(?<!\\d)${n}\\s*쪽|페이지\\s*${n}(?!\\d)|page\\s*${n}(?!\\d))`,
+    'i',
+  );
 }
 
 /** Runs a search through the UI: mode first, then query + Enter. */

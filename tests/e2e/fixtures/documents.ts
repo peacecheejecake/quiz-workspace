@@ -9,7 +9,8 @@
 //   POST /documents/complete-upload {upload_id, sha256}     → 202 {document_id, job_id}
 //   GET  /jobs/{id}                                        → 200 {id, status: queued|running|succeeded|failed|cancelled}
 //   GET  /workspaces/{id}/documents                        → 200 {items: [{id, title, filename, status}]}
-//   GET  /documents/{id}/outline                           → 200 (chapter/section tree)
+//   GET  /documents/{id}/outline                           → 200 {items: OutlineNode[]}
+//        OutlineNode = {id, title, level, page, children: OutlineNode[]}  (id = chapter_ids value)
 //   POST /documents/{id}/publish                           → 202 {job_id}
 //   POST /workspaces/{id}/search {query, mode, document_ids?, chapter_ids?}
 //        → 200 {items: [{document_id, revision_id, block_id, page, text, ...}]}
@@ -222,6 +223,34 @@ export async function search(
     [200],
   );
   return body.items;
+}
+
+export interface OutlineNode {
+  readonly id: string;
+  readonly title: string;
+  readonly level?: number;
+  readonly page?: number;
+  readonly children?: readonly OutlineNode[];
+}
+
+/** Server id of the outline node (chapter/section) titled `title` in the document's outline. */
+export async function outlineNodeId(
+  member: Member,
+  documentId: string,
+  title: string,
+): Promise<string> {
+  const body = await member.api.ok<{ items: OutlineNode[] }>(
+    'GET',
+    `/documents/${documentId}/outline`,
+    undefined,
+    [200],
+  );
+  const queue = [...body.items];
+  for (let node = queue.shift(); node; node = queue.shift()) {
+    if (node.title.trim() === title) return node.id;
+    queue.push(...(node.children ?? []));
+  }
+  throw new Error(`outline of the document has no node titled "${title}"`);
 }
 
 /**

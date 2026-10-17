@@ -14,6 +14,7 @@ import {
   expect,
   JOB_TIMEOUT_MS,
   notFoundHeading,
+  outlineNodeId,
   pageLabel,
   runSearch,
   search,
@@ -23,6 +24,7 @@ import {
   test,
   uploadReadyBook,
   type Problem,
+  type SearchItem,
 } from '../fixtures/test.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -81,11 +83,39 @@ test(
     }
     expect(seen).toEqual(new Set([enId, koId]));
 
+    // Chapter ids come from the server's outline (never from the truth file's ids).
+    const chapterId = await outlineNodeId(owner, enId, chapter2.title);
+    const outsideChapter = (h: SearchItem) => h.page !== chapter2.page;
     for (const mode of ['keyword', 'semantic', 'hybrid'] as const) {
-      const scoped = await search(owner, ws.id, { query: 'water', mode, document_ids: [enId] });
-      expect(scoped.length, mode).toBeGreaterThan(0);
+      const byDocument = await search(owner, ws.id, { query: 'water', mode, document_ids: [enId] });
+      expect(byDocument.length, mode).toBeGreaterThan(0);
       expect(
-        scoped.every((h) => h.document_id === enId),
+        byDocument.every((h) => h.document_id === enId),
+        mode,
+      ).toBe(true);
+      // Control: without the chapter filter the same query also hits chapter 1 (pages 2-3).
+      expect(byDocument.some(outsideChapter), `${mode} control`).toBe(true);
+
+      const byChapter = await search(owner, ws.id, {
+        query: 'water',
+        mode,
+        document_ids: [enId],
+        chapter_ids: [chapterId],
+      });
+      expect(byChapter.length, mode).toBeGreaterThan(0);
+      expect(
+        byChapter.every((h) => h.document_id === enId && !outsideChapter(h)),
+        mode,
+      ).toBe(true);
+      // Chapter filter alone is enforced by the server too (both books have a "chapter 2").
+      const chapterOnly = await search(owner, ws.id, {
+        query: 'water',
+        mode,
+        chapter_ids: [chapterId],
+      });
+      expect(chapterOnly.length, mode).toBeGreaterThan(0);
+      expect(
+        chapterOnly.every((h) => h.document_id === enId && !outsideChapter(h)),
         mode,
       ).toBe(true);
     }
@@ -102,11 +132,14 @@ test(
       await runSearch(page, 'water', mode);
       const items = searchUi.resultItems(page);
       await expect(items.first(), mode).toBeVisible();
-      const texts = await items.allInnerTexts();
-      for (const text of texts) {
+      // Page label on the whole item; language only on the excerpt (UI metadata is Korean).
+      for (const text of await items.allInnerTexts()) {
         expect(text, mode).toMatch(pageLabel(chapter2.page));
-        expect(text, mode).not.toMatch(HANGUL);
       }
+      for (const excerpt of await searchUi.excerpt(items).allInnerTexts()) {
+        expect(excerpt, mode).not.toMatch(HANGUL);
+      }
+      expect(await searchUi.excerpt(items).count(), mode).toBe(await items.count());
     }
   },
 );
