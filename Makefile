@@ -24,7 +24,7 @@ SUPABASE := pnpm exec supabase
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
 	test test-ts test-py infra-up infra-down infra-status infra-reset \
-	contracts contracts-check api-dev web-dev
+	contracts contracts-check api-dev web-dev db-reset db-lint db-test
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -92,6 +92,16 @@ infra-status: ## Show compose service health and Supabase local URLs
 infra-reset: ## Stop local infra and DELETE its data volumes (Postgres, Storage, Qdrant, Redis)
 	$(SUPABASE) stop --no-backup
 	$(COMPOSE) down --volumes
+
+# Database (requires `make infra-up`). supabase/migrations is the only migration owner.
+db-reset: ## Recreate the local DB from supabase/migrations + supabase/seed.sql
+	$(SUPABASE) db reset
+
+db-lint: ## Lint the local DB schema (plpgsql_check)
+	$(SUPABASE) db lint --fail-on warning
+
+db-test: ## Run pgTAP tests in supabase/tests against the local DB
+	$(SUPABASE) test db
 
 # OpenAPI contract: FastAPI app -> contracts/openapi.json -> packages/api-client TS types.
 contracts: ## Export contracts/openapi.json and regenerate the TS API client
