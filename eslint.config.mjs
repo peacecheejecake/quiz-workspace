@@ -3,6 +3,8 @@
 // scoped by `files`, rather than shipping their own config.
 import js from '@eslint/js';
 import { defineConfig } from 'eslint/config';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
+import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
@@ -43,5 +45,18 @@ export default defineConfig(
       ],
       '@typescript-eslint/consistent-type-imports': 'error',
     },
+  },
+  // React (packages/ui now, apps/web later): hooks rules + JSX accessibility for every JSX file.
+  {
+    files: ['**/*.{jsx,tsx}'],
+    ...jsxA11y.flatConfigs.recommended,
+  },
+  {
+    files: ['**/*.{jsx,tsx}'],
+    ...reactHooks.configs.flat['recommended-latest'],
+  },
+  {
+    files: ['packages/ui/**'],
+    languageOptions: { globals: { ...globals.browser } },
   },
 );

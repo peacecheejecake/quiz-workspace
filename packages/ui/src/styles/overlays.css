@@ -1,0 +1,463 @@
+/*
+ * Floating layers. z-index and motion come from tokens (docs/design-system.md §4):
+ * popover 20, side panel 40, modal 60, toast 70; panel enter 240ms / exit 180ms using
+ * transform + opacity only. Reduced motion collapses the animations (base.css + below).
+ */
+
+/* Backdrop shared by modal side panels, the mobile nav drawer and modal dialogs. */
+.qz-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-side-panel);
+  background: var(--qz-scrim);
+}
+
+.qz-backdrop:is([data-layer='modal'], [data-layer='drawer']) {
+  z-index: var(--z-modal);
+}
+
+.qz-backdrop[data-state='open'] {
+  animation: qz-fade-in var(--duration-panel-enter) ease-out;
+}
+
+.qz-backdrop[data-state='closed'] {
+  animation: qz-fade-out var(--duration-panel-exit) ease-in;
+}
+
+/* FloatingSidePanel */
+.qz-panel {
+  position: fixed;
+  z-index: var(--z-side-panel);
+  top: var(--space-4);
+  right: var(--space-4);
+  bottom: var(--space-4);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(var(--floating-panel-width), calc(100vw - 2 * var(--space-4)));
+  border-radius: var(--radius-xl);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  overflow: hidden;
+}
+
+.qz-panel[data-size='wide'] {
+  width: min(720px, calc(100vw - 2 * var(--space-4)));
+}
+
+/* The panel container receives programmatic focus on open (so its title is announced); it is
+   not itself an interactive control, so it shows no ring. Controls inside use FocusRing. */
+.qz-panel:focus {
+  outline: none;
+}
+
+.qz-panel[data-state='open'] {
+  animation: qz-panel-in var(--duration-panel-enter) ease-out;
+}
+
+.qz-panel[data-state='closed'] {
+  animation: qz-panel-out var(--duration-panel-exit) ease-in;
+}
+
+.qz-panel__header,
+.qz-modal__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.qz-panel__heading {
+  flex: 1;
+  min-width: 0;
+  padding-top: var(--space-2);
+}
+
+.qz-panel__title,
+.qz-modal__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.qz-panel__description {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.qz-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.qz-panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-5) var(--space-6);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.qz-panel__footer,
+.qz-modal__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6) var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+@media (max-width: 767px) {
+  .qz-panel {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-height: 90dvh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    /* Full-width sheets cover the reading area: keep them opaque for legibility. */
+    background: var(--color-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .qz-panel[data-size='wide'] {
+    width: 100%;
+  }
+
+  .qz-panel[data-mobile-layout='full'] {
+    top: 0;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .qz-panel[data-state='open'] {
+    animation-name: qz-sheet-in;
+  }
+
+  .qz-panel[data-state='closed'] {
+    animation-name: qz-sheet-out;
+  }
+
+  .qz-panel__header,
+  .qz-panel__body,
+  .qz-panel__footer {
+    padding-inline: var(--space-4);
+  }
+}
+
+/* ModalDialog */
+.qz-modal {
+  position: fixed;
+  z-index: var(--z-modal);
+  top: 50%;
+  left: 50%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100vw - 2 * var(--space-4)));
+  max-height: calc(100dvh - 2 * var(--space-4));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-floating);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  transform: translate(-50%, -50%);
+}
+
+.qz-modal[data-size='sm'] {
+  width: min(400px, calc(100vw - 2 * var(--space-4)));
+}
+
+.qz-modal:focus {
+  outline: none;
+}
+
+.qz-modal[data-state='open'] {
+  animation: qz-modal-in var(--duration-panel-enter) ease-out;
+}
+
+.qz-modal[data-state='closed'] {
+  animation: qz-modal-out var(--duration-panel-exit) ease-in;
+}
+
+.qz-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-6);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* Popover */
+.qz-popover {
+  z-index: var(--z-popover);
+  position: relative;
+  box-sizing: border-box;
+  min-width: 220px;
+  max-width: min(360px, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.qz-popover:has(.qz-popover__close) {
+  padding-right: calc(var(--space-4) + 32px);
+}
+
+.qz-popover__close {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+}
+
+.qz-popover[data-state='open'] {
+  animation: qz-fade-in var(--duration-marker) ease-out;
+}
+
+/* Tooltip: inverted, opaque for legibility. */
+.qz-tooltip {
+  z-index: var(--z-popover);
+  max-width: 280px;
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-text-primary);
+  color: var(--color-canvas);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.qz-tooltip[data-state$='open'] {
+  animation: qz-fade-in var(--duration-marker) ease-out;
+}
+
+/* Toast */
+.qz-toast-viewport {
+  position: fixed;
+  z-index: var(--z-toast);
+  right: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(400px, 100vw);
+  max-height: 100dvh;
+  margin: 0;
+  padding: var(--space-4);
+  padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+  list-style: none;
+  outline: none;
+}
+
+.qz-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border-left-width: 4px;
+  border-radius: var(--radius-lg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+.qz-toast[data-tone='success'] {
+  border-left-color: var(--qz-color-success);
+}
+
+.qz-toast[data-tone='error'] {
+  border-left-color: var(--qz-color-danger);
+}
+
+.qz-toast__body {
+  flex: 1;
+  min-width: 0;
+  padding-top: 6px;
+}
+
+.qz-toast__title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.qz-toast__description {
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.qz-toast[data-state='open'] {
+  animation: qz-toast-in var(--duration-panel-enter) ease-out;
+}
+
+.qz-toast[data-state='closed'] {
+  animation: qz-fade-out var(--duration-panel-exit) ease-in;
+}
+
+.qz-toast[data-swipe='move'] {
+  transform: translateX(var(--radix-toast-swipe-move-x));
+}
+
+.qz-toast[data-swipe='end'] {
+  animation: qz-fade-out var(--duration-panel-exit) ease-in;
+}
+
+/* Mobile navigation drawer (AppShell) */
+.qz-drawer {
+  position: fixed;
+  z-index: var(--z-modal);
+  top: 0;
+  bottom: 0;
+  left: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(320px, calc(100vw - 48px));
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-floating);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+.qz-drawer:focus {
+  outline: none;
+}
+
+.qz-drawer[data-state='open'] {
+  animation: qz-drawer-in var(--duration-panel-enter) ease-out;
+}
+
+.qz-drawer[data-state='closed'] {
+  animation: qz-drawer-out var(--duration-panel-exit) ease-in;
+}
+
+.qz-drawer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--app-header-height);
+  padding: 0 var(--space-3) 0 var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.qz-drawer__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.qz-drawer__nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-3);
+}
+
+@keyframes qz-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes qz-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes qz-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--space-6));
+  }
+}
+
+@keyframes qz-panel-out {
+  to {
+    opacity: 0;
+    transform: translateX(var(--space-6));
+  }
+}
+
+@keyframes qz-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-8));
+  }
+}
+
+@keyframes qz-sheet-out {
+  to {
+    opacity: 0;
+    transform: translateY(var(--space-8));
+  }
+}
+
+@keyframes qz-modal-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + var(--space-2)));
+  }
+}
+
+@keyframes qz-modal-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + var(--space-2)));
+  }
+}
+
+@keyframes qz-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-4));
+  }
+}
+
+@keyframes qz-drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes qz-drawer-out {
+  to {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qz-backdrop,
+  .qz-panel,
+  .qz-modal,
+  .qz-popover,
+  .qz-tooltip,
+  .qz-toast,
+  .qz-drawer {
+    animation-duration: 0.01ms !important;
+  }
+}

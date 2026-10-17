@@ -1,0 +1,207 @@
+/* Kit-internal aliases. They only point at semantic tokens; no literal colors. */
+:root {
+  /* Until design-tokens gains feedback colors, reuse the closest semantic status tokens. */
+  --qz-color-danger: var(--question-status-incorrect);
+  --qz-color-success: var(--question-status-correct);
+  --qz-color-warning: var(--question-status-retry);
+  /* Text on accent fills: the opaque surface contrasts with the accent in both themes. */
+  --qz-color-on-accent: var(--color-surface);
+  /* Borders of form controls need ≥ 3:1 against the surface (WCAG 1.4.11). */
+  --qz-color-control-border: var(--color-text-secondary);
+  --qz-scrim: color-mix(in srgb, var(--color-canvas) 64%, transparent);
+  --qz-transition-fast: 120ms ease-out;
+}
+
+.qz-theme-scope {
+  background: var(--color-canvas);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+.qz-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* FocusRing: keyboard focus indicator shared by every interactive component. */
+.qz-focus-ring:focus {
+  outline: none;
+}
+
+.qz-focus-ring:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .qz-focus-ring:focus-visible {
+    outline-color: Highlight;
+  }
+}
+
+/* Surface / GlassSurface */
+.qz-surface {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.qz-surface[data-tone='muted'] {
+  background: var(--color-surface-muted);
+  border-color: transparent;
+}
+
+.qz-glass {
+  color: var(--color-text-primary);
+  border-radius: var(--radius-lg);
+}
+
+:is(.qz-surface, .qz-glass)[data-padding='none'] {
+  padding: 0;
+}
+
+:is(.qz-surface, .qz-glass)[data-padding='sm'] {
+  padding: var(--space-3);
+}
+
+:is(.qz-surface, .qz-glass)[data-padding='md'] {
+  padding: var(--space-4);
+}
+
+:is(.qz-surface, .qz-glass)[data-padding='lg'] {
+  padding: var(--space-6);
+}
+
+/* Badge */
+.qz-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.qz-badge[data-tone='accent'] {
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-surface));
+}
+
+.qz-badge__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  outline: 1px solid var(--color-border);
+}
+
+.qz-badge[data-tone='success'] .qz-badge__dot {
+  background: var(--qz-color-success);
+}
+
+.qz-badge[data-tone='warning'] .qz-badge__dot {
+  background: var(--qz-color-warning);
+}
+
+.qz-badge[data-tone='danger'] .qz-badge__dot {
+  background: var(--qz-color-danger);
+}
+
+/* Skeleton */
+.qz-skeleton {
+  display: block;
+  height: 1em;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  animation: qz-skeleton-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.qz-skeleton[data-shape='rect'] {
+  border-radius: var(--radius-md);
+}
+
+.qz-skeleton[data-shape='circle'] {
+  border-radius: var(--radius-pill);
+}
+
+@keyframes qz-skeleton-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.5;
+  }
+}
+
+/* Spinner (inside loading buttons) */
+.qz-spinner {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--radius-pill);
+  animation: qz-spin 0.8s linear infinite;
+}
+
+@keyframes qz-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qz-skeleton,
+  .qz-spinner {
+    animation: none;
+  }
+}
+
+/* EmptyState */
+.qz-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--color-text-primary);
+}
+
+.qz-empty-state__icon {
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.qz-empty-state__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.qz-empty-state__description {
+  margin: 0;
+  max-width: 48ch;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.qz-empty-state__action {
+  margin-top: var(--space-3);
+}
