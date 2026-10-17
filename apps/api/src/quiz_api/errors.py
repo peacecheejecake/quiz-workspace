@@ -36,6 +36,12 @@ class ProblemType(StrEnum):
     WORKSPACE_ARCHIVED = "urn:quiz-workspace:problem:workspace-archived"
     # 409: an `Idempotency-Key` was reused for the same operation with a different request body.
     IDEMPOTENCY_KEY_REUSED = "urn:quiz-workspace:problem:idempotency-key-reused"
+    # 409: complete-upload found no stored object for the intent (upload not finished yet).
+    UPLOAD_INCOMPLETE = "urn:quiz-workspace:problem:upload-incomplete"
+    # 409: the upload intent expired before it was completed; request a new one.
+    UPLOAD_EXPIRED = "urn:quiz-workspace:problem:upload-expired"
+    # 422: the stored object does not match the declared size / SHA-256 (it is discarded).
+    UPLOAD_MISMATCH = "urn:quiz-workspace:problem:upload-mismatch"
 
 
 class ProblemException(StarletteHTTPException):
