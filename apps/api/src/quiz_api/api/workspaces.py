@@ -4,8 +4,8 @@
     GET    /workspaces?status=          the caller's active or archived workspaces
     GET    /workspaces/{id}             one workspace (any member)
     PATCH  /workspaces/{id}             rename (owner; not while archived)
-    POST   /workspaces/{id}/archive     owner; idempotent (archiving an archived one is a no-op)
-    POST   /workspaces/{id}/restore     owner; idempotent (restoring an active one is a no-op)
+    POST   /workspaces/{id}/archive     owner; repeat = no-op; `Idempotency-Key` aware
+    POST   /workspaces/{id}/restore     owner; repeat = no-op; `Idempotency-Key` aware
     DELETE /workspaces/{id}             owner; soft delete, 204. Afterwards every route answers
                                         404 for it, including a repeated DELETE.
 
@@ -14,6 +14,11 @@ soft-deleted ids are the same 404; members lacking the role get 403 `insufficien
 to an archived workspace get 403 `workspace-archived`. Lifecycle actions lock the workspace and
 membership rows (`LockMode.UPDATE`) in the request session, and the write plus its
 `activity_events` row commit in that same transaction.
+
+Idempotency-Key scopes (quiz_api.idempotency): create = (user, `POST /workspaces`, key);
+archive/restore = (user, `POST /workspaces/{id}/lifecycle`, key) with the action in the request
+hash. Replays happen only after the authorization dependency passed, so losing access (or a
+deleted workspace) turns a retry into 404 rather than a replay of the stored body.
 """
 
 from __future__ import annotations
@@ -188,20 +193,83 @@ def update_workspace(access: UpdateAccess, body: WorkspaceUpdate, repo: Workspac
     return _out(record, access.role)
 
 
-@router.post("/{workspace_id}/archive", operation_id="archiveWorkspace")
-def archive_workspace(access: ArchiveAccess, repo: WorkspaceRepo) -> Workspace:
-    """Make the workspace read-only (owner). Repeating it returns the archived workspace."""
-    record = repo.archive(access.workspace_id, access.user_id)
-    repo.commit()
-    return _out(record, access.role)
+def lifecycle_scope(workspace_id: uuid.UUID) -> str:
+    """Idempotency scope shared by the POST lifecycle actions of one workspace.
+
+    The action is part of the request hash, not of the scope: one key reused for `archive` and
+    then `restore` of the same workspace is a 409, while the same key on another workspace is an
+    independent request.
+    """
+    return f"POST /workspaces/{workspace_id}/lifecycle"
 
 
-@router.post("/{workspace_id}/restore", operation_id="restoreWorkspace")
-def restore_workspace(access: RestoreAccess, repo: WorkspaceRepo) -> Workspace:
-    """Make an archived workspace writable again (owner). Repeating it is a no-op."""
-    record = repo.restore(access.workspace_id, access.user_id)
+def _lifecycle(
+    action: Literal["archive", "restore"],
+    access: WorkspaceAccess,
+    repo: WorkspaceRepository,
+    idempotency: IdempotencyStore,
+    idempotency_key: str | None,
+) -> Any:
+    # Authorization already ran (dependency): a replay needs current owner access, so a caller
+    # who lost access (or a deleted workspace) gets 404, never the stored response.
+    scope, body_hash = lifecycle_scope(access.workspace_id), request_hash({"action": action})
+    if idempotency_key is not None:
+        idempotency.lock(access.user_id, scope, idempotency_key)
+        stored = idempotency.find(access.user_id, scope, idempotency_key)
+        if stored is not None:
+            return replay(stored, body_hash)
+    run = repo.archive if action == "archive" else repo.restore
+    result = _out(run(access.workspace_id, access.user_id), access.role)
+    if idempotency_key is not None:
+        idempotency.save(
+            access.user_id,
+            scope,
+            idempotency_key,
+            body_hash,
+            status.HTTP_200_OK,
+            result.model_dump(mode="json"),
+        )
     repo.commit()
-    return _out(record, access.role)
+    return result
+
+
+@router.post(
+    "/{workspace_id}/archive",
+    response_model=Workspace,
+    operation_id="archiveWorkspace",
+    responses=problem_responses(409),
+)
+def archive_workspace(
+    access: ArchiveAccess,
+    repo: WorkspaceRepo,
+    idempotency: IdempotencyStoreDep,
+    idempotency_key: IdempotencyKey = None,
+) -> Any:
+    """Make the workspace read-only (owner). Repeating it returns the archived workspace.
+
+    With `Idempotency-Key`, a retry replays the first response even if the workspace was
+    restored in between (no second archive, no second event).
+    """
+    return _lifecycle("archive", access, repo, idempotency, idempotency_key)
+
+
+@router.post(
+    "/{workspace_id}/restore",
+    response_model=Workspace,
+    operation_id="restoreWorkspace",
+    responses=problem_responses(409),
+)
+def restore_workspace(
+    access: RestoreAccess,
+    repo: WorkspaceRepo,
+    idempotency: IdempotencyStoreDep,
+    idempotency_key: IdempotencyKey = None,
+) -> Any:
+    """Make an archived workspace writable again (owner). Repeating it is a no-op.
+
+    With `Idempotency-Key`, a retry replays the first response (see archive).
+    """
+    return _lifecycle("restore", access, repo, idempotency, idempotency_key)
 
 
 @router.delete(

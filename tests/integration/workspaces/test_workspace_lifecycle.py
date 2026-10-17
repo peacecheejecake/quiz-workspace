@@ -228,6 +228,29 @@ class Tx:
             headers["Idempotency-Key"] = key
         return self.http.post("/api/v1/workspaces", json=body, headers=headers)
 
+    def lifecycle(self, token: str, workspace_id: str, action: str, key: str | None) -> Any:
+        headers = {"Authorization": f"Bearer {token}"}
+        if key is not None:
+            headers["Idempotency-Key"] = key
+        return self.http.post(f"/api/v1/workspaces/{workspace_id}/{action}", headers=headers)
+
+    def events(self, workspace_id: str) -> list[str]:
+        rows = self.conn.execute(
+            text(
+                "select event_type from public.activity_events where workspace_id = :w "
+                "order by created_at, id"
+            ),
+            {"w": workspace_id},
+        )
+        return [r[0] for r in rows]
+
+    def status(self, workspace_id: str) -> str:
+        return str(
+            self.conn.execute(
+                text("select status from public.workspaces where id = :w"), {"w": workspace_id}
+            ).scalar_one()
+        )
+
     def count(self, user_id: str) -> int:
         return int(
             self.conn.execute(
@@ -336,3 +359,54 @@ def test_invalid_idempotency_keys_are_rejected(seed: Any) -> None:
         for key in ("has space", "x" * 201, ""):
             seed.problem(tx.post(alice.user.token, {"name": "Bad"}, key), 422)
         assert tx.count(alice.user.id) == 0
+
+
+# Events inside one transaction share `now()`, so they are compared as multisets.
+
+
+@pytest.mark.parametrize(("action", "opposite"), [("archive", "restore"), ("restore", "archive")])
+def test_lost_lifecycle_response_is_replayed_without_redoing_it(
+    seed: Any, action: str, opposite: str
+) -> None:
+    alice = seed.client(f"m31a-idem-{action}")
+    token, key = alice.user.token, f"{action}-{uuid.uuid4()}"
+    with _rolled_back_app() as tx:
+        wid = tx.post(token, {"name": "Lifecycle"}, None).json()["id"]
+        if action == "restore":
+            assert tx.lifecycle(token, wid, "archive", None).status_code == 200
+        first = tx.lifecycle(token, wid, action, key)
+        assert first.status_code == 200, first.text
+        # Response lost; the opposite action happens in between; then the client retries.
+        assert tx.lifecycle(token, wid, opposite, None).status_code == 200
+        state, events = tx.status(wid), sorted(tx.events(wid))
+
+        retry = tx.lifecycle(token, wid, action, key)
+        assert retry.status_code == 200
+        assert retry.headers["Idempotent-Replayed"] == "true"
+        assert retry.json() == first.json()
+        assert tx.status(wid) == state, "the replay does not redo the action"
+        assert sorted(tx.events(wid)) == events, "the replay records no event"
+
+        # Same key on the other action of this workspace: 409; on another workspace: independent.
+        seed.problem(tx.lifecycle(token, wid, opposite, key), 409, REUSED)
+        other = tx.post(token, {"name": "Other"}, None).json()["id"]
+        if action == "restore":
+            assert tx.lifecycle(token, other, "archive", None).status_code == 200
+        independent = tx.lifecycle(token, other, action, key)
+        assert independent.status_code == 200
+        assert "Idempotent-Replayed" not in independent.headers
+        assert independent.json()["id"] == other
+        assert tx.status(other) == ("archived" if action == "archive" else "active")
+
+
+def test_lifecycle_replay_after_delete_is_404(seed: Any) -> None:
+    alice = seed.client("m31a-idem-deleted")
+    token, key = alice.user.token, f"gone-{uuid.uuid4()}"
+    with _rolled_back_app() as tx:
+        wid = tx.post(token, {"name": "Gone"}, None).json()["id"]
+        assert tx.lifecycle(token, wid, "archive", key).status_code == 200
+        delete = tx.http.delete(
+            f"/api/v1/workspaces/{wid}", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert delete.status_code == 204
+        seed.problem(tx.lifecycle(token, wid, "archive", key), 404)

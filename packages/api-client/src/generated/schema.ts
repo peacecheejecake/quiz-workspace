@@ -104,6 +104,9 @@ export type paths = {
     /**
      * Archive Workspace
      * @description Make the workspace read-only (owner). Repeating it returns the archived workspace.
+     *
+     *     With `Idempotency-Key`, a retry replays the first response even if the workspace was
+     *     restored in between (no second archive, no second event).
      */
     post: operations['archiveWorkspace'];
     delete?: never;
@@ -124,6 +127,8 @@ export type paths = {
     /**
      * Restore Workspace
      * @description Make an archived workspace writable again (owner). Repeating it is a no-op.
+     *
+     *     With `Idempotency-Key`, a retry replays the first response (see archive).
      */
     post: operations['restoreWorkspace'];
     delete?: never;
@@ -857,7 +862,10 @@ export interface operations {
   archiveWorkspace: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
       path: {
         workspace_id: string;
       };
@@ -894,6 +902,15 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };
@@ -924,7 +941,10 @@ export interface operations {
   restoreWorkspace: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
       path: {
         workspace_id: string;
       };
@@ -961,6 +981,15 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };

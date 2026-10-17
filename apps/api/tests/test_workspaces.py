@@ -437,9 +437,14 @@ def test_openapi_documents_the_workspace_routes(api: TestClient) -> None:
         ("post", "/api/v1/workspaces/{workspace_id}/archive"): "archiveWorkspace",
         ("post", "/api/v1/workspaces/{workspace_id}/restore"): "restoreWorkspace",
     }
-    create = paths["/api/v1/workspaces"]["post"]
-    assert {"201", "409", "422", "401"} <= set(create["responses"])
-    assert any(p["name"] == "Idempotency-Key" and p["in"] == "header" for p in create["parameters"])
+    for path, code in (
+        ("/api/v1/workspaces", "201"),
+        ("/api/v1/workspaces/{workspace_id}/archive", "200"),
+        ("/api/v1/workspaces/{workspace_id}/restore", "200"),
+    ):
+        op = paths[path]["post"]
+        assert {code, "409", "422", "401"} <= set(op["responses"]), path
+        assert any(p["name"] == "Idempotency-Key" and p["in"] == "header" for p in op["parameters"])
     assert "204" in paths["/api/v1/workspaces/{workspace_id}"]["delete"]["responses"]
     schema = spec["components"]["schemas"]["Workspace"]
     assert set(schema["required"]) == {
@@ -451,3 +456,71 @@ def test_openapi_documents_the_workspace_routes(api: TestClient) -> None:
         "created_at",
         "updated_at",
     }
+
+
+# --- archive/restore idempotency ----------------------------------------------------------------
+
+
+def _lifecycle_call(api: TestClient, ws: uuid.UUID, action: str, headers: dict[str, str]) -> Any:
+    return api.post(f"{BASE}/{ws}/{action}", headers=headers)
+
+
+def test_lost_archive_response_is_replayed_after_an_intervening_restore(
+    api: TestClient, world: World, store: FakeIdempotencyStore, bearer: Any
+) -> None:
+    owner = uuid.uuid4()
+    ws = world.add(owner)
+    keyed = {**bearer(owner), "Idempotency-Key": "arch-1"}
+
+    first = _lifecycle_call(api, ws, "archive", keyed)
+    assert first.status_code == 200
+    assert first.json()["status"] == "archived"
+    # The client lost that response; meanwhile the workspace is restored (no key).
+    assert _lifecycle_call(api, ws, "restore", bearer(owner)).json()["status"] == "active"
+    seen = len(world.calls)
+
+    retry = _lifecycle_call(api, ws, "archive", keyed)
+    assert retry.status_code == 200
+    assert retry.headers["idempotent-replayed"] == "true"
+    assert retry.json() == first.json()
+    assert world.workspaces[ws].status == "active", "the replay changes nothing"
+    assert [c for c in world.calls[seen:] if c[0] != "load_membership"] == []
+    stored = store.stored[(owner, f"POST /workspaces/{ws}/lifecycle", "arch-1")]
+    assert stored.request_hash == request_hash({"action": "archive"})
+
+
+def test_lifecycle_key_reused_for_the_other_action_is_409(
+    api: TestClient, world: World, bearer: Any
+) -> None:
+    owner = uuid.uuid4()
+    ws = world.add(owner)
+    keyed = {**bearer(owner), "Idempotency-Key": "k"}
+    assert _lifecycle_call(api, ws, "archive", keyed).status_code == 200
+    _problem(_lifecycle_call(api, ws, "restore", keyed), 409, ProblemType.IDEMPOTENCY_KEY_REUSED)
+    assert world.workspaces[ws].status == "archived"
+
+
+def test_lifecycle_key_is_independent_per_workspace(
+    api: TestClient, world: World, bearer: Any
+) -> None:
+    owner = uuid.uuid4()
+    one, two = world.add(owner), world.add(owner)
+    keyed = {**bearer(owner), "Idempotency-Key": "same"}
+    a = _lifecycle_call(api, one, "archive", keyed)
+    b = _lifecycle_call(api, two, "archive", keyed)
+    assert "idempotent-replayed" not in b.headers
+    assert (a.json()["id"], b.json()["id"]) == (str(one), str(two))
+    assert world.workspaces[two].status == "archived"
+
+
+def test_lifecycle_replay_requires_current_access(
+    api: TestClient, world: World, store: FakeIdempotencyStore, bearer: Any
+) -> None:
+    owner = uuid.uuid4()
+    ws = world.add(owner)
+    keyed = {**bearer(owner), "Idempotency-Key": "gone"}
+    assert _lifecycle_call(api, ws, "archive", keyed).status_code == 200
+    world.deleted.add(ws)
+    store.calls.clear()
+    _problem(_lifecycle_call(api, ws, "archive", keyed), 404)
+    assert store.calls == [], "no replay lookup without access"

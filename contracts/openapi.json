@@ -1067,7 +1067,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/archive": {
       "post": {
-        "description": "Make the workspace read-only (owner). Repeating it returns the archived workspace.",
+        "description": "Make the workspace read-only (owner). Repeating it returns the archived workspace.\n\nWith `Idempotency-Key`, a retry replays the first response even if the workspace was\nrestored in between (no second archive, no second event).",
         "operationId": "archiveWorkspace",
         "parameters": [
           {
@@ -1078,6 +1078,25 @@
               "format": "uuid",
               "title": "Workspace Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -1121,6 +1140,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
@@ -1156,7 +1185,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/restore": {
       "post": {
-        "description": "Make an archived workspace writable again (owner). Repeating it is a no-op.",
+        "description": "Make an archived workspace writable again (owner). Repeating it is a no-op.\n\nWith `Idempotency-Key`, a retry replays the first response (see archive).",
         "operationId": "restoreWorkspace",
         "parameters": [
           {
@@ -1167,6 +1196,25 @@
               "format": "uuid",
               "title": "Workspace Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -1210,6 +1258,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
