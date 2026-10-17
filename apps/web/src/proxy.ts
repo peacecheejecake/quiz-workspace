@@ -41,8 +41,10 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Everything except build assets and static files: every page needs the session refreshed and
-  // its own CSP nonce.
+  // its own CSP nonce. Route handlers (`/api/**`) are always matched, whatever their last segment
+  // looks like: a dynamic id ending in `.png` must not skip the cross-site write guard.
   matcher: [
     '/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|woff2?)$).*)',
+    '/api/:path*',
   ],
 };
