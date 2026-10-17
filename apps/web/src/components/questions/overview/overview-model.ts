@@ -14,7 +14,10 @@ export {
 } from '@/lib/questions/overview-placement';
 
 export type StudyPatch = Partial<
-  Pick<OverviewItem, 'status' | 'is_favorite' | 'needs_retry' | 'last_graded_result'>
+  Pick<
+    OverviewItem,
+    'status' | 'is_favorite' | 'needs_retry' | 'last_graded_result' | 'is_pending_grading'
+  >
 >;
 
 /**
@@ -58,6 +61,28 @@ export function optimisticStatus(
     needsRetry: flags.needs_retry ?? item.needs_retry,
     isFavorite: flags.is_favorite ?? item.is_favorite,
   });
+}
+
+/**
+ * Study state after a practice submission (questions.md §2.1, §4): a graded result becomes the
+ * last graded result (retry still wins the color); a pending one only marks grading as pending
+ * and keeps the previous graded result.
+ */
+export function gradedPatch(
+  item: OverviewItem,
+  result: 'correct' | 'incorrect' | 'pending',
+): StudyPatch {
+  const lastGradedResult = result === 'pending' ? item.last_graded_result : result;
+  return {
+    last_graded_result: lastGradedResult,
+    is_pending_grading: result === 'pending',
+    status: deriveDotStatus({
+      firstViewedAt: 'viewed',
+      lastGradedResult,
+      needsRetry: item.needs_retry,
+      isFavorite: item.is_favorite,
+    }),
+  };
 }
 
 export function heatmapChapters(placed: readonly PlacedQuestion[]): HeatmapChapter[] {

@@ -7,6 +7,8 @@ import type { ValidationIssue } from './form';
 export const QUESTION_PROBLEM_TYPES = {
   ...PROBLEM_TYPES,
   staleRevision: 'urn:quiz-workspace:problem:stale-revision',
+  practiceSessionSubmitted: 'urn:quiz-workspace:problem:practice-session-submitted',
+  practiceSessionNotPending: 'urn:quiz-workspace:problem:practice-session-not-pending',
 } as const;
 
 export type QuestionFailureKind =
@@ -16,6 +18,8 @@ export type QuestionFailureKind =
   | 'notFound'
   | 'staleRevision'
   | 'idempotencyKeyReused'
+  | 'alreadySubmitted'
+  | 'notPending'
   | 'invalid'
   | 'unavailable';
 
@@ -27,6 +31,8 @@ export const QUESTION_FAILURE_MESSAGES: Readonly<Record<QuestionFailureKind, str
   staleRevision:
     '다른 곳에서 이 문제가 먼저 수정되었습니다. 최신 내용을 불러온 뒤 다시 저장해 주세요.',
   idempotencyKeyReused: '요청이 겹쳐 처리하지 못했습니다. 다시 시도해 주세요.',
+  alreadySubmitted: '이미 제출한 풀이입니다. 문제를 다시 열어 새로 풀어 주세요.',
+  notPending: '이미 채점이 끝난 풀이입니다.',
   invalid: '입력한 내용을 확인해 주세요.',
   unavailable: '일시적인 오류로 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.',
 };
@@ -50,6 +56,9 @@ export function classifyQuestionFailure(status: number, body: unknown): Question
     if (type === QUESTION_PROBLEM_TYPES.idempotencyKeyReused) {
       return { kind: 'idempotencyKeyReused' };
     }
+    if (type === QUESTION_PROBLEM_TYPES.practiceSessionSubmitted)
+      return { kind: 'alreadySubmitted' };
+    if (type === QUESTION_PROBLEM_TYPES.practiceSessionNotPending) return { kind: 'notPending' };
     return { kind: 'unavailable' };
   }
   if (status === 422) return { kind: 'invalid', issues: validationIssues(problem) };

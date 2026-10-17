@@ -47,8 +47,10 @@ import {
 import { lookupOverviewQuestionAction, setMyStateAction } from '@/lib/questions/practice-actions';
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from '@/lib/questions/problems';
 import { PracticePanel, type PracticeQuestion } from '../practice/practice-panel';
+import { neighbors, type AttemptResult } from '../practice/practice-model';
 import {
   applyOverrides,
+  gradedPatch,
   heatmapChapters,
   optimisticStatus,
   placedTitle,
@@ -167,6 +169,11 @@ export function QuestionsOverview({
   useLayoutEffect(() => {
     latestItems.current = serverItems;
   }, [serverItems]);
+  // Study state changed since the server rendered `overview` (no action revalidates it).
+  const staleOverview = useRef(false);
+  useLayoutEffect(() => {
+    staleOverview.current = false;
+  }, [serverItems]);
   const mutationSeq = useRef(new Map<string, number>());
   const overridesRef = useRef(overrides);
   useLayoutEffect(() => {
@@ -179,6 +186,10 @@ export function QuestionsOverview({
     [overview.chapters, items],
   );
   const chapters = useMemo(() => heatmapChapters(placed), [placed]);
+  const itemsRef = useRef(items);
+  useLayoutEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   // The practice panel follows `?question=`, independently of the filters: a question the
   // filtered list does not show (deep link under other filters, or one that left the list while
@@ -264,6 +275,16 @@ export function QuestionsOverview({
     };
   }, [openPlaced, found, overrides, serverItems]);
 
+  // Previous/next follow the heatmap order under the current filters.
+  const panelNeighbors = useMemo(
+    () =>
+      neighbors(
+        placed.map((p) => p.item.question_id),
+        openedId,
+      ),
+    [placed, openedId],
+  );
+
   const screenRef = useRef<HTMLDivElement>(null);
 
   function setQuestionParam(questionId: string | null) {
@@ -271,8 +292,8 @@ export function QuestionsOverview({
     if (questionId) params.set(QUESTION_PARAM, questionId);
     else params.delete(QUESTION_PARAM);
     const query = params.toString();
-    // A history entry per open/close: back/forward reopen or close the panel. Next.js syncs
-    // `useSearchParams` with pushState without a server round trip.
+    // A history entry per open/close/previous/next: back/forward reopen or close the panel.
+    // Next.js syncs `useSearchParams` with pushState.
     window.history.pushState(null, '', `${pathname}${query ? `?${query}` : ''}`);
   }
 
@@ -350,6 +371,7 @@ export function QuestionsOverview({
       toast({ tone: 'error', title: result.message });
       return;
     }
+    staleOverview.current = true;
     const { status, is_favorite, needs_retry, last_graded_result } = result.data;
     putOverride(questionId, seq, {
       patch: { status, is_favorite, needs_retry, last_graded_result },
@@ -361,6 +383,7 @@ export function QuestionsOverview({
     (questionId: string) => {
       const item = latestItems.current.find((i) => i.question_id === questionId);
       if (!item || item.status !== 'unseen') return;
+      staleOverview.current = true;
       // A flag change in flight already carries the server's status; don't race it.
       if (overridesRef.current.has(questionId)) return;
       const seq = (mutationSeq.current.get(questionId) ?? 0) + 1;
@@ -372,6 +395,43 @@ export function QuestionsOverview({
     },
     [putOverride],
   );
+
+  /**
+   * The dot shows a submission's result at once (the overview is refreshed when the panel
+   * closes). A flag change of the same question that is still current is kept.
+   */
+  function markGraded(questionId: string, result: AttemptResult) {
+    const listed = itemsRef.current.find((i) => i.question_id === questionId);
+    const existing = overridesRef.current.get(questionId);
+    const live =
+      existing && (existing.settledOn === null || existing.settledOn === latestItems.current)
+        ? existing
+        : undefined;
+    const item =
+      listed ??
+      (openPlaced?.item.question_id === questionId
+        ? { ...openPlaced.item, ...live?.patch }
+        : undefined);
+    if (!item) return;
+    staleOverview.current = true;
+    const patch = { ...live?.patch, ...gradedPatch(item, result) };
+    if (live?.settledOn === null) {
+      // A flag change is in flight: it owns the sequence and settles with the server's state.
+      putOverride(questionId, mutationSeq.current.get(questionId) ?? 0, {
+        patch,
+        settledOn: null,
+      });
+      return;
+    }
+    putOverride(questionId, nextSeq(questionId), { patch, settledOn: latestItems.current });
+  }
+
+  function closePanel() {
+    setQuestionParam(null);
+    // Study state changed while the panel was open: reload the overview (counts) now that the
+    // URL is settled. A refresh lost to a quick reopen is retried on the next close.
+    if (staleOverview.current) router.refresh();
+  }
 
   const filtered = isOverviewFiltered(filters);
   const chapterOptions = [
@@ -544,7 +604,10 @@ export function QuestionsOverview({
         question={panelQuestion}
         readOnly={readOnly === 'archived'}
         screenId={panelScreenId}
-        onClose={() => setQuestionParam(null)}
+        neighbors={panelNeighbors}
+        onNavigate={(questionId) => setQuestionParam(questionId)}
+        onClose={closePanel}
+        onGraded={markGraded}
         onFlagsChange={(questionId, flags) => void changeFlags(questionId, flags)}
         onViewed={markViewed}
         onCloseAutoFocus={(event) => {

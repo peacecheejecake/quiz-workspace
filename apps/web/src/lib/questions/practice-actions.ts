@@ -3,8 +3,10 @@
 // QOV-01 / QPLAY-01 study actions (BFF, implementation-plan §7): the browser never calls FastAPI
 // directly. Inputs are untrusted: ids must be UUIDs, flags booleans. FastAPI remains the authority
 // (membership, archived = read-only, own study state only, no answers before submission).
+// No action revalidates the overview: a server-action refresh racing the panel's
+// `history.pushState` (open/previous/next/close) could restore an older `?question=`. The screen
+// shows the new study state optimistically and refreshes once the panel is closed.
 import type { Schemas } from '@quiz/api-client';
-import { revalidatePath } from 'next/cache';
 import { isWorkspaceId } from '@/lib/workspaces/validation';
 import { overviewPath } from './overview-data';
 import { findPlaced, type PlacedQuestion } from './overview-placement';
@@ -13,6 +15,12 @@ import { callQuestionApi, type ApiOutcome } from './server';
 
 export type PracticeSession = Schemas['PracticeSession'];
 export type MyState = Schemas['MyState'];
+export type SubmitResult = Schemas['SubmitResult'];
+export type SelfGradeResult = Schemas['SelfGradeResult'];
+
+/** An answer as the panel sends it; validated here before it reaches FastAPI. */
+export type PracticeSubmission =
+  { readonly selected_option_ids: readonly string[] } | { readonly answer_text: string };
 
 export type StudyActionResult<T> =
   | { readonly ok: true; readonly data: T }
@@ -24,6 +32,10 @@ export interface MyStatePatch {
 }
 
 const KEY = /^[A-Za-z0-9-]{8,128}$/;
+// Mirrors the API's SubmitBody limits.
+const MAX_SELECTED = 50;
+const MAX_OPTION_ID = 200;
+const MAX_ANSWER_TEXT = 20_000;
 
 function failed<T>(kind: QuestionFailureKind): StudyActionResult<T> {
   return { ok: false, kind, message: QUESTION_FAILURE_MESSAGES[kind] };
@@ -31,11 +43,6 @@ function failed<T>(kind: QuestionFailureKind): StudyActionResult<T> {
 
 function fromOutcome<T>(outcome: ApiOutcome<T>): StudyActionResult<T> {
   return outcome.ok ? outcome : failed(outcome.failure.kind);
-}
-
-/** The heatmap of this workspace shows the new study state on its next render. */
-function refresh(workspaceId: string): void {
-  revalidatePath(overviewPath(workspaceId));
 }
 
 /**
@@ -60,10 +67,69 @@ export async function openPracticeSessionAction(
       body: {},
     }),
   );
-  if (outcome.ok) {
-    if (outcome.data.workspace_id !== workspaceId) return failed('notFound');
-    refresh(workspaceId);
+  if (outcome.ok && outcome.data.workspace_id !== workspaceId) return failed('notFound');
+  return fromOutcome(outcome);
+}
+
+function submissionBody(
+  answer: PracticeSubmission,
+): { selected_option_ids: string[] } | { answer_text: string } | null {
+  if (typeof answer !== 'object' || answer === null) return null;
+  if ('selected_option_ids' in answer) {
+    const ids: unknown = answer.selected_option_ids;
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > MAX_SELECTED) return null;
+    const valid = ids.every(
+      (id): id is string => typeof id === 'string' && id.length > 0 && id.length <= MAX_OPTION_ID,
+    );
+    return valid ? { selected_option_ids: [...(ids as string[])] } : null;
   }
+  if ('answer_text' in answer) {
+    const text: unknown = answer.answer_text;
+    if (typeof text !== 'string' || text.trim() === '' || text.length > MAX_ANSWER_TEXT) {
+      return null;
+    }
+    return { answer_text: text };
+  }
+  return null;
+}
+
+/**
+ * Submits the answer of an open practice session. The server grades it on the session's pinned
+ * revision by stable option ids and only now reveals the answers / explanation.
+ */
+export async function submitPracticeAction(
+  workspaceId: string,
+  sessionId: string,
+  answer: PracticeSubmission,
+): Promise<StudyActionResult<SubmitResult>> {
+  if (!isWorkspaceId(workspaceId) || !isWorkspaceId(sessionId)) return failed('notFound');
+  const body = submissionBody(answer);
+  if (!body) return failed('invalid');
+  const outcome = await callQuestionApi(overviewPath(workspaceId), (api) =>
+    api.POST('/api/v1/practice-sessions/{session_id}/submit', {
+      params: { path: { session_id: sessionId } },
+      body,
+    }),
+  );
+  if (outcome.ok && outcome.data.practice_session_id !== sessionId) return failed('notFound');
+  return fromOutcome(outcome);
+}
+
+/** The user's own grade of a pending submission (essay, short answer without accepted answers). */
+export async function selfGradePracticeAction(
+  workspaceId: string,
+  sessionId: string,
+  result: 'correct' | 'incorrect',
+): Promise<StudyActionResult<SelfGradeResult>> {
+  if (!isWorkspaceId(workspaceId) || !isWorkspaceId(sessionId)) return failed('notFound');
+  if (result !== 'correct' && result !== 'incorrect') return failed('invalid');
+  const outcome = await callQuestionApi(overviewPath(workspaceId), (api) =>
+    api.POST('/api/v1/practice-sessions/{session_id}/self-grade', {
+      params: { path: { session_id: sessionId } },
+      body: { result },
+    }),
+  );
+  if (outcome.ok && outcome.data.practice_session_id !== sessionId) return failed('notFound');
   return fromOutcome(outcome);
 }
 
@@ -84,7 +150,6 @@ export async function setMyStateAction(
       body,
     }),
   );
-  if (outcome.ok) refresh(workspaceId);
   return fromOutcome(outcome);
 }
 

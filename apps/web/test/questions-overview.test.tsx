@@ -23,9 +23,10 @@ const subscribe = (notify: () => void) => {
     window.removeEventListener('test:pushstate', notify);
   };
 };
+const routerRefresh = vi.fn();
 vi.mock('next/navigation', () => ({
   usePathname: () => window.location.pathname,
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: routerRefresh }),
   useSearchParams: () =>
     new URLSearchParams(useSyncExternalStore(subscribe, () => window.location.search)),
 }));
@@ -33,7 +34,11 @@ vi.mock('next/navigation', () => ({
 const openPracticeSessionAction = vi.fn();
 const setMyStateAction = vi.fn();
 const lookupOverviewQuestionAction = vi.fn();
+const submitPracticeAction = vi.fn();
+const selfGradePracticeAction = vi.fn();
 vi.mock('../src/lib/questions/practice-actions', () => ({
+  submitPracticeAction: (...a: unknown[]) => submitPracticeAction(...a),
+  selfGradePracticeAction: (...a: unknown[]) => selfGradePracticeAction(...a),
   openPracticeSessionAction: (...a: unknown[]) => openPracticeSessionAction(...a),
   setMyStateAction: (...a: unknown[]) => setMyStateAction(...a),
   lookupOverviewQuestionAction: (...a: unknown[]) => lookupOverviewQuestionAction(...a),
@@ -136,6 +141,9 @@ beforeEach(() => {
   openPracticeSessionAction.mockReset();
   setMyStateAction.mockReset();
   lookupOverviewQuestionAction.mockReset();
+  submitPracticeAction.mockReset();
+  selfGradePracticeAction.mockReset();
+  routerRefresh.mockReset();
   lookupOverviewQuestionAction.mockResolvedValue({ ok: true, data: null });
   openPracticeSessionAction.mockImplementation((_ws: string, qid: string) =>
     Promise.resolve(session(Number(qid.slice(-2)))),
@@ -352,5 +360,156 @@ describe('QuestionsOverview review fixes', () => {
     await user.click(within(panel).getByRole('button', { name: '패널 닫기' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(within(dot(1)).getByTestId('question-marker')).toHaveAttribute('data-shape', 'square');
+  });
+});
+
+const SESSION = '99999999-9999-4999-8999-999999999999';
+
+function submitted(result: 'correct' | 'incorrect' | 'pending', extra: object = {}) {
+  return {
+    ok: true,
+    data: {
+      attempt_id: '77777777-7777-4777-8777-777777777777',
+      practice_session_id: SESSION,
+      question_revision_id: '88888888-8888-4888-8888-888888888888',
+      state: result === 'pending' ? 'pending_grade' : 'graded',
+      result,
+      correct_option_ids: null,
+      accepted_answers: null,
+      explanation: null,
+      rubric: null,
+      ...extra,
+    },
+  };
+}
+
+const dotStatus = (n: number) =>
+  document.querySelector(`[data-question-id="${id(n)}"]`)?.getAttribute('data-status');
+
+describe('QuestionsOverview practice panel (QPLAY-01)', () => {
+  it('previous/next move ?question= along the heatmap and stop at the ends', async () => {
+    const user = userEvent.setup();
+    render(<Screen />);
+    await user.click(dot(1));
+    let panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    expect(within(panel).getByRole('button', { name: '이전 문제' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
+    panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
+    await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
+    panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+    const next = within(panel).getByRole('button', { name: '다음 문제' });
+    expect(next).toHaveAttribute('aria-disabled', 'true');
+    await user.click(next);
+    expect(new URLSearchParams(window.location.search).get('question')).toBe(id(3));
+    // Each question opened its own session (= its own view).
+    await waitFor(() => expect(openPracticeSessionAction).toHaveBeenCalledTimes(3));
+
+    await user.click(within(panel).getByRole('button', { name: '이전 문제' }));
+    await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
+  });
+
+  it('submits the chosen option id, reveals the answer only then and refreshes on close', async () => {
+    const user = userEvent.setup();
+    submitPracticeAction.mockResolvedValue(
+      submitted('correct', { correct_option_ids: ['o1'], explanation: '해설 본문' }),
+    );
+    render(<Screen />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    const submit = within(panel).getByRole('button', { name: '제출' });
+    await waitFor(() => expect(within(panel).getByRole('radio')).toBeInTheDocument());
+    expect(submit).toBeDisabled();
+    expect(within(panel).queryByText('해설 본문')).toBeNull();
+
+    await user.click(within(panel).getByRole('radio', { name: '보기 하나' }));
+    await user.click(submit);
+    await waitFor(() => expect(within(panel).getByRole('status')).toHaveTextContent('정답입니다.'));
+    expect(submitPracticeAction).toHaveBeenCalledWith(WS, SESSION, { selected_option_ids: ['o1'] });
+    expect(within(panel).getByText('해설 본문')).toBeInTheDocument();
+    expect(within(panel).getByRole('radio', { name: '보기 하나' })).toBeDisabled();
+    expect(within(panel).queryByRole('button', { name: '제출' })).toBeNull();
+    expect(dotStatus(1)).toBe('correct');
+
+    expect(routerRefresh).not.toHaveBeenCalled();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(routerRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('a pending essay waits for the self-grade, which settles the dot', async () => {
+    const user = userEvent.setup();
+    openPracticeSessionAction.mockImplementation((_ws: string, qid: string) => {
+      const base = session(Number(qid.slice(-2)));
+      return Promise.resolve({
+        ...base,
+        data: { ...base.data, question_type: 'ESSAY', options: [], displayed_option_ids: [] },
+      });
+    });
+    submitPracticeAction.mockResolvedValue(submitted('pending', { rubric: '채점 기준 본문' }));
+    selfGradePracticeAction.mockResolvedValue({
+      ok: true,
+      data: { attempt_id: 'x', practice_session_id: SESSION, result: 'incorrect' },
+    });
+    render(<Screen />);
+    await user.click(dot(2));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    await user.type(await within(panel).findByRole('textbox', { name: '답안' }), '증발');
+    await user.click(within(panel).getByRole('button', { name: '제출' }));
+
+    await waitFor(() => expect(within(panel).getByRole('status')).toHaveTextContent('채점 대기'));
+    expect(within(panel).getByText('채점 기준 본문')).toBeInTheDocument();
+    expect(dotStatus(2)).toBe('viewed');
+    await user.click(within(panel).getByRole('button', { name: '틀림' }));
+    await waitFor(() => expect(within(panel).getByRole('status')).toHaveTextContent('오답'));
+    expect(selfGradePracticeAction).toHaveBeenCalledWith(WS, SESSION, 'incorrect');
+    expect(within(panel).queryByRole('button', { name: '맞음' })).toBeNull();
+    expect(dotStatus(2)).toBe('incorrect');
+  });
+
+  it('a correct answer keeps the retry flag the user just set', async () => {
+    const user = userEvent.setup();
+    setMyStateAction.mockResolvedValue({
+      ok: true,
+      data: {
+        question_id: id(1),
+        status: 'retry',
+        is_favorite: false,
+        needs_retry: true,
+        last_graded_result: null,
+      },
+    });
+    submitPracticeAction.mockResolvedValue(submitted('correct', { correct_option_ids: ['o1'] }));
+    render(<Screen />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await user.click(within(panel).getByRole('button', { name: '다시 풀기 표시' }));
+    await within(panel).findByRole('button', { name: '다시 풀기 해제' });
+    await user.click(await within(panel).findByRole('radio', { name: '보기 하나' }));
+    await user.click(within(panel).getByRole('button', { name: '제출' }));
+    await waitFor(() => expect(within(panel).getByRole('status')).toHaveTextContent('정답입니다.'));
+    expect(within(panel).getByRole('button', { name: '다시 풀기 해제' })).toBeInTheDocument();
+    expect(dotStatus(1)).toBe('retry');
+  });
+
+  it('a failed submit keeps the answer and reports the error', async () => {
+    const user = userEvent.setup();
+    submitPracticeAction.mockResolvedValue({
+      ok: false,
+      kind: 'unavailable',
+      message: '일시적인 오류로 처리하지 못했습니다.',
+    });
+    render(<Screen />);
+    await user.click(dot(3));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+    await user.click(await within(panel).findByRole('radio', { name: '보기 하나' }));
+    await user.click(within(panel).getByRole('button', { name: '제출' }));
+    await waitFor(() => expect(within(panel).getByRole('alert')).toHaveTextContent('일시적인'));
+    expect(within(panel).getByRole('radio', { name: '보기 하나' })).toBeChecked();
+    expect(within(panel).getByRole('button', { name: '제출' })).toBeEnabled();
   });
 });
