@@ -14,8 +14,7 @@ from typing import Any
 
 import pytest
 
-# RED (M4.0): remove `red` when M4.2a makes these GREEN.
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = pytest.mark.infra
 
 
 def _stem(text: str) -> str:

@@ -110,6 +110,53 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/questions/{question_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Question */
+    get: operations['getQuestion'];
+    put?: never;
+    post?: never;
+    /**
+     * Delete Question
+     * @description Soft delete (editor+). Revisions and attempts stay for history; the question then answers
+     *     404 everywhere and leaves the bank and the overview.
+     */
+    delete: operations['deleteQuestion'];
+    options?: never;
+    head?: never;
+    /**
+     * Update Question
+     * @description Edit (QBANK-01-AC03): a content change appends a revision and keeps option ids; a stale
+     *     `base_revision_id` is 409 `stale-revision`.
+     */
+    patch: operations['updateQuestion'];
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/revisions/{revision_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Question Revision
+     * @description One immutable revision of the question (history; attempts point at these).
+     */
+    get: operations['getQuestionRevision'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces': {
     parameters: {
       query?: never;
@@ -225,6 +272,32 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspace_id}/questions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Questions
+     * @description The bank (any member, answers included): live questions in bank order (sort order,
+     *     question number, registration order).
+     */
+    get: operations['listQuestions'];
+    put?: never;
+    /**
+     * Create Question
+     * @description Register a question with revision 1 (QBANK-01-AC02). CONFIRMED (default) requires
+     *     complete content (an MCQ needs >= 2 options and a correct option); DRAFT may be incomplete.
+     */
+    post: operations['createQuestion'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspace_id}/restore': {
     parameters: {
       query?: never;
@@ -291,6 +364,21 @@ export type paths = {
 export type webhooks = Record<string, never>;
 export type components = {
   schemas: {
+    /** ChapterRef */
+    ChapterRef: {
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Title */
+      title: string;
+    };
     /**
      * CheckStatus
      * @enum {string}
@@ -315,7 +403,7 @@ export type components = {
     };
     /** DocumentDetail */
     DocumentDetail: {
-      active_revision: components['schemas']['RevisionSummary'] | null;
+      active_revision: components['schemas']['quiz_api__api__documents__RevisionSummary'] | null;
       /**
        * Active Revision Id
        * @description The published revision search and the viewer use (null until ready).
@@ -344,7 +432,7 @@ export type components = {
        */
       last_error: string | null;
       /** @description The newest revision (a draft while a parse or correction is pending). */
-      latest_revision: components['schemas']['RevisionSummary'] | null;
+      latest_revision: components['schemas']['quiz_api__api__documents__RevisionSummary'] | null;
       /** Sha256 */
       sha256: string;
       /** Size Bytes */
@@ -533,6 +621,320 @@ export type components = {
        */
       updated_at: string;
     };
+    /** Question */
+    Question: {
+      chapter: components['schemas']['ChapterRef'] | null;
+      /**
+       * Chapter Id
+       * @description Document outline node (`chapters.id`).
+       */
+      chapter_id: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Origin
+       * @description manual | import | generation
+       */
+      origin: string;
+      /**
+       * Publication Status
+       * @enum {string}
+       */
+      publication_status: 'DRAFT' | 'CONFIRMED' | 'ARCHIVED';
+      /**
+       * Question Number
+       * @description Display number (`12번`), not unique.
+       */
+      question_number: number | null;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /** @description The active revision. */
+      revision: components['schemas']['QuestionRevision'];
+      /** Sources */
+      sources: components['schemas']['QuestionSource'][];
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /** QuestionCreate */
+    QuestionCreate: {
+      /**
+       * Accepted Answers
+       * @description SHORT_ANSWER only.
+       */
+      accepted_answers?: string[] | null;
+      /** Chapter Id */
+      chapter_id?: string | null;
+      /**
+       * Correct Option Ids
+       * @description MCQ only; required when CONFIRMED.
+       */
+      correct_option_ids?: string[] | null;
+      /** Explanation */
+      explanation?: string | null;
+      /**
+       * Is Multi Answer
+       * @default false
+       */
+      is_multi_answer?: boolean;
+      /**
+       * Options
+       * @description MCQ only.
+       */
+      options?: components['schemas']['QuestionOption'][];
+      /**
+       * Publication Status
+       * @description DRAFT or CONFIRMED (ARCHIVED is not a creation state).
+       * @default CONFIRMED
+       * @enum {string}
+       */
+      publication_status?: 'DRAFT' | 'CONFIRMED' | 'ARCHIVED';
+      /** Question Number */
+      question_number?: number | null;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /** Rubric */
+      rubric?: string | null;
+      /** Sources */
+      sources?: components['schemas']['QuestionSourceInput'][];
+      /** Stem */
+      stem: string;
+    };
+    /** QuestionDetail */
+    QuestionDetail: {
+      chapter: components['schemas']['ChapterRef'] | null;
+      /**
+       * Chapter Id
+       * @description Document outline node (`chapters.id`).
+       */
+      chapter_id: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Origin
+       * @description manual | import | generation
+       */
+      origin: string;
+      /**
+       * Publication Status
+       * @enum {string}
+       */
+      publication_status: 'DRAFT' | 'CONFIRMED' | 'ARCHIVED';
+      /**
+       * Question Number
+       * @description Display number (`12번`), not unique.
+       */
+      question_number: number | null;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /** @description The active revision. */
+      revision: components['schemas']['QuestionRevision'];
+      /**
+       * Revisions
+       * @description Every revision, newest first.
+       */
+      revisions: components['schemas']['quiz_api__api__questions__RevisionSummary'][];
+      /** Sources */
+      sources: components['schemas']['QuestionSource'][];
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /** QuestionList */
+    QuestionList: {
+      /** Items */
+      items: components['schemas']['Question'][];
+      /**
+       * Next Cursor
+       * @description Pass as `cursor` for the next page.
+       */
+      next_cursor: string | null;
+    };
+    /** QuestionOption */
+    QuestionOption: {
+      /**
+       * Id
+       * @description Opaque, client-chosen id (no whitespace, unique in the question). Grading and practice use it; keep it when editing the option.
+       */
+      id: string;
+      /** Text */
+      text: string;
+    };
+    /** QuestionRevision */
+    QuestionRevision: {
+      /**
+       * Accepted Answers
+       * @description null = not auto-gradable.
+       */
+      accepted_answers: string[] | null;
+      /**
+       * Correct Option Ids
+       * @description null = answer unknown.
+       */
+      correct_option_ids: string[] | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Explanation */
+      explanation: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Is Multi Answer */
+      is_multi_answer: boolean;
+      /** Options */
+      options: components['schemas']['QuestionOption'][];
+      /** Rubric */
+      rubric: string | null;
+      /** Stem */
+      stem: string;
+      /** Version */
+      version: number;
+    };
+    /** QuestionSource */
+    QuestionSource: {
+      /** Document Id */
+      document_id: string | null;
+      /**
+       * Document Revision Id
+       * @description The document revision that was active when the source was saved.
+       */
+      document_revision_id: string | null;
+      /** Page End */
+      page_end: number | null;
+      /** Page Start */
+      page_start: number | null;
+    };
+    /** QuestionSourceInput */
+    QuestionSourceInput: {
+      /**
+       * Document Id
+       * Format: uuid
+       * @description A live document of this workspace.
+       */
+      document_id: string;
+      /**
+       * Page End
+       * @description Defaults to `page_start`.
+       */
+      page_end?: number | null;
+      /** Page Start */
+      page_start?: number | null;
+    };
+    /**
+     * QuestionUpdate
+     * @description Partial update: omitted fields are kept, `null` clears a nullable field.
+     */
+    QuestionUpdate: {
+      /** Accepted Answers */
+      accepted_answers?: string[] | null;
+      /**
+       * Base Revision Id
+       * Format: uuid
+       * @description The active revision the edit is based on.
+       */
+      base_revision_id: string;
+      /** Chapter Id */
+      chapter_id?: string | null;
+      /** Correct Option Ids */
+      correct_option_ids?: string[] | null;
+      /** Explanation */
+      explanation?: string | null;
+      /** Is Multi Answer */
+      is_multi_answer?: boolean | null;
+      /** Options */
+      options?: components['schemas']['QuestionOption'][] | null;
+      /** Publication Status */
+      publication_status?: ('DRAFT' | 'CONFIRMED' | 'ARCHIVED') | null;
+      /** Question Number */
+      question_number?: number | null;
+      /**
+       * Question Type
+       * @description Must equal the current type (changing it is refused).
+       */
+      question_type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      /** Rubric */
+      rubric?: string | null;
+      /** Sources */
+      sources?: components['schemas']['QuestionSourceInput'][] | null;
+      /** Stem */
+      stem?: string | null;
+    };
+    /** RevisionSummary */
+    quiz_api__api__documents__RevisionSummary: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Published At */
+      published_at: string | null;
+      /** Revision Number */
+      revision_number: number;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'draft' | 'published';
+    };
+    /** RevisionSummary */
+    quiz_api__api__questions__RevisionSummary: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Version */
+      version: number;
+    };
     /** ReadinessReport */
     ReadinessReport: {
       /** Checks */
@@ -569,23 +971,6 @@ export type components = {
       metadata: {
         [key: string]: string;
       };
-    };
-    /** RevisionSummary */
-    RevisionSummary: {
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /** Published At */
-      published_at: string | null;
-      /** Revision Number */
-      revision_number: number;
-      /**
-       * Status
-       * @enum {string}
-       */
-      status: 'draft' | 'published';
     };
     /** SignedReadUrl */
     SignedReadUrl: {
@@ -1121,6 +1506,286 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['MyWorkspaceList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getQuestion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QuestionDetail'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  deleteQuestion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  updateQuestion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['QuestionUpdate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Question'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getQuestionRevision: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+        revision_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QuestionRevision'];
         };
       };
       /** @description Unauthorized */
@@ -1733,6 +2398,167 @@ export interface operations {
       };
       /** @description Unsupported Media Type */
       415: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listQuestions: {
+    parameters: {
+      query?: {
+        chapter_id?: string | null;
+        cursor?: string | null;
+        /** @description Questions with a source in this document. */
+        document_id?: string | null;
+        limit?: number;
+        /** @description Repeatable; default CONFIRMED only. */
+        publication_status?: ('DRAFT' | 'CONFIRMED' | 'ARCHIVED')[] | null;
+        /** @description Case-insensitive stem search. */
+        q?: string | null;
+        question_type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      };
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QuestionList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createQuestion: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['QuestionCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Question'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };
