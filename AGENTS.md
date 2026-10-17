@@ -49,7 +49,9 @@ summary of the rules for carrying out the implementation plan.
   Subagents use it but never run `infra-up/down/reset` or `db-reset` unless their brief says so
   Never apply migrations to the shared DB: verify them in a rolled-back transaction
   (`begin; \i <migration>; \i <pgTAP>; rollback;`). The orchestrator applies merged migrations
-  with `supabase migration up`. Isolate data with per-test users and workspaces.
+  with `supabase migration up`. Keep such verification transactions short (seconds): DDL that
+  references `auth.users` locks it and stalls Auth for every parallel task while open.
+  Isolate data with per-test users and workspaces.
 
 **Reviewer (Codex)**
 - Runs via `scripts/codex-review.sh` (§4) on the Task's commit(s) with the default model.
