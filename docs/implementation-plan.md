@@ -405,9 +405,12 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M3.0 RED | ✅ | 71343ac · 0a454d1 | RED 확인(E2E 44, contract 10, `red` marker). P2×3(Hangul `\b`, 언어 판정 범위, 서버 chapter filter) → 반영 → 지적 없음 |
 | A2.3 account security | ✅ | 1342644 | 지적 없음. **A0 phase GREEN** → CI `E2E_PHASES=P0.10,A0` |
 | M2.3 hybrid search | ✅ | 4618c72 | 지적 없음. Qwen3 hybrid R@5 0.667 / semantic 0.917(양 책 동시 검색 시 RRF가 교차언어를 밀어냄 → M2.4/M2.6 튜닝) |
-| M3.1a workspace API | ◐ | ad8d6f6 | migration 190000 적용. WS-01-AC02 GREEN(AC03~05는 문서/검색 route 대기로 red 유지). P2(archive/restore idempotency) 수정 중 |
-| M4.0 RED | ◐ | e5a51e1 | RED 확인(M4 endpoint 미구현). P2×2(검증 case 격리, 실패 job 재시도) 수정 중 |
-| A3 · M2.4 · M2.5 | ◐ | — | 진행 중 |
+| M3.1a workspace API | ✅ | ad8d6f6 · 9d7634a | migration 190000 적용. P2(archive/restore idempotency) → 반영 → 지적 없음. WS-01-AC03~05 contract는 문서/검색 route 대기로 red |
+| M4.0 RED | ✅ | e5a51e1 · 7f8ee11 · d8a5341 | RED 확인(M4 endpoint 미구현). P2×2 → 반영 → P2(부분 저장 전제) → 반영 → 지적 없음 |
+| M2.5 ExcerptResolver | ✅ | dd296d7 · 7440a26 | P2(word window가 match 끝을 자름) → 반영 → 지적 없음 |
+| A3 auth readiness | ◐ | e38a507 | CORS allowlist·CSP nonce·보안 header·prod guard. 기본 port 전체 auth E2E GREEN. P2×2(origin 직렬화, log-audit blocking) 수정 중 |
+| M3.1b workspace UI | ◐ | 4453ab4 | WS-01 AC01·02·04 GREEN(AC03·05·06은 M3.2a/S1a 대기). P2×3(dialog lifecycle, focus 복귀, drawer) 수정 중 |
+| M2.4 · M3.2a | ◐ | — | 진행 중 |
 | M4.3 LLM·extractor | ✅ | d104c02 · 9b335a6 · a6cb4a2 | P1(보기 swap)·P2(세로 정답표) → 반영 → P1(원문자 숫자 crash 회귀) → decimal-only + never-raise property test(600 seed) → 지적 없음 |
 | (통합) worktree 제외 설정 | ✅ | 6704d1c | 사소한 설정 수정, 리뷰 생략 |
 
