@@ -49,8 +49,13 @@ class ProblemType(StrEnum):
     # 404 (shared routes): unknown share id, wrong secret, revoked/expired link or deleted
     # workspace; one body for all of them (no existence oracle). The guest's session is over.
     SHARE_UNAVAILABLE = "urn:quiz-workspace:problem:share-unavailable"
-    # 401 (shared routes): no (valid) share session cookie; exchange the link secret first.
+    # 401 (shared reads) / 403 (fork, where 401 means the user JWT): no (valid) share session
+    # cookie; exchange the link secret first.
     SHARE_SESSION_REQUIRED = "urn:quiz-workspace:problem:share-session-required"
+    # 403: the share link does not allow forking (WS-FORK-01-AC02).
+    FORK_NOT_ALLOWED = "urn:quiz-workspace:problem:fork-not-allowed"
+    # 409: the shared workspace is larger than one fork may copy.
+    FORK_TOO_LARGE = "urn:quiz-workspace:problem:fork-too-large"
     # 409: practice needs a CONFIRMED question (drafts and archived questions are not studied).
     QUESTION_NOT_CONFIRMED = "urn:quiz-workspace:problem:question-not-confirmed"
     # 409: the practice session was already submitted (a session is answered exactly once).

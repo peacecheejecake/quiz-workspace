@@ -65,6 +65,19 @@ class ObjectStorage(Protocol):
         ...
 
 
+class ObjectCopier(Protocol):
+    """Server-side copies for the fork job (S3a): no bytes pass through the worker."""
+
+    def copy(self, bucket: str, source_key: str, dest_key: str) -> None:
+        """Copy an object inside `bucket`, replacing `dest_key` (idempotent); raises
+        `ObjectMissingError` when the source does not exist."""
+        ...
+
+    def delete(self, bucket: str, key: str) -> None:
+        """Remove an object; a missing object is not an error."""
+        ...
+
+
 def _is_not_found(response: httpx.Response) -> bool:
     # Storage reports a missing object as HTTP 400 with `statusCode: "404"` in the body.
     if response.status_code == 404:
@@ -147,6 +160,18 @@ class SupabaseStorage:
                 headers={"content-type": content_type, "x-upsert": "true"},
             )
         self._check(res, "upload")
+
+    def copy(self, bucket: str, source_key: str, dest_key: str) -> None:
+        with self._errors("copy"):
+            res = self._client.post(
+                "/object/copy",
+                json={"bucketId": bucket, "sourceKey": source_key, "destinationKey": dest_key},
+                # A retried copy replaces its own earlier result (same immutable source).
+                headers={"x-upsert": "true"},
+            )
+        if _is_not_found(res):
+            raise ObjectMissingError("source object not found")
+        self._check(res, "copy")
 
     def delete(self, bucket: str, key: str) -> None:
         with self._errors("delete"):

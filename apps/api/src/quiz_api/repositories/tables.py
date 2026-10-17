@@ -430,3 +430,28 @@ workspace_share_links = Table(
     _ts("created_at", nullable=False),
     _ts("updated_at", nullable=False),
 )
+
+
+# --- S3a workspace forks (20261018170000_workspace_forks.sql) ---------------------------------
+
+workspace_forks = Table(
+    "workspace_forks",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("source_workspace_id", Uuid),
+    Column("source_share_link_id", Uuid),
+    # Null until the fork is COMPLETED.
+    Column("target_workspace_id", Uuid),
+    Column("forked_by", Uuid, nullable=False),
+    Column("name", Text, nullable=False),
+    Column("async_job_id", Uuid),
+    # Pinned published revisions, id salt and target id; never part of an API response.
+    Column("source_snapshot_manifest", JSONB, nullable=False),
+    Column("origin_attribution", JSONB, nullable=False),
+    Column("status", Text, nullable=False, server_default=FetchedValue()),
+    Column("progress", SmallInteger, nullable=False, server_default=FetchedValue()),
+    Column("last_error", Text),
+    _ts("created_at", nullable=False),
+    _ts("updated_at", nullable=False),
+    _ts("completed_at"),
+)

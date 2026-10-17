@@ -252,6 +252,26 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/me/forks/{fork_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get My Fork
+     * @description Status of one of the caller's forks (WS-FORK-01-AC04); anyone else's is 404.
+     */
+    get: operations['getMyFork'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/me/workspaces': {
     parameters: {
       query?: never;
@@ -697,6 +717,31 @@ export type paths = {
     get: operations['getSharedDocumentPdf'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/forks': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start Fork
+     * @description Fork the shared workspace into a new workspace of the caller (WS-FORK-01-AC02/AC04).
+     *
+     *     Needs the user's Bearer JWT and the share session cookie of this link, and the link must
+     *     allow forking. Copies the published documents, questions, answers and explanations; never
+     *     drafts, other people's progress, activity or share links. 202 with the fork; poll
+     *     `GET /me/forks/{id}`.
+     */
+    post: operations['startWorkspaceFork'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1752,6 +1797,68 @@ export type components = {
        * @enum {string}
        */
       severity: 'warning' | 'error';
+    };
+    /**
+     * Fork
+     * @description A fork request of the caller (never the source owner, manifest or link).
+     */
+    Fork: {
+      /** Completed At */
+      completed_at: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Error Code
+       * @description Why a fork ended FAILED or CANCELLED, e.g. `share_unavailable` (the link was revoked, expired, set to no-fork or its workspace deleted while copying).
+       */
+      error_code: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Job Id
+       * @description The `workspace.fork` job (202 Accepted).
+       */
+      job_id: string | null;
+      /**
+       * Name
+       * @description Name of the new workspace.
+       */
+      name: string;
+      /**
+       * Progress
+       * @description 0-100 (100 once COMPLETED).
+       */
+      progress: number;
+      /**
+       * Status
+       * @description PENDING | COPYING | COMPLETED | FAILED | CANCELLED
+       * @enum {string}
+       */
+      status: 'PENDING' | 'COPYING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+      /**
+       * Target Workspace Id
+       * @description The new workspace, owned by the caller; null until COMPLETED.
+       */
+      target_workspace_id: string | null;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /** ForkCreate */
+    ForkCreate: {
+      /**
+       * Name
+       * @description Name of the new workspace.
+       */
+      name: string;
     };
     /** GenerationCreate */
     GenerationCreate: {
@@ -4895,6 +5002,73 @@ export interface operations {
       };
     };
   };
+  getMyFork: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        fork_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Fork'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   listMyWorkspaces: {
     parameters: {
       query?: never;
@@ -6555,6 +6729,99 @@ export interface operations {
       };
       /** @description Unprocessable Content */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  startWorkspaceFork: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ForkCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Fork'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
         headers: {
           [name: string]: unknown;
         };

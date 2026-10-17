@@ -17,7 +17,9 @@ select tables_are(
         -- M3.2a document domain
         'documents', 'document_revisions', 'chapters', 'content_blocks', 'document_uploads',
         -- S1a share links
-        'workspace_share_links'],
+        'workspace_share_links',
+        -- S3a forks
+        'workspace_forks'],
   'public schema contains exactly the expected tables'
 );
 
@@ -86,8 +88,8 @@ select is(
     where trigger_schema = 'public' and action_statement like '%set_updated_at%'),
   array['async_jobs', 'content_blocks', 'document_revisions', 'document_uploads', 'documents',
         'practice_sessions', 'profiles', 'question_drafts', 'question_generation_runs',
-        'question_import_runs', 'question_user_states', 'questions', 'workspace_memberships',
-        'workspace_share_links', 'workspaces'],
+        'question_import_runs', 'question_user_states', 'questions', 'workspace_forks',
+        'workspace_memberships', 'workspace_share_links', 'workspaces'],
   'updated_at trigger exists on every mutable table'
 );
 

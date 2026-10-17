@@ -170,6 +170,11 @@ class Settings(BaseSettings):
     relay_client_secret: SecretStr | None = Field(
         default=None, validation_alias="RELAY_CLIENT_SECRET"
     )
+    # Fork starts per minute per user (S3a; in-process token bucket, burst = rate); above it 429 +
+    # Retry-After. 0 disables it.
+    share_fork_rate_per_minute: int = Field(
+        default=5, ge=0, le=600, validation_alias="SHARE_FORK_RATE_LIMIT_PER_MINUTE"
+    )
     # Supabase Storage (M3.2a; docs/deployment.md §2, auth.md §4). The API talks to Storage with
     # the server-only secret key; browsers only ever get short-lived signed URLs. Unset key ->
     # document upload/read routes answer 503.

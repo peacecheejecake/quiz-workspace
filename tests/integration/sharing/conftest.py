@@ -22,7 +22,9 @@ from __future__ import annotations
 import base64
 import importlib.util
 import json
+import logging
 import sys
+import threading
 import time
 import uuid
 from collections.abc import Iterator
@@ -34,9 +36,18 @@ from typing import Any
 import httpx
 import psycopg
 import pytest
+from book_core.embedding import FakeEmbedder
+from book_core.indexing import QdrantIndexStore
 from fastapi.testclient import TestClient
 from quiz_api.main import create_app
 from quiz_api.settings import LOCAL_CORS_ORIGINS, Settings
+from quiz_worker.adapters import FailureInjectingEmbedder
+from quiz_worker.document_store import PostgresDocumentStore
+from quiz_worker.fork_job import ForkJobDeps, workspace_fork_definition
+from quiz_worker.fork_store import PostgresForkStore
+from quiz_worker.pg_store import create_job_store_engine
+from quiz_worker.settings import WorkerSettings
+from quiz_worker.storage import SupabaseStorage
 
 _M3_CONFTEST = Path(__file__).resolve().parents[1] / "workspaces" / "conftest.py"
 _spec = importlib.util.spec_from_file_location("_m3_contract_conftest_sharing", _M3_CONFTEST)
@@ -47,7 +58,10 @@ sys.modules[_spec.name] = _m3  # dataclasses resolve their module through sys.mo
 _spec.loader.exec_module(_m3)
 
 # In-process job worker of the M4 contract suite (document.parse for uploaded books), so no Celery
-# worker has to run: `wait_for_job` drains the job, then reads it through `GET /jobs/{id}`.
+# worker has to run: `wait_for_job` drains the job, then reads it through `GET /jobs/{id}`. The
+# `workspace.fork` job (S3a) is added below and runs in a background thread per accepted fork,
+# because the fork tests only poll `GET /me/forks/{id}` (a paused fork must be observable while
+# the owner revokes the link).
 _M4_CONFTEST = Path(__file__).resolve().parents[1] / "questions" / "conftest.py"
 _spec4 = importlib.util.spec_from_file_location("_m4_contract_conftest_sharing", _M4_CONFTEST)
 assert _spec4 is not None
@@ -58,7 +72,79 @@ _spec4.loader.exec_module(_m4)
 
 # Re-exported fixtures (pytest collects fixtures from conftest attributes).
 stack = _m3.stack
-job_worker = _m4.job_worker
+
+
+class ForkJobWorker(_m4.JobWorker):
+    """The M4 in-process worker plus `workspace.fork` (S3a) with the same Postgres role, Storage
+    and Qdrant prefix, and the APP_ENV=test fault injection of S6; forks run in background
+    threads (`start`), joined before each test's cleanup (`join`)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._build_lock = threading.Lock()
+        self._threads: list[threading.Thread] = []
+        self._started: set[str] = set()
+        self.fork_deps: ForkJobDeps | None = None
+
+    def _build(self) -> Any:
+        with self._build_lock:
+            if self._built is not None:
+                return self._built
+            jobs, runner, definitions = super()._build()
+            env = WorkerSettings(_env_file=str(_m3.REPO_ROOT / ".env"))  # type: ignore[call-arg]
+            url, secret = env.worker_database_url, env.supabase_secret_key
+            assert url is not None, "WORKER_DATABASE_URL missing (.env)"
+            assert secret is not None, "SUPABASE_SECRET_KEY missing (.env)"
+            assert env.supabase_url, "SUPABASE_URL missing (.env)"
+            engine = create_job_store_engine(url, pool_size=4)
+            storage = SupabaseStorage(env.supabase_url, secret.get_secret_value())
+            self._closers += [engine.dispose, storage.close]
+            assert self._qdrant is not None
+            fork_deps = ForkJobDeps(
+                forks=PostgresForkStore(engine),
+                documents=PostgresDocumentStore(engine),
+                storage=storage,
+                index=QdrantIndexStore(
+                    self._qdrant, FailureInjectingEmbedder(FakeEmbedder()), names=self._names
+                ),
+                inject_failures=True,
+            )
+            self.fork_deps = fork_deps
+            definition = workspace_fork_definition(lambda: fork_deps)
+            definitions = {**definitions, definition.job_type: definition}
+            self._built = (jobs, runner, definitions)
+            return self._built
+
+    def start(self, job_id: str) -> None:
+        """Drain the job in a background thread (once per job id)."""
+        if job_id in self._started:
+            return
+        self._started.add(job_id)
+
+        def run() -> None:
+            try:
+                self.drain(job_id)
+            except BaseException:  # the test sees the outcome through GET /me/forks
+                logging.getLogger(__name__).exception("background fork job crashed")
+
+        thread = threading.Thread(target=run, name=f"fork-{job_id[:8]}", daemon=True)
+        self._threads.append(thread)
+        thread.start()
+
+    def join(self, timeout: float | None = None) -> None:
+        for thread in self._threads:
+            thread.join(FORK_TIMEOUT_S if timeout is None else timeout)
+        self._threads = [t for t in self._threads if t.is_alive()]
+
+
+@pytest.fixture(scope="module")
+def job_worker(stack: Any) -> Iterator[ForkJobWorker]:
+    worker = ForkJobWorker()
+    try:
+        yield worker
+    finally:
+        worker.join()
+        worker.close()
 
 
 @pytest.fixture(scope="module")
@@ -244,7 +330,7 @@ class ShareClient(_m3.Client):
         jwt: bool = True,
         origin: str | None = "web",
     ) -> httpx.Response:
-        return self.send(
+        res = self.send(
             "POST",
             f"/shared/{share_id}/forks",
             {"name": name},
@@ -253,6 +339,10 @@ class ShareClient(_m3.Client):
             origin=web_origin() if origin == "web" else origin,
             headers={"Idempotency-Key": key or str(uuid.uuid4())},
         )
+        job_id = res.json().get("job_id") if res.status_code == 202 else None
+        if job_id and self.worker is not None:
+            self.worker.start(str(job_id))
+        return res
 
     def get_fork(self, fork_id: str) -> httpx.Response:
         return self.call("GET", f"/me/forks/{fork_id}")
@@ -361,6 +451,8 @@ class ShareSeed(_m3.Seed):
     FOREIGN_ORIGIN = FOREIGN_ORIGIN
     PERSONAL_KEYS = PERSONAL_KEYS
     UNPUBLISHED_STEMS = UNPUBLISHED_STEMS
+    DB_ADMIN_URL = DB_ADMIN_URL
+    SUPABASE_URL: str = _m3.SUPABASE_URL
     worker: Any = None
     stable = staticmethod(stable)
     assert_status = staticmethod(assert_status)
@@ -561,4 +653,5 @@ def seed(stack: Any, app_client: TestClient, job_worker: Any) -> Iterator[ShareS
     try:
         yield s
     finally:
+        job_worker.join()  # no fork job may still be writing while its users are removed
         s.cleanup()

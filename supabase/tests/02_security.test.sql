@@ -27,10 +27,11 @@ select is_empty(
         and not (tablename in ('async_jobs', 'documents', 'document_revisions', 'chapters',
                                'content_blocks', 'document_uploads', 'question_import_runs',
                                'question_drafts', 'question_generation_runs', 'questions',
-                               'question_revisions', 'question_sources')
+                               'question_revisions', 'question_sources', 'workspace_forks')
                  and roles = array['quiz_worker']::name[]) $$,
   'every policy in public targets quiz_api only (plus quiz_worker on async_jobs, P0.7b, the '
-    || 'document tables, M3.2a, the import runs/drafts, M4.4a, and generation, M6.2)'
+    || 'document tables, M3.2a, the import runs/drafts, M4.4a, generation, M6.2, and '
+    || 'workspace_forks, S3a)'
 );
 
 -- Table privileges ------------------------------------------------------------------------------

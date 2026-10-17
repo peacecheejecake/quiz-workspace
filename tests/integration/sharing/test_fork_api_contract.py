@@ -12,8 +12,7 @@ from typing import Any
 
 import pytest
 
-# RED (S0): S3a removes `red` when the fork worker makes these GREEN.
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = [pytest.mark.infra]
 
 
 def _shared(

@@ -18,6 +18,7 @@ from sqlalchemy import Column, ColumnElement, Table, exists, select
 from sqlalchemy.orm import Session
 
 from quiz_api.authz.permissions import LockMode, Role
+from quiz_api.repositories.forks import FORK_JOB_TYPE
 from quiz_api.repositories.tables import (
     async_jobs,
     document_revisions,
@@ -74,7 +75,11 @@ class ResourceBinding:
 
 
 RESOURCES: dict[ResourceType, ResourceBinding] = {
-    ResourceType.JOB: ResourceBinding(async_jobs),
+    # S3a: a fork job lives in the *source* workspace but belongs to the forking user only; its
+    # status is read through GET /me/forks/{id}, never through the workspace's /jobs routes.
+    ResourceType.JOB: ResourceBinding(
+        async_jobs, visible_when=async_jobs.c.job_type != FORK_JOB_TYPE
+    ),
     ResourceType.QUESTION: ResourceBinding(questions, deleted_column="deleted_at"),
     ResourceType.PRACTICE_SESSION: ResourceBinding(practice_sessions),
     ResourceType.QUESTION_DRAFT: ResourceBinding(question_drafts),

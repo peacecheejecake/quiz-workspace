@@ -251,8 +251,10 @@ def _unavailable() -> ProblemException:
     return ProblemException(404, ProblemType.SHARE_UNAVAILABLE, detail=SHARE_UNAVAILABLE)
 
 
-def _session_required() -> ProblemException:
-    return ProblemException(401, ProblemType.SHARE_SESSION_REQUIRED, detail=SESSION_REQUIRED)
+def _session_required(status_code: int = 401) -> ProblemException:
+    return ProblemException(
+        status_code, ProblemType.SHARE_SESSION_REQUIRED, detail=SESSION_REQUIRED
+    )
 
 
 def _not_found() -> HTTPException:
@@ -266,22 +268,39 @@ def _uuid(value: str) -> uuid.UUID | None:
         return None
 
 
-def require_shared_link(
-    share_id: ShareIdPath, request: Request, repo: SharedRepo, key: SessionKey
+def verify_share_session(
+    share_id: str,
+    request: Request,
+    repo: SharedRepository,
+    key: ShareSessionKey,
+    *,
+    session_required_status: int = 401,
 ) -> SharedLink:
-    """The share check of every read: a valid session of THIS link, re-validated in the DB."""
+    """A valid session of THIS link, re-validated in the DB (usable link, live workspace).
+
+    No / malformed / expired / forged cookie → `session_required_status` share-session-required
+    (401 on the guest reads; the fork route, where 401 means the user JWT, uses 403). A session
+    of another link or an unusable link → 404 share-unavailable.
+    """
     raw = request.cookies.get(SHARE_COOKIE)
     claims = parse_token(raw)
     if raw is None or claims is None:
-        raise _session_required()
+        raise _session_required(session_required_status)
     link = repo.link(claims.link_id)
     # MAC first (a forged token learns nothing about the link), against the dummy digest when the
     # id is unknown so both paths do the same work.
     if not verify_token(key, raw, claims, link.token_digest if link else _DUMMY_DIGEST):
-        raise _session_required()
+        raise _session_required(session_required_status)
     if link is None or not link.usable or _uuid(share_id) != link.id:
         raise _unavailable()
     return link
+
+
+def require_shared_link(
+    share_id: ShareIdPath, request: Request, repo: SharedRepo, key: SessionKey
+) -> SharedLink:
+    """The share check of every read: a valid session of THIS link, re-validated in the DB."""
+    return verify_share_session(share_id, request, repo, key)
 
 
 Shared = Annotated[SharedLink, Depends(require_shared_link)]
@@ -367,7 +386,7 @@ QuestionRepo = Annotated[QuestionRepository, Depends(get_question_repository)]
 # --- session exchange ---------------------------------------------------------------------------
 
 
-def _allowed_origin(request: Request) -> bool:
+def allowed_origin(request: Request) -> bool:
     raw = request.headers.get("origin")
     if raw is None or not raw.isascii():
         return False
@@ -399,7 +418,7 @@ def create_shared_session(
     Needs an allowlisted `Origin` (the web app). Unknown link, wrong secret, revoked or expired
     link and deleted workspace all answer the same 404. The secret is never stored or logged.
     """
-    if not _allowed_origin(request):
+    if not allowed_origin(request):
         raise HTTPException(status_code=403, detail="Origin not allowed.")
     # Per client (behind the relay: the client it vouches for, quiz_api.relay_client) and a
     # ceiling per link across all clients.
