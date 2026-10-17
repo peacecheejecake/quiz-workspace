@@ -7,7 +7,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from quiz_api.api import documents, jobs, me, questions, share_links, workspaces
+from quiz_api.api import (
+    documents,
+    jobs,
+    me,
+    question_overview,
+    questions,
+    share_links,
+    workspaces,
+)
 from quiz_api.errors import problem_responses
 
 API_V1_PREFIX = "/api/v1"
@@ -18,5 +26,6 @@ api_router.include_router(me.router)
 api_router.include_router(workspaces.router)
 api_router.include_router(documents.router)
 api_router.include_router(questions.router)
+api_router.include_router(question_overview.router)
 api_router.include_router(share_links.router)
 api_router.include_router(jobs.router)

@@ -338,6 +338,27 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspace_id}/questions/overview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Question Overview
+     * @description The caller's question heatmap: CONFIRMED questions with their study status, grouped by
+     *     chapter, plus the status counts. Read-only: never records a view.
+     */
+    get: operations['getQuestionOverview'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspace_id}/restore': {
     parameters: {
       query?: never;
@@ -818,6 +839,86 @@ export type components = {
       /** Items */
       items: components['schemas']['MyWorkspace'][];
     };
+    /** OverviewChapter */
+    OverviewChapter: {
+      /** Document Id */
+      document_id: string | null;
+      /**
+       * Id
+       * @description null = the questions without a chapter.
+       */
+      id: string | null;
+      /**
+       * Number
+       * @description Chapter number for `3장 12번` labels, if known.
+       */
+      number: number | null;
+      /**
+       * Question Count
+       * @description Items of this group in `items`.
+       */
+      question_count: number;
+      /** Title */
+      title: string;
+    };
+    /** OverviewCounts */
+    OverviewCounts: {
+      /** Correct */
+      correct: number;
+      /**
+       * Favorite
+       * @description Overlaps the status counts.
+       */
+      favorite: number;
+      /** Incorrect */
+      incorrect: number;
+      /** Retry */
+      retry: number;
+      /** Total */
+      total: number;
+      /** Unseen */
+      unseen: number;
+      /** Viewed */
+      viewed: number;
+    };
+    /** OverviewItem */
+    OverviewItem: {
+      /** Chapter Id */
+      chapter_id: string | null;
+      /** Is Favorite */
+      is_favorite: boolean;
+      /**
+       * Is Pending Grading
+       * @description Latest submission awaits grading (채점 대기).
+       */
+      is_pending_grading: boolean;
+      /** Last Graded Result */
+      last_graded_result: ('correct' | 'incorrect') | null;
+      /** Needs Retry */
+      needs_retry: boolean;
+      /**
+       * Preview
+       * @description First 1-3 lines of the stem; never the answer.
+       */
+      preview: string;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /** Question Number */
+      question_number: number | null;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry';
+    };
     /** Problem */
     Problem: {
       /**
@@ -1045,6 +1146,15 @@ export type components = {
       id: string;
       /** Text */
       text: string;
+    };
+    /** QuestionOverview */
+    QuestionOverview: {
+      /** Chapters */
+      chapters: components['schemas']['OverviewChapter'][];
+      /** @description Over the chapter/type/q scope; status/favorite/retry filters ignored. */
+      counts: components['schemas']['OverviewCounts'];
+      /** Items */
+      items: components['schemas']['OverviewItem'][];
     };
     /** QuestionRevision */
     QuestionRevision: {
@@ -3000,6 +3110,85 @@ export interface operations {
       };
       /** @description Conflict */
       409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getQuestionOverview: {
+    parameters: {
+      query?: {
+        /** @description A chapter id, or `none` for questions without one. */
+        chapter?: string | null;
+        /** @description Keep (non-)favorites only. */
+        favorite?: boolean | null;
+        /** @description Case-insensitive stem search. */
+        q?: string | null;
+        /** @description Keep questions (not) marked for retry. */
+        retry?: boolean | null;
+        /** @description Repeatable; keeps these statuses. */
+        status?: ('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry')[] | null;
+        type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      };
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QuestionOverview'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };
