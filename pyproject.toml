@@ -4,7 +4,9 @@ name = "quiz-workspace"
 version = "0.0.0"
 description = "Quiz Workspace monorepo (uv workspace root)"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+# Workspace members the root environment installs, so `uv sync` / `uv run` at the root can
+# import, type-check and test them.
+dependencies = ["quiz-api"]
 
 [tool.uv]
 package = false
@@ -14,6 +16,9 @@ package = false
 # members that do not exist yet. Listed explicitly so TS-only dirs (apps/web, packages/ui,
 # packages/design-tokens) are never treated as Python members.
 members = ["apps/api", "apps/worker", "packages/core"]
+
+[tool.uv.sources]
+quiz-api = { workspace = true }
 
 [dependency-groups]
 dev = [

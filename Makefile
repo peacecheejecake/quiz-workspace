@@ -19,7 +19,7 @@ PY_MEMBERS := apps/api apps/worker packages/core
 PY_PRESENT := $(foreach m,$(PY_MEMBERS),$(if $(wildcard $(m)/pyproject.toml),$(m)))
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
-	test test-ts test-py
+	test test-ts test-py contracts contracts-check api-dev
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -71,3 +71,15 @@ test-py:
 	@rc=0; uv run pytest || rc=$$?; \
 	if [ $$rc -eq 5 ]; then echo "pytest: no tests collected yet; ok"; exit 0; fi; \
 	exit $$rc
+
+# OpenAPI contract: FastAPI app -> contracts/openapi.json -> packages/api-client TS types.
+contracts: ## Export contracts/openapi.json and regenerate the TS API client
+	uv run python -m quiz_api.openapi_export
+	pnpm --filter @quiz/api-client run generate
+
+contracts-check: ## Fail if contracts/openapi.json or the TS API client is stale
+	uv run python -m quiz_api.openapi_export --check
+	pnpm --filter @quiz/api-client run check:generated
+
+api-dev: ## Run the API locally with reload (reads .env)
+	uv run uvicorn quiz_api.main:create_app --factory --reload

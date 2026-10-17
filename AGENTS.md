@@ -163,6 +163,9 @@ make fmt         # prettier --write, eslint --fix, ruff --fix, ruff format
 make fmt-check   # format check only
 make typecheck   # per-package `typecheck` scripts (tsc) + mypy on Python members
 make test        # per-package `test` scripts (Vitest) + pytest
+make contracts   # export contracts/openapi.json + regenerate packages/api-client types
+make contracts-check   # fail if either generated contract file is stale
+make api-dev     # run the FastAPI app locally with reload
 pnpm --filter <pkg> <script>   # run one TS package's script
 uv run pytest apps/api         # run one Python member's tests
 scripts/codex-review.sh --commit HEAD --title "<Task ID>: <summary>"
