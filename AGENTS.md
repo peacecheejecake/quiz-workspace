@@ -32,7 +32,10 @@ summary of the rules for carrying out the implementation plan.
 - One subagent = one Task. The brief must include: Task ID, scope (directories it may touch),
   relevant spec sections and AC IDs, DoD from the plan, and the verification commands to run.
 - Tasks in the same wave run in parallel only when their file scopes do not overlap; parallel
-  subagents use isolated git worktrees (`task/<task-id>` branches) merged into `develop`.
+  subagents use isolated git worktrees merged into `develop` by the orchestrator. A worktree
+  subagent cannot write to the main checkout: review fixes go on a new branch in its worktree
+  created from current `develop`. Shared files (lockfiles, Makefile, root configs) are expected
+  to conflict; the orchestrator resolves them and regenerates lockfiles.
 - Reviews the subagent's report critically: re-runs the verification commands itself before
   accepting a Task.
 
@@ -90,9 +93,10 @@ starts — never in bulk ahead of time. Never push or force-push without explici
 ## 5. Engineering rules
 
 **Repository layout** (`docs/architecture.md` §10): `apps/{api,worker,web}`,
-`packages/{core,ui,design-tokens}`, `supabase/migrations`, `contracts/openapi.json`,
+`packages/{core,ui,design-tokens,api-client}`, `supabase/migrations`, `contracts/openapi.json`,
 `tests/{e2e,integration}`, `eval/`, `infra/compose.yaml`. Python uses a `uv` workspace;
-TypeScript uses a `pnpm` workspace. The TS API client is generated from OpenAPI — never hand-edit it.
+TypeScript uses a `pnpm` workspace. The TS API client (`packages/api-client`) is generated from
+OpenAPI — never hand-edit it; run `make contracts` after API changes.
 
 **Security and data isolation**
 - FastAPI is the authorization boundary. Every request checks resource → workspace → membership
@@ -158,14 +162,19 @@ Copy `.env.example` to `.env` for local values (never commit `.env`).
 
 ```bash
 make install     # pnpm install + uv sync
-make lint        # eslint + prettier --check + ruff check + ruff format --check (+ per-package lint)
+make lint        # eslint + prettier --check + ruff + per-package lint + contracts-check
 make fmt         # prettier --write, eslint --fix, ruff --fix, ruff format
 make fmt-check   # format check only
 make typecheck   # per-package `typecheck` scripts (tsc) + mypy on Python members
 make test        # per-package `test` scripts (Vitest) + pytest
 make contracts   # export contracts/openapi.json + regenerate packages/api-client types
 make contracts-check   # fail if either generated contract file is stale
-make api-dev     # run the FastAPI app locally with reload
+make api-dev     # run the FastAPI app locally with reload (python -m quiz_api.serve; never bare uvicorn)
+make infra-up    # Docker required: Qdrant + Redis (infra/compose.yaml) + Supabase local stack
+make infra-status  # compose health + Supabase local URLs (keys go only into .env)
+make infra-down  # stop infra, keep data volumes
+make infra-reset # stop infra and DELETE local data volumes
+pnpm exec supabase <cmd>       # pinned Supabase CLI; never a global install
 pnpm --filter <pkg> <script>   # run one TS package's script
 uv run pytest apps/api         # run one Python member's tests
 scripts/codex-review.sh --commit HEAD --title "<Task ID>: <summary>"
