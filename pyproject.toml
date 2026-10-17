@@ -47,8 +47,9 @@ explicit = true
 dev = [
   # Workspace members installed into the shared venv so pytest/mypy can import them.
   # `parser` (Docling + CPU torch) and `models` (transformers on the same torch) are part of the
-  # dev install so the parser and embedding tests always run.
-  "book-core[parser,models]",
+  # dev install so the parser and embedding tests always run; `llm` (httpx) so the provider
+  # adapter is type-checked and tested offline against a mock transport.
+  "book-core[parser,models,llm]",
   "quiz-api",
   "quiz-worker",
   # Type stubs for Celery/kombu (they ship no inline types).
@@ -113,4 +114,5 @@ norecursedirs = [".*", "*.egg", "venv", "node_modules", "dist", "build"]
 markers = [
   "infra: needs the local stack (`make infra-up`); skipped with a reason otherwise, run via `make test-infra`",
   "models: runs real model weights (Docling layout/TableFormer, Qwen3-Embedding; downloads into HF_HOME); excluded from `make test`, run via `make test-models` (nightly)",
+  "llm: calls the real LLM provider (needs LLM_API_KEY + LLM_MODEL, costs money, sends only synthetic text); excluded from `make test`, run via `make test-llm`",
 ]

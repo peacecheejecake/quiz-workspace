@@ -36,8 +36,11 @@ models = [
   "transformers>=4.51,<6",
   "torch==2.14.1",
 ]
-# M4.3: real LLM provider SDK for structured outputs.
-llm = []
+# M4.3: HTTP client for the real LLM provider (Anthropic Messages API, structured outputs) behind
+# the provider-agnostic `LLMClient` protocol. Opt-in: only workers with LLM_API_KEY use it. The
+# official SDK is not used: it pulls in httpx2, which switches Starlette's TestClient (apps/api)
+# to httpx2, and it logs full request bodies (book text) at DEBUG.
+llm = ["httpx>=0.28,<1"]
 
 [project.scripts]
 core = "book_core.cli:main"

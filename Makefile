@@ -25,7 +25,7 @@ SUPABASE := pnpm exec supabase
 SIGNING_KEYS := supabase/signing_keys.json
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
-	test test-ts test-py test-infra test-models auth-keys infra-up infra-down infra-status infra-reset \
+	test test-ts test-py test-infra test-models test-llm auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
 	e2e e2e-browsers e2e-trace
 
@@ -78,9 +78,10 @@ test-ts:
 
 # pytest exits 5 when no tests were collected; that is the only non-zero code tolerated.
 # Tests marked `infra` skip (with a reason, listed by -ra) when the local stack is not running.
-# Tests marked `models` (real model weights) never run here; see `make test-models`.
+# Tests marked `models` (real model weights) or `llm` (real LLM provider) never run here; see
+# `make test-models` / `make test-llm`.
 test-py:
-	@rc=0; uv run pytest -m "not infra and not models" || rc=$$?; \
+	@rc=0; uv run pytest -m "not infra and not models and not llm" || rc=$$?; \
 	if [ $$rc -eq 5 ]; then echo "pytest: no tests collected yet; ok"; exit 0; fi; \
 	exit $$rc
 
@@ -94,6 +95,11 @@ test-infra: ## Integration tests against the running local stack (needs `make in
 # before parser or model-adapter changes.
 test-models: ## Tests on real model weights (downloads into HF_HOME on first run)
 	uv run pytest -m models
+
+# Real LLM provider calls (opt-in, billed). Needs LLM_API_KEY and LLM_MODEL in the environment;
+# fails, never skips, without them. Sends only synthetic text, never book content.
+test-llm: ## Tests against the real LLM provider (needs LLM_API_KEY, LLM_MODEL)
+	uv run pytest -m llm
 
 auth-keys: $(SIGNING_KEYS) ## Generate the local Auth JWT signing key if missing (idempotent)
 
