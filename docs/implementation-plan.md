@@ -410,7 +410,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M3.1a workspace API | ✅ | ad8d6f6 · 9d7634a | migration 190000 적용. P2(archive/restore idempotency) → 반영 → 지적 없음. WS-01-AC03~05 contract는 문서/검색 route 대기로 red |
 | M4.0 RED | ✅ | e5a51e1 · 7f8ee11 · d8a5341 | RED 확인(M4 endpoint 미구현). P2×2 → 반영 → P2(부분 저장 전제) → 반영 → 지적 없음 |
 | M2.5 ExcerptResolver | ✅ | dd296d7 · 7440a26 | P2(word window가 match 끝을 자름) → 반영 → 지적 없음 |
-| A3 auth readiness | ◐ | e38a507 | CORS allowlist·CSP nonce·보안 header·prod guard. 기본 port 전체 auth E2E GREEN. P2×2(origin 직렬화, log-audit blocking) 수정 중 |
+| A3 auth readiness | ✅ | e38a507 · 8d1147f · 9654171 · 34a75df | CORS allowlist·CSP nonce·보안 header·prod guard. P2×2 → 반영 → IDNA 회귀 2회 → ASCII 직렬화 원칙으로 전환 → 지적 없음. **Auth 트랙(A0~A3) 완료** |
 | M3.1b workspace UI | ✅ | 4453ab4 · e30392e · ff50592 | WS-01 AC01~05 GREEN(AC06은 S1a 대기). P2×3 → 반영 → P2(이전 dialog 응답이 새 dialog 덮음) → session 범위화 → 지적 없음 |
 | M2.4 reranker | ✅ | 0b92ab4 | 지적 없음. rerank 시 hybrid R@5 1.0/MRR 0.917, CPU ~7s/query(부하 중) → 대화형 기본 off |
 | M3.2a documents·upload | ✅ | 7f3fa1e · 88c108f | migration 200000·210000 적용. P2×2(publish와 content 변경 경합, provenance NULL CHECK) → 반영(FOR SHARE lock, 2-session test) → 지적 없음 |
