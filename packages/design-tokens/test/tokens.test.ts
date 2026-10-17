@@ -109,6 +109,17 @@ describe('generated tokens.css', () => {
     expect(genDark['color-scheme']).toBe('dark');
   });
 
+  it('follows the OS dark preference unless a light scope is explicit', () => {
+    const media = css.slice(css.indexOf('@media (prefers-color-scheme: dark)'));
+    const followDark = declarations(cssBlock(media, /:root:not\(\[data-theme=["']light["']\]\)/));
+    expect(followDark).toEqual(genDark);
+    const explicitLight = declarations(cssBlock(css, /\n\[data-theme=["']light["']\]/));
+    const themedLight = Object.fromEntries(
+      Object.keys(followDark).map((k) => [k, genLight[k]] as const),
+    );
+    expect(explicitLight).toEqual(themedLight);
+  });
+
   it.each(['light', 'dark'] as const)('every question status token exists in %s', (theme) => {
     const decls = theme === 'light' ? genLight : genDark;
     expect(questionStatuses).toEqual(EXPECTED_STATUSES);

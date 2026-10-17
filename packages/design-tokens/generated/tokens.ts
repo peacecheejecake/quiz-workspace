@@ -5,7 +5,7 @@ export const themedTokens = {
     'color-surface': '#FFFFFF',
     'color-surface-muted': '#F0F3F7',
     'color-text-primary': '#172033',
-    'color-text-secondary': '#667085',
+    'color-text-secondary': '#636D82',
     'color-border': '#DEE3EB',
     'color-accent': '#5268D8',
     'color-focus': '#356CFF',

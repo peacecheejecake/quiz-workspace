@@ -136,7 +136,7 @@ export function FloatingSidePanel({
           }}
         >
           <LayerProvider value="var(--z-side-panel)">
-            <header className="qz-panel__header">
+            <div className="qz-panel__header">
               <div className="qz-panel__heading">
                 <Dialog.Title className="qz-panel__title">{title}</Dialog.Title>
                 {description ? (
@@ -149,9 +149,9 @@ export function FloatingSidePanel({
               <Dialog.Close asChild>
                 <IconButton label={closeLabel} icon={<CloseIcon />} />
               </Dialog.Close>
-            </header>
+            </div>
             <div className="qz-panel__body">{children}</div>
-            {footer ? <footer className="qz-panel__footer">{footer}</footer> : null}
+            {footer ? <div className="qz-panel__footer">{footer}</div> : null}
           </LayerProvider>
         </Dialog.Content>
       </Dialog.Portal>

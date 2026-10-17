@@ -36,7 +36,7 @@
 | `--color-surface` | `#FFFFFF` | 카드·읽기 화면 |
 | `--color-surface-muted` | `#F0F3F7` | subtle group |
 | `--color-text-primary` | `#172033` | 기본 텍스트 |
-| `--color-text-secondary` | `#667085` | 보조 텍스트 |
+| `--color-text-secondary` | `#636D82` | 보조 텍스트(surface-muted 위에서도 4.5:1 이상) |
 | `--color-border` | `#DEE3EB` | 표면·필드 경계 |
 | `--color-accent` | `#5268D8` | primary action, navigation |
 | `--color-focus` | `#356CFF` | focus outline |
@@ -55,6 +55,8 @@
 | `--color-scrim` | `rgba(247,248,250,.64)` | modal·drawer backdrop |
 
 **v1.1.1 추가:** `--color-border-strong`, `--color-on-accent`, `--color-danger`/`success`/`warning`, `--color-scrim`, typography scale(`--font-size-*`, `--line-height-*`, `--font-weight-*`), breakpoint(`--breakpoint-*`). feedback 색은 question-status 토큰을 재사용하지 않으며(의미가 다름), canvas·surface 위 텍스트로 4.5:1 이상을 만족한다.
+
+**v1.1.2 (M7.2):** `--color-text-secondary` light `#667085` → `#636D82`. 보조 텍스트가 선택·현재 항목, 메타 정보 등 `--color-surface-muted` 위에도 쓰여 4.47:1로 AA에 미달했다(axe 전 화면 검사). 같은 색조로 4.67:1(muted)·4.89:1(canvas)·5.2:1(surface)을 만족한다. 앱은 별도 선택이 없으면 OS `prefers-color-scheme`을 따라 Dark token을 적용한다(`[data-theme]`가 있으면 그 값이 우선).
 
 **상태 점은 기본 표면과 충분히 구분되도록** 최소 얇은 outline과 범례를 갖는다. 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
 
@@ -97,7 +99,7 @@
   --color-surface: #FFFFFF;
   --color-surface-muted: #F0F3F7;
   --color-text-primary: #172033;
-  --color-text-secondary: #667085;
+  --color-text-secondary: #636D82;
   --color-border: #DEE3EB;
   --color-accent: #5268D8;
   --color-focus: #356CFF;

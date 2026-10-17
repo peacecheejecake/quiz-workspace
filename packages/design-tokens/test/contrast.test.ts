@@ -42,15 +42,17 @@ const NON_TEXT_TOKENS = ['color-border-strong', 'color-focus'] as const;
 const REQUIRED: Pair[] = [
   ...TEXT_TOKENS.flatMap((fg) => BACKGROUNDS.map((bg): Pair => [fg, bg, TEXT_MIN])),
   ['color-on-accent', 'color-accent', TEXT_MIN],
+  // Secondary text also labels current/selected rows and metadata on muted surfaces (M7.2 axe).
+  ['color-text-secondary', 'color-surface-muted', TEXT_MIN],
+  ['color-text-primary', 'color-surface-muted', TEXT_MIN],
   // Tooltip: inverted text.
   ['color-canvas', 'color-text-primary', TEXT_MIN],
   ...NON_TEXT_TOKENS.flatMap((fg) => BACKGROUNDS.map((bg): Pair => [fg, bg, NON_TEXT_MIN])),
 ];
 
 // Reported, not enforced: status markers are non-text and rely on an outline + legend
-// (design-system.md §3.1); secondary text on surface-muted is only used for disabled controls.
+// (design-system.md §3.1).
 const REPORTED: Pair[] = [
-  ['color-text-secondary', 'color-surface-muted', TEXT_MIN],
   ...(['unseen', 'viewed', 'incorrect', 'correct', 'retry'] as const).flatMap((s) =>
     BACKGROUNDS.map((bg): Pair => [`question-status-${s}`, bg, NON_TEXT_MIN]),
   ),

@@ -22,6 +22,24 @@ describe('FloatingSidePanel container', () => {
     const dialog = await screen.findByRole('dialog', { name: '공유 링크' });
     expect(screen.getByRole('main')).toContainElement(dialog);
   });
+
+  it('adds no banner/contentinfo landmark next to the page header (M7.2 axe)', async () => {
+    render(
+      <FloatingSidePanel
+        defaultOpen
+        modal={false}
+        title="발췌"
+        footer={<Button>닫기</Button>}
+        headerActions={<Button size="sm">PDF</Button>}
+      >
+        본문
+      </FloatingSidePanel>,
+    );
+    const dialog = await screen.findByRole('dialog', { name: '발췌' });
+    expect(dialog.querySelector('header, footer')).toBeNull();
+    expect(screen.queryByRole('banner')).toBeNull();
+    expect(screen.queryByRole('contentinfo')).toBeNull();
+  });
 });
 
 function ModalPanel(props: { closeOnBackdropClick?: boolean }) {
@@ -113,10 +131,10 @@ describe('FloatingSidePanel (modal)', () => {
     render(<ModalPanel />);
     await user.click(screen.getByRole('button', { name: '문제 열기' }));
     const dialog = await screen.findByRole('dialog');
-    expect(dialog.querySelector('header')).toContainElement(
+    expect(dialog.querySelector('.qz-panel__header')).toContainElement(
       screen.getByRole('button', { name: '즐겨찾기' }),
     );
-    expect(dialog.querySelector('footer')).toContainElement(
+    expect(dialog.querySelector('.qz-panel__footer')).toContainElement(
       screen.getByRole('button', { name: '제출' }),
     );
   });

@@ -375,7 +375,8 @@
 
 .viewerNote {
   margin: 0;
-  color: var(--color-text-secondary);
+  /* Sits on the muted viewer backdrop, where the secondary text color is below 4.5:1. */
+  color: var(--color-text-primary);
   font-size: var(--font-size-body);
 }
 

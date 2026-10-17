@@ -5,7 +5,7 @@
   --color-surface: #ffffff;
   --color-surface-muted: #f0f3f7;
   --color-text-primary: #172033;
-  --color-text-secondary: #667085;
+  --color-text-secondary: #636d82;
   --color-border: #dee3eb;
   --color-accent: #5268d8;
   --color-focus: #356cff;
@@ -94,4 +94,56 @@
   --question-status-incorrect: #f17b84;
   --question-status-correct: #4bc68e;
   --question-status-retry: #f4c763;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --color-canvas: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f0f3f7;
+  --color-text-primary: #172033;
+  --color-text-secondary: #636d82;
+  --color-border: #dee3eb;
+  --color-accent: #5268d8;
+  --color-focus: #356cff;
+  --color-glass: rgba(255, 255, 255, 0.78);
+  --color-glass-stroke: rgba(255, 255, 255, 0.66);
+  --color-border-strong: #7d8799;
+  --color-on-accent: #ffffff;
+  --color-danger: #c42b3a;
+  --color-success: #1e7a52;
+  --color-warning: #8f5f00;
+  --color-scrim: rgba(247, 248, 250, 0.64);
+  --question-status-unseen: #d9dee5;
+  --question-status-viewed: #858e9b;
+  --question-status-incorrect: #e0525e;
+  --question-status-correct: #26865c;
+  --question-status-retry: #e9b447;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --color-canvas: #11151d;
+    --color-surface: #1b222d;
+    --color-surface-muted: #27313e;
+    --color-text-primary: #f2f5f9;
+    --color-text-secondary: #acb7c5;
+    --color-border: #364251;
+    --color-accent: #8ca0ff;
+    --color-focus: #a2b3ff;
+    --color-glass: rgba(27, 34, 45, 0.79);
+    --color-glass-stroke: rgba(255, 255, 255, 0.12);
+    --color-border-strong: #7a8799;
+    --color-on-accent: #11151d;
+    --color-danger: #ff8a93;
+    --color-success: #4fcb92;
+    --color-warning: #f2c14e;
+    --color-scrim: rgba(17, 21, 29, 0.64);
+    --question-status-unseen: #4e5967;
+    --question-status-viewed: #9ea7b4;
+    --question-status-incorrect: #f17b84;
+    --question-status-correct: #4bc68e;
+    --question-status-retry: #f4c763;
+  }
 }

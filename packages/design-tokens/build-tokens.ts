@@ -93,6 +93,21 @@ function renderCss(source: TokenSource): string {
     ...themedFor('dark'),
     '}',
     '',
+    // An explicit light scope (ThemeProvider `scope="element"`) inside a dark document.
+    '[data-theme="light"] {',
+    '  color-scheme: light;',
+    ...themedFor('light'),
+    '}',
+    '',
+    // Without an explicit choice the document follows the OS (design-system.md §1 "Themeable"):
+    // the app renders dark from the first paint, no script or stored preference involved.
+    '@media (prefers-color-scheme: dark) {',
+    '  :root:not([data-theme="light"]) {',
+    '    color-scheme: dark;',
+    ...themedFor('dark').map((line) => `  ${line}`),
+    '  }',
+    '}',
+    '',
   ].join('\n');
 }
 
