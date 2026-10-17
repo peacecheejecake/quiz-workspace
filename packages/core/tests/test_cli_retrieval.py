@@ -558,3 +558,49 @@ def test_committed_sample_report_is_current(tmp_path: Path) -> None:
     )
     assert report.read_bytes() == SAMPLE_JSON.read_bytes()
     assert markdown.read_bytes() == SAMPLE_MD.read_bytes()
+
+
+def _alias_state(path: Path) -> tuple[dict[str, str], list[str]]:
+    client = QdrantClient(path=str(path))
+    try:
+        aliases = {a.alias_name: a.collection_name for a in client.get_aliases().aliases}
+        return aliases, sorted(c.name for c in client.get_collections().collections)
+    finally:
+        client.close()
+
+
+def test_eval_on_a_local_path_never_touches_the_existing_corpus(
+    artifacts: dict[str, tuple[Path, Path]], tmp_path: Path
+) -> None:
+    path = tmp_path / "qdrant"
+    location = ["--qdrant-path", str(path)]
+    # Only book-en is indexed: the evaluation index (both books) must not replace it.
+    _ok(["index", str(artifacts["book-en"][1]), "--workspace-id", WS, *location])
+    before = _alias_state(path)
+    search_before = _search(location, "chlorine", "--revision-id", "r1")
+    assert {h["hit"]["document_id"] for h in search_before["hits"]} == {"book-en"}
+    out, _ = _ok(["eval", str(SEED_DATASET), *location, "--mode", "keyword", "--no-latency"])
+    assert json.loads(out)["index"]["backend"] == "local"
+    assert _alias_state(path) == before
+    assert _search(location, "chlorine", "--revision-id", "r1") == search_before
+    # --keep-index leaves the isolated eval_ collections, still without touching the alias.
+    _ok(["eval", str(SEED_DATASET), *location, "--mode", "keyword", "--keep-index"])
+    aliases, collections = _alias_state(path)
+    assert aliases["documents_v1"] == before[0]["documents_v1"]
+    added = [c for c in collections if c not in before[1]]
+    assert added
+    assert all(c.startswith("eval_") for c in added)
+    assert all(a == "documents_v1" or a.startswith("eval_") for a in aliases)
+    assert _search(location, "chlorine", "--revision-id", "r1") == search_before
+
+
+def test_chunk_output_pipes_into_index_on_stdin(
+    artifacts: dict[str, tuple[Path, Path]], tmp_path: Path
+) -> None:
+    chunks, _ = _ok(["chunk", str(artifacts["book-ko"][0])])
+    location = ["--qdrant-path", str(tmp_path / "q")]
+    out, _ = _ok(["index", "-", "--workspace-id", WS, *location], stdin=chunks)
+    [entry] = json.loads(out)["revisions"]
+    assert (entry["document_id"], entry["revision_id"]) == ("book-ko", "r1")
+    assert entry["chunks"] == len(chunks.decode().splitlines())
+    assert _search(location, "염소", "--document-id", "book-ko")["hits"]

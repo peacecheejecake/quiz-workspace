@@ -201,18 +201,23 @@ def dump_jsonl(chunks: Sequence[SearchChunk], *, sort_keys: bool = False) -> str
 def load_chunks_jsonl(path: str) -> list[SearchChunk]:
     data = _read_bytes(path)
     try:
-        lines = data.decode("utf-8").splitlines()
+        text = data.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise CliError(f"{_label(path)} is not UTF-8 JSONL") from exc
+    return parse_chunks_jsonl(text, _label(path))
+
+
+def parse_chunks_jsonl(text: str, label: str) -> list[SearchChunk]:
+    """``SearchChunk`` JSONL already read into memory (``label`` names it in errors)."""
     chunks: list[SearchChunk] = []
-    for number, line in enumerate(lines, start=1):
+    for number, line in enumerate(text.splitlines(), start=1):
         if not line.strip():
             continue
         try:
             raw = json.loads(line)
         except json.JSONDecodeError as exc:
-            raise CliError(f"{_label(path)} line {number} is not valid JSON") from exc
-        chunks.append(_validate(SearchChunk, raw, f"{_label(path)} line {number}"))
+            raise CliError(f"{label} line {number} is not valid JSON") from exc
+        chunks.append(_validate(SearchChunk, raw, f"{label} line {number}"))
     return chunks
 
 
@@ -613,7 +618,8 @@ def _load_index_source(path: str) -> list[tuple[DocumentRevision | None, list[Se
         revision = _validate(DocumentRevision, raw, _label(path))
         return [(revision, list(chunk_revision(revision).chunks))]
     groups: dict[tuple[str, str], list[SearchChunk]] = {}
-    for chunk in load_chunks_jsonl(path):
+    # Parsed from the text already read: stdin cannot be read twice.
+    for chunk in parse_chunks_jsonl(text, _label(path)):
         groups.setdefault((chunk.document_id, chunk.revision_id), []).append(chunk)
     if not groups:
         raise CliError(f"{_label(path)} holds no chunks")
@@ -1044,12 +1050,12 @@ def eval_command(
         str | None,
         typer.Option(
             "--collection-prefix",
-            help="Collection prefix on a server (default eval_<random>_); dropped afterwards "
-            "unless --keep-index.",
+            help="Collection prefix on a server or --qdrant-path (default eval_<random>_); "
+            "dropped afterwards unless --keep-index.",
         ),
     ] = None,
     keep_index: Annotated[
-        bool, typer.Option("--keep-index", help="Keep the server collections.")
+        bool, typer.Option("--keep-index", help="Keep the evaluation collections.")
     ] = False,
 ) -> None:
     import uuid
@@ -1102,9 +1108,12 @@ def eval_command(
         model = _embedder(EmbedderName(settings.embedder), settings.embedding_dimension)
         rerank_model = make_reranker(settings.reranker)
         server = qdrant_url is not None
+        persistent = server or qdrant_path is not None
         prefix = collection_prefix
         if prefix is None:
-            prefix = f"eval_{uuid.uuid4().hex[:12]}_" if server else ""
+            # A server or local directory may hold a real corpus behind the unprefixed alias:
+            # evaluation always builds an isolated, throw-away index there.
+            prefix = f"eval_{uuid.uuid4().hex[:12]}_" if persistent else ""
         with _qdrant(qdrant_url, qdrant_path, memory=True) as client:
             try:
                 built = build_index(data, model, client, names=CollectionNames(prefix=prefix))
@@ -1117,7 +1126,7 @@ def eval_command(
                     backend="server" if server else ("local" if qdrant_path else "memory"),
                 )
             finally:
-                if server and not keep_index and prefix:
+                if persistent and not keep_index and prefix:
                     drop_prefixed(client, prefix)
         if markdown is not None:
             _write_text(markdown, render_markdown(report))

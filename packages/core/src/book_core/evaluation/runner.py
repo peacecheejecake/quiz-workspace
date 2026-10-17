@@ -263,9 +263,10 @@ def _location_found(expected: SourceLocation, shown: Sequence[SourceLocation]) -
     for location in shown:
         if location.page != expected.page:
             continue
-        if expected.bbox is None or location.bbox is None:
+        if expected.bbox is None:
             return True
-        if _center_inside(location.bbox, expected.bbox):
+        # A judged box needs a returned box around its centre; a page match alone is not enough.
+        if location.bbox is not None and _center_inside(location.bbox, expected.bbox):
             return True
     return False
 

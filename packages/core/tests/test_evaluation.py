@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from book_core.contracts import SearchMode
+from book_core.contracts import BBox, Excerpt, SearchMode, SourceLocation
 from book_core.evaluation import (
     DatasetError,
     EvalConfig,
@@ -32,8 +32,9 @@ from book_core.evaluation import (
     render_markdown,
 )
 from book_core.evaluation.dataset import Dataset, EvalQuery, Judgement
+from book_core.evaluation.runner import _location_found
 from book_core.parser.fake import load_truth_document
-from book_core.search import RerankMode
+from book_core.search import ExcerptResolver, RerankMode
 from book_core.structure import build_revision, publish
 from make_fixture_pdfs import OUT_DIR
 
@@ -214,6 +215,42 @@ def test_location_check_detects_wrong_ground_truth() -> None:
     assert locations["checked"] == 1
     assert locations["ok"] == 0
     assert locations["failures"] == [{"query": query.id, "judgement": judgement.key}]
+
+
+def test_location_needs_a_returned_box_when_the_judgement_has_one() -> None:
+    page_box = BBox(x0=0, y0=0, x1=600, y1=800)
+    judged = SourceLocation(page=2, bbox=BBox(x0=10, y0=10, x1=20, y1=20))
+    assert _location_found(judged, [SourceLocation(page=2, bbox=page_box)])
+    assert not _location_found(judged, [SourceLocation(page=2)])
+    assert not _location_found(judged, [SourceLocation(page=3, bbox=page_box)])
+    assert not _location_found(
+        judged, [SourceLocation(page=2, bbox=BBox(x0=100, y0=100, x1=200, y1=200))]
+    )
+    assert _location_found(SourceLocation(page=2), [SourceLocation(page=2)])
+
+
+def test_excerpts_without_boxes_fail_the_location_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    resolve = ExcerptResolver.resolve_hit
+
+    def stripped(self: ExcerptResolver, *args: Any, **kwargs: Any) -> Excerpt:
+        excerpt = resolve(self, *args, **kwargs)
+        locations = tuple(loc.model_copy(update={"bbox": None}) for loc in excerpt.locations)
+        return excerpt.model_copy(update={"locations": locations, "primary_location": locations[0]})
+
+    monkeypatch.setattr(ExcerptResolver, "resolve_hit", stripped)
+    dataset = load_dataset(SEED_DATASET)
+    embedder = make_embedder("fake")
+    with qdrant_client() as client:
+        index = build_index(dataset, embedder, client)
+        report = evaluate(
+            dataset,
+            index,
+            EvalConfig(modes=(SearchMode.KEYWORD,), rerank=(RerankMode.OFF,), latency=False),
+            embedder_name=embedder.model_name,
+        )
+    locations = report["runs"][0]["locations"]
+    assert locations["checked"] == 6
+    assert locations["ok"] == 0
 
 
 def test_section_only_judgements_on_revision_ids() -> None:
