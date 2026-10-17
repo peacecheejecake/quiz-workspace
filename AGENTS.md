@@ -45,6 +45,9 @@ summary of the rules for carrying out the implementation plan.
 - Follows the Task lifecycle in §3 and finishes with a commit plus a short report: what changed,
   commands run with results, RED evidence (if applicable), open issues.
 - Never marks a Task done with failing, skipped, or deleted tests.
+- Shared local stack: the orchestrator keeps `make infra-up` running from the main checkout.
+  Subagents use it but never run `infra-up/down/reset` or `db-reset` unless their brief says so
+  (only migration-changing Tasks, with orchestrator approval). Isolate data with per-test users.
 
 **Reviewer (Codex)**
 - Runs via `scripts/codex-review.sh` (§4) on the Task's commit(s) with the default model.
