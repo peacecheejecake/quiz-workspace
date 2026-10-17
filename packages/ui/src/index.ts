@@ -20,7 +20,15 @@ export { FocusRing, focusRingClassName } from './primitives/FocusRing';
 export type { FocusRingProps } from './primitives/FocusRing';
 export { IconButton } from './primitives/IconButton';
 export type { IconButtonProps } from './primitives/IconButton';
-export { AlertIcon, CheckIcon, CloseIcon, MenuIcon, MinusIcon, MoreIcon } from './primitives/icons';
+export {
+  AlertIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  CloseIcon,
+  MenuIcon,
+  MinusIcon,
+  MoreIcon,
+} from './primitives/icons';
 export { Input } from './primitives/Input';
 export type { InputProps } from './primitives/Input';
 export {
@@ -31,6 +39,10 @@ export {
   PopoverTrigger,
 } from './primitives/Popover';
 export type { PopoverContentProps } from './primitives/Popover';
+export { RadioGroup } from './primitives/RadioGroup';
+export type { RadioGroupProps, RadioOption } from './primitives/RadioGroup';
+export { Select } from './primitives/Select';
+export type { SelectOption, SelectProps } from './primitives/Select';
 export { Skeleton } from './primitives/Skeleton';
 export type { SkeletonProps } from './primitives/Skeleton';
 export { GlassSurface, Surface } from './primitives/Surface';
