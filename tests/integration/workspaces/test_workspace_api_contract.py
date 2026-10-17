@@ -13,10 +13,9 @@ import pytest
 
 pytestmark = pytest.mark.infra
 
-# RED (M3.0) until the document/search endpoints they also probe exist (M3.2a upload-intent and
-# document list, M3.6a search). Their workspace-API steps are GREEN since M3.1a; remove `red`
-# when those Tasks land.
-_RED_UNTIL_DOCUMENTS = pytest.mark.red
+# RED (M3.0) until the search endpoint they also probe exists (M3.6a). Their workspace and
+# document steps are GREEN since M3.1a / M3.2a; remove `red` when M3.6a lands.
+_RED_UNTIL_SEARCH = pytest.mark.red
 
 
 def test_ws_01_ac02_created_workspace_lists_the_creator_as_owner(seed: Any) -> None:
@@ -36,7 +35,6 @@ def test_ws_01_ac02_created_workspace_lists_the_creator_as_owner(seed: Any) -> N
     assert [(w["id"], w["role"]) for w in mine] == [(created["id"], "owner")]
 
 
-@_RED_UNTIL_DOCUMENTS
 def test_ws_01_ac03_archived_workspace_rejects_writes(seed: Any) -> None:
     alice = seed.client("ws01-ac03")
     ws = alice.create_workspace()
@@ -65,7 +63,7 @@ def test_ws_01_ac03_archived_workspace_rejects_writes(seed: Any) -> None:
     assert renamed["name"] == "renamed"
 
 
-@_RED_UNTIL_DOCUMENTS
+@_RED_UNTIL_SEARCH
 def test_ws_01_ac04_soft_deleted_workspace_answers_404_like_a_missing_one(seed: Any) -> None:
     alice = seed.client("ws01-ac04")
     ws = alice.create_workspace()
@@ -84,7 +82,7 @@ def test_ws_01_ac04_soft_deleted_workspace_answers_404_like_a_missing_one(seed: 
         assert seed.problem(alice.call(method, path, body), 404) == missing, f"{method} {path}"
 
 
-@_RED_UNTIL_DOCUMENTS
+@_RED_UNTIL_SEARCH
 def test_ws_01_ac05_foreign_workspace_ids_are_404_and_leave_it_untouched(seed: Any) -> None:
     alice, mallory = seed.client("ws01-ac05-alice"), seed.client("ws01-ac05-mallory")
     ws = alice.create_workspace("Alice Private")

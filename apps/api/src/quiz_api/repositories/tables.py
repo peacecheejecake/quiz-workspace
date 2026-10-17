@@ -90,12 +90,19 @@ async_jobs = Table(
     Column("workspace_id", Uuid, nullable=False),
     Column("created_by", Uuid),
     Column("job_type", Text, nullable=False),
+    Column("schema_version", Integer, nullable=False),
     Column("status", Text, nullable=False),
+    Column("idempotency_key", Text),
+    Column("payload", JSONB, nullable=False),
+    Column("published_at", DateTime(timezone=True)),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
 
 # --- M4.1 question domain (20261017180000_question_domain.sql) --------------------------------
-# Document-side ids (chapter_id, document_id, document_revision_id) get their FK from M3.2a.
+# Document-side ids (chapter_id, document_id, document_revision_id) reference the M3.2a tables
+# below through composite (workspace_id, col) FKs (20261017200000_documents.sql).
 
 
 def _ts(name: str, *, nullable: bool = True) -> Column[datetime]:
@@ -279,6 +286,110 @@ question_drafts = Table(
     Column("reviewed_by", Uuid),
     _ts("reviewed_at"),
     Column("published_question_id", Uuid),
+    _ts("created_at", nullable=False),
+    _ts("updated_at", nullable=False),
+)
+
+
+# --- M3.2a document domain (20261017200000_documents.sql) -------------------------------------
+
+documents = Table(
+    "documents",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("document_type", Text, nullable=False),
+    Column("title", Text, nullable=False),
+    Column("filename", Text, nullable=False),
+    Column("content_type", Text, nullable=False),
+    Column("size_bytes", BigInteger, nullable=False),
+    Column("sha256", Text, nullable=False),
+    Column("source_object_key", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("active_revision_id", Uuid),
+    Column("last_error", Text),
+    Column("created_by", Uuid),
+    _ts("created_at", nullable=False),
+    _ts("updated_at", nullable=False),
+    _ts("deleted_at"),
+)
+
+document_revisions = Table(
+    "document_revisions",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("document_id", Uuid, nullable=False),
+    Column("revision_number", Integer, nullable=False),
+    Column("parent_revision_id", Uuid),
+    Column("status", Text, nullable=False),
+    Column("content_hash", Text),
+    Column("parser_version", Text),
+    Column("source_object_key", Text, nullable=False),
+    Column("parsed_object_key", Text),
+    _ts("published_at"),
+    Column("created_by", Uuid),
+    _ts("created_at", nullable=False),
+    _ts("updated_at", nullable=False),
+)
+
+chapters = Table(
+    "chapters",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("document_id", Uuid, nullable=False),
+    Column("document_revision_id", Uuid, nullable=False),
+    Column("parent_id", Uuid),
+    Column("section_key", Text, nullable=False),
+    Column("level", SmallInteger, nullable=False),
+    Column("sort_order", Integer, nullable=False),
+    Column("title", Text, nullable=False),
+    Column("page", Integer),
+    Column("heading_block_id", Text),
+    _ts("created_at", nullable=False),
+)
+
+content_blocks = Table(
+    "content_blocks",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("document_id", Uuid, nullable=False),
+    Column("document_revision_id", Uuid, nullable=False),
+    Column("block_id", Text, nullable=False),
+    Column("ordinal", Integer, nullable=False),
+    Column("chapter_id", Uuid),
+    Column("block_type", Text, nullable=False),
+    Column("text", Text, nullable=False),
+    Column("page", Integer, nullable=False),
+    Column("provenance", JSONB, nullable=False),
+    Column("attributes", JSONB, nullable=False),
+    Column("edited", Boolean, nullable=False),
+    _ts("created_at", nullable=False),
+    _ts("updated_at", nullable=False),
+)
+
+document_uploads = Table(
+    "document_uploads",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("user_id", Uuid, nullable=False),
+    Column("document_id", Uuid, nullable=False),
+    Column("revision_id", Uuid, nullable=False),
+    Column("document_type", Text, nullable=False),
+    Column("title", Text, nullable=False),
+    Column("filename", Text, nullable=False),
+    Column("content_type", Text, nullable=False),
+    Column("expected_size_bytes", BigInteger, nullable=False),
+    Column("expected_sha256", Text, nullable=False),
+    Column("object_key", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    _ts("expires_at", nullable=False),
+    _ts("completed_at"),
+    Column("completed_document_id", Uuid),
+    Column("completed_job_id", Uuid),
     _ts("created_at", nullable=False),
     _ts("updated_at", nullable=False),
 )

@@ -9,7 +9,7 @@ from __future__ import annotations
 from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -58,6 +58,30 @@ class Settings(BaseSettings):
     )
     jwks_fetch_timeout_seconds: float = Field(
         default=3.0, gt=0, validation_alias="JWKS_FETCH_TIMEOUT_SECONDS"
+    )
+
+    # Supabase Storage (M3.2a; docs/deployment.md §2, auth.md §4). The API talks to Storage with
+    # the server-only secret key; browsers only ever get short-lived signed URLs. Unset key ->
+    # document upload/read routes answer 503.
+    supabase_url: str | None = Field(
+        default=None, validation_alias=AliasChoices("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL")
+    )
+    # Origin the browser uses for signed Storage URLs, when it differs from `supabase_url`
+    # (e.g. the API reaches Storage on an internal hostname).
+    storage_public_url: str | None = Field(default=None, validation_alias="STORAGE_PUBLIC_URL")
+    supabase_secret_key: SecretStr | None = Field(
+        default=None, validation_alias="SUPABASE_SECRET_KEY"
+    )
+    storage_timeout_seconds: float = Field(
+        default=30.0, gt=0, validation_alias="STORAGE_TIMEOUT_SECONDS"
+    )
+    # How long an upload intent can be completed (the direct/TUS upload must finish within it).
+    upload_intent_ttl_seconds: int = Field(
+        default=3600, ge=60, le=7200, validation_alias="UPLOAD_INTENT_TTL_SECONDS"
+    )
+    # Lifetime of a signed PDF read URL (the viewer asks for a new one when it expires).
+    signed_read_url_ttl_seconds: int = Field(
+        default=300, ge=10, le=3600, validation_alias="SIGNED_READ_URL_TTL_SECONDS"
     )
 
     db_pool_size: int = Field(default=5, ge=1, validation_alias="DB_POOL_SIZE")

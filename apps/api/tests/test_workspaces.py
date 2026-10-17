@@ -425,8 +425,8 @@ def test_openapi_documents_the_workspace_routes(api: TestClient) -> None:
     ops = {
         (method, path): op["operationId"]
         for path, item in paths.items()
-        if path.startswith("/api/v1/workspaces")
         for method, op in item.items()
+        if "workspaces" in op.get("tags", [])
     }
     assert ops == {
         ("post", "/api/v1/workspaces"): "createWorkspace",

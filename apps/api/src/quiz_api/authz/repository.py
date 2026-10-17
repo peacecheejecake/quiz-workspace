@@ -14,12 +14,15 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
-from sqlalchemy import Column, Table, select
+from sqlalchemy import Column, ColumnElement, Table, exists, select
 from sqlalchemy.orm import Session
 
 from quiz_api.authz.permissions import LockMode, Role
 from quiz_api.repositories.tables import (
     async_jobs,
+    document_revisions,
+    document_uploads,
+    documents,
     practice_sessions,
     question_drafts,
     question_generation_runs,
@@ -43,6 +46,11 @@ class ResourceType(StrEnum):
     QUESTION_DRAFT = "question_draft"
     QUESTION_GENERATION_RUN = "question_generation_run"
     QUESTION_IMPORT_RUN = "question_import_run"
+    # M3.2a. A soft-deleted document and its revisions are invisible.
+    DOCUMENT = "document"
+    REVISION = "revision"
+    # Upload intent; per-user: the route must additionally check `document_uploads.user_id`.
+    UPLOAD = "upload"
 
 
 @dataclass(frozen=True)
@@ -50,6 +58,8 @@ class ResourceBinding:
     table: Table
     # Optional soft-delete column of the resource itself: a non-null value hides the resource.
     deleted_column: str | None = None
+    # Optional extra visibility condition, e.g. "its parent is not soft-deleted".
+    visible_when: ColumnElement[bool] | None = None
 
     @property
     def id(self) -> Column[uuid.UUID]:
@@ -67,6 +77,16 @@ RESOURCES: dict[ResourceType, ResourceBinding] = {
     ResourceType.QUESTION_DRAFT: ResourceBinding(question_drafts),
     ResourceType.QUESTION_GENERATION_RUN: ResourceBinding(question_generation_runs),
     ResourceType.QUESTION_IMPORT_RUN: ResourceBinding(question_import_runs),
+    ResourceType.DOCUMENT: ResourceBinding(documents, deleted_column="deleted_at"),
+    ResourceType.REVISION: ResourceBinding(
+        document_revisions,
+        visible_when=exists().where(
+            documents.c.id == document_revisions.c.document_id,
+            documents.c.workspace_id == document_revisions.c.workspace_id,
+            documents.c.deleted_at.is_(None),
+        ),
+    ),
+    ResourceType.UPLOAD: ResourceBinding(document_uploads),
 }
 
 
@@ -143,5 +163,7 @@ class SqlAccessRepository:
         stmt = select(binding.workspace_id).where(binding.id == resource_id)
         if binding.deleted_column is not None:
             stmt = stmt.where(binding.table.c[binding.deleted_column].is_(None))
+        if binding.visible_when is not None:
+            stmt = stmt.where(binding.visible_when)
         workspace_id: uuid.UUID | None = self._session.execute(stmt).scalar_one_or_none()
         return workspace_id

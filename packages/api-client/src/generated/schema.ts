@@ -3,6 +3,73 @@
 /* eslint-disable */
 
 export type paths = {
+  '/api/v1/documents/{document_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Document */
+    get: operations['getDocument'];
+    put?: never;
+    post?: never;
+    /**
+     * Delete Document
+     * @description Soft delete (editor+). The document then answers 404 everywhere and leaves the library;
+     *     the original stays in Storage until the retention cleanup (follow-up).
+     */
+    delete: operations['deleteDocument'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/documents/{document_id}/source-url': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Document Source Url
+     * @description A short-lived signed URL of the original PDF for the viewer; ask again when it expires.
+     */
+    get: operations['getDocumentSourceUrl'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/documents/complete-upload': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Complete Upload
+     * @description Verify the uploaded object and start parsing it (202 + job id, DOC-01-AC03/AC04).
+     *
+     *     Idempotent per upload: repeating it returns the same document and job. 409
+     *     `upload-incomplete` = nothing stored yet (finish the upload, then retry); 409
+     *     `upload-expired` = start over with a new intent; 422 `upload-mismatch` = the stored bytes
+     *     differ from the declared size/SHA-256 (the object is discarded).
+     */
+    post: operations['completeDocumentUpload'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/me': {
     parameters: {
       query?: never;
@@ -112,6 +179,49 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspace_id}/documents': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Documents
+     * @description The workspace's documents (not soft-deleted), newest first.
+     */
+    get: operations['listDocuments'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/documents/upload-intent': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Upload Intent
+     * @description Reserve a document and return where to upload its PDF (DOC-01-AC03).
+     *
+     *     Rejects non-PDF names/types (415) and files over 50 MiB (413) before any URL is issued.
+     *     Each call is a new intent; an intent that is never completed creates no document.
+     */
+    post: operations['createDocumentUploadIntent'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspace_id}/restore': {
     parameters: {
       query?: never;
@@ -181,9 +291,134 @@ export type components = {
      * @enum {string}
      */
     CheckStatus: 'ok' | 'error' | 'timeout' | 'not_configured';
+    /** CompleteUpload */
+    CompleteUpload: {
+      /**
+       * Sha256
+       * @description Hex SHA-256 of the uploaded bytes.
+       */
+      sha256: string;
+      /**
+       * Upload Id
+       * Format: uuid
+       */
+      upload_id: string;
+    };
     /** DependencyStatus */
     DependencyStatus: {
       status: components['schemas']['CheckStatus'];
+    };
+    /** DocumentDetail */
+    DocumentDetail: {
+      active_revision: components['schemas']['RevisionSummary'] | null;
+      /**
+       * Active Revision Id
+       * @description The published revision search and the viewer use (null until ready).
+       */
+      active_revision_id: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Document Type
+       * @enum {string}
+       */
+      document_type: 'book' | 'question_paper';
+      /** Filename */
+      filename: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Last Error
+       * @description Why the last processing attempt failed.
+       */
+      last_error: string | null;
+      /** @description The newest revision (a draft while a parse or correction is pending). */
+      latest_revision: components['schemas']['RevisionSummary'] | null;
+      /** Sha256 */
+      sha256: string;
+      /** Size Bytes */
+      size_bytes: number;
+      /**
+       * Status
+       * @description uploading | processing | ready | failed
+       * @enum {string}
+       */
+      status: 'uploading' | 'processing' | 'ready' | 'failed';
+      /** Title */
+      title: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /** DocumentList */
+    DocumentList: {
+      /** Items */
+      items: components['schemas']['DocumentSummary'][];
+    };
+    /** DocumentSummary */
+    DocumentSummary: {
+      /**
+       * Active Revision Id
+       * @description The published revision search and the viewer use (null until ready).
+       */
+      active_revision_id: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Document Type
+       * @enum {string}
+       */
+      document_type: 'book' | 'question_paper';
+      /** Filename */
+      filename: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Last Error
+       * @description Why the last processing attempt failed.
+       */
+      last_error: string | null;
+      /** Sha256 */
+      sha256: string;
+      /** Size Bytes */
+      size_bytes: number;
+      /**
+       * Status
+       * @description uploading | processing | ready | failed
+       * @enum {string}
+       */
+      status: 'uploading' | 'processing' | 'ready' | 'failed';
+      /** Title */
+      title: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
     };
     /** LivenessReport */
     LivenessReport: {
@@ -305,6 +540,148 @@ export type components = {
        */
       status: 'ok' | 'unavailable';
     };
+    /**
+     * ResumableUpload
+     * @description TUS (resumable) alternative to the single PUT, for large files and flaky networks.
+     */
+    ResumableUpload: {
+      /**
+       * Endpoint
+       * @description TUS creation endpoint.
+       */
+      endpoint: string;
+      /**
+       * Headers
+       * @description Send on every TUS request (carries the token).
+       */
+      headers: {
+        [key: string]: string;
+      };
+      /**
+       * Metadata
+       * @description TUS `Upload-Metadata` entries.
+       */
+      metadata: {
+        [key: string]: string;
+      };
+    };
+    /** RevisionSummary */
+    RevisionSummary: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Published At */
+      published_at: string | null;
+      /** Revision Number */
+      revision_number: number;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'draft' | 'published';
+    };
+    /** SignedReadUrl */
+    SignedReadUrl: {
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /**
+       * Url
+       * @description Short-lived signed URL of the original PDF. Do not store it.
+       */
+      url: string;
+    };
+    /** UploadCompleted */
+    UploadCompleted: {
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /**
+       * Job Id
+       * Format: uuid
+       * @description The parse job; poll `GET /jobs/{id}`.
+       */
+      job_id: string;
+    };
+    /** UploadIntent */
+    UploadIntent: {
+      /**
+       * Expires At
+       * Format: date-time
+       * @description Complete the upload before this time.
+       */
+      expires_at: string;
+      /**
+       * Max Size Bytes
+       * @default 52428800
+       */
+      max_size_bytes?: number;
+      resumable: components['schemas']['ResumableUpload'];
+      /**
+       * Upload Headers
+       * @description Headers to send with the PUT.
+       */
+      upload_headers: {
+        [key: string]: string;
+      };
+      /**
+       * Upload Id
+       * Format: uuid
+       */
+      upload_id: string;
+      /**
+       * Upload Method
+       * @default PUT
+       * @constant
+       */
+      upload_method?: 'PUT';
+      /**
+       * Upload Url
+       * @description Short-lived signed URL: `PUT` the raw PDF bytes here.
+       */
+      upload_url: string;
+    };
+    /** UploadIntentCreate */
+    UploadIntentCreate: {
+      /**
+       * Content Type
+       * @description Must be `application/pdf`.
+       */
+      content_type: string;
+      /**
+       * Document Type
+       * @description `question_paper` for question PDFs to import.
+       * @default book
+       * @enum {string}
+       */
+      document_type?: 'book' | 'question_paper';
+      /**
+       * Filename
+       * @description Original file name; must end in `.pdf`.
+       */
+      filename: string;
+      /**
+       * Sha256
+       * @description Hex SHA-256 of the file; re-verified on completion.
+       */
+      sha256: string;
+      /**
+       * Size Bytes
+       * @description Exact size in bytes (at most 52428800).
+       */
+      size_bytes: number;
+      /**
+       * Title
+       * @description Defaults to the file name stem.
+       */
+      title?: string | null;
+    };
     /** ValidationIssue */
     ValidationIssue: {
       /** Loc */
@@ -372,6 +749,292 @@ export type components = {
 };
 export type $defs = Record<string, never>;
 export interface operations {
+  getDocument: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DocumentDetail'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  deleteDocument: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getDocumentSourceUrl: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SignedReadUrl'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  completeDocumentUpload: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CompleteUpload'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UploadCompleted'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unsupported Media Type */
+      415: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getMe: {
     parameters: {
       query?: never;
@@ -894,6 +1557,165 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listDocuments: {
+    parameters: {
+      query?: {
+        /** @description Only this document type. */
+        document_type?: ('book' | 'question_paper') | null;
+      };
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DocumentList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createDocumentUploadIntent: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UploadIntentCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UploadIntent'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Content Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unsupported Media Type */
+      415: {
         headers: {
           [name: string]: unknown;
         };

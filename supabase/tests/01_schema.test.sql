@@ -13,7 +13,9 @@ select tables_are(
         'practice_sessions', 'question_attempts', 'question_lineage', 'question_generation_runs',
         'question_import_runs', 'question_drafts',
         -- M3.1a Idempotency-Key replay store
-        'idempotency_keys'],
+        'idempotency_keys',
+        -- M3.2a document domain
+        'documents', 'document_revisions', 'chapters', 'content_blocks', 'document_uploads'],
   'public schema contains exactly the expected tables'
 );
 
@@ -80,9 +82,10 @@ select is(
   (select array_agg(event_object_table::text order by event_object_table::text)
      from information_schema.triggers
     where trigger_schema = 'public' and action_statement like '%set_updated_at%'),
-  array['async_jobs', 'practice_sessions', 'profiles', 'question_drafts',
-        'question_generation_runs', 'question_import_runs', 'question_user_states', 'questions',
-        'workspace_memberships', 'workspaces'],
+  array['async_jobs', 'content_blocks', 'document_revisions', 'document_uploads', 'documents',
+        'practice_sessions', 'profiles', 'question_drafts', 'question_generation_runs',
+        'question_import_runs', 'question_user_states', 'questions', 'workspace_memberships',
+        'workspaces'],
   'updated_at trigger exists on every mutable table'
 );
 

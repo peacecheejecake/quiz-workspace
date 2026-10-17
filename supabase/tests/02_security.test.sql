@@ -24,8 +24,11 @@ select is_empty(
 select is_empty(
   $$ select tablename, policyname, roles from pg_policies
       where schemaname = 'public' and roles <> array['quiz_api']::name[]
-        and not (tablename = 'async_jobs' and roles = array['quiz_worker']::name[]) $$,
-  'every policy in public targets quiz_api only (plus quiz_worker on async_jobs, P0.7b)'
+        and not (tablename in ('async_jobs', 'documents', 'document_revisions', 'chapters',
+                               'content_blocks', 'document_uploads')
+                 and roles = array['quiz_worker']::name[]) $$,
+  'every policy in public targets quiz_api only (plus quiz_worker on async_jobs, P0.7b, and the '
+    || 'document tables, M3.2a)'
 );
 
 -- Table privileges ------------------------------------------------------------------------------
