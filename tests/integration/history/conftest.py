@@ -36,7 +36,7 @@ HISTORY_INDEX_MIGRATION = (
     Path(__file__).resolve().parents[3]
     / "supabase"
     / "migrations"
-    / "20261018140000_history_keyset_indexes.sql"
+    / "20261018160000_history_keyset_indexes.sql"
 )
 
 

@@ -1,4 +1,4 @@
--- M7.1 (20261018140000): keyset indexes of the HISTORY-01 lists. The plans that use them are
+-- M7.1 (20261018160000): keyset indexes of the HISTORY-01 lists. The plans that use them are
 -- checked in tests/integration/history/test_history_api.py.
 begin;
 create extension if not exists pgtap with schema extensions;
