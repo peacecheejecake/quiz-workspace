@@ -16,6 +16,7 @@ from quiz_api.settings import (
     Environment,
     InsecureConfigurationError,
     Settings,
+    normalize_origin,
 )
 
 WEB = "https://app.example.com"
@@ -273,6 +274,13 @@ def test_error_never_echoes_configured_values(env: pytest.MonkeyPatch) -> None:
         ("http://[::1]:3000", "http://[::1]:3000"),
         ("http://[::1]:80", "http://[::1]"),
         ("https://Bücher.example", "https://xn--bcher-kva.example"),
+        # UTS #46 non-transitional, as browsers: ß kept (IDNA 2003 would give `fass`)...
+        ("https://faß.example", "https://xn--fa-hia.example"),
+        # ...and a final capital sigma maps to U+03C3 (lowercasing first would give U+03C2).
+        ("https://ΣΑ.example", "https://xn--mxa9a.example"),
+        ("https://ΑΣ.example", "https://xn--mxa0b.example"),
+        ("https://BÜCHER.Example:443", "https://xn--bcher-kva.example"),
+        ("https://xn--fa-hia.example", "https://xn--fa-hia.example"),
     ],
 )
 def test_configured_origins_use_browser_serialization(
@@ -287,11 +295,34 @@ def test_non_numeric_port_is_refused(env: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize(
+    "host", ["xn--zz.example", "b\u00fc\uffffx.example", "-b\u00fccher.example", "\u00fc..example"]
+)
+def test_invalid_idn_labels_are_refused_without_echoing_them(host: str) -> None:
+    with pytest.raises(ValueError, match="valid host name") as info:
+        normalize_origin(f"https://{host}")
+    assert host not in str(info.value)
+
+
+def test_guard_rejects_non_ascii_origin_headers(env: pytest.MonkeyPatch) -> None:
+    # Browsers always send the punycode form; a raw Unicode Origin is not a browser Origin.
+    settings = _settings(env, CORS_ALLOWED_ORIGINS="https://faß.example")
+    with TestClient(create_app(settings, readiness_checkers=[])) as client:
+        raw = client.get("/health/live", headers={"Origin": "https://faß.example".encode()})
+        fass = client.get("/health/live", headers={"Origin": "https://fass.example"})
+        browser = client.get("/health/live", headers={"Origin": "https://xn--fa-hia.example"})
+    assert raw.status_code == 403
+    assert fass.status_code == 403  # the IDNA 2003 spelling is a different domain
+    assert browser.status_code == 200
+
+
+@pytest.mark.parametrize(
     ("configured", "sent"),
     [
         ("https://app.example.com:443", "https://app.example.com"),
         ("http://[::1]:3000", "http://[::1]:3000"),
         ("https://bücher.example", "https://xn--bcher-kva.example"),
+        ("https://faß.example", "https://xn--fa-hia.example"),
+        ("https://ΣΑ.example", "https://xn--mxa9a.example"),
         ("https://app.example.com", "HTTPS://APP.EXAMPLE.COM"),
     ],
 )

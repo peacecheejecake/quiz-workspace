@@ -145,6 +145,19 @@ describe('isCrossOriginWrite', () => {
     expect(write('ftp://app.example.com', 'app.example.com')).toBe(true);
   });
 
+  it('uses UTS #46 non-transitional host processing (WHATWG URL), like browsers', () => {
+    const host = (h: string) => new URL(`https://${h}`).host;
+    expect(host('faß.example')).toBe('xn--fa-hia.example'); // not IDNA 2003 `fass.example`
+    expect(host('ΣΑ.example')).toBe('xn--mxa9a.example');
+    expect(host('ΑΣ.example')).toBe('xn--mxa0b.example');
+    expect(host('BÜCHER.Example')).toBe('xn--bcher-kva.example');
+    const write = (origin: string, ownHost: string) =>
+      isCrossOriginWrite('POST', new Headers({ host: ownHost, origin }));
+    expect(write('https://xn--fa-hia.example', 'xn--fa-hia.example')).toBe(false);
+    expect(write('https://fass.example', 'xn--fa-hia.example')).toBe(true);
+    expect(write('https://xn--zz.example', 'xn--zz.example')).toBe(true); // invalid A-label
+  });
+
   it('rejects writes from other origins, opaque origins and cross-site fetches', () => {
     expect(isCrossOriginWrite('POST', h({ origin: 'https://evil.example' }))).toBe(true);
     expect(

@@ -11,6 +11,7 @@ from functools import lru_cache
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
+import idna
 from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -37,15 +38,18 @@ _DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
 def _ascii_host(hostname: str) -> str:
-    """Lowercase ASCII host as browsers serialize it: IDNA (punycode) labels, IPv6 in brackets."""
-    host = hostname.lower()
-    if ":" in host:  # IPv6 literal (urlsplit strips the brackets)
-        return f"[{host}]"
-    if host.isascii():
-        return host
+    """The host as browsers serialize it (WHATWG URL host parser): IPv6 in brackets, ASCII names
+    lowercased, Unicode names through UTS #46 *non-transitional* processing (`faß` stays `ß` →
+    `xn--fa-hia`, unlike IDNA 2003). Mapping runs on the original case: lowercasing first would
+    turn a final capital sigma (U+03A3) into U+03C2 where browsers map it to U+03C3.
+    """
+    if ":" in hostname:  # IPv6 literal (urlsplit strips the brackets)
+        return f"[{hostname.lower()}]"
+    if hostname.isascii() and "xn--" not in hostname.lower():
+        return hostname.lower()
     try:
-        return host.encode("idna").decode("ascii")
-    except UnicodeError:
+        return idna.encode(hostname, uts46=True, transitional=False).decode("ascii")
+    except (idna.IDNAError, UnicodeError):
         raise ValueError("each origin must have a valid host name") from None
 
 
@@ -71,7 +75,14 @@ def normalize_origin(value: str) -> str:
     except ValueError:
         raise ValueError("each origin must have a numeric port") from None
     port = "" if port_number in (None, _DEFAULT_PORTS[scheme]) else f":{port_number}"
-    return f"{scheme}://{_ascii_host(parts.hostname)}{port}"
+    return f"{scheme}://{_ascii_host(_original_case_host(parts.netloc))}{port}"
+
+
+def _original_case_host(netloc: str) -> str:
+    """Host part of `host[:port]` / `[v6]:port` as written (`SplitResult.hostname` lowercases)."""
+    if netloc.startswith("["):
+        return netloc[1 : netloc.index("]")]
+    return netloc.rpartition(":")[0] if ":" in netloc else netloc
 
 
 def origin_authority(scheme: str, host: str) -> str | None:

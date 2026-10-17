@@ -74,6 +74,9 @@ class OriginGuardMiddleware:
         self.allowed_origins = frozenset(allowed_origins)
 
     def _allowed(self, raw_origin: str, headers: Headers) -> bool:
+        # Browsers send the ASCII serialization (punycode); anything else is not a browser Origin.
+        if not raw_origin.isascii():
+            return False
         try:
             origin = normalize_origin(raw_origin)
         except ValueError:
