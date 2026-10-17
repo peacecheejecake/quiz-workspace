@@ -26,6 +26,10 @@ mkdir -p "$REVIEW_DIR"
 if [[ "${1:-}" == "--inner" ]]; then
   shift
   token="$1" log="$2"; shift 2
+  # In pane mode the caller hands lock ownership to this process (see below).
+  if [[ "${CODEX_REVIEW_LOCK_HANDOFF:-}" == "1" ]]; then
+    trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
+  fi
   clear
   echo "== codex review $* =="
   set +e
@@ -58,7 +62,9 @@ slug="$(printf '%s' "${title:-${target[*]}}" | tr -cs 'A-Za-z0-9._-' '-' | cut -
 log="$REVIEW_DIR/$(date +%Y%m%d-%H%M%S)-${slug}.log"
 token="$(date +%s)-$$"
 
-# mkdir is atomic: only one review (and one pane command) at a time. Released by its owner.
+# mkdir is atomic: only one review (and one pane command) at a time. The caller owns the
+# lock until the pane command is dispatched; from then on the pane process releases it, so a
+# caller-side timeout never frees the lock while a review is still running.
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   echo "a codex review is already running (lock: $LOCK_DIR)" >&2; exit 3
 fi
@@ -84,8 +90,9 @@ if [[ -z "$pane" ]]; then
   herdr pane wait-output "$pane" --regex '[%$#>❯] ?$' --source visible --timeout 15000 >/dev/null 2>&1 || true
 fi
 
-quoted="$(printf '%q ' "$SELF" --inner "$token" "$log" "${args[@]}")"
+quoted="CODEX_REVIEW_LOCK_HANDOFF=1 $(printf '%q ' "$SELF" --inner "$token" "$log" "${args[@]}")"
 herdr pane run "$pane" "$quoted" >/dev/null
+trap - EXIT
 herdr pane wait-output "$pane" --regex "${DONE_MARK} ${token} exit=[0-9]+" --source recent-unwrapped \
   --timeout "${CODEX_REVIEW_TIMEOUT_MS:-1800000}" >/dev/null
 status="$(herdr pane read "$pane" --source recent-unwrapped --lines 400 \
