@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from pydantic import BaseModel
 from quiz_worker.celery_app import QuizCelery, create_celery_app, run_reconciler, submit_job
-from quiz_worker.reconcile import reconcile_jobs
+from quiz_worker.reconcile import ReconcileReport, reconcile_jobs
 from quiz_worker.retry import RetryPolicy
 from quiz_worker.runner import (
     JobContext,
@@ -415,13 +415,7 @@ def test_reconciler_recovers_a_job_whose_publish_failed(
 def test_reconcile_task_is_registered_and_scheduled(eager_app: QuizCelery) -> None:
     task = eager_app.tasks["quiz.maintenance.reconcile_jobs"]
 
-    assert task.apply().get() == {
-        "requeued": 0,
-        "failed": 0,
-        "cancelled": 0,
-        "republished": 0,
-        "publish_errors": 0,
-    }
+    assert task.apply().get() == ReconcileReport().as_dict()
     schedule = eager_app.conf.beat_schedule["reconcile-jobs"]
     assert schedule["task"] == "quiz.maintenance.reconcile_jobs"
     assert schedule["schedule"] == eager_app.worker_settings.reconcile_interval_seconds

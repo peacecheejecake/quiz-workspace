@@ -30,7 +30,14 @@ from quiz_worker.errors import (
 )
 from quiz_worker.logging_config import job_id_var
 from quiz_worker.retry import RetryPolicy
-from quiz_worker.store import ClaimOutcome, JobRecord, JobStore, StaleClaimError, utc_now
+from quiz_worker.store import (
+    ClaimOutcome,
+    JobRecord,
+    JobStatus,
+    JobStore,
+    StaleClaimError,
+    utc_now,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +79,10 @@ class JobDefinition[P: BaseModel]:
     """One job type: its payload model per schema version, handler and retry policy.
 
     `cleanup` runs when the job ends `failed` or `cancelled` after any attempt may have
-    started work (e.g. S3a removes temporary Storage copies), including terminal transitions
+    started work (e.g. S3a removes temporary Storage copies). The obligation is persisted
+    (`cleanup_pending`) in the same write that ends the job and cleared only after cleanup
+    succeeds, so a crash or a raising cleanup is retried with backoff by the reconciler and
+    on redelivery (`perform_cleanup`). This covers terminal transitions
     that happen without a running handler: cancel during a retry countdown, a lost worker's
     final attempt, and the reconciler's recovery. It must be idempotent and tolerate finding
     nothing to clean. It does not run between retries: handlers must be idempotent so a retry
@@ -147,11 +157,13 @@ class JobRunner:
         worker_id: str,
         lease_seconds: int,
         clock: Callable[[], datetime] = utc_now,
+        cleanup_policy: CleanupPolicy | None = None,
     ) -> None:
         self._store = store
         self._worker_id = worker_id
         self._lease_seconds = lease_seconds
         self._clock = clock
+        self._cleanup_policy = cleanup_policy or CleanupPolicy()
 
     def run(self, definition: JobDefinition[Any], raw_envelope: object) -> RunResult:
         try:
@@ -184,6 +196,8 @@ class JobRunner:
                 return RunResult(RunOutcome.REJECTED, job_id, error=error, record=claim.record)
             case ClaimOutcome.ALREADY_FINISHED:
                 logger.info("duplicate delivery of a finished job ignored")
+                if claim.record is not None and claim.record.cleanup_pending:
+                    self._finish_cleanup(definition, claim.record)
                 return RunResult(RunOutcome.DUPLICATE_FINISHED, job_id, record=claim.record)
             case ClaimOutcome.IN_PROGRESS:
                 return RunResult(
@@ -195,12 +209,12 @@ class JobRunner:
             case ClaimOutcome.CANCELLED:
                 assert claim.record is not None  # noqa: S101 - cancelled returns the row
                 logger.info("job cancelled before this delivery started")
-                run_cleanup(definition, context_for(claim.record, self._store), "cancelled")
+                self._finish_cleanup(definition, claim.record)
                 return RunResult(RunOutcome.CANCELLED, job_id, record=claim.record)
             case ClaimOutcome.EXHAUSTED:
                 assert claim.record is not None  # noqa: S101 - exhausted returns the row
                 logger.error("job failed: %s", claim.record.last_error)
-                run_cleanup(definition, context_for(claim.record, self._store), "failed")
+                self._finish_cleanup(definition, claim.record)
                 return RunResult(
                     RunOutcome.FAILED, job_id, error=claim.record.last_error, record=claim.record
                 )
@@ -234,9 +248,9 @@ class JobRunner:
         error = sanitize_error(exc)
         try:
             if isinstance(exc, JobCancelledError):
-                self._cleanup(definition, ctx, "cancelled", started=started)
-                record = self._store.cancel(ctx.job_id, attempt=ctx.attempt)
+                record = self._store.cancel(ctx.job_id, attempt=ctx.attempt, cleanup=started)
                 logger.info("job cancelled on attempt %d", ctx.attempt)
+                self._finish_cleanup(definition, record)
                 return RunResult(RunOutcome.CANCELLED, ctx.job_id, record=record)
 
             if is_retryable(exc) and definition.retry_policy.should_retry(
@@ -256,24 +270,22 @@ class JobRunner:
                     RunOutcome.RETRY, ctx.job_id, error=error, countdown=countdown, record=record
                 )
 
-            self._cleanup(definition, ctx, "failed", started=started)
-            record = self._store.fail(ctx.job_id, attempt=ctx.attempt, error=error)
+            record = self._store.fail(ctx.job_id, attempt=ctx.attempt, error=error, cleanup=started)
             logger.error("job failed on attempt %d/%d: %s", ctx.attempt, ctx.max_attempts, error)
             self._log_traceback(exc)
+            self._finish_cleanup(definition, record)
             return RunResult(RunOutcome.FAILED, ctx.job_id, error=error, record=record)
         except StaleClaimError:
             return self._stale(ctx.job_id)
 
-    @staticmethod
-    def _cleanup(
-        definition: JobDefinition[Any],
-        ctx: JobContext,
-        reason: TerminalReason,
-        *,
-        started: bool,
-    ) -> None:
-        if started:
-            run_cleanup(definition, ctx, reason)
+    def _finish_cleanup(self, definition: JobDefinition[Any], record: JobRecord) -> None:
+        if not record.cleanup_pending:
+            return
+        try:
+            perform_cleanup(self._store, definition, record.job_id, self._cleanup_policy)
+        except Exception as exc:
+            # The flag stays set; the reconciler retries the cleanup.
+            logger.error("job cleanup bookkeeping failed: %s", sanitize_error(exc))
 
     def _lease_remaining(self, record: JobRecord | None) -> float:
         if record is None or record.lease_expires_at is None:
@@ -305,11 +317,65 @@ def context_for(record: JobRecord, store: JobStore) -> JobContext:
     )
 
 
-def run_cleanup(definition: JobDefinition[Any], ctx: JobContext, reason: TerminalReason) -> None:
-    """Run the job's cleanup if any attempt was ever claimed (`ctx.attempt > 0`)."""
-    if definition.cleanup is None or ctx.attempt < 1:
-        return
+@dataclass(frozen=True)
+class CleanupPolicy:
+    """Retries of a pending cleanup: bounded tries with backoff, each under a lease."""
+
+    retry: RetryPolicy = field(
+        default_factory=lambda: RetryPolicy(
+            max_attempts=8, base_delay_seconds=60, max_delay_seconds=3600
+        )
+    )
+    # A cleanup try that crashes is retried once this lease runs out.
+    lease_seconds: float = 1800
+
+
+class CleanupOutcome(StrEnum):
+    DONE = "done"
+    # Raised; retried after a backoff.
+    FAILED = "failed"
+    # Raised on the last allowed try; the job stays flagged for an operator.
+    GAVE_UP = "gave_up"
+    # Not due, owned by someone else, or no definition for the job type.
+    SKIPPED = "skipped"
+
+
+def perform_cleanup(
+    store: JobStore,
+    definition: JobDefinition[Any] | None,
+    job_id: UUID,
+    policy: CleanupPolicy,
+) -> CleanupOutcome:
+    """Run one try of a job's pending cleanup and record the result on the job row."""
+    if definition is None:
+        logger.error("pending cleanup has no job definition; job stays flagged")
+        return CleanupOutcome.SKIPPED
+    claimed = store.claim_cleanup(
+        job_id, lease_seconds=policy.lease_seconds, max_attempts=policy.retry.max_attempts
+    )
+    if claimed is None:
+        return CleanupOutcome.SKIPPED
+    try_number = claimed.cleanup_attempts
+    reason: TerminalReason = "cancelled" if claimed.status is JobStatus.CANCELLED else "failed"
     try:
-        definition.cleanup(ctx, reason)
+        if definition.cleanup is not None:
+            definition.cleanup(context_for(claimed, store), reason)
     except Exception as exc:
-        logger.error("job cleanup failed: %s", sanitize_error(exc))
+        error = sanitize_error(exc)
+        store.fail_cleanup(
+            job_id,
+            cleanup_attempt=try_number,
+            error=error,
+            retry_after_seconds=policy.retry.countdown(try_number),
+        )
+        if policy.retry.should_retry(try_number):
+            logger.warning("job cleanup try %d failed, will retry: %s", try_number, error)
+            return CleanupOutcome.FAILED
+        logger.error(
+            "job cleanup gave up after %d tries; job stays flagged cleanup_pending: %s",
+            try_number,
+            error,
+        )
+        return CleanupOutcome.GAVE_UP
+    store.finish_cleanup(job_id, cleanup_attempt=try_number)
+    return CleanupOutcome.DONE

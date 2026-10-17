@@ -28,7 +28,14 @@ from quiz_worker.errors import JobOutcomeError, JobRetryError
 from quiz_worker.jobs import ECHO_JOB
 from quiz_worker.logging_config import configure_logging
 from quiz_worker.reconcile import ReconcileReport, reconcile_jobs
-from quiz_worker.runner import JobDefinition, JobRunner, RunOutcome, RunResult
+from quiz_worker.retry import RetryPolicy
+from quiz_worker.runner import (
+    CleanupPolicy,
+    JobDefinition,
+    JobRunner,
+    RunOutcome,
+    RunResult,
+)
 from quiz_worker.settings import Environment, WorkerSettings, get_settings
 from quiz_worker.store import InMemoryJobStore, JobRecord, JobStatus, JobStore, SqliteJobStore
 
@@ -88,6 +95,7 @@ class IdempotentJobTask(_TaskBase):
             app.job_store,
             worker_id=self._worker_id(),
             lease_seconds=app.worker_settings.lease_seconds,
+            cleanup_policy=cleanup_policy_for(app.worker_settings),
         )
         result = runner.run(self.job_definition, raw_envelope)
         return self._to_celery(result)
@@ -297,6 +305,21 @@ def run_reconciler(app: QuizCelery) -> ReconcileReport:
         app.job_definitions,
         unpublished_grace_seconds=settings.reconcile_unpublished_grace_seconds,
         stale_after_seconds=settings.reconcile_stale_after,
+        cleanup_policy=cleanup_policy_for(settings),
+    )
+
+
+def cleanup_policy_for(settings: WorkerSettings) -> CleanupPolicy:
+    return CleanupPolicy(
+        retry=RetryPolicy(
+            max_attempts=settings.cleanup_max_attempts,
+            base_delay_seconds=settings.cleanup_base_delay_seconds,
+            max_delay_seconds=max(
+                settings.cleanup_max_delay_seconds, settings.cleanup_base_delay_seconds
+            ),
+        ),
+        # A cleanup try runs inside a task, so the hard time limit bounds it.
+        lease_seconds=settings.lease_seconds,
     )
 
 

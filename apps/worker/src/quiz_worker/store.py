@@ -21,6 +21,11 @@ Guarantees every implementation must provide:
   so a row that exists without a message (publish failed, message lost or acked by a hard
   time limit) is found by `find_republish_candidates` and re-published.
 - `last_error` only ever receives `errors.sanitize_error()` output or the constants below.
+- Every transition that makes a job `failed` or `cancelled` after an attempt was claimed sets
+  `cleanup_pending` in the same write. The flag is cleared only by `finish_cleanup`, so
+  cleanup of artifacts left by earlier attempts survives crashes and cleanup errors: it is
+  claimed with a lease (`claim_cleanup`), retried with backoff (`fail_cleanup`) by the
+  reconciler and on redelivery, and stays flagged (never dropped) once retries run out.
 
 All transitions are pure functions of (row, now) in this module; a store only has to run them
 atomically (`_atomic`): a lock for the in-memory store, `BEGIN IMMEDIATE` for SQLite, and
@@ -84,6 +89,12 @@ class JobRecord:
     published_at: datetime | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
+    # Cleanup owed by a failed/cancelled job (see module docstring).
+    cleanup_pending: bool = False
+    cleanup_attempts: int = 0
+    cleanup_last_error: str | None = None
+    # Earliest next cleanup try; doubles as the lease of a cleanup in progress.
+    cleanup_next_at: datetime | None = None
 
     def matches(self, envelope: JobEnvelope) -> bool:
         return (
@@ -157,13 +168,17 @@ class JobStore(Protocol):
         self, job_id: UUID, *, attempt: int, result: Mapping[str, JsonValue] | None
     ) -> JobRecord: ...
 
-    def fail(self, job_id: UUID, *, attempt: int, error: str) -> JobRecord: ...
+    def fail(
+        self, job_id: UUID, *, attempt: int, error: str, cleanup: bool | None = None
+    ) -> JobRecord:
+        """running -> failed. `cleanup` overrides the default (pending if any attempt ran)."""
+        ...
 
     def release_for_retry(self, job_id: UUID, *, attempt: int, error: str) -> JobRecord:
         """running -> queued; also marks the job published (Celery re-sends it right after)."""
         ...
 
-    def cancel(self, job_id: UUID, *, attempt: int) -> JobRecord:
+    def cancel(self, job_id: UUID, *, attempt: int, cleanup: bool | None = None) -> JobRecord:
         """running -> cancelled, after the attempt observed the cancel request."""
         ...
 
@@ -181,6 +196,27 @@ class JobStore(Protocol):
         """If attempt `attempt` still holds an expired lease: requeue it (unpublished), or
         fail it when attempts are exhausted, or cancel it when cancel was requested.
         Returns None when the row moved on (a live worker or another reconciler won)."""
+        ...
+
+    def claim_cleanup(
+        self, job_id: UUID, *, lease_seconds: float, max_attempts: int
+    ) -> JobRecord | None:
+        """Take the pending cleanup if it is due and has tries left; counts one try and
+        leases it for `lease_seconds`. None when nothing is due (or someone else holds it)."""
+        ...
+
+    def finish_cleanup(self, job_id: UUID, *, cleanup_attempt: int) -> JobRecord | None:
+        """Clear `cleanup_pending` if try `cleanup_attempt` still owns the cleanup."""
+        ...
+
+    def fail_cleanup(
+        self, job_id: UUID, *, cleanup_attempt: int, error: str, retry_after_seconds: float
+    ) -> JobRecord | None:
+        """Keep the cleanup pending, record the sanitized error and when to retry."""
+        ...
+
+    def find_pending_cleanups(self, *, max_attempts: int, limit: int) -> list[JobRecord]:
+        """Terminal jobs whose cleanup is due and still has tries left."""
         ...
 
     def find_republish_candidates(
@@ -225,10 +261,16 @@ def _finish(
     *,
     error: str | None = None,
     result: Mapping[str, JsonValue] | None = None,
+    cleanup: bool | None = None,
 ) -> JobRecord:
+    """Terminal row. `cleanup` defaults to "an attempt was ever claimed" for failed/cancelled."""
+    if cleanup is None:
+        cleanup = status is not JobStatus.SUCCEEDED and record.attempts > 0
     return replace(
         record,
         status=status,
+        cleanup_pending=cleanup,
+        cleanup_next_at=now if cleanup else None,
         last_error=error if error is not None else record.last_error,
         result=dict(result) if result is not None else None,
         locked_by=None,
@@ -307,6 +349,14 @@ def claim_transition(
     return ClaimResult(ClaimOutcome.CLAIMED, claimed), claimed
 
 
+def _cleanup_due(record: JobRecord, now: datetime, max_attempts: int) -> bool:
+    return (
+        record.cleanup_pending
+        and record.cleanup_attempts < max_attempts
+        and (record.cleanup_next_at is None or record.cleanup_next_at <= now)
+    )
+
+
 def needs_republish(
     record: JobRecord,
     now: datetime,
@@ -382,9 +432,13 @@ class TransactionalJobStore:
 
         return self._atomic(job_id, mutate)
 
-    def fail(self, job_id: UUID, *, attempt: int, error: str) -> JobRecord:
+    def fail(
+        self, job_id: UUID, *, attempt: int, error: str, cleanup: bool | None = None
+    ) -> JobRecord:
         def mutate(r: JobRecord | None, now: datetime) -> tuple[JobRecord, JobRecord]:
-            failed = _finish(_owned(r, job_id, attempt), JobStatus.FAILED, now, error=error)
+            failed = _finish(
+                _owned(r, job_id, attempt), JobStatus.FAILED, now, error=error, cleanup=cleanup
+            )
             return failed, failed
 
         return self._atomic(job_id, mutate)
@@ -404,9 +458,11 @@ class TransactionalJobStore:
 
         return self._atomic(job_id, mutate)
 
-    def cancel(self, job_id: UUID, *, attempt: int) -> JobRecord:
+    def cancel(self, job_id: UUID, *, attempt: int, cleanup: bool | None = None) -> JobRecord:
         def mutate(r: JobRecord | None, now: datetime) -> tuple[JobRecord, JobRecord]:
-            cancelled = _finish(_owned(r, job_id, attempt), JobStatus.CANCELLED, now)
+            cancelled = _finish(
+                _owned(r, job_id, attempt), JobStatus.CANCELLED, now, cleanup=cleanup
+            )
             return cancelled, cancelled
 
         return self._atomic(job_id, mutate)
@@ -439,6 +495,57 @@ class TransactionalJobStore:
             return settled, settled
 
         return self._atomic(job_id, mutate)
+
+    def claim_cleanup(
+        self, job_id: UUID, *, lease_seconds: float, max_attempts: int
+    ) -> JobRecord | None:
+        def mutate(r: JobRecord | None, now: datetime) -> tuple[JobRecord | None, JobRecord | None]:
+            if r is None or not _cleanup_due(r, now, max_attempts):
+                return None, None
+            claimed = replace(
+                r,
+                cleanup_attempts=r.cleanup_attempts + 1,
+                cleanup_next_at=now + timedelta(seconds=lease_seconds),
+                updated_at=now,
+            )
+            return claimed, claimed
+
+        return self._atomic(job_id, mutate)
+
+    def finish_cleanup(self, job_id: UUID, *, cleanup_attempt: int) -> JobRecord | None:
+        def mutate(r: JobRecord | None, now: datetime) -> tuple[JobRecord | None, JobRecord | None]:
+            if r is None or not r.cleanup_pending or r.cleanup_attempts != cleanup_attempt:
+                return None, None
+            done = replace(r, cleanup_pending=False, cleanup_next_at=None, updated_at=now)
+            return done, done
+
+        return self._atomic(job_id, mutate)
+
+    def fail_cleanup(
+        self, job_id: UUID, *, cleanup_attempt: int, error: str, retry_after_seconds: float
+    ) -> JobRecord | None:
+        def mutate(r: JobRecord | None, now: datetime) -> tuple[JobRecord | None, JobRecord | None]:
+            if r is None or not r.cleanup_pending or r.cleanup_attempts != cleanup_attempt:
+                return None, None
+            failed = replace(
+                r,
+                cleanup_last_error=error,
+                cleanup_next_at=now + timedelta(seconds=retry_after_seconds),
+                updated_at=now,
+            )
+            return failed, failed
+
+        return self._atomic(job_id, mutate)
+
+    def find_pending_cleanups(self, *, max_attempts: int, limit: int) -> list[JobRecord]:
+        now = self._clock()
+        due = [
+            r
+            for status in (JobStatus.FAILED, JobStatus.CANCELLED)
+            for r in self._scan(status)
+            if _cleanup_due(r, now, max_attempts)
+        ]
+        return sorted(due, key=lambda r: r.updated_at)[:limit]
 
     def find_republish_candidates(
         self, *, unpublished_grace_seconds: float, stale_after_seconds: float, limit: int
@@ -519,6 +626,10 @@ CREATE TABLE IF NOT EXISTS async_jobs (
     published_at REAL,
     started_at REAL,
     finished_at REAL,
+    cleanup_pending INTEGER NOT NULL DEFAULT 0,
+    cleanup_attempts INTEGER NOT NULL DEFAULT 0,
+    cleanup_last_error TEXT,
+    cleanup_next_at REAL,
     UNIQUE (workspace_id, job_type, idempotency_key)
 );
 CREATE INDEX IF NOT EXISTS async_jobs_status ON async_jobs (status, updated_at);
@@ -534,6 +645,7 @@ _TIME_COLUMNS = frozenset(
         "published_at",
         "started_at",
         "finished_at",
+        "cleanup_next_at",
     }
 )
 
@@ -563,6 +675,7 @@ def _from_row(row: sqlite3.Row) -> JobRecord:
     data["job_id"] = UUID(data["job_id"])
     data["workspace_id"] = UUID(data["workspace_id"])
     data["status"] = JobStatus(data["status"])
+    data["cleanup_pending"] = bool(data["cleanup_pending"])
     data["payload"] = json.loads(data["payload"])
     data["result"] = json.loads(data["result"]) if data["result"] is not None else None
     return JobRecord(**data)

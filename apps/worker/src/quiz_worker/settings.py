@@ -67,6 +67,17 @@ class WorkerSettings(BaseSettings):
     reconcile_stale_after_seconds: float | None = Field(
         default=None, gt=0, validation_alias="WORKER_RECONCILE_STALE_AFTER_SECONDS"
     )
+    # Pending cleanups of failed/cancelled jobs: tries (with exponential backoff between
+    # base and max delay) before the job is left flagged for an operator.
+    cleanup_max_attempts: int = Field(
+        default=8, ge=1, validation_alias="WORKER_CLEANUP_MAX_ATTEMPTS"
+    )
+    cleanup_base_delay_seconds: float = Field(
+        default=60, ge=0, validation_alias="WORKER_CLEANUP_BASE_DELAY_SECONDS"
+    )
+    cleanup_max_delay_seconds: float = Field(
+        default=3600, ge=0, validation_alias="WORKER_CLEANUP_MAX_DELAY_SECONDS"
+    )
     # Run Celery beat inside the worker (`worker -B`) to schedule the reconciler. Reconciling
     # is safe to run concurrently, so several workers with embedded beat are tolerable.
     embedded_beat: bool = Field(default=True, validation_alias="WORKER_EMBEDDED_BEAT")
