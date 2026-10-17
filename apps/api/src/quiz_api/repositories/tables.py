@@ -189,7 +189,7 @@ question_user_states = Table(
 practice_sessions = Table(
     "practice_sessions",
     metadata,
-    Column("id", Uuid, primary_key=True),
+    Column("id", Uuid, primary_key=True, server_default=FetchedValue()),
     Column("workspace_id", Uuid, nullable=False),
     Column("question_id", Uuid, nullable=False),
     Column("question_revision_id", Uuid, nullable=False),
@@ -207,7 +207,7 @@ practice_sessions = Table(
 question_attempts = Table(
     "question_attempts",
     metadata,
-    Column("id", Uuid, primary_key=True),
+    Column("id", Uuid, primary_key=True, server_default=FetchedValue()),
     Column("workspace_id", Uuid, nullable=False),
     Column("question_id", Uuid, nullable=False),
     Column("question_revision_id", Uuid, nullable=False),

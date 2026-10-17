@@ -17,8 +17,7 @@ from typing import Any
 import httpx
 import pytest
 
-# RED (M5.0): remove `red` when M5.1/M5.2 make these GREEN.
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = pytest.mark.infra
 
 ANSWER_KEYS = {"correct_option_ids", "accepted_answers", "explanation", "rubric", "correct_answer"}
 # A10: everything a practice session may carry. A new field is a deliberate, reviewed change.
