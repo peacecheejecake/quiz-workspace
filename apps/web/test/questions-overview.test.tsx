@@ -513,3 +513,105 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
     expect(within(panel).getByRole('button', { name: '제출' })).toBeEnabled();
   });
 });
+
+describe('QuestionsOverview practice panel review fixes (M5.5)', () => {
+  const dotLabel = (n: number) =>
+    document.querySelector(`[data-question-id="${id(n)}"]`)?.getAttribute('aria-label') ?? '';
+
+  function essaySessions() {
+    openPracticeSessionAction.mockImplementation((_ws: string, qid: string) => {
+      const base = session(Number(qid.slice(-2)));
+      return Promise.resolve({
+        ...base,
+        data: { ...base.data, question_type: 'ESSAY', options: [], displayed_option_ids: [] },
+      });
+    });
+  }
+
+  function myState(n: number, extra: object) {
+    return {
+      ok: true,
+      data: {
+        question_id: id(n),
+        status: 'viewed',
+        is_favorite: true,
+        needs_retry: false,
+        last_graded_result: null,
+        ...extra,
+      },
+    };
+  }
+
+  it('closing the panel with browser Back refreshes the changed overview', async () => {
+    const user = userEvent.setup();
+    render(<Screen />);
+    await user.click(dot(1));
+    await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await waitFor(() => expect(dotStatus(1)).toBe('viewed'));
+    expect(routerRefresh).not.toHaveBeenCalled();
+    await act(async () => {
+      realPushState(null, '', PATH);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(routerRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('the close button refreshes too, but previous/next do not', async () => {
+    const user = userEvent.setup();
+    render(<Screen />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
+    const second = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    expect(routerRefresh).not.toHaveBeenCalled();
+    await user.click(within(second).getByRole('button', { name: '패널 닫기' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(routerRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('a favorite toggled after an essay submit keeps the pending-grading marker', async () => {
+    const user = userEvent.setup();
+    essaySessions();
+    submitPracticeAction.mockResolvedValue(submitted('pending'));
+    setMyStateAction.mockResolvedValue(myState(2, {}));
+    render(<Screen />);
+    await user.click(dot(2));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    await user.type(await within(panel).findByRole('textbox', { name: '답안' }), '증발');
+    await user.click(within(panel).getByRole('button', { name: '제출' }));
+    await waitFor(() => expect(dotLabel(2)).toMatch(/채점 대기/));
+
+    await user.click(within(panel).getByRole('button', { name: '즐겨찾기 추가' }));
+    await within(panel).findByRole('button', { name: '즐겨찾기 해제' });
+    expect(dotLabel(2)).toMatch(/채점 대기/);
+    expect(dotStatus(2)).toBe('viewed');
+  });
+
+  it('a self-grade made while a flag change is in flight survives the flag response', async () => {
+    const user = userEvent.setup();
+    essaySessions();
+    submitPracticeAction.mockResolvedValue(submitted('pending'));
+    selfGradePracticeAction.mockResolvedValue({
+      ok: true,
+      data: { attempt_id: 'x', practice_session_id: SESSION, result: 'correct' },
+    });
+    let answer: (value: unknown) => void = () => undefined;
+    setMyStateAction.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    render(<Screen />);
+    await user.click(dot(3));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+    await user.type(await within(panel).findByRole('textbox', { name: '답안' }), '증발');
+    await user.click(within(panel).getByRole('button', { name: '제출' }));
+    await waitFor(() => expect(dotLabel(3)).toMatch(/채점 대기/));
+
+    await user.click(within(panel).getByRole('button', { name: '즐겨찾기 추가' }));
+    await user.click(within(panel).getByRole('button', { name: '맞음' }));
+    await waitFor(() => expect(dotStatus(3)).toBe('correct'));
+    // The my-state response was computed before the self-grade.
+    await act(async () => answer(myState(3, { last_graded_result: null })));
+    await within(panel).findByRole('button', { name: '즐겨찾기 해제' });
+    expect(dotStatus(3)).toBe('correct');
+    expect(dotLabel(3)).not.toMatch(/채점 대기/);
+  });
+});

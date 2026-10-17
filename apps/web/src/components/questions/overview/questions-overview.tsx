@@ -50,11 +50,13 @@ import { PracticePanel, type PracticeQuestion } from '../practice/practice-panel
 import { neighbors, type AttemptResult } from '../practice/practice-model';
 import {
   applyOverrides,
+  flagsPatch,
   gradedPatch,
   heatmapChapters,
   optimisticStatus,
   placedTitle,
   placeQuestions,
+  type Grading,
   type PlacedQuestion,
   type StudyOverride,
   type StudyPatch,
@@ -171,8 +173,11 @@ export function QuestionsOverview({
   }, [serverItems]);
   // Study state changed since the server rendered `overview` (no action revalidates it).
   const staleOverview = useRef(false);
+  // Grading results of this screen's submissions, until the server's overview catches up.
+  const gradings = useRef(new Map<string, Grading>());
   useLayoutEffect(() => {
     staleOverview.current = false;
+    gradings.current.clear();
   }, [serverItems]);
   const mutationSeq = useRef(new Map<string, number>());
   const overridesRef = useRef(overrides);
@@ -355,6 +360,7 @@ export function QuestionsOverview({
       is_favorite: item.is_favorite,
       needs_retry: item.needs_retry,
       last_graded_result: item.last_graded_result,
+      is_pending_grading: item.is_pending_grading,
       ...flags,
       status: optimisticStatus(item, flags),
     };
@@ -372,9 +378,13 @@ export function QuestionsOverview({
       return;
     }
     staleOverview.current = true;
-    const { status, is_favorite, needs_retry, last_graded_result } = result.data;
+    // A submission settled while this request was in flight wins over the response's grading.
+    const grading = gradings.current.get(questionId) ?? {
+      last_graded_result: result.data.last_graded_result,
+      is_pending_grading: item.is_pending_grading,
+    };
     putOverride(questionId, seq, {
-      patch: { status, is_favorite, needs_retry, last_graded_result },
+      patch: flagsPatch(result.data, grading),
       settledOn: latestItems.current,
     });
   }
@@ -414,7 +424,12 @@ export function QuestionsOverview({
         : undefined);
     if (!item) return;
     staleOverview.current = true;
-    const patch = { ...live?.patch, ...gradedPatch(item, result) };
+    const graded = gradedPatch(item, result);
+    gradings.current.set(questionId, {
+      last_graded_result: graded.last_graded_result ?? null,
+      is_pending_grading: graded.is_pending_grading ?? false,
+    });
+    const patch = { ...live?.patch, ...graded };
     if (live?.settledOn === null) {
       // A flag change is in flight: it owns the sequence and settles with the server's state.
       putOverride(questionId, mutationSeq.current.get(questionId) ?? 0, {
@@ -426,12 +441,15 @@ export function QuestionsOverview({
     putOverride(questionId, nextSeq(questionId), { patch, settledOn: latestItems.current });
   }
 
-  function closePanel() {
-    setQuestionParam(null);
-    // Study state changed while the panel was open: reload the overview (counts) now that the
-    // URL is settled. A refresh lost to a quick reopen is retried on the next close.
-    if (staleOverview.current) router.refresh();
-  }
+  // Whenever the panel closes (close button, Escape, browser Back), reload the overview if study
+  // state changed while it was open: no practice action revalidates it. A refresh lost to a
+  // quick reopen is retried on the next close.
+  const wasOpen = useRef(openId !== null);
+  useEffect(() => {
+    const open = openId !== null;
+    if (wasOpen.current && !open && staleOverview.current) router.refresh();
+    wasOpen.current = open;
+  }, [openId, router]);
 
   const filtered = isOverviewFiltered(filters);
   const chapterOptions = [
@@ -606,7 +624,7 @@ export function QuestionsOverview({
         screenId={panelScreenId}
         neighbors={panelNeighbors}
         onNavigate={(questionId) => setQuestionParam(questionId)}
-        onClose={closePanel}
+        onClose={() => setQuestionParam(null)}
         onGraded={markGraded}
         onFlagsChange={(questionId, flags) => void changeFlags(questionId, flags)}
         onViewed={markViewed}

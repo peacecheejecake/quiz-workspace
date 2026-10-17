@@ -1,7 +1,7 @@
 // QPLAY-01 practice model: answers are stable option ids (never positions), a pending result is
 // not a grade, previous/next follow the heatmap order; QOV-01 dot state after a submission.
 import { describe, expect, it } from 'vitest';
-import { gradedPatch } from '../src/components/questions/overview/overview-model';
+import { flagsPatch, gradedPatch } from '../src/components/questions/overview/overview-model';
 import {
   canSubmit,
   EMPTY_ANSWER,
@@ -124,5 +124,30 @@ describe('gradedPatch', () => {
     expect(
       gradedPatch({ ...item, status: 'incorrect', last_graded_result: 'incorrect' }, 'pending'),
     ).toEqual({ last_graded_result: 'incorrect', is_pending_grading: true, status: 'incorrect' });
+  });
+});
+
+describe('flagsPatch', () => {
+  const state = {
+    status: 'viewed' as const,
+    is_favorite: true,
+    needs_retry: false,
+    last_graded_result: null,
+  };
+
+  it('keeps a pending grading the my-state response does not carry', () => {
+    expect(flagsPatch(state, { last_graded_result: null, is_pending_grading: true })).toEqual({
+      is_favorite: true,
+      needs_retry: false,
+      last_graded_result: null,
+      is_pending_grading: true,
+      status: 'viewed',
+    });
+  });
+
+  it('a newer local grade wins and the status follows it (retry still first)', () => {
+    const graded = { last_graded_result: 'correct' as const, is_pending_grading: false };
+    expect(flagsPatch(state, graded).status).toBe('correct');
+    expect(flagsPatch({ ...state, needs_retry: true }, graded).status).toBe('retry');
   });
 });

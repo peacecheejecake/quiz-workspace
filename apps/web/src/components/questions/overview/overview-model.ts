@@ -85,6 +85,34 @@ export function gradedPatch(
   };
 }
 
+/** A question's grading state as this screen last saw it change (a submission or self-grade). */
+export type Grading = Required<Pick<StudyPatch, 'last_graded_result' | 'is_pending_grading'>>;
+
+/**
+ * Patch of a favorite/retry change. `my-state` carries no pending-grading flag and may predate a
+ * submission made while it was in flight, so the grading seen on this screen is kept and the
+ * status derived again from it.
+ */
+export function flagsPatch(
+  state: Pick<OverviewItem, 'status' | 'is_favorite' | 'needs_retry' | 'last_graded_result'>,
+  grading: Grading,
+): StudyPatch {
+  return {
+    is_favorite: state.is_favorite,
+    needs_retry: state.needs_retry,
+    ...grading,
+    status:
+      state.status === 'unseen'
+        ? 'unseen'
+        : deriveDotStatus({
+            firstViewedAt: 'viewed',
+            lastGradedResult: grading.last_graded_result,
+            needsRetry: state.needs_retry,
+            isFavorite: state.is_favorite,
+          }),
+  };
+}
+
 export function heatmapChapters(placed: readonly PlacedQuestion[]): HeatmapChapter[] {
   const chapters: HeatmapChapter[] = [];
   let current: HeatmapChapter | undefined;

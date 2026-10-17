@@ -114,8 +114,14 @@ interface Captured {
 function captureResponses(page: Page): { stop: () => Promise<Captured[]> } {
   const pending: Promise<Captured | undefined>[] = [];
   const onResponse = (res: Response) => {
-    const type = res.request().resourceType();
+    const request = res.request();
+    const type = request.resourceType();
     if (!['document', 'fetch', 'xhr'].includes(type)) return;
+    // Router prefetches of OTHER screens (nav links) are not this screen's data; one cut short by
+    // `page.reload()` never yields a body in Chromium, which would hang `stop()`. Prefetches of
+    // this screen's own path are still captured.
+    const prefetch = request.headers()['next-router-prefetch'] !== undefined;
+    if (prefetch && new URL(res.url()).pathname !== new URL(page.url()).pathname) return;
     pending.push(
       res
         .text()
