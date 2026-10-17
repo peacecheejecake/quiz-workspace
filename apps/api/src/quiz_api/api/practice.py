@@ -629,7 +629,7 @@ def update_my_state(
             [{"loc": ("body",), "msg": "Give is_favorite and/or needs_retry.", "type": "missing"}]
         )
     ws = access.workspace
-    before = practice.get_state(access.resource_id, ws.user_id, lock=True)
+    before = practice.lock_state(ws.workspace_id, access.resource_id, ws.user_id)
     changed = {k: v for k, v in flags.items() if getattr(before, k) != v}
     if changed:
         practice.set_flags(ws.workspace_id, access.resource_id, ws.user_id, changed)

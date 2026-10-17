@@ -458,6 +458,23 @@ class PracticeRepository:
     ) -> None:
         self._upsert_state(workspace_id, question_id, user_id, dict(flags), dict(flags))
 
+    def lock_state(
+        self, workspace_id: uuid.UUID, question_id: uuid.UUID, user_id: uuid.UUID
+    ) -> StateRecord:
+        """The caller's state row, created with defaults if missing, locked FOR UPDATE until the
+        transaction ends, so read-compare-write callers (my-state) serialize even on the very
+        first update: a concurrent creator waits on the speculative insert, then the SELECT
+        (a new READ COMMITTED snapshot) sees and locks the committed row. The single-statement
+        upserts (`record_view`, `record_graded`) compute their values in SQL and need no lock."""
+        self._session.execute(
+            pg_insert(question_user_states)
+            .values(user_id=user_id, question_id=question_id, workspace_id=workspace_id)
+            .on_conflict_do_nothing(
+                index_elements=[question_user_states.c.user_id, question_user_states.c.question_id]
+            )
+        )
+        return self.get_state(question_id, user_id, lock=True)
+
     def get_state(
         self, question_id: uuid.UUID, user_id: uuid.UUID, *, lock: bool = False
     ) -> StateRecord:

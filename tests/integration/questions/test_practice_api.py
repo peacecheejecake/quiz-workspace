@@ -8,6 +8,7 @@ attempt history pagination. Fixtures come from conftest.py.
 
 from __future__ import annotations
 
+import itertools
 import threading
 import uuid
 from typing import Any
@@ -256,3 +257,44 @@ def test_attempt_history_pages_newest_first(seed: Any) -> None:
     first = alice.ok("GET", f"/questions/{q['id']}/attempts")["items"][-1]
     assert first["submitted_answer"] == {"selected_option_ids": ["opt-1"], "answer_text": None}
     assert first["revision_version"] == 1
+
+
+def test_concurrent_first_my_state_updates_serialize(seed: Any) -> None:
+    """Two first-ever PATCHes with opposite flag pairs (no state row yet) must end in a state
+    some serial order produces, with history events that replay to it."""
+    alice = seed.client("m52-race-mystate")
+    ws = alice.create_workspace()
+    a = {"is_favorite": True, "needs_retry": False}
+    b = {"is_favorite": False, "needs_retry": True}
+    for n in range(8):
+        q = alice.create_question(ws["id"], seed.mcq(_stem(f"첫 상태 {n}"), ["a", "b"], 0))
+        path = f"/questions/{q['id']}/my-state"
+        results = _race(
+            [lambda body=body, path=path: alice.call("PATCH", path, body) for body in (a, b)]
+        )
+        assert sorted(r.status_code for r in results) == [200, 200]
+
+        items = alice.ok("GET", f"/workspaces/{ws['id']}/questions/overview")["items"]
+        [item] = [i for i in items if i["question_id"] == q["id"]]
+        state = {"is_favorite": item["is_favorite"], "needs_retry": item["needs_retry"]}
+        assert state in (a, b), f"round {n}: {state} is no serial outcome"
+
+        with psycopg.connect(DB_ADMIN_URL, autocommit=True) as conn:
+            rows = conn.execute(
+                "select metadata from public.activity_events where target_id = %s "
+                "and event_type = 'question.study_state_changed' order by created_at, id",
+                (q["id"],),
+            ).fetchall()
+        events = [r[0]["changed"] for r in rows]
+        # created_at is each transaction's start, not its commit order: some order of the
+        # events must replay from the defaults to the final state, every step a real change.
+        assert any(_replays(list(order), state) for order in itertools.permutations(events)), events
+
+
+def _replays(events: list[dict[str, bool]], final: dict[str, bool]) -> bool:
+    state = {"is_favorite": False, "needs_retry": False}
+    for changed in events:
+        if not changed or any(state[k] == v for k, v in changed.items()):
+            return False
+        state.update(changed)
+    return state == final
