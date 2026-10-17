@@ -78,6 +78,15 @@ export interface QuestionsOverviewProps {
 const ALL = '__all__';
 const TYPES: readonly QuestionType[] = ['MCQ', 'SHORT_ANSWER', 'ESSAY'];
 
+/**
+ * Whether a failed deep-link lookup may succeed when retried. `notFound`, `forbidden`,
+ * `archived` and `invalid` are answers about the question; the rest (`unavailable`: 5xx,
+ * network, timeout, unexpected conflicts) are transient.
+ */
+export function isRetryableLookupFailure(kind: QuestionFailureKind): boolean {
+  return !['notFound', 'forbidden', 'archived', 'invalid', 'unauthenticated'].includes(kind);
+}
+
 function dotOf(root: ParentNode, questionId: string): HTMLElement | null {
   const id = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(questionId) : questionId;
   return root.querySelector<HTMLElement>(`[data-question-id="${id}"]`);
@@ -198,17 +207,21 @@ export function QuestionsOverview({
   useEffect(() => {
     if (!needsLookup || !openId || lookedUp.current.has(openId)) return;
     lookedUp.current.add(openId);
-    lookupOverviewQuestionAction(workspaceId, openId).then(
-      (result) => {
-        const placedQuestion = result.ok ? result.data : null;
-        if (placedQuestion) setOutside((prev) => new Map(prev).set(openId, placedQuestion));
-      },
-      () => {
-        // Transport failure: the panel stays closed; a later navigation may retry.
-        lookedUp.current.delete(openId);
-      },
-    );
-  }, [needsLookup, openId, workspaceId]);
+    // Only a definitive answer (found, or not a question of this workspace) is cached; a
+    // transient failure (5xx, network, timeout) is forgotten so a later navigation retries.
+    const transient = () => {
+      lookedUp.current.delete(openId);
+      toast({ tone: 'error', title: '문제를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.' });
+    };
+    lookupOverviewQuestionAction(workspaceId, openId).then((result) => {
+      if (!result.ok) {
+        if (isRetryableLookupFailure(result.kind)) transient();
+        return;
+      }
+      const placedQuestion = result.data;
+      if (placedQuestion) setOutside((prev) => new Map(prev).set(openId, placedQuestion));
+    }, transient);
+  }, [needsLookup, openId, workspaceId, toast]);
 
   // Where focus returns on close: the opening dot and the heatmap order it was opened on.
   const lastOpened = useRef<string | null>(null);

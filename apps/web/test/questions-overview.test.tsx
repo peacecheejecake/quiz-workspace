@@ -269,6 +269,51 @@ describe('QuestionsOverview review fixes', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  async function navigateTo(search: string) {
+    await act(async () => {
+      realPushState(null, '', `${PATH}${search}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+  }
+
+  it.each([
+    [
+      'a 5xx/network failure',
+      () => Promise.resolve({ ok: false, kind: 'unavailable', message: 'x' }),
+    ],
+    ['a rejected request', () => Promise.reject(new TypeError('Failed to fetch'))],
+  ])('a deep-link lookup retries after %s on the next navigation', async (_, fail) => {
+    lookupOverviewQuestionAction.mockImplementationOnce(fail);
+    lookupOverviewQuestionAction.mockResolvedValue({ ok: true, data: outsidePlaced(2) });
+    render(<Screen data={only(1, 3)} />);
+    await navigateTo(`?favorite=true&question=${id(2)}`);
+    expect(await screen.findByText(/문제를 불러오지 못했습니다/)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    await navigateTo('?favorite=true');
+    await navigateTo(`?favorite=true&question=${id(2)}`);
+    expect(await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' })).toBeVisible();
+    expect(lookupOverviewQuestionAction).toHaveBeenCalledTimes(2);
+  });
+
+  it('a not-found lookup stays cached across navigations', async () => {
+    lookupOverviewQuestionAction.mockResolvedValue({ ok: true, data: null });
+    render(<Screen data={only(1, 3)} />);
+    await navigateTo(`?question=${id(9)}`);
+    await waitFor(() => expect(lookupOverviewQuestionAction).toHaveBeenCalledTimes(1));
+    await navigateTo('');
+    await navigateTo(`?question=${id(9)}`);
+    // A 404-style answer is definitive too.
+    lookupOverviewQuestionAction.mockResolvedValue({ ok: false, kind: 'notFound', message: 'x' });
+    await navigateTo(`?question=${id(8)}`);
+    await waitFor(() => expect(lookupOverviewQuestionAction).toHaveBeenCalledTimes(2));
+    await navigateTo('');
+    await navigateTo(`?question=${id(8)}`);
+    await navigateTo(`?question=${id(9)}`);
+    expect(lookupOverviewQuestionAction).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   it('focus goes to the nearest surviving dot when the opening dot left the heatmap', async () => {
     const user = userEvent.setup();
     const { rerender } = render(<Screen />);
