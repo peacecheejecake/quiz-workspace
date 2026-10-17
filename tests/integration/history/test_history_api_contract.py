@@ -16,8 +16,7 @@ from typing import Any
 import httpx
 import pytest
 
-# RED (M7.0): M7.1 removes `red` when the history read APIs make these GREEN.
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = [pytest.mark.infra]
 
 RANDOM_ID = "00000000-0000-4000-8000-000000000000"
 INDEX_FAILURE_MARKER = "E2E-FAIL-INDEXING"

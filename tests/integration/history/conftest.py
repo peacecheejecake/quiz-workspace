@@ -13,6 +13,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 _QUESTIONS_CONFTEST = Path(__file__).resolve().parents[1] / "questions" / "conftest.py"
 _spec = importlib.util.spec_from_file_location("_m7_questions_conftest", _QUESTIONS_CONFTEST)
 assert _spec is not None
@@ -26,3 +28,23 @@ stack = _questions.stack
 app_client = _questions.app_client
 job_worker = _questions.job_worker
 seed = _questions.seed
+
+
+# M7.1 (tests/integration/history/test_history_api.py): the local stack's superuser URL for
+# documented direct seeds and EXPLAIN checks, and the history index migration under test.
+HISTORY_INDEX_MIGRATION = (
+    Path(__file__).resolve().parents[3]
+    / "supabase"
+    / "migrations"
+    / "20261018140000_history_keyset_indexes.sql"
+)
+
+
+@pytest.fixture
+def admin_db_url() -> str:
+    return str(_questions.DB_ADMIN_URL)
+
+
+@pytest.fixture
+def history_index_migration() -> Path:
+    return HISTORY_INDEX_MIGRATION

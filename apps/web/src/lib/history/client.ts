@@ -1,0 +1,110 @@
+// Browser side of HISTORY-01: older pages of each list and the retry action, all through the
+// same-origin BFF relays (src/app/api/**), which attach the session's Bearer token server-side.
+// A retry calls the target's existing endpoint and creates a new job; the failed job stays.
+import {
+  HISTORY_PAGE_SIZE,
+  type Activity,
+  type HistoryPage,
+  type WorkspaceAttempt,
+  type WorkspaceJob,
+} from './model';
+
+export type HistoryKind = 'activities' | 'jobs' | 'attempts';
+
+export class HistoryRequestError extends Error {
+  constructor(readonly status: number | null) {
+    super(
+      status === null
+        ? 'History request failed (network)'
+        : `History request failed (HTTP ${status})`,
+    );
+    this.name = 'HistoryRequestError';
+  }
+}
+
+const enc = encodeURIComponent;
+
+export function historyListPath(workspaceId: string, kind: HistoryKind, cursor?: string): string {
+  const query = new URLSearchParams({ limit: String(HISTORY_PAGE_SIZE) });
+  if (cursor) query.set('cursor', cursor);
+  return `/api/workspaces/${enc(workspaceId)}/${kind}?${query.toString()}`;
+}
+
+/** The BFF endpoint that starts a retryable job again, or null when it has none. */
+export function retryPath(job: Pick<WorkspaceJob, 'target_type' | 'target_id'>): string | null {
+  if (!job.target_id) return null;
+  if (job.target_type === 'document') return `/api/documents/${enc(job.target_id)}/publish`;
+  if (job.target_type === 'question_import') {
+    return `/api/question-imports/${enc(job.target_id)}/retry`;
+  }
+  return null;
+}
+
+type Fetch = typeof fetch;
+
+async function request(fetchImpl: Fetch, path: string, init: RequestInit): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetchImpl(path, {
+      ...init,
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { accept: 'application/json', ...init.headers },
+    });
+  } catch {
+    throw new HistoryRequestError(null);
+  }
+  if (!response.ok) throw new HistoryRequestError(response.status);
+  try {
+    return await response.json();
+  } catch {
+    throw new HistoryRequestError(response.status);
+  }
+}
+
+interface ListBody<T> {
+  readonly items: T[];
+  readonly next_cursor: string | null;
+}
+
+/** Item type of each list (the BFF relays FastAPI's page unchanged). */
+export interface HistoryItems {
+  readonly activities: Activity;
+  readonly jobs: WorkspaceJob;
+  readonly attempts: WorkspaceAttempt;
+}
+
+export interface HistoryClient {
+  list<K extends HistoryKind>(
+    workspaceId: string,
+    kind: K,
+    cursor?: string,
+  ): Promise<HistoryPage<HistoryItems[K]>>;
+  retry(job: WorkspaceJob, idempotencyKey: string): Promise<void>;
+}
+
+export function createHistoryClient(fetchImpl: Fetch = (...a) => fetch(...a)): HistoryClient {
+  return {
+    async list<K extends HistoryKind>(workspaceId: string, kind: K, cursor?: string) {
+      const body = (await request(fetchImpl, historyListPath(workspaceId, kind, cursor), {
+        method: 'GET',
+      })) as ListBody<HistoryItems[K]>;
+      return { items: body.items, nextCursor: body.next_cursor };
+    },
+    async retry(job, idempotencyKey) {
+      const path = retryPath(job);
+      if (!path) throw new HistoryRequestError(409);
+      const isDocument = job.target_type === 'document';
+      await request(fetchImpl, path, {
+        method: 'POST',
+        headers: {
+          'idempotency-key': idempotencyKey,
+          ...(isDocument ? { 'content-type': 'application/json' } : {}),
+        },
+        // Publishing the document's current correction draft (no revision pin: the draft the
+        // failed job indexed is still the current one, or the API answers 409).
+        ...(isDocument ? { body: '{}' } : {}),
+      });
+    },
+  };
+}

@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from quiz_api.api import (
     document_revisions,
     documents,
+    history,
     jobs,
     me,
     practice,
@@ -39,3 +40,4 @@ api_router.include_router(practice.router)
 api_router.include_router(share_links.router)
 api_router.include_router(shared.router)
 api_router.include_router(jobs.router)
+api_router.include_router(history.router)

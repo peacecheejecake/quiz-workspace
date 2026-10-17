@@ -13,7 +13,10 @@
 // `document.parse` job of the draft revision with error_code `indexing_failed`, retried by
 // POST /documents/{id}/publish (DOC-02-AC04, M3.4).
 //
-// NOT in the docs (M7.0 assumptions, to confirm or change in M7.1):
+// NOT in the docs (M7.0 assumptions; M7.1 implemented them as written, apps/api/src/quiz_api/api/
+// history.py: limit 1-100 (default 50); a `user_id` on /attempts is refused with 422; attempts on
+// soft-deleted questions are omitted; `retryable` also needs an edit role in an active workspace
+// and, for a reindex, that its draft is still the document's current correction draft):
 //   H1 GET /workspaces/{id}/activities?limit=&cursor= → 200 {items: Activity[], next_cursor}
 //      newest first, any member (viewer included); `question.study_state_changed` only for its
 //      actor. Activity = {id, event_type, target_type, target_id, target_label: string|null,

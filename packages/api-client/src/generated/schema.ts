@@ -752,6 +752,27 @@ export type paths = {
     patch: operations['updateWorkspace'];
     trace?: never;
   };
+  '/api/v1/workspaces/{workspace_id}/activities': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Activities
+     * @description Change history of the workspace (documents, questions, imports, sharing), newest first.
+     *     Personal study-state events are included for the caller's own changes only.
+     */
+    get: operations['listWorkspaceActivities'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspace_id}/archive': {
     parameters: {
       query?: never;
@@ -769,6 +790,27 @@ export type paths = {
      *     restored in between (no second archive, no second event).
      */
     post: operations['archiveWorkspace'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/attempts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List My Attempts
+     * @description The caller's own practice attempts in the workspace, newest first. Other users' attempts
+     *     are never listed; a `user_id` parameter is refused (422).
+     */
+    get: operations['listMyWorkspaceAttempts'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -812,6 +854,27 @@ export type paths = {
      *     Each call is a new intent; an intent that is never completed creates no document.
      */
     post: operations['createDocumentUploadIntent'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/jobs': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Jobs
+     * @description Async jobs of the workspace (parse/reindex, import, generation), newest first, with what
+     *     each works on and whether the caller can retry it.
+     */
+    get: operations['listWorkspaceJobs'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1067,6 +1130,73 @@ export type paths = {
 export type webhooks = Record<string, never>;
 export type components = {
   schemas: {
+    /** Activity */
+    Activity: {
+      /** @description null once the user was deleted. */
+      actor: components['schemas']['ActivityActor'] | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Event Type
+       * @description e.g. `document.block_corrected`, `question.updated`.
+       */
+      event_type: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** @description The revision a document correction/publish/restore touched or the question version a change produced; null for events without one. */
+      revision: components['schemas']['ActivityRevision'] | null;
+      /** Target Id */
+      target_id: string | null;
+      /**
+       * Target Label
+       * @description Document title, workspace name or a question label (`N번 문제`); never book or question text.
+       */
+      target_label: string | null;
+      /**
+       * Target Type
+       * @description e.g. `document`, `question`, `workspace`.
+       */
+      target_type: string;
+    };
+    /** ActivityActor */
+    ActivityActor: {
+      /** Display Name */
+      display_name: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+    };
+    /** ActivityPage */
+    ActivityPage: {
+      /** Items */
+      items: components['schemas']['Activity'][];
+      /**
+       * Next Cursor
+       * @description Pass as `cursor` for older events.
+       */
+      next_cursor: string | null;
+    };
+    /** ActivityRevision */
+    ActivityRevision: {
+      /**
+       * Id
+       * @description Document revision id or question revision id.
+       */
+      id: string | null;
+      /**
+       * Number
+       * @description Document `revision_number` or question `version` the event produced.
+       */
+      number: number | null;
+    };
     /** Attempt */
     Attempt: {
       /**
@@ -3381,10 +3511,159 @@ export type components = {
        */
       updated_at: string;
     };
+    /** WorkspaceAttempt */
+    WorkspaceAttempt: {
+      /**
+       * Displayed Option Ids
+       * @description The order the options were shown in.
+       */
+      displayed_option_ids: string[];
+      /** Graded At */
+      graded_at: string | null;
+      /**
+       * Grades Attempt Id
+       * @description For a self/reviewer grade: the pending attempt it settles.
+       */
+      grades_attempt_id: string | null;
+      /**
+       * Grading Method
+       * @description null while pending.
+       */
+      grading_method: ('auto' | 'self' | 'reviewer') | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Practice Session Id
+       * Format: uuid
+       */
+      practice_session_id: string;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /** Question Number */
+      question_number: number | null;
+      /**
+       * Question Revision Id
+       * Format: uuid
+       * @description Graded against this revision.
+       */
+      question_revision_id: string;
+      /** Question Type */
+      question_type: string;
+      /**
+       * Result
+       * @enum {string}
+       */
+      result: 'correct' | 'incorrect' | 'pending';
+      /** Revision Version */
+      revision_version: number;
+      submitted_answer: components['schemas']['SubmittedAnswer'];
+      /**
+       * Submitted At
+       * Format: date-time
+       */
+      submitted_at: string;
+    };
+    /** WorkspaceAttemptPage */
+    WorkspaceAttemptPage: {
+      /** Items */
+      items: components['schemas']['WorkspaceAttempt'][];
+      /**
+       * Next Cursor
+       * @description Pass as `cursor` for older attempts.
+       */
+      next_cursor: string | null;
+    };
     /** WorkspaceCreate */
     WorkspaceCreate: {
       /** Name */
       name: string;
+    };
+    /** WorkspaceJob */
+    WorkspaceJob: {
+      /** Attempts */
+      attempts: number;
+      /** Cancel Requested */
+      cancel_requested: boolean;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Error Code
+       * @description Stable reason of a failed (or `cancelled`) job, e.g. `parse_failed`.
+       */
+      error_code: string | null;
+      /** Finished At */
+      finished_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Job Type
+       * @description e.g. `document.parse`.
+       */
+      job_type: string;
+      /** Max Attempts */
+      max_attempts: number;
+      /**
+       * Progress
+       * @description 0-100 while running (100 once succeeded); null when unknown.
+       */
+      progress: number | null;
+      /**
+       * Retryable
+       * @description The caller can start this job again: `document` → POST /documents/{target_id}/publish, `question_import` → POST /question-imports/{target_id}/retry. The retry is a new job.
+       */
+      retryable: boolean;
+      /**
+       * Stage
+       * @description Current step while running, e.g. `parsing`, `indexing`; null otherwise.
+       */
+      stage: string | null;
+      /** Started At */
+      started_at: string | null;
+      /**
+       * Status
+       * @description queued | running | succeeded | failed | cancelled
+       * @enum {string}
+       */
+      status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+      /** Target Id */
+      target_id: string | null;
+      /**
+       * Target Label
+       * @description Document or question paper title.
+       */
+      target_label: string | null;
+      /**
+       * Target Type
+       * @description What the job works on.
+       */
+      target_type: ('document' | 'question_import' | 'question_generation') | null;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /** WorkspaceJobPage */
+    WorkspaceJobPage: {
+      /** Items */
+      items: components['schemas']['WorkspaceJob'][];
+      /**
+       * Next Cursor
+       * @description Pass as `cursor` for older jobs.
+       */
+      next_cursor: string | null;
     };
     /** WorkspaceList */
     WorkspaceList: {
@@ -6374,6 +6653,67 @@ export interface operations {
       };
     };
   };
+  listWorkspaceActivities: {
+    parameters: {
+      query?: {
+        cursor?: string | null;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ActivityPage'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   archiveWorkspace: {
     parameters: {
       query?: never;
@@ -6444,6 +6784,67 @@ export interface operations {
       };
       /** @description Service Unavailable */
       503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listMyWorkspaceAttempts: {
+    parameters: {
+      query?: {
+        cursor?: string | null;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkspaceAttemptPage'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
         headers: {
           [name: string]: unknown;
         };
@@ -6603,6 +7004,67 @@ export interface operations {
       };
       /** @description Service Unavailable */
       503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listWorkspaceJobs: {
+    parameters: {
+      query?: {
+        cursor?: string | null;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkspaceJobPage'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
         headers: {
           [name: string]: unknown;
         };

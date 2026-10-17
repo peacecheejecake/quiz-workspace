@@ -16,7 +16,7 @@ export const WORKSPACE_NAV: readonly NavEntry[] = [
   { segment: 'documents', label: '문서' },
   { segment: 'search', label: '검색' },
   { segment: 'questions', label: '문제' },
-  { segment: 'history', label: '학습 기록' },
+  { segment: 'history', label: '이력' },
   { segment: 'settings/sharing', label: '공유 설정', ownerOnly: true },
 ];
 
