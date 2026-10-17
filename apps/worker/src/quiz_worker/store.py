@@ -605,6 +605,21 @@ class InMemoryJobStore(TransactionalJobStore):
 # SQLite: a cross-process store for local multi-process runs and prefork worker tests
 # --------------------------------------------------------------------------------------------
 
+# Local/test schema only. The production `async_jobs` table is owned by supabase/migrations;
+# this file-backed copy upgrades itself in place (additive columns) when the store evolves.
+#
+# user_version 1: P0.7 fix layout (published_at, no cleanup columns).
+# user_version 2: + cleanup_pending, cleanup_attempts, cleanup_last_error, cleanup_next_at.
+SQLITE_SCHEMA_VERSION = 2
+
+# Columns added after version 1, with the DDL used to add them to an existing table.
+_SQLITE_ADDED_COLUMNS: dict[str, str] = {
+    "cleanup_pending": "INTEGER NOT NULL DEFAULT 0",
+    "cleanup_attempts": "INTEGER NOT NULL DEFAULT 0",
+    "cleanup_last_error": "TEXT",
+    "cleanup_next_at": "REAL",
+}
+
 _SQLITE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS async_jobs (
     job_id TEXT PRIMARY KEY,
@@ -692,6 +707,23 @@ class SqliteJobStore(TransactionalJobStore):
         self._path = str(path)
         with self._connect() as conn:
             conn.executescript(_SQLITE_SCHEMA)
+        self._upgrade_schema()
+
+    def _upgrade_schema(self) -> None:
+        """Bring an existing file up to `SQLITE_SCHEMA_VERSION` (idempotent, additive)."""
+        with self._transaction() as conn:
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version > SQLITE_SCHEMA_VERSION:
+                raise RuntimeError(
+                    f"job store schema version {version} is newer than this worker "
+                    f"({SQLITE_SCHEMA_VERSION})"
+                )
+            existing = {row["name"] for row in conn.execute("PRAGMA table_info(async_jobs)")}
+            for name, ddl in _SQLITE_ADDED_COLUMNS.items():
+                if name not in existing:
+                    conn.execute(f"ALTER TABLE async_jobs ADD COLUMN {name} {ddl}")
+            if version != SQLITE_SCHEMA_VERSION:
+                conn.execute(f"PRAGMA user_version = {SQLITE_SCHEMA_VERSION}")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
