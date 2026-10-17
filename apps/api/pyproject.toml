@@ -12,6 +12,8 @@ dependencies = [
   "psycopg[binary]>=3.3,<4",
   "redis>=8.1,<9",
   "httpx>=0.28,<1",
+  # Access-token verification against the Supabase Auth JWKS (ES256/RS256 via cryptography).
+  "pyjwt[crypto]==2.15.1",
   # Shared core (architecture §2); the API currently uses only its stdlib log redaction.
   "book-core",
 ]
