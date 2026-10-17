@@ -1,0 +1,129 @@
+# CI skeleton (P0.10, docs/deployment.md §5): static checks → unit → contracts, then the local
+# stack (Supabase CLI + Qdrant/Redis) → DB tests → infra integration tests → E2E.
+#
+# E2E_PHASES lists the RED phases whose specs are GREEN (`scripts/e2e-trace.ts` PHASES). Only
+# those specs (plus tests/e2e/harness) run and are trace-gated: develop carries RED specs of the
+# phase in progress, main never does (docs/implementation-plan.md §7). Append a phase in the same
+# change that turns its last spec GREEN, e.g. `P0.10,A0`.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  E2E_PHASES: P0.10
+  FORCE_COLOR: '1'
+
+jobs:
+  checks:
+    name: lint · typecheck · unit · contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: pnpm/action-setup@v4.1.0
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v6.4.3
+        with:
+          enable-cache: true
+      - name: Install
+        run: |
+          pnpm install --frozen-lockfile
+          uv sync --locked
+      - name: Lint (eslint, prettier, ruff)
+        run: make lint-ts lint-py
+      - name: Typecheck
+        run: make typecheck
+      - name: Unit tests
+        run: make test
+      - name: Contracts up to date
+        run: make contracts-check
+      - name: AC traceability (implemented phases)
+        run: pnpm e2e:trace --strict --phase "$E2E_PHASES"
+
+  integration:
+    name: db · infra · e2e
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: pnpm/action-setup@v4.1.0
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v6.4.3
+        with:
+          enable-cache: true
+      - name: Install
+        run: |
+          pnpm install --frozen-lockfile
+          uv sync --locked
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4.2.3
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - name: Install Playwright browsers (Chromium + WebKit)
+        run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Start local stack
+        run: make infra-up
+      - name: Export local Supabase keys (masked)
+        run: |
+          status="$(pnpm exec supabase status -o json | sed -n '/^{/,$p')"
+          publishable="$(jq -r .PUBLISHABLE_KEY <<<"$status")"
+          secret="$(jq -r .SECRET_KEY <<<"$status")"
+          echo "::add-mask::$publishable"
+          echo "::add-mask::$secret"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$publishable"
+            echo "SUPABASE_SECRET_KEY=$secret"
+          } >> "$GITHUB_ENV"
+      - name: Enable local quiz_api login (CI-only password)
+        run: >-
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          -c "alter role quiz_api with login password 'change-me-local'"
+
+      - name: DB tests (pgTAP)
+        run: make db-test
+      - name: Infra integration tests
+        run: make test-infra
+
+      - name: E2E (harness + implemented phases)
+        run: |
+          mapfile -t specs < <(node scripts/e2e-trace.ts --list-specs --phase "$E2E_PHASES")
+          pnpm e2e tests/e2e/harness/ "${specs[@]}"
+
+      # Reports hold traces/screenshots of failed tests: synthetic users on this throwaway stack
+      # only (tests/e2e/README.md), kept briefly.
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop local stack
+        if: ${{ always() }}
+        run: make infra-down

@@ -27,9 +27,10 @@ export default defineConfig(
       '.claude/**',
       'playwright-report/**',
       'test-results/**',
-      // Owned by P0.10 (Playwright harness); @playwright/test is not installed yet.
-      'playwright.config.ts',
-      'tests/e2e/**',
+      // Pre-harness starter specs kept byte-for-byte until their RED Task moves them
+      // (see tests/e2e/README.md).
+      'tests/e2e/_pending/**',
+      'playwright/.auth/**',
     ],
   },
   js.configs.recommended,
