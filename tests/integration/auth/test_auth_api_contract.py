@@ -455,8 +455,10 @@ def test_auth_api_ac01_missing_or_non_bearer_credentials_are_401(
     token = stack.sign_in(user.email, user.password).access_token
 
     _assert_unauthorized(api.client.get(ME), secret="", api=api)
+    # Bearer scheme without a token. (`"Bearer "` with the trailing space cannot be sent: h11
+    # rejects header values with trailing whitespace client-side.)
     _assert_unauthorized(
-        api.client.get(ME, headers={"Authorization": "Bearer "}), secret="", api=api
+        api.client.get(ME, headers={"Authorization": "Bearer"}), secret="", api=api
     )
     _assert_unauthorized(
         api.client.get(ME, headers={"Authorization": f"Basic {token}"}), secret=token, api=api
