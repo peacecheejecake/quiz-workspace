@@ -45,3 +45,39 @@ export { DialogClose, ModalDialog } from './layout/ModalDialog';
 export type { ModalDialogProps } from './layout/ModalDialog';
 export { PageHeader } from './layout/PageHeader';
 export type { PageHeaderProps } from './layout/PageHeader';
+
+export {
+  QUESTION_DOT_STATUSES,
+  deriveDotStatus,
+  questionDotLabel,
+  questionStatusLabels,
+  questionTypeLabels,
+  summarizeStatuses,
+} from './questions/status';
+export type {
+  LastGradedResult,
+  QuestionDotStatus,
+  QuestionLabelInput,
+  QuestionStatusCounts,
+  QuestionType,
+  UserStudyState,
+} from './questions/status';
+export { QuestionMarker } from './questions/QuestionMarker';
+export type { QuestionMarkerProps } from './questions/QuestionMarker';
+export { QuestionDot } from './questions/QuestionDot';
+export type { QuestionDotProps } from './questions/QuestionDot';
+export { QuestionHeatmap } from './questions/QuestionHeatmap';
+export type {
+  HeatmapChapter,
+  HeatmapQuestion,
+  QuestionHeatmapProps,
+} from './questions/QuestionHeatmap';
+export { QuestionPreviewPopover } from './questions/QuestionPreviewPopover';
+export type { QuestionPreviewPopoverProps } from './questions/QuestionPreviewPopover';
+export { HeatmapLegend } from './questions/HeatmapLegend';
+export type { HeatmapLegendProps } from './questions/HeatmapLegend';
+export { StatusSummary } from './questions/StatusSummary';
+export type { StatusSummaryProps } from './questions/StatusSummary';
+export { FavoriteToggle, RetryToggle } from './questions/StudyToggles';
+export type { StudyToggleProps } from './questions/StudyToggles';
+export { RetryIcon, StarIcon } from './questions/icons';

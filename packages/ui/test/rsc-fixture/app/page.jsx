@@ -11,9 +11,11 @@ import {
   CloseIcon,
   DialogClose,
   EmptyState,
+  FavoriteToggle,
   FloatingSidePanel,
   FocusRing,
   GlassSurface,
+  HeatmapLegend,
   IconButton,
   Input,
   MenuIcon,
@@ -25,18 +27,54 @@ import {
   PopoverClose,
   PopoverContent,
   PopoverTrigger,
+  QUESTION_DOT_STATUSES,
+  QuestionDot,
+  QuestionHeatmap,
+  QuestionMarker,
+  QuestionPreviewPopover,
+  RetryIcon,
+  RetryToggle,
   Skeleton,
+  StarIcon,
+  StatusSummary,
   Surface,
   Textarea,
   ThemeProvider,
   ToastProvider,
   Tooltip,
+  deriveDotStatus,
   focusRingClassName,
+  questionDotLabel,
+  questionStatusLabels,
+  questionTypeLabels,
+  summarizeStatuses,
   useTheme,
   useToast,
 } from '@quiz/ui';
 
 const hooks = [useTheme, useToast];
+// Need function props (onOpen / onPressedChange), so a Client Component has to render them.
+const interactive = [QuestionDot, QuestionHeatmap, FavoriteToggle, RetryToggle];
+
+// The status helpers are plain functions and must be callable on the server.
+const questions = QUESTION_DOT_STATUSES.map((status, index) => ({
+  status: deriveDotStatus({
+    firstViewedAt: status === 'unseen' ? null : '2026-10-01T00:00:00Z',
+    lastGradedResult: status === 'correct' || status === 'incorrect' ? status : null,
+    needsRetry: status === 'retry',
+    isFavorite: index % 2 === 0,
+  }),
+  isFavorite: index % 2 === 0,
+}));
+const label = questionDotLabel({
+  chapterNumber: 3,
+  chapterTitle: '어텐션',
+  questionNumber: '12',
+  questionType: 'MCQ',
+  status: 'retry',
+  isFavorite: true,
+  lastGradedResult: 'incorrect',
+});
 
 export default function Page() {
   return (
@@ -80,6 +118,27 @@ export default function Page() {
             본문
           </FloatingSidePanel>
           <EmptyState title="비어 있음" />
+          <p>
+            {interactive.length} interactive · {label} · {questionTypeLabels.MCQ}
+          </p>
+          <StatusSummary counts={summarizeStatuses(questions)} />
+          <HeatmapLegend />
+          {questions.map(({ status, isFavorite }) => (
+            <QuestionMarker key={status} status={status} favorite={isFavorite} />
+          ))}
+          <QuestionPreviewPopover
+            chapterNumber={3}
+            chapterTitle="어텐션"
+            questionNumber="12"
+            questionType="MCQ"
+            status="unseen"
+            isFavorite={false}
+            preview="문제 본문"
+          >
+            <button type="button">{questionStatusLabels.unseen}</button>
+          </QuestionPreviewPopover>
+          <StarIcon />
+          <RetryIcon />
         </AppShell>
       </ToastProvider>
     </ThemeProvider>
