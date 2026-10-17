@@ -26,7 +26,8 @@ SIGNING_KEYS := supabase/signing_keys.json
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
 	test test-ts test-py test-infra auth-keys infra-up infra-down infra-status infra-reset \
-	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test
+	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
+	e2e e2e-browsers e2e-trace
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -60,6 +61,7 @@ typecheck: typecheck-ts typecheck-py ## Type-check (tsc per package, mypy per Py
 
 typecheck-ts:
 	pnpm -r --if-present run typecheck
+	pnpm exec tsc -p tests/e2e/tsconfig.json
 
 typecheck-py:
 ifeq ($(strip $(PY_PRESENT)),)
@@ -72,6 +74,7 @@ test: test-ts test-py ## Unit tests (Vitest per package, pytest)
 
 test-ts:
 	pnpm -r --if-present run test
+	node --test 'scripts/*.test.ts'
 
 # pytest exits 5 when no tests were collected; that is the only non-zero code tolerated.
 # Tests marked `infra` skip (with a reason, listed by -ra) when the local stack is not running.
@@ -134,3 +137,14 @@ web-dev: ## Run the Next.js web app locally (http://127.0.0.1:3000)
 
 worker-dev: ## Run the Celery worker locally (reads .env; needs Redis from infra-up)
 	uv run python -m quiz_worker.serve
+
+# E2E (Playwright; workflow in tests/e2e/README.md). `e2e` starts a production build of apps/web
+# unless a server already answers on E2E_BASE_URL. Tests tagged @infra need `make infra-up`.
+e2e-browsers: ## Install the Playwright browsers E2E uses (Chromium + WebKit only)
+	pnpm exec playwright install chromium webkit
+
+e2e: ## Run Playwright E2E, e.g. ARGS="--project harness-chromium"
+	pnpm e2e $(ARGS)
+
+e2e-trace: ## AC <-> test traceability report; ARGS="--strict --phase A0" gates a phase
+	pnpm e2e:trace $(ARGS)
