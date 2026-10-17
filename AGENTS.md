@@ -180,6 +180,7 @@ make db-lint     # supabase db lint --fail-on warning
 make db-test     # pgTAP tests in supabase/tests
 make web-dev     # Next.js dev server on http://127.0.0.1:3000 (reads root .env)
 pnpm --filter @quiz/web build  # production build of apps/web
+uv run python packages/core/scripts/make_fixture_pdfs.py [--check]  # regenerate/check tests/fixtures/pdfs
 pnpm --filter <pkg> <script>   # run one TS package's script
 uv run pytest apps/api         # run one Python member's tests
 scripts/codex-review.sh --commit HEAD --title "<Task ID>: <summary>"
