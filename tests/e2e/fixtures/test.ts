@@ -34,7 +34,18 @@ export const test = base.extend<E2EFixtures>({
 
 export { expect };
 export type { AuthSession, CreateUserOptions, TestUser } from './auth.ts';
-export { signIn, userExists } from './auth.ts';
+export {
+  canSignIn,
+  findUserIdByEmail,
+  isEmailConfirmed,
+  newCredentials,
+  refreshStatus,
+  requestPasswordRecovery,
+  signIn,
+  userExists,
+  verifyTokenHashStatus,
+} from './auth.ts';
+export * from './auth-ui.ts';
 export {
   deleteMessagesFor,
   extractLinks,
