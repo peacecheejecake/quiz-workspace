@@ -45,8 +45,9 @@ explicit = true
 [dependency-groups]
 dev = [
   # Workspace members installed into the shared venv so pytest/mypy can import them.
-  # `parser` (Docling + CPU torch) is part of the dev install so the parser tests always run.
-  "book-core[parser]",
+  # `parser` (Docling + CPU torch) and `models` (transformers on the same torch) are part of the
+  # dev install so the parser and embedding tests always run.
+  "book-core[parser,models]",
   "quiz-api",
   "quiz-worker",
   # Type stubs for Celery/kombu (they ship no inline types).
@@ -110,5 +111,5 @@ pythonpath = ["packages/core/scripts"]
 norecursedirs = [".*", "*.egg", "venv", "node_modules", "dist", "build"]
 markers = [
   "infra: needs the local stack (`make infra-up`); skipped with a reason otherwise, run via `make test-infra`",
-  "models: runs real model weights (Docling layout/TableFormer; downloads into HF_HOME); excluded from `make test`, run via `make test-models` (nightly)",
+  "models: runs real model weights (Docling layout/TableFormer, Qwen3-Embedding; downloads into HF_HOME); excluded from `make test`, run via `make test-models` (nightly)",
 ]

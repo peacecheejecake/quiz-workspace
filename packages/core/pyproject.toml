@@ -28,8 +28,12 @@ ocr = [
   "book-core[parser]",
   "docling-slim[feat-ocr-rapidocr-onnx]==2.131.0",
 ]
-# M2.1 / M2.4: Qwen3-Embedding and Qwen3-Reranker (transformers / torch).
-models = []
+# M2.1 / M2.4: Qwen3-Embedding and Qwen3-Reranker on transformers + CPU torch: the same
+# packages Docling pulls in for `parser`, so both extras share one install.
+models = [
+  "transformers>=4.51,<6",
+  "torch==2.14.1",
+]
 # M4.3: real LLM provider SDK for structured outputs.
 llm = []
 

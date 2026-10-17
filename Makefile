@@ -89,8 +89,9 @@ test-py:
 test-infra: ## Integration tests against the running local stack (needs `make infra-up`)
 	QUIZ_REQUIRE_INFRA=1 uv run pytest -m infra
 
-# Real model weights (Docling layout/TableFormer from the Hugging Face cache, HF_HOME). Never
-# skips: missing weights without network access fail the run. Nightly / before parser changes.
+# Real model weights (Docling layout/TableFormer ~0.5G, Qwen3-Embedding-0.6B ~1.2G; Hugging Face
+# cache, HF_HOME). Never skips: missing weights without network access fail the run. Nightly /
+# before parser or model-adapter changes.
 test-models: ## Tests on real model weights (downloads into HF_HOME on first run)
 	uv run pytest -m models
 
