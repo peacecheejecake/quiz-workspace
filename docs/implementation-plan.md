@@ -352,7 +352,8 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | P0.1 monorepo 골격 | ✅ | 704c61a | 지적 없음 |
 | P0.2 로컬 인프라 | ✅ | 5cfce1a (merge 73c5a13) | 지적 없음. Studio 비활성(결정 기록) |
 | P0.3 design tokens | ✅ | e1c4fc3 | 지적 없음 |
-| P0.6 API 골격·OpenAPI client | ◐ | ce575fe · d17018a (merge a8b5d80) | P1×2(예외 traceback·uvicorn access log 토큰 노출) → 반영 → 지적 없음. 후속: 실행 순서 의존 로그 테스트 수정 중 |
+| P0.6 API 골격·OpenAPI client | ✅ | ce575fe · d17018a (merge a8b5d80) · 02b4e0e | P1×2(예외 traceback·uvicorn access log 토큰 노출) → 반영 → 지적 없음. 실행 순서 의존 로그 테스트 수정 → 지적 없음 |
+| W3: P0.4 · P0.5 · P0.7 · P0.9 · M1.1 | ◐ | — | 병렬 진행 중 |
 | P0.8 core 골격 | ✅ | 163e9ea · bc78ce6 · 1c56c17 | P2(LLM 검증 오류에 원문 노출) → 반영 → P2(식별자형 key 노출) → 반영 → 지적 없음 |
 | (통합) worktree 제외 설정 | ✅ | 6704d1c | 사소한 설정 수정, 리뷰 생략 |
 
