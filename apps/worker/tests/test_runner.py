@@ -1,4 +1,4 @@
-"""JobRunner + InMemoryJobStore: the idempotency, retry and cancellation contract."""
+"""JobRunner over both JobStores: the idempotency, retry and cancellation contract."""
 
 from __future__ import annotations
 
@@ -22,9 +22,9 @@ from quiz_worker.runner import (
 )
 from quiz_worker.store import (
     WORKER_LOST_ERROR,
-    InMemoryJobStore,
     JobStatus,
     StaleClaimError,
+    TransactionalJobStore,
 )
 
 from .conftest import BOOK_TEXT, TOKEN, EnvelopeFactory, FakeClock
@@ -57,7 +57,7 @@ def definition(
 
 
 @pytest.fixture
-def runner(store: InMemoryJobStore, clock: FakeClock) -> JobRunner:
+def runner(store: TransactionalJobStore, clock: FakeClock) -> JobRunner:
     return JobRunner(store, worker_id="w1", lease_seconds=LEASE, clock=clock)
 
 
@@ -71,7 +71,7 @@ class Calls:
 
 
 def test_success_records_result_and_single_attempt(
-    store: InMemoryJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
+    store: TransactionalJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
 ) -> None:
     job = definition(lambda ctx, p: {"length": len(p.message)})
     envelope = make_envelope()
@@ -89,7 +89,10 @@ def test_success_records_result_and_single_attempt(
 
 
 def test_duplicate_delivery_after_success_is_a_noop(
-    store: InMemoryJobStore, runner: JobRunner, make_envelope: EnvelopeFactory, clock: FakeClock
+    store: TransactionalJobStore,
+    runner: JobRunner,
+    make_envelope: EnvelopeFactory,
+    clock: FakeClock,
 ) -> None:
     calls = Calls()
 
@@ -112,7 +115,7 @@ def test_duplicate_delivery_after_success_is_a_noop(
 
 
 def test_concurrent_duplicate_cannot_run_twice(
-    store: InMemoryJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
+    store: TransactionalJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
 ) -> None:
     entered = threading.Event()
     release = threading.Event()
@@ -144,7 +147,7 @@ def test_concurrent_duplicate_cannot_run_twice(
 
 
 def test_failure_records_sanitized_error_and_retries_up_to_the_limit(
-    store: InMemoryJobStore,
+    store: TransactionalJobStore,
     runner: JobRunner,
     make_envelope: EnvelopeFactory,
     caplog: pytest.LogCaptureFixture,
@@ -180,7 +183,7 @@ def test_failure_records_sanitized_error_and_retries_up_to_the_limit(
 
 
 def test_job_error_keeps_its_safe_message(
-    store: InMemoryJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
+    store: TransactionalJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
 ) -> None:
     class PageLimitError(NonRetryableJobError):
         code = "page_limit"
@@ -199,7 +202,7 @@ def test_job_error_keeps_its_safe_message(
 
 
 def test_non_retryable_error_fails_immediately(
-    store: InMemoryJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
+    store: TransactionalJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
 ) -> None:
     calls = Calls()
 
@@ -222,7 +225,7 @@ def test_non_retryable_error_fails_immediately(
 
 
 def test_retryable_job_error_is_retried(
-    store: InMemoryJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
+    store: TransactionalJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
 ) -> None:
     class UpstreamBusyError(JobError):
         code = "upstream_busy"
@@ -242,7 +245,7 @@ def test_retryable_job_error_is_retried(
 
 
 def test_cancellation_hook_stops_work_and_runs_cleanup(
-    store: InMemoryJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
+    store: TransactionalJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
 ) -> None:
     calls = Calls()
     processed: list[int] = []
@@ -269,7 +272,7 @@ def test_cancellation_hook_stops_work_and_runs_cleanup(
 
 
 def test_cancel_requested_while_queued_never_runs_the_handler(
-    store: InMemoryJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
+    store: TransactionalJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
 ) -> None:
     calls = Calls()
 
@@ -293,7 +296,7 @@ def test_cancel_requested_while_queued_never_runs_the_handler(
 
 @pytest.mark.parametrize(("version", "kind"), [(2, "newer than"), (7, "newer than")])
 def test_newer_schema_version_fails_the_job_explicitly(
-    store: InMemoryJobStore,
+    store: TransactionalJobStore,
     runner: JobRunner,
     make_envelope: EnvelopeFactory,
     version: int,
@@ -321,7 +324,7 @@ def test_newer_schema_version_fails_the_job_explicitly(
 
 
 def test_unknown_older_schema_version_is_rejected(
-    store: InMemoryJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
+    store: TransactionalJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
 ) -> None:
     job: JobDefinition[TextPayload] = JobDefinition(
         job_type="echo", payload_models={2: TextPayload, 3: TextPayload}, handler=lambda c, p: None
@@ -338,7 +341,7 @@ def test_unknown_older_schema_version_is_rejected(
 
 
 def test_invalid_payload_fails_without_retry(
-    store: InMemoryJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
+    store: TransactionalJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
 ) -> None:
     envelope = make_envelope(payload={"message": ["not", "text", BOOK_TEXT]})
     store.create(envelope, max_attempts=3)
@@ -350,7 +353,7 @@ def test_invalid_payload_fails_without_retry(
 
 
 def test_messages_that_do_not_match_a_stored_job_are_rejected_untouched(
-    store: InMemoryJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
+    store: TransactionalJobStore, runner: JobRunner, make_envelope: EnvelopeFactory
 ) -> None:
     job = definition(lambda c, p: None)
     envelope = make_envelope()
@@ -369,7 +372,7 @@ def test_messages_that_do_not_match_a_stored_job_are_rejected_untouched(
 
 
 def test_lost_worker_lease_is_reclaimed_and_the_stale_attempt_is_fenced(
-    store: InMemoryJobStore,
+    store: TransactionalJobStore,
     runner: JobRunner,
     make_envelope: EnvelopeFactory,
     clock: FakeClock,
@@ -392,7 +395,7 @@ def test_lost_worker_lease_is_reclaimed_and_the_stale_attempt_is_fenced(
 
 
 def test_lost_worker_on_final_attempt_fails_the_job(
-    store: InMemoryJobStore,
+    store: TransactionalJobStore,
     runner: JobRunner,
     make_envelope: EnvelopeFactory,
     clock: FakeClock,
@@ -411,7 +414,7 @@ def test_lost_worker_on_final_attempt_fails_the_job(
 
 
 def test_create_is_idempotent_on_the_idempotency_key(
-    store: InMemoryJobStore, make_envelope: EnvelopeFactory
+    store: TransactionalJobStore, make_envelope: EnvelopeFactory
 ) -> None:
     first = make_envelope(idempotency_key="fork-1")
     again = make_envelope(idempotency_key="fork-1")

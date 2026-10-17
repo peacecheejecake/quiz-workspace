@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 from quiz_worker.envelope import JobEnvelope
 from quiz_worker.settings import WorkerSettings
-from quiz_worker.store import InMemoryJobStore
+from quiz_worker.store import InMemoryJobStore, SqliteJobStore, TransactionalJobStore
 
 # Synthetic stand-ins for data that must never reach logs or `last_error`.
 TOKEN = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEifQ.c2lnbmF0dXJl"  # noqa: S105 - fake JWT
@@ -16,6 +17,7 @@ BOOK_TEXT = "Chapter 7 synthetic passage: the quick brown fox jumps over the laz
 WORKSPACE_ID = UUID("00000000-0000-4000-8000-000000000001")
 
 EnvelopeFactory = Callable[..., JobEnvelope]
+JobStoreUnderTest = TransactionalJobStore
 
 
 class FakeClock:
@@ -34,8 +36,11 @@ def clock() -> FakeClock:
     return FakeClock()
 
 
-@pytest.fixture
-def store(clock: FakeClock) -> InMemoryJobStore:
+@pytest.fixture(params=["memory", "sqlite"])
+def store(request: pytest.FixtureRequest, clock: FakeClock, tmp_path: Path) -> JobStoreUnderTest:
+    """Every store test runs against both implementations of the shared transitions."""
+    if request.param == "sqlite":
+        return SqliteJobStore(tmp_path / "jobs.sqlite3", clock=clock)
     return InMemoryJobStore(clock=clock)
 
 

@@ -73,6 +73,9 @@ def test_config_is_json_only_late_ack_and_single_prefetch() -> None:
     assert conf["accept_content"] == conf["result_accept_content"] == ["json"]
     assert conf["task_acks_late"] is True
     assert conf["task_reject_on_worker_lost"] is True
+    # Hard-time-limit kills re-queue the message instead of acking it away.
+    assert conf["task_acks_on_failure_or_timeout"] is False
+    assert conf["beat_schedule"]["reconcile-jobs"]["task"] == "quiz.maintenance.reconcile_jobs"
     assert conf["worker_prefetch_multiplier"] == 1
     assert conf["worker_concurrency"] == 1
     assert conf["task_soft_time_limit"] < conf["task_time_limit"]

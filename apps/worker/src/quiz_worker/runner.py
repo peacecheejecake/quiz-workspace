@@ -71,9 +71,12 @@ Cleanup = Callable[[JobContext, TerminalReason], None]
 class JobDefinition[P: BaseModel]:
     """One job type: its payload model per schema version, handler and retry policy.
 
-    `cleanup` runs once when the job ends `failed` or `cancelled` after the handler started
-    (e.g. S3a removes temporary Storage copies). It does not run between retries: handlers
-    must be idempotent so a retry can resume or redo partial work.
+    `cleanup` runs when the job ends `failed` or `cancelled` after any attempt may have
+    started work (e.g. S3a removes temporary Storage copies), including terminal transitions
+    that happen without a running handler: cancel during a retry countdown, a lost worker's
+    final attempt, and the reconciler's recovery. It must be idempotent and tolerate finding
+    nothing to clean. It does not run between retries: handlers must be idempotent so a retry
+    can resume or redo partial work.
     """
 
     job_type: str
@@ -190,11 +193,14 @@ class JobRunner:
                     record=claim.record,
                 )
             case ClaimOutcome.CANCELLED:
-                logger.info("job cancelled before it started")
+                assert claim.record is not None  # noqa: S101 - cancelled returns the row
+                logger.info("job cancelled before this delivery started")
+                run_cleanup(definition, context_for(claim.record, self._store), "cancelled")
                 return RunResult(RunOutcome.CANCELLED, job_id, record=claim.record)
             case ClaimOutcome.EXHAUSTED:
                 assert claim.record is not None  # noqa: S101 - exhausted returns the row
                 logger.error("job failed: %s", claim.record.last_error)
+                run_cleanup(definition, context_for(claim.record, self._store), "failed")
                 return RunResult(
                     RunOutcome.FAILED, job_id, error=claim.record.last_error, record=claim.record
                 )
@@ -203,18 +209,10 @@ class JobRunner:
 
         record = claim.record
         assert record is not None  # noqa: S101 - claimed returns the row
-        ctx = JobContext(
-            job_id=job_id,
-            job_type=envelope.job_type,
-            workspace_id=envelope.workspace_id,
-            idempotency_key=envelope.idempotency_key,
-            schema_version=envelope.schema_version,
-            attempt=record.attempts,
-            max_attempts=record.max_attempts,
-            _store=self._store,
-        )
+        ctx = context_for(record, self._store)
         logger.info("job attempt %d/%d started", ctx.attempt, ctx.max_attempts)
-        started = False
+        # Earlier attempts (retried or lost) may have left partial work behind.
+        started = ctx.attempt > 1
         try:
             payload = definition.parse_payload(envelope)
             ctx.check_cancelled()
@@ -266,20 +264,16 @@ class JobRunner:
         except StaleClaimError:
             return self._stale(ctx.job_id)
 
+    @staticmethod
     def _cleanup(
-        self,
         definition: JobDefinition[Any],
         ctx: JobContext,
         reason: TerminalReason,
         *,
         started: bool,
     ) -> None:
-        if definition.cleanup is None or not started:
-            return
-        try:
-            definition.cleanup(ctx, reason)
-        except Exception as exc:
-            logger.error("job cleanup failed: %s", sanitize_error(exc))
+        if started:
+            run_cleanup(definition, ctx, reason)
 
     def _lease_remaining(self, record: JobRecord | None) -> float:
         if record is None or record.lease_expires_at is None:
@@ -296,3 +290,26 @@ class JobRunner:
     def _stale(job_id: UUID) -> RunResult:
         logger.warning("job attempt lost ownership; result discarded")
         return RunResult(RunOutcome.STALE, job_id)
+
+
+def context_for(record: JobRecord, store: JobStore) -> JobContext:
+    return JobContext(
+        job_id=record.job_id,
+        job_type=record.job_type,
+        workspace_id=record.workspace_id,
+        idempotency_key=record.idempotency_key,
+        schema_version=record.schema_version,
+        attempt=record.attempts,
+        max_attempts=record.max_attempts,
+        _store=store,
+    )
+
+
+def run_cleanup(definition: JobDefinition[Any], ctx: JobContext, reason: TerminalReason) -> None:
+    """Run the job's cleanup if any attempt was ever claimed (`ctx.attempt > 0`)."""
+    if definition.cleanup is None or ctx.attempt < 1:
+        return
+    try:
+        definition.cleanup(ctx, reason)
+    except Exception as exc:
+        logger.error("job cleanup failed: %s", sanitize_error(exc))

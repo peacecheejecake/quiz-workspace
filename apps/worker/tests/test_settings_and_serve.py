@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import logging
+import os
 import pickle
 
 import pytest
 from pydantic import ValidationError
 from quiz_worker import serve
 from quiz_worker.celery_app import QuizCelery, create_celery_app, task_name
+from quiz_worker.logging_config import configure_logging
 from quiz_worker.retry import RetryPolicy
 from quiz_worker.settings import WorkerSettings, get_settings
 
@@ -59,6 +61,18 @@ def test_worker_argv_uses_configured_concurrency_and_job_queue() -> None:
     assert "--concurrency=1" in argv
     assert "--loglevel=INFO" in argv
     assert "--queues=quiz.jobs" in argv
+    assert "--beat" in argv
+    assert "--scheduler=celery.beat:Scheduler" in argv
+    assert "--beat" not in serve.build_worker_argv(1, "info", beat=False)
+
+
+def test_soft_time_limit_zero_disables_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WORKER_TASK_SOFT_TIME_LIMIT_SECONDS", "0")
+
+    settings = WorkerSettings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.task_soft_time_limit_seconds == 0
+    assert settings.reconcile_stale_after == settings.lease_seconds
 
 
 def test_serve_refuses_eager_mode(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -90,3 +104,28 @@ def test_app_pickles_by_rebuilding_from_the_environment(monkeypatch: pytest.Monk
     assert isinstance(clone, QuizCelery)
     assert clone is not app
     assert task_name("echo") in clone.tasks
+
+
+@pytest.mark.parametrize(("method", "flagged"), [("spawn", True), ("fork", False)])
+def test_spawned_pool_children_get_the_execv_flag(
+    monkeypatch: pytest.MonkeyPatch, method: str, flagged: bool
+) -> None:
+    monkeypatch.delenv("FORKED_BY_MULTIPROCESSING", raising=False)
+    monkeypatch.setattr("billiard.get_start_method", lambda: method)
+
+    assert serve.prepare_pool_start_method() == method
+    assert ("FORKED_BY_MULTIPROCESSING" in os.environ) is flagged
+
+
+def test_debug_level_never_enables_payload_logging_loggers() -> None:
+    root = logging.getLogger()
+    level, handlers = root.level, list(root.handlers)
+    try:
+        configure_logging("DEBUG")
+        assert logging.getLogger("celery.pool").getEffectiveLevel() == logging.INFO
+        assert logging.getLogger("kombu").getEffectiveLevel() == logging.INFO
+    finally:
+        root.setLevel(level)
+        for handler in root.handlers[:]:
+            if handler not in handlers:
+                root.removeHandler(handler)

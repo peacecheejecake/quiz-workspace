@@ -12,6 +12,7 @@ import json
 import threading
 import time
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -29,8 +30,15 @@ from quiz_worker.celery_app import (
 from quiz_worker.jobs import EchoPayloadV1
 from quiz_worker.retry import RetryPolicy
 from quiz_worker.runner import JobContext, JobDefinition, JobResult
-from quiz_worker.settings import WorkerSettings
-from quiz_worker.store import TERMINAL_STATUSES, InMemoryJobStore, JobRecord, JobStatus
+from quiz_worker.settings import WorkerSettings, get_settings
+from quiz_worker.store import (
+    TERMINAL_STATUSES,
+    WORKER_LOST_ERROR,
+    JobRecord,
+    JobStatus,
+    SqliteJobStore,
+    TransactionalJobStore,
+)
 
 from .conftest import BOOK_TEXT, EnvelopeFactory
 
@@ -53,7 +61,7 @@ def _settings(server: TcpFakeServer) -> WorkerSettings:
 
 
 @pytest.fixture
-def broker_app(redis_server: TcpFakeServer, store: InMemoryJobStore) -> QuizCelery:
+def broker_app(redis_server: TcpFakeServer, store: TransactionalJobStore) -> QuizCelery:
     return create_celery_app(_settings(redis_server), job_store=store)
 
 
@@ -63,7 +71,9 @@ def _queued_messages(app: QuizCelery) -> list[dict[str, Any]]:
         return [json.loads(raw) for raw in channel.client.lrange(DEFAULT_QUEUE, 0, -1)]
 
 
-def _wait_for_terminal(store: InMemoryJobStore, job_id: UUID, timeout: float = 15) -> JobRecord:
+def _wait_for_terminal(
+    store: TransactionalJobStore, job_id: UUID, timeout: float = 15
+) -> JobRecord:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         record = store.get(job_id)
@@ -111,7 +121,7 @@ def test_every_publish_hides_the_envelope_even_without_argsrepr(
 
 
 def test_worker_consumes_and_completes_a_job(
-    broker_app: QuizCelery, store: InMemoryJobStore, make_envelope: EnvelopeFactory
+    broker_app: QuizCelery, store: TransactionalJobStore, make_envelope: EnvelopeFactory
 ) -> None:
     envelope = make_envelope(payload={"message": "over the wire"})
 
@@ -125,7 +135,7 @@ def test_worker_consumes_and_completes_a_job(
 
 
 def test_worker_retries_a_transient_failure_over_the_broker(
-    redis_server: TcpFakeServer, store: InMemoryJobStore, make_envelope: EnvelopeFactory
+    redis_server: TcpFakeServer, store: TransactionalJobStore, make_envelope: EnvelopeFactory
 ) -> None:
     attempts: list[int] = []
 
@@ -151,3 +161,44 @@ def test_worker_retries_a_transient_failure_over_the_broker(
     assert attempts == [1, 2]
     assert (record.status, record.attempts) == (JobStatus.SUCCEEDED, 2)
     assert record.last_error == "unexpected_error: RuntimeError"
+
+
+def test_hard_time_limit_never_leaves_a_job_running(
+    redis_server: TcpFakeServer,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    make_envelope: EnvelopeFactory,
+) -> None:
+    # A real prefork child is killed by the hard time limit on every attempt. Its message is
+    # re-queued (acks_on_failure_or_timeout=False), deferred until the lease expires and
+    # re-claimed until max_attempts, so the job ends failed instead of staying `running`.
+    # Prefork children rebuild the app from the environment, so state goes through SQLite.
+    port = redis_server.server_address[1]
+    for name, value in {
+        "APP_ENV": "test",
+        "REDIS_URL": f"redis://127.0.0.1:{port}/0",
+        "WORKER_JOB_STORE_PATH": str(tmp_path / "jobs.sqlite3"),
+        "WORKER_TASK_TIME_LIMIT_SECONDS": "2",
+        "WORKER_TASK_SOFT_TIME_LIMIT_SECONDS": "0",
+        "WORKER_LEASE_GRACE_SECONDS": "1",
+        "WORKER_TASK_ALWAYS_EAGER": "false",
+    }.items():
+        monkeypatch.setenv(name, value)
+    get_settings.cache_clear()
+    try:
+        app = create_celery_app(get_settings())
+    finally:
+        get_settings.cache_clear()
+    store = app.job_store
+    assert isinstance(store, SqliteJobStore)
+    envelope = make_envelope(payload={"message": "slow", "delay_seconds": 30})
+
+    with start_worker(
+        app, pool="prefork", concurrency=1, perform_ping_check=False, shutdown_timeout=10
+    ):
+        submit_job(app, envelope)
+        record = _wait_for_terminal(store, envelope.job_id, timeout=60)
+
+    assert record.status is JobStatus.FAILED
+    assert record.attempts == record.max_attempts == 3
+    assert record.last_error == WORKER_LOST_ERROR

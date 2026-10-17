@@ -38,8 +38,9 @@ class WorkerSettings(BaseSettings):
     # docs/deployment.md §7: start at concurrency 1 and scale after measuring memory/latency.
     concurrency: int = Field(default=1, ge=1, validation_alias="WORKER_CONCURRENCY")
     # Soft limit raises inside the task (retryable); the hard limit kills the child process.
+    # 0 disables the soft limit (tests that exercise the hard limit).
     task_soft_time_limit_seconds: int = Field(
-        default=1500, ge=1, validation_alias="WORKER_TASK_SOFT_TIME_LIMIT_SECONDS"
+        default=1500, ge=0, validation_alias="WORKER_TASK_SOFT_TIME_LIMIT_SECONDS"
     )
     task_time_limit_seconds: int = Field(
         default=1800, ge=1, validation_alias="WORKER_TASK_TIME_LIMIT_SECONDS"
@@ -52,6 +53,27 @@ class WorkerSettings(BaseSettings):
     # Run tasks in-process (tests / wiring only); never enable in a deployed worker.
     task_always_eager: bool = Field(default=False, validation_alias="WORKER_TASK_ALWAYS_EAGER")
 
+    # Reconciler (quiz_worker.reconcile): recovers jobs whose broker message is gone.
+    reconcile_interval_seconds: float = Field(
+        default=60, gt=0, validation_alias="WORKER_RECONCILE_INTERVAL_SECONDS"
+    )
+    # A queued row with no publish recorded is re-published after this (covers the window
+    # between the row insert and the publish).
+    reconcile_unpublished_grace_seconds: float = Field(
+        default=60, gt=0, validation_alias="WORKER_RECONCILE_UNPUBLISHED_GRACE_SECONDS"
+    )
+    # A published but unclaimed queued row is re-published after this; defaults to the lease
+    # (it must exceed every retry countdown). Duplicates are harmless, only wasteful.
+    reconcile_stale_after_seconds: float | None = Field(
+        default=None, gt=0, validation_alias="WORKER_RECONCILE_STALE_AFTER_SECONDS"
+    )
+    # Run Celery beat inside the worker (`worker -B`) to schedule the reconciler. Reconciling
+    # is safe to run concurrently, so several workers with embedded beat are tolerable.
+    embedded_beat: bool = Field(default=True, validation_alias="WORKER_EMBEDDED_BEAT")
+    # Local/test only: share job state between processes through a SQLite file (prefork
+    # children, several local workers). Unset -> in-memory store (single process).
+    job_store_path: str | None = Field(default=None, validation_alias="WORKER_JOB_STORE_PATH")
+
     @model_validator(mode="after")
     def _check_limits(self) -> WorkerSettings:
         if self.task_soft_time_limit_seconds >= self.task_time_limit_seconds:
@@ -61,6 +83,10 @@ class WorkerSettings(BaseSettings):
     @property
     def lease_seconds(self) -> int:
         return self.task_time_limit_seconds + self.lease_grace_seconds
+
+    @property
+    def reconcile_stale_after(self) -> float:
+        return self.reconcile_stale_after_seconds or float(self.lease_seconds)
 
     @property
     def broker_visibility_timeout_seconds(self) -> int:

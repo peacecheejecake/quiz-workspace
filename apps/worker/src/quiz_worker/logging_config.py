@@ -81,10 +81,16 @@ def build_handler(stream: Any = None) -> logging.Handler:
     return handler
 
 
+# These log raw message bodies (the job envelope, i.e. payload) at DEBUG; never below INFO.
+PAYLOAD_LOGGING_LOGGERS = ("celery.pool", "kombu", "amqp", "fakeredis")
+
+
 def configure_logging(level: str = "INFO") -> None:
     """Install one redacting stream handler on the root logger (idempotent)."""
     root = logging.getLogger()
     root.setLevel(level.upper())
+    for name in PAYLOAD_LOGGING_LOGGERS:
+        logging.getLogger(name).setLevel(max(logging.INFO, root.level))
     for handler in root.handlers:
         if getattr(handler, "_quiz_worker", False):
             return

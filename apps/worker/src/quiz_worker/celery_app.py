@@ -1,9 +1,12 @@
 """Celery app factory and the idempotent job task base.
 
 Delivery is at-least-once (docs/deployment.md §7): `task_acks_late` +
-`task_reject_on_worker_lost` re-deliver a message whose worker died, and the `JobStore` claim
-makes every re-delivery safe (finished -> no-op, live lease -> deferred, expired lease -> new
-attempt). Only JSON is accepted on the wire.
+`task_reject_on_worker_lost` re-deliver a message whose worker died, and
+`task_acks_on_failure_or_timeout=False` re-queues the message of an attempt killed by the hard
+time limit. The `JobStore` claim makes every re-delivery safe (finished -> no-op, live lease ->
+deferred, expired lease -> new attempt or failed). Jobs whose message is gone anyway are
+recovered by the `reconcile_jobs` beat task (quiz_worker.reconcile). Only JSON is accepted on
+the wire.
 
 Nothing sensitive reaches Celery's own logs, events or result backend: the message argument
 is hidden behind `argsrepr`, task return values are `RunResult.summary()`, and failures are
@@ -24,12 +27,14 @@ from quiz_worker.envelope import JobEnvelope
 from quiz_worker.errors import JobOutcomeError, JobRetryError
 from quiz_worker.jobs import ECHO_JOB
 from quiz_worker.logging_config import configure_logging
+from quiz_worker.reconcile import ReconcileReport, reconcile_jobs
 from quiz_worker.runner import JobDefinition, JobRunner, RunOutcome, RunResult
 from quiz_worker.settings import Environment, WorkerSettings, get_settings
-from quiz_worker.store import InMemoryJobStore, JobRecord, JobStore
+from quiz_worker.store import InMemoryJobStore, JobRecord, JobStatus, JobStore, SqliteJobStore
 
 TASK_NAME_PREFIX = "quiz.jobs."
 DEFAULT_QUEUE = "quiz.jobs"
+RECONCILE_TASK_NAME = "quiz.maintenance.reconcile_jobs"
 
 
 class QuizCelery(Celery):
@@ -142,6 +147,7 @@ def create_celery_app(
     app.conf.update(build_celery_config(settings))
     for definition in definitions if definitions is not None else default_definitions():
         register_job(app, definition)
+    register_reconciler(app)
     return app
 
 
@@ -169,11 +175,14 @@ def build_celery_config(settings: WorkerSettings) -> dict[str, Any]:
         # At-least-once delivery; JobStore claims make re-delivery idempotent.
         "task_acks_late": True,
         "task_reject_on_worker_lost": True,
-        "task_acks_on_failure_or_timeout": True,
+        # A hard-time-limit kill re-queues the message instead of acking it, so the job is
+        # re-claimed after its lease (bounded by max_attempts). Failed jobs are dropped
+        # (reject without requeue), which for Redis is the same as an ack.
+        "task_acks_on_failure_or_timeout": False,
         "worker_prefetch_multiplier": 1,
         "worker_concurrency": settings.concurrency,
         "worker_cancel_long_running_tasks_on_connection_loss": True,
-        "task_soft_time_limit": settings.task_soft_time_limit_seconds,
+        "task_soft_time_limit": settings.task_soft_time_limit_seconds or None,
         "task_time_limit": settings.task_time_limit_seconds,
         "task_default_queue": DEFAULT_QUEUE,
         # No task arguments in the result backend or task events.
@@ -189,11 +198,21 @@ def build_celery_config(settings: WorkerSettings) -> dict[str, Any]:
         "task_eager_propagates": False,
         "timezone": "UTC",
         "enable_utc": True,
+        "beat_schedule": {
+            "reconcile-jobs": {
+                "task": RECONCILE_TASK_NAME,
+                "schedule": settings.reconcile_interval_seconds,
+                # A backlog of reconcile messages is pointless; only the latest matters.
+                "options": {"expires": settings.reconcile_interval_seconds},
+            }
+        },
     }
 
 
 def build_job_store(settings: WorkerSettings) -> JobStore:
     if settings.app_env in {Environment.LOCAL, Environment.TEST}:
+        if settings.job_store_path:
+            return SqliteJobStore(settings.job_store_path)
         return InMemoryJobStore()
     # The Postgres JobStore on `async_jobs` lands once P0.9's migration exists.
     raise RuntimeError(f"no persistent JobStore configured for APP_ENV={settings.app_env}")
@@ -233,28 +252,52 @@ def register_job(app: QuizCelery, definition: JobDefinition[Any]) -> IdempotentJ
     return task
 
 
+def publish_record(app: QuizCelery, record: JobRecord) -> None:
+    """Send the job's message (`task_id = job_id`); callers then `mark_published`."""
+    # apply_async (not send_task) so eager mode runs the job in-process.
+    app.tasks[task_name(record.job_type)].apply_async(
+        args=(record.to_envelope().to_message(),),
+        task_id=str(record.job_id),
+    )
+
+
 def submit_job(app: QuizCelery, envelope: JobEnvelope) -> JobRecord:
-    """Create the job row (idempotent) and publish its message.
+    """Create the job row (idempotent) and publish its message unless already published.
 
     Models the API-side contract used by later Tasks: insert `async_jobs` first, then send
-    the envelope with `task_id = job_id`. A repeated idempotency key returns the existing row
-    and publishes nothing.
+    the envelope and record `published_at`. A repeated job id or idempotency key returns the
+    existing row; it is (re-)published only while it is still queued and unpublished, so a
+    caller retrying after a failed publish recovers the job instead of stranding it. If this
+    process dies between insert and publish, the reconciler publishes it after a grace period.
     """
     definition = app.job_definitions.get(envelope.job_type)
     if definition is None:
         raise ValueError(f"unknown job type: {envelope.job_type}")
-    existing = app.job_store.get(envelope.job_id)
-    if existing is not None:
-        return existing
     record = app.job_store.create(envelope, max_attempts=definition.retry_policy.max_attempts)
-    if record.job_id != envelope.job_id:
-        return record
-    # apply_async (not send_task) so eager mode runs the job in-process.
-    app.tasks[task_name(envelope.job_type)].apply_async(
-        args=(envelope.to_message(),),
-        task_id=str(envelope.job_id),
+    if record.status is JobStatus.QUEUED and record.published_at is None:
+        publish_record(app, record)
+        app.job_store.mark_published(record.job_id)
+    return app.job_store.get(record.job_id) or record
+
+
+def register_reconciler(app: QuizCelery) -> Any:
+    @app.task(name=RECONCILE_TASK_NAME, ignore_result=True, acks_late=False, shared=False)
+    def reconcile() -> dict[str, int]:
+        return run_reconciler(app).as_dict()
+
+    return reconcile
+
+
+def run_reconciler(app: QuizCelery) -> ReconcileReport:
+    """One reconcile pass with the app's store, settings and job definitions."""
+    settings = app.worker_settings
+    return reconcile_jobs(
+        app.job_store,
+        lambda record: publish_record(app, record),
+        app.job_definitions,
+        unpublished_grace_seconds=settings.reconcile_unpublished_grace_seconds,
+        stale_after_seconds=settings.reconcile_stale_after,
     )
-    return app.job_store.get(envelope.job_id) or record
 
 
 def default_definitions() -> list[JobDefinition[Any]]:
