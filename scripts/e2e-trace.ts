@@ -12,9 +12,11 @@
 // `--list-specs` prints the existing spec files of the selected screens, one per line.
 // HARNESS-nn titles are reserved for harness self-tests in tests/e2e/harness/.
 //
-// Runs on plain Node (type stripping): only erasable TypeScript syntax, `node:` imports only.
+// Runs on plain Node (type stripping): only erasable TypeScript syntax. Test calls are found with
+// the TypeScript parser (root devDependency), not regexes, so comments and strings never count.
 import { existsSync, globSync, readFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
+import ts from 'typescript';
 
 export interface Screen {
   readonly id: string;
@@ -89,36 +91,86 @@ export function parseApiContracts(doc: string, text: string): Screen {
   return { id: API_SCREEN_ID, doc, testPath: CONTRACT_DIR, acs };
 }
 
-const PW_TEST =
-  /(?<![\w.])(?:test|setup)(?:\.(?:only|skip|fixme|fail|slow))?\(\s*(['"`])((?:\\.|(?!\1)[^\\])*)\1/g;
-const PW_FOCUS_OR_SKIP = /(?<![\w.])(?:test|setup)(?:\.describe)?\.(?:only|skip|fixme)\b/g;
+const TEST_FNS = new Set(['test', 'setup']);
+const TEST_MODIFIERS = new Set(['only', 'skip', 'fixme', 'fail', 'slow']);
+const FOCUS_OR_SKIP = new Set(['only', 'skip', 'fixme']);
 
+/** Literal text of a title argument; for `${}` templates only the leading literal part. */
+function literalTitle(node: ts.Node | undefined): string | undefined {
+  if (!node) return undefined;
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+  if (ts.isTemplateExpression(node)) return node.head.text;
+  return undefined;
+}
+
+/**
+ * Executable `test(...)` / `test.<modifier>(...)` / `setup(...)` calls with a literal title, found
+ * with the TypeScript parser so commented-out code and string contents never count.
+ * `test.only/skip/fixme` and `test.describe.only/skip/fixme` are reported as violations.
+ */
 export function parsePlaywrightTests(
   file: string,
   text: string,
 ): { tests: TestCase[]; violations: Violation[] } {
-  const tests = [...text.matchAll(PW_TEST)].map((m) => {
-    const title = (m[2] ?? '').replace(/\\(.)/g, '$1');
-    return { file, line: lineAt(text, m.index), title, id: LEADING_ID.exec(title)?.[1] };
-  });
-  const violations = [...text.matchAll(PW_FOCUS_OR_SKIP)].map((m) => ({
-    file,
-    line: lineAt(text, m.index),
-    text: m[0],
-  }));
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const lineOf = (node: ts.Node) =>
+    source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+  const tests: TestCase[] = [];
+  const violations: Violation[] = [];
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      let isTest = false;
+      if (ts.isIdentifier(callee)) {
+        isTest = TEST_FNS.has(callee.text);
+      } else if (ts.isPropertyAccessExpression(callee)) {
+        const modifier = callee.name.text;
+        const target = callee.expression;
+        if (ts.isIdentifier(target) && TEST_FNS.has(target.text) && TEST_MODIFIERS.has(modifier)) {
+          isTest = true;
+          if (FOCUS_OR_SKIP.has(modifier)) {
+            violations.push({ file, line: lineOf(callee), text: `${target.text}.${modifier}` });
+          }
+        } else if (
+          FOCUS_OR_SKIP.has(modifier) &&
+          ts.isPropertyAccessExpression(target) &&
+          target.name.text === 'describe' &&
+          ts.isIdentifier(target.expression) &&
+          TEST_FNS.has(target.expression.text)
+        ) {
+          const text = `${target.expression.text}.describe.${modifier}`;
+          violations.push({ file, line: lineOf(callee), text });
+        }
+      }
+      const title = isTest ? literalTitle(node.arguments[0]) : undefined;
+      if (title !== undefined) {
+        tests.push({ file, line: lineOf(node), title, id: LEADING_ID.exec(title)?.[1] });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
   return { tests, violations };
+}
+
+/** Blank out triple-quoted strings (docstrings), keeping newlines so line numbers stay valid. */
+function stripPythonStrings(text: string): string {
+  return text.replace(/("""|''')[\s\S]*?\1/g, (m) => m.replace(/[^\n]/g, ' '));
 }
 
 /** pytest functions whose name carries an AC ID, e.g. `test_ws_share_01_ac02_...` → WS-SHARE-01-AC02. */
 export function parsePytestTests(file: string, text: string): TestCase[] {
   const out: TestCase[] = [];
-  for (const m of text.matchAll(/^\s*(?:async\s+)?def\s+(test_\w+)\s*\(/gm)) {
+  // Line-anchored `def`, so `# def test_...` comments never match; docstrings are blanked first.
+  const code = stripPythonStrings(text);
+  for (const m of code.matchAll(/^[ \t]*(?:async[ \t]+)?def[ \t]+(test_\w+)[ \t]*\(/gm)) {
     const name = m[1] as string;
     const ac = /^test_([a-z0-9]+(?:_[a-z0-9]+)*?_ac\d+)(?:_|$)/.exec(name);
     if (!ac?.[1]) continue;
     out.push({
       file,
-      line: lineAt(text, m.index),
+      line: lineAt(code, m.index),
       title: name,
       id: ac[1].toUpperCase().replaceAll('_', '-'),
     });
@@ -335,6 +387,11 @@ function listArg(args: readonly string[], name: string): string[] | undefined {
   return out;
 }
 
+/** One spec path per line, newline-terminated; the empty string for an empty list. */
+export function formatSpecList(specs: readonly string[]): string {
+  return [...new Set(specs)].map((spec) => `${spec}\n`).join('');
+}
+
 export function main(argv: readonly string[], root: string): number {
   const report = loadReport(root);
   const selected = selectScreens(report, listArg(argv, '--phase'), listArg(argv, '--screens'));
@@ -344,7 +401,9 @@ export function main(argv: readonly string[], root: string): number {
       .filter((s) => selected.has(s.id) && s.testPath?.endsWith('.spec.ts'))
       .map((s) => s.testPath as string)
       .filter((path) => existsSync(join(root, path)));
-    console.log([...new Set(specs)].join('\n'));
+    // Zero bytes when nothing is selected: a blank line would become an empty Playwright filter
+    // that matches every spec.
+    process.stdout.write(formatSpecList(specs));
     return 0;
   }
   console.log(formatReport(report));

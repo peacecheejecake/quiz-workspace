@@ -1,9 +1,11 @@
 // Unit tests for scripts/e2e-trace.ts (`node --test scripts/`; part of `make test`).
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
   analyze,
+  formatSpecList,
   loadReport,
   parseApiContracts,
   parsePlaywrightTests,
@@ -93,6 +95,67 @@ describe('parsers', () => {
       parsePytestTests('tests/integration/api/test_auth.py', src).map((t) => t.id),
       ['AUTH-API-AC01', 'WS-SHARE-01-AC02'],
     );
+  });
+
+  it('ignores commented-out and string-embedded Playwright declarations', () => {
+    const src = [
+      "// test('AUTH-01-AC01 line-commented', async () => {});",
+      '/*',
+      "test('AUTH-01-AC02 block-commented', async () => {});",
+      "test.only('AUTH-01-AC03 block-commented focus', async () => {});",
+      '*/',
+      'const doc = "test(\'AUTH-01-AC04 inside a string\', () => {})";',
+      "const tpl = `test.skip('AUTH-01-AC05 inside a template', () => {})`;",
+      "test(`AUTH-01-AC06 template title ${'x'}`, async () => {});",
+      'test(`AUTH-01-AC07 plain template`, async () => {});',
+      "test.describe.only('group', () => {});",
+    ].join('\n');
+    const { tests, violations } = parsePlaywrightTests('tests/e2e/auth/login.spec.ts', src);
+    assert.deepEqual(
+      tests.map((t) => [t.line, t.id]),
+      [
+        [8, 'AUTH-01-AC06'],
+        [9, 'AUTH-01-AC07'],
+      ],
+    );
+    assert.deepEqual(
+      violations.map((v) => [v.line, v.text]),
+      [[10, 'test.describe.only']],
+    );
+  });
+
+  it('ignores commented-out and docstring pytest defs', () => {
+    const src = [
+      '# def test_auth_api_ac01_commented(client):',
+      'def helper():',
+      '    """Example:',
+      '    def test_auth_api_ac02_in_docstring(client):',
+      '    """',
+      "    '''",
+      'def test_auth_api_ac03_in_single_quoted_block():',
+      "    '''",
+      'def test_auth_api_ac04_real(client):',
+    ].join('\n');
+    assert.deepEqual(
+      parsePytestTests('tests/integration/api/test_auth.py', src).map((t) => [t.line, t.id]),
+      [[9, 'AUTH-API-AC04']],
+    );
+  });
+});
+
+describe('--list-specs', () => {
+  it('formats one path per line and nothing for an empty list', () => {
+    assert.equal(formatSpecList([]), '');
+    assert.equal(formatSpecList(['a.spec.ts', 'b.spec.ts', 'a.spec.ts']), 'a.spec.ts\nb.spec.ts\n');
+  });
+
+  it('prints zero bytes for the harness-only phase', () => {
+    const stdout = execFileSync(
+      process.execPath,
+      [join(import.meta.dirname, 'e2e-trace.ts'), '--list-specs', '--phase', 'P0.10'],
+      { encoding: 'utf8' },
+    );
+    assert.equal(stdout, '');
   });
 });
 

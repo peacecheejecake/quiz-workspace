@@ -109,7 +109,12 @@ jobs:
 
       - name: E2E (harness + implemented phases)
         run: |
-          mapfile -t specs < <(node scripts/e2e-trace.ts --list-specs --phase "$E2E_PHASES")
+          # A blank entry would be an empty Playwright filter matching every spec (incl. RED ones).
+          specs=()
+          while IFS= read -r spec; do
+            [[ -n "${spec//[[:space:]]/}" ]] && specs+=("$spec")
+          done < <(node scripts/e2e-trace.ts --list-specs --phase "$E2E_PHASES")
+          echo "E2E specs: tests/e2e/harness/ ${specs[*]}"
           pnpm e2e tests/e2e/harness/ "${specs[@]}"
 
       # Reports hold traces/screenshots of failed tests: synthetic users on this throwaway stack
