@@ -20,6 +20,7 @@ from pydantic import SecretStr
 from quiz_api.api.shared import get_search_repository, get_shared_repository
 from quiz_api.errors import ProblemType
 from quiz_api.main import create_app
+from quiz_api.relay_client import CLIENT_HEADER, SIGNATURE_HEADER, relay_signature
 from quiz_api.repositories.search import SearchableDocument
 from quiz_api.repositories.shared import SharedLink
 from quiz_api.settings import Environment, InsecureConfigurationError, Settings
@@ -304,3 +305,88 @@ def test_a_configured_key_survives_restarts(links: FakeLinks) -> None:
     # Without a configured key each process has its own random key.
     with TestClient(_app(links), raise_server_exceptions=False) as third:
         assert _read(third, link.id, found[1].value).status_code == 401
+
+
+# --- per-client limits behind the relay ---------------------------------------------------------
+
+RELAY_SECRET = "r" * 32
+
+
+def test_relay_signature_matches_the_web_relay() -> None:
+    # Same vector as apps/web/test/shared-bff.test.ts (SHA-256 of 203.0.113.7, base64url).
+    client = "_sUlZaoM8Y9X189bOscoUDuJktLW99RtodEgEJCQKwI"
+    assert relay_signature(RELAY_SECRET, client) == (
+        "df6818bb97c1d1f06cf1872140d70f880001c5da2d1eec5d03a5e04ca89995d7"
+    )
+
+
+def _as(client: str, *, forged: bool = False) -> dict[str, str]:
+    signature = relay_signature("x" * 32 if forged else RELAY_SECRET, client)
+    return {CLIENT_HEADER: client, SIGNATURE_HEADER: signature}
+
+
+def _exchange_as(api: TestClient, share_id: Any, secret: str, headers: dict[str, str]) -> Any:
+    res = api.post(
+        f"/api/v1/shared/{share_id}/sessions",
+        json={"secret": secret},
+        headers={"Origin": WEB, **headers},
+    )
+    api.cookies.clear()
+    return res
+
+
+def test_one_clients_failures_do_not_lock_others_out(links: FakeLinks) -> None:
+    app = _app(
+        links,
+        share_exchange_rate_per_minute=2,
+        relay_client_secret=SecretStr(RELAY_SECRET),
+    )
+    link = links.add()
+    secret = links.secrets[link.id]
+    with TestClient(app, raise_server_exceptions=False) as api:
+        attacker = [_exchange_as(api, link.id, "A" * 43, _as("attacker")) for _ in range(3)]
+        assert [r.status_code for r in attacker] == [404, 404, 429]
+        # Another visitor behind the same relay still gets in.
+        assert _exchange_as(api, link.id, secret, _as("visitor")).status_code == 204
+        # Unsigned or forged identities are ignored: they all share the socket peer's bucket.
+        forged = [
+            _exchange_as(api, link.id, "A" * 43, _as(f"spoof{i}", forged=True)) for i in range(3)
+        ]
+        assert [r.status_code for r in forged] == [404, 404, 429]
+        assert _exchange_as(api, link.id, secret, {}).status_code == 429
+
+
+def test_a_per_link_ceiling_caps_all_clients(links: FakeLinks) -> None:
+    app = _app(
+        links,
+        share_exchange_rate_per_minute=100,
+        share_exchange_link_rate_per_minute=3,
+        relay_client_secret=SecretStr(RELAY_SECRET),
+    )
+    link = links.add()
+    other = links.add()
+    with TestClient(app, raise_server_exceptions=False) as api:
+        statuses = [
+            _exchange_as(api, link.id, "A" * 43, _as(f"c{i}")).status_code for i in range(4)
+        ]
+        assert statuses == [404, 404, 404, 429]
+        assert _exchange_as(api, other.id, links.secrets[other.id], _as("c0")).status_code == 204
+
+
+def test_deployed_shared_routes_need_the_relay_secret(links: FakeLinks) -> None:
+    link = links.add()
+    deployed: dict[str, Any] = {
+        "app_env": Environment.PRODUCTION,
+        "cors_allowed_origins": (WEB,),
+        "share_session_secret": SecretStr("s" * 40),
+    }
+    app = _app(links)
+    app.state.settings = Settings.model_construct(**deployed)
+    with TestClient(app, raise_server_exceptions=False) as api:
+        assert _exchange(api, link.id, links.secrets[link.id]).status_code == 503
+    app = _app(links)
+    app.state.settings = Settings.model_construct(
+        **deployed, relay_client_secret=SecretStr(RELAY_SECRET)
+    )
+    with TestClient(app, raise_server_exceptions=False) as api:
+        assert _exchange(api, link.id, links.secrets[link.id]).status_code == 204

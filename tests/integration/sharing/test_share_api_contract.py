@@ -399,6 +399,64 @@ def test_ws_view_01_ac04_unpublished_revisions_never_reach_the_share(seed: Any) 
         assert pdf.headers["content-type"].startswith("application/pdf")
 
 
+def test_ws_view_01_ac04_shared_search_accepts_only_published_chapter_ids(seed: Any) -> None:
+    """Chapter filters of drafts, other workspaces and random ids are one 404 (no oracle)."""
+    owner = seed.client("v-ac04c-owner")
+    ws = owner.create_workspace()
+    link = owner.create_link(ws["id"])
+    other_ws = owner.create_workspace()
+    guest = seed.guest()
+    cookie = guest.session(link["id"], link["secret"])
+    docs = {}
+    for w in (ws["id"], other_ws["id"]):
+        _, _, done = owner.upload_book(w)
+        owner.wait_for_job(str(done["job_id"]))
+        docs[w] = str(done["document_id"])
+    doc = docs[ws["id"]]
+
+    def chapter_ids(document_id: str, revision: str) -> list[str]:
+        outline = owner.ok("GET", f"/documents/{document_id}/outline?revision={revision}")
+        out: list[str] = []
+        stack = list(outline["items"])
+        while stack:
+            node = stack.pop()
+            out.append(str(node["id"]))
+            stack.extend(node["children"])
+        return out
+
+    published = chapter_ids(doc, "active")
+    assert published, "fixture book has an outline"
+    # A correction draft copies the outline under new (unpublished) chapter ids.
+    blocks = owner.ok("GET", f"/documents/{doc}/blocks?limit=5")["items"]
+    block = next(b for b in blocks if b["text"].strip())
+    owner.ok(
+        "PATCH",
+        f"/documents/{doc}/blocks/{block['block_id']}",
+        {"text": block["text"] + " S1b", "base_version": block["version"]},
+        (200, 201),
+    )
+    drafts = [c for c in chapter_ids(doc, "latest") if c not in published]
+    assert drafts, "the draft revision has its own chapter ids"
+    foreign = chapter_ids(docs[other_ws["id"]], "active")
+
+    def search(ids: list[str]) -> Any:
+        return guest.send(
+            "POST",
+            f"/shared/{link['id']}/search",
+            {"query": "강수", "mode": "keyword", "chapter_ids": ids},
+            cookie=cookie,
+        )
+
+    ok = search(published[:1])
+    seed.assert_status(ok, 200, "published chapter filter")
+    missing = search([str(uuid.uuid4())])
+    seed.assert_status(missing, 404, "random chapter id")
+    for kind, ids in (("draft", drafts[:1]), ("foreign", foreign[:1])):
+        res = search(ids)
+        seed.assert_status(res, 404, f"{kind} chapter id")
+        assert seed.stable(res) == seed.stable(missing), f"{kind}: not the generic 404"
+
+
 def test_session_exchange_rejects_missing_or_foreign_origin(seed: Any) -> None:
     owner = seed.client("csrf-owner")
     ws = owner.create_workspace()

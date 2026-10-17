@@ -43,6 +43,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Literal
 
@@ -71,6 +72,7 @@ from quiz_api.api.questions import (
     _revision_out,
 )
 from quiz_api.api.search import (
+    CHAPTER_NOT_FOUND,
     DOCUMENT_NOT_FOUND,
     Engine,
     SearchItem,
@@ -83,6 +85,7 @@ from quiz_api.document_content import outline_tree
 from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.question_rules import QuestionType
 from quiz_api.rate_limit import TokenBucketLimiter, retry_after_header
+from quiz_api.relay_client import client_key, relay_configured
 from quiz_api.repositories.document_content import DocumentContentRepository
 from quiz_api.repositories.questions import QuestionFilter, QuestionRecord, QuestionRepository
 from quiz_api.repositories.search import SearchableDocument, SearchRepository
@@ -198,6 +201,9 @@ SharedRepo = Annotated[SharedRepository, Depends(get_shared_repository)]
 
 def get_session_key(request: Request) -> ShareSessionKey:
     state = request.app.state
+    if state.settings.is_deployed and not relay_configured(state.settings):
+        # Without the relay secret every guest would share the relay's rate-limit buckets.
+        raise HTTPException(status_code=503, detail="Shared access is not configured.")
     key: ShareSessionKey | None = getattr(state, "share_session_key", None)
     if key is not None:
         return key
@@ -216,12 +222,29 @@ def get_session_key(request: Request) -> ShareSessionKey:
 SessionKey = Annotated[ShareSessionKey, Depends(get_session_key)]
 
 
-def get_exchange_limiter(request: Request) -> TokenBucketLimiter:
-    limiter: TokenBucketLimiter | None = getattr(request.app.state, "share_exchange_limiter", None)
-    if limiter is None:
-        rate = request.app.state.settings.share_exchange_rate_per_minute
-        limiter = request.app.state.share_exchange_limiter = TokenBucketLimiter(rate, max(1, rate))
-    return limiter
+@dataclass(frozen=True)
+class ExchangeLimiters:
+    per_client: TokenBucketLimiter
+    per_link: TokenBucketLimiter
+
+
+def get_exchange_limiters(request: Request) -> ExchangeLimiters:
+    state = request.app.state
+    limiters: ExchangeLimiters | None = getattr(state, "share_exchange_limiters", None)
+    if limiters is None:
+        client_rate = state.settings.share_exchange_rate_per_minute
+        link_rate = state.settings.share_exchange_link_rate_per_minute
+        limiters = state.share_exchange_limiters = ExchangeLimiters(
+            per_client=TokenBucketLimiter(client_rate, max(1, client_rate)),
+            per_link=TokenBucketLimiter(link_rate, max(1, link_rate)),
+        )
+    return limiters
+
+
+def _too_many(wait: float, detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=429, detail=detail, headers={"Retry-After": retry_after_header(wait)}
+    )
 
 
 def _unavailable() -> ProblemException:
@@ -269,14 +292,9 @@ def shared_search_rate_limit(
     request: Request,
     limiter: Annotated[TokenBucketLimiter, Depends(get_search_limiter)],
 ) -> None:
-    client = request.client.host if request.client else "unknown"
-    wait = limiter.acquire(f"shared-search:{link.id}:{client}")
+    wait = limiter.acquire(f"shared-search:{link.id}:{client_key(request)}")
     if wait is not None:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many searches. Wait a moment and try again.",
-            headers={"Retry-After": retry_after_header(wait)},
-        )
+        raise _too_many(wait, "Too many searches. Wait a moment and try again.")
 
 
 # --- helpers ------------------------------------------------------------------------------------
@@ -373,7 +391,7 @@ def create_shared_session(
     request: Request,
     repo: SharedRepo,
     key: SessionKey,
-    limiter: Annotated[TokenBucketLimiter, Depends(get_exchange_limiter)],
+    limiters: Annotated[ExchangeLimiters, Depends(get_exchange_limiters)],
     body: SessionExchange,
 ) -> Response:
     """Exchange the link secret for a read-only share session cookie (WS-VIEW-01-AC01).
@@ -383,14 +401,13 @@ def create_shared_session(
     """
     if not _allowed_origin(request):
         raise HTTPException(status_code=403, detail="Origin not allowed.")
-    client = request.client.host if request.client else "unknown"
-    wait = limiter.acquire(f"share-exchange:{client}:{share_id}")
+    # Per client (behind the relay: the client it vouches for, quiz_api.relay_client) and a
+    # ceiling per link across all clients.
+    wait = limiters.per_client.acquire(f"share-exchange:{client_key(request)}:{share_id}")
+    if wait is None:
+        wait = limiters.per_link.acquire(f"share-exchange-link:{share_id}")
     if wait is not None:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many attempts. Wait a moment and try again.",
-            headers={"Retry-After": retry_after_header(wait)},
-        )
+        raise _too_many(wait, "Too many attempts. Wait a moment and try again.")
     link_id = _uuid(share_id)
     link = repo.link(link_id) if link_id else None
     matches = secret_matches(body.secret, link.token_digest if link else _DUMMY_DIGEST)
@@ -524,10 +541,17 @@ def search_shared_workspace(
     Same request and result items as the member search; `document_ids` must name shared
     (published) documents. The query is not echoed back.
     """
-    if body.document_ids:
-        published = _published(search_repo, link)
-        if any(d not in published for d in body.document_ids):
-            raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
+    published = _published(search_repo, link)
+    if body.document_ids and any(d not in published for d in body.document_ids):
+        raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
+    if body.chapter_ids:
+        # Only outline ids of the shared (published, active) revisions; ids of drafts, older
+        # revisions or other workspaces are the same 404 as unknown ids (no existence oracle).
+        shared_chapters = {
+            c.id for c in search_repo.chapters_of([d.revision_id for d in published.values()])
+        }
+        if any(c not in shared_chapters for c in body.chapter_ids):
+            raise HTTPException(status_code=404, detail=CHAPTER_NOT_FOUND)
     result = run_search(search_repo, engine, link.workspace_id, body)
     return SharedSearchResponse(**result.model_dump(exclude={"query"}))
 

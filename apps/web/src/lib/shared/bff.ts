@@ -137,6 +137,12 @@ export interface RelayContext {
   /** The browser reached us over HTTPS (Secure cookie). */
   readonly secure: boolean;
   readonly fetch?: typeof fetch;
+  /**
+   * Signed statement of which client this relay acts for (`X-Quiz-Relay-Client` +
+   * `X-Quiz-Relay-Signature`, see src/lib/shared/context.ts), so FastAPI's per-client rate limits
+   * see the visitor instead of this server. Absent: FastAPI keys on the socket peer.
+   */
+  readonly clientHeaders?: Readonly<Record<string, string>>;
 }
 
 function withSharedHeaders(upstream: Response): Headers {
@@ -177,6 +183,7 @@ export async function exchangeSession(
         accept: 'application/json',
         'content-type': 'application/json',
         ...(origin ? { origin } : {}),
+        ...ctx.clientHeaders,
       },
       body,
       cache: 'no-store',
@@ -238,6 +245,7 @@ export async function relayShared(
         method: options.method ?? 'GET',
         headers: {
           accept: options.stream ? 'application/pdf' : 'application/json',
+          ...ctx.clientHeaders,
           ...(session ? { cookie: `${SHARE_COOKIE}=${session}` } : {}),
           ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
         },

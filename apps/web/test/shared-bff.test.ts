@@ -9,6 +9,7 @@ import {
   upstreamSession,
   type RelayContext,
 } from '@/lib/shared/bff';
+import { clientAddress, clientHeadersFor, relayClientHeaders } from '@/lib/shared/context';
 
 const SHARE = '11111111-2222-4333-8444-555555555555';
 const API = 'http://api.test';
@@ -174,5 +175,48 @@ describe('cookie helpers', () => {
     const req = new Request('http://web.test/x?limit=5&evil=1');
     expect(sharedQuery(req, { limit: /^[0-9]+$/ })).toBe('?limit=5');
     expect(sharedQuery(new Request('http://web.test/x?limit=a'), { limit: /^[0-9]+$/ })).toBeNull();
+  });
+});
+
+describe('signed client identity for per-client limits', () => {
+  const RELAY = 'r'.repeat(32);
+  // Same vector as apps/api/tests/test_shared.py.
+  const VECTOR = {
+    'x-quiz-relay-client': '_sUlZaoM8Y9X189bOscoUDuJktLW99RtodEgEJCQKwI',
+    'x-quiz-relay-signature': 'df6818bb97c1d1f06cf1872140d70f880001c5da2d1eec5d03a5e04ca89995d7',
+  };
+
+  it('signs a hash of the edge-reported address, never the address itself', () => {
+    expect(relayClientHeaders(RELAY, '203.0.113.7')).toEqual(VECTOR);
+    const headers = new Headers({ 'x-real-ip': '203.0.113.7', 'x-forwarded-for': '198.51.100.1' });
+    const env = { RELAY_CLIENT_SECRET: RELAY, RELAY_CLIENT_IP_HEADER: 'X-Real-IP' };
+    expect(clientHeadersFor(headers, env)).toEqual(VECTOR);
+    expect(JSON.stringify(clientHeadersFor(headers, env))).not.toContain('203.0.113.7');
+    // First hop of a list; nothing without a secret (or a short one) or without the header.
+    expect(clientAddress(new Headers({ 'x-real-ip': ' 1.2.3.4, 5.6.7.8' }), 'x-real-ip')).toBe(
+      '1.2.3.4',
+    );
+    expect(clientHeadersFor(headers, { RELAY_CLIENT_IP_HEADER: 'x-real-ip' })).toBeUndefined();
+    expect(clientHeadersFor(headers, { ...env, RELAY_CLIENT_SECRET: 'short' })).toBeUndefined();
+    expect(clientHeadersFor(new Headers(), env)).toBeUndefined();
+    expect(clientHeadersFor(headers, { RELAY_CLIENT_SECRET: RELAY })).toBeUndefined();
+  });
+
+  it('forwards the identity on exchanges and reads', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => upstream(404, { body: {} }));
+    const withIdentity = { ...ctx(fetchImpl), clientHeaders: VECTOR };
+    await exchangeSession(
+      new Request('http://web.test/x', { method: 'POST', body: '{"secret":"x"}' }),
+      SHARE,
+      withIdentity,
+    );
+    await relayShared(new Request('http://web.test/x'), SHARE, '/search', withIdentity, {
+      method: 'POST',
+      body: new Request('http://web.test/x', { method: 'POST', body: '{"query":"q"}' }),
+    });
+    for (const call of fetchImpl.mock.calls) {
+      expect(call[1]?.headers).toMatchObject(VECTOR);
+    }
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 });

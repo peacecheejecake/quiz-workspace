@@ -160,6 +160,16 @@ class Settings(BaseSettings):
     share_exchange_rate_per_minute: int = Field(
         default=20, ge=0, le=600, validation_alias="SHARE_EXCHANGE_RATE_LIMIT_PER_MINUTE"
     )
+    # Ceiling on exchanges per minute for one link across all clients (0 disables it).
+    share_exchange_link_rate_per_minute: int = Field(
+        default=300, ge=0, le=60000, validation_alias="SHARE_EXCHANGE_LINK_RATE_LIMIT_PER_MINUTE"
+    )
+    # Server-only HMAC key shared with the web relay (quiz_api.relay_client): lets the relay state
+    # which client it acts for, so per-client limits work behind it. >= 32 characters. Unset:
+    # the socket peer is the client (local); preview/production answer 503 on /shared routes.
+    relay_client_secret: SecretStr | None = Field(
+        default=None, validation_alias="RELAY_CLIENT_SECRET"
+    )
     # Supabase Storage (M3.2a; docs/deployment.md §2, auth.md §4). The API talks to Storage with
     # the server-only secret key; browsers only ever get short-lived signed URLs. Unset key ->
     # document upload/read routes answer 503.
@@ -251,6 +261,9 @@ class Settings(BaseSettings):
         share_key = self.share_session_secret
         if share_key is not None and 0 < len(share_key.get_secret_value()) < 32:
             problems.append("SHARE_SESSION_SECRET must have at least 32 characters")
+        relay_key = self.relay_client_secret
+        if relay_key is not None and 0 < len(relay_key.get_secret_value()) < 32:
+            problems.append("RELAY_CLIENT_SECRET must have at least 32 characters")
         if self.search_embedder is EmbedderMode.FAKE:
             problems.append("WORKER_EMBEDDER=fake is for local and test runs only")
         if problems:
