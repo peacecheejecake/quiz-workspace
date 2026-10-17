@@ -1,0 +1,19 @@
+{
+  "name": "seed-qwen3",
+  "embedder": "qwen3",
+  "embedding_dimension": 256,
+  "reranker": "qwen3",
+  "modes": ["keyword", "semantic", "hybrid"],
+  "rerank": ["off", "top_k"],
+  "dense_candidates": 30,
+  "keyword_candidates": 30,
+  "rerank_top": 20,
+  "results": 10,
+  "rrf_k": 60,
+  "sweep": {
+    "rrf_ks": [0, 10, 30, 60, 100],
+    "depths": [5, 10, 20, 30, 50],
+    "modes": ["hybrid"],
+    "rerank": ["off"]
+  }
+}

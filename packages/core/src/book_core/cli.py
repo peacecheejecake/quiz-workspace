@@ -2,12 +2,16 @@
 
 Implemented (Task M1.5): ``parse`` (PDF -> ``ParsedDocument`` JSON), ``structure``
 (``ParsedDocument`` -> ``DocumentRevision`` JSON) and ``chunk`` (revision -> ``SearchChunk``
-JSONL, optional ``ChunkDiff`` against older chunks). The other commands are stubs until their
-Task lands.
+JSONL, optional ``ChunkDiff`` against older chunks). Task M2.6: ``index`` (revision/chunks ->
+Qdrant), ``search`` (query -> hits JSON within a workspace/revision scope), ``excerpt`` (hit ->
+``Excerpt`` JSON) and ``eval`` (dataset + config -> JSON/Markdown report). The ``questions``
+commands are stubs until their Task lands.
 
 Conventions: ``-`` means stdin/stdout; results go to stdout or ``-o``, summaries and warnings to
 stderr. Exit codes: 0 ok, 2 usage error, 1 processing error. Error messages carry ids, counts
-and file names only, never book text. Docling is imported only for ``--parser docling``.
+and file names only, never book text or queries. Docling is imported only for ``--parser
+docling``; Qdrant, models and the evaluation package only by the commands that use them. The
+Qdrant API key is read from ``QDRANT_API_KEY`` only, never from a flag.
 """
 
 from __future__ import annotations
@@ -503,6 +507,632 @@ def chunk(
 
 
 # --------------------------------------------------------------------------------------------
+# index / search / excerpt / eval (Task M2.6)
+
+
+class EmbedderName(StrEnum):
+    FAKE = "fake"
+    QWEN3 = "qwen3"
+
+
+class RerankerName(StrEnum):
+    NONE = "none"
+    FAKE = "fake"
+    QWEN3 = "qwen3"
+
+
+_QDRANT_URL_ENV = "QDRANT_URL"
+_QDRANT_KEY_ENV = "QDRANT_API_KEY"
+_DEFAULT_QDRANT_URL = "http://127.0.0.1:6333"
+_PREFIX_PATTERN = r"^[A-Za-z0-9_-]*$"
+
+_QDRANT_URL = typer.Option(
+    "--qdrant-url",
+    help=f"Qdrant server URL (default ${_QDRANT_URL_ENV} or {_DEFAULT_QDRANT_URL}). The API key "
+    f"is read from ${_QDRANT_KEY_ENV} only.",
+)
+_QDRANT_PATH = typer.Option(
+    "--qdrant-path", help="Local on-disk Qdrant directory instead of a server (no Docker)."
+)
+_COLLECTION_PREFIX = typer.Option(
+    "--collection-prefix", help="Prefix of the documents alias and its collections."
+)
+_EMBEDDER = typer.Option("--embedder", help="fake (deterministic) or qwen3 (real model).")
+_EMBEDDING_DIM = typer.Option(
+    "--embedding-dim", help="Embedding size (Qwen3 MRL; default: fake 64, Qwen3 full size)."
+)
+_WORKSPACE_ID = typer.Option("--workspace-id", help="Workspace the points belong to.")
+
+
+def _check_prefix(prefix: str) -> None:
+    import re
+
+    if not re.match(_PREFIX_PATTERN, prefix):
+        raise typer.BadParameter(
+            "only letters, digits, '_' and '-' are allowed", param_hint="--collection-prefix"
+        )
+
+
+def _check_ids(values: Sequence[str], hint: str) -> None:
+    for value in values:
+        _check_id(value, hint)
+
+
+@contextmanager
+def _qdrant(url: str | None, path: str | None, *, memory: bool = False) -> Iterator[Any]:
+    """A Qdrant client; failures are reported by exception type only (no URLs, no payloads)."""
+    from book_core.evaluation import qdrant_client
+
+    if url is not None and path is not None:
+        raise typer.BadParameter("pass --qdrant-url or --qdrant-path, not both")
+    if url is None and path is None and not memory:
+        url = os.environ.get(_QDRANT_URL_ENV) or _DEFAULT_QDRANT_URL
+    try:
+        with qdrant_client(
+            url=url, path=path, api_key=os.environ.get(_QDRANT_KEY_ENV) or None
+        ) as client:
+            yield client
+    except (typer.Exit, typer.BadParameter, CliError):
+        raise
+    except Exception as exc:
+        raise CliError(_runtime_error(exc)) from exc
+
+
+def _runtime_error(exc: BaseException) -> str:
+    """Our own index/model errors carry ids only; anything else (HTTP client, Qdrant responses
+    that may echo payloads or URLs) is reported by type."""
+    from book_core.embedding import ModelUnavailableError
+    from book_core.indexing import IndexStoreError
+
+    if isinstance(exc, IndexStoreError | ModelUnavailableError):
+        return f"{type(exc).__name__}: {exc}"
+    return f"index/search failed ({type(exc).__name__})"
+
+
+def _embedder(name: EmbedderName, dimension: int | None) -> Any:
+    from book_core.evaluation import make_embedder
+
+    if dimension is not None and dimension < 1:
+        raise typer.BadParameter("must be >= 1", param_hint="--embedding-dim")
+    return make_embedder(name.value, dimension)
+
+
+def _load_index_source(path: str) -> list[tuple[DocumentRevision | None, list[SearchChunk]]]:
+    """A DocumentRevision JSON (chunked with the defaults) or SearchChunk JSONL, grouped by
+    (document, revision)."""
+    data = _read_bytes(path)
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise CliError(f"{_label(path)} is not UTF-8") from exc
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError:
+        raw = None
+    if isinstance(raw, dict) and "revision_id" in raw and "blocks" in raw:
+        revision = _validate(DocumentRevision, raw, _label(path))
+        return [(revision, list(chunk_revision(revision).chunks))]
+    groups: dict[tuple[str, str], list[SearchChunk]] = {}
+    for chunk in load_chunks_jsonl(path):
+        groups.setdefault((chunk.document_id, chunk.revision_id), []).append(chunk)
+    if not groups:
+        raise CliError(f"{_label(path)} holds no chunks")
+    return [(None, chunks) for chunks in groups.values()]
+
+
+@app.command(help="Index revisions (DocumentRevision JSON or chunks JSONL) into Qdrant.")
+def index(
+    sources: Annotated[
+        list[str],
+        typer.Argument(
+            help="DocumentRevision JSON (chunked with the defaults) or SearchChunk JSONL files; "
+            "- reads one from stdin."
+        ),
+    ],
+    workspace_id: Annotated[str, _WORKSPACE_ID],
+    output: Annotated[
+        str | None, typer.Option("-o", "--output", help="Index report JSON (default stdout).")
+    ] = None,
+    activate: Annotated[
+        bool,
+        typer.Option(
+            "--activate/--no-activate", help="Mark each written revision as the active one."
+        ),
+    ] = True,
+    rebuild_collection: Annotated[
+        bool,
+        typer.Option(
+            "--rebuild",
+            help="Write into a fresh physical collection and switch the alias to it (the "
+            "previous target is kept for rollback).",
+        ),
+    ] = False,
+    document_type: Annotated[
+        str | None, typer.Option("--document-type", help="Payload document_type (e.g. book).")
+    ] = None,
+    embedder: Annotated[EmbedderName, _EMBEDDER] = EmbedderName.FAKE,
+    embedding_dim: Annotated[int | None, _EMBEDDING_DIM] = None,
+    qdrant_url: Annotated[str | None, _QDRANT_URL] = None,
+    qdrant_path: Annotated[str | None, _QDRANT_PATH] = None,
+    collection_prefix: Annotated[str, _COLLECTION_PREFIX] = "",
+) -> None:
+    from book_core.indexing import (
+        CollectionNames,
+        QdrantIndexStore,
+        RevisionChunks,
+        embedder_model_key,
+        rebuild,
+    )
+
+    _check_id(workspace_id, "--workspace-id")
+    _check_id(document_type, "--document-type")
+    _check_prefix(collection_prefix)
+    if sources.count(STDIO) > 1:
+        raise typer.BadParameter("stdin can be read only once", param_hint="SOURCES")
+    if rebuild_collection and document_type is not None:
+        raise typer.BadParameter("is not supported with --rebuild", param_hint="--document-type")
+    for source in sources:
+        _require_input(source, "SOURCES")
+    _check_destinations([(output, "--output")], sources)
+    with _errors([*sources, output or STDIO]):
+        items = [item for source in sources for item in _load_index_source(source)]
+        seen: set[tuple[str, str]] = set()
+        for _, chunks in items:
+            key = (chunks[0].document_id, chunks[0].revision_id)
+            if key in seen:
+                raise CliError(f"revision {key[0]}/{key[1]} is given twice")
+            seen.add(key)
+        model = _embedder(embedder, embedding_dim)
+        names = CollectionNames(prefix=collection_prefix)
+        report: dict[str, Any] = {"workspace_id": workspace_id, "alias": names.alias}
+        with _qdrant(qdrant_url, qdrant_path) as client:
+            if rebuild_collection:
+                rebuilt = rebuild(
+                    client,
+                    model,
+                    [
+                        RevisionChunks(
+                            workspace_id,
+                            chunks[0].document_id,
+                            chunks[0].revision_id,
+                            chunks,
+                            active=activate,
+                        )
+                        for _, chunks in items
+                    ],
+                    names=names,
+                )
+                report.update(
+                    collection=rebuilt.collection,
+                    previous=rebuilt.previous,
+                    revisions=[
+                        {
+                            "document_id": chunks[0].document_id,
+                            "revision_id": chunks[0].revision_id,
+                            "chunks": len(chunks),
+                            "active": activate,
+                        }
+                        for _, chunks in items
+                    ],
+                )
+            else:
+                store = QdrantIndexStore(client, model, names=names)
+                written = []
+                for _, chunks in items:
+                    document_id, revision_id = chunks[0].document_id, chunks[0].revision_id
+                    result = store.index_revision(
+                        workspace_id, document_id, revision_id, chunks, document_type=document_type
+                    )
+                    if activate:
+                        store.activate_revision(workspace_id, document_id, revision_id)
+                    written.append(
+                        {
+                            "document_id": document_id,
+                            "revision_id": revision_id,
+                            "chunks": len(chunks),
+                            "embedded": result.embedded,
+                            "reused": result.reused,
+                            "refreshed": result.refreshed,
+                            "unchanged": result.unchanged,
+                            "active": activate,
+                        }
+                    )
+                report.update(collection=store.ensure_collection(), revisions=written)
+        report["model_key"] = embedder_model_key(model)
+        _write_text(output, dump_json(report))
+    typer.echo(
+        f"indexed {len(items)} revision(s) into {report['collection']} "
+        f"({sum(r['chunks'] for r in report['revisions'])} chunks, "
+        f"activate={str(activate).lower()})",
+        err=True,
+    )
+
+
+def _ranked_hit_json(item: Any) -> dict[str, Any]:
+    return {
+        "hit": item.hit.model_dump(mode="json"),
+        "chunk": item.chunk.model_dump(mode="json"),
+        "parent": item.parent.model_dump(mode="json") if item.parent is not None else None,
+        "chapter_id": item.chapter_id,
+        "scores": dict(item.scores),
+        "ranks": dict(item.ranks),
+    }
+
+
+@app.command(help="Search indexed chunks (keyword/semantic/hybrid) within a scope.")
+def search(
+    query: Annotated[str, typer.Argument(help="Query text, or - to read it from stdin.")],
+    workspace_id: Annotated[str, _WORKSPACE_ID],
+    revision_ids: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--revision-id",
+            help="Published revision in scope (repeatable). Default: the active revision of "
+            "each --document-id.",
+        ),
+    ] = None,
+    document_ids: Annotated[
+        list[str] | None, typer.Option("--document-id", help="Document filter (repeatable).")
+    ] = None,
+    section_ids: Annotated[
+        list[str] | None,
+        typer.Option("--section-id", help="Section filter, exact chunk section (repeatable)."),
+    ] = None,
+    languages: Annotated[
+        list[str] | None, typer.Option("--language", help="Chunk language filter (repeatable).")
+    ] = None,
+    mode: Annotated[str, typer.Option("--mode", help="keyword, semantic or hybrid.")] = "hybrid",
+    reranker: Annotated[
+        RerankerName,
+        typer.Option("--reranker", help="Rerank the top --rerank-top candidates (default none)."),
+    ] = RerankerName.NONE,
+    dense_candidates: Annotated[int, typer.Option("--dense-candidates")] = 30,
+    keyword_candidates: Annotated[int, typer.Option("--keyword-candidates")] = 30,
+    rerank_top: Annotated[int, typer.Option("--rerank-top")] = 20,
+    results: Annotated[int, typer.Option("--results")] = 10,
+    rrf_k: Annotated[int, typer.Option("--rrf-k")] = 60,
+    with_parents: Annotated[
+        bool, typer.Option("--with-parents", help="Attach each hit's parent chunk.")
+    ] = False,
+    output: Annotated[
+        str | None, typer.Option("-o", "--output", help="Hits JSON (default stdout).")
+    ] = None,
+    embedder: Annotated[EmbedderName, _EMBEDDER] = EmbedderName.FAKE,
+    embedding_dim: Annotated[int | None, _EMBEDDING_DIM] = None,
+    qdrant_url: Annotated[str | None, _QDRANT_URL] = None,
+    qdrant_path: Annotated[str | None, _QDRANT_PATH] = None,
+    collection_prefix: Annotated[str, _COLLECTION_PREFIX] = "",
+) -> None:
+    from book_core.contracts import SearchMode
+    from book_core.evaluation import make_reranker
+    from book_core.indexing import CollectionNames, QdrantIndexStore, SearchScope
+    from book_core.search import (
+        InvalidQueryError,
+        RerankMode,
+        SearchFilters,
+        SearchLimits,
+        SearchService,
+    )
+
+    _check_id(workspace_id, "--workspace-id")
+    _check_ids(revision_ids or [], "--revision-id")
+    _check_ids(document_ids or [], "--document-id")
+    _check_ids(section_ids or [], "--section-id")
+    _check_ids(languages or [], "--language")
+    _check_prefix(collection_prefix)
+    try:
+        search_mode = SearchMode(mode)
+    except ValueError as exc:
+        raise typer.BadParameter(
+            "must be keyword, semantic or hybrid", param_hint="--mode"
+        ) from exc
+    try:
+        limits = SearchLimits(
+            dense_candidates=dense_candidates,
+            keyword_candidates=keyword_candidates,
+            rerank_top=rerank_top,
+            results=results,
+            rrf_k=rrf_k,
+            rerank=RerankMode.OFF if reranker is RerankerName.NONE else RerankMode.TOP_K,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="limits") from exc
+    if not revision_ids and not document_ids:
+        raise typer.BadParameter(
+            "give --revision-id, or --document-id to use the active revisions",
+            param_hint="--revision-id",
+        )
+    _check_destinations([(output, "--output")], [])
+    with _errors([output or STDIO]):
+        text = _read_bytes(STDIO).decode("utf-8", errors="replace") if query == STDIO else query
+        model = _embedder(embedder, embedding_dim)
+        rerank_model = make_reranker(reranker.value)
+        with _qdrant(qdrant_url, qdrant_path) as client:
+            store = QdrantIndexStore(client, model, names=CollectionNames(prefix=collection_prefix))
+            revisions = list(revision_ids or [])
+            if not revisions:
+                for document_id in document_ids or []:
+                    active = store.active_revision(workspace_id, document_id)
+                    if active is not None:
+                        revisions.append(active)
+                if not revisions:
+                    raise CliError("no active revision for the given documents")
+            scope = SearchScope(workspace_id=workspace_id, revision_ids=tuple(revisions))
+            filters = SearchFilters(
+                document_ids=tuple(document_ids or ()),
+                section_ids=tuple(section_ids or ()),
+                languages=tuple(languages or ()),
+            )
+            service = SearchService(store, reranker=rerank_model, limits=limits)
+            try:
+                result = service.search(
+                    text, scope, mode=search_mode, filters=filters, with_parents=with_parents
+                )
+            except InvalidQueryError as exc:
+                raise CliError(f"invalid query: {exc}") from exc
+        document = {
+            "query": result.query,
+            "mode": result.mode.value,
+            "query_language": result.query_language,
+            "truncated": result.truncated,
+            "warnings": list(result.warnings),
+            "candidates": dict(result.candidates),
+            "scope": {"workspace_id": workspace_id, "revision_ids": revisions},
+            "hits": [_ranked_hit_json(h) for h in result.hits],
+        }
+        _write_text(output, dump_json(document))
+    for warning in result.warnings:
+        if not warning.startswith("query truncated"):
+            typer.echo(f"warning: {warning}", err=True)
+    typer.echo(
+        f"search ({search_mode.value}, reranker {reranker.value}): {len(result.hits)} hits from "
+        f"{len(revisions)} revision(s)",
+        err=True,
+    )
+
+
+def _select_hits(
+    raw: Any, rank: int | None, all_hits: bool, label: str
+) -> tuple[list[Any], str | None]:
+    """(chunks or SearchHits to resolve, query from the search output)."""
+    from book_core.contracts import SearchHit
+
+    if isinstance(raw, dict) and isinstance(raw.get("hits"), list):
+        entries = raw["hits"]
+        query = raw.get("query") if isinstance(raw.get("query"), str) else None
+    else:
+        entries, query = [raw], None
+    items: list[Any] = []
+    for position, entry in enumerate(entries, start=1):
+        what = f"{label} hit {position}"
+        if isinstance(entry, dict) and "chunk" in entry:
+            items.append(_validate(SearchChunk, entry["chunk"], what))
+        elif isinstance(entry, dict) and "chunk_id" in entry:
+            items.append(_validate(SearchHit, entry, what))
+        elif isinstance(entry, dict) and "content_hash" in entry:
+            items.append(_validate(SearchChunk, entry, what))
+        else:
+            raise CliError(f"{what} is neither a search hit nor a chunk")
+    if not items:
+        raise CliError(f"{label} has no hits")
+    if all_hits:
+        return items, query
+    wanted = 1 if rank is None else rank
+    if wanted > len(items):
+        raise CliError(f"{label} has {len(items)} hit(s); no rank {wanted}")
+    return [items[wanted - 1]], query
+
+
+@app.command(help="Resolve paragraph-complete excerpts (page/bbox) for search hits.")
+def excerpt(
+    hits: Annotated[
+        str,
+        typer.Argument(
+            help="`core search` output, one hit, or one SearchChunk (JSON); - for stdin."
+        ),
+    ],
+    revisions: Annotated[
+        list[str],
+        typer.Option("--revision", help="DocumentRevision JSON the hits belong to (repeatable)."),
+    ],
+    rank: Annotated[
+        int | None, typer.Option("--rank", help="Hit to resolve, 1-based (default 1).", min=1)
+    ] = None,
+    all_hits: Annotated[
+        bool, typer.Option("--all", help="Resolve every hit (writes a JSON list).")
+    ] = False,
+    query: Annotated[
+        str | None,
+        typer.Option("--query", help="Query for term highlights (default: the search's query)."),
+    ] = None,
+    context_before: Annotated[int, typer.Option("--context-before", min=0)] = 1,
+    context_after: Annotated[int, typer.Option("--context-after", min=0)] = 1,
+    cross_sections: Annotated[
+        bool, typer.Option("--cross-sections", help="Let context cross section boundaries.")
+    ] = False,
+    max_chars: Annotated[int, typer.Option("--max-chars", min=1)] = 1600,
+    title: Annotated[
+        str | None, typer.Option("--title", help="Document title leading the breadcrumb.")
+    ] = None,
+    output: Annotated[
+        str | None, typer.Option("-o", "--output", help="Excerpt JSON (default stdout).")
+    ] = None,
+) -> None:
+    from book_core.search import ExcerptConfig, ExcerptError, ExcerptResolver
+
+    if rank is not None and all_hits:
+        raise typer.BadParameter("cannot be combined with --all", param_hint="--rank")
+    if hits == STDIO and STDIO in revisions:
+        raise typer.BadParameter("HITS already reads stdin", param_hint="--revision")
+    if revisions.count(STDIO) > 1:
+        raise typer.BadParameter("stdin can be read only once", param_hint="--revision")
+    _require_input(hits, "HITS")
+    for path in revisions:
+        _require_input(path, "--revision")
+    _check_destinations([(output, "--output")], [hits, *revisions])
+    config = ExcerptConfig(
+        context_before=context_before,
+        context_after=context_after,
+        cross_sections=cross_sections,
+        max_chars=max_chars,
+    )
+    with _errors([hits, *revisions, output or STDIO]):
+        selected, search_query = _select_hits(_load_json(hits), rank, all_hits, _label(hits))
+        resolvers: dict[tuple[str, str], ExcerptResolver] = {}
+        for path in revisions:
+            revision = _validate(DocumentRevision, _load_json(path), _label(path))
+            resolvers[(revision.document_id, revision.revision_id)] = ExcerptResolver(
+                revision, config=config, document_title=title
+            )
+        excerpts = []
+        for item in selected:
+            key = (item.document_id, item.revision_id)
+            resolver = resolvers.get(key)
+            if resolver is None:
+                raise CliError(f"no --revision for {key[0]}/{key[1]}")
+            try:
+                excerpts.append(resolver.resolve_hit(item, query=query or search_query))
+            except ExcerptError as exc:
+                raise CliError(f"excerpt failed: {exc}") from exc
+        if all_hits:
+            _write_text(output, dump_json([e.model_dump(mode="json") for e in excerpts]))
+        else:
+            _write_text(output, dump_json(excerpts[0]))
+    typer.echo(
+        f"excerpt: {len(excerpts)} resolved, {sum(len(e.locations) for e in excerpts)} location(s)",
+        err=True,
+    )
+
+
+@app.command(name="eval", help="Run the retrieval evaluation and write JSON/Markdown reports.")
+def eval_command(
+    dataset: Annotated[str, typer.Argument(help="Dataset JSON (eval/datasets/*.json).")],
+    config: Annotated[
+        str | None, typer.Option("--config", help="EvalConfig JSON (eval/configs/*.json).")
+    ] = None,
+    output: Annotated[
+        str | None, typer.Option("-o", "--output", help="JSON report (default stdout).")
+    ] = None,
+    markdown: Annotated[
+        str | None, typer.Option("--markdown", help="Also write a Markdown report here.")
+    ] = None,
+    name: Annotated[str | None, typer.Option("--name", help="Report name.")] = None,
+    embedder: Annotated[EmbedderName | None, _EMBEDDER] = None,
+    embedding_dim: Annotated[int | None, _EMBEDDING_DIM] = None,
+    reranker: Annotated[
+        RerankerName | None, typer.Option("--reranker", help="none, fake or qwen3.")
+    ] = None,
+    modes: Annotated[
+        list[str] | None, typer.Option("--mode", help="Mode to run (repeatable).")
+    ] = None,
+    sweep: Annotated[
+        bool, typer.Option("--sweep", help="Add the RRF k x depth sweep (config grid or default).")
+    ] = False,
+    no_latency: Annotated[
+        bool, typer.Option("--no-latency", help="Leave timings out (deterministic report).")
+    ] = False,
+    qdrant_url: Annotated[
+        str | None,
+        typer.Option(
+            "--qdrant-url",
+            help=f"Index into this Qdrant server (API key from ${_QDRANT_KEY_ENV}); default: "
+            "in-process memory.",
+        ),
+    ] = None,
+    qdrant_path: Annotated[str | None, _QDRANT_PATH] = None,
+    collection_prefix: Annotated[
+        str | None,
+        typer.Option(
+            "--collection-prefix",
+            help="Collection prefix on a server (default eval_<random>_); dropped afterwards "
+            "unless --keep-index.",
+        ),
+    ] = None,
+    keep_index: Annotated[
+        bool, typer.Option("--keep-index", help="Keep the server collections.")
+    ] = False,
+) -> None:
+    import uuid
+
+    from book_core.evaluation import (
+        DatasetError,
+        EvalConfig,
+        SweepConfig,
+        build_index,
+        drop_prefixed,
+        evaluate,
+        load_dataset,
+        make_reranker,
+        render_markdown,
+    )
+    from book_core.indexing import CollectionNames
+
+    if collection_prefix is not None:
+        _check_prefix(collection_prefix)
+    _require_input(dataset, "DATASET")
+    if dataset == STDIO:
+        raise typer.BadParameter("must be a file (relative paths resolve next to it)")
+    _require_input(config, "--config")
+    _check_destinations(
+        [(output, "--output"), (markdown, "--markdown")],
+        [dataset, *([config] if config is not None else [])],
+    )
+    with _errors([dataset, config or STDIO, output or STDIO, markdown or STDIO]):
+        raw_config: dict[str, Any] = dict(_load_json(config)) if config is not None else {}
+        overrides: dict[str, Any] = {}
+        if name is not None:
+            overrides["name"] = name
+        if embedder is not None:
+            overrides["embedder"] = embedder.value
+        if embedding_dim is not None:
+            overrides["embedding_dimension"] = embedding_dim
+        if reranker is not None:
+            overrides["reranker"] = reranker.value
+        if modes:
+            overrides["modes"] = modes
+        if no_latency:
+            overrides["latency"] = False
+        settings = _validate(EvalConfig, {**raw_config, **overrides}, "eval config")
+        if sweep and settings.sweep is None:
+            settings = settings.model_copy(update={"sweep": SweepConfig()})
+        try:
+            data = load_dataset(dataset)
+        except DatasetError as exc:
+            raise CliError(f"dataset: {exc}") from exc
+        model = _embedder(EmbedderName(settings.embedder), settings.embedding_dimension)
+        rerank_model = make_reranker(settings.reranker)
+        server = qdrant_url is not None
+        prefix = collection_prefix
+        if prefix is None:
+            prefix = f"eval_{uuid.uuid4().hex[:12]}_" if server else ""
+        with _qdrant(qdrant_url, qdrant_path, memory=True) as client:
+            try:
+                built = build_index(data, model, client, names=CollectionNames(prefix=prefix))
+                report = evaluate(
+                    data,
+                    built,
+                    settings,
+                    embedder_name=model.model_name,
+                    reranker=rerank_model,
+                    backend="server" if server else ("local" if qdrant_path else "memory"),
+                )
+            finally:
+                if server and not keep_index and prefix:
+                    drop_prefixed(client, prefix)
+        if markdown is not None:
+            _write_text(markdown, render_markdown(report))
+        if output is not None or markdown is None:
+            _write_text(output, dump_json(report))
+    for run in report["runs"]:
+        overall = run["overall"]
+        typer.echo(
+            f"{run['mode']}/rerank {run['rerank']}: "
+            + " ".join(f"{k}={overall[k]:.3f}" for k in ("R@5", "R@10", "MRR@10", "nDCG@10")),
+            err=True,
+        )
+
+
+# --------------------------------------------------------------------------------------------
 # stubs
 
 # Accept any arguments so a stub always reports "not implemented" rather than a usage error.
@@ -521,10 +1151,6 @@ def _stub(group: typer.Typer, name: str, help_text: str, task: str, label: str) 
     )(command)
 
 
-_stub(app, "index", "Index chunks into Qdrant (dense + sparse).", "M2.6", "core index")
-_stub(app, "search", "Search indexed chunks (keyword/semantic/hybrid).", "M2.6", "core search")
-_stub(app, "excerpt", "Resolve a paragraph-complete excerpt for a hit.", "M2.6", "core excerpt")
-_stub(app, "eval", "Run retrieval evaluation.", "M2.6", "core eval")
 _stub(
     questions_app,
     "extract",

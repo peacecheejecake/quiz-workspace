@@ -1,0 +1,4 @@
+# Generated reports (make eval / make eval-models). Only the fake-model sample is committed.
+*
+!.gitignore
+!sample-*
