@@ -34,6 +34,8 @@ class ProblemType(StrEnum):
     INSUFFICIENT_ROLE = "urn:quiz-workspace:problem:insufficient-role"
     # 403: the workspace is archived (read-only); restore it to write again.
     WORKSPACE_ARCHIVED = "urn:quiz-workspace:problem:workspace-archived"
+    # 409: an `Idempotency-Key` was reused for the same operation with a different request body.
+    IDEMPOTENCY_KEY_REUSED = "urn:quiz-workspace:problem:idempotency-key-reused"
 
 
 class ProblemException(StarletteHTTPException):

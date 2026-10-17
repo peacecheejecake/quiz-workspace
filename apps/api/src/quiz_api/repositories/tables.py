@@ -7,7 +7,19 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, MetaData, Table, Text, Uuid
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    FetchedValue,
+    Integer,
+    MetaData,
+    SmallInteger,
+    Table,
+    Text,
+    Uuid,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
 metadata = MetaData(schema="public")
@@ -24,7 +36,7 @@ profiles = Table(
 workspaces = Table(
     "workspaces",
     metadata,
-    Column("id", Uuid, primary_key=True),
+    Column("id", Uuid, primary_key=True, server_default=FetchedValue()),
     Column("name", Text, nullable=False),
     Column("owner_id", Uuid, nullable=False),
     Column("status", Text, nullable=False),
@@ -42,6 +54,33 @@ workspace_memberships = Table(
     Column("role", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
+activity_events = Table(
+    "activity_events",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=FetchedValue()),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("actor_id", Uuid),
+    Column("event_type", Text, nullable=False),
+    Column("target_type", Text, nullable=False),
+    Column("target_id", Uuid),
+    Column("metadata", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+# M3.1a Idempotency-Key replay store (20261017190000_idempotency_keys.sql).
+idempotency_keys = Table(
+    "idempotency_keys",
+    metadata,
+    Column("user_id", Uuid, primary_key=True),
+    Column("scope", Text, primary_key=True),
+    Column("key", Text, primary_key=True),
+    Column("request_hash", Text, nullable=False),
+    Column("response_status", SmallInteger, nullable=False),
+    Column("response_body", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
 )
 
 async_jobs = Table(
