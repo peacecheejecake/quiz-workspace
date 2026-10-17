@@ -16,7 +16,8 @@
     "test": "vitest run && pnpm run check:rsc",
     "check:rsc": "NEXT_TELEMETRY_DISABLED=1 next build test/rsc-fixture",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build -o storybook-static --quiet"
+    "build-storybook": "storybook build -o storybook-static --quiet",
+    "test:visual": "pnpm run build-storybook && playwright test -c playwright.visual.config.ts"
   },
   "dependencies": {
     "@quiz/design-tokens": "workspace:*",

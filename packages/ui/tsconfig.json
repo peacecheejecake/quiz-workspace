@@ -7,5 +7,12 @@
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true
   },
-  "include": ["src", "test", ".storybook", "vitest.config.ts"]
+  "include": [
+    "src",
+    "test",
+    "visual",
+    ".storybook",
+    "vitest.config.ts",
+    "playwright.visual.config.ts"
+  ]
 }
