@@ -7,8 +7,12 @@ select plan(31);
 
 select tables_are(
   'public',
-  array['profiles', 'workspaces', 'workspace_memberships', 'activity_events', 'async_jobs'],
-  'public schema contains exactly the baseline tables'
+  array['profiles', 'workspaces', 'workspace_memberships', 'activity_events', 'async_jobs',
+        -- M4.1 question domain
+        'questions', 'question_revisions', 'question_sources', 'question_user_states',
+        'practice_sessions', 'question_attempts', 'question_lineage', 'question_generation_runs',
+        'question_import_runs', 'question_drafts'],
+  'public schema contains exactly the expected tables'
 );
 
 select columns_are('public', 'profiles',
@@ -74,7 +78,9 @@ select is(
   (select array_agg(event_object_table::text order by event_object_table::text)
      from information_schema.triggers
     where trigger_schema = 'public' and action_statement like '%set_updated_at%'),
-  array['async_jobs', 'profiles', 'workspace_memberships', 'workspaces'],
+  array['async_jobs', 'practice_sessions', 'profiles', 'question_drafts',
+        'question_generation_runs', 'question_import_runs', 'question_user_states', 'questions',
+        'workspace_memberships', 'workspaces'],
   'updated_at trigger exists on every mutable table'
 );
 
