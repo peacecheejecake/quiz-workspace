@@ -11,12 +11,15 @@ const PUBLIC_STUB_ROUTES = [
   { path: '/share/e2e-share', id: 'WS-VIEW-01' },
 ] as const;
 
+// `:ws` is replaced by a workspace the signed-in user owns: since M3.1b workspace routes check
+// access server-side and answer 404 for unknown ids.
 const PROTECTED_STUB_ROUTES = [
   { path: '/settings/security', id: 'ACCOUNT-01' },
   { path: '/workspaces', id: 'WS-01' },
-  { path: '/workspaces/e2e-ws/documents/e2e-doc', id: 'DOC-02' },
-  { path: '/workspaces/e2e-ws/questions', id: 'QOV-01' },
+  { path: '/workspaces/:ws/documents/e2e-doc', id: 'DOC-02' },
+  { path: '/workspaces/:ws/questions', id: 'QOV-01' },
 ] as const;
+const PLACEHOLDER_WS = '00000000-0000-4000-8000-000000000000';
 
 test('HARNESS-01 stub routes render their screen ID', async ({ page }) => {
   for (const { path, id } of PUBLIC_STUB_ROUTES) {
@@ -27,7 +30,7 @@ test('HARNESS-01 stub routes render their screen ID', async ({ page }) => {
   }
   // Without a session every protected stub sends the browser to /login.
   for (const { path } of PROTECTED_STUB_ROUTES) {
-    await page.goto(path);
+    await page.goto(path.replace(':ws', PLACEHOLDER_WS));
     await expect(page, path).toHaveURL(LOGIN_SCREEN);
   }
 });
@@ -35,18 +38,20 @@ test('HARNESS-01 stub routes render their screen ID', async ({ page }) => {
 test(
   'HARNESS-02 protected and query-state stubs render for a signed-in user',
   { tag: '@infra' },
-  async ({ page, userFactory }) => {
-    const user = await userFactory.create({ label: 'harness02' });
-    await submitLogin(page, user);
+  async ({ page, workspaceFactory }) => {
+    const member = await workspaceFactory.member('harness02');
+    const ws = await workspaceFactory.create(member);
+    await submitLogin(page, member.user);
     await expect(page).toHaveURL((url) => url.pathname === '/workspaces');
 
-    for (const { path, id } of PROTECTED_STUB_ROUTES) {
+    for (const { path: template, id } of PROTECTED_STUB_ROUTES) {
+      const path = template.replace(':ws', ws.id);
       const res = await page.goto(path);
       expect(res?.status(), path).toBe(200);
       await expect(page.getByRole('main').locator(`[data-screen-id="${id}"]`), path).toBeVisible();
       await expect(page.getByRole('heading', { level: 1 }), path).toBeVisible();
     }
-    await page.goto('/workspaces/e2e-ws/questions?question=q12');
+    await page.goto(`/workspaces/${ws.id}/questions?question=q12`);
     await expect(page.locator('section[data-screen-id="QPLAY-01"]')).toBeVisible();
     await page.goto('/share/e2e-share?panel=fork');
     await expect(page.locator('section[data-screen-id="WS-FORK-01"]')).toBeVisible();

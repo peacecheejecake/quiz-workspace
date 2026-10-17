@@ -8,11 +8,19 @@ export { Button } from './primitives/Button';
 export type { ButtonProps, ButtonSize, ButtonVariant } from './primitives/Button';
 export { Checkbox } from './primitives/Checkbox';
 export type { CheckboxProps } from './primitives/Checkbox';
+export {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './primitives/DropdownMenu';
+export type { DropdownMenuContentProps, DropdownMenuItemProps } from './primitives/DropdownMenu';
 export { FocusRing, focusRingClassName } from './primitives/FocusRing';
 export type { FocusRingProps } from './primitives/FocusRing';
 export { IconButton } from './primitives/IconButton';
 export type { IconButtonProps } from './primitives/IconButton';
-export { AlertIcon, CheckIcon, CloseIcon, MenuIcon, MinusIcon } from './primitives/icons';
+export { AlertIcon, CheckIcon, CloseIcon, MenuIcon, MinusIcon, MoreIcon } from './primitives/icons';
 export { Input } from './primitives/Input';
 export type { InputProps } from './primitives/Input';
 export {
@@ -27,6 +35,13 @@ export { Skeleton } from './primitives/Skeleton';
 export type { SkeletonProps } from './primitives/Skeleton';
 export { GlassSurface, Surface } from './primitives/Surface';
 export type { GlassSurfaceProps, SurfacePadding, SurfaceProps } from './primitives/Surface';
+export { Tabs, TabsContent, TabsList, TabsTrigger } from './primitives/Tabs';
+export type {
+  TabsContentProps,
+  TabsListProps,
+  TabsProps,
+  TabsTriggerProps,
+} from './primitives/Tabs';
 export { Textarea } from './primitives/Textarea';
 export type { TextareaProps } from './primitives/Textarea';
 export { Tooltip } from './primitives/Tooltip';
@@ -39,6 +54,8 @@ export type { ToastOptions, ToastProviderProps, ToastTone } from './feedback/Toa
 
 export { AppShell } from './layout/AppShell';
 export type { AppShellProps } from './layout/AppShell';
+export { ConfirmDialog } from './layout/ConfirmDialog';
+export type { ConfirmDialogProps } from './layout/ConfirmDialog';
 export { FloatingSidePanel } from './layout/FloatingSidePanel';
 export type { FloatingSidePanelProps } from './layout/FloatingSidePanel';
 export { DialogClose, ModalDialog } from './layout/ModalDialog';

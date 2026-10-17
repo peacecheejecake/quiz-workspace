@@ -9,7 +9,13 @@ import {
   CheckIcon,
   Checkbox,
   CloseIcon,
+  ConfirmDialog,
   DialogClose,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
   EmptyState,
   FavoriteToggle,
   FloatingSidePanel,
@@ -20,6 +26,7 @@ import {
   Input,
   MenuIcon,
   MinusIcon,
+  MoreIcon,
   ModalDialog,
   PageHeader,
   Popover,
@@ -38,6 +45,10 @@ import {
   StarIcon,
   StatusSummary,
   Surface,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   Textarea,
   ThemeProvider,
   ToastProvider,
@@ -54,7 +65,7 @@ import {
 
 const hooks = [useTheme, useToast];
 // Need function props (onOpen / onPressedChange), so a Client Component has to render them.
-const interactive = [QuestionDot, QuestionHeatmap, FavoriteToggle, RetryToggle];
+const interactive = [QuestionDot, QuestionHeatmap, FavoriteToggle, RetryToggle, ConfirmDialog];
 
 // The status helpers are plain functions and must be callable on the server.
 const questions = QUESTION_DOT_STATUSES.map((status, index) => ({
@@ -99,6 +110,7 @@ export default function Page() {
             <CheckIcon />
             <MenuIcon />
             <MinusIcon />
+            <MoreIcon />
           </Surface>
           <GlassSurface>glass</GlassSurface>
           <Tooltip content="설명">
@@ -118,6 +130,22 @@ export default function Page() {
             본문
           </FloatingSidePanel>
           <EmptyState title="비어 있음" />
+          <Tabs defaultValue="a">
+            <TabsList aria-label="탭">
+              <TabsTrigger value="a">가</TabsTrigger>
+              <TabsTrigger value="b">나</TabsTrigger>
+            </TabsList>
+            <TabsContent value="a">가 내용</TabsContent>
+            <TabsContent value="b">나 내용</TabsContent>
+          </Tabs>
+          <DropdownMenu>
+            <DropdownMenuTrigger>더보기</DropdownMenuTrigger>
+            <DropdownMenuContent aria-label="작업">
+              <DropdownMenuItem>보관</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem tone="danger">삭제</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <p>
             {interactive.length} interactive · {label} · {questionTypeLabels.MCQ}
           </p>
