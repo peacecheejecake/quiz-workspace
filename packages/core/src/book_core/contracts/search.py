@@ -131,7 +131,16 @@ class TextSpan(CoreModel):
 class Excerpt(CoreModel):
     """Original text expanded to paragraph boundaries around a hit, with page coordinates.
 
-    ``highlights`` mark the matched passage inside ``text`` for emphasis in the UI.
+    ``text`` is canonical revision text: the matched blocks expanded to whole paragraphs (a table
+    or figure with its caption is one unit), plus context blocks, joined by blank lines. It may
+    be a clean cut of that (``truncated_start`` / ``truncated_end``), always keeping the match.
+
+    ``highlights`` mark the matched passage inside ``text`` for emphasis in the UI and
+    ``term_highlights`` the query terms. ``matched_block_ids`` are the blocks the hit itself
+    covers (the rest of ``block_ids`` is context); ``locations`` hold every page/bbox of
+    ``block_ids`` in reading order (a paragraph merged across pages has one per page) and
+    ``primary_location`` is where a PDF viewer should jump (the first matched block's first
+    location). ``breadcrumb`` is the document title (when known) and the section path.
     """
 
     document_id: Identifier
@@ -140,13 +149,24 @@ class Excerpt(CoreModel):
     section_id: Identifier | None = None
     text: NonEmptyText
     highlights: tuple[TextSpan, ...] = ()
+    term_highlights: tuple[TextSpan, ...] = ()
     block_ids: Annotated[tuple[Identifier, ...], Field(min_length=1)]
+    matched_block_ids: tuple[Identifier, ...] = ()
     locations: Annotated[tuple[SourceLocation, ...], Field(min_length=1)]
+    primary_location: SourceLocation | None = None
+    breadcrumb: tuple[NonEmptyText, ...] = ()
+    truncated_start: bool = False
+    truncated_end: bool = False
 
     @model_validator(mode="after")
     def _check(self) -> Self:
         ensure_unique(list(self.block_ids), "block id")
-        for span in self.highlights:
+        ensure_unique(list(self.matched_block_ids), "matched block id")
+        if not set(self.matched_block_ids) <= set(self.block_ids):
+            raise ValueError("matched blocks must be excerpt blocks")
+        for span in (*self.highlights, *self.term_highlights):
             if span.end > len(self.text):
                 raise ValueError("highlight exceeds excerpt text")
+        if self.primary_location is not None and self.primary_location not in self.locations:
+            raise ValueError("primary location must be one of the excerpt locations")
         return self

@@ -235,7 +235,7 @@ _CAPTION_START = re.compile(
 )
 
 
-def _captions(blocks: Sequence[Block]) -> dict[str, Block]:
+def caption_links(blocks: Sequence[Block]) -> dict[str, Block]:
     """Caption of each table/image of a section run: the linked ``caption_block_id`` or, when
     the parser did not link one, an adjacent text block labelled like a caption (``표 1.``,
     ``Figure 2``) of the matching kind."""
@@ -288,7 +288,7 @@ class _SectionChunker:
 
     def units(self, blocks: Sequence[Block]) -> list[_Unit]:
         position = {b.id: i for i, b in enumerate(blocks)}
-        caption_of = _captions(blocks)
+        caption_of = caption_links(blocks)
         by_id = {b.id: b for b in blocks}
         owner_of = {cap.id: by_id[owner_id] for owner_id, cap in caption_of.items()}
         emitted: set[str] = set()
