@@ -5,7 +5,7 @@
 // see the active published revision without edit controls; editors see the latest revision (the
 // correction draft when there is one), correct blocks inline, publish the draft (index job
 // followed live) and roll back from the revision history. FastAPI decides every write.
-import { PageHeader } from '@quiz/ui';
+import { Button, PageHeader } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -21,7 +21,14 @@ import {
   type RevisionHistoryItem,
 } from '@/lib/documents/editor-api';
 import { JobGoneError, watchJob } from '@/lib/documents/job-events';
-import { blockPage, locationsOn, sectionOf, targetBlockFor } from '@/lib/documents/outline';
+import {
+  applySavedBlock,
+  blockPage,
+  locationsOn,
+  sectionOf,
+  targetBlockFor,
+  viewerSearch,
+} from '@/lib/documents/outline';
 import { SignedUrlCache } from '@/lib/documents/pdf-source';
 import {
   INDEX_FAILURE_MESSAGE,
@@ -90,6 +97,10 @@ export function DocumentEditor({
   const [reloadKey, setReloadKey] = useState(0);
   const [page, setPage] = useState(initialPage ?? 1);
   const [currentBlockId, setCurrentBlockId] = useState<string | null>(null);
+  /** Block named in `?block=`: the current selection, cleared by pure page navigation. */
+  const [linkedBlockId, setLinkedBlockId] = useState<string | null>(initialBlockId);
+  /** The text shown may be behind the server after a save (refresh failed): offer a retry. */
+  const [staleContent, setStaleContent] = useState(false);
   const [highlightKey, setHighlightKey] = useState(0);
   const [editState, dispatchEdit] = useReducer(blockEditReducer, IDLE);
   const [justSaved, setJustSaved] = useState(false);
@@ -161,6 +172,7 @@ export function DocumentEditor({
       if (!target) return;
       scrollTextOnSelect.current = true;
       setCurrentBlockId(target.block_id);
+      setLinkedBlockId(target.block_id);
       if (byId) setPage(blockPage(byId));
       setHighlightKey((k) => k + 1);
     },
@@ -229,6 +241,7 @@ export function DocumentEditor({
     ) => {
       scrollTextOnSelect.current = scrollText;
       setCurrentBlockId(block.block_id);
+      setLinkedBlockId(block.block_id);
       setPage(blockPage(block));
       setHighlightKey((k) => k + 1);
       if (view) setMobileView(view);
@@ -242,6 +255,7 @@ export function DocumentEditor({
       if (target) selectBlock(target, { view: 'pdf', scrollText: true });
       else if (node.page != null) {
         setPage(node.page);
+        setLinkedBlockId(null);
         setMobileView('pdf');
       }
       setAnnouncement(`${node.title}${node.page != null ? ` · ${node.page}쪽` : ''}`);
@@ -249,13 +263,14 @@ export function DocumentEditor({
     [blocks, selectBlock],
   );
 
-  // Keep `?page=` in the address bar (reload and sharing reopen the same page).
+  // Keep `?page=` and `?block=` in the address bar (reload and sharing reopen the same view).
   useEffect(() => {
     const url = new URL(window.location.href);
-    if (url.searchParams.get('page') === String(page)) return;
-    url.searchParams.set('page', String(page));
+    const search = viewerSearch(url.search, page, linkedBlockId);
+    if (search === url.search) return;
+    url.search = search;
     window.history.replaceState(window.history.state, '', url);
-  }, [page]);
+  }, [linkedBlockId, page]);
 
   // Scroll the current block into view in the text pane.
   const textScrollRef = useRef<HTMLDivElement>(null);
@@ -403,11 +418,22 @@ export function DocumentEditor({
   const onStartEdit = useCallback((block: ContentBlock) => {
     setNotice(null);
     setCurrentBlockId(block.block_id);
+    setLinkedBlockId(block.block_id);
     setPage(blockPage(block));
     dispatchEdit({ type: 'start', block });
   }, []);
   const onChange = useCallback((text: string) => dispatchEdit({ type: 'change', text }), []);
   const onCancel = useCallback(() => dispatchEdit({ type: 'cancel' }), []);
+
+  const refreshContent = useCallback(async () => {
+    try {
+      const loaded = await client.loadContent(documentId, 'latest');
+      setContentState({ status: 'ready', content: loaded });
+      setStaleContent(false);
+    } catch (error) {
+      if (!handleCommonError(error)) setStaleContent(true);
+    }
+  }, [client, documentId, handleCommonError]);
 
   const onSave = useCallback(async () => {
     const state = editStateRef.current;
@@ -422,25 +448,16 @@ export function DocumentEditor({
       if (publish.phase === 'failed' || publish.phase === 'succeeded') setPublish(PUBLISH_IDLE);
       setAnnouncement('초안에 저장했습니다');
       const sameRevision = revisionIdRef.current === saved.revision.id;
-      if (sameRevision && saved.block.type !== 'heading') {
-        setContentState((prev) =>
-          prev.status !== 'ready'
-            ? prev
-            : {
-                status: 'ready',
-                content: {
-                  ...prev.content,
-                  revision: saved.revision,
-                  blocks: prev.content.blocks.map((b) =>
-                    b.block_id === blockId ? saved.block : b,
-                  ),
-                },
-              },
-        );
-      } else {
-        // A new draft (chapter ids belong to each revision) or a renamed section: reload.
-        const loaded = await client.loadContent(documentId, 'latest');
-        setContentState({ status: 'ready', content: loaded });
+      // Show the saved block and its (draft) revision right away, whatever happens next.
+      setContentState((prev) =>
+        prev.status !== 'ready'
+          ? prev
+          : { status: 'ready', content: applySavedBlock(prev.content, saved) },
+      );
+      if (!sameRevision || saved.block.type === 'heading') {
+        // A new draft (chapter ids belong to each revision) or a renamed section: reload. A
+        // failure here does not undo the save; the screen offers to reload the text.
+        void refreshContent();
       }
       void refreshRevisions();
     } catch (error) {
@@ -477,7 +494,7 @@ export function DocumentEditor({
           : { kind: 'unavailable' as const, message: '저장하지 못했습니다. 다시 시도해 주세요.' };
       dispatchEdit({ type: 'failed', blockId, failure });
     }
-  }, [client, documentId, handleCommonError, publish.phase, refreshRevisions]);
+  }, [client, documentId, handleCommonError, publish.phase, refreshContent, refreshRevisions]);
 
   // Unsaved text survives an accidental tab close.
   useEffect(() => {
@@ -540,6 +557,17 @@ export function DocumentEditor({
           {notice}
         </p>
       ) : null}
+      {staleContent ? (
+        <div role="alert" className={styles.publishAlert}>
+          <p>
+            수정 내용은 초안에 저장되었지만 최신 원문을 다시 불러오지 못했습니다. 목차와 원문이
+            최신이 아닐 수 있습니다.
+          </p>
+          <Button size="sm" onClick={() => void refreshContent()}>
+            원문 다시 불러오기
+          </Button>
+        </div>
+      ) : null}
       {!ready ? (
         <p role="note" className={styles.note}>
           {document.status === 'failed'
@@ -583,6 +611,7 @@ export function DocumentEditor({
             page={page}
             onPageChange={(next) => {
               setPage(next);
+              setLinkedBlockId(null);
               setAnnouncement(`${next}쪽`);
             }}
             highlights={highlights}

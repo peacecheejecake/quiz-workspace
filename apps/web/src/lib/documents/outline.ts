@@ -1,5 +1,5 @@
 // Pure helpers of the DOC-02 outline tree and block ↔ page mapping (unit-tested).
-import type { ContentBlock, OutlineItem } from './editor-api';
+import type { BlockDetail, ContentBlock, DocumentContent, OutlineItem } from './editor-api';
 
 export interface OutlineRow {
   readonly node: OutlineItem;
@@ -102,4 +102,27 @@ export function parsePageParam(value: string | string[] | undefined): number | n
   if (!raw || !/^\d{1,6}$/.test(raw)) return null;
   const page = Number(raw);
   return page >= 1 ? page : null;
+}
+
+/**
+ * The address-bar query for the viewer state: `page` always, `block` while a block is the
+ * selection (a pure page navigation clears it, so reload/share never reopens a stale block).
+ * Other parameters are kept.
+ */
+export function viewerSearch(search: string, page: number, blockId: string | null): string {
+  const params = new URLSearchParams(search);
+  params.set('page', String(page));
+  if (blockId) params.set('block', blockId);
+  else params.delete('block');
+  const text = params.toString();
+  return text ? `?${text}` : '';
+}
+
+/** Content after a successful correction: the saved block and the revision it now lives in. */
+export function applySavedBlock(content: DocumentContent, saved: BlockDetail): DocumentContent {
+  return {
+    ...content,
+    revision: saved.revision,
+    blocks: content.blocks.map((b) => (b.block_id === saved.block.block_id ? saved.block : b)),
+  };
 }

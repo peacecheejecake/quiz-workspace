@@ -21,9 +21,11 @@ import {
   ancestorsOf,
   blockPage,
   locationsOn,
+  applySavedBlock,
   parsePageParam,
   sectionOf,
   targetBlockFor,
+  viewerSearch,
   visibleOutlineRows,
 } from '../src/lib/documents/outline';
 import { loadPdfBytes, PdfLoadError, SignedUrlCache } from '../src/lib/documents/pdf-source';
@@ -324,6 +326,27 @@ describe('outline helpers', () => {
     expect(locationsOn(crossPage, 5)).toHaveLength(0);
     expect(sectionOf(crossPage, outline)).toBe('ch1-s2');
     expect(ancestorsOf('ch1-s2', outline)).toEqual(['ch1']);
+  });
+
+  it('writes page and the selected block into the query, dropping a stale block', () => {
+    expect(viewerSearch('?block=old&page=2&x=1', 5, null)).toBe('?page=5&x=1');
+    expect(viewerSearch('', 4, 'ch2-s2-p1')).toBe('?page=4&block=ch2-s2-p1');
+    expect(viewerSearch('?page=4&block=a', 4, 'b')).toBe('?page=4&block=b');
+  });
+
+  it('applies a saved correction and its draft revision to the shown content', () => {
+    const active = { id: 'r1', revision_number: 1, status: 'published', is_active: true };
+    const draft = { id: 'r2', revision_number: 2, status: 'draft', is_active: false };
+    const content = { revision: active, outline, blocks } as never;
+    const next = applySavedBlock(content, {
+      document_id: 'd',
+      revision: draft,
+      block: block({ block_id: 'ch1-p1', text: 'fixed', edited: true }),
+    } as never);
+    expect(next.revision?.id).toBe('r2');
+    expect(next.blocks.find((b) => b.block_id === 'ch1-p1')).toMatchObject({ text: 'fixed' });
+    expect(next.blocks).toHaveLength(blocks.length);
+    expect(next.outline).toBe(outline);
   });
 
   it('parses only positive integer ?page= values', () => {
