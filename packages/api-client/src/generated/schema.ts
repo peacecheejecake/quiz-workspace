@@ -404,10 +404,13 @@ export type paths = {
     put?: never;
     /**
      * Publish Question Import Drafts
-     * @description Approve and register exactly these drafts as CONFIRMED questions (QIMPORT-01-AC03).
-     *     All or nothing: an id that is not a draft of this import is 404, a draft that cannot be
-     *     confirmed (e.g. an MCQ without an answer) is 422. Already published drafts return their
-     *     question (idempotent).
+     * @description Register exactly these approved drafts as CONFIRMED questions (QIMPORT-01-AC03).
+     *
+     *     Each item names the draft and the `version` that was reviewed. All or nothing: an id that
+     *     is not a draft of this import is 404; a draft that changed since (another editor's edit,
+     *     approval or rejection) is 409 `stale-draft`; a draft that is not approved (pending or
+     *     rejected) is 409 `draft-not-approved`; a draft that cannot be confirmed is 422. Already
+     *     published drafts return their question whatever version is sent (idempotent replay).
      */
     post: operations['publishQuestionImportDrafts'];
     delete?: never;
@@ -1334,7 +1337,7 @@ export type components = {
     ImportDraft: {
       /**
        * Answer Missing
-       * @description Neither option answers nor accepted answers.
+       * @description No option answers, no accepted answers and (essay) no model answer.
        */
       answer_missing: boolean;
       /**
@@ -1369,7 +1372,7 @@ export type components = {
       publish_errors: components['schemas']['DraftPublishError'][];
       /**
        * Publishable
-       * @description Can be confirmed as it is.
+       * @description Can be approved / confirmed as it is.
        */
       publishable: boolean;
       /** Published Question Id */
@@ -1392,6 +1395,11 @@ export type components = {
       /** Reviewed At */
       reviewed_at: string | null;
       /**
+       * Rubric
+       * @description Essay model answer / grading criteria (a model answer printed in the source lands here, never in accepted_answers).
+       */
+      rubric: string | null;
+      /**
        * Updated At
        * Format: date-time
        */
@@ -1400,7 +1408,7 @@ export type components = {
       validations: components['schemas']['DraftValidation'][];
       /**
        * Version
-       * @description Send as `base_version` when editing.
+       * @description Changes with every write. Send it as `base_version` when editing and as `version` when publishing (the version that was reviewed).
        */
       version: string;
     };
@@ -1424,8 +1432,8 @@ export type components = {
     };
     /** ImportPublishRequest */
     ImportPublishRequest: {
-      /** Draft Ids */
-      draft_ids: string[];
+      /** Drafts */
+      drafts: components['schemas']['ReviewedDraft'][];
     };
     /** ImportPublishResult */
     ImportPublishResult: {
@@ -2216,9 +2224,14 @@ export type components = {
       question_type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
       /**
        * Review Status
-       * @description approve (needs a publishable draft) / reject / back to pending. A content edit without it returns an approved draft to pending.
+       * @description approve (needs a publishable draft) / reject / back to pending. Any other change without `approved` returns an approved draft to pending (it must be re-approved).
        */
       review_status?: ('pending' | 'approved' | 'rejected') | null;
+      /**
+       * Rubric
+       * @description Essay model answer / criteria.
+       */
+      rubric?: string | null;
       /** Stem */
       stem?: string | null;
     };
@@ -2433,6 +2446,19 @@ export type components = {
       metadata: {
         [key: string]: string;
       };
+    };
+    /** ReviewedDraft */
+    ReviewedDraft: {
+      /**
+       * Draft Id
+       * Format: uuid
+       */
+      draft_id: string;
+      /**
+       * Version
+       * @description The `version` of the draft that was approved.
+       */
+      version: string;
     };
     /** RevisionHistory */
     RevisionHistory: {

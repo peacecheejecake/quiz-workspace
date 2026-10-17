@@ -46,7 +46,9 @@ select columns_are('public', 'question_drafts',
         'question_type', 'payload', 'validations', 'review_status', 'reviewed_by', 'reviewed_at',
         'published_question_id', 'created_at', 'updated_at',
         -- M4.4a (20261018100000)
-        'question_number', 'is_multi_answer']);
+        'question_number', 'is_multi_answer',
+        -- M4.4a review fix (20261018120000)
+        'rubric']);
 
 select col_is_pk('public', 'question_user_states', array['user_id', 'question_id'],
   'question_user_states PK is (user_id, question_id)');

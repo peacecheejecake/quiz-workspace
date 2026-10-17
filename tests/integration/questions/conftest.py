@@ -292,8 +292,38 @@ class QuestionClient(_m3.Client):
         ]
         return sorted(items, key=lambda d: int(d["position"]))
 
+    def approve(self, draft: dict[str, Any]) -> httpx.Response:
+        """PATCH the draft to `approved` at its current version (A4)."""
+        return self.call(
+            "PATCH",
+            f"/question-drafts/{draft['id']}",
+            {"base_version": draft["version"], "review_status": "approved"},
+        )
+
+    def publish_reviewed(self, import_id: str, items: list[dict[str, str]]) -> httpx.Response:
+        """POST publish with explicit `{draft_id, version}` items (A4)."""
+        return self.call("POST", f"/question-imports/{import_id}/publish", {"drafts": items})
+
     def publish(self, import_id: str, draft_ids: list[str]) -> httpx.Response:
-        return self.call("POST", f"/question-imports/{import_id}/publish", {"draft_ids": draft_ids})
+        """Review, then register, as the import screen does (A4): approve each listed draft that
+        is neither approved nor published at its current version, then publish them at the
+        approved versions. Returns the first refused approval (e.g. 422 for an MCQ without an
+        answer, nothing published) or the publish response. Ids that are not drafts of the
+        import are sent as they are (the server answers 404)."""
+        current = {d["id"]: d for d in self.drafts(import_id)}
+        items: list[dict[str, str]] = []
+        for draft_id in draft_ids:
+            draft = current.get(draft_id)
+            if draft is None:
+                items.append({"draft_id": draft_id, "version": "0"})
+                continue
+            if draft["published_question_id"] is None and draft["review_status"] != "approved":
+                res = self.approve(draft)
+                if res.status_code != 200:
+                    return res
+                draft = res.json()
+            items.append({"draft_id": draft_id, "version": str(draft["version"])})
+        return self.publish_reviewed(import_id, items)
 
 
 def truth_question(number: int) -> dict[str, Any]:

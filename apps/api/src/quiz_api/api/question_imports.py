@@ -10,17 +10,20 @@
     GET   /question-imports/{id}/drafts          any member; drafts in position order
     PATCH /question-drafts/{id}                  editor+; edit / approve / reject a draft
                                                  (`base_version` optimistic concurrency)
-    POST  /question-imports/{id}/publish         editor+; {draft_ids} -> the CONFIRMED questions,
-                                                 idempotent per draft
+    POST  /question-imports/{id}/publish         editor+; {drafts: [{draft_id, version}]} of
+                                                 APPROVED drafts at the reviewed version -> the
+                                                 CONFIRMED questions, idempotent per draft
 
 Isolation (AGENTS.md §5 Data): drafts live in `question_drafts` and are never questions: the bank,
-the overview and `GET /questions/{id}` never see them. Only `publish` turns the drafts it is given
-into CONFIRMED questions (origin `import`, revision 1 from the draft, one source row pointing at
-the import's document revision and pages, no lineage), atomically: if any of them cannot be
-confirmed (quiz_api.question_drafts) the request is 422 and nothing is registered. Each draft is
-published at most once (`published_question_id`, unique): a repeated publish returns the same
-mapping. Answers are never filled in: an MCQ draft without an answer is 422 until a reviewer
-enters one (QIMPORT-01-AC02).
+the overview and `GET /questions/{id}` never see them. Human approval is the gate: a draft is
+approved through PATCH (only when it can be confirmed), any later change returns it to pending,
+and `publish` registers only approved drafts whose current version is the one the client
+reviewed (409 `stale-draft` / `draft-not-approved` otherwise). Publishing creates CONFIRMED
+questions (origin `import`, revision 1 from the draft, one source row pointing at the import's
+document revision and pages, no lineage) atomically: if any draft is refused nothing is
+registered. Each draft is published at most once (`published_question_id`, unique): a repeated
+publish returns the same mapping. Answers are never filled in: an MCQ draft without an answer
+cannot be approved until a reviewer enters one (QIMPORT-01-AC02).
 
 Authorization as everywhere (A1.3): runs and drafts resolve their workspace from the DB; unknown,
 foreign and invisible ids answer the same 404; viewers read but cannot import, edit or publish
@@ -199,15 +202,24 @@ class ImportDraft(BaseModel):
     question_number: int | None = Field(description="Number printed in the source.")
     question_type: QuestionType
     is_multi_answer: bool
+    rubric: str | None = Field(
+        description="Essay model answer / grading criteria (a model answer printed in the "
+        "source lands here, never in accepted_answers)."
+    )
     review_status: ReviewStatus
     published_question_id: uuid.UUID | None
     validations: list[DraftValidation]
-    answer_missing: bool = Field(description="Neither option answers nor accepted answers.")
+    answer_missing: bool = Field(
+        description="No option answers, no accepted answers and (essay) no model answer."
+    )
     pages: list[int] = Field(description="Source PDF pages (1-based) of the draft.")
-    publishable: bool = Field(description="Can be confirmed as it is.")
+    publishable: bool = Field(description="Can be approved / confirmed as it is.")
     publish_errors: list[DraftPublishError] = Field(description="Why it cannot be confirmed yet.")
     payload: DraftPayload
-    version: str = Field(description="Send as `base_version` when editing.")
+    version: str = Field(
+        description="Changes with every write. Send it as `base_version` when editing and as "
+        "`version` when publishing (the version that was reviewed)."
+    )
     reviewed_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -231,11 +243,14 @@ class QuestionDraftUpdate(BaseModel):
     is_multi_answer: bool | None = None
     accepted_answers: list[str] | None = Field(default=None, max_length=MAX_ACCEPTED_ANSWERS)
     explanation: str | None = Field(default=None, max_length=MAX_LONG_TEXT)
+    rubric: str | None = Field(
+        default=None, max_length=MAX_LONG_TEXT, description="Essay model answer / criteria."
+    )
     question_number: int | None = Field(default=None, ge=1, le=INT4_MAX)
     review_status: ReviewStatus | None = Field(
         default=None,
-        description="approve (needs a publishable draft) / reject / back to pending. A content "
-        "edit without it returns an approved draft to pending.",
+        description="approve (needs a publishable draft) / reject / back to pending. Any other "
+        "change without `approved` returns an approved draft to pending (it must be re-approved).",
     )
 
     @field_validator("question_type", "stem", "options", "is_multi_answer", "review_status")
@@ -246,10 +261,17 @@ class QuestionDraftUpdate(BaseModel):
         return value
 
 
+class ReviewedDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    draft_id: uuid.UUID
+    version: str = Field(max_length=64, description="The `version` of the draft that was approved.")
+
+
 class ImportPublishRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    draft_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_PUBLISH)
+    drafts: list[ReviewedDraft] = Field(min_length=1, max_length=MAX_PUBLISH)
 
 
 class ImportPublishedDraft(BaseModel):
@@ -365,12 +387,13 @@ _MICROSECOND = datetime(1970, 1, 1, 0, 0, 0, 1, tzinfo=UTC) - _EPOCH
 
 
 def _content(record: DraftRecord, draft: QuestionDraft) -> QuestionContent:
-    return content_of(draft, is_multi_answer=record.is_multi_answer)
+    return content_of(draft, is_multi_answer=record.is_multi_answer, rubric=record.rubric)
 
 
 def _draft_out(record: DraftRecord) -> ImportDraft:
     draft = parse_payload(record.payload)
-    blockers = publish_issues(_content(record, draft), record.validations, prefix=())
+    content = _content(record, draft)
+    blockers = publish_issues(content, record.validations, prefix=())
     return ImportDraft(
         id=record.id,
         import_id=record.import_run_id,
@@ -378,10 +401,11 @@ def _draft_out(record: DraftRecord) -> ImportDraft:
         question_number=record.question_number,
         question_type=draft.question_type.value,
         is_multi_answer=record.is_multi_answer,
+        rubric=content.rubric,
         review_status=record.review_status,
         published_question_id=record.published_question_id,
         validations=[DraftValidation.model_validate(v) for v in record.validations],
-        answer_missing=answer_missing(draft),
+        answer_missing=answer_missing(content),
         pages=pages(draft),
         publishable=not blockers.items,
         publish_errors=[
@@ -680,19 +704,24 @@ def update_question_draft(
         if "accepted_answers" in sent
         else old.accepted_answers,
         explanation=body.explanation if "explanation" in sent else old.explanation,
-        rubric=None,
+        rubric=body.rubric if "rubric" in sent else old.rubric,
     )
-    content_issues(content, "DRAFT").raise_if_any()
-
     content_changed = content != old
+    number_changed = "question_number" in sent and body.question_number != record.question_number
+    # Validated per target status: a review-status change alone (reject, back to pending) does
+    # not depend on the content rules; an edit must be storable; an approval must be publishable.
+    if content_changed:
+        content_issues(content, "DRAFT").raise_if_any()
     validations = recompute_validations(content, draft) if content_changed else draft.validations
     validation_rows = [v.model_dump(mode="json") for v in validations]
+    # Human approval covers exactly the reviewed content: any other change returns an approved
+    # draft to pending unless this same request approves the new content.
     target: ReviewStatus = (
         body.review_status
         if body.review_status is not None
         else (
             "pending"
-            if content_changed and record.review_status == "approved"
+            if (content_changed or number_changed) and record.review_status == "approved"
             else record.review_status
         )
     )
@@ -709,6 +738,7 @@ def update_question_draft(
     values: dict[str, Any] = {
         "question_type": content.question_type,
         "is_multi_answer": content.is_multi_answer,
+        "rubric": content.rubric,
         "validations": validation_rows,
     }
     if "question_number" in sent:
@@ -740,26 +770,43 @@ def publish_question_import_drafts(
     repo: ImportRepo,
     questions: QuestionRepo,
 ) -> ImportPublishResult:
-    """Approve and register exactly these drafts as CONFIRMED questions (QIMPORT-01-AC03).
-    All or nothing: an id that is not a draft of this import is 404, a draft that cannot be
-    confirmed (e.g. an MCQ without an answer) is 422. Already published drafts return their
-    question (idempotent)."""
+    """Register exactly these approved drafts as CONFIRMED questions (QIMPORT-01-AC03).
+
+    Each item names the draft and the `version` that was reviewed. All or nothing: an id that
+    is not a draft of this import is 404; a draft that changed since (another editor's edit,
+    approval or rejection) is 409 `stale-draft`; a draft that is not approved (pending or
+    rejected) is 409 `draft-not-approved`; a draft that cannot be confirmed is 422. Already
+    published drafts return their question whatever version is sent (idempotent replay)."""
     run = _load_run(repo, access.resource_id)
     user_id = access.workspace.user_id
-    requested = list(dict.fromkeys(body.draft_ids))
+    versions: dict[uuid.UUID, str] = {}
+    for item in body.drafts:
+        versions.setdefault(item.draft_id, item.version)
+    requested = list(versions)
     drafts = {d.id: d for d in repo.lock_drafts(run.id, requested)}
     if len(drafts) != len(requested):
         raise HTTPException(status_code=404, detail="Draft not found.")
 
+    pending = [drafts[d] for d in requested if drafts[d].published_question_id is None]
+    if any(versions[r.id] != draft_version(r.updated_at) for r in pending):
+        raise ProblemException(
+            409,
+            ProblemType.STALE_DRAFT,
+            detail="A draft changed since it was reviewed. Reload the drafts and review again.",
+        )
+    if any(r.review_status != "approved" for r in pending):
+        raise ProblemException(
+            409,
+            ProblemType.DRAFT_NOT_APPROVED,
+            detail="Only approved drafts can be registered. Approve them first.",
+        )
+
     issues = Issues()
     plans: list[tuple[DraftRecord, QuestionDraft, QuestionContent]] = []
-    for index, draft_id in enumerate(body.draft_ids):
-        record = drafts[draft_id]
-        if record.published_question_id is not None or record.id in {p[0].id for p in plans}:
-            continue
+    for index, record in enumerate(pending):
         draft = parse_payload(record.payload)
         content = _content(record, draft)
-        blockers = publish_issues(content, record.validations, prefix=("body", "draft_ids", index))
+        blockers = publish_issues(content, record.validations, prefix=("body", "drafts", index))
         issues.items.extend(blockers.items)
         plans.append((record, draft, content))
     issues.raise_if_any()
@@ -790,14 +837,8 @@ def publish_question_import_drafts(
                 block_ids=found.block_ids,
                 locations=found.locations,
             )
-            approved = with_review(draft, content, draft.validations, "approved")
-            repo.mark_draft_reviewed(
-                record.id,
-                actor_id=user_id,
-                review_status="approved",
-                payload=approved.model_dump(mode="json"),
-                published_question_id=question_id,
-            )
+            # The approval (reviewer, time, content) stays as it was; only the link is added.
+            repo.update_draft(record.id, published_question_id=question_id)
             mapping[record.id] = question_id
         if plans:
             repo.record_published(run.workspace_id, user_id, run.id, len(plans))

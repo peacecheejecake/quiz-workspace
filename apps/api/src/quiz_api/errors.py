@@ -67,6 +67,8 @@ class ProblemType(StrEnum):
     STALE_DRAFT = "urn:quiz-workspace:problem:stale-draft"
     # 409: the draft is already published as a question; edit the question instead.
     DRAFT_PUBLISHED = "urn:quiz-workspace:problem:draft-published"
+    # 409: publishing a draft that is not approved (pending or rejected); approve it first.
+    DRAFT_NOT_APPROVED = "urn:quiz-workspace:problem:draft-not-approved"
 
 
 class ProblemException(StarletteHTTPException):

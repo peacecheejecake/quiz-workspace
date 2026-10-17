@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 import pytest
+from book_core.contracts import ParsedDocument
 from book_core.parser import FakeParser
 from quiz_worker.celery_app import default_definitions
 from quiz_worker.document_job import (
@@ -409,3 +410,34 @@ def test_the_import_job_is_registered_and_the_llm_is_opt_in() -> None:
     # Never in APP_ENV=test, even when opted in.
     test_opt_in = WorkerSettings.model_construct(app_env=Environment.TEST, question_import_llm=True)
     assert build_llm(test_opt_in) == (None, None)
+
+
+def test_a_printed_essay_answer_becomes_the_rubric_not_an_accepted_answer(world: World) -> None:
+    """The key prints a model answer for essay question 7: the extractor reports it as text
+    answers, the job stores it as the draft's rubric (never accepted_answers, codex P2)."""
+    document = world.paper()
+    assert document.active_revision_id is not None
+    key = world.documents.revisions[document.active_revision_id].parsed_object_key
+    assert key is not None
+    parsed = ParsedDocument.model_validate_json(world.storage.objects[(PARSED_BUCKET, key)])
+    blocks = list(parsed.blocks)
+    last_key_line = next(i for i, b in enumerate(blocks) if b.text.startswith("8. B"))
+    model = "도시화로 불투수면이 늘어 침투가 줄고 유출이 증가한다."
+    blocks.insert(
+        last_key_line + 1,
+        blocks[last_key_line].model_copy(
+            update={"text": f"7. {model}", "id": blocks[last_key_line].id + "-x"}
+        ),
+    )
+    edited = parsed.model_copy(update={"blocks": tuple(blocks)})
+    world.storage.objects[(PARSED_BUCKET, key)] = edited.model_dump_json().encode()
+    run = world.start(document)
+
+    result = world.run(world.submit(run))
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    essay = world.imports.run_drafts(run.id)[6]
+    assert essay.question_type == "ESSAY"
+    assert essay.rubric == model
+    assert essay.payload["accepted_answers"] is None
+    assert "answer_missing" not in {v["code"] for v in essay.validations}

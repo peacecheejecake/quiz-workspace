@@ -75,6 +75,7 @@ class DraftRecord:
     question_type: str
     question_number: int | None
     is_multi_answer: bool
+    rubric: str | None
     payload: dict[str, Any]
     validations: list[dict[str, Any]]
     review_status: ReviewStatus
@@ -191,6 +192,7 @@ _DRAFT_COLUMNS = (
     question_drafts.c.question_type,
     question_drafts.c.question_number,
     question_drafts.c.is_multi_answer,
+    question_drafts.c.rubric,
     question_drafts.c.payload,
     question_drafts.c.validations,
     question_drafts.c.review_status,
@@ -211,6 +213,7 @@ def _draft(row: Any) -> DraftRecord:
         question_type=row.question_type,
         question_number=row.question_number,
         is_multi_answer=row.is_multi_answer,
+        rubric=row.rubric,
         payload=dict(row.payload),
         validations=list(row.validations),
         review_status=cast(ReviewStatus, row.review_status),

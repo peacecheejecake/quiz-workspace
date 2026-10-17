@@ -67,7 +67,7 @@ def test_an_mcq_without_an_answer_cannot_be_confirmed_and_none_is_made_up() -> N
     blockers = publish_issues(content, [v.model_dump() for v in draft.validations])
     assert [i["loc"] for i in blockers.items] == [("body", "correct_option_ids")]
     assert content.correct_option_ids is None
-    assert answer_missing(draft)
+    assert answer_missing(content)
 
 
 def test_short_answer_and_essay_without_answers_can_be_confirmed() -> None:
@@ -75,7 +75,7 @@ def test_short_answer_and_essay_without_answers_can_be_confirmed() -> None:
         draft = parse_payload(payload(question_type=kind, options=[]))
         content = content_of(draft, is_multi_answer=False)
         assert publish_issues(content, []).items == [], kind
-        assert answer_missing(draft)
+        assert answer_missing(content)
 
 
 def test_error_level_validations_block_publishing() -> None:
@@ -121,3 +121,20 @@ def test_draft_version_changes_with_every_write() -> None:
     now = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
     assert draft_version(now) != draft_version(now + timedelta(microseconds=1))
     assert draft_version(now) == draft_version(now.astimezone())
+
+
+def test_a_printed_essay_answer_is_the_rubric_never_an_accepted_answer() -> None:
+    # A draft written before the rule (payload accepted_answers on an ESSAY) reads the same way.
+    legacy = parse_payload(
+        payload(question_type="ESSAY", options=[], accepted_answers=["침투가 줄어 유출 증가"])
+    )
+    content = content_of(legacy, is_multi_answer=False)
+    assert content.accepted_answers is None
+    assert content.rubric == "침투가 줄어 유출 증가"
+    assert not answer_missing(content)
+    assert publish_issues(content, []).items == []
+    assert "answer_missing" not in {v.code for v in recompute_validations(content, legacy)}
+    # The rubric column wins; the rewritten payload no longer carries accepted answers.
+    stored = content_of(legacy, is_multi_answer=False, rubric="모범 답안")
+    assert stored.rubric == "모범 답안"
+    assert with_review(legacy, stored, (), "approved").accepted_answers is None

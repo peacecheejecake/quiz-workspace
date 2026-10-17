@@ -23,6 +23,7 @@ NOT_RETRYABLE = "urn:quiz-workspace:problem:import-not-retryable"
 STALE_DRAFT = "urn:quiz-workspace:problem:stale-draft"
 DRAFT_PUBLISHED = "urn:quiz-workspace:problem:draft-published"
 KEY_REUSED = "urn:quiz-workspace:problem:idempotency-key-reused"
+NOT_APPROVED = "urn:quiz-workspace:problem:draft-not-approved"
 PAPER = Path(__file__).resolve().parents[2] / "fixtures" / "pdfs" / "questions-ko.pdf"
 
 
@@ -167,22 +168,92 @@ def test_rejected_drafts_stay_out_and_multi_answer_is_kept(seed: Any) -> None:
     assert (run_after["draft_count"], run_after["published_count"]) == (8, 1)
 
 
+def _item(draft: dict[str, Any]) -> dict[str, str]:
+    return {"draft_id": draft["id"], "version": draft["version"]}
+
+
+def _approved(client: Any, draft: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = client.ok_response(client.approve(draft), "PATCH", "approve", (200,))
+    return out
+
+
 def test_publish_is_all_or_nothing_and_scoped_to_its_import(seed: Any) -> None:
     alice = seed.client("m44a-publish")
     ws = alice.create_workspace()
     run, drafts = alice.import_paper(ws["id"])
     other_run, other_drafts = alice.import_paper(ws["id"])
+    q1 = _approved(alice, seed.draft_for(drafts, 1))
+    other = _approved(alice, seed.draft_for(other_drafts, 1))
 
     # A draft of another import of the same workspace is not part of this one.
-    mixed = [seed.draft_for(drafts, 1)["id"], seed.draft_for(other_drafts, 1)["id"]]
-    seed.problem(alice.publish(run["id"], mixed), 404)
-    # One blocked draft (MCQ without answer) blocks the whole request.
-    blocked = [seed.draft_for(drafts, 1)["id"], seed.draft_for(drafts, 3)["id"]]
-    res = alice.publish(run["id"], blocked)
-    assert seed.problem(res, 422)["errors"][0]["loc"][:3] == ["body", "draft_ids", 1]
+    seed.problem(alice.publish_reviewed(run["id"], [_item(q1), _item(other)]), 404)
+    # One draft that is not approved (pending) refuses the whole request.
+    q4 = seed.draft_for(drafts, 4)
+    res = alice.publish_reviewed(run["id"], [_item(q1), _item(q4)])
+    seed.problem(res, 409, NOT_APPROVED)
     assert alice.list_questions(ws["id"]) == []
-    assert all(d["review_status"] == "pending" for d in alice.drafts(run["id"]))
+    assert seed.draft_for(alice.drafts(run["id"]), 1)["published_question_id"] is None
     assert other_run["id"] != run["id"]
+
+
+def test_publish_registers_only_the_reviewed_version_of_approved_drafts(seed: Any) -> None:
+    """Human approval is the gate (codex P1): a draft changed or rejected by another editor after
+    review is not registered."""
+    alice = seed.client("m44a-gate")
+    bob = seed.client("m44a-gate-bob")
+    ws = alice.create_workspace()
+    run, drafts = alice.import_paper(ws["id"])
+    seed.membership(ws["id"], bob.user, "editor")
+    q1 = _approved(alice, seed.draft_for(drafts, 1))
+    q5 = _approved(alice, seed.draft_for(drafts, 5))
+
+    # Bob edits q1 after Alice approved it: it is pending again and Alice's publish is stale.
+    stem = "바뀐 문제: 물이 기체로 변하는 과정은?"
+    edited = bob.ok_response(_patch(bob, q1, stem=stem), "PATCH", "edit", (200,))
+    assert edited["review_status"] == "pending"
+    seed.problem(alice.publish_reviewed(run["id"], [_item(q1), _item(q5)]), 409, STALE_DRAFT)
+    # Even at the new version it is not approved any more.
+    seed.problem(alice.publish_reviewed(run["id"], [_item(edited)]), 409, NOT_APPROVED)
+
+    # Bob rejects q5 after Alice approved it: refused at the old version (stale) and the new one.
+    rejected = bob.ok_response(_patch(bob, q5, review_status="rejected"), "PATCH", "r", (200,))
+    seed.problem(alice.publish_reviewed(run["id"], [_item(q5)]), 409, STALE_DRAFT)
+    seed.problem(alice.publish_reviewed(run["id"], [_item(rejected)]), 409, NOT_APPROVED)
+    assert alice.list_questions(ws["id"]) == []
+
+    # Re-approved and published at the matching version; a replay with any version is idempotent.
+    again = _approved(alice, edited)
+    res = alice.publish_reviewed(run["id"], [_item(again)])
+    first = alice.ok_response(res, "POST", "publish", (200,))
+    [question] = alice.list_questions(ws["id"])
+    assert question["id"] == first["items"][0]["question_id"]
+    assert question["revision"]["stem"] == stem
+    replay = alice.publish_reviewed(run["id"], [{"draft_id": again["id"], "version": "0"}])
+    assert alice.ok_response(replay, "POST", "publish", (200,)) == first
+    assert len(alice.list_questions(ws["id"])) == 1
+
+
+def test_rejecting_needs_no_publishable_content_and_essays_keep_a_model_answer(seed: Any) -> None:
+    alice = seed.client("m44a-essay")
+    ws = alice.create_workspace()
+    run, drafts = alice.import_paper(ws["id"])
+    # q3 (MCQ without an answer) cannot be approved but can be rejected and reopened.
+    q3 = seed.draft_for(drafts, 3)
+    rejected = alice.ok_response(_patch(alice, q3, review_status="rejected"), "PATCH", "r", (200,))
+    alice.ok_response(_patch(alice, rejected, review_status="pending"), "PATCH", "p", (200,))
+
+    # Essay: a model answer is the rubric, never an accepted answer.
+    q7 = seed.draft_for(drafts, 7)
+    assert (q7["rubric"], q7["answer_missing"]) == (None, True)
+    seed.problem(_patch(alice, q7, accepted_answers=["모범 답안"]), 422)
+    model = "도시화로 불투수면이 늘어 침투가 줄고 지표 유출이 증가한다."
+    edited = alice.ok_response(_patch(alice, q7, rubric=model), "PATCH", "edit", (200,))
+    assert (edited["rubric"], edited["answer_missing"]) == (model, False)
+    assert edited["payload"]["accepted_answers"] is None
+    published = alice.ok_response(alice.publish(run["id"], [q7["id"]]), "POST", "p", (200,))
+    question = alice.get_question(published["items"][0]["question_id"])
+    assert question["revision"]["rubric"] == model
+    assert question["revision"]["accepted_answers"] is None
 
 
 def test_only_failed_or_cancelled_runs_can_be_retried(seed: Any) -> None:

@@ -1064,7 +1064,7 @@
       "ImportDraft": {
         "properties": {
           "answer_missing": {
-            "description": "Neither option answers nor accepted answers.",
+            "description": "No option answers, no accepted answers and (essay) no model answer.",
             "title": "Answer Missing",
             "type": "boolean"
           },
@@ -1119,7 +1119,7 @@
             "type": "array"
           },
           "publishable": {
-            "description": "Can be confirmed as it is.",
+            "description": "Can be approved / confirmed as it is.",
             "title": "Publishable",
             "type": "boolean"
           },
@@ -1177,6 +1177,18 @@
             ],
             "title": "Reviewed At"
           },
+          "rubric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Essay model answer / grading criteria (a model answer printed in the source lands here, never in accepted_answers).",
+            "title": "Rubric"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -1190,7 +1202,7 @@
             "type": "array"
           },
           "version": {
-            "description": "Send as `base_version` when editing.",
+            "description": "Changes with every write. Send it as `base_version` when editing and as `version` when publishing (the version that was reviewed).",
             "title": "Version",
             "type": "string"
           }
@@ -1202,6 +1214,7 @@
           "question_number",
           "question_type",
           "is_multi_answer",
+          "rubric",
           "review_status",
           "published_question_id",
           "validations",
@@ -1237,19 +1250,18 @@
       "ImportPublishRequest": {
         "additionalProperties": false,
         "properties": {
-          "draft_ids": {
+          "drafts": {
             "items": {
-              "format": "uuid",
-              "type": "string"
+              "$ref": "#/components/schemas/ReviewedDraft"
             },
             "maxItems": 200,
             "minItems": 1,
-            "title": "Draft Ids",
+            "title": "Drafts",
             "type": "array"
           }
         },
         "required": [
-          "draft_ids"
+          "drafts"
         ],
         "title": "ImportPublishRequest",
         "type": "object"
@@ -3116,8 +3128,21 @@
                 "type": "null"
               }
             ],
-            "description": "approve (needs a publishable draft) / reject / back to pending. A content edit without it returns an approved draft to pending.",
+            "description": "approve (needs a publishable draft) / reject / back to pending. Any other change without `approved` returns an approved draft to pending (it must be re-approved).",
             "title": "Review Status"
+          },
+          "rubric": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Essay model answer / criteria.",
+            "title": "Rubric"
           },
           "stem": {
             "anyOf": [
@@ -3676,6 +3701,28 @@
           "metadata"
         ],
         "title": "ResumableUpload",
+        "type": "object"
+      },
+      "ReviewedDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "draft_id": {
+            "format": "uuid",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "version": {
+            "description": "The `version` of the draft that was approved.",
+            "maxLength": 64,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "version"
+        ],
+        "title": "ReviewedDraft",
         "type": "object"
       },
       "RevisionHistory": {
@@ -6702,7 +6749,7 @@
     },
     "/api/v1/question-imports/{import_id}/publish": {
       "post": {
-        "description": "Approve and register exactly these drafts as CONFIRMED questions (QIMPORT-01-AC03).\nAll or nothing: an id that is not a draft of this import is 404, a draft that cannot be\nconfirmed (e.g. an MCQ without an answer) is 422. Already published drafts return their\nquestion (idempotent).",
+        "description": "Register exactly these approved drafts as CONFIRMED questions (QIMPORT-01-AC03).\n\nEach item names the draft and the `version` that was reviewed. All or nothing: an id that\nis not a draft of this import is 404; a draft that changed since (another editor's edit,\napproval or rejection) is 409 `stale-draft`; a draft that is not approved (pending or\nrejected) is 409 `draft-not-approved`; a draft that cannot be confirmed is 422. Already\npublished drafts return their question whatever version is sent (idempotent replay).",
         "operationId": "publishQuestionImportDrafts",
         "parameters": [
           {

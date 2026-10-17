@@ -136,12 +136,13 @@ def test_qimport_01_ac03_import_and_publish_need_an_editor_of_an_active_workspac
     run, drafts = owner.import_paper(ws["id"])
     seed.membership(ws["id"], viewer.user, "viewer")
     first = drafts[0]["id"]
+    reviewed = {"drafts": [{"draft_id": first, "version": drafts[0]["version"]}]}
 
     # Other users: the run, its drafts and the workspace's imports do not exist for them.
     for method, path, body in (
         ("GET", f"/question-imports/{run['id']}", None),
         ("GET", f"/question-imports/{run['id']}/drafts", None),
-        ("POST", f"/question-imports/{run['id']}/publish", {"draft_ids": [first]}),
+        ("POST", f"/question-imports/{run['id']}/publish", reviewed),
         ("GET", f"/workspaces/{ws['id']}/question-imports", None),
         ("POST", f"/workspaces/{ws['id']}/question-imports", {"document_id": seed.new_id()}),
     ):
@@ -152,7 +153,7 @@ def test_qimport_01_ac03_import_and_publish_need_an_editor_of_an_active_workspac
     # Viewers can read drafts but cannot import or publish.
     assert len(viewer.drafts(run["id"])) == len(drafts)
     seed.problem(
-        viewer.call("POST", f"/question-imports/{run['id']}/publish", {"draft_ids": [first]}),
+        viewer.call("POST", f"/question-imports/{run['id']}/publish", reviewed),
         403,
         seed.INSUFFICIENT_ROLE,
     )
@@ -168,7 +169,7 @@ def test_qimport_01_ac03_import_and_publish_need_an_editor_of_an_active_workspac
 
     owner.ok("POST", f"/workspaces/{ws['id']}/archive")
     seed.problem(
-        owner.call("POST", f"/question-imports/{run['id']}/publish", {"draft_ids": [first]}),
+        owner.call("POST", f"/question-imports/{run['id']}/publish", reviewed),
         403,
         seed.ARCHIVED,
     )

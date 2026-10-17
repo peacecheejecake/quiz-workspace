@@ -39,9 +39,14 @@
 //           runs table has a (workspace_id, created_at desc) index for this listing)
 //      GET  /question-imports/{id}            → 200 ImportRun
 //      GET  /question-imports/{id}/drafts     → 200 {items: Draft[]} ordered by position
-//      POST /question-imports/{id}/publish {draft_ids} → 200 {items: [{draft_id, question_id}]}
-//           approves + publishes exactly those drafts; idempotent per draft (unique
-//           published_question_id); an unedited MCQ draft without an answer → 422.
+//      POST /question-imports/{id}/publish {drafts: [{draft_id, version}]}
+//           → 200 {items: [{draft_id, question_id}]} (changed by the M4.4a review fix: was
+//           {draft_ids}, which approved + published in one step). Registers exactly those
+//           drafts, which must already be APPROVED (PATCH below) at the `version` the client
+//           reviewed: a changed draft → 409 stale-draft, a pending/rejected one → 409
+//           draft-not-approved, nothing registered. Idempotent per draft (unique
+//           published_question_id; an already published draft replays whatever version is sent).
+//           An MCQ draft without an answer cannot be approved (422) until an answer is entered.
 //      POST /question-imports/{id}/retry      → 202 ImportRun (same run, new job_id) after the
 //           run failed; the retried job must not duplicate drafts persisted by the failed attempt
 //      ImportRun = {id, status, job_id, source_document_id}; the job is polled at GET /jobs/{id}.
@@ -50,13 +55,17 @@
 //      M4.4a confirmed the above and added (contracts/openapi.json is the reference):
 //      ImportRun += {source_document_revision_id, document_title, error_code, draft_count,
 //                    published_count, created_at, updated_at, finished_at}
-//      Draft += {import_id, question_number, is_multi_answer, answer_missing, pages,
+//      Draft += {import_id, question_number, is_multi_answer, rubric, answer_missing, pages,
 //                publishable, publish_errors: [{field, message}], version, ...timestamps}
+//            `rubric` = an essay's model answer / grading criteria (a model answer printed in the
+//            paper lands there, never in accepted_answers); answer_missing counts it.
 //      PATCH /question-drafts/{id} {base_version: Draft.version, question_type?, stem?, options?,
-//            correct_option_ids?, is_multi_answer?, accepted_answers?, explanation?,
+//            correct_option_ids?, is_multi_answer?, accepted_answers?, explanation?, rubric?,
 //            question_number?, review_status?: pending|approved|rejected} → 200 Draft; a stale
 //            base_version → 409 stale-draft; a published draft → 409 draft-published; approving
-//            a draft that is not publishable → 422 (validations are recomputed after an edit)
+//            a draft that is not publishable → 422 (validations are recomputed after an edit);
+//            any change without `approved` returns an approved draft to pending; rejecting or
+//            reopening never depends on the content rules.
 //      Errors: start from a non-ready paper → 409 document-not-ready; a book or unknown document
 //      → 422; retry of a run that is not failed/cancelled → 409 import-not-retryable.
 //   A5 QIMPORT-01-AC01 says "a PDF with 5 questions → 5 drafts"; the only synthetic question

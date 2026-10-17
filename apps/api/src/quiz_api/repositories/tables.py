@@ -292,6 +292,8 @@ question_drafts = Table(
     # M4.4a (20261018100000_question_import_worker.sql).
     Column("question_number", Integer),
     Column("is_multi_answer", Boolean, nullable=False),
+    # 20261018120000_question_draft_rubric.sql
+    Column("rubric", Text),
     Column("payload", JSONB, nullable=False),
     Column("validations", JSONB, nullable=False),
     Column("review_status", Text, nullable=False),

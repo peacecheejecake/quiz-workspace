@@ -19,6 +19,9 @@ Pipeline, serialised per run by an advisory lock:
 4. in one transaction: re-check workspace access (rows locked FOR SHARE), insert the drafts whose
    position has none yet and mark the run `succeeded`.
 
+A model answer the key prints for an ESSAY goes to the draft's `rubric` (모범 답안 / grading
+criteria), never to `accepted_answers` (essays are not auto-graded).
+
 Drafts stay isolated in `question_drafts` (`pending`) until a human publishes them through the API.
 
 Failure: the run is marked `failed` (or `cancelled`) by the final attempt and again by the cleanup
@@ -79,6 +82,7 @@ logger = logging.getLogger(__name__)
 IMPORT_FAILURE_MARKER = "E2E-FAIL-IMPORT-ONCE"
 # A parse artifact is the JSON of one PDF's blocks; far below the 50 MiB bucket limit.
 MAX_ARTIFACT_BYTES = 50 * 1024 * 1024
+MAX_RUBRIC = 20000  # question_drafts_rubric_length / question_revisions_rubric_length
 _DRAFT_NUMBER = re.compile(r"-q(\d{3,})(?:-\d+)?$")
 
 
@@ -288,6 +292,12 @@ def draft_row(
     multi = question.draft.question_type is QuestionType.MCQ and (
         question.multi_select or len(draft.correct_option_ids or ()) > 1
     )
+    rubric = None
+    if draft.question_type is QuestionType.ESSAY and draft.accepted_answers:
+        # An essay is never auto-graded: a printed model answer is its rubric (모범 답안), not
+        # an accepted answer (question_rules allow accepted answers on SHORT_ANSWER only).
+        rubric = "\n".join(draft.accepted_answers)[:MAX_RUBRIC]
+        draft = QuestionDraft.model_validate({**draft.model_dump(), "accepted_answers": None})
     return DraftRow(
         position=position,
         question_type=draft.question_type.value,
@@ -295,6 +305,7 @@ def draft_row(
         is_multi_answer=multi,
         payload=draft.model_dump(mode="json"),
         validations=[v.model_dump(mode="json") for v in draft.validations],
+        rubric=rubric,
     )
 
 

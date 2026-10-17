@@ -5,7 +5,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(17);
+select plan(18);
 
 insert into auth.users (id, email) values
   ('00000000-0000-4000-8000-0000004a4a01', 'm44a-owner@example.test');
@@ -21,6 +21,7 @@ insert into public.question_drafts (id, workspace_id, source_type, import_run_id
 
 -- Schema ------------------------------------------------------------------------------------------
 select has_column('public', 'question_drafts', 'question_number', 'drafts carry the printed number');
+select has_column('public', 'question_drafts', 'rubric', 'drafts carry an essay model answer (20261018120000)');
 select col_not_null('public', 'question_drafts', 'is_multi_answer', 'is_multi_answer is not null');
 select col_default_is('public', 'question_drafts', 'is_multi_answer', 'false',
   'is_multi_answer defaults to false');

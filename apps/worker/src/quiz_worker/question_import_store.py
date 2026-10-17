@@ -69,6 +69,8 @@ class DraftRow:
     is_multi_answer: bool
     payload: dict[str, Any]
     validations: list[dict[str, Any]]
+    # Essay model answer printed in the answer key (20261018120000); never accepted_answers.
+    rubric: str | None = None
 
 
 class ImportStore(Protocol):
@@ -143,9 +145,9 @@ _INSERT_DRAFT = text(
     """
     insert into public.question_drafts (workspace_id, source_type, import_run_id, position,
                                         question_type, question_number, is_multi_answer, payload,
-                                        validations)
+                                        validations, rubric)
     select :workspace_id, 'import', :run_id, :position, :question_type, :question_number,
-           :is_multi_answer, cast(:payload as jsonb), cast(:validations as jsonb)
+           :is_multi_answer, cast(:payload as jsonb), cast(:validations as jsonb), :rubric
      where not exists (select 1 from public.question_drafts
                         where import_run_id = :run_id and position = :position)
     on conflict do nothing
@@ -263,6 +265,7 @@ class PostgresImportStore:
                     "is_multi_answer": draft.is_multi_answer,
                     "payload": _json(draft.payload),
                     "validations": _json(draft.validations),
+                    "rubric": draft.rubric,
                 },
             )
             created += result.rowcount or 0
