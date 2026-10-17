@@ -17,6 +17,8 @@ dependencies = [
   "psycopg[binary]>=3.3,<4",
   # Shared core (architecture §2): job adapters will call it; log redaction lives there.
   "book-core",
+  # M3.2b: Supabase Storage REST client (same range as apps/api).
+  "httpx>=0.28,<1",
 ]
 
 [build-system]

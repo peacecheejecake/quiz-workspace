@@ -23,6 +23,7 @@ from uuid import UUID
 
 from celery import Celery, Task, signals
 
+from quiz_worker.document_job import LazyDeps, document_parse_definition
 from quiz_worker.envelope import JobEnvelope
 from quiz_worker.errors import JobOutcomeError, JobRetryError
 from quiz_worker.jobs import ECHO_JOB
@@ -154,7 +155,7 @@ def create_celery_app(
     store = job_store if job_store is not None else build_job_store(settings)
     app = QuizCelery(worker_settings=settings, job_store=store)
     app.conf.update(build_celery_config(settings))
-    for definition in definitions if definitions is not None else default_definitions():
+    for definition in definitions if definitions is not None else default_definitions(settings):
         register_job(app, definition)
     register_reconciler(app)
     return app
@@ -336,5 +337,8 @@ def cleanup_policy_for(settings: WorkerSettings) -> CleanupPolicy:
     )
 
 
-def default_definitions() -> list[JobDefinition[Any]]:
-    return [ECHO_JOB]
+def default_definitions(settings: WorkerSettings) -> list[JobDefinition[Any]]:
+    """Every job type the worker runs. Dependencies of the document jobs (DB, Storage, Qdrant,
+    models) are built on their first run, so a worker without that configuration still starts
+    (those jobs then fail as `worker_not_configured`)."""
+    return [ECHO_JOB, document_parse_definition(LazyDeps(settings))]

@@ -25,6 +25,8 @@ class ParserOptions:
     ``artifacts_path``: pre-downloaded model weights directory (offline workers); ``None`` uses
     the Hugging Face cache (``HF_HOME``, default ``~/.cache/huggingface``).
     ``device``: model inference device. ``cpu`` keeps output identical across machines.
+    ``document_timeout``: seconds after which conversion stops; a document that does not finish
+    in time is a ``ParserError`` (never a partial document). ``None`` = no limit.
     """
 
     ocr: bool = False
@@ -32,6 +34,7 @@ class ParserOptions:
     table_structure: bool = True
     artifacts_path: Path | None = None
     device: str = "cpu"
+    document_timeout: float | None = None
 
 
 @runtime_checkable
