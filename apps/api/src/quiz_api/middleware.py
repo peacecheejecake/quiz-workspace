@@ -100,15 +100,23 @@ class NoStoreMiddleware:
     response to a request that carried an `Authorization` header, overriding whatever the
     route set: authenticated responses must never land in a shared cache. Public endpoints
     outside the prefix that want caching set their own header.
+
+    Responses under `shared_prefix` (the guest share routes, docs/workspace-sharing.md §2) get
+    `Cache-Control: private, no-store` and `X-Robots-Tag: noindex, nofollow` as well
+    (`Referrer-Policy: no-referrer` is on every response, `SecurityHeadersMiddleware`).
     """
 
-    def __init__(self, app: ASGIApp, *, path_prefix: str) -> None:
+    def __init__(self, app: ASGIApp, *, path_prefix: str, shared_prefix: str | None = None) -> None:
         self.app = app
         self.path_prefix = path_prefix.rstrip("/")
+        self.shared_prefix = shared_prefix.rstrip("/") if shared_prefix else None
+
+    @staticmethod
+    def _under(path: str, prefix: str) -> bool:
+        return path == prefix or path.startswith(f"{prefix}/")
 
     def _applies(self, scope: Scope) -> bool:
-        path: str = scope["path"]
-        if path == self.path_prefix or path.startswith(f"{self.path_prefix}/"):
+        if self._under(scope["path"], self.path_prefix):
             return True
         return "authorization" in Headers(scope=scope)
 
@@ -116,10 +124,16 @@ class NoStoreMiddleware:
         if scope["type"] != "http" or not self._applies(scope):
             await self.app(scope, receive, send)
             return
+        shared = self.shared_prefix is not None and self._under(scope["path"], self.shared_prefix)
 
         async def send_no_store(message: Message) -> None:
             if message["type"] == "http.response.start":
-                MutableHeaders(scope=message)["Cache-Control"] = "no-store"
+                headers = MutableHeaders(scope=message)
+                if shared:
+                    headers["Cache-Control"] = "private, no-store"
+                    headers["X-Robots-Tag"] = "noindex, nofollow"
+                else:
+                    headers["Cache-Control"] = "no-store"
             await send(message)
 
         await self.app(scope, receive, send_no_store)

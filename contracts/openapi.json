@@ -4375,6 +4375,22 @@
         "title": "SelfGradeResult",
         "type": "object"
       },
+      "SessionExchange": {
+        "additionalProperties": false,
+        "properties": {
+          "secret": {
+            "description": "The `k` value of the share URL fragment (`#k=…`), sent once.",
+            "maxLength": 256,
+            "title": "Secret",
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret"
+        ],
+        "title": "SessionExchange",
+        "type": "object"
+      },
       "ShareLink": {
         "description": "A share link's metadata (never its secret or digest).",
         "properties": {
@@ -4537,6 +4553,321 @@
           }
         },
         "title": "ShareLinkUpdate",
+        "type": "object"
+      },
+      "SharedDocument": {
+        "properties": {
+          "blocks": {
+            "description": "Blocks in reading order (one page).",
+            "items": {
+              "$ref": "#/components/schemas/ContentBlock"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "document_type": {
+            "title": "Document Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "next_after": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `after` for the next page of blocks.",
+            "title": "Next After"
+          },
+          "outline": {
+            "description": "Chapter/section tree of the revision.",
+            "items": {
+              "$ref": "#/components/schemas/OutlineItem"
+            },
+            "title": "Outline",
+            "type": "array"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "document_type",
+          "revision_id",
+          "outline",
+          "blocks",
+          "next_after"
+        ],
+        "title": "SharedDocument",
+        "type": "object"
+      },
+      "SharedDocumentSummary": {
+        "properties": {
+          "document_type": {
+            "description": "`book` or `question_paper`.",
+            "title": "Document Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "description": "The published revision shown to guests.",
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "document_type",
+          "revision_id"
+        ],
+        "title": "SharedDocumentSummary",
+        "type": "object"
+      },
+      "SharedQuestion": {
+        "description": "A published question with its answer and explanation; no per-user or owner fields.",
+        "properties": {
+          "chapter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChapterRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "question_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Number"
+          },
+          "question_type": {
+            "enum": [
+              "MCQ",
+              "SHORT_ANSWER",
+              "ESSAY"
+            ],
+            "title": "Question Type",
+            "type": "string"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/QuestionRevision",
+            "description": "The active (published) revision."
+          },
+          "sources": {
+            "description": "Sources in shared documents only.",
+            "items": {
+              "$ref": "#/components/schemas/QuestionSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "question_type",
+          "chapter_id",
+          "chapter",
+          "question_number",
+          "revision",
+          "sources",
+          "updated_at"
+        ],
+        "title": "SharedQuestion",
+        "type": "object"
+      },
+      "SharedQuestionList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SharedQuestion"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "SharedQuestionList",
+        "type": "object"
+      },
+      "SharedSearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SearchItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "keyword",
+              "semantic",
+              "hybrid"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "query_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Script hint: `ko`, `en`, `mixed` or null.",
+            "title": "Query Language"
+          },
+          "truncated": {
+            "description": "The query was cut to the maximum length.",
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "query_language",
+          "truncated",
+          "warnings",
+          "items"
+        ],
+        "title": "SharedSearchResponse",
+        "type": "object"
+      },
+      "SharedWorkspace": {
+        "properties": {
+          "allow_fork": {
+            "description": "Signed-in guests may fork (WS-VIEW-01-AC06).",
+            "title": "Allow Fork",
+            "type": "boolean"
+          },
+          "documents": {
+            "description": "Documents with a published revision, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/SharedDocumentSummary"
+            },
+            "title": "Documents",
+            "type": "array"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the link expires; null: never.",
+            "title": "Expires At"
+          },
+          "workspace": {
+            "$ref": "#/components/schemas/SharedWorkspaceInfo"
+          }
+        },
+        "required": [
+          "workspace",
+          "allow_fork",
+          "expires_at",
+          "documents"
+        ],
+        "title": "SharedWorkspace",
+        "type": "object"
+      },
+      "SharedWorkspaceInfo": {
+        "properties": {
+          "archived": {
+            "description": "Archived workspaces stay readable through the link.",
+            "title": "Archived",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "archived"
+        ],
+        "title": "SharedWorkspaceInfo",
         "type": "object"
       },
       "SignedReadUrl": {
@@ -8127,6 +8458,803 @@
         "summary": "Get Question Revision",
         "tags": [
           "questions"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}": {
+      "get": {
+        "description": "The shared workspace: name, fork policy and published documents (WS-VIEW-01-AC01/AC06).",
+        "operationId": "getSharedWorkspace",
+        "parameters": [
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedWorkspace"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Shared Workspace",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/documents/{document_id}": {
+      "get": {
+        "description": "The published revision of a document: outline and blocks (WS-VIEW-01-AC01/AC02).\n\nOnly the active published revision; drafts and older revisions are never reachable here.",
+        "operationId": "getSharedDocument",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only blocks starting on this page.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only blocks starting on this page.",
+              "title": "Page"
+            }
+          },
+          {
+            "description": "`next_after` of the previous page.",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": -1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next_after` of the previous page.",
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedDocument"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Shared Document",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/documents/{document_id}/pdf": {
+      "get": {
+        "description": "The original PDF of a shared document, streamed through the API (WS-VIEW-01-AC02).\n\nThe private bucket is read server-side after the share check; no signed Storage URL is\nhanded to the guest.",
+        "operationId": "getSharedDocumentPdf",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {}
+            },
+            "description": "The original PDF."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Shared Document Pdf",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/questions": {
+      "get": {
+        "description": "CONFIRMED questions in bank order, answers and explanations included (WS-VIEW-01-AC01).\n\nReading records nothing (no view, favourite, retry or attempt state).",
+        "operationId": "listSharedQuestions",
+        "parameters": [
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "question_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "MCQ",
+                    "SHORT_ANSWER",
+                    "ESSAY"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Question Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chapter_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chapter Id"
+            }
+          },
+          {
+            "description": "Questions with a source in this document.",
+            "in": "query",
+            "name": "document_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Questions with a source in this document.",
+              "title": "Document Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedQuestionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List Shared Questions",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/questions/{question_id}": {
+      "get": {
+        "description": "One CONFIRMED question of the shared workspace; anything else is the same 404.",
+        "operationId": "getSharedQuestion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedQuestion"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Shared Question",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/search": {
+      "post": {
+        "description": "Search the published documents of the shared workspace (WS-VIEW-01-AC02).\n\nSame request and result items as the member search; `document_ids` must name shared\n(published) documents. The query is not echoed back.",
+        "operationId": "searchSharedWorkspace",
+        "parameters": [
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Search Shared Workspace",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/sessions": {
+      "post": {
+        "description": "Exchange the link secret for a read-only share session cookie (WS-VIEW-01-AC01).\n\nNeeds an allowlisted `Origin` (the web app). Unknown link, wrong secret, revoked or expired\nlink and deleted workspace all answer the same 404. The secret is never stored or logged.",
+        "operationId": "createSharedSession",
+        "parameters": [
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionExchange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Create Shared Session",
+        "tags": [
+          "shared"
         ]
       }
     },

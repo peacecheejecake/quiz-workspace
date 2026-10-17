@@ -46,6 +46,11 @@ class ProblemType(StrEnum):
     STALE_REVISION = "urn:quiz-workspace:problem:stale-revision"
     # 409: the share link is revoked (or, for rotate, revoked or expired); create a new link.
     SHARE_LINK_INACTIVE = "urn:quiz-workspace:problem:share-link-inactive"
+    # 404 (shared routes): unknown share id, wrong secret, revoked/expired link or deleted
+    # workspace; one body for all of them (no existence oracle). The guest's session is over.
+    SHARE_UNAVAILABLE = "urn:quiz-workspace:problem:share-unavailable"
+    # 401 (shared routes): no (valid) share session cookie; exchange the link secret first.
+    SHARE_SESSION_REQUIRED = "urn:quiz-workspace:problem:share-session-required"
     # 409: practice needs a CONFIRMED question (drafts and archived questions are not studied).
     QUESTION_NOT_CONFIRMED = "urn:quiz-workspace:problem:question-not-confirmed"
     # 409: the practice session was already submitted (a session is answered exactly once).

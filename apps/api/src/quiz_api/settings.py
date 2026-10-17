@@ -145,6 +145,21 @@ class Settings(BaseSettings):
     # Public origin of the web app, used to build share URLs (`<origin>/share/{id}#k=…`, S1a).
     # Unset → the first CORS origin (https in preview/production).
     web_origin: str | None = Field(default=None, validation_alias="WEB_ORIGIN")
+    # Guest share sessions (S1b; quiz_api.share_sessions). HMAC key of the session cookie, at
+    # least 32 characters (`openssl rand -base64 32`), the same on every API replica. Unset: a
+    # random per-process key locally/in tests; preview/production answer 503 on /shared routes.
+    share_session_secret: SecretStr | None = Field(
+        default=None, validation_alias="SHARE_SESSION_SECRET"
+    )
+    # Lifetime of a share session cookie (short-lived; the link is re-checked on every request).
+    share_session_ttl_seconds: int = Field(
+        default=4 * 3600, ge=60, le=8 * 3600, validation_alias="SHARE_SESSION_TTL_SECONDS"
+    )
+    # Secret exchanges per minute per client and share link (in-process token bucket, like
+    # search); above it 429 + Retry-After. 0 disables it.
+    share_exchange_rate_per_minute: int = Field(
+        default=20, ge=0, le=600, validation_alias="SHARE_EXCHANGE_RATE_LIMIT_PER_MINUTE"
+    )
     # Supabase Storage (M3.2a; docs/deployment.md §2, auth.md §4). The API talks to Storage with
     # the server-only secret key; browsers only ever get short-lived signed URLs. Unset key ->
     # document upload/read routes answer 503.
@@ -233,6 +248,9 @@ class Settings(BaseSettings):
             problems.append("CORS_ALLOWED_ORIGINS must contain only https:// origins")
         if self.web_origin and not self.web_origin.startswith("https://"):
             problems.append("WEB_ORIGIN must be an https:// origin")
+        share_key = self.share_session_secret
+        if share_key is not None and 0 < len(share_key.get_secret_value()) < 32:
+            problems.append("SHARE_SESSION_SECRET must have at least 32 characters")
         if self.search_embedder is EmbedderMode.FAKE:
             problems.append("WORKER_EMBEDDER=fake is for local and test runs only")
         if problems:

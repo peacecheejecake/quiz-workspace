@@ -67,7 +67,9 @@ def create_app(
         allowed_origins=settings.effective_cors_origins,
         max_age=settings.cors_max_age_seconds,
     )
-    app.add_middleware(NoStoreMiddleware, path_prefix=API_V1_PREFIX)
+    app.add_middleware(
+        NoStoreMiddleware, path_prefix=API_V1_PREFIX, shared_prefix=f"{API_V1_PREFIX}/shared"
+    )
     app.add_middleware(
         SecurityHeadersMiddleware,
         force_hsts=settings.is_deployed,

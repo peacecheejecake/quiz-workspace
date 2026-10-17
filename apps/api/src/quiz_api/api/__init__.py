@@ -18,6 +18,7 @@ from quiz_api.api import (
     questions,
     search,
     share_links,
+    shared,
     workspaces,
 )
 from quiz_api.errors import problem_responses
@@ -36,4 +37,5 @@ api_router.include_router(question_overview.router)
 api_router.include_router(question_imports.router)
 api_router.include_router(practice.router)
 api_router.include_router(share_links.router)
+api_router.include_router(shared.router)
 api_router.include_router(jobs.router)

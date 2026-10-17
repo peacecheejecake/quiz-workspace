@@ -37,6 +37,9 @@ const nextConfig: NextConfig = {
       { source: '/:path*', headers: securityHeaders },
       { source: '/share', headers: shareHeaders },
       { source: '/share/:path*', headers: shareHeaders },
+      // The share relay (src/app/api/shared/**) sets the same values itself; listed for redirects
+      // and framework-generated responses on those paths.
+      { source: '/api/shared/:path*', headers: shareHeaders },
     ];
   },
 };

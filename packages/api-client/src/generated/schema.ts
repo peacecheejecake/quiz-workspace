@@ -550,6 +550,159 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/shared/{share_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Shared Workspace
+     * @description The shared workspace: name, fork policy and published documents (WS-VIEW-01-AC01/AC06).
+     */
+    get: operations['getSharedWorkspace'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/documents/{document_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Shared Document
+     * @description The published revision of a document: outline and blocks (WS-VIEW-01-AC01/AC02).
+     *
+     *     Only the active published revision; drafts and older revisions are never reachable here.
+     */
+    get: operations['getSharedDocument'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/documents/{document_id}/pdf': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Shared Document Pdf
+     * @description The original PDF of a shared document, streamed through the API (WS-VIEW-01-AC02).
+     *
+     *     The private bucket is read server-side after the share check; no signed Storage URL is
+     *     handed to the guest.
+     */
+    get: operations['getSharedDocumentPdf'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/questions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Shared Questions
+     * @description CONFIRMED questions in bank order, answers and explanations included (WS-VIEW-01-AC01).
+     *
+     *     Reading records nothing (no view, favourite, retry or attempt state).
+     */
+    get: operations['listSharedQuestions'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/questions/{question_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Shared Question
+     * @description One CONFIRMED question of the shared workspace; anything else is the same 404.
+     */
+    get: operations['getSharedQuestion'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/search': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Search Shared Workspace
+     * @description Search the published documents of the shared workspace (WS-VIEW-01-AC02).
+     *
+     *     Same request and result items as the member search; `document_ids` must name shared
+     *     (published) documents. The query is not echoed back.
+     */
+    post: operations['searchSharedWorkspace'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/sessions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Shared Session
+     * @description Exchange the link secret for a read-only share session cookie (WS-VIEW-01-AC01).
+     *
+     *     Needs an allowlisted `Origin` (the web app). Unknown link, wrong secret, revoked or expired
+     *     link and deleted workspace all answer the same 404. The secret is never stored or logged.
+     */
+    post: operations['createSharedSession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces': {
     parameters: {
       query?: never;
@@ -2777,6 +2930,158 @@ export type components = {
        * @enum {string}
        */
       result: 'correct' | 'incorrect';
+    };
+    /** SessionExchange */
+    SessionExchange: {
+      /**
+       * Secret
+       * @description The `k` value of the share URL fragment (`#k=…`), sent once.
+       */
+      secret: string;
+    };
+    /** SharedDocument */
+    SharedDocument: {
+      /**
+       * Blocks
+       * @description Blocks in reading order (one page).
+       */
+      blocks: components['schemas']['ContentBlock'][];
+      /** Document Type */
+      document_type: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Next After
+       * @description Pass as `after` for the next page of blocks.
+       */
+      next_after: number | null;
+      /**
+       * Outline
+       * @description Chapter/section tree of the revision.
+       */
+      outline: components['schemas']['OutlineItem'][];
+      /**
+       * Revision Id
+       * Format: uuid
+       */
+      revision_id: string;
+      /** Title */
+      title: string;
+    };
+    /** SharedDocumentSummary */
+    SharedDocumentSummary: {
+      /**
+       * Document Type
+       * @description `book` or `question_paper`.
+       */
+      document_type: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Revision Id
+       * Format: uuid
+       * @description The published revision shown to guests.
+       */
+      revision_id: string;
+      /** Title */
+      title: string;
+    };
+    /**
+     * SharedQuestion
+     * @description A published question with its answer and explanation; no per-user or owner fields.
+     */
+    SharedQuestion: {
+      chapter: components['schemas']['ChapterRef'] | null;
+      /** Chapter Id */
+      chapter_id: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Question Number */
+      question_number: number | null;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /** @description The active (published) revision. */
+      revision: components['schemas']['QuestionRevision'];
+      /**
+       * Sources
+       * @description Sources in shared documents only.
+       */
+      sources: components['schemas']['QuestionSource'][];
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /** SharedQuestionList */
+    SharedQuestionList: {
+      /** Items */
+      items: components['schemas']['SharedQuestion'][];
+      /** Next Cursor */
+      next_cursor: string | null;
+    };
+    /** SharedSearchResponse */
+    SharedSearchResponse: {
+      /** Items */
+      items: components['schemas']['SearchItem'][];
+      /**
+       * Mode
+       * @enum {string}
+       */
+      mode: 'keyword' | 'semantic' | 'hybrid';
+      /**
+       * Query Language
+       * @description Script hint: `ko`, `en`, `mixed` or null.
+       */
+      query_language: string | null;
+      /**
+       * Truncated
+       * @description The query was cut to the maximum length.
+       */
+      truncated: boolean;
+      /** Warnings */
+      warnings: string[];
+    };
+    /** SharedWorkspace */
+    SharedWorkspace: {
+      /**
+       * Allow Fork
+       * @description Signed-in guests may fork (WS-VIEW-01-AC06).
+       */
+      allow_fork: boolean;
+      /**
+       * Documents
+       * @description Documents with a published revision, oldest first.
+       */
+      documents: components['schemas']['SharedDocumentSummary'][];
+      /**
+       * Expires At
+       * @description When the link expires; null: never.
+       */
+      expires_at: string | null;
+      workspace: components['schemas']['SharedWorkspaceInfo'];
+    };
+    /** SharedWorkspaceInfo */
+    SharedWorkspaceInfo: {
+      /**
+       * Archived
+       * @description Archived workspaces stay readable through the link.
+       */
+      archived: boolean;
+      /** Name */
+      name: string;
     };
     /**
      * ShareLink
@@ -5183,6 +5488,522 @@ export interface operations {
       };
       /** @description Unprocessable Content */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getSharedWorkspace: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedWorkspace'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getSharedDocument: {
+    parameters: {
+      query?: {
+        /** @description `next_after` of the previous page. */
+        after?: number | null;
+        limit?: number;
+        /** @description Only blocks starting on this page. */
+        page?: number | null;
+      };
+      header?: never;
+      path: {
+        document_id: string;
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedDocument'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getSharedDocumentPdf: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        document_id: string;
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The original PDF. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/pdf': unknown;
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listSharedQuestions: {
+    parameters: {
+      query?: {
+        chapter_id?: string | null;
+        cursor?: string | null;
+        /** @description Questions with a source in this document. */
+        document_id?: string | null;
+        limit?: number;
+        question_type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      };
+      header?: never;
+      path: {
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedQuestionList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getSharedQuestion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedQuestion'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  searchSharedWorkspace: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SearchRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedSearchResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createSharedSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SessionExchange'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
         headers: {
           [name: string]: unknown;
         };

@@ -13,8 +13,8 @@ from typing import Any
 
 import pytest
 
-# RED (S0): S1a/S1b remove `red` when the share API makes these GREEN.
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+# S0 RED, GREEN since S1b (share session exchange and shared read API).
+pytestmark = pytest.mark.infra
 
 RANDOM_ID = "00000000-0000-4000-8000-000000000000"
 

@@ -542,13 +542,21 @@ def search_workspace(
     access: ReadAccess, body: SearchRequest, repo: SearchRepo, engine: Engine
 ) -> SearchResponse:
     """Search the published text of this workspace's documents (SEARCH-01)."""
+    return run_search(repo, engine, access.workspace_id, body)
+
+
+def run_search(
+    repo: SearchRepository, engine: SearchEngine, workspace_id: uuid.UUID, body: SearchRequest
+) -> SearchResponse:
+    """The search of an authorized caller in `workspace_id` (members and share sessions alike):
+    the server-side scope of `build_scope`, then the index query restricted to it."""
     try:
         prepared = prepare_query(body.query, max_chars=DEFAULT_MAX_QUERY_CHARS)
     except InvalidQueryError:
         raise _invalid_query() from None
-    scope, chapters = build_scope(repo, access.workspace_id, body)
+    scope, chapters = build_scope(repo, workspace_id, body)
     warnings = list(scope.warnings)
-    search_scope = to_search_scope(access.workspace_id, scope)
+    search_scope = to_search_scope(workspace_id, scope)
     if search_scope is None:
         if prepared.truncated:
             warnings.append(

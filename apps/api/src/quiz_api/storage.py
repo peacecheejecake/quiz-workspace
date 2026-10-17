@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Protocol
@@ -58,6 +58,15 @@ class ObjectDigest:
     head: bytes
 
 
+@dataclass(frozen=True)
+class ObjectStream:
+    """An object being downloaded: iterate `chunks`, then (always) call `close`."""
+
+    size: int | None
+    chunks: Iterator[bytes]
+    close: Callable[[], None]
+
+
 class Storage(Protocol):
     def create_signed_upload(self, bucket: str, key: str) -> SignedUpload: ...
 
@@ -69,6 +78,10 @@ class Storage(Protocol):
         ...
 
     def create_signed_read_url(self, bucket: str, key: str, expires_in: int) -> str: ...
+
+    def open_read(self, bucket: str, key: str) -> ObjectStream | None:
+        """Start streaming an object to a server-side proxy; `None` if it does not exist."""
+        ...
 
     def delete(self, bucket: str, key: str) -> None: ...
 
@@ -174,6 +187,32 @@ class SupabaseStorage:
         if not isinstance(signed, str) or not signed.startswith("/"):
             raise StorageUnavailableError("sign-read")
         return self._public + signed
+
+    def open_read(self, bucket: str, key: str) -> ObjectStream | None:
+        with self._errors("download"):
+            request = self._client.build_request("GET", f"/object/{self._path(bucket, key)}")
+            res = self._client.send(request, stream=True)
+        try:
+            if res.status_code in (400, 404):
+                res.read()
+                if _is_not_found(res):
+                    res.close()
+                    return None
+            self._check(res, "download")
+        except BaseException:
+            res.close()
+            raise
+        length = res.headers.get("content-length")
+
+        def chunks() -> Iterator[bytes]:
+            with self._errors("download"):
+                yield from res.iter_bytes(chunk_size=1 << 16)
+
+        return ObjectStream(
+            size=int(length) if length and length.isdigit() else None,
+            chunks=chunks(),
+            close=res.close,
+        )
 
     def delete(self, bucket: str, key: str) -> None:
         with self._errors("delete"):

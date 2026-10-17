@@ -35,6 +35,7 @@ import httpx
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from quiz_api.main import create_app
 from quiz_api.settings import LOCAL_CORS_ORIGINS, Settings
 
 _M3_CONFTEST = Path(__file__).resolve().parents[1] / "workspaces" / "conftest.py"
@@ -45,9 +46,38 @@ _m3 = importlib.util.module_from_spec(_spec)
 sys.modules[_spec.name] = _m3  # dataclasses resolve their module through sys.modules
 _spec.loader.exec_module(_m3)
 
+# In-process job worker of the M4 contract suite (document.parse for uploaded books), so no Celery
+# worker has to run: `wait_for_job` drains the job, then reads it through `GET /jobs/{id}`.
+_M4_CONFTEST = Path(__file__).resolve().parents[1] / "questions" / "conftest.py"
+_spec4 = importlib.util.spec_from_file_location("_m4_contract_conftest_sharing", _M4_CONFTEST)
+assert _spec4 is not None
+assert _spec4.loader is not None
+_m4 = importlib.util.module_from_spec(_spec4)
+sys.modules[_spec4.name] = _m4
+_spec4.loader.exec_module(_m4)
+
 # Re-exported fixtures (pytest collects fixtures from conftest attributes).
 stack = _m3.stack
-app_client = _m3.app_client
+job_worker = _m4.job_worker
+
+
+@pytest.fixture(scope="module")
+def app_client(stack: Any, job_worker: Any) -> Iterator[TestClient]:
+    """The production app with APP_ENV=test (fake query embedder) searching the collections the
+    in-process worker indexes into (per-module Qdrant prefix)."""
+    settings = Settings(
+        DATABASE_URL=_m3.API_DATABASE_URL,
+        SUPABASE_JWT_ISSUER=_m3.ISSUER,
+        SUPABASE_JWKS_URL=_m3.JWKS_URL,
+        APP_ENV="test",
+        QDRANT_COLLECTION_PREFIX=job_worker._names.prefix,
+        WORKER_EMBEDDER="auto",
+    )
+    with TestClient(
+        create_app(settings, readiness_checkers=[]), raise_server_exceptions=False
+    ) as c:
+        yield c
+
 
 API: str = _m3.API
 DB_ADMIN_URL: str = _m3.DB_ADMIN_URL
@@ -157,6 +187,8 @@ def share_cookie_of(res: httpx.Response) -> ShareCookie | None:
 class ShareClient(_m3.Client):
     """`Client` (one user, Bearer JWT) plus share-link, shared-read and fork calls."""
 
+    worker: Any = None
+
     def send(
         self,
         method: str,
@@ -259,6 +291,8 @@ class ShareClient(_m3.Client):
         return items
 
     def wait_for_job(self, job_id: str) -> None:
+        if self.worker is not None:
+            self.worker.drain(job_id)
         deadline = time.monotonic() + JOB_TIMEOUT_S
         status = ""
         while time.monotonic() < deadline:
@@ -327,6 +361,7 @@ class ShareSeed(_m3.Seed):
     FOREIGN_ORIGIN = FOREIGN_ORIGIN
     PERSONAL_KEYS = PERSONAL_KEYS
     UNPUBLISHED_STEMS = UNPUBLISHED_STEMS
+    worker: Any = None
     stable = staticmethod(stable)
     assert_status = staticmethod(assert_status)
     assert_privacy_headers = staticmethod(assert_privacy_headers)
@@ -336,7 +371,9 @@ class ShareSeed(_m3.Seed):
 
     def client(self, label: str) -> ShareClient:
         base = super().client(f"s0-{label}")
-        return ShareClient(self._http, base.user)
+        client = ShareClient(self._http, base.user)
+        client.worker = self.worker
+        return client
 
     def guest(self) -> Guest:
         return Guest(self._http)
@@ -518,8 +555,9 @@ class ShareSeed(_m3.Seed):
 
 
 @pytest.fixture
-def seed(stack: Any, app_client: TestClient) -> Iterator[ShareSeed]:
+def seed(stack: Any, app_client: TestClient, job_worker: Any) -> Iterator[ShareSeed]:
     s = ShareSeed(stack, app_client)
+    s.worker = job_worker
     try:
         yield s
     finally:
