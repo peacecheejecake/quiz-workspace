@@ -402,6 +402,11 @@ class QuestionRepository:
                 documents.c.deleted_at.is_(None),
                 documents.c.active_revision_id == chapters.c.document_revision_id,
             )
+            # FOR SHARE of the document: a concurrent publish (which switches the active revision
+            # and remaps question chapters in one transaction, 20261018003400) either committed
+            # before this check or waits until this question is saved, so no question keeps a
+            # chapter of a superseded revision.
+            .with_for_update(read=True, of=documents)
         ).first()
         return found is not None
 

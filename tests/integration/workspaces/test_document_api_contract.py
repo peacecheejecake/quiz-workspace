@@ -14,10 +14,6 @@ import pytest
 
 pytestmark = pytest.mark.infra
 
-# RED (M3.0) until their remaining routes exist: GET /jobs/{id} (M3.2b), outline/blocks/publish
-# (M3.4). The upload steps are GREEN since M3.2a; remove `red` when those Tasks land.
-_RED_UNTIL_REVISIONS = pytest.mark.red
-
 
 def test_doc_01_ac03_upload_intent_rejects_unsupported_type_and_oversize(seed: Any) -> None:
     alice = seed.client("doc01-ac03")
@@ -78,7 +74,6 @@ def test_doc_01_ac04_complete_upload_is_idempotent(seed: Any) -> None:
     assert [d["id"] for d in docs] == [first["document_id"]]
 
 
-@_RED_UNTIL_REVISIONS
 def test_ws_01_ac05_foreign_documents_and_jobs_are_404(seed: Any) -> None:
     alice, mallory = seed.client("docs-alice"), seed.client("docs-mallory")
     ws = alice.create_workspace()
@@ -101,7 +96,6 @@ def test_ws_01_ac05_foreign_documents_and_jobs_are_404(seed: Any) -> None:
         assert "book-ko" not in res.text
 
 
-@_RED_UNTIL_REVISIONS
 def test_doc_02_ac05_viewer_and_archived_workspace_cannot_write_documents(seed: Any) -> None:
     owner, viewer = seed.client("doc02-ac05-owner"), seed.client("doc02-ac05-viewer")
     ws = owner.create_workspace()

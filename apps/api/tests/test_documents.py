@@ -742,6 +742,17 @@ def test_openapi_documents_the_document_routes(api: TestClient) -> None:
         ("get", "/api/v1/documents/{document_id}"): "getDocument",
         ("get", "/api/v1/documents/{document_id}/source-url"): "getDocumentSourceUrl",
         ("delete", "/api/v1/documents/{document_id}"): "deleteDocument",
+        # M3.4 (quiz_api.api.document_revisions)
+        ("get", "/api/v1/documents/{document_id}/outline"): "getDocumentOutline",
+        ("get", "/api/v1/documents/{document_id}/blocks"): "listDocumentBlocks",
+        ("get", "/api/v1/documents/{document_id}/blocks/{block_id}"): "getDocumentBlock",
+        ("patch", "/api/v1/documents/{document_id}/blocks/{block_id}"): "correctDocumentBlock",
+        ("post", "/api/v1/documents/{document_id}/publish"): "publishDocumentDraft",
+        ("get", "/api/v1/documents/{document_id}/revisions"): "listDocumentRevisions",
+        (
+            "post",
+            "/api/v1/documents/{document_id}/revisions/{revision_id}/restore",
+        ): "restoreDocumentRevision",
     }
     intent = spec["paths"]["/api/v1/workspaces/{workspace_id}/documents/upload-intent"]["post"]
     assert {"201", "403", "404", "413", "415", "422", "503"} <= set(intent["responses"])

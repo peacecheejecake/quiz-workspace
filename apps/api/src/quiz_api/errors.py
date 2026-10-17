@@ -52,6 +52,14 @@ class ProblemType(StrEnum):
     PRACTICE_SESSION_SUBMITTED = "urn:quiz-workspace:problem:practice-session-submitted"
     # 409: self-grade of a session that is not awaiting a grade (still open or already graded).
     PRACTICE_SESSION_NOT_PENDING = "urn:quiz-workspace:problem:practice-session-not-pending"
+    # 409: the document has no published revision yet (first parse pending or failed).
+    DOCUMENT_NOT_READY = "urn:quiz-workspace:problem:document-not-ready"
+    # 409: a correction was based on block text (or a draft) that changed since it was loaded.
+    EDIT_CONFLICT = "urn:quiz-workspace:problem:edit-conflict"
+    # 409: the draft is being published (indexing); wait for the job, then edit again.
+    PUBLISH_IN_PROGRESS = "urn:quiz-workspace:problem:publish-in-progress"
+    # 409: there is no correction draft, or it does not differ from the published revision.
+    NOTHING_TO_PUBLISH = "urn:quiz-workspace:problem:nothing-to-publish"
 
 
 class ProblemException(StarletteHTTPException):

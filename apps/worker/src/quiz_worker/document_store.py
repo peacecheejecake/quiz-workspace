@@ -38,7 +38,7 @@ import time
 import uuid
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 from book_core.contracts import (
@@ -541,29 +541,52 @@ class PostgresDocumentStore:
             )
 
     def load_content(self, document: DocumentRow, revision: RevisionRow) -> DocumentRevision:
-        with self._engine.begin() as conn:
-            chapters = [
-                dict(r)
-                for r in conn.execute(
-                    text(
-                        "select id, parent_id, section_key, level, sort_order, title, "
-                        "heading_block_id from public.chapters where document_revision_id = :r"
-                    ),
+        # One snapshot for the hash and the rows: the API corrects a draft (and refreshes its
+        # hash) in one transaction, so a correction committed meanwhile is either fully seen or
+        # not at all. A changed hash is then caught by `publish` (ContentChangedError, retried).
+        with self._engine.connect() as raw:
+            conn = raw.execution_options(isolation_level="REPEATABLE READ")
+            with conn.begin():
+                current_hash = conn.execute(
+                    text("select content_hash from public.document_revisions where id = :r"),
                     {"r": revision.id},
-                ).mappings()
-            ]
-            blocks = [
-                dict(r)
-                for r in conn.execute(
-                    text(
-                        "select block_id, ordinal, chapter_id, block_type, text, provenance, "
-                        "attributes, edited from public.content_blocks "
-                        "where document_revision_id = :r"
-                    ),
-                    {"r": revision.id},
-                ).mappings()
-            ]
-        return revision_from_rows(document, revision, chapters, blocks)
+                ).scalar_one_or_none()
+                if current_hash is None:
+                    raise ContentChangedError("the revision has no stored content any more")
+                chapters, blocks = self._content_rows(conn, revision.id)
+        return revision_from_rows(
+            document,
+            replace(revision, content_hash=current_hash),
+            chapters,
+            blocks,
+        )
+
+    @staticmethod
+    def _content_rows(
+        conn: Connection, revision_id: uuid.UUID
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        chapters = [
+            dict(r)
+            for r in conn.execute(
+                text(
+                    "select id, parent_id, section_key, level, sort_order, title, "
+                    "heading_block_id from public.chapters where document_revision_id = :r"
+                ),
+                {"r": revision_id},
+            ).mappings()
+        ]
+        blocks = [
+            dict(r)
+            for r in conn.execute(
+                text(
+                    "select block_id, ordinal, chapter_id, block_type, text, provenance, "
+                    "attributes, edited from public.content_blocks "
+                    "where document_revision_id = :r"
+                ),
+                {"r": revision_id},
+            ).mappings()
+        ]
+        return chapters, blocks
 
     def workspace_writable(self, workspace_id: uuid.UUID, user_id: uuid.UUID | None) -> bool:
         with self._engine.begin() as conn:

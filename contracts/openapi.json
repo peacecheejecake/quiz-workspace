@@ -136,6 +136,157 @@
         "title": "AttemptList",
         "type": "object"
       },
+      "BlockCorrection": {
+        "additionalProperties": false,
+        "properties": {
+          "base_version": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The block `version` the correction started from; 409 `edit-conflict` when the block changed since.",
+            "title": "Base Version"
+          },
+          "text": {
+            "description": "Corrected text. Tables: one row per line, cells separated by `|`.",
+            "maxLength": 200000,
+            "pattern": "^[^\\x00]*$",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "BlockCorrection",
+        "type": "object"
+      },
+      "BlockDetail": {
+        "properties": {
+          "block": {
+            "$ref": "#/components/schemas/ContentBlock"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/RevisionInfo"
+          }
+        },
+        "required": [
+          "document_id",
+          "revision",
+          "block"
+        ],
+        "title": "BlockDetail",
+        "type": "object"
+      },
+      "BlockList": {
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContentBlock"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_after": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `after` for the next page; null on the last page.",
+            "title": "Next After"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "document_id",
+          "revision",
+          "items",
+          "next_after"
+        ],
+        "title": "BlockList",
+        "type": "object"
+      },
+      "BlockLocation": {
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BoundingBox"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "PDF points, origin top-left."
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "bbox"
+        ],
+        "title": "BlockLocation",
+        "type": "object"
+      },
+      "BoundingBox": {
+        "properties": {
+          "x0": {
+            "title": "X0",
+            "type": "number"
+          },
+          "x1": {
+            "title": "X1",
+            "type": "number"
+          },
+          "y0": {
+            "title": "Y0",
+            "type": "number"
+          },
+          "y1": {
+            "title": "Y1",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x0",
+          "y0",
+          "x1",
+          "y1"
+        ],
+        "title": "BoundingBox",
+        "type": "object"
+      },
       "ChapterRef": {
         "properties": {
           "document_id": {
@@ -191,6 +342,118 @@
           "sha256"
         ],
         "title": "CompleteUpload",
+        "type": "object"
+      },
+      "ContentBlock": {
+        "properties": {
+          "block_id": {
+            "description": "Stable across revisions (search hits, question sources).",
+            "title": "Block Id",
+            "type": "string"
+          },
+          "caption_block_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption Block Id"
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Id"
+          },
+          "edited": {
+            "description": "Corrected by a user in this or an earlier revision.",
+            "title": "Edited",
+            "type": "boolean"
+          },
+          "heading_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading Level"
+          },
+          "locations": {
+            "description": "Where the block sits in the PDF.",
+            "items": {
+              "$ref": "#/components/schemas/BlockLocation"
+            },
+            "title": "Locations",
+            "type": "array"
+          },
+          "ordinal": {
+            "description": "Reading order within the revision.",
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "page": {
+            "description": "First PDF page of the block.",
+            "title": "Page",
+            "type": "integer"
+          },
+          "table": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TableCells"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "heading",
+              "text",
+              "table",
+              "image",
+              "formula"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "version": {
+            "description": "Send as `base_version` when correcting this block.",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "block_id",
+          "ordinal",
+          "type",
+          "text",
+          "page",
+          "chapter_id",
+          "locations",
+          "heading_level",
+          "table",
+          "caption_block_id",
+          "edited",
+          "version"
+        ],
+        "title": "ContentBlock",
         "type": "object"
       },
       "DependencyStatus": {
@@ -892,6 +1155,105 @@
         "title": "MyWorkspaceList",
         "type": "object"
       },
+      "Outline": {
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OutlineItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null while nothing is published yet."
+          }
+        },
+        "required": [
+          "document_id",
+          "revision",
+          "items"
+        ],
+        "title": "Outline",
+        "type": "object"
+      },
+      "OutlineItem": {
+        "properties": {
+          "block_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The heading block that opens the section.",
+            "title": "Block Id"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/OutlineItem"
+            },
+            "title": "Children",
+            "type": "array"
+          },
+          "id": {
+            "description": "Chapter id of this revision (the `chapter_ids` value search and questions use). Changes with every revision; `section_key` does not.",
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "1-based PDF page of the heading.",
+            "title": "Page"
+          },
+          "section_key": {
+            "description": "Stable section id across revisions.",
+            "title": "Section Key",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "section_key",
+          "title",
+          "level",
+          "page",
+          "block_id",
+          "children"
+        ],
+        "title": "OutlineItem",
+        "type": "object"
+      },
       "OverviewChapter": {
         "properties": {
           "document_id": {
@@ -1489,6 +1851,48 @@
           "updated_at"
         ],
         "title": "Profile",
+        "type": "object"
+      },
+      "PublishAccepted": {
+        "properties": {
+          "job_id": {
+            "description": "The indexing job; poll `GET /jobs/{id}` or its SSE.",
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "description": "The draft revision being published.",
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "revision_id"
+        ],
+        "title": "PublishAccepted",
+        "type": "object"
+      },
+      "PublishRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The draft the client reviewed; 409 `edit-conflict` if it is not the draft.",
+            "title": "Revision Id"
+          }
+        },
+        "title": "PublishRequest",
         "type": "object"
       },
       "Question": {
@@ -2345,6 +2749,25 @@
         "title": "ReadinessReport",
         "type": "object"
       },
+      "RestoredDraft": {
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/RevisionInfo",
+            "description": "The draft now holding the restored content."
+          }
+        },
+        "required": [
+          "document_id",
+          "revision"
+        ],
+        "title": "RestoredDraft",
+        "type": "object"
+      },
       "ResumableUpload": {
         "description": "TUS (resumable) alternative to the single PUT, for large files and flaky networks.",
         "properties": {
@@ -2376,6 +2799,192 @@
           "metadata"
         ],
         "title": "ResumableUpload",
+        "type": "object"
+      },
+      "RevisionHistory": {
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RevisionHistoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document_id",
+          "items"
+        ],
+        "title": "RevisionHistory",
+        "type": "object"
+      },
+      "RevisionHistoryItem": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "description": "The published revision search and the viewer use.",
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionJob"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest parse/publish job of this revision."
+          },
+          "parent_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Revision Id"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "revision_number": {
+            "title": "Revision Number",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision_number",
+          "status",
+          "parent_revision_id",
+          "is_active",
+          "published_at",
+          "created_at",
+          "job"
+        ],
+        "title": "RevisionHistoryItem",
+        "type": "object"
+      },
+      "RevisionInfo": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "description": "The published revision search and the viewer use.",
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "parent_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Revision Id"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "revision_number": {
+            "title": "Revision Number",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision_number",
+          "status",
+          "parent_revision_id",
+          "is_active",
+          "published_at",
+          "created_at"
+        ],
+        "title": "RevisionInfo",
+        "type": "object"
+      },
+      "RevisionJob": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "description": "queued | running | succeeded | failed | cancelled",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "RevisionJob",
         "type": "object"
       },
       "SelfGradeBody": {
@@ -2782,6 +3391,30 @@
           }
         },
         "title": "SubmittedAnswer",
+        "type": "object"
+      },
+      "TableCells": {
+        "properties": {
+          "header_rows": {
+            "title": "Header Rows",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rows",
+          "header_rows"
+        ],
+        "title": "TableCells",
         "type": "object"
       },
       "UploadCompleted": {
@@ -3419,6 +4052,778 @@
           }
         ],
         "summary": "Get Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{document_id}/blocks": {
+      "get": {
+        "description": "Canonical blocks of a revision in reading order (keyset-paged by ordinal).",
+        "operationId": "listDocumentBlocks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`active` (published, default), `latest` (the draft if any) or a revision id.",
+            "in": "query",
+            "name": "revision",
+            "required": false,
+            "schema": {
+              "default": "active",
+              "description": "`active` (published, default), `latest` (the draft if any) or a revision id.",
+              "pattern": "^(active|latest|[0-9a-fA-F-]{36})$",
+              "title": "Revision",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only blocks of this chapter (an outline id) and its sub-sections.",
+            "in": "query",
+            "name": "chapter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only blocks of this chapter (an outline id) and its sub-sections.",
+              "title": "Chapter"
+            }
+          },
+          {
+            "description": "Only blocks starting on this page.",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only blocks starting on this page.",
+              "title": "Page"
+            }
+          },
+          {
+            "description": "`next_after` of the previous page.",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": -1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next_after` of the previous page.",
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Blocks",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{document_id}/blocks/{block_id}": {
+      "get": {
+        "operationId": "getDocumentBlock",
+        "parameters": [
+          {
+            "description": "Canonical block id (stable across revisions), e.g. from search hits.",
+            "in": "path",
+            "name": "block_id",
+            "required": true,
+            "schema": {
+              "description": "Canonical block id (stable across revisions), e.g. from search hits.",
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "^\\S+$",
+              "title": "Block Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`active` (published, default), `latest` (the draft if any) or a revision id.",
+            "in": "query",
+            "name": "revision",
+            "required": false,
+            "schema": {
+              "default": "active",
+              "description": "`active` (published, default), `latest` (the draft if any) or a revision id.",
+              "pattern": "^(active|latest|[0-9a-fA-F-]{36})$",
+              "title": "Revision",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Block",
+        "tags": [
+          "documents"
+        ]
+      },
+      "patch": {
+        "description": "Correct one block's canonical text in the document's draft revision (DOC-02-AC02).",
+        "operationId": "correctDocumentBlock",
+        "parameters": [
+          {
+            "description": "Canonical block id (stable across revisions), e.g. from search hits.",
+            "in": "path",
+            "name": "block_id",
+            "required": true,
+            "schema": {
+              "description": "Canonical block id (stable across revisions), e.g. from search hits.",
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "^\\S+$",
+              "title": "Block Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlockCorrection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Correct Block",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{document_id}/outline": {
+      "get": {
+        "description": "Chapter/section tree of a revision (DOC-02-AC01), roots and children in reading order.",
+        "operationId": "getDocumentOutline",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`active` (published, default), `latest` (the draft if any) or a revision id.",
+            "in": "query",
+            "name": "revision",
+            "required": false,
+            "schema": {
+              "default": "active",
+              "description": "`active` (published, default), `latest` (the draft if any) or a revision id.",
+              "pattern": "^(active|latest|[0-9a-fA-F-]{36})$",
+              "title": "Revision",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Outline"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Outline",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{document_id}/publish": {
+      "post": {
+        "description": "Index and publish the correction draft (DOC-02-AC03): 202 with the job to follow.",
+        "operationId": "publishDocumentDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PublishRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Publish Draft",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{document_id}/revisions": {
+      "get": {
+        "description": "Every revision, newest first, with its newest parse/publish job.",
+        "operationId": "listDocumentRevisions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionHistory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Revisions",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{document_id}/revisions/{revision_id}/restore": {
+      "post": {
+        "description": "Put a previous published revision's content into the draft (rollback); publish it to\nmake it live. Restoring the active revision discards the draft's corrections.",
+        "operationId": "restoreDocumentRevision",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Revision Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoredDraft"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Restore Revision",
         "tags": [
           "documents"
         ]
