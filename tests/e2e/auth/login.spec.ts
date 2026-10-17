@@ -36,6 +36,38 @@ test('AUTH-01-AC01 protected URL redirects to /login and keeps a safe relative n
   }
 });
 
+test('AUTH-01-AC01 a malformed session cookie reads as signed out and is cleared', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  // A structurally valid SSR session whose access token is not a JWT (`notjson` header): the
+  // pinned SDK throws while verifying it. Synthetic value, no real credential.
+  const session = {
+    access_token: 'bm90anNvbg.e30.YQ',
+    refresh_token: 'not-a-refresh-token',
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    expires_in: 3600,
+    token_type: 'bearer',
+    user: { id: '00000000-0000-4000-8000-000000000000' },
+  };
+  const value = `base64-${Buffer.from(JSON.stringify(session)).toString('base64url')}`;
+  const sessionCookies = async () =>
+    (await context.cookies()).filter((c) => /^sb-.+-auth-token(?:\.\d+)?$/.test(c.name));
+
+  await context.addCookies([{ name: 'sb-127-auth-token', value, url: baseURL ?? '' }]);
+  const res = await page.goto('/login');
+  expect(res?.status()).toBe(200);
+  await expect(authUi.email(page)).toBeVisible();
+  expect(await sessionCookies()).toEqual([]);
+
+  await context.addCookies([{ name: 'sb-127-auth-token', value, url: baseURL ?? '' }]);
+  await page.goto('/workspaces');
+  await expect(page).toHaveURL(LOGIN_SCREEN);
+  expect(new URL(page.url()).searchParams.get('next')).toBe('/workspaces');
+  expect(await sessionCookies()).toEqual([]);
+});
+
 test(
   'AUTH-01-AC01 external or protocol-relative next is dropped after sign-in',
   { tag: '@infra' },

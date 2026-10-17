@@ -51,6 +51,18 @@ describe('API Bearer wiring', () => {
     expect(await verifiedAccessToken(client(null, 'tok'))).toBeNull();
     expect(await verifiedAccessToken(client({ sub: 'u1' }, null))).toBeNull();
   });
+
+  it('treats a throwing session read (malformed cookie) as signed out', async () => {
+    const throwing = {
+      auth: {
+        getClaims: () => Promise.reject(new SyntaxError('Unexpected token')),
+        getSession: () => Promise.reject(new SyntaxError('Unexpected token')),
+      },
+    } as unknown as Parameters<typeof verifiedAccessToken>[0];
+    expect(await verifiedAccessToken(throwing)).toBeNull();
+    const { readVerifiedClaims } = await import('../src/lib/supabase/session-guard');
+    expect(await readVerifiedClaims(throwing)).toEqual({ claims: null, corrupt: true });
+  });
 });
 
 describe('relativeRedirect', () => {

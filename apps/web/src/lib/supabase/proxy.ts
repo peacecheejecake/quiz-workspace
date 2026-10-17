@@ -5,6 +5,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getPublicEnv } from '@/env';
 import { decideAccess } from '@/lib/auth/routes';
+import { isSessionCookie, readVerifiedClaims } from './session-guard';
 
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
   const { supabaseUrl, supabasePublishableKey } = getPublicEnv();
@@ -28,8 +29,19 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
 
   // Verifies the access token (refreshing it first when expired); cookie presence alone never
   // counts as signed in.
-  const { data, error } = await supabase.auth.getClaims();
-  const authenticated = !error && !!data?.claims?.sub;
+  const { claims, corrupt } = await readVerifiedClaims(supabase);
+  const authenticated = claims !== null;
+  if (corrupt) {
+    // Unreadable session cookie: drop it (request for the render, response for the browser) and
+    // continue as signed out instead of failing every page with a 500.
+    response = NextResponse.next({ request });
+    for (const { name } of request.cookies.getAll()) {
+      if (!isSessionCookie(name)) continue;
+      request.cookies.delete(name);
+      response.cookies.set(name, '', { path: '/', maxAge: 0 });
+    }
+    response.headers.set('Cache-Control', 'private, no-store');
+  }
 
   const decision = decideAccess({
     pathname: request.nextUrl.pathname,

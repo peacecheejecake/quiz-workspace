@@ -151,3 +151,46 @@ describe('proxy updateSession', () => {
     expect(res.headers.get('set-cookie')).toContain('sb-127-auth-token=refreshed');
   });
 });
+
+describe('proxy with a malformed session cookie (getClaims throws)', () => {
+  const corruptRequest = (path: string) => {
+    const req = request(path);
+    req.cookies.set('sb-127-auth-token', 'base64-not-a-session');
+    req.cookies.set('sb-127-auth-token.1', 'chunk');
+    req.cookies.set('sb-127-auth-token-code-verifier', 'keep');
+    return req;
+  };
+  const cleared = (res: Response) => {
+    const header = res.headers.get('set-cookie') ?? '';
+    return ['sb-127-auth-token=;', 'sb-127-auth-token.1=;'].every((c) => header.includes(c));
+  };
+
+  it('renders public pages as signed out and clears the session cookies', async () => {
+    auth.getClaims.mockRejectedValue(new SyntaxError('Unexpected token'));
+    const res = await updateSession(corruptRequest('/login'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+    expect(cleared(res)).toBe(true);
+    expect(res.headers.get('set-cookie')).not.toContain('code-verifier');
+    expect(res.headers.get('cache-control')).toContain('no-store');
+  });
+
+  it('redirects protected pages to /login and clears the cookies on the redirect', async () => {
+    auth.getClaims.mockRejectedValue(new SyntaxError('Unexpected token'));
+    const res = await updateSession(corruptRequest('/workspaces'));
+    expect(res.status).toBe(307);
+    expect(location(res).pathname).toBe('/login');
+    expect(location(res).searchParams.get('next')).toBe('/workspaces');
+    expect(cleared(res)).toBe(true);
+  });
+});
+
+describe('callback when the SDK throws', () => {
+  it('goes to /auth/error without setting cookies', async () => {
+    auth.verifyOtp.mockRejectedValue(new SyntaxError('Unexpected token'));
+    const res = await GET(request('/auth/callback?token_hash=h&type=email'));
+    expect(location(res).pathname).toBe('/auth/error');
+    expect(location(res).searchParams.get('reason')).toBe('invalid');
+    expect(res.headers.get('set-cookie')).toBeNull();
+  });
+});

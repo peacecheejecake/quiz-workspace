@@ -5,6 +5,7 @@ import { createApiClient, type ApiClient } from '@quiz/api-client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getPublicEnv } from '@/env';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { readVerifiedClaims } from '@/lib/supabase/session-guard';
 
 export class NotAuthenticatedError extends Error {
   constructor() {
@@ -24,12 +25,16 @@ export function bearerHeaders(accessToken: string): { Authorization: string } {
  * `getClaims()` checks is the session's own access token, refreshed first when expired).
  */
 export async function verifiedAccessToken(supabase: SupabaseClient): Promise<string | null> {
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims?.sub) return null;
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return session?.access_token ?? null;
+  const { claims } = await readVerifiedClaims(supabase);
+  if (!claims) return null;
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** API client authenticated as the current user; throws `NotAuthenticatedError` when signed out. */

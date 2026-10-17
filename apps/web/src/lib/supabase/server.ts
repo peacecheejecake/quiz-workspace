@@ -6,6 +6,7 @@ import { createServerClient } from '@supabase/ssr';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { getPublicEnv } from '@/env';
+import { readVerifiedClaims } from './session-guard';
 
 export async function createSupabaseServerClient(): Promise<SupabaseClient> {
   const { supabaseUrl, supabasePublishableKey } = getPublicEnv();
@@ -34,8 +35,8 @@ export interface VerifiedUser {
 
 export async function getVerifiedUser(client?: SupabaseClient): Promise<VerifiedUser | null> {
   const supabase = client ?? (await createSupabaseServerClient());
-  const { data, error } = await supabase.auth.getClaims();
-  const claims = data?.claims;
-  if (error || !claims?.sub) return null;
+  // A corrupt cookie reads as signed out; the proxy clears it on the next request.
+  const { claims } = await readVerifiedClaims(supabase);
+  if (!claims) return null;
   return { id: claims.sub, email: typeof claims.email === 'string' ? claims.email : undefined };
 }

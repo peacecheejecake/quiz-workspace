@@ -4,7 +4,12 @@
 import { createServerClient } from '@supabase/ssr';
 import type { NextRequest, NextResponse } from 'next/server';
 import { getPublicEnv } from '@/env';
-import { authErrorPath, callbackResultPath, planCallback } from '@/lib/auth/callback';
+import {
+  authErrorPath,
+  callbackResultPath,
+  planCallback,
+  type AuthErrorLike,
+} from '@/lib/auth/callback';
 import { relativeRedirect } from '@/lib/http/redirect';
 
 export const dynamic = 'force-dynamic';
@@ -34,10 +39,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         },
       },
     });
-    const { error } =
-      plan.kind === 'verify-otp'
-        ? await supabase.auth.verifyOtp({ token_hash: plan.tokenHash, type: plan.type })
-        : await supabase.auth.exchangeCodeForSession(plan.code);
+    let error: AuthErrorLike | null;
+    try {
+      ({ error } =
+        plan.kind === 'verify-otp'
+          ? await supabase.auth.verifyOtp({ token_hash: plan.tokenHash, type: plan.type })
+          : await supabase.auth.exchangeCodeForSession(plan.code));
+    } catch {
+      // The SDK threw (e.g. a malformed existing session cookie): no session was created.
+      error = { code: 'unexpected_failure' };
+      pending.length = 0;
+    }
     location = callbackResultPath(plan, error);
   }
 
