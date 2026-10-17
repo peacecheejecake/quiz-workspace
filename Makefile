@@ -24,7 +24,7 @@ SUPABASE := pnpm exec supabase
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
 	test test-ts test-py infra-up infra-down infra-status infra-reset \
-	contracts contracts-check api-dev web-dev db-reset db-lint db-test
+	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -117,3 +117,6 @@ api-dev: ## Run the API locally with reload (reads .env)
 
 web-dev: ## Run the Next.js web app locally (http://127.0.0.1:3000)
 	pnpm --filter @quiz/web dev
+
+worker-dev: ## Run the Celery worker locally (reads .env; needs Redis from infra-up)
+	uv run python -m quiz_worker.serve

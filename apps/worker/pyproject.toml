@@ -1,0 +1,22 @@
+[project]
+name = "quiz-worker"
+version = "0.1.0"
+description = "Quiz Workspace background worker (Celery)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "celery>=5.6.3,<5.7",
+  # Not `celery[redis]`: kombu 5.6's `redis` extra caps redis-py <6.5, which conflicts with the
+  # workspace's redis>=8.1 and would pull the kombu 5.7 alpha. The redis transport is exercised
+  # against redis-py 8 in tests/test_broker_transport.py.
+  "kombu>=5.6.2,<5.7",
+  "redis>=8.1,<9",
+  "pydantic>=2.12,<3",
+  "pydantic-settings>=2.16,<3",
+]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "quiz_worker"
