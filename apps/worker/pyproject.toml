@@ -12,6 +12,8 @@ dependencies = [
   "redis>=8.1,<9",
   "pydantic>=2.12,<3",
   "pydantic-settings>=2.16,<3",
+  # Shared core (architecture §2): job adapters will call it; log redaction lives there.
+  "book-core",
 ]
 
 [build-system]

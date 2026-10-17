@@ -70,6 +70,8 @@ def test_request_id_is_generated_and_attached_to_records(
         (f"Authorization: Bearer {TOKEN}", TOKEN),
         (f"token={TOKEN}", TOKEN),
         ("connect postgresql://postgres:s3cret@db:5432/app", "s3cret"),
+        # Password-only URL, the usual REDIS_URL form.
+        ("connect redis://:s3cret@redis:6379/0", "s3cret"),
     ],
 )
 def test_redaction_filter_scrubs_tokens_and_url_credentials(message: str, leaked: str) -> None:

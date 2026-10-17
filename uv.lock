@@ -1377,6 +1377,7 @@ name = "quiz-api"
 version = "0.1.0"
 source = { editable = "apps/api" }
 dependencies = [
+    { name = "book-core" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "psycopg", extra = ["binary"] },
@@ -1389,6 +1390,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "book-core", editable = "packages/core" },
     { name = "fastapi", specifier = ">=0.143,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
@@ -1404,6 +1406,7 @@ name = "quiz-worker"
 version = "0.1.0"
 source = { editable = "apps/worker" }
 dependencies = [
+    { name = "book-core" },
     { name = "celery" },
     { name = "kombu" },
     { name = "pydantic" },
@@ -1413,6 +1416,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "book-core", editable = "packages/core" },
     { name = "celery", specifier = ">=5.6.3,<5.7" },
     { name = "kombu", specifier = ">=5.6.2,<5.7" },
     { name = "pydantic", specifier = ">=2.12,<3" },
