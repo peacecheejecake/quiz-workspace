@@ -42,11 +42,16 @@ class RevisionStatus(StrEnum):
 
 
 class PageInfo(CoreModel):
-    """Page size in PDF points, used to bound block coordinates."""
+    """Page size in PDF points, used to bound block coordinates.
+
+    ``text_layer`` is ``False`` when the source page had no extractable text (a scanned or
+    image-only page); such pages need the OCR fallback, see ``ParsedDocument.ocr_applied``.
+    """
 
     page: PageNumber
     width: Annotated[float, Field(gt=0)]
     height: Annotated[float, Field(gt=0)]
+    text_layer: bool = True
 
 
 class Section(CoreModel):
@@ -58,11 +63,32 @@ class Section(CoreModel):
     parent_id: Identifier | None = None
 
 
+class TableContent(CoreModel):
+    """Cells of a table block as a rectangular grid (spanning cells repeat their text).
+
+    The first ``header_rows`` rows are column headers.
+    """
+
+    rows: Annotated[tuple[tuple[str, ...], ...], Field(min_length=1)]
+    header_rows: Annotated[int, Field(ge=0)] = 0
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if len({len(row) for row in self.rows}) != 1:
+            raise ValueError("table rows must have the same number of cells")
+        if self.header_rows > len(self.rows):
+            raise ValueError("header_rows exceeds row count")
+        return self
+
+
 class Block(CoreModel):
     """One content block in reading order, with provenance to the original PDF.
 
     ``text`` may be empty for blocks without extractable text (e.g. an image without caption).
-    A block can span pages, hence one or more ``locations``.
+    A block can span pages, hence one or more ``locations``. Table blocks hold their rows as
+    ``a | b | c`` lines in ``text`` and the cells in ``table``. ``heading_level`` is the level the
+    parser detected for a heading (1 = top); it is a hint, the section tree lives in
+    ``sections``. ``caption_block_id`` links an image or table to its caption block.
     """
 
     id: Identifier
@@ -70,6 +96,24 @@ class Block(CoreModel):
     text: str
     section_id: Identifier | None = None
     locations: Annotated[tuple[SourceLocation, ...], Field(min_length=1)]
+    heading_level: Annotated[int, Field(ge=1)] | None = None
+    table: TableContent | None = None
+    caption_block_id: Identifier | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.heading_level is not None and self.type is not BlockType.HEADING:
+            raise ValueError(f"block {self.id!r}: heading_level is only valid for headings")
+        if self.table is not None and self.type is not BlockType.TABLE:
+            raise ValueError(f"block {self.id!r}: table cells are only valid for tables")
+        if self.caption_block_id is not None and self.type not in (
+            BlockType.IMAGE,
+            BlockType.TABLE,
+        ):
+            raise ValueError(f"block {self.id!r}: only images and tables have captions")
+        if self.caption_block_id == self.id:
+            raise ValueError(f"block {self.id!r} cannot be its own caption")
+        return self
 
 
 def _check_structure(
@@ -95,7 +139,12 @@ def _check_structure(
         levels[section.id] = section.level
 
     page_sizes = {p.page: p for p in pages} if pages is not None else None
+    block_ids = {b.id for b in blocks}
     for block in blocks:
+        if block.caption_block_id is not None and block.caption_block_id not in block_ids:
+            raise ValueError(
+                f"block {block.id!r} references unknown caption block {block.caption_block_id!r}"
+            )
         if block.section_id is not None and block.section_id not in levels:
             raise ValueError(f"block {block.id!r} references unknown section {block.section_id!r}")
         for loc in block.locations:

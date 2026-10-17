@@ -23,6 +23,7 @@ from book_core.contracts.document import (
     ParsedDocument,
     RevisionStatus,
     Section,
+    TableContent,
 )
 from book_core.contracts.question import (
     DRAFT_VARIATION_TYPES,
@@ -74,6 +75,7 @@ __all__ = [
     "Sha256Hex",
     "SourceEvidence",
     "SourceLocation",
+    "TableContent",
     "TextSpan",
     "ValidationIssue",
     "ValidationSeverity",

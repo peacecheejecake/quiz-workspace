@@ -11,8 +11,23 @@ dependencies = [
 # Heavy model/runtime stacks stay optional so CI and E2E run on the deterministic fakes
 # (docs/implementation-plan.md §7, docs/e2e-strategy.md §3). Each extra is filled by its Task.
 [project.optional-dependencies]
-# M1.2: Docling parser + OCR fallback.
-parser = []
+# M1.2: Docling PDF parser (layout + table structure models, CPU). Only the PDF backend and the
+# local layout/table models are pulled in (docling-slim extras), not Docling's office/audio/VLM
+# stacks or any OCR engine.
+parser = [
+  "docling-slim[format-pdf,models-local,convert-core]==2.131.0",
+  # TableFormer needs OpenCV; the headless build avoids GUI/system library dependencies.
+  "docling-ibm-models[opencv-python-headless]==4.0.3",
+  # Listed directly so the workspace can route them to the CPU-only wheel index on Linux.
+  "torch==2.14.1",
+  "torchvision==0.29.1",
+]
+# M1.2 OCR fallback engine (RapidOCR on onnxruntime). Off by default and not part of the dev
+# install; needed only when a PDF has pages without a text layer and OCR is enabled.
+ocr = [
+  "book-core[parser]",
+  "docling-slim[feat-ocr-rapidocr-onnx]==2.131.0",
+]
 # M2.1 / M2.4: Qwen3-Embedding and Qwen3-Reranker (transformers / torch).
 models = []
 # M4.3: real LLM provider SDK for structured outputs.
