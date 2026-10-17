@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from quiz_api.api import me
+from quiz_api.api import me, workspaces
 from quiz_api.errors import problem_responses
 
 API_V1_PREFIX = "/api/v1"
@@ -15,3 +15,4 @@ API_V1_PREFIX = "/api/v1"
 # Every v1 route documents the shared problem shape for auth, not-found and validation errors.
 api_router = APIRouter(responses=problem_responses(401, 403, 404, 422))
 api_router.include_router(me.router)
+api_router.include_router(workspaces.router)

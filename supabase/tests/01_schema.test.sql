@@ -11,7 +11,9 @@ select tables_are(
         -- M4.1 question domain
         'questions', 'question_revisions', 'question_sources', 'question_user_states',
         'practice_sessions', 'question_attempts', 'question_lineage', 'question_generation_runs',
-        'question_import_runs', 'question_drafts'],
+        'question_import_runs', 'question_drafts',
+        -- M3.1a Idempotency-Key replay store
+        'idempotency_keys'],
   'public schema contains exactly the expected tables'
 );
 
