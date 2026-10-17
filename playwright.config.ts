@@ -14,6 +14,25 @@ import { defineConfig, devices, type PlaywrightTestOptions } from '@playwright/t
 const CI = !!process.env.CI;
 const BASE_URL = (process.env.E2E_BASE_URL?.trim() || 'http://127.0.0.1:3000').replace(/\/+$/, '');
 const { hostname, port } = new URL(BASE_URL);
+// FastAPI: the web app calls it server-side and the M3+ data fixtures create workspaces/documents
+// through it (tests/e2e/fixtures/api.ts).
+const API_URL = (process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || 'http://127.0.0.1:8000').replace(
+  /\/+$/,
+  '',
+);
+const api = new URL(API_URL);
+// Local-stack defaults (.env.example) so CI, which has no .env, verifies tokens and reaches the DB.
+const SUPABASE_URL = (
+  process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || 'http://127.0.0.1:54321'
+).replace(/\/+$/, '');
+const apiEnv = {
+  NEXT_PUBLIC_API_BASE_URL: API_URL,
+  SUPABASE_JWT_ISSUER: process.env.SUPABASE_JWT_ISSUER || `${SUPABASE_URL}/auth/v1`,
+  SUPABASE_JWKS_URL:
+    process.env.SUPABASE_JWKS_URL || `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`,
+  DATABASE_URL:
+    process.env.DATABASE_URL || 'postgresql://quiz_api:change-me-local@127.0.0.1:54322/postgres',
+};
 
 const TEST_DIR = 'tests/e2e';
 const SPEC = /.*\.spec\.ts$/;
@@ -67,14 +86,27 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'on-first-retry',
   },
-  webServer: {
-    command: `pnpm --filter @quiz/web build && pnpm --filter @quiz/web exec next start --hostname ${hostname} --port ${port || '3000'}`,
-    url: `${BASE_URL}/login`,
-    reuseExistingServer: !CI,
-    timeout: 180_000,
-    stdout: 'ignore',
-    stderr: 'pipe',
-  },
+  webServer: [
+    {
+      command: `pnpm --filter @quiz/web build && pnpm --filter @quiz/web exec next start --hostname ${hostname} --port ${port || '3000'}`,
+      url: `${BASE_URL}/login`,
+      env: { NEXT_PUBLIC_API_BASE_URL: API_URL },
+      reuseExistingServer: !CI,
+      timeout: 180_000,
+      stdout: 'ignore',
+      stderr: 'pipe',
+    },
+    {
+      // The only supported launcher (implementation-plan §7); never bare uvicorn.
+      command: `uv run python -m quiz_api.serve --host ${api.hostname} --port ${api.port || '8000'}`,
+      url: `${API_URL}/health/live`,
+      env: apiEnv,
+      reuseExistingServer: !CI,
+      timeout: 60_000,
+      stdout: 'ignore',
+      stderr: 'pipe',
+    },
+  ],
   projects: [
     { name: 'harness-chromium', testMatch: HARNESS_SPECS, use: { ...chromium, ...noSession } },
     { name: 'harness-webkit', testMatch: HARNESS_SPECS, use: { ...webkit, ...noSession } },
