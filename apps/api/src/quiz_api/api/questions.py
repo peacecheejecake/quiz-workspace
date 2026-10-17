@@ -196,8 +196,23 @@ class RevisionSummary(BaseModel):
     created_at: datetime
 
 
+class QuestionLineage(BaseModel):
+    """Where a generated variant comes from (questions.md §5)."""
+
+    parent_question_id: uuid.UUID
+    source_question_revision_id: uuid.UUID = Field(
+        description="The parent's revision the variant was generated from."
+    )
+    variation_type: str = Field(description="PARAPHRASE | INVERT_POLARITY | ANALOGOUS_CONCEPT")
+    generation_run_id: uuid.UUID | None
+
+
 class QuestionDetail(Question):
     revisions: list[RevisionSummary] = Field(description="Every revision, newest first.")
+    lineage: QuestionLineage | None = Field(
+        default=None,
+        description="Set for a question registered from a generated draft (origin `generation`).",
+    )
 
 
 class QuestionList(BaseModel):
@@ -662,12 +677,21 @@ def _load(
 @router.get("/questions/{question_id}", operation_id="getQuestion")
 def get_question(access: ReadQuestion, repo: QuestionRepo) -> QuestionDetail:
     found = _load(repo, access.resource_id)
+    lineage = repo.lineage_of(found.id)
     return QuestionDetail(
         **_out(found).model_dump(),
         revisions=[
             RevisionSummary(id=r.id, version=r.version, created_at=r.created_at)
             for r in repo.revisions(found.id)
         ],
+        lineage=QuestionLineage(
+            parent_question_id=lineage.parent_question_id,
+            source_question_revision_id=lineage.source_question_revision_id,
+            variation_type=lineage.variation_type,
+            generation_run_id=lineage.generation_run_id,
+        )
+        if lineage is not None
+        else None,
     )
 
 

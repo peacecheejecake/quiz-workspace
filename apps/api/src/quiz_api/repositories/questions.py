@@ -37,6 +37,7 @@ from quiz_api.repositories.tables import (
     activity_events,
     chapters,
     documents,
+    question_lineage,
     question_revisions,
     question_sources,
     questions,
@@ -118,6 +119,16 @@ class QuestionRecord:
             explanation=rev.explanation,
             rubric=rev.rubric,
         )
+
+
+@dataclass(frozen=True)
+class LineageRecord:
+    """A generated question's parent (M6.2, `question_lineage`)."""
+
+    parent_question_id: uuid.UUID
+    source_question_revision_id: uuid.UUID
+    variation_type: str
+    generation_run_id: uuid.UUID | None
 
 
 @dataclass(frozen=True)
@@ -377,6 +388,24 @@ class QuestionRepository:
             .order_by(question_revisions.c.version.desc())
         )
         return [RevisionSummaryRecord(r.id, r.version, r.created_at) for r in rows]
+
+    def lineage_of(self, question_id: uuid.UUID) -> LineageRecord | None:
+        row = self._session.execute(
+            select(
+                question_lineage.c.parent_question_id,
+                question_lineage.c.source_question_revision_id,
+                question_lineage.c.variation_type,
+                question_lineage.c.generation_run_id,
+            ).where(question_lineage.c.child_question_id == question_id)
+        ).one_or_none()
+        if row is None:
+            return None
+        return LineageRecord(
+            row.parent_question_id,
+            row.source_question_revision_id,
+            row.variation_type,
+            row.generation_run_id,
+        )
 
     def get_revision(self, question_id: uuid.UUID, revision_id: uuid.UUID) -> RevisionRecord | None:
         row = self._session.execute(

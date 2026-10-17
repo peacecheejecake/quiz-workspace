@@ -28,12 +28,14 @@
 //        E2E-LLM-SCHEMA-INVALID JSON of another shape } `llm_output_invalid` and no draft
 //      An unscripted task/marker raises (never a silent default).
 //   G2 LLM task names: `questions.generate.paraphrase`, `.invert_polarity`, `.analogous_concept`.
-//   G3 LLM output: {candidates: [{question_type, stem, options: [{id, text}], correct_option_ids,
-//      is_multi_answer, explanation, justification, evidence: [{quote}]}]}. Evidence quotes are
-//      verbatim excerpts of the passages given to the model; the worker maps each quote to the
-//      block (block id + page) it occurs in, and a quote found in no passage is a validation
-//      error (source coverage). Passages = the published blocks of the source question's
-//      `sources` pages (book-ko p.4 in every scenario; more may be added by search).
+//   G3 LLM output (M6.2: book_core.generation.LLMVariantBatch, `questions.generate.*/v1`):
+//      {candidates: [{question_type, multi_select, stem, options: [{label, text}],
+//      correct_option_labels, accepted_answers, explanation, justification, citations:
+//      [{passage_id, quote}]}]}. Option labels become stable ids `opt-<n>` in display order.
+//      Passages are tagged P1, P2, ...: the published blocks of the source question's `sources`
+//      pages, one passage per section in reading order (book-ko p.4: P1 2장 intro, P2 2.1, P3
+//      2.2). Quotes must be verbatim excerpts of the cited passage (else the candidate is
+//      rejected); the worker maps each quote to the block(s) it occurs in (block id + page).
 //   G4 Run API
 //      POST /questions/{id}/generations {variation_types: VariationType[1..3], candidate_count?:
 //           1..20 (default 1)} (+ optional `Idempotency-Key`: same key → same run) → 202 Run.
@@ -114,10 +116,11 @@ interface ScenarioSource {
 
 interface ScenarioCandidate {
   readonly stem: string;
-  readonly options: readonly QuestionOption[];
-  readonly correct_option_ids: readonly string[] | null;
+  readonly multi_select: boolean;
+  readonly options: readonly { readonly label: string; readonly text: string }[];
+  readonly correct_option_labels: readonly string[] | null;
   readonly justification: string;
-  readonly evidence: readonly { readonly quote: string }[];
+  readonly citations: readonly { readonly passage_id: string; readonly quote: string }[];
 }
 
 interface ScenarioFile {

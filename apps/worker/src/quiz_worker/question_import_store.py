@@ -20,22 +20,21 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 import uuid
-from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
 from sqlalchemy import Connection, Engine, text
 
-from quiz_worker.document_store import DocumentBusyError, WorkspaceUnavailableError
+from quiz_worker.document_store import WorkspaceUnavailableError
 from quiz_worker.errors import NonRetryableJobError
+from quiz_worker.run_lock import advisory_run_lock
 
 logger = logging.getLogger(__name__)
 
 JOB_TYPE = "question.import"
-_LOCK_POLL_SECONDS = 0.5
 
 TerminalRunStatus = Literal["failed", "cancelled"]
 
@@ -159,34 +158,16 @@ class PostgresImportStore:
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
 
-    @contextmanager
     def run_lock(
         self, run_id: uuid.UUID, *, wait_seconds: float, check: Callable[[], None]
-    ) -> Iterator[None]:
-        """Session-level advisory lock on a dedicated connection; a dead worker's connection
-        drops and releases it."""
-        key = f"quiz.question_import:{run_id}"
-        with self._engine.connect() as conn:
-            deadline = time.monotonic() + wait_seconds
-            while not conn.execute(
-                text("select pg_try_advisory_lock(hashtextextended(:k, 0))"), {"k": key}
-            ).scalar_one():
-                conn.commit()
-                if time.monotonic() >= deadline:
-                    raise DocumentBusyError("another job is processing this import")
-                check()
-                time.sleep(_LOCK_POLL_SECONDS)
-            conn.commit()
-            try:
-                yield
-            finally:
-                try:
-                    conn.execute(
-                        text("select pg_advisory_unlock(hashtextextended(:k, 0))"), {"k": key}
-                    )
-                    conn.commit()
-                except Exception:
-                    conn.invalidate()
+    ) -> AbstractContextManager[None]:
+        return advisory_run_lock(
+            self._engine,
+            f"quiz.question_import:{run_id}",
+            wait_seconds=wait_seconds,
+            check=check,
+            busy_message="another job is processing this import",
+        )
 
     def load_run(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> RunRow | None:
         with self._engine.begin() as conn:

@@ -36,7 +36,9 @@ select columns_are('public', 'question_lineage',
 select columns_are('public', 'question_generation_runs',
   array['id', 'workspace_id', 'created_by', 'source_question_id', 'source_question_revision_id',
         'variation_types', 'candidate_count', 'async_job_id', 'status', 'llm_model',
-        'prompt_version', 'params', 'finished_at', 'created_at', 'updated_at']);
+        'prompt_version', 'params', 'finished_at', 'created_at', 'updated_at',
+        -- M6.2 (20261018150000)
+        'passages']);
 select columns_are('public', 'question_import_runs',
   array['id', 'workspace_id', 'created_by', 'source_document_id', 'source_document_revision_id',
         'target_chapter_id', 'async_job_id', 'status', 'llm_model', 'prompt_version', 'params',
@@ -48,7 +50,9 @@ select columns_are('public', 'question_drafts',
         -- M4.4a (20261018100000)
         'question_number', 'is_multi_answer',
         -- M4.4a review fix (20261018120000)
-        'rubric']);
+        'rubric',
+        -- M6.2 (20261018150000)
+        'acknowledged_codes']);
 
 select col_is_pk('public', 'question_user_states', array['user_id', 'question_id'],
   'question_user_states PK is (user_id, question_id)');
@@ -576,9 +580,9 @@ select throws_ok(
   '23514', null, 'draft source type must match its run');
 select throws_ok(
   $$ insert into public.question_drafts
-       (workspace_id, source_type, generation_run_id, question_type, payload)
+       (workspace_id, source_type, generation_run_id, position, question_type, payload)
      values ('10000000-0000-4000-8000-0000000041b2', 'generation',
-             '60000000-0000-4000-8000-000000004101', 'MCQ', '{}') $$,
+             '60000000-0000-4000-8000-000000004101', 99, 'MCQ', '{}') $$,
   '23503', null, 'a draft cannot attach to another workspace''s run');
 select throws_ok(
   $$ update public.question_drafts

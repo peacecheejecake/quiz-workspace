@@ -291,6 +291,63 @@ def test_inversion_with_multiple_answers_warns_and_blocks_approval() -> None:
     QuestionDraft.model_validate({**approved.model_dump(), "review_status": "approved"})
 
 
+def _same_options(labels: list[str], *, multi: bool = False) -> dict[str, Any]:
+    """An inversion that keeps the source's four statements (in another order)."""
+    return candidate(
+        stem="물의 상태 변화에 대한 설명으로 옳은 것은?",
+        multi_select=multi,
+        options=[
+            {"label": "1", "text": "응결은 수증기가 물방울로 변하는 현상이다."},
+            {"label": "2", "text": "증발은 물이 수증기로 변하는 현상이다."},
+            {"label": "3", "text": "응결은 열을 흡수한다."},
+            {"label": "4", "text": "증발은 액체에서 기체로의 변화이다."},
+        ],
+        correct_option_labels=labels,
+    )
+
+
+def test_inversion_keeping_the_options_must_mark_the_complement_of_the_answer() -> None:
+    # Source: "옳지 않은 것" with opt-3 correct; inverted, the other three statements are correct.
+    result, _ = run(_same_options(["1"]), variation=VariationType.INVERT_POLARITY)
+    (draft,) = result.drafts
+    (mismatch,) = [v for v in draft.validations if v.code == "inverted_answer_mismatch"]
+    assert mismatch.severity is ValidationSeverity.ERROR
+    assert mismatch.field == "correct_option_ids"
+    assert "3 of them" in mismatch.message
+    assert "answer_count_changed" not in codes(draft.validations)
+    assert draft.has_blocking_issues
+    assert "inverted_answer_mismatch" not in ACKNOWLEDGEABLE_CODES | REJECT_CODES
+
+    # The reviewer sets the complement as a multi-answer question and confirms the new count.
+    resolved = draft.model_copy(update={"correct_option_ids": ("opt-1", "opt-2", "opt-4")})
+    issues = validate_variant(
+        resolved,
+        source=SOURCE,
+        passages=(PASSAGE,),
+        acknowledged={"answer_count_changed"},
+        multi_select=True,
+    )
+    assert not any(i.severity is ValidationSeverity.ERROR for i in issues)
+    assert "inverted_answer_mismatch" not in codes(issues)
+    unconfirmed = validate_variant(resolved, source=SOURCE, passages=(PASSAGE,), multi_select=True)
+    assert "answer_count_changed" in {
+        i.code for i in unconfirmed if i.severity is ValidationSeverity.ERROR
+    }
+
+
+def test_inversion_with_rebuilt_options_is_not_checked_against_the_complement() -> None:
+    result, _ = run(
+        candidate(stem="물의 상태 변화에 대한 설명으로 옳은 것은?", correct_option_labels=["2"]),
+        variation=VariationType.INVERT_POLARITY,
+    )
+    (draft,) = result.drafts
+    assert "inverted_answer_mismatch" not in codes(draft.validations)
+    # Paraphrases are never checked against the complement.
+    result, _ = run(_same_options(["3"]))
+    (draft,) = result.drafts
+    assert "inverted_answer_mismatch" not in codes(draft.validations)
+
+
 def test_inversion_that_keeps_the_polarity_gets_a_warning() -> None:
     result, _ = run(candidate(), variation=VariationType.INVERT_POLARITY)
     (draft,) = result.drafts

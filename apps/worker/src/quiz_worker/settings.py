@@ -157,6 +157,12 @@ class WorkerSettings(BaseSettings):
     # question text to the provider, docs/deployment.md §6). Never used in APP_ENV=test.
     question_import_llm: bool = Field(default=False, validation_alias="WORKER_QUESTION_IMPORT_LLM")
 
+    # -- question.generate (M6.2) ---------------------------------------------------------------
+    # APP_ENV=test only: scripted LLM outputs (book_core ScenarioLLMClient); defaults to the
+    # repository's tests/fixtures/llm/generation-scenarios.json. Ignored elsewhere (the provider
+    # comes from LLM_API_KEY / LLM_MODEL).
+    llm_scenario_file: str | None = Field(default=None, validation_alias="WORKER_LLM_SCENARIO_FILE")
+
     @model_validator(mode="after")
     def _check_limits(self) -> WorkerSettings:
         if self.task_soft_time_limit_seconds >= self.task_time_limit_seconds:

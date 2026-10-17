@@ -1044,7 +1044,7 @@
             "title": "Correct Option Ids"
           },
           "evidence": {
-            "description": "Page/area provenance in the source PDF.",
+            "description": "Import: page/area provenance in the question PDF. Generation: the cited book passages (document revision, blocks, pages, verbatim quote).",
             "items": {
               "$ref": "#/components/schemas/DraftEvidence"
             },
@@ -1073,7 +1073,7 @@
             ]
           },
           "id": {
-            "description": "Extractor id `{document_id}-q{NNN}` (not the draft row id).",
+            "description": "Producer id: extractor `{document_id}-q{NNN}` or generator `gen-{run id}-{variation}-{NN}` (not the draft row id).",
             "title": "Id",
             "type": "string"
           },
@@ -1086,6 +1086,7 @@
                 "type": "null"
               }
             ],
+            "description": "Generation: why the answer is correct, from the passages.",
             "title": "Justification"
           },
           "options": {
@@ -1102,6 +1103,18 @@
             ],
             "title": "Origin",
             "type": "string"
+          },
+          "parent_question_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Generation: the source question (lineage parent).",
+            "title": "Parent Question Id"
           },
           "question_type": {
             "enum": [
@@ -1125,6 +1138,18 @@
             "title": "Schema Version",
             "type": "integer"
           },
+          "source_question_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Generation: the source revision to diff against.",
+            "title": "Source Question Revision Id"
+          },
           "stem": {
             "title": "Stem",
             "type": "string"
@@ -1135,6 +1160,23 @@
             },
             "title": "Validations",
             "type": "array"
+          },
+          "variation_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "PARAPHRASE",
+                  "INVERT_POLARITY",
+                  "ANALOGOUS_CONCEPT"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Generation drafts only.",
+            "title": "Variation Type"
           }
         },
         "required": [
@@ -1215,6 +1257,259 @@
           "message"
         ],
         "title": "DraftValidation",
+        "type": "object"
+      },
+      "GenerationCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_count": {
+            "default": 1,
+            "description": "Candidates per variation.",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "easier",
+                  "same",
+                  "harder"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional target difficulty relative to the source.",
+            "title": "Difficulty"
+          },
+          "variation_types": {
+            "description": "Distinct variations. OPTION_SHUFFLE is refused (422): it is a practice order (POST /questions/{id}/practice-sessions), never a generation.",
+            "items": {
+              "enum": [
+                "OPTION_SHUFFLE",
+                "PARAPHRASE",
+                "INVERT_POLARITY",
+                "ANALOGOUS_CONCEPT"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Variation Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "variation_types"
+        ],
+        "title": "GenerationCreate",
+        "type": "object"
+      },
+      "GenerationDraftList": {
+        "properties": {
+          "items": {
+            "description": "Generation drafts (`run_id` set).",
+            "items": {
+              "$ref": "#/components/schemas/ImportDraft"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "GenerationDraftList",
+        "type": "object"
+      },
+      "GenerationRun": {
+        "properties": {
+          "candidate_count": {
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "easier",
+                  "same",
+                  "harder"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty"
+          },
+          "draft_count": {
+            "title": "Draft Count",
+            "type": "integer"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the job failed (stable code), e.g. `llm_output_invalid`, `no_valid_candidates`, `llm_unavailable`, `llm_not_configured`.",
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Poll `GET /jobs/{id}` (job `question.generate`).",
+            "title": "Job Id"
+          },
+          "llm_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set when the run succeeded.",
+            "title": "Llm Model"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set when the run succeeded.",
+            "title": "Prompt Version"
+          },
+          "published_count": {
+            "title": "Published Count",
+            "type": "integer"
+          },
+          "source_question_id": {
+            "format": "uuid",
+            "title": "Source Question Id",
+            "type": "string"
+          },
+          "source_question_revision_id": {
+            "description": "The revision the variants are generated from (the diff original).",
+            "format": "uuid",
+            "title": "Source Question Revision Id",
+            "type": "string"
+          },
+          "status": {
+            "description": "queued | running | succeeded | failed | cancelled",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "variation_types": {
+            "items": {
+              "enum": [
+                "PARAPHRASE",
+                "INVERT_POLARITY",
+                "ANALOGOUS_CONCEPT"
+              ],
+              "type": "string"
+            },
+            "title": "Variation Types",
+            "type": "array"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "status",
+          "job_id",
+          "error_code",
+          "source_question_id",
+          "source_question_revision_id",
+          "variation_types",
+          "candidate_count",
+          "difficulty",
+          "draft_count",
+          "published_count",
+          "llm_model",
+          "prompt_version",
+          "created_at",
+          "updated_at",
+          "finished_at"
+        ],
+        "title": "GenerationRun",
+        "type": "object"
+      },
+      "GenerationRunList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GenerationRun"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "GenerationRunList",
         "type": "object"
       },
       "HitBoundingBox": {
@@ -1299,7 +1594,16 @@
         "type": "object"
       },
       "ImportDraft": {
+        "description": "A question draft under review: an import draft or a generation draft (M6.2).",
         "properties": {
+          "acknowledged_codes": {
+            "description": "Generation: blocking validations the reviewer confirmed (answer_count_changed via is_multi_answer, question_type_changed via question_type).",
+            "items": {
+              "type": "string"
+            },
+            "title": "Acknowledged Codes",
+            "type": "array"
+          },
           "answer_missing": {
             "description": "No option answers, no accepted answers and (essay) no model answer.",
             "title": "Answer Missing",
@@ -1325,6 +1629,7 @@
                 "type": "null"
               }
             ],
+            "description": "The import run (import drafts).",
             "title": "Import Id"
           },
           "is_multi_answer": {
@@ -1426,6 +1731,19 @@
             "description": "Essay model answer / grading criteria (a model answer printed in the source lands here, never in accepted_answers).",
             "title": "Rubric"
           },
+          "run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The generation run (generation drafts).",
+            "title": "Run Id"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -1437,6 +1755,23 @@
             },
             "title": "Validations",
             "type": "array"
+          },
+          "variation_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "PARAPHRASE",
+                  "INVERT_POLARITY",
+                  "ANALOGOUS_CONCEPT"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Generation drafts only.",
+            "title": "Variation Type"
           },
           "version": {
             "description": "Changes with every write. Send it as `base_version` when editing and as `version` when publishing (the version that was reviewed).",
@@ -3161,6 +3496,17 @@
             "title": "Id",
             "type": "string"
           },
+          "lineage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuestionLineage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set for a question registered from a generated draft (origin `generation`)."
+          },
           "origin": {
             "description": "manual | import | generation",
             "title": "Origin",
@@ -3398,6 +3744,47 @@
           "base_version"
         ],
         "title": "QuestionDraftUpdate",
+        "type": "object"
+      },
+      "QuestionLineage": {
+        "description": "Where a generated variant comes from (questions.md §5).",
+        "properties": {
+          "generation_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Run Id"
+          },
+          "parent_question_id": {
+            "format": "uuid",
+            "title": "Parent Question Id",
+            "type": "string"
+          },
+          "source_question_revision_id": {
+            "description": "The parent's revision the variant was generated from.",
+            "format": "uuid",
+            "title": "Source Question Revision Id",
+            "type": "string"
+          },
+          "variation_type": {
+            "description": "PARAPHRASE | INVERT_POLARITY | ANALOGOUS_CONCEPT",
+            "title": "Variation Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "parent_question_id",
+          "source_question_revision_id",
+          "variation_type",
+          "generation_run_id"
+        ],
+        "title": "QuestionLineage",
         "type": "object"
       },
       "QuestionList": {
@@ -7760,7 +8147,7 @@
     },
     "/api/v1/question-drafts/{draft_id}": {
       "patch": {
-        "description": "Edit a draft (e.g. enter the answer the source did not give), approve or reject it.\n409 `stale-draft` when `base_version` is outdated, 409 `draft-published` once published.",
+        "description": "Edit a draft (e.g. enter the answer the source did not give), approve or reject it.\n409 `stale-draft` when `base_version` is outdated, 409 `draft-published` once published.\n\nImport and generation drafts share this route. A generation draft (M6.2) is re-validated\nagainst its run's source revision and passages on every request; `is_multi_answer: true`\nconfirms a changed answer count and `question_type` a changed type (`acknowledged_codes`).",
         "operationId": "updateQuestionDraft",
         "parameters": [
           {
@@ -7864,6 +8251,292 @@
         "summary": "Update Question Draft",
         "tags": [
           "question-imports"
+        ]
+      }
+    },
+    "/api/v1/question-generations/{generation_id}": {
+      "get": {
+        "operationId": "getQuestionGeneration",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "generation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Generation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Question Generation",
+        "tags": [
+          "question-generations"
+        ]
+      }
+    },
+    "/api/v1/question-generations/{generation_id}/drafts": {
+      "get": {
+        "description": "The run's drafts in generation order with diff original (the run's source revision),\njustification, cited passages and validations. Review them with PATCH /question-drafts/{id}.",
+        "operationId": "listQuestionGenerationDrafts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "generation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Generation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationDraftList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Question Generation Drafts",
+        "tags": [
+          "question-generations"
+        ]
+      }
+    },
+    "/api/v1/question-generations/{generation_id}/publish": {
+      "post": {
+        "description": "Register exactly these approved drafts as CONFIRMED questions with lineage\n(QGEN-01-AC04). Same contract as the import publish: all or nothing; 404 for an id that is\nnot a draft of this run, 409 `stale-draft` for a draft changed since review, 409\n`draft-not-approved` for a pending/rejected draft, 422 when a draft cannot be confirmed;\nalready published drafts return their question (idempotent replay).",
+        "operationId": "publishQuestionGenerationDrafts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "generation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Generation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportPublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportPublishResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Publish Question Generation Drafts",
+        "tags": [
+          "question-generations"
         ]
       }
     },
@@ -8661,6 +9334,134 @@
         "summary": "List My Attempts",
         "tags": [
           "practice"
+        ]
+      }
+    },
+    "/api/v1/questions/{question_id}/generations": {
+      "post": {
+        "description": "Start generating variant drafts of a CONFIRMED question (QGEN-01-AC02..AC04). 409\n`question-not-confirmed` for a draft/archived question. ANALOGOUS_CONCEPT needs a source\nquestion that cites document pages (422 otherwise): its passages come from those pages.",
+        "operationId": "createQuestionGeneration",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerationCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Question Generation",
+        "tags": [
+          "question-generations"
         ]
       }
     },
@@ -10939,6 +11740,124 @@
         "summary": "List Jobs",
         "tags": [
           "history"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/question-generations": {
+      "get": {
+        "description": "The workspace's generation runs, newest first (optionally of one source question).",
+        "operationId": "listQuestionGenerations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_question_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Question Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationRunList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Question Generations",
+        "tags": [
+          "question-generations"
         ]
       }
     },

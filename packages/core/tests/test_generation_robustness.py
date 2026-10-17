@@ -91,6 +91,7 @@ KNOWN_CODES = (
     REJECT_CODES
     | ACKNOWLEDGEABLE_CODES
     | {"provenance_missing", "mcq_multi_inconsistent", "polarity_unchanged", "stem_unchanged"}
+    | {"inverted_answer_mismatch"}
 )
 
 
@@ -194,7 +195,8 @@ def _check_draft(draft: QuestionDraft, passages: tuple[Excerpt, ...]) -> None:
     # Blocking issues are exactly the error-level ones.
     blocking = [i for i in draft.validations if i.severity is ValidationSeverity.ERROR]
     assert draft.has_blocking_issues == bool(blocking)
-    assert {i.code for i in blocking} <= ACKNOWLEDGEABLE_CODES
+    # Draft-level blockers: confirmable ones, or an inverted answer the reviewer must set.
+    assert {i.code for i in blocking} <= ACKNOWLEDGEABLE_CODES | {"inverted_answer_mismatch"}
 
 
 @pytest.mark.parametrize("seed", range(6))

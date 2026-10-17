@@ -592,6 +592,10 @@ def _source_changes(
                 field="correct_option_ids",
             )
         )
+    if variation_type is VariationType.INVERT_POLARITY:
+        mismatch = _inverted_answer_mismatch(content, source)
+        if mismatch is not None:
+            issues.append(mismatch)
     if variation_type is VariationType.INVERT_POLARITY and _negated(content.stem) == _negated(
         source.stem
     ):
@@ -607,6 +611,40 @@ def _source_changes(
     ):
         issues.append(issue("stem_unchanged", "The stem was not reworded.", field="stem"))
     return issues
+
+
+def _inverted_answer_mismatch(
+    content: VariantContent, source: SourceQuestion
+) -> ValidationIssue | None:
+    """An inversion that keeps the original options (same texts, any order or ids) makes the
+    complement of the original answer correct. The declared answer must be exactly that set;
+    otherwise the draft is blocked until the reviewer sets the answer (multi-answer when several
+    options are now correct) or rebuilds the options (questions.md §5, QGEN-01-AC03)."""
+    if content.question_type is not QuestionType.MCQ or source.question_type is not (
+        QuestionType.MCQ
+    ):
+        return None
+    if source.correct_option_ids is None or content.correct_option_ids is None:
+        return None
+    source_texts = {normalize_text(o.text): o.id for o in source.options}
+    if len(source_texts) != len(source.options):
+        return None
+    if sorted(normalize_text(o.text) for o in content.options) != sorted(source_texts):
+        return None
+    original = set(source.correct_option_ids)
+    expected = {text for text, oid in source_texts.items() if oid not in original}
+    by_id = {o.id: normalize_text(o.text) for o in content.options}
+    declared = {by_id[i] for i in content.correct_option_ids if i in by_id}
+    if declared == expected:
+        return None
+    return issue(
+        "inverted_answer_mismatch",
+        f"The inversion keeps the original options, so {len(expected)} of them are correct "
+        f"now (the complement of the original answer) but the draft marks {len(declared)}; set "
+        "the answer (multi-answer when several are correct) or rebuild the options.",
+        error=True,
+        field="correct_option_ids",
+    )
 
 
 def _negated(stem: str) -> bool:

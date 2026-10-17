@@ -7,8 +7,8 @@ cannot be approved until the reviewer resolves it); invalid LLM output fails the
 drafts; only approved drafts become CONFIRMED questions with lineage; generation is an editor
 write scoped to the workspace. Endpoint shapes and the fake-LLM scenarios are assumptions G1-G6
 in tests/e2e/fixtures/generation.ts; the scenario file is tests/fixtures/llm/
-generation-scenarios.json. Jobs run in-process through conftest's JobWorker, which needs the
-`question.generate` definition with the ScenarioLLMClient (M6.2 registers it there).
+generation-scenarios.json. Jobs run in-process through conftest's JobWorker (`question.generate`
+with the ScenarioLLMClient).
 """
 
 from __future__ import annotations
@@ -21,8 +21,7 @@ from typing import Any
 import httpx
 import pytest
 
-# RED (M6.0): M6.2 removes `red` when the generation run API/worker make these GREEN.
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = pytest.mark.infra
 
 SCENARIO_FILE = Path(__file__).resolve().parents[2] / "fixtures/llm/generation-scenarios.json"
 SCENARIOS: dict[str, Any] = json.loads(SCENARIO_FILE.read_text(encoding="utf-8"))

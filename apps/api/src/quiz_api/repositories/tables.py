@@ -255,6 +255,8 @@ question_generation_runs = Table(
     Column("llm_model", Text),
     Column("prompt_version", Text),
     Column("params", JSONB, nullable=False),
+    # M6.2 (20261018150000_question_generation_worker.sql): the Excerpt[] given to the LLM.
+    Column("passages", JSONB, nullable=False),
     _ts("finished_at"),
     _ts("created_at", nullable=False),
     _ts("updated_at", nullable=False),
@@ -294,6 +296,8 @@ question_drafts = Table(
     Column("is_multi_answer", Boolean, nullable=False),
     # 20261018120000_question_draft_rubric.sql
     Column("rubric", Text),
+    # 20261018150000_question_generation_worker.sql
+    Column("acknowledged_codes", ARRAY(Text), nullable=False),
     Column("payload", JSONB, nullable=False),
     Column("validations", JSONB, nullable=False),
     Column("review_status", Text, nullable=False),

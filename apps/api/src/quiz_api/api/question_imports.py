@@ -9,7 +9,8 @@
                                                  (same run) -> 202; `Idempotency-Key`
     GET   /question-imports/{id}/drafts          any member; drafts in position order
     PATCH /question-drafts/{id}                  editor+; edit / approve / reject a draft
-                                                 (`base_version` optimistic concurrency)
+                                                 (`base_version` optimistic concurrency); also
+                                                 generation drafts (M6.2, question_generations)
     POST  /question-imports/{id}/publish         editor+; {drafts: [{draft_id, version}]} of
                                                  APPROVED drafts at the reviewed version -> the
                                                  CONFIRMED questions, idempotent per draft
@@ -35,7 +36,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from book_core.contracts import QuestionDraft
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
@@ -72,6 +73,7 @@ from quiz_api.question_drafts import (
     source_pages,
     with_review,
 )
+from quiz_api.question_generation_review import acknowledged_codes, generation_validations
 from quiz_api.question_rules import (
     MAX_ACCEPTED_ANSWERS,
     MAX_LONG_TEXT,
@@ -99,6 +101,7 @@ router = APIRouter(tags=["question-imports"], responses=problem_responses(503))
 
 NOT_FOUND = "Not found."
 MAX_PUBLISH = 200
+DraftVariation = Literal["PARAPHRASE", "INVERT_POLARITY", "ANALOGOUS_CONCEPT"]
 INT4_MAX = 2147483647
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
@@ -175,7 +178,10 @@ class DraftPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     schema_version: int
-    id: str = Field(description="Extractor id `{document_id}-q{NNN}` (not the draft row id).")
+    id: str = Field(
+        description="Producer id: extractor `{document_id}-q{NNN}` or generator "
+        "`gen-{run id}-{variation}-{NN}` (not the draft row id)."
+    )
     origin: Literal["pdf_import", "generation"]
     question_type: QuestionType
     stem: str
@@ -183,8 +189,22 @@ class DraftPayload(BaseModel):
     correct_option_ids: list[str] | None = Field(description="null = the source has no answer.")
     accepted_answers: list[str] | None = Field(description="null = the source has no answer.")
     explanation: str | None = None
-    justification: str | None = None
-    evidence: list[DraftEvidence] = Field(description="Page/area provenance in the source PDF.")
+    justification: str | None = Field(
+        default=None, description="Generation: why the answer is correct, from the passages."
+    )
+    evidence: list[DraftEvidence] = Field(
+        description="Import: page/area provenance in the question PDF. Generation: the cited "
+        "book passages (document revision, blocks, pages, verbatim quote)."
+    )
+    variation_type: DraftVariation | None = Field(
+        default=None, description="Generation drafts only."
+    )
+    parent_question_id: str | None = Field(
+        default=None, description="Generation: the source question (lineage parent)."
+    )
+    source_question_revision_id: str | None = Field(
+        default=None, description="Generation: the source revision to diff against."
+    )
     generator: DraftGenerator | None = None
     validations: list[DraftValidation]
     review_status: ReviewStatus
@@ -196,8 +216,21 @@ class DraftPublishError(BaseModel):
 
 
 class ImportDraft(BaseModel):
+    """A question draft under review: an import draft or a generation draft (M6.2)."""
+
     id: uuid.UUID
-    import_id: uuid.UUID | None
+    import_id: uuid.UUID | None = Field(description="The import run (import drafts).")
+    run_id: uuid.UUID | None = Field(
+        default=None, description="The generation run (generation drafts)."
+    )
+    variation_type: DraftVariation | None = Field(
+        default=None, description="Generation drafts only."
+    )
+    acknowledged_codes: list[str] = Field(
+        default_factory=list,
+        description="Generation: blocking validations the reviewer confirmed "
+        "(answer_count_changed via is_multi_answer, question_type_changed via question_type).",
+    )
     position: int = Field(description="0-based order in the source.")
     question_number: int | None = Field(description="Number printed in the source.")
     question_type: QuestionType
@@ -397,6 +430,11 @@ def _draft_out(record: DraftRecord) -> ImportDraft:
     return ImportDraft(
         id=record.id,
         import_id=record.import_run_id,
+        run_id=record.generation_run_id,
+        variation_type=cast(DraftVariation, draft.variation_type.value)
+        if draft.variation_type is not None
+        else None,
+        acknowledged_codes=list(record.acknowledged_codes),
         position=record.position,
         question_number=record.question_number,
         question_type=draft.question_type.value,
@@ -659,7 +697,11 @@ def update_question_draft(
     access: EditDraft, body: QuestionDraftUpdate, repo: ImportRepo
 ) -> ImportDraft:
     """Edit a draft (e.g. enter the answer the source did not give), approve or reject it.
-    409 `stale-draft` when `base_version` is outdated, 409 `draft-published` once published."""
+    409 `stale-draft` when `base_version` is outdated, 409 `draft-published` once published.
+
+    Import and generation drafts share this route. A generation draft (M6.2) is re-validated
+    against its run's source revision and passages on every request; `is_multi_answer: true`
+    confirms a changed answer count and `question_type` a changed type (`acknowledged_codes`)."""
     _reject_unstorable(body)
     record = repo.get_draft(access.resource_id, lock=True)
     if record is None:
@@ -712,7 +754,17 @@ def update_question_draft(
     # not depend on the content rules; an edit must be storable; an approval must be publishable.
     if content_changed:
         content_issues(content, "DRAFT").raise_if_any()
-    validations = recompute_validations(content, draft) if content_changed else draft.validations
+    acknowledged = record.acknowledged_codes
+    if record.source_type == "generation":
+        # quiz_api.question_generation_review: the worker's rules, recomputed on every PATCH.
+        acknowledged = acknowledged_codes(
+            record, sent=sent, is_multi_answer=body.is_multi_answer, question_type=question_type
+        )
+        validations = generation_validations(repo.session, record, draft, content, acknowledged)
+    elif content_changed:
+        validations = recompute_validations(content, draft)
+    else:
+        validations = draft.validations
     validation_rows = [v.model_dump(mode="json") for v in validations]
     # Human approval covers exactly the reviewed content: any other change returns an approved
     # draft to pending unless this same request approves the new content.
@@ -740,6 +792,7 @@ def update_question_draft(
         "is_multi_answer": content.is_multi_answer,
         "rubric": content.rubric,
         "validations": validation_rows,
+        "acknowledged_codes": list(acknowledged),
     }
     if "question_number" in sent:
         values["question_number"] = body.question_number

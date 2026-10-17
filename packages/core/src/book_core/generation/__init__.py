@@ -10,12 +10,14 @@ from book_core.generation.generator import VariantGenerator
 from book_core.generation.models import (
     MAX_CANDIDATES_PER_VARIATION,
     MAX_PASSAGES,
+    MAX_SOURCE_PAGES,
     Difficulty,
     GeneratedVariant,
     RejectedCandidate,
     SourceQuestion,
     VariantGenerationResult,
     VariantRequest,
+    stored_source_evidence,
 )
 from book_core.generation.prompts import (
     GENERATE_TASKS,
@@ -42,6 +44,7 @@ __all__ = [
     "GENERATE_TASKS",
     "MAX_CANDIDATES_PER_VARIATION",
     "MAX_PASSAGES",
+    "MAX_SOURCE_PAGES",
     "PROMPT_VERSIONS",
     "REJECT_CODES",
     "Difficulty",
@@ -61,5 +64,6 @@ __all__ = [
     "content_issues",
     "passage_tag",
     "source_fingerprint",
+    "stored_source_evidence",
     "validate_variant",
 ]

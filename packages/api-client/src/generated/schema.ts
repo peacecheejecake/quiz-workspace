@@ -351,8 +351,74 @@ export type paths = {
      * Update Question Draft
      * @description Edit a draft (e.g. enter the answer the source did not give), approve or reject it.
      *     409 `stale-draft` when `base_version` is outdated, 409 `draft-published` once published.
+     *
+     *     Import and generation drafts share this route. A generation draft (M6.2) is re-validated
+     *     against its run's source revision and passages on every request; `is_multi_answer: true`
+     *     confirms a changed answer count and `question_type` a changed type (`acknowledged_codes`).
      */
     patch: operations['updateQuestionDraft'];
+    trace?: never;
+  };
+  '/api/v1/question-generations/{generation_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Question Generation */
+    get: operations['getQuestionGeneration'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/question-generations/{generation_id}/drafts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Question Generation Drafts
+     * @description The run's drafts in generation order with diff original (the run's source revision),
+     *     justification, cited passages and validations. Review them with PATCH /question-drafts/{id}.
+     */
+    get: operations['listQuestionGenerationDrafts'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/question-generations/{generation_id}/publish': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Publish Question Generation Drafts
+     * @description Register exactly these approved drafts as CONFIRMED questions with lineage
+     *     (QGEN-01-AC04). Same contract as the import publish: all or nothing; 404 for an id that is
+     *     not a draft of this run, 409 `stale-draft` for a draft changed since review, 409
+     *     `draft-not-approved` for a pending/rejected draft, 422 when a draft cannot be confirmed;
+     *     already published drafts return their question (idempotent replay).
+     */
+    post: operations['publishQuestionGenerationDrafts'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/v1/question-imports/{import_id}': {
@@ -483,6 +549,28 @@ export type paths = {
     get: operations['listMyQuestionAttempts'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/generations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Question Generation
+     * @description Start generating variant drafts of a CONFIRMED question (QGEN-01-AC02..AC04). 409
+     *     `question-not-confirmed` for a draft/archived question. ANALOGOUS_CONCEPT needs a source
+     *     question that cites document pages (422 otherwise): its passages come from those pages.
+     */
+    post: operations['createQuestionGeneration'];
     delete?: never;
     options?: never;
     head?: never;
@@ -873,6 +961,26 @@ export type paths = {
      *     each works on and whether the caller can retry it.
      */
     get: operations['listWorkspaceJobs'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/question-generations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Question Generations
+     * @description The workspace's generation runs, newest first (optionally of one source question).
+     */
+    get: operations['listQuestionGenerations'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1568,7 +1676,7 @@ export type components = {
       correct_option_ids: string[] | null;
       /**
        * Evidence
-       * @description Page/area provenance in the source PDF.
+       * @description Import: page/area provenance in the question PDF. Generation: the cited book passages (document revision, blocks, pages, verbatim quote).
        */
       evidence: components['schemas']['DraftEvidence'][];
       /** Explanation */
@@ -1576,10 +1684,13 @@ export type components = {
       generator?: components['schemas']['DraftGenerator'] | null;
       /**
        * Id
-       * @description Extractor id `{document_id}-q{NNN}` (not the draft row id).
+       * @description Producer id: extractor `{document_id}-q{NNN}` or generator `gen-{run id}-{variation}-{NN}` (not the draft row id).
        */
       id: string;
-      /** Justification */
+      /**
+       * Justification
+       * @description Generation: why the answer is correct, from the passages.
+       */
       justification?: string | null;
       /** Options */
       options: components['schemas']['QuestionOption'][];
@@ -1588,6 +1699,11 @@ export type components = {
        * @enum {string}
        */
       origin: 'pdf_import' | 'generation';
+      /**
+       * Parent Question Id
+       * @description Generation: the source question (lineage parent).
+       */
+      parent_question_id?: string | null;
       /**
        * Question Type
        * @enum {string}
@@ -1600,10 +1716,20 @@ export type components = {
       review_status: 'pending' | 'approved' | 'rejected';
       /** Schema Version */
       schema_version: number;
+      /**
+       * Source Question Revision Id
+       * @description Generation: the source revision to diff against.
+       */
+      source_question_revision_id?: string | null;
       /** Stem */
       stem: string;
       /** Validations */
       validations: components['schemas']['DraftValidation'][];
+      /**
+       * Variation Type
+       * @description Generation drafts only.
+       */
+      variation_type?: ('PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT') | null;
     };
     /** DraftPublishError */
     DraftPublishError: {
@@ -1626,6 +1752,112 @@ export type components = {
        * @enum {string}
        */
       severity: 'warning' | 'error';
+    };
+    /** GenerationCreate */
+    GenerationCreate: {
+      /**
+       * Candidate Count
+       * @description Candidates per variation.
+       * @default 1
+       */
+      candidate_count?: number;
+      /**
+       * Difficulty
+       * @description Optional target difficulty relative to the source.
+       */
+      difficulty?: ('easier' | 'same' | 'harder') | null;
+      /**
+       * Variation Types
+       * @description Distinct variations. OPTION_SHUFFLE is refused (422): it is a practice order (POST /questions/{id}/practice-sessions), never a generation.
+       */
+      variation_types: (
+        'OPTION_SHUFFLE' | 'PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT'
+      )[];
+    };
+    /** GenerationDraftList */
+    GenerationDraftList: {
+      /**
+       * Items
+       * @description Generation drafts (`run_id` set).
+       */
+      items: components['schemas']['ImportDraft'][];
+    };
+    /** GenerationRun */
+    GenerationRun: {
+      /** Candidate Count */
+      candidate_count: number;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Difficulty */
+      difficulty: ('easier' | 'same' | 'harder') | null;
+      /** Draft Count */
+      draft_count: number;
+      /**
+       * Error Code
+       * @description Why the job failed (stable code), e.g. `llm_output_invalid`, `no_valid_candidates`, `llm_unavailable`, `llm_not_configured`.
+       */
+      error_code: string | null;
+      /** Finished At */
+      finished_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Job Id
+       * @description Poll `GET /jobs/{id}` (job `question.generate`).
+       */
+      job_id: string | null;
+      /**
+       * Llm Model
+       * @description Set when the run succeeded.
+       */
+      llm_model: string | null;
+      /**
+       * Prompt Version
+       * @description Set when the run succeeded.
+       */
+      prompt_version: string | null;
+      /** Published Count */
+      published_count: number;
+      /**
+       * Source Question Id
+       * Format: uuid
+       */
+      source_question_id: string;
+      /**
+       * Source Question Revision Id
+       * Format: uuid
+       * @description The revision the variants are generated from (the diff original).
+       */
+      source_question_revision_id: string;
+      /**
+       * Status
+       * @description queued | running | succeeded | failed | cancelled
+       * @enum {string}
+       */
+      status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      /** Variation Types */
+      variation_types: ('PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT')[];
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /** GenerationRunList */
+    GenerationRunList: {
+      /** Items */
+      items: components['schemas']['GenerationRun'][];
     };
     /** HitBoundingBox */
     HitBoundingBox: {
@@ -1656,8 +1888,16 @@ export type components = {
        */
       document_id: string;
     };
-    /** ImportDraft */
+    /**
+     * ImportDraft
+     * @description A question draft under review: an import draft or a generation draft (M6.2).
+     */
     ImportDraft: {
+      /**
+       * Acknowledged Codes
+       * @description Generation: blocking validations the reviewer confirmed (answer_count_changed via is_multi_answer, question_type_changed via question_type).
+       */
+      acknowledged_codes?: string[];
       /**
        * Answer Missing
        * @description No option answers, no accepted answers and (essay) no model answer.
@@ -1673,7 +1913,10 @@ export type components = {
        * Format: uuid
        */
       id: string;
-      /** Import Id */
+      /**
+       * Import Id
+       * @description The import run (import drafts).
+       */
       import_id: string | null;
       /** Is Multi Answer */
       is_multi_answer: boolean;
@@ -1723,12 +1966,22 @@ export type components = {
        */
       rubric: string | null;
       /**
+       * Run Id
+       * @description The generation run (generation drafts).
+       */
+      run_id?: string | null;
+      /**
        * Updated At
        * Format: date-time
        */
       updated_at: string;
       /** Validations */
       validations: components['schemas']['DraftValidation'][];
+      /**
+       * Variation Type
+       * @description Generation drafts only.
+       */
+      variation_type?: ('PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT') | null;
       /**
        * Version
        * @description Changes with every write. Send it as `base_version` when editing and as `version` when publishing (the version that was reviewed).
@@ -2480,6 +2733,8 @@ export type components = {
        * Format: uuid
        */
       id: string;
+      /** @description Set for a question registered from a generated draft (origin `generation`). */
+      lineage?: components['schemas']['QuestionLineage'] | null;
       /**
        * Origin
        * @description manual | import | generation
@@ -2557,6 +2812,30 @@ export type components = {
       rubric?: string | null;
       /** Stem */
       stem?: string | null;
+    };
+    /**
+     * QuestionLineage
+     * @description Where a generated variant comes from (questions.md §5).
+     */
+    QuestionLineage: {
+      /** Generation Run Id */
+      generation_run_id: string | null;
+      /**
+       * Parent Question Id
+       * Format: uuid
+       */
+      parent_question_id: string;
+      /**
+       * Source Question Revision Id
+       * Format: uuid
+       * @description The parent's revision the variant was generated from.
+       */
+      source_question_revision_id: string;
+      /**
+       * Variation Type
+       * @description PARAPHRASE | INVERT_POLARITY | ANALOGOUS_CONCEPT
+       */
+      variation_type: string;
     };
     /** QuestionList */
     QuestionList: {
@@ -4988,6 +5267,220 @@ export interface operations {
       };
     };
   };
+  getQuestionGeneration: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        generation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GenerationRun'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listQuestionGenerationDrafts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        generation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GenerationDraftList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  publishQuestionGenerationDrafts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        generation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ImportPublishRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportPublishResult'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getQuestionImport: {
     parameters: {
       query?: never;
@@ -5536,6 +6029,89 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createQuestionGeneration: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GenerationCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GenerationRun'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };
@@ -7065,6 +7641,76 @@ export interface operations {
       };
       /** @description Unprocessable Content */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listQuestionGenerations: {
+    parameters: {
+      query?: {
+        limit?: number;
+        source_question_id?: string | null;
+      };
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GenerationRunList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
         headers: {
           [name: string]: unknown;
         };

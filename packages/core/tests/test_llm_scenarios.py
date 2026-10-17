@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from book_core.generation import LLMVariantBatch
 from book_core.llm import FakeLLMNotScriptedError, LLMClient, LLMOutputError, LLMRequest
 from book_core.llm.scenarios import ScenarioLLMClient
-from pydantic import BaseModel, ConfigDict
 
 SCENARIOS = Path(__file__).resolve().parents[3] / "tests/fixtures/llm/generation-scenarios.json"
 BOOK_TRUTH = Path(__file__).resolve().parents[3] / "tests/fixtures/pdfs/book-ko.truth.json"
@@ -20,34 +20,8 @@ TASKS = (
 )
 
 
-# The candidate shape assumed by M6.0 (tests/e2e/fixtures/generation.ts, G3). M6.1 owns the real
-# schema; this mirror only proves the fixture's "valid" outputs are internally consistent.
-class _Strict(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class _Option(_Strict):
-    id: str
-    text: str
-
-
-class _Evidence(_Strict):
-    quote: str
-
-
-class _Candidate(_Strict):
-    question_type: str
-    stem: str
-    options: list[_Option]
-    correct_option_ids: list[str] | None
-    is_multi_answer: bool
-    explanation: str | None
-    justification: str
-    evidence: list[_Evidence]
-
-
-class _Output(_Strict):
-    candidates: list[_Candidate]
+# The fixture's outputs follow the real M6.1 schema (aligned in M6.2).
+_Output = LLMVariantBatch
 
 
 def _sources() -> dict[str, dict[str, Any]]:
@@ -72,9 +46,10 @@ def test_ok_scenario_answers_each_scripted_task_with_a_schema_valid_candidate() 
     for task in ("questions.generate.paraphrase", "questions.generate.analogous_concept"):
         result = client.complete(_request(task, "E2E-LLM-OK", stem), _Output)
         [candidate] = result.output.candidates
-        ids = [o.id for o in candidate.options]
-        assert candidate.correct_option_ids
-        assert set(candidate.correct_option_ids) <= set(ids)
+        labels = [o.label for o in candidate.options]
+        assert candidate.correct_option_labels
+        assert set(candidate.correct_option_labels) <= set(labels)
+        assert candidate.citations
         assert candidate.stem != stem
         assert result.info.model == client.model_name
     assert [m for m, _ in client.calls] == ["E2E-LLM-OK", "E2E-LLM-OK"]
@@ -94,8 +69,8 @@ def test_every_evidence_quote_occurs_verbatim_in_the_source_page() -> None:
     for marker, task in scripted:
         output = client.generate(_request(task, marker), _Output)
         for candidate in output.candidates:
-            for evidence in candidate.evidence:
-                assert evidence.quote in page_text, (marker, task)
+            for citation in candidate.citations:
+                assert citation.quote in page_text, (marker, task)
 
 
 def test_invert_multi_keeps_the_options_so_three_statements_become_correct() -> None:
@@ -105,14 +80,14 @@ def test_invert_multi_keeps_the_options_so_three_statements_become_correct() -> 
         _request("questions.generate.invert_polarity", "E2E-LLM-INVERT-MULTI"), _Output
     )
     [candidate] = output.candidates
-    assert [o.model_dump() for o in candidate.options] == source["options"]
-    all_ids = {o.id for o in candidate.options}
-    inverted = all_ids - set(source["correct_option_ids"])
+    assert [o.text for o in candidate.options] == [o["text"] for o in source["options"]]
+    correct = {o["text"] for o in source["options"] if o["id"] in source["correct_option_ids"]}
+    inverted = [o for o in candidate.options if o.text not in correct]
     assert len(inverted) == 3
     # The model still declares one answer: the validator must not trust it (questions.md §5).
-    assert candidate.is_multi_answer is False
-    assert candidate.correct_option_ids is not None
-    assert len(candidate.correct_option_ids) == 1
+    assert candidate.multi_select is False
+    assert candidate.correct_option_labels is not None
+    assert len(candidate.correct_option_labels) == 1
 
 
 @pytest.mark.parametrize("marker", ["E2E-LLM-MALFORMED", "E2E-LLM-SCHEMA-INVALID"])

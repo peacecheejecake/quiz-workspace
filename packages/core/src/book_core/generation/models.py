@@ -8,10 +8,11 @@ that were rejected, each with structured reasons.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from enum import StrEnum
-from typing import Annotated, Self
+from typing import Annotated, Any, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, ValidationError, model_validator
 
 from book_core.contracts import (
     DRAFT_VARIATION_TYPES,
@@ -23,6 +24,7 @@ from book_core.contracts import (
     QuestionType,
     Sha256Hex,
     SourceEvidence,
+    SourceLocation,
     ValidationIssue,
     VariationType,
 )
@@ -34,6 +36,9 @@ MAX_CANDIDATES_PER_VARIATION = 20
 
 MAX_PASSAGES = 8
 """Source passages sent to the LLM in one request."""
+
+MAX_SOURCE_PAGES = 50
+"""Pages of one stored source range turned into page-level locations."""
 
 
 class Difficulty(StrEnum):
@@ -69,6 +74,44 @@ class SourceQuestion(CoreModel):
         if self.correct_option_ids is not None and not set(self.correct_option_ids) <= set(ids):
             raise ValueError("correct_option_ids not among options")
         return self
+
+
+def stored_source_evidence(
+    *,
+    document_id: str,
+    revision_id: str | None,
+    page_start: int | None,
+    page_end: int | None,
+    block_ids: Sequence[str] = (),
+    locations: Sequence[Mapping[str, Any]] = (),
+) -> SourceEvidence | None:
+    """A stored question source (``question_sources`` row) as the source question's evidence.
+
+    The worker (generation) and the API (re-validation of a reviewer's edit) must build the
+    same value, so a draft that inherited the source's provenance stays valid. Stored
+    ``locations`` win; otherwise the page range (capped at :data:`MAX_SOURCE_PAGES`) becomes
+    page-level locations. ``None`` without any location.
+    """
+    found: list[SourceLocation] = []
+    for raw in locations:
+        try:
+            found.append(SourceLocation.model_validate(raw))
+        except ValidationError:
+            continue
+    if not found and page_start is not None and page_start >= 1:
+        end = min(max(page_end or page_start, page_start), page_start + MAX_SOURCE_PAGES)
+        found = [SourceLocation(page=p) for p in range(page_start, end + 1)]
+    if not found:
+        return None
+    try:
+        return SourceEvidence(
+            document_id=document_id,
+            revision_id=revision_id,
+            block_ids=tuple(block_ids),
+            locations=tuple(found),
+        )
+    except ValidationError:
+        return None
 
 
 class VariantRequest(CoreModel):

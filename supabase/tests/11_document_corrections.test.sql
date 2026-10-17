@@ -1,6 +1,6 @@
 -- M3.4 (20261018003400): switching a document's active revision remaps question chapter links to
 -- the same section of the new revision (or null), for the switching role quiz_worker, without
--- giving it any privilege on questions. The end-to-end flow (API draft -> worker publish) is
+-- giving it any write privilege on questions. The end-to-end flow (API draft -> worker publish) is
 -- covered by tests/integration/workspaces/test_document_revisions.py.
 begin;
 create extension if not exists pgtap with schema extensions;
@@ -98,9 +98,9 @@ select ok(
   and not has_function_privilege('anon', 'public.documents_remap_question_chapters()', 'execute'),
   'nobody can call the remap function directly');
 select ok(
-  not has_table_privilege('quiz_worker', 'public.questions', 'select')
-  and not has_table_privilege('quiz_worker', 'public.questions', 'update'),
-  'quiz_worker still has no privilege on questions');
+  not has_table_privilege('quiz_worker', 'public.questions', 'update')
+  and not has_table_privilege('quiz_worker', 'public.questions', 'insert'),
+  'quiz_worker cannot write questions (M6.2 grants it SELECT only)');
 
 -- A draft does not move anything ----------------------------------------------------------------
 select is(

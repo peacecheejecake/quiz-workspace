@@ -70,6 +70,7 @@ class DraftRecord:
     id: uuid.UUID
     workspace_id: uuid.UUID
     import_run_id: uuid.UUID | None
+    generation_run_id: uuid.UUID | None
     source_type: str
     position: int
     question_type: str
@@ -83,6 +84,8 @@ class DraftRecord:
     published_question_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
+    # Generation drafts: blocking validations the reviewer confirmed (M6.2).
+    acknowledged_codes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -187,6 +190,7 @@ _DRAFT_COLUMNS = (
     question_drafts.c.id,
     question_drafts.c.workspace_id,
     question_drafts.c.import_run_id,
+    question_drafts.c.generation_run_id,
     question_drafts.c.source_type,
     question_drafts.c.position,
     question_drafts.c.question_type,
@@ -200,6 +204,7 @@ _DRAFT_COLUMNS = (
     question_drafts.c.published_question_id,
     question_drafts.c.created_at,
     question_drafts.c.updated_at,
+    question_drafts.c.acknowledged_codes,
 )
 
 
@@ -208,6 +213,7 @@ def _draft(row: Any) -> DraftRecord:
         id=row.id,
         workspace_id=row.workspace_id,
         import_run_id=row.import_run_id,
+        generation_run_id=row.generation_run_id,
         source_type=row.source_type,
         position=row.position,
         question_type=row.question_type,
@@ -221,6 +227,7 @@ def _draft(row: Any) -> DraftRecord:
         published_question_id=row.published_question_id,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        acknowledged_codes=tuple(row.acknowledged_codes or ()),
     )
 
 

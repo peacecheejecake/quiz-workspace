@@ -8,13 +8,13 @@ both in sync). The `postgres` superuser is used for teardown and two documented 
 `viewer` membership (no membership API before S1/S2) and seeding/reading a graded attempt on a
 question revision (practice API arrives in M5).
 
-Jobs (`document.parse` for the uploaded paper, `question.import`) run in this process
-(`JobWorker`, M4.4a): `wait_for_job` drives the job with the worker's `JobRunner` and real
-dependencies (Postgres as the least-privilege `quiz_worker` role from WORKER_DATABASE_URL, Supabase
-Storage, Qdrant under a per-module collection prefix, APP_ENV=test adapters: fixture-truth parser,
-fake embedder, the import fault injection of A7), then reads the outcome through `GET /jobs/{id}`
-like any client. No Celery worker has to be running; one that is running is harmless (job claims
-are idempotent).
+Jobs (`document.parse` for the uploaded paper, `question.import`, `question.generate` with the
+APP_ENV=test ScenarioLLMClient) run in this process (`JobWorker`, M4.4a): `wait_for_job` drives
+the job with the worker's `JobRunner` and real dependencies (Postgres as the least-privilege
+`quiz_worker` role from WORKER_DATABASE_URL, Supabase Storage, Qdrant under a per-module
+collection prefix, APP_ENV=test adapters: fixture-truth parser, fake embedder, the import fault
+injection of A7), then reads the outcome through `GET /jobs/{id}` like any client. No Celery worker
+has to be running; one that is running is harmless (job claims are idempotent).
 """
 
 from __future__ import annotations
@@ -47,6 +47,12 @@ from quiz_worker.document_job import (
 )
 from quiz_worker.document_store import PostgresDocumentStore
 from quiz_worker.pg_store import PostgresJobStore, create_job_store_engine
+from quiz_worker.question_generation_job import (
+    GenerationJobDeps,
+    build_generation_llm,
+    question_generate_definition,
+)
+from quiz_worker.question_generation_store import PostgresGenerationStore
 from quiz_worker.question_import_job import ImportJobDeps, question_import_definition
 from quiz_worker.question_import_store import PostgresImportStore
 from quiz_worker.runner import JobDefinition, JobRunner
@@ -101,6 +107,7 @@ class JobWorker:
         self._closers: list[Any] = []
         self._names = CollectionNames(prefix=f"it_m44a_{uuid.uuid4().hex[:8]}_")
         self._qdrant: QdrantClient | None = None
+        self.generation_deps: GenerationJobDeps | None = None
 
     def _build(self) -> tuple[PostgresJobStore, JobRunner, dict[str, JobDefinition[Any]]]:
         if self._built is not None:
@@ -135,10 +142,20 @@ class JobWorker:
             inject_failures=True,
             lock_wait_seconds=30,
         )
+        # APP_ENV=test: the ScenarioLLMClient over tests/fixtures/llm/generation-scenarios.json
+        # (tests/e2e/fixtures/generation.ts G1).
+        generation_deps = GenerationJobDeps(
+            generations=PostgresGenerationStore(engine),
+            documents=documents,
+            llm=build_generation_llm(env),
+            lock_wait_seconds=30,
+        )
+        self.generation_deps = generation_deps
         definitions: list[JobDefinition[Any]] = [
             document_parse_definition(lambda: document_deps),
             index_sync_definition(lambda: document_deps),
             question_import_definition(lambda: import_deps),
+            question_generate_definition(lambda: generation_deps),
         ]
         jobs = PostgresJobStore(engine)
         runner = JobRunner(jobs, worker_id="it-m44a", lease_seconds=600)
@@ -155,8 +172,6 @@ class JobWorker:
                 return
             definition = definitions.get(record.job_type)
             if definition is None:
-                # `question.generate` (M6.2) registers here with the APP_ENV=test
-                # ScenarioLLMClient (tests/e2e/fixtures/generation.ts G1).
                 pytest.fail(f"JobWorker has no in-process handler for job type {record.job_type}")
             runner.run(definition, record.to_envelope().to_message())
 
@@ -353,6 +368,7 @@ class QuestionSeed(_m3.Seed):
     draft_for = staticmethod(draft_for)
     QUESTION_TRUTH = QUESTION_TRUTH
     IMPORT_FAILURE_MARKER = IMPORT_FAILURE_MARKER
+    DB_ADMIN_URL = DB_ADMIN_URL
 
     worker: JobWorker | None = None
 

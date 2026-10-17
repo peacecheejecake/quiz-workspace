@@ -33,6 +33,10 @@ from quiz_worker.errors import JobOutcomeError, JobRetryError
 from quiz_worker.jobs import ECHO_JOB
 from quiz_worker.logging_config import configure_logging
 from quiz_worker.pg_store import PostgresJobStore, create_job_store_engine
+from quiz_worker.question_generation_job import (
+    LazyGenerationDeps,
+    question_generate_definition,
+)
 from quiz_worker.question_import_job import LazyImportDeps, question_import_definition
 from quiz_worker.reconcile import ReconcileReport, reconcile_jobs
 from quiz_worker.retry import RetryPolicy
@@ -343,8 +347,8 @@ def cleanup_policy_for(settings: WorkerSettings) -> CleanupPolicy:
 
 
 def default_definitions(settings: WorkerSettings) -> list[JobDefinition[Any]]:
-    """Every job type the worker runs. Dependencies of the document and import jobs (DB,
-    Storage, Qdrant, models) are built on their first run, so a worker without that
+    """Every job type the worker runs. Dependencies of the document, import and generation jobs
+    (DB, Storage, Qdrant, models, LLM) are built on their first run, so a worker without that
     configuration still starts (those jobs then fail as `worker_not_configured`)."""
     deps = LazyDeps(settings)
     return [
@@ -352,4 +356,5 @@ def default_definitions(settings: WorkerSettings) -> list[JobDefinition[Any]]:
         document_parse_definition(deps),
         index_sync_definition(deps),
         question_import_definition(LazyImportDeps(settings)),
+        question_generate_definition(LazyGenerationDeps(settings)),
     ]
