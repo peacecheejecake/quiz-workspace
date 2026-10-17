@@ -110,4 +110,5 @@ pythonpath = ["packages/core/scripts"]
 norecursedirs = [".*", "*.egg", "venv", "node_modules", "dist", "build"]
 markers = [
   "infra: needs the local stack (`make infra-up`); skipped with a reason otherwise, run via `make test-infra`",
+  "models: runs real model weights (e.g. Docling); excluded from `make test`, run with `pytest -m models`",
 ]

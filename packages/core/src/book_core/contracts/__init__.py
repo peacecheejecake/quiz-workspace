@@ -24,6 +24,7 @@ from book_core.contracts.document import (
     RevisionStatus,
     Section,
     TableContent,
+    revision_content_hash,
 )
 from book_core.contracts.question import (
     DRAFT_VARIATION_TYPES,
@@ -80,4 +81,5 @@ __all__ = [
     "ValidationIssue",
     "ValidationSeverity",
     "VariationType",
+    "revision_content_hash",
 ]
