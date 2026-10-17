@@ -304,6 +304,36 @@ def test_ws_view_01_ac04_shared_questions_carry_answers_but_no_personal_data(see
     assert detail["revision"]["explanation"] == "해설: 공유 개인정보 문제"
 
 
+def test_ws_view_01_ac04_only_confirmed_questions_are_shared(seed: Any) -> None:
+    owner = seed.client("v-ac04u-owner")
+    ws = owner.create_workspace()
+    link = owner.create_link(ws["id"])
+    confirmed = owner.create_question(ws["id"], "S0 발행된 공유 문제")
+    hidden = seed.unpublished_questions(owner, ws["id"])
+    guest = seed.guest()
+    cookie = guest.session(link["id"], link["secret"])
+
+    listed = guest.read(link["id"], cookie, "/questions")
+    seed.assert_status(listed, 200, "shared questions")
+    assert [q["id"] for q in listed.json()["items"]] == [confirmed["id"]]
+    missing = guest.read(link["id"], cookie, f"/questions/{uuid.uuid4()}")
+    seed.assert_status(missing, 404, "random question id")
+    for kind, stem in seed.UNPUBLISHED_STEMS.items():
+        assert stem not in listed.text, f"{kind} question listed"
+        found = guest.send(
+            "POST",
+            f"/shared/{link['id']}/search",
+            {"query": stem, "mode": "keyword"},
+            cookie=cookie,
+        )
+        seed.assert_status(found, 200, "shared search")
+        assert stem not in found.text, f"{kind} question searchable"
+        direct = guest.read(link["id"], cookie, f"/questions/{hidden[kind]}")
+        seed.assert_status(direct, 404, f"{kind} question by id")
+        assert seed.stable(direct) == seed.stable(missing), f"{kind}: not the generic 404"
+        assert stem not in direct.text
+
+
 def test_ws_view_01_ac01_exchange_sets_a_short_lived_httponly_cookie_and_privacy_headers(
     seed: Any,
 ) -> None:

@@ -39,8 +39,15 @@ import {
   test,
   updateShareLink,
   expectPrivacyHeaders,
+  expectFragmentRemoved,
+  expectUrl,
+  NO_VISUAL_ARTIFACTS,
+  openShareWithSecret,
+  seedUnpublishedQuestions,
+  UNPUBLISHED_STEMS,
 } from '../fixtures/sharing.ts';
 
+test.use(NO_VISUAL_ARTIFACTS);
 test.describe.configure({ timeout: JOB_TIMEOUT_MS + 90_000 });
 
 const RANDOM_ID = '00000000-0000-4000-8000-000000000000';
@@ -56,9 +63,9 @@ function recordRequests(page: Page): string[] {
 
 /** Opens the link like a recipient would and waits for the exchange to remove the fragment. */
 async function openShare(page: Page, shareId: string, secret: string): Promise<void> {
-  await page.goto(sharePath(shareId, secret));
+  await openShareWithSecret(page, shareId, secret);
   await expect(sharedUi.readOnlyNotice(page)).toBeVisible();
-  await expect(page).toHaveURL((url) => url.pathname === `/share/${shareId}` && url.hash === '');
+  await expectFragmentRemoved(page, shareId);
 }
 
 test(
@@ -71,12 +78,12 @@ test(
     const content = await seedSharedContent(owner, ws.id);
     const requests = recordRequests(page);
 
-    const res = await page.goto(sharePath(link.id, link.secret));
-    expect(res?.headers()['cache-control'] ?? '').toMatch(/no-store/);
-    expect(res?.headers()['referrer-policy']).toBe('no-referrer');
-    expect(res?.headers()['x-robots-tag'] ?? '').toMatch(/noindex/);
+    const res = await openShareWithSecret(page, link.id, link.secret);
+    expect(res.headers()['cache-control'] ?? '').toMatch(/no-store/);
+    expect(res.headers()['referrer-policy']).toBe('no-referrer');
+    expect(res.headers()['x-robots-tag'] ?? '').toMatch(/noindex/);
     await expect(sharedUi.readOnlyNotice(page)).toBeVisible();
-    await expect(page).toHaveURL((url) => url.pathname === `/share/${link.id}` && url.hash === '');
+    await expectFragmentRemoved(page, link.id);
     expectNoSecret(page.url(), link.secret, 'the address bar after the exchange');
 
     await expect(sharedUi.heading(page)).toHaveText(ws.name);
@@ -202,6 +209,7 @@ test(
     if (!first) throw new Error('no seeded question');
     seedOwnerStudyState(owner.user.id, ws.id, first.id);
     seedGradedAttempt(ws.id, first.id, first.revision.id, owner.user.id);
+    const hidden = await seedUnpublishedQuestions(owner, ws.id);
     const session = await ShareSession.open(link.id, link.secret);
 
     // Other workspace ids: 404 like ids that never existed.
@@ -221,9 +229,26 @@ test(
     expect(doc.blocks.some((b) => b.text.includes(snippet(PUBLISHED_BLOCK.text)))).toBe(true);
     expect((await session.search(DRAFT_TEXT)).body?.items).toEqual([]);
 
-    // No owner personal data or identity.
+    // Only CONFIRMED questions: DRAFT, ARCHIVED, soft-deleted questions and import drafts are
+    // absent from the list and search, and 404 by id exactly like a missing question.
     const questions = await session.get<{ items: Record<string, unknown>[] }>('/questions');
     expect(questions.status).toBe(200);
+    expect(new Set(questions.body?.items.map((q) => q.id))).toEqual(
+      new Set(content.questions.map((q) => q.id)),
+    );
+    for (const stem of Object.values(UNPUBLISHED_STEMS)) {
+      expect(questions.text.includes(stem), stem).toBe(false);
+      const found = await session.search(stem);
+      expect(found.status).toBe(200);
+      expect(found.text.includes(stem), `search ${stem}`).toBe(false);
+    }
+    for (const id of Object.values(hidden)) {
+      const res = await session.get(`/questions/${id}`);
+      expect(res.status, 'unpublished question by id').toBe(404);
+      expect(stableProblem(res)).toEqual(stableProblem(missing));
+    }
+
+    // No owner personal data or identity.
     for (const item of questions.body?.items ?? []) {
       expect(PERSONAL_KEYS.filter((k) => k in item)).toEqual([]);
     }
@@ -244,6 +269,9 @@ test(
 
     // UI: another link id without its secret shows only the unavailable notice.
     await openShare(page, link.id, link.secret);
+    for (const stem of Object.values(UNPUBLISHED_STEMS)) {
+      await expect(page.getByText(stem)).toHaveCount(0);
+    }
     await page.goto(sharePath(otherLink.id));
     await expect(sharedUi.unavailable(page)).toBeVisible();
     await expect(page.getByText(other.name)).toHaveCount(0);
@@ -269,7 +297,7 @@ test(
     };
 
     // Wrong secret.
-    await page.goto(sharePath(expiring.id, `${expiring.secret.slice(0, -4)}AAAA`));
+    await openShareWithSecret(page, expiring.id, `${expiring.secret.slice(0, -4)}AAAA`);
     await expectUnavailable(ws.name);
     const wrong = await exchangeRequest(expiring.id, `${expiring.secret.slice(0, -4)}AAAA`);
     expect(wrong.status).toBe(404);
@@ -322,7 +350,12 @@ test(
     await expect(page.getByText(/독립|independent/i).first()).toBeVisible();
     await expect(page.getByText(/로그인|sign in|log in/i).first()).toBeVisible();
     await sharedUi.forkButton(page).click();
-    await expect(page).toHaveURL(LOGIN_SCREEN);
-    expect(new URL(page.url()).searchParams.get('next')).toBe(`/share/${link.id}?panel=fork`);
+    await expectUrl(
+      page,
+      (url) =>
+        url.pathname === '/login' &&
+        url.searchParams.get('next') === `/share/${link.id}?panel=fork`,
+      'Fork sends a guest to /login?next=/share/{id}?panel=fork',
+    );
   },
 );

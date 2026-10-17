@@ -4,8 +4,10 @@
 // Every test signs in its own owner through /login in a cookie-less context and shares its own
 // workspace. Each test touches the share-link API first, so until S1a the failure names the
 // missing route. Guest sessions are opened with Node fetch (fixtures/sharing.ts ShareSession),
-// so secrets and cookies never reach a trace; secrets are compared with booleans only. API and
-// UI label assumptions: fixtures/sharing.ts header (S1–S9 + UI contract).
+// so secrets and cookies never reach a trace; secrets are compared with booleans only, and the
+// spec runs without trace/screenshot/video (the one-time secret URL is on screen). API and UI
+// label assumptions: fixtures/sharing.ts header (S1–S9 + UI contract + artifact hygiene).
+import type { Locator } from '@playwright/test';
 import {
   notFoundHeading,
   PROBLEM_TYPES,
@@ -21,6 +23,8 @@ import {
   expectNoSecret,
   listShareLinks,
   membershipsOf,
+  NO_VISUAL_ARTIFACTS,
+  registerShareSecret,
   revokeShareLink,
   secretBytes,
   shareLinkRow,
@@ -33,10 +37,24 @@ import {
   type ShareLink,
 } from '../fixtures/sharing.ts';
 
-test.use({ storageState: { cookies: [], origins: [] } });
+test.use({ storageState: { cookies: [], origins: [] }, ...NO_VISUAL_ARTIFACTS });
 
 const RANDOM_ID = '00000000-0000-4000-8000-000000000000';
 const SHARE_URL = /\/share\/([0-9a-f-]{36})#k=([A-Za-z0-9_-]+)$/;
+
+/**
+ * Waits for the one-time link field to hold a share URL and returns [linkId, secret]. Checked as a
+ * boolean: `toHaveValue` would print the secret URL on failure.
+ */
+async function readShareUrl(field: Locator): Promise<[string, string]> {
+  await expect
+    .poll(async () => SHARE_URL.test(await field.inputValue({ timeout: 1_000 }).catch(() => '')), {
+      message: 'the link field shows /share/{id}#k={secret}',
+    })
+    .toBe(true);
+  const [, linkId = '', secret = ''] = SHARE_URL.exec(await field.inputValue()) ?? [];
+  return [linkId, registerShareSecret(secret)];
+}
 
 /** `YYYY-MM-DD` `days` from now in Asia/Seoul (the pinned browser timezone). */
 function seoulDate(days: number): string {
@@ -86,8 +104,7 @@ test(
     await page.goto(sharingSettingsPath(ws.id));
     await sharingUi.createButton(page).click();
     const field = sharingUi.linkField(page);
-    await expect(field).toHaveValue(SHARE_URL);
-    const [, linkId = '', secret = ''] = SHARE_URL.exec(await field.inputValue()) ?? [];
+    const [linkId, secret] = await readShareUrl(field);
     expect(secretBytes(secret), 'secret carries >= 32 random bytes').toBeGreaterThanOrEqual(32);
     await expect(sharingUi.copyButton(page)).toBeEnabled();
     await expect(sharingUi.onceNotice(page)).toBeVisible();
@@ -185,8 +202,7 @@ test(
     await sharingUi.rotateButton(page).click();
     await sharingUi.confirmButton(sharingUi.confirmDialog(page)).click();
     const field = sharingUi.linkField(page);
-    await expect(field).toHaveValue(SHARE_URL);
-    const [, secondId = '', secondSecret = ''] = SHARE_URL.exec(await field.inputValue()) ?? [];
+    const [secondId, secondSecret] = await readShareUrl(field);
     expect(secondId).not.toBe(first.id);
     expect(secondSecret === first.secret, 'rotate issues a new secret').toBe(false);
 

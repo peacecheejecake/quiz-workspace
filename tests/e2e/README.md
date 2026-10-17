@@ -66,6 +66,7 @@ test('AUTH-01-AC02 ...', async ({ page, userFactory }) => {
 - `trace: retain-on-failure`, `screenshot: only-on-failure`, `video: on-first-retry`. CI artifact(`playwright-report/`, `test-results/`) 보존 기간 7일.
 - Playwright trace는 `page`/`request`의 네트워크 본문과 `fill` 입력값을 기록한다. 그래서 fixture는 Auth/Mailpit 호출에 **Node `fetch`만** 쓰고, admin 키·세션 토큰·메일 링크는 trace에 들어가지 않는다(실패 trace를 직접 검사해 확인). 메일 링크·토큰을 test title, `console.log`, attachment에 넣지 않는다.
 - 남는 위험: UI 로그인(`setup`, AUTH 화면 테스트)의 trace에는 입력한 비밀번호와 응답 cookie가 포함된다. 모두 **로컬/CI 일회용 스택의 합성 사용자**(테스트 후 삭제, 로컬 전용 서명 키, 1시간 만료)이므로 실사용 비밀이 아니다. 실제 계정·운영 URL은 E2E에 절대 쓰지 않는다.
+- 공유 링크 비밀값은 이 예외에 포함되지 않는다. 공유 spec(`workspaces/{sharing-owner,share-public,fork}.spec.ts`)은 trace·screenshot·video를 끄고, 실패 시 비밀값을 가린 페이지 텍스트(`page-text-redacted`)만 첨부한다. 실행 직후 `pnpm e2e:artifact-audit`가 `test-results/`·`playwright-report/`(trace zip, report 내장 zip 포함)에서 알려진 비밀값과 `#k=` fragment를 찾아 있으면 실패한다(규칙: `fixtures/sharing.ts` 머리 주석).
 
 ## RED Task가 할 일
 

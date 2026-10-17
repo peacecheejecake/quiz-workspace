@@ -13,7 +13,6 @@ import {
   JOB_TIMEOUT_MS,
   listDocuments,
   listQuestions,
-  LOGIN_SCREEN,
   mcqInput,
   search,
   seedGradedAttempt,
@@ -27,6 +26,10 @@ import {
   activityCountBy,
   createShareLink,
   DRAFT_TEXT,
+  expectFragmentRemoved,
+  expectUrl,
+  NO_VISUAL_ARTIFACTS,
+  openShareWithSecret,
   expect,
   expireShareLinkNow,
   FORK_FAILURE_MARKER,
@@ -40,6 +43,7 @@ import {
   rawApi,
   revokeShareLink,
   seedOwnerStudyState,
+  seedUnpublishedQuestions,
   seedSharedContent,
   sharedUi,
   sharePath,
@@ -51,7 +55,7 @@ import {
   workspaceRowsOwnedBy,
 } from '../fixtures/sharing.ts';
 
-test.use({ storageState: { cookies: [], origins: [] } });
+test.use({ storageState: { cookies: [], origins: [] }, ...NO_VISUAL_ARTIFACTS });
 test.describe.configure({ timeout: JOB_TIMEOUT_MS + 2 * FORK_TIMEOUT_MS + 60_000 });
 
 const NO_PRIVATE_ROWS = {
@@ -64,9 +68,9 @@ const NO_PRIVATE_ROWS = {
 
 /** Opens the share link, waits for the exchange, then opens the Fork dialog. */
 async function openForkDialog(page: Page, id: string, secret: string) {
-  await page.goto(sharePath(id, secret));
+  await openShareWithSecret(page, id, secret);
   await expect(sharedUi.readOnlyNotice(page)).toBeVisible();
-  await expect(page).toHaveURL((url) => url.hash === '');
+  await expectFragmentRemoved(page, id);
   await sharedUi.forkButton(page).click();
   const dialog = forkUi.dialog(page);
   await expect(dialog).toBeVisible();
@@ -85,18 +89,20 @@ test(
 
     // Signed out: Fork leads to sign-in, and sign-in returns to the dialog (the share context is
     // restored from the share cookie; the fragment is long gone).
-    await page.goto(sharePath(on.id, on.secret));
+    await openShareWithSecret(page, on.id, on.secret);
     await expect(sharedUi.readOnlyNotice(page)).toBeVisible();
     await sharedUi.forkButton(page).click();
-    await expect(page).toHaveURL(LOGIN_SCREEN);
+    await expectUrl(page, (url) => url.pathname === '/login', 'Fork sends a guest to /login');
     await submitLogin(page, recipient.user, `/share/${on.id}?panel=fork`);
-    await expect(page).toHaveURL(
+    await expectUrl(
+      page,
       (url) => url.pathname === `/share/${on.id}` && url.searchParams.get('panel') === 'fork',
+      'sign-in returns to /share/{id}?panel=fork',
     );
     await expect(forkUi.dialog(page)).toBeVisible();
 
     // Fork OFF: no button, and the panel URL opens no dialog.
-    await page.goto(sharePath(off.id, off.secret));
+    await openShareWithSecret(page, off.id, off.secret);
     await expect(sharedUi.readOnlyNotice(page)).toBeVisible();
     await expect(sharedUi.forkButton(page)).toHaveCount(0);
     await page.goto(`${sharePath(off.id)}?panel=fork`);
@@ -234,6 +240,7 @@ test(
     if (!first) throw new Error('no seeded question');
     seedOwnerStudyState(owner.user.id, ws.id, first.id);
     seedGradedAttempt(ws.id, first.id, first.revision.id, owner.user.id);
+    await seedUnpublishedQuestions(owner, ws.id);
     const sourceRows = privateRowCounts(ws.id);
 
     const session = await ShareSession.open(link.id, link.secret);
@@ -254,6 +261,10 @@ test(
     expect(dstDocs.map((d) => d.title)).toEqual(srcDocs.map((d) => d.title));
     expect(dstDocs.some((d) => srcDocs.some((s) => s.id === d.id))).toBe(false);
     const dstQuestions = await listQuestions(recipient, target);
+    // Only CONFIRMED questions are forked (no DRAFT/ARCHIVED/deleted questions, no import drafts).
+    expect(new Set(dstQuestions.map((q) => q.revision.stem))).toEqual(
+      new Set(content.questions.map((q) => q.revision.stem)),
+    );
     for (const src of content.questions) {
       const dst = dstQuestions.find((q) => q.revision.stem === src.revision.stem);
       expect(dst, src.revision.stem).toBeDefined();

@@ -62,6 +62,13 @@ FORK_TIMEOUT_S = 120.0
 JOB_TIMEOUT_S = 120.0
 FORK_TERMINAL = {"COMPLETED", "FAILED", "CANCELLED"}
 FOREIGN_ORIGIN = "https://evil.example"
+# Stems of questions that exist but are not published (mirrors UNPUBLISHED_STEMS in sharing.ts).
+UNPUBLISHED_STEMS = {
+    "draft": "S0 비공개 DRAFT 문제",
+    "archived": "S0 비공개 보관 문제",
+    "deleted": "S0 비공개 삭제 문제",
+    "importDraft": "S0 비공개 가져오기 초안",
+}
 PERSONAL_KEYS = (
     "status",
     "is_favorite",
@@ -319,6 +326,7 @@ class ShareSeed(_m3.Seed):
     FORK_BURST = FORK_BURST
     FOREIGN_ORIGIN = FOREIGN_ORIGIN
     PERSONAL_KEYS = PERSONAL_KEYS
+    UNPUBLISHED_STEMS = UNPUBLISHED_STEMS
     stable = staticmethod(stable)
     assert_status = staticmethod(assert_status)
     assert_privacy_headers = staticmethod(assert_privacy_headers)
@@ -356,6 +364,77 @@ class ShareSeed(_m3.Seed):
         )
         assert len(rows) == 1, "share link row not found"
         return str(rows[0][0]), bytes(rows[0][1])
+
+    def unpublished_questions(self, owner: ShareClient, workspace_id: str) -> dict[str, str]:
+        """Questions that must never be shared or forked (docs/questions.md: CONFIRMED only).
+
+        A DRAFT question with a revision, an ARCHIVED and a soft-deleted question (created
+        CONFIRMED through the API, then moved) and a pending import draft of a finished run.
+        Direct seed: no public API sets these states yet (M4.2a/M4.4a); mirrors
+        seedUnpublishedQuestions() in tests/e2e/fixtures/sharing.ts. Returns {kind: id}.
+        """
+        archived = owner.create_question(workspace_id, UNPUBLISHED_STEMS["archived"])
+        deleted = owner.create_question(workspace_id, UNPUBLISHED_STEMS["deleted"])
+        draft, revision, run, import_draft = (str(uuid.uuid4()) for _ in range(4))
+        user = owner.user.id
+        with psycopg.connect(DB_ADMIN_URL) as conn, conn.transaction():
+            conn.execute(
+                "insert into public.questions (id, workspace_id, question_type, "
+                "publication_status, created_by) values (%s, %s, 'ESSAY', 'DRAFT', %s)",
+                (draft, workspace_id, user),
+            )
+            conn.execute(
+                "insert into public.question_revisions (id, workspace_id, question_id, version, "
+                "stem, created_by) values (%s, %s, %s, 1, %s, %s)",
+                (revision, workspace_id, draft, UNPUBLISHED_STEMS["draft"], user),
+            )
+            conn.execute(
+                "update public.questions set active_revision_id = %s where id = %s",
+                (revision, draft),
+            )
+            conn.execute(
+                "update public.questions set publication_status = 'ARCHIVED' "
+                "where id = %s and workspace_id = %s",
+                (archived["id"], workspace_id),
+            )
+            conn.execute(
+                "update public.questions set deleted_at = now() "
+                "where id = %s and workspace_id = %s",
+                (deleted["id"], workspace_id),
+            )
+            conn.execute(
+                "insert into public.question_import_runs (id, workspace_id, created_by, status, "
+                "finished_at) values (%s, %s, %s, 'succeeded', now())",
+                (run, workspace_id, user),
+            )
+            conn.execute(
+                "insert into public.question_drafts (id, workspace_id, source_type, import_run_id, "
+                "question_type, payload) values (%s, %s, 'import', %s, 'ESSAY', %s::jsonb)",
+                (
+                    import_draft,
+                    workspace_id,
+                    run,
+                    json.dumps(
+                        {"question_type": "ESSAY", "stem": UNPUBLISHED_STEMS["importDraft"]}
+                    ),
+                ),
+            )
+        return {
+            "draft": draft,
+            "archived": str(archived["id"]),
+            "deleted": str(deleted["id"]),
+            "importDraft": import_draft,
+        }
+
+    def question_rows(self, workspace_id: str) -> list[tuple[str, bool, str]]:
+        """Every question row of a workspace as (status, soft-deleted, active stem), sorted."""
+        rows = self._admin(
+            "select q.publication_status, q.deleted_at is not null, coalesce(r.stem, '') "
+            "from public.questions q left join public.question_revisions r "
+            "on r.id = q.active_revision_id where q.workspace_id = %s",
+            (workspace_id,),
+        )
+        return sorted((str(r[0]), bool(r[1]), str(r[2])) for r in rows)
 
     def study_state(self, user_id: str, workspace_id: str, question_id: str) -> None:
         self._admin(

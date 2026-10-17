@@ -103,14 +103,25 @@
 //     status "복제 중"), then "Fork 완료" with a link to the new workspace; failure → role=alert +
 //     "다시 시도"; cancellation → "취소됨".
 //
-// Secrets: tests compare secrets with booleans (never `toContain(secret)`, which would print the
-// value on failure) and never put them in titles or attachments. The browser specs have to open
-// `/share/{id}#k=<secret>`, so a failed test's trace holds that synthetic, per-test secret of a
-// link whose workspace teardown deletes (same residual risk as the synthetic login passwords,
-// tests/e2e/README.md).
+// Secrets never reach an artifact (AGENTS.md §5: no share secrets in traces):
+//   - the sharing specs run with `test.use(NO_VISUAL_ARTIFACTS)`: trace, screenshot, video off;
+//   - the browser reaches `/share/{id}#k=…` only through openShareWithSecret(), which navigates
+//     with `location.assign` from a neutral page, so no step title, call log or report line
+//     carries the URL; values that hold a secret are compared as booleans (never
+//     `toContain` / `toHaveValue` / `toHaveURL` on them: those print the received value);
+//   - on failure the auto fixture attaches `page-text-redacted` (URL + body text with every
+//     known secret and any `#k=` fragment replaced) as the debugging substitute, then blanks the
+//     page so Playwright's error-context aria snapshot cannot capture a secret;
+//   - every secret a test sees is registered; its SHA-256 goes to `share-secret.sha256` in the
+//     test's output dir, and `pnpm e2e:artifact-audit` (scripts/e2e-artifact-audit.ts) scans
+//     test-results/ and playwright-report/ (zipped traces and the embedded report data
+//     included) for those secrets and for any `#k=` fragment, failing if one is found.
+// Run it right after the sharing specs (Playwright wipes test-results/ when it starts):
+//   pnpm e2e tests/e2e/workspaces/{sharing-owner,share-public,fork}.spec.ts; pnpm e2e:artifact-audit
 import { execFileSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { expect, type Locator, type Page } from '@playwright/test';
+import { createHash, randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import { expect, type Locator, type Page, type Response as PageResponse } from '@playwright/test';
 import { API_PREFIX, isMissingRoute, routeOf, type ApiResponse, type Problem } from './api.ts';
 import { book, block, search, snippet, uploadReadyBook } from './documents.ts';
 import { localDbAdminUrl, localEndpoints } from './local-env.ts';
@@ -128,6 +139,85 @@ export const EXCHANGE_BURST = 30;
 export const FORK_BURST = 10;
 export const FORK_TIMEOUT_MS = 120_000;
 export const FORK_TERMINAL = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
+
+// ---------------------------------------------------------------------------------------------
+// Secret hygiene (see "Secrets never reach an artifact" above)
+// ---------------------------------------------------------------------------------------------
+
+/** For every sharing spec: `test.use(NO_VISUAL_ARTIFACTS)`. */
+export const NO_VISUAL_ARTIFACTS = { trace: 'off', screenshot: 'off', video: 'off' } as const;
+/** File (per test output dir) listing SHA-256 digests of the secrets the test saw. */
+export const SECRET_DIGEST_FILE = 'share-secret.sha256';
+/** A static app page to navigate from, so the secret URL is never a `page.goto` argument. */
+const NEUTRAL_PATH = '/privacy';
+
+const seenSecrets = new Set<string>();
+
+/** Remembers a secret this test handles (for redaction and the artifact audit); returns it. */
+export function registerShareSecret(secret: string): string {
+  if (secret) seenSecrets.add(secret);
+  return secret;
+}
+
+/** `text` with every registered secret and any `#k=` fragment value replaced. */
+export function redactSecrets(text: string): string {
+  let out = text.replace(/(#|%23)k(=|%3D)[A-Za-z0-9_-]+/gi, '$1k$2<redacted>');
+  for (const secret of seenSecrets) out = out.split(secret).join('<redacted>');
+  return out;
+}
+
+export function secretDigest(secret: string): string {
+  return createHash('sha256').update(secret, 'utf8').digest('hex');
+}
+
+/**
+ * Opens `/share/{id}#k=<secret>` without the URL appearing in a step title or call log: loads a
+ * neutral page, then `location.assign`s the secret URL. Returns the share page's document response.
+ */
+export async function openShareWithSecret(
+  page: Page,
+  shareId: string,
+  secret: string,
+): Promise<PageResponse> {
+  registerShareSecret(secret);
+  const path = sharePath(shareId);
+  await page.goto(NEUTRAL_PATH);
+  const target = `${new URL(path, page.url()).href}#k=${secret}`;
+  const response = page.waitForResponse(
+    (r) => r.request().isNavigationRequest() && new URL(r.url()).pathname === path,
+  );
+  await page.evaluate((url) => {
+    window.location.assign(url);
+  }, target);
+  const res = await response;
+  // Let the navigation finish: a later navigation interrupting it would quote the secret URL in
+  // a step error, which no fixture can redact (the artifact audit would catch it).
+  await page.waitForFunction((p) => window.location.pathname === p, path);
+  await page.waitForLoadState('load');
+  return res;
+}
+
+/** Boolean URL assertion: on failure only `message` is printed, never the (secret) URL. */
+export async function expectUrl(
+  page: Page,
+  predicate: (url: URL) => boolean,
+  message: string,
+): Promise<void> {
+  await expect.poll(() => predicate(new URL(page.url())), { message }).toBe(true);
+}
+
+/** Waits (boolean poll, nothing printed) until the page is on `/share/{id}` with no fragment. */
+export async function expectFragmentRemoved(page: Page, shareId: string): Promise<void> {
+  await expect
+    .poll(
+      () => {
+        const url = new URL(page.url());
+        return url.pathname === sharePath(shareId) && url.hash === '';
+      },
+      { message: 'the share page removes the #k= fragment after the exchange' },
+    )
+    .toBe(true);
+}
 
 // ---------------------------------------------------------------------------------------------
 // Types (S2, S4, S5)
@@ -327,12 +417,14 @@ export async function createShareLink(
   workspaceId: string,
   body: { allow_fork?: boolean; expires_at?: string | null } = {},
 ): Promise<IssuedShareLink> {
-  return owner.api.ok<IssuedShareLink>(
+  const link = await owner.api.ok<IssuedShareLink>(
     'POST',
     `/workspaces/${workspaceId}/share-links`,
     body,
     [201],
   );
+  registerShareSecret(link.secret);
+  return link;
 }
 
 export async function listShareLinks(owner: Member, workspaceId: string): Promise<ShareLink[]> {
@@ -377,12 +469,14 @@ export async function rotateShareLink(
   workspaceId: string,
   linkId: string,
 ): Promise<IssuedShareLink> {
-  return owner.api.ok<IssuedShareLink>(
+  const link = await owner.api.ok<IssuedShareLink>(
     'POST',
     `/workspaces/${workspaceId}/share-links/${linkId}/rotate`,
     {},
     [201],
   );
+  registerShareSecret(link.secret);
+  return link;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -394,6 +488,7 @@ export function exchangeRequest(
   secret: string,
   origin?: string | null,
 ): Promise<RawResponse> {
+  registerShareSecret(secret);
   return rawApi('POST', `/shared/${shareId}/sessions`, { body: { secret }, origin });
 }
 
@@ -409,6 +504,7 @@ export class ShareSession {
 
   /** Exchanges the fragment secret; fails unless a share cookie is issued. */
   static async open(shareId: string, secret: string): Promise<ShareSession> {
+    registerShareSecret(secret);
     const res = await exchangeRequest(shareId, secret);
     expectStatus(res, [200, 201, 204], 'POST', `/shared/${shareId}/sessions`);
     const cookie = shareCookieOf(res);
@@ -609,6 +705,81 @@ export function shareLinkRow(linkId: string): {
   return { json: parsed.row, digestBytes: parsed.digest_bytes };
 }
 
+/** Stems of questions that exist in the owner's workspace but are not published. */
+export const UNPUBLISHED_STEMS = {
+  draft: 'E2E 비공개 DRAFT 문제',
+  archived: 'E2E 비공개 보관 문제',
+  deleted: 'E2E 비공개 삭제 문제',
+  importDraft: 'E2E 비공개 가져오기 초안',
+} as const;
+
+export interface UnpublishedQuestions {
+  readonly draftQuestionId: string;
+  readonly archivedQuestionId: string;
+  readonly deletedQuestionId: string;
+  readonly importDraftId: string;
+}
+
+/**
+ * Questions that must never reach a share or a fork (docs/questions.md: only CONFIRMED is shown):
+ * a DRAFT question with a revision, an ARCHIVED and a soft-deleted question (created CONFIRMED
+ * through the API, then moved), and a pending import draft of a finished import run. S8: no
+ * public API creates these states yet (question status changes and imports arrive with
+ * M4.2a/M4.4a) and the server-side exclusion is what the ACs are about.
+ */
+export async function seedUnpublishedQuestions(
+  owner: Member,
+  workspaceId: string,
+): Promise<UnpublishedQuestions> {
+  const archived = await createQuestion(
+    owner,
+    workspaceId,
+    mcqInput(UNPUBLISHED_STEMS.archived, ['1', '2']),
+  );
+  const deleted = await createQuestion(
+    owner,
+    workspaceId,
+    mcqInput(UNPUBLISHED_STEMS.deleted, ['1', '2']),
+  );
+  const draft = randomUUID();
+  const revision = randomUUID();
+  const run = randomUUID();
+  const importDraft = randomUUID();
+  const [w, u, q, r, a, d, rn, dr] = [
+    workspaceId,
+    owner.user.id,
+    draft,
+    revision,
+    archived.id,
+    deleted.id,
+    run,
+    importDraft,
+  ].map((v) => ids(v));
+  psql(
+    `begin; ` +
+      `insert into public.questions (id, workspace_id, question_type, publication_status, ` +
+      `created_by) values (${q}, ${w}, 'ESSAY', 'DRAFT', ${u}); ` +
+      `insert into public.question_revisions (id, workspace_id, question_id, version, stem, ` +
+      `created_by) values (${r}, ${w}, ${q}, 1, '${UNPUBLISHED_STEMS.draft}', ${u}); ` +
+      `update public.questions set active_revision_id = ${r} where id = ${q}; ` +
+      `update public.questions set publication_status = 'ARCHIVED' where id = ${a} ` +
+      `and workspace_id = ${w}; ` +
+      `update public.questions set deleted_at = now() where id = ${d} and workspace_id = ${w}; ` +
+      `insert into public.question_import_runs (id, workspace_id, created_by, status, ` +
+      `finished_at) values (${rn}, ${w}, ${u}, 'succeeded', now()); ` +
+      `insert into public.question_drafts (id, workspace_id, source_type, import_run_id, ` +
+      `question_type, payload) values (${dr}, ${w}, 'import', ${rn}, 'ESSAY', ` +
+      `jsonb_build_object('question_type', 'ESSAY', 'stem', '${UNPUBLISHED_STEMS.importDraft}')); ` +
+      `commit;`,
+  );
+  return {
+    draftQuestionId: draft,
+    archivedQuestionId: archived.id,
+    deletedQuestionId: deleted.id,
+    importDraftId: importDraft,
+  };
+}
+
 /** Owner's personal study state on a question: favourite + retry (S8; practice API is M5). */
 export function seedOwnerStudyState(userId: string, workspaceId: string, questionId: string): void {
   psql(
@@ -682,6 +853,11 @@ export function purgeSharingFor(userIds: readonly string[]): void {
 export interface SharingFixtures {
   /** Auto fixture: purges share links and fork records before workspaces and users go. */
   sharingCleanup: null;
+  /**
+   * Auto fixture: writes the digests of the secrets the test saw for the artifact audit and, on
+   * failure, attaches a redacted page text and blanks the page (no secret in error-context).
+   */
+  sharingArtifacts: null;
 }
 
 export const test = base.extend<SharingFixtures>({
@@ -693,6 +869,41 @@ export const test = base.extend<SharingFixtures>({
       } finally {
         purgeSharingFor(userFactory.created.map((u) => u.id));
       }
+    },
+    { auto: true },
+  ],
+  sharingArtifacts: [
+    async ({ page }, use, testInfo) => {
+      seenSecrets.clear();
+      await use(null);
+      if (seenSecrets.size) {
+        // `<length> <sha256>` per secret (scripts/e2e-artifact-audit.ts); never the value.
+        const digests = [...seenSecrets].map((s) => `${s.length} ${secretDigest(s)}`).join('\n');
+        writeFileSync(testInfo.outputPath(SECRET_DIGEST_FILE), `${digests}\n`);
+      }
+      if (testInfo.status !== testInfo.expectedStatus) {
+        let text: string;
+        try {
+          const body = await page.locator('body').innerText({ timeout: 2_000 });
+          text = `${page.url()}\n\n${body}`;
+        } catch {
+          text = `${page.url()}\n\n(page text unavailable)`;
+        }
+        await testInfo.attach('page-text-redacted', {
+          body: redactSecrets(text),
+          contentType: 'text/plain',
+        });
+        await page.goto('about:blank').catch(() => undefined);
+        // Playwright errors quote URLs verbatim (e.g. "navigation … interrupted by another
+        // navigation to …/share/{id}#k=…"); error-context.md and the report are written from
+        // testInfo.errors after this teardown, so redact them in place.
+        for (const error of testInfo.errors) {
+          if (error.message) error.message = redactSecrets(error.message);
+          if (error.stack) error.stack = redactSecrets(error.stack);
+          if (error.value) error.value = redactSecrets(error.value);
+        }
+      }
+      seenSecrets.clear();
     },
     { auto: true },
   ],

@@ -109,6 +109,7 @@ def test_ws_fork_01_ac05_fork_copies_the_published_snapshot_with_new_ids_and_no_
     q2 = owner.create_question(ws["id"], "S0 fork 문제 둘", answer=3)
     seed.study_state(owner.user.id, ws["id"], q1["id"])
     seed.graded_attempt(ws["id"], q1["id"], q1["revision"]["id"], owner.user.id)
+    seed.unpublished_questions(owner, ws["id"])
     source_counts = seed.private_counts(ws["id"])
     assert source_counts["workspace_share_links"] == 1
 
@@ -128,6 +129,11 @@ def test_ws_fork_01_ac05_fork_copies_the_published_snapshot_with_new_ids_and_no_
     copies = recipient.list_questions(target)
     by_stem = {q["revision"]["stem"]: q for q in copies}
     assert set(by_stem) == {"S0 fork 문제 하나", "S0 fork 문제 둘"}
+    # Only the CONFIRMED snapshot: no DRAFT/ARCHIVED/deleted question rows, in any state.
+    assert seed.question_rows(target) == [
+        ("CONFIRMED", False, "S0 fork 문제 둘"),
+        ("CONFIRMED", False, "S0 fork 문제 하나"),
+    ]
     for src in (q1, q2):
         dst = by_stem[src["revision"]["stem"]]
         assert dst["id"] != src["id"]
