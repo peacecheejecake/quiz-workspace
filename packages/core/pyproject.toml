@@ -5,6 +5,8 @@ description = "Quiz Workspace core: PDF parsing, chunking, search, excerpts and 
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "pydantic>=2.11,<3",
+  # M2.2: Qdrant dense + sparse (BM25) index. REST client only; gRPC is not used.
+  "qdrant-client==1.19.1",
   "typer>=0.16",
 ]
 
