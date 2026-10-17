@@ -8,7 +8,9 @@ next-env.d.ts
 coverage/
 storybook-static/
 playwright-report/
+playwright-report-*/
 test-results/
+test-results-*/
 .venv/
 .reviews/
 .claude/

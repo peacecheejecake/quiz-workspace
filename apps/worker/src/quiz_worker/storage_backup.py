@@ -2,14 +2,18 @@
 
 Used by `scripts/backup` / `scripts/restore` next to the Postgres dump; runnable on its own:
 
-    python -m quiz_worker.storage_backup dump    --out <dir>/storage
+    python -m quiz_worker.storage_backup check
+    python -m quiz_worker.storage_backup dump    --out <dir>/storage --from-dump <dir>/db/data.sql
     python -m quiz_worker.storage_backup restore --from <dir>/storage [--dry-run]
     python -m quiz_worker.storage_backup verify  --from <dir>/storage
 
-Environment: `BACKUP_DB_URL` (an admin connection that can read `storage.objects`, e.g. the local
-`postgres` superuser or a hosted project's `postgres` user), `SUPABASE_URL` (or
-NEXT_PUBLIC_SUPABASE_URL) and `SUPABASE_SECRET_KEY` (server-only; header only, never in a URL or
-log line).
+Storage target: `SUPABASE_URL` (or NEXT_PUBLIC_SUPABASE_URL) and `SUPABASE_SECRET_KEY`
+(server-only; header only, never in a URL or log line), from the environment or, when unset there,
+from `./.env` (the repo-root file the apps read). `check` validates them and probes the Storage
+API before anything is written; `scripts/restore` runs it before touching the database.
+`dump --from-dump` takes the object inventory from the `storage.objects` COPY block of the DB data
+dump, so the inventory is exactly the DB snapshot's; without it `BACKUP_DB_URL` (an admin
+connection) is listed live.
 
 Layout (content-addressed, so fork copies of the same PDF are stored once and object names never
 become file paths):
@@ -17,9 +21,9 @@ become file paths):
     manifest.jsonl          one line per object: bucket, name, size, sha256, content_type
     blobs/<sha[:2]>/<sha>   the object bytes
 
-- `dump` lists objects from `storage.objects` (the same snapshot the DB dump records) and
-  downloads each through the Storage API, hashing on the way. An object deleted between listing
-  and download is reported and skipped (exit status 1 unless `--allow-missing`).
+- `dump` downloads every inventoried object through the Storage API, hashing on the way. An
+  object the snapshot references but Storage no longer has (deleted after the snapshot, e.g. a
+  fork cleanup) fails the dump (exit status 1 unless `--allow-missing`): take the backup again.
 - `restore` checks every blob's SHA-256 first, then uploads with upsert (idempotent: a re-run or
   an object restored by the DB dump's metadata rows is replaced with identical bytes). Buckets
   come from supabase/migrations, not from here.
@@ -36,11 +40,13 @@ import os
 import sys
 import tempfile
 import threading
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Protocol
+
+import httpx
 
 from quiz_worker.storage import ObjectMissingError, SupabaseStorage
 
@@ -99,6 +105,59 @@ def list_objects(db_url: str) -> list[Listed]:
     with psycopg.connect(db_url, connect_timeout=10) as conn:
         rows = conn.execute(_LIST_OBJECTS).fetchall()
     return [Listed(str(b), str(n), int(s), str(c)) for b, n, s, c in rows]
+
+
+_COPY_ESCAPES = {"b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t", "v": "\v", "\\": "\\"}
+
+
+def _copy_field(raw: str) -> str | None:
+    """One field of PostgreSQL's COPY text format (`\\N` = NULL, backslash escapes)."""
+    if raw == "\\N":
+        return None
+    out: list[str] = []
+    i = 0
+    while i < len(raw):
+        ch = raw[i]
+        if ch == "\\" and i + 1 < len(raw):
+            nxt = raw[i + 1]
+            out.append(_COPY_ESCAPES.get(nxt, nxt))
+            i += 2
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
+def inventory_from_dump(data_sql: Path) -> list[Listed]:
+    """Objects of the `storage.objects` COPY block in a `pg_dump --data-only` file: the inventory
+    of exactly the snapshot the DB dump captured."""
+    header: list[str] | None = None
+    rows: list[Listed] = []
+    with data_sql.open(encoding="utf-8") as fh:
+        for raw_line in fh:
+            line = raw_line.rstrip("\n")
+            if header is None:
+                if line.startswith(('COPY "storage"."objects" (', "COPY storage.objects (")):
+                    cols = line[line.index("(") + 1 : line.index(")")]
+                    header = [c.strip().strip('"') for c in cols.split(",")]
+                continue
+            if line == "\\.":
+                break
+            values = dict(zip(header, (_copy_field(v) for v in line.split("\t")), strict=True))
+            if values.get("name") is None or values.get("bucket_id") is None:
+                continue
+            meta = json.loads(values.get("metadata") or "null") or {}
+            rows.append(
+                Listed(
+                    str(values["bucket_id"]),
+                    str(values["name"]),
+                    int(meta.get("size") or 0),
+                    str(meta.get("mimetype") or "application/octet-stream"),
+                )
+            )
+    if header is None:
+        raise ValueError("the dump has no storage.objects data block")
+    return sorted(rows, key=lambda r: (r.bucket, r.name))
 
 
 def read_manifest(root: Path) -> list[Entry]:
@@ -217,12 +276,67 @@ def restore(root: Path, entries: Sequence[Entry], storage: Storage, *, workers: 
 # --------------------------------------------------------------------------------------------
 
 
-def _storage_from_env() -> SupabaseStorage:
-    url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SECRET_KEY")
+def _dotenv(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.is_file():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip().strip("'\"")
+    return values
+
+
+@dataclass(frozen=True)
+class StorageConfig:
+    url: str
+    secret_key: str = field(repr=False)
+
+
+def storage_config(
+    env: Mapping[str, str] | None = None, dotenv: Path | None = Path(".env")
+) -> StorageConfig:
+    """The Storage target from the environment, falling back to `.env` per variable (like the
+    apps). Raises SystemExit naming the problem (never a value)."""
+    environ = dict(os.environ if env is None else env)
+    fallback = _dotenv(dotenv) if dotenv is not None else {}
+
+    def get(name: str) -> str:
+        return (environ.get(name) or fallback.get(name) or "").strip()
+
+    url = get("SUPABASE_URL") or get("NEXT_PUBLIC_SUPABASE_URL")
+    key = get("SUPABASE_SECRET_KEY")
     if not url or not key:
-        raise SystemExit("storage_backup: SUPABASE_URL and SUPABASE_SECRET_KEY are required")
-    return SupabaseStorage(url, key, timeout=120)
+        raise SystemExit(
+            "storage_backup: SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SECRET_KEY "
+            "are required (environment or .env)"
+        )
+    if not url.startswith(("http://", "https://")):
+        raise SystemExit("storage_backup: SUPABASE_URL must be an http(s) URL")
+    return StorageConfig(url.rstrip("/"), key)
+
+
+def check_storage(config: StorageConfig, transport: httpx.BaseTransport | None = None) -> None:
+    """The Storage API answers the bucket listing with this key (SystemExit otherwise)."""
+    try:
+        with httpx.Client(transport=transport, timeout=15) as client:
+            res = client.get(
+                f"{config.url}/storage/v1/bucket",
+                headers={
+                    "apikey": config.secret_key,
+                    "Authorization": f"Bearer {config.secret_key}",
+                },
+            )
+    except httpx.HTTPError as exc:
+        raise SystemExit(f"storage_backup: Storage unreachable ({type(exc).__name__})") from None
+    if res.status_code != 200:
+        raise SystemExit(f"storage_backup: Storage rejected the key (HTTP {res.status_code})")
+
+
+def _storage(config: StorageConfig) -> SupabaseStorage:
+    return SupabaseStorage(config.url, config.secret_key, timeout=120)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -231,6 +345,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_dump = sub.add_parser("dump", help="download every Storage object into a directory")
     p_dump.add_argument("--out", type=Path, required=True)
     p_dump.add_argument("--allow-missing", action="store_true")
+    p_dump.add_argument(
+        "--from-dump",
+        type=Path,
+        help="take the inventory from this data dump's storage.objects block (DB snapshot)",
+    )
+    sub.add_parser("check", help="validate the Storage target configuration and key")
     p_restore = sub.add_parser("restore", help="upload a dump back (upsert)")
     p_restore.add_argument("--from", dest="source", type=Path, required=True)
     p_restore.add_argument(
@@ -247,12 +367,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_logging(os.environ.get("LOG_LEVEL", "INFO"))
     # httpx logs every request URL (bucket + object name) at INFO.
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    if args.command == "check":
+        check_storage(storage_config())
+        print(json.dumps({"command": "check", "ok": True}, separators=(",", ":")))
+        return 0
     if args.command == "dump":
-        db_url = os.environ.get("BACKUP_DB_URL")
-        if not db_url:
-            raise SystemExit("storage_backup: BACKUP_DB_URL is required")
-        listed = list_objects(db_url)
-        storage = _storage_from_env()
+        config = storage_config()
+        if args.from_dump is not None:
+            listed = inventory_from_dump(args.from_dump)
+        else:
+            db_url = os.environ.get("BACKUP_DB_URL")
+            if not db_url:
+                raise SystemExit("storage_backup: --from-dump or BACKUP_DB_URL is required")
+            listed = list_objects(db_url)
+        check_storage(config)
+        storage = _storage(config)
         try:
             report, _ = dump(listed, storage, args.out, workers=args.workers)
         finally:
@@ -262,7 +391,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         report = verify(args.source, read_manifest(args.source))
         ok = not (report.missing or report.corrupt)
     else:
-        storage = _storage_from_env()
+        config = storage_config()
+        check_storage(config)
+        storage = _storage(config)
         try:
             report = restore(args.source, read_manifest(args.source), storage, workers=args.workers)
         finally:

@@ -5,7 +5,9 @@
 supabase/signing_keys.json
 playwright/.auth/
 playwright-report/
+playwright-report-*/
 test-results/
+test-results-*/
 node_modules/
 .next/
 __pycache__/

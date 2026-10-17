@@ -8,8 +8,10 @@
 #   db/data.sql                  data of every non-platform schema (public, auth, storage, …),
 #                                COPY format, from `supabase db dump --data-only`
 #   db/migrations.txt            applied supabase/migrations versions (restore precondition)
-#   storage/                     every Storage object, content-addressed + manifest.jsonl
-#                                (python -m quiz_worker.storage_backup dump)
+#   storage/                     every Storage object the dump's storage.objects rows reference,
+#                                content-addressed + manifest.jsonl (the inventory is read from
+#                                db/data.sql, i.e. the same snapshot; an object missing from
+#                                Storage fails the backup -> run it again)
 #   SHA256SUMS                   checksums of everything above
 #
 # Qdrant is NOT backed up: it is a derived index, rebuilt after a restore with
@@ -18,8 +20,10 @@
 # Environment
 #   BACKUP_DB_URL        admin connection (local default: the stack's postgres superuser; hosted:
 #                        the project's `postgres` user, session pooler or direct connection)
-#   SUPABASE_URL         Storage API origin (or NEXT_PUBLIC_SUPABASE_URL; local default)
-#   SUPABASE_SECRET_KEY  server-only Storage key (read from the environment / .env)
+#   SUPABASE_URL         Storage API origin (or NEXT_PUBLIC_SUPABASE_URL)
+#   SUPABASE_SECRET_KEY  server-only Storage key
+#   (both from the environment or, per variable, the repo-root .env; validated against the
+#   Storage API before anything is dumped)
 #
 # The backup directory holds user data, Auth password hashes and session tokens: it is created
 # 0700, must stay on encrypted, access-controlled storage and is never committed or attached to
@@ -49,16 +53,14 @@ umask 077
 mkdir -p "$out/db" "$out/storage"
 out="$(cd "$out" && pwd)"
 
-# Local stack defaults; .env (git-ignored) fills SUPABASE_SECRET_KEY like the app does.
-if [[ -f $repo/.env && -z ${SUPABASE_SECRET_KEY:-} ]]; then
-  SUPABASE_SECRET_KEY="$(sed -n 's/^SUPABASE_SECRET_KEY=//p' "$repo/.env" | tail -n 1)"
-fi
+# Local stack default for the DB; the Storage target comes from the environment or .env.
 export BACKUP_DB_URL="${BACKUP_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}"
-export SUPABASE_URL="${SUPABASE_URL:-${NEXT_PUBLIC_SUPABASE_URL:-http://127.0.0.1:54321}}"
-export SUPABASE_SECRET_KEY="${SUPABASE_SECRET_KEY:-}"
 
 phase() { printf 'backup: %-28s %ss\n' "$1" "$2"; }
 supabase() { (cd "$repo" && pnpm exec supabase "$@"); }
+storage_backup() { (cd "$repo" && uv run --no-sync python -m quiz_worker.storage_backup "$@"); }
+
+storage_backup check >/dev/null
 
 start=$SECONDS
 supabase db dump --db-url "$BACKUP_DB_URL" --role-only -f "$out/db/roles.sql" >/dev/null
@@ -70,7 +72,7 @@ psql "$BACKUP_DB_URL" -X -At -v ON_ERROR_STOP=1 \
 phase "postgres dump" $((SECONDS - start))
 
 start=$SECONDS
-(cd "$repo" && uv run --no-sync python -m quiz_worker.storage_backup dump --out "$out/storage")
+storage_backup dump --out "$out/storage" --from-dump "$out/db/data.sql"
 phase "storage objects" $((SECONDS - start))
 
 sums="$(mktemp)"

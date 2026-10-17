@@ -17,7 +17,9 @@
 #
 # Environment
 #   RESTORE_DB_URL       admin connection to the TARGET (required; never defaults to anything)
-#   SUPABASE_URL / SUPABASE_SECRET_KEY   the TARGET project's Storage (step 4)
+#   SUPABASE_URL / SUPABASE_SECRET_KEY   the TARGET project's Storage (step 4), from the
+#                        environment or the repo-root .env; checked against the Storage API
+#                        before the database is touched (skipped with --skip-storage)
 #   PSQL                 psql command (default `psql`); it must understand the target's pg_dump
 #                        output (PostgreSQL client 17, or 16.10+/15.14+ for `\restrict`)
 #
@@ -53,6 +55,11 @@ start=$SECONDS
 (cd "$repo" && uv run --no-sync python -m quiz_worker.storage_backup verify --from "$dir/storage") \
   >/dev/null || die "Storage blobs do not match their manifest"
 phase "verify backup" $((SECONDS - start))
+
+if [[ $skip_storage -eq 0 ]]; then
+  (cd "$repo" && uv run --no-sync python -m quiz_worker.storage_backup check) >/dev/null ||
+    die "Storage target is not configured or rejects the key (SUPABASE_URL / SUPABASE_SECRET_KEY)"
+fi
 
 # Row counts per table in data.sql: `COPY "schema"."table" (...) FROM stdin;` … `\.`
 dump_counts() {

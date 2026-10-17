@@ -1,10 +1,17 @@
-# CI (M7.3, docs/deployment.md §5): static checks → unit → contracts ‖ container images, then the
-# local stack (Supabase CLI + Qdrant/Redis) → DB tests → infra integration tests → E2E with the
-# worker and log/artifact audits → backup/restore rehearsal (DEP-06). Nightly: real-model tests.
+# CI (M7.3, docs/deployment.md §5): static checks → unit → contracts ‖ container images ‖ UI
+# visual baselines, then the local stack (Supabase CLI + Qdrant/Redis) → DB tests → infra
+# integration tests → E2E (screens, a11y, WebKit/mobile smoke) with the worker and log/artifact
+# audits → app visual baselines → backup/restore rehearsal (DEP-06). Nightly (schedule) runs all of
+# it plus Web Vitals/API latency (`e2e:perf`) and the real-model tests.
 #
-#   checks ──► integration
+#   checks ──► integration (+ perf on schedule / manual)
 #   images (api · worker · web, no push)
+#   visual-ui (@quiz/ui Storybook baselines)
 #   models (schedule / manual only)
+#
+# Visual baselines are Linux renders of the pinned Playwright image (tests/e2e/README.md "Visual
+# baselines"): scripts/visual-run.sh starts `playwright run-server` in
+# mcr.microsoft.com/playwright:v<installed @playwright/test>-noble and the runner connects to it.
 #
 # E2E_PHASES lists the RED phases whose specs are GREEN (`scripts/e2e-trace.ts` PHASES); the trace
 # gate is strict for them. E2E runs every spec under tests/e2e except the screen specs of phases
@@ -24,6 +31,10 @@ on:
         description: Also run the real-model tests (make test-models)
         type: boolean
         default: false
+      perf:
+        description: Also run the Web Vitals / API latency checks (pnpm e2e:perf)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -39,7 +50,6 @@ env:
 jobs:
   checks:
     name: lint · typecheck · unit · contracts
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -69,7 +79,6 @@ jobs:
 
   images:
     name: image · ${{ matrix.image }}
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -211,10 +220,40 @@ jobs:
             if [[ $skip -eq 0 ]]; then specs+=("$spec"); fi
           done < <(find tests/e2e -name '*.spec.ts' -not -path '*/_pending/*' | LC_ALL=C sort)
           echo "E2E specs (${#specs[@]}): ${specs[*]}"
+          # tests/e2e/quality/ (a11y-chromium, smoke-{ipad,iphone}-webkit, smoke-mobile-chrome) is
+          # in this list; its visual/perf projects only exist when their renderer/flag is set.
+          printf '%s\n' "${specs[@]}" | grep -q '^tests/e2e/quality/a11y.spec.ts$'
           pnpm e2e:log-audit --worker --web-port 3000 --api-port 8000 -- "${specs[@]}"
+
+      # App screenshots against the pinned renderer (visual-desktop, visual-ipad), same servers and
+      # worker (reusing the web build); own output/report dirs so the E2E artifacts stay.
+      - name: Visual baselines (app, pinned Linux renderer)
+        if: ${{ !cancelled() }}
+        env:
+          APP_ENV: test
+          WORKER_LLM_SCENARIO_FILE: ${{ github.workspace }}/tests/fixtures/llm/generation-scenarios.json
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-visual
+        run: >-
+          scripts/visual-run.sh pnpm e2e:log-audit --worker --no-build --web-port 3000 --api-port 8000
+          -- tests/e2e/quality/visual.spec.ts --project=visual-desktop --project=visual-ipad
+          --output=test-results-visual
+
+      - name: Web Vitals / API latency (nightly)
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.perf)) }}
+        env:
+          APP_ENV: test
+          E2E_PERF: '1'
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-perf
+        run: >-
+          pnpm e2e:log-audit --worker --no-build --web-port 3000 --api-port 8000
+          -- tests/e2e/quality/perf.spec.ts --project=perf-chromium --workers=1
+          --output=test-results-perf
+
       - name: E2E artifact audit (no share secrets in traces/reports)
         if: ${{ !cancelled() }}
-        run: pnpm e2e:artifact-audit
+        run: >-
+          pnpm e2e:artifact-audit test-results playwright-report test-results-visual
+          playwright-report-visual test-results-perf playwright-report-perf
 
       # DEP-06 rehearsal on the throwaway stack: back up, wipe the DB and the index, restore,
       # rebuild Qdrant from Postgres. The backup holds synthetic users only and is never uploaded.
@@ -225,6 +264,10 @@ jobs:
         run: |
           set -euo pipefail
           backup="$RUNNER_TEMP/backup"
+          probe="$RUNNER_TEMP/restore-probe.json"
+          # The E2E fixtures delete their data, so seed one published synthetic document (real
+          # upload + document.parse path) that the restore must bring back.
+          uv run --no-sync python scripts/restore_probe.py seed --state "$probe"
           scripts/backup "$backup"
           before="$(psql "$RESTORE_DB_URL" -X -At -c 'select count(*) from public.documents')"
           make db-reset
@@ -244,6 +287,8 @@ jobs:
           [[ "$before" == "$after" ]]
           summary="$(grep '"summary"' "$RUNNER_TEMP/restore.log")"
           jq -e '.summary.failed == 0 and .summary.busy == 0 and .summary.indexed > 0' <<<"$summary"
+          # That document: same active revision, original Storage bytes, active in Qdrant.
+          uv run --no-sync python scripts/restore_probe.py verify --state "$probe"
           rm -rf "$backup"
 
       # Reports hold traces/screenshots of failed tests: synthetic users on this throwaway stack
@@ -256,17 +301,42 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            playwright-report-visual/
+            test-results-visual/
+            playwright-report-perf/
+            test-results-perf/
           if-no-files-found: ignore
           retention-days: 7
       - name: Stop local stack
         if: ${{ always() }}
         run: make infra-down
 
-  # HOOK (M7.2, visual baselines): screenshot baselines are platform-specific. If tests/e2e or
-  # packages/ui visual specs need Linux baselines, run them in a job pinned to the Playwright image
-  # matching @playwright/test (container: mcr.microsoft.com/playwright:v<version>-noble@sha256:…)
-  # and generate the baselines with the same container; until then they run with the darwin
-  # baselines locally only.
+  visual-ui:
+    name: visual · @quiz/ui Storybook
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # Storybook build + screenshots in the pinned renderer (scripts/visual-run.sh, Docker).
+      - name: Storybook visual baselines
+        run: pnpm --filter @quiz/ui test:visual
+      - name: Upload visual diffs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ui-visual-diffs
+          path: packages/ui/test-results/visual/
+          if-no-files-found: ignore
+          retention-days: 7
 
   models:
     name: real-model tests (nightly)

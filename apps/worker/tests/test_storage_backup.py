@@ -141,7 +141,81 @@ def test_cli_verify_and_dry_run_print_counts_only(
     assert "workspaces/" not in json.dumps(lines)
 
 
-def test_cli_dump_requires_an_admin_db_url(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_cli_dump_requires_an_inventory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SUPABASE_URL", "http://storage.test")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_unit")
     monkeypatch.delenv("BACKUP_DB_URL", raising=False)
-    with pytest.raises(SystemExit, match="BACKUP_DB_URL"):
+    with pytest.raises(SystemExit, match="--from-dump or BACKUP_DB_URL"):
         storage_backup.main(["dump", "--out", str(tmp_path)])
+
+
+DUMP = (
+    "SET session_replication_role = replica;\n"
+    'COPY "storage"."buckets" ("id", "name") FROM stdin;\n'
+    "source-pdfs\tsource-pdfs\n"
+    "\\.\n"
+    'COPY "storage"."objects" ("id", "bucket_id", "name", "owner", "metadata") FROM stdin;\n'
+    "1\tsource-pdfs\tworkspaces/a/b\\tc.pdf\t\\N\t"
+    '{"size": 18, "mimetype": "application/pdf"}\n'
+    "2\tparsed-artifacts\tworkspaces/a/p.json\t\\N\t\\N\n"
+    "3\tsource-pdfs\t\\N\t\\N\t\\N\n"
+    "\\.\n"
+    'COPY "public"."documents" ("id") FROM stdin;\n'
+    "x\n"
+    "\\.\n"
+)
+
+
+def test_inventory_comes_from_the_dumps_storage_objects_block(tmp_path: Path) -> None:
+    data = tmp_path / "data.sql"
+    data.write_text(DUMP, encoding="utf-8")
+
+    listed = storage_backup.inventory_from_dump(data)
+
+    assert listed == [
+        Listed("parsed-artifacts", "workspaces/a/p.json", 0, "application/octet-stream"),
+        Listed("source-pdfs", "workspaces/a/b\tc.pdf", 18, "application/pdf"),
+    ]
+    data.write_text('COPY "public"."documents" ("id") FROM stdin;\n\\.\n', encoding="utf-8")
+    with pytest.raises(ValueError, match=r"storage\.objects"):
+        storage_backup.inventory_from_dump(data)
+
+
+def test_storage_config_prefers_the_environment_then_dotenv(tmp_path: Path) -> None:
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(
+        "# local\nNEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321/\nSUPABASE_SECRET_KEY='from-file'\n",
+        encoding="utf-8",
+    )
+
+    from_file = storage_backup.storage_config({}, dotenv)
+    from_env = storage_backup.storage_config(
+        {"SUPABASE_URL": "https://p.supabase.co", "SUPABASE_SECRET_KEY": "from-env"}, dotenv
+    )
+
+    assert (from_file.url, from_file.secret_key) == ("http://127.0.0.1:54321", "from-file")
+    assert (from_env.url, from_env.secret_key) == ("https://p.supabase.co", "from-env")
+    assert "from-env" not in repr(from_env)
+    with pytest.raises(SystemExit, match="SUPABASE_SECRET_KEY"):
+        storage_backup.storage_config({"SUPABASE_URL": "http://x"}, tmp_path / "missing")
+    with pytest.raises(SystemExit, match="http"):
+        storage_backup.storage_config({"SUPABASE_URL": "x", "SUPABASE_SECRET_KEY": "k"}, None)
+
+
+def test_check_storage_probes_the_bucket_listing_with_the_key() -> None:
+    seen: list[httpx.Request] = []
+
+    def ok(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=[])
+
+    config = storage_backup.StorageConfig("http://storage.test", "sb_secret_unit")
+    storage_backup.check_storage(config, httpx.MockTransport(ok))
+    assert seen[0].url.path == "/storage/v1/bucket"
+    assert seen[0].headers["apikey"] == "sb_secret_unit"
+
+    with pytest.raises(SystemExit, match="HTTP 401") as denied:
+        storage_backup.check_storage(
+            config, httpx.MockTransport(lambda _r: httpx.Response(401, json={}))
+        )
+    assert "sb_secret_unit" not in str(denied.value)

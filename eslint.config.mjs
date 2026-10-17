@@ -26,7 +26,9 @@ export default defineConfig(
       // Agent worktrees (other checkouts of this repo).
       '.claude/**',
       'playwright-report/**',
+      'playwright-report-*/**',
       'test-results/**',
+      'test-results-*/**',
       // Pre-harness starter specs kept byte-for-byte until their RED Task moves them
       // (see tests/e2e/README.md).
       'tests/e2e/_pending/**',
