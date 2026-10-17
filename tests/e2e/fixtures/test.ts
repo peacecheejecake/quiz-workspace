@@ -13,6 +13,10 @@
 //     the questions-ko paper truth, and the QBANK-01/QIMPORT-01 UI label contract; M5.0 adds the
 //     overview/practice/my-state/attempts API helpers and the QOV-01/QPLAY-01 UI contract.
 //   - S0: owner/guest/recipient share fixtures on top of the two above.
+//   - generation.ts (M6.0): scenario-driven source questions (fake LLM markers, G1), generation
+//     run API helpers and the QGEN-01 UI contract.
+//   - history.ts (M7.0): activities/jobs/attempts read-API helpers, document corrections that
+//     produce history, and the HISTORY-01 UI contract.
 // Never add test-only seed/reset endpoints to the production app (AGENTS.md §5).
 import { test as base, expect } from '@playwright/test';
 import { UserFactory } from './auth.ts';
@@ -65,6 +69,8 @@ export {
 export * from './auth-ui.ts';
 export { ApiClient, PROBLEM_TYPES, type ApiResponse, type Problem } from './api.ts';
 export * from './documents.ts';
+export * from './generation.ts';
+export * from './history.ts';
 export { attemptRevision, seedGradedAttempt, seedMembership } from './db.ts';
 export * from './questions.ts';
 export * from './workspace-ui.ts';

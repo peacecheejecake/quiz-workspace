@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "description": "Deterministic LLM outputs for question variant generation (QGEN-01, M6.0). APP_ENV=test only: the worker's ScenarioLLMClient (book_core.llm.scenarios) picks the scenario whose marker occurs in the prompt (the source question's stem ends with ` [<marker>]`) and answers by task name; an unscripted task fails loudly. Output shape and task names are M6.0 assumptions G2/G3 in tests/e2e/fixtures/generation.ts; M6.1/M6.2 may rename fields here (one place) as long as each scenario keeps its meaning.",
+  "scenarios": [
+    {
+      "marker": "E2E-LLM-OK",
+      "description": "Schema-valid, semantically sound PARAPHRASE and ANALOGOUS_CONCEPT candidates for the `disinfection` source. Every evidence quote occurs verbatim on page 4 of book-ko.pdf.",
+      "responses": {
+        "questions.generate.paraphrase": {
+          "candidates": [
+            {
+              "question_type": "MCQ",
+              "stem": "정수장에서 병원성 미생물을 줄이려고 마지막에 투입하는 소독제는 무엇인가?",
+              "options": [
+                { "id": "opt-1", "text": "염소" },
+                { "id": "opt-2", "text": "응집제" },
+                { "id": "opt-3", "text": "모래" },
+                { "id": "opt-4", "text": "자갈" }
+              ],
+              "correct_option_ids": ["opt-1"],
+              "is_multi_answer": false,
+              "explanation": "정수 처리의 마지막 소독 단계에서는 염소와 같은 소독제를 넣는다.",
+              "justification": "문구만 바꾸었고 묻는 개념(소독 단계)과 정답(염소)은 원본과 같다.",
+              "evidence": [
+                {
+                  "quote": "마지막으로 염소와 같은 소독제를 넣어 남아 있는 병원성 미생물을 줄인다."
+                }
+              ]
+            }
+          ]
+        },
+        "questions.generate.analogous_concept": {
+          "candidates": [
+            {
+              "question_type": "MCQ",
+              "stem": "원수에 응집제를 넣고 천천히 저을 때 작은 입자들이 서로 달라붙어 생기는 덩어리를 무엇이라고 하는가?",
+              "options": [
+                { "id": "gen-1", "text": "플록" },
+                { "id": "gen-2", "text": "여과층" },
+                { "id": "gen-3", "text": "침전물" },
+                { "id": "gen-4", "text": "수증기" }
+              ],
+              "correct_option_ids": ["gen-1"],
+              "is_multi_answer": false,
+              "explanation": "응집 단계에서 작은 입자들이 달라붙어 생긴 덩어리를 플록이라고 부른다.",
+              "justification": "같은 장(2장 정수 처리)의 응집 단계를 묻는 유사 개념 문제다.",
+              "evidence": [{ "quote": "이 덩어리를 플록이라고 부르며, 이 단계를 응집이라고 한다." }]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "marker": "E2E-LLM-INVERT-MULTI",
+      "description": "INVERT_POLARITY of the `not-correct` source ('옳지 않은 것' -> '옳은 것') that keeps the four options: three statements become correct, yet the model still declares a single answer. The validator must not trust the declared answer (questions.md §5) and must block approval (QGEN-01-AC03).",
+      "responses": {
+        "questions.generate.invert_polarity": {
+          "candidates": [
+            {
+              "question_type": "MCQ",
+              "stem": "정수 처리 과정에 대한 설명으로 옳은 것은?",
+              "options": [
+                {
+                  "id": "opt-1",
+                  "text": "응집제를 넣으면 작은 입자들이 서로 달라붙어 덩어리가 된다."
+                },
+                { "id": "opt-2", "text": "침전지에서는 무거워진 플록이 바닥으로 가라앉는다." },
+                { "id": "opt-3", "text": "여과지는 모래와 자갈을 여러 층으로 쌓아 만든다." },
+                { "id": "opt-4", "text": "염소는 수도관을 지나는 동안 소독 효과가 바로 사라진다." }
+              ],
+              "correct_option_ids": ["opt-1"],
+              "is_multi_answer": false,
+              "explanation": "응집제를 넣으면 작은 입자들이 덩어리(플록)가 된다.",
+              "justification": "'옳지 않은 것'을 '옳은 것'으로 바꾸었다.",
+              "evidence": [{ "quote": "이 덩어리를 플록이라고 부르며, 이 단계를 응집이라고 한다." }]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "marker": "E2E-LLM-MALFORMED",
+      "description": "Output that is not JSON (truncated mid-string). The run must fail without drafts.",
+      "responses": {
+        "questions.generate.paraphrase": "{\"candidates\": [{\"question_type\": \"MCQ\", \"stem\": \"정수장에서",
+        "questions.generate.invert_polarity": "{\"candidates\": [{\"question_type\": \"MCQ\", \"stem\": \"정수장에서",
+        "questions.generate.analogous_concept": "{\"candidates\": [{\"question_type\": \"MCQ\", \"stem\": \"정수장에서"
+      }
+    },
+    {
+      "marker": "E2E-LLM-SCHEMA-INVALID",
+      "description": "Well-formed JSON that does not match the output schema (no stem, an unknown field). The run must fail without drafts.",
+      "responses": {
+        "questions.generate.paraphrase": {
+          "candidates": [{ "question_type": "MCQ", "options": [], "answer": "염소" }]
+        },
+        "questions.generate.invert_polarity": {
+          "candidates": [{ "question_type": "MCQ", "options": [], "answer": "염소" }]
+        },
+        "questions.generate.analogous_concept": {
+          "candidates": [{ "question_type": "MCQ", "options": [], "answer": "염소" }]
+        }
+      }
+    }
+  ],
+  "sources": {
+    "disinfection": {
+      "marker": "E2E-LLM-OK",
+      "question_type": "MCQ",
+      "stem": "정수 처리의 마지막 단계에서 남아 있는 병원성 미생물을 줄이기 위해 넣는 물질은?",
+      "options": [
+        { "id": "opt-1", "text": "염소" },
+        { "id": "opt-2", "text": "응집제" },
+        { "id": "opt-3", "text": "모래" },
+        { "id": "opt-4", "text": "자갈" }
+      ],
+      "correct_option_ids": ["opt-1"],
+      "is_multi_answer": false,
+      "explanation": "마지막 소독 단계에서 염소와 같은 소독제를 넣는다.",
+      "source_page": 4
+    },
+    "not-correct": {
+      "marker": "E2E-LLM-INVERT-MULTI",
+      "question_type": "MCQ",
+      "stem": "정수 처리 과정에 대한 설명으로 옳지 않은 것은?",
+      "options": [
+        { "id": "opt-1", "text": "응집제를 넣으면 작은 입자들이 서로 달라붙어 덩어리가 된다." },
+        { "id": "opt-2", "text": "침전지에서는 무거워진 플록이 바닥으로 가라앉는다." },
+        { "id": "opt-3", "text": "여과지는 모래와 자갈을 여러 층으로 쌓아 만든다." },
+        { "id": "opt-4", "text": "염소는 수도관을 지나는 동안 소독 효과가 바로 사라진다." }
+      ],
+      "correct_option_ids": ["opt-4"],
+      "is_multi_answer": false,
+      "explanation": "염소는 수도관을 따라 이동하는 동안에도 소독 효과가 유지된다.",
+      "source_page": 4
+    },
+    "malformed": {
+      "marker": "E2E-LLM-MALFORMED",
+      "question_type": "MCQ",
+      "stem": "정수 처리의 마지막 단계에서 미생물을 줄이기 위해 넣는 물질은?",
+      "options": [
+        { "id": "opt-1", "text": "염소" },
+        { "id": "opt-2", "text": "응집제" }
+      ],
+      "correct_option_ids": ["opt-1"],
+      "is_multi_answer": false,
+      "explanation": null,
+      "source_page": 4
+    },
+    "schema-invalid": {
+      "marker": "E2E-LLM-SCHEMA-INVALID",
+      "question_type": "MCQ",
+      "stem": "정수 처리의 마지막 단계에서 미생물을 줄이기 위해 투입하는 물질은?",
+      "options": [
+        { "id": "opt-1", "text": "염소" },
+        { "id": "opt-2", "text": "응집제" }
+      ],
+      "correct_option_ids": ["opt-1"],
+      "is_multi_answer": false,
+      "explanation": null,
+      "source_page": 4
+    }
+  }
+}

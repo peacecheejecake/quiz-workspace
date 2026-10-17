@@ -153,7 +153,12 @@ class JobWorker:
             assert record is not None, "job row missing"
             if record.status in TERMINAL_STATUSES:
                 return
-            runner.run(definitions[record.job_type], record.to_envelope().to_message())
+            definition = definitions.get(record.job_type)
+            if definition is None:
+                # `question.generate` (M6.2) registers here with the APP_ENV=test
+                # ScenarioLLMClient (tests/e2e/fixtures/generation.ts G1).
+                pytest.fail(f"JobWorker has no in-process handler for job type {record.job_type}")
+            runner.run(definition, record.to_envelope().to_message())
 
     def close(self) -> None:
         for close in self._closers:
