@@ -409,36 +409,41 @@ class QuestionRepository:
         ).first()
         return found is not None
 
-    def lock_chapter_documents(
-        self, workspace_id: uuid.UUID, chapter_ids: Iterable[uuid.UUID | None]
+    def lock_documents(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        chapter_ids: Iterable[uuid.UUID | None] = (),
+        document_ids: Iterable[uuid.UUID] = (),
     ) -> None:
-        """FOR SHARE on the documents of these chapters, in document id order.
+        """FOR SHARE on the documents of these chapters plus the given (source) documents of this
+        workspace, all in one statement in document id order.
 
-        Lock order for question writes that set or keep a chapter: documents first, then the
-        question row. A publish holds the document FOR UPDATE and then (remap trigger,
-        20261018003400) updates the questions of its chapters; taking the document before the
-        question means the two never wait on each other in opposite orders. Holding it also makes
-        `chapter_is_current` and the save atomic with respect to a publish: a publish either
-        committed before (the check sees the new active revision) or waits until this question is
-        saved (and then remaps it).
+        Lock order for question writes: documents first, then the question row. A publish holds
+        the document FOR UPDATE and then (remap trigger, 20261018003400) updates the questions of
+        its chapters; taking the document before the question means the two never wait on each
+        other in opposite orders. Holding it also makes everything read from the document atomic
+        with the save: `chapter_is_current` and the active revision a source cites
+        (`live_documents`) are read after a publish either committed (and are then the new
+        revision) or while it waits until this question is saved (and then remaps it).
         """
-        ids = sorted({c for c in chapter_ids if c is not None})
+        wanted = {c for c in chapter_ids if c is not None}
+        ids = set(document_ids)
+        if wanted:
+            ids.update(
+                self._session.execute(
+                    select(chapters.c.document_id).where(
+                        chapters.c.workspace_id == workspace_id, chapters.c.id.in_(wanted)
+                    )
+                ).scalars()
+            )
         if not ids:
             return
         self._session.execute(
             select(documents.c.id)
-            .select_from(
-                chapters.join(
-                    documents,
-                    and_(
-                        documents.c.workspace_id == chapters.c.workspace_id,
-                        documents.c.id == chapters.c.document_id,
-                    ),
-                )
-            )
-            .where(chapters.c.workspace_id == workspace_id, chapters.c.id.in_(ids))
+            .where(documents.c.workspace_id == workspace_id, documents.c.id.in_(sorted(ids)))
             .order_by(documents.c.id)
-            .with_for_update(read=True, of=documents)
+            .with_for_update(read=True)
         ).all()
 
     def chapter_of(self, question_id: uuid.UUID) -> uuid.UUID | None:

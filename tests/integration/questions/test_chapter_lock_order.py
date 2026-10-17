@@ -3,7 +3,7 @@
 A publish (worker, `quiz_worker`) locks the document row FOR UPDATE, then switches the active
 revision; the remap trigger (20261018003400) then updates the questions linked to the document's
 chapters. A question edit that sets a chapter must therefore take the document lock *before* the
-question row lock (QuestionRepository.lock_chapter_documents). With the opposite order the edit
+question row lock (QuestionRepository.lock_documents). With the opposite order the edit
 held the question and waited for the document while the publish held the document and waited
 for the question: a deadlock (one side aborted, the API answered 500).
 
@@ -24,6 +24,7 @@ import os
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -155,3 +156,80 @@ def test_m34_chapter_edit_racing_a_publish_does_not_deadlock(seed: Any, target: 
     else:
         assert res.status_code == 200, res.text
         assert res.json()["chapter_id"] == rev2["b"]
+
+
+def _race_publish(doc: dict[str, Any], request: Callable[[], httpx.Response]) -> httpx.Response:
+    """Run `request()` in a thread while a publish of revision 2 holds the document; let the
+    publish commit once the request waits for it. Returns the request's response."""
+    result: dict[str, httpx.Response] = {}
+    with psycopg.connect(WORKER_DATABASE_URL) as publish:
+        publish.execute("set lock_timeout = '20s'")
+        pid = publish.info.backend_pid
+        publish.execute(
+            "select active_revision_id from public.documents where id = %s for update",
+            (doc["id"],),
+        )
+        thread = threading.Thread(target=lambda: result.update(res=request()))
+        thread.start()
+        _wait_until_blocked_by(pid)
+        publish.execute(
+            "update public.document_revisions set status = 'published', published_at = now() "
+            "where id = %s",
+            (doc["revisions"][1],),
+        )
+        publish.execute(
+            "update public.documents set active_revision_id = %s where id = %s",
+            (doc["revisions"][1], doc["id"]),
+        )
+        publish.commit()
+        thread.join(timeout=30)
+        assert not thread.is_alive(), "the request never finished"
+    return result["res"]
+
+
+def _cited_revisions(question_id: str) -> list[str]:
+    with psycopg.connect(DB_ADMIN_URL, autocommit=True) as conn:
+        rows = conn.execute(
+            "select document_revision_id::text from public.question_sources where question_id = %s",
+            (question_id,),
+        ).fetchall()
+    return [str(r[0]) for r in rows]
+
+
+def test_m34_create_racing_a_publish_cites_the_new_active_revision(seed: Any) -> None:
+    """A create that names a chapter of the revision being published and cites the document
+    waits for the publish; the chapter check and the cited revision are then both read under the
+    document lock, so the source pins the new active revision (not one read before the wait)."""
+    alice = seed.client("m34-lock-source-create")
+    ws = alice.create_workspace()
+    doc = _seed(ws["id"])
+    body = seed.mcq(
+        "출처 경합 문제",
+        ["가", "나"],
+        0,
+        chapter_id=doc["chapters"][1]["a"],
+        sources=[{"document_id": doc["id"], "page_start": 1}],
+    )
+
+    res = _race_publish(doc, lambda: alice.call("POST", f"/workspaces/{ws['id']}/questions", body))
+
+    assert res.status_code == 201, res.text
+    assert res.json()["chapter_id"] == doc["chapters"][1]["a"]
+    assert _cited_revisions(res.json()["id"]) == [doc["revisions"][1]]
+
+
+def test_m34_source_edit_racing_a_publish_cites_the_new_active_revision(seed: Any) -> None:
+    """Same for a PATCH that only changes the sources (the question has no chapter)."""
+    alice = seed.client("m34-lock-source-patch")
+    ws = alice.create_workspace()
+    doc = _seed(ws["id"])
+    question = alice.create_question(ws["id"], seed.mcq("출처 수정 문제", ["가", "나"], 0))
+    patch = {
+        "base_revision_id": question["revision"]["id"],
+        "sources": [{"document_id": doc["id"], "page_start": 2}],
+    }
+
+    res = _race_publish(doc, lambda: alice.call("PATCH", f"/questions/{question['id']}", patch))
+
+    assert res.status_code == 200, res.text
+    assert _cited_revisions(question["id"]) == [doc["revisions"][1]]

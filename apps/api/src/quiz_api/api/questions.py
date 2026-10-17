@@ -561,14 +561,21 @@ def create_question(
         body.rubric,
     )
     issues.items.extend(content_issues(content, body.publication_status).items)
-    sources, revisions = _sources(repo, access.workspace_id, body.sources, issues)
 
     def attempt() -> uuid.UUID:
-        # Same lock order as an edit: the chapter's document before anything else.
-        repo.lock_chapter_documents(access.workspace_id, [body.chapter_id])
+        # Same lock order as an edit: the chapter's and the sources' documents first; the chapter
+        # check and the cited revisions are then read under those locks (fresh on every retry).
+        repo.lock_documents(
+            access.workspace_id,
+            chapter_ids=[body.chapter_id],
+            document_ids=[s.document_id for s in body.sources],
+        )
+        found = Issues()
+        found.items.extend(issues.items)
         if body.chapter_id is not None:
-            _check_chapter(repo, access.workspace_id, body.chapter_id, issues)
-        issues.raise_if_any()
+            _check_chapter(repo, access.workspace_id, body.chapter_id, found)
+        sources, revisions = _sources(repo, access.workspace_id, body.sources, found)
+        found.raise_if_any()
         return repo.create(
             workspace_id=access.workspace_id,
             actor_id=access.user_id,
@@ -689,11 +696,19 @@ def update_question(access: EditQuestion, body: QuestionUpdate, repo: QuestionRe
     question_id = access.resource_id
 
     def attempt() -> QuestionRecord:
-        # Lock order: the documents of the current and the requested chapter, then the question
-        # (QuestionRepository.lock_chapter_documents), as a publish does.
-        requested = body.chapter_id if "chapter_id" in body.model_fields_set else None
-        repo.lock_chapter_documents(
-            access.workspace.workspace_id, [repo.chapter_of(question_id), requested]
+        # Lock order, as a publish: the documents of the current and the requested chapter and of
+        # the cited sources (QuestionRepository.lock_documents), then the question.
+        sent_fields = body.model_fields_set
+        requested = body.chapter_id if "chapter_id" in sent_fields else None
+        source_documents = (
+            [s.document_id for s in body.sources]
+            if "sources" in sent_fields and body.sources is not None
+            else []
+        )
+        repo.lock_documents(
+            access.workspace.workspace_id,
+            chapter_ids=[repo.chapter_of(question_id), requested],
+            document_ids=source_documents,
         )
         current = _load(repo, question_id, lock=True)
         if body.base_revision_id != current.revision.id:
