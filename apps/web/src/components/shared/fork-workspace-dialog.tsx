@@ -37,6 +37,12 @@ export interface ForkWorkspaceDialogProps {
   readonly onOpenChange: (open: boolean) => void;
   /** Name of the shared workspace (the suggested name of the copy). */
   readonly sourceName: string;
+  /**
+   * Element that gets focus back when the dialog closes (Escape, Cancel, close button or the
+   * `?panel=fork` URL going away). The entry is a link, not a Radix trigger, so Radix cannot
+   * restore focus by itself; null keeps Radix's default.
+   */
+  readonly returnFocusTo?: () => HTMLElement | null;
   /** Injected in unit tests. */
   readonly client?: ForkClient;
 }
@@ -55,6 +61,7 @@ export function ForkWorkspaceDialog({
   open,
   onOpenChange,
   sourceName,
+  returnFocusTo,
   client: injected,
 }: ForkWorkspaceDialogProps) {
   const client = useMemo(() => injected ?? createForkClient(shareId), [injected, shareId]);
@@ -159,6 +166,12 @@ export function ForkWorkspaceDialog({
         if (!input) return;
         event.preventDefault();
         input.focus();
+      }}
+      onCloseAutoFocus={(event) => {
+        const target = returnFocusTo?.();
+        if (!target?.isConnected) return;
+        event.preventDefault();
+        target.focus();
       }}
     >
       <div className={styles.body} data-screen-id={screenId}>

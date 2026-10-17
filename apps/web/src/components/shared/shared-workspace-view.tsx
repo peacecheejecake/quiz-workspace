@@ -71,6 +71,10 @@ export function SharedWorkspaceView({
   /** One start-up per attempt (React re-runs effects in development). */
   const bootRef = useRef<{ attempt: number; promise: Promise<Phase> } | null>(null);
 
+  /** Focus returns here when the Fork dialog closes (fallback: the workspace heading). */
+  const forkEntryRef = useRef<HTMLAnchorElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
   const markUnavailable = useCallback(() => setPhase(UNAVAILABLE), []);
 
   useEffect(() => {
@@ -169,7 +173,9 @@ export function SharedWorkspaceView({
           </span>
         </p>
         <div className={styles.titleRow}>
-          <h1 className={styles.title}>{workspace.workspace.name}</h1>
+          <h1 ref={headingRef} tabIndex={-1} className={styles.title}>
+            {workspace.workspace.name}
+          </h1>
           {workspace.workspace.archived ? <Badge>보관됨</Badge> : null}
         </div>
         {workspace.expires_at ? (
@@ -183,7 +189,9 @@ export function SharedWorkspaceView({
               {signedIn ? null : ' Fork하려면 로그인이 필요합니다.'}
             </p>
             <Button asChild variant="primary">
-              <Link href={forkHref}>Fork</Link>
+              <Link ref={forkEntryRef} href={forkHref}>
+                Fork
+              </Link>
             </Button>
           </div>
         ) : null}
@@ -250,6 +258,9 @@ export function SharedWorkspaceView({
             if (!next) router.replace(sharePath(shareId), { scroll: false });
           }}
           sourceName={workspace.workspace.name}
+          returnFocusTo={() =>
+            forkEntryRef.current?.isConnected ? forkEntryRef.current : headingRef.current
+          }
         />
       ) : null}
     </main>

@@ -5,6 +5,7 @@
 // CANCELLED (link unavailable).
 import './dom-setup';
 import { act, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ForkWorkspaceDialog } from '../src/components/shared/fork-workspace-dialog';
@@ -154,5 +155,54 @@ describe('ForkWorkspaceDialog', () => {
     renderDialog(client);
     await userEvent.click(screen.getByRole('button', { name: 'Fork 시작' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/Fork를 허용하지 않습니다/);
+  });
+
+  it('returns focus to the entry on Escape and Cancel, or to the fallback when it is gone', async () => {
+    const client = fakeClient(
+      async () => fork(),
+      async () => fork(),
+    );
+    function Host({ entry }: { entry: boolean }) {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          {entry ? (
+            <a id="entry" href="#fork" onClick={() => setOpen(true)}>
+              Fork
+            </a>
+          ) : null}
+          <h1 id="fallback" tabIndex={-1}>
+            공유 알고리즘
+          </h1>
+          <ForkWorkspaceDialog
+            shareId={SHARE}
+            screenId="WS-FORK-01"
+            open={open}
+            onOpenChange={setOpen}
+            sourceName="공유 알고리즘"
+            returnFocusTo={() =>
+              document.getElementById('entry') ?? document.getElementById('fallback')
+            }
+            client={client}
+          />
+        </>
+      );
+    }
+    const first = render(<Host entry />);
+    expect(screen.getByRole('textbox', { name: '새 Workspace 이름' })).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.getElementById('entry')).toHaveFocus();
+
+    await userEvent.click(screen.getByRole('link', { name: 'Fork' }));
+    await userEvent.click(await screen.findByRole('button', { name: '취소' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.getElementById('entry')).toHaveFocus();
+    first.unmount();
+
+    render(<Host entry={false} />);
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('heading', { name: '공유 알고리즘' })).toHaveFocus();
   });
 });

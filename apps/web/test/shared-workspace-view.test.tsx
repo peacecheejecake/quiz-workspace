@@ -210,4 +210,26 @@ describe('SharedWorkspaceView', () => {
       ),
     );
   });
+
+  it('returns focus to the Fork entry when the ?panel=fork dialog closes', async () => {
+    routes({
+      '': () => json({ ...WORKSPACE, allow_fork: true }),
+      '/questions': () => json({ items: [], next_cursor: null }),
+    });
+    const view = renderView({ signedIn: true, view: { ...HOME, forkPanel: true } });
+    expect(await screen.findByRole('dialog', { name: 'Workspace Fork' })).toBeInTheDocument();
+    // Navigation-driven close (the URL loses `?panel=fork`).
+    view.rerender(
+      <SharedWorkspaceView
+        screenId="WS-VIEW-01"
+        forkScreenId="WS-FORK-01"
+        shareId={SHARE}
+        view={HOME}
+        signedIn
+        forkLoginHref="/login"
+      />,
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.getByRole('link', { name: /^fork/i })).toHaveFocus());
+  });
 });
