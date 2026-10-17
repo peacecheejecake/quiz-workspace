@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ko">
+  <body>
+    <h2>로그인 링크 / Your sign-in link</h2>
+    <p>아래 링크를 눌러 Quiz Workspace에 로그인하세요. 링크는 한 번만 사용할 수 있습니다.</p>
+    <p>Follow the link below to sign in to Quiz Workspace. The link can be used only once.</p>
+    <p>
+      <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email"
+        >로그인하기 / Sign in</a
+      >
+    </p>
+    <p>요청하지 않았다면 이 메일을 무시하세요. / If you did not request this, ignore this email.</p>
+  </body>
+</html>

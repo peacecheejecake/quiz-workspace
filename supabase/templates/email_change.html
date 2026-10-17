@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="ko">
+  <body>
+    <h2>이메일 변경 확인 / Confirm your new email</h2>
+    <p>{{ .Email }} 에서 {{ .NewEmail }} (으)로 이메일 변경을 확인하려면 아래 링크를 누르세요.</p>
+    <p>
+      Follow the link below to confirm changing your email from {{ .Email }} to {{ .NewEmail }}.
+    </p>
+    <p>
+      <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email_change"
+        >이메일 변경 확인하기 / Confirm email change</a
+      >
+    </p>
+    <p>요청하지 않았다면 이 메일을 무시하세요. / If you did not request this, ignore this email.</p>
+  </body>
+</html>

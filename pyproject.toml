@@ -95,3 +95,6 @@ addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importli
 # Dev-only fixture generator modules (M1.1) imported by packages/core/tests/test_fixture_pdfs.py.
 pythonpath = ["packages/core/scripts"]
 norecursedirs = [".*", "*.egg", "venv", "node_modules", "dist", "build"]
+markers = [
+  "infra: needs the local stack (`make infra-up`); skipped with a reason otherwise, run via `make test-infra`",
+]

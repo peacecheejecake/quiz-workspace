@@ -21,9 +21,11 @@ PY_PRESENT := $(foreach m,$(PY_MEMBERS),$(if $(wildcard $(m)/pyproject.toml),$(m
 
 COMPOSE := docker compose -f infra/compose.yaml
 SUPABASE := pnpm exec supabase
+# Local Auth JWT signing key (private, ES256). Ignored by VCS; generated on demand.
+SIGNING_KEYS := supabase/signing_keys.json
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
-	test test-ts test-py infra-up infra-down infra-status infra-reset \
+	test test-ts test-py test-infra auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test
 
 help: ## List targets
@@ -72,12 +74,24 @@ test-ts:
 	pnpm -r --if-present run test
 
 # pytest exits 5 when no tests were collected; that is the only non-zero code tolerated.
+# Tests marked `infra` skip (with a reason, listed by -ra) when the local stack is not running.
 test-py:
 	@rc=0; uv run pytest || rc=$$?; \
 	if [ $$rc -eq 5 ]; then echo "pytest: no tests collected yet; ok"; exit 0; fi; \
 	exit $$rc
 
-infra-up: ## Start local Qdrant + Redis (compose) and the Supabase local stack
+# QUIZ_REQUIRE_INFRA=1 turns the "stack not running" skip into a failure, so this never passes
+# vacuously.
+test-infra: ## Integration tests against the running local stack (needs `make infra-up`)
+	QUIZ_REQUIRE_INFRA=1 uv run pytest -m infra
+
+auth-keys: $(SIGNING_KEYS) ## Generate the local Auth JWT signing key if missing (idempotent)
+
+$(SIGNING_KEYS):
+	@umask 077; echo '[]' > $@
+	@$(SUPABASE) gen signing-key --algorithm ES256 --append || { rm -f $@; exit 1; }
+
+infra-up: auth-keys ## Start local Qdrant + Redis (compose) and the Supabase local stack
 	$(COMPOSE) up -d --wait
 	$(SUPABASE) start
 
