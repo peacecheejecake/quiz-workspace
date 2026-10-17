@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import type { NextConfig } from 'next';
-import { loadRootEnvFallback } from './load-root-env';
+import { loadRootEnvFallback } from './load-root-env.ts';
 
 // The monorepo keeps its git-ignored `.env*` at the repo root (AGENTS.md §7). Fill only keys that
 // the process environment and apps/web/.env* (already loaded by Next) left unset.
@@ -29,6 +29,9 @@ const shareHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  // `next dev` would otherwise generate apps/web/AGENTS.md + CLAUDE.md; agent rules live in the
+  // repo-root AGENTS.md.
+  agentRules: false,
   // Workspace packages ship TypeScript/CSS sources.
   transpilePackages: ['@quiz/design-tokens'],
   async headers() {
