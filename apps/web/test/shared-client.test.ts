@@ -161,6 +161,23 @@ describe('createSharedClient', () => {
 
     const missing = createSharedClient(SHARE, async () => json({}, 404));
     await expect(missing.pdf(DOC, signal)).rejects.toBeInstanceOf(PdfLoadError);
+    const down = createSharedClient(SHARE, async () => new Response('oops', { status: 503 }));
+    await expect(down.pdf(DOC, signal)).rejects.toBeInstanceOf(PdfLoadError);
+  });
+
+  it('reports a refused link or ended session on the PDF as a share failure', async () => {
+    const signal = new AbortController().signal;
+    const revoked = createSharedClient(SHARE, async () => json({ type: SHARE_UNAVAILABLE }, 404));
+    await expect(revoked.pdf(DOC, signal)).rejects.toMatchObject({
+      name: 'SharedApiError',
+      kind: 'unavailable',
+    });
+    const ended = createSharedClient(SHARE, async () =>
+      json({ type: SHARE_SESSION_REQUIRED }, 401),
+    );
+    const error = await ended.pdf(DOC, signal).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SharedApiError);
+    expect(endsShareView(error)).toBe(true);
   });
 
   it('searches with the hybrid mode and no filters, and pages questions by cursor', async () => {

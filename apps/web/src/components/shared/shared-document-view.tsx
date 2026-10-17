@@ -68,8 +68,13 @@ export function SharedDocumentView({
   /** The deep link (page/block) last applied to the loaded content. */
   const [appliedLink, setAppliedLink] = useState<string | null>(null);
   const pdfSource = useCallback(
-    (signal: AbortSignal) => client.pdf(documentId, signal),
-    [client, documentId],
+    (signal: AbortSignal) =>
+      client.pdf(documentId, signal).catch((error: unknown) => {
+        // The viewer would only show its own error: a revoked/expired link ends the view.
+        if (!signal.aborted && endsShareView(error)) onUnavailable();
+        throw error;
+      }),
+    [client, documentId, onUnavailable],
   );
 
   useEffect(() => {

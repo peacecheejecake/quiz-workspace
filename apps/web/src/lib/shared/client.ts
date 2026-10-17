@@ -90,6 +90,10 @@ export interface SharedClient {
   document(documentId: string, signal?: AbortSignal): Promise<SharedDocument>;
   questions(cursor: string | null, signal?: AbortSignal): Promise<SharedQuestionList>;
   search(query: string, signal?: AbortSignal): Promise<SharedSearchResponse>;
+  /**
+   * The original PDF bytes. Rejects with {@link SharedApiError} when the link or session is no
+   * longer usable, else with {@link PdfLoadError}.
+   */
   pdf(documentId: string, signal: AbortSignal): Promise<Uint8Array>;
 }
 
@@ -199,7 +203,13 @@ export function createSharedClient(
         throw new PdfLoadError('network');
       }
       if (!response.ok) {
-        await response.body?.cancel().catch(() => undefined);
+        // A refused link or ended session ends the whole share view; anything else stays a
+        // local PDF error the viewer shows with a retry.
+        const body: unknown = await response.json().catch(() => undefined);
+        const kind = classifySharedFailure(response.status, body);
+        if (kind === 'unavailable' || kind === 'sessionRequired') {
+          throw new SharedApiError(kind, response.status);
+        }
         throw new PdfLoadError('unavailable');
       }
       if (Number(response.headers.get('content-length') ?? 0) > MAX_PDF_BYTES) {
