@@ -175,10 +175,19 @@ make infra-status  # compose health + Supabase local URLs (keys go only into .en
 make infra-down  # stop infra, keep data volumes
 make infra-reset # stop infra and DELETE local data volumes
 pnpm exec supabase <cmd>       # pinned Supabase CLI; never a global install
+make db-reset    # recreate local DB from supabase/migrations + seed.sql (needs infra-up)
+make db-lint     # supabase db lint --fail-on warning
+make db-test     # pgTAP tests in supabase/tests
+make web-dev     # Next.js dev server on http://127.0.0.1:3000 (reads root .env)
+pnpm --filter @quiz/web build  # production build of apps/web
 pnpm --filter <pkg> <script>   # run one TS package's script
 uv run pytest apps/api         # run one Python member's tests
 scripts/codex-review.sh --commit HEAD --title "<Task ID>: <summary>"
 ```
+
+The API connects as the least-privilege role `quiz_api` (NOLOGIN in migrations). One-time local
+step after `infra-up` (roles survive `db reset`; local-only password, never committed):
+`psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -c "alter role quiz_api with login password 'change-me-local'"`.
 
 New TS packages extend `tsconfig.base.json` and expose `typecheck`/`test` scripts; ESLint and
 Prettier run from the root config. New Python members must be added to both
