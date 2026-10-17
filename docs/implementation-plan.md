@@ -370,9 +370,11 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | P0.4 UI kit | ✅ | 66f6466 (merge 7bc9440, React 19.2.8로 정렬) · 12158b7 | P1(RSC client boundary 누락)·P2(숨김 요소로 Tab handoff) → 반영(RSC build fixture 추가) → 지적 없음 |
 | A1.1 Supabase Auth local | ✅ | e8768f3 | 지적 없음 |
 | P0.3b 토큰 보강 | ✅ | 9df4496 | 지적 없음. 대비 test 추가(light unseen/retry marker는 outline 필요 → M5.3) |
-| M1.2 Docling parser | ◐ | 9cd16d6 (merge e1c27d1) · 408a015 | P2×2(OCR 오보고, 실모델 test 기본 suite 포함) → 반영(`make test-models` 분리) → P2(OCR extra 설치 시 test 실패) 수정 중 |
-| P0.7 worker | ◐ | 981a1bf · bf6f99d · 2ef82be | P1×2·P2 → 반영(reconciler, published_at, 공용 log redaction) → P2(terminal cleanup 복구 불가) 수정 중 |
-| P0.10 E2E harness | ◐ | 776afac | P2×2(빈 spec 목록이 전체 실행 유발, 주석 처리된 test를 coverage로 인정) 수정 중 |
+| M1.2 Docling parser | ✅ | 9cd16d6 · 408a015 · 1eda859 | P2×2 → 반영(`make test-models` 분리, RapidOCR 명시) → P2(OCR extra 설치 시 test 실패) → 반영 → 지적 없음 |
+| P0.7 worker | ✅ | 981a1bf · bf6f99d · 2ef82be · e93724a · 3fc8089 | P1×2·P2 → reconciler/published_at/공용 redaction → P2(terminal cleanup 복구) → cleanup_pending 영속·재시도 → P2(SQLite 스키마 업그레이드) → 반영 → 지적 없음 |
+| P0.10 E2E harness | ✅ | 776afac · a5a58e8 | P2×2(빈 spec 목록, 주석 test coverage 인정) → 반영(TS parser 기반) → 지적 없음 |
+| M1.3 structure | ◐ | 1134994 | P2×3(Roman/알파벳 번호 모호성, title page 오판, 다중 페이지 TOC) 수정 중 |
+| A0 Auth RED | ◐ | — | 진행 중 |
 | P0.8 core 골격 | ✅ | 163e9ea · bc78ce6 · 1c56c17 | P2(LLM 검증 오류에 원문 노출) → 반영 → P2(식별자형 key 노출) → 반영 → 지적 없음 |
 | (통합) worktree 제외 설정 | ✅ | 6704d1c | 사소한 설정 수정, 리뷰 생략 |
 
