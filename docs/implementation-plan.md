@@ -377,6 +377,11 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-10-17 | 브라우저는 FastAPI를 직접 호출하지 않고 Next.js 같은 출처 route handler/server action(BFF)을 거친다. 서버가 `getClaims()`로 세션을 검증하고 Bearer로 API에 전달한다. 인가는 여전히 FastAPI가 판단. | A3에서 session cookie를 HttpOnly로 고정 → 브라우저 JS에 access token 미노출 |
 | 2026-10-17 | 문서 업로드: 6 MiB 이하는 단일 PUT, 초과는 TUS(`tus-js-client` 고정, 재개 상태는 메모리만). sha256은 Web Worker에서 계산(CSP `worker-src 'self'`). | deployment.md §2 |
 | 2026-10-17 | 즐겨찾기/다시 풀기 변경 이력은 `activity_events`(`question.study_state_changed`, `visibility: actor`)에 남기고 History(M7.1)는 본인에게만 보여준다. | questions.md §4.7 + 개인 학습 상태 비공개 |
+| 2026-10-18 | 검색 범위는 DB가 결정(삭제되지 않은 문서의 published active revision만), Qdrant에는 그 revision id만 전달. 검색 rate limit은 process 내 token bucket(임시). 배포 API image는 `book-core[models]` 필요. | M3.6a |
+| 2026-10-18 | 공유 세션은 무상태 HMAC cookie(`v1.<link>.<exp>.<HMAC>`, link digest 포함 → rotate 시 무효), 매 요청 DB 재검증. PDF는 API proxy로 전달(signed URL 비노출). | S1b, workspace-sharing.md |
+| 2026-10-18 | Guest 공유 rate limit은 relay 뒤 client별: relay가 edge client 주소의 SHA-256을 `RELAY_CLIENT_SECRET` HMAC으로 서명해 전달, FastAPI는 서명 검증 시에만 신뢰(아니면 socket peer, `X-Forwarded-For` 불신). link별 300/min 상한. preview/production은 secret 없으면 `/shared` 503. 공유 검색 `chapter_ids`는 published active revision outline id만 허용. | S1b review |
+| 2026-10-18 | Practice 중에는 server action revalidate를 하지 않고 panel open→closed 전이에서 overview를 refresh한다(pushState와 RSC refetch race). | M5.5 |
+| 2026-10-18 | 생성 LLM model 기본값 없음(`LLM_MODEL` 필수) 유지. 인용 조작 후보는 통째로 reject. | M6.1 |
 
 ## 8. 진행 현황
 
@@ -439,7 +444,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M6.0/M7.0 RED | ✅ | 9ad03b7 | QGEN-01 4 + HISTORY-01 3 E2E, contract 10 RED(404). ScenarioLLMClient fake. 지적 없음 |
 | M4.4b import 화면 | ✅ | 9a263df · c02d89a | QIMPORT-01 AC01~04 GREEN. 공용 `QuestionDraftReview`. P2×2(초기 로드 재시도, publish 200 제한) → 상태 직접 갱신 + 200개 batch → 지적 없음 |
 | S2a sharing 화면 | ✅ | bbcbc21 · 27c0039 | WS-SHARE-01 AC01~05 + WS-01-AC06 GREEN(chromium·webkit), artifact-audit 0. P2×2(21+ link revoke, 만료 link 정책 편집) → 반영 → 지적 없음 |
-| S1b shared API | ◐ | bb611bc | share contract 13 GREEN. 무상태 HMAC session cookie, PDF는 API proxy. P2×2(relay 뒤 rate limit key, 미발행 chapter oracle) 수정 중 |
+| S1b shared API | ✅ | bb611bc · 8693117 | share contract 14 GREEN. 무상태 HMAC session cookie, PDF는 API proxy. P2×2(relay 뒤 rate limit key, 미발행 chapter oracle) → 서명된 relay client id + link별 상한, published chapter만 허용 → 지적 없음 |
 | M5.5 practice panel | ✅ | e29ae2d · f45f8c9 | QPLAY-01 AC01~05 GREEN(3회 반복 92/92). practice action revalidate 제거(pushState race) → panel open→closed 전이에서 refresh. P2×2(Back 닫기 stale, flag 변경 시 채점대기 유실) → 반영 → 지적 없음. leak capture는 다른 화면 router prefetch 제외(Chromium reload 시 body 미반환 hang) |
 | M2.6 eval·CLI | ✅ | 8f605ce · 8ef75a4 | seed: Qwen3 hybrid R@5 0.667→rerank 1.0, sweep상 depth 10/k=0 최적(데이터 6 query라 기본값 변경 보류). P1·P2×2 → 반영 → 지적 없음 |
 | M3.5 PDF viewer·교정 UI | ✅ | 353277e · f01356a · 57bbf68 | DOC-02 AC01 GREEN(AC02~05는 M3.6a 후 재확인). P2×2 → 반영 → P2(지연 refresh가 새 저장 덮음) → generation counter → 지적 없음 |
