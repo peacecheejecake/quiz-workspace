@@ -11,6 +11,7 @@ from quiz_api.api import (
     documents,
     jobs,
     me,
+    practice,
     question_overview,
     questions,
     share_links,
@@ -27,5 +28,6 @@ api_router.include_router(workspaces.router)
 api_router.include_router(documents.router)
 api_router.include_router(questions.router)
 api_router.include_router(question_overview.router)
+api_router.include_router(practice.router)
 api_router.include_router(share_links.router)
 api_router.include_router(jobs.router)

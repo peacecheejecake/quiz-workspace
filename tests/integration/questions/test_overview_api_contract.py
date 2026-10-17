@@ -15,10 +15,9 @@ from typing import Any
 
 import pytest
 
-# RED (M5.0): remove `red` when M5.1/M5.2 make these GREEN. M5.1 added the overview endpoint
-# (its own guarantees: test_overview_api.py); every test here still drives state through the
-# M5.2 practice/my-state API, and AC01 also through the M4.4a import API.
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+# Study state is driven through the M5.2 practice/my-state API. AC01 also needs the M4.4a
+# import API and stays RED (remove its `red` marker in M4.4a).
+pytestmark = pytest.mark.infra
 
 ANSWER_KEYS = {"correct_option_ids", "accepted_answers", "explanation", "rubric", "correct_answer"}
 STATUSES = ("unseen", "viewed", "incorrect", "correct", "retry")
@@ -65,6 +64,7 @@ def numbered(seed: Any, n: int) -> dict[str, Any]:
     return {**body, "question_number": n}
 
 
+@pytest.mark.red
 def test_qov_01_ac01_one_item_per_confirmed_question_drafts_and_shuffles_add_none(
     seed: Any,
 ) -> None:

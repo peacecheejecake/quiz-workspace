@@ -150,6 +150,68 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/practice-sessions/{session_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Practice Session
+     * @description Resume one of the caller's sessions. `outcome` (with answers) only once submitted.
+     */
+    get: operations['getPracticeSession'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/practice-sessions/{session_id}/self-grade': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Self Grade Practice Session
+     * @description The user's own grade of a pending (essay / ungradable short answer) submission. Appends
+     *     a grade attempt referencing the pending one; the session becomes graded. Once.
+     */
+    post: operations['selfGradePracticeSession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/practice-sessions/{session_id}/submit': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Submit Practice Session
+     * @description Grade the answer on the server against the session's revision (option ids, never
+     *     positions); append the attempt; reveal answers and explanation. Once per session.
+     */
+    post: operations['submitPracticeSession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/questions/{question_id}': {
     parameters: {
       query?: never;
@@ -175,6 +237,68 @@ export type paths = {
      *     `base_revision_id` is 409 `stale-revision`.
      */
     patch: operations['updateQuestion'];
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/attempts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List My Attempts
+     * @description The caller's own attempts on the question, newest first, each pinned to the revision it
+     *     was graded on (its content: GET /questions/{id}/revisions/{revision_id}).
+     */
+    get: operations['listMyQuestionAttempts'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/my-state': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Update My State
+     * @description Toggle the caller's favorite / retry flags (independent of each other and of results).
+     */
+    patch: operations['updateMyQuestionState'];
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/practice-sessions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start Practice Session
+     * @description Open the practice panel on a CONFIRMED question: pins its active revision, shuffles MCQ
+     *     options, records the caller's view. No answers in the response.
+     */
+    post: operations['startPracticeSession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/v1/questions/{question_id}/revisions/{revision_id}': {
@@ -516,6 +640,65 @@ export type paths = {
 export type webhooks = Record<string, never>;
 export type components = {
   schemas: {
+    /** Attempt */
+    Attempt: {
+      /**
+       * Displayed Option Ids
+       * @description The order the options were shown in.
+       */
+      displayed_option_ids: string[];
+      /** Graded At */
+      graded_at: string | null;
+      /**
+       * Grades Attempt Id
+       * @description For a self/reviewer grade: the pending attempt it settles.
+       */
+      grades_attempt_id: string | null;
+      /**
+       * Grading Method
+       * @description null while pending.
+       */
+      grading_method: ('auto' | 'self' | 'reviewer') | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Practice Session Id
+       * Format: uuid
+       */
+      practice_session_id: string;
+      /**
+       * Question Revision Id
+       * Format: uuid
+       * @description Graded against this revision.
+       */
+      question_revision_id: string;
+      /**
+       * Result
+       * @enum {string}
+       */
+      result: 'correct' | 'incorrect' | 'pending';
+      /** Revision Version */
+      revision_version: number;
+      submitted_answer: components['schemas']['SubmittedAnswer'];
+      /**
+       * Submitted At
+       * Format: date-time
+       */
+      submitted_at: string;
+    };
+    /** AttemptList */
+    AttemptList: {
+      /** Items */
+      items: components['schemas']['Attempt'][];
+      /**
+       * Next Cursor
+       * @description Pass as `cursor` for older attempts.
+       */
+      next_cursor: string | null;
+    };
     /** ChapterRef */
     ChapterRef: {
       /**
@@ -800,6 +983,38 @@ export type components = {
       /** @description Created on the first authenticated `/me` call. */
       profile: components['schemas']['Profile'];
     };
+    /** MyState */
+    MyState: {
+      /** Is Favorite */
+      is_favorite: boolean;
+      /** Last Graded Result */
+      last_graded_result: ('correct' | 'incorrect') | null;
+      /** Needs Retry */
+      needs_retry: boolean;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry';
+    };
+    /**
+     * MyStateUpdate
+     * @description Omitted flags are kept; at least one is required.
+     */
+    MyStateUpdate: {
+      /** Is Favorite */
+      is_favorite?: boolean | null;
+      /**
+       * Needs Retry
+       * @description Never cleared by a correct answer; only by the user.
+       */
+      needs_retry?: boolean | null;
+    };
     /** MyWorkspace */
     MyWorkspace: {
       /** Archived At */
@@ -918,6 +1133,142 @@ export type components = {
        * @enum {string}
        */
       status: 'unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry';
+    };
+    /** PracticeOption */
+    PracticeOption: {
+      /**
+       * Id
+       * @description Stable option id; submit it, never a position.
+       */
+      id: string;
+      /** Text */
+      text: string;
+    };
+    /**
+     * PracticeSession
+     * @description What the practice panel needs to show a question. Never carries answers, explanations,
+     *     rubrics or accepted answers (a new field here is a reviewed change).
+     */
+    PracticeSession: {
+      /** Chapter Id */
+      chapter_id: string | null;
+      /**
+       * Displayed Option Ids
+       * @description The displayed order (MCQ), as ids.
+       */
+      displayed_option_ids: string[];
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Is Multi Answer */
+      is_multi_answer: boolean;
+      /**
+       * Opened At
+       * Format: date-time
+       */
+      opened_at: string;
+      /**
+       * Options
+       * @description MCQ options in displayed order.
+       */
+      options: components['schemas']['PracticeOption'][];
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /** Question Number */
+      question_number: number | null;
+      /**
+       * Question Revision Id
+       * Format: uuid
+       * @description The revision this session is graded on.
+       */
+      question_revision_id: string;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * State
+       * @enum {string}
+       */
+      state: 'open' | 'pending_grade' | 'graded';
+      /** Stem */
+      stem: string;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /** PracticeSessionCreate */
+    PracticeSessionCreate: Record<string, never>;
+    /** PracticeSessionDetail */
+    PracticeSessionDetail: {
+      /** Chapter Id */
+      chapter_id: string | null;
+      /**
+       * Displayed Option Ids
+       * @description The displayed order (MCQ), as ids.
+       */
+      displayed_option_ids: string[];
+      /** Graded At */
+      graded_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Is Multi Answer */
+      is_multi_answer: boolean;
+      /**
+       * Opened At
+       * Format: date-time
+       */
+      opened_at: string;
+      /**
+       * Options
+       * @description MCQ options in displayed order.
+       */
+      options: components['schemas']['PracticeOption'][];
+      /** @description null while the session is open (no answers before submission). */
+      outcome: components['schemas']['SubmitResult'] | null;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /** Question Number */
+      question_number: number | null;
+      /**
+       * Question Revision Id
+       * Format: uuid
+       * @description The revision this session is graded on.
+       */
+      question_revision_id: string;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * State
+       * @enum {string}
+       */
+      state: 'open' | 'pending_grade' | 'graded';
+      /** Stem */
+      stem: string;
+      /** Submitted At */
+      submitted_at: string | null;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
     };
     /** Problem */
     Problem: {
@@ -1329,6 +1680,38 @@ export type components = {
         [key: string]: string;
       };
     };
+    /** SelfGradeBody */
+    SelfGradeBody: {
+      /**
+       * Result
+       * @enum {string}
+       */
+      result: 'correct' | 'incorrect';
+    };
+    /** SelfGradeResult */
+    SelfGradeResult: {
+      /**
+       * Attempt Id
+       * Format: uuid
+       */
+      attempt_id: string;
+      /**
+       * Grades Attempt Id
+       * Format: uuid
+       * @description The pending attempt this grade settles.
+       */
+      grades_attempt_id: string;
+      /**
+       * Practice Session Id
+       * Format: uuid
+       */
+      practice_session_id: string;
+      /**
+       * Result
+       * @enum {string}
+       */
+      result: 'correct' | 'incorrect';
+    };
     /**
      * ShareLink
      * @description A share link's metadata (never its secret or digest).
@@ -1419,6 +1802,63 @@ export type components = {
        * @description Short-lived signed URL of the original PDF. Do not store it.
        */
       url: string;
+    };
+    /**
+     * SubmitBody
+     * @description `selected_option_ids` for an MCQ (one id unless multi-answer), `answer_text` otherwise.
+     */
+    SubmitBody: {
+      /** Answer Text */
+      answer_text?: string | null;
+      /** Selected Option Ids */
+      selected_option_ids?: string[] | null;
+    };
+    /**
+     * SubmitResult
+     * @description The graded (or pending) submission with the pinned revision's answers revealed.
+     */
+    SubmitResult: {
+      /** Accepted Answers */
+      accepted_answers: string[] | null;
+      /**
+       * Attempt Id
+       * Format: uuid
+       * @description The attempt that holds the current result.
+       */
+      attempt_id: string;
+      /** Correct Option Ids */
+      correct_option_ids: string[] | null;
+      /** Explanation */
+      explanation: string | null;
+      /**
+       * Practice Session Id
+       * Format: uuid
+       */
+      practice_session_id: string;
+      /**
+       * Question Revision Id
+       * Format: uuid
+       */
+      question_revision_id: string;
+      /**
+       * Result
+       * @enum {string}
+       */
+      result: 'correct' | 'incorrect' | 'pending';
+      /** Rubric */
+      rubric: string | null;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: 'open' | 'pending_grade' | 'graded';
+    };
+    /** SubmittedAnswer */
+    SubmittedAnswer: {
+      /** Answer Text */
+      answer_text?: string | null;
+      /** Selected Option Ids */
+      selected_option_ids?: string[] | null;
     };
     /** UploadCompleted */
     UploadCompleted: {
@@ -2106,6 +2546,233 @@ export interface operations {
       };
     };
   };
+  getPracticeSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PracticeSessionDetail'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  selfGradePracticeSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SelfGradeBody'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SelfGradeResult'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  submitPracticeSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SubmitBody'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SubmitResult'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getQuestion: {
     parameters: {
       query?: never;
@@ -2260,6 +2927,230 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Question'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listMyQuestionAttempts: {
+    parameters: {
+      query?: {
+        cursor?: string | null;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AttemptList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  updateMyQuestionState: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MyStateUpdate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MyState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  startPracticeSession: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PracticeSessionCreate'] | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PracticeSession'];
         };
       };
       /** @description Unauthorized */

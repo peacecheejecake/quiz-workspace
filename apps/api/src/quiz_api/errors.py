@@ -46,6 +46,12 @@ class ProblemType(StrEnum):
     STALE_REVISION = "urn:quiz-workspace:problem:stale-revision"
     # 409: the share link is revoked (or, for rotate, revoked or expired); create a new link.
     SHARE_LINK_INACTIVE = "urn:quiz-workspace:problem:share-link-inactive"
+    # 409: practice needs a CONFIRMED question (drafts and archived questions are not studied).
+    QUESTION_NOT_CONFIRMED = "urn:quiz-workspace:problem:question-not-confirmed"
+    # 409: the practice session was already submitted (a session is answered exactly once).
+    PRACTICE_SESSION_SUBMITTED = "urn:quiz-workspace:problem:practice-session-submitted"
+    # 409: self-grade of a session that is not awaiting a grade (still open or already graded).
+    PRACTICE_SESSION_NOT_PENDING = "urn:quiz-workspace:problem:practice-session-not-pending"
 
 
 class ProblemException(StarletteHTTPException):

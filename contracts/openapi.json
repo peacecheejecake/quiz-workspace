@@ -1,6 +1,141 @@
 {
   "components": {
     "schemas": {
+      "Attempt": {
+        "properties": {
+          "displayed_option_ids": {
+            "description": "The order the options were shown in.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Displayed Option Ids",
+            "type": "array"
+          },
+          "graded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graded At"
+          },
+          "grades_attempt_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a self/reviewer grade: the pending attempt it settles.",
+            "title": "Grades Attempt Id"
+          },
+          "grading_method": {
+            "anyOf": [
+              {
+                "enum": [
+                  "auto",
+                  "self",
+                  "reviewer"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null while pending.",
+            "title": "Grading Method"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "practice_session_id": {
+            "format": "uuid",
+            "title": "Practice Session Id",
+            "type": "string"
+          },
+          "question_revision_id": {
+            "description": "Graded against this revision.",
+            "format": "uuid",
+            "title": "Question Revision Id",
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "correct",
+              "incorrect",
+              "pending"
+            ],
+            "title": "Result",
+            "type": "string"
+          },
+          "revision_version": {
+            "title": "Revision Version",
+            "type": "integer"
+          },
+          "submitted_answer": {
+            "$ref": "#/components/schemas/SubmittedAnswer"
+          },
+          "submitted_at": {
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "question_revision_id",
+          "revision_version",
+          "practice_session_id",
+          "displayed_option_ids",
+          "submitted_answer",
+          "result",
+          "grading_method",
+          "grades_attempt_id",
+          "submitted_at",
+          "graded_at"
+        ],
+        "title": "Attempt",
+        "type": "object"
+      },
+      "AttemptList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Attempt"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `cursor` for older attempts.",
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "AttemptList",
+        "type": "object"
+      },
       "ChapterRef": {
         "properties": {
           "document_id": {
@@ -593,6 +728,89 @@
         "title": "Me",
         "type": "object"
       },
+      "MyState": {
+        "properties": {
+          "is_favorite": {
+            "title": "Is Favorite",
+            "type": "boolean"
+          },
+          "last_graded_result": {
+            "anyOf": [
+              {
+                "enum": [
+                  "correct",
+                  "incorrect"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Graded Result"
+          },
+          "needs_retry": {
+            "title": "Needs Retry",
+            "type": "boolean"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "unseen",
+              "viewed",
+              "incorrect",
+              "correct",
+              "retry"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "status",
+          "is_favorite",
+          "needs_retry",
+          "last_graded_result"
+        ],
+        "title": "MyState",
+        "type": "object"
+      },
+      "MyStateUpdate": {
+        "additionalProperties": false,
+        "description": "Omitted flags are kept; at least one is required.",
+        "properties": {
+          "is_favorite": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Favorite"
+          },
+          "needs_retry": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Never cleared by a correct answer; only by the user.",
+            "title": "Needs Retry"
+          }
+        },
+        "title": "MyStateUpdate",
+        "type": "object"
+      },
       "MyWorkspace": {
         "properties": {
           "archived_at": {
@@ -874,6 +1092,294 @@
           "preview"
         ],
         "title": "OverviewItem",
+        "type": "object"
+      },
+      "PracticeOption": {
+        "properties": {
+          "id": {
+            "description": "Stable option id; submit it, never a position.",
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "PracticeOption",
+        "type": "object"
+      },
+      "PracticeSession": {
+        "description": "What the practice panel needs to show a question. Never carries answers, explanations,\nrubrics or accepted answers (a new field here is a reviewed change).",
+        "properties": {
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Id"
+          },
+          "displayed_option_ids": {
+            "description": "The displayed order (MCQ), as ids.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Displayed Option Ids",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_multi_answer": {
+            "title": "Is Multi Answer",
+            "type": "boolean"
+          },
+          "opened_at": {
+            "format": "date-time",
+            "title": "Opened At",
+            "type": "string"
+          },
+          "options": {
+            "description": "MCQ options in displayed order.",
+            "items": {
+              "$ref": "#/components/schemas/PracticeOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "question_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Number"
+          },
+          "question_revision_id": {
+            "description": "The revision this session is graded on.",
+            "format": "uuid",
+            "title": "Question Revision Id",
+            "type": "string"
+          },
+          "question_type": {
+            "enum": [
+              "MCQ",
+              "SHORT_ANSWER",
+              "ESSAY"
+            ],
+            "title": "Question Type",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "pending_grade",
+              "graded"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "stem": {
+            "title": "Stem",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "question_id",
+          "question_revision_id",
+          "question_type",
+          "chapter_id",
+          "question_number",
+          "stem",
+          "is_multi_answer",
+          "options",
+          "displayed_option_ids",
+          "state",
+          "opened_at"
+        ],
+        "title": "PracticeSession",
+        "type": "object"
+      },
+      "PracticeSessionCreate": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "PracticeSessionCreate",
+        "type": "object"
+      },
+      "PracticeSessionDetail": {
+        "properties": {
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Id"
+          },
+          "displayed_option_ids": {
+            "description": "The displayed order (MCQ), as ids.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Displayed Option Ids",
+            "type": "array"
+          },
+          "graded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graded At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_multi_answer": {
+            "title": "Is Multi Answer",
+            "type": "boolean"
+          },
+          "opened_at": {
+            "format": "date-time",
+            "title": "Opened At",
+            "type": "string"
+          },
+          "options": {
+            "description": "MCQ options in displayed order.",
+            "items": {
+              "$ref": "#/components/schemas/PracticeOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubmitResult"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null while the session is open (no answers before submission)."
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "question_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Number"
+          },
+          "question_revision_id": {
+            "description": "The revision this session is graded on.",
+            "format": "uuid",
+            "title": "Question Revision Id",
+            "type": "string"
+          },
+          "question_type": {
+            "enum": [
+              "MCQ",
+              "SHORT_ANSWER",
+              "ESSAY"
+            ],
+            "title": "Question Type",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "pending_grade",
+              "graded"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "stem": {
+            "title": "Stem",
+            "type": "string"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "question_id",
+          "question_revision_id",
+          "question_type",
+          "chapter_id",
+          "question_number",
+          "stem",
+          "is_multi_answer",
+          "options",
+          "displayed_option_ids",
+          "state",
+          "opened_at",
+          "submitted_at",
+          "graded_at",
+          "outcome"
+        ],
+        "title": "PracticeSessionDetail",
         "type": "object"
       },
       "Problem": {
@@ -1872,6 +2378,60 @@
         "title": "ResumableUpload",
         "type": "object"
       },
+      "SelfGradeBody": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "enum": [
+              "correct",
+              "incorrect"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "SelfGradeBody",
+        "type": "object"
+      },
+      "SelfGradeResult": {
+        "properties": {
+          "attempt_id": {
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "grades_attempt_id": {
+            "description": "The pending attempt this grade settles.",
+            "format": "uuid",
+            "title": "Grades Attempt Id",
+            "type": "string"
+          },
+          "practice_session_id": {
+            "format": "uuid",
+            "title": "Practice Session Id",
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "correct",
+              "incorrect"
+            ],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt_id",
+          "practice_session_id",
+          "result",
+          "grades_attempt_id"
+        ],
+        "title": "SelfGradeResult",
+        "type": "object"
+      },
       "ShareLink": {
         "description": "A share link's metadata (never its secret or digest).",
         "properties": {
@@ -2054,6 +2614,174 @@
           "expires_at"
         ],
         "title": "SignedReadUrl",
+        "type": "object"
+      },
+      "SubmitBody": {
+        "additionalProperties": false,
+        "description": "`selected_option_ids` for an MCQ (one id unless multi-answer), `answer_text` otherwise.",
+        "properties": {
+          "answer_text": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer Text"
+          },
+          "selected_option_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Option Ids"
+          }
+        },
+        "title": "SubmitBody",
+        "type": "object"
+      },
+      "SubmitResult": {
+        "description": "The graded (or pending) submission with the pinned revision's answers revealed.",
+        "properties": {
+          "accepted_answers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Answers"
+          },
+          "attempt_id": {
+            "description": "The attempt that holds the current result.",
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "correct_option_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct Option Ids"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "practice_session_id": {
+            "format": "uuid",
+            "title": "Practice Session Id",
+            "type": "string"
+          },
+          "question_revision_id": {
+            "format": "uuid",
+            "title": "Question Revision Id",
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "correct",
+              "incorrect",
+              "pending"
+            ],
+            "title": "Result",
+            "type": "string"
+          },
+          "rubric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "pending_grade",
+              "graded"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt_id",
+          "practice_session_id",
+          "question_revision_id",
+          "state",
+          "result",
+          "correct_option_ids",
+          "accepted_answers",
+          "explanation",
+          "rubric"
+        ],
+        "title": "SubmitResult",
+        "type": "object"
+      },
+      "SubmittedAnswer": {
+        "properties": {
+          "answer_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer Text"
+          },
+          "selected_option_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Option Ids"
+          }
+        },
+        "title": "SubmittedAnswer",
         "type": "object"
       },
       "UploadCompleted": {
@@ -3097,6 +3825,313 @@
         ]
       }
     },
+    "/api/v1/practice-sessions/{session_id}": {
+      "get": {
+        "description": "Resume one of the caller's sessions. `outcome` (with answers) only once submitted.",
+        "operationId": "getPracticeSession",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeSessionDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Practice Session",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
+    "/api/v1/practice-sessions/{session_id}/self-grade": {
+      "post": {
+        "description": "The user's own grade of a pending (essay / ungradable short answer) submission. Appends\na grade attempt referencing the pending one; the session becomes graded. Once.",
+        "operationId": "selfGradePracticeSession",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelfGradeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfGradeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Self Grade Practice Session",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
+    "/api/v1/practice-sessions/{session_id}/submit": {
+      "post": {
+        "description": "Grade the answer on the server against the session's revision (option ids, never\npositions); append the attempt; reveal answers and explanation. Once per session.",
+        "operationId": "submitPracticeSession",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Submit Practice Session",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
     "/api/v1/questions/{question_id}": {
       "delete": {
         "description": "Soft delete (editor+). Revisions and attempts stay for history; the question then answers\n404 everywhere and leaves the bank and the overview.",
@@ -3369,6 +4404,358 @@
         "summary": "Update Question",
         "tags": [
           "questions"
+        ]
+      }
+    },
+    "/api/v1/questions/{question_id}/attempts": {
+      "get": {
+        "description": "The caller's own attempts on the question, newest first, each pinned to the revision it\nwas graded on (its content: GET /questions/{id}/revisions/{revision_id}).",
+        "operationId": "listMyQuestionAttempts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttemptList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List My Attempts",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
+    "/api/v1/questions/{question_id}/my-state": {
+      "patch": {
+        "description": "Toggle the caller's favorite / retry flags (independent of each other and of results).",
+        "operationId": "updateMyQuestionState",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MyStateUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Update My State",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
+    "/api/v1/questions/{question_id}/practice-sessions": {
+      "post": {
+        "description": "Open the practice panel on a CONFIRMED question: pins its active revision, shuffles MCQ\noptions, records the caller's view. No answers in the response.",
+        "operationId": "startPracticeSession",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PracticeSessionCreate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeSession"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Start Practice Session",
+        "tags": [
+          "practice"
         ]
       }
     },
