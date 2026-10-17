@@ -140,12 +140,15 @@ def _is_ambiguous(numbering: Numbering | None) -> bool:
 _HARD = 10
 """Cost of a Roman numeral that does not increase (a second Roman ``I`` after ``I``)."""
 _BACKWARD_LETTER = 2
-_BRUTE_FORCE_MAX = 12
-"""Ambiguous headings solved exactly together; longer runs are solved in windows."""
+
+_State = tuple[int | None, int | None]
+"""Last Roman value and last letter value of the current sequences (``None`` = not started)."""
+_Key = tuple[int, int, int]
+"""(cost, readings flipped from the default, flip mask with later headings as higher bits)."""
 
 
-def _sequence_cost(numberings: Sequence[Numbering | None]) -> int:
-    """Breaks in the Roman and letter heading sequences of a fully resolved heading list.
+def _step(state: _State, n: Numbering | None) -> tuple[_State, int]:
+    """Sequence state after heading ``n`` and the cost ``n`` adds.
 
     Roman headings form one sequence (reset only by an outer Part/Chapter/제N절 heading) that
     must start at I and increase by one; letter headings restart under every outer heading
@@ -153,76 +156,107 @@ def _sequence_cost(numberings: Sequence[Numbering | None]) -> int:
     start costs 1, a letter going backwards ``_BACKWARD_LETTER``, a Roman numeral that does not
     increase ``_HARD``.
     """
+    roman, letter = state
+    if n is None:
+        return state, 0
+    value = n.numbers[-1]
+    if n.kind is NumberingKind.ROMAN:
+        if roman is None:
+            cost = int(value != 1)
+        elif value <= roman:
+            cost = _HARD
+        else:
+            cost = int(value != roman + 1)
+        return (value, None), cost
+    if n.kind is NumberingKind.UPPER_ALPHA:
+        if letter is None:
+            cost = int(value != 1)
+        elif value <= letter:
+            cost = _BACKWARD_LETTER
+        else:
+            cost = int(value != letter + 1)
+        return (roman, value), cost
+    if n.kind < NumberingKind.ROMAN:
+        return (None, None), 0
+    if n.kind < NumberingKind.UPPER_ALPHA:
+        return (roman, None), 0
+    return state, 0
+
+
+def _sequence_cost(numberings: Sequence[Numbering | None]) -> int:
+    """Total ``_step`` cost of a fully resolved heading list."""
+    state: _State = (None, None)
     cost = 0
-    roman: int | None = None
-    letter: int | None = None
     for n in numberings:
-        if n is None:
-            continue
-        value = n.numbers[-1]
-        if n.kind is NumberingKind.ROMAN:
-            if roman is None:
-                cost += value != 1
-            elif value <= roman:
-                cost += _HARD
-            else:
-                cost += value != roman + 1
-            roman, letter = value, None
-        elif n.kind is NumberingKind.UPPER_ALPHA:
-            if letter is None:
-                cost += value != 1
-            elif value <= letter:
-                cost += _BACKWARD_LETTER
-            else:
-                cost += value != letter + 1
-            letter = value
-        elif n.kind < NumberingKind.UPPER_ALPHA:
-            letter = None
-            if n.kind < NumberingKind.ROMAN:
-                roman = None
+        state, added = _step(state, n)
+        cost += added
     return cost
+
+
+def _resets_all(n: Numbering | None) -> bool:
+    return n is not None and n.kind < NumberingKind.ROMAN
+
+
+def _solve_segment(
+    segment: Sequence[Numbering | None],
+    default: Sequence[Numbering | None],
+    flipped: Sequence[Numbering | None],
+) -> int:
+    """Flip mask (bit j = j-th ambiguous heading of the segment takes the non-default reading)
+    with the minimum ``_Key``, by dynamic programming over the sequence state.
+
+    Paths reaching the same state share their future, so keeping the minimum key per state is
+    exact: future costs and flips add equally, and future flips are higher mask bits.
+    """
+    frontier: dict[_State, _Key] = {(None, None): (0, 0, 0)}
+    bit = 0
+    for n, d, f in zip(segment, default, flipped, strict=True):
+        nxt: dict[_State, _Key] = {}
+        options = [(n, 0)] if not _is_ambiguous(n) else [(d, 0), (f, 1 << bit)]
+        for state, (cost, flips, mask) in frontier.items():
+            for reading, flip in options:
+                after, added = _step(state, reading)
+                key = (cost + added, flips + (flip != 0), mask | flip)
+                if after not in nxt or key < nxt[after]:
+                    nxt[after] = key
+        frontier = nxt
+        bit += _is_ambiguous(n)
+    return min(frontier.values())[2]
 
 
 def disambiguate_letters(numberings: Sequence[Numbering | None]) -> list[Numbering | None]:
     """Resolve single-letter ``I.``/``V.``/``X.`` headings, which read as Roman numerals or as
     letters, by a global minimum-cost assignment over the whole heading sequence.
 
-    Every combination of readings of the ambiguous headings is scored with ``_sequence_cost``
-    (exactly, for up to ``_BRUTE_FORCE_MAX`` ambiguous headings; longer runs are solved window
-    by window, left to right, with later headings at their default reading). Ties go to the
-    assignment closest to the default reading: letter if the document uses letter headings and
-    no multi-letter Roman numerals, else Roman; then to the earliest such assignment.
+    The cost of an assignment is ``_sequence_cost``. Ties go to the assignment closest to the
+    document's default reading (letter if it uses letter headings and no multi-letter Roman
+    numerals, else Roman), then to the one that keeps later headings at the default. Headings
+    that reset both sequences (Part/Chapter/제N절 ...) split the list into independent segments,
+    each solved exactly by dynamic programming over the sequence state, in linear time.
     """
     result = list(numberings)
-    ambiguous = [i for i, n in enumerate(result) if _is_ambiguous(n)]
-    if not ambiguous:
+    if not any(_is_ambiguous(n) for n in result):
         return result
     uses_alpha = any(n is not None and n.kind is NumberingKind.UPPER_ALPHA for n in numberings)
     uses_multi_roman = any(
         n is not None and n.kind is NumberingKind.ROMAN and len(n.label) > 1 for n in numberings
     )
-    roman_reading = {i: result[i] for i in ambiguous}
-    alpha_reading = {i: _alpha(n) for i, n in roman_reading.items() if n is not None}
-    default, flipped = (
-        (alpha_reading, roman_reading)
-        if uses_alpha and not uses_multi_roman
-        else (roman_reading, alpha_reading)
-    )
-    for i in ambiguous:
-        result[i] = default[i]
-    for start in range(0, len(ambiguous), _BRUTE_FORCE_MAX):
-        window = ambiguous[start : start + _BRUTE_FORCE_MAX]
+    alpha_default = uses_alpha and not uses_multi_roman
+    alpha = [_alpha(n) if n is not None and _is_ambiguous(n) else n for n in result]
+    default, flipped = (alpha, result) if alpha_default else (result, alpha)
 
-        def apply(mask: int, window: list[int] = window) -> None:
-            for bit, i in enumerate(window):
-                result[i] = flipped[i] if mask >> bit & 1 else default[i]
-
-        def key(mask: int) -> tuple[int, int, int]:
-            apply(mask)
-            return (_sequence_cost(result), mask.bit_count(), mask)
-
-        apply(min(range(1 << len(window)), key=key))
-    return result
+    bounds = [i for i, n in enumerate(result) if i > 0 and _resets_all(n)]
+    out = list(default)
+    for start, end in zip([0, *bounds], [*bounds, len(result)], strict=True):
+        segment = result[start:end]
+        mask = _solve_segment(segment, default[start:end], flipped[start:end])
+        bit = 0
+        for i in range(start, end):
+            if _is_ambiguous(result[i]):
+                if mask >> bit & 1:
+                    out[i] = flipped[i]
+                bit += 1
+    return out
 
 
 def _key(title: str) -> str:

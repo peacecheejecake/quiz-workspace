@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import random
+import string
+import time
 from dataclasses import dataclass
 
 import pytest
@@ -17,13 +20,19 @@ from book_core.contracts import (
 from book_core.parser import document_from_pages
 from book_core.parser._blocks import table_text as _table_text
 from book_core.structure import (
+    Numbering,
     NumberingKind,
     StructureResult,
     build_revision,
     normalize_block_text,
     parse_numbering,
 )
-from book_core.structure.numbering import disambiguate_letters
+from book_core.structure.numbering import (
+    _alpha,
+    _is_ambiguous,
+    _sequence_cost,
+    disambiguate_letters,
+)
 
 SHA = "0" * 64
 
@@ -581,3 +590,70 @@ def test_disambiguate_letters_matrix(labels: str, kinds: str) -> None:
     )
     short = {NumberingKind.ROMAN: "R", NumberingKind.UPPER_ALPHA: "A"}
     assert " ".join(short[n.kind] for n in resolved if n is not None) == kinds
+
+
+def _brute_force_letters(numberings: list[Numbering | None]) -> list[Numbering | None]:
+    """Reference: every assignment scored with the full-sequence cost, same tie-breaks
+    (cost, readings flipped from the default, flip mask with later headings as higher bits)."""
+    ambiguous = [i for i, n in enumerate(numberings) if _is_ambiguous(n)]
+    uses_alpha = any(n is not None and n.kind is NumberingKind.UPPER_ALPHA for n in numberings)
+    uses_multi_roman = any(
+        n is not None and n.kind is NumberingKind.ROMAN and len(n.label) > 1 for n in numberings
+    )
+    alpha = [_alpha(n) if n is not None and _is_ambiguous(n) else n for n in numberings]
+    alpha_default = uses_alpha and not uses_multi_roman
+    default, flipped = (alpha, numberings) if alpha_default else (numberings, alpha)
+
+    def assignment(mask: int) -> list[Numbering | None]:
+        out = list(default)
+        for bit, i in enumerate(ambiguous):
+            if mask >> bit & 1:
+                out[i] = flipped[i]
+        return out
+
+    best = min(
+        range(1 << len(ambiguous)),
+        key=lambda mask: (_sequence_cost(assignment(mask)), mask.bit_count(), mask),
+    )
+    return assignment(best)
+
+
+RANDOM_TITLES = [
+    *["I. T", "V. T", "X. T"] * 3,
+    *[f"{r}. T" for r in ("II", "III", "IV", "VI", "IX", "XI")],
+    *[f"{ch}. T" for ch in "ABCDEFGHJKLMNUWY"],
+    "Chapter 1 T",
+    "Chapter 2 T",
+    "제1절 T",
+    "1. T",
+    "1.1 T",
+    "가. T",
+    "(1) T",
+    "Unnumbered",
+]
+
+
+def test_dp_matches_brute_force_on_random_sequences() -> None:
+    rng = random.Random(1303)  # noqa: S311 - deterministic test data
+    for _ in range(300):
+        titles = [rng.choice(RANDOM_TITLES) for _ in range(rng.randint(1, 18))]
+        numberings = [parse_numbering(t) for t in titles]
+        while sum(_is_ambiguous(n) for n in numberings) > 10:
+            numberings.pop()
+        assert disambiguate_letters(numberings) == _brute_force_letters(numberings), titles
+
+
+def test_disambiguation_is_linear_in_headings() -> None:
+    titles = [
+        title
+        for chapter in range(1, 101)
+        for title in (f"Chapter {chapter} Title", *(f"{ch}. Item" for ch in string.ascii_uppercase))
+    ]
+    numberings = [parse_numbering(t) for t in titles]
+    assert len(numberings) == 2700
+    started = time.perf_counter()
+    resolved = disambiguate_letters(numberings)
+    elapsed = time.perf_counter() - started
+    assert elapsed < 0.5, f"{elapsed:.3f}s"
+    kinds = [n.kind for n in resolved if n is not None]
+    assert kinds == [NumberingKind.CHAPTER, *[NumberingKind.UPPER_ALPHA] * 26] * 100
