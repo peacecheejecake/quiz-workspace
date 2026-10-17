@@ -132,12 +132,28 @@ export interface SearchItem {
 
 const TERMINAL = new Set(['succeeded', 'failed', 'cancelled']);
 
+/** The upload-relevant facts of any synthetic PDF fixture (books and question papers). */
+export interface PdfFile {
+  readonly file: string;
+  readonly path: string;
+  readonly sha256: string;
+  readonly size: number;
+}
+
 export async function uploadBook(
   owner: Member,
   workspaceId: string,
   id: BookId,
 ): Promise<UploadedDocument> {
-  const fixture = book(id);
+  return uploadPdf(owner, workspaceId, book(id));
+}
+
+/** upload-intent → direct Storage upload → complete-upload for any synthetic PDF fixture. */
+export async function uploadPdf(
+  owner: Member,
+  workspaceId: string,
+  fixture: PdfFile,
+): Promise<UploadedDocument> {
   const bytes = readFileSync(fixture.path);
   const intent = await owner.api.ok<{
     upload_id: string;
