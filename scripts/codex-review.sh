@@ -8,7 +8,7 @@
 #
 # The review runs in a herdr pane labelled "codex-review" (split to the right of the
 # caller on first use, reused afterwards; id cached in .reviews/.pane-id).
-# The full output is saved to .reviews/<timestamp>-<slug>.log and its path is printed
+# The full output is saved to .reviews/<timestamp>-<pid>-<slug>.log and its path is printed
 # on the last line as `REVIEW_LOG=<path>`. Outside herdr, codex runs in the foreground.
 # codex rejects a custom prompt together with a review target, so review guidance lives
 # in AGENTS.md ("Review guidelines"), which codex loads automatically.
@@ -36,6 +36,9 @@ if [[ "${1:-}" == "--inner" ]]; then
   codex review "$@" 2>&1 | tee "$log"
   status=${PIPESTATUS[0]}
   set -e
+  # Persist the status before the lock is released (EXIT trap), so the caller never
+  # depends on pane output that a later review could clear.
+  echo "$status" > "$log.status"
   echo "${DONE_MARK} ${token} exit=${status}"
   exit "$status"
 fi
@@ -59,7 +62,7 @@ args=("${target[@]}")
 [[ -n "$title" ]] && args+=(--title "$title")
 
 slug="$(printf '%s' "${title:-${target[*]}}" | tr -cs 'A-Za-z0-9._-' '-' | cut -c1-60)"
-log="$REVIEW_DIR/$(date +%Y%m%d-%H%M%S)-${slug}.log"
+log="$REVIEW_DIR/$(date +%Y%m%d-%H%M%S)-$$-${slug}.log"
 token="$(date +%s)-$$"
 
 # mkdir is atomic: only one review (and one pane command) at a time. The caller owns the
@@ -93,9 +96,13 @@ fi
 quoted="CODEX_REVIEW_LOCK_HANDOFF=1 $(printf '%q ' "$SELF" --inner "$token" "$log" "${args[@]}")"
 herdr pane run "$pane" "$quoted" >/dev/null
 trap - EXIT
-herdr pane wait-output "$pane" --regex "${DONE_MARK} ${token} exit=[0-9]+" --source recent-unwrapped \
-  --timeout "${CODEX_REVIEW_TIMEOUT_MS:-1800000}" >/dev/null
-status="$(herdr pane read "$pane" --source recent-unwrapped --lines 400 \
-  | sed -n "s/.*${DONE_MARK} ${token} exit=\([0-9][0-9]*\).*/\1/p" | tail -1)"
+deadline=$(( $(date +%s) + ${CODEX_REVIEW_TIMEOUT_S:-1800} ))
+until [[ -s "$log.status" ]]; do
+  if (( $(date +%s) > deadline )); then
+    echo "timed out waiting for codex review; it may still be running in pane $pane" >&2; exit 4
+  fi
+  sleep 2
+done
+status="$(cat "$log.status")"
 echo "REVIEW_LOG=$log"
 [[ "$status" == "0" ]] || { echo "codex review failed (exit=${status:-unknown})" >&2; exit "${status:-1}"; }
