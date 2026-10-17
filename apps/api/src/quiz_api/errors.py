@@ -44,6 +44,8 @@ class ProblemType(StrEnum):
     UPLOAD_MISMATCH = "urn:quiz-workspace:problem:upload-mismatch"
     # 409: an edit was based on a revision that is no longer the active one (reload and retry).
     STALE_REVISION = "urn:quiz-workspace:problem:stale-revision"
+    # 409: the share link is revoked (or, for rotate, revoked or expired); create a new link.
+    SHARE_LINK_INACTIVE = "urn:quiz-workspace:problem:share-link-inactive"
 
 
 class ProblemException(StarletteHTTPException):

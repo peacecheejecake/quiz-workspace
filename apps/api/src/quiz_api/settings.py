@@ -141,6 +141,9 @@ class Settings(BaseSettings):
     cors_max_age_seconds: int = Field(
         default=600, ge=0, le=MAX_CORS_MAX_AGE_SECONDS, validation_alias="CORS_MAX_AGE_SECONDS"
     )
+    # Public origin of the web app, used to build share URLs (`<origin>/share/{id}#k=…`, S1a).
+    # Unset → the first CORS origin (https in preview/production).
+    web_origin: str | None = Field(default=None, validation_alias="WEB_ORIGIN")
     # Supabase Storage (M3.2a; docs/deployment.md §2, auth.md §4). The API talks to Storage with
     # the server-only secret key; browsers only ever get short-lived signed URLs. Unset key ->
     # document upload/read routes answer 503.
@@ -182,6 +185,13 @@ class Settings(BaseSettings):
         origins = [normalize_origin(str(item)) for item in items if str(item).strip()]
         return tuple(dict.fromkeys(origins)) or None
 
+    @field_validator("web_origin", mode="before")
+    @classmethod
+    def _parse_web_origin(cls, value: Any) -> str | None:
+        if value is None or not str(value).strip():
+            return None
+        return normalize_origin(str(value))
+
     def ensure_secure_deployment(self) -> Settings:
         """Raise `InsecureConfigurationError` for configs that must not run in preview/production.
 
@@ -203,6 +213,8 @@ class Settings(BaseSettings):
             problems.append("CORS_ALLOWED_ORIGINS must list the web origin(s)")
         elif any(not origin.startswith("https://") for origin in self.cors_allowed_origins):
             problems.append("CORS_ALLOWED_ORIGINS must contain only https:// origins")
+        if self.web_origin and not self.web_origin.startswith("https://"):
+            problems.append("WEB_ORIGIN must be an https:// origin")
         if problems:
             raise InsecureConfigurationError(
                 f"Refusing to start with APP_ENV={self.app_env.value}: " + "; ".join(problems)
@@ -216,6 +228,14 @@ class Settings(BaseSettings):
         if self.cors_allowed_origins:
             return self.cors_allowed_origins
         return () if self.app_env in DEPLOYED_ENVIRONMENTS else LOCAL_CORS_ORIGINS
+
+    @property
+    def share_web_origin(self) -> str:
+        """Origin of the share URLs handed to owners: WEB_ORIGIN, else the first CORS origin."""
+        if self.web_origin:
+            return self.web_origin
+        origins = self.effective_cors_origins or LOCAL_CORS_ORIGINS
+        return origins[0]
 
     @property
     def is_deployed(self) -> bool:
