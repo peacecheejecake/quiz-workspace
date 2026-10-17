@@ -27,6 +27,9 @@ export const EXPIRY_MARGIN_MS = 20_000;
 /** Upload limit is 50 MiB; anything far beyond is not ours. */
 const MAX_PDF_BYTES = 64 * 1024 * 1024;
 
+/** Downloads a whole PDF; rejects with {@link PdfLoadError} (or the abort reason). */
+export type PdfBytesSource = (signal: AbortSignal) => Promise<Uint8Array>;
+
 export type SignedUrlSource = (signal?: AbortSignal) => Promise<SignedReadUrl>;
 
 /** Caches the current signed URL and asks for a new one when it is (about to be) expired. */

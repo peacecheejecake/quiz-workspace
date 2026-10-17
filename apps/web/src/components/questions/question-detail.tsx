@@ -215,7 +215,7 @@ function DetailBody({
   );
 }
 
-function RevisionView({
+export function RevisionView({
   revision,
   type,
   heading,

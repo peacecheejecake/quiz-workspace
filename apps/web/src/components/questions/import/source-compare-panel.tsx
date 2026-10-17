@@ -9,7 +9,7 @@ import { FloatingSidePanel } from '@quiz/ui';
 import { useMemo, useState } from 'react';
 import { PdfViewer } from '@/components/documents/editor/pdf-viewer';
 import { createEditorClient } from '@/lib/documents/editor-api';
-import { SignedUrlCache } from '@/lib/documents/pdf-source';
+import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
 import { draftNumber, type ReviewDraft } from '@/lib/questions/drafts';
 import styles from './question-import.module.css';
 
@@ -43,9 +43,10 @@ export function SourceComparePanel({ draft, onClose }: SourceComparePanelProps) 
 }
 
 function ComparePages({ draft, documentId }: { draft: ReviewDraft; documentId: string }) {
-  const urls = useMemo(() => {
+  const pdfSource = useMemo(() => {
     const client = createEditorClient();
-    return new SignedUrlCache((signal) => client.getSourceUrl(documentId, signal));
+    const urls = new SignedUrlCache((signal) => client.getSourceUrl(documentId, signal));
+    return (signal: AbortSignal) => loadPdfBytes(urls, { signal });
   }, [documentId]);
   const [page, setPage] = useState(draft.pages[0] ?? 1);
   const highlights = draft.locations.filter((l) => l.page === page);
@@ -66,7 +67,7 @@ function ComparePages({ draft, documentId }: { draft: ReviewDraft; documentId: s
         ) : null}
       </section>
       <PdfViewer
-        urls={urls}
+        source={pdfSource}
         page={page}
         onPageChange={setPage}
         highlights={highlights}

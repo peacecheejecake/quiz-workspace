@@ -65,8 +65,11 @@ test(
     expect(missing?.status(), 'unknown document').toBe(404);
     await expect(notFoundHeading(page)).toBeVisible();
     // QOV-01 and its QPLAY-01 panel (`?question=`) are real screens since M5.4 (questions specs).
+    // WS-VIEW-01 is real since S2b: its `?panel=fork` entry (WS-FORK-01) needs a valid Fork ON
+    // link (workspaces/share-public and fork specs); an unknown link shows only the notice.
     await page.goto('/share/e2e-share?panel=fork');
-    await expect(page.locator('section[data-screen-id="WS-FORK-01"]')).toBeVisible();
+    await expect(page.getByRole('main')).toHaveAttribute('data-screen-id', 'WS-VIEW-01');
+    await expect(page.locator('[data-screen-id="WS-FORK-01"]')).toHaveCount(0);
   },
 );
 

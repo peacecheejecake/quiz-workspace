@@ -30,7 +30,7 @@ import {
   targetBlockFor,
   viewerSearch,
 } from '@/lib/documents/outline';
-import { SignedUrlCache } from '@/lib/documents/pdf-source';
+import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
 import {
   INDEX_FAILURE_MESSAGE,
   isDraft,
@@ -94,10 +94,10 @@ export function DocumentEditor({
   const router = useRouter();
   const documentId = initialDocument.id;
   const documentPath = `/workspaces/${workspaceId}/documents/${documentId}`;
-  const urls = useMemo(
-    () => new SignedUrlCache((signal) => client.getSourceUrl(documentId, signal)),
-    [client, documentId],
-  );
+  const pdfSource = useMemo(() => {
+    const urls = new SignedUrlCache((signal) => client.getSourceUrl(documentId, signal));
+    return (signal: AbortSignal) => loadPdfBytes(urls, { signal });
+  }, [client, documentId]);
 
   const [document, setDocument] = useState(initialDocument);
   const [canEdit, setCanEdit] = useState(initialCanEdit);
@@ -667,7 +667,7 @@ export function DocumentEditor({
 
         <section aria-label="PDF 원본" className={styles.pdfPane} data-pane="pdf">
           <PdfViewer
-            urls={urls}
+            source={pdfSource}
             page={page}
             onPageChange={(next) => {
               setPage(next);

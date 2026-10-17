@@ -1,0 +1,307 @@
+/* WS-VIEW-01 shared workspace view. Semantic tokens only. */
+
+.main {
+  display: grid;
+  align-content: start;
+  gap: var(--space-5);
+  max-width: var(--content-max-width);
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: var(--space-6);
+  background: var(--color-canvas);
+  color: var(--color-text-primary);
+}
+
+@media (width < 768px) {
+  .main {
+    padding: var(--space-4);
+  }
+}
+
+.header {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.readOnly {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-normal);
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-page-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  overflow-wrap: anywhere;
+}
+
+.lead {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
+}
+
+.meta {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.unavailable {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 40rem;
+  padding-top: var(--space-8);
+}
+
+.fork {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.forkText {
+  flex: 1 1 24rem;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-normal);
+}
+
+.layout {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+@media (width >= 1024px) {
+  .layout {
+    grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.sidebar,
+.content {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.card {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--font-size-section-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+.note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-normal);
+}
+
+.note:empty {
+  display: none;
+}
+
+.alert {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.alert p {
+  margin: 0;
+}
+
+.docList,
+.questionList,
+.sourceList {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.docList li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.docLink,
+.sourceLink,
+.backLink {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.docLink[aria-current='page'] {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.docType {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label-sm);
+}
+
+.searchForm {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.searchField {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.questionItem {
+  min-width: 0;
+}
+
+.questionButton {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.questionButton:hover,
+.questionButton[aria-current='true'] {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+}
+
+.questionButton[aria-current='true'] {
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.questionNumber {
+  grid-row: span 2;
+  min-width: 2ch;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.questionStem {
+  overflow-wrap: anywhere;
+  line-height: var(--line-height-normal);
+}
+
+.questionMeta {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.more {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.panelBody {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.panelMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.panelSection {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.panelHeading {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.document {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.documentHeader {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.documentTitle {
+  margin: 0;
+  font-size: var(--font-size-section-title);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+/* The share page has no app header: size the viewer panes to the viewport. */
+@media (width >= 768px) {
+  .split {
+    height: calc(100dvh - 12rem);
+  }
+}
+
+@media (width >= 1024px) {
+  .split {
+    grid-template-columns: minmax(9rem, 12rem) minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+}

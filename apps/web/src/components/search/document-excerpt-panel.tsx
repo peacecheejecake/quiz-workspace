@@ -16,7 +16,10 @@ import { hitKey } from './search-result-list';
 import styles from './search.module.css';
 
 export interface DocumentExcerptPanelProps {
-  readonly workspaceId: string;
+  /** Member view: "PDF에서 보기" links into the workspace's DOC-02 viewer. */
+  readonly workspaceId?: string;
+  /** Shared view (WS-VIEW-01): opens the hit in place instead of linking to DOC-02. */
+  readonly onJump?: (item: SearchItem, target: JumpTarget) => void;
   readonly client: Pick<SearchClient, 'block'>;
   /** The hit shown; kept while the panel animates closed. */
   readonly item: SearchItem | null;
@@ -34,6 +37,7 @@ const linkFor = (workspaceId: string, item: SearchItem, target: JumpTarget) =>
 
 export function DocumentExcerptPanel({
   workspaceId,
+  onJump: jumpInPlace,
   client,
   item,
   open,
@@ -59,13 +63,20 @@ export function DocumentExcerptPanel({
   const target = item ? (resolved?.key === key ? resolved.target : apiJumpTarget(item)) : null;
 
   const onJump = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (!item || resolved?.key === key) return;
+    if (!item || workspaceId === undefined || resolved?.key === key) return;
     const pending = pendingRef.current;
     if (!pending || pending.key !== key) return;
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)
       return;
     event.preventDefault();
     void pending.promise.then((t) => router.push(linkFor(workspaceId, item, t)));
+  };
+
+  const openInPlace = () => {
+    if (!item || !target || !jumpInPlace) return;
+    const pending = pendingRef.current;
+    if (resolved?.key === key || !pending || pending.key !== key) jumpInPlace(item, target);
+    else void pending.promise.then((t) => jumpInPlace(item, t));
   };
 
   return (
@@ -80,7 +91,11 @@ export function DocumentExcerptPanel({
         item && target ? `${item.document_title} · ${pageLabel(target.page)}` : undefined
       }
       footer={
-        item && target ? (
+        item && target && jumpInPlace ? (
+          <Button variant="primary" onClick={openInPlace}>
+            PDF에서 보기
+          </Button>
+        ) : item && target && workspaceId !== undefined ? (
           <Button asChild variant="primary">
             <Link href={linkFor(workspaceId, item, target)} onClick={onJump}>
               PDF에서 보기

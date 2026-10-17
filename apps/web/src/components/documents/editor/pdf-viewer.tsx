@@ -7,7 +7,7 @@
 import { Button, IconButton } from '@quiz/ui';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { ContentBlock } from '@/lib/documents/editor-api';
-import { loadPdfBytes, PdfLoadError, type SignedUrlCache } from '@/lib/documents/pdf-source';
+import { PdfLoadError, type PdfBytesSource } from '@/lib/documents/pdf-source';
 import {
   loadPdfjs,
   openPdf,
@@ -18,7 +18,8 @@ import {
 import styles from './editor.module.css';
 
 export interface PdfViewerProps {
-  readonly urls: SignedUrlCache;
+  /** Downloads the original (owner: signed Storage URL; shared view: same-origin relay). */
+  readonly source: PdfBytesSource;
   readonly page: number;
   readonly onPageChange: (page: number) => void;
   readonly onPageCount?: (count: number) => void;
@@ -54,7 +55,7 @@ function nextZoom(current: number, direction: 1 | -1): number {
 }
 
 export function PdfViewer({
-  urls,
+  source,
   page,
   onPageChange,
   onPageCount,
@@ -91,10 +92,7 @@ export function PdfViewer({
     const setLoad = (state: LoadState) => setLoaded({ attempt, state });
     void (async () => {
       try {
-        const [bytes, pdfjs] = await Promise.all([
-          loadPdfBytes(urls, { signal: controller.signal }),
-          loadPdfjs(),
-        ]);
+        const [bytes, pdfjs] = await Promise.all([source(controller.signal), loadPdfjs()]);
         if (controller.signal.aborted) return;
         task = openPdf(pdfjs, bytes);
         const opened = await task.promise;
@@ -116,7 +114,7 @@ export function PdfViewer({
       controller.abort();
       void task?.destroy();
     };
-  }, [urls, attempt]);
+  }, [source, attempt]);
 
   // Fit-to-width follows the pane's width.
   useEffect(() => {
