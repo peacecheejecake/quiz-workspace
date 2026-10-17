@@ -241,6 +241,12 @@ test(
     await expect(importUi.alert(page)).toContainText(/실패|오류|failed|error/i, {
       timeout: JOB_TIMEOUT_MS,
     });
+    // Some but not all drafts survived the failure (A7), so the retry has to reconcile with them.
+    const partial = await listDrafts(owner, run.id);
+    expect(partial.length).toBeGreaterThan(0);
+    expect(partial.length).toBeLessThan(PAPER.questions.length);
+    expect(partial.every((d) => d.published_question_id === null)).toBe(true);
+    await expect(importUi.draftItems(page)).toHaveCount(partial.length);
 
     await importUi.retry(page).click();
     await waitForImportStatus(owner, run.id, 'succeeded');

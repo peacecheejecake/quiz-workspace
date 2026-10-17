@@ -57,7 +57,9 @@
 //   A7 Fault injection (decided, implementation-plan §7): fake adapters active only with
 //      APP_ENV=test fail deterministically on an `E2E-FAIL-…` marker. IMPORT_FAILURE_MARKER in the
 //      uploaded file name (a copy of questions-ko.pdf, same bytes) makes the fake extractor fail
-//      the run's FIRST job after persisting part of the drafts; the retried job succeeds.
+//      the run's FIRST job after persisting a strict, non-empty subset of the drafts (the first
+//      half in position order: 4 of 8), so they stay listed by GET /question-imports/{id}/drafts
+//      and shown on the import screen; the retried job succeeds and must reconcile with them.
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
 //   QBANK-01  h1 "문제은행"; empty-state heading "등록된 문제가 없습니다" with a "문제 직접 등록" button

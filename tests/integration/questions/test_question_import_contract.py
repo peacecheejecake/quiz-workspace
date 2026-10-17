@@ -221,7 +221,8 @@ def test_qimport_01_ac04_retrying_a_failed_import_job_does_not_duplicate_drafts(
     alice.wait_for_job(str(run["job_id"]), expected="failed")
     assert alice.ok("GET", f"/question-imports/{run['id']}")["status"] == "failed"
     partial = alice.drafts(run["id"])
-    assert len(partial) < len(seed.QUESTION_TRUTH["questions"])
+    # A strict, non-empty subset survives the failure (A7), so the retry must reconcile with it.
+    assert 0 < len(partial) < len(seed.QUESTION_TRUTH["questions"])
     assert all(d["published_question_id"] is None for d in partial)
 
     retried = alice.retry_import(str(run["id"]))
