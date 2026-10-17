@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from quiz_api.middleware import REQUEST_ID_HEADER, security_headers
+from quiz_api.middleware import REQUEST_ID_HEADER, no_store_headers, security_headers
 
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 
@@ -205,11 +205,22 @@ async def _validation_exception_handler(
 async def _unhandled_exception_handler(request: Request, _exc: Exception) -> JSONResponse:
     # Logged (with traceback and request id) by RequestIdMiddleware; never echoed here.
     # Rendered by Starlette's outermost error middleware, i.e. outside SecurityHeadersMiddleware.
+    # The same goes for NoStoreMiddleware: without its headers a 500 of an authenticated or
+    # shared request would be cacheable.
     settings = getattr(request.app.state, "settings", None)
     https = request.url.scheme == "https" or bool(getattr(settings, "is_deployed", False))
-    return problem_response(
-        request, HTTPStatus.INTERNAL_SERVER_ERROR, headers=security_headers(https=https)
-    )
+    headers = security_headers(https=https)
+    no_store: dict[str, str] | None = getattr(request.app.state, "no_store", None)
+    if no_store is not None:
+        headers.update(
+            no_store_headers(
+                request.url.path,
+                has_authorization="authorization" in request.headers,
+                path_prefix=no_store["path_prefix"],
+                shared_prefix=no_store.get("shared_prefix"),
+            )
+        )
+    return problem_response(request, HTTPStatus.INTERNAL_SERVER_ERROR, headers=headers)
 
 
 def install_error_handlers(app: FastAPI) -> None:

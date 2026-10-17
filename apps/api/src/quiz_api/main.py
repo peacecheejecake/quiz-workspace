@@ -67,9 +67,10 @@ def create_app(
         allowed_origins=settings.effective_cors_origins,
         max_age=settings.cors_max_age_seconds,
     )
-    app.add_middleware(
-        NoStoreMiddleware, path_prefix=API_V1_PREFIX, shared_prefix=f"{API_V1_PREFIX}/shared"
-    )
+    no_store = {"path_prefix": API_V1_PREFIX, "shared_prefix": f"{API_V1_PREFIX}/shared"}
+    # The 500 handler runs outside the middleware stack and applies the same caching headers.
+    app.state.no_store = no_store
+    app.add_middleware(NoStoreMiddleware, **no_store)
     app.add_middleware(
         SecurityHeadersMiddleware,
         force_hsts=settings.is_deployed,

@@ -93,6 +93,22 @@ class RequestIdMiddleware:
             request_id_var.reset(token)
 
 
+def _under(path: str, prefix: str) -> bool:
+    return path == prefix or path.startswith(f"{prefix}/")
+
+
+def no_store_headers(
+    path: str, *, has_authorization: bool, path_prefix: str, shared_prefix: str | None
+) -> dict[str, str]:
+    """The caching headers `NoStoreMiddleware` puts on a response (empty: not applicable)."""
+    path_prefix = path_prefix.rstrip("/")
+    if not (_under(path, path_prefix) or has_authorization):
+        return {}
+    if shared_prefix is not None and _under(path, shared_prefix.rstrip("/")):
+        return {"Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow"}
+    return {"Cache-Control": "no-store"}
+
+
 class NoStoreMiddleware:
     """`Cache-Control: no-store` for per-user API responses (docs/auth.md §5).
 
@@ -111,29 +127,30 @@ class NoStoreMiddleware:
         self.path_prefix = path_prefix.rstrip("/")
         self.shared_prefix = shared_prefix.rstrip("/") if shared_prefix else None
 
-    @staticmethod
-    def _under(path: str, prefix: str) -> bool:
-        return path == prefix or path.startswith(f"{prefix}/")
-
-    def _applies(self, scope: Scope) -> bool:
-        if self._under(scope["path"], self.path_prefix):
-            return True
-        return "authorization" in Headers(scope=scope)
+    def headers_for(self, path: str, *, has_authorization: bool) -> dict[str, str]:
+        return no_store_headers(
+            path,
+            has_authorization=has_authorization,
+            path_prefix=self.path_prefix,
+            shared_prefix=self.shared_prefix,
+        )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or not self._applies(scope):
+        if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        shared = self.shared_prefix is not None and self._under(scope["path"], self.shared_prefix)
+        extra = self.headers_for(
+            scope["path"], has_authorization="authorization" in Headers(scope=scope)
+        )
+        if not extra:
+            await self.app(scope, receive, send)
+            return
 
         async def send_no_store(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
-                if shared:
-                    headers["Cache-Control"] = "private, no-store"
-                    headers["X-Robots-Tag"] = "noindex, nofollow"
-                else:
-                    headers["Cache-Control"] = "no-store"
+                for key, value in extra.items():
+                    headers[key] = value
             await send(message)
 
         await self.app(scope, receive, send_no_store)

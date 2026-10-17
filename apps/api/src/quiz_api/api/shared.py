@@ -421,13 +421,16 @@ def create_shared_session(
     if not allowed_origin(request):
         raise HTTPException(status_code=403, detail="Origin not allowed.")
     # Per client (behind the relay: the client it vouches for, quiz_api.relay_client) and a
-    # ceiling per link across all clients.
-    wait = limiters.per_client.acquire(f"share-exchange:{client_key(request)}:{share_id}")
+    # ceiling per link across all clients. Keyed by the parsed id: `uuid.UUID` accepts many
+    # spellings of one link (case, braces, no hyphens, `urn:uuid:`), and each must not get a
+    # fresh bucket. Ids that are no UUID at all share one bucket (they never match a link).
+    link_id = _uuid(share_id)
+    bucket = str(link_id) if link_id else "invalid"
+    wait = limiters.per_client.acquire(f"share-exchange:{client_key(request)}:{bucket}")
     if wait is None:
-        wait = limiters.per_link.acquire(f"share-exchange-link:{share_id}")
+        wait = limiters.per_link.acquire(f"share-exchange-link:{bucket}")
     if wait is not None:
         raise _too_many(wait, "Too many attempts. Wait a moment and try again.")
-    link_id = _uuid(share_id)
     link = repo.link(link_id) if link_id else None
     matches = secret_matches(body.secret, link.token_digest if link else _DUMMY_DIGEST)
     if link is None or not matches or not link.usable:

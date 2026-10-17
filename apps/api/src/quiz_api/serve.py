@@ -35,6 +35,11 @@ def main(argv: list[str] | None = None) -> None:
         access_log=False,
         # No `Server: uvicorn` banner (docs/auth.md §5); SecurityHeadersMiddleware sets the rest.
         server_header=False,
+        # Never take the client address or scheme from X-Forwarded-For/-Proto (uvicorn trusts
+        # them from 127.0.0.1 by default, or from anyone with FORWARDED_ALLOW_IPS=*): the
+        # per-client rate limits key on the socket peer or the signed relay identity only
+        # (implementation-plan §7, quiz_api.relay_client). HSTS uses `is_deployed`.
+        proxy_headers=False,
         log_config=UVICORN_LOG_CONFIG,
     )
 
