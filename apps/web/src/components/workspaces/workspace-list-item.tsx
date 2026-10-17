@@ -18,7 +18,7 @@ import {
   useToast,
 } from '@quiz/ui';
 import Link from 'next/link';
-import { useId, useRef, useState, useTransition } from 'react';
+import { useEffect, useId, useRef, useState, useTransition } from 'react';
 import {
   archiveWorkspaceAction,
   deleteWorkspaceAction,
@@ -27,7 +27,9 @@ import {
   type WorkspaceActionResult,
   type WorkspaceFormState,
 } from '@/lib/workspaces/actions';
+import { keyForAttempt, type PendingCreate } from '@/lib/workspaces/idempotency';
 import { ROLE_LABELS, sharingHref, workspaceHref } from './labels';
+import { useNameSubmit } from './use-name-submit';
 import { WorkspaceNameForm } from './workspace-name-form';
 import styles from './workspaces.module.css';
 
@@ -60,14 +62,24 @@ function OwnerActions({ workspace }: { workspace: Workspace }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const moreRef = useRef<HTMLButtonElement>(null);
   const renameInputId = useId();
+  const renameOpenRef = useRef(false);
+  // Archive/restore Idempotency-Key: kept only while the last attempt's outcome is unknown.
+  const lifecycleKey = useRef<PendingCreate | null>(null);
 
   function run(
-    action: (id: string) => Promise<WorkspaceActionResult>,
+    action: (id: string, idempotencyKey?: string) => Promise<WorkspaceActionResult>,
     success: string,
     after?: () => void,
   ) {
+    const kind = action === restoreWorkspaceAction ? 'restore' : 'archive';
+    const key =
+      action === deleteWorkspaceAction
+        ? undefined
+        : (lifecycleKey.current = keyForAttempt(lifecycleKey.current, kind)).key;
     startTransition(async () => {
-      const result = await action(workspace.id);
+      const result = await action(workspace.id, key);
+      // Reuse the key only to retry an attempt whose outcome is unknown.
+      if (result.ok || result.failure !== 'unavailable') lifecycleKey.current = null;
       after?.();
       if (result.ok) toast({ tone: 'success', title: success });
       else toast({ tone: 'error', title: result.error });
@@ -75,10 +87,20 @@ function OwnerActions({ workspace }: { workspace: Workspace }) {
   }
 
   function onRenamed(state: WorkspaceFormState) {
-    if (state.status !== 'done' || !state.workspace) return;
-    setRenameOpen(false);
-    toast({ tone: 'success', title: `이름을 ‘${state.workspace.name}’(으)로 바꿨습니다.` });
+    if (state.status === 'done' && state.workspace) {
+      setRenameOpen(false);
+      toast({ tone: 'success', title: `이름을 ‘${state.workspace.name}’(으)로 바꿨습니다.` });
+    } else if (!renameOpenRef.current && state.error) {
+      // Dismissed while in flight: the form is gone, so report the failure here.
+      toast({ tone: 'error', title: state.error });
+    }
   }
+  const renameSubmission = useNameSubmit(renameWorkspaceAction, onRenamed);
+  const resetRename = renameSubmission.reset;
+  useEffect(() => {
+    renameOpenRef.current = renameOpen;
+    if (renameOpen) resetRename();
+  }, [renameOpen, resetRename]);
 
   return (
     <>
@@ -142,12 +164,11 @@ function OwnerActions({ workspace }: { workspace: Workspace }) {
         }}
       >
         <WorkspaceNameForm
-          action={renameWorkspaceAction}
+          submission={renameSubmission}
           submitLabel="저장"
           initialName={workspace.name}
           inputId={renameInputId}
           prepare={(formData) => formData.set('workspaceId', workspace.id)}
-          onResult={onRenamed}
         />
       </ModalDialog>
 

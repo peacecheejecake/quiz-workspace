@@ -3,43 +3,38 @@
 // Name form shared by the create and rename dialogs: client-side validation identical to the
 // API's, server action submit, field/form errors (FormNotice, role="alert") and a busy submit.
 import { Button, DialogClose, Input } from '@quiz/ui';
-import { startTransition, useActionState, useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { FormNotice } from '@/components/auth/form-notice';
 import { useFormErrors } from '@/components/auth/use-form-errors';
-import type { WorkspaceFormState } from '@/lib/workspaces/actions';
 import { validateWorkspaceName } from '@/lib/workspaces/validation';
+import type { NameSubmit } from './use-name-submit';
 import styles from './workspaces.module.css';
 
 export interface WorkspaceNameFormProps {
-  action: (prev: WorkspaceFormState, formData: FormData) => Promise<WorkspaceFormState>;
+  /** Submission state owned by a component that outlives this form (see use-name-submit.ts). */
+  submission: NameSubmit;
   submitLabel: string;
   initialName?: string;
   /** Extra form fields (e.g. the workspace id), set right before the action runs. */
   prepare?: (formData: FormData, name: string) => void;
-  onResult?: (state: WorkspaceFormState) => void;
   /** Id for the name input, so the dialog can focus it on open. */
   inputId: string;
 }
 
 export function WorkspaceNameForm({
-  action,
+  submission,
   submitLabel,
   initialName = '',
   prepare,
-  onResult,
   inputId,
 }: WorkspaceNameFormProps) {
-  const [state, formAction, pending] = useActionState(action, { status: 'idle' });
+  const { state, pending, submit } = submission;
   const { formRef, errors, show, clear } = useFormErrors<'name'>();
   const [name, setName] = useState(initialName);
 
   useEffect(() => {
-    if (state.status === 'idle') return;
     if (state.fieldErrors) show(state.fieldErrors);
-    onResult?.(state);
-    // Only a new result (a new state object) should trigger this.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state]);
+  }, [state, show]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -52,7 +47,7 @@ export function WorkspaceNameForm({
     }
     show({});
     prepare?.(formData, checked.name);
-    startTransition(() => formAction(formData));
+    submit(formData);
   }
 
   return (

@@ -289,6 +289,25 @@ describe('lifecycle actions', () => {
     expect(revalidated).toEqual([['/workspaces']]);
   });
 
+  it('forwards a well-formed Idempotency-Key on archive/restore only', async () => {
+    api.POST.mockResolvedValue(ok(workspace));
+    await archiveWorkspaceAction(WS_ID, KEY);
+    await restoreWorkspaceAction(WS_ID, KEY);
+    for (const path of [
+      '/api/v1/workspaces/{workspace_id}/archive',
+      '/api/v1/workspaces/{workspace_id}/restore',
+    ]) {
+      expect(api.POST).toHaveBeenCalledWith(path, {
+        params: { path: { workspace_id: WS_ID }, header: { 'Idempotency-Key': KEY } },
+      });
+    }
+    api.POST.mockClear();
+    await archiveWorkspaceAction(WS_ID, 'bad key\r\n');
+    expect(api.POST).toHaveBeenCalledWith('/api/v1/workspaces/{workspace_id}/archive', {
+      params: { path: { workspace_id: WS_ID } },
+    });
+  });
+
   it('rejects non-UUID ids locally', async () => {
     expect(await deleteWorkspaceAction('e2e-ws')).toMatchObject({ ok: false, failure: 'notFound' });
     expect(api.DELETE).not.toHaveBeenCalled();

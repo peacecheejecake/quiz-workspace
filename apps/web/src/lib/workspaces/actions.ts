@@ -70,10 +70,13 @@ function formFailure(failure: WorkspaceFailureKind, attempt: number): WorkspaceF
   return { status: 'error', failure, attempt, error: WORKSPACE_FAILURE_MESSAGES[failure] };
 }
 
-function readKey(formData: FormData): string | undefined {
-  const key = formData.get('idempotencyKey');
+function validKey(key: unknown): string | undefined {
   // The API accepts any opaque key; keep it to a sane token so it is safe in a header.
   return typeof key === 'string' && /^[A-Za-z0-9-]{8,128}$/.test(key) ? key : undefined;
+}
+
+function readKey(formData: FormData): string | undefined {
+  return validKey(formData.get('idempotencyKey'));
 }
 
 /**
@@ -130,11 +133,21 @@ export async function renameWorkspaceAction(
 
 type Lifecycle = 'archive' | 'restore' | 'delete';
 
-async function lifecycle(action: Lifecycle, workspaceId: unknown): Promise<WorkspaceActionResult> {
+async function lifecycle(
+  action: Lifecycle,
+  workspaceId: unknown,
+  idempotencyKey?: unknown,
+): Promise<WorkspaceActionResult> {
   if (!isWorkspaceId(workspaceId)) {
     return { ok: false, failure: 'notFound', error: WORKSPACE_FAILURE_MESSAGES.notFound };
   }
-  const params = { params: { path: { workspace_id: workspaceId } } };
+  const key = validKey(idempotencyKey);
+  const params = {
+    params: {
+      path: { workspace_id: workspaceId },
+      ...(key ? { header: { 'Idempotency-Key': key } } : {}),
+    },
+  };
   const result = await callApi<unknown>((api) => {
     switch (action) {
       case 'archive':
@@ -142,7 +155,10 @@ async function lifecycle(action: Lifecycle, workspaceId: unknown): Promise<Works
       case 'restore':
         return api.POST('/api/v1/workspaces/{workspace_id}/restore', params);
       case 'delete':
-        return api.DELETE('/api/v1/workspaces/{workspace_id}', params);
+        // Soft delete takes no Idempotency-Key: repeating it is a 404 and changes nothing.
+        return api.DELETE('/api/v1/workspaces/{workspace_id}', {
+          params: { path: { workspace_id: workspaceId } },
+        });
     }
   });
   if (!result.ok) {
@@ -160,13 +176,19 @@ async function lifecycle(action: Lifecycle, workspaceId: unknown): Promise<Works
 }
 
 /** Makes a workspace read-only (owner). Repeating it is a no-op on the API. */
-export async function archiveWorkspaceAction(workspaceId: string): Promise<WorkspaceActionResult> {
-  return lifecycle('archive', workspaceId);
+export async function archiveWorkspaceAction(
+  workspaceId: string,
+  idempotencyKey?: string,
+): Promise<WorkspaceActionResult> {
+  return lifecycle('archive', workspaceId, idempotencyKey);
 }
 
 /** Makes an archived workspace writable again (owner). */
-export async function restoreWorkspaceAction(workspaceId: string): Promise<WorkspaceActionResult> {
-  return lifecycle('restore', workspaceId);
+export async function restoreWorkspaceAction(
+  workspaceId: string,
+  idempotencyKey?: string,
+): Promise<WorkspaceActionResult> {
+  return lifecycle('restore', workspaceId, idempotencyKey);
 }
 
 /** Soft-deletes a workspace (owner); afterwards every route answers 404 for it. */
