@@ -137,60 +137,91 @@ def _is_ambiguous(numbering: Numbering | None) -> bool:
     )
 
 
-def _candidate_value(numbering: Numbering, kind: NumberingKind) -> int | None:
-    """Value of a heading if read as ``kind`` (an ambiguous letter can be read either way)."""
-    if _is_ambiguous(numbering):
-        roman = _roman(numbering.label)
-        return roman if kind is NumberingKind.ROMAN else ord(numbering.label) - 64
-    return numbering.numbers[-1] if numbering.kind is kind else None
+_HARD = 10
+"""Cost of a Roman numeral that does not increase (a second Roman ``I`` after ``I``)."""
+_BACKWARD_LETTER = 2
+_BRUTE_FORCE_MAX = 12
+"""Ambiguous headings solved exactly together; longer runs are solved in windows."""
+
+
+def _sequence_cost(numberings: Sequence[Numbering | None]) -> int:
+    """Breaks in the Roman and letter heading sequences of a fully resolved heading list.
+
+    Roman headings form one sequence (reset only by an outer Part/Chapter/제N절 heading) that
+    must start at I and increase by one; letter headings restart under every outer heading
+    (Roman, Chapter, numbered ...) and must start at A and increase by one. A gap or a wrong
+    start costs 1, a letter going backwards ``_BACKWARD_LETTER``, a Roman numeral that does not
+    increase ``_HARD``.
+    """
+    cost = 0
+    roman: int | None = None
+    letter: int | None = None
+    for n in numberings:
+        if n is None:
+            continue
+        value = n.numbers[-1]
+        if n.kind is NumberingKind.ROMAN:
+            if roman is None:
+                cost += value != 1
+            elif value <= roman:
+                cost += _HARD
+            else:
+                cost += value != roman + 1
+            roman, letter = value, None
+        elif n.kind is NumberingKind.UPPER_ALPHA:
+            if letter is None:
+                cost += value != 1
+            elif value <= letter:
+                cost += _BACKWARD_LETTER
+            else:
+                cost += value != letter + 1
+            letter = value
+        elif n.kind < NumberingKind.UPPER_ALPHA:
+            letter = None
+            if n.kind < NumberingKind.ROMAN:
+                roman = None
+    return cost
 
 
 def disambiguate_letters(numberings: Sequence[Numbering | None]) -> list[Numbering | None]:
     """Resolve single-letter ``I.``/``V.``/``X.`` headings, which read as Roman numerals or as
-    letters, by which sequence they continue.
+    letters, by a global minimum-cost assignment over the whole heading sequence.
 
-    Each reading is scored against its own sequence in document order: +1 if the nearest earlier
-    heading of that sequence is its predecessor (earlier ambiguous headings count as resolved),
-    +1 if the nearest later heading that can be read in that sequence is its successor. The
-    higher score wins (``IV. V. VI.`` is Roman, ``H. I. J.`` and ``U. V.`` are letters, and
-    ``V.`` after ``IV.`` > ``A.`` ... ``U.`` and before ``VI.`` stays Roman). On a tie it is a
-    letter if the document uses letter headings and no multi-letter Roman numerals, else Roman.
+    Every combination of readings of the ambiguous headings is scored with ``_sequence_cost``
+    (exactly, for up to ``_BRUTE_FORCE_MAX`` ambiguous headings; longer runs are solved window
+    by window, left to right, with later headings at their default reading). Ties go to the
+    assignment closest to the default reading: letter if the document uses letter headings and
+    no multi-letter Roman numerals, else Roman; then to the earliest such assignment.
     """
     result = list(numberings)
-    seq = [
-        i
-        for i, n in enumerate(result)
-        if n is not None and n.kind in (NumberingKind.ROMAN, NumberingKind.UPPER_ALPHA)
-    ]
+    ambiguous = [i for i, n in enumerate(result) if _is_ambiguous(n)]
+    if not ambiguous:
+        return result
     uses_alpha = any(n is not None and n.kind is NumberingKind.UPPER_ALPHA for n in numberings)
     uses_multi_roman = any(
         n is not None and n.kind is NumberingKind.ROMAN and len(n.label) > 1 for n in numberings
     )
+    roman_reading = {i: result[i] for i in ambiguous}
+    alpha_reading = {i: _alpha(n) for i, n in roman_reading.items() if n is not None}
+    default, flipped = (
+        (alpha_reading, roman_reading)
+        if uses_alpha and not uses_multi_roman
+        else (roman_reading, alpha_reading)
+    )
+    for i in ambiguous:
+        result[i] = default[i]
+    for start in range(0, len(ambiguous), _BRUTE_FORCE_MAX):
+        window = ambiguous[start : start + _BRUTE_FORCE_MAX]
 
-    def score(current: Numbering, pos: int, kind: NumberingKind) -> int:
-        value = _candidate_value(current, kind) or 0
-        total = 0
-        for i in reversed(seq[:pos]):  # earlier headings are already resolved
-            n = result[i]
-            if n is not None and n.kind is kind:
-                total += n.numbers[-1] == value - 1
-                break
-        for i in seq[pos + 1 :]:
-            n = result[i]
-            later = _candidate_value(n, kind) if n is not None else None
-            if later is not None:
-                total += later == value + 1
-                break
-        return total
+        def apply(mask: int, window: list[int] = window) -> None:
+            for bit, i in enumerate(window):
+                result[i] = flipped[i] if mask >> bit & 1 else default[i]
 
-    for pos, i in enumerate(seq):
-        n = result[i]
-        if n is None or not _is_ambiguous(n):
-            continue
-        roman = score(n, pos, NumberingKind.ROMAN)
-        alpha = score(n, pos, NumberingKind.UPPER_ALPHA)
-        if alpha > roman or (alpha == roman and uses_alpha and not uses_multi_roman):
-            result[i] = _alpha(n)
+        def key(mask: int) -> tuple[int, int, int]:
+            apply(mask)
+            return (_sequence_cost(result), mask.bit_count(), mask)
+
+        apply(min(range(1 << len(window)), key=key))
     return result
 
 

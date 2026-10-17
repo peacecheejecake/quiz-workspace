@@ -354,7 +354,12 @@ def _body(*pages: list[str]) -> list[list[str]]:
     return [[text for title in page for text in (f"# {title}", LONG_EN)] for page in pages]
 
 
-ALPHA_TO_U = [f"{ch}. Item {ch}" for ch in "ABCDEFGHIJKLMNOPQRSTU"]
+def _items(letters: str) -> list[str]:
+    return [f"{ch}. Item {ch}" for ch in letters]
+
+
+ALPHA_TO_U = _items("ABCDEFGHIJKLMNOPQRSTU")
+ROMAN_1_12 = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
 LEADER_TABLE = TableContent(rows=tuple((f"Step {n}", "........", str(n)) for n in range(1, 5)))
 
 # (pages or manual blocks, expected tree as (title, level, parent, heading page), TOC blocks,
@@ -418,6 +423,51 @@ STRUCTURE_CASES: dict[str, StructureCase] = {
             ("II. Methods", 1, None, 2),
             ("A. Data", 2, "II. Methods", 2),
         ],
+        0,
+        0,
+    ),
+    "roman I with A..I then II": (
+        _body(["I. Part one", *_items("ABCDEFGHI")], ["II. Part two"]),
+        [
+            ("I. Part one", 1, None, 1),
+            *[(title, 2, "I. Part one", 1) for title in _items("ABCDEFGHI")],
+            ("II. Part two", 1, None, 2),
+        ],
+        0,
+        0,
+    ),
+    "roman I A..I, II A..V, III": (
+        _body(["I. One", *_items("ABCDEFGHI")], ["II. Two", *_items("ABCDEFGHIJKLMNOPQRSTUV")])
+        + _body(["III. Three"]),
+        [
+            ("I. One", 1, None, 1),
+            *[(title, 2, "I. One", 1) for title in _items("ABCDEFGHI")],
+            ("II. Two", 1, None, 2),
+            *[(title, 2, "II. Two", 2) for title in _items("ABCDEFGHIJKLMNOPQRSTUV")],
+            ("III. Three", 1, None, 3),
+        ],
+        0,
+        0,
+    ),
+    "roman IV with A..X then V": (
+        _body(["IV. Four", *_items("ABCDEFGHIJKLMNOPQRSTUVWX")], ["V. Five"]),
+        [
+            ("IV. Four", 1, None, 1),
+            *[(title, 2, "IV. Four", 1) for title in _items("ABCDEFGHIJKLMNOPQRSTUVWX")],
+            ("V. Five", 1, None, 2),
+        ],
+        0,
+        0,
+    ),
+    "letters-only A..Z": (
+        _body(_items("ABCDEFGHIJKLM"), _items("NOPQRSTUVWXYZ")),
+        [(t, 1, None, 1 if t < "N" else 2) for t in _items("ABCDEFGHIJKLMNOPQRSTUVWXYZ")],
+        0,
+        0,
+    ),
+    "roman-only I..XII": (
+        _body([f"{r}. Part" for r in ROMAN_1_12[:6]], [f"{r}. Part" for r in ROMAN_1_12[6:]]),
+        [(f"{r}. Part", 1, None, 1 if n < 6 else 2) for n, r in enumerate(ROMAN_1_12)],
         0,
         0,
     ),
@@ -511,6 +561,18 @@ def test_structure_case_matrix(case: str) -> None:
         ("I A B II A", "R A A R A"),
         ("W X Y", "A A A"),
         ("IX X XI", "R R R"),
+        ("I A B C D E F G H I II", "R A A A A A A A A A R"),
+        (
+            "I A B C D E F G H I II " + " ".join("ABCDEFGHIJKLMNOPQRSTUV") + " III",
+            "R" + " A" * 9 + " R" + " A" * 22 + " R",
+        ),
+        ("IV " + " ".join("ABCDEFGHIJKLMNOPQRSTUVWX") + " V", "R" + " A" * 24 + " R"),
+        (" ".join("ABCDEFGHIJKLMNOPQRSTUVWXYZ"), " ".join("A" * 26)),
+        (" ".join(ROMAN_1_12), " ".join("R" * 12)),
+        (  # 17 ambiguous headings: solved in windows
+            " ".join(f"{r} " + " ".join("ABCDEFGHIJKLMNOPQRSTUVWX") for r in ROMAN_1_12[:5]),
+            " ".join(" ".join("R" + "A" * 24) for _ in range(5)),
+        ),
     ],
 )
 def test_disambiguate_letters_matrix(labels: str, kinds: str) -> None:
