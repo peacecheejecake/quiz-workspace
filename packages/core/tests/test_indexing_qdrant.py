@@ -236,6 +236,30 @@ def test_rebuild_switches_the_alias_atomically_and_rolls_back(
     assert alias_target(qdrant, names.alias) == old
 
 
+@pytest.mark.infra
+def test_live_store_follows_the_alias_and_survives_dropping_the_old_generation(
+    qdrant: QdrantClient, store: QdrantIndexStore, names: CollectionNames
+) -> None:
+    store.index_revision(WS, "book-ko", "r1", _chunks(_revision("book-ko")))
+    store.activate_revision(WS, "book-ko", "r1")
+    old = store.ensure_collection()
+    report = rebuild(
+        qdrant,
+        FakeEmbedder(),
+        [RevisionChunks(WS, "book-ko", "r1", _chunks(_revision("book-ko")))],
+        names=names,
+    )
+    qdrant.delete_collection(old)
+
+    en = _chunks(_revision("book-en"))
+    assert store.index_revision(WS, "book-en", "r1", en).collection == report.collection
+    store.activate_revision(WS, "book-en", "r1")
+    scope = SearchScope(workspace_id=WS, revision_ids=("r1",), document_ids=("book-en",))
+    [top] = store.keyword_candidates(scope, "chlorine", 1)
+    assert top.chunk.document_id == "book-en"
+    assert qdrant.count(names.alias, exact=True).count == report.points + len(en)
+
+
 @pytest.mark.models
 def test_qwen3_dense_retrieval_after_indexing() -> None:
     client = QdrantClient(":memory:")

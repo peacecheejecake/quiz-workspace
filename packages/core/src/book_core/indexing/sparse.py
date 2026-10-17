@@ -134,6 +134,12 @@ class Bm25Encoder:
         if self.k1 < 0 or not 0 <= self.b <= 1 or self.avg_doc_terms <= 0:
             raise ValueError("require k1 >= 0, 0 <= b <= 1 and avg_doc_terms > 0")
 
+    @property
+    def config_id(self) -> str:
+        """Tokeniser version and weighting parameters: everything stored sparse vectors depend
+        on. Part of the collection's model key, so changing any of it needs a new collection."""
+        return f"{BM25_VERSION};k1={self.k1!r};b={self.b!r};avgdl={self.avg_doc_terms!r}"
+
     def encode_document(self, text: str) -> SparseVector:
         """Saturated, length-normalised term frequencies (IDF is applied by Qdrant)."""
         terms = tokenize(text)

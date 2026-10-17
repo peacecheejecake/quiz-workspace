@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import uuid
 import warnings
-from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any, Final, Protocol
@@ -268,9 +268,12 @@ class _Plan:
 class QdrantIndexStore:
     """``IndexStore`` on Qdrant for one embedder (one vector space = one physical collection).
 
-    By default the store writes to the alias target when it holds this embedder's vector space,
-    else to ``names.physical(model_key)`` (created on first use; the alias is created too when
-    missing). ``collection`` pins an explicit physical collection (rebuilds).
+    Unpinned stores resolve the collection for every operation: the alias target when it holds
+    this store's vector space, else ``names.physical(model_key)`` (created on first use; the alias
+    is created too when missing). A long-lived store therefore follows ``rebuild`` /
+    ``switch_alias`` and keeps working after the previous generation is dropped (an operation
+    that hits a just-deleted collection is re-resolved and retried once). ``collection`` pins an
+    explicit physical collection (rebuilds); a pinned store never moves.
     """
 
     def __init__(
@@ -293,8 +296,12 @@ class QdrantIndexStore:
         self._sparse = sparse or Bm25Encoder()
         self._batch_size = batch_size
         self._retry = retry or RetryPolicy()
-        self._model_key = embedder_model_key(embedder)
-        self._collection: str | None = None
+        self._model_key = embedder_model_key(embedder, self._sparse)
+        # Collections already checked (schema + payload indexes) and the model key of collections
+        # seen as alias targets. A collection's metadata never changes, so both stay valid until
+        # the collection disappears.
+        self._verified: set[str] = set()
+        self._keys: dict[str, str | None] = {}
 
     # -- collection management -----------------------------------------------------------
 
@@ -314,43 +321,68 @@ class QdrantIndexStore:
             "model_name": self._embedder.model_name,
             "dimension": self._embedder.dimension,
             "sparse": BM25_VERSION,
+            "sparse_config": self._sparse.config_id,
         }
 
     def ensure_collection(self) -> str:
-        """Resolve (and create if needed) the physical collection this store writes to."""
-        if self._collection is not None:
-            return self._collection
+        """Resolve (and create if needed) the physical collection for the next operation."""
+        alias_missing = False
         if self._pinned is not None:
             name = self._pinned
         else:
             target = alias_target(self._client, self._names.alias, retry=self._retry)
+            alias_missing = target is None
             if target is not None and self._key_of(target) == self._model_key:
                 name = target
             else:
                 name = self._names.physical(self._model_key)
-        if not self._retry.call(lambda: self._client.collection_exists(name)):
-            self._create(name)
-        info = self._retry.call(lambda: self._client.get_collection(name))
-        found = (info.config.metadata or {}).get("model_key")
-        if found != self._model_key:
-            raise IndexSchemaError(
-                f"collection {name!r} holds model key {found!r}, expected {self._model_key!r}"
-            )
-        self._ensure_payload_indexes(name, set(info.payload_schema))
-        if self._pinned is None and alias_target(self._client, self._names.alias) is None:
+        if name not in self._verified:
+            self._verify(name)
+        if alias_missing:
             try:
                 switch_alias(self._client, self._names.alias, name, retry=self._retry)
             except UnexpectedResponse:
                 # Another writer created the alias concurrently; keep its target.
                 if alias_target(self._client, self._names.alias) is None:
                     raise
-        self._collection = name
         return name
 
+    def _verify(self, name: str) -> None:
+        if not self._retry.call(lambda: self._client.collection_exists(name)):
+            self._create(name)
+        info = self._retry.call(lambda: self._client.get_collection(name))
+        found = (info.config.metadata or {}).get("model_key")
+        if found != self._model_key:
+            raise IndexSchemaError(
+                f"collection {name!r} holds model key {found!r}, expected {self._model_key!r} "
+                "(different embedder or BM25 settings: build a new collection with rebuild())"
+            )
+        self._ensure_payload_indexes(name, set(info.payload_schema))
+        self._verified.add(name)
+        self._keys[name] = found
+
     def _key_of(self, collection: str) -> str | None:
-        info = self._retry.call(lambda: self._client.get_collection(collection))
-        key = (info.config.metadata or {}).get("model_key")
-        return key if isinstance(key, str) else None
+        if collection not in self._keys:
+            info = self._retry.call(lambda: self._client.get_collection(collection))
+            key = (info.config.metadata or {}).get("model_key")
+            self._keys[collection] = key if isinstance(key, str) else None
+        return self._keys[collection]
+
+    def _forget(self, collection: str) -> None:
+        self._verified.discard(collection)
+        self._keys.pop(collection, None)
+
+    def _run[T](self, operation: Callable[[str], T]) -> T:
+        """Run ``operation`` on the resolved collection; if that collection vanished meanwhile
+        (an old generation dropped after an alias switch), resolve again and retry once."""
+        collection = self.ensure_collection()
+        try:
+            return operation(collection)
+        except Exception as exc:
+            if self._pinned is not None or not _is_missing_collection(exc):
+                raise
+            self._forget(collection)
+            return operation(self.ensure_collection())
 
     def _create(self, name: str) -> None:
         try:
@@ -424,15 +456,39 @@ class QdrantIndexStore:
         ):
             _require(value, what)
         _check_chunks(document_id, revision_id, chunks)
-        collection = self.ensure_collection()
-        active = self.active_revision(workspace_id, document_id)
+        return self._run(
+            partial(
+                self._index_revision,
+                workspace_id=workspace_id,
+                document_id=document_id,
+                revision_id=revision_id,
+                chunks=chunks,
+                base_revision_id=base_revision_id,
+            )
+        )
+
+    def _index_revision(
+        self,
+        collection: str,
+        *,
+        workspace_id: str,
+        document_id: str,
+        revision_id: str,
+        chunks: Sequence[SearchChunk],
+        base_revision_id: str | None,
+    ) -> IndexReport:
+        active = self._active_revision(collection, workspace_id, document_id)
         if base_revision_id is None and active != revision_id:
             base_revision_id = active
         if base_revision_id == revision_id:
             base_revision_id = None
 
-        existing = self._stored(workspace_id, document_id, revision_id)
-        base = self._stored(workspace_id, document_id, base_revision_id) if base_revision_id else {}
+        existing = self._stored(collection, workspace_id, document_id, revision_id)
+        base = (
+            self._stored(collection, workspace_id, document_id, base_revision_id)
+            if base_revision_id
+            else {}
+        )
         plan = self._plan(
             workspace_id, document_id, revision_id, chunks, existing, base, active == revision_id
         )
@@ -561,8 +617,13 @@ class QdrantIndexStore:
         Refuses a revision that has no points or was only partly written. The new revision is
         flagged first, so a reader filtering on the flag briefly sees both, never neither.
         """
-        collection = self.ensure_collection()
-        own = _match("revision_id", _require(revision_id, "revision_id"))
+        _require(revision_id, "revision_id")
+        self._run(partial(self._activate, workspace_id, document_id, revision_id))
+
+    def _activate(
+        self, workspace_id: str, document_id: str, revision_id: str, collection: str
+    ) -> None:
+        own = _match("revision_id", revision_id)
         total = self._count(collection, _revision_filter(workspace_id, document_id, own))
         if total == 0:
             raise RevisionNotReadyError(f"revision {revision_id!r} has no indexed chunks")
@@ -580,7 +641,9 @@ class QdrantIndexStore:
         self._set_active(collection, others, False)
 
     def active_revision(self, workspace_id: str, document_id: str) -> str | None:
-        collection = self.ensure_collection()
+        return self._run(lambda c: self._active_revision(c, workspace_id, document_id))
+
+    def _active_revision(self, collection: str, workspace_id: str, document_id: str) -> str | None:
         flt = _revision_filter(workspace_id, document_id, _match("active", True))
         records, _ = self._retry.call(
             lambda: self._client.scroll(
@@ -598,22 +661,18 @@ class QdrantIndexStore:
         """Garbage-collect inactive revisions of a document except ``keep`` (e.g. the previous
         revision, for a quick rollback). Call only after the database switched the published
         revision, and never while another revision of the document is being indexed."""
-        collection = self.ensure_collection()
         flt = _revision_filter(workspace_id, document_id, _match("active", False))
         if keep:
             flt = qm.Filter(must=flt.must, must_not=[_match_any("revision_id", keep)])
-        self._delete(collection, flt)
+        self._run(lambda c: self._delete(c, flt))
 
     def delete_revision(self, workspace_id: str, document_id: str, revision_id: str) -> None:
-        collection = self.ensure_collection()
-        self._delete(
-            collection,
-            _revision_filter(workspace_id, document_id, _match("revision_id", revision_id)),
-        )
+        flt = _revision_filter(workspace_id, document_id, _match("revision_id", revision_id))
+        self._run(lambda c: self._delete(c, flt))
 
     def delete_document(self, workspace_id: str, document_id: str) -> None:
-        collection = self.ensure_collection()
-        self._delete(collection, _revision_filter(workspace_id, document_id))
+        flt = _revision_filter(workspace_id, document_id)
+        self._run(lambda c: self._delete(c, flt))
 
     # -- reading ---------------------------------------------------------------------------
 
@@ -621,7 +680,7 @@ class QdrantIndexStore:
         self, workspace_id: str, document_id: str, revision_id: str
     ) -> list[SearchChunk]:
         """Stored chunks of one revision: parents then children, each in reading order."""
-        stored = self._stored(workspace_id, document_id, revision_id)
+        stored = self._run(lambda c: self._stored(c, workspace_id, document_id, revision_id))
         chunks = [chunk_from_payload(s.payload) for s in stored.values()]
         return sorted(chunks, key=lambda c: (c.level is ChunkLevel.CHILD, c.ordinal or 0, c.id))
 
@@ -631,7 +690,7 @@ class QdrantIndexStore:
             return []
         scoped = scope_filter(scope, any_level=True)
         flt = qm.Filter(must=[*_as_list(scoped.must), _match_any("chunk_id", chunk_ids)])
-        records = self._scroll(self.ensure_collection(), flt, True)
+        records = self._run(lambda c: list(self._scroll(c, flt, True)))
         return [chunk_from_payload(r.payload or {}) for r in records]
 
     def keyword_candidates(self, scope: SearchScope, query: str, limit: int) -> list[Candidate]:
@@ -649,15 +708,11 @@ class QdrantIndexStore:
         if limit < 1:
             raise ValueError("limit must be >= 1")
         flt = scope_filter(scope)
-        collection = self.ensure_collection()
-        response = self._retry.call(
-            lambda: self._client.query_points(
-                collection,
-                query=query,
-                using=using,
-                query_filter=flt,
-                limit=limit,
-                with_payload=True,
+        response = self._run(
+            lambda c: self._retry.call(
+                lambda: self._client.query_points(
+                    c, query=query, using=using, query_filter=flt, limit=limit, with_payload=True
+                )
             )
         )
         return [
@@ -667,8 +722,9 @@ class QdrantIndexStore:
 
     # -- helpers ---------------------------------------------------------------------------
 
-    def _stored(self, workspace_id: str, document_id: str, revision_id: str) -> dict[str, _Stored]:
-        collection = self.ensure_collection()
+    def _stored(
+        self, collection: str, workspace_id: str, document_id: str, revision_id: str
+    ) -> dict[str, _Stored]:
         flt = _revision_filter(workspace_id, document_id, _match("revision_id", revision_id))
         result: dict[str, _Stored] = {}
         for record in self._scroll(collection, flt, True):
@@ -713,6 +769,13 @@ class QdrantIndexStore:
                 collection, points_selector=qm.FilterSelector(filter=flt), wait=True
             )
         )
+
+
+def _is_missing_collection(exc: BaseException) -> bool:
+    if isinstance(exc, UnexpectedResponse):
+        return exc.status_code == 404
+    # Local mode (in-process qdrant-client) raises ValueError("Collection ... not found").
+    return isinstance(exc, ValueError) and "not found" in str(exc).lower()
 
 
 def _as_list(conditions: Any) -> list[Any]:
@@ -826,7 +889,7 @@ def rebuild(
     """
     names = names or CollectionNames()
     policy = retry or RetryPolicy()
-    key = embedder_model_key(embedder)
+    key = embedder_model_key(embedder, sparse)
     existing = {c.name for c in policy.call(client.get_collections).collections}
     generation = 1
     while names.physical(key, generation) in existing:

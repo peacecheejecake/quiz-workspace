@@ -634,3 +634,97 @@ def test_rebuild_builds_a_new_generation_and_switches_the_alias(
     # Rolling back the upgrade is one alias switch; the old collection was untouched.
     switch_alias(client, "documents_v1", current)
     assert QdrantIndexStore(client, FakeEmbedder()).active_revision(WS, "doc-ko") is None
+
+
+def test_unpinned_store_follows_rebuild_and_survives_dropping_the_old_generation(
+    client: QdrantClient, store: QdrantIndexStore
+) -> None:
+    ko = _revision("book-ko", "doc-ko")
+    store.index_revision(WS, "doc-ko", "r1", _chunks(ko))
+    store.activate_revision(WS, "doc-ko", "r1")
+    old = store.ensure_collection()
+    report = rebuild(
+        client,
+        FakeEmbedder(),
+        [RevisionChunks(WS, "doc-ko", "r2", _chunks(_edited(ko)))],
+    )
+    # The long-lived store now reads the new generation...
+    assert store.ensure_collection() == report.collection
+    assert store.active_revision(WS, "doc-ko") == "r2"
+    assert store.keyword_candidates(_scope("r2"), "염소", 1)
+    # ...and writes to it.
+    en = _chunks(_revision("book-en", "doc-en"))
+    written = store.index_revision(WS, "doc-en", "r1", en)
+    assert written.collection == report.collection
+    assert client.count(report.collection, exact=True).count == report.points + len(en)
+    assert client.count(old, exact=True).count == len(_chunks(ko))
+
+    client.delete_collection(old)
+    assert store.load_chunks(WS, "doc-en", "r1")
+    store.activate_revision(WS, "doc-en", "r1")
+    assert store.active_revision(WS, "doc-en") == "r1"
+
+
+def test_operation_on_a_collection_dropped_meanwhile_is_resolved_again(
+    client: QdrantClient, store: QdrantIndexStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ko = _revision("book-ko", "doc-ko")
+    store.index_revision(WS, "doc-ko", "r1", _chunks(ko))
+    store.activate_revision(WS, "doc-ko", "r1")
+    old = store.ensure_collection()
+    report = rebuild(client, FakeEmbedder(), [RevisionChunks(WS, "doc-ko", "r1", _chunks(ko))])
+    client.delete_collection(old)
+    # The race: the collection was resolved just before it was dropped.
+    stale = iter([old])
+    real = QdrantIndexStore.ensure_collection
+    monkeypatch.setattr(store, "ensure_collection", lambda: next(stale, None) or real(store))
+    assert store.active_revision(WS, "doc-ko") == "r1"
+    assert store.ensure_collection() == report.collection
+
+
+def test_pinned_store_never_moves(client: QdrantClient, store: QdrantIndexStore) -> None:
+    store.index_revision(WS, "doc-en", "r1", _chunks(_revision("book-en", "doc-en")))
+    old = store.ensure_collection()
+    pinned = QdrantIndexStore(client, FakeEmbedder(), collection=old)
+    rebuild(client, FakeEmbedder(), [])
+    assert alias_target(client, "documents_v1") != old
+    assert pinned.ensure_collection() == old
+    assert pinned.load_chunks(WS, "doc-en", "r1")
+
+
+def test_bm25_parameters_are_part_of_the_model_key() -> None:
+    default = Bm25Encoder()
+    assert default.config_id.startswith(BM25_VERSION)
+    assert model_key("m", 8) == model_key("m", 8, default.config_id)
+    encoders = (default, Bm25Encoder(k1=1.5), Bm25Encoder(b=0.5), Bm25Encoder(avg_doc_terms=80))
+    assert len({model_key("m", 8, enc.config_id) for enc in encoders}) == 4
+
+
+def test_collection_with_other_bm25_parameters_is_refused_and_rebuilt(
+    client: QdrantClient, store: QdrantIndexStore
+) -> None:
+    chunks = _chunks(_revision("book-en", "doc-en"))
+    store.index_revision(WS, "doc-en", "r1", chunks)
+    store.activate_revision(WS, "doc-en", "r1")
+    current = store.ensure_collection()
+    tuned = Bm25Encoder(k1=1.6, avg_doc_terms=120)
+    pinned = QdrantIndexStore(client, FakeEmbedder(), sparse=tuned, collection=current)
+    with pytest.raises(IndexSchemaError, match="BM25"):
+        pinned.ensure_collection()
+    # Unpinned, the tuned store gets its own collection: no sparse vectors are reused across
+    # BM25 settings.
+    retuned = QdrantIndexStore(client, FakeEmbedder(), sparse=tuned)
+    assert retuned.model_key != store.model_key
+    assert retuned.ensure_collection() != current
+    assert retuned.active_revision(WS, "doc-en") is None
+    metadata = client.get_collection(retuned.ensure_collection()).config.metadata or {}
+    assert metadata["sparse_config"] == tuned.config_id
+    # The supported path: rebuild with the new settings and switch the alias.
+    report = rebuild(
+        client, FakeEmbedder(), [RevisionChunks(WS, "doc-en", "r1", chunks)], sparse=tuned
+    )
+    assert alias_target(client, "documents_v1") == report.collection
+    assert retuned.ensure_collection() == report.collection
+    assert retuned.active_revision(WS, "doc-en") == "r1"
+    # A store with the old settings no longer matches the alias target: its own collection.
+    assert store.ensure_collection() == current
