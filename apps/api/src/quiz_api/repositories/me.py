@@ -12,6 +12,8 @@ from datetime import datetime
 from typing import Literal, cast
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from quiz_api.repositories.tables import profiles, workspace_memberships, workspaces
@@ -39,6 +41,10 @@ class MemberWorkspaceRecord:
     role: MembershipRole
 
 
+class UnknownUserError(Exception):
+    """The token's user no longer exists in `auth.users` (deleted while the token is valid)."""
+
+
 class MeRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
@@ -64,6 +70,29 @@ class MeRepository:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
+
+    def ensure_profile(self, user_id: uuid.UUID) -> ProfileRecord:
+        """Create the profile if missing and return it; commits.
+
+        `INSERT ... ON CONFLICT (user_id) DO NOTHING` is idempotent and race-safe: concurrent
+        first requests insert at most one row and never fail on the conflict, and an existing
+        profile is never modified. Raises `UnknownUserError` when the user has been deleted.
+        """
+        try:
+            self._session.execute(
+                insert(profiles)
+                .values(user_id=user_id)
+                .on_conflict_do_nothing(index_elements=[profiles.c.user_id])
+            )
+            self._session.commit()
+        except IntegrityError:
+            # Only the auth.users foreign key can fail here (the PK conflict is DO NOTHING).
+            self._session.rollback()
+            raise UnknownUserError from None
+        profile = self.get_profile(user_id)
+        if profile is None:  # the user was deleted (cascade) right after the insert
+            raise UnknownUserError
+        return profile
 
     def list_member_workspaces(self, user_id: uuid.UUID) -> list[MemberWorkspaceRecord]:
         """Workspaces the user is a member of; soft-deleted ones are never returned."""

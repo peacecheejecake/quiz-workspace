@@ -12,7 +12,7 @@ export type paths = {
     };
     /**
      * Get Me
-     * @description The authenticated user and their profile.
+     * @description The authenticated user and their profile (created on first call).
      */
     get: operations['getMe'];
     put?: never;
@@ -112,8 +112,8 @@ export type components = {
        * @description The verified user id (token `sub`).
        */
       id: string;
-      /** @description `null` until the profile is initialised. */
-      profile: components['schemas']['Profile'] | null;
+      /** @description Created on the first authenticated `/me` call. */
+      profile: components['schemas']['Profile'];
     };
     /** MyWorkspace */
     MyWorkspace: {

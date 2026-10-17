@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from quiz_api.api.me import get_me_repository
 from quiz_api.auth.verifier import TokenVerifier
 from quiz_api.main import create_app
-from quiz_api.repositories.me import MemberWorkspaceRecord, ProfileRecord
+from quiz_api.repositories.me import MemberWorkspaceRecord, ProfileRecord, UnknownUserError
 from quiz_api.settings import Settings
 
 ME = "/api/v1/me"
@@ -29,10 +29,17 @@ class FakeMeRepository:
         self.profiles: dict[uuid.UUID, ProfileRecord] = {}
         self.workspaces: dict[uuid.UUID, list[MemberWorkspaceRecord]] = {}
         self.calls: list[tuple[str, uuid.UUID]] = []
+        self.deleted_users: set[uuid.UUID] = set()
 
     def get_profile(self, user_id: uuid.UUID) -> ProfileRecord | None:
         self.calls.append(("get_profile", user_id))
         return self.profiles.get(user_id)
+
+    def ensure_profile(self, user_id: uuid.UUID) -> ProfileRecord:
+        self.calls.append(("ensure_profile", user_id))
+        if user_id in self.deleted_users:
+            raise UnknownUserError
+        return self.profiles.setdefault(user_id, ProfileRecord(user_id, None, T0, T0))
 
     def list_member_workspaces(self, user_id: uuid.UUID) -> list[MemberWorkspaceRecord]:
         self.calls.append(("list_member_workspaces", user_id))
@@ -122,13 +129,41 @@ def test_me_returns_verified_user_and_profile(
     assert token not in response.text
 
 
-def test_me_without_profile_row_returns_null_profile(
-    api: TestClient, signing_key: Any, auth_kit: Any
+def test_me_initialises_a_missing_profile_once(
+    api: TestClient, repo: FakeMeRepository, signing_key: Any, auth_kit: Any
 ) -> None:
     user_id = uuid.uuid4()
-    response = api.get(ME, headers=_bearer(signing_key.sign(auth_kit.claims(user_id))))
-    assert response.status_code == 200
-    assert response.json() == {"id": str(user_id), "profile": None}
+    headers = _bearer(signing_key.sign(auth_kit.claims(user_id)))
+
+    first = api.get(ME, headers=headers)
+    second = api.get(ME, headers=headers)
+
+    expected = {
+        "id": str(user_id),
+        "profile": {
+            "display_name": None,
+            "created_at": "2026-10-01T00:00:00Z",
+            "updated_at": "2026-10-01T00:00:00Z",
+        },
+    }
+    assert first.status_code == second.status_code == 200
+    assert first.json() == second.json() == expected
+    assert repo.calls == [("ensure_profile", user_id)] * 2
+    assert list(repo.profiles) == [user_id]
+
+
+def test_me_for_a_deleted_user_is_401(
+    api: TestClient, repo: FakeMeRepository, signing_key: Any, auth_kit: Any
+) -> None:
+    user_id = uuid.uuid4()
+    repo.deleted_users.add(user_id)
+    token = signing_key.sign(auth_kit.claims(user_id))
+
+    response = api.get(ME, headers=_bearer(token))
+
+    _assert_401(response, token)
+    assert response.headers["www-authenticate"] == 'Bearer realm="api", error="invalid_token"'
+    assert repo.profiles == {}
 
 
 def test_me_workspaces_lists_only_callers_memberships(

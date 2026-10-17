@@ -40,3 +40,13 @@ workspace_memberships = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
+
+async_jobs = Table(
+    "async_jobs",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("created_by", Uuid),
+    Column("job_type", Text, nullable=False),
+    Column("status", Text, nullable=False),
+)

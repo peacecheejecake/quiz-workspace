@@ -46,15 +46,8 @@
             "type": "string"
           },
           "profile": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Profile"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "`null` until the profile is initialised."
+            "$ref": "#/components/schemas/Profile",
+            "description": "Created on the first authenticated `/me` call."
           }
         },
         "required": [
@@ -329,7 +322,7 @@
   "paths": {
     "/api/v1/me": {
       "get": {
-        "description": "The authenticated user and their profile.",
+        "description": "The authenticated user and their profile (created on first call).",
         "operationId": "getMe",
         "responses": {
           "200": {

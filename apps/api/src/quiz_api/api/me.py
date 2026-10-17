@@ -2,8 +2,9 @@
 
 Both are scoped exclusively by the verified token `sub`; query parameters and headers such as
 `user_id`, `workspace_id` or `X-User-Id` are not declared and therefore never read.
-`/me` only reads the profile: idempotent profile initialisation (upsert) belongs to A1.3, so a
-user without a `profiles` row gets `profile: null`.
+`/me` initialises the caller's profile on first use with an idempotent, race-safe upsert
+(docs/auth.md §5; `auth.users` is never modified), so it always returns a profile. A token whose
+user has since been deleted is answered 401 like any other invalid credential.
 """
 
 from __future__ import annotations
@@ -12,14 +13,19 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from quiz_api.auth import CurrentUser
 from quiz_api.db import get_db_session
 from quiz_api.errors import problem_responses
-from quiz_api.repositories.me import MembershipRole, MeRepository, WorkspaceStatus
+from quiz_api.repositories.me import (
+    MembershipRole,
+    MeRepository,
+    UnknownUserError,
+    WorkspaceStatus,
+)
 
 router = APIRouter(prefix="/me", tags=["me"], responses=problem_responses(503))
 
@@ -32,7 +38,7 @@ class Profile(BaseModel):
 
 class Me(BaseModel):
     id: uuid.UUID = Field(description="The verified user id (token `sub`).")
-    profile: Profile | None = Field(description="`null` until the profile is initialised.")
+    profile: Profile = Field(description="Created on the first authenticated `/me` call.")
 
 
 class MyWorkspace(BaseModel):
@@ -58,18 +64,23 @@ MeRepo = Annotated[MeRepository, Depends(get_me_repository)]
 
 @router.get("", operation_id="getMe")
 def get_me(user: CurrentUser, repo: MeRepo) -> Me:
-    """The authenticated user and their profile."""
-    record = repo.get_profile(user.id)
-    profile = (
-        None
-        if record is None
-        else Profile(
+    """The authenticated user and their profile (created on first call)."""
+    try:
+        record = repo.ensure_profile(user.id)
+    except UnknownUserError:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing or invalid access token.",
+            headers={"WWW-Authenticate": 'Bearer realm="api", error="invalid_token"'},
+        ) from None
+    return Me(
+        id=user.id,
+        profile=Profile(
             display_name=record.display_name,
             created_at=record.created_at,
             updated_at=record.updated_at,
-        )
+        ),
     )
-    return Me(id=user.id, profile=profile)
 
 
 @router.get("/workspaces", operation_id="listMyWorkspaces")
