@@ -6,7 +6,7 @@
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { isSessionCookie } from '@/lib/supabase/session-guard';
+import { endBrowserSession } from './end-session';
 import { PENDING_EMAIL_COOKIE, pendingEmailCookieOptions } from './pending-email';
 import { LOGIN_PATH } from './routes';
 import { safeNextPath } from './safe-next';
@@ -53,22 +53,6 @@ export async function signInAction(_prev: SignInState, formData: FormData): Prom
 
 /** Ends this browser's session: revokes its refresh token at the Auth server, clears cookies. */
 export async function signOutAction(): Promise<void> {
-  let failed: boolean;
-  try {
-    const supabase = await createSupabaseServerClient();
-    const { error } = await supabase.auth.signOut({ scope: 'local' });
-    failed = !!error;
-  } catch {
-    // Unreadable session cookie.
-    failed = true;
-  }
-  if (failed) {
-    // Auth server unreachable or corrupt cookie: still drop this browser's session cookies so the
-    // user is signed out locally (the refresh token then expires on its own).
-    const cookieStore = await cookies();
-    for (const { name } of cookieStore.getAll()) {
-      if (isSessionCookie(name)) cookieStore.delete(name);
-    }
-  }
+  await endBrowserSession();
   redirect(LOGIN_PATH);
 }
