@@ -258,3 +258,60 @@ def test_error_never_echoes_configured_values(env: pytest.MonkeyPatch) -> None:
     with pytest.raises(InsecureConfigurationError) as info:
         _settings(env, **{**SECURE_PROD, "SUPABASE_JWT_ISSUER": secret_looking})
     assert "hunter2" not in str(info.value)
+
+
+# --- Origin serialization (the browser's `Origin` header form) -------------------------------
+
+
+@pytest.mark.parametrize(
+    ("configured", "serialized"),
+    [
+        ("https://app.example.com:443", "https://app.example.com"),
+        ("http://127.0.0.1:80/", "http://127.0.0.1"),
+        ("https://app.example.com:80", "https://app.example.com:80"),
+        ("HTTPS://APP.Example.COM", "https://app.example.com"),
+        ("http://[::1]:3000", "http://[::1]:3000"),
+        ("http://[::1]:80", "http://[::1]"),
+        ("https://Bücher.example", "https://xn--bcher-kva.example"),
+    ],
+)
+def test_configured_origins_use_browser_serialization(
+    env: pytest.MonkeyPatch, configured: str, serialized: str
+) -> None:
+    assert _settings(env, CORS_ALLOWED_ORIGINS=configured).effective_cors_origins == (serialized,)
+
+
+def test_non_numeric_port_is_refused(env: pytest.MonkeyPatch) -> None:
+    with pytest.raises(ValidationError, match="numeric port"):
+        _settings(env, CORS_ALLOWED_ORIGINS="https://app.example.com:abc")
+
+
+@pytest.mark.parametrize(
+    ("configured", "sent"),
+    [
+        ("https://app.example.com:443", "https://app.example.com"),
+        ("http://[::1]:3000", "http://[::1]:3000"),
+        ("https://bücher.example", "https://xn--bcher-kva.example"),
+        ("https://app.example.com", "HTTPS://APP.EXAMPLE.COM"),
+    ],
+)
+def test_guard_and_cors_match_the_browser_origin(
+    env: pytest.MonkeyPatch, configured: str, sent: str
+) -> None:
+    settings = _settings(env, CORS_ALLOWED_ORIGINS=configured)
+    with TestClient(create_app(settings, readiness_checkers=[])) as client:
+        guarded = client.post("/api/v1/nope", headers={"Origin": sent})
+        assert guarded.status_code == 404  # past the guard
+        preflight = _preflight(client, sent.lower() if sent.isascii() else sent)
+        assert preflight.status_code == 200
+
+
+def test_same_origin_check_ignores_default_ports_and_keeps_ipv6(web_client: TestClient) -> None:
+    def call(origin: str, host: str) -> int:
+        response = web_client.get("/health/live", headers={"Origin": origin, "Host": host})
+        return int(response.status_code)
+
+    assert call("http://testserver", "testserver:80") == 200
+    assert call("http://[::1]:8000", "[::1]:8000") == 200
+    assert call("http://[::1]:8001", "[::1]:8000") == 403
+    assert call("http://testserver:8080", "testserver") == 403

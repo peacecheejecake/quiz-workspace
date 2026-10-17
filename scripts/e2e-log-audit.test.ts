@@ -1,7 +1,55 @@
 // Unit tests for scripts/e2e-log-audit.ts (`node --test scripts/`; part of `make test`).
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { parseArgs, scanLog } from './e2e-log-audit.ts';
+import { parseArgs, run, scanLog, startLogged, stop } from './e2e-log-audit.ts';
+
+describe('server logging while Playwright runs', () => {
+  it('never stalls a server that writes more than a pipe buffer (>1MB) of logs', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'log-audit-test-'));
+    const log = join(dir, 'server.log');
+    // "Server": 2MB of log lines on stdout and stderr, then a marker, then stays alive.
+    const server = startLogged(
+      process.execPath,
+      [
+        '-e',
+        `const line = 'x'.repeat(1023) + '\\n';
+         for (let i = 0; i < 1024; i++) { process.stdout.write(line); process.stderr.write(line); }
+         process.stdout.write('SERVER-DONE\\n');
+         setInterval(() => {}, 1000);`,
+      ],
+      process.env,
+      log,
+    );
+    try {
+      // "Playwright": exits 0 only once the server got past its logging (10s budget).
+      const status = await run(
+        process.execPath,
+        [
+          '-e',
+          `const fs = require('node:fs');
+           const until = Date.now() + 10000;
+           const t = setInterval(() => {
+             if (fs.readFileSync(${JSON.stringify(log)}, 'utf8').includes('SERVER-DONE')) process.exit(0);
+             if (Date.now() > until) process.exit(3);
+           }, 50);`,
+        ],
+        process.env,
+      );
+      assert.equal(status, 0);
+      assert.ok(statSync(log).size > 2 * 1024 * 1024);
+      assert.ok(readFileSync(log, 'utf8').endsWith('SERVER-DONE\n'));
+    } finally {
+      stop(server);
+    }
+  });
+
+  it('resolves the exit code of the command it runs', async () => {
+    assert.equal(await run(process.execPath, ['-e', 'process.exit(7)'], process.env), 7);
+  });
+});
 
 const JWT = 'eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEifQ.c2lnbmF0dXJlLXZhbHVl';
 

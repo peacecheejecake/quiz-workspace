@@ -19,6 +19,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from quiz_api.errors import problem_response
 from quiz_api.idempotency import IDEMPOTENCY_KEY_HEADER
 from quiz_api.middleware import REQUEST_ID_HEADER, security_headers
+from quiz_api.settings import normalize_origin, origin_authority
 
 CORS_ALLOWED_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 CORS_ALLOWED_HEADERS = ("Authorization", "Content-Type", IDEMPOTENCY_KEY_HEADER, REQUEST_ID_HEADER)
@@ -72,13 +73,21 @@ class OriginGuardMiddleware:
         self.app = app
         self.allowed_origins = frozenset(allowed_origins)
 
-    def _allowed(self, origin: str, headers: Headers) -> bool:
+    def _allowed(self, raw_origin: str, headers: Headers) -> bool:
+        try:
+            origin = normalize_origin(raw_origin)
+        except ValueError:
+            return False  # `null` and other opaque or malformed values
         if origin in self.allowed_origins:
             return True
         host = headers.get("host")
+        if host is None:
+            return False
         # Same-origin (e.g. the local interactive docs page): compare authority only, since TLS
-        # may terminate in front of the app.
-        return host is not None and origin.split("://", 1)[-1] == host.lower()
+        # may terminate in front of the app; the Host header is read with the Origin's scheme so
+        # default ports compare equal.
+        scheme, authority = origin.split("://", 1)
+        return origin_authority(scheme, host) == authority
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -86,7 +95,7 @@ class OriginGuardMiddleware:
             return
         headers = Headers(scope=scope)
         origin = headers.get("origin")
-        if origin is None or self._allowed(origin.strip().lower().rstrip("/"), headers):
+        if origin is None or self._allowed(origin, headers):
             await self.app(scope, receive, send)
             return
         response = problem_response(Request(scope), 403, detail="Origin not allowed.")
@@ -95,6 +104,7 @@ class OriginGuardMiddleware:
 
 def install_browser_security(app: FastAPI, *, allowed_origins: Iterable[str], max_age: int) -> None:
     """CORS + Origin guard. Call before `RequestIdMiddleware`/headers so those wrap them."""
+    # Already in browser serialization (Settings), which is what CORSMiddleware compares against.
     origins = list(allowed_origins)
     app.add_middleware(
         CORSMiddleware,

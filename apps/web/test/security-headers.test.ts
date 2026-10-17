@@ -132,6 +132,19 @@ describe('isCrossOriginWrite', () => {
     ).toBe(false);
   });
 
+  it('compares browser-serialized origins (default ports, case, IPv6, IDN)', () => {
+    const write = (origin: string, host: string) =>
+      isCrossOriginWrite('POST', new Headers({ host, origin }));
+    expect(write('https://app.example.com', 'app.example.com:443')).toBe(false);
+    expect(write('http://app.example.com', 'APP.Example.com:80')).toBe(false);
+    expect(write('https://app.example.com', 'app.example.com:80')).toBe(true);
+    expect(write('http://[::1]:3000', '[::1]:3000')).toBe(false);
+    expect(write('http://[::1]:3001', '[::1]:3000')).toBe(true);
+    expect(write('https://xn--bcher-kva.example', 'bücher.example')).toBe(false);
+    expect(write('https://xn--bcher-kva.example', 'xn--bcher-kva.example')).toBe(false);
+    expect(write('ftp://app.example.com', 'app.example.com')).toBe(true);
+  });
+
   it('rejects writes from other origins, opaque origins and cross-site fetches', () => {
     expect(isCrossOriginWrite('POST', h({ origin: 'https://evil.example' }))).toBe(true);
     expect(

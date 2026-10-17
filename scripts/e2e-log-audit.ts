@@ -10,8 +10,8 @@
 //
 // Logs land in a fresh temp directory (Playwright wipes test-results/ when it starts); the path is
 // printed at the end. Runs on plain Node (type stripping).
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { createWriteStream, mkdtempSync, readFileSync } from 'node:fs';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { closeSync, mkdtempSync, openSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -81,15 +81,39 @@ async function waitFor(url: string, server: ChildProcess, name: string): Promise
   throw new Error(`${name} did not come up at ${url}`);
 }
 
-function start(command: string, args: string[], env: NodeJS.ProcessEnv, log: string): ChildProcess {
-  const out = createWriteStream(log);
-  const child = spawn(command, args, { env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
-  child.stdout?.pipe(out);
-  child.stderr?.pipe(out);
-  return child;
+/**
+ * Starts a server (own process group) whose stdout+stderr go straight to `log` through a file
+ * descriptor: nothing is piped through this process, so a chatty server can never block on a full
+ * pipe while we wait for Playwright.
+ */
+export function startLogged(
+  command: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+  log: string,
+): ChildProcess {
+  const fd = openSync(log, 'a');
+  try {
+    return spawn(command, args, { env, stdio: ['ignore', fd, fd], detached: true });
+  } finally {
+    closeSync(fd); // the child holds its own copy
+  }
 }
 
-function stop(child: ChildProcess): void {
+/** Runs a command with inherited stdio without blocking the event loop; resolves its exit code. */
+export function run(
+  command: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { env, stdio: 'inherit' });
+    child.once('error', reject);
+    child.once('exit', (code, signal) => resolve(code ?? (signal ? 1 : 0)));
+  });
+}
+
+export function stop(child: ChildProcess): void {
   if (child.pid !== undefined && child.exitCode === null) {
     try {
       process.kill(-child.pid, 'SIGTERM'); // the whole group (pnpm/uv wrappers + server)
@@ -111,13 +135,13 @@ async function main(): Promise<number> {
   const env = { ...process.env, NEXT_PUBLIC_API_BASE_URL: apiUrl, E2E_BASE_URL: webUrl };
 
   if (options.build) {
-    const build = spawnSync('pnpm', ['--filter', '@quiz/web', 'build'], { env, stdio: 'inherit' });
-    if (build.status !== 0) return build.status ?? 1;
+    const build = await run('pnpm', ['--filter', '@quiz/web', 'build'], env);
+    if (build !== 0) return build;
   }
 
   const apiLog = join(dir, 'api.log');
   const webLog = join(dir, 'web.log');
-  const api = start(
+  const api = startLogged(
     'uv',
     ['run', 'python', '-m', 'quiz_api.serve', '--port', String(options.apiPort)],
     {
@@ -131,7 +155,7 @@ async function main(): Promise<number> {
     },
     apiLog,
   );
-  const web = start(
+  const web = startLogged(
     'pnpm',
     [
       '--filter',
@@ -152,11 +176,7 @@ async function main(): Promise<number> {
   try {
     await waitFor(`${apiUrl}/health/live`, api, 'API');
     await waitFor(`${webUrl}/login`, web, 'web');
-    const run = spawnSync('pnpm', ['exec', 'playwright', 'test', ...options.playwrightArgs], {
-      env,
-      stdio: 'inherit',
-    });
-    status = run.status ?? 1;
+    status = await run('pnpm', ['exec', 'playwright', 'test', ...options.playwrightArgs], env);
   } finally {
     stop(api);
     stop(web);

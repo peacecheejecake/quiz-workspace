@@ -33,8 +33,26 @@ LOCAL_CORS_ORIGINS: tuple[str, ...] = ("http://127.0.0.1:3000", "http://localhos
 MAX_CORS_MAX_AGE_SECONDS = 7200
 
 
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def _ascii_host(hostname: str) -> str:
+    """Lowercase ASCII host as browsers serialize it: IDNA (punycode) labels, IPv6 in brackets."""
+    host = hostname.lower()
+    if ":" in host:  # IPv6 literal (urlsplit strips the brackets)
+        return f"[{host}]"
+    if host.isascii():
+        return host
+    try:
+        return host.encode("idna").decode("ascii")
+    except UnicodeError:
+        raise ValueError("each origin must have a valid host name") from None
+
+
 def normalize_origin(value: str) -> str:
-    """`scheme://host[:port]` in lowercase; raises ValueError for anything that is not an origin.
+    """The browser's ASCII serialization of an origin (`Origin` header form): lowercase scheme and
+    host, IDNA-encoded host, IPv6 in brackets, default port (80/443) omitted. Raises ValueError
+    for anything that is not an origin.
 
     The message names the problem, never the value (configuration errors end up in logs).
     """
@@ -42,13 +60,26 @@ def normalize_origin(value: str) -> str:
     if raw == "*":
         raise ValueError("wildcard origin '*' is not allowed (explicit allowlist only)")
     parts = urlsplit(raw.rstrip("/"))
-    if parts.scheme not in {"http", "https"} or not parts.hostname:
+    scheme = parts.scheme.lower()
+    if scheme not in _DEFAULT_PORTS or not parts.hostname:
         raise ValueError("each origin must be an http(s)://host[:port] URL")
     extras = (parts.username, parts.password, parts.path, parts.query, parts.fragment)
     if "*" in raw or any(extras):
         raise ValueError("each origin must be exactly scheme://host[:port] (no wildcard or path)")
-    port = f":{parts.port}" if parts.port is not None else ""
-    return f"{parts.scheme}://{parts.hostname.lower()}{port}"
+    try:
+        port_number = parts.port
+    except ValueError:
+        raise ValueError("each origin must have a numeric port") from None
+    port = "" if port_number in (None, _DEFAULT_PORTS[scheme]) else f":{port_number}"
+    return f"{scheme}://{_ascii_host(parts.hostname)}{port}"
+
+
+def origin_authority(scheme: str, host: str) -> str | None:
+    """`host[:port]` of `scheme://<host header>` in the same serialization, or None if invalid."""
+    try:
+        return normalize_origin(f"{scheme}://{host}").split("://", 1)[1]
+    except ValueError:
+        return None
 
 
 def _is_https_url(value: str) -> bool:

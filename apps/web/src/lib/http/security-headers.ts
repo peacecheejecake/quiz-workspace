@@ -84,13 +84,16 @@ export function isCrossOriginWrite(method: string, headers: Headers): boolean {
   if (origin === null) {
     return headers.get('sec-fetch-site') === 'cross-site';
   }
-  const host = (headers.get('x-forwarded-host')?.split(',')[0] ?? headers.get('host'))
-    ?.trim()
-    .toLowerCase();
+  const host = (headers.get('x-forwarded-host')?.split(',')[0] ?? headers.get('host'))?.trim();
   if (!host) return true;
   try {
-    return new URL(origin).host.toLowerCase() !== host;
+    // Both sides in the WHATWG URL serialization (lowercase, punycode, IPv6 brackets, default
+    // port dropped); the host header is read with the Origin's scheme so `:443`/`:80` compare equal.
+    const { protocol, host: originHost } = new URL(origin);
+    if (protocol !== 'http:' && protocol !== 'https:') return true;
+    const ownHost = new URL(`${protocol}//${host}`).host;
+    return originHost !== ownHost;
   } catch {
-    return true; // `Origin: null` and other opaque values
+    return true; // `Origin: null`, other opaque values and malformed host headers
   }
 }
