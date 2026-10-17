@@ -11,6 +11,8 @@ This is the only module in ``book_core`` that imports Docling. Mapping to the co
   text. Other items (forms, key-value regions) are skipped.
 - Captions are separate ``text`` blocks linked via ``caption_block_id``; a caption printed above
   its table/figure is placed before it in reading order.
+- OCR fallback: only RapidOCR, configured explicitly (Docling's auto engine selection silently
+  passes pages through when no engine is installed). ``ocr_applied`` means RapidOCR ran.
 - Bboxes are converted to the contract convention (PDF points, top-left origin), clamped to the
   page and rounded to 0.01 pt. Pages are 1-based. A paragraph that continues on the next page
   stays two blocks; merging is the structure step's job (M1.3).
@@ -19,13 +21,14 @@ This is the only module in ``book_core`` that imports Docling. Mapping to the co
 from __future__ import annotations
 
 import importlib.metadata
+import importlib.util
 from io import BytesIO
 from pathlib import Path
 
 import pypdfium2  # type: ignore[import-untyped]  # no py.typed; used only here
 from docling.datamodel.accelerator_options import AcceleratorOptions
 from docling.datamodel.base_models import ConversionStatus, InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.document import DoclingDocument
 from docling_core.types.doc.items.node import DocItem
@@ -82,6 +85,14 @@ def docling_parser_version() -> str:
     )
 
 
+OCR_ENGINE_MODULES = ("rapidocr", "onnxruntime")
+
+
+def ocr_engine_available() -> bool:
+    """Whether the RapidOCR engine (``ocr`` extra) is importable."""
+    return all(importlib.util.find_spec(name) is not None for name in OCR_ENGINE_MODULES)
+
+
 def text_layer_pages(data: bytes) -> list[bool]:
     """Per page: whether the PDF has extractable (non-whitespace) text on it."""
     pdf = pypdfium2.PdfDocument(data)
@@ -109,6 +120,10 @@ class DoclingParser:
 
     def __init__(self, options: ParserOptions | None = None) -> None:
         self._options = options or ParserOptions()
+        if self._options.ocr and not ocr_engine_available():
+            raise ParserError(
+                "OCR requested but RapidOCR is not installed (install book-core[ocr])"
+            )
         self._converters: dict[bool, DocumentConverter] = {}
         self._version = docling_parser_version()
 
@@ -136,33 +151,57 @@ class DoclingParser:
         if result.status is not ConversionStatus.SUCCESS:
             errors = "; ".join(e.error_message for e in result.errors)
             raise ParserError(f"docling conversion {result.status.value}: {errors}")
-        doc = result.document
-
-        pages = _pages(doc, text_layers)
-        drafts = _drafts(doc, {p.page: p for p in pages})
-        return ParsedDocument(
+        return document_from_docling(
+            result.document,
+            text_layers=text_layers,
             source_path=source_path,
             source_sha256=sha256_hex(data),
             parser_version=self._version,
             ocr_applied=run_ocr,
-            pages=pages,
-            blocks=finalize_blocks(drafts),
         )
+
+    def pipeline_options(self, ocr: bool) -> PdfPipelineOptions:
+        options = PdfPipelineOptions(
+            do_ocr=ocr,
+            do_table_structure=self._options.table_structure,
+            artifacts_path=self._options.artifacts_path,
+            accelerator_options=AcceleratorOptions(device=self._options.device),
+        )
+        if ocr:
+            options.ocr_options = RapidOcrOptions(lang=[self._options.ocr_lang])
+        return options
 
     def _converter(self, ocr: bool) -> DocumentConverter:
         converter = self._converters.get(ocr)
         if converter is None:
-            pipeline = PdfPipelineOptions(
-                do_ocr=ocr,
-                do_table_structure=self._options.table_structure,
-                artifacts_path=self._options.artifacts_path,
-                accelerator_options=AcceleratorOptions(device=self._options.device),
-            )
+            pipeline = self.pipeline_options(ocr)
             converter = DocumentConverter(
                 format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline)}
             )
             self._converters[ocr] = converter
         return converter
+
+
+def document_from_docling(
+    doc: DoclingDocument,
+    *,
+    text_layers: list[bool],
+    source_path: str,
+    source_sha256: str,
+    parser_version: str,
+    ocr_applied: bool = False,
+) -> ParsedDocument:
+    """Map a converted ``DoclingDocument`` to the contract (pure; no models involved)."""
+    pages = _pages(doc, text_layers)
+    drafts = _drafts(doc, {p.page: p for p in pages})
+    return ParsedDocument(
+        source_path=source_path,
+        source_sha256=source_sha256,
+        parser_version=parser_version,
+        ocr_applied=ocr_applied,
+        pages=pages,
+        blocks=finalize_blocks(drafts),
+    )
 
 
 def _pages(doc: DoclingDocument, text_layers: list[bool]) -> tuple[PageInfo, ...]:

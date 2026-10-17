@@ -16,9 +16,11 @@ class ParserError(RuntimeError):
 class ParserOptions:
     """Knobs shared by parser implementations.
 
-    ``ocr``: run the OCR fallback on pages without a text layer. Off by default; the OCR engine
-    ships with the ``ocr`` extra and is never installed by default. Pages without a text layer
-    are flagged (``PageInfo.text_layer = False``) whether or not OCR runs.
+    ``ocr``: run the OCR fallback (RapidOCR) on documents with pages without a text layer. Off by
+    default; the engine ships with the ``ocr`` extra and is never installed by default, so
+    ``ocr=True`` without it is a ``ParserError``. Pages without a text layer are flagged
+    (``PageInfo.text_layer = False``) whether or not OCR runs.
+    ``ocr_lang``: RapidOCR recognition language (PP-OCR code, e.g. ``korean``, ``en``).
     ``table_structure``: recover table cells (Docling TableFormer).
     ``artifacts_path``: pre-downloaded model weights directory (offline workers); ``None`` uses
     the Hugging Face cache (``HF_HOME``, default ``~/.cache/huggingface``).
@@ -26,6 +28,7 @@ class ParserOptions:
     """
 
     ocr: bool = False
+    ocr_lang: str = "korean"
     table_structure: bool = True
     artifacts_path: Path | None = None
     device: str = "cpu"

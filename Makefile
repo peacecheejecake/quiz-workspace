@@ -25,7 +25,7 @@ SUPABASE := pnpm exec supabase
 SIGNING_KEYS := supabase/signing_keys.json
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
-	test test-ts test-py test-infra auth-keys infra-up infra-down infra-status infra-reset \
+	test test-ts test-py test-infra test-models auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
 	e2e e2e-browsers e2e-trace
 
@@ -78,8 +78,9 @@ test-ts:
 
 # pytest exits 5 when no tests were collected; that is the only non-zero code tolerated.
 # Tests marked `infra` skip (with a reason, listed by -ra) when the local stack is not running.
+# Tests marked `models` (real model weights) never run here; see `make test-models`.
 test-py:
-	@rc=0; uv run pytest -m "not infra" || rc=$$?; \
+	@rc=0; uv run pytest -m "not infra and not models" || rc=$$?; \
 	if [ $$rc -eq 5 ]; then echo "pytest: no tests collected yet; ok"; exit 0; fi; \
 	exit $$rc
 
@@ -87,6 +88,11 @@ test-py:
 # vacuously.
 test-infra: ## Integration tests against the running local stack (needs `make infra-up`)
 	QUIZ_REQUIRE_INFRA=1 uv run pytest -m infra
+
+# Real model weights (Docling layout/TableFormer from the Hugging Face cache, HF_HOME). Never
+# skips: missing weights without network access fail the run. Nightly / before parser changes.
+test-models: ## Tests on real model weights (downloads into HF_HOME on first run)
+	uv run pytest -m models
 
 auth-keys: $(SIGNING_KEYS) ## Generate the local Auth JWT signing key if missing (idempotent)
 

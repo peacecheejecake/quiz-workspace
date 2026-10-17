@@ -1,7 +1,8 @@
-"""Docling parser adapter against the synthetic fixture truth (M1.2).
+"""Real Docling models against the synthetic fixture truth (M1.2). Marked ``models``.
 
-Needs the ``parser`` extra (part of the root dev install) and the Docling layout/TableFormer
-weights, which Docling downloads into the Hugging Face cache on first use.
+Runs Docling's layout and TableFormer models, so it needs their weights (downloaded into the
+Hugging Face cache, ``HF_HOME``, on first use). Excluded from ``make test``; run with
+``make test-models`` (nightly). Model-free mapping tests live in ``test_parser_docling_mapping.py``.
 
 Tolerances:
 - Text: a truth block part matches a parsed block on the same page when both are equal after
@@ -20,12 +21,14 @@ from pathlib import Path
 
 import pytest
 from book_core.contracts import BBox, Block, BlockType, ParsedDocument
-from book_core.parser import ParserError, ParserOptions, PdfParser
-from book_core.parser.docling_adapter import DoclingParser, text_layer_pages
+from book_core.parser import PdfParser
+from book_core.parser.docling_adapter import DoclingParser
 from fixture_truth import BookTruth, QuestionsTruth, TruthPart
 from make_fixture_pdfs import OUT_DIR
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
+
+pytestmark = pytest.mark.models
 
 BOOKS = ("book-ko", "book-en")
 QUESTIONS = "questions-ko"
@@ -278,36 +281,7 @@ def _pdf_with_image_only_page(path: Path) -> None:
 def test_pages_without_text_layer_are_flagged(parser: DoclingParser, tmp_path: Path) -> None:
     path = tmp_path / "scan.pdf"
     _pdf_with_image_only_page(path)
-    assert text_layer_pages(path.read_bytes()) == [True, False]
     doc = parser.parse(path)
     assert [p.text_layer for p in doc.pages] == [True, False]
     assert not doc.ocr_applied
     assert all(b.text == "" for b in doc.blocks if b.locations[0].page == 2)
-
-
-def test_ocr_runs_only_when_enabled_and_needed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    path = tmp_path / "scan.pdf"
-    _pdf_with_image_only_page(path)
-    ocr_parser = DoclingParser(ParserOptions(ocr=True))
-    requested: list[bool] = []
-    real_converter = DoclingParser._converter
-
-    def spy(self: DoclingParser, ocr: bool) -> object:
-        requested.append(ocr)
-        # The OCR engine is an optional extra; run the text pipeline in its place.
-        return real_converter(self, False)
-
-    monkeypatch.setattr(DoclingParser, "_converter", spy)
-    assert ocr_parser.parse(path).ocr_applied
-    assert not ocr_parser.parse(OUT_DIR / "book-en.pdf").ocr_applied
-    assert not DoclingParser().parse(path).ocr_applied
-    assert requested == [True, False, False]
-
-
-def test_non_pdf_input_raises_parser_error(parser: DoclingParser, tmp_path: Path) -> None:
-    path = tmp_path / "not-a.pdf"
-    path.write_bytes(b"plain text, not a PDF")
-    with pytest.raises(ParserError):
-        parser.parse(path)
