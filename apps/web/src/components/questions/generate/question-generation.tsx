@@ -125,7 +125,18 @@ export function QuestionGeneration({
   const revision = source.revision;
 
   const [runs, setRuns] = useState<GenerationRun[]>(() => [...initialRuns]);
-  const [run, setRun] = useState<GenerationRun | null>(initialRun);
+  const [run, setRunState] = useState<GenerationRun | null>(initialRun);
+  /**
+   * The run the screen shows. Every async draft/run update checks it after its await, so a
+   * response that arrives after the reviewer switched runs never lands in another run's list
+   * (and a later publish never sends one run's drafts against another).
+   */
+  const shownRun = useRef<string | null>(initialRun?.id ?? null);
+  const setRun = useCallback((next: GenerationRun | null) => {
+    shownRun.current = next?.id ?? null;
+    setRunState(next);
+  }, []);
+  const isShown = (runId: string) => shownRun.current === runId;
   /** Source revisions by id: the current one and those runs were generated from. */
   const [revisions, setRevisions] = useState<Record<string, SourceRevision>>(() => ({
     [revision.id]: revision,
@@ -191,11 +202,12 @@ export function QuestionGeneration({
     async (runId: string, signal?: AbortSignal) => {
       try {
         const items = await client.listDrafts(runId, signal);
+        if (shownRun.current !== runId) return false;
         setDrafts(sortDrafts(items.map(reviewDraftFromImport)));
         setListFailed(false);
         return true;
       } catch (error) {
-        if (signal?.aborted) return false;
+        if (signal?.aborted || shownRun.current !== runId) return false;
         if (!onUnauthenticated(error)) setListFailed(true);
         return false;
       }
@@ -235,10 +247,11 @@ export function QuestionGeneration({
         if (isAbort(error, signal)) return;
         onUnauthenticated(error);
       }
-      setRun(latest);
       setRuns((list) => upsertRun(list, latest));
+      if (shownRun.current !== current.id) return;
+      setRun(latest);
       await refreshDrafts(latest.id, signal);
-      if (signal.aborted) return;
+      if (signal.aborted || shownRun.current !== latest.id) return;
       setWorking(null);
       if (latest.status === 'succeeded') {
         setStatus({
@@ -255,11 +268,11 @@ export function QuestionGeneration({
         setListFailed(true);
       }
     },
-    [client, onUnauthenticated, refreshDrafts],
+    [client, onUnauthenticated, refreshDrafts, setRun],
   );
 
   async function startGeneration(body: GenerationCreate) {
-    if (!canEdit || working) return;
+    if (!canEdit || working || publishing) return;
     const { signal } = newController();
     const keyOf = bodyKey(body);
     let key = startKeys.current.get(keyOf);
@@ -345,7 +358,8 @@ export function QuestionGeneration({
   /** Shows an earlier (or the newest) run: its drafts, review state and failure. */
   async function selectRun(runId: string) {
     const next = runs.find((r) => r.id === runId);
-    if (!next || next.id === run?.id || working) return;
+    // Not while a publish (and its refresh) is in flight: it belongs to the run on screen.
+    if (!next || next.id === run?.id || working || publishing) return;
     const { signal } = newController();
     showRunInUrl(next.id);
     setRun(next);
@@ -389,7 +403,7 @@ export function QuestionGeneration({
     try {
       const latest = await client.getRun(runId);
       setRuns((list) => upsertRun(list, latest));
-      setRun((current) => (current?.id === latest.id ? latest : current));
+      if (shownRun.current === latest.id) setRun(latest);
     } catch {
       // Counts in the history stay as they were; the drafts themselves are up to date.
     }
@@ -459,18 +473,21 @@ export function QuestionGeneration({
   // --- review -------------------------------------------------------------------------------
 
   async function patchDraft(draft: ReviewDraft, body: DraftUpdateBody, fallback: string) {
+    const runId = shownRun.current;
+    if (!runId) return;
     try {
       const updated = await client.updateDraft(draft.id, body);
+      if (!isShown(runId)) return;
       setDrafts((list) => replaceDraft(list, reviewDraftFromImport(updated)));
       setStates((s) => {
         const { [draft.id]: _done, ...rest } = s;
         return rest;
       });
     } catch (error) {
-      if (onUnauthenticated(error)) return;
+      if (onUnauthenticated(error) || !isShown(runId)) return;
       setStates((s) => ({ ...s, [draft.id]: { error: messageOf(error, fallback) } }));
-      if (run && error instanceof GenerationApiError && error.kind !== 'network') {
-        void refreshDrafts(run.id);
+      if (error instanceof GenerationApiError && error.kind !== 'network') {
+        void refreshDrafts(runId);
       }
     }
   }
@@ -499,12 +516,14 @@ export function QuestionGeneration({
     baseVersion: string,
   ): Promise<DraftSaveResult> {
     const target = editing;
-    if (!target) return { ok: false, message: '편집할 초안이 없습니다.' };
+    const runId = shownRun.current;
+    if (!target || !runId) return { ok: false, message: '편집할 초안이 없습니다.' };
     try {
       const updated = await client.updateDraft(
         target.id,
         generationDraftUpdateBody(values, target, baseVersion),
       );
+      if (!isShown(runId)) return { ok: true };
       setDrafts((list) => replaceDraft(list, reviewDraftFromImport(updated)));
       setStates((s) => {
         const { [target.id]: _done, ...rest } = s;
@@ -525,9 +544,11 @@ export function QuestionGeneration({
   }
 
   async function reloadDraft(draftId: string): Promise<ReviewDraft | null> {
-    if (!run) return null;
+    const runId = shownRun.current;
+    if (!runId) return null;
     try {
-      const items = (await client.listDrafts(run.id)).map(reviewDraftFromImport);
+      const items = (await client.listDrafts(runId)).map(reviewDraftFromImport);
+      if (!isShown(runId)) return null;
       setDrafts(sortDrafts(items));
       return items.find((d) => d.id === draftId) ?? null;
     } catch (error) {
@@ -542,25 +563,26 @@ export function QuestionGeneration({
   const approving = Object.values(states).some((s) => s.approving !== undefined);
 
   async function publish() {
-    if (!run || publishing || selection.length === 0) return;
+    // The drafts on screen belong to the shown run (every draft update is scoped to it).
+    if (!run || !isShown(run.id) || publishing || selection.length === 0) return;
     setPublishing(true);
     setPublishFailure(null);
     setStatus(null);
     const runId = run.id;
     const round = publishRound.current;
+    // Switching runs stays disabled until the publish and its refresh are done.
     try {
       await publishInBatches(
         selection,
         (batch) => client.publish(runId, batch),
         (items) => {
           for (const item of items) round.add(item.draft_id);
-          setDrafts((list) => applyPublished(list, items));
+          if (isShown(runId)) setDrafts((list) => applyPublished(list, items));
         },
       );
       setStatus({ text: publishedMessage(round.size), bank: true });
       round.clear();
-      void refreshDrafts(runId);
-      void refreshRun(runId);
+      await Promise.all([refreshDrafts(runId), refreshRun(runId)]);
     } catch (error) {
       if (onUnauthenticated(error)) return;
       const kind = error instanceof GenerationApiError ? error.kind : 'unavailable';
@@ -569,8 +591,10 @@ export function QuestionGeneration({
         `승인한 초안을 모두 등록하지 못했습니다.${partial} ${messageOf(error, '문제를 등록하지 못했습니다.')}`,
       );
       // A refusal (e.g. 409 duplicate-question) re-validated the drafts: show why.
-      if (kind !== 'network' && kind !== 'unavailable') void refreshDrafts(runId);
-      if (round.size > 0) void refreshRun(runId);
+      await Promise.all([
+        kind !== 'network' && kind !== 'unavailable' ? refreshDrafts(runId) : null,
+        round.size > 0 ? refreshRun(runId) : null,
+      ]);
     } finally {
       setPublishing(false);
     }
@@ -671,7 +695,7 @@ export function QuestionGeneration({
         }}
         canGenerate={canEdit}
         canShuffle={readOnly !== 'archived'}
-        busy={busy || opening}
+        busy={busy || opening || publishing}
         onShuffle={() => void openShuffled()}
         onGenerate={(body) => void startGeneration(body)}
       />
@@ -786,7 +810,7 @@ export function QuestionGeneration({
               label="생성 기록"
               description="이전에 만든 초안도 여기서 다시 열어 검토하고 등록할 수 있습니다."
               value={run?.id ?? ''}
-              disabled={busy}
+              disabled={busy || publishing}
               options={runs.map((r) => ({ value: r.id, label: runLabel(r, formatDateTime) }))}
               onValueChange={(value) => void selectRun(value)}
               fieldClassName={styles.historyField}
