@@ -42,6 +42,8 @@ class ProblemType(StrEnum):
     UPLOAD_EXPIRED = "urn:quiz-workspace:problem:upload-expired"
     # 422: the stored object does not match the declared size / SHA-256 (it is discarded).
     UPLOAD_MISMATCH = "urn:quiz-workspace:problem:upload-mismatch"
+    # 409: an edit was based on a revision that is no longer the active one (reload and retry).
+    STALE_REVISION = "urn:quiz-workspace:problem:stale-revision"
 
 
 class ProblemException(StarletteHTTPException):
