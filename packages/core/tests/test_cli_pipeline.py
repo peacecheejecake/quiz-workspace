@@ -446,3 +446,105 @@ def test_cli_docling_parse_to_chunks_book_ko(tmp_path: Path) -> None:
     covered = {bid for c in children for bid in c.block_ids}
     assert {b.id for b in revision.blocks if b.section_id is not None} <= covered
     assert all(c.language == "ko" for c in children)
+
+
+# ---------------------------------------------------------------------------------------------
+# diagnostics never carry the supplied source path; outputs never clobber inputs or each other
+
+FAKE_JWT = "eyJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiL2sucGRmIn0.c2lnbmF0dXJlLXZhbHVl"
+SIGNED_URL = f"https://x.supabase.co/storage/v1/object/sign/b/k.pdf?token={FAKE_JWT}#frag"
+
+
+def test_signed_url_source_path_stays_out_of_diagnostics(tmp_path: Path) -> None:
+    output = tmp_path / "parsed.json"
+    code, out, err = _invoke(
+        [
+            "parse",
+            str(_pdf("book-ko")),
+            *_fake_args("book-ko"),
+            "--source-path",
+            SIGNED_URL,
+            "-o",
+            str(output),
+        ]
+    )
+    assert code == 0, err
+    assert out == b""
+    assert "parsed k.pdf:" in err
+    for fragment in (FAKE_JWT, "token=", "supabase.co", "/sign/", "#frag"):
+        assert fragment not in err
+    # The value itself is recorded as given; only diagnostics are scrubbed.
+    assert ParsedDocument.model_validate_json(output.read_bytes()).source_path == SIGNED_URL
+
+
+def test_signed_url_source_path_stays_out_of_parser_errors() -> None:
+    # The fake parser's UnknownDocumentError quotes the source path it was given.
+    err = _assert_failed(
+        ["parse", str(_pdf("book-ko")), "--parser", "fake", "--source-path", SIGNED_URL]
+    )
+    assert "registered for k.pdf" in err
+    for fragment in (FAKE_JWT, "token=", "supabase.co", "/sign/"):
+        assert fragment not in err
+
+
+def test_error_labels_drop_directories(tmp_path: Path) -> None:
+    secret_dir = tmp_path / "private-dir"
+    secret_dir.mkdir()
+    bad = secret_dir / "bad.json"
+    bad.write_text("{nope", encoding="utf-8")
+    err = _assert_failed(["structure", str(bad), "--document-id", "d", "--revision-id", "r"])
+    assert "bad.json is not valid JSON" in err
+    assert "private-dir" not in err
+
+
+def _collision_cases(tmp: Path) -> list[list[str]]:
+    _, revision_path, chunks_path = _run_pipeline("book-ko", tmp)
+    parsed_path = tmp / "parsed.json"
+    link = tmp / "link.jsonl"
+    link.symlink_to(chunks_path)
+    rev_link = tmp / "rev-link.json"
+    rev_link.symlink_to(revision_path)
+    out = tmp / "new.jsonl"
+    dotted = str(tmp / "." / "new.jsonl")
+    rev, old = str(revision_path), str(chunks_path)
+    return [
+        # chunks and diff into the same file: same path, ./ spelling, symlink
+        ["chunk", rev, "-o", str(out), "--diff", old, "--diff-output", str(out)],
+        ["chunk", rev, "-o", str(out), "--diff", old, "--diff-output", dotted],
+        ["chunk", rev, "-o", str(link), "--diff", str(tmp / "x.jsonl"), "--diff-output", old],
+        # an output overwriting the --diff old chunks or the main input
+        ["chunk", rev, "-o", old, "--diff", old, "--diff-output", str(tmp / "d.json")],
+        ["chunk", rev, "-o", str(out), "--diff", old, "--diff-output", str(link)],
+        ["chunk", rev, "-o", str(tmp / "." / "revision.json")],
+        ["chunk", rev, "-o", str(rev_link)],
+        [
+            "structure",
+            str(parsed_path),
+            "--document-id",
+            "d",
+            "--revision-id",
+            "r",
+            "-o",
+            str(tmp / "." / "parsed.json"),
+        ],
+        ["parse", str(_pdf("book-ko")), *_fake_args("book-ko"), "-o", str(_truth("book-ko"))],
+    ]
+
+
+def test_colliding_outputs_are_rejected_before_writing(tmp_path: Path) -> None:
+    (tmp_path / "x.jsonl").write_text("", encoding="utf-8")
+    cases = _collision_cases(tmp_path)
+    watched = [
+        tmp_path / "parsed.json",
+        tmp_path / "revision.json",
+        tmp_path / "chunks.jsonl",
+        _truth("book-ko"),
+    ]
+    before = {p: p.read_bytes() for p in watched}
+    for args in cases:
+        code, out, err = _invoke(args)
+        assert code == USAGE, (args, err)
+        assert out == b""
+        assert not (tmp_path / "new.jsonl").exists()
+        assert not (tmp_path / "d.json").exists()
+        assert {p: p.read_bytes() for p in watched} == before

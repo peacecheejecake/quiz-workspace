@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 import tempfile
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, NoReturn
+from urllib.parse import urlsplit
 
 import typer
 from pydantic import BaseModel, ValidationError
@@ -38,6 +40,7 @@ PROCESSING_ERROR_EXIT_CODE = 1
 STDIO = "-"
 STDIN_SOURCE_PATH = "document.pdf"
 _MAX_ERROR_CHARS = 300
+_MAX_LABEL_CHARS = 80
 
 app = typer.Typer(
     name="core",
@@ -65,7 +68,10 @@ class CliError(Exception):
 # I/O helpers
 
 
-def _fail(message: str) -> NoReturn:
+def _fail(message: str, sensitive: Sequence[str] = ()) -> NoReturn:
+    for value in sorted(set(sensitive), key=len, reverse=True):
+        if value and value != STDIO:
+            message = message.replace(value, _label(value))
     text = redact(" ".join(message.split()))
     if len(text) > _MAX_ERROR_CHARS:
         text = text[: _MAX_ERROR_CHARS - 1] + "…"
@@ -74,8 +80,41 @@ def _fail(message: str) -> NoReturn:
 
 
 def _label(path: str) -> str:
-    """How an input/output is named in messages: the file name only, never a local path."""
-    return "<stdin>" if path == STDIO else Path(path).name
+    """Credential-free name of a path or URL for diagnostics: the last path segment only, with
+    no directories, host, userinfo, query or fragment, redacted. A ``--source-path`` may be a
+    storage key or signed URL, so the value itself is never printed."""
+    if path == STDIO:
+        return "<stdin>"
+    parts = urlsplit(path) if "://" in path else None
+    tail = parts.path if parts is not None else path
+    name = re.split(r"[?#]", tail.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1], maxsplit=1)[0]
+    name = redact(name)
+    if len(name) > _MAX_LABEL_CHARS:
+        name = name[: _MAX_LABEL_CHARS - 1] + "…"
+    return name or "<unnamed>"
+
+
+def _same_file(a: str, b: str) -> bool:
+    first, second = Path(a), Path(b)
+    try:
+        if first.exists() and second.exists():
+            return first.samefile(second)
+        return first.resolve() == second.resolve()
+    except OSError:
+        return False
+
+
+def _check_destinations(outputs: Sequence[tuple[str | None, str]], inputs: Sequence[str]) -> None:
+    """Reject (exit 2, before anything is read or written) an output file that is another
+    output or one of the inputs, including via ``./`` spellings, symlinks and hard links."""
+    files = [(path, hint) for path, hint in outputs if path is not None and path != STDIO]
+    for i, (path, hint) in enumerate(files):
+        for other, other_hint in files[:i]:
+            if _same_file(path, other):
+                raise typer.BadParameter(f"same file as {other_hint}", param_hint=hint)
+        for source in inputs:
+            if source != STDIO and _same_file(path, source):
+                raise typer.BadParameter("would overwrite an input file", param_hint=hint)
 
 
 def _require_input(path: str | None, hint: str) -> None:
@@ -181,16 +220,20 @@ def diff_to_json(diff: ChunkDiff) -> dict[str, Any]:
 
 
 @contextmanager
-def _errors() -> Iterator[None]:
-    """Map processing failures to exit code 1 with a sanitized one-line message."""
+def _errors(sensitive: Sequence[str] = ()) -> Iterator[None]:
+    """Map processing failures to exit code 1 with a sanitized one-line message.
+
+    ``sensitive`` values (paths, the supplied source path) are replaced by their ``_label``
+    wherever an underlying error message quotes them.
+    """
     try:
         yield
     except CliError as exc:
-        _fail(str(exc))
+        _fail(str(exc), sensitive)
     except ParserError as exc:
-        _fail(f"parse failed ({type(exc).__name__}): {exc}")
+        _fail(f"parse failed ({type(exc).__name__}): {exc}", sensitive)
     except ChunkingError as exc:
-        _fail(f"chunking failed: {exc}")
+        _fail(f"chunking failed: {exc}", sensitive)
 
 
 # --------------------------------------------------------------------------------------------
@@ -259,14 +302,16 @@ def parse(
     if source_path is not None and not source_path.strip():
         raise typer.BadParameter("must not be empty", param_hint="--source-path")
     _require_input(pdf, "PDF")
-    with _errors():
+    truth_paths = [str(t) for t in truth or []]
+    _check_destinations([(output, "--output")], [pdf, *truth_paths])
+    with _errors([pdf, *truth_paths, *([source_path] if source_path else []), output or STDIO]):
         engine = _make_parser(parser, truth or [], ocr=ocr, ocr_lang=ocr_lang)
         name = source_path or (STDIN_SOURCE_PATH if pdf == STDIO else Path(pdf).name)
         with _pdf_path(pdf) as path:
             document = engine.parse(path, source_path=name)
         _write_text(output, dump_json(document, compact=compact, sort_keys=sort_keys))
     typer.echo(
-        f"parsed {document.source_path}: {len(document.pages)} pages, "
+        f"parsed {_label(document.source_path)}: {len(document.pages)} pages, "
         f"{len(document.blocks)} blocks, ocr_applied={str(document.ocr_applied).lower()}, "
         f"parser {document.parser_version}",
         err=True,
@@ -326,7 +371,8 @@ def structure(
     _check_id(document_id, "--document-id")
     _check_id(revision_id, "--revision-id")
     _require_input(parsed, "PARSED")
-    with _errors():
+    _check_destinations([(output, "--output")], [parsed])
+    with _errors([parsed, output or STDIO]):
         document = _validate(ParsedDocument, _load_json(parsed), _label(parsed))
         revision = _structure(
             document, document_id=document_id, revision_id=revision_id, published=published
@@ -424,7 +470,12 @@ def chunk(
             raise typer.BadParameter("SOURCE already reads stdin", param_hint="--diff")
     _require_input(source, "SOURCE")
     _require_input(diff, "--diff")
-    with _errors():
+    inputs = [source, *([diff] if diff is not None else [])]
+    _check_destinations(
+        [(output, "--output"), *([(diff_output, "--diff-output")] if diff is not None else [])],
+        inputs,
+    )
+    with _errors([*inputs, output or STDIO, diff_output]):
         revision = _load_revision(source, document_id=document_id, revision_id=revision_id)
         old = load_chunks_jsonl(diff) if diff is not None else None
         result = chunk_revision(revision, document_title=title or None, config=config)
