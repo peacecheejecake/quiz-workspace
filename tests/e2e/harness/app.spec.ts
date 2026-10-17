@@ -1,10 +1,13 @@
 // Harness self-tests (no AC): the web server, project settings and the unauthenticated context
-// behave as the RED/GREEN specs assume. They pass against today's stub routes (HARNESS-02 signs in).
-import { expect, LOGIN_SCREEN, submitLogin, test } from '../fixtures/test.ts';
+// behave as the RED/GREEN specs assume. Every screen route — implemented or still a stub — carries
+// its screen ID (`data-screen-id`); HARNESS-02 signs in. Screens whose route needs real data
+// (DOC-02 needs a parsed document) are covered by their own specs; here only the route's
+// existence check is asserted.
+import { expect, LOGIN_SCREEN, notFoundHeading, submitLogin, test } from '../fixtures/test.ts';
 
-// Public stub routes own their <main>; protected stubs (A2.1) render inside the AppShell <main>
+// Public screen routes own their <main>; protected ones (A2.1) render inside the AppShell <main>
 // and are reachable only with a session.
-const PUBLIC_STUB_ROUTES = [
+const PUBLIC_SCREEN_ROUTES = [
   { path: '/login', id: 'AUTH-01' },
   { path: '/signup', id: 'AUTH-02' },
   { path: '/auth/error', id: 'AUTH-07' },
@@ -12,30 +15,37 @@ const PUBLIC_STUB_ROUTES = [
 ] as const;
 
 // `:ws` is replaced by a workspace the signed-in user owns: since M3.1b workspace routes check
-// access server-side and answer 404 for unknown ids.
-const PROTECTED_STUB_ROUTES = [
+// access server-side and answer 404 for unknown ids. Implemented screens (ACCOUNT-01, WS-01,
+// DOC-01) and the remaining stubs alike.
+const PROTECTED_SCREEN_ROUTES = [
   { path: '/settings/security', id: 'ACCOUNT-01' },
   { path: '/workspaces', id: 'WS-01' },
-  { path: '/workspaces/:ws/documents/e2e-doc', id: 'DOC-02' },
+  { path: '/workspaces/:ws/documents', id: 'DOC-01' },
+  { path: '/workspaces/:ws/history', id: 'HISTORY-01' },
 ] as const;
 const PLACEHOLDER_WS = '00000000-0000-4000-8000-000000000000';
+/** DOC-02 is a real viewer since M3.5: a document that does not exist is the 404 page. */
+const UNKNOWN_DOCUMENT = '00000000-0000-4000-8000-0000000000d0';
 
-test('HARNESS-01 stub routes render their screen ID', async ({ page }) => {
-  for (const { path, id } of PUBLIC_STUB_ROUTES) {
+test('HARNESS-01 screen routes render their screen ID', async ({ page }) => {
+  for (const { path, id } of PUBLIC_SCREEN_ROUTES) {
     const res = await page.goto(path);
     expect(res?.status(), path).toBe(200);
     await expect(page.getByRole('main'), path).toHaveAttribute('data-screen-id', id);
     await expect(page.getByRole('heading', { level: 1 }), path).toBeVisible();
   }
-  // Without a session every protected stub sends the browser to /login.
-  for (const { path } of PROTECTED_STUB_ROUTES) {
+  // Without a session every protected screen sends the browser to /login.
+  for (const path of [
+    ...PROTECTED_SCREEN_ROUTES.map((r) => r.path),
+    `/workspaces/:ws/documents/${UNKNOWN_DOCUMENT}`,
+  ]) {
     await page.goto(path.replace(':ws', PLACEHOLDER_WS));
     await expect(page, path).toHaveURL(LOGIN_SCREEN);
   }
 });
 
 test(
-  'HARNESS-02 protected and query-state stubs render for a signed-in user',
+  'HARNESS-02 protected and query-state screens render for a signed-in user',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const member = await workspaceFactory.member('harness02');
@@ -43,13 +53,17 @@ test(
     await submitLogin(page, member.user);
     await expect(page).toHaveURL((url) => url.pathname === '/workspaces');
 
-    for (const { path: template, id } of PROTECTED_STUB_ROUTES) {
+    for (const { path: template, id } of PROTECTED_SCREEN_ROUTES) {
       const path = template.replace(':ws', ws.id);
       const res = await page.goto(path);
       expect(res?.status(), path).toBe(200);
       await expect(page.getByRole('main').locator(`[data-screen-id="${id}"]`), path).toBeVisible();
       await expect(page.getByRole('heading', { level: 1 }), path).toBeVisible();
     }
+    // DOC-02 route exists and checks the document server-side (viewer: documents-editor spec).
+    const missing = await page.goto(`/workspaces/${ws.id}/documents/${UNKNOWN_DOCUMENT}`);
+    expect(missing?.status(), 'unknown document').toBe(404);
+    await expect(notFoundHeading(page)).toBeVisible();
     // QOV-01 and its QPLAY-01 panel (`?question=`) are real screens since M5.4 (questions specs).
     await page.goto('/share/e2e-share?panel=fork');
     await expect(page.locator('section[data-screen-id="WS-FORK-01"]')).toBeVisible();
