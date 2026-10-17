@@ -442,6 +442,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M6.1 core generation | ✅ | 48e35f9 · 8ffba22 | PARAPHRASE/INVERT_POLARITY/ANALOGOUS_CONCEPT + schema·정답 수·fingerprint·인용 검증, never-raise sweep. P2(원본 evidence와 같은 인용 미집계) → 반영 → 지적 없음. LLM model default 없음(§7 유지) |
 | M3.6b search 화면 | ✅ | 0df2934 · 9407384 · 5c8f1be | SEARCH-01 AC01~05 + DOC-02 AC02~05 GREEN(chromium·webkit). PDF jump 위치는 브라우저에서 첫 query term block으로 보정(서버측 개선은 follow-up). P2×2(revision 미유지, stale chapter) → 반영 → P2(지연 초기 검색 race) → 반영 → 지적 없음 |
 | M6.0/M7.0 RED | ✅ | 9ad03b7 | QGEN-01 4 + HISTORY-01 3 E2E, contract 10 RED(404). ScenarioLLMClient fake. 지적 없음 |
+| S2b shared view 화면 | ✅ | a1ff998 · b9472b4 | WS-VIEW-01 AC01~06 + WS-SHARE-01 AC02~05 GREEN(chromium·webkit), artifact-audit 0. PdfViewer는 byte loader 주입으로 변경(share cookie). Fork는 placeholder(S3b). P2(PDF 요청의 share 실패 미전파) → 반영 → 지적 없음 |
 | M4.4b import 화면 | ✅ | 9a263df · c02d89a | QIMPORT-01 AC01~04 GREEN. 공용 `QuestionDraftReview`. P2×2(초기 로드 재시도, publish 200 제한) → 상태 직접 갱신 + 200개 batch → 지적 없음 |
 | S2a sharing 화면 | ✅ | bbcbc21 · 27c0039 | WS-SHARE-01 AC01~05 + WS-01-AC06 GREEN(chromium·webkit), artifact-audit 0. P2×2(21+ link revoke, 만료 link 정책 편집) → 반영 → 지적 없음 |
 | S1b shared API | ✅ | bb611bc · 8693117 | share contract 14 GREEN. 무상태 HMAC session cookie, PDF는 API proxy. P2×2(relay 뒤 rate limit key, 미발행 chapter oracle) → 서명된 relay client id + link별 상한, published chapter만 허용 → 지적 없음 |
