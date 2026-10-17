@@ -9,8 +9,10 @@ import {
   expect,
   expectFieldError,
   newCredentials,
+  PROTECTED_LANDING,
   recordMutations,
   requestPasswordRecovery,
+  submitLogin,
   test,
   waitForMailLink,
   type TestUser,
@@ -95,6 +97,24 @@ test(
     await newLinkPath(page).click();
     await expect(page).toHaveURL(atPath(/^\/forgot-password$/));
 
+    expect(await canSignIn(user)).toBe(true);
+  },
+);
+
+test(
+  'AUTH-06-AC02 a normal (non-recovery) session cannot use /reset-password',
+  { tag: '@infra' },
+  async ({ page, userFactory }) => {
+    const user = await userFactory.create({ label: 'auth06-ac02-session' });
+    // Regular password sign-in: authenticated, but not a recovery session.
+    await submitLogin(page, user);
+    await expect(page).toHaveURL(PROTECTED_LANDING);
+
+    await page.goto('/reset-password');
+    // Denied: no new-password form, only the way to request a recovery link (here or on
+    // /auth/error), and the session is not turned into a password change.
+    await expect(page).toHaveURL(atPath(/^\/(reset-password|auth\/error)$/));
+    await expectNewLinkOffer(page);
     expect(await canSignIn(user)).toBe(true);
   },
 );

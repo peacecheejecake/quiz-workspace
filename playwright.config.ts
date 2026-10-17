@@ -61,6 +61,8 @@ export default defineConfig({
     : [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: BASE_URL,
+    // Missing elements fail fast with a locator message instead of running into the test timeout.
+    actionTimeout: 10_000,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'on-first-retry',

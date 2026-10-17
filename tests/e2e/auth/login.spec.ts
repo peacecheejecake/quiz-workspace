@@ -136,7 +136,8 @@ test(
     }
     expect(messages[0]).toBe(messages[1]);
 
-    // Retrying with the right password succeeds.
+    // Retrying with the right credentials from the same form succeeds.
+    await authUi.email(page).fill(user.email);
     await authUi.password(page).fill(user.password);
     await authUi.signInButton(page).click();
     await expect(page).toHaveURL(PROTECTED_LANDING);
