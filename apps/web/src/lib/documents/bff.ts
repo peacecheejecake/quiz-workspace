@@ -100,6 +100,9 @@ export async function relayToApi(path: string, options: RelayOptions): Promise<R
   const headers = new Headers(NO_STORE);
   const contentType = upstream.headers.get('content-type');
   if (contentType) headers.set('Content-Type', contentType);
+  // Rate limits (429) and maintenance (503) tell the browser when to come back.
+  const retryAfter = upstream.headers.get('retry-after');
+  if (retryAfter && /^[\w ,:+-]{1,64}$/.test(retryAfter)) headers.set('Retry-After', retryAfter);
   if (options.stream && upstream.ok) {
     // No buffering between here and the browser (reverse proxies, compression).
     headers.set('X-Accel-Buffering', 'no');

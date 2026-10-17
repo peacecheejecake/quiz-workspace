@@ -1,0 +1,228 @@
+/* SEARCH-01 search screen. Semantic tokens only. */
+
+.screen {
+  display: grid;
+  gap: var(--space-5);
+}
+
+/* Desktop: the non-modal excerpt panel sits on the right; keep the results readable beside it. */
+@media (width >= 1024px) {
+  .screen[data-panel-open] {
+    padding-inline-end: calc(var(--floating-panel-width) + var(--space-4));
+  }
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 48rem;
+}
+
+.queryRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.queryField {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.resultsSection {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 1.5em;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.status:empty {
+  display: none;
+}
+
+.hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+}
+
+.guidance {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-inline-start: var(--space-5);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  text-align: start;
+}
+
+.alert {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+}
+
+.alert p {
+  margin: 0;
+}
+
+.results {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.results[aria-busy='true'] {
+  opacity: 0.6;
+}
+
+.hit {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+/* Selected hit: thicker accent border plus the bar, not colour alone. */
+.hit[data-selected] {
+  border-color: var(--color-accent);
+  box-shadow: inset 4px 0 0 var(--color-accent);
+}
+
+.hitHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.hitTitle {
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-body-lg);
+  font-weight: var(--font-weight-semibold);
+  text-align: start;
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-strong);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.hitTitle:hover {
+  text-decoration-color: currentcolor;
+}
+
+.hitTitle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.hitPage {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  white-space: nowrap;
+}
+
+.breadcrumb {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.excerpt {
+  margin: 0;
+  padding-inline-start: var(--space-3);
+  border-inline-start: 3px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-relaxed);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.excerpt[data-variant='compact'] {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: var(--font-size-body);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+.mark {
+  background: none;
+  color: inherit;
+}
+
+/* Matched passage: tinted background plus an underline (visible without colour). */
+.mark[data-passage] {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  text-decoration: underline;
+  text-decoration-color: var(--color-accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+/* Query term: bold. */
+.mark[data-term] {
+  font-weight: var(--font-weight-semibold);
+}
+
+.panelBody {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.panelBreadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  list-style: none;
+}
+
+.panelBreadcrumb li + li::before {
+  content: '›';
+  margin-inline-end: var(--space-1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .results {
+    transition: opacity var(--duration-panel-exit) ease;
+  }
+}
