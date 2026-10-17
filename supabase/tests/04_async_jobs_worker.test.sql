@@ -4,7 +4,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(53);
+select plan(58);
 
 -- Columns and defaults --------------------------------------------------------------------------
 select col_not_null('public', 'async_jobs', 'max_attempts', 'max_attempts is not null');
@@ -98,18 +98,43 @@ select throws_ok(
              repeat('x', 501)) $$,
   '23514', null, 'cleanup_last_error is bounded');
 
--- updated_at trigger keeps an explicit value, otherwise stamps now() ----------------------------
+-- updated_at trigger (20261017170000): now() unless the writer signals its own clock -----------
+-- Without the signal an explicitly written value is replaced, and so is an untouched one.
 update public.async_jobs set updated_at = '2001-02-03 04:05:06+00', locked_by = 'w2'
  where id = '20000000-0000-4000-8000-0000000007b1';
 select is(
   (select updated_at from public.async_jobs where id = '20000000-0000-4000-8000-0000000007b1'),
-  '2001-02-03 04:05:06+00'::timestamptz,
-  'an explicitly written updated_at is kept');
+  now(),
+  'without the signal an explicit updated_at is replaced by now()');
 update public.async_jobs set locked_by = 'w3' where id = '20000000-0000-4000-8000-0000000007b1';
 select is(
   (select updated_at from public.async_jobs where id = '20000000-0000-4000-8000-0000000007b1'),
   now(),
   'an update without updated_at stamps now()');
+set local quiz.explicit_updated_at = 'off';
+update public.async_jobs set updated_at = '2001-02-03 04:05:06+00'
+ where id = '20000000-0000-4000-8000-0000000007b1';
+select is(
+  (select updated_at from public.async_jobs where id = '20000000-0000-4000-8000-0000000007b1'),
+  now(),
+  'a signal value other than on is ignored');
+
+-- With the signal the written value is kept, also when it equals the old value (two
+-- transitions computed from one clock reading: the case the 20261017150000 trigger got wrong).
+set local quiz.explicit_updated_at = 'on';
+update public.async_jobs set updated_at = '2001-02-03 04:05:06+00', locked_by = 'w4'
+ where id = '20000000-0000-4000-8000-0000000007b1';
+select is(
+  (select updated_at from public.async_jobs where id = '20000000-0000-4000-8000-0000000007b1'),
+  '2001-02-03 04:05:06+00'::timestamptz,
+  'with the signal an explicit updated_at is kept');
+update public.async_jobs set updated_at = '2001-02-03 04:05:06+00', locked_by = 'w5'
+ where id = '20000000-0000-4000-8000-0000000007b1';
+select is(
+  (select updated_at from public.async_jobs where id = '20000000-0000-4000-8000-0000000007b1'),
+  '2001-02-03 04:05:06+00'::timestamptz,
+  'with the signal an explicit updated_at equal to the old value is kept');
+set local quiz.explicit_updated_at = '';
 
 -- Privileges ------------------------------------------------------------------------------------
 select table_privs_are('public', 'async_jobs', 'quiz_worker', array['SELECT', 'INSERT'],
@@ -166,6 +191,15 @@ select lives_ok(
   $$ insert into public.async_jobs (workspace_id, job_type, idempotency_key, max_attempts)
      values ('10000000-0000-4000-8000-0000000007b1', 'document.index', 'follow-up-1', 5) $$,
   'quiz_worker can create a follow-up job');
+select lives_ok(
+  $$ select pg_catalog.set_config('quiz.explicit_updated_at', 'on', true) $$,
+  'quiz_worker can set the explicit clock signal');
+update public.async_jobs set updated_at = '2002-03-04 05:06:07+00'
+ where id = '20000000-0000-4000-8000-0000000007b1';
+select is(
+  (select updated_at from public.async_jobs where id = '20000000-0000-4000-8000-0000000007b1'),
+  '2002-03-04 05:06:07+00'::timestamptz,
+  'quiz_worker transitions keep their own updated_at under the signal');
 select throws_ok(
   $$ update public.async_jobs set payload = '{"x": 1}'
       where id = '20000000-0000-4000-8000-0000000007b1' $$,

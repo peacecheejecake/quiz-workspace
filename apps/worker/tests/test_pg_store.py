@@ -26,7 +26,7 @@ from quiz_worker.store import (
 )
 from sqlalchemy import event, text
 
-from .conftest import EnvelopeFactory, FakeClock, PgEngines, Tenancy
+from .conftest import EnvelopeFactory, FakeClock, PgEngines, PgTenancy, Tenancy
 
 pytestmark = pytest.mark.infra
 
@@ -43,8 +43,8 @@ SCAN_INDEXES = frozenset(
 
 
 @pytest.fixture
-def pg(pg_engines: PgEngines, pg_tenancy: Tenancy, clock: FakeClock) -> PostgresJobStore:
-    return PostgresJobStore(pg_engines.worker, clock=clock)
+def pg(pg_engines: PgEngines, pg_tenancy: PgTenancy, clock: FakeClock) -> PostgresJobStore:
+    return pg_tenancy.store(pg_engines.worker, clock)
 
 
 @pytest.fixture
@@ -236,13 +236,14 @@ def captured_sql(pg_engines: PgEngines) -> Iterator[list[tuple[str, Any]]]:
     ],
 )
 def test_reconciler_scans_use_their_indexes(
-    pg: PostgresJobStore,
     pg_engines: PgEngines,
+    clock: FakeClock,
     captured_sql: list[tuple[str, Any]],
     scan: Callable[[PostgresJobStore], object],
     index: str,
 ) -> None:
-    scan(pg)
+    # The deployed (unscoped) queries; only their SQL is used, not their results.
+    scan(PostgresJobStore(pg_engines.worker, clock=clock))
     assert captured_sql
     raw = pg_engines.admin.raw_connection()
     try:
@@ -314,6 +315,47 @@ def test_a_job_inserted_by_the_api_with_column_defaults_is_claimable(
     assert pg.claim(envelope, worker_id="w", lease_seconds=LEASE).outcome is ClaimOutcome.CLAIMED
 
 
+def test_scan_scope_hides_other_sessions_rows(
+    pg: PostgresJobStore,
+    pg_engines: PgEngines,
+    other_tenancy: PgTenancy,
+    make_envelope: EnvelopeFactory,
+    clock: FakeClock,
+) -> None:
+    # Another "session": its own user/workspace, same frozen clock, an unpublished job.
+    other = other_tenancy.store(pg_engines.worker, clock)
+    foreign = make_envelope(
+        workspace_id=other_tenancy.workspace_id,
+        created_by=other_tenancy.user_id,
+    )
+    other.create(foreign, max_attempts=3)
+    mine = make_envelope()
+    pg.create(mine, max_attempts=3)
+    clock.advance(60)
+
+    def ids(store: PostgresJobStore) -> set[UUID]:
+        return {
+            r.job_id
+            for r in store.find_republish_candidates(
+                unpublished_grace_seconds=60, stale_after_seconds=10_000, limit=100
+            )
+        }
+
+    assert ids(pg) == {mine.job_id}
+    assert ids(other) == {foreign.job_id}
+    unscoped = PostgresJobStore(pg_engines.worker, clock=clock)
+    assert {mine.job_id, foreign.job_id} <= ids(unscoped)
+
+
+@pytest.fixture
+def other_tenancy(pg_engines: PgEngines) -> Iterator[PgTenancy]:
+    tenancy = PgTenancy(pg_engines.admin)
+    try:
+        yield tenancy
+    finally:
+        tenancy.cleanup()
+
+
 def test_unknown_job_and_identity_clash(
     pg: PostgresJobStore, make_envelope: EnvelopeFactory
 ) -> None:
@@ -322,3 +364,37 @@ def test_unknown_job_and_identity_clash(
     pg.create(envelope, max_attempts=3)
     with pytest.raises(ValueError, match="job_id already used"):
         pg.create(make_envelope("workspace.fork", job_id=envelope.job_id), max_attempts=3)
+
+
+def test_every_transition_persists_the_record_it_returns(
+    pg: PostgresJobStore, pg_engines: PgEngines, make_envelope: EnvelopeFactory
+) -> None:
+    # Frozen clock: consecutive transitions write the same updated_at as the row already has.
+    envelope = make_envelope()
+    steps: list[Callable[[], object]] = [
+        partial(pg.create, envelope, max_attempts=3),
+        partial(pg.mark_published, envelope.job_id),
+        partial(pg.claim, envelope, worker_id="w", lease_seconds=LEASE),
+        partial(pg.release_for_retry, envelope.job_id, attempt=1, error="transient"),
+        partial(pg.request_cancel, envelope.job_id),
+        partial(pg.claim, envelope, worker_id="w", lease_seconds=LEASE),
+    ]
+    for step in steps:
+        returned = step()
+        record = returned.record if isinstance(returned, ClaimResult) else returned
+        assert record == pg.get(envelope.job_id)
+    final = pg.get(envelope.job_id)
+    assert final is not None
+    assert final.status is JobStatus.CANCELLED
+
+    # The signal is transaction-local: a later plain update on a pooled connection is stamped.
+    with pg_engines.worker.begin() as conn:
+        conn.execute(
+            text("update public.async_jobs set cleanup_last_error = 'x' where id = :id"),
+            {"id": envelope.job_id},
+        )
+        stamped = conn.execute(
+            text("select updated_at = now() from public.async_jobs where id = :id"),
+            {"id": envelope.job_id},
+        ).scalar_one()
+    assert stamped is True

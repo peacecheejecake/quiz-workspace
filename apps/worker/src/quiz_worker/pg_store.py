@@ -10,13 +10,15 @@ Only the state columns are ever updated (the columns `quiz_worker` has UPDATE on
 identity (workspace, creator, type, key, schema version, payload) is written once by `create`.
 
 Time comes from the database (`clock_timestamp()`) unless a clock is injected (tests), so every
-worker and the reconciler compare leases against one clock.
+worker and the reconciler compare leases against one clock. Every transition writes its own
+`updated_at` and sets the transaction-local `quiz.explicit_updated_at` signal so the table's
+trigger keeps that value: the persisted row is exactly the record the store returns.
 """
 
 from __future__ import annotations
 
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Collection, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -31,6 +33,7 @@ from sqlalchemy import (
     Engine,
     Integer,
     MetaData,
+    Select,
     Table,
     Text,
     Uuid,
@@ -114,6 +117,8 @@ STATE_COLUMNS = (
     "cleanup_next_at",
 )
 _TERMINAL_WITH_CLEANUP = (JobStatus.FAILED.value, JobStatus.CANCELLED.value)
+# Read by the async_jobs updated_at trigger (supabase/migrations/20261017170000).
+EXPLICIT_UPDATED_AT_SETTING = "quiz.explicit_updated_at"
 
 
 def create_job_store_engine(
@@ -190,11 +195,21 @@ def _values(record: JobRecord, columns: tuple[str, ...]) -> dict[str, Any]:
 class PostgresJobStore(TransactionalJobStore):
     """`JobStore` over `public.async_jobs`, for every environment with a database."""
 
-    def __init__(self, engine: Engine, clock: Callable[[], datetime] | None = None) -> None:
+    def __init__(
+        self,
+        engine: Engine,
+        clock: Callable[[], datetime] | None = None,
+        *,
+        scan_workspaces: Collection[UUID] | None = None,
+    ) -> None:
+        """`scan_workspaces` limits the reconciler/cleanup scans to those workspaces (read at
+        every scan). Deployed workers leave it None; tests sharing one database use it so a
+        scan never picks up another test session's rows."""
         super().__init__(clock or _no_clock)
         self._engine = engine
         self._db_clock = clock is None
         self._pid = os.getpid()
+        self._scan_workspaces = scan_workspaces
 
     @property
     def engine(self) -> Engine:
@@ -219,8 +234,9 @@ class PostgresJobStore(TransactionalJobStore):
         now = conn.execute(select(func.clock_timestamp(type_=_TS))).scalar_one()
         return now.astimezone(UTC)
 
-    @staticmethod
-    def _fetch(conn: Connection, stmt: Any) -> list[JobRecord]:
+    def _fetch(self, conn: Connection, stmt: Select[Any]) -> list[JobRecord]:
+        if self._scan_workspaces is not None:
+            stmt = stmt.where(_T.workspace_id.in_(list(self._scan_workspaces)))
         return [_from_row(row) for row in conn.execute(stmt).mappings()]
 
     # -- TransactionalJobStore primitives ------------------------------------------------
@@ -233,6 +249,9 @@ class PostgresJobStore(TransactionalJobStore):
             )
             value, updated = mutate(_from_row(found) if found else None, self._now(conn))
             if updated is not None:
+                # Transaction-local: keep the updated_at this transition computed instead of
+                # letting the trigger stamp now() (migration 20261017170000).
+                conn.execute(select(func.set_config(EXPLICIT_UPDATED_AT_SETTING, "on", True)))
                 conn.execute(
                     update(ASYNC_JOBS)
                     .where(_T.id == job_id)

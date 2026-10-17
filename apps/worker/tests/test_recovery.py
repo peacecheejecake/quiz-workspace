@@ -211,6 +211,28 @@ def test_unpublished_job_is_published_after_the_grace_period(
     assert reconcile(store, recorder, job).republished == 0
 
 
+def test_transitions_at_one_frozen_instant_persist_exactly_what_they_return(
+    store: TransactionalJobStore, make_envelope: EnvelopeFactory, clock: FakeClock
+) -> None:
+    # create and request_cancel compute the same updated_at; the stored row must keep it
+    # (Postgres: the trigger must not swap in its own now()), or the reconciler's grace-period
+    # comparison runs against a different time than the worker's.
+    envelope = make_envelope()
+    created = store.create(envelope, max_attempts=3)
+    flagged = store.request_cancel(envelope.job_id)
+
+    assert flagged.updated_at == created.updated_at == clock.now
+    assert store.get(envelope.job_id) == flagged
+    assert store.find_republish_candidates(
+        unpublished_grace_seconds=GRACE, stale_after_seconds=STALE, limit=10
+    ) == []  # fmt: skip
+    clock.advance(GRACE)
+    candidates = store.find_republish_candidates(
+        unpublished_grace_seconds=GRACE, stale_after_seconds=STALE, limit=10
+    )
+    assert candidates == [flagged]
+
+
 def test_published_but_unclaimed_job_is_republished_when_stale(
     store: TransactionalJobStore, make_envelope: EnvelopeFactory, clock: FakeClock
 ) -> None:

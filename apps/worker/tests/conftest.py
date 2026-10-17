@@ -61,7 +61,7 @@ class Tenancy:
     new_user: Callable[[], UUID] = field(default=uuid4)
 
 
-class _PgTenancy(Tenancy):
+class PgTenancy(Tenancy):
     def __init__(self, admin: Engine) -> None:
         self._admin = admin
         self._workspaces: list[UUID] = []
@@ -92,6 +92,11 @@ class _PgTenancy(Tenancy):
             )
         self._workspaces.append(workspace_id)
         return workspace_id
+
+    def store(self, engine: Engine, clock: Callable[[], datetime] | None) -> PostgresJobStore:
+        """A store whose reconciler/cleanup scans see only this test's workspaces (other
+        sessions may be running the same suites against the shared local DB)."""
+        return PostgresJobStore(engine, clock=clock, scan_workspaces=self._workspaces)
 
     def cleanup(self) -> None:
         with self._admin.begin() as conn:
@@ -156,8 +161,8 @@ def pg_engines() -> Iterator[PgEngines]:
 
 
 @pytest.fixture
-def pg_tenancy(pg_engines: PgEngines) -> Iterator[_PgTenancy]:
-    tenancy = _PgTenancy(pg_engines.admin)
+def pg_tenancy(pg_engines: PgEngines) -> Iterator[PgTenancy]:
+    tenancy = PgTenancy(pg_engines.admin)
     try:
         yield tenancy
     finally:
@@ -169,8 +174,8 @@ def store(request: pytest.FixtureRequest, clock: FakeClock, tmp_path: Path) -> J
     """Every store test runs against all implementations of the shared transitions."""
     if request.param == "postgres":
         engines: PgEngines = request.getfixturevalue("pg_engines")
-        request.getfixturevalue("pg_tenancy")
-        return PostgresJobStore(engines.worker, clock=clock)
+        tenancy: PgTenancy = request.getfixturevalue("pg_tenancy")
+        return tenancy.store(engines.worker, clock)
     if request.param == "sqlite":
         return SqliteJobStore(tmp_path / "jobs.sqlite3", clock=clock)
     return InMemoryJobStore(clock=clock)

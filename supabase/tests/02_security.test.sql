@@ -113,7 +113,11 @@ grant quiz_api to postgres;
 -- Test-only (rolled back): let assertions run while the role is switched.
 grant usage on schema extensions to quiz_api;
 set local role quiz_api;
-select results_eq($$ select name from public.workspaces $$::text, $$ values ('sec ws'::text) $$::text,
+-- Scoped to the fixture row: the shared local DB may hold committed rows of concurrent
+-- integration tests.
+select results_eq(
+  $$ select name from public.workspaces where id = '10000000-0000-4000-8000-000000000001' $$::text,
+  $$ values ('sec ws'::text) $$::text,
   'quiz_api can read workspaces through its RLS policy');
 select lives_ok(
   $$ insert into public.activity_events (workspace_id, actor_id, event_type, target_type, target_id)
