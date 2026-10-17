@@ -20,12 +20,12 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from book_core.contracts import ParsedDocument
-from book_core.embedding import Embedder, FakeEmbedder
+from book_core.embedding import Embedder, select_embedder, uses_fake_embedder
 from book_core.indexing import CollectionNames, QdrantIndexStore
 from book_core.parser import FakeParser, ParserOptions, PdfParser, sha256_hex
 
 from quiz_worker.errors import NonRetryableJobError
-from quiz_worker.settings import EmbedderMode, ParserMode, WorkerSettings
+from quiz_worker.settings import ParserMode, WorkerSettings
 
 INDEX_FAILURE_MARKER = "E2E-FAIL-INDEXING"
 _REPO_FIXTURES = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "pdfs"
@@ -145,15 +145,14 @@ def build_parser(settings: WorkerSettings) -> PdfParser:
 
 
 def build_embedder(settings: WorkerSettings) -> Embedder:
-    mode = settings.embedder
-    embedder: Embedder
-    if mode is EmbedderMode.FAKE or (mode is EmbedderMode.AUTO and settings.is_test):
-        embedder = FakeEmbedder()
-    else:
+    # Shared with the API's query embedder (book_core.embedding.select_embedder).
+    if not uses_fake_embedder(settings.embedder.value, test_env=settings.is_test):
         _prepare_offline(settings)
-        from book_core.embedding import Qwen3Embedder, Qwen3EmbedderConfig
-
-        embedder = Qwen3Embedder(Qwen3EmbedderConfig(local_files_only=settings.models_offline))
+    embedder = select_embedder(
+        settings.embedder.value,
+        test_env=settings.is_test,
+        local_files_only=settings.models_offline,
+    )
     if settings.is_test:
         embedder = FailureInjectingEmbedder(embedder)
     return embedder

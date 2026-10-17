@@ -394,6 +394,43 @@ def test_section_tree_filters_become_qdrant_conditions(memory_store: QdrantIndex
     assert {h.chapter_id for h in filtered.hits} == {chapter2}
 
 
+def _subtree(book: str, title_part: str) -> tuple[str, ...]:
+    sections = REVISIONS[book].sections
+    root = next(s.id for s in sections if s.level == 1 and title_part in s.title)
+    return tuple(sorted({s.id for s in sections if s.parent_id == root} | {root}))
+
+
+def test_document_sections_restrict_sections_per_document(memory_store: QdrantIndexStore) -> None:
+    # Both books share section ids (same structure); the pairs keep each document's sections
+    # apart, which a flat `section_ids` filter cannot.
+    en_ch2 = _subtree("book-en", "Treatment")
+    ko_ch1 = _subtree("book-ko", "순환")
+    assert set(en_ch2) & {s.id for s in REVISIONS["book-ko"].sections}
+    scope = _scope(document_sections=(("book-en", en_ch2), ("book-ko", ko_ch1)))
+    conditions = scope_filter(scope).must
+    assert isinstance(conditions, list)
+    assert isinstance(conditions[-1], qm.Filter)
+    service = SearchService(memory_store, limits=SearchLimits(results=100))
+    for mode in ("keyword", "semantic", "hybrid"):
+        result = service.search("water 물", scope, mode=mode)
+        found = {(h.hit.document_id, h.hit.section_id) for h in result.hits}
+        assert {doc for doc, _ in found} == set(BOOKS), mode
+        for doc, section in found:
+            assert section in (en_ch2 if doc == "book-en" else ko_ch1), mode
+
+
+def test_document_sections_are_enforced_on_returned_candidates() -> None:
+    inside = _child("inside", document="doc")
+    other_doc = _child("other", document="doc2")
+    store = CannedStore([Candidate(other_doc, 9.0), Candidate(inside, 1.0)], [])
+    section = inside.section_id
+    assert section is not None
+    scope = _scope("r1", document_sections=(("doc", (section,)),))
+    assert _ids(SearchService(store).search("passage", scope, mode="keyword")) == ["inside"]
+    with pytest.raises(ValueError, match="at least one section"):
+        _scope("r1", document_sections=(("doc", ()),))
+
+
 @pytest.mark.parametrize(
     ("filters", "expected"),
     [

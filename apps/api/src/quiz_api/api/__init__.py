@@ -16,6 +16,7 @@ from quiz_api.api import (
     question_imports,
     question_overview,
     questions,
+    search,
     share_links,
     workspaces,
 )
@@ -29,6 +30,7 @@ api_router.include_router(me.router)
 api_router.include_router(workspaces.router)
 api_router.include_router(documents.router)
 api_router.include_router(document_revisions.router)
+api_router.include_router(search.router)
 api_router.include_router(questions.router)
 api_router.include_router(question_overview.router)
 api_router.include_router(question_imports.router)

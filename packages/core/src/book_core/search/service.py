@@ -406,6 +406,7 @@ def _in_scope(candidates: Sequence[Candidate], scope: SearchScope) -> list[Candi
             or (scope.document_ids and chunk.document_id not in scope.document_ids)
             or (scope.section_ids and chunk.section_id not in scope.section_ids)
             or (scope.languages and chunk.language not in scope.languages)
+            or not scope.admits_section(chunk.document_id, chunk.section_id)
             or not math.isfinite(candidate.score)
         ):
             dropped += 1

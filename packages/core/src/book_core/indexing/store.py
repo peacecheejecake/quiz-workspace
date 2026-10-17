@@ -99,7 +99,12 @@ class SearchScope:
     """Server-enforced read filter. ``revision_ids`` are the published (active) revisions the
     caller resolved from the database for the documents it may read; both they and
     ``workspace_id`` are mandatory, so no query can run across workspaces or reach a stale
-    or unpublished revision."""
+    or unpublished revision.
+
+    ``document_sections`` restricts sections per document: ``((document_id, section_ids), ...)``
+    admits a chunk only when its document is listed and its ``section_id`` is one of that
+    document's sections. Section ids are per-document (two books can both have ``ch2``), so a
+    chapter filter spanning several documents needs these pairs instead of ``section_ids``."""
 
     workspace_id: str
     revision_ids: tuple[str, ...]
@@ -107,6 +112,7 @@ class SearchScope:
     section_ids: tuple[str, ...] = ()
     languages: tuple[str, ...] = ()
     level: ChunkLevel = ChunkLevel.CHILD
+    document_sections: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     def __post_init__(self) -> None:
         _require(self.workspace_id, "workspace_id")
@@ -114,6 +120,21 @@ class SearchScope:
             raise ValueError("a search scope needs at least one published revision id")
         for value in (*self.revision_ids, *self.document_ids, *self.section_ids):
             _require(value, "scope id")
+        for document_id, sections in self.document_sections:
+            _require(document_id, "scope id")
+            if isinstance(sections, str) or not sections:
+                raise ValueError("document_sections needs at least one section per document")
+            for value in sections:
+                _require(value, "scope id")
+
+    def admits_section(self, document_id: str, section_id: str | None) -> bool:
+        """Whether ``document_sections`` (if any) admits a chunk of this document/section."""
+        if not self.document_sections:
+            return True
+        return any(
+            document_id == doc and section_id in sections
+            for doc, sections in self.document_sections
+        )
 
 
 def scope_filter(scope: SearchScope, *, any_level: bool = False) -> qm.Filter:
@@ -132,6 +153,15 @@ def scope_filter(scope: SearchScope, *, any_level: bool = False) -> qm.Filter:
         must.append(_match_any("section_id", scope.section_ids))
     if scope.languages:
         must.append(_match_any("language", scope.languages))
+    if scope.document_sections:
+        must.append(
+            qm.Filter(
+                should=[
+                    qm.Filter(must=[_match("document_id", doc), _match_any("section_id", sections)])
+                    for doc, sections in scope.document_sections
+                ]
+            )
+        )
     return qm.Filter(must=must)
 
 

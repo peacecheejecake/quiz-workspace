@@ -11,6 +11,7 @@ from functools import lru_cache
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
+from book_core.embedding.factory import EmbedderMode
 from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -168,6 +169,23 @@ class Settings(BaseSettings):
         default=300, ge=10, le=3600, validation_alias="SIGNED_READ_URL_TTL_SECONDS"
     )
 
+    # Workspace search (M3.6a). The query embedder and the collection namespace must be the
+    # worker's (same model key, same collections), so these read the worker's variables and
+    # pick the embedder through the same `book_core.embedding.select_embedder`.
+    qdrant_collection_prefix: str = Field(
+        default="", pattern=r"^[A-Za-z0-9_-]*$", validation_alias="QDRANT_COLLECTION_PREFIX"
+    )
+    search_embedder: EmbedderMode = Field(
+        default=EmbedderMode.AUTO, validation_alias="WORKER_EMBEDDER"
+    )
+    search_models_offline: bool = Field(default=False, validation_alias="WORKER_MODELS_OFFLINE")
+    # Per-user search rate limit (in-process token bucket, a stopgap until a shared limiter):
+    # sustained requests per minute and the burst allowed on top. 0 disables it.
+    search_rate_per_minute: int = Field(
+        default=60, ge=0, le=6000, validation_alias="SEARCH_RATE_LIMIT_PER_MINUTE"
+    )
+    search_rate_burst: int = Field(default=20, ge=1, le=1000, validation_alias="SEARCH_RATE_BURST")
+
     db_pool_size: int = Field(default=5, ge=1, validation_alias="DB_POOL_SIZE")
     db_connect_timeout_seconds: float = Field(
         default=3.0, gt=0, validation_alias="DB_CONNECT_TIMEOUT_SECONDS"
@@ -215,6 +233,8 @@ class Settings(BaseSettings):
             problems.append("CORS_ALLOWED_ORIGINS must contain only https:// origins")
         if self.web_origin and not self.web_origin.startswith("https://"):
             problems.append("WEB_ORIGIN must be an https:// origin")
+        if self.search_embedder is EmbedderMode.FAKE:
+            problems.append("WORKER_EMBEDDER=fake is for local and test runs only")
         if problems:
             raise InsecureConfigurationError(
                 f"Refusing to start with APP_ENV={self.app_env.value}: " + "; ".join(problems)

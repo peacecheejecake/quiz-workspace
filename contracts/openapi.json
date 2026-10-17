@@ -1045,6 +1045,71 @@
         "title": "DraftValidation",
         "type": "object"
       },
+      "HitBoundingBox": {
+        "properties": {
+          "x0": {
+            "title": "X0",
+            "type": "number"
+          },
+          "x1": {
+            "title": "X1",
+            "type": "number"
+          },
+          "y0": {
+            "title": "Y0",
+            "type": "number"
+          },
+          "y1": {
+            "title": "Y1",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x0",
+          "y0",
+          "x1",
+          "y1"
+        ],
+        "title": "HitBoundingBox",
+        "type": "object"
+      },
+      "HitLocation": {
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HitBoundingBox"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "PDF points, origin top-left."
+          },
+          "block_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Id"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "bbox",
+          "block_id"
+        ],
+        "title": "HitLocation",
+        "type": "object"
+      },
       "ImportCreate": {
         "additionalProperties": false,
         "properties": {
@@ -3911,6 +3976,351 @@
         "title": "RevisionJob",
         "type": "object"
       },
+      "SearchItem": {
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HitBoundingBox"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Box of `block_id` on `page`."
+          },
+          "block_id": {
+            "description": "Where to jump: the first matched block.",
+            "title": "Block Id",
+            "type": "string"
+          },
+          "block_ids": {
+            "description": "Blocks the hit itself covers.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Block Ids",
+            "type": "array"
+          },
+          "breadcrumb": {
+            "description": "Document title, then the section path.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Breadcrumb",
+            "type": "array"
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Top-level outline node (chapter) of the hit, in this revision.",
+            "title": "Chapter Id"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "context_block_ids": {
+            "description": "Every block shown in `text`.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Context Block Ids",
+            "type": "array"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "document_type": {
+            "description": "`book` or `question_paper`.",
+            "title": "Document Type",
+            "type": "string"
+          },
+          "highlights": {
+            "description": "The matched passage inside `text`.",
+            "items": {
+              "$ref": "#/components/schemas/TextRange"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "locations": {
+            "description": "Every page/box of `context_block_ids`.",
+            "items": {
+              "$ref": "#/components/schemas/HitLocation"
+            },
+            "title": "Locations",
+            "type": "array"
+          },
+          "page": {
+            "description": "1-based PDF page of `block_id`.",
+            "title": "Page",
+            "type": "integer"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "revision_id": {
+            "description": "The published revision the hit comes from.",
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "score_type": {
+            "enum": [
+              "bm25",
+              "cosine",
+              "rrf",
+              "rerank"
+            ],
+            "title": "Score Type",
+            "type": "string"
+          },
+          "section_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Outline node of the hit's own section (the chapter or a sub-section).",
+            "title": "Section Id"
+          },
+          "term_highlights": {
+            "description": "Query terms inside `text`.",
+            "items": {
+              "$ref": "#/components/schemas/TextRange"
+            },
+            "title": "Term Highlights",
+            "type": "array"
+          },
+          "text": {
+            "description": "Excerpt: the matched paragraphs plus context, canonical text.",
+            "title": "Text",
+            "type": "string"
+          },
+          "truncated_end": {
+            "title": "Truncated End",
+            "type": "boolean"
+          },
+          "truncated_start": {
+            "title": "Truncated Start",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "document_id",
+          "document_title",
+          "document_type",
+          "revision_id",
+          "chunk_id",
+          "chapter_id",
+          "section_id",
+          "breadcrumb",
+          "block_id",
+          "block_ids",
+          "context_block_ids",
+          "page",
+          "bbox",
+          "locations",
+          "text",
+          "highlights",
+          "term_highlights",
+          "truncated_start",
+          "truncated_end",
+          "language",
+          "rank",
+          "score",
+          "score_type"
+        ],
+        "title": "SearchItem",
+        "type": "object"
+      },
+      "SearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "chapter_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only these outline nodes (chapter or section) and their sub-sections.",
+            "title": "Chapter Ids"
+          },
+          "document_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only these documents.",
+            "title": "Document Ids"
+          },
+          "include_question_papers": {
+            "default": false,
+            "description": "Also search question-paper documents (left out of book search by default).",
+            "title": "Include Question Papers",
+            "type": "boolean"
+          },
+          "languages": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 35,
+                  "minLength": 2,
+                  "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$",
+                  "type": "string"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only passages in these languages, e.g. `en`.",
+            "title": "Languages"
+          },
+          "limit": {
+            "default": 10,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "mode": {
+            "default": "hybrid",
+            "description": "`keyword` (BM25), `semantic` (dense) or `hybrid` (both fused with RRF).",
+            "enum": [
+              "keyword",
+              "semantic",
+              "hybrid"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "query": {
+            "description": "Free text in any language. Longer than 1000 characters is truncated (with a warning); blank is 422.",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "SearchRequest",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SearchItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "keyword",
+              "semantic",
+              "hybrid"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "query": {
+            "description": "The query as searched (normalised, maybe truncated).",
+            "title": "Query",
+            "type": "string"
+          },
+          "query_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Script hint: `ko`, `en`, `mixed` or null.",
+            "title": "Query Language"
+          },
+          "truncated": {
+            "description": "The query was cut to the maximum length.",
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "mode",
+          "query_language",
+          "truncated",
+          "warnings",
+          "items"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
       "SelfGradeBody": {
         "additionalProperties": false,
         "properties": {
@@ -4339,6 +4749,26 @@
           "header_rows"
         ],
         "title": "TableCells",
+        "type": "object"
+      },
+      "TextRange": {
+        "properties": {
+          "end": {
+            "description": "Offset in `text` (characters), exclusive.",
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "description": "Offset in `text` (characters), inclusive.",
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "TextRange",
         "type": "object"
       },
       "UploadCompleted": {
@@ -9424,6 +9854,115 @@
         "summary": "Restore Workspace",
         "tags": [
           "workspaces"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/search": {
+      "post": {
+        "description": "Search the published text of this workspace's documents (SEARCH-01).",
+        "operationId": "searchWorkspace",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Search Workspace",
+        "tags": [
+          "search"
         ]
       }
     },

@@ -759,6 +759,26 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspace_id}/search': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Search Workspace
+     * @description Search the published text of this workspace's documents (SEARCH-01).
+     */
+    post: operations['searchWorkspace'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspace_id}/share-links': {
     parameters: {
       query?: never;
@@ -1323,6 +1343,26 @@ export type components = {
        * @enum {string}
        */
       severity: 'warning' | 'error';
+    };
+    /** HitBoundingBox */
+    HitBoundingBox: {
+      /** X0 */
+      x0: number;
+      /** X1 */
+      x1: number;
+      /** Y0 */
+      y0: number;
+      /** Y1 */
+      y1: number;
+    };
+    /** HitLocation */
+    HitLocation: {
+      /** @description PDF points, origin top-left. */
+      bbox: components['schemas']['HitBoundingBox'] | null;
+      /** Block Id */
+      block_id: string | null;
+      /** Page */
+      page: number;
     };
     /** ImportCreate */
     ImportCreate: {
@@ -2543,6 +2583,169 @@ export type components = {
        */
       status: string;
     };
+    /** SearchItem */
+    SearchItem: {
+      /** @description Box of `block_id` on `page`. */
+      bbox: components['schemas']['HitBoundingBox'] | null;
+      /**
+       * Block Id
+       * @description Where to jump: the first matched block.
+       */
+      block_id: string;
+      /**
+       * Block Ids
+       * @description Blocks the hit itself covers.
+       */
+      block_ids: string[];
+      /**
+       * Breadcrumb
+       * @description Document title, then the section path.
+       */
+      breadcrumb: string[];
+      /**
+       * Chapter Id
+       * @description Top-level outline node (chapter) of the hit, in this revision.
+       */
+      chapter_id: string | null;
+      /** Chunk Id */
+      chunk_id: string;
+      /**
+       * Context Block Ids
+       * @description Every block shown in `text`.
+       */
+      context_block_ids: string[];
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Document Title */
+      document_title: string;
+      /**
+       * Document Type
+       * @description `book` or `question_paper`.
+       */
+      document_type: string;
+      /**
+       * Highlights
+       * @description The matched passage inside `text`.
+       */
+      highlights: components['schemas']['TextRange'][];
+      /** Language */
+      language: string | null;
+      /**
+       * Locations
+       * @description Every page/box of `context_block_ids`.
+       */
+      locations: components['schemas']['HitLocation'][];
+      /**
+       * Page
+       * @description 1-based PDF page of `block_id`.
+       */
+      page: number;
+      /** Rank */
+      rank: number;
+      /**
+       * Revision Id
+       * Format: uuid
+       * @description The published revision the hit comes from.
+       */
+      revision_id: string;
+      /** Score */
+      score: number;
+      /**
+       * Score Type
+       * @enum {string}
+       */
+      score_type: 'bm25' | 'cosine' | 'rrf' | 'rerank';
+      /**
+       * Section Id
+       * @description Outline node of the hit's own section (the chapter or a sub-section).
+       */
+      section_id: string | null;
+      /**
+       * Term Highlights
+       * @description Query terms inside `text`.
+       */
+      term_highlights: components['schemas']['TextRange'][];
+      /**
+       * Text
+       * @description Excerpt: the matched paragraphs plus context, canonical text.
+       */
+      text: string;
+      /** Truncated End */
+      truncated_end: boolean;
+      /** Truncated Start */
+      truncated_start: boolean;
+    };
+    /** SearchRequest */
+    SearchRequest: {
+      /**
+       * Chapter Ids
+       * @description Only these outline nodes (chapter or section) and their sub-sections.
+       */
+      chapter_ids?: string[] | null;
+      /**
+       * Document Ids
+       * @description Only these documents.
+       */
+      document_ids?: string[] | null;
+      /**
+       * Include Question Papers
+       * @description Also search question-paper documents (left out of book search by default).
+       * @default false
+       */
+      include_question_papers?: boolean;
+      /**
+       * Languages
+       * @description Only passages in these languages, e.g. `en`.
+       */
+      languages?: string[] | null;
+      /**
+       * Limit
+       * @default 10
+       */
+      limit?: number;
+      /**
+       * Mode
+       * @description `keyword` (BM25), `semantic` (dense) or `hybrid` (both fused with RRF).
+       * @default hybrid
+       * @enum {string}
+       */
+      mode?: 'keyword' | 'semantic' | 'hybrid';
+      /**
+       * Query
+       * @description Free text in any language. Longer than 1000 characters is truncated (with a warning); blank is 422.
+       */
+      query: string;
+    };
+    /** SearchResponse */
+    SearchResponse: {
+      /** Items */
+      items: components['schemas']['SearchItem'][];
+      /**
+       * Mode
+       * @enum {string}
+       */
+      mode: 'keyword' | 'semantic' | 'hybrid';
+      /**
+       * Query
+       * @description The query as searched (normalised, maybe truncated).
+       */
+      query: string;
+      /**
+       * Query Language
+       * @description Script hint: `ko`, `en`, `mixed` or null.
+       */
+      query_language: string | null;
+      /**
+       * Truncated
+       * @description The query was cut to the maximum length.
+       */
+      truncated: boolean;
+      /** Warnings */
+      warnings: string[];
+    };
     /** SelfGradeBody */
     SelfGradeBody: {
       /**
@@ -2729,6 +2932,19 @@ export type components = {
       header_rows: number;
       /** Rows */
       rows: string[][];
+    };
+    /** TextRange */
+    TextRange: {
+      /**
+       * End
+       * @description Offset in `text` (characters), exclusive.
+       */
+      end: number;
+      /**
+       * Start
+       * @description Offset in `text` (characters), inclusive.
+       */
+      start: number;
     };
     /** UploadCompleted */
     UploadCompleted: {
@@ -6028,6 +6244,86 @@ export interface operations {
       };
       /** @description Unprocessable Content */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  searchWorkspace: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SearchRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SearchResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
         headers: {
           [name: string]: unknown;
         };
