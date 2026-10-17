@@ -412,17 +412,43 @@ def test_authorization_viewer_archived_and_outsiders(seed: Any) -> None:
     assert len(overview(viewer, ws["id"])["items"]) == 1
 
 
-def test_overview_statement_uses_the_overview_indexes(seed: Any) -> None:
-    """Plan check (not timing): with sequential scans disabled the statement must still be
-    answerable through the overview/state indexes, i.e. its predicates match them."""
+INDEX_SCANS = {"Index Scan", "Index Only Scan", "Bitmap Heap Scan"}
+
+
+def _plan_nodes(node: dict[str, Any]) -> list[dict[str, Any]]:
+    return [node, *(n for child in node.get("Plans", []) for n in _plan_nodes(child))]
+
+
+def _index_conds(node: dict[str, Any]) -> str:
+    """Index conditions of a scan node (a bitmap heap scan keeps them in its index children)."""
+    return " ".join(str(n["Index Cond"]) for n in _plan_nodes(node) if "Index Cond" in n)
+
+
+def test_overview_statement_is_index_bounded(seed: Any) -> None:
+    """Plan check (not timing, not a specific index name): with sequential scans disabled the
+    statement is still answered by index scans bounded by the workspace (questions) and the
+    caller (study states, practice sessions), i.e. its predicates match the indexes."""
     stmt = overview_statement(uuid.uuid4(), uuid.uuid4(), OverviewFilter())
     compiled = stmt.compile(dialect=postgresql.psycopg.dialect())  # type: ignore[attr-defined]
     with psycopg.connect(DB_ADMIN_URL) as conn:
         conn.execute("set local enable_seqscan = off")
-        plan = "\n".join(
-            str(r[0]) for r in conn.execute(f"explain {compiled}", compiled.params).fetchall()
-        )
+        row = conn.execute(f"explain (format json) {compiled}", compiled.params).fetchone()
         conn.rollback()
-    assert "questions_overview_idx" in plan, plan
-    assert "question_user_states_pkey" in plan, plan
-    assert "practice_sessions_user_question_idx" in plan, plan
+    assert row is not None
+    nodes = _plan_nodes(row[0][0]["Plan"])
+    by_table: dict[str, list[dict[str, Any]]] = {}
+    for n in nodes:
+        if "Relation Name" in n:
+            by_table.setdefault(n["Relation Name"], []).append(n)
+
+    for table in ("questions", "question_user_states", "practice_sessions"):
+        scans = by_table.get(table, [])
+        assert scans, f"{table} missing from the plan: {nodes}"
+        assert all(s["Node Type"] in INDEX_SCANS for s in scans), f"{table}: {scans}"
+    assert any("workspace_id" in _index_conds(s) for s in by_table["questions"]), by_table
+    # Per-caller lookups: index-driven by the caller or by the joined question (the planner may
+    # pick either, e.g. practice_sessions_user_question_idx or practice_sessions_revision_idx).
+    for table in ("question_user_states", "practice_sessions"):
+        for scan in by_table[table]:
+            conds = _index_conds(scan)
+            assert "user_id" in conds or "question_id" in conds, f"{table}: {scan}"
