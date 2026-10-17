@@ -383,6 +383,8 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-10-18 | Practice 중에는 server action revalidate를 하지 않고 panel open→closed 전이에서 overview를 refresh한다(pushState와 RSC refetch race). | M5.5 |
 | 2026-10-18 | 생성 LLM model 기본값 없음(`LLM_MODEL` 필수) 유지. 인용 조작 후보는 통째로 reject. | M6.1 |
 | 2026-10-18 | Fork(S3a): `workspace_forks.target_workspace_id`는 COMPLETED 전까지 NULL(문서 스케치의 `not null`과 다름, 대상 Workspace는 커밋 시에만 생성). 복제 DB 쓰기는 SECURITY DEFINER `worker_fork_commit` 한 트랜잭션에서 링크·원본 Workspace를 FOR SHARE로 잠근 뒤 재검증하고 수행(취소·실패 시 DB 잔여물 없음, Storage/Qdrant는 job cleanup이 삭제). ID는 `md5(salt:원본 id)`로 결정적 재매핑(재시도 멱등). Fork job은 원본 Workspace의 `async_jobs`에 두되 `/jobs`에서는 숨기고 `/me/forks/{id}`로만 조회. Fork 요청의 공유 세션 누락은 403 `share-session-required`(401은 JWT 의미). | quiz_worker에 workspaces·questions 등 쓰기 권한을 주지 않음, revoke와 커밋의 직렬화, 원본 owner에게 fork 존재 비노출 |
+| 2026-10-18 | S4: API launcher는 `proxy_headers=False`(uvicorn이 `X-Forwarded-For` 신뢰하지 않음), rate limit key는 정규화된 link UUID, web proxy matcher는 `/api/**` 전체 포함(확장자 경로 우회 방지), 500 응답도 no-store. `e2e:log-audit --worker`로 worker log까지 검사. 인가 matrix는 OpenAPI에서 생성되어 새 route는 규칙 없이 통과 불가. | S4 |
+| 2026-10-18 | M7.3(컨테이너·CI)은 M7.2와 파일 범위가 겹치지 않아 병렬 착수. CI GREEN 판정은 M7.2 merge 후 전체 E2E 포함으로 수행. | 진행 속도, 의존성 목적(전체 GREEN 후 CI 확정) 유지 |
 
 ## 8. 진행 현황
 
@@ -449,6 +451,8 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | S3a fork worker | ✅ | 0c0a806 · 886925c · c338e85 | migration 170000·200000 적용. fork contract 8 + worker integration GREEN. P2×2(재시도 시 Qdrant 재활성화, source 가변 읽기) → document lock 하 active revision 확인, manifest에 source snapshot → P2(manifest 크기) → `pg_column_size` + 제약 위반 409 → 지적 없음 |
 | S3b fork dialog | ✅ | bf295cb · 5cb99ab | WS-FORK-01 AC01~06 GREEN(chromium·webkit, repeat 3), artifact-audit 0. 상태 조회는 `/api/me/forks/{id}`. P2(닫을 때 focus 미복귀) → 반영 → 지적 없음. CI `E2E_PHASES`에 S0 미추가(CI에 worker 없음 → M7.3) |
 | M6.3 generation 화면 | ✅ | 86c56f9 · 909195f · ca10afb | QGEN-01 AC01~04 GREEN. 공용 QuestionDraftReview 재사용. P2×2(pinned revision 대비 diff, 이전 run 접근) + M6.2 fix 반영 → P2(publish 중 run 전환 race) → run별 scope + 전환 잠금 → 지적 없음 |
+| S4 security 검증 | ✅ | fac8c44 · 35dafb6 | 취약점 4건 발견·수정(share id 표기 변형 rate limit 우회, uvicorn XFF 신뢰, 500 캐시 가능, 확장자 경로 CSRF guard 우회). OpenAPI 기반 authz matrix 236+, share 공격, leak test, HARNESS-13~15. test-infra 555 GREEN, log/artifact audit 0. 지적 없음 |
+| (통합) 전체 E2E 회귀 | ✅ | 909195f | worker 포함 234/234 GREEN(chromium·webkit) |
 | M4.4b import 화면 | ✅ | 9a263df · c02d89a | QIMPORT-01 AC01~04 GREEN. 공용 `QuestionDraftReview`. P2×2(초기 로드 재시도, publish 200 제한) → 상태 직접 갱신 + 200개 batch → 지적 없음 |
 | S2a sharing 화면 | ✅ | bbcbc21 · 27c0039 | WS-SHARE-01 AC01~05 + WS-01-AC06 GREEN(chromium·webkit), artifact-audit 0. P2×2(21+ link revoke, 만료 link 정책 편집) → 반영 → 지적 없음 |
 | S1b shared API | ✅ | bb611bc · 8693117 | share contract 14 GREEN. 무상태 HMAC session cookie, PDF는 API proxy. P2×2(relay 뒤 rate limit key, 미발행 chapter oracle) → 서명된 relay client id + link별 상한, published chapter만 허용 → 지적 없음 |
