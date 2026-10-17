@@ -52,6 +52,9 @@ summary of the rules for carrying out the implementation plan.
   with `supabase migration up`. Keep such verification transactions short (seconds): DDL that
   references `auth.users` locks it and stalls Auth for every parallel task while open.
   Isolate data with per-test users and workspaces.
+- Processes you start (web/API/worker servers on non-default ports, separate Redis DB / Qdrant
+  prefix per task) are stopped by their recorded PIDs only — never `pkill -f` patterns that can hit
+  other tasks' processes.
 
 **Reviewer (Codex)**
 - Runs via `scripts/codex-review.sh` (§4) on the Task's commit(s) with the default model.
