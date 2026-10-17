@@ -440,7 +440,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M4.4b import 화면 | ✅ | 9a263df · c02d89a | QIMPORT-01 AC01~04 GREEN. 공용 `QuestionDraftReview`. P2×2(초기 로드 재시도, publish 200 제한) → 상태 직접 갱신 + 200개 batch → 지적 없음 |
 | S2a sharing 화면 | ✅ | bbcbc21 · 27c0039 | WS-SHARE-01 AC01~05 + WS-01-AC06 GREEN(chromium·webkit), artifact-audit 0. P2×2(21+ link revoke, 만료 link 정책 편집) → 반영 → 지적 없음 |
 | S1b shared API | ◐ | bb611bc | share contract 13 GREEN. 무상태 HMAC session cookie, PDF는 API proxy. P2×2(relay 뒤 rate limit key, 미발행 chapter oracle) 수정 중 |
-| M5.5 practice panel | ◐ | e29ae2d | QPLAY-01 AC01~05 GREEN. practice action revalidate 제거(pushState race) → panel 닫힐 때 refresh. P2×2(Back으로 닫을 때 stale, flag 변경 시 채점대기 유실) 수정 중 |
+| M5.5 practice panel | ✅ | e29ae2d · f45f8c9 | QPLAY-01 AC01~05 GREEN(3회 반복 92/92). practice action revalidate 제거(pushState race) → panel open→closed 전이에서 refresh. P2×2(Back 닫기 stale, flag 변경 시 채점대기 유실) → 반영 → 지적 없음. leak capture는 다른 화면 router prefetch 제외(Chromium reload 시 body 미반환 hang) |
 | M2.6 eval·CLI | ✅ | 8f605ce · 8ef75a4 | seed: Qwen3 hybrid R@5 0.667→rerank 1.0, sweep상 depth 10/k=0 최적(데이터 6 query라 기본값 변경 보류). P1·P2×2 → 반영 → 지적 없음 |
 | M3.5 PDF viewer·교정 UI | ✅ | 353277e · f01356a · 57bbf68 | DOC-02 AC01 GREEN(AC02~05는 M3.6a 후 재확인). P2×2 → 반영 → P2(지연 refresh가 새 저장 덮음) → generation counter → 지적 없음 |
 | M4.3 LLM·extractor | ✅ | d104c02 · 9b335a6 · a6cb4a2 | P1(보기 swap)·P2(세로 정답표) → 반영 → P1(원문자 숫자 crash 회귀) → decimal-only + never-raise property test(600 seed) → 지적 없음 |
