@@ -326,18 +326,24 @@ class QdrantIndexStore:
 
     def ensure_collection(self) -> str:
         """Resolve (and create if needed) the physical collection for the next operation."""
+        return self._run(lambda collection: collection)
+
+    def _resolve(self) -> str:
         alias_missing = False
+        create = True
         if self._pinned is not None:
             name = self._pinned
         else:
             target = alias_target(self._client, self._names.alias, retry=self._retry)
             alias_missing = target is None
             if target is not None and self._key_of(target) == self._model_key:
-                name = target
+                # Never re-create an alias target that disappeared: it was switched away from
+                # and dropped, so resolve again instead.
+                name, create = target, False
             else:
                 name = self._names.physical(self._model_key)
         if name not in self._verified:
-            self._verify(name)
+            self._verify(name, create=create)
         if alias_missing:
             try:
                 switch_alias(self._client, self._names.alias, name, retry=self._retry)
@@ -347,8 +353,10 @@ class QdrantIndexStore:
                     raise
         return name
 
-    def _verify(self, name: str) -> None:
+    def _verify(self, name: str, *, create: bool) -> None:
         if not self._retry.call(lambda: self._client.collection_exists(name)):
+            if not create:
+                raise _CollectionGoneError(f"collection {name!r} no longer exists")
             self._create(name)
         info = self._retry.call(lambda: self._client.get_collection(name))
         found = (info.config.metadata or {}).get("model_key")
@@ -368,21 +376,19 @@ class QdrantIndexStore:
             self._keys[collection] = key if isinstance(key, str) else None
         return self._keys[collection]
 
-    def _forget(self, collection: str) -> None:
-        self._verified.discard(collection)
-        self._keys.pop(collection, None)
-
     def _run[T](self, operation: Callable[[str], T]) -> T:
-        """Run ``operation`` on the resolved collection; if that collection vanished meanwhile
-        (an old generation dropped after an alias switch), resolve again and retry once."""
-        collection = self.ensure_collection()
-        try:
-            return operation(collection)
-        except Exception as exc:
-            if self._pinned is not None or not _is_missing_collection(exc):
-                raise
-            self._forget(collection)
-            return operation(self.ensure_collection())
+        """Resolve the collection and run ``operation`` on it as one unit. If a collection
+        vanished anywhere in between (an old generation dropped right after an alias switch),
+        the caches are cleared and the unit is retried once."""
+        for attempt in range(2):
+            try:
+                return operation(self._resolve())
+            except Exception as exc:
+                if attempt or self._pinned is not None or not _is_missing_collection(exc):
+                    raise
+                self._verified.clear()
+                self._keys.clear()
+        raise AssertionError("unreachable")  # pragma: no cover
 
     def _create(self, name: str) -> None:
         try:
@@ -771,7 +777,13 @@ class QdrantIndexStore:
         )
 
 
+class _CollectionGoneError(IndexStoreError):
+    """A resolved alias target was dropped before it could be used."""
+
+
 def _is_missing_collection(exc: BaseException) -> bool:
+    if isinstance(exc, _CollectionGoneError):
+        return True
     if isinstance(exc, UnexpectedResponse):
         return exc.status_code == 404
     # Local mode (in-process qdrant-client) raises ValueError("Collection ... not found").

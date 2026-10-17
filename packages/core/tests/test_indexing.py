@@ -9,6 +9,8 @@ alias switching and rebuilds. Tests against a real Qdrant server live in
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
+from decimal import Decimal
+from fractions import Fraction
 
 import pytest
 from book_core.chunker import ChunkerConfig, chunk_revision, diff_chunks
@@ -676,8 +678,8 @@ def test_operation_on_a_collection_dropped_meanwhile_is_resolved_again(
     client.delete_collection(old)
     # The race: the collection was resolved just before it was dropped.
     stale = iter([old])
-    real = QdrantIndexStore.ensure_collection
-    monkeypatch.setattr(store, "ensure_collection", lambda: next(stale, None) or real(store))
+    real = QdrantIndexStore._resolve
+    monkeypatch.setattr(store, "_resolve", lambda: next(stale, None) or real(store))
     assert store.active_revision(WS, "doc-ko") == "r1"
     assert store.ensure_collection() == report.collection
 
@@ -728,3 +730,92 @@ def test_collection_with_other_bm25_parameters_is_refused_and_rebuilt(
     assert retuned.active_revision(WS, "doc-en") == "r1"
     # A store with the old settings no longer matches the alias target: its own collection.
     assert store.ensure_collection() == current
+
+
+@pytest.mark.parametrize("warm", [False, True], ids=["fresh-store", "cached-store"])
+def test_alias_switch_and_drop_right_after_alias_lookup_is_retried(
+    client: QdrantClient, monkeypatch: pytest.MonkeyPatch, warm: bool
+) -> None:
+    ko = _chunks(_revision("book-ko", "doc-ko"))
+    seed = QdrantIndexStore(client, FakeEmbedder())
+    seed.index_revision(WS, "doc-ko", "r1", ko)
+    seed.activate_revision(WS, "doc-ko", "r1")
+    old = seed.ensure_collection()
+    new = rebuild(
+        client, FakeEmbedder(), [RevisionChunks(WS, "doc-ko", "r1", ko)], switch=False
+    ).collection
+
+    store = QdrantIndexStore(client, FakeEmbedder())
+    if warm:
+        assert store.ensure_collection() == old  # caches the old generation as verified
+    lookups: list[str | None] = []
+
+    def racing_alias_target(*args: object, **kwargs: object) -> str | None:
+        target = alias_target(*args, **kwargs)  # type: ignore[arg-type]
+        lookups.append(target)
+        if len(lookups) == 1:
+            # Right after get_aliases(): the alias moves and the old target is dropped.
+            client.update_collection_aliases(
+                change_aliases_operations=[
+                    qm.DeleteAliasOperation(delete_alias=qm.DeleteAlias(alias_name="documents_v1")),
+                    qm.CreateAliasOperation(
+                        create_alias=qm.CreateAlias(collection_name=new, alias_name="documents_v1")
+                    ),
+                ]
+            )
+            client.delete_collection(old)
+        return target
+
+    monkeypatch.setattr("book_core.indexing.store.alias_target", racing_alias_target)
+    assert store.active_revision(WS, "doc-ko") == "r1"
+    assert lookups == [old, new]
+    assert store.ensure_collection() == new
+    assert not client.collection_exists(old)  # the dropped generation is not re-created
+
+
+def test_collection_vanishing_twice_is_not_retried_forever(
+    client: QdrantClient, store: QdrantIndexStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store.ensure_collection()
+    calls = []
+
+    def gone(collection: str) -> None:
+        calls.append(collection)
+        raise ValueError(f"Collection {collection} not found")
+
+    with pytest.raises(ValueError, match="not found"):
+        store._run(gone)
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        (Bm25Encoder(avg_doc_terms=200), Bm25Encoder(avg_doc_terms=200.0)),
+        (Bm25Encoder(avg_doc_terms=Decimal("200")), Bm25Encoder()),  # type: ignore[arg-type]
+        (Bm25Encoder(k1=Decimal("1.2"), b=Fraction(3, 4)), Bm25Encoder()),  # type: ignore[arg-type]
+        (Bm25Encoder(k1=0, b=-0.0), Bm25Encoder(k1=0.0, b=0.0)),
+        (Bm25Encoder(b=1), Bm25Encoder(b=1.0)),
+    ],
+)
+def test_equivalent_bm25_parameters_share_one_config_id(
+    left: Bm25Encoder, right: Bm25Encoder
+) -> None:
+    assert left.config_id == right.config_id
+    assert left == right
+    assert left.encode_document("water water cloud") == right.encode_document("water water cloud")
+
+
+def test_distinct_bm25_parameters_differ_and_bad_types_are_rejected() -> None:
+    ids = {
+        Bm25Encoder().config_id,
+        Bm25Encoder(avg_doc_terms=200.0000001).config_id,
+        Bm25Encoder(k1=1.2000000000000002).config_id,
+        Bm25Encoder(b=0.7500001).config_id,
+    }
+    assert len(ids) == 4
+    for bad in (True, "1.2", None):
+        with pytest.raises(TypeError, match="real number"):
+            Bm25Encoder(k1=bad)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="finite"):
+        Bm25Encoder(avg_doc_terms=float("inf"))

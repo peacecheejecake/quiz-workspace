@@ -21,10 +21,13 @@ changing the tokenisation must create a new collection.
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass
+from decimal import Decimal
+from fractions import Fraction
 
 BM25_VERSION = "bm25-kobigram-v1"
 
@@ -131,6 +134,16 @@ class Bm25Encoder:
     avg_doc_terms: float = 200.0
 
     def __post_init__(self) -> None:
+        # Canonical floats: 200, 200.0 and Decimal("200") give identical weights, so they must
+        # also give the same ``config_id`` (and model key).
+        for name in ("k1", "b", "avg_doc_terms"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int | float | Decimal | Fraction):
+                raise TypeError(f"{name} must be a real number")
+            number = float(value) + 0.0  # also folds -0.0 into 0.0
+            if not math.isfinite(number):
+                raise ValueError(f"{name} must be finite")
+            object.__setattr__(self, name, number)
         if self.k1 < 0 or not 0 <= self.b <= 1 or self.avg_doc_terms <= 0:
             raise ValueError("require k1 >= 0, 0 <= b <= 1 and avg_doc_terms > 0")
 
@@ -138,6 +151,7 @@ class Bm25Encoder:
     def config_id(self) -> str:
         """Tokeniser version and weighting parameters: everything stored sparse vectors depend
         on. Part of the collection's model key, so changing any of it needs a new collection."""
+        # Parameters are floats (see __post_init__); repr is their shortest round-trip form.
         return f"{BM25_VERSION};k1={self.k1!r};b={self.b!r};avgdl={self.avg_doc_terms!r}"
 
     def encode_document(self, text: str) -> SparseVector:
