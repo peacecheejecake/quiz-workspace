@@ -25,6 +25,128 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/documents/{document_id}/blocks': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Blocks
+     * @description Canonical blocks of a revision in reading order (keyset-paged by ordinal).
+     */
+    get: operations['listDocumentBlocks'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/documents/{document_id}/blocks/{block_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Block */
+    get: operations['getDocumentBlock'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Correct Block
+     * @description Correct one block's canonical text in the document's draft revision (DOC-02-AC02).
+     */
+    patch: operations['correctDocumentBlock'];
+    trace?: never;
+  };
+  '/api/v1/documents/{document_id}/outline': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Outline
+     * @description Chapter/section tree of a revision (DOC-02-AC01), roots and children in reading order.
+     */
+    get: operations['getDocumentOutline'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/documents/{document_id}/publish': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Publish Draft
+     * @description Index and publish the correction draft (DOC-02-AC03): 202 with the job to follow.
+     */
+    post: operations['publishDocumentDraft'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/documents/{document_id}/revisions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Revisions
+     * @description Every revision, newest first, with its newest parse/publish job.
+     */
+    get: operations['listDocumentRevisions'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/documents/{document_id}/revisions/{revision_id}/restore': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Restore Revision
+     * @description Put a previous published revision's content into the draft (rollback); publish it to
+     *     make it live. Restoring the active revision discards the draft's corrections.
+     */
+    post: operations['restoreDocumentRevision'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/documents/{document_id}/source-url': {
     parameters: {
       query?: never;
@@ -516,6 +638,63 @@ export type paths = {
 export type webhooks = Record<string, never>;
 export type components = {
   schemas: {
+    /** BlockCorrection */
+    BlockCorrection: {
+      /**
+       * Base Version
+       * @description The block `version` the correction started from; 409 `edit-conflict` when the block changed since.
+       */
+      base_version?: string | null;
+      /**
+       * Text
+       * @description Corrected text. Tables: one row per line, cells separated by `|`.
+       */
+      text: string;
+    };
+    /** BlockDetail */
+    BlockDetail: {
+      block: components['schemas']['ContentBlock'];
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      revision: components['schemas']['RevisionInfo'];
+    };
+    /** BlockList */
+    BlockList: {
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Items */
+      items: components['schemas']['ContentBlock'][];
+      /**
+       * Next After
+       * @description Pass as `after` for the next page; null on the last page.
+       */
+      next_after: number | null;
+      revision: components['schemas']['RevisionInfo'] | null;
+    };
+    /** BlockLocation */
+    BlockLocation: {
+      /** @description PDF points, origin top-left. */
+      bbox: components['schemas']['BoundingBox'] | null;
+      /** Page */
+      page: number;
+    };
+    /** BoundingBox */
+    BoundingBox: {
+      /** X0 */
+      x0: number;
+      /** X1 */
+      x1: number;
+      /** Y0 */
+      y0: number;
+      /** Y1 */
+      y1: number;
+    };
     /** ChapterRef */
     ChapterRef: {
       /**
@@ -548,6 +727,53 @@ export type components = {
        * Format: uuid
        */
       upload_id: string;
+    };
+    /** ContentBlock */
+    ContentBlock: {
+      /**
+       * Block Id
+       * @description Stable across revisions (search hits, question sources).
+       */
+      block_id: string;
+      /** Caption Block Id */
+      caption_block_id: string | null;
+      /** Chapter Id */
+      chapter_id: string | null;
+      /**
+       * Edited
+       * @description Corrected by a user in this or an earlier revision.
+       */
+      edited: boolean;
+      /** Heading Level */
+      heading_level: number | null;
+      /**
+       * Locations
+       * @description Where the block sits in the PDF.
+       */
+      locations: components['schemas']['BlockLocation'][];
+      /**
+       * Ordinal
+       * @description Reading order within the revision.
+       */
+      ordinal: number;
+      /**
+       * Page
+       * @description First PDF page of the block.
+       */
+      page: number;
+      table: components['schemas']['TableCells'] | null;
+      /** Text */
+      text: string;
+      /**
+       * Type
+       * @enum {string}
+       */
+      type: 'heading' | 'text' | 'table' | 'image' | 'formula';
+      /**
+       * Version
+       * @description Send as `base_version` when correcting this block.
+       */
+      version: string;
     };
     /** DependencyStatus */
     DependencyStatus: {
@@ -839,6 +1065,48 @@ export type components = {
       /** Items */
       items: components['schemas']['MyWorkspace'][];
     };
+    /** Outline */
+    Outline: {
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Items */
+      items: components['schemas']['OutlineItem'][];
+      /** @description Null while nothing is published yet. */
+      revision: components['schemas']['RevisionInfo'] | null;
+    };
+    /** OutlineItem */
+    OutlineItem: {
+      /**
+       * Block Id
+       * @description The heading block that opens the section.
+       */
+      block_id: string | null;
+      /** Children */
+      children: components['schemas']['OutlineItem'][];
+      /**
+       * Id
+       * Format: uuid
+       * @description Chapter id of this revision (the `chapter_ids` value search and questions use). Changes with every revision; `section_key` does not.
+       */
+      id: string;
+      /** Level */
+      level: number;
+      /**
+       * Page
+       * @description 1-based PDF page of the heading.
+       */
+      page: number | null;
+      /**
+       * Section Key
+       * @description Stable section id across revisions.
+       */
+      section_key: string;
+      /** Title */
+      title: string;
+    };
     /** OverviewChapter */
     OverviewChapter: {
       /** Document Id */
@@ -968,6 +1236,29 @@ export type components = {
        * Format: date-time
        */
       updated_at: string;
+    };
+    /** PublishAccepted */
+    PublishAccepted: {
+      /**
+       * Job Id
+       * Format: uuid
+       * @description The indexing job; poll `GET /jobs/{id}` or its SSE.
+       */
+      job_id: string;
+      /**
+       * Revision Id
+       * Format: uuid
+       * @description The draft revision being published.
+       */
+      revision_id: string;
+    };
+    /** PublishRequest */
+    PublishRequest: {
+      /**
+       * Revision Id
+       * @description The draft the client reviewed; 409 `edit-conflict` if it is not the draft.
+       */
+      revision_id?: string | null;
     };
     /** Question */
     Question: {
@@ -1304,6 +1595,16 @@ export type components = {
        */
       status: 'ok' | 'unavailable';
     };
+    /** RestoredDraft */
+    RestoredDraft: {
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** @description The draft now holding the restored content. */
+      revision: components['schemas']['RevisionInfo'];
+    };
     /**
      * ResumableUpload
      * @description TUS (resumable) alternative to the single PUT, for large files and flaky networks.
@@ -1328,6 +1629,89 @@ export type components = {
       metadata: {
         [key: string]: string;
       };
+    };
+    /** RevisionHistory */
+    RevisionHistory: {
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Items */
+      items: components['schemas']['RevisionHistoryItem'][];
+    };
+    /** RevisionHistoryItem */
+    RevisionHistoryItem: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Is Active
+       * @description The published revision search and the viewer use.
+       */
+      is_active: boolean;
+      /** @description The newest parse/publish job of this revision. */
+      job: components['schemas']['RevisionJob'] | null;
+      /** Parent Revision Id */
+      parent_revision_id: string | null;
+      /** Published At */
+      published_at: string | null;
+      /** Revision Number */
+      revision_number: number;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'draft' | 'published';
+    };
+    /** RevisionInfo */
+    RevisionInfo: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Is Active
+       * @description The published revision search and the viewer use.
+       */
+      is_active: boolean;
+      /** Parent Revision Id */
+      parent_revision_id: string | null;
+      /** Published At */
+      published_at: string | null;
+      /** Revision Number */
+      revision_number: number;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'draft' | 'published';
+    };
+    /** RevisionJob */
+    RevisionJob: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Status
+       * @description queued | running | succeeded | failed | cancelled
+       */
+      status: string;
     };
     /**
      * ShareLink
@@ -1419,6 +1803,13 @@ export type components = {
        * @description Short-lived signed URL of the original PDF. Do not store it.
        */
       url: string;
+    };
+    /** TableCells */
+    TableCells: {
+      /** Header Rows */
+      header_rows: number;
+      /** Rows */
+      rows: string[][];
     };
     /** UploadCompleted */
     UploadCompleted: {
@@ -1697,6 +2088,471 @@ export interface operations {
       };
       /** @description Service Unavailable */
       503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listDocumentBlocks: {
+    parameters: {
+      query?: {
+        /** @description `next_after` of the previous page. */
+        after?: number | null;
+        /** @description Only blocks of this chapter (an outline id) and its sub-sections. */
+        chapter?: string | null;
+        limit?: number;
+        /** @description Only blocks starting on this page. */
+        page?: number | null;
+        /** @description `active` (published, default), `latest` (the draft if any) or a revision id. */
+        revision?: string;
+      };
+      header?: never;
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BlockList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getDocumentBlock: {
+    parameters: {
+      query?: {
+        /** @description `active` (published, default), `latest` (the draft if any) or a revision id. */
+        revision?: string;
+      };
+      header?: never;
+      path: {
+        /** @description Canonical block id (stable across revisions), e.g. from search hits. */
+        block_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BlockDetail'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  correctDocumentBlock: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Canonical block id (stable across revisions), e.g. from search hits. */
+        block_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BlockCorrection'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BlockDetail'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getDocumentOutline: {
+    parameters: {
+      query?: {
+        /** @description `active` (published, default), `latest` (the draft if any) or a revision id. */
+        revision?: string;
+      };
+      header?: never;
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Outline'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  publishDocumentDraft: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PublishRequest'] | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PublishAccepted'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listDocumentRevisions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RevisionHistory'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  restoreDocumentRevision: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        document_id: string;
+        revision_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RestoredDraft'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
         headers: {
           [name: string]: unknown;
         };

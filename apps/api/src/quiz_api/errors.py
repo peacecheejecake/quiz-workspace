@@ -46,6 +46,14 @@ class ProblemType(StrEnum):
     STALE_REVISION = "urn:quiz-workspace:problem:stale-revision"
     # 409: the share link is revoked (or, for rotate, revoked or expired); create a new link.
     SHARE_LINK_INACTIVE = "urn:quiz-workspace:problem:share-link-inactive"
+    # 409: the document has no published revision yet (first parse pending or failed).
+    DOCUMENT_NOT_READY = "urn:quiz-workspace:problem:document-not-ready"
+    # 409: a correction was based on block text (or a draft) that changed since it was loaded.
+    EDIT_CONFLICT = "urn:quiz-workspace:problem:edit-conflict"
+    # 409: the draft is being published (indexing); wait for the job, then edit again.
+    PUBLISH_IN_PROGRESS = "urn:quiz-workspace:problem:publish-in-progress"
+    # 409: there is no correction draft, or it does not differ from the published revision.
+    NOTHING_TO_PUBLISH = "urn:quiz-workspace:problem:nothing-to-publish"
 
 
 class ProblemException(StarletteHTTPException):

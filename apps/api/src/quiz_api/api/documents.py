@@ -272,7 +272,7 @@ def _completed(upload: UploadRecord, job_id: uuid.UUID) -> UploadCompleted:
     return UploadCompleted(document_id=upload.document_id, job_id=job_id)
 
 
-def _publish(repo: DocumentRepository, publisher: JobPublisher | None, job: JobRow) -> None:
+def publish_job(repo: DocumentRepository, publisher: JobPublisher | None, job: JobRow) -> None:
     """Send a queued, unpublished job to the broker and record it; failures are left to the
     worker's reconciler (the row stays queued with `published_at` null)."""
     if publisher is None or job.status != "queued" or job.published_at is not None:
@@ -428,7 +428,7 @@ def complete_upload(
     job = repo.find_parse_job(upload.workspace_id, user.id, upload.id)
     assert job is not None  # noqa: S101 - created in complete_upload
     repo.commit()
-    _publish(repo, publisher, job)
+    publish_job(repo, publisher, job)
     return _completed(upload, job.id)
 
 
@@ -439,7 +439,7 @@ def _replay(
     if job is None:
         # The job row was removed out of band; the document exists, the parse job does not.
         raise HTTPException(status_code=409, detail="The parse job of this upload is gone.")
-    _publish(repo, publisher, job)  # recovers a publish that failed the first time
+    publish_job(repo, publisher, job)  # recovers a publish that failed the first time
     return _completed(upload, job.id)
 
 

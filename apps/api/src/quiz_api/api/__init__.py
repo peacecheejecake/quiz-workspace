@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from quiz_api.api import (
+    document_revisions,
     documents,
     jobs,
     me,
@@ -25,6 +26,7 @@ api_router = APIRouter(responses=problem_responses(401, 403, 404, 422))
 api_router.include_router(me.router)
 api_router.include_router(workspaces.router)
 api_router.include_router(documents.router)
+api_router.include_router(document_revisions.router)
 api_router.include_router(questions.router)
 api_router.include_router(question_overview.router)
 api_router.include_router(share_links.router)
