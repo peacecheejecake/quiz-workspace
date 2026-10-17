@@ -6,20 +6,16 @@
 // Creation sends one Idempotency-Key per creation attempt: retries of the same content reuse it,
 // a content change, a success or an `idempotency-key-reused` conflict mint a new one.
 import {
-  AlertIcon,
   Button,
-  Checkbox,
   CloseIcon,
   DialogClose,
   IconButton,
   Input,
   ModalDialog,
-  RadioGroup,
   Select,
-  Textarea,
   useToast,
 } from '@quiz/ui';
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { FormNotice } from '@/components/auth/form-notice';
 import {
   createQuestionAction,
@@ -28,22 +24,13 @@ import {
   type ActionResult,
 } from '@/lib/questions/actions';
 import {
-  addOption,
   addSource,
   createBody,
   emptyForm,
   errorSummary,
   FORM_KEY,
   formFromQuestion,
-  moveOption,
-  optionKey,
-  QUESTION_TYPE_LABELS,
-  QUESTION_TYPES,
-  removeOption,
   removeSource,
-  setMultiAnswer,
-  setOptionCorrect,
-  setOptionText,
   sourceKey,
   sourceSnapshot,
   updateSource,
@@ -51,13 +38,13 @@ import {
   type FieldErrors,
   type Question,
   type QuestionFormValues,
-  type QuestionType,
   type SourceSnapshot,
 } from '@/lib/questions/form';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 import type { ChapterOption, DocumentOption } from '@/lib/questions/server';
 import { newIdempotencyKey } from '@/lib/workspaces/idempotency';
 import { chapterLabel } from './labels';
+import { FieldMessage, QuestionContentFields } from './question-content-fields';
 import styles from './question-bank.module.css';
 
 export type EditorTarget =
@@ -288,7 +275,6 @@ function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: 
     }
   }
 
-  const isMcq = values.type === 'MCQ';
   const multiDocs = new Set(chapters.map((c) => c.documentId)).size > 1;
   const chapterOptions = [
     { value: NO_CHAPTER, label: '챕터 없음' },
@@ -320,128 +306,13 @@ function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: 
         </FormNotice>
       ) : null}
 
-      <RadioGroup
-        label="문제 유형"
-        options={QUESTION_TYPES.map((type) => ({ value: type, label: QUESTION_TYPE_LABELS[type] }))}
-        value={values.type}
-        onValueChange={(type) => update({ ...values, type: type as QuestionType })}
-        disabled={editing !== null}
-        {...(editing ? { description: '등록된 문제의 유형은 바꿀 수 없습니다.' } : {})}
-      />
-
-      <Textarea
-        id={stemId}
-        label="문제 내용"
-        rows={4}
-        value={values.stem}
-        onChange={(e) => update({ ...values, stem: e.target.value }, ['stem'])}
-        error={errors.stem}
-        required
-      />
-
-      {isMcq ? (
-        <fieldset className={styles.fieldset}>
-          <legend className={styles.legend}>보기와 정답</legend>
-          <Checkbox
-            label="복수 정답 허용"
-            description={
-              values.multiAnswer ? '정답을 여러 개 선택할 수 있습니다.' : '정답은 1개입니다.'
-            }
-            checked={values.multiAnswer}
-            onCheckedChange={(checked) =>
-              update(setMultiAnswer(values, checked === true), ['correct'])
-            }
-          />
-          {values.options.map((option, index) => {
-            const n = index + 1;
-            return (
-              <div key={option.id} className={styles.optionEditor} data-option-id={option.id}>
-                <Input
-                  label={`보기 ${n}`}
-                  value={option.text}
-                  onChange={(e) =>
-                    update(setOptionText(values, option.id, e.target.value), [optionKey(option.id)])
-                  }
-                  error={errors[optionKey(option.id)]}
-                  autoComplete="off"
-                />
-                <div className={styles.optionControls}>
-                  <Checkbox
-                    label="정답"
-                    aria-label={`보기 ${n} 정답`}
-                    checked={option.correct}
-                    onCheckedChange={(checked) =>
-                      update(setOptionCorrect(values, option.id, checked === true), ['correct'])
-                    }
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`보기 ${n} 위로 이동`}
-                    disabled={index === 0}
-                    onClick={() => update(moveOption(values, option.id, -1))}
-                  >
-                    위로
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`보기 ${n} 아래로 이동`}
-                    disabled={index === values.options.length - 1}
-                    onClick={() => update(moveOption(values, option.id, 1))}
-                  >
-                    아래로
-                  </Button>
-                  <IconButton
-                    size="sm"
-                    label={`보기 ${n} 삭제`}
-                    icon={<CloseIcon width={16} height={16} />}
-                    onClick={() =>
-                      update(removeOption(values, option.id), [optionKey(option.id), 'options'])
-                    }
-                  />
-                </div>
-              </div>
-            );
-          })}
-          <FieldMessage>{errors.options}</FieldMessage>
-          <FieldMessage>{errors.correct}</FieldMessage>
-          <div>
-            <Button onClick={() => update(addOption(values), ['options'])}>보기 추가</Button>
-          </div>
-        </fieldset>
-      ) : null}
-
-      {values.type === 'SHORT_ANSWER' ? (
-        <Textarea
-          label="허용 답안"
-          rows={3}
-          description="한 줄에 하나씩 입력합니다. 비워 두면 자동 채점하지 않고 직접 채점합니다."
-          value={values.acceptedAnswers}
-          onChange={(e) =>
-            update({ ...values, acceptedAnswers: e.target.value }, ['acceptedAnswers'])
-          }
-          error={errors.acceptedAnswers}
-        />
-      ) : null}
-
-      {values.type === 'ESSAY' ? (
-        <Textarea
-          label="채점 기준"
-          rows={4}
-          description="모범 답안이나 채점할 때 확인할 내용을 적습니다."
-          value={values.rubric}
-          onChange={(e) => update({ ...values, rubric: e.target.value }, ['rubric'])}
-          error={errors.rubric}
-        />
-      ) : null}
-
-      <Textarea
-        label="해설"
-        rows={3}
-        value={values.explanation}
-        onChange={(e) => update({ ...values, explanation: e.target.value }, ['explanation'])}
-        error={errors.explanation}
+      <QuestionContentFields
+        values={values}
+        errors={errors}
+        update={update}
+        stemId={stemId}
+        typeLocked={editing !== null}
+        {...(editing ? { typeDescription: '등록된 문제의 유형은 바꿀 수 없습니다.' } : {})}
       />
 
       <div className={styles.row}>
@@ -542,15 +413,5 @@ function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: 
         </Button>
       </div>
     </form>
-  );
-}
-
-function FieldMessage({ children }: { children: ReactNode }) {
-  if (!children) return null;
-  return (
-    <p className={styles.fieldError}>
-      <AlertIcon width={16} height={16} />
-      <span>{children}</span>
-    </p>
   );
 }

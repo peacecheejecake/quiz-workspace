@@ -1,0 +1,256 @@
+// QuestionDraftReview model (QIMPORT-01, shared with QGEN-01): normalization of API drafts, the
+// draft editor's validation and request bodies, and the approve-then-publish selection — logic
+// the E2E specs only observe indirectly (which version is sent, that an unknown answer stays null,
+// that the API's English validation text never reaches the UI).
+import { describe, expect, it } from 'vitest';
+import {
+  applyPublished,
+  approvalBlocker,
+  draftUpdateBody,
+  formFromDraft,
+  issueMessage,
+  publishedMessage,
+  publishSelection,
+  replaceDraft,
+  reviewBody,
+  reviewDraftFromImport,
+  sortDrafts,
+  validateDraftForm,
+  type ImportDraft,
+  type ReviewDraft,
+} from '../src/lib/questions/drafts';
+import { MESSAGES } from '../src/lib/questions/form';
+
+function at<T>(list: readonly T[], index: number): T {
+  const item = list[index];
+  if (item === undefined) throw new Error(`no item ${index}`);
+  return item;
+}
+
+const DOC = '33333333-3333-4333-8333-333333333333';
+const RUN = '22222222-2222-4222-8222-222222222222';
+
+function importDraft(overrides: Partial<ImportDraft> = {}, payload: object = {}): ImportDraft {
+  const base: ImportDraft = {
+    id: '11111111-1111-4111-8111-000000000003',
+    import_id: RUN,
+    position: 2,
+    question_number: 3,
+    question_type: 'MCQ',
+    is_multi_answer: false,
+    rubric: null,
+    review_status: 'pending',
+    published_question_id: null,
+    validations: [
+      {
+        code: 'answer_missing',
+        severity: 'warning',
+        message: 'No answer in the source.',
+        field: 'correct_option_ids',
+      },
+    ],
+    answer_missing: true,
+    pages: [2],
+    publishable: false,
+    publish_errors: [{ field: 'correct_option_ids', message: 'needs an answer' }],
+    version: 'v1',
+    reviewed_at: null,
+    created_at: '2026-10-18T00:00:00Z',
+    updated_at: '2026-10-18T00:00:00Z',
+    payload: {
+      schema_version: 1,
+      id: `${DOC}-q003`,
+      origin: 'pdf_import',
+      question_type: 'MCQ',
+      stem: '물이 기체로 변하는 현상은?',
+      options: [
+        { id: 'o1', text: '응고' },
+        { id: 'o2', text: '증발' },
+      ],
+      correct_option_ids: null,
+      accepted_answers: null,
+      evidence: [
+        {
+          document_id: DOC,
+          locations: [
+            { page: 2, bbox: { x0: 1, y0: 2, x1: 3, y1: 4 } },
+            { page: 2, bbox: null },
+          ],
+        },
+      ],
+      validations: [],
+      review_status: 'pending',
+      ...payload,
+    },
+    ...overrides,
+  };
+  return base;
+}
+
+describe('reviewDraftFromImport', () => {
+  it('keeps a missing answer null and links the source pages', () => {
+    const draft = reviewDraftFromImport(importDraft());
+    expect(draft.correctOptionIds).toBeNull();
+    expect(draft.acceptedAnswers).toBeNull();
+    expect(draft.answerMissing).toBe(true);
+    expect(draft.options.every((o) => !o.correct)).toBe(true);
+    expect(draft.sourceDocumentId).toBe(DOC);
+    expect(draft.pages).toEqual([2]);
+    expect(draft.locations).toEqual([
+      { page: 2, bbox: { x0: 1, y0: 2, x1: 3, y1: 4 } },
+      { page: 2, bbox: null },
+    ]);
+    // "정답 없음" is shown from answer_missing, not as a second validation note.
+    expect(draft.issues).toEqual([]);
+  });
+
+  it('marks the correct options by id', () => {
+    const draft = reviewDraftFromImport(
+      importDraft({ answer_missing: false }, { correct_option_ids: ['o2'] }),
+    );
+    expect(draft.options.map((o) => o.correct)).toEqual([false, true]);
+  });
+
+  it('falls back to evidence pages and sorts them', () => {
+    const draft = reviewDraftFromImport(
+      importDraft(
+        { pages: [] },
+        {
+          evidence: [
+            {
+              document_id: DOC,
+              locations: [{ page: 5 }, { page: 4 }, { page: 5 }],
+            },
+          ],
+        },
+      ),
+    );
+    expect(draft.pages).toEqual([4, 5]);
+  });
+});
+
+describe('issueMessage', () => {
+  it('is Korean for known and unknown codes (never the API text)', () => {
+    expect(issueMessage('answer_not_in_options')).toMatch(/정답/);
+    expect(issueMessage('something_new')).toBe('확인이 필요한 항목이 있습니다.');
+    expect(issueMessage('something_new')).not.toMatch(/no answer/i);
+  });
+});
+
+describe('approvalBlocker', () => {
+  it('asks for a correct option on an MCQ without an answer', () => {
+    expect(approvalBlocker(reviewDraftFromImport(importDraft()))).toMatch(/정답 보기/);
+  });
+
+  it('is null for publishable, approved or published drafts', () => {
+    const ok = reviewDraftFromImport(importDraft({ publishable: true }));
+    expect(approvalBlocker(ok)).toBeNull();
+    expect(approvalBlocker({ ...ok, publishable: false, reviewStatus: 'approved' })).toBeNull();
+    expect(approvalBlocker({ ...ok, publishable: false, publishedQuestionId: 'q' })).toBeNull();
+  });
+});
+
+describe('draft editor', () => {
+  const draft = reviewDraftFromImport(importDraft());
+
+  it('allows saving an MCQ without an answer, but not two answers on a single-answer MCQ', () => {
+    const values = formFromDraft(draft);
+    expect(validateDraftForm(values)).toEqual({});
+    const two = {
+      ...values,
+      options: values.options.map((o) => ({ ...o, correct: true })),
+    };
+    expect(validateDraftForm(two).correct).toBe(MESSAGES.singleAnswer);
+    expect(validateDraftForm({ ...values, stem: ' ' }).stem).toBe(MESSAGES.stemRequired);
+  });
+
+  it('sends the edit on top of the opened version with option ids kept', () => {
+    const values = formFromDraft(draft);
+    const answered = {
+      ...values,
+      options: values.options.map((o) => ({ ...o, correct: o.text === '증발' })),
+    };
+    expect(draftUpdateBody(answered, 'v1')).toEqual({
+      base_version: 'v1',
+      question_type: 'MCQ',
+      stem: draft.stem,
+      options: [
+        { id: 'o1', text: '응고' },
+        { id: 'o2', text: '증발' },
+      ],
+      correct_option_ids: ['o2'],
+      is_multi_answer: false,
+      accepted_answers: null,
+      explanation: null,
+      rubric: null,
+      question_number: 3,
+    });
+    // No answer chosen stays unknown (null), never an empty list.
+    expect(draftUpdateBody(values, 'v1').correct_option_ids).toBeNull();
+  });
+
+  it('maps short answers and essay rubrics by type', () => {
+    const values = formFromDraft(draft);
+    const short = draftUpdateBody(
+      { ...values, type: 'SHORT_ANSWER', acceptedAnswers: ' 증발 \n\n기화 ' },
+      'v2',
+    );
+    expect(short).toMatchObject({
+      question_type: 'SHORT_ANSWER',
+      options: [],
+      correct_option_ids: null,
+      accepted_answers: ['증발', '기화'],
+      rubric: null,
+    });
+    const essay = draftUpdateBody({ ...values, type: 'ESSAY', rubric: '모범 답안' }, 'v2');
+    expect(essay).toMatchObject({ accepted_answers: null, rubric: '모범 답안' });
+    expect(draftUpdateBody({ ...values, questionNumber: '' }, 'v2').question_number).toBeNull();
+  });
+});
+
+describe('approve then publish', () => {
+  const drafts: ReviewDraft[] = [
+    { ...reviewDraftFromImport(importDraft()), id: 'a', version: 'va', reviewStatus: 'approved' },
+    { ...reviewDraftFromImport(importDraft()), id: 'b', version: 'vb', reviewStatus: 'pending' },
+    {
+      ...reviewDraftFromImport(importDraft()),
+      id: 'c',
+      version: 'vc',
+      reviewStatus: 'approved',
+      publishedQuestionId: 'q-c',
+    },
+    { ...reviewDraftFromImport(importDraft()), id: 'd', version: 'vd', reviewStatus: 'rejected' },
+  ];
+
+  it('reviews exactly the version on screen', () => {
+    expect(reviewBody(at(drafts, 1), true)).toEqual({
+      base_version: 'vb',
+      review_status: 'approved',
+    });
+    expect(reviewBody(at(drafts, 0), false)).toEqual({
+      base_version: 'va',
+      review_status: 'pending',
+    });
+  });
+
+  it('publishes only approved, unregistered drafts at their approved version', () => {
+    expect(publishSelection(drafts)).toEqual([{ draft_id: 'a', version: 'va' }]);
+  });
+
+  it('marks published drafts and reports the count', () => {
+    const next = applyPublished(drafts, [{ draft_id: 'a', question_id: 'q-a' }]);
+    expect(next.map((d) => d.publishedQuestionId)).toEqual(['q-a', null, 'q-c', null]);
+    expect(publishSelection(next)).toEqual([]);
+    expect(publishedMessage(2)).toMatch(/2\s*개.*등록/);
+  });
+
+  it('replaces and sorts drafts by source position', () => {
+    const replaced = replaceDraft(drafts, { ...at(drafts, 1), version: 'vb2' });
+    expect(replaced[1]?.version).toBe('vb2');
+    const sorted = sortDrafts([
+      { ...at(drafts, 0), position: 3 },
+      { ...at(drafts, 1), position: 0 },
+    ]);
+    expect(sorted.map((d) => d.id)).toEqual(['b', 'a']);
+  });
+});
