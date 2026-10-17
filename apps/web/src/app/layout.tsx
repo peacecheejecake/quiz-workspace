@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
-import '@quiz/design-tokens/tokens.css';
-import '@quiz/design-tokens/base.css';
+import '@quiz/ui/styles.css';
 import './globals.css';
 
 export const metadata: Metadata = {

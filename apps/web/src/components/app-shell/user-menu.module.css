@@ -1,0 +1,24 @@
+.trigger {
+  margin-left: auto;
+}
+
+.content {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 220px;
+  padding: var(--space-3);
+}
+
+.content form,
+.content form button,
+.content a {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.email {
+  margin: 0 0 var(--space-1);
+  overflow-wrap: anywhere;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}

@@ -33,7 +33,7 @@ const nextConfig: NextConfig = {
   // repo-root AGENTS.md.
   agentRules: false,
   // Workspace packages ship TypeScript/CSS sources.
-  transpilePackages: ['@quiz/design-tokens'],
+  transpilePackages: ['@quiz/design-tokens', '@quiz/ui', '@quiz/api-client'],
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },
