@@ -40,6 +40,7 @@ from book_core.contracts.question import (
     VariationType,
 )
 from book_core.contracts.search import (
+    ChunkLevel,
     Excerpt,
     ScoreType,
     SearchChunk,
@@ -53,6 +54,7 @@ __all__ = [
     "BBox",
     "Block",
     "BlockType",
+    "ChunkLevel",
     "CoreModel",
     "DocumentRevision",
     "DraftOrigin",

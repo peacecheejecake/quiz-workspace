@@ -45,12 +45,26 @@ _SCORE_TYPES_BY_MODE: dict[SearchMode, frozenset[ScoreType]] = {
 }
 
 
+class ChunkLevel(StrEnum):
+    """Parent chunks give section context; child chunks are the retrieval units."""
+
+    PARENT = "parent"
+    CHILD = "child"
+
+
 class SearchChunk(CoreModel):
     """One indexable chunk of a document revision.
 
     ``content`` is the canonical text shown to users; ``search_text`` is the contextualised text
     that is embedded/indexed (e.g. prefixed with chapter/section titles). ``parent_id`` points at
-    the parent chunk in the parent/child hierarchy.
+    the parent chunk in the parent/child hierarchy; parent chunks have none.
+
+    ``id`` is stable across revisions for unchanged regions and ``content_hash`` changes when
+    anything that must be re-indexed changes; ``revision_id`` and ``ordinal`` (reading-order
+    position among chunks of the same ``level``) are excluded from it, so both are payload that
+    is refreshed for every chunk of a new revision. ``breadcrumb`` is the document title (when
+    known) followed by the chapter/section titles; ``token_count`` is the size of
+    ``search_text`` under the chunker's tokenizer.
     """
 
     schema_version: Literal[1] = 1
@@ -65,11 +79,17 @@ class SearchChunk(CoreModel):
     language: LanguageTag | None = None
     block_ids: Annotated[tuple[Identifier, ...], Field(min_length=1)]
     locations: Annotated[tuple[SourceLocation, ...], Field(min_length=1)]
+    level: ChunkLevel = ChunkLevel.CHILD
+    ordinal: Annotated[int, Field(ge=0)] | None = None
+    token_count: Annotated[int, Field(ge=0)] | None = None
+    breadcrumb: tuple[NonEmptyText, ...] = ()
 
     @model_validator(mode="after")
     def _check(self) -> Self:
         if self.parent_id == self.id:
             raise ValueError("chunk cannot be its own parent")
+        if self.level is ChunkLevel.PARENT and self.parent_id is not None:
+            raise ValueError("parent chunks cannot have a parent")
         ensure_unique(list(self.block_ids), "block id")
         return self
 
