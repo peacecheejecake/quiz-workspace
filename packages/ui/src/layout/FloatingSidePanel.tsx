@@ -39,6 +39,11 @@ export interface FloatingSidePanelProps {
   size?: 'default' | 'wide';
   /** Below the mobile breakpoint: bottom sheet (max 90dvh) or full-height panel. */
   mobileLayout?: 'sheet' | 'full';
+  /**
+   * Element the panel is portalled into (default: `document.body`). A page whose whole content
+   * is the panel (e.g. a settings route) passes its `<main>` so the panel stays in that landmark.
+   */
+  container?: HTMLElement | null;
   /** Defaults to focusing the panel itself so its title is announced first. */
   onOpenAutoFocus?: ContentProps['onOpenAutoFocus'];
   onCloseAutoFocus?: ContentProps['onCloseAutoFocus'];
@@ -65,6 +70,7 @@ export function FloatingSidePanel({
   closeOnBackdropClick = true,
   size = 'default',
   mobileLayout = 'sheet',
+  container,
   onOpenAutoFocus,
   onCloseAutoFocus,
   className,
@@ -78,7 +84,7 @@ export function FloatingSidePanel({
   return (
     <Dialog.Root open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange} modal={modal}>
       {trigger ? <Dialog.Trigger asChild>{trigger}</Dialog.Trigger> : null}
-      <Dialog.Portal>
+      <Dialog.Portal container={container}>
         {modal ? <Dialog.Overlay className="qz-backdrop" data-layer="panel" /> : null}
         <Dialog.Content
           ref={contentRef}

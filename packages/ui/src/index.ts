@@ -47,6 +47,8 @@ export { Skeleton } from './primitives/Skeleton';
 export type { SkeletonProps } from './primitives/Skeleton';
 export { GlassSurface, Surface } from './primitives/Surface';
 export type { GlassSurfaceProps, SurfacePadding, SurfaceProps } from './primitives/Surface';
+export { Switch } from './primitives/Switch';
+export type { SwitchProps } from './primitives/Switch';
 export { Tabs, TabsContent, TabsList, TabsTrigger } from './primitives/Tabs';
 export type {
   TabsContentProps,

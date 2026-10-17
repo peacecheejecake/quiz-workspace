@@ -4,6 +4,26 @@ import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
 import { Button, FloatingSidePanel, Input } from '../src';
 
+describe('FloatingSidePanel container', () => {
+  it('portals into the given element so the panel stays in that landmark', async () => {
+    function InMain() {
+      const [main, setMain] = useState<HTMLElement | null>(null);
+      return (
+        <main ref={setMain}>
+          {main ? (
+            <FloatingSidePanel defaultOpen modal={false} title="공유 링크" container={main}>
+              <Button>링크 만들기</Button>
+            </FloatingSidePanel>
+          ) : null}
+        </main>
+      );
+    }
+    render(<InMain />);
+    const dialog = await screen.findByRole('dialog', { name: '공유 링크' });
+    expect(screen.getByRole('main')).toContainElement(dialog);
+  });
+});
+
 function ModalPanel(props: { closeOnBackdropClick?: boolean }) {
   return (
     <>

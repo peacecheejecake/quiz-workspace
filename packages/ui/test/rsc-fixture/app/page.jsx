@@ -48,6 +48,7 @@ import {
   StarIcon,
   StatusSummary,
   Surface,
+  Switch,
   Tabs,
   TabsContent,
   TabsList,
@@ -108,6 +109,7 @@ export default function Page() {
             <Input label="이메일" error="오류" />
             <Textarea label="메모" />
             <Checkbox label="동의" />
+            <Switch label="알림" />
             <Select
               label="유형"
               defaultValue="MCQ"

@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   Badge,
@@ -13,6 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
   Skeleton,
+  Switch,
   Textarea,
   focusRingClassName,
 } from '../src';
@@ -127,6 +129,26 @@ describe('Checkbox', () => {
   it('exposes the indeterminate state', () => {
     render(<Checkbox label="전체 선택" checked="indeterminate" />);
     expect(screen.getByRole('checkbox', { name: '전체 선택' })).toBePartiallyChecked();
+  });
+});
+
+describe('Switch', () => {
+  it('is a labelled switch with visible state text, toggled by click and keyboard', async () => {
+    const user = userEvent.setup();
+    function Controlled() {
+      const [on, setOn] = useState(false);
+      return <Switch label="Fork 허용" checked={on} onCheckedChange={setOn} />;
+    }
+    render(<Controlled />);
+    const control = screen.getByRole('switch', { name: 'Fork 허용' });
+    expect(control).not.toBeChecked();
+    expect(screen.getByText('꺼짐')).toBeInTheDocument();
+    await user.click(screen.getByText('Fork 허용'));
+    expect(control).toBeChecked();
+    expect(screen.getByText('켜짐')).toBeInTheDocument();
+    control.focus();
+    await user.keyboard(' ');
+    expect(control).not.toBeChecked();
   });
 });
 
