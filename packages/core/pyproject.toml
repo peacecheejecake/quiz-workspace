@@ -1,0 +1,29 @@
+[project]
+name = "book-core"
+version = "0.0.0"
+description = "Quiz Workspace core: PDF parsing, chunking, search, excerpts and question drafting"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "pydantic>=2.11,<3",
+  "typer>=0.16",
+]
+
+# Heavy model/runtime stacks stay optional so CI and E2E run on the deterministic fakes
+# (docs/implementation-plan.md §7, docs/e2e-strategy.md §3). Each extra is filled by its Task.
+[project.optional-dependencies]
+# M1.2: Docling parser + OCR fallback.
+parser = []
+# M2.1 / M2.4: Qwen3-Embedding and Qwen3-Reranker (transformers / torch).
+models = []
+# M4.3: real LLM provider SDK for structured outputs.
+llm = []
+
+[project.scripts]
+core = "book_core.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "book_core"

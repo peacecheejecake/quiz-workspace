@@ -15,8 +15,13 @@ package = false
 # packages/design-tokens) are never treated as Python members.
 members = ["apps/api", "apps/worker", "packages/core"]
 
+[tool.uv.sources]
+book-core = { workspace = true }
+
 [dependency-groups]
 dev = [
+  # Workspace members installed into the shared venv so pytest/mypy can import them.
+  "book-core",
   "mypy>=2.4",
   "pytest>=9.1",
   "ruff>=0.17",
