@@ -10,6 +10,7 @@ import {
   createBody,
   fieldErrorsFromIssues,
   parseFormValues,
+  parseSourceSnapshot,
   updateBody,
   validateQuestionForm,
   type FieldErrors,
@@ -167,6 +168,7 @@ export async function updateQuestionAction(
   questionId: string,
   baseRevisionId: string,
   rawValues: unknown,
+  rawBaseSources: unknown,
 ): Promise<ActionResult<Question>> {
   if (!isWorkspaceId(workspaceId) || !isId(questionId) || !isId(baseRevisionId)) {
     return failed('notFound');
@@ -175,10 +177,12 @@ export async function updateQuestionAction(
   if (!values) return failed('invalid', {});
   const errors = validateQuestionForm(values);
   if (Object.keys(errors).length > 0) return failed('invalid', errors);
+  // The sources the edit started from: unchanged sources are not sent (provenance is kept).
+  const baseSources = parseSourceSnapshot(rawBaseSources);
   const outcome = await callQuestionApi(bankPath(workspaceId), (api) =>
     api.PATCH('/api/v1/questions/{question_id}', {
       params: { path: { question_id: questionId } },
-      body: updateBody(values, baseRevisionId),
+      body: updateBody(values, baseRevisionId, baseSources),
     }),
   );
   if (outcome.ok) refresh(workspaceId);

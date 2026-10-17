@@ -481,14 +481,73 @@ export function createBody(values: QuestionFormValues): QuestionCreateBody {
   };
 }
 
-/** A full edit of content + metadata on top of `baseRevisionId` (the type never changes). */
-export function updateBody(values: QuestionFormValues, baseRevisionId: string): QuestionUpdateBody {
+/** Sources of a loaded question, shaped like the request body (what the editor started from). */
+export type SourceSnapshot = NonNullable<QuestionCreateBody['sources']>;
+
+export function sourceSnapshot(question: Pick<Question, 'sources'>): SourceSnapshot {
+  return question.sources
+    .filter((s): s is typeof s & { document_id: string } => s.document_id != null)
+    .map((s) => ({
+      document_id: s.document_id,
+      page_start: s.page_start,
+      page_end: s.page_end ?? s.page_start,
+    }));
+}
+
+/** Re-reads a snapshot received from the client; null when malformed. */
+export function parseSourceSnapshot(raw: unknown): SourceSnapshot | null {
+  if (!Array.isArray(raw)) return null;
+  const out: SourceSnapshot = [];
+  const page = (x: unknown) => x === null || (typeof x === 'number' && Number.isInteger(x));
+  for (const s of raw as unknown[]) {
+    if (typeof s !== 'object' || s === null) return null;
+    const { document_id, page_start, page_end } = s as Record<string, unknown>;
+    if (typeof document_id !== 'string' || !page(page_start) || !page(page_end)) return null;
+    out.push({
+      document_id,
+      page_start: page_start as number | null,
+      page_end: page_end as number | null,
+    });
+  }
+  return out;
+}
+
+/** Whether the form's sources differ (documents, pages or order) from `base`. */
+export function sourcesChanged(values: QuestionFormValues, base: SourceSnapshot): boolean {
+  const sent = sourcesBody(values);
+  return (
+    sent.length !== base.length ||
+    sent.some((s, i) => {
+      const b = base[i];
+      return (
+        !b ||
+        s.document_id !== b.document_id ||
+        (s.page_start ?? null) !== (b.page_start ?? null) ||
+        (s.page_end ?? null) !== (b.page_end ?? null)
+      );
+    })
+  );
+}
+
+/**
+ * A full edit of content + metadata on top of `baseRevisionId` (the type never changes).
+ * `sources` is sent only when it differs from `baseSources` (the loaded question's): replacing
+ * sources re-pins their provenance to each document's current revision and fails for a deleted
+ * document, so an unchanged list must be left alone. `null` = unknown base, always send.
+ */
+export function updateBody(
+  values: QuestionFormValues,
+  baseRevisionId: string,
+  baseSources: SourceSnapshot | null,
+): QuestionUpdateBody {
   return {
     base_revision_id: baseRevisionId,
     ...contentBody(values),
     chapter_id: values.chapterId || null,
     question_number: questionNumber(values),
-    sources: sourcesBody(values),
+    ...(baseSources === null || sourcesChanged(values, baseSources)
+      ? { sources: sourcesBody(values) }
+      : {}),
   };
 }
 

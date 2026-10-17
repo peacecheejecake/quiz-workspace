@@ -16,7 +16,7 @@ import {
 } from '@quiz/ui';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useMemo, useRef, useState, useTransition, type FormEvent } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, useTransition, type FormEvent } from 'react';
 import {
   deleteQuestionAction,
   listQuestionsAction,
@@ -136,15 +136,24 @@ export function QuestionBank({
   const [rendered, setRendered] = useState({ items: initialItems, filtersKey, q: filters.q });
   // Filters as last chosen: several quick changes build on each other before the URL catches up.
   const [view, setView] = useState(filters);
+  // List generation: bumped on every filter change and new server render. A "더 보기" response
+  // for an older generation belongs to another list and is dropped.
+  const [listGeneration, setListGeneration] = useState(0);
+  const generation = useRef(0);
+  useLayoutEffect(() => {
+    generation.current = Math.max(generation.current, listGeneration);
+  }, [listGeneration]);
+  const [loadingMore, setLoadingMore] = useState(false);
   if (rendered.items !== initialItems || rendered.filtersKey !== filtersKey) {
+    setListGeneration((g) => Math.max(g, generation.current) + 1);
     setRendered({ items: initialItems, filtersKey, q: filters.q });
     setItems(initialItems);
     setCursor(initialCursor);
+    setLoadingMore(false);
     setKnownChapters((known) => withChapters(known, initialItems));
     if (rendered.filtersKey !== filtersKey) setView(filters);
     if (rendered.q !== filters.q) setSearch(filters.q);
   }
-  const [loadingMore, setLoadingMore] = useState(false);
 
   const [editor, setEditor] = useState<{ target: EditorTarget | null; session: number }>({
     target: null,
@@ -160,6 +169,9 @@ export function QuestionBank({
 
   function navigate(patch: Partial<BankFilters>) {
     const next = { ...view, ...patch };
+    generation.current += 1;
+    setListGeneration(generation.current);
+    setLoadingMore(false);
     setView(next);
     startNavigation(() => {
       router.replace(`${pathname}${serializeBankFilters(next)}`, { scroll: false });
@@ -173,9 +185,11 @@ export function QuestionBank({
 
   async function loadMore() {
     if (!cursor || loadingMore) return;
+    const requested = generation.current;
     setLoadingMore(true);
     try {
       const result = await listQuestionsAction(workspaceId, filters, cursor);
+      if (requested !== generation.current) return;
       if (!result.ok) {
         toast({ tone: 'error', title: result.message });
         return;
@@ -187,7 +201,7 @@ export function QuestionBank({
       setKnownChapters((known) => withChapters(known, result.data.items));
       setCursor(result.data.nextCursor);
     } finally {
-      setLoadingMore(false);
+      if (requested === generation.current) setLoadingMore(false);
     }
   }
 

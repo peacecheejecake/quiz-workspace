@@ -45,12 +45,14 @@ import {
   setOptionCorrect,
   setOptionText,
   sourceKey,
+  sourceSnapshot,
   updateSource,
   validateQuestionForm,
   type FieldErrors,
   type Question,
   type QuestionFormValues,
   type QuestionType,
+  type SourceSnapshot,
 } from '@/lib/questions/form';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 import type { ChapterOption, DocumentOption } from '@/lib/questions/server';
@@ -75,6 +77,13 @@ export interface QuestionEditorProps {
 }
 
 const NO_CHAPTER = '__none__';
+
+/** What an edit is based on: the revision and the sources the form was loaded with. */
+interface EditBase {
+  readonly questionId: string;
+  readonly baseRevisionId: string;
+  readonly baseSources: SourceSnapshot;
+}
 
 export function QuestionEditor({
   workspaceId,
@@ -107,7 +116,7 @@ export function QuestionEditor({
   async function save(
     forSession: number,
     values: QuestionFormValues,
-    edit: { questionId: string; baseRevisionId: string } | null,
+    edit: EditBase | null,
   ): Promise<ActionResult<Question>> {
     let result: ActionResult<Question>;
     if (edit) {
@@ -116,6 +125,7 @@ export function QuestionEditor({
         edit.questionId,
         edit.baseRevisionId,
         values,
+        edit.baseSources,
       );
     } else {
       const fingerprint = JSON.stringify(createBody(values));
@@ -185,7 +195,7 @@ interface EditorFormProps {
   readonly documents: readonly DocumentOption[];
   readonly save: (
     values: QuestionFormValues,
-    edit: { questionId: string; baseRevisionId: string } | null,
+    edit: EditBase | null,
   ) => Promise<ActionResult<Question>>;
 }
 
@@ -195,6 +205,7 @@ function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: 
     editing ? formFromQuestion(editing) : emptyForm(),
   );
   const [baseRevisionId, setBaseRevisionId] = useState(editing?.revision.id ?? null);
+  const [baseSources, setBaseSources] = useState(() => (editing ? sourceSnapshot(editing) : []));
   const [currentChapter, setCurrentChapter] = useState(editing?.chapter ?? null);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [notice, setNotice] = useState<{ text: string; stale: boolean; attempt: number } | null>(
@@ -236,7 +247,7 @@ function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: 
     try {
       const result = await save(
         values,
-        editing && baseRevisionId ? { questionId: editing.id, baseRevisionId } : null,
+        editing && baseRevisionId ? { questionId: editing.id, baseRevisionId, baseSources } : null,
       );
       if (result.ok) return;
       attempts.current += 1;
@@ -267,6 +278,7 @@ function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: 
       }
       setValues(formFromQuestion(result.data));
       setBaseRevisionId(result.data.revision.id);
+      setBaseSources(sourceSnapshot(result.data));
       setCurrentChapter(result.data.chapter);
       setErrors({});
       setNotice(null);

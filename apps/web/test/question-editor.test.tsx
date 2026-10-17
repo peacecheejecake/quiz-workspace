@@ -20,7 +20,13 @@ const createQuestionAction =
   vi.fn<(ws: string, values: unknown, key: unknown) => Promise<ActionResult<Question>>>();
 const updateQuestionAction =
   vi.fn<
-    (ws: string, id: string, base: string, values: unknown) => Promise<ActionResult<Question>>
+    (
+      ws: string,
+      id: string,
+      base: string,
+      values: unknown,
+      baseSources: unknown,
+    ) => Promise<ActionResult<Question>>
   >();
 const getQuestionAction =
   vi.fn<(ws: string, id: string) => Promise<ActionResult<QuestionDetail>>>();
@@ -37,6 +43,7 @@ const { QuestionEditor } = await import('../src/components/questions/question-ed
 const WS = '55555555-5555-4555-8555-555555555555';
 const REV1 = '11111111-1111-4111-8111-111111111111';
 const REV2 = '11111111-1111-4111-8111-222222222222';
+const DOC = '33333333-3333-4333-8333-333333333333';
 
 function question(revisionId: string, stem: string): Question {
   return {
@@ -189,10 +196,15 @@ describe('QuestionEditor edit', () => {
     await user.click(screen.getByRole('button', { name: '저장' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('먼저 수정되었습니다');
     expect(updateQuestionAction.mock.calls[0]?.[2]).toBe(REV1);
+    expect(updateQuestionAction.mock.calls[0]?.[4]).toEqual([]);
 
     getQuestionAction.mockResolvedValueOnce({
       ok: true,
-      data: { ...question(REV2, '다른 사람이 고친 문제'), revisions: [] },
+      data: {
+        ...question(REV2, '다른 사람이 고친 문제'),
+        sources: [{ document_id: DOC, document_revision_id: null, page_start: 4, page_end: 4 }],
+        revisions: [],
+      },
     });
     await user.click(screen.getByRole('button', { name: '최신 내용 불러오기' }));
     await waitFor(() =>
@@ -206,6 +218,10 @@ describe('QuestionEditor edit', () => {
     await user.click(screen.getByRole('button', { name: '저장' }));
     await waitFor(() => expect(updateQuestionAction).toHaveBeenCalledTimes(2));
     expect(updateQuestionAction.mock.calls[1]?.[2]).toBe(REV2);
+    // The edit is now based on the reloaded sources (unchanged → the action omits them).
+    expect(updateQuestionAction.mock.calls[1]?.[4]).toEqual([
+      { document_id: DOC, page_start: 4, page_end: 4 },
+    ]);
     const values = updateQuestionAction.mock.calls[1]?.[3] as QuestionFormValues;
     expect(values.options.map((o) => o.id)).toEqual(['a', 'b']);
   });

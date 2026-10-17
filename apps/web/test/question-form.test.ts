@@ -6,6 +6,7 @@ import { parseBankFilters, serializeBankFilters, statusQuery } from '../src/lib/
 import {
   acceptedAnswerList,
   addOption,
+  addSource,
   contentBody,
   createBody,
   emptyForm,
@@ -17,11 +18,16 @@ import {
   newOptionId,
   optionKey,
   parseFormValues,
+  parseSourceSnapshot,
   removeOption,
+  removeSource,
   setMultiAnswer,
   setOptionCorrect,
   setOptionText,
+  sourcesChanged,
+  sourceSnapshot,
   updateBody,
+  updateSource,
   validateQuestionForm,
   type Question,
   type QuestionFormValues,
@@ -101,7 +107,7 @@ describe('option ids', () => {
   it('keeps server ids when editing an existing question and never re-mints them', () => {
     let values = formFromQuestion(QUESTION);
     values = setOptionText(values, 'server-c', '물의 온도를 높인다');
-    const body = updateBody(values, REV);
+    const body = updateBody(values, REV, null);
     expect(body.options?.map((o) => o.id)).toEqual(['server-a', 'server-b', 'server-c']);
     expect(body.options?.[2]?.text).toBe('물의 온도를 높인다');
     expect(body.correct_option_ids).toEqual(['server-b']);
@@ -117,6 +123,50 @@ describe('option ids', () => {
     const mints = [taken, taken, 'opt-fresh'];
     const next = addOption(values, () => mints.shift() ?? 'opt-x');
     expect(next.options.map((o) => o.id)).toEqual([taken, 'opt-fresh']);
+  });
+});
+
+describe('sources on edit (provenance is kept unless they change)', () => {
+  const base = sourceSnapshot(QUESTION);
+
+  it('omits unchanged sources so the API keeps their pinned document revision', () => {
+    const values = setOptionText(formFromQuestion(QUESTION), 'server-a', '색을 진하게');
+    expect(base).toEqual([{ document_id: DOC, page_start: 4, page_end: 4 }]);
+    expect(sourcesChanged(values, base)).toBe(false);
+    expect(updateBody(values, REV, base)).not.toHaveProperty('sources');
+  });
+
+  it('sends sources when pages, documents or the list change', () => {
+    const values = formFromQuestion(QUESTION);
+    const key = values.sources[0]?.key ?? '';
+    const paged = updateSource(values, key, { pageEnd: '5' });
+    expect(updateBody(paged, REV, base).sources).toEqual([
+      { document_id: DOC, page_start: 4, page_end: 5 },
+    ]);
+    const other = updateSource(values, key, { documentId: CHAPTER });
+    expect(updateBody(other, REV, base)).toHaveProperty('sources');
+    expect(updateBody(removeSource(values, key), REV, base).sources).toEqual([]);
+    expect(updateBody(addSource(values, DOC), REV, base).sources).toHaveLength(2);
+  });
+
+  it('leaves a source of a deleted document alone when the edit does not touch sources', () => {
+    const withDeleted: Question = {
+      ...QUESTION,
+      sources: [
+        ...QUESTION.sources,
+        { document_id: null, document_revision_id: null, page_start: 7, page_end: 7 },
+      ],
+    };
+    const values = formFromQuestion(withDeleted);
+    expect(updateBody(values, REV, sourceSnapshot(withDeleted))).not.toHaveProperty('sources');
+  });
+
+  it('re-reads the base snapshot sent by the client and sends sources when it is unusable', () => {
+    expect(parseSourceSnapshot(JSON.parse(JSON.stringify(base)))).toEqual(base);
+    expect(parseSourceSnapshot('x')).toBeNull();
+    expect(parseSourceSnapshot([{ document_id: 1, page_start: null, page_end: null }])).toBeNull();
+    expect(parseSourceSnapshot([{ document_id: DOC, page_start: 1.5, page_end: null }])).toBeNull();
+    expect(updateBody(formFromQuestion(QUESTION), REV, null)).toHaveProperty('sources');
   });
 });
 
