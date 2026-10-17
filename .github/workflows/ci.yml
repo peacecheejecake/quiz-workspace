@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  E2E_PHASES: P0.10
+  E2E_PHASES: P0.10,A0
   FORCE_COLOR: '1'
 
 jobs:
