@@ -29,6 +29,7 @@ from book_core.structure.canonical import CanonicalDraft
 from book_core.structure.numbering import (
     Numbering,
     NumberingKind,
+    disambiguate_letters,
     is_back_matter,
     is_toc_title,
     parse_numbering,
@@ -81,34 +82,49 @@ def _page(draft: CanonicalDraft) -> int:
     return draft.locations[0][1].page
 
 
-def _is_toc_like(draft: CanonicalDraft) -> bool:
-    if draft.type not in (BlockType.TEXT, BlockType.TABLE):
-        return False
-    return len(_LEADERS.findall(draft.text)) >= _TOC_LEADER_MIN
+def _leaders(draft: CanonicalDraft) -> int:
+    if draft.type not in (BlockType.TEXT, BlockType.TABLE, BlockType.HEADING):
+        return 0
+    return len(_LEADERS.findall(draft.text))
 
 
 def _toc_pages(drafts: Sequence[CanonicalDraft], page_count: int) -> set[int]:
-    """The first run of TOC pages near the start: a page with a TOC title, or with dot-leader
-    blocks and no body-length paragraph (so a leader table inside a chapter is not a TOC)."""
-    prose_pages = {
-        _page(d)
-        for d in drafts
-        if d.type is BlockType.TEXT and len(d.text) >= _TITLE_PAGE_MAX_TEXT and not _is_toc_like(d)
-    }
-    candidates = {
-        _page(d)
-        for d in drafts
-        if (d.type is BlockType.HEADING and is_toc_title(d.text))
-        or (_is_toc_like(d) and _page(d) not in prose_pages)
-    }
-    if not candidates:
+    """The first run of TOC pages near the start.
+
+    Leader evidence is counted per page across blocks (a TOC parsed one entry per block, some
+    entries labelled as headings). A run starts on a page with a TOC title, or with at least
+    ``_TOC_LEADER_MIN`` leaders and no body-length paragraph (so a leader table inside a chapter
+    is not a TOC), and continues over following pages that are made up mostly of leader entries.
+    """
+    leaders: dict[int, int] = {}
+    entries: dict[int, int] = {}
+    blocks: dict[int, int] = {}
+    titled: set[int] = set()
+    prose: set[int] = set()
+    for d in drafts:
+        page, count = _page(d), _leaders(d)
+        leaders[page] = leaders.get(page, 0) + count
+        entries[page] = entries.get(page, 0) + (count > 0)
+        blocks[page] = blocks.get(page, 0) + 1
+        if d.type is BlockType.HEADING and is_toc_title(d.text):
+            titled.add(page)
+        if d.type is BlockType.TEXT and count == 0 and len(d.text) >= _TITLE_PAGE_MAX_TEXT:
+            prose.add(page)
+
+    def starts(page: int) -> bool:
+        return page in titled or (leaders.get(page, 0) >= _TOC_LEADER_MIN and page not in prose)
+
+    def continues(page: int) -> bool:
+        if page not in blocks or page in prose:
+            return False
+        return leaders[page] >= _TOC_LEADER_MIN or 2 * entries[page] > blocks[page]
+
+    start = next((p for p in sorted(blocks) if starts(p)), None)
+    if start is None or start > max(4, page_count // 10):
         return set()
-    start = min(candidates)
-    if start > max(4, page_count // 10):
-        return set()
-    pages = set()
-    page = start
-    while page in candidates:
+    pages = {start}
+    page = start + 1
+    while continues(page):
         pages.add(page)
         page += 1
     return pages
@@ -146,7 +162,13 @@ def restore_hierarchy(drafts: Sequence[CanonicalDraft], page_count: int) -> Hier
         for i in range(after_toc, len(drafts))
         if drafts[i].type is BlockType.HEADING and i not in result.toc
     ]
-    numbering = {i: parse_numbering(drafts[i].text) for i in heads}
+    numbering = dict(
+        zip(
+            heads,
+            disambiguate_letters([parse_numbering(drafts[i].text) for i in heads]),
+            strict=True,
+        )
+    )
     kinds = {n.kind for n in numbering.values() if n is not None}
 
     if not heads:
@@ -158,8 +180,8 @@ def restore_hierarchy(drafts: Sequence[CanonicalDraft], page_count: int) -> Hier
         top = min(kinds)
         start = next(i for i in heads if (n := numbering[i]) is not None and n.kind is top)
     else:
-        page_one_text = max(
-            (len(d.text) for d in drafts if _page(d) == 1 and d.type is BlockType.TEXT), default=0
+        page_one_text = sum(
+            len(d.text) for d in drafts if _page(d) == 1 and d.type is BlockType.TEXT
         )
         title_page = (
             page_count > 1

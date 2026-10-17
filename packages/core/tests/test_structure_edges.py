@@ -354,3 +354,88 @@ def test_leader_table_inside_a_chapter_is_not_a_toc() -> None:
     )
     assert result.toc_block_ids == ()
     assert _tree(result) == [("Chapter 1 Steps", 1, None), ("Chapter 2 More", 1, None)]
+
+
+def test_letter_i_in_an_alphabetic_sequence_is_not_roman() -> None:
+    letters = "ABCDEFGHIJ"
+
+    def page(chars: str) -> list[str]:
+        return [text for ch in chars for text in (f"# {ch}. Topic {ch}", LONG_EN)]
+
+    result = _structure([page(letters[:5]), page(letters[5:])])
+    assert _tree(result) == [(f"{ch}. Topic {ch}", 1, None) for ch in letters]
+    assert result.front_matter_block_ids == ()
+    assert result.warnings == ()
+
+
+@pytest.mark.parametrize(
+    ("labels", "kinds"),
+    [
+        (["I", "II", "III"], [NumberingKind.ROMAN] * 3),
+        (["H", "I", "J"], [NumberingKind.UPPER_ALPHA] * 3),
+        (["I", "J"], [NumberingKind.UPPER_ALPHA] * 2),
+        (["IV", "V", "VI"], [NumberingKind.ROMAN] * 3),
+        (["U", "V"], [NumberingKind.UPPER_ALPHA] * 2),
+        (["I"], [NumberingKind.ROMAN]),
+    ],
+)
+def test_disambiguate_single_letter_roman(labels: list[str], kinds: list[NumberingKind]) -> None:
+    from book_core.structure.numbering import disambiguate_letters
+
+    resolved = disambiguate_letters([parse_numbering(f"{label}. Title") for label in labels])
+    assert [n.kind if n else None for n in resolved] == kinds
+
+
+def test_roman_parts_with_letter_subsections() -> None:
+    result = _structure(
+        [
+            ["# I. Overview", LONG_EN, "# A. First", LONG_EN, "# B. Second", LONG_EN],
+            ["# II. Methods", LONG_EN, "# A. Data", LONG_EN],
+        ]
+    )
+    assert _tree(result) == [
+        ("I. Overview", 1, None),
+        ("A. First", 2, "I. Overview"),
+        ("B. Second", 2, "I. Overview"),
+        ("II. Methods", 1, None),
+        ("A. Data", 2, "II. Methods"),
+    ]
+
+
+def test_first_page_of_short_paragraphs_is_not_a_title_page() -> None:
+    short = "A short paragraph of body text here."
+    result = _structure(
+        [["# Introduction", *[short] * 10], ["# Background", LONG_EN], ["# Methods", LONG_EN]]
+    )
+    assert [s.title for s in result.revision.sections] == ["Introduction", "Background", "Methods"]
+    assert result.front_matter_block_ids == ()
+    assert all(b.section_id is not None for b in result.revision.blocks)
+
+
+def test_multi_page_toc_with_one_entry_per_block() -> None:
+    toc1 = ["# Contents", "# Chapter 1 Start ........ 3", "1.1 Scope ........ 3"]
+    toc2 = ["Chapter 2 Middle ........ 4", "# Chapter 3 End ........ 5"]
+    result = _structure(
+        [
+            toc1,
+            toc2,
+            ["# Chapter 1 Start", LONG_EN, "# 1.1 Scope", LONG_EN],
+            ["# Chapter 2 Middle", LONG_EN],
+            ["# Chapter 3 End", LONG_EN],
+        ]
+    )
+    assert _tree(result) == [
+        ("Chapter 1 Start", 1, None),
+        ("1.1 Scope", 2, "Chapter 1 Start"),
+        ("Chapter 2 Middle", 1, None),
+        ("Chapter 3 End", 1, None),
+    ]
+    blocks = {b.id: b for b in result.revision.blocks}
+    pages = [
+        blocks[s.heading_block_id].locations[0].page
+        for s in result.revision.sections
+        if s.heading_block_id
+    ]
+    assert pages == [3, 3, 4, 5]
+    assert len(result.toc_block_ids) == 5
+    assert result.warnings == ()

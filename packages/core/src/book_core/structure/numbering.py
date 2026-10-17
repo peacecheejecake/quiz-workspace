@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
 from enum import IntEnum
 
 
@@ -34,6 +35,8 @@ class Numbering:
     kind: NumberingKind
     numbers: tuple[int, ...]
     """Numeric value of each component; dotted numbers have one entry per component."""
+    label: str = ""
+    """The printed label, e.g. ``1.2``, ``IV`` or ``가``."""
 
 
 _HANGUL_ORDER = "가나다라마바사아자차카타파하"
@@ -116,9 +119,49 @@ def parse_numbering(title: str) -> Numbering | None:
         if "." in raw:
             numbers = tuple(int(part) for part in raw.split("."))
             depth = min(len(numbers), 5)
-            return Numbering(NumberingKind(NumberingKind.NUM1 + depth - 1), numbers)
-        return Numbering(kind, (_value(raw, kind),))
+            return Numbering(NumberingKind(NumberingKind.NUM1 + depth - 1), numbers, raw)
+        return Numbering(kind, (_value(raw, kind),), raw)
     return None
+
+
+def _alpha(numbering: Numbering) -> Numbering:
+    label = numbering.label
+    return replace(numbering, kind=NumberingKind.UPPER_ALPHA, numbers=(ord(label) - 64,))
+
+
+def disambiguate_letters(numberings: Sequence[Numbering | None]) -> list[Numbering | None]:
+    """Resolve single-letter ``I.``/``V.``/``X.`` headings, which read as Roman numerals or as
+    letters, from the neighbouring letter/Roman headings in document order.
+
+    ``H.`` before ``I.`` (or ``J.`` after it) makes it a letter; ``II.`` after it (or ``H.``
+    missing while other Roman headings exist) keeps it Roman. Without neighbours, it is a letter
+    if the document uses letter headings and no multi-letter Roman numerals, else Roman.
+    """
+    result = list(numberings)
+    letter_kinds = (NumberingKind.ROMAN, NumberingKind.UPPER_ALPHA)
+    seq = [i for i, n in enumerate(result) if n is not None and n.kind in letter_kinds]
+    uses_alpha = any(n is not None and n.kind is NumberingKind.UPPER_ALPHA for n in numberings)
+    uses_multi_roman = any(
+        n is not None and n.kind is NumberingKind.ROMAN and len(n.label) > 1 for n in numberings
+    )
+    for pos, i in enumerate(seq):
+        n = result[i]
+        if n is None or n.kind is not NumberingKind.ROMAN or len(n.label) != 1:
+            continue
+        letter = ord(n.label) - 64
+        prev = result[seq[pos - 1]] if pos > 0 else None
+        nxt = result[seq[pos + 1]] if pos + 1 < len(seq) else None
+        if prev is not None and prev.kind is NumberingKind.UPPER_ALPHA:
+            alpha = prev.numbers[-1] == letter - 1
+        elif nxt is not None and nxt.kind is NumberingKind.ROMAN and len(nxt.label) > 1:
+            alpha = False
+        elif nxt is not None and nxt.kind is NumberingKind.UPPER_ALPHA:
+            alpha = nxt.numbers[-1] == letter + 1
+        else:
+            alpha = uses_alpha and not uses_multi_roman
+        if alpha:
+            result[i] = _alpha(n)
+    return result
 
 
 def _key(title: str) -> str:
