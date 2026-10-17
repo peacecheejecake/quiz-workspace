@@ -4,6 +4,7 @@ import { DEFAULT_AFTER_SIGN_IN, safeNextPath } from './safe-next';
 export const LOGIN_PATH = '/login';
 export const AUTH_ERROR_PATH = '/auth/error';
 export const RESET_PASSWORD_PATH = '/reset-password';
+export const ACCOUNT_SECURITY_PATH = '/settings/security';
 
 /** Areas that require a verified session. */
 export const PROTECTED_PREFIXES = ['/workspaces', '/documents', '/questions', '/settings'] as const;
