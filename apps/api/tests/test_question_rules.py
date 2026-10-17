@@ -9,7 +9,10 @@ from fastapi.exceptions import RequestValidationError
 from quiz_api.question_rules import (
     QuestionContent,
     content_issues,
+    opaque_id_valid,
+    storable,
     transition_allowed,
+    unstorable_strings,
     validate_content,
 )
 
@@ -111,3 +114,25 @@ def test_every_violation_is_reported_at_once() -> None:
 )
 def test_publication_transitions(current: str, target: str, allowed: bool) -> None:
     assert transition_allowed(current, target) is allowed  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "oid", ["opt\x00", "\x00", "a\x07b", "a​b", "a\ud800", "a\x7f", "a\u0085", "a"]
+)
+def test_option_ids_reject_control_and_invalid_characters(oid: str) -> None:
+    content = replace(MCQ, options=(("opt-1", "a"), (oid, "b")), correct_option_ids=("opt-1",))
+    assert ("body", "options", 1, "id") in locs(content)
+    assert not opaque_id_valid(oid)
+
+
+@pytest.mark.parametrize("oid", ["opt-1", "가", "選択肢_3", "a" * 256, "\U0001f642"])
+def test_ordinary_option_ids_are_accepted(oid: str) -> None:
+    assert opaque_id_valid(oid)
+
+
+def test_unstorable_strings_are_located_anywhere_in_a_body() -> None:
+    body = {"stem": "ok", "options": [{"id": "a", "text": "b\x00"}], "x": ["\udc00"]}
+    assert unstorable_strings(body) == [("options", 0, "text"), ("x", 0)]
+    assert storable("tab\tnewline\n")
+    assert not storable("\x00")
+    assert not storable("\ud83d")

@@ -57,8 +57,17 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy.exc import IntegrityError
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    Strict,
+    TypeAdapter,
+    ValidationError,
+    field_validator,
+)
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
 from quiz_api.auth import CurrentUser
@@ -87,7 +96,9 @@ from quiz_api.question_rules import (
     QuestionContent,
     QuestionType,
     content_issues,
+    storable,
     transition_allowed,
+    unstorable_strings,
 )
 from quiz_api.repositories.idempotency import IdempotencyStore
 from quiz_api.repositories.questions import (
@@ -413,18 +424,33 @@ def _check_chapter(
         )
 
 
-def _constraint_violation(repo: QuestionRepository) -> RequestValidationError:
-    """A DB constraint rejected the write (e.g. a chapter/document deleted concurrently)."""
+def _constraint_violation(
+    repo: QuestionRepository, loc: tuple[str, ...] = ("body",)
+) -> RequestValidationError:
+    """The DB rejected the statement's data (a constraint, e.g. a chapter/document deleted
+    concurrently, or a value it cannot store). Defensive: input rules should catch these first.
+    The message never echoes input."""
     repo.rollback()
     return RequestValidationError(
         [
             {
-                "loc": ("body",),
-                "msg": "The question violates a data constraint.",
+                "loc": loc,
+                "msg": "The request contains data that cannot be stored.",
                 "type": "value_error",
             }
         ]
     )
+
+
+def _reject_unstorable(body: BaseModel) -> None:
+    """422 for strings PostgreSQL cannot hold (NUL, lone surrogates) anywhere in the body; runs
+    before hashing/storing so such input never reaches the DB or the idempotency store."""
+    bad = unstorable_strings(body.model_dump(mode="python"))
+    if bad:
+        issues = Issues()
+        for loc in bad:
+            issues.add(loc, "Text must not contain NUL characters or invalid code points.")
+        issues.raise_if_any()
 
 
 def _encode_cursor(cursor: ListCursor) -> str:
@@ -435,17 +461,28 @@ def _encode_cursor(cursor: ListCursor) -> str:
     return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
 
 
+_Int4 = Annotated[int, Strict(), Field(ge=-INT4_MAX - 1, le=INT4_MAX)]
+# [sort_order, question number (or UNNUMBERED), created_at, id] as written by `_encode_cursor`.
+_CURSOR = TypeAdapter(tuple[_Int4, _Int4, AwareDatetime, uuid.UUID])
+MAX_CURSOR = 500
+
+
+def _invalid_cursor() -> RequestValidationError:
+    return RequestValidationError(
+        [{"loc": ("query", "cursor"), "msg": "Invalid cursor.", "type": "value_error"}]
+    )
+
+
 def _decode_cursor(value: str) -> ListCursor:
+    """Opaque cursor -> keyset position; anything not produced by `_encode_cursor` is a 422."""
+    if len(value) > MAX_CURSOR:
+        raise _invalid_cursor()
     try:
-        raw = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
-        sort_order, number, created_at, qid = json.loads(raw)
-        return ListCursor(
-            int(sort_order), int(number), datetime.fromisoformat(created_at), uuid.UUID(qid)
-        )
-    except (binascii.Error, ValueError, TypeError) as exc:
-        raise RequestValidationError(
-            [{"loc": ("query", "cursor"), "msg": "Invalid cursor.", "type": "value_error"}]
-        ) from exc
+        raw = base64.urlsafe_b64decode(value.encode("ascii") + b"=" * (-len(value) % 4))
+        sort_order, number, created_at, qid = _CURSOR.validate_json(raw)
+    except (binascii.Error, UnicodeError, ValueError, ValidationError):
+        raise _invalid_cursor() from None
+    return ListCursor(sort_order, number, created_at, qid)
 
 
 def _scope(workspace_id: uuid.UUID) -> str:
@@ -472,6 +509,7 @@ def create_question(
     """Register a question with revision 1 (QBANK-01-AC02). CONFIRMED (default) requires
     complete content (an MCQ needs >= 2 options and a correct option); DRAFT may be incomplete.
     """
+    _reject_unstorable(body)
     scope, body_hash = _scope(access.workspace_id), request_hash(body.model_dump(mode="json"))
     if idempotency_key is not None:
         idempotency.lock(access.user_id, scope, idempotency_key)
@@ -522,7 +560,7 @@ def create_question(
                 result.model_dump(mode="json"),
             )
         repo.commit()
-    except IntegrityError:
+    except (IntegrityError, DataError):
         raise _constraint_violation(repo) from None
     return result
 
@@ -544,10 +582,14 @@ def list_questions(
         str | None, Query(max_length=200, description="Case-insensitive stem search.")
     ] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
-    cursor: Annotated[str | None, Query(max_length=500)] = None,
+    cursor: Annotated[str | None, Query(max_length=MAX_CURSOR)] = None,
 ) -> QuestionList:
     """The bank (any member, answers included): live questions in bank order (sort order,
     question number, registration order)."""
+    if q is not None and not storable(q):
+        raise RequestValidationError(
+            [{"loc": ("query", "q"), "msg": "Invalid search text.", "type": "value_error"}]
+        )
     flt = QuestionFilter(
         statuses=sorted(set(publication_status or ["CONFIRMED"])),
         question_type=question_type,
@@ -556,7 +598,10 @@ def list_questions(
         text=q.strip() if q and q.strip() else None,
     )
     after = _decode_cursor(cursor) if cursor else None
-    items, next_cursor = repo.list_page(access.workspace_id, flt, limit=limit, after=after)
+    try:
+        items, next_cursor = repo.list_page(access.workspace_id, flt, limit=limit, after=after)
+    except DataError:
+        raise _constraint_violation(repo, ("query",)) from None
     return QuestionList(
         items=[_out(i) for i in items],
         next_cursor=_encode_cursor(next_cursor) if next_cursor else None,
@@ -605,6 +650,7 @@ def get_question_revision(
 def update_question(access: EditQuestion, body: QuestionUpdate, repo: QuestionRepo) -> Question:
     """Edit (QBANK-01-AC03): a content change appends a revision and keeps option ids; a stale
     `base_revision_id` is 409 `stale-revision`."""
+    _reject_unstorable(body)
     current = _load(repo, access.resource_id, lock=True)
     if body.base_revision_id != current.revision.id:
         raise ProblemException(
@@ -695,7 +741,7 @@ def update_question(access: EditQuestion, body: QuestionUpdate, repo: QuestionRe
             )
         updated = _load(repo, current.id)
         repo.commit()
-    except IntegrityError:
+    except (IntegrityError, DataError):
         raise _constraint_violation(repo) from None
     return _out(updated)
 

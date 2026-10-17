@@ -9,9 +9,13 @@ the public API. Fixtures: conftest.py.
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
+import random
 import uuid
 from typing import Any
+from urllib.parse import quote
 
 import psycopg
 import pytest
@@ -136,13 +140,14 @@ def test_draft_confirm_archive_lifecycle_and_listing(seed: Any) -> None:
     seed.problem(alice.call("GET", f"{path}/revisions/{seed.new_id()}"), 404)
 
     events = _events(draft["id"])
-    assert [e[0] for e in events] == [
+    # Events of one transaction share created_at, so compare without relying on their order.
+    assert sorted(e[0] for e in events) == [
         "question.created",
+        "question.status_changed",
+        "question.status_changed",
         "question.updated",
-        "question.status_changed",
-        "question.status_changed",
     ]
-    assert events[2][1] == {"from": "DRAFT", "to": "CONFIRMED", "version": 2}
+    assert ("question.status_changed", {"from": "DRAFT", "to": "CONFIRMED", "version": 2}) in events
     text = repr(events)
     assert body["stem"] not in text
     assert "opt-3" not in text, "activity metadata never carries answers"
@@ -306,3 +311,82 @@ def test_chapter_links_sources_filters_and_pagination(seed: Any) -> None:
         {"base_revision_id": q1["revision"]["id"], "chapter_id": None, "sources": []},
     )
     assert (moved["chapter_id"], moved["sources"], moved["revision"]) == (None, [], q1["revision"])
+
+
+# Characters that broke or could break storage: NUL, C0/C1 controls, lone surrogates, BOM,
+# zero-width/bidi format characters, private use, non-BMP, combining marks, LIKE wildcards.
+_NASTY = [
+    "\x00", "\x01", "\x1f", "\x7f", "\x85", "\ud800", "\udfff", "﻿", "​", "‮",
+    "", "\U0001f642", "́", " ", "\t", "\n", "%", "_", "\\", "'",
+]  # fmt: skip
+
+
+def _nasty(rng: random.Random) -> str:
+    return "".join(
+        rng.choice(_NASTY) if rng.random() < 0.6 else chr(rng.randint(0x20, 0x2FFF))
+        for _ in range(rng.randint(0, 6))
+    )
+
+
+def _raw(client: Any, method: str, path: str, body: Any = None) -> Any:
+    """Send `body` as ASCII-escaped JSON so lone surrogates reach the server intact."""
+    return client._http.request(
+        method,
+        f"/api/v1{path}",
+        content=None if body is None else json.dumps(body).encode(),
+        headers={
+            "Authorization": f"Bearer {client.user.token}",
+            "content-type": "application/json",
+        },
+    )
+
+
+def _fuzz_body(seed: Any, field: str, value: str) -> dict[str, Any]:
+    if field == "accepted":
+        return {"question_type": "SHORT_ANSWER", "stem": _stem("단답"), "accepted_answers": [value]}
+    body: dict[str, Any] = seed.mcq(_stem("fuzz"), ["a", "b"], 0)
+    if field in {"stem", "explanation", "rubric"}:
+        body[field] = value
+    elif field == "option_id":
+        body["options"][1]["id"] = value
+    elif field == "option_text":
+        body["options"][1]["text"] = value
+    else:  # answer
+        body["correct_option_ids"] = [value]
+    return body
+
+
+def test_random_unicode_and_control_strings_never_cause_a_500(seed: Any) -> None:
+    alice = seed.client("m42a-fuzz")
+    ws = alice.create_workspace()
+    q = alice.create_question(ws["id"], seed.mcq(_stem("퍼즈"), ["a", "b"], 0))
+    rng = random.Random(4242)  # noqa: S311 - deterministic test data
+    fields = ("stem", "explanation", "rubric", "option_id", "option_text", "answer", "accepted")
+    statuses: set[int] = set()
+    for i in range(140):
+        field, value = fields[i % len(fields)], _nasty(rng)
+        body = _fuzz_body(seed, field, value)
+        created = _raw(alice, "POST", f"/workspaces/{ws['id']}/questions", body)
+        current = alice.get_question(q["id"])["revision"]["id"]
+        patch = (
+            {k: v for k, v in body.items() if k != "question_type"}
+            if body["question_type"] == "MCQ"
+            else {"stem": value}
+        )
+        edited = _raw(
+            alice, "PATCH", f"/questions/{q['id']}", {"base_revision_id": current, **patch}
+        )
+        search = quote(value.encode("utf-8", "surrogatepass"))
+        query = _raw(alice, "GET", f"/workspaces/{ws['id']}/questions?q={search}")
+        for res in (created, edited, query):
+            assert res.status_code < 500, f"{field}={value!r}: HTTP {res.status_code}"
+            statuses.add(res.status_code)
+    assert {200, 201, 422} <= statuses, statuses
+
+    # Search text and cursors with NUL / junk are 422; invalid UTF-8 is replaced, never a 500.
+    for params in ("q=%00", "cursor=%00", "cursor=" + "A" * 400):
+        res = alice.call("GET", f"/workspaces/{ws['id']}/questions?{params}")
+        assert res.status_code == 422, (params, res.status_code)
+    assert alice.call("GET", f"/workspaces/{ws['id']}/questions?q=%ED%A0%80").status_code < 500
+    bad = base64.urlsafe_b64encode(b'[0,0,"2026-10-17T00:00:00",123]').decode().rstrip("=")
+    seed.problem(alice.call("GET", f"/workspaces/{ws['id']}/questions?cursor={bad}"), 422)

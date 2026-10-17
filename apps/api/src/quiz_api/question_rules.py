@@ -20,6 +20,7 @@ the request body, rendered by the shared 422 problem handler.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -73,6 +74,31 @@ class Issues:
             raise RequestValidationError(self.items)
 
 
+def storable(value: str) -> bool:
+    """PostgreSQL text can hold it: no NUL, no lone surrogates (not encodable as UTF-8)."""
+    return "\x00" not in value and not any(0xD800 <= ord(c) <= 0xDFFF for c in value)
+
+
+def opaque_id_valid(value: str, limit: int = MAX_OPTION_ID) -> bool:
+    """1..limit characters, no whitespace, no control/format/surrogate/unassigned characters."""
+    return (
+        0 < len(value) <= limit
+        and _OPAQUE_ID.fullmatch(value) is not None
+        and all(unicodedata.category(c) not in {"Cc", "Cf", "Cs", "Co", "Cn"} for c in value)
+    )
+
+
+def unstorable_strings(value: Any, loc: Loc = ()) -> list[Loc]:
+    """Paths of every string inside `value` (dicts/lists) that `storable` rejects."""
+    if isinstance(value, str):
+        return [] if storable(value) else [loc]
+    if isinstance(value, dict):
+        return [p for k, v in value.items() for p in unstorable_strings(v, (*loc, k))]
+    if isinstance(value, list | tuple):
+        return [p for i, v in enumerate(value) for p in unstorable_strings(v, (*loc, i))]
+    return []
+
+
 def _blank(value: str) -> bool:
     return value.strip() == ""
 
@@ -82,8 +108,8 @@ def _text(issues: Issues, loc: Loc, value: str | None, limit: int, *, required: 
         if required:
             issues.add(loc, "Field required.", "missing")
         return
-    if "\x00" in value:
-        issues.add(loc, "Text must not contain NUL characters.")
+    if not storable(value):
+        issues.add(loc, "Text must not contain NUL characters or invalid code points.")
     if required and _blank(value):
         issues.add(loc, "Must not be blank.")
     if len(value) > limit:
@@ -95,10 +121,11 @@ def _options(issues: Issues, content: QuestionContent) -> None:
         issues.add(("options",), f"At most {MAX_OPTIONS} options.", "too_long")
     seen: set[str] = set()
     for i, (oid, text) in enumerate(content.options):
-        if not _OPAQUE_ID.fullmatch(oid) or len(oid) > MAX_OPTION_ID:
+        if not opaque_id_valid(oid):
             issues.add(
                 ("options", i, "id"),
-                f"Option ids are 1-{MAX_OPTION_ID} characters without whitespace.",
+                f"Option ids are 1-{MAX_OPTION_ID} characters without whitespace or control "
+                "characters.",
             )
         elif oid in seen:
             issues.add(("options", i, "id"), "Option ids must be unique within the question.")
