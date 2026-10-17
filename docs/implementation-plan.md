@@ -351,6 +351,9 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-10-17 | 비밀번호 정책: 최소 10자, 문자 종류 규칙 없음(NIST 800-63B). A2.2 폼 검증도 동일 규칙. | auth.md에 수치 없음 |
 | 2026-10-17 | 인증 메일 링크는 `token_hash` 방식(`/auth/callback?token_hash&type`), callback은 `token_hash`(verifyOtp)와 `code`(PKCE/OAuth) 모두 처리하고 `next`는 내부 경로 allowlist로 검증. | Supabase SSR 권장, 다른 브라우저에서 열어도 동작 |
 | 2026-10-17 | 웹/UI React는 19.2.8로 통일(Next 16.3 라인). | P0.4·P0.5 버전 불일치 해소 |
+| 2026-10-17 | 실모델(Docling) test는 `models` marker로 분리해 `make test-models`로만 실행하고, CI는 nightly(또는 parser 변경 시)로 HF cache와 함께 돌린다. PR CI의 `make test`는 오프라인·모델 미사용. | AGENTS.md 실모델 경계, 오프라인 재현성 |
+| 2026-10-17 | test-only seed endpoint는 만들지 않는다. E2E fixture는 local Auth admin API(로컬 loopback만 허용)와 이후 공개 API로 데이터를 만든다. CI의 `E2E_PHASES`에는 GREEN이 된 phase만 추가한다. | AGENTS.md §5, develop의 RED spec이 CI를 깨지 않게 |
+| 2026-10-17 | API·worker 공용 로그 redaction은 `book_core.log_redaction`에 둔다. | 두 앱이 이미 book_core에 의존, 신규 member 불필요 |
 
 ## 8. 진행 현황
 
@@ -365,10 +368,11 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | P0.9 DB baseline | ✅ | 0e1d8c0 (merge a78f172) · ac9fa6a | P2(quiz_api LOGIN 시 db-test 실패) → 반영 → 지적 없음 |
 | M1.1 PDF fixtures | ✅ | eea3957 | 지적 없음. Noto Sans KR subset(OFL) 임베드 |
 | P0.4 UI kit | ✅ | 66f6466 (merge 7bc9440, React 19.2.8로 정렬) · 12158b7 | P1(RSC client boundary 누락)·P2(숨김 요소로 Tab handoff) → 반영(RSC build fixture 추가) → 지적 없음 |
-| P0.7 worker | ◐ | 981a1bf (merge 3cb0c83) | P1×2(publish 실패·hard timeout 시 job 고착)·P2(취소 시 cleanup 누락) + API redaction 공백 수정 중 |
 | A1.1 Supabase Auth local | ✅ | e8768f3 | 지적 없음 |
 | P0.3b 토큰 보강 | ✅ | 9df4496 | 지적 없음. 대비 test 추가(light unseen/retry marker는 outline 필요 → M5.3) |
-| M1.2 Docling parser | ◐ | 9cd16d6 (merge e1c27d1) | P2×2(OCR 엔진 부재 시 ocr_applied 오보고, 실모델 test가 기본 suite에 포함) 수정 중 |
+| M1.2 Docling parser | ◐ | 9cd16d6 (merge e1c27d1) · 408a015 | P2×2(OCR 오보고, 실모델 test 기본 suite 포함) → 반영(`make test-models` 분리) → P2(OCR extra 설치 시 test 실패) 수정 중 |
+| P0.7 worker | ◐ | 981a1bf · bf6f99d · 2ef82be | P1×2·P2 → 반영(reconciler, published_at, 공용 log redaction) → P2(terminal cleanup 복구 불가) 수정 중 |
+| P0.10 E2E harness | ◐ | 776afac | P2×2(빈 spec 목록이 전체 실행 유발, 주석 처리된 test를 coverage로 인정) 수정 중 |
 | P0.8 core 골격 | ✅ | 163e9ea · bc78ce6 · 1c56c17 | P2(LLM 검증 오류에 원문 노출) → 반영 → P2(식별자형 key 노출) → 반영 → 지적 없음 |
 | (통합) worktree 제외 설정 | ✅ | 6704d1c | 사소한 설정 수정, 리뷰 생략 |
 

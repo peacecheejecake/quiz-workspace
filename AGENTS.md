@@ -166,7 +166,7 @@ make lint        # eslint + prettier --check + ruff + per-package lint + contrac
 make fmt         # prettier --write, eslint --fix, ruff --fix, ruff format
 make fmt-check   # format check only
 make typecheck   # per-package `typecheck` scripts (tsc) + mypy on Python members
-make test        # per-package `test` scripts (Vitest) + pytest
+make test        # Vitest + node --test + pytest -m "not infra and not models" (offline, no model weights)
 make contracts   # export contracts/openapi.json + regenerate packages/api-client types
 make contracts-check   # fail if either generated contract file is stale
 make api-dev     # run the FastAPI app locally with reload (python -m quiz_api.serve; never bare uvicorn)
@@ -176,6 +176,10 @@ make infra-down  # stop infra, keep data volumes
 make infra-reset # stop infra and DELETE local data volumes
 pnpm exec supabase <cmd>       # pinned Supabase CLI; never a global install
 make auth-keys   # generate gitignored local Auth ES256 signing key (run by infra-up; idempotent)
+make test-models # real Docling models (~0.5G HF weights on first run); fails, never skips, without them
+make e2e-browsers  # playwright install chromium webkit
+make e2e         # Playwright (builds+starts apps/web unless a server is on E2E_BASE_URL); @infra specs need infra-up
+make e2e-trace   # AC <-> test traceability; ARGS="--strict --phase A0" gates a phase, --list-specs lists its specs
 make test-infra  # pytest -m infra against the running stack (errors, not skips, if it's down)
 make worker-dev  # Celery worker via python -m quiz_worker.serve (never bare `celery worker`)
 make db-reset    # recreate local DB from supabase/migrations + seed.sql (needs infra-up)
