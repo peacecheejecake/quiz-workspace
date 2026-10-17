@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Protocol, get_args, runtime_checkable
+from dataclasses import dataclass
+from typing import Annotated, Protocol, get_args, runtime_checkable
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from book_core.contracts.common import CoreModel, Identifier, NonEmptyText
 
@@ -21,6 +22,81 @@ class LLMRequest(CoreModel):
         return hashlib.sha256(self.model_dump_json().encode("utf-8")).hexdigest()
 
 
+class LLMUsage(CoreModel):
+    """Token accounting of one call. ``cost_usd`` is set only when the client has pricing."""
+
+    input_tokens: Annotated[int, Field(ge=0)] = 0
+    output_tokens: Annotated[int, Field(ge=0)] = 0
+    cache_read_input_tokens: Annotated[int, Field(ge=0)] = 0
+    cache_creation_input_tokens: Annotated[int, Field(ge=0)] = 0
+    cost_usd: Annotated[float, Field(ge=0)] | None = None
+
+    def __add__(self, other: LLMUsage) -> LLMUsage:
+        cost = (
+            None
+            if self.cost_usd is None and other.cost_usd is None
+            else (self.cost_usd or 0.0) + (other.cost_usd or 0.0)
+        )
+        return LLMUsage(
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            cache_read_input_tokens=self.cache_read_input_tokens + other.cache_read_input_tokens,
+            cache_creation_input_tokens=(
+                self.cache_creation_input_tokens + other.cache_creation_input_tokens
+            ),
+            cost_usd=cost,
+        )
+
+
+class LLMCallInfo(CoreModel):
+    """Provenance of one call: what produced an output (questions.md §5: model + prompt version).
+
+    Carries no prompt or output text, so it is safe to log and to store on drafts and runs.
+    """
+
+    task: Identifier
+    prompt_version: NonEmptyText
+    model: NonEmptyText
+    request_fingerprint: NonEmptyText
+    usage: LLMUsage = LLMUsage()
+    stop_reason: str | None = None
+    provider_request_id: str | None = None
+    latency_ms: Annotated[int, Field(ge=0)] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LLMResult[T: BaseModel]:
+    """A schema-validated output plus its call provenance."""
+
+    output: T
+    info: LLMCallInfo
+
+
+class LLMProviderError(Exception):
+    """The provider call failed (transport, HTTP status, refusal, truncation) after retries.
+
+    Like :class:`LLMOutputError`, the message is built only from metadata (status code, error
+    type, provider request id, stop reason), never from prompt, output or provider error bodies,
+    so it is safe to log.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        kind: str,
+        status_code: int | None = None,
+        provider_request_id: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.kind = kind
+        self.status_code = status_code
+        self.provider_request_id = provider_request_id
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.args[0]!r})"
+
+
 class LLMOutputError(Exception):
     """The model's output did not conform to the requested schema.
 
@@ -35,6 +111,8 @@ class LLMOutputError(Exception):
         self.schema = schema
         self.raw_output = raw_output
         self.detail = detail
+        self.call_info: LLMCallInfo | None = None
+        """Provenance and usage of the call that produced the output, when a client knows it."""
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.args[0]!r})"
@@ -96,12 +174,16 @@ def parse_structured_output[T: BaseModel](raw_output: str, schema: type[T]) -> T
 class LLMClient(Protocol):
     """Provider-agnostic LLM client returning schema-validated structured output.
 
-    ``generate`` raises :class:`LLMOutputError` when the output does not match ``schema``. The
-    returned model is only schema-valid; semantic checks (answer count, sources) are done by the
-    caller (questions.md §5: the LLM's declared answer is never trusted).
+    ``complete`` returns the output with its call provenance (model, prompt version, tokens);
+    ``generate`` returns the output only. Both raise :class:`LLMOutputError` when the output does
+    not match ``schema`` and :class:`LLMProviderError` when the call itself fails. The returned
+    model is only schema-valid; semantic checks (answer count, sources) are done by the caller
+    (questions.md §5: the LLM's declared answer is never trusted).
     """
 
     @property
     def model_name(self) -> str: ...
+
+    def complete[T: BaseModel](self, request: LLMRequest, schema: type[T]) -> LLMResult[T]: ...
 
     def generate[T: BaseModel](self, request: LLMRequest, schema: type[T]) -> T: ...

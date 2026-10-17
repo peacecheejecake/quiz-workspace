@@ -184,6 +184,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+llm = [
+    { name = "httpx" },
+]
 models = [
     { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'linux'" },
@@ -212,6 +215,7 @@ requires-dist = [
     { name = "docling-ibm-models", extras = ["opencv-python-headless"], marker = "extra == 'parser'", specifier = "==4.0.3" },
     { name = "docling-slim", extras = ["feat-ocr-rapidocr-onnx"], marker = "extra == 'ocr'", specifier = "==2.131.0" },
     { name = "docling-slim", extras = ["format-pdf", "models-local", "convert-core"], marker = "extra == 'parser'", specifier = "==2.131.0" },
+    { name = "httpx", marker = "extra == 'llm'", specifier = ">=0.28,<1" },
     { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "torch", marker = "sys_platform == 'linux' and extra == 'models'", specifier = "==2.14.1", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torch", marker = "sys_platform == 'linux' and extra == 'parser'", specifier = "==2.14.1", index = "https://download.pytorch.org/whl/cpu" },
@@ -1541,7 +1545,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "book-core", extra = ["models", "parser"] },
+    { name = "book-core", extra = ["llm", "models", "parser"] },
     { name = "celery-types" },
     { name = "fakeredis", extra = ["lua"] },
     { name = "fonttools" },
@@ -1561,7 +1565,7 @@ requires-dist = [{ name = "quiz-api", editable = "apps/api" }]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "book-core", extras = ["parser", "models"], editable = "packages/core" },
+    { name = "book-core", extras = ["parser", "models", "llm"], editable = "packages/core" },
     { name = "celery-types", specifier = ">=0.26" },
     { name = "fakeredis", extras = ["lua"], specifier = ">=2.38,<2.40" },
     { name = "fonttools", specifier = "==4.66.1" },
