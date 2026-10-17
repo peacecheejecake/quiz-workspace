@@ -318,6 +318,47 @@ def test_create_validates_the_body(api: TestClient, world: World, bearer: Any) -
     assert res.json()["expires_at"].startswith("2099-01-31")
 
 
+def test_replay_after_the_expiry_passed_returns_the_stored_response(
+    api: TestClient,
+    world: World,
+    store: FakeIdempotencyStore,
+    bearer: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import quiz_api.api.share_links as module
+
+    owner = uuid.uuid4()
+    ws = world.workspace(owner)
+    expires = (datetime.now(UTC) + timedelta(seconds=2)).isoformat()
+    body = {"expires_at": expires}
+    first = api.post(_base(ws), json=body, headers=bearer(owner, **{"Idempotency-Key": "k-exp"}))
+    assert first.status_code == 201, first.text
+
+    class Later(datetime):
+        @classmethod
+        def now(cls, tz: Any = None) -> Any:
+            return datetime.now(tz) + timedelta(hours=1)
+
+    monkeypatch.setattr(module, "datetime", Later)
+    again = api.post(_base(ws), json=body, headers=bearer(owner, **{"Idempotency-Key": "k-exp"}))
+    assert again.status_code == 201, again.text
+    assert again.headers["idempotent-replayed"] == "true"
+    replayed = again.json()
+    assert replayed["id"] == first.json()["id"]
+    assert (replayed["secret"], replayed["secret_already_issued"]) == (None, True)
+    assert len(world.links) == 1
+
+    # A new key (or no key) actually creates: now the past expiry is rejected.
+    fresh = api.post(_base(ws), json=body, headers=bearer(owner, **{"Idempotency-Key": "k-new"}))
+    _problem(fresh, 422)
+    assert fresh.json()["errors"][0]["loc"] == ["body", "expires_at"]
+    _problem(api.post(_base(ws), json=body, headers=bearer(owner)), 422)
+    link = first.json()["id"]
+    _problem(api.patch(f"{_base(ws)}/{link}", json=body, headers=bearer(owner)), 422)
+    assert len(world.links) == 1
+    assert not any(k[2] == "k-new" for k in store.stored)
+
+
 def test_idempotent_replay_never_returns_the_secret(
     api: TestClient, world: World, store: FakeIdempotencyStore, bearer: Any
 ) -> None:

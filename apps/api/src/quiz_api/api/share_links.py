@@ -34,7 +34,8 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request, status
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
+from fastapi.exceptions import RequestValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from quiz_api.authz import (
@@ -100,10 +101,23 @@ class ShareLinkList(BaseModel):
     items: list[ShareLink]
 
 
-def _future(value: datetime | None) -> datetime | None:
+def _ensure_future(value: datetime | None) -> None:
+    """422 unless `expires_at` lies in the future.
+
+    Checked by the route, not the model: it depends on the clock, so it must run only when a link
+    is actually written, after an Idempotency-Key replay lookup (a retry after the instant has
+    passed still gets the stored response).
+    """
     if value is not None and value <= datetime.now(UTC):
-        raise ValueError("expires_at must be in the future")
-    return value
+        raise RequestValidationError(
+            [
+                {
+                    "loc": ("body", "expires_at"),
+                    "msg": "expires_at must be in the future",
+                    "type": "value_error",
+                }
+            ]
+        )
 
 
 class ShareLinkCreate(BaseModel):
@@ -114,11 +128,6 @@ class ShareLinkCreate(BaseModel):
         default=None, description="Future instant with a UTC offset; null or absent: no expiry."
     )
 
-    @field_validator("expires_at")
-    @classmethod
-    def _check_expiry(cls, value: datetime | None) -> datetime | None:
-        return _future(value)
-
 
 class ShareLinkUpdate(BaseModel):
     """Only the fields present change; `expires_at: null` removes the expiry."""
@@ -127,11 +136,6 @@ class ShareLinkUpdate(BaseModel):
 
     allow_fork: bool | None = None
     expires_at: AwareDatetime | None = None
-
-    @field_validator("expires_at")
-    @classmethod
-    def _check_expiry(cls, value: datetime | None) -> datetime | None:
-        return _future(value)
 
     @model_validator(mode="after")
     def _allow_fork_not_null(self) -> ShareLinkUpdate:
@@ -263,6 +267,17 @@ def create_share_link(
 
     The secret appears only in this response. A link is not a membership.
     """
+
+    def run(digest: bytes) -> ShareLinkRecord:
+        _ensure_future(body.expires_at)
+        return repo.create(
+            access.workspace_id,
+            access.user_id,
+            token_digest=digest,
+            allow_fork=body.allow_fork,
+            expires_at=body.expires_at,
+        )
+
     return _issue(
         f"POST /workspaces/{access.workspace_id}/share-links",
         request_hash(body.model_dump(mode="json")),
@@ -271,13 +286,7 @@ def create_share_link(
         idempotency_key,
         repo,
         settings,
-        lambda digest: repo.create(
-            access.workspace_id,
-            access.user_id,
-            token_digest=digest,
-            allow_fork=body.allow_fork,
-            expires_at=body.expires_at,
-        ),
+        run,
     )
 
 
@@ -296,6 +305,7 @@ def update_share_link(
     A revoked link is final (409 `share-link-inactive`); an expired one can get a new expiry.
     """
     ws = access.workspace
+    _ensure_future(body.expires_at)
     link = repo.lock(ws.workspace_id, access.resource_id)
     if link.revoked_at is not None:
         raise _inactive("This share link is revoked; create a new link instead.")
