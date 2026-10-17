@@ -37,6 +37,29 @@ class Settings(BaseSettings):
     qdrant_url: str | None = Field(default=None, validation_alias="QDRANT_URL")
     qdrant_api_key: SecretStr | None = Field(default=None, validation_alias="QDRANT_API_KEY")
 
+    # Supabase Auth access-token verification (docs/auth.md §3). Unset → authenticated routes
+    # answer 503 (never accept unverified tokens).
+    supabase_jwt_issuer: str | None = Field(default=None, validation_alias="SUPABASE_JWT_ISSUER")
+    supabase_jwks_url: str | None = Field(default=None, validation_alias="SUPABASE_JWKS_URL")
+    supabase_jwt_audience: str = Field(
+        default="authenticated", validation_alias="SUPABASE_JWT_AUDIENCE"
+    )
+    jwt_leeway_seconds: float = Field(
+        default=30.0, ge=0, le=120, validation_alias="JWT_LEEWAY_SECONDS"
+    )
+    jwks_cache_ttl_seconds: float = Field(
+        default=600.0, gt=0, validation_alias="JWKS_CACHE_TTL_SECONDS"
+    )
+    jwks_min_refresh_interval_seconds: float = Field(
+        default=30.0, ge=0, validation_alias="JWKS_MIN_REFRESH_INTERVAL_SECONDS"
+    )
+    jwks_max_stale_seconds: float = Field(
+        default=3600.0, ge=0, validation_alias="JWKS_MAX_STALE_SECONDS"
+    )
+    jwks_fetch_timeout_seconds: float = Field(
+        default=3.0, gt=0, validation_alias="JWKS_FETCH_TIMEOUT_SECONDS"
+    )
+
     db_pool_size: int = Field(default=5, ge=1, validation_alias="DB_POOL_SIZE")
     db_connect_timeout_seconds: float = Field(
         default=3.0, gt=0, validation_alias="DB_CONNECT_TIMEOUT_SECONDS"

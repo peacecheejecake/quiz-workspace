@@ -13,12 +13,13 @@ from fastapi import FastAPI
 
 from quiz_api import __version__
 from quiz_api.api import API_V1_PREFIX, api_router
+from quiz_api.auth.dependencies import build_token_verifier
 from quiz_api.db import create_database
 from quiz_api.errors import Problem, install_error_handlers
 from quiz_api.health import ReadinessChecker, default_readiness_checkers
 from quiz_api.health import router as health_router
 from quiz_api.logging_config import configure_logging
-from quiz_api.middleware import RequestIdMiddleware
+from quiz_api.middleware import NoStoreMiddleware, RequestIdMiddleware
 from quiz_api.settings import Environment, Settings, get_settings
 
 API_TITLE = "Quiz Workspace API"
@@ -51,6 +52,7 @@ def create_app(
     )
     app.state.settings = settings
     app.state.database = database
+    app.state.token_verifier = build_token_verifier(settings)
     app.state.readiness_checkers = (
         list(readiness_checkers)
         if readiness_checkers is not None
@@ -58,6 +60,7 @@ def create_app(
     )
 
     install_error_handlers(app)
+    app.add_middleware(NoStoreMiddleware, path_prefix=API_V1_PREFIX)
     app.add_middleware(RequestIdMiddleware)
 
     app.include_router(health_router)

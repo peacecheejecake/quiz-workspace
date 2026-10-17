@@ -73,3 +73,35 @@ class RequestIdMiddleware:
                 (time.perf_counter() - started) * 1000,
             )
             request_id_var.reset(token)
+
+
+class NoStoreMiddleware:
+    """`Cache-Control: no-store` for per-user API responses (docs/auth.md §5).
+
+    Applied to every response under `path_prefix` (success and error alike), and to any
+    response to a request that carried an `Authorization` header, overriding whatever the
+    route set: authenticated responses must never land in a shared cache. Public endpoints
+    outside the prefix that want caching set their own header.
+    """
+
+    def __init__(self, app: ASGIApp, *, path_prefix: str) -> None:
+        self.app = app
+        self.path_prefix = path_prefix.rstrip("/")
+
+    def _applies(self, scope: Scope) -> bool:
+        path: str = scope["path"]
+        if path == self.path_prefix or path.startswith(f"{self.path_prefix}/"):
+            return True
+        return "authorization" in Headers(scope=scope)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or not self._applies(scope):
+            await self.app(scope, receive, send)
+            return
+
+        async def send_no_store(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)["Cache-Control"] = "no-store"
+            await send(message)
+
+        await self.app(scope, receive, send_no_store)
