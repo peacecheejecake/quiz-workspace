@@ -54,6 +54,9 @@ export function buildContentSecurityPolicy({
     ['img-src', "'self'", 'data:', 'blob:'],
     ['font-src', "'self'", 'data:'],
     ['connect-src', "'self'", ...connect],
+    // Same-origin dedicated workers (DOC-01 file hashing). Without it workers fall back to
+    // script-src, where 'strict-dynamic' ignores 'self' and blocks them.
+    ['worker-src', "'self'"],
     ['frame-src', "'none'"],
     ['frame-ancestors', "'none'"],
     ['base-uri', "'self'"],
