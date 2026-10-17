@@ -61,6 +61,57 @@
 //      half in position order: 4 of 8), so they stay listed by GET /question-imports/{id}/drafts
 //      and shown on the import screen; the retried job succeeds and must reconcile with them.
 //
+// M5.0 assumptions about M5.1/M5.2/M5.4/M5.5 (QOV-01 heatmap, QPLAY-01 practice panel; mirrored
+// in tests/integration/questions/test_{overview,practice}_api_contract.py):
+//   A8 Overview API (architecture §6, questions.md §2/§3/§7)
+//      GET /workspaces/{id}/questions/overview → 200 Overview
+//      Overview = {counts: {total, unseen, viewed, incorrect, correct, retry, favorite},
+//                  chapters: [{id: string|null, number: number|null, title}],
+//                  items: OverviewItem[]}
+//      OverviewItem = {question_id, chapter_id, question_number, question_type, status,
+//                      is_favorite, needs_retry, last_graded_result, is_pending_grading, preview}
+//      for the CALLER's study state; CONFIRMED, non-deleted questions only (drafts never), in
+//      chapter sort order then question order. Status counts are mutually exclusive (retry wins),
+//      `favorite` overlaps them. No answer/explanation fields (ANSWER_KEYS); reading the overview
+//      never records a view.
+//   A9 A1's QuestionInput gains an optional `question_number` (positive int; the
+//      questions.question_number column). Heatmap dots are labelled with it via M5.3's
+//      questionDotLabel (`3장 12번 문제, 객관식, …`); a question without a chapter sits in one
+//      "챕터 없음" group (`챕터 없음 12번 문제, …`). The M5.0 specs always pass a number.
+//   A10 Practice API (architecture §6, questions.md §4)
+//      POST /questions/{id}/practice-sessions {} → 201 PracticeSession
+//           {id, question_id, question_revision_id, question_type, stem, is_multi_answer,
+//            options: [{id, text}] in DISPLAYED order, state: "open"}
+//           never carries ANSWER_KEYS; records the caller's view (first/last_viewed_at). MCQ
+//           options are shuffled per session (random, so 100 sessions of a 4-option MCQ show more
+//           than one order) and the displayed order is stored (displayed_option_ids).
+//      POST /practice-sessions/{id}/submit {selected_option_ids} (MCQ) | {answer_text} → 200
+//           SubmitResult {attempt_id, result: correct|incorrect|pending, correct_option_ids,
+//           accepted_answers, explanation, rubric}: answers are revealed only here. A second
+//           submit on the same session → 409; an unknown option id, or two ids on a single-answer
+//           MCQ → 422. MCQ grading = set equality of option ids (order-free).
+//      POST /practice-sessions/{id}/self-grade {result: "correct"|"incorrect"} → 200
+//           {attempt_id, result, grades_attempt_id} for a pending submission only (else 409);
+//           appends a new attempt, the pending one never changes (M4.1 schema).
+//      PATCH /questions/{id}/my-state {is_favorite?, needs_retry?} → 200 MyState
+//           {question_id, status, is_favorite, needs_retry, last_graded_result}
+//      GET /questions/{id}/attempts → 200 {items: Attempt[]}, the caller's own, newest first;
+//           Attempt = {id, question_revision_id, practice_session_id, displayed_option_ids,
+//                      submitted_answer, result, grading_method, grades_attempt_id,
+//                      submitted_at, graded_at}; submitted_answer is the submit body
+//           ({selected_option_ids} | {answer_text}); a self-grade row copies the pending one's.
+//      A session is graded against the revision it was opened on, even after an edit. Another
+//      user's session → 404 (same body as an unknown id). Viewers may practise (own state only).
+//      Archived workspace → 403 workspace-archived for practice-sessions / submit / self-grade /
+//      my-state (implementation-plan §7: practice is a write).
+//   A11 Short answers with accepted answers are auto-graded after NFKC, trim, whitespace
+//      collapse and case folding; without accepted answers (null) they are pending like essays.
+//   A12 A pending submission is not a graded result: the dot keeps `viewed` (or the previous
+//      graded result), `is_pending_grading` is true and the label/tooltip says "채점 대기".
+//   A13 QOV-01-AC01 "draft 10개": the only synthetic question paper yields 8 import drafts (A5);
+//      the spec uses those 8 drafts, then publishes the 3 answered drafts 1, 4, 5 and expects
+//      exactly +3 markers (questions.md §8: "그중 3개 승인하면 점 103개").
+//
 // UI contract (Korean first, English accepted; AGENTS.md §5):
 //   QBANK-01  h1 "문제은행"; empty-state heading "등록된 문제가 없습니다" with a "문제 직접 등록" button
 //             and a "PDF 가져오기" link to /questions/import; header "문제 등록" button; searchbox
@@ -78,10 +129,22 @@
 //             showing that page); "정답 없음" when the key has no answer; checkbox "승인"; "편집"
 //             opens the same question editor; button "승인한 문제 등록" publishes; a failed
 //             import job or publish shows role=alert + "다시 시도".
+//   QOV-01    route /workspaces/{id}/questions; role=group "문제 heatmap" holding one button per
+//             CONFIRMED question, named by questionDotLabel and carrying data-status; inside it the
+//             marker svg data-testid="question-marker" with data-shape square|star (design-system
+//             §6.1, packages/ui/src/questions); preview role=tooltip; summary region "문제 상태 요약";
+//             legend list "상태 범례".
+//   QPLAY-01  modal dialog named by the question title (`… 12번 문제`) with "패널 닫기",
+//             toggles "즐겨찾기 추가"/"즐겨찾기 해제" and "다시 풀기 표시"/"다시 풀기 해제" (M5.3
+//             StudyToggles); MCQ options as radios (single) or checkboxes (multi) named by the
+//             option text in displayed order; textbox "답안" (short/essay); button "제출"; the
+//             graded result as text 정답/오답/채점 대기 (role=status); the explanation only after
+//             submit; self-grade buttons "맞음"/"틀림"; "이전 문제"/"다음 문제". While open the URL
+//             carries ?question=<id>; closing removes it and returns focus to the trigger dot.
 import { copyFileSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
-import { JOB_TIMEOUT_MS, PDF_DIR, waitForJob, type PdfFile } from './documents.ts';
+import { JOB_TIMEOUT_MS, PDF_DIR, uploadPdf, waitForJob, type PdfFile } from './documents.ts';
 import { main } from './workspace-ui.ts';
 import type { Member } from './workspaces.ts';
 
@@ -167,6 +230,8 @@ export interface QuestionInput {
   readonly rubric?: string | null;
   readonly chapter_id?: string | null;
   readonly sources?: readonly QuestionSource[];
+  /** A9 (M5.0): the heatmap label number (`12번 문제`). */
+  readonly question_number?: number;
 }
 
 export interface QuestionRevision {
@@ -457,4 +522,293 @@ export async function uploadQuestionPaper(page: Page, paper: QuestionPaper): Pro
   const chooser = page.waitForEvent('filechooser');
   await importUi.uploadButton(page).click();
   await (await chooser).setFiles(paper.path);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Overview + practice API (A8–A13, M5.0)
+// ---------------------------------------------------------------------------------------------
+
+export type DotStatus = 'unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry';
+
+export interface OverviewItem {
+  readonly question_id: string;
+  readonly chapter_id: string | null;
+  readonly question_number: number | null;
+  readonly question_type: QuestionType;
+  readonly status: DotStatus;
+  readonly is_favorite: boolean;
+  readonly needs_retry: boolean;
+  readonly last_graded_result: 'correct' | 'incorrect' | null;
+  readonly is_pending_grading: boolean;
+  readonly preview: string;
+}
+
+export interface Overview {
+  readonly counts: Readonly<Record<DotStatus | 'total' | 'favorite', number>>;
+  readonly chapters: readonly {
+    readonly id: string | null;
+    readonly number: number | null;
+    readonly title: string;
+  }[];
+  readonly items: readonly OverviewItem[];
+}
+
+export interface PracticeSession {
+  readonly id: string;
+  readonly question_id: string;
+  readonly question_revision_id: string;
+  readonly question_type: QuestionType;
+  readonly stem: string;
+  readonly is_multi_answer: boolean;
+  readonly options: readonly QuestionOption[];
+  readonly state: string;
+}
+
+export interface SubmitResult {
+  readonly attempt_id: string;
+  readonly result: 'correct' | 'incorrect' | 'pending';
+  readonly correct_option_ids: readonly string[] | null;
+  readonly explanation: string | null;
+}
+
+export interface Attempt {
+  readonly id: string;
+  readonly question_revision_id: string;
+  readonly practice_session_id: string;
+  readonly displayed_option_ids: readonly string[];
+  readonly submitted_answer: {
+    readonly selected_option_ids?: readonly string[];
+    readonly answer_text?: string;
+  };
+  readonly result: 'correct' | 'incorrect' | 'pending';
+  readonly grading_method: 'auto' | 'self' | 'reviewer' | null;
+  readonly grades_attempt_id: string | null;
+}
+
+/** Fields a practice payload must never carry before submission (A10, e2e-strategy §6). */
+export const ANSWER_KEYS: readonly string[] = [
+  'correct_option_ids',
+  'accepted_answers',
+  'explanation',
+  'rubric',
+  'correct_answer',
+];
+
+/** Every ANSWER_KEYS key found anywhere in a parsed JSON value, as `$.path.to.key`. */
+export function answerKeysIn(value: unknown, path = '$'): string[] {
+  if (Array.isArray(value)) return value.flatMap((v, i) => answerKeysIn(v, `${path}[${i}]`));
+  if (value === null || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, v]) => [
+    ...(ANSWER_KEYS.includes(key) ? [`${path}.${key}`] : []),
+    ...answerKeysIn(v, `${path}.${key}`),
+  ]);
+}
+
+export async function getOverview(member: Member, workspaceId: string): Promise<Overview> {
+  return member.api.ok<Overview>(
+    'GET',
+    `/workspaces/${workspaceId}/questions/overview`,
+    undefined,
+    [200],
+  );
+}
+
+export async function overviewItem(
+  member: Member,
+  workspaceId: string,
+  questionId: string,
+): Promise<OverviewItem> {
+  const item = (await getOverview(member, workspaceId)).items.find(
+    (i) => i.question_id === questionId,
+  );
+  if (!item) throw new Error('question missing from the overview');
+  return item;
+}
+
+export async function startPractice(member: Member, questionId: string): Promise<PracticeSession> {
+  return member.api.ok<PracticeSession>(
+    'POST',
+    `/questions/${questionId}/practice-sessions`,
+    {},
+    [201],
+  );
+}
+
+export async function submitPractice(
+  member: Member,
+  sessionId: string,
+  answer: { selected_option_ids: readonly string[] } | { answer_text: string },
+): Promise<SubmitResult> {
+  return member.api.ok<SubmitResult>(
+    'POST',
+    `/practice-sessions/${sessionId}/submit`,
+    answer,
+    [200],
+  );
+}
+
+export async function setMyState(
+  member: Member,
+  questionId: string,
+  state: { is_favorite?: boolean; needs_retry?: boolean },
+): Promise<void> {
+  await member.api.ok('PATCH', `/questions/${questionId}/my-state`, state, [200]);
+}
+
+export async function listAttempts(member: Member, questionId: string): Promise<Attempt[]> {
+  const body = await member.api.ok<{ items: Attempt[] }>(
+    'GET',
+    `/questions/${questionId}/attempts`,
+    undefined,
+    [200],
+  );
+  return body.items;
+}
+
+/** Practises `question` once through the API and answers it correctly (auto-graded MCQ). */
+export async function answerCorrectly(member: Member, question: Question): Promise<void> {
+  const session = await startPractice(member, question.id);
+  const ids = question.revision.correct_option_ids ?? [];
+  const graded = await submitPractice(member, session.id, { selected_option_ids: ids });
+  if (graded.result !== 'correct')
+    throw new Error(`expected a correct grade, got ${graded.result}`);
+}
+
+/** MCQ numbered `n` (A9) whose option texts are unique to `label`; option `answer` is correct. */
+export function numberedMcq(
+  label: string,
+  n: number,
+  answer = 0,
+  extra: Partial<QuestionInput> = {},
+): QuestionInput {
+  const tag = `${label}-${n}`;
+  const texts = ['가', '나', '다', '라'].map((x) => `${tag} 보기 ${x}`);
+  return {
+    ...mcqInput(`${tag} 문제: 알맞은 것을 고르시오.`, texts, answer),
+    question_number: n,
+    ...extra,
+  };
+}
+
+/** Creates numbered MCQs 1..count in parallel batches of 10; returns them in number order. */
+export async function createNumberedQuestions(
+  owner: Member,
+  workspaceId: string,
+  label: string,
+  count: number,
+): Promise<Question[]> {
+  const out: Question[] = [];
+  for (let start = 1; start <= count; start += 10) {
+    const batch = Array.from({ length: Math.min(10, count - start + 1) }, (_, i) => start + i);
+    const created = await Promise.all(
+      batch.map((n) => createQuestion(owner, workspaceId, numberedMcq(label, n))),
+    );
+    out.push(...created);
+  }
+  return out;
+}
+
+/** Imports questions-ko.pdf through the public API (A4); returns the run and its drafts (A13). */
+export async function importPaperDrafts(
+  owner: Member,
+  workspaceId: string,
+): Promise<{ run: ImportRun; drafts: Draft[] }> {
+  const { documentId, jobId } = await uploadPdf(
+    owner,
+    workspaceId,
+    questionPaper(),
+    'question_paper',
+  );
+  await waitForJob(owner, jobId);
+  const run = await startImport(owner, workspaceId, documentId);
+  await waitForJob(owner, run.job_id);
+  return { run, drafts: await listDrafts(owner, run.id) };
+}
+
+export async function publishDrafts(
+  owner: Member,
+  importId: string,
+  draftIds: readonly string[],
+): Promise<void> {
+  const body = { draft_ids: draftIds };
+  await owner.api.ok('POST', `/question-imports/${importId}/publish`, body, [200]);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Overview / practice panel UI (QOV-01, QPLAY-01)
+// ---------------------------------------------------------------------------------------------
+
+export function overviewPath(workspaceId: string, questionId?: string): string {
+  const base = `/workspaces/${workspaceId}/questions`;
+  return questionId ? `${base}?question=${questionId}` : base;
+}
+
+/** `12번 문제` not preceded by another digit (so `2번` never matches `12번`). */
+export function questionNumberName(n: number): RegExp {
+  return new RegExp(`(?<!\\d)${n}번 문제|question ${n}(?!\\d)`, 'i');
+}
+
+export const overviewUi = {
+  heatmap: (page: Page) => main(page).getByRole('group', { name: /문제 heatmap|heatmap/i }),
+  dots: (page: Page) => overviewUi.heatmap(page).getByRole('button'),
+  dot: (page: Page, n: number) =>
+    overviewUi.heatmap(page).getByRole('button', { name: questionNumberName(n) }),
+  markers: (page: Page) => overviewUi.heatmap(page).getByTestId('question-marker'),
+  marker: (dot: Locator) => dot.getByTestId('question-marker'),
+  tooltip: (page: Page) => page.getByRole('tooltip'),
+  summary: (page: Page) =>
+    main(page).getByRole('region', { name: /문제 상태 요약|status summary/i }),
+};
+
+export const panelUi = {
+  panel: (page: Page) => page.getByRole('dialog', { name: /번 문제|question \d/i }),
+  numbered: (page: Page, n: number) => page.getByRole('dialog', { name: questionNumberName(n) }),
+  close: (panel: Locator) => panel.getByRole('button', { name: /패널 닫기|^닫기$|^close/i }),
+  favoriteOn: (panel: Locator) =>
+    panel.getByRole('button', { name: /즐겨찾기 추가|add (to )?favorites?/i }),
+  favoriteOff: (panel: Locator) =>
+    panel.getByRole('button', { name: /즐겨찾기 해제|remove (from )?favorites?/i }),
+  retryOn: (panel: Locator) =>
+    panel.getByRole('button', { name: /다시 풀기 표시|mark (for )?retry/i }),
+  retryOff: (panel: Locator) => panel.getByRole('button', { name: /다시 풀기 해제|clear retry/i }),
+  option: (panel: Locator, text: string) =>
+    panel
+      .getByRole('radio', { name: text, exact: true })
+      .or(panel.getByRole('checkbox', { name: text, exact: true })),
+  options: (panel: Locator) => panel.getByRole('radio').or(panel.getByRole('checkbox')),
+  answerText: (panel: Locator) => panel.getByRole('textbox', { name: /답안|answer/i }),
+  submit: (panel: Locator) => panel.getByRole('button', { name: /^(답안 )?제출|^submit/i }),
+  result: (panel: Locator) => panel.getByRole('status'),
+  selfGradeCorrect: (panel: Locator) =>
+    panel.getByRole('button', { name: /^(맞음|맞았|정답으로|correct)/i }),
+  selfGradeIncorrect: (panel: Locator) =>
+    panel.getByRole('button', { name: /^(틀림|틀렸|오답으로|incorrect)/i }),
+  next: (panel: Locator) => panel.getByRole('button', { name: /다음 문제|^next/i }),
+  previous: (panel: Locator) => panel.getByRole('button', { name: /이전 문제|^previous/i }),
+};
+
+export const RESULT_TEXT = {
+  correct: /정답|(?<!in)correct/i,
+  incorrect: /오답|틀렸|incorrect/i,
+  pending: /채점 대기|pending/i,
+} as const;
+
+/** Computed `color` of the `--question-status-<status>` token as the browser resolves it. */
+export async function statusColor(page: Page, status: DotStatus): Promise<string> {
+  return page.evaluate((s) => {
+    const probe = document.createElement('span');
+    probe.style.color = `var(--question-status-${s})`;
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }, status);
+}
+
+/** Uniform scale factor of an element's computed transform (1 when none). */
+export async function scaleOf(locator: Locator): Promise<number> {
+  return locator.evaluate((el) => {
+    const t = getComputedStyle(el).transform;
+    return !t || t === 'none' ? 1 : new DOMMatrixReadOnly(t).a;
+  });
 }
