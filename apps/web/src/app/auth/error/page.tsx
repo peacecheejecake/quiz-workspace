@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { AuthCard } from '@/components/auth/auth-card';
+import { AuthLayout } from '@/components/auth/auth-layout';
 import { stubMetadata } from '@/components/stub-screen';
 import {
   parseAuthErrorFlow,
@@ -60,7 +60,7 @@ export default async function Page({ searchParams }: ErrorPageProps) {
   const retry = retryLink(flow);
 
   return (
-    <AuthCard screenId="AUTH-07" title={copy.title}>
+    <AuthLayout screenId="AUTH-07" title={copy.title}>
       <p className={styles.body}>{copy.body}</p>
       <ul className={styles.actions}>
         <li>
@@ -76,6 +76,6 @@ export default async function Page({ searchParams }: ErrorPageProps) {
           </li>
         )}
       </ul>
-    </AuthCard>
+    </AuthLayout>
   );
 }

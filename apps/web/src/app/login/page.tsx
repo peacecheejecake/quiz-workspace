@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { AuthCard } from '@/components/auth/auth-card';
+import { AuthLayout } from '@/components/auth/auth-layout';
 import { SignInForm } from '@/components/auth/sign-in-form';
 import { stubMetadata } from '@/components/stub-screen';
 import { safeNextPath } from '@/lib/auth/safe-next';
@@ -16,7 +16,7 @@ export default async function Page({ searchParams }: LoginPageProps) {
   const next = safeNextPath(Array.isArray(raw) ? raw[0] : raw, '') || undefined;
 
   return (
-    <AuthCard
+    <AuthLayout
       screenId="AUTH-01"
       title="로그인"
       description="이메일과 비밀번호로 Quiz Workspace에 로그인하세요."
@@ -28,6 +28,6 @@ export default async function Page({ searchParams }: LoginPageProps) {
       }
     >
       <SignInForm next={next} />
-    </AuthCard>
+    </AuthLayout>
   );
 }

@@ -1,16 +1,22 @@
 'use client';
 
-// Minimal AUTH-01 sign-in form (A2.1). A2.2 owns the polished `SignInForm`/`AuthLayout` and may
-// extend or replace this component; keep the labels (이메일 / 비밀번호), the `next` hidden field
-// and the form-level `role="alert"` contract used by tests/e2e/fixtures/auth-ui.ts.
+// `SignInForm` (AUTH-01). Credentials are posted to the `signInAction` server action, so the
+// password never passes through browser-side Supabase code (implementation-plan §7). Client-side
+// checks only catch empty/malformed input before the request. Contract with
+// tests/e2e/fixtures/auth-ui.ts: labels 이메일 / 비밀번호, hidden `next`, form errors as
+// `role="alert"` inside <main>.
 import { Button, Input } from '@quiz/ui';
-import { useActionState } from 'react';
+import Link from 'next/link';
+import { useActionState, type FormEvent } from 'react';
 import { useFormStatus } from 'react-dom';
 import { signInAction, type SignInState } from '@/lib/auth/actions';
+import { hasErrors, normalizeEmail, validateSignIn } from '@/lib/auth/validation';
 import styles from './auth-form.module.css';
+import { FormNotice } from './form-notice';
+import { useFormErrors } from './use-form-errors';
 
 export interface SignInFormProps {
-  /** Raw `next` from the URL; re-validated by the server action before redirecting. */
+  /** Validated internal `next`; the server action re-validates it before redirecting. */
   next?: string | undefined;
 }
 
@@ -25,14 +31,31 @@ function SubmitButton() {
 
 export function SignInForm({ next }: SignInFormProps) {
   const [state, formAction] = useActionState<SignInState, FormData>(signInAction, {});
+  const { formRef, errors, show, clear } = useFormErrors<'email' | 'password'>();
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    const data = new FormData(event.currentTarget);
+    const found = validateSignIn({
+      email: normalizeEmail(data.get('email')),
+      password: String(data.get('password') ?? ''),
+    });
+    show(found);
+    // Invalid input never reaches the server action.
+    if (hasErrors(found)) event.preventDefault();
+  }
 
   return (
-    <form action={formAction} className={styles.form}>
+    <form ref={formRef} action={formAction} onSubmit={onSubmit} noValidate className={styles.form}>
       {next ? <input type="hidden" name="next" value={next} /> : null}
       {state.error ? (
-        <p role="alert" className={styles.alert}>
-          {state.error}
-        </p>
+        <FormNotice tone="danger" focusKey={state}>
+          <p>{state.error}</p>
+          {state.emailNotConfirmed ? (
+            <p>
+              <Link href="/auth/verify">인증 메일 다시 받기</Link>
+            </p>
+          ) : null}
+        </FormNotice>
       ) : null}
       <Input
         // Remount after each attempt so the address survives React's post-action form reset.
@@ -46,6 +69,8 @@ export function SignInForm({ next }: SignInFormProps) {
         spellCheck={false}
         required
         defaultValue={state.email ?? ''}
+        error={errors.email}
+        onChange={() => clear('email')}
       />
       <Input
         label="비밀번호"
@@ -53,6 +78,8 @@ export function SignInForm({ next }: SignInFormProps) {
         type="password"
         autoComplete="current-password"
         required
+        error={errors.password}
+        onChange={() => clear('password')}
       />
       <SubmitButton />
     </form>

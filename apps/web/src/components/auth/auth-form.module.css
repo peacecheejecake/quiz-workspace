@@ -5,14 +5,98 @@
 
 .submit {
   width: 100%;
+  min-height: 44px;
 }
 
-.alert {
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
   margin: 0;
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-danger);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background: var(--color-surface-muted);
   color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-normal);
+}
+
+.notice:focus {
+  outline: none;
+}
+
+.notice:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.notice svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.notice[data-tone='danger'] {
+  border-color: var(--color-danger);
+}
+
+.notice[data-tone='danger'] svg {
+  color: var(--color-danger);
+}
+
+.notice[data-tone='success'] {
+  border-color: var(--color-success);
+}
+
+.notice[data-tone='success'] svg {
+  color: var(--color-success);
+}
+
+.notice a {
+  color: var(--color-accent);
+}
+
+.noticeBody {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.noticeBody p {
+  margin: 0;
+}
+
+.fine {
+  margin: 0;
+  color: var(--color-text-secondary);
   font-size: var(--font-size-label);
+  line-height: var(--line-height-normal);
+}
+
+.fine a {
+  color: var(--color-accent);
+}
+
+.actions {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.actions a,
+.actions button {
+  width: 100%;
+  min-height: 44px;
+}
+
+.body {
+  margin: 0;
+  line-height: var(--line-height-relaxed);
+}
+
+.email {
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
 }
