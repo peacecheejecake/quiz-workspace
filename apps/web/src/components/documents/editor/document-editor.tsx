@@ -60,6 +60,9 @@ export interface DocumentEditorProps {
 
 type MobileView = 'outline' | 'pdf' | 'text';
 
+/** Reloads overtaken by newer saves before the screen asks the user to reload. */
+const MAX_SUPERSEDED_RELOADS = 3;
+
 const MOBILE_VIEWS: readonly { id: MobileView; label: string }[] = [
   { id: 'outline', label: '목차' },
   { id: 'pdf', label: 'PDF' },
@@ -181,12 +184,26 @@ export function DocumentEditor({
 
   // --- loading ---------------------------------------------------------------------------------
 
+  // Every local content change the server already has (a saved correction, a restore) bumps the
+  // generation. A full load captures it when it starts and is applied only if nothing changed in
+  // between; otherwise its snapshot may predate that change and would overwrite newer text.
+  const contentGeneration = useRef(0);
+  /** Loads `selector`'s content; null when a newer local change superseded this load. */
+  const loadFresh = useCallback(
+    async (selectorToLoad: 'active' | 'latest', signal?: AbortSignal) => {
+      const generation = contentGeneration.current;
+      const loaded = await client.loadContent(documentId, selectorToLoad, signal);
+      return generation === contentGeneration.current ? loaded : null;
+    },
+    [client, documentId],
+  );
+
   useEffect(() => {
     if (!ready) return;
     const controller = new AbortController();
-    client
-      .loadContent(documentId, selector, controller.signal)
+    loadFresh(selector, controller.signal)
       .then((loaded) => {
+        if (loaded === null) return; // a save landed meanwhile; it keeps its own content
         setContentState({ status: 'ready', content: loaded });
         applyDeepLink(loaded.blocks);
       })
@@ -210,7 +227,7 @@ export function DocumentEditor({
         });
       });
     return () => controller.abort();
-  }, [applyDeepLink, client, documentId, ready, reloadKey, selector, toLogin]);
+  }, [applyDeepLink, loadFresh, ready, reloadKey, selector, toLogin]);
 
   const refreshRevisions = useCallback(async () => {
     if (!canEdit) return null;
@@ -300,12 +317,14 @@ export function DocumentEditor({
         });
         if (final.status === 'succeeded') {
           await refreshDocument();
-          const loaded = await client.loadContent(documentId, 'latest', controller.signal);
-          setContentState({ status: 'ready', content: loaded });
+          // Edits are locked while publishing, so nothing should supersede this load; if
+          // something did, keep the newer local content.
+          const loaded = await loadFresh('latest', controller.signal);
+          if (loaded) setContentState({ status: 'ready', content: loaded });
           setJustSaved(false);
           setPublish({
             phase: 'succeeded',
-            revisionNumber: loaded.revision?.revision_number ?? null,
+            revisionNumber: loaded?.revision?.revision_number ?? null,
           });
           setAnnouncement('발행 완료: 새 버전이 검색에 반영되었습니다');
         } else {
@@ -327,7 +346,7 @@ export function DocumentEditor({
         void refreshRevisions();
       }
     },
-    [client, documentId, handleCommonError, refreshDocument, refreshRevisions],
+    [handleCommonError, loadFresh, refreshDocument, refreshRevisions],
   );
 
   useEffect(() => () => watchController.current?.abort(), []);
@@ -390,8 +409,9 @@ export function DocumentEditor({
       setNotice(null);
       try {
         await client.restore(documentId, revision.id);
-        const loaded = await client.loadContent(documentId, 'latest');
-        setContentState({ status: 'ready', content: loaded });
+        contentGeneration.current += 1; // loads started before the restore hold the pre-restore draft
+        const loaded = await loadFresh('latest');
+        if (loaded) setContentState({ status: 'ready', content: loaded });
         setJustSaved(true);
         setPublish(PUBLISH_IDLE);
         setAnnouncement(`버전 ${revision.revision_number}의 내용을 초안으로 되돌렸습니다`);
@@ -410,7 +430,7 @@ export function DocumentEditor({
         setRestoring(null);
       }
     },
-    [client, documentId, handleCommonError, refreshRevisions],
+    [client, documentId, handleCommonError, loadFresh, refreshRevisions],
   );
 
   // --- block corrections -----------------------------------------------------------------------
@@ -425,15 +445,26 @@ export function DocumentEditor({
   const onChange = useCallback((text: string) => dispatchEdit({ type: 'change', text }), []);
   const onCancel = useCallback(() => dispatchEdit({ type: 'cancel' }), []);
 
+  /**
+   * Full reload of the latest text after a save. A reload overtaken by a newer save is dropped
+   * and run again (its snapshot may miss that save); after repeated overtakes the screen offers a
+   * manual reload instead.
+   */
   const refreshContent = useCallback(async () => {
     try {
-      const loaded = await client.loadContent(documentId, 'latest');
-      setContentState({ status: 'ready', content: loaded });
-      setStaleContent(false);
+      for (let attempt = 0; attempt < MAX_SUPERSEDED_RELOADS; attempt += 1) {
+        const loaded = await loadFresh('latest');
+        if (loaded) {
+          setContentState({ status: 'ready', content: loaded });
+          setStaleContent(false);
+          return;
+        }
+      }
+      setStaleContent(true);
     } catch (error) {
       if (!handleCommonError(error)) setStaleContent(true);
     }
-  }, [client, documentId, handleCommonError]);
+  }, [handleCommonError, loadFresh]);
 
   const onSave = useCallback(async () => {
     const state = editStateRef.current;
@@ -448,7 +479,9 @@ export function DocumentEditor({
       if (publish.phase === 'failed' || publish.phase === 'succeeded') setPublish(PUBLISH_IDLE);
       setAnnouncement('초안에 저장했습니다');
       const sameRevision = revisionIdRef.current === saved.revision.id;
-      // Show the saved block and its (draft) revision right away, whatever happens next.
+      // Show the saved block and its (draft) revision right away, whatever happens next; loads
+      // already in flight may predate this save and are discarded.
+      contentGeneration.current += 1;
       setContentState((prev) =>
         prev.status !== 'ready'
           ? prev

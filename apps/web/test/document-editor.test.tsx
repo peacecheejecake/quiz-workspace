@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // DOC-02 editor screen behaviour the E2E specs cannot force: a saved correction stays visible
-// (draft revision, publish enabled) when the follow-up text refresh fails, with a retry; and the
-// `?page=`/`?block=` address-bar state follows the selection.
+// (draft revision, publish enabled) when the follow-up text refresh fails, with a retry; a
+// refresh overtaken by a newer save never brings back older text; and the `?page=`/`?block=`
+// address-bar state follows the selection.
 import './dom-setup';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -31,7 +32,7 @@ const { DocumentEditor } = await import('../src/components/documents/editor/docu
 const DOC = '11111111-1111-4111-8111-111111111111';
 const WS = '22222222-2222-4222-8222-222222222222';
 const V1 = 'a'.repeat(32);
-const V2 = 'b'.repeat(32);
+const savedVersion = (n: number) => String(n).padStart(32, 'c');
 
 const revision = (id: string, number: number, draft: boolean): RevisionInfo => ({
   id,
@@ -55,7 +56,7 @@ const block = (overrides: Partial<ContentBlock> = {}): ContentBlock => ({
   ordinal: 1,
   page: 2,
   table: null,
-  text: '원래 문장',
+  text: '',
   type: 'text',
   version: V1,
   ...overrides,
@@ -72,6 +73,10 @@ const document = {
 
 let failBlockReads = false;
 let blockReads = 0;
+/** While set, block reads answer with the server state of their request time, released later. */
+let heldReads: (() => void)[] | null = null;
+/** Server side: the revision the text belongs to and each block's text and version. */
+let server: { revision: RevisionInfo; texts: Map<string, string>; versions: Map<string, string> };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -80,9 +85,42 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+function serverBlocks(): ContentBlock[] {
+  return ['b1', 'b2'].map((id, index) => {
+    const version = server.versions.get(id) ?? V1;
+    return block({
+      block_id: id,
+      ordinal: index + 1,
+      text: server.texts.get(id) ?? '',
+      version,
+      edited: version !== V1,
+    });
+  });
+}
+
+function patchBodies(): { text: string; base_version: string }[] {
+  return vi
+    .mocked(fetch)
+    .mock.calls.filter(([, init]) => init?.method === 'PATCH')
+    .map(([, init]) => JSON.parse(String(init?.body)) as { text: string; base_version: string });
+}
+
 beforeEach(() => {
   failBlockReads = false;
   blockReads = 0;
+  heldReads = null;
+  server = {
+    revision: ACTIVE,
+    texts: new Map([
+      ['b1', '원래 문장'],
+      ['b2', '둘째 문장'],
+    ]),
+    versions: new Map([
+      ['b1', V1],
+      ['b2', V1],
+    ]),
+  };
+  let saves = 0;
   window.history.replaceState(null, '', '/workspaces/ws/documents/doc');
   globalThis.CSS ??= { escape: (v: string) => v } as unknown as typeof CSS;
   Element.prototype.scrollTo ??= () => undefined;
@@ -90,20 +128,34 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes('/outline')) return json({ document_id: DOC, revision: ACTIVE, items: [] });
+      if (url.includes('/outline')) {
+        return json({ document_id: DOC, revision: server.revision, items: [] });
+      }
       if (url.includes('/revisions')) return json({ document_id: DOC, items: [] });
       if (url.includes('/blocks/') && init?.method === 'PATCH') {
+        const id = decodeURIComponent(url.split('/blocks/')[1] ?? '');
         const body = JSON.parse(String(init.body)) as { text: string };
-        return json({
-          document_id: DOC,
-          revision: DRAFT,
-          block: block({ text: body.text, edited: true, version: V2 }),
-        });
+        saves += 1;
+        server.revision = DRAFT;
+        server.texts.set(id, body.text);
+        server.versions.set(id, savedVersion(saves));
+        const saved = serverBlocks().find((b) => b.block_id === id);
+        return json({ document_id: DOC, revision: DRAFT, block: saved });
       }
       if (url.includes('/blocks')) {
         blockReads += 1;
         if (failBlockReads) return json({ type: 'about:blank', status: 503 }, 503);
-        return json({ document_id: DOC, revision: ACTIVE, items: [block()], next_after: null });
+        const snapshot = {
+          document_id: DOC,
+          revision: server.revision,
+          items: serverBlocks(),
+          next_after: null,
+        };
+        const queue = heldReads;
+        if (queue) {
+          return new Promise<Response>((resolve) => queue.push(() => resolve(json(snapshot))));
+        }
+        return json(snapshot);
       }
       return json({}, 404);
     }),
@@ -126,16 +178,27 @@ function renderEditor(props: { initialBlockId?: string | null; initialPage?: num
   );
 }
 
+const editButtons = () => screen.getAllByRole('button', { name: /^편집/ });
+
+async function correct(
+  user: ReturnType<typeof userEvent.setup>,
+  index: number,
+  text: string,
+): Promise<void> {
+  await user.click(editButtons()[index] as HTMLElement);
+  const field = screen.getByRole('textbox', { name: /블록 텍스트/ });
+  await user.clear(field);
+  await user.type(field, text);
+  await user.click(screen.getByRole('button', { name: /^저장/ }));
+}
+
 describe('DocumentEditor', () => {
   it('keeps a saved first correction on screen when the text refresh fails, and offers a retry', async () => {
     const user = userEvent.setup();
     renderEditor();
-    await user.click(await screen.findByRole('button', { name: /^편집/ }));
-    const field = screen.getByRole('textbox', { name: /블록 텍스트/ });
-    await user.clear(field);
-    await user.type(field, '고친 문장');
+    await screen.findAllByRole('button', { name: /^편집/ });
     failBlockReads = true; // the reload after the new draft fails
-    await user.click(screen.getByRole('button', { name: /^저장/ }));
+    await correct(user, 0, '고친 문장');
 
     expect(await screen.findByText(/초안에 저장되었지만/)).toBeInTheDocument();
     expect(screen.getByText('고친 문장')).toBeInTheDocument();
@@ -148,12 +211,46 @@ describe('DocumentEditor', () => {
     await user.click(screen.getByRole('button', { name: /원문 다시 불러오기/ }));
     await waitFor(() => expect(screen.queryByText(/초안에 저장되었지만/)).not.toBeInTheDocument());
     expect(blockReads).toBeGreaterThan(before);
+    expect(screen.getByText('고친 문장')).toBeInTheDocument();
+  });
+
+  it('drops a refresh overtaken by a newer save, keeping the newer text and version', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await screen.findAllByRole('button', { name: /^편집/ });
+    failBlockReads = true;
+    await correct(user, 0, '첫 수정');
+    await screen.findByText(/초안에 저장되었지만/);
+
+    // The retry's block read is held: its snapshot is the server state before the next save.
+    failBlockReads = false;
+    const held: (() => void)[] = [];
+    heldReads = held;
+    await user.click(screen.getByRole('button', { name: /원문 다시 불러오기/ }));
+    await waitFor(() => expect(held).toHaveLength(1));
+
+    // Another block is corrected while that refresh is in flight.
+    await correct(user, 1, '둘째 수정');
+    await screen.findByText('둘째 수정');
+
+    // The stale snapshot arrives late; the re-run refresh answers with the current state.
+    heldReads = null;
+    held.shift()?.();
+    await waitFor(() => expect(screen.queryByText(/초안에 저장되었지만/)).not.toBeInTheDocument());
+    expect(screen.getByText('둘째 수정')).toBeInTheDocument();
+    expect(screen.queryByText('둘째 문장')).not.toBeInTheDocument();
+    expect(screen.getByText('첫 수정')).toBeInTheDocument();
+
+    // The block kept its newer version: the next correction starts from it (no false conflict).
+    await correct(user, 1, '셋째 수정');
+    await screen.findByText('셋째 수정');
+    expect(patchBodies().at(-1)?.base_version).toBe(savedVersion(2));
   });
 
   it('keeps ?block= in step with the selection and drops it on pure page navigation', async () => {
     const user = userEvent.setup();
     renderEditor({ initialBlockId: 'b1' });
-    await screen.findByRole('button', { name: /^편집/ });
+    await screen.findAllByRole('button', { name: /^편집/ });
     await waitFor(() => {
       const params = new URL(window.location.href).searchParams;
       expect(params.get('block')).toBe('b1');
@@ -167,10 +264,10 @@ describe('DocumentEditor', () => {
       expect(params.has('block')).toBe(false);
     });
 
-    await user.click(screen.getByRole('button', { name: /원문 위치 보기/ }));
+    await user.click(screen.getAllByRole('button', { name: /원문 위치 보기/ })[1] as HTMLElement);
     await waitFor(() => {
       const params = new URL(window.location.href).searchParams;
-      expect(params.get('block')).toBe('b1');
+      expect(params.get('block')).toBe('b2');
       expect(params.get('page')).toBe('2');
     });
   });
