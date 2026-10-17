@@ -369,6 +369,8 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-10-17 | 문제 PDF는 문서 업로드 경로를 재사용하고 `documents.type='question_paper'`로 구분한다(책 검색 기본 제외). | architecture §5 `documents.type`, 업로드/파싱 경로 단일화 |
 | 2026-10-17 | E2E·contract test의 결정론적 실패 주입은 `APP_ENV=test`에서만 동작하는 fake adapter가 파일명/내용 marker(`E2E-FAIL-…`)로 수행한다. production 코드 경로에는 test-only endpoint를 두지 않는다. | DOC-02-AC04, QIMPORT-01-AC04 재현성 |
 | 2026-10-17 | Workspace 생성/보관/복원 POST는 `Idempotency-Key`를 지원(사용자·route·key 범위, 24h, 다른 body 재사용 409). | architecture §6 |
+| 2026-10-17 | Reranker는 대화형 검색에서 기본 off(`SearchLimits.rerank`), 평가·배치에서 `top_k`(20). GPU/bf16 측정 후 재검토. | CPU 지연 ~7s/query(부하 중), architecture §2 "지연 측정 후 운영 모드 구성" |
+| 2026-10-17 | CORS origin 설정은 브라우저 ASCII 직렬화(IDN은 punycode)만 허용하고 API는 IDNA 변환을 하지 않는다. | IDNA2003/2008·UTS46 차이로 반복 회귀 |
 
 ## 8. 진행 현황
 
@@ -409,8 +411,11 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M4.0 RED | ✅ | e5a51e1 · 7f8ee11 · d8a5341 | RED 확인(M4 endpoint 미구현). P2×2 → 반영 → P2(부분 저장 전제) → 반영 → 지적 없음 |
 | M2.5 ExcerptResolver | ✅ | dd296d7 · 7440a26 | P2(word window가 match 끝을 자름) → 반영 → 지적 없음 |
 | A3 auth readiness | ◐ | e38a507 | CORS allowlist·CSP nonce·보안 header·prod guard. 기본 port 전체 auth E2E GREEN. P2×2(origin 직렬화, log-audit blocking) 수정 중 |
-| M3.1b workspace UI | ◐ | 4453ab4 | WS-01 AC01·02·04 GREEN(AC03·05·06은 M3.2a/S1a 대기). P2×3(dialog lifecycle, focus 복귀, drawer) 수정 중 |
-| M2.4 · M3.2a | ◐ | — | 진행 중 |
+| M3.1b workspace UI | ✅ | 4453ab4 · e30392e · ff50592 | WS-01 AC01~05 GREEN(AC06은 S1a 대기). P2×3 → 반영 → P2(이전 dialog 응답이 새 dialog 덮음) → session 범위화 → 지적 없음 |
+| M2.4 reranker | ✅ | 0b92ab4 | 지적 없음. rerank 시 hybrid R@5 1.0/MRR 0.917, CPU ~7s/query(부하 중) → 대화형 기본 off |
+| M3.2a documents·upload | ✅ | 7f3fa1e · 88c108f | migration 200000·210000 적용. P2×2(publish와 content 변경 경합, provenance NULL CHECK) → 반영(FOR SHARE lock, 2-session test) → 지적 없음 |
+| M5.0 RED | ✅ | cbc05fb | 지적 없음(현재 RED 원인은 M4.2a question API 미구현) |
+| S0 RED | ◐ | 3dc280c | P2×2(trace에 공유 비밀값 잔존, 미발행 문제 격리 미검증) 수정 중 |
 | M4.3 LLM·extractor | ✅ | d104c02 · 9b335a6 · a6cb4a2 | P1(보기 swap)·P2(세로 정답표) → 반영 → P1(원문자 숫자 crash 회귀) → decimal-only + never-raise property test(600 seed) → 지적 없음 |
 | (통합) worktree 제외 설정 | ✅ | 6704d1c | 사소한 설정 수정, 리뷰 생략 |
 
