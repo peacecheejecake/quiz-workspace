@@ -126,21 +126,47 @@ def test_llm_request_fingerprint_is_stable() -> None:
 BOOK_TEXT = "PRIVATE BOOK PASSAGE 비공개 본문"
 
 
+BOOK_KEY = "CONFIDENTIAL_BOOK_PASSAGE"
+"""Identifier-shaped, so only a schema allowlist (not a syntax check) keeps it out."""
+
+
+class _Option(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: str
+
+
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
     stem: str
     option_count: int
+    options: list[_Option] = []
+    notes: dict[str, int] = {}
+
+
+def _dump(payload: dict[str, object]) -> str:
+    return json.dumps({"stem": "Q?", "option_count": 1, **payload}, ensure_ascii=False)
 
 
 @pytest.mark.parametrize(
     "raw",
     [
-        json.dumps({"stem": "Q?", "option_count": BOOK_TEXT}, ensure_ascii=False),
-        json.dumps({"stem": ["not", BOOK_TEXT], "option_count": 1}, ensure_ascii=False),
-        json.dumps({"stem": "Q?", "option_count": 1, BOOK_TEXT: "extra"}, ensure_ascii=False),
+        _dump({"option_count": BOOK_TEXT}),
+        _dump({"stem": ["not", BOOK_TEXT]}),
+        _dump({BOOK_TEXT: "extra"}),
+        _dump({BOOK_KEY: "extra"}),
+        _dump({"options": [{"label": "a"}, {"label": "b", BOOK_KEY: "extra"}]}),
+        _dump({"notes": {BOOK_KEY: "not an int"}}),
         f"{BOOK_TEXT} is not JSON",
     ],
-    ids=["wrong-type", "nested-input", "extra-key", "invalid-json"],
+    ids=[
+        "wrong-type",
+        "nested-input",
+        "extra-key",
+        "identifier-extra-key",
+        "nested-identifier-extra-key",
+        "dict-key",
+        "invalid-json",
+    ],
 )
 def test_llm_output_error_never_exposes_raw_output(raw: str) -> None:
     with pytest.raises(LLMOutputError) as info:
@@ -154,4 +180,13 @@ def test_llm_output_error_never_exposes_raw_output(raw: str) -> None:
     for text in (str(err), repr(err), repr(err.args), err.detail, rendered):
         assert "PRIVATE" not in text
         assert "비공개" not in text
+        assert "CONFIDENTIAL" not in text
     assert "_Strict" in str(err)
+
+
+def test_llm_output_error_keeps_schema_owned_locations() -> None:
+    raw = _dump({"options": [{"label": "a"}, {"label": "b", BOOK_KEY: "x"}], "option_count": "?"})
+    with pytest.raises(LLMOutputError) as info:
+        parse_structured_output(raw, _Strict)
+    assert "option_count: int_parsing" in info.value.detail
+    assert "options.1.<key>: extra_forbidden" in info.value.detail
