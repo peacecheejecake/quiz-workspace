@@ -2,9 +2,14 @@
  * Question heatmap, markers and study-state controls (docs/design-system.md §6/§6.1,
  * docs/questions.md §3). Marker color comes only from --question-status-* via data-status.
  */
+/*
+ * The dot sets the cell size on itself too, so a standalone QuestionDot (panel header, bank
+ * list, stories) gets the touch size without a heatmap ancestor.
+ */
 .qz-heatmap,
 .qz-heatmap-legend,
-.qz-status-summary {
+.qz-status-summary,
+.qz-question-dot {
   --qz-heatmap-cell: var(--heatmap-cell);
 }
 
@@ -12,7 +17,8 @@
 @media (width < 768px), (pointer: coarse) {
   .qz-heatmap,
   .qz-heatmap-legend,
-  .qz-status-summary {
+  .qz-status-summary,
+  .qz-question-dot {
     --qz-heatmap-cell: var(--heatmap-cell-touch);
   }
 }
@@ -71,8 +77,8 @@
   box-sizing: border-box;
   display: grid;
   place-items: center;
-  width: var(--qz-heatmap-cell, var(--heatmap-cell));
-  height: var(--qz-heatmap-cell, var(--heatmap-cell));
+  width: var(--qz-heatmap-cell);
+  height: var(--qz-heatmap-cell);
   margin: 0;
   padding: 0;
   border: 2px solid transparent;

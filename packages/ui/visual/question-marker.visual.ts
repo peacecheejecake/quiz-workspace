@@ -7,7 +7,8 @@ const STATUSES = ['unseen', 'viewed', 'incorrect', 'correct', 'retry'] as const;
 
 async function openStory(page: Page, id: string, theme: 'light' | 'dark' = 'light') {
   await page.goto(`/iframe.html?id=${id}&viewMode=story&globals=theme:${theme}`);
-  await expect(page.locator('#storybook-root')).not.toBeEmpty({ timeout: 30_000 });
+  // Wait for the story's first element (a lone dot has no text, so not toBeEmpty).
+  await page.locator('#storybook-root > *').first().waitFor({ timeout: 30_000 });
   await page.evaluate(() => document.fonts.ready);
 }
 
@@ -94,6 +95,33 @@ test('mobile uses 32px cells', async ({ page }) => {
   await openStory(page, 'questions-questionheatmap--full');
   const box = await page.locator('[data-question-id="q-1-1"]').boundingBox();
   expect(box).toMatchObject({ width: 32, height: 32 });
+});
+
+test('a standalone dot (no heatmap ancestor) is 28px on desktop and 32px on mobile', async ({
+  page,
+}) => {
+  await openStory(page, 'questions-questiondot--default');
+  const dot = page.locator('[data-question-id]');
+  expect(await dot.boundingBox()).toMatchObject({ width: 28, height: 28 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => dot.boundingBox()).toMatchObject({ width: 32, height: 32 });
+  await expect(dot.getByTestId('question-marker')).toHaveCSS('width', '16px');
+});
+
+test('a standalone dot is 32px for a coarse pointer at desktop width', async ({ browser }) => {
+  const context = await browser.newContext({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 1024, height: 768 },
+  });
+  const page = await context.newPage();
+  await openStory(page, 'questions-questiondot--default');
+  expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+  expect(await page.locator('[data-question-id]').boundingBox()).toMatchObject({
+    width: 32,
+    height: 32,
+  });
+  await context.close();
 });
 
 test('touch devices (hover: none) never scale on hover', async ({ browser }) => {
