@@ -23,6 +23,8 @@ import {
   locationsOn,
   applySavedBlock,
   parsePageParam,
+  parseRevisionParam,
+  pinnedRevisionFor,
   sectionOf,
   targetBlockFor,
   viewerSearch,
@@ -34,6 +36,7 @@ import {
   PUBLISH_IDLE,
   resumePublishState,
   revisionStatusText,
+  pinnedStatusText,
 } from '../src/lib/documents/publish-state';
 
 const V1 = 'a'.repeat(32);
@@ -490,5 +493,44 @@ describe('editor API client', () => {
     expect(content.revision?.id).toBe('r2');
     // First outline answered r1 while blocks were r2: loaded a second time.
     expect(fetchImpl.mock.calls.filter(([u]) => String(u).includes('/outline'))).toHaveLength(2);
+  });
+});
+
+describe('pinned revision (search hit jump)', () => {
+  const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+  it('parses only revision ids', () => {
+    expect(parseRevisionParam(A.toUpperCase())).toBe(A);
+    expect(parseRevisionParam([A, B])).toBe(A);
+    for (const bad of [undefined, '', 'latest', 'active', `${A}x`]) {
+      expect(parseRevisionParam(bad)).toBeNull();
+    }
+  });
+
+  it('pins only when the default view would show another revision', () => {
+    const withDraft = { active_revision_id: A, latest_revision: { id: B } };
+    // Editor with a draft: the published hit revision must be pinned.
+    expect(pinnedRevisionFor(A, withDraft, true)).toBe(A);
+    // Reader: the active revision is the default already.
+    expect(pinnedRevisionFor(A, withDraft, false)).toBeNull();
+    // Published again since the search: readers see the older hit revision pinned.
+    expect(pinnedRevisionFor(B, { active_revision_id: A, latest_revision: { id: A } }, false)).toBe(
+      B,
+    );
+    // Editor without a draft: latest == active == hit.
+    expect(
+      pinnedRevisionFor(A, { active_revision_id: A, latest_revision: { id: A } }, true),
+    ).toBeNull();
+    expect(pinnedRevisionFor(null, withDraft, true)).toBeNull();
+  });
+
+  it('labels the pinned revision', () => {
+    expect(pinnedStatusText({ revision_number: 3, is_active: true, status: 'published' })).toMatch(
+      /발행본 · 버전 3 · 검색 결과 기준/,
+    );
+    expect(pinnedStatusText({ revision_number: 2, is_active: false, status: 'published' })).toMatch(
+      /이전 발행본 · 버전 2/,
+    );
   });
 });

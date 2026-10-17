@@ -104,6 +104,34 @@ export function parsePageParam(value: string | string[] | undefined): number | n
   return page >= 1 ? page : null;
 }
 
+const REVISION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** `?revision=<uuid>` (a search hit's published revision), else null. */
+export function parseRevisionParam(value: string | string[] | undefined): string | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw && REVISION_ID.test(raw) ? raw.toLowerCase() : null;
+}
+
+/**
+ * The revision DOC-02 must show instead of its default, or null when the default already is
+ * that revision: editors default to the latest revision (their draft, if any), readers to the
+ * active published one.
+ */
+export function pinnedRevisionFor(
+  requested: string | null,
+  document: {
+    readonly active_revision_id: string | null;
+    readonly latest_revision?: { readonly id: string } | null;
+  },
+  canEdit: boolean,
+): string | null {
+  if (requested === null) return null;
+  const shownByDefault = canEdit
+    ? (document.latest_revision?.id ?? document.active_revision_id)
+    : document.active_revision_id;
+  return shownByDefault?.toLowerCase() === requested ? null : requested;
+}
+
 /**
  * The address-bar query for the viewer state: `page` always, `block` while a block is the
  * selection (a pure page navigation clears it, so reload/share never reopens a stale block).

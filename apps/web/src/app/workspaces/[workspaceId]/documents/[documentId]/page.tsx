@@ -5,7 +5,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { DocumentEditor } from '@/components/documents/editor/document-editor';
 import { loadDocument } from '@/lib/documents/data';
-import { parsePageParam } from '@/lib/documents/outline';
+import { parsePageParam, parseRevisionParam, pinnedRevisionFor } from '@/lib/documents/outline';
 import { requireWorkspace } from '@/lib/workspaces/data';
 
 export const metadata: Metadata = { title: '문서 보기' };
@@ -32,17 +32,19 @@ export default async function Page({
       ? '뷰어 권한으로는 원문을 볼 수만 있고 수정·발행할 수 없습니다.'
       : undefined;
   const rawBlock = Array.isArray(query.block) ? query.block[0] : query.block;
+  const pinnedRevisionId = pinnedRevisionFor(parseRevisionParam(query.revision), document, canEdit);
 
   return (
     <div data-screen-id="DOC-02">
       <DocumentEditor
-        key={document.id}
+        key={`${document.id}:${pinnedRevisionId ?? ''}`}
         workspaceId={workspace.id}
         document={document}
         canEdit={canEdit}
         readOnlyReason={readOnlyReason}
         initialPage={parsePageParam(query.page)}
         initialBlockId={rawBlock && BLOCK_ID.test(rawBlock) ? rawBlock : null}
+        pinnedRevisionId={pinnedRevisionId}
       />
     </div>
   );

@@ -86,12 +86,15 @@ const response = (items: SearchItem[], warnings: string[] = []): SearchResponse 
   items,
 });
 
-function makeClient(search: SearchClient['search']): SearchClient & {
+function makeClient(
+  search: SearchClient['search'],
+  chapters: SearchClient['chapters'] = async () => [],
+): SearchClient & {
   search: ReturnType<typeof vi.fn>;
 } {
   return {
     search: vi.fn(search),
-    chapters: vi.fn(async () => []),
+    chapters: vi.fn(chapters),
     block: vi.fn(
       async (_d: string, id: string) =>
         ({
@@ -249,7 +252,10 @@ describe('SearchScreen', () => {
     expect(panel).not.toHaveAttribute('aria-modal');
     const link = within(panel).getByRole('link', { name: 'PDF에서 보기' });
     await waitFor(() =>
-      expect(link).toHaveAttribute('href', `/workspaces/${WS}/documents/${DOC}?page=5&block=p2`),
+      expect(link).toHaveAttribute(
+        'href',
+        `/workspaces/${WS}/documents/${DOC}?page=5&block=p2&revision=${REV}`,
+      ),
     );
     expect(panel).toHaveTextContent('5쪽');
     expect(client.block).toHaveBeenCalledWith(DOC, 'p2', REV, expect.anything());
@@ -257,5 +263,56 @@ describe('SearchScreen', () => {
     // The background stays usable: focusing the search box keeps the panel open.
     await user.click(screen.getByRole('searchbox', { name: /검색/ }));
     expect(screen.getByRole('dialog', { name: '원문 발췌' })).toBeVisible();
+  });
+
+  it('clears a bookmarked chapter of an older revision before searching, in the URL too', async () => {
+    const current = '66666666-6666-4666-8666-666666666666';
+    const stale = '77777777-7777-4777-8777-777777777777';
+    window.history.replaceState(
+      null,
+      '',
+      `/workspaces/${WS}/search?q=water&document=${DOC}&chapter=${stale}`,
+    );
+    const client = makeClient(
+      async () => response([hit()]),
+      async () => [{ id: current, title: 'Chapter 2', children: [] } as never],
+    );
+    render(
+      <SearchScreen
+        workspaceId={WS}
+        documents={[{ id: DOC, title: 'Water Book', isQuestionPaper: false }]}
+        initial={{ ...INITIAL, query: 'water', documentId: DOC, chapterId: stale }}
+        client={client}
+      />,
+    );
+    expect(await screen.findByRole('list', { name: '검색 결과' })).toBeVisible();
+    expect(client.search).toHaveBeenCalledTimes(1);
+    expect(client.search.mock.calls[0]?.[1]).toMatchObject({ documentId: DOC, chapterId: null });
+    expect(screen.getByText(/장 필터를 해제했습니다/)).toBeVisible();
+    expect(screen.getByRole('combobox', { name: '장' })).toHaveTextContent('전체 장');
+    expect(window.location.search).toBe(`?q=water&document=${DOC}`);
+  });
+
+  it('keeps a valid bookmarked chapter and searches with it', async () => {
+    const chapter = '66666666-6666-4666-8666-666666666666';
+    const client = makeClient(
+      async () => response([hit()]),
+      async () => [{ id: chapter, title: 'Chapter 2', children: [] } as never],
+    );
+    render(
+      <SearchScreen
+        workspaceId={WS}
+        documents={[{ id: DOC, title: 'Water Book', isQuestionPaper: false }]}
+        initial={{ ...INITIAL, query: 'water', documentId: DOC, chapterId: chapter }}
+        client={client}
+      />,
+    );
+    expect(await screen.findByRole('list', { name: '검색 결과' })).toBeVisible();
+    expect(client.search.mock.calls[0]?.[1]).toMatchObject({ chapterId: chapter });
+    expect(client.search).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: '장' })).toHaveTextContent('Chapter 2'),
+    );
+    expect(screen.queryByText(/장 필터를 해제했습니다/)).toBeNull();
   });
 });

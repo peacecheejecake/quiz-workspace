@@ -27,6 +27,7 @@ import {
   rateLimitMessage,
   SEARCH_FAILURE_MESSAGES,
   searchParamsFor,
+  reconcileChapter,
   warningMessages,
 } from '@/lib/search/state';
 import { DocumentExcerptPanel } from './document-excerpt-panel';
@@ -94,6 +95,7 @@ export function SearchScreen({
   const [selected, setSelected] = useState<SearchItem | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [chapterNotice, setChapterNotice] = useState<string | null>(null);
 
   const controllerRef = useRef<AbortController | null>(null);
   const generationRef = useRef(0);
@@ -138,27 +140,62 @@ export function SearchScreen({
     [client, router, workspaceId],
   );
 
-  // A search in the address bar (back from the PDF viewer, a shared link) runs on arrival.
-  const initialRef = useRef(initial);
+  // Latest values for the async chapter reconciliation below.
+  const chapterIdRef = useRef(chapterId);
+  const submittedRef = useRef(submitted);
   useEffect(() => {
-    if (initialRef.current.query) void run(initialRef.current);
+    chapterIdRef.current = chapterId;
+    submittedRef.current = submitted;
+  });
+
+  // A search in the address bar (back from the PDF viewer, a shared link) runs on arrival. With
+  // a chapter filter it waits until the chapter is known to exist (see below), so the scope
+  // that is searched is always the scope on screen.
+  const initialRef = useRef(initial);
+  const pendingInitialRef = useRef(false);
+  useEffect(() => {
+    const q = initialRef.current;
+    if (!q.query) return;
+    if (q.documentId && q.chapterId) pendingInitialRef.current = true;
+    else void run(q);
     return () => controllerRef.current?.abort();
   }, [run]);
 
-  // Chapters of the selected document's published revision.
+  // Chapters of the selected document's published revision. A selected chapter that is not one
+  // of them (a bookmark from an older revision) is cleared, in the URL and in a running search.
   useEffect(() => {
     if (!documentId) return;
     const controller = new AbortController();
-    client.chapters(documentId, controller.signal).then(
-      (items) => {
-        if (!controller.signal.aborted) setLoadedChapters({ documentId, items });
-      },
-      () => {
-        if (!controller.signal.aborted) setLoadedChapters({ documentId, failed: true });
-      },
-    );
+    const settle = (items: readonly OutlineItem[] | null) => {
+      if (controller.signal.aborted) return;
+      setLoadedChapters(items ? { documentId, items } : { documentId, failed: true });
+      const kept = reconcileChapter(chapterIdRef.current, items);
+      const stale = kept !== chapterIdRef.current;
+      if (stale) {
+        chapterIdRef.current = null;
+        setChapterId(null);
+        setChapterNotice(
+          items
+            ? '선택했던 장이 현재 발행본에 없어 장 필터를 해제했습니다.'
+            : '장 목록을 불러오지 못해 장 필터를 해제했습니다.',
+        );
+      }
+      if (pendingInitialRef.current) {
+        pendingInitialRef.current = false;
+        void run({ ...initialRef.current, chapterId: kept });
+      } else if (stale) {
+        const last = submittedRef.current;
+        if (last?.chapterId) void run({ ...last, chapterId: null });
+        else {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('chapter');
+          window.history.replaceState(window.history.state, '', url);
+        }
+      }
+    };
+    client.chapters(documentId, controller.signal).then(settle, () => settle(null));
     return () => controller.abort();
-  }, [client, documentId]);
+  }, [client, documentId, run]);
   const chapters: Chapters = !documentId
     ? { status: 'none' }
     : loadedChapters?.documentId !== documentId
@@ -207,15 +244,19 @@ export function SearchScreen({
   };
 
   const onDocumentChange = (value: string) => {
+    if (!value) return; // Radix reports '' when its hidden select loses the value
     const next = value === ALL ? null : value;
     setDocumentId(next);
     setChapterId(null);
+    setChapterNotice(null);
     rerun({ documentId: next, chapterId: null });
   };
 
   const onChapterChange = (value: string) => {
+    if (!value) return; // Radix reports '' when its hidden select loses the value
     const next = value === ALL ? null : value;
     setChapterId(next);
+    setChapterNotice(null);
     rerun({ chapterId: next });
   };
 
@@ -242,13 +283,8 @@ export function SearchScreen({
       : chapters.status === 'error'
         ? '장 목록을 불러오지 못했습니다'
         : '문서를 먼저 선택하세요';
-  // Keep a chapter from the address bar only once it is known to belong to the document.
-  const chapterValue =
-    chapters.status === 'ready' && chapterId && chapters.items.some((c) => c.id === chapterId)
-      ? chapterId
-      : chapters.status === 'ready'
-        ? ALL
-        : undefined;
+  // Unknown chapters are cleared as soon as the list arrives (reconcileChapter).
+  const chapterValue = chapters.status === 'ready' ? (chapterId ?? ALL) : '';
 
   const response =
     results.status === 'done'
@@ -319,7 +355,7 @@ export function SearchScreen({
           <Select
             label="장"
             options={chapterOptions}
-            value={chapterValue ?? ''}
+            value={chapterValue}
             placeholder={chapterPlaceholder}
             disabled={chapters.status !== 'ready'}
             onValueChange={onChapterChange}
@@ -330,6 +366,11 @@ export function SearchScreen({
             onCheckedChange={(checked) => onQuestionPapersChange(checked === true)}
           />
         </div>
+        {chapterNotice ? (
+          <p role="status" className={styles.hint}>
+            {chapterNotice}
+          </p>
+        ) : null}
       </form>
 
       <section aria-labelledby="search-results-heading" className={styles.resultsSection}>

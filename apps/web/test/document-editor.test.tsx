@@ -166,7 +166,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderEditor(props: { initialBlockId?: string | null; initialPage?: number | null } = {}) {
+function renderEditor(
+  props: {
+    initialBlockId?: string | null;
+    initialPage?: number | null;
+    pinnedRevisionId?: string | null;
+  } = {},
+) {
   return render(
     <DocumentEditor
       workspaceId={WS}
@@ -174,6 +180,7 @@ function renderEditor(props: { initialBlockId?: string | null; initialPage?: num
       canEdit
       initialPage={props.initialPage ?? null}
       initialBlockId={props.initialBlockId ?? null}
+      pinnedRevisionId={props.pinnedRevisionId ?? null}
     />,
   );
 }
@@ -270,5 +277,22 @@ describe('DocumentEditor', () => {
       expect(params.get('block')).toBe('b2');
       expect(params.get('page')).toBe('2');
     });
+  });
+
+  it('shows a pinned search-hit revision read-only, loaded by its id, with a way to the latest text', async () => {
+    renderEditor({ pinnedRevisionId: 'r1', initialBlockId: 'b2' });
+    expect(await screen.findByText('둘째 문장')).toBeInTheDocument();
+    const reads = vi
+      .mocked(fetch)
+      .mock.calls.map(([input]) => String(input))
+      .filter((url) => url.includes('/blocks') || url.includes('/outline'));
+    expect(reads.length).toBeGreaterThan(0);
+    expect(reads.every((url) => url.includes('revision=r1'))).toBe(true);
+    expect(screen.queryAllByRole('button', { name: /^편집/ })).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /^발행/ })).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent(/발행본 · 버전 1 · 검색 결과 기준/);
+    expect(screen.getByText(/검색 결과가 나온 발행본을 보고 있습니다/)).toBeInTheDocument();
+    const latest = screen.getByRole('link', { name: '최신 원문 보기·교정하기' });
+    expect(latest.getAttribute('href')).toMatch(/\/documents\/[^?]+\?page=2&block=b2$/);
   });
 });

@@ -50,12 +50,35 @@ export function searchParamsFor(q: SearchQuery): string {
   return out.toString();
 }
 
-/** DOC-02 deep link of a hit: its document at the hit's page, with the block selected. */
+/**
+ * The chapter filter that can stay selected once the document's chapters are known: `chapterId`
+ * when it is one of them, else null (an id of an older revision, or the list failed to load).
+ */
+export function reconcileChapter(
+  chapterId: string | null,
+  chapters: readonly { readonly id: string }[] | null,
+): string | null {
+  if (chapterId === null || chapters === null) return null;
+  return chapters.some((c) => c.id === chapterId) ? chapterId : null;
+}
+
+/** DOC-02 deep link of a hit: its document and revision at the hit's page, block selected. */
 export function pdfLinkFor(
   workspaceId: string,
-  hit: { readonly document_id: string; readonly page: number; readonly block_id: string },
+  hit: {
+    readonly document_id: string;
+    readonly revision_id: string;
+    readonly page: number;
+    readonly block_id: string;
+  },
 ): string {
-  const params = new URLSearchParams({ page: String(hit.page), block: hit.block_id });
+  // `revision` pins DOC-02 to the published revision the excerpt came from: editors otherwise
+  // see their latest draft, and a publish between search and click would change the text.
+  const params = new URLSearchParams({
+    page: String(hit.page),
+    block: hit.block_id,
+    revision: hit.revision_id,
+  });
   return `/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(
     hit.document_id,
   )}?${params.toString()}`;

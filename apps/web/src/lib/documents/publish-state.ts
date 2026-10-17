@@ -98,3 +98,15 @@ export function resumePublishState(
 
 export const INDEX_FAILURE_MESSAGE =
   '색인에 실패해 초안을 발행하지 못했습니다. 이전 발행본이 계속 검색에 사용됩니다. 초안은 그대로 남아 있으니 다시 색인할 수 있습니다.';
+
+/** Status line while DOC-02 shows a pinned revision (`?revision=`, opened from a search hit). */
+export function pinnedStatusText(
+  revision: Pick<RevisionInfo, 'revision_number' | 'is_active' | 'status'> | null,
+): string {
+  if (!revision) return '원문을 불러오는 중…';
+  const number = `버전 ${revision.revision_number}`;
+  if (revision.is_active) return `발행본 · ${number} · 검색 결과 기준 · 읽기 전용`;
+  return revision.status === 'draft'
+    ? `초안 · ${number} · 읽기 전용`
+    : `이전 발행본 · ${number} · 검색 결과 기준 · 읽기 전용`;
+}

@@ -16,6 +16,7 @@ import {
   parseSearchParams,
   pdfLinkFor,
   rateLimitMessage,
+  reconcileChapter,
   searchParamsFor,
   warningMessages,
 } from '../src/lib/search/state';
@@ -175,10 +176,18 @@ describe('search address-bar state', () => {
     expect(searchParamsFor(parseSearchParams({}))).toBe('');
   });
 
-  it('builds the DOC-02 deep link with page and block', () => {
-    expect(pdfLinkFor('ws 1', { document_id: DOC, page: 4, block_id: 'cb/1' })).toBe(
-      `/workspaces/ws%201/documents/${DOC}?page=4&block=cb%2F1`,
-    );
+  it('builds the DOC-02 deep link with page, block and the hit revision', () => {
+    expect(
+      pdfLinkFor('ws 1', { document_id: DOC, revision_id: REV, page: 4, block_id: 'cb/1' }),
+    ).toBe(`/workspaces/ws%201/documents/${DOC}?page=4&block=cb%2F1&revision=${REV}`);
+  });
+
+  it('keeps a chapter filter only when it is one of the loaded chapters', () => {
+    const chapters = [{ id: CHAPTER }];
+    expect(reconcileChapter(CHAPTER, chapters)).toBe(CHAPTER);
+    expect(reconcileChapter('55555555-5555-4555-8555-555555555555', chapters)).toBeNull();
+    expect(reconcileChapter(CHAPTER, null)).toBeNull();
+    expect(reconcileChapter(null, chapters)).toBeNull();
   });
 
   it('sends filters only when set', () => {

@@ -27,6 +27,7 @@ export interface DocumentExcerptPanelProps {
 const linkFor = (workspaceId: string, item: SearchItem, target: JumpTarget) =>
   pdfLinkFor(workspaceId, {
     document_id: item.document_id,
+    revision_id: item.revision_id,
     page: target.page,
     block_id: target.blockId,
   });

@@ -18,6 +18,8 @@ export type SignedReadUrl = Schemas['SignedReadUrl'];
 
 /** `active` = the published revision readers see; `latest` = the correction draft if any. */
 export type RevisionSelector = 'active' | 'latest';
+/** A selector or one revision's id (a search hit's published revision, `?revision=`). */
+export type ContentRevision = RevisionSelector | string;
 
 export const EDITOR_PROBLEMS = {
   editConflict: 'urn:quiz-workspace:problem:edit-conflict',
@@ -108,10 +110,10 @@ const enc = encodeURIComponent;
 
 export const EDITOR_PATHS = {
   document: (id: string) => `/api/documents/${enc(id)}`,
-  outline: (id: string, revision: RevisionSelector) =>
-    `/api/documents/${enc(id)}/outline?revision=${revision}`,
-  blocks: (id: string, revision: RevisionSelector, after?: number) =>
-    `/api/documents/${enc(id)}/blocks?revision=${revision}&limit=${BLOCK_PAGE_SIZE}` +
+  outline: (id: string, revision: ContentRevision) =>
+    `/api/documents/${enc(id)}/outline?revision=${enc(revision)}`,
+  blocks: (id: string, revision: ContentRevision, after?: number) =>
+    `/api/documents/${enc(id)}/blocks?revision=${enc(revision)}&limit=${BLOCK_PAGE_SIZE}` +
     (after !== undefined ? `&after=${after}` : ''),
   block: (id: string, blockId: string, revision?: RevisionSelector) =>
     `/api/documents/${enc(id)}/blocks/${enc(blockId)}` + (revision ? `?revision=${revision}` : ''),
@@ -138,7 +140,7 @@ export interface EditorClient {
   /** Outline + every block of one revision; retried once if the revision moved in between. */
   loadContent(
     id: string,
-    revision: RevisionSelector,
+    revision: ContentRevision,
     signal?: AbortSignal,
   ): Promise<DocumentContent>;
   getBlock(id: string, blockId: string, revision: RevisionSelector): Promise<BlockDetail>;
@@ -186,7 +188,7 @@ export function createEditorClient(fetchImpl: FetchLike = (...a) => fetch(...a))
   /** One read of outline + all block pages; `consistent` is false when the revision moved. */
   async function loadOnce(
     id: string,
-    revision: RevisionSelector,
+    revision: ContentRevision,
     signal?: AbortSignal,
   ): Promise<{ content: DocumentContent; consistent: boolean }> {
     const outlinePromise = call<Outline>(EDITOR_PATHS.outline(id, revision), { signal });

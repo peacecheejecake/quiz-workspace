@@ -15,6 +15,7 @@ import {
   createEditorClient,
   EditorApiError,
   type ContentBlock,
+  type ContentRevision,
   type DocumentContent,
   type DocumentDetail,
   type OutlineItem,
@@ -34,6 +35,7 @@ import {
   INDEX_FAILURE_MESSAGE,
   isDraft,
   isPublishing,
+  pinnedStatusText,
   PUBLISH_IDLE,
   resumePublishState,
   revisionStatusText,
@@ -56,6 +58,11 @@ export interface DocumentEditorProps {
   readonly initialPage: number | null;
   /** `?block=<id>` deep link. */
   readonly initialBlockId: string | null;
+  /**
+   * `?revision=<id>` when it differs from what the screen shows by default (a search hit's
+   * published revision): that revision is shown read-only with a way back to the latest text.
+   */
+  readonly pinnedRevisionId?: string | null;
 }
 
 type MobileView = 'outline' | 'pdf' | 'text';
@@ -81,6 +88,7 @@ export function DocumentEditor({
   readOnlyReason,
   initialPage,
   initialBlockId,
+  pinnedRevisionId = null,
 }: DocumentEditorProps) {
   const client = useMemo(() => createEditorClient(), []);
   const router = useRouter();
@@ -93,8 +101,11 @@ export function DocumentEditor({
 
   const [document, setDocument] = useState(initialDocument);
   const [canEdit, setCanEdit] = useState(initialCanEdit);
+  const pinned = pinnedRevisionId !== null;
+  /** Corrections go to the draft, so a pinned (search-hit) revision is read-only. */
+  const editable = canEdit && !pinned;
   const ready = document.active_revision_id !== null;
-  const selector = canEdit ? 'latest' : 'active';
+  const selector: ContentRevision = pinnedRevisionId ?? (canEdit ? 'latest' : 'active');
 
   const [contentState, setContentState] = useState<ContentState>({ status: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
@@ -190,7 +201,7 @@ export function DocumentEditor({
   const contentGeneration = useRef(0);
   /** Loads `selector`'s content; null when a newer local change superseded this load. */
   const loadFresh = useCallback(
-    async (selectorToLoad: 'active' | 'latest', signal?: AbortSignal) => {
+    async (selectorToLoad: ContentRevision, signal?: AbortSignal) => {
       const generation = contentGeneration.current;
       const loaded = await client.loadContent(documentId, selectorToLoad, signal);
       return generation === contentGeneration.current ? loaded : null;
@@ -230,7 +241,7 @@ export function DocumentEditor({
   }, [applyDeepLink, loadFresh, ready, reloadKey, selector, toLogin]);
 
   const refreshRevisions = useCallback(async () => {
-    if (!canEdit) return null;
+    if (!editable) return null;
     try {
       const items = await client.listRevisions(documentId);
       setRevisions(items);
@@ -239,7 +250,7 @@ export function DocumentEditor({
       handleCommonError(error);
       return null;
     }
-  }, [canEdit, client, documentId, handleCommonError]);
+  }, [editable, client, documentId, handleCommonError]);
 
   const refreshDocument = useCallback(async () => {
     try {
@@ -354,7 +365,7 @@ export function DocumentEditor({
   // After a reload: resume a running publish, or show the last failed one with its retry.
   const resumed = useRef(false);
   useEffect(() => {
-    if (!canEdit || !ready || resumed.current) return;
+    if (!editable || !ready || resumed.current) return;
     resumed.current = true;
     void refreshRevisions().then((items) => {
       if (!items) return;
@@ -362,7 +373,7 @@ export function DocumentEditor({
       if (state.phase === 'indexing') void follow(state.jobId);
       else if (state.phase === 'failed') setPublish(state);
     });
-  }, [canEdit, follow, ready, refreshRevisions]);
+  }, [editable, follow, ready, refreshRevisions]);
 
   const draft = content?.revision && isDraft(content.revision) ? content.revision : null;
 
@@ -545,12 +556,14 @@ export function DocumentEditor({
       : '처리 중 · 아직 발행된 원문이 없습니다'
     : contentState.status === 'loading'
       ? '원문을 불러오는 중…'
-      : revisionStatusText({
-          canEdit,
-          revision: content?.revision ?? null,
-          justSaved,
-          publish,
-        });
+      : pinned
+        ? pinnedStatusText(content?.revision ?? null)
+        : revisionStatusText({
+            canEdit,
+            revision: content?.revision ?? null,
+            justSaved,
+            publish,
+          });
 
   const highlights = locationsOn(currentBlock, page);
   const currentSection = sectionOf(currentBlock, outline);
@@ -569,7 +582,7 @@ export function DocumentEditor({
 
       <PublishBar
         statusText={statusText}
-        canEdit={canEdit && ready}
+        canEdit={editable && ready}
         hasDraft={draft !== null}
         publish={publish}
         editing={editState.phase !== 'idle'}
@@ -580,6 +593,20 @@ export function DocumentEditor({
         onOpenHistory={() => void refreshRevisions()}
       />
 
+      {pinned ? (
+        <div role="note" className={styles.note}>
+          <p>
+            {content?.revision && !content.revision.is_active
+              ? '검색 결과가 나온 이전 발행본을 보고 있습니다. 그 뒤에 새 버전이 발행되어 현재 원문과 다를 수 있습니다.'
+              : canEdit
+                ? '검색 결과가 나온 발행본을 보고 있습니다. 아직 발행하지 않은 초안의 내용과 다를 수 있습니다.'
+                : '검색 결과가 나온 발행본을 보고 있습니다.'}
+          </p>
+          <Link href={`${documentPath}${viewerSearch('', page, linkedBlockId)}`}>
+            {canEdit ? '최신 원문 보기·교정하기' : '최신 원문 보기'}
+          </Link>
+        </div>
+      ) : null}
       {readOnlyReason ? (
         <p role="note" className={styles.note}>
           {readOnlyReason}
@@ -678,7 +705,7 @@ export function DocumentEditor({
               <TextBlockEditor
                 blocks={blocks}
                 currentBlockId={currentBlockId}
-                canEdit={canEdit}
+                canEdit={editable}
                 editLocked={isPublishing(publish) || restoring !== null}
                 editState={editState}
                 onSelect={(block) => selectBlock(block, { view: 'pdf' })}
