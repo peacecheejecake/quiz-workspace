@@ -170,16 +170,17 @@ select is(
   'quiz_worker policies on async_jobs');
 -- M3.2a adds quiz_worker policies on the document tables (07_documents.test.sql), M4.4a on the
 -- import runs/drafts (11_question_import_worker.test.sql), M6.2 on generation runs and read-only
--- questions (12_question_generation_worker.test.sql); nothing else.
+-- questions (12_question_generation_worker.test.sql), S3a on workspace_forks
+-- (12_workspace_forks.test.sql); nothing else.
 select is_empty(
   $$ select tablename from pg_policies
       where schemaname = 'public' and 'quiz_worker' = any(roles)
         and tablename not in ('async_jobs', 'documents', 'document_revisions', 'chapters',
                               'content_blocks', 'document_uploads', 'question_import_runs',
                               'question_drafts', 'question_generation_runs', 'questions',
-                              'question_revisions', 'question_sources') $$,
-  'quiz_worker has policies on async_jobs, the M3.2a document tables, M4.4a imports and M6.2 '
-    || 'generation only');
+                              'question_revisions', 'question_sources', 'workspace_forks') $$,
+  'quiz_worker has policies on async_jobs, the M3.2a document tables, M4.4a imports, M6.2 '
+    || 'generation and S3a forks only');
 
 -- quiz_worker works within its grants -----------------------------------------------------------
 grant quiz_worker to postgres;

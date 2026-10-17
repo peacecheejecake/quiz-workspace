@@ -10,8 +10,8 @@ from fastapi import APIRouter
 from quiz_api.api import (
     document_revisions,
     documents,
-    history,
     forks,
+    history,
     jobs,
     me,
     practice,
