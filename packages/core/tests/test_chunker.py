@@ -82,15 +82,24 @@ def assert_chunk_invariants(
         assert chunk.token_count == tokenizer.count(chunk.search_text)
         assert chunk.search_text.endswith(chunk.content)
         assert chunk.search_text.startswith(" > ".join(chunk.breadcrumb))
+        assert tokenizer.count(" > ".join(chunk.breadcrumb)) <= int(
+            config.target_tokens * config.breadcrumb_max_share
+        )
         assert SearchChunk.model_validate_json(chunk.model_dump_json()) == chunk
+        # Faithful text: every line is a verbatim slice of a covered block's canonical text.
+        for line in chunk.content.split("\n"):
+            assert not line or any(line in blocks[b].text for b in chunk.block_ids), line
 
     for child in result.children:
         assert child.level is ChunkLevel.CHILD
         parent = parents[child.parent_id or ""]
         assert parent.section_id == child.section_id
         assert set(child.block_ids) <= set(parent.block_ids)
-        if child.token_count is not None and child.token_count > config.max_tokens:
-            # Only a single table row (with the repeated header) may exceed the limit.
+        # The parent carries its children's full context (overlap and table header included).
+        assert all(line in parent.content for line in child.content.split("\n"))
+        # Hard limit; only a single table row (with the repeated header) may exceed it.
+        assert child.token_count == tokenizer.count(child.search_text)
+        if child.token_count > config.max_tokens:
             assert any(blocks[b].type is BlockType.TABLE for b in child.block_ids)
     for parent in result.parents:
         assert parent.level is ChunkLevel.PARENT
@@ -121,15 +130,20 @@ def test_chunks_cover_fixture_revisions(fixture_id: str, config_name: str) -> No
         assert chunk.token_count is not None
         assert chunk.token_count <= config.max_tokens  # fixture table rows are short
         assert chunk.language == truth.language
-        assert chunk.breadcrumb[0] == truth.title
 
     sections = {s.id: s for s in revision.sections}
     for chunk in result.chunks:
         assert chunk.section_id is not None
         section = sections[chunk.section_id]
-        assert chunk.breadcrumb[-1] == section.title
+        full = [truth.title, section.title]
         if section.parent_id is not None:
-            assert chunk.breadcrumb[-2] == sections[section.parent_id].title
+            full.insert(1, sections[section.parent_id].title)
+        if config_name == "default":
+            assert chunk.breadcrumb == tuple(full)
+        else:  # bounded: outer entries may be dropped, titles ellipsized from the end
+            assert chunk.breadcrumb
+            for got, want in zip(reversed(chunk.breadcrumb), reversed(full), strict=False):
+                assert got == want or (got.endswith("…") and want.startswith(got[:-1]))
 
     # The cross-page paragraph's chunk carries both page locations.
     merged = [b for b in revision.blocks if len(b.locations) == 2]

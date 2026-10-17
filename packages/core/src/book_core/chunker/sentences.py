@@ -59,58 +59,83 @@ def _is_abbreviation(head: str) -> bool:
     return word in _ABBREVIATIONS or (len(word) == 1 and word.isalpha() and word.isascii())
 
 
-def split_sentences(text: str) -> list[str]:
-    """Sentences of ``text`` in order; joining them with single spaces restores the text up to
-    whitespace. Text without sentence punctuation is one sentence."""
-    sentences: list[str] = []
+Span = tuple[int, int]
+"""Half-open character range ``[start, end)`` of the text being split."""
+
+_WORD = re.compile(r"\S+")
+
+
+def _strip(text: str, start: int, end: int) -> Span:
+    while start < end and text[start].isspace():
+        start += 1
+    while end > start and text[end - 1].isspace():
+        end -= 1
+    return start, end
+
+
+def sentence_spans(text: str) -> list[Span]:
+    """Sentence ranges of ``text`` in order, without surrounding whitespace. Slicing ``text``
+    from one span's start to a later span's end reproduces the original text exactly. Text
+    without sentence punctuation is one sentence."""
+    spans: list[Span] = []
     start = 0
     for match in _BOUNDARY.finditer(text):
         end = match.start()
         if end <= start:
             continue
-        head = text[start:end]
-        if head.endswith(".") and _is_abbreviation(head):
+        if text[end - 1] == "." and _is_abbreviation(text[start:end]):
             continue
-        sentences.append(head.strip())
+        spans.append(_strip(text, start, end))
         start = match.end()
-    tail = text[start:].strip()
-    if tail:
-        sentences.append(tail)
-    return [s for s in sentences if s]
+    spans.append(_strip(text, start, len(text)))
+    return [(s, e) for s, e in spans if s < e]
 
 
-def split_oversized(text: str, budget: int, tokenizer: Tokenizer) -> list[str]:
-    """Split one sentence longer than ``budget`` tokens at word boundaries, or at characters for
-    a word that alone exceeds the budget (unspaced CJK runs, URLs)."""
-    pieces: list[str] = []
-    current: list[str] = []
+def split_sentences(text: str) -> list[str]:
+    """Sentences of ``text`` in order (see ``sentence_spans``)."""
+    return [text[s:e] for s, e in sentence_spans(text)]
+
+
+def oversized_spans(text: str, span: Span, budget: int, tokenizer: Tokenizer) -> list[Span]:
+    """Split ``text[span]`` (a sentence longer than ``budget`` tokens) at word boundaries, or at
+    characters for a word that alone exceeds the budget (unspaced CJK runs, URLs). The pieces
+    are contiguous ranges of ``text``, so slicing from the first start to the last end restores
+    the original characters, separators included."""
+    pieces: list[Span] = []
+    current: Span | None = None
     used = 0
-    for word in text.split():
-        cost = tokenizer.count(word)
+    for match in _WORD.finditer(text, span[0], span[1]):
+        word = (match.start(), match.end())
+        cost = tokenizer.count(match.group())
         if cost > budget:
-            if current:
-                pieces.append(" ".join(current))
-                current, used = [], 0
-            pieces.extend(_split_chars(word, budget, tokenizer))
+            if current is not None:
+                pieces.append(current)
+                current, used = None, 0
+            pieces.extend(_char_spans(text, word, budget, tokenizer))
             continue
-        if current and used + cost > budget:
-            pieces.append(" ".join(current))
-            current, used = [], 0
-        current.append(word)
+        if current is not None and used + cost > budget:
+            pieces.append(current)
+            current, used = None, 0
+        current = word if current is None else (current[0], word[1])
         used += cost
-    if current:
-        pieces.append(" ".join(current))
+    if current is not None:
+        pieces.append(current)
     return pieces
 
 
-def _split_chars(word: str, budget: int, tokenizer: Tokenizer) -> list[str]:
-    pieces: list[str] = []
-    start = 0
-    while start < len(word):
+def split_oversized(text: str, budget: int, tokenizer: Tokenizer) -> list[str]:
+    """``oversized_spans`` over the whole ``text``, as strings."""
+    return [text[s:e] for s, e in oversized_spans(text, (0, len(text)), budget, tokenizer)]
+
+
+def _char_spans(text: str, word: Span, budget: int, tokenizer: Tokenizer) -> list[Span]:
+    pieces: list[Span] = []
+    start, stop = word
+    while start < stop:
         end = start + 1
         # Grow while the piece fits; a tokenizer charging >budget for one char still advances.
-        while end < len(word) and tokenizer.count(word[start : end + 1]) <= budget:
+        while end < stop and tokenizer.count(text[start : end + 1]) <= budget:
             end += 1
-        pieces.append(word[start:end])
+        pieces.append((start, end))
         start = end
     return pieces

@@ -22,10 +22,10 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 
-from book_core.chunker.sentences import split_oversized, split_sentences
+from book_core.chunker.sentences import oversized_spans, sentence_spans
 from book_core.chunker.tokens import ApproxTokenizer, Tokenizer
 from book_core.contracts import (
     Block,
@@ -53,9 +53,15 @@ class ChunkerConfig:
     - ``overlap_tokens``: trailing sentences of one window repeated at the start of the next,
       only inside a split block (never across blocks, so a block edit stays local);
     - ``parent_max_tokens``: parents group consecutive children of one section up to this size;
-    - ``include_front_matter``: also chunk blocks outside every section (title page, TOC).
+    - ``include_front_matter``: also chunk blocks outside every section (title page, TOC);
+    - ``breadcrumb_max_share``: the indexed breadcrumb (``search_text`` prefix and
+      ``SearchChunk.breadcrumb``) gets at most this share of ``target_tokens``. A longer one is
+      shortened: the longest title is ellipsized first (deepest on ties), and when every title
+      is down to ``…`` the outermost ones (document title first) are dropped. Section titles
+      stay available in full through ``section_id``.
 
-    The only content allowed above ``max_tokens`` is a single table row (plus repeated header),
+    ``max_tokens`` always holds for children (``ChunkingError`` otherwise, e.g. with a
+    tokenizer that is not additive), except for a single table row plus its repeated header,
     since tables are never split inside a row.
     """
 
@@ -64,14 +70,21 @@ class ChunkerConfig:
     overlap_tokens: int = 32
     parent_max_tokens: int = 1536
     include_front_matter: bool = False
+    breadcrumb_max_share: float = 0.25
 
     def __post_init__(self) -> None:
+        if not 0 <= self.breadcrumb_max_share < 1:
+            raise ValueError("require 0 <= breadcrumb_max_share < 1")
         if not 0 < self.target_tokens <= self.max_tokens:
             raise ValueError("require 0 < target_tokens <= max_tokens")
         if not 0 <= self.overlap_tokens < self.target_tokens:
             raise ValueError("require 0 <= overlap_tokens < target_tokens")
         if self.parent_max_tokens < self.max_tokens:
             raise ValueError("parent_max_tokens must be >= max_tokens")
+
+
+class ChunkingError(ValueError):
+    """The configured limits cannot be met (a child would exceed ``max_tokens``)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,18 +120,66 @@ class _Unit:
     caption: Block | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _Segment:
+    """What a child contributes to its parent's content.
+
+    Plain segments are whole units. Pieces of one split text block (same ``key``) are ranges
+    ``[start, end)`` of ``source``; inside one parent they merge into a single range, so the
+    first piece keeps its full context (overlap included) and later overlap is not repeated.
+    Parts of one split table carry their ``prefix`` lines (caption and header for the first
+    part, the repeated header for later ones) and ``rows``; inside one parent the first part's
+    prefix is kept and the rows are appended.
+    """
+
+    key: str
+    text: str = ""
+    source: str | None = None
+    start: int = 0
+    end: int = 0
+    prefix: tuple[str, ...] | None = None
+    rows: tuple[str, ...] = ()
+
+    def render(self) -> str:
+        if self.source is not None:
+            return self.source[self.start : self.end]
+        if self.prefix is not None:
+            return "\n".join((*self.prefix, *self.rows))
+        return self.text
+
+    def merge(self, other: _Segment) -> _Segment | None:
+        """``other`` (a later piece of the same block) folded into this one, if mergeable."""
+        if other.key != self.key:
+            return None
+        if self.source is not None and other.source == self.source:
+            return replace(self, end=max(self.end, other.end))
+        if self.prefix is not None and other.prefix is not None:
+            return replace(self, rows=(*self.rows, *other.rows))
+        return None
+
+
 @dataclass(slots=True)
 class _Child:
     blocks: list[Block]
     texts: list[str]
     part: int | None = None
-    # Non-overlapping text for the parent as (group key, joiner, text): consecutive segments of
-    # one split block share a key and are joined with ``joiner`` instead of a blank line.
-    segments: list[tuple[str, str, str]] = field(default_factory=list)
+    segments: list[_Segment] = field(default_factory=list)
 
 
-def _segments(units: Iterable[_Unit]) -> list[tuple[str, str, str]]:
-    return [(u.blocks[0].id, "\n", u.text) for u in units if u.text]
+def _segments(units: Iterable[_Unit]) -> list[_Segment]:
+    return [_Segment(u.blocks[0].id, u.text) for u in units if u.text]
+
+
+def _parent_content(children: Sequence[_Child]) -> str:
+    merged: list[_Segment] = []
+    for child in children:
+        for segment in child.segments:
+            folded = merged[-1].merge(segment) if merged else None
+            if folded is not None:
+                merged[-1] = folded
+            else:
+                merged.append(segment)
+    return _UNIT_SEP.join(s.render() for s in merged if s.render())
 
 
 def _sha(*parts: str) -> str:
@@ -210,11 +271,16 @@ class _SectionChunker:
 
     def __init__(self, config: ChunkerConfig, tokenizer: Tokenizer, crumb_tokens: int) -> None:
         self.tok = tokenizer
-        # Budgets apply to content; the breadcrumb prefix of search_text takes its share.
-        self.target = max(config.target_tokens - crumb_tokens, 1)
-        self.max = max(config.max_tokens - crumb_tokens, 1)
+        # Budgets apply to content; the breadcrumb prefix of search_text takes its share
+        # (bounded by ``breadcrumb_max_share``, so this only fails for an inconsistent tokenizer).
+        self.target = config.target_tokens - crumb_tokens
+        self.max = config.max_tokens - crumb_tokens
+        if self.target < 1:
+            raise ChunkingError(
+                f"breadcrumb takes {crumb_tokens} tokens, no room left in target_tokens"
+            )
         self.overlap = min(config.overlap_tokens, self.target - 1)
-        self.parent_max = max(config.parent_max_tokens - crumb_tokens, self.max)
+        self.parent_max = config.parent_max_tokens - crumb_tokens
         self.children: list[_Child] = []
         self.pending_textless: list[Block] = []
 
@@ -329,47 +395,51 @@ class _SectionChunker:
     def _emit_split(self, unit: _Unit, lead_units: list[_Unit]) -> None:
         """A text block over ``max``: sentence windows of about ``target`` with overlap."""
         lead_blocks, lead, lead_tokens = self._lead(lead_units, self.max - self.target)
-        key = unit.blocks[0].id
-        sentences: list[tuple[str, int]] = []
-        for sentence in split_sentences(unit.text):
-            cost = self.tok.count(sentence)
-            if cost > self.target:
-                pieces = split_oversized(sentence, self.target, self.tok)
-                sentences.extend((p, self.tok.count(p)) for p in pieces)
-            else:
-                sentences.append((sentence, cost))
-        start, covered, part = 0, 0, 0
+        key, source = unit.blocks[0].id, unit.text
+        # (start, end, tokens) ranges of ``source``; windows are slices of it, so the original
+        # separators (or their absence inside a character-split word) are kept.
+        sentences: list[tuple[int, int, int]] = []
+        for span in sentence_spans(source):
+            cost = self.tok.count(source[span[0] : span[1]])
+            pieces = (
+                oversized_spans(source, span, self.target, self.tok)
+                if cost > self.target
+                else [span]
+            )
+            sentences.extend((s, e, self.tok.count(source[s:e])) for s, e in pieces)
+        start, part = 0, 0
         while start < len(sentences):
             limit = self.target - lead_tokens if part == 0 else self.target
             end, used = start, 0
-            while end < len(sentences) and (end == start or used + sentences[end][1] <= limit):
-                used += sentences[end][1]
+            while end < len(sentences) and (end == start or used + sentences[end][2] <= limit):
+                used += sentences[end][2]
                 end += 1
-            text = " ".join(s for s, _ in sentences[start:end])
-            core = " ".join(s for s, _ in sentences[max(start, covered) : end])
+            segment = _Segment(
+                key, source=source, start=sentences[start][0], end=sentences[end - 1][1]
+            )
+            text = segment.render()
             if part == 0:
                 child = _Child(
                     [*self._take_pending(), *lead_blocks, *unit.blocks],
                     [*(u.text for u in lead if u.text), text],
                     part,
-                    [*_segments(lead), (key, " ", core)],
+                    [*_segments(lead), segment],
                 )
             else:
-                child = _Child(list(unit.blocks), [text], part, [(key, " ", core)])
+                child = _Child(list(unit.blocks), [text], part, [segment])
             self.children.append(child)
             if end >= len(sentences):
                 break
-            covered = end
             # Overlap: trailing sentences of this window, as long as the next window still
             # makes progress (overlap + next sentence fit in the target).
-            back, overlap, nxt = end, 0, sentences[end][1]
+            back, overlap, nxt = end, 0, sentences[end][2]
             while (
                 back - 1 > start
-                and overlap + sentences[back - 1][1] <= self.overlap
-                and overlap + sentences[back - 1][1] + nxt <= self.target
+                and overlap + sentences[back - 1][2] <= self.overlap
+                and overlap + sentences[back - 1][2] + nxt <= self.target
             ):
                 back -= 1
-                overlap += sentences[back][1]
+                overlap += sentences[back][2]
             start = back
             part += 1
 
@@ -383,7 +453,7 @@ class _SectionChunker:
                     [*self._take_pending(), *lead_blocks, *unit.blocks],
                     [*(u.text for u in lead if u.text), unit.text],
                     None,
-                    [*_segments(lead), (table.id, "\n", unit.text)],
+                    [*_segments(lead), _Segment(table.id, unit.text)],
                 )
             )
             return
@@ -408,52 +478,39 @@ class _SectionChunker:
                 rows.append(body[index])
                 used += cost
                 index += 1
-            text = "\n".join([*(cap if first else []), *header, *rows])
-            core = "\n".join([*(cap + header if first else []), *rows])
+            segment = _Segment(
+                table.id, prefix=(*(cap if first else []), *header), rows=tuple(rows)
+            )
+            text = segment.render()
             if first:
                 captions = [caption] if caption is not None else []
                 child = _Child(
                     [*self._take_pending(), *lead_blocks, *captions, table],
                     [*(u.text for u in lead if u.text), text],
                     part,
-                    [*_segments(lead), (table.id, "\n", core)],
+                    [*_segments(lead), segment],
                 )
             else:
-                child = _Child([table], [text], part, [(table.id, "\n", core)])
+                child = _Child([table], [text], part, [segment])
             self.children.append(child)
             part += 1
 
     # -- parents ----------------------------------------------------------------------------
 
     def parent_groups(self) -> list[list[_Child]]:
+        """Consecutive children up to ``parent_max`` tokens of rendered parent content (a parent
+        that starts inside a split block carries that piece's full context)."""
         groups: list[list[_Child]] = []
         current: list[_Child] = []
-        used = 0
         for child in self.children:
-            cost = sum(self.tok.count(text) for _, _, text in child.segments)
-            if current and used + cost > self.parent_max:
+            candidate = [*current, child]
+            if current and self.tok.count(_parent_content(candidate)) > self.parent_max:
                 groups.append(current)
-                current, used = [], 0
-            current.append(child)
-            used += cost
+                candidate = [child]
+            current = candidate
         if current:
             groups.append(current)
         return groups
-
-
-def _parent_content(children: Sequence[_Child]) -> str:
-    out: list[str] = []
-    last_key: str | None = None
-    for child in children:
-        for key, joiner, text in child.segments:
-            if not text:
-                continue
-            if out and key == last_key:
-                out[-1] = f"{out[-1]}{joiner}{text}"
-            else:
-                out.append(text)
-            last_key = key
-    return _UNIT_SEP.join(out)
 
 
 def _breadcrumb(
@@ -466,6 +523,48 @@ def _breadcrumb(
         current = sections.get(current.parent_id) if current.parent_id is not None else None
     title = document_title.strip() if document_title else ""
     return (title, *path) if title else tuple(path)
+
+
+_ELLIPSIS = "…"
+
+
+def _ellipsize(title: str, tokens: int, tokenizer: Tokenizer) -> str:
+    """Longest prefix of ``title`` plus an ellipsis that costs at most ``tokens``."""
+    low, high = 0, len(title) - 1
+    while low < high:
+        mid = (low + high + 1) // 2
+        if tokenizer.count(title[:mid].rstrip() + _ELLIPSIS) <= tokens:
+            low = mid
+        else:
+            high = mid - 1
+    return title[:low].rstrip() + _ELLIPSIS
+
+
+def bound_breadcrumb(
+    breadcrumb: Sequence[str], budget: int, tokenizer: Tokenizer
+) -> tuple[str, ...]:
+    """Shorten ``breadcrumb`` to at most ``budget`` tokens (joined with `` > ``).
+
+    The longest title is ellipsized first (the deepest on ties) until it fits; once every
+    title is down to the ellipsis, the outermost entries are dropped. May return ``()``.
+    """
+    items = list(breadcrumb)
+
+    def cost() -> int:
+        return tokenizer.count(_CRUMB_SEP.join(items)) if items else 0
+
+    while items and cost() > budget:
+        costs = [tokenizer.count(t) for t in items]
+        longest = max(range(len(items)), key=lambda i: (costs[i], i))
+        if items[longest] != _ELLIPSIS and costs[longest] > tokenizer.count(_ELLIPSIS):
+            # Cut just the excess, but never below a fair share of the budget, so a huge
+            # title shortens itself rather than wiping out its neighbours.
+            share = max((budget - (len(items) - 1)) // len(items), 1)
+            keep = min(costs[longest] - 1, max(costs[longest] - (cost() - budget), share))
+            items[longest] = _ellipsize(items[longest], keep, tokenizer)
+        else:
+            items.pop(0)
+    return tuple(items)
 
 
 def _search_text(breadcrumb: Sequence[str], content: str) -> str:
@@ -557,11 +656,14 @@ def chunk_revision(
     parents: list[SearchChunk] = []
     children: list[SearchChunk] = []
     uncovered: list[str] = []
+    crumb_budget = int(config.target_tokens * config.breadcrumb_max_share)
 
     for section_id, blocks in _runs(revision.blocks):
         if section_id is None and not config.include_front_matter:
             continue
-        breadcrumb = _breadcrumb(section_id, sections, document_title)
+        breadcrumb = bound_breadcrumb(
+            _breadcrumb(section_id, sections, document_title), crumb_budget, tokenizer
+        )
         crumb_tokens = tokenizer.count(_CRUMB_SEP.join(breadcrumb))
         chunker = _SectionChunker(config, tokenizer, crumb_tokens)
         chunker.run(blocks)
@@ -596,20 +698,25 @@ def chunk_revision(
                 )
             )
             for child, child_id, blocks_ in zip(group, child_ids, child_blocks, strict=True):
-                children.append(
-                    _make_chunk(
-                        chunk_id=child_id,
-                        revision=revision,
-                        level=ChunkLevel.CHILD,
-                        parent_id=parent_id,
-                        section_id=section_id,
-                        breadcrumb=breadcrumb,
-                        content=_UNIT_SEP.join(child.texts),
-                        blocks=blocks_,
-                        ordinal=len(children),
-                        tokenizer=tokenizer,
-                    )
+                chunk = _make_chunk(
+                    chunk_id=child_id,
+                    revision=revision,
+                    level=ChunkLevel.CHILD,
+                    parent_id=parent_id,
+                    section_id=section_id,
+                    breadcrumb=breadcrumb,
+                    content=_UNIT_SEP.join(child.texts),
+                    blocks=blocks_,
+                    ordinal=len(children),
+                    tokenizer=tokenizer,
                 )
+                single_row = any(s.prefix is not None and len(s.rows) == 1 for s in child.segments)
+                if (chunk.token_count or 0) > config.max_tokens and not single_row:
+                    raise ChunkingError(
+                        f"chunk of section {section_id!r} has {chunk.token_count} tokens, "
+                        f"over max_tokens={config.max_tokens}"
+                    )
+                children.append(chunk)
     return ChunkedRevision(
         parents=tuple(parents),
         children=tuple(children),

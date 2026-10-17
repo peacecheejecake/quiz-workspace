@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import itertools
+import re
 from dataclasses import dataclass
 
 import pytest
 from book_core.chunker import (
     ApproxTokenizer,
     ChunkerConfig,
+    ChunkingError,
     Tokenizer,
+    bound_breadcrumb,
     chunk_revision,
     detect_language,
     diff_chunks,
+    oversized_spans,
     split_oversized,
     split_sentences,
 )
@@ -307,3 +311,146 @@ def test_contract_rejects_parent_with_parent() -> None:
     legacy = {k: v for k, v in data.items() if k not in {"level", "ordinal", "token_count"}}
     legacy.pop("breadcrumb")
     assert SearchChunk.model_validate(legacy).level is ChunkLevel.CHILD  # additive defaults
+
+
+# -- regressions (M1.4 review) ------------------------------------------------------------------
+
+
+def test_split_paragraph_spanning_parents_keeps_context_in_each_parent() -> None:
+    config = ChunkerConfig(
+        target_tokens=120, max_tokens=160, overlap_tokens=40, parent_max_tokens=300
+    )
+    revision = _revision([B(BlockType.TEXT, LONG_KO, "s1")])
+    result = chunk_revision(revision, config=config)
+    assert len(result.parents) > 2
+    for parent in result.parents:
+        kids = [c for c in result.children if c.parent_id == parent.id]
+        # The parent is one verbatim slice of the paragraph, starting where its first child
+        # starts (overlap included) and ending where its last child ends.
+        assert parent.content in LONG_KO
+        assert parent.content.startswith(kids[0].content)
+        assert parent.content.endswith(kids[-1].content)
+        assert all(c.content in parent.content for c in kids)
+        sentences = split_sentences(parent.content)
+        assert len(sentences) == len(set(sentences))  # overlap not repeated inside a parent
+        assert (parent.token_count or 0) <= config.parent_max_tokens
+    # A later parent starts with its first child's overlap sentence, which the previous
+    # parent also holds.
+    first, second = result.parents[:2]
+    assert split_sentences(second.content)[0] in split_sentences(first.content)
+
+
+def test_split_table_spanning_parents_repeats_header_once_per_parent() -> None:
+    rows = (("단계", "설명"), *((f"단계 {n}", f"설명 문장 {n} 입니다") for n in range(60)))
+    table = TableContent(rows=rows, header_rows=1)
+    text = "\n".join(" | ".join(r) for r in rows)
+    revision = _revision(
+        [B(BlockType.TEXT, "표 3. 단계 목록", "s1"), B(BlockType.TABLE, text, "s1", table=table)]
+    )
+    config = ChunkerConfig(
+        target_tokens=60, max_tokens=80, overlap_tokens=10, parent_max_tokens=160
+    )
+    result = chunk_revision(revision, config=config)
+    assert len(result.parents) > 2
+    body: list[str] = []
+    for n, parent in enumerate(result.parents):
+        lines = parent.content.split("\n")
+        if n == 0:
+            assert lines[0] == "표 3. 단계 목록"
+            lines = lines[1:]
+        assert lines[0] == "단계 | 설명"  # every parent has the column header ...
+        assert lines.count("단계 | 설명") == 1  # ... exactly once
+        body.extend(lines[1:])
+        assert (parent.token_count or 0) <= config.parent_max_tokens
+    assert body == [" | ".join(r) for r in rows[1:]]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "가" * 150,
+        "물의순환은" * 40 + " 그리고 끝.",
+        "See https://example.com/" + "a1b2" * 120 + "?q=1 for details. Then stop.",
+    ],
+)
+@pytest.mark.parametrize("overlap", [0, 8])
+def test_character_splits_reconstruct_the_canonical_text(text: str, overlap: int) -> None:
+    config = ChunkerConfig(
+        target_tokens=40, max_tokens=60, overlap_tokens=overlap, parent_max_tokens=4000
+    )
+    revision = _revision([B(BlockType.TEXT, text, "s1")])
+    result = chunk_revision(revision, config=config)
+    assert len(result.children) > 2
+    (parent,) = result.parents
+    assert parent.content == text  # byte-faithful, no inserted separators
+    for child in result.children:
+        assert child.content in text
+        assert child.content == child.content.strip()
+        assert (child.token_count or 0) <= config.max_tokens
+    if overlap == 0:  # pieces tile the text exactly, up to the whitespace between them
+        tiled = "".join(c.content for c in result.children)
+        assert re.sub(r"\s+", "", tiled) == re.sub(r"\s+", "", text)
+
+
+def test_oversized_spans_are_contiguous_slices() -> None:
+    text = "앞말 " + "가" * 30 + " 뒷말"
+    spans = oversized_spans(text, (0, len(text)), 8, TOK)
+    assert all(TOK.count(text[s:e]) <= 8 for s, e in spans)
+    assert text[spans[0][0] : spans[-1][1]] == text
+    assert all(a[1] <= b[0] for a, b in itertools.pairwise(spans))
+    assert "".join(text[s:e] for s, e in spans) == text.replace(" ", "")
+
+
+def test_huge_breadcrumb_is_bounded_and_max_tokens_holds() -> None:
+    sections = [
+        Section(id="s1", title="장 " + "나" * 300, level=1),
+        Section(id="s1-1", title="가" * 400, level=2, parent_id="s1"),
+    ]
+    revision = _revision(
+        [B(BlockType.TEXT, LONG_KO, "s1-1"), B(BlockType.TEXT, "짧은 문단이다.", "s1-1")],
+        sections,
+    )
+    config = ChunkerConfig()
+    result = chunk_revision(revision, document_title="책 " * 200, config=config)
+    budget = int(config.target_tokens * config.breadcrumb_max_share)
+    for chunk in result.chunks:
+        assert TOK.count(" > ".join(chunk.breadcrumb)) <= budget
+        assert chunk.breadcrumb[-1].startswith("가")
+        assert chunk.breadcrumb[-1].endswith("…")
+    for child in result.children:
+        assert child.token_count == TOK.count(child.search_text)
+        assert child.token_count <= config.max_tokens
+    assert {b for c in result.children for b in c.block_ids} == {"b0", "b1"}
+
+
+def test_bound_breadcrumb_ellipsizes_longest_then_drops_outermost() -> None:
+    crumb = ("Document title", "1장 " + "가" * 20, "1.1 짧은 절")
+    assert bound_breadcrumb(crumb, 100, TOK) == crumb
+    bounded = bound_breadcrumb(crumb, 20, TOK)
+    assert TOK.count(" > ".join(bounded)) <= 20
+    assert bounded[0] == "Document title"
+    assert bounded[1].startswith("1장 가")
+    assert bounded[1].endswith("…")
+    assert bounded[2] == "1.1 짧은 절"
+    tiny = bound_breadcrumb(crumb, 3, TOK)
+    assert TOK.count(" > ".join(tiny)) <= 3
+    assert tiny[-1].endswith("…")
+    assert bound_breadcrumb(crumb, 0, TOK) == ()
+
+
+class _NewlineHeavyTokenizer:
+    """Not additive: a text with a line break costs double (search_text joins crumb + body)."""
+
+    name = "newline-heavy"
+
+    def count(self, text: str) -> int:
+        n = TOK.count(text)
+        return 2 * n if "\n" in text else n
+
+
+def test_unmeetable_limit_raises_chunking_error() -> None:
+    revision = _revision([B(BlockType.TEXT, LONG_KO, "s1")])
+    with pytest.raises(ChunkingError, match="max_tokens"):
+        chunk_revision(revision, tokenizer=_NewlineHeavyTokenizer())
+    with pytest.raises(ValueError, match="breadcrumb_max_share"):
+        ChunkerConfig(breadcrumb_max_share=1.0)

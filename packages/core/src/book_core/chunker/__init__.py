@@ -10,10 +10,17 @@ from book_core.chunker.diff import ChunkDiff, diff_chunks
 from book_core.chunker.hierarchical import (
     ChunkedRevision,
     ChunkerConfig,
+    ChunkingError,
+    bound_breadcrumb,
     chunk_revision,
     detect_language,
 )
-from book_core.chunker.sentences import split_oversized, split_sentences
+from book_core.chunker.sentences import (
+    oversized_spans,
+    sentence_spans,
+    split_oversized,
+    split_sentences,
+)
 from book_core.chunker.tokens import ApproxTokenizer, Tokenizer
 
 __all__ = [
@@ -21,10 +28,14 @@ __all__ = [
     "ChunkDiff",
     "ChunkedRevision",
     "ChunkerConfig",
+    "ChunkingError",
     "Tokenizer",
+    "bound_breadcrumb",
     "chunk_revision",
     "detect_language",
     "diff_chunks",
+    "oversized_spans",
+    "sentence_spans",
     "split_oversized",
     "split_sentences",
 ]
