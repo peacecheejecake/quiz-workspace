@@ -18,6 +18,7 @@ from book_core.contracts import (
     DraftOrigin,
     PageInfo,
     ParsedDocument,
+    QuestionDraft,
     QuestionType,
     ReviewStatus,
     SourceLocation,
@@ -346,6 +347,110 @@ def test_llm_type_that_contradicts_printed_options_is_rejected() -> None:
     assert "llm_type_rejected" in _codes(draft.validations)
 
 
+def _refine_one(number: int, proposal: LLMQuestion) -> tuple[QuestionDraft, set[str | None]]:
+    result = QuestionExtractor(_scripted({number: proposal})).extract(
+        _document(), document_id=DOC_ID
+    )
+    draft = next(q.draft for q in result.questions if q.number == number)
+    rejected = {v.field for v in draft.validations if v.code == "llm_text_rejected"}
+    return draft, rejected
+
+
+def _truth_question(number: int) -> TruthQuestion:
+    return next(q for q in _truth().questions if q.number == number)
+
+
+def test_llm_option_texts_swapped_between_labels_are_rejected() -> None:
+    good = _llm_output(_truth_question(1))
+    # 응결 <-> 증발 with the labels kept: the printed key (②) would then point at 응결.
+    swapped = [LLMOption(label="①", text="증발"), LLMOption(label="②", text="응결")]
+    draft, rejected = _refine_one(
+        1, good.model_copy(update={"options": swapped + good.options[2:]})
+    )
+    assert rejected == {"options"}
+    assert [(o.id, o.text) for o in draft.options[:2]] == [("opt-1", "응결"), ("opt-2", "증발")]
+    assert draft.correct_option_ids == ("opt-2",)
+
+
+def test_llm_relabelled_options_are_rejected() -> None:
+    good = _llm_output(_truth_question(1))
+    relabelled = [LLMOption(label="②", text="응결"), LLMOption(label="①", text="증발")]
+    draft, rejected = _refine_one(
+        1, good.model_copy(update={"options": relabelled + good.options[2:]})
+    )
+    assert rejected == {"options"}
+    assert draft.options[1].text == "증발"
+
+
+def test_llm_text_moved_from_option_to_stem_is_rejected() -> None:
+    q1 = _truth_question(1)
+    good = _llm_output(q1)
+    moved = good.model_copy(
+        update={
+            "stem": q1.stem + " 응결",
+            "options": [LLMOption(label="①", text=""), *good.options[1:]],
+        }
+    )
+    draft, rejected = _refine_one(1, moved)
+    assert rejected == {"stem", "options"}
+    assert draft.stem == q1.stem
+    assert draft.options[0].text == "응결"
+
+
+def test_llm_partially_rewritten_option_text_is_rejected() -> None:
+    good = _llm_output(_truth_question(5))
+    rewritten = [LLMOption(label="②", text="병원성 미생물을 없앤다.")]
+    draft, rejected = _refine_one(
+        5, good.model_copy(update={"options": good.options[:1] + rewritten + good.options[2:]})
+    )
+    assert rejected == {"options"}
+    assert draft.options[1].text == "병원성 미생물을 줄인다."
+
+
+def _single_question_llm(stem: str, options: list[tuple[str, str]]) -> QuestionDraft:
+    client = FakeLLMClient()
+    client.script(
+        "questions.extract",
+        LLMQuestion(
+            question_type="MCQ",
+            multi_select=False,
+            stem=stem,
+            options=[LLMOption(label=label, text=text) for label, text in options],
+            answer=None,
+        ),
+    )
+    doc = _doc(["1. 물이 기체가 되는 과정은? 가. 응결 나. 증발"])
+    (draft,) = QuestionExtractor(client).extract(doc, document_id="d").drafts
+    return draft
+
+
+def test_llm_split_of_unrecognised_options_is_accepted_when_it_reproduces_the_print() -> None:
+    draft = _single_question_llm("물이 기체가 되는 과정은?", [("가", "응결"), ("나", "증발")])
+    assert draft.question_type is QuestionType.MCQ
+    assert [(o.id, o.text) for o in draft.options] == [("opt-가", "응결"), ("opt-나", "증발")]
+    assert "llm_text_rejected" not in _codes(draft.validations)
+
+
+@pytest.mark.parametrize(
+    ("stem", "options"),
+    [
+        ("물이 기체가 되는 과정은?", [("가", "증발"), ("나", "응결")]),
+        ("물이 기체가 되는 과정은? 가. 응결", [("나", "증발")]),
+        ("물이 기체가 되는 과정은?", [("가", "응결")]),
+        ("물이 기체가 되는 과정은?", [("가", "응결"), ("나", "증발함")]),
+    ],
+    ids=["swapped", "option-in-stem", "dropped", "rewritten"],
+)
+def test_llm_split_that_does_not_reproduce_the_print_is_rejected(
+    stem: str, options: list[tuple[str, str]]
+) -> None:
+    draft = _single_question_llm(stem, options)
+    assert draft.options == ()
+    assert draft.question_type is QuestionType.SHORT_ANSWER
+    assert draft.stem == "물이 기체가 되는 과정은? 가. 응결 나. 증발"
+    assert "llm_text_rejected" in _codes(draft.validations)
+
+
 # ------------------------------------------------------------------------------------------
 # Layout variants (synthetic text documents)
 
@@ -502,6 +607,75 @@ def test_answer_key_table_and_layout_essay() -> None:
     assert q1.correct_option_ids == ("opt-2",)
     assert q2.question_type is QuestionType.ESSAY  # large blank area before the next block
     assert q2.accepted_answers == ("가",)
+
+
+Rows = tuple[tuple[str, ...], ...]
+
+
+def _table_answers(rows: Rows) -> tuple[list[str | None], set[str]]:
+    """Answers of three short-answer questions read from an answer-key table."""
+    loc = (SourceLocation(page=1),)
+    questions = [
+        Block(id=f"q{n}", type=BlockType.TEXT, text=f"{n}. 값을 쓰시오.", locations=loc)
+        for n in (1, 2, 3)
+    ]
+    doc = ParsedDocument(
+        source_path="t.pdf",
+        source_sha256="3" * 64,
+        parser_version="test",
+        pages=(PageInfo(page=1, width=595.0, height=842.0),),
+        blocks=(
+            *questions,
+            Block(id="h", type=BlockType.HEADING, text="정답", locations=loc),
+            Block(
+                id="t",
+                type=BlockType.TABLE,
+                text="\n".join(" | ".join(row) for row in rows),
+                locations=loc,
+                table=TableContent(rows=rows),
+            ),
+        ),
+    )
+    result = QuestionExtractor().extract(doc, document_id="t")
+    answers = [d.accepted_answers[0] if d.accepted_answers else None for d in result.drafts]
+    return answers, _codes(result.warnings)
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        (("1", "3"), ("2", "4"), ("3", "1")),  # one question per row: number -> answer
+        (("번호", "정답"), ("1", "3"), ("2", "4"), ("3", "1")),
+        (("1", "2", "3"), ("3", "4", "1")),  # one question per column
+        (("번호", "1", "2", "3"), ("정답", "3", "4", "1")),
+        (("1", "3", "3", "1"), ("2", "4", "", "")),  # two number/answer column pairs
+    ],
+    ids=[
+        "numeric-vertical",
+        "labelled-vertical",
+        "numeric-horizontal",
+        "labelled-horizontal",
+        "vertical-two-pairs",
+    ],
+)
+def test_answer_table_orientation(rows: Rows) -> None:
+    answers, warnings = _table_answers(rows)
+    assert answers == ["3", "4", "1"]
+    assert "answer_key_table_ambiguous" not in warnings
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        (("1", "2"), ("3", "4")),  # 1->2, 3->4 by rows or 1->3, 2->4 by columns
+        (("1", "2"), ("2", "3")),
+        (("번호", "정답"), ("정답", "1")),  # labels both across and down
+    ],
+)
+def test_ambiguous_answer_table_gives_no_answers(rows: Rows) -> None:
+    answers, warnings = _table_answers(rows)
+    assert answers == [None, None, None]
+    assert "answer_key_table_ambiguous" in warnings
 
 
 # ------------------------------------------------------------------------------------------

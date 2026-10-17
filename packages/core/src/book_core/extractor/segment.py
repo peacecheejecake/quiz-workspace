@@ -20,7 +20,6 @@ Nothing here invents content: every stem/option/answer string is copied from the
 
 from __future__ import annotations
 
-import itertools
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -119,6 +118,7 @@ class Segmentation:
     answer_key: list[AnswerKeyEntry]
     loose_figures: list[RawFigure]
     unparsed_answer_lines: int = 0
+    ambiguous_answer_tables: int = 0
 
 
 def _norm_label(label: str) -> str:
@@ -149,29 +149,130 @@ def _answer_entries(line: SourceLine) -> list[AnswerKeyEntry]:
     ]
 
 
-def _table_answer_entries(block: Block, index: int) -> list[AnswerKeyEntry]:
+_NUMBER_LABEL = re.compile(r"^(?:번호|문항|문제|no\.?|number|q)$", re.IGNORECASE)
+_ANSWER_LABEL = re.compile(r"^(?:정답|답|answer|answers|ans\.?)$", re.IGNORECASE)
+
+
+def _cell_number(cell: str) -> int | None:
+    cell = cell.strip().rstrip(".번").strip()
+    return int(cell) if cell.isdigit() else None
+
+
+def _increasing(cells: Sequence[str], after: int) -> int | None:
+    """Last number when the non-empty ``cells`` are all numbers strictly increasing from
+    ``after`` (trailing blanks allowed), else ``None``."""
+    values = [c for c in cells if c.strip()]
+    if not values or any(c.strip() == "" for c in cells[: len(values)]):
+        return None
+    last = after
+    for cell in values:
+        number = _cell_number(cell)
+        if number is None or number <= last:
+            return None
+        last = number
+    return last
+
+
+def _pairs_vertical(
+    rows: Sequence[Sequence[str]], number_cols: Sequence[int]
+) -> list[tuple[str, str]]:
+    return [
+        (row[c], row[c + 1])
+        for c in number_cols
+        for row in rows
+        if c + 1 < len(row) and row[c].strip() and row[c + 1].strip()
+    ]
+
+
+def _pairs_horizontal(
+    rows: Sequence[Sequence[str]], number_rows: Sequence[int], first_col: int
+) -> list[tuple[str, str]]:
+    return [
+        (rows[r][c], rows[r + 1][c])
+        for r in number_rows
+        if r + 1 < len(rows)
+        for c in range(first_col, len(rows[r]))
+        if rows[r][c].strip() and rows[r + 1][c].strip()
+    ]
+
+
+def _table_orientation(
+    rows: Sequence[Sequence[str]],
+) -> tuple[str, list[tuple[str, str]]]:
+    """``("vertical" | "horizontal", (number, answer) pairs)``, ``("ambiguous", [])`` or
+    ``("unknown", [])``.
+
+    Header labels (번호/정답, No./Answer) decide first: labels across the first row mean one
+    question per row, labels down the first column one question per column. Without labels the
+    question-number sequence decides: number columns (every other column) increasing down the
+    rows versus number rows (every other row) increasing across. When both readings are
+    consistent the table is ambiguous and nothing is applied (wrong answers are worse than none).
+    """
+    width = len(rows[0])
+    header = rows[0]
+    first_col = [row[0] for row in rows]
+    by_row = any(_NUMBER_LABEL.match(c.strip()) for c in header) and any(
+        _ANSWER_LABEL.match(c.strip()) for c in header
+    )
+    by_col = any(_NUMBER_LABEL.match(c.strip()) for c in first_col) and any(
+        _ANSWER_LABEL.match(c.strip()) for c in first_col
+    )
+    if by_row and not by_col:
+        cols = [i for i, c in enumerate(header) if _NUMBER_LABEL.match(c.strip())]
+        cols = [c for c in cols if c + 1 < width and _ANSWER_LABEL.match(header[c + 1].strip())]
+        return ("vertical", _pairs_vertical(rows[1:], cols)) if cols else ("unknown", [])
+    if by_col and not by_row:
+        number_rows = [
+            i
+            for i, c in enumerate(first_col)
+            if _NUMBER_LABEL.match(c.strip())
+            and i + 1 < len(rows)
+            and _ANSWER_LABEL.match(first_col[i + 1].strip())
+        ]
+        if not number_rows:
+            return "unknown", []
+        return "horizontal", _pairs_horizontal(rows, number_rows, 1)
+    if by_row and by_col:
+        return "ambiguous", []
+
+    vertical = width % 2 == 0
+    last = 0
+    for c in range(0, width, 2):
+        found = _increasing([row[c] for row in rows], last) if vertical else None
+        if found is None:
+            vertical = False
+            break
+        last = found
+    horizontal = len(rows) % 2 == 0
+    last = 0
+    for r in range(0, len(rows), 2):
+        found = _increasing(rows[r], last) if horizontal else None
+        if found is None:
+            horizontal = False
+            break
+        last = found
+    if vertical and horizontal:
+        return "ambiguous", []
+    if vertical:
+        return "vertical", _pairs_vertical(rows, range(0, width, 2))
+    if horizontal:
+        return "horizontal", _pairs_horizontal(rows, range(0, len(rows), 2), 0)
+    return "unknown", []
+
+
+def _table_answer_entries(block: Block, index: int) -> tuple[list[AnswerKeyEntry], bool]:
+    """Answer-key entries of a table block and whether its orientation was ambiguous."""
     if block.table is None:
-        return []
+        return [], False
     rows = [[cell.strip() for cell in row] for row in block.table.rows]
-    entries: list[AnswerKeyEntry] = []
+    orientation, pairs = _table_orientation(rows)
     line = SourceLine(text=block.text, block=block, block_index=index)
-    for upper, lower in itertools.pairwise(rows):
-        cells = [c.rstrip(".번") for c in upper]
-        answers = list(lower)
-        if cells and not cells[0].isdigit():  # leading label column ("번호" / "정답")
-            cells, answers = cells[1:], answers[1:]
-        if any(cells) and all(c.isdigit() for c in cells if c):
-            entries += [
-                AnswerKeyEntry(number=int(n), text=a, line=line)
-                for n, a in zip(cells, answers, strict=False)
-                if n and a
-            ]
-    if entries:
-        return entries
-    for row in rows:
-        if len(row) >= 2 and row[0].rstrip(".번").isdigit() and row[1]:
-            entries.append(AnswerKeyEntry(number=int(row[0].rstrip(".번")), text=row[1], line=line))
-    return entries
+    entries = [
+        AnswerKeyEntry(number=number, text=answer.strip(), line=line)
+        for raw_number, answer in pairs
+        if (number := _cell_number(raw_number)) is not None
+    ]
+    return entries, orientation == "ambiguous"
 
 
 def _split_inline_options(text: str) -> tuple[str, list[tuple[str, str]]]:
@@ -193,6 +294,7 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
     current: RawQuestion | None = None
     seen_numbers: set[int] = set()
     unparsed = 0
+    ambiguous_tables = 0
 
     for index, block, lines in _lines(blocks):
         if block.type is BlockType.IMAGE:
@@ -207,9 +309,12 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
             continue
         if block.type is BlockType.TABLE:
             if in_answer_key:
-                found = _table_answer_entries(block, index)
+                found, ambiguous = _table_answer_entries(block, index)
                 answer_key += found
-                unparsed += 0 if found else 1
+                if ambiguous:
+                    ambiguous_tables += 1
+                elif not found:
+                    unparsed += 1
             elif current is not None:
                 current.block_indices.append(index)
             continue
@@ -303,6 +408,7 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
         answer_key=answer_key,
         loose_figures=loose_figures,
         unparsed_answer_lines=unparsed,
+        ambiguous_answer_tables=ambiguous_tables,
     )
 
 

@@ -15,6 +15,7 @@ its pre-extraction and gets a warning.
 from __future__ import annotations
 
 import logging
+import re
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
@@ -134,7 +135,9 @@ class QuestionExtractor:
     ) -> QuestionExtraction:
         blocks = document.blocks
         seg = segment(blocks)
-        warnings = _document_warnings(seg.questions, seg.answer_key, seg.unparsed_answer_lines)
+        warnings = _document_warnings(
+            seg.questions, seg.answer_key, seg.unparsed_answer_lines, seg.ambiguous_answer_tables
+        )
 
         questions: list[ExtractedQuestion] = []
         calls: list[LLMCallInfo] = []
@@ -293,7 +296,13 @@ def _options(raw: RawQuestion) -> tuple[list[tuple[str, str]], list[ValidationIs
     return options, issues
 
 
+_HANGUL_LABELS = "가나다라마바사아자차"
+
+
 def _is_sequence(keys: Sequence[str]) -> bool:
+    """Labels run 1, 2, 3... / A, B, C... / 가, 나, 다... from the first label."""
+    if keys and all(k in _HANGUL_LABELS for k in keys):
+        return "".join(keys) == _HANGUL_LABELS[: len(keys)]
     if all(k.isdigit() for k in keys):
         return [int(k) for k in keys] == list(range(1, len(keys) + 1))
     if all(len(k) == 1 and k.isalpha() for k in keys):
@@ -442,7 +451,7 @@ def _refine(
             )
         )
         return pre, False, None
-    merged = _merge(pre, result.output, source, entries)
+    merged = _merge(pre, result.output, entries)
     merged.generator = GeneratorInfo(model=result.info.model, prompt_version=request.prompt_version)
     return merged, True, result.info
 
@@ -450,52 +459,11 @@ def _refine(
 def _merge(
     pre: _Candidate,
     proposal: LLMQuestion,
-    source_lines: Sequence[str],
     entries: Sequence[AnswerKeyEntry],
 ) -> _Candidate:
-    source = loose_text("\n".join(source_lines))
     issues = list(pre.issues)
-
-    def grounded(text: str) -> bool:
-        return bool(loose_text(text)) and loose_text(text) in source
-
-    stem = pre.stem
-    if grounded(proposal.stem):
-        stem = proposal.stem.strip()
-    elif proposal.stem.strip() != pre.stem:
-        issues.append(
-            issue(
-                "llm_text_rejected",
-                "The LLM stem is not in the source text; the printed stem was kept.",
-                field="stem",
-            )
-        )
-
-    options = pre.options
-    if proposal.options:
-        keys = [canonical_key(o.label) for o in proposal.options]
-        if (
-            all(keys)
-            and len(set(keys)) == len(keys)
-            and all(grounded(o.text) for o in proposal.options)
-        ):
-            options = [(k, o.text.strip()) for k, o in zip(keys, proposal.options, strict=True)]
-        else:
-            issues.append(
-                issue(
-                    "llm_text_rejected",
-                    "LLM options are not in the source text; the printed options were kept.",
-                    field="options",
-                )
-            )
-    elif pre.options:
-        issues.append(
-            issue(
-                "llm_text_rejected",
-                "The LLM dropped printed options; the printed options were kept.",
-                field="options",
-            )
-        )
+    stem, options, text_issues = _verified_text(pre, proposal)
+    issues += text_issues
 
     question_type = QuestionType(proposal.question_type)
     if (question_type is QuestionType.MCQ) != bool(options):
@@ -550,6 +518,97 @@ def _merge(
         accepted_answers=accepted,
         issues=issues,
     )
+
+
+def _verified_text(
+    pre: _Candidate, proposal: LLMQuestion
+) -> tuple[str, list[tuple[str, str]], list[ValidationIssue]]:
+    """Stem and options from the LLM only where they match the printed spans.
+
+    Every label-text pair must be the printed one: with options found by the pre-extractor,
+    each LLM option must have the same label, in the same order, with the same text as that
+    option's printed span (whitespace/line breaks aside), and the stem must equal the printed
+    stem span. So swapped texts, text moved between stem and options and rewritten text are all
+    rejected (the printed version is kept, with a warning). When the pre-extractor found no
+    options, the LLM split is accepted only if stem + label + text + ... reproduces the printed
+    question text exactly.
+    """
+    issues: list[ValidationIssue] = []
+    keys = [canonical_key(o.label) for o in proposal.options]
+    keys_ok = all(keys) and len(set(keys)) == len(keys)
+    llm_stem = proposal.stem.strip()
+
+    if not pre.options and proposal.options:
+        llm_options = [(k, o.text.strip()) for k, o in zip(keys, proposal.options, strict=True)]
+        # The labels must form a complete sequence from the first label, so an option cannot
+        # be folded into the stem (``stem 가. x`` + ``나. y`` also reproduces the print).
+        if keys_ok and _is_sequence(keys) and _reproduces(pre.stem, llm_stem, llm_options):
+            return llm_stem, llm_options, issues
+        issues.append(
+            issue(
+                "llm_text_rejected",
+                "The LLM split of stem and options does not reproduce the printed question; "
+                "the printed text was kept.",
+                field="options",
+            )
+        )
+        return pre.stem, pre.options, issues
+
+    stem = pre.stem
+    if llm_stem and loose_text(llm_stem) == loose_text(pre.stem):
+        stem = llm_stem
+    else:
+        issues.append(
+            issue(
+                "llm_text_rejected",
+                "The LLM stem differs from the printed stem; the printed stem was kept.",
+                field="stem",
+            )
+        )
+    if not pre.options:
+        return stem, pre.options, issues
+    if not proposal.options:
+        issues.append(
+            issue(
+                "llm_text_rejected",
+                "The LLM dropped printed options; the printed options were kept.",
+                field="options",
+            )
+        )
+    elif not (
+        keys_ok
+        and keys == [k for k, _ in pre.options]
+        and all(
+            loose_text(o.text) == loose_text(text)
+            for o, (_, text) in zip(proposal.options, pre.options, strict=True)
+        )
+    ):
+        issues.append(
+            issue(
+                "llm_text_rejected",
+                "LLM options do not match the printed label-text pairs; "
+                "the printed options were kept.",
+                field="options",
+            )
+        )
+    return stem, pre.options, issues
+
+
+def _reproduces(printed: str, stem: str, options: Sequence[tuple[str, str]]) -> bool:
+    """Whether ``stem`` followed by each option's printed marker and text is exactly
+    ``printed`` (compared without whitespace, NFKC: ``①`` reads as ``1``)."""
+    target = loose_text(printed)
+    pos = len(loose_text(stem))
+    if pos == 0 or not target.startswith(loose_text(stem)):
+        return False
+    for key, text in options:
+        marker = re.compile(rf"\(?{re.escape(key)}[.)]?", re.IGNORECASE)
+        match = marker.match(target, pos)
+        body = loose_text(text)
+        if match is None or not body or not target.startswith(body, match.end()):
+            return False
+        pos = match.end() + len(body)
+    return pos == len(target)
 
 
 def _llm_answer_matches_key(
@@ -649,7 +708,10 @@ def _dedupe(issues: Sequence[ValidationIssue]) -> list[ValidationIssue]:
 
 
 def _document_warnings(
-    questions: Sequence[RawQuestion], answer_key: Sequence[AnswerKeyEntry], unparsed: int
+    questions: Sequence[RawQuestion],
+    answer_key: Sequence[AnswerKeyEntry],
+    unparsed: int,
+    ambiguous_tables: int = 0,
 ) -> list[ValidationIssue]:
     warnings: list[ValidationIssue] = []
     if not questions:
@@ -676,6 +738,14 @@ def _document_warnings(
                 "The answer key lists numbers without a question: "
                 + ", ".join(map(str, unknown))
                 + ".",
+            )
+        )
+    if ambiguous_tables:
+        warnings.append(
+            issue(
+                "answer_key_table_ambiguous",
+                f"{ambiguous_tables} answer key table(s) can be read row- or column-wise; "
+                "no answers were taken from them.",
             )
         )
     if unparsed:
