@@ -364,7 +364,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | P0.5 web stub routes | ✅ | c28cc7a · 40a9aed · d074397 | P2(root .env 미로딩) → 반영 → P1(확장자 없는 config import, native TS loader) → 반영 → 지적 없음. `agentRules: false`(next dev가 apps/web/AGENTS.md 생성 방지) |
 | P0.9 DB baseline | ✅ | 0e1d8c0 (merge a78f172) · ac9fa6a | P2(quiz_api LOGIN 시 db-test 실패) → 반영 → 지적 없음 |
 | M1.1 PDF fixtures | ✅ | eea3957 | 지적 없음. Noto Sans KR subset(OFL) 임베드 |
-| P0.4 UI kit | ◐ | 66f6466 (merge 7bc9440, React 19.2.8로 정렬) | P1(RSC에서 client boundary 누락)·P2(숨김 요소로 Tab handoff) 수정 중 |
+| P0.4 UI kit | ✅ | 66f6466 (merge 7bc9440, React 19.2.8로 정렬) · 12158b7 | P1(RSC client boundary 누락)·P2(숨김 요소로 Tab handoff) → 반영(RSC build fixture 추가) → 지적 없음 |
 | P0.7 worker | ◐ | 981a1bf (merge 3cb0c83) | P1×2(publish 실패·hard timeout 시 job 고착)·P2(취소 시 cleanup 누락) + API redaction 공백 수정 중 |
 | A1.1 Supabase Auth local | ✅ | e8768f3 | 지적 없음 |
 | M1.2 | ◐ | — | 진행 중 |
