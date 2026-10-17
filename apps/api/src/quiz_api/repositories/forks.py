@@ -25,6 +25,7 @@ from datetime import datetime
 from typing import Any, Literal, cast
 
 from sqlalchemy import func, insert, select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from quiz_api.repositories.search import SearchRepository
@@ -34,6 +35,15 @@ FORK_JOB_TYPE = "workspace.fork"
 FORK_JOB_SCHEMA_VERSION = 1
 # 2: questions carry their pinned sources (20261018200000_workspace_fork_source_snapshot.sql).
 MANIFEST_VERSION = 2
+
+# `workspace_forks_manifest_size`: pg_column_size(source_snapshot_manifest) <= 4 MiB.
+MAX_MANIFEST_BYTES = 4 * 1024 * 1024
+_MANIFEST_CHECK = "workspace_forks_manifest_size"
+
+
+class ForkTooLargeError(Exception):
+    """The pinned snapshot does not fit the manifest column (route: 409 fork-too-large)."""
+
 
 ForkStatus = Literal["PENDING", "COPYING", "COMPLETED", "FAILED", "CANCELLED"]
 
@@ -63,10 +73,6 @@ class Snapshot:
                 for q in self.questions
             ],
         )
-
-    def encoded_size(self) -> int:
-        """Characters of the pinned entries as JSON (an upper bound of the stored size)."""
-        return len(json.dumps(self.manifest_entries(), separators=(",", ":")))
 
 
 @dataclass(frozen=True)
@@ -176,6 +182,14 @@ class ForkRepository:
             "documents": pinned_documents,
             "questions": pinned_questions,
         }
+        # Measured as the DB measures it: the CHECK sees the uncompressed JSONB datum, whose size
+        # is not bounded by the length of compact JSON text (binary headers, offsets, numerics).
+        size = self._session.execute(
+            text("select pg_column_size(cast(:manifest as jsonb))"),
+            {"manifest": json.dumps(manifest)},
+        ).scalar_one()
+        if size > MAX_MANIFEST_BYTES:
+            raise ForkTooLargeError
         self._session.execute(
             insert(async_jobs).values(
                 id=job_id,
@@ -187,7 +201,41 @@ class ForkRepository:
                 payload={"fork_id": str(fork_id)},
             )
         )
-        row = self._session.execute(
+        try:
+            with self._session.begin_nested():
+                row = self._insert_fork(
+                    fork_id=fork_id,
+                    source_workspace_id=source_workspace_id,
+                    source_workspace_name=source_workspace_name,
+                    share_link_id=share_link_id,
+                    user_id=user_id,
+                    name=name,
+                    job_id=job_id,
+                    manifest=manifest,
+                )
+        except IntegrityError as exc:
+            # Defence in depth: the size check above and the DB must never disagree, but if they
+            # do the client still gets 409 fork-too-large rather than a 500.
+            if _MANIFEST_CHECK in str(exc.orig):
+                raise ForkTooLargeError from None
+            raise
+        job = self.job(job_id)
+        assert job is not None  # noqa: S101 - inserted above
+        return _record(row), job
+
+    def _insert_fork(
+        self,
+        *,
+        fork_id: uuid.UUID,
+        source_workspace_id: uuid.UUID,
+        source_workspace_name: str,
+        share_link_id: uuid.UUID,
+        user_id: uuid.UUID,
+        name: str,
+        job_id: uuid.UUID,
+        manifest: dict[str, Any],
+    ) -> Any:
+        return self._session.execute(
             insert(workspace_forks)
             .values(
                 id=fork_id,
@@ -205,9 +253,6 @@ class ForkRepository:
             )
             .returning(*_COLUMNS)
         ).one()
-        job = self.job(job_id)
-        assert job is not None  # noqa: S101 - inserted above
-        return _record(row), job
 
     def get_for_user(self, fork_id: uuid.UUID, user_id: uuid.UUID) -> ForkRecord | None:
         """The caller's own fork; someone else's is indistinguishable from a missing one."""

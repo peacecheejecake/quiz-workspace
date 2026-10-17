@@ -21,6 +21,8 @@ import httpx
 import psycopg
 import pytest
 from qdrant_client import models as qm
+from quiz_api.errors import ProblemType
+from quiz_api.repositories import forks as fork_repository
 from quiz_worker.errors import JobError
 from quiz_worker.fork_job import (
     WorkspaceForkPayloadV1,
@@ -482,3 +484,78 @@ def test_question_sources_are_pinned_at_request_time(seed: Any, worker_engine: E
     (copied,) = recipient.list_questions(str(done["target_workspace_id"]))
     assert [(s["page_start"], s["page_end"]) for s in copied["sources"]] == [(1, 1)]
     assert copied["revision"]["stem"] == "S3a 출처 고정 문제"
+
+
+# --- manifest size (measured as JSONB) ----------------------------------------------------------
+
+
+def _heavy_question(seed: Any, owner: Any, ws_id: str, sources: int) -> None:
+    """A CONFIRMED question whose sources carry ~30 kB of (incompressible) locations each."""
+    question = owner.create_question(ws_id, "S3a 큰 출처 문제")
+    seed._admin(
+        "insert into public.question_sources (workspace_id, question_id, locations) "
+        "select %s, %s, jsonb_build_array(jsonb_build_object('page', 1, 'note', "
+        "(select string_agg(md5(random()::text || n::text || i::text), '') "
+        "from generate_series(1, 900) i))) from generate_series(1, %s) n",
+        (ws_id, question["id"], sources),
+    )
+
+
+def _start(seed: Any, recipient: Any, link: dict[str, Any], cookie: str) -> Any:
+    return recipient.send(
+        "POST",
+        f"/shared/{link['id']}/forks",
+        {"name": "S3a 큰 fork"},
+        cookie=cookie,
+        origin=seed.web_origin(),
+        headers={"Idempotency-Key": str(uuid.uuid4())},
+    )
+
+
+def _fork_jobs(seed: Any, user_id: str) -> int:
+    rows = seed._admin(
+        "select count(*) from public.async_jobs where created_by = %s and job_type = %s",
+        (user_id, "workspace.fork"),
+    )
+    return int(rows[0][0])
+
+
+def test_the_manifest_limit_is_the_jsonb_size_at_its_exact_boundary(
+    seed: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    owner, ws, link, recipient, cookie = _shared(seed, "s3a-size")
+    _heavy_question(seed, owner, ws["id"], sources=3)
+    monkeypatch.setattr(fork_repository, "MAX_MANIFEST_BYTES", 10**9)
+    first = _start(seed, recipient, link, cookie)
+    seed.assert_status(first, 202, "fork start")
+    ((size,),) = seed._admin(
+        "select pg_column_size(source_snapshot_manifest::text::jsonb) "
+        "from public.workspace_forks where id = %s",
+        (first.json()["id"],),
+    )
+    # Every manifest of this snapshot has the same size (fresh uuids are fixed-length).
+    monkeypatch.setattr(fork_repository, "MAX_MANIFEST_BYTES", int(size) - 1)
+    over = _start(seed, recipient, link, cookie)
+    assert (over.status_code, over.json()["type"]) == (409, ProblemType.FORK_TOO_LARGE)
+    monkeypatch.setattr(fork_repository, "MAX_MANIFEST_BYTES", int(size))
+    seed.assert_status(_start(seed, recipient, link, cookie), 202, "fork at the limit")
+    assert _fork_jobs(seed, recipient.user.id) == 2, "the refused fork left a job behind"
+
+
+@pytest.mark.parametrize("guard", ["measured", "db_check"])
+def test_a_location_heavy_snapshot_over_4_mib_is_409_not_500(
+    seed: Any, monkeypatch: pytest.MonkeyPatch, guard: str
+) -> None:
+    owner, ws, link, recipient, cookie = _shared(seed, f"s3a-big-{guard}")
+    # ~150 x 30 kB of locations: more than the 4 MiB manifest column check.
+    _heavy_question(seed, owner, ws["id"], sources=150)
+    if guard == "db_check":
+        # Pretend the pre-check missed it: the CHECK violation is still a 409.
+        monkeypatch.setattr(fork_repository, "MAX_MANIFEST_BYTES", 10**9)
+    res = _start(seed, recipient, link, cookie)
+    assert (res.status_code, res.json()["type"]) == (409, ProblemType.FORK_TOO_LARGE)
+    assert _fork_jobs(seed, recipient.user.id) == 0
+    rows = seed._admin(
+        "select count(*) from public.workspace_forks where forked_by = %s", (recipient.user.id,)
+    )
+    assert rows == [(0,)]
