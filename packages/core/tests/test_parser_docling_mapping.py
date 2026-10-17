@@ -6,7 +6,9 @@ real-model quality tests are ``test_parser_docling.py`` (marker ``models``).
 
 from __future__ import annotations
 
+import importlib.util
 import re
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +32,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 WIDTH, HEIGHT = 600.0, 800.0
+CORE_PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 BLOCK_ID = re.compile(r"^p\d+-b\d{3}-[0-9a-f]{10}$")
 SPLIT_TEXT = "Water keeps moving and the total amount stays constant."
 SPLIT_AT = SPLIT_TEXT.index(" the total")
@@ -285,15 +288,48 @@ def test_text_layer_detection(tmp_path: Path) -> None:
     assert text_layer_pages(text.read_bytes()) == [True, True]
 
 
+def _engine_modules(monkeypatch: pytest.MonkeyPatch, *, present: bool) -> None:
+    """Simulate (un)importable OCR engine modules, independent of the installed extras."""
+    real_find_spec = importlib.util.find_spec
+
+    def find_spec(name: str, *args: Any, **kwargs: Any) -> object:
+        if name in docling_adapter.OCR_ENGINE_MODULES:
+            return object() if present else None
+        return real_find_spec(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib.util, "find_spec", find_spec)
+
+
+def test_ocr_engine_availability_follows_importability(monkeypatch: pytest.MonkeyPatch) -> None:
+    _engine_modules(monkeypatch, present=False)
+    assert not docling_adapter.ocr_engine_available()
+    _engine_modules(monkeypatch, present=True)
+    assert docling_adapter.ocr_engine_available()
+
+
 def test_ocr_requested_without_engine_is_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(docling_adapter, "ocr_engine_available", lambda: False)
+    _engine_modules(monkeypatch, present=False)
     with pytest.raises(ParserError, match="RapidOCR"):
         DoclingParser(ParserOptions(ocr=True))
+    DoclingParser()  # OCR off never needs the engine
 
 
-def test_default_install_has_no_ocr_engine() -> None:
-    # The `ocr` extra is not part of the dev install; if this changes, revisit the default.
-    assert not docling_adapter.ocr_engine_available()
+def test_ocr_engine_ships_only_with_the_ocr_extra() -> None:
+    """RapidOCR/onnxruntime are reachable only via the opt-in ``ocr`` extra."""
+    project = tomllib.loads(CORE_PYPROJECT.read_text(encoding="utf-8"))["project"]
+    extras: dict[str, list[str]] = project["optional-dependencies"]
+
+    def mentions_engine(requirement: str) -> bool:
+        return (
+            re.search(r"rapidocr|onnxruntime|feat-ocr|easyocr|tesserocr", requirement) is not None
+        )
+
+    assert not any(mentions_engine(r) for r in project["dependencies"])
+    assert not any(mentions_engine(r) for r in extras["parser"])
+    assert any("feat-ocr-rapidocr-onnx" in r for r in extras["ocr"])
+    root = tomllib.loads((CORE_PYPROJECT.parents[2] / "pyproject.toml").read_text(encoding="utf-8"))
+    dev = root["dependency-groups"]["dev"]
+    assert not any(r.startswith("book-core[") and "ocr" in r for r in dev)
 
 
 def test_ocr_runs_only_when_enabled_needed_and_available(
