@@ -99,6 +99,11 @@ export function SearchScreen({
 
   const controllerRef = useRef<AbortController | null>(null);
   const generationRef = useRef(0);
+  /**
+   * The address-bar search waiting for its chapter check. Dropped by any newer search and by any
+   * user interaction with the form, so it can never replace what the user did meanwhile.
+   */
+  const pendingInitialRef = useRef<{ documentId: string; generation: number } | null>(null);
 
   const run = useCallback(
     async (q: SearchQuery) => {
@@ -106,6 +111,7 @@ export function SearchScreen({
       const controller = new AbortController();
       controllerRef.current = controller;
       const generation = ++generationRef.current;
+      pendingInitialRef.current = null; // any search supersedes a deferred one
       setSubmitted(q);
       setPanelOpen(false);
       setResults((current) => ({
@@ -152,12 +158,12 @@ export function SearchScreen({
   // a chapter filter it waits until the chapter is known to exist (see below), so the scope
   // that is searched is always the scope on screen.
   const initialRef = useRef(initial);
-  const pendingInitialRef = useRef(false);
   useEffect(() => {
     const q = initialRef.current;
     if (!q.query) return;
-    if (q.documentId && q.chapterId) pendingInitialRef.current = true;
-    else void run(q);
+    if (q.documentId && q.chapterId) {
+      pendingInitialRef.current = { documentId: q.documentId, generation: generationRef.current };
+    } else void run(q);
     return () => controllerRef.current?.abort();
   }, [run]);
 
@@ -169,8 +175,9 @@ export function SearchScreen({
     const settle = (items: readonly OutlineItem[] | null) => {
       if (controller.signal.aborted) return;
       setLoadedChapters(items ? { documentId, items } : { documentId, failed: true });
-      const kept = reconcileChapter(chapterIdRef.current, items);
-      const stale = kept !== chapterIdRef.current;
+      const selectedChapter = chapterIdRef.current;
+      const kept = reconcileChapter(selectedChapter, items);
+      const stale = kept !== selectedChapter;
       if (stale) {
         chapterIdRef.current = null;
         setChapterId(null);
@@ -180,13 +187,19 @@ export function SearchScreen({
             : '장 목록을 불러오지 못해 장 필터를 해제했습니다.',
         );
       }
-      if (pendingInitialRef.current) {
-        pendingInitialRef.current = false;
+      const pending = pendingInitialRef.current;
+      if (
+        pending &&
+        pending.documentId === documentId &&
+        pending.generation === generationRef.current
+      ) {
         void run({ ...initialRef.current, chapterId: kept });
       } else if (stale) {
+        // Only the latest search, and only if it used exactly this chapter, is narrowed.
         const last = submittedRef.current;
-        if (last?.chapterId) void run({ ...last, chapterId: null });
-        else {
+        if (last && last.documentId === documentId && last.chapterId === selectedChapter) {
+          void run({ ...last, chapterId: null });
+        } else {
           const url = new URL(window.location.href);
           url.searchParams.delete('chapter');
           window.history.replaceState(window.history.state, '', url);
@@ -223,11 +236,13 @@ export function SearchScreen({
 
   /** Filters and mode apply to the last submitted query right away. */
   const rerun = (overrides: Partial<SearchQuery>) => {
+    pendingInitialRef.current = null; // the user took over: never run the deferred search
     if (submitted) void run({ ...current(), query: submitted.query, ...overrides });
   };
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    pendingInitialRef.current = null;
     const q = current();
     if (!q.query) {
       setFieldError('검색어를 입력해 주세요.');

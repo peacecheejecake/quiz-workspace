@@ -315,4 +315,89 @@ describe('SearchScreen', () => {
     );
     expect(screen.queryByText(/장 필터를 해제했습니다/)).toBeNull();
   });
+
+  describe('a bookmarked search waiting for its chapter check', () => {
+    const CHAPTER = '66666666-6666-4666-8666-666666666666';
+    const OTHER = '88888888-8888-4888-8888-888888888888';
+    const docs = [
+      { id: DOC, title: 'Water Book', isQuestionPaper: false },
+      { id: OTHER, title: 'Other Book', isQuestionPaper: false },
+    ];
+
+    function deferredChapters() {
+      const waiting = new Map<string, (items: never[]) => void>();
+      const chapters: SearchClient['chapters'] = (documentId) =>
+        new Promise((resolve) => waiting.set(documentId, resolve as (items: never[]) => void));
+      const release = (documentId: string) =>
+        act(() =>
+          waiting.get(documentId)?.([{ id: CHAPTER, title: 'Chapter 2', children: [] } as never]),
+        );
+      return { chapters, release, waiting };
+    }
+
+    const bookmarked = { ...INITIAL, query: 'water', documentId: DOC, chapterId: CHAPTER };
+
+    it('is dropped when the user changes the document before the chapters arrive', async () => {
+      const user = userEvent.setup();
+      const deferred = deferredChapters();
+      const client = makeClient(async () => response([hit()]), deferred.chapters);
+      render(
+        <SearchScreen workspaceId={WS} documents={docs} initial={bookmarked} client={client} />,
+      );
+      await waitFor(() => expect(deferred.waiting.has(DOC)).toBe(true));
+
+      await user.click(screen.getByRole('combobox', { name: '문서' }));
+      await user.click(await screen.findByRole('option', { name: 'Other Book' }));
+      await waitFor(() => expect(deferred.waiting.has(OTHER)).toBe(true));
+
+      await deferred.release(DOC);
+      await deferred.release(OTHER);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(client.search).not.toHaveBeenCalled();
+      expect(screen.getByRole('combobox', { name: '문서' })).toHaveTextContent('Other Book');
+    });
+
+    it('never overrides a query the user submitted while the chapters were loading', async () => {
+      const user = userEvent.setup();
+      const deferred = deferredChapters();
+      const client = makeClient(
+        async (_ws, q) => response([hit({ document_title: `hit for ${q.query}` })]),
+        deferred.chapters,
+      );
+      render(
+        <SearchScreen workspaceId={WS} documents={docs} initial={bookmarked} client={client} />,
+      );
+      await waitFor(() => expect(deferred.waiting.has(DOC)).toBe(true));
+
+      await submit(user, 'chlorine');
+      expect(await screen.findByText('hit for chlorine')).toBeVisible();
+
+      await deferred.release(DOC);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(client.search).toHaveBeenCalledTimes(1);
+      expect(client.search.mock.calls[0]?.[1]).toMatchObject({ query: 'chlorine' });
+      expect(screen.getByText('hit for chlorine')).toBeVisible();
+      expect(window.location.search).toContain('q=chlorine');
+    });
+
+    it('is dropped when the mode changes before the chapters arrive', async () => {
+      const user = userEvent.setup();
+      const deferred = deferredChapters();
+      const client = makeClient(async () => response([hit()]), deferred.chapters);
+      render(
+        <SearchScreen workspaceId={WS} documents={docs} initial={bookmarked} client={client} />,
+      );
+      await waitFor(() => expect(deferred.waiting.has(DOC)).toBe(true));
+      await user.click(screen.getByRole('radio', { name: '키워드' }));
+      await deferred.release(DOC);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(client.search).not.toHaveBeenCalled();
+    });
+  });
 });
