@@ -428,8 +428,9 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M5.1 overview API | ✅ | 10ff24d · 2bc9049 | 지적 없음. counts는 chapter/type/q만 반영, chapter 번호는 제목 parse, TS/Python 상태 규칙 공유 truth table. EXPLAIN test를 index 이름 무관 검사로 수정 |
 | M4.2b question bank UI | ✅ | 55dd56d · 8f192ea | AC01·03·04 GREEN(AC02는 M3.4 outline 대기). P2×2(편집 시 출처 재고정, 오래된 page 응답) → 반영 → 지적 없음 |
 | M3.3 documents library UI | ✅ | 8b823b5 · f270647 | DOC-01 AC01~04 GREEN(chromium·webkit). P2×2(만료 intent 재시도 중복, TUS 로딩 중 취소) → 반영 → 지적 없음 |
-| M5.2 practice API | ◐ | d3ea842 | QPLAY 10 + QOV AC02·03·05 contract GREEN. 정답 비노출(OpenAPI allowlist test). P2(첫 my-state 동시 갱신 경합) 수정 중 |
-| M3.4 · M2.6 · M4.4a | ◐ | — | 진행 중 |
+| M5.2 practice API | ✅ | d3ea842 · 67a1aa9 | QPLAY 10 + QOV AC02·03·05 contract GREEN. P2(첫 my-state 동시 갱신) → upsert 후 lock → 지적 없음 |
+| M3.4 outline·교정·publish | ◐ | b354564 | migration 003400 적용. DOC-02 contract GREEN, 교정 draft→publish(index 후 전환)→rollback, question chapter remap trigger. P2(lock 순서 역전 deadlock) 수정 중 |
+| M2.6 · M4.4a · M5.4 | ◐ | — | 진행 중 |
 | M4.3 LLM·extractor | ✅ | d104c02 · 9b335a6 · a6cb4a2 | P1(보기 swap)·P2(세로 정답표) → 반영 → P1(원문자 숫자 crash 회귀) → decimal-only + never-raise property test(600 seed) → 지적 없음 |
 | (통합) worktree 제외 설정 | ✅ | 6704d1c | 사소한 설정 수정, 리뷰 생략 |
 
