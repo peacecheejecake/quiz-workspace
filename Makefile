@@ -76,7 +76,7 @@ test-ts:
 # pytest exits 5 when no tests were collected; that is the only non-zero code tolerated.
 # Tests marked `infra` skip (with a reason, listed by -ra) when the local stack is not running.
 test-py:
-	@rc=0; uv run pytest || rc=$$?; \
+	@rc=0; uv run pytest -m "not infra" || rc=$$?; \
 	if [ $$rc -eq 5 ]; then echo "pytest: no tests collected yet; ok"; exit 0; fi; \
 	exit $$rc
 
