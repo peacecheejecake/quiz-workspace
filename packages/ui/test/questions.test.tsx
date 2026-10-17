@@ -202,6 +202,8 @@ describe('QuestionDot', () => {
     await user.hover(dot);
     const tooltip = await screen.findByRole('tooltip');
     expect(tooltip).toHaveTextContent(/√d로 나누는 이유/);
+    // The role="tooltip" copy carries the whole preview, status included (not just the stem).
+    expect(tooltip).toHaveTextContent('아직 보지 않음');
     // The visible preview card: type, number, chapter, status, favorite.
     const card = document.querySelector('.qz-question-preview');
     expect(card).toHaveTextContent('객관식');

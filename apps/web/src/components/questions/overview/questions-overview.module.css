@@ -1,0 +1,110 @@
+/* QOV-01 questions heatmap screen. Semantic tokens only. */
+
+.screen {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.searchForm {
+  display: flex;
+  gap: var(--space-2);
+  align-items: end;
+  min-width: 0;
+}
+
+.searchForm > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.stateFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.chip[aria-pressed='true'] {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+  font-weight: var(--font-weight-semibold);
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  margin-inline-end: var(--space-1);
+  border-radius: var(--radius-sm);
+  background: currentColor;
+}
+
+.swatch[data-status='unseen'] {
+  color: var(--question-status-unseen);
+}
+
+.swatch[data-status='viewed'] {
+  color: var(--question-status-viewed);
+}
+
+.swatch[data-status='incorrect'] {
+  color: var(--question-status-incorrect);
+}
+
+.swatch[data-status='correct'] {
+  color: var(--question-status-correct);
+}
+
+.swatch[data-status='retry'] {
+  color: var(--question-status-retry);
+}
+
+.inFilter {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.legend {
+  justify-self: start;
+}
+
+.heatmap[aria-busy='true'] {
+  opacity: 0.6;
+}
+
+.loadError {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.loadError p {
+  margin: 0;
+}
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+@media (max-width: 767px) {
+  .filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stateFilters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+}

@@ -60,9 +60,9 @@ export function QuestionPreviewPopover({
             collisionPadding={8}
             className="qz-popover glass-surface qz-question-preview"
             style={layerStyle}
-            // The trigger's accessible name already carries title/type/status; the description
-            // adds the stem.
-            aria-label={preview}
+            // No aria-label: Radix then mirrors the whole content (type, title, status phrases,
+            // stem) into its visually hidden role="tooltip" element, so the tooltip that
+            // assistive technology (and getByRole('tooltip')) sees is the one on screen.
           >
             <p className="qz-question-preview__meta">
               <span>{type}</span>

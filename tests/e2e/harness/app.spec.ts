@@ -17,7 +17,6 @@ const PROTECTED_STUB_ROUTES = [
   { path: '/settings/security', id: 'ACCOUNT-01' },
   { path: '/workspaces', id: 'WS-01' },
   { path: '/workspaces/:ws/documents/e2e-doc', id: 'DOC-02' },
-  { path: '/workspaces/:ws/questions', id: 'QOV-01' },
 ] as const;
 const PLACEHOLDER_WS = '00000000-0000-4000-8000-000000000000';
 
@@ -51,8 +50,7 @@ test(
       await expect(page.getByRole('main').locator(`[data-screen-id="${id}"]`), path).toBeVisible();
       await expect(page.getByRole('heading', { level: 1 }), path).toBeVisible();
     }
-    await page.goto(`/workspaces/${ws.id}/questions?question=q12`);
-    await expect(page.locator('section[data-screen-id="QPLAY-01"]')).toBeVisible();
+    // QOV-01 and its QPLAY-01 panel (`?question=`) are real screens since M5.4 (questions specs).
     await page.goto('/share/e2e-share?panel=fork');
     await expect(page.locator('section[data-screen-id="WS-FORK-01"]')).toBeVisible();
   },

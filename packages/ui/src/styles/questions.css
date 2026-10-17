@@ -129,8 +129,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* !important beats the global 0.01ms reduced-motion reset (design-tokens base.css): the
+     marker must switch scale instantly, with no transition at all (QOV-01-AC04). */
   .qz-question-marker {
-    transition: none;
+    transition: none !important;
   }
 }
 

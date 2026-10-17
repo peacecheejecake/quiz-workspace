@@ -1,0 +1,45 @@
+/* QPLAY-01 practice panel body (shell). Semantic tokens only. */
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.stem {
+  margin: 0;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-relaxed);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.options {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-inline-start: var(--space-5);
+}
+
+.notice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.loading {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.error {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.error p {
+  margin: 0;
+}

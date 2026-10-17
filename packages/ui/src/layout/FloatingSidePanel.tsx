@@ -82,6 +82,8 @@ export function FloatingSidePanel({
         {modal ? <Dialog.Overlay className="qz-backdrop" data-layer="panel" /> : null}
         <Dialog.Content
           ref={contentRef}
+          // Radix hides the background from assistive technology but does not set aria-modal.
+          aria-modal={modal || undefined}
           data-modal={modal}
           data-size={size}
           data-mobile-layout={mobileLayout}
