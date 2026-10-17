@@ -24,6 +24,7 @@ export type DraftUpdateBody = Schemas['QuestionDraftUpdate'];
 export type ReviewedDraftRef = Schemas['ReviewedDraft'];
 export type ReviewStatus = ImportDraft['review_status'];
 export type DraftOrigin = ImportDraft['payload']['origin'];
+export type GeneratedVariationType = NonNullable<ImportDraft['variation_type']>;
 
 export interface DraftOption {
   readonly id: string;
@@ -34,6 +35,27 @@ export interface DraftOption {
 export interface DraftLocation {
   readonly page: number;
   readonly bbox: { x0: number; y0: number; x1: number; y1: number } | null;
+}
+
+/** One cited book passage of a generated draft (QGEN-01 evidence). */
+export interface DraftEvidenceRef {
+  readonly documentId: string;
+  /** 1-based pages of the cited blocks (ascending, unique). */
+  readonly pages: readonly number[];
+  /** Verbatim excerpt the generator cited (null = none). */
+  readonly quote: string | null;
+}
+
+/** What a generation draft adds to the common review model (QGEN-01). */
+export interface GenerationDraftInfo {
+  readonly variationType: GeneratedVariationType | null;
+  readonly parentQuestionId: string | null;
+  readonly sourceRevisionId: string | null;
+  /** Why the generator says the answer is correct (from the passages). */
+  readonly justification: string | null;
+  readonly evidence: readonly DraftEvidenceRef[];
+  /** Blocking validations the reviewer already confirmed (e.g. `question_type_changed`). */
+  readonly acknowledgedCodes: readonly string[];
 }
 
 /** A draft as the review UI shows it, whatever produced it (PDF import or generation). */
@@ -65,6 +87,24 @@ export interface ReviewDraft {
   /** Source pages (1-based, ascending, unique). */
   readonly pages: readonly number[];
   readonly locations: readonly DraftLocation[];
+  /** Generation drafts only (QGEN-01); absent for PDF import drafts. */
+  readonly generation?: GenerationDraftInfo;
+}
+
+function generationInfo(draft: ImportDraft): GenerationDraftInfo {
+  const p = draft.payload;
+  return {
+    variationType: draft.variation_type ?? p.variation_type ?? null,
+    parentQuestionId: p.parent_question_id ?? null,
+    sourceRevisionId: p.source_question_revision_id ?? null,
+    justification: p.justification ?? null,
+    evidence: p.evidence.map((e) => ({
+      documentId: e.document_id,
+      pages: [...new Set(e.locations.map((l) => l.page))].sort((a, b) => a - b),
+      quote: e.quote ?? null,
+    })),
+    acknowledgedCodes: draft.acknowledged_codes ?? [],
+  };
 }
 
 export function reviewDraftFromImport(draft: ImportDraft): ReviewDraft {
@@ -102,6 +142,7 @@ export function reviewDraftFromImport(draft: ImportDraft): ReviewDraft {
     sourceDocumentId: evidence?.document_id ?? null,
     pages,
     locations,
+    ...(p.origin === 'generation' ? { generation: generationInfo(draft) } : {}),
   };
 }
 
@@ -137,6 +178,33 @@ const ISSUE_MESSAGES: Readonly<Record<string, string>> = {
   options_not_allowed: '이 유형에는 보기를 둘 수 없습니다.',
   option_answer_not_allowed: '이 유형에는 정답 보기를 지정할 수 없습니다.',
   provenance_missing: '원본 PDF의 쪽 정보가 없습니다.',
+  // Generation drafts (QGEN-01, book_core.generation validation codes).
+  inverted_answer_mismatch:
+    '복수 정답: 보기를 그대로 두고 정오를 뒤집어 원래 정답이 아니던 보기들이 모두 정답이 되었습니다. 편집에서 정답을 다시 지정하거나 보기를 고쳐 주세요.',
+  answer_count_changed:
+    '정답 수가 원본과 달라졌습니다. 편집에서 "복수 정답 허용"을 켜서 확인하거나 보기를 다시 구성해 주세요.',
+  question_type_changed: '문제 유형이 원본과 달라졌습니다. 변경을 확인해야 승인할 수 있습니다.',
+  polarity_unchanged: '문제의 긍정/부정 표현이 원본과 같아 보입니다. 문구를 확인해 주세요.',
+  stem_unchanged: '문제 문구가 원본과 같습니다.',
+  duplicate_of_source: '원본 문제와 같은 문제입니다.',
+  duplicate_of_existing: '이 Workspace에 이미 같은 문제가 있습니다.',
+  duplicate_candidate: '같은 생성 작업의 다른 초안과 같은 문제입니다.',
+  duplicate_option_text: '같은 내용의 보기가 두 번 있습니다.',
+  source_not_cited: '원본 문서의 근거를 인용하지 않았습니다.',
+  citation_unknown_passage: '제공되지 않은 원문을 근거로 인용했습니다.',
+  citation_not_in_passage: '인용문이 원문에 없습니다. 근거를 확인해 주세요.',
+  citation_too_short: '인용문이 너무 짧아 근거로 확인할 수 없습니다.',
+  evidence_not_in_passages: '근거가 원본 문제의 출처 쪽에 없습니다.',
+  justification_missing: '정답 근거 설명이 없습니다.',
+  invalid_option_labels: '보기 번호가 올바르지 않습니다.',
+  too_many_options: '보기가 너무 많습니다.',
+  option_text_empty: '내용이 비어 있는 보기가 있습니다.',
+  option_text_too_long: '보기 내용이 너무 깁니다.',
+  empty_stem: '문제 내용이 비어 있습니다.',
+  stem_too_long: '문제 내용이 너무 깁니다.',
+  text_too_long: '내용이 너무 깁니다.',
+  answer_text_invalid: '허용 답안이 올바르지 않습니다.',
+  draft_invalid: '초안 형식이 올바르지 않습니다.',
 };
 
 export function issueMessage(code: string): string {
@@ -207,6 +275,27 @@ export function draftUpdateBody(values: QuestionFormValues, baseVersion: string)
     rubric: values.type === 'ESSAY' ? nullIfBlank(values.rubric) : null,
     question_number: /^\d+$/.test(number) ? Number(number) : null,
   };
+}
+
+/**
+ * Content edit of a generation draft. Sending `question_type` confirms a changed question type
+ * (API `question_type_changed`), so it is sent only when the reviewer changed the type in the
+ * editor; the explicit confirmation is `confirmTypeBody`.
+ */
+export function generationDraftUpdateBody(
+  values: QuestionFormValues,
+  draft: Pick<ReviewDraft, 'type'>,
+  baseVersion: string,
+): DraftUpdateBody {
+  const body = draftUpdateBody(values, baseVersion);
+  if (values.type !== draft.type) return body;
+  const { question_type: _unchanged, ...rest } = body;
+  return rest;
+}
+
+/** Confirms the generated draft's question type (clears the blocking `question_type_changed`). */
+export function confirmTypeBody(draft: Pick<ReviewDraft, 'version' | 'type'>): DraftUpdateBody {
+  return { base_version: draft.version, question_type: draft.type };
 }
 
 /** Approve (`true`) or return to pending (`false`) exactly the version on screen. */

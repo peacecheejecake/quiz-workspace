@@ -1,0 +1,221 @@
+// Browser side of the QGEN-01 data flow (M6.2 API). Calls go to this app's own `/api/...` route
+// handlers, which attach the session's access token server-side, so browser code never holds a
+// JWT. FastAPI stays the authority on every decision (role, archived workspace, CONFIRMED source,
+// approval of a draft with an error validation, publish of exactly the approved versions).
+import type { Problem, Schemas } from '@quiz/api-client';
+import type { DraftUpdateBody, ImportDraft, ReviewedDraftRef } from './drafts';
+
+export type GenerationRun = Schemas['GenerationRun'];
+export type GenerationCreate = Schemas['GenerationCreate'];
+export type VariationType = GenerationCreate['variation_types'][number];
+export type LlmVariationType = Exclude<VariationType, 'OPTION_SHUFFLE'>;
+export type GenerationDifficulty = NonNullable<GenerationCreate['difficulty']>;
+
+export const GENERATION_PROBLEMS = {
+  workspaceArchived: 'urn:quiz-workspace:problem:workspace-archived',
+  questionNotConfirmed: 'urn:quiz-workspace:problem:question-not-confirmed',
+  idempotencyKeyReused: 'urn:quiz-workspace:problem:idempotency-key-reused',
+  staleDraft: 'urn:quiz-workspace:problem:stale-draft',
+  draftPublished: 'urn:quiz-workspace:problem:draft-published',
+  draftNotApproved: 'urn:quiz-workspace:problem:draft-not-approved',
+} as const;
+
+export type GenerationFailureKind =
+  | 'network'
+  | 'unauthenticated'
+  | 'archived'
+  | 'forbidden'
+  | 'notFound'
+  | 'notConfirmed'
+  | 'staleDraft'
+  | 'draftPublished'
+  | 'draftNotApproved'
+  | 'idempotencyKeyReused'
+  | 'invalid'
+  | 'unavailable';
+
+export const GENERATION_FAILURE_MESSAGES: Readonly<Record<GenerationFailureKind, string>> = {
+  network: '네트워크 연결이 끊겨 요청 결과를 확인하지 못했습니다. 다시 시도해 주세요.',
+  unauthenticated: '로그인이 만료되었습니다. 다시 로그인해 주세요.',
+  archived: '보관된 Workspace에서는 변형 문제를 만들거나 등록할 수 없습니다.',
+  forbidden: '이 Workspace에서 변형 문제를 만들거나 등록할 권한이 없습니다.',
+  notFound: '원본 문제나 생성 작업을 찾을 수 없습니다. 삭제되었거나 접근 권한이 없습니다.',
+  notConfirmed:
+    '확정된 문제만 변형할 수 있습니다. 문제은행에서 문제를 확정한 뒤 다시 시도해 주세요.',
+  staleDraft:
+    '다른 곳에서 초안이 먼저 바뀌었습니다. 최신 초안을 불러왔으니 내용을 확인한 뒤 다시 승인해 주세요.',
+  draftPublished: '이미 문제은행에 등록된 초안입니다. 문제은행에서 수정해 주세요.',
+  draftNotApproved: '승인되지 않은 초안이 있어 등록하지 못했습니다. 승인 상태를 확인해 주세요.',
+  idempotencyKeyReused: '요청이 겹쳐 처리하지 못했습니다. 다시 시도해 주세요.',
+  invalid:
+    '요청을 처리할 수 없습니다. 변형 유형과 원본 문제의 출처를 확인하고, 초안은 검증 항목을 고친 뒤 승인해 주세요.',
+  unavailable: '일시적인 오류로 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+};
+
+export class GenerationApiError extends Error {
+  constructor(
+    readonly kind: GenerationFailureKind,
+    readonly status = 0,
+  ) {
+    super(GENERATION_FAILURE_MESSAGES[kind]);
+    this.name = 'GenerationApiError';
+  }
+}
+
+export function classifyGenerationFailure(status: number, body: unknown): GenerationFailureKind {
+  const type =
+    typeof body === 'object' && body !== null ? (body as Partial<Problem>).type : undefined;
+  if (status === 401) return 'unauthenticated';
+  if (status === 403) {
+    return type === GENERATION_PROBLEMS.workspaceArchived ? 'archived' : 'forbidden';
+  }
+  if (status === 404) return 'notFound';
+  if (status === 409) {
+    switch (type) {
+      case GENERATION_PROBLEMS.questionNotConfirmed:
+        return 'notConfirmed';
+      case GENERATION_PROBLEMS.staleDraft:
+        return 'staleDraft';
+      case GENERATION_PROBLEMS.draftPublished:
+        return 'draftPublished';
+      case GENERATION_PROBLEMS.draftNotApproved:
+        return 'draftNotApproved';
+      case GENERATION_PROBLEMS.idempotencyKeyReused:
+        return 'idempotencyKeyReused';
+      default:
+        return 'unavailable';
+    }
+  }
+  if (status === 422) return 'invalid';
+  return 'unavailable';
+}
+
+/** Why a run failed, by its stable `error_code` (the API's English never reaches the UI). */
+const RUN_FAILURES: Readonly<Record<string, string>> = {
+  llm_output_invalid: '생성 모델의 응답 형식이 올바르지 않았습니다.',
+  no_valid_candidates: '검증을 통과한 변형 후보가 없었습니다.',
+  llm_unavailable: '생성 모델에 연결하지 못했습니다.',
+  llm_not_configured: '생성 모델이 설정되어 있지 않습니다. 관리자에게 문의해 주세요.',
+  source_question_deleted: '원본 문제가 삭제되었습니다.',
+  source_passages_missing: '원본 문제의 출처 쪽에서 근거로 쓸 원문을 찾지 못했습니다.',
+  workspace_unavailable: 'Workspace가 보관되었거나 접근할 수 없습니다.',
+  cancelled: '작업이 취소되었습니다.',
+};
+
+export function runFailureMessage(errorCode: string | null | undefined): string {
+  const reason = (errorCode && RUN_FAILURES[errorCode]) || '알 수 없는 오류가 발생했습니다.';
+  return `변형 문제를 만들지 못했습니다. ${reason}${errorCode ? ` (${errorCode})` : ''}`;
+}
+
+export function isRunWorking(run: Pick<GenerationRun, 'status'>): boolean {
+  return run.status === 'queued' || run.status === 'running';
+}
+
+const enc = encodeURIComponent;
+
+export function generatePath(workspaceId: string, sourceQuestionId?: string | null): string {
+  const base = `/workspaces/${workspaceId}/questions/generate`;
+  return sourceQuestionId ? `${base}?source=${enc(sourceQuestionId)}` : base;
+}
+
+export const GENERATION_BFF_PATHS = {
+  start: (questionId: string) => `/api/questions/${enc(questionId)}/generations`,
+  runs: (workspaceId: string, sourceQuestionId: string) =>
+    `/api/workspaces/${enc(workspaceId)}/question-generations?source_question_id=${enc(sourceQuestionId)}&limit=1`,
+  run: (runId: string) => `/api/question-generations/${enc(runId)}`,
+  drafts: (runId: string) => `/api/question-generations/${enc(runId)}/drafts`,
+  publish: (runId: string) => `/api/question-generations/${enc(runId)}/publish`,
+  draft: (draftId: string) => `/api/question-drafts/${enc(draftId)}`,
+} as const;
+
+export interface GenerationClient {
+  startGeneration(
+    questionId: string,
+    body: GenerationCreate,
+    idempotencyKey: string,
+  ): Promise<GenerationRun>;
+  /** The newest run of `sourceQuestionId`, or null. */
+  latestRun(
+    workspaceId: string,
+    sourceQuestionId: string,
+    signal?: AbortSignal,
+  ): Promise<GenerationRun | null>;
+  getRun(runId: string, signal?: AbortSignal): Promise<GenerationRun>;
+  listDrafts(runId: string, signal?: AbortSignal): Promise<ImportDraft[]>;
+  updateDraft(draftId: string, body: DraftUpdateBody): Promise<ImportDraft>;
+  publish(
+    runId: string,
+    drafts: readonly ReviewedDraftRef[],
+  ): Promise<{ draft_id: string; question_id: string }[]>;
+}
+
+type FetchLike = typeof fetch;
+
+export function createGenerationClient(
+  fetchImpl: FetchLike = (...a) => fetch(...a),
+): GenerationClient {
+  async function call<T>(
+    path: string,
+    init: RequestInit & { idempotencyKey?: string } = {},
+  ): Promise<T> {
+    const { idempotencyKey, ...rest } = init;
+    let response: Response;
+    try {
+      response = await fetchImpl(path, {
+        ...rest,
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: {
+          accept: 'application/json',
+          ...(rest.body ? { 'content-type': 'application/json' } : {}),
+          ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
+        },
+      });
+    } catch (error) {
+      if (rest.signal?.aborted) throw error;
+      throw new GenerationApiError('network');
+    }
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      if (response.ok) throw new GenerationApiError('network', response.status);
+      body = undefined;
+    }
+    if (!response.ok) {
+      throw new GenerationApiError(
+        classifyGenerationFailure(response.status, body),
+        response.status,
+      );
+    }
+    return body as T;
+  }
+
+  return {
+    startGeneration: (questionId, body, idempotencyKey) =>
+      call(GENERATION_BFF_PATHS.start(questionId), {
+        method: 'POST',
+        body: JSON.stringify(body),
+        idempotencyKey,
+      }),
+    latestRun: async (workspaceId, sourceQuestionId, signal) =>
+      (
+        await call<{ items: GenerationRun[] }>(
+          GENERATION_BFF_PATHS.runs(workspaceId, sourceQuestionId),
+          { signal },
+        )
+      ).items[0] ?? null,
+    getRun: (runId, signal) => call(GENERATION_BFF_PATHS.run(runId), { signal }),
+    listDrafts: async (runId, signal) =>
+      (await call<{ items: ImportDraft[] }>(GENERATION_BFF_PATHS.drafts(runId), { signal })).items,
+    updateDraft: (draftId, body) =>
+      call(GENERATION_BFF_PATHS.draft(draftId), { method: 'PATCH', body: JSON.stringify(body) }),
+    publish: async (runId, drafts) =>
+      (
+        await call<{ items: { draft_id: string; question_id: string }[] }>(
+          GENERATION_BFF_PATHS.publish(runId),
+          { method: 'POST', body: JSON.stringify({ drafts }) },
+        )
+      ).items,
+  };
+}

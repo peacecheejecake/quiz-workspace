@@ -65,7 +65,16 @@ export function QuestionDetailPanel({
               <Button onClick={() => onStatus(question, 'CONFIRMED')}>확정</Button>
             ) : null}
             {question.publication_status === 'CONFIRMED' ? (
-              <Button onClick={() => onStatus(question, 'ARCHIVED')}>보관</Button>
+              <>
+                <Button asChild>
+                  <Link
+                    href={`/workspaces/${workspaceId}/questions/generate?source=${encodeURIComponent(question.id)}`}
+                  >
+                    변형 출제
+                  </Link>
+                </Button>
+                <Button onClick={() => onStatus(question, 'ARCHIVED')}>보관</Button>
+              </>
             ) : null}
             {question.publication_status === 'ARCHIVED' ? (
               <Button onClick={() => onStatus(question, 'CONFIRMED')}>보관 해제</Button>
