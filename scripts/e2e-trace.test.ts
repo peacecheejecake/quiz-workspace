@@ -11,6 +11,8 @@ import {
   parsePlaywrightTests,
   parsePytestTests,
   parseScreenSpec,
+  PHASES,
+  screensOutsidePhases,
   selectScreens,
   strictProblems,
 } from './e2e-trace.ts';
@@ -156,6 +158,34 @@ describe('--list-specs', () => {
       { encoding: 'utf8' },
     );
     assert.equal(stdout, '');
+  });
+
+  it('--exclude-phase lists the specs of the other phases only', () => {
+    const list = (phases: string): string[] =>
+      execFileSync(
+        process.execPath,
+        [join(import.meta.dirname, 'e2e-trace.ts'), '--list-specs', '--exclude-phase', phases],
+        { encoding: 'utf8' },
+      )
+        .split('\n')
+        .filter(Boolean);
+    const all = Object.keys(PHASES).join(',');
+    assert.deepEqual(list(all), []);
+    const withoutS0 = list(
+      Object.keys(PHASES)
+        .filter((p) => p !== 'S0')
+        .join(','),
+    );
+    assert.ok(withoutS0.includes('tests/e2e/workspaces/fork.spec.ts'));
+    assert.ok(!withoutS0.includes('tests/e2e/auth/login.spec.ts'));
+    assert.ok(list('P0.10').includes('tests/e2e/auth/login.spec.ts'));
+  });
+
+  it('screensOutsidePhases validates phases and never drops a listed screen', () => {
+    assert.throws(() => screensOutsidePhases(['M9.0']), /unknown phase/);
+    const outside = screensOutsidePhases(['A0']);
+    assert.ok(!outside.has('AUTH-01'));
+    assert.ok(outside.has('WS-01'));
   });
 });
 

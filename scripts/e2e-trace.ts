@@ -10,6 +10,8 @@
 // (`--phase A0,M3.0` / `--screens WS-01,DOC-01`; neither = all screens; `--phase P0.10` = none)
 // plus repo-wide title problems (unknown IDs, titles without an ID, test.only/skip/fixme).
 // `--list-specs` prints the existing spec files of the selected screens, one per line.
+// `--list-specs --exclude-phase <phases>` prints the spec files of every *other* phase's screens
+// that no listed phase also declares (CI runs all of tests/e2e minus these: the not-yet-GREEN ones).
 // HARNESS-nn titles are reserved for harness self-tests in tests/e2e/harness/.
 //
 // Runs on plain Node (type stripping): only erasable TypeScript syntax. Test calls are found with
@@ -266,6 +268,27 @@ export function selectScreens(
   return selected;
 }
 
+/** Screens of the phases NOT listed (validated like `--phase`) that no listed phase includes. */
+export function screensOutsidePhases(phases: readonly string[]): Set<string> {
+  const kept = selectScreensOfPhases(phases);
+  const outside = new Set<string>();
+  for (const [phase, ids] of Object.entries(PHASES)) {
+    if (phases.includes(phase)) continue;
+    for (const id of ids) if (!kept.has(id)) outside.add(id);
+  }
+  return outside;
+}
+
+function selectScreensOfPhases(phases: readonly string[]): Set<string> {
+  const selected = new Set<string>();
+  for (const phase of phases) {
+    const ids = PHASES[phase];
+    if (!ids) throw new Error(`unknown phase ${phase} (known: ${Object.keys(PHASES).join(', ')})`);
+    ids.forEach((id) => selected.add(id));
+  }
+  return selected;
+}
+
 /** Problems that fail `--strict` for the selected screens. */
 export function strictProblems(report: Report, selected: ReadonlySet<string>): string[] {
   const problems: string[] = [];
@@ -394,13 +417,24 @@ export function formatSpecList(specs: readonly string[]): string {
 
 export function main(argv: readonly string[], root: string): number {
   const report = loadReport(root);
-  const selected = selectScreens(report, listArg(argv, '--phase'), listArg(argv, '--screens'));
+  const excludePhases = listArg(argv, '--exclude-phase');
+  const selected =
+    excludePhases === undefined
+      ? selectScreens(report, listArg(argv, '--phase'), listArg(argv, '--screens'))
+      : screensOutsidePhases(excludePhases);
   if (argv.includes('--list-specs')) {
-    // Spec files of the selected screens that exist (CI passes them to `playwright test`).
-    const specs = report.screens
-      .filter((s) => selected.has(s.id) && s.testPath?.endsWith('.spec.ts'))
-      .map((s) => s.testPath as string)
-      .filter((path) => existsSync(join(root, path)));
+    const specsOf = (ids: ReadonlySet<string>): string[] =>
+      report.screens
+        .filter((s) => ids.has(s.id) && s.testPath?.endsWith('.spec.ts'))
+        .map((s) => s.testPath as string)
+        .filter((path) => existsSync(join(root, path)));
+    // Spec files of the selected screens that exist (CI passes them to / excludes them from
+    // `playwright test`). With --exclude-phase a spec also declared by a listed phase stays in.
+    const keep =
+      excludePhases === undefined
+        ? new Set<string>()
+        : new Set(specsOf(selectScreensOfPhases(excludePhases)));
+    const specs = specsOf(selected).filter((path) => !keep.has(path));
     // Zero bytes when nothing is selected: a blank line would become an empty Playwright filter
     // that matches every spec.
     process.stdout.write(formatSpecList(specs));

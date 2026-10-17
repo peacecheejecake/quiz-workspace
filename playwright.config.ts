@@ -12,6 +12,9 @@ import { globSync } from 'node:fs';
 import { defineConfig, devices, type PlaywrightTestOptions } from '@playwright/test';
 
 const CI = !!process.env.CI;
+// `pnpm e2e:log-audit` (also in CI) starts the web/API/worker servers itself to capture their logs
+// and sets this, so Playwright uses them instead of refusing an occupied port.
+const REUSE_SERVERS = !CI || process.env.E2E_REUSE_SERVERS === '1';
 const BASE_URL = (process.env.E2E_BASE_URL?.trim() || 'http://127.0.0.1:3000').replace(/\/+$/, '');
 const { hostname, port } = new URL(BASE_URL);
 // FastAPI: the web app calls it server-side and the M3+ data fixtures create workspaces/documents
@@ -93,7 +96,7 @@ export default defineConfig({
       command: `pnpm --filter @quiz/web build && pnpm --filter @quiz/web exec next start --hostname ${hostname} --port ${port || '3000'}`,
       url: `${BASE_URL}/login`,
       env: { NEXT_PUBLIC_API_BASE_URL: API_URL },
-      reuseExistingServer: !CI,
+      reuseExistingServer: REUSE_SERVERS,
       timeout: 180_000,
       stdout: 'ignore',
       stderr: 'pipe',
@@ -103,7 +106,7 @@ export default defineConfig({
       command: `uv run python -m quiz_api.serve --host ${api.hostname} --port ${api.port || '8000'}`,
       url: `${API_URL}/health/live`,
       env: apiEnv,
-      reuseExistingServer: !CI,
+      reuseExistingServer: REUSE_SERVERS,
       timeout: 60_000,
       stdout: 'ignore',
       stderr: 'pipe',

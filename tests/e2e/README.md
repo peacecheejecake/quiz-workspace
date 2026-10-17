@@ -74,6 +74,6 @@ test('AUTH-01-AC02 ...', async ({ page, userFactory }) => {
 2. test title은 AC ID로 시작한다(`AUTH-01-AC03 ...`). API contract test(예: `AUTH-API-AC01`)는 `tests/integration/`의 pytest 함수 이름에 ID를 넣는다(`def test_auth_api_ac01_missing_jwt_is_401`).
 3. `pnpm e2e`로 RED를 확인한다. 실패 원인이 서버·seed·네트워크가 아닌 **미구현 기능**이어야 한다.
 4. `pnpm e2e:trace --strict --phase <Task>`(예: `A0`)로 해당 화면에 orphan AC/잘못된 경로가 없는지 확인한다. `--screens WS-01,DOC-01`로 화면을 직접 지정할 수도 있다.
-5. Phase가 GREEN이 되면 `.github/workflows/ci.yml`의 `E2E_PHASES`에 Task ID를 추가한다. CI는 그 Phase의 spec과 `harness/`만 실행하고 trace를 강제한다(develop의 진행 중 RED는 CI에서 돌리지 않음).
+5. Phase가 GREEN이 되면 `.github/workflows/ci.yml`의 `E2E_PHASES`에 Task ID를 추가한다. CI는 `tests/e2e`의 모든 spec에서 **목록에 없는 phase의 화면 spec만 빼고** 실행하며(`e2e:trace --list-specs --exclude-phase`; harness·a11y 등 phase에 속하지 않는 spec은 항상 실행), 목록의 phase에 trace를 강제한다(develop의 진행 중 RED는 CI에서 돌리지 않음). E2E는 `e2e:log-audit --worker`(web :3000, API :8000, `APP_ENV=test` worker)로 돌고 이어서 `e2e:artifact-audit`를 실행한다.
 
 `e2e:trace`는 `docs/screens/*.md`의 `### <ID>-ACnn` 제목과 선언된 spec 경로, `docs/auth.md` §7의 `AUTH-API-ACnn`을 읽고 `tests/e2e/**/*.spec.ts`(`_pending` 제외) title과 `tests/integration/**/*.py`의 test 함수 이름을 대조해 orphan AC, orphan test, 경로 불일치, ID 없는 title, `test.only/skip/fixme`를 보고한다.

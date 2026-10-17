@@ -199,7 +199,10 @@ async function main(): Promise<number> {
   try {
     await waitFor(`${apiUrl}/health/live`, api, 'API');
     await waitFor(`${webUrl}/login`, web, 'web');
-    status = await run('pnpm', ['exec', 'playwright', 'test', ...options.playwrightArgs], env);
+    status = await run('pnpm', ['exec', 'playwright', 'test', ...options.playwrightArgs], {
+      ...env,
+      E2E_REUSE_SERVERS: '1',
+    });
   } finally {
     stop(api);
     stop(web);
