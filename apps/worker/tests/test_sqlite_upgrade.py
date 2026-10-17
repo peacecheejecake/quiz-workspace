@@ -98,7 +98,9 @@ def test_v1_store_is_upgraded_and_its_jobs_still_run(tmp_path: Path) -> None:
     store = SqliteJobStore(path, clock=clock)
     SqliteJobStore(path, clock=clock)  # reopening is a no-op
 
-    assert {"cleanup_pending", "cleanup_attempts", "cleanup_next_at"} <= _columns(path)
+    assert {"cleanup_pending", "cleanup_attempts", "cleanup_next_at", "created_by"} <= _columns(
+        path
+    )
     queued = store.get(queued_id)
     assert queued is not None
     assert (queued.status, queued.cleanup_pending, queued.cleanup_attempts) == (
@@ -106,6 +108,9 @@ def test_v1_store_is_upgraded_and_its_jobs_still_run(tmp_path: Path) -> None:
         False,
         0,
     )
+    # v3 rebuilt the table: old rows keep their key, have no creator (deduplicated by id only).
+    assert (queued.idempotency_key, queued.created_by) == (f"key-{queued_id.hex}", None)
+    assert store.create(queued.to_envelope(), max_attempts=3) == queued
 
     calls: list[int] = []
 

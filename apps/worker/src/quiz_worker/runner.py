@@ -52,7 +52,9 @@ class JobContext:
     job_id: UUID
     job_type: str
     workspace_id: UUID
-    idempotency_key: str
+    # The user the job runs for (None for system jobs); authorization is re-checked by the job.
+    created_by: UUID | None
+    idempotency_key: str | None
     schema_version: int
     attempt: int
     max_attempts: int
@@ -309,6 +311,7 @@ def context_for(record: JobRecord, store: JobStore) -> JobContext:
         job_id=record.job_id,
         job_type=record.job_type,
         workspace_id=record.workspace_id,
+        created_by=record.created_by,
         idempotency_key=record.idempotency_key,
         schema_version=record.schema_version,
         attempt=record.attempts,

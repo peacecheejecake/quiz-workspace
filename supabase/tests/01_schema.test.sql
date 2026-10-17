@@ -23,7 +23,10 @@ select columns_are('public', 'activity_events',
 select columns_are('public', 'async_jobs',
   array['id', 'workspace_id', 'created_by', 'job_type', 'schema_version', 'status', 'attempts',
         'idempotency_key', 'payload', 'result', 'last_error', 'started_at', 'finished_at',
-        'created_at', 'updated_at']);
+        'created_at', 'updated_at',
+        -- P0.7b worker alignment
+        'max_attempts', 'cancel_requested_at', 'locked_by', 'lease_expires_at', 'published_at',
+        'cleanup_pending', 'cleanup_attempts', 'cleanup_last_error', 'cleanup_next_at']);
 
 -- Primary keys
 select col_is_pk('public', 'profiles', 'user_id', 'profiles PK is user_id');

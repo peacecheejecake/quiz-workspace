@@ -26,10 +26,12 @@ Guarantees every implementation must provide:
   cleanup of artifacts left by earlier attempts survives crashes and cleanup errors: it is
   claimed with a lease (`claim_cleanup`), retried with backoff (`fail_cleanup`) by the
   reconciler and on redelivery, and stays flagged (never dropped) once retries run out.
+- `create` deduplicates exactly like `async_jobs_idempotency_idx`: on the job id, and on
+  (workspace_id, created_by, job_type, idempotency_key) when both creator and key are set.
 
 All transitions are pure functions of (row, now) in this module; a store only has to run them
 atomically (`_atomic`): a lock for the in-memory store, `BEGIN IMMEDIATE` for SQLite, and
-`SELECT ... FOR UPDATE` for the Postgres store that lands on top of P0.9's `async_jobs`.
+`SELECT ... FOR UPDATE` for the Postgres store (`quiz_worker.pg_store`).
 """
 
 from __future__ import annotations
@@ -72,7 +74,7 @@ class JobRecord:
     job_id: UUID
     job_type: str
     workspace_id: UUID
-    idempotency_key: str
+    idempotency_key: str | None
     schema_version: int
     status: JobStatus
     attempts: int
@@ -95,11 +97,21 @@ class JobRecord:
     cleanup_last_error: str | None = None
     # Earliest next cleanup try; doubles as the lease of a cleanup in progress.
     cleanup_next_at: datetime | None = None
+    # The user the job runs for; None for system jobs (and after the user was deleted).
+    created_by: UUID | None = None
+
+    @property
+    def dedupe_key(self) -> tuple[UUID, UUID, str, str] | None:
+        """The `async_jobs_idempotency_idx` scope, or None when the row is not deduplicated."""
+        if self.created_by is None or self.idempotency_key is None:
+            return None
+        return (self.workspace_id, self.created_by, self.job_type, self.idempotency_key)
 
     def matches(self, envelope: JobEnvelope) -> bool:
         return (
             self.job_type == envelope.job_type
             and self.workspace_id == envelope.workspace_id
+            and self.created_by == envelope.created_by
             and self.idempotency_key == envelope.idempotency_key
             and self.schema_version == envelope.schema_version
         )
@@ -111,6 +123,7 @@ class JobRecord:
             schema_version=self.schema_version,
             idempotency_key=self.idempotency_key,
             workspace_id=self.workspace_id,
+            created_by=self.created_by,
             payload=dict(self.payload),
         )
 
@@ -147,7 +160,8 @@ class JobNotFoundError(LookupError):
 
 class JobStore(Protocol):
     def create(self, envelope: JobEnvelope, *, max_attempts: int) -> JobRecord:
-        """Insert a `queued`, unpublished job; idempotent on (workspace_id, job_type, key).
+        """Insert a `queued`, unpublished job; idempotent on the job id and on
+        (workspace_id, created_by, job_type, idempotency_key) when creator and key are set.
 
         Returns the existing row for a repeated idempotency key or job id. In production the
         API owns this insert (same transaction as the resource it belongs to).
@@ -243,6 +257,7 @@ def new_record(envelope: JobEnvelope, *, max_attempts: int, now: datetime) -> Jo
         job_id=envelope.job_id,
         job_type=envelope.job_type,
         workspace_id=envelope.workspace_id,
+        created_by=envelope.created_by,
         idempotency_key=envelope.idempotency_key,
         schema_version=envelope.schema_version,
         status=JobStatus.QUEUED,
@@ -571,7 +586,7 @@ class InMemoryJobStore(TransactionalJobStore):
         super().__init__(clock)
         self._lock = threading.Lock()
         self._jobs: dict[UUID, JobRecord] = {}
-        self._by_key: dict[tuple[UUID, str, str], UUID] = {}
+        self._by_key: dict[tuple[UUID, UUID, str, str], UUID] = {}
 
     def _atomic[T](self, job_id: UUID, mutate: Mutation[T]) -> T:
         with self._lock:
@@ -581,15 +596,16 @@ class InMemoryJobStore(TransactionalJobStore):
             return value
 
     def _insert_or_get(self, record: JobRecord) -> JobRecord:
-        key = (record.workspace_id, record.job_type, record.idempotency_key)
+        key = record.dedupe_key
         with self._lock:
-            existing_id = self._by_key.get(key)
+            existing_id = self._by_key.get(key) if key is not None else None
             if existing_id is not None:
                 return self._jobs[existing_id]
             if record.job_id in self._jobs:
                 return self._jobs[record.job_id]
             self._jobs[record.job_id] = record
-            self._by_key[key] = record.job_id
+            if key is not None:
+                self._by_key[key] = record.job_id
             return record
 
     def get(self, job_id: UUID) -> JobRecord | None:
@@ -610,7 +626,11 @@ class InMemoryJobStore(TransactionalJobStore):
 #
 # user_version 1: P0.7 fix layout (published_at, no cleanup columns).
 # user_version 2: + cleanup_pending, cleanup_attempts, cleanup_last_error, cleanup_next_at.
-SQLITE_SCHEMA_VERSION = 2
+# user_version 3: + created_by, nullable idempotency_key, UNIQUE on the P0.9 idempotency scope
+#                 (workspace_id, created_by, job_type, idempotency_key); needs a table rebuild.
+#                 Rows from older files keep their key but have no creator, so (like system
+#                 jobs in Postgres) they are deduplicated by job id only.
+SQLITE_SCHEMA_VERSION = 3
 
 # Columns added after version 1, with the DDL used to add them to an existing table.
 _SQLITE_ADDED_COLUMNS: dict[str, str] = {
@@ -620,12 +640,13 @@ _SQLITE_ADDED_COLUMNS: dict[str, str] = {
     "cleanup_next_at": "REAL",
 }
 
-_SQLITE_SCHEMA = """
-CREATE TABLE IF NOT EXISTS async_jobs (
+_SQLITE_TABLE = """
+CREATE TABLE IF NOT EXISTS {table} (
     job_id TEXT PRIMARY KEY,
     job_type TEXT NOT NULL,
     workspace_id TEXT NOT NULL,
-    idempotency_key TEXT NOT NULL,
+    created_by TEXT,
+    idempotency_key TEXT,
     schema_version INTEGER NOT NULL,
     status TEXT NOT NULL,
     attempts INTEGER NOT NULL,
@@ -645,10 +666,12 @@ CREATE TABLE IF NOT EXISTS async_jobs (
     cleanup_attempts INTEGER NOT NULL DEFAULT 0,
     cleanup_last_error TEXT,
     cleanup_next_at REAL,
-    UNIQUE (workspace_id, job_type, idempotency_key)
+    -- NULLs are distinct, so rows without a creator or key are never deduplicated (as in PG).
+    UNIQUE (workspace_id, created_by, job_type, idempotency_key)
 );
-CREATE INDEX IF NOT EXISTS async_jobs_status ON async_jobs (status, updated_at);
 """
+_SQLITE_INDEX = "CREATE INDEX IF NOT EXISTS async_jobs_status ON async_jobs (status, updated_at);"
+_SQLITE_SCHEMA = _SQLITE_TABLE.format(table="async_jobs") + _SQLITE_INDEX
 
 _COLUMNS = tuple(f.name for f in fields(JobRecord))
 _TIME_COLUMNS = frozenset(
@@ -689,6 +712,7 @@ def _from_row(row: sqlite3.Row) -> JobRecord:
             data[name] = datetime.fromtimestamp(data[name], UTC)
     data["job_id"] = UUID(data["job_id"])
     data["workspace_id"] = UUID(data["workspace_id"])
+    data["created_by"] = UUID(data["created_by"]) if data["created_by"] is not None else None
     data["status"] = JobStatus(data["status"])
     data["cleanup_pending"] = bool(data["cleanup_pending"])
     data["payload"] = json.loads(data["payload"])
@@ -722,8 +746,23 @@ class SqliteJobStore(TransactionalJobStore):
             for name, ddl in _SQLITE_ADDED_COLUMNS.items():
                 if name not in existing:
                     conn.execute(f"ALTER TABLE async_jobs ADD COLUMN {name} {ddl}")
+            if "created_by" not in existing:
+                self._rebuild_v3(conn)
             if version != SQLITE_SCHEMA_VERSION:
                 conn.execute(f"PRAGMA user_version = {SQLITE_SCHEMA_VERSION}")
+
+    @staticmethod
+    def _rebuild_v3(conn: sqlite3.Connection) -> None:
+        """Version 3 changes the UNIQUE constraint, which SQLite can only do by copying."""
+        columns = ", ".join(name for name in _COLUMNS if name != "created_by")
+        conn.execute("DROP INDEX IF EXISTS async_jobs_status")
+        conn.execute(_SQLITE_TABLE.format(table="async_jobs_v3"))
+        conn.execute(
+            f"INSERT INTO async_jobs_v3 ({columns}) SELECT {columns} FROM async_jobs"  # noqa: S608 - fixed columns
+        )
+        conn.execute("DROP TABLE async_jobs")
+        conn.execute("ALTER TABLE async_jobs_v3 RENAME TO async_jobs")
+        conn.execute(_SQLITE_INDEX)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -764,14 +803,19 @@ class SqliteJobStore(TransactionalJobStore):
 
     def _insert_or_get(self, record: JobRecord) -> JobRecord:
         with self._transaction() as conn:
+            # `created_by = NULL` / `idempotency_key = NULL` never match: same scope as the
+            # UNIQUE constraint. A key match wins over a job id match.
             found = conn.execute(
                 "SELECT * FROM async_jobs WHERE job_id = ? OR "
-                "(workspace_id = ? AND job_type = ? AND idempotency_key = ?)",
+                "(workspace_id = ? AND created_by = ? AND job_type = ? AND idempotency_key = ?) "
+                "ORDER BY job_id = ? LIMIT 1",
                 (
                     str(record.job_id),
                     str(record.workspace_id),
+                    str(record.created_by) if record.created_by is not None else None,
                     record.job_type,
                     record.idempotency_key,
+                    str(record.job_id),
                 ),
             ).fetchone()
             if found is not None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -18,10 +19,11 @@ from quiz_worker.celery_app import (
 )
 from quiz_worker.errors import JobOutcomeError, JobRetryError, NonRetryableJobError
 from quiz_worker.jobs import ECHO_JOB
+from quiz_worker.pg_store import PostgresJobStore
 from quiz_worker.retry import RetryPolicy
 from quiz_worker.runner import JobContext, JobDefinition, JobResult, RunOutcome, RunResult
 from quiz_worker.settings import Environment, WorkerSettings
-from quiz_worker.store import InMemoryJobStore, JobStatus
+from quiz_worker.store import InMemoryJobStore, JobStatus, SqliteJobStore
 
 from .conftest import BOOK_TEXT, TOKEN, EnvelopeFactory
 
@@ -109,6 +111,34 @@ def test_deployed_environments_refuse_the_in_memory_store() -> None:
     for env in (Environment.PREVIEW, Environment.PRODUCTION):
         with pytest.raises(RuntimeError, match="no persistent JobStore"):
             build_job_store(WorkerSettings.model_construct(app_env=env))
+        # The SQLite file store is local/test only.
+        with pytest.raises(RuntimeError, match="set WORKER_DATABASE_URL"):
+            build_job_store(WorkerSettings.model_construct(app_env=env, job_store_path="x.db"))
+
+
+def test_worker_database_url_selects_the_postgres_store(tmp_path: Path) -> None:
+    url = SecretStr("postgresql://quiz_worker:s3cret-pass@db.internal:5432/postgres")
+    for env in Environment:
+        settings = WorkerSettings.model_construct(app_env=env, worker_database_url=url)
+        store = build_job_store(settings)  # lazy engine: no connection is opened
+        assert isinstance(store, PostgresJobStore)
+        assert store.engine.url.drivername == "postgresql+psycopg"
+        assert store.engine.url.username == "quiz_worker"
+        assert "s3cret-pass" not in repr(store.engine) + repr(settings)
+        store.dispose()
+    # Locally an explicit SQLite path still wins (prefork tests share state through it).
+    local = WorkerSettings.model_construct(
+        worker_database_url=url, job_store_path=str(tmp_path / "jobs.sqlite3")
+    )
+    assert isinstance(build_job_store(local), SqliteJobStore)
+
+
+def test_worker_never_reads_the_api_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://quiz_api:pw@db.internal:5432/postgres")
+    monkeypatch.delenv("WORKER_DATABASE_URL", raising=False)
+    settings = WorkerSettings(_env_file=None)  # type: ignore[call-arg]
+    assert settings.worker_database_url is None
+    assert isinstance(build_job_store(settings), InMemoryJobStore)
 
 
 def test_echo_job_runs_eagerly_and_duplicate_delivery_is_a_noop(

@@ -2,9 +2,15 @@
 
 Every Celery job message carries exactly one positional argument, the JSON form of
 `JobEnvelope`. The envelope identifies the `async_jobs` row (`job_id`) and repeats the row's
-identity (`job_type`, `workspace_id`, `idempotency_key`, `schema_version`) so the worker can
-refuse a message that does not match the stored job. `payload` is versioned per job type by
-`schema_version` and validated by the job's own payload model.
+identity (`job_type`, `workspace_id`, `created_by`, `idempotency_key`, `schema_version`) so the
+worker can refuse a message that does not match the stored job.
+
+Idempotency scope (same as the `async_jobs_idempotency_idx` unique index): a key deduplicates
+jobs per (workspace_id, created_by, job_type) and only when both `created_by` and the key are
+set. Jobs without a creator (system jobs) or without a key are deduplicated by `job_id` only.
+
+`payload` is versioned per job type by `schema_version` and validated by the job's own payload
+model.
 
 Validation errors are reported as `loc: error_type` only; Pydantic's default message would
 echo the offending input (possibly book text or a token).
@@ -35,8 +41,11 @@ class JobEnvelope(BaseModel):
     job_id: UUID
     job_type: str = Field(pattern=JOB_TYPE_PATTERN, max_length=100)
     schema_version: int = Field(ge=1)
-    idempotency_key: str = Field(pattern=IDEMPOTENCY_KEY_PATTERN)
+    idempotency_key: str | None = Field(default=None, pattern=IDEMPOTENCY_KEY_PATTERN)
     workspace_id: UUID
+    # The user the job runs for (`async_jobs.created_by`, the verified JWT `sub` at creation);
+    # None for system jobs.
+    created_by: UUID | None = None
     # repr=False: an envelope that lands in a log or traceback never prints the payload.
     payload: dict[str, JsonValue] = Field(default_factory=dict, repr=False)
 
