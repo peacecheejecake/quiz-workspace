@@ -54,7 +54,9 @@ summary of the rules for carrying out the implementation plan.
   Isolate data with per-test users and workspaces.
 - Processes you start (web/API/worker servers on non-default ports, separate Redis DB / Qdrant
   prefix per task) are stopped by their recorded PIDs only — never `pkill -f` patterns that can hit
-  other tasks' processes.
+  other tasks' processes. The session scratchpad is shared by parallel tasks: keep scripts, PID files
+  and logs under a per-task subdirectory (`<scratchpad>/<task-id>/`) and confirm a PID's command line
+  (`ps -p <pid> -o command=`) shows your own port before killing it.
 
 **Reviewer (Codex)**
 - Runs via `scripts/codex-review.sh` (§4) on the Task's commit(s) with the default model.
