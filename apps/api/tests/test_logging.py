@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import logging
 from collections.abc import Callable
 
@@ -7,7 +8,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from quiz_api.health import ReadinessChecker
-from quiz_api.logging_config import REDACTED, RedactionFilter, RequestIdFilter, redact
+from quiz_api.logging_config import (
+    REDACTED,
+    RedactionFilter,
+    RequestIdFilter,
+    build_handler,
+    redact,
+)
 
 TOKEN = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEifQ.c2lnbmF0dXJl"  # noqa: S105 - fake JWT
 
@@ -67,3 +74,57 @@ def test_redaction_filter_scrubs_tokens_and_url_credentials(message: str, leaked
     record = logging.LogRecord("x", logging.INFO, __file__, 1, "%s", (message,), None)
     RedactionFilter().filter(record)
     assert leaked not in record.getMessage()
+
+
+def _secret_error() -> RuntimeError:
+    return RuntimeError(
+        f"upstream rejected GET /x?access_token={TOKEN} via postgresql://app:s3cret@db:5432/app"
+    )
+
+
+def test_formatted_output_redacts_exception_text_and_stack_info() -> None:
+    stream = io.StringIO()
+    logger = logging.getLogger("quiz_api.tests.formatter")
+    logger.propagate = False
+    logger.addHandler(build_handler(stream))
+    try:
+        try:
+            raise _secret_error()
+        except RuntimeError:
+            logger.exception("request failed", stack_info=True)
+    finally:
+        logger.handlers.clear()
+
+    output = stream.getvalue()
+    assert "Traceback (most recent call last)" in output
+    assert "Stack (most recent call last)" in output
+    assert "RuntimeError: upstream rejected" in output
+    assert TOKEN not in output
+    assert "s3cret" not in output
+    assert f"access_token={REDACTED}" in output
+
+
+def test_unhandled_exception_traceback_is_redacted_in_handler_output(
+    make_app: Callable[..., FastAPI],
+) -> None:
+    app = make_app()
+
+    @app.get("/_probe/boom")
+    async def boom() -> None:
+        raise _secret_error()
+
+    stream = io.StringIO()
+    handler = build_handler(stream)
+    root = logging.getLogger()
+    root.addHandler(handler)
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            assert client.get("/_probe/boom").status_code == 500
+    finally:
+        root.removeHandler(handler)
+
+    output = stream.getvalue()
+    assert "Unhandled RuntimeError on GET /_probe/boom" in output
+    assert "Traceback (most recent call last)" in output
+    assert TOKEN not in output
+    assert "s3cret" not in output

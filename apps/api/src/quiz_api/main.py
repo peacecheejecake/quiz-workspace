@@ -1,6 +1,7 @@
 """Application factory.
 
-Run locally with `make api-dev` (`uvicorn quiz_api.main:create_app --factory --reload`).
+Run with `make api-dev` / `python -m quiz_api.serve`, not bare `uvicorn`: the launcher turns
+off uvicorn's query-logging access log and routes its loggers through the redacting handler.
 """
 
 from __future__ import annotations

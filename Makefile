@@ -82,4 +82,4 @@ contracts-check: ## Fail if contracts/openapi.json or the TS API client is stale
 	pnpm --filter @quiz/api-client run check:generated
 
 api-dev: ## Run the API locally with reload (reads .env)
-	uv run uvicorn quiz_api.main:create_app --factory --reload
+	uv run python -m quiz_api.serve --reload
