@@ -24,7 +24,7 @@ SUPABASE := pnpm exec supabase
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
 	test test-ts test-py infra-up infra-down infra-status infra-reset \
-	contracts contracts-check api-dev
+	contracts contracts-check api-dev worker-dev
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -104,3 +104,6 @@ contracts-check: ## Fail if contracts/openapi.json or the TS API client is stale
 
 api-dev: ## Run the API locally with reload (reads .env)
 	uv run python -m quiz_api.serve --reload
+
+worker-dev: ## Run the Celery worker locally (reads .env; needs Redis from infra-up)
+	uv run python -m quiz_worker.serve
