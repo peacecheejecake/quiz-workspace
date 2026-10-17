@@ -18,7 +18,16 @@ from sqlalchemy import Column, Table, select
 from sqlalchemy.orm import Session
 
 from quiz_api.authz.permissions import LockMode, Role
-from quiz_api.repositories.tables import async_jobs, workspace_memberships, workspaces
+from quiz_api.repositories.tables import (
+    async_jobs,
+    practice_sessions,
+    question_drafts,
+    question_generation_runs,
+    question_import_runs,
+    questions,
+    workspace_memberships,
+    workspaces,
+)
 
 
 class ResourceType(StrEnum):
@@ -28,6 +37,12 @@ class ResourceType(StrEnum):
     """
 
     JOB = "job"
+    QUESTION = "question"
+    # Per-user: the route must additionally check `practice_sessions.user_id` is the caller.
+    PRACTICE_SESSION = "practice_session"
+    QUESTION_DRAFT = "question_draft"
+    QUESTION_GENERATION_RUN = "question_generation_run"
+    QUESTION_IMPORT_RUN = "question_import_run"
 
 
 @dataclass(frozen=True)
@@ -47,6 +62,11 @@ class ResourceBinding:
 
 RESOURCES: dict[ResourceType, ResourceBinding] = {
     ResourceType.JOB: ResourceBinding(async_jobs),
+    ResourceType.QUESTION: ResourceBinding(questions, deleted_column="deleted_at"),
+    ResourceType.PRACTICE_SESSION: ResourceBinding(practice_sessions),
+    ResourceType.QUESTION_DRAFT: ResourceBinding(question_drafts),
+    ResourceType.QUESTION_GENERATION_RUN: ResourceBinding(question_generation_runs),
+    ResourceType.QUESTION_IMPORT_RUN: ResourceBinding(question_import_runs),
 }
 
 
