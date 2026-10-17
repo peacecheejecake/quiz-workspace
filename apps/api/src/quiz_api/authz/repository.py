@@ -29,6 +29,7 @@ from quiz_api.repositories.tables import (
     question_import_runs,
     questions,
     workspace_memberships,
+    workspace_share_links,
     workspaces,
 )
 
@@ -51,6 +52,8 @@ class ResourceType(StrEnum):
     REVISION = "revision"
     # Upload intent; per-user: the route must additionally check `document_uploads.user_id`.
     UPLOAD = "upload"
+    # S1a. Revoked and expired links stay addressable for their owner (policy edits, listing).
+    SHARE_LINK = "share_link"
 
 
 @dataclass(frozen=True)
@@ -87,6 +90,7 @@ RESOURCES: dict[ResourceType, ResourceBinding] = {
         ),
     ),
     ResourceType.UPLOAD: ResourceBinding(document_uploads),
+    ResourceType.SHARE_LINK: ResourceBinding(workspace_share_links),
 }
 
 

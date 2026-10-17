@@ -14,6 +14,7 @@ from sqlalchemy import (
     DateTime,
     FetchedValue,
     Integer,
+    LargeBinary,
     MetaData,
     SmallInteger,
     Table,
@@ -390,6 +391,25 @@ document_uploads = Table(
     _ts("completed_at"),
     Column("completed_document_id", Uuid),
     Column("completed_job_id", Uuid),
+    _ts("created_at", nullable=False),
+    _ts("updated_at", nullable=False),
+)
+
+
+# --- S1a share links (20261017224000_workspace_share_links.sql) -------------------------------
+
+workspace_share_links = Table(
+    "workspace_share_links",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=FetchedValue()),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("created_by", Uuid, nullable=False),
+    # SHA-256 of the 32 secret bytes; never part of an API response.
+    Column("token_digest", LargeBinary, nullable=False),
+    Column("allow_fork", Boolean, nullable=False),
+    _ts("expires_at"),
+    _ts("revoked_at"),
+    Column("rotated_from_id", Uuid),
     _ts("created_at", nullable=False),
     _ts("updated_at", nullable=False),
 )

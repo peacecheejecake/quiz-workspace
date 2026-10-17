@@ -247,6 +247,97 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspace_id}/share-links': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Share Links
+     * @description Every link of the workspace (revoked and expired included), newest first; no secrets.
+     */
+    get: operations['listShareLinks'];
+    put?: never;
+    /**
+     * Create Share Link
+     * @description Issue a read-only share link (WS-SHARE-01-AC02). Fork is off unless `allow_fork`.
+     *
+     *     The secret appears only in this response. A link is not a membership.
+     */
+    post: operations['createShareLink'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/share-links/{link_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Update Share Link
+     * @description Change `allow_fork` and/or `expires_at` (WS-SHARE-01-AC03; allowed on archived).
+     *
+     *     A revoked link is final (409 `share-link-inactive`); an expired one can get a new expiry.
+     */
+    patch: operations['updateShareLink'];
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/share-links/{link_id}/revoke': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Revoke Share Link
+     * @description Revoke at once (WS-SHARE-01-AC04; allowed on archived). Repeating it is a no-op.
+     */
+    post: operations['revokeShareLink'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/share-links/{link_id}/rotate': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Rotate Share Link
+     * @description Revoke the link and issue a replacement (new id and secret, same policy) atomically.
+     *
+     *     Only an active link can be rotated (409 `share-link-inactive` for revoked or expired ones:
+     *     extend the expiry first, or create a new link).
+     */
+    post: operations['rotateShareLink'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/health/live': {
     parameters: {
       query?: never;
@@ -425,6 +516,68 @@ export type components = {
        */
       workspace_id: string;
     };
+    /** IssuedShareLink */
+    IssuedShareLink: {
+      /**
+       * Allow Fork
+       * @description Whether signed-in viewers may fork (default off).
+       */
+      allow_fork: boolean;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Expires At
+       * @description Null: never expires.
+       */
+      expires_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       * @description The public share id (`/share/{id}`).
+       */
+      id: string;
+      /** Revoked At */
+      revoked_at: string | null;
+      /**
+       * Rotated From Id
+       * @description The revoked link this one replaced (rotate).
+       */
+      rotated_from_id: string | null;
+      /**
+       * Secret
+       * @description The link secret (unpadded base64url, 32 bytes). Returned only in this response; null when an Idempotency-Key retry replays an earlier issue.
+       */
+      secret: string | null;
+      /**
+       * Secret Already Issued
+       * @description True on an Idempotency-Key replay: the secret was shown once already.
+       */
+      secret_already_issued: boolean;
+      /**
+       * Share Url
+       * @description `<web origin>/share/{id}#k={secret}`; null exactly when `secret` is.
+       */
+      share_url: string | null;
+      /**
+       * Status
+       * @description Derived from revoked_at / expires_at.
+       * @enum {string}
+       */
+      status: 'active' | 'expired' | 'revoked';
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
     /** LivenessReport */
     LivenessReport: {
       /**
@@ -586,6 +739,84 @@ export type components = {
        * @enum {string}
        */
       status: 'draft' | 'published';
+    };
+    /**
+     * ShareLink
+     * @description A share link's metadata (never its secret or digest).
+     */
+    ShareLink: {
+      /**
+       * Allow Fork
+       * @description Whether signed-in viewers may fork (default off).
+       */
+      allow_fork: boolean;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Expires At
+       * @description Null: never expires.
+       */
+      expires_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       * @description The public share id (`/share/{id}`).
+       */
+      id: string;
+      /** Revoked At */
+      revoked_at: string | null;
+      /**
+       * Rotated From Id
+       * @description The revoked link this one replaced (rotate).
+       */
+      rotated_from_id: string | null;
+      /**
+       * Status
+       * @description Derived from revoked_at / expires_at.
+       * @enum {string}
+       */
+      status: 'active' | 'expired' | 'revoked';
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /** ShareLinkCreate */
+    ShareLinkCreate: {
+      /**
+       * Allow Fork
+       * @default false
+       */
+      allow_fork?: boolean;
+      /**
+       * Expires At
+       * @description Future instant with a UTC offset; null or absent: no expiry.
+       */
+      expires_at?: string | null;
+    };
+    /** ShareLinkList */
+    ShareLinkList: {
+      /** Items */
+      items: components['schemas']['ShareLink'][];
+    };
+    /**
+     * ShareLinkUpdate
+     * @description Only the fields present change; `expires_at: null` removes the expiry.
+     */
+    ShareLinkUpdate: {
+      /** Allow Fork */
+      allow_fork?: boolean | null;
+      /** Expires At */
+      expires_at?: string | null;
     };
     /** SignedReadUrl */
     SignedReadUrl: {
@@ -1781,6 +2012,385 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Workspace'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listShareLinks: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ShareLinkList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createShareLink: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ShareLinkCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['IssuedShareLink'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  updateShareLink: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        link_id: string;
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ShareLinkUpdate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ShareLink'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  revokeShareLink: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        link_id: string;
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ShareLink'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  rotateShareLink: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        link_id: string;
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['IssuedShareLink'];
         };
       };
       /** @description Unauthorized */

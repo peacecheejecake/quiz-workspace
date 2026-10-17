@@ -42,6 +42,8 @@ class ProblemType(StrEnum):
     UPLOAD_EXPIRED = "urn:quiz-workspace:problem:upload-expired"
     # 422: the stored object does not match the declared size / SHA-256 (it is discarded).
     UPLOAD_MISMATCH = "urn:quiz-workspace:problem:upload-mismatch"
+    # 409: the share link is revoked (or, for rotate, revoked or expired); create a new link.
+    SHARE_LINK_INACTIVE = "urn:quiz-workspace:problem:share-link-inactive"
 
 
 class ProblemException(StarletteHTTPException):
