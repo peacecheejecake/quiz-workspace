@@ -12,6 +12,7 @@ from book_core.chunker.hierarchical import (
     ChunkerConfig,
     ChunkingError,
     bound_breadcrumb,
+    caption_links,
     chunk_revision,
     detect_language,
 )
@@ -31,6 +32,7 @@ __all__ = [
     "ChunkingError",
     "Tokenizer",
     "bound_breadcrumb",
+    "caption_links",
     "chunk_revision",
     "detect_language",
     "diff_chunks",
