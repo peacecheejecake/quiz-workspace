@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from enum import StrEnum
 from functools import lru_cache
+from typing import Annotated, Any
+from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Environment(StrEnum):
@@ -18,6 +20,44 @@ class Environment(StrEnum):
     TEST = "test"
     PREVIEW = "preview"
     PRODUCTION = "production"
+
+
+# Deployed environments: served over HTTPS behind real domains (docs/deployment.md §1, §6).
+DEPLOYED_ENVIRONMENTS = frozenset({Environment.PREVIEW, Environment.PRODUCTION})
+
+# Web origins allowed by default where nothing is configured (local/test only): the Next.js dev
+# server on both loopback spellings (`make web-dev`).
+LOCAL_CORS_ORIGINS: tuple[str, ...] = ("http://127.0.0.1:3000", "http://localhost:3000")
+
+# Browsers cap preflight caching (Chromium at 2h); a bounded value keeps allowlist changes timely.
+MAX_CORS_MAX_AGE_SECONDS = 7200
+
+
+def normalize_origin(value: str) -> str:
+    """`scheme://host[:port]` in lowercase; raises ValueError for anything that is not an origin.
+
+    The message names the problem, never the value (configuration errors end up in logs).
+    """
+    raw = value.strip()
+    if raw == "*":
+        raise ValueError("wildcard origin '*' is not allowed (explicit allowlist only)")
+    parts = urlsplit(raw.rstrip("/"))
+    if parts.scheme not in {"http", "https"} or not parts.hostname:
+        raise ValueError("each origin must be an http(s)://host[:port] URL")
+    extras = (parts.username, parts.password, parts.path, parts.query, parts.fragment)
+    if "*" in raw or any(extras):
+        raise ValueError("each origin must be exactly scheme://host[:port] (no wildcard or path)")
+    port = f":{parts.port}" if parts.port is not None else ""
+    return f"{parts.scheme}://{parts.hostname.lower()}{port}"
+
+
+def _is_https_url(value: str) -> bool:
+    parts = urlsplit(value.strip())
+    return parts.scheme == "https" and bool(parts.hostname)
+
+
+class InsecureConfigurationError(RuntimeError):
+    """Settings that must never run in a deployed environment (raised at startup)."""
 
 
 class Settings(BaseSettings):
@@ -60,6 +100,15 @@ class Settings(BaseSettings):
         default=3.0, gt=0, validation_alias="JWKS_FETCH_TIMEOUT_SECONDS"
     )
 
+    # Browser origins allowed to call the API (CORS), comma-separated `scheme://host[:port]`.
+    # Unset → LOCAL_CORS_ORIGINS in local/test; required (HTTPS) in preview/production.
+    cors_allowed_origins: Annotated[tuple[str, ...] | None, NoDecode] = Field(
+        default=None, validation_alias="CORS_ALLOWED_ORIGINS"
+    )
+    cors_max_age_seconds: int = Field(
+        default=600, ge=0, le=MAX_CORS_MAX_AGE_SECONDS, validation_alias="CORS_MAX_AGE_SECONDS"
+    )
+
     db_pool_size: int = Field(default=5, ge=1, validation_alias="DB_POOL_SIZE")
     db_connect_timeout_seconds: float = Field(
         default=3.0, gt=0, validation_alias="DB_CONNECT_TIMEOUT_SECONDS"
@@ -68,7 +117,55 @@ class Settings(BaseSettings):
         default=2.0, gt=0, validation_alias="READINESS_TIMEOUT_SECONDS"
     )
 
+    @field_validator("cors_allowed_origins", mode="before")
+    @classmethod
+    def _parse_origins(cls, value: Any) -> tuple[str, ...] | None:
+        if value is None:
+            return None
+        items = value.split(",") if isinstance(value, str) else list(value)
+        origins = [normalize_origin(str(item)) for item in items if str(item).strip()]
+        return tuple(dict.fromkeys(origins)) or None
+
+    def ensure_secure_deployment(self) -> Settings:
+        """Raise `InsecureConfigurationError` for configs that must not run in preview/production.
+
+        Deliberately not a pydantic validator: a `ValidationError` would echo every input value
+        (DATABASE_URL included) into the startup log. The message names variables only.
+        """
+        if self.app_env not in DEPLOYED_ENVIRONMENTS:
+            return self
+        problems: list[str] = []
+        for name, url in (
+            ("SUPABASE_JWT_ISSUER", self.supabase_jwt_issuer),
+            ("SUPABASE_JWKS_URL", self.supabase_jwks_url),
+        ):
+            if not url:
+                problems.append(f"{name} is required")
+            elif not _is_https_url(url):
+                problems.append(f"{name} must be an https:// URL")
+        if not self.cors_allowed_origins:
+            problems.append("CORS_ALLOWED_ORIGINS must list the web origin(s)")
+        elif any(not origin.startswith("https://") for origin in self.cors_allowed_origins):
+            problems.append("CORS_ALLOWED_ORIGINS must contain only https:// origins")
+        if problems:
+            raise InsecureConfigurationError(
+                f"Refusing to start with APP_ENV={self.app_env.value}: " + "; ".join(problems)
+            )
+        return self
+
+    @property
+    def effective_cors_origins(self) -> tuple[str, ...]:
+        """The CORS allowlist in force: configured origins, else the local defaults (never in a
+        deployed environment, where validation already demanded an explicit list)."""
+        if self.cors_allowed_origins:
+            return self.cors_allowed_origins
+        return () if self.app_env in DEPLOYED_ENVIRONMENTS else LOCAL_CORS_ORIGINS
+
+    @property
+    def is_deployed(self) -> bool:
+        return self.app_env in DEPLOYED_ENVIRONMENTS
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    return Settings().ensure_secure_deployment()

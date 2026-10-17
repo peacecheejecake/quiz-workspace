@@ -15,7 +15,8 @@
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "pnpm -r --if-present run test",
     "e2e": "playwright test",
-    "e2e:trace": "node scripts/e2e-trace.ts"
+    "e2e:trace": "node scripts/e2e-trace.ts",
+    "e2e:log-audit": "node scripts/e2e-log-audit.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10",

@@ -20,6 +20,7 @@ from quiz_api.health import ReadinessChecker, default_readiness_checkers
 from quiz_api.health import router as health_router
 from quiz_api.logging_config import configure_logging
 from quiz_api.middleware import NoStoreMiddleware, RequestIdMiddleware
+from quiz_api.security import SecurityHeadersMiddleware, install_browser_security
 from quiz_api.settings import Environment, Settings, get_settings
 
 API_TITLE = "Quiz Workspace API"
@@ -30,7 +31,7 @@ def create_app(
     *,
     readiness_checkers: Sequence[ReadinessChecker] | None = None,
 ) -> FastAPI:
-    settings = settings or get_settings()
+    settings = (settings or get_settings()).ensure_secure_deployment()
     configure_logging(settings.log_level)
     database = create_database(settings)
 
@@ -60,7 +61,18 @@ def create_app(
     )
 
     install_error_handlers(app)
+    # Outermost last: RequestId → SecurityHeaders → NoStore → Origin guard → CORS → routes.
+    install_browser_security(
+        app,
+        allowed_origins=settings.effective_cors_origins,
+        max_age=settings.cors_max_age_seconds,
+    )
     app.add_middleware(NoStoreMiddleware, path_prefix=API_V1_PREFIX)
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        force_hsts=settings.is_deployed,
+        csp_exempt_paths={app.docs_url} if app.docs_url else (),
+    )
     app.add_middleware(RequestIdMiddleware)
 
     app.include_router(health_router)

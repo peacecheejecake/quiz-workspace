@@ -174,6 +174,7 @@ const deleted: unknown[] = [];
 
 vi.mock('@supabase/ssr', () => ({ createServerClient: () => ({ auth }) }));
 vi.mock('next/headers', () => ({
+  headers: async () => new Headers(),
   cookies: async () => ({
     get: (name: string) => (cookieJar.has(name) ? { name, value: cookieJar.get(name) } : undefined),
     getAll: () => [...cookieJar].map(([name, value]) => ({ name, value })),

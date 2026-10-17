@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from quiz_api.middleware import REQUEST_ID_HEADER
+from quiz_api.middleware import REQUEST_ID_HEADER, security_headers
 
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 
@@ -158,7 +158,12 @@ async def _validation_exception_handler(
 
 async def _unhandled_exception_handler(request: Request, _exc: Exception) -> JSONResponse:
     # Logged (with traceback and request id) by RequestIdMiddleware; never echoed here.
-    return problem_response(request, HTTPStatus.INTERNAL_SERVER_ERROR)
+    # Rendered by Starlette's outermost error middleware, i.e. outside SecurityHeadersMiddleware.
+    settings = getattr(request.app.state, "settings", None)
+    https = request.url.scheme == "https" or bool(getattr(settings, "is_deployed", False))
+    return problem_response(
+        request, HTTPStatus.INTERNAL_SERVER_ERROR, headers=security_headers(https=https)
+    )
 
 
 def install_error_handlers(app: FastAPI) -> None:

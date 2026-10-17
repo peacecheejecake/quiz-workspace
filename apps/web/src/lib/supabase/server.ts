@@ -4,20 +4,23 @@
 // (`getClaims()`), never `getSession().user` (docs/auth.md §3).
 import { createServerClient } from '@supabase/ssr';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { getPublicEnv } from '@/env';
+import { isHttpsRequest } from '@/lib/http/security-headers';
+import { hardenSessionCookie } from './cookie-options';
 import { readVerifiedClaims } from './session-guard';
 
 export async function createSupabaseServerClient(): Promise<SupabaseClient> {
   const { supabaseUrl, supabasePublishableKey } = getPublicEnv();
   const cookieStore = await cookies();
+  const secure = isHttpsRequest(await headers());
   return createServerClient(supabaseUrl, supabasePublishableKey, {
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll: (cookiesToSet) => {
         try {
           for (const { name, value, options } of cookiesToSet) {
-            cookieStore.set(name, value, options);
+            cookieStore.set(name, value, hardenSessionCookie(options, secure));
           }
         } catch {
           // Server Components cannot set cookies; the proxy already refreshed the session.

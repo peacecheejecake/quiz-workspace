@@ -32,6 +32,8 @@ const apiEnv = {
     process.env.SUPABASE_JWKS_URL || `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`,
   DATABASE_URL:
     process.env.DATABASE_URL || 'postgresql://quiz_api:change-me-local@127.0.0.1:54322/postgres',
+  // The web origin under test is the browser origin the API must allow (A3 CORS allowlist).
+  CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS || BASE_URL,
 };
 
 const TEST_DIR = 'tests/e2e';

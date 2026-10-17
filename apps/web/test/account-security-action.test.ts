@@ -15,6 +15,7 @@ vi.mock('next/navigation', () => ({
   },
 }));
 vi.mock('next/headers', () => ({
+  headers: async () => new Headers(),
   cookies: async () => ({
     get: (name: string) => (cookieJar.has(name) ? { name, value: cookieJar.get(name) } : undefined),
     getAll: () => [...cookieJar].map(([name, value]) => ({ name, value })),

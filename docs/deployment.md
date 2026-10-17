@@ -98,6 +98,36 @@ PR opened
 - 로그에 검색 원문·비밀번호·JWT·원본 PDF 본문을 기본으로 남기지 않는다. 임베딩/LLM 외부 API로 책 원문을 전송할 때 프라이버시·저작권 조건을 확인한다.
 - Rate limit: 인증 요청, 업로드 요청, 문제 생성 LLM 호출, 검색 및 공개 API 별도 제한.
 
+### 6.1 Auth release readiness 설정 (A3, 로컬 범위 구현 · 배포 적용은 M7.4)
+
+**API (FastAPI) — 시작 시 검증.** `APP_ENV=preview|production`이면 아래 조건을 어길 때 `InsecureConfigurationError`로 기동을 거부한다(메시지는 변수 이름만, 값은 출력하지 않음).
+
+| 변수 | local/test 기본값 | preview/production 요구 |
+|---|---|---|
+| `APP_ENV` | `local` | `preview` 또는 `production` (HSTS 강제, `/api/v1/docs` 비활성은 production) |
+| `SUPABASE_JWT_ISSUER` | `.env` | 필수, `https://<project>.supabase.co/auth/v1` |
+| `SUPABASE_JWKS_URL` | `.env` | 필수, `https://…/auth/v1/.well-known/jwks.json` |
+| `CORS_ALLOWED_ORIGINS` | `http://127.0.0.1:3000,http://localhost:3000` | 필수, 쉼표 구분 `https://host[:port]` 목록(웹 production 도메인 + 필요 시 고정 preview 도메인). `*`·wildcard·path 금지(모든 환경) |
+| `CORS_MAX_AGE_SECONDS` | `600` | 0–7200 (preflight cache 상한) |
+
+- CORS: allowlist origin만 `Access-Control-Allow-Origin`으로 응답, `allow_credentials=false`(브라우저→API는 Bearer header, cookie 없음), 허용 header는 `Authorization, Content-Type, Idempotency-Key, X-Request-ID`, 노출 header는 `X-Request-ID`.
+- Origin guard: `Origin` header가 allowlist에도 API 자신의 host에도 없으면(`Origin: null` 포함) preflight·본 요청 모두 route 실행 전 `403 application/problem+json`. `Origin`이 없는 server-to-server 호출(Next.js 서버)은 영향 없음.
+- 모든 응답 header: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`(로컬 `/api/v1/docs` 제외), HTTPS 또는 preview/production에서 `Strict-Transport-Security: max-age=63072000; includeSubDomains`. `/api/v1/**`와 `Authorization` 요청 응답은 `Cache-Control: no-store`. `quiz_api.serve`가 uvicorn `Server` header를 끈다.
+- Vercel preview URL은 배포마다 host가 바뀌므로 wildcard 대신 고정 preview alias 도메인을 `CORS_ALLOWED_ORIGINS`에 넣는다.
+
+**Web (Next.js).**
+- `src/proxy.ts`가 요청마다 nonce를 만들고 CSP를 응답(및 render용 request header)에 설정한다. 모든 page는 dynamic rendering(root layout `connection()`): 정적 page는 nonce를 가질 수 없다.
+  `default-src 'self'; script-src 'self' 'nonce-…' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' <NEXT_PUBLIC_SUPABASE_URL origin> <NEXT_PUBLIC_API_BASE_URL origin>; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'` (+ HTTPS에서 `upgrade-insecure-requests`, `next dev`에서만 `'unsafe-eval'`).
+  `style-src 'unsafe-inline'`은 의도적: React/Radix가 SSR에서 `style="…"` attribute(Popper 위치, CSS 변수)를 출력하며 nonce는 attribute에 적용되지 않는다. script는 nonce 전용이므로 style 주입으로 script 실행은 불가.
+- HTTPS(`x-forwarded-proto: https`)에서 `Strict-Transport-Security`. 정적 header(`next.config.ts`): `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, `COOP: same-origin`; `/share/**`는 `no-store`, `no-referrer`, `noindex`.
+- CSRF: Server Action은 Next 자체의 `Origin` ↔ host 검사로 보호되고(`serverActions.allowedOrigins` 미설정 유지), 추가로 proxy가 GET/HEAD/OPTIONS 외 요청 중 `Origin`이 자기 host(`x-forwarded-host` 우선)와 다르거나 `Origin` 없이 `Sec-Fetch-Site: cross-site`인 요청을 `403`으로 거부한다(route handler 포함).
+- Supabase session cookie: 서버가 쓰는 모든 `sb-…-auth-token*` cookie는 `HttpOnly; SameSite=Lax; Path=/`, HTTPS에서 `Secure`. 브라우저 client는 session을 읽지 않는 호출(signUp/resend/resetPasswordForEmail)만 한다.
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_API_BASE_URL`은 production에서 `https://`여야 한다(CSP `connect-src`와 mixed content).
+
+**Supabase Auth / 메일 (M7.4에서 적용).** `site_url` = 웹 production origin(HTTPS), `additional_redirect_urls` = `https://<web>/auth/callback`(및 고정 preview alias)만, wildcard 금지. 외부 SMTP(발신 도메인 SPF/DKIM), Auth rate limit·CAPTCHA, JWT signing key는 비대칭(ES256/RS256), access token 만료 ≤ 1h. `AUTH_RECOVERY_MARKER_SECRET`(32 byte random)은 환경별로 다르게.
+
+**로그 검사.** `pnpm e2e:log-audit -- <specs> --project …`는 API(INFO)·웹 서버 로그를 캡처해 Playwright를 실행하고 JWT·Bearer/refresh/access token·session cookie 값·email 주소가 있으면 실패한다(DEP-07 staging smoke에서도 같은 명령을 쓴다).
+
 ## 7. 가용성, 백업, 복원
 
 - 매일 DB 백업(사용 플랜 지원/외부 `pg_dump` 점검), Supabase Storage 객체 version/별도 백업, 주요 workspace의 export 정기 검증.
