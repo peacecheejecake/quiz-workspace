@@ -431,9 +431,9 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M5.2 practice API | ✅ | d3ea842 · 67a1aa9 | QPLAY 10 + QOV AC02·03·05 contract GREEN. P2(첫 my-state 동시 갱신) → upsert 후 lock → 지적 없음 |
 | M3.4 outline·교정·publish | ✅ | b354564 · 3171d3c · c4c875b | migration 003400 적용. DOC-02 contract GREEN. P2(lock 역전 deadlock) → document 먼저 lock + savepoint retry → P2(출처 revision을 lock 전에 해석) → lock 안에서 해석 → 지적 없음 |
 | M4.4a question import | ◐ | e5efe21 | migration 100000 적용. QIMPORT·QOV-AC01 GREEN. P1(검토한 version과 다른 내용 발행)·P2(서술형 모범답안 처리) 수정 중 |
-| M5.4 heatmap 화면 | ◐ | e22a1e9 | QOV AC02~06 GREEN. P2×3(filter 밖 deep link, focus fallback, 낙관적 갱신 rollback) 수정 중 |
+| M5.4 heatmap 화면 | ◐ | e22a1e9 · f20d787 | **QOV-01 AC01~06 GREEN**(chromium·webkit). P2×3 → 반영 → P2(일시 실패 lookup 재시도 불가) 수정 중 |
 | M2.6 eval·CLI | ✅ | 8f605ce · 8ef75a4 | seed: Qwen3 hybrid R@5 0.667→rerank 1.0, sweep상 depth 10/k=0 최적(데이터 6 query라 기본값 변경 보류). P1·P2×2 → 반영 → 지적 없음 |
-| M3.5 PDF viewer·교정 UI | ◐ | 353277e | DOC-02 AC01 GREEN(AC02~05는 M3.6a search 대기, 대체 검증 12/12). P2×2 수정 중 |
+| M3.5 PDF viewer·교정 UI | ✅ | 353277e · f01356a · 57bbf68 | DOC-02 AC01 GREEN(AC02~05는 M3.6a 후 재확인). P2×2 → 반영 → P2(지연 refresh가 새 저장 덮음) → generation counter → 지적 없음 |
 | M4.3 LLM·extractor | ✅ | d104c02 · 9b335a6 · a6cb4a2 | P1(보기 swap)·P2(세로 정답표) → 반영 → P1(원문자 숫자 crash 회귀) → decimal-only + never-raise property test(600 seed) → 지적 없음 |
 | (통합) worktree 제외 설정 | ✅ | 6704d1c | 사소한 설정 수정, 리뷰 생략 |
 
