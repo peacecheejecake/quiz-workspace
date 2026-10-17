@@ -9,7 +9,8 @@
 #   - Python members: add the directory to PY_MEMBERS below *and* to
 #     [tool.uv.workspace].members in pyproject.toml. mypy runs on each member that has a
 #     pyproject.toml; pytest collects tests from the whole repo.
-#   - Infra targets (`infra-up`, ...) are added by P0.2.
+#   - Local infra: Qdrant + Redis via Docker Compose (infra/compose.yaml) and the Supabase local
+#     stack via the pinned CLI (`pnpm exec supabase`, config in supabase/config.toml).
 
 SHELL := /bin/bash
 .SHELLFLAGS := -euo pipefail -c
@@ -18,8 +19,11 @@ SHELL := /bin/bash
 PY_MEMBERS := apps/api apps/worker packages/core
 PY_PRESENT := $(foreach m,$(PY_MEMBERS),$(if $(wildcard $(m)/pyproject.toml),$(m)))
 
+COMPOSE := docker compose -f infra/compose.yaml
+SUPABASE := pnpm exec supabase
+
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
-	test test-ts test-py
+	test test-ts test-py infra-up infra-down infra-status infra-reset
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -71,3 +75,19 @@ test-py:
 	@rc=0; uv run pytest || rc=$$?; \
 	if [ $$rc -eq 5 ]; then echo "pytest: no tests collected yet; ok"; exit 0; fi; \
 	exit $$rc
+
+infra-up: ## Start local Qdrant + Redis (compose) and the Supabase local stack
+	$(COMPOSE) up -d --wait
+	$(SUPABASE) start
+
+infra-down: ## Stop local infra, keeping data volumes
+	$(SUPABASE) stop
+	$(COMPOSE) down
+
+infra-status: ## Show compose service health and Supabase local URLs
+	$(COMPOSE) ps
+	$(SUPABASE) status
+
+infra-reset: ## Stop local infra and DELETE its data volumes (Postgres, Storage, Qdrant, Redis)
+	$(SUPABASE) stop --no-backup
+	$(COMPOSE) down --volumes
