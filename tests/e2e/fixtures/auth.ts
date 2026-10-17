@@ -128,9 +128,81 @@ export async function signIn(user: Pick<TestUser, 'email' | 'password'>): Promis
   };
 }
 
+/** Credentials for a user the test signs up itself through the app UI (not created yet). */
+export function newCredentials(label = 'user'): Pick<TestUser, 'email' | 'password'> {
+  return { email: uniqueEmail(label), password: uniquePassword() };
+}
+
+/** Admin lookup of a user id by exact email; undefined when no such user exists. */
+export async function findUserIdByEmail(email: string): Promise<string | undefined> {
+  const res = await authFetch(`/admin/users?per_page=1000&filter=${encodeURIComponent(email)}`, {
+    method: 'GET',
+    key: 'secret',
+  });
+  if (!res.ok) throw await failure('list users', res);
+  const body = (await res.json()) as { users?: { id: string; email?: string }[] };
+  return body.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase())?.id;
+}
+
+/** True once the Auth server records the user's email as confirmed. */
+export async function isEmailConfirmed(id: string): Promise<boolean> {
+  const res = await authFetch(`/admin/users/${encodeURIComponent(id)}`, {
+    method: 'GET',
+    key: 'secret',
+  });
+  if (!res.ok) throw await failure('get user', res);
+  const body = (await res.json()) as { email_confirmed_at?: string | null };
+  return !!body.email_confirmed_at;
+}
+
+/** Public password-recovery request (the Auth call behind AUTH-05); sends the recovery mail. */
+export async function requestPasswordRecovery(email: string): Promise<void> {
+  const res = await authFetch('/recover', { method: 'POST', key: 'publishable', body: { email } });
+  if (!res.ok) throw await failure('recover', res);
+}
+
+/**
+ * Redeems a token hash from an auth mail directly at the Auth server (bypassing the app), e.g.
+ * to make a link already used. Returns the HTTP status only.
+ */
+export async function verifyTokenHashStatus(type: string, tokenHash: string): Promise<number> {
+  const res = await authFetch('/verify', {
+    method: 'POST',
+    key: 'publishable',
+    body: { type, token_hash: tokenHash },
+  });
+  await res.body?.cancel();
+  return res.status;
+}
+
+/**
+ * Redeems a refresh token. Returns the HTTP status only (never the new tokens): 200 means the
+ * token was still usable, 4xx that the Auth server rejected it.
+ */
+export async function refreshStatus(refreshToken: string): Promise<number> {
+  const res = await authFetch('/token?grant_type=refresh_token', {
+    method: 'POST',
+    key: 'publishable',
+    body: { refresh_token: refreshToken },
+  });
+  await res.body?.cancel();
+  return res.status;
+}
+
+/** True when password sign-in through the Auth API succeeds (no session is returned). */
+export async function canSignIn(user: Pick<TestUser, 'email' | 'password'>): Promise<boolean> {
+  try {
+    await signIn(user);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Tracks users created during one test and deletes them all on `cleanup()`. */
 export class UserFactory {
   readonly #created: TestUser[] = [];
+  readonly #adopted: string[] = [];
   readonly #emails: string[] = [];
 
   async create(options: CreateUserOptions = {}): Promise<TestUser> {
@@ -138,6 +210,36 @@ export class UserFactory {
     this.#created.push(user);
     this.#emails.push(user.email);
     return user;
+  }
+
+  /**
+   * Public sign-up through the Auth API (`POST /signup`, what a sign-up form does): the user is
+   * unconfirmed and the Auth server mails the confirmation link (AUTH-03/04/07 flows).
+   */
+  async signUp(options: Pick<CreateUserOptions, 'label'> = {}): Promise<TestUser> {
+    const { email, password } = newCredentials(options.label);
+    this.#emails.push(email);
+    const res = await authFetch('/signup', {
+      method: 'POST',
+      key: 'publishable',
+      body: { email, password },
+    });
+    if (!res.ok) throw await failure('sign up', res);
+    const body = (await res.json()) as { id?: string; user?: { id?: string } };
+    const id = body.user?.id ?? body.id;
+    if (!id) throw new Error('sign up: response has no user id');
+    const user = { id, email, password };
+    this.#created.push(user);
+    return user;
+  }
+
+  /**
+   * Registers an address the test signs up with through the app UI, so cleanup deletes that user
+   * (looked up by email at cleanup time; a user that was never created is fine) and its mail.
+   */
+  adopt(email: string): void {
+    this.#adopted.push(email);
+    this.#emails.push(email);
   }
 
   /** Every address this factory ever created (for mailbox cleanup after `cleanup()`). */
@@ -152,10 +254,18 @@ export class UserFactory {
 
   async cleanup(): Promise<void> {
     const users = this.#created.splice(0);
-    const results = await Promise.allSettled(users.map((u) => deleteUser(u.id)));
+    const adopted = this.#adopted.splice(0);
+    const results = await Promise.allSettled([
+      ...users.map((u) => deleteUser(u.id)),
+      ...adopted.map(async (email) => {
+        const id = await findUserIdByEmail(email);
+        if (id) await deleteUser(id);
+      }),
+    ]);
     const failed = results.filter((r) => r.status === 'rejected');
     if (failed.length) {
-      throw new Error(`user cleanup failed for ${failed.length}/${users.length} user(s)`);
+      const total = users.length + adopted.length;
+      throw new Error(`user cleanup failed for ${failed.length}/${total} user(s)`);
     }
   }
 }
