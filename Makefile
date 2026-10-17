@@ -27,7 +27,7 @@ SIGNING_KEYS := supabase/signing_keys.json
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
 	test test-ts test-py test-infra test-models test-llm auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
-	e2e e2e-browsers e2e-trace
+	e2e e2e-browsers e2e-trace test-red
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -87,8 +87,11 @@ test-py:
 
 # QUIZ_REQUIRE_INFRA=1 turns the "stack not running" skip into a failure, so this never passes
 # vacuously.
-test-infra: ## Integration tests against the running local stack (needs `make infra-up`)
-	QUIZ_REQUIRE_INFRA=1 uv run pytest -m infra
+test-infra: ## Integration tests against the running local stack (needs `make infra-up`), excluding RED-phase tests
+	QUIZ_REQUIRE_INFRA=1 uv run pytest -m "infra and not red"
+
+test-red: ## RED-phase integration tests (expected to fail until their phase is implemented)
+	QUIZ_REQUIRE_INFRA=1 uv run pytest -m "infra and red"
 
 # Real model weights (Docling layout/TableFormer ~0.5G, Qwen3-Embedding-0.6B ~1.2G; Hugging Face
 # cache, HF_HOME). Never skips: missing weights without network access fail the run. Nightly /

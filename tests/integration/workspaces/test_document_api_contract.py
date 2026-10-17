@@ -12,7 +12,8 @@ from typing import Any
 
 import pytest
 
-pytestmark = pytest.mark.infra
+# RED (M3.0): remove `red` when the implementing Task makes these GREEN.
+pytestmark = [pytest.mark.infra, pytest.mark.red]
 
 
 def test_doc_01_ac03_upload_intent_rejects_unsupported_type_and_oversize(seed: Any) -> None:

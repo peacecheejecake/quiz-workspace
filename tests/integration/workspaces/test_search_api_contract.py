@@ -12,7 +12,8 @@ from typing import Any
 
 import pytest
 
-pytestmark = pytest.mark.infra
+# RED (M3.0): remove `red` when the implementing Task makes these GREEN.
+pytestmark = [pytest.mark.infra, pytest.mark.red]
 
 MODES = ("keyword", "semantic", "hybrid")
 

@@ -11,7 +11,8 @@ from typing import Any
 
 import pytest
 
-pytestmark = pytest.mark.infra
+# RED (M3.0): remove `red` when the implementing Task makes these GREEN.
+pytestmark = [pytest.mark.infra, pytest.mark.red]
 
 
 def test_ws_01_ac02_created_workspace_lists_the_creator_as_owner(seed: Any) -> None:

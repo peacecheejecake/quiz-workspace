@@ -62,6 +62,8 @@ summary of the rules for carrying out the implementation plan.
    with the AC ID (`QOV-01-AC03 ...`). Use the file path declared in the screen spec. Run them and
    confirm they fail because the feature is missing — not because of infrastructure, seed data or
    network. Commit with the failure reasons in the commit body.
+   Pytest RED tests also carry the `red` marker so `make test-infra` stays green; E2E RED specs
+   stay out of CI via `E2E_PHASES`. The implementing Task removes the marker / adds the phase.
 3. **Implementation tasks**: make the referenced tests GREEN. Add unit/integration tests for logic
    the browser cannot observe (authorization, revision consistency, answer leakage, idempotency).
 4. Run locally before committing: format, lint, typecheck, unit tests of touched packages, and the
@@ -185,7 +187,9 @@ make test-models # real Docling models (~0.5G HF weights on first run); fails, n
 make e2e-browsers  # playwright install chromium webkit
 make e2e         # Playwright (builds+starts apps/web unless a server is on E2E_BASE_URL); @infra specs need infra-up
 make e2e-trace   # AC <-> test traceability; ARGS="--strict --phase A0" gates a phase, --list-specs lists its specs
-make test-infra  # pytest -m infra against the running stack (errors, not skips, if it's down)
+make test-infra  # pytest -m "infra and not red" against the running stack (errors, not skips, if down)
+make test-red    # RED-phase infra tests (pytest marker `red`; implementing Task removes the marker)
+make test-llm    # real LLM provider tests (needs LLM_API_KEY/LLM_MODEL; synthetic text only)
 make worker-dev  # Celery worker via python -m quiz_worker.serve (never bare `celery worker`)
 make db-reset    # recreate local DB from supabase/migrations + seed.sql (needs infra-up)
 make db-lint     # supabase db lint --fail-on warning

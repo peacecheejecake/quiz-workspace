@@ -114,5 +114,6 @@ norecursedirs = [".*", "*.egg", "venv", "node_modules", "dist", "build"]
 markers = [
   "infra: needs the local stack (`make infra-up`); skipped with a reason otherwise, run via `make test-infra`",
   "models: runs real model weights (Docling layout/TableFormer, Qwen3-Embedding; downloads into HF_HOME); excluded from `make test`, run via `make test-models` (nightly)",
+  "red: RED-phase test for a feature not implemented yet (AGENTS.md §3); excluded from `make test-infra`, run via `make test-red`; the implementing Task removes the marker",
   "llm: calls the real LLM provider (needs LLM_API_KEY + LLM_MODEL, costs money, sends only synthetic text); excluded from `make test`, run via `make test-llm`",
 ]
