@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { connection } from 'next/server';
 import type { ReactNode } from 'react';
 import '@quiz/ui/styles.css';
 import './globals.css';
@@ -13,7 +14,10 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+  // Every page renders per request: the CSP nonce from `proxy.ts` must be stamped on Next's
+  // scripts, which a build-time (static) page cannot carry.
+  await connection();
   return (
     <html lang="ko">
       <body>{children}</body>

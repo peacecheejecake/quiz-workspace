@@ -33,6 +33,8 @@ def main(argv: list[str] | None = None) -> None:
         port=args.port,
         reload=args.reload,
         access_log=False,
+        # No `Server: uvicorn` banner (docs/auth.md §5); SecurityHeadersMiddleware sets the rest.
+        server_header=False,
         log_config=UVICORN_LOG_CONFIG,
     )
 

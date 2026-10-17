@@ -17,6 +17,24 @@ _VALID_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 access_logger = logging.getLogger("quiz_api.access")
 
+HSTS_VALUE = "max-age=63072000; includeSubDomains"
+# JSON API responses never render as documents (the local-only interactive docs page is exempt).
+API_CSP = "default-src 'none'; frame-ancestors 'none'"
+
+
+def security_headers(*, https: bool, csp: bool = True) -> dict[str, str]:
+    """Headers every API response carries (docs/auth.md §5); HSTS only when served over HTTPS."""
+    headers = {
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+        "X-Frame-Options": "DENY",
+    }
+    if csp:
+        headers["Content-Security-Policy"] = API_CSP
+    if https:
+        headers["Strict-Transport-Security"] = HSTS_VALUE
+    return headers
+
 
 def _resolve_request_id(scope: Scope) -> str:
     incoming = Headers(scope=scope).get(REQUEST_ID_HEADER)

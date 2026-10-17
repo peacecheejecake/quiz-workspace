@@ -55,6 +55,9 @@ def test_real_server_never_logs_query_string_tokens(tmp_path: Path) -> None:
                 headers={"Authorization": f"Bearer {TOKEN}"},
             )
             assert response.status_code == 404
+            # No banner from uvicorn itself (`server_header=False`), security headers present.
+            assert "server" not in response.headers
+            assert response.headers["x-content-type-options"] == "nosniff"
         finally:
             server.terminate()
             server.wait(timeout=10)

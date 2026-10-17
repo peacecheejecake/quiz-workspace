@@ -5,10 +5,13 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getPublicEnv } from '@/env';
 import { decideAccess } from '@/lib/auth/routes';
+import { isHttpsRequest } from '@/lib/http/security-headers';
+import { hardenSessionCookie } from './cookie-options';
 import { isSessionCookie, readVerifiedClaims } from './session-guard';
 
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
   const { supabaseUrl, supabasePublishableKey } = getPublicEnv();
+  const secure = isHttpsRequest(request.headers, request.nextUrl);
   let response = NextResponse.next({ request });
   const cacheHeaders: Record<string, string> = {};
 
@@ -19,7 +22,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
         for (const { name, value } of cookiesToSet) request.cookies.set(name, value);
         response = NextResponse.next({ request });
         for (const { name, value, options } of cookiesToSet) {
-          response.cookies.set(name, value, options);
+          response.cookies.set(name, value, hardenSessionCookie(options, secure));
         }
         Object.assign(cacheHeaders, headers);
         for (const [key, value] of Object.entries(cacheHeaders)) response.headers.set(key, value);

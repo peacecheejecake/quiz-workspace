@@ -300,3 +300,35 @@ def test_openapi_declares_bearer_security_and_problem_responses(auth_app: FastAP
         assert operation["security"] == [{"SupabaseAccessToken": []}]
         assert {"200", "401", "403", "503"} <= set(operation["responses"])
         assert not operation.get("parameters")  # no client-supplied identity inputs
+
+
+def test_auth_flow_never_logs_tokens_or_emails(
+    api: TestClient,
+    repo: FakeMeRepository,
+    signing_key: Any,
+    auth_kit: Any,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # A3: the sign-in follow-up calls (/me, /me/workspaces) with a verified token carrying the
+    # user's email, plus expired and wrongly signed tokens, from the allowlisted web origin.
+    email = "a3-log-audit@example.test"
+    user_id = uuid.uuid4()
+    good = signing_key.sign(auth_kit.claims(user_id, email=email))
+    expired = signing_key.sign(auth_kit.claims(user_id, email=email, exp=1))
+    wrong_key = auth_kit.new_key().sign(auth_kit.claims(user_id, email=email))
+    web = {"Origin": "http://127.0.0.1:3000"}
+
+    with caplog.at_level(logging.INFO):
+        assert api.get(ME, headers={**_bearer(good), **web}).status_code == 200
+        assert api.get(ME_WORKSPACES, headers=_bearer(good)).status_code == 200
+        assert api.get(ME, headers=_bearer(expired)).status_code == 401
+        assert api.get(ME, headers=_bearer(wrong_key)).status_code == 401
+
+    # httpx/httpcore records are TestClient's own client-side lines, not the server's.
+    server_records = [r for r in caplog.records if not r.name.startswith(("httpx", "httpcore"))]
+    assert any(r.name == "quiz_api.access" for r in server_records)  # non-vacuous
+    text = "\n".join(r.getMessage() for r in server_records)
+    assert email not in text
+    for token in (good, expired, wrong_key):
+        for part in token.split("."):
+            assert part not in text
