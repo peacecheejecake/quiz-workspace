@@ -184,6 +184,11 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+models = [
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
+    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'linux'" },
+    { name = "transformers" },
+]
 ocr = [
     { name = "docling-ibm-models", extra = ["opencv-python-headless"] },
     { name = "docling-slim", extra = ["convert-core", "feat-ocr-rapidocr-onnx", "format-pdf", "models-local"] },
@@ -208,10 +213,13 @@ requires-dist = [
     { name = "docling-slim", extras = ["feat-ocr-rapidocr-onnx"], marker = "extra == 'ocr'", specifier = "==2.131.0" },
     { name = "docling-slim", extras = ["format-pdf", "models-local", "convert-core"], marker = "extra == 'parser'", specifier = "==2.131.0" },
     { name = "pydantic", specifier = ">=2.11,<3" },
+    { name = "torch", marker = "sys_platform == 'linux' and extra == 'models'", specifier = "==2.14.1", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torch", marker = "sys_platform == 'linux' and extra == 'parser'", specifier = "==2.14.1", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "sys_platform != 'linux' and extra == 'models'", specifier = "==2.14.1" },
     { name = "torch", marker = "sys_platform != 'linux' and extra == 'parser'", specifier = "==2.14.1" },
     { name = "torchvision", marker = "sys_platform == 'linux' and extra == 'parser'", specifier = "==0.29.1", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", marker = "sys_platform != 'linux' and extra == 'parser'", specifier = "==0.29.1" },
+    { name = "transformers", marker = "extra == 'models'", specifier = ">=4.51,<6" },
     { name = "typer", specifier = ">=0.16" },
 ]
 provides-extras = ["parser", "ocr", "models", "llm"]
@@ -1533,7 +1541,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "book-core", extra = ["parser"] },
+    { name = "book-core", extra = ["models", "parser"] },
     { name = "celery-types" },
     { name = "fakeredis", extra = ["lua"] },
     { name = "fonttools" },
@@ -1553,7 +1561,7 @@ requires-dist = [{ name = "quiz-api", editable = "apps/api" }]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "book-core", extras = ["parser"], editable = "packages/core" },
+    { name = "book-core", extras = ["parser", "models"], editable = "packages/core" },
     { name = "celery-types", specifier = ">=0.26" },
     { name = "fakeredis", extras = ["lua"], specifier = ">=2.38,<2.40" },
     { name = "fonttools", specifier = "==4.66.1" },
