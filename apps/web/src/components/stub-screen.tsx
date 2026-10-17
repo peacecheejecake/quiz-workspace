@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { isProtectedPath } from '@/lib/auth/routes';
 import { getScreen, isQueryStateActive, type ScreenId } from '@/screens';
 import styles from './stub-screen.module.css';
 
@@ -23,8 +24,11 @@ export function StubScreen({ screenId, queryScreenId, searchParams = {} }: StubS
   const queryScreen = queryScreenId ? getScreen(queryScreenId) : undefined;
   const showQueryScreen = queryScreen ? isQueryStateActive(queryScreen, searchParams) : false;
 
+  // Protected routes render inside the AppShell, which owns the page's <main> landmark.
+  const Root = isProtectedPath(screen.path) ? 'div' : 'main';
+
   return (
-    <main className={styles.main} data-screen-id={screen.id}>
+    <Root className={styles.main} data-screen-id={screen.id}>
       <h1 className={styles.title}>{screen.name}</h1>
       <p className={styles.meta}>
         화면 ID <code className={styles.id}>{screen.id}</code>
@@ -45,6 +49,6 @@ export function StubScreen({ screenId, queryScreenId, searchParams = {} }: StubS
           <p className={styles.notice}>{NOT_IMPLEMENTED_TEXT}</p>
         </section>
       ) : null}
-    </main>
+    </Root>
   );
 }

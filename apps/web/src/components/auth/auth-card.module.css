@@ -1,0 +1,43 @@
+.main {
+  display: grid;
+  place-items: start center;
+  min-height: 100dvh;
+  padding: var(--space-8) var(--space-4);
+}
+
+.card {
+  display: grid;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 420px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-page-title);
+  line-height: var(--line-height-tight);
+  font-weight: var(--font-weight-semibold);
+}
+
+.description {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--font-size-label);
+}
+
+.footer a {
+  color: var(--color-accent);
+}
+
+@media (max-width: 640px) {
+  .main {
+    padding: var(--space-6) var(--space-4);
+  }
+}

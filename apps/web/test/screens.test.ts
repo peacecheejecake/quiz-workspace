@@ -29,8 +29,11 @@ function parseScreensIndex(markdown: string): DocScreen[] {
 
 const docScreens = parseScreensIndex(readFileSync(SCREENS_INDEX, 'utf8'));
 
+/** `page.tsx`, or `route.ts` for screens that are a Route Handler (AUTH-04 /auth/callback). */
 function pageFile(path: string): string {
-  return join(APP_DIR, ...path.split('/').filter(Boolean), 'page.tsx');
+  const dir = join(APP_DIR, ...path.split('/').filter(Boolean));
+  const route = join(dir, 'route.ts');
+  return existsSync(route) ? route : join(dir, 'page.tsx');
 }
 
 describe('screen route table', () => {
@@ -58,11 +61,14 @@ describe('screen route table', () => {
     }
   });
 
-  it.each(SCREENS.map((s) => [s.id, s] as const))('%s resolves to a page file', (id, screen) => {
-    const file = pageFile(screen.path);
-    expect(existsSync(file), `${file} missing`).toBe(true);
-    expect(readFileSync(file, 'utf8')).toContain(`"${id}"`);
-  });
+  it.each(SCREENS.map((s) => [s.id, s] as const))(
+    '%s resolves to a page or route file',
+    (id, screen) => {
+      const file = pageFile(screen.path);
+      expect(existsSync(file), `${file} missing`).toBe(true);
+      expect(readFileSync(file, 'utf8')).toContain(`"${id}"`);
+    },
+  );
 });
 
 describe('isQueryStateActive', () => {
