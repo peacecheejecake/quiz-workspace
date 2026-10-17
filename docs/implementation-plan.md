@@ -430,8 +430,10 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M3.3 documents library UI | ✅ | 8b823b5 · f270647 | DOC-01 AC01~04 GREEN(chromium·webkit). P2×2(만료 intent 재시도 중복, TUS 로딩 중 취소) → 반영 → 지적 없음 |
 | M5.2 practice API | ✅ | d3ea842 · 67a1aa9 | QPLAY 10 + QOV AC02·03·05 contract GREEN. P2(첫 my-state 동시 갱신) → upsert 후 lock → 지적 없음 |
 | M3.4 outline·교정·publish | ✅ | b354564 · 3171d3c · c4c875b | migration 003400 적용. DOC-02 contract GREEN. P2(lock 역전 deadlock) → document 먼저 lock + savepoint retry → P2(출처 revision을 lock 전에 해석) → lock 안에서 해석 → 지적 없음 |
-| M4.4a question import | ◐ | e5efe21 | migration 100000 적용. QIMPORT·QOV-AC01 GREEN. P1(검토한 version과 다른 내용 발행)·P2(서술형 모범답안 처리) 수정 중 |
-| M5.4 heatmap 화면 | ◐ | e22a1e9 · f20d787 | **QOV-01 AC01~06 GREEN**(chromium·webkit). P2×3 → 반영 → P2(일시 실패 lookup 재시도 불가) 수정 중 |
+| M4.4a question import | ✅ | e5efe21 · 5999cc2 · 1fc2fe8 | migration 100000·120000 적용. QIMPORT·QOV-AC01 GREEN. P1(검토 version과 다른 내용 발행)·P2(서술형 모범답안) → 승인 version만 publish + rubric 매핑 → P2(E2E helper 구 body) → approve-then-publish → 지적 없음 |
+| M5.4 heatmap 화면 | ✅ | e22a1e9 · f20d787 · b4f433c | **QOV-01 AC01~06 GREEN**(chromium·webkit). P2×3 → 반영 → P2(일시 실패 lookup 재시도 불가) → 일시 실패 marker 제거 → 지적 없음 |
+| M3.6a search API | ✅ | 5463bc3 | DB가 published active revision만 scope로 결정(Qdrant는 그 revision id만 조회). chapter filter용 `SearchScope.document_sections` 추가. 리뷰 지적 없음. 배포 시 API image에 models extra 필요(M7 결정), rate limit은 in-process stopgap |
+| (통합) E2E harness 갱신 | ✅ | 350a62b 반영 | 구현된 화면은 stub 기대 제거. 지적 없음 |
 | M2.6 eval·CLI | ✅ | 8f605ce · 8ef75a4 | seed: Qwen3 hybrid R@5 0.667→rerank 1.0, sweep상 depth 10/k=0 최적(데이터 6 query라 기본값 변경 보류). P1·P2×2 → 반영 → 지적 없음 |
 | M3.5 PDF viewer·교정 UI | ✅ | 353277e · f01356a · 57bbf68 | DOC-02 AC01 GREEN(AC02~05는 M3.6a 후 재확인). P2×2 → 반영 → P2(지연 refresh가 새 저장 덮음) → generation counter → 지적 없음 |
 | M4.3 LLM·extractor | ✅ | d104c02 · 9b335a6 · a6cb4a2 | P1(보기 swap)·P2(세로 정답표) → 반영 → P1(원문자 숫자 crash 회귀) → decimal-only + never-raise property test(600 seed) → 지적 없음 |
