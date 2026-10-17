@@ -1,0 +1,19 @@
+pnpm-lock.yaml
+uv.lock
+node_modules/
+dist/
+build/
+.next/
+coverage/
+storybook-static/
+playwright-report/
+test-results/
+.venv/
+.reviews/
+contracts/openapi.json
+# Hand-written design docs (Korean); not reformatted by tooling.
+docs/
+*.md
+# Owned by P0.10 (Playwright harness); kept byte-for-byte until it takes them over.
+playwright.config.ts
+tests/e2e/

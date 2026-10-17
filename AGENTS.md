@@ -153,8 +153,21 @@ When reviewing a commit in this repository:
 
 ## 7. Commands
 
-Filled in as the scaffold lands (Task P0.1 owns this section). Until then:
+Prerequisites: Node 24 (`.nvmrc`), pnpm 10 (`packageManager`), uv, Python 3.12 (`.python-version`).
+Copy `.env.example` to `.env` for local values (never commit `.env`).
 
 ```bash
+make install     # pnpm install + uv sync
+make lint        # eslint + prettier --check + ruff check + ruff format --check (+ per-package lint)
+make fmt         # prettier --write, eslint --fix, ruff --fix, ruff format
+make fmt-check   # format check only
+make typecheck   # per-package `typecheck` scripts (tsc) + mypy on Python members
+make test        # per-package `test` scripts (Vitest) + pytest
+pnpm --filter <pkg> <script>   # run one TS package's script
+uv run pytest apps/api         # run one Python member's tests
 scripts/codex-review.sh --commit HEAD --title "<Task ID>: <summary>"
 ```
+
+New TS packages extend `tsconfig.base.json` and expose `typecheck`/`test` scripts; ESLint and
+Prettier run from the root config. New Python members must be added to both
+`[tool.uv.workspace].members` in `pyproject.toml` and `PY_MEMBERS` in the `Makefile`.

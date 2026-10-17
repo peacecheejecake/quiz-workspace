@@ -10,3 +10,13 @@ __pycache__/
 *.pyc
 .DS_Store
 .reviews/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+dist/
+build/
+coverage/
+storybook-static/
+*.tsbuildinfo
+.eslintcache
