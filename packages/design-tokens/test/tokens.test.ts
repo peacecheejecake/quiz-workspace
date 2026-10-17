@@ -10,7 +10,9 @@ import {
   parseTokenSource,
 } from '../build-tokens.ts';
 import {
+  breakpoints,
   cssVar,
+  mediaQueries,
   questionStatusVar,
   questionStatuses,
   staticTokens,
@@ -78,10 +80,12 @@ const genDark = declarations(cssBlock(css, /\[data-theme=["']dark["']\]/));
 
 describe('spec extraction (guards against a vacuous comparison)', () => {
   it('finds every color token of §3.1, §3.2 and the §3.3 :root example', () => {
-    expect(Object.keys(docLight)).toHaveLength(15);
-    expect(Object.keys(docDark)).toHaveLength(15);
-    // 15 colors + 23 font/space/radius/glass/shadow/layout/heatmap vars + color-scheme.
-    expect(Object.keys(docRoot)).toHaveLength(39);
+    // 15 v1.1 colors + 6 v1.1.1 additions (border-strong, on-accent, danger/success/warning, scrim).
+    expect(Object.keys(docLight)).toHaveLength(21);
+    expect(Object.keys(docDark)).toHaveLength(21);
+    // 21 colors + 23 font/space/radius/glass/shadow/layout/heatmap vars + 12 typography
+    // + 2 breakpoints + color-scheme.
+    expect(Object.keys(docRoot)).toHaveLength(59);
   });
 });
 
@@ -131,6 +135,42 @@ describe('generated TS module', () => {
     expect(cssVar('color-accent')).toBe('var(--color-accent)');
     expect(cssVar('heatmap-dot')).toBe('var(--heatmap-dot)');
     expect(questionStatusVar('retry')).toBe('var(--question-status-retry)');
+  });
+
+  it('exposes breakpoints and media queries derived from the breakpoint tokens', () => {
+    expect(breakpoints).toEqual({ md: 768, lg: 1024 });
+    expect(mediaQueries).toEqual({
+      mobile: '(width < 768px)',
+      tabletUp: '(width >= 768px)',
+      desktop: '(width >= 1024px)',
+    });
+  });
+});
+
+describe('typography scale (design-system.md §4)', () => {
+  const px = (name: keyof typeof staticTokens) => Number.parseFloat(staticTokens[name]);
+  const num = (name: keyof typeof staticTokens) => Number(staticTokens[name]);
+
+  it('sizes fall in the §4 ranges', () => {
+    for (const name of ['font-size-label-sm', 'font-size-label'] as const) {
+      expect(px(name), name).toBeGreaterThanOrEqual(12);
+      expect(px(name), name).toBeLessThanOrEqual(13);
+    }
+    for (const name of ['font-size-body', 'font-size-body-lg'] as const) {
+      expect(px(name), name).toBeGreaterThanOrEqual(14);
+      expect(px(name), name).toBeLessThanOrEqual(16);
+    }
+    expect(px('font-size-section-title')).toBeGreaterThanOrEqual(16);
+    expect(px('font-size-section-title')).toBeLessThanOrEqual(18);
+    expect(px('font-size-page-title')).toBeGreaterThanOrEqual(24);
+    expect(px('font-size-page-title')).toBeLessThanOrEqual(28);
+  });
+
+  it('long text is 16px/1.6, page title 1.2, titles 600', () => {
+    expect(px('font-size-body-lg')).toBe(16);
+    expect(num('line-height-relaxed')).toBeGreaterThanOrEqual(1.6);
+    expect(num('line-height-tight')).toBe(1.2);
+    expect(num('font-weight-semibold')).toBe(600);
   });
 });
 

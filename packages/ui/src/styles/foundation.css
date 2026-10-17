@@ -1,14 +1,5 @@
-/* Kit-internal aliases. They only point at semantic tokens; no literal colors. */
+/* Kit-internal motion value; colors, type and breakpoints come from @quiz/design-tokens. */
 :root {
-  /* Until design-tokens gains feedback colors, reuse the closest semantic status tokens. */
-  --qz-color-danger: var(--question-status-incorrect);
-  --qz-color-success: var(--question-status-correct);
-  --qz-color-warning: var(--question-status-retry);
-  /* Text on accent fills: the opaque surface contrasts with the accent in both themes. */
-  --qz-color-on-accent: var(--color-surface);
-  /* Borders of form controls need ≥ 3:1 against the surface (WCAG 1.4.11). */
-  --qz-color-control-border: var(--color-text-secondary);
-  --qz-scrim: color-mix(in srgb, var(--color-canvas) 64%, transparent);
   --qz-transition-fast: 120ms ease-out;
 }
 
@@ -90,9 +81,9 @@
   border-radius: var(--radius-pill);
   background: var(--color-surface-muted);
   color: var(--color-text-primary);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 18px;
+  font-size: var(--font-size-label-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-normal);
   white-space: nowrap;
 }
 
@@ -110,15 +101,15 @@
 }
 
 .qz-badge[data-tone='success'] .qz-badge__dot {
-  background: var(--qz-color-success);
+  background: var(--color-success);
 }
 
 .qz-badge[data-tone='warning'] .qz-badge__dot {
-  background: var(--qz-color-warning);
+  background: var(--color-warning);
 }
 
 .qz-badge[data-tone='danger'] .qz-badge__dot {
-  background: var(--qz-color-danger);
+  background: var(--color-danger);
 }
 
 /* Skeleton */
@@ -189,17 +180,17 @@
 
 .qz-empty-state__title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1.3;
+  font-size: var(--font-size-section-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
 }
 
 .qz-empty-state__description {
   margin: 0;
   max-width: 48ch;
   color: var(--color-text-secondary);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-relaxed);
 }
 
 .qz-empty-state__action {
