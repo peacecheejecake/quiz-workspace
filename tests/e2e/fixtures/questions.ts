@@ -305,6 +305,8 @@ export interface Draft {
   readonly published_question_id: string | null;
   readonly validations: readonly { readonly code: string; readonly severity: string }[];
   readonly payload: DraftPayload;
+  /** Optimistic-concurrency token: `base_version` when editing, `version` when publishing. */
+  readonly version: string;
 }
 
 /** Four-option MCQ with client-chosen option ids (A2); option `answer` (0-based) is correct. */
@@ -746,13 +748,29 @@ export async function importPaperDrafts(
   return { run, drafts: await listDrafts(owner, run.id) };
 }
 
+/**
+ * Registers drafts the way a reviewer does (A4): approve each one at its current version
+ * (`PATCH /question-drafts/{id}`), then publish exactly those drafts at the approved versions.
+ */
 export async function publishDrafts(
   owner: Member,
   importId: string,
   draftIds: readonly string[],
 ): Promise<void> {
-  const body = { draft_ids: draftIds };
-  await owner.api.ok('POST', `/question-imports/${importId}/publish`, body, [200]);
+  const current = new Map((await listDrafts(owner, importId)).map((d) => [d.id, d]));
+  const drafts: { draft_id: string; version: string }[] = [];
+  for (const id of draftIds) {
+    const draft = current.get(id);
+    if (!draft) throw new Error(`draft ${id} is not part of import ${importId}`);
+    const approved = await owner.api.ok<Draft>(
+      'PATCH',
+      `/question-drafts/${id}`,
+      { base_version: draft.version, review_status: 'approved' },
+      [200],
+    );
+    drafts.push({ draft_id: id, version: approved.version });
+  }
+  await owner.api.ok('POST', `/question-imports/${importId}/publish`, { drafts }, [200]);
 }
 
 // ---------------------------------------------------------------------------------------------
