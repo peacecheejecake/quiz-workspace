@@ -1,3 +1,5 @@
+'use client';
+
 import { Tooltip as RadixTooltip } from 'radix-ui';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { useLayerStyle } from '../internal/layer';

@@ -1,3 +1,5 @@
+'use client';
+
 import type { Ref, TextareaHTMLAttributes } from 'react';
 import { cx } from '../internal/cx';
 import { FieldFrame, useFieldIds, type FieldOwnProps } from './Field';

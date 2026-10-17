@@ -1,3 +1,5 @@
+'use client';
+
 import { Checkbox as RadixCheckbox } from 'radix-ui';
 import { useId, type ComponentProps, type ReactNode } from 'react';
 import { cx } from '../internal/cx';

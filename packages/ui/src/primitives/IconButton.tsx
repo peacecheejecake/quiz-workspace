@@ -1,3 +1,5 @@
+'use client';
+
 import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { cx } from '../internal/cx';
 import type { ButtonSize, ButtonVariant } from './Button';

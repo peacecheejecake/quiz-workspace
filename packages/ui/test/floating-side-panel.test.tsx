@@ -149,3 +149,81 @@ describe('FloatingSidePanel (non-modal)', () => {
     expect(opener).toHaveFocus();
   });
 });
+
+describe('FloatingSidePanel (non-modal) focus handoff skips unfocusable candidates', () => {
+  function PanelWithHiddenNeighbours() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <main>
+          <button type="button" onClick={() => setOpen(true)}>
+            발췌 열기
+          </button>
+          <button type="button" style={{ display: 'none' }}>
+            숨은 버튼
+          </button>
+          <nav aria-label="모바일 메뉴" style={{ display: 'none' }}>
+            <a href="#docs">숨은 링크</a>
+          </nav>
+          <div hidden>
+            <button type="button">hidden 속성</button>
+          </div>
+          <button type="button" style={{ visibility: 'hidden' }}>
+            보이지 않음
+          </button>
+          <div inert>
+            <button type="button">inert 버튼</button>
+          </div>
+          <button type="button">거부하는 버튼</button>
+          <button type="button">다음 버튼</button>
+        </main>
+        <FloatingSidePanel open={open} onOpenChange={setOpen} modal={false} title="발췌">
+          <Button>원문으로 이동</Button>
+        </FloatingSidePanel>
+      </>
+    );
+  }
+
+  it('moves Tab focus to the next element that actually takes focus', async () => {
+    const user = userEvent.setup();
+    render(<PanelWithHiddenNeighbours />);
+    // A candidate whose focus() does nothing (e.g. hidden by CSS the engine cannot report).
+    const refusing = screen.getByRole('button', { name: '거부하는 버튼' });
+    refusing.focus = () => undefined;
+
+    await user.click(screen.getByRole('button', { name: '발췌 열기' }));
+    const dialog = await screen.findByRole('dialog', { name: '발췌' });
+    screen.getByRole('button', { name: '원문으로 이동' }).focus();
+    await user.tab();
+
+    expect(dialog).not.toContainElement(document.activeElement as HTMLElement);
+    expect(screen.getByRole('button', { name: '다음 버튼' })).toHaveFocus();
+  });
+
+  it('Shift+Tab skips an opener that became hidden and lands on the element before it', async () => {
+    function HidingOpener() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button">앞 버튼</button>
+          {/* e.g. a responsive nav that collapses once the panel opens */}
+          <div style={{ display: open ? 'none' : 'block' }}>
+            <button type="button" onClick={() => setOpen(true)}>
+              발췌 열기
+            </button>
+          </div>
+          <FloatingSidePanel open={open} onOpenChange={setOpen} modal={false} title="발췌">
+            <Button>원문으로 이동</Button>
+          </FloatingSidePanel>
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    render(<HidingOpener />);
+    await user.click(screen.getByRole('button', { name: '발췌 열기' }));
+    const dialog = await screen.findByRole('dialog', { name: '발췌' });
+    expect(dialog).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(screen.getByRole('button', { name: '앞 버튼' })).toHaveFocus();
+  });
+});
