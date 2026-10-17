@@ -44,7 +44,9 @@ select columns_are('public', 'question_import_runs',
 select columns_are('public', 'question_drafts',
   array['id', 'workspace_id', 'source_type', 'generation_run_id', 'import_run_id', 'position',
         'question_type', 'payload', 'validations', 'review_status', 'reviewed_by', 'reviewed_at',
-        'published_question_id', 'created_at', 'updated_at']);
+        'published_question_id', 'created_at', 'updated_at',
+        -- M4.4a (20261018100000)
+        'question_number', 'is_multi_answer']);
 
 select col_is_pk('public', 'question_user_states', array['user_id', 'question_id'],
   'question_user_states PK is (user_id, question_id)');

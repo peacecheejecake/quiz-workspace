@@ -444,6 +444,740 @@
         "title": "DocumentSummary",
         "type": "object"
       },
+      "DraftBBox": {
+        "properties": {
+          "x0": {
+            "title": "X0",
+            "type": "number"
+          },
+          "x1": {
+            "title": "X1",
+            "type": "number"
+          },
+          "y0": {
+            "title": "Y0",
+            "type": "number"
+          },
+          "y1": {
+            "title": "Y1",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x0",
+          "y0",
+          "x1",
+          "y1"
+        ],
+        "title": "DraftBBox",
+        "type": "object"
+      },
+      "DraftEvidence": {
+        "properties": {
+          "block_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Block Ids",
+            "type": "array"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "locations": {
+            "items": {
+              "$ref": "#/components/schemas/DraftLocation"
+            },
+            "title": "Locations",
+            "type": "array"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Figure caption text, when any.",
+            "title": "Quote"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          }
+        },
+        "required": [
+          "document_id",
+          "locations"
+        ],
+        "title": "DraftEvidence",
+        "type": "object"
+      },
+      "DraftGenerator": {
+        "properties": {
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "prompt_version"
+        ],
+        "title": "DraftGenerator",
+        "type": "object"
+      },
+      "DraftLocation": {
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DraftBBox"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "block_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Id"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page"
+        ],
+        "title": "DraftLocation",
+        "type": "object"
+      },
+      "DraftPayload": {
+        "description": "book_core `QuestionDraft` (schema_version 1).",
+        "properties": {
+          "accepted_answers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = the source has no answer.",
+            "title": "Accepted Answers"
+          },
+          "correct_option_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = the source has no answer.",
+            "title": "Correct Option Ids"
+          },
+          "evidence": {
+            "description": "Page/area provenance in the source PDF.",
+            "items": {
+              "$ref": "#/components/schemas/DraftEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "generator": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DraftGenerator"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "description": "Extractor id `{document_id}-q{NNN}` (not the draft row id).",
+            "title": "Id",
+            "type": "string"
+          },
+          "justification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Justification"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "origin": {
+            "enum": [
+              "pdf_import",
+              "generation"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "question_type": {
+            "enum": [
+              "MCQ",
+              "SHORT_ANSWER",
+              "ESSAY"
+            ],
+            "title": "Question Type",
+            "type": "string"
+          },
+          "review_status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "title": "Review Status",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "stem": {
+            "title": "Stem",
+            "type": "string"
+          },
+          "validations": {
+            "items": {
+              "$ref": "#/components/schemas/DraftValidation"
+            },
+            "title": "Validations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "origin",
+          "question_type",
+          "stem",
+          "options",
+          "correct_option_ids",
+          "accepted_answers",
+          "evidence",
+          "validations",
+          "review_status"
+        ],
+        "title": "DraftPayload",
+        "type": "object"
+      },
+      "DraftPublishError": {
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "message"
+        ],
+        "title": "DraftPublishError",
+        "type": "object"
+      },
+      "DraftValidation": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "severity": {
+            "description": "`error` blocks approval.",
+            "enum": [
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "message"
+        ],
+        "title": "DraftValidation",
+        "type": "object"
+      },
+      "ImportCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "description": "A `question_paper` document of this workspace whose processing finished.",
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id"
+        ],
+        "title": "ImportCreate",
+        "type": "object"
+      },
+      "ImportDraft": {
+        "properties": {
+          "answer_missing": {
+            "description": "Neither option answers nor accepted answers.",
+            "title": "Answer Missing",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "import_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Id"
+          },
+          "is_multi_answer": {
+            "title": "Is Multi Answer",
+            "type": "boolean"
+          },
+          "pages": {
+            "description": "Source PDF pages (1-based) of the draft.",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/DraftPayload"
+          },
+          "position": {
+            "description": "0-based order in the source.",
+            "title": "Position",
+            "type": "integer"
+          },
+          "publish_errors": {
+            "description": "Why it cannot be confirmed yet.",
+            "items": {
+              "$ref": "#/components/schemas/DraftPublishError"
+            },
+            "title": "Publish Errors",
+            "type": "array"
+          },
+          "publishable": {
+            "description": "Can be confirmed as it is.",
+            "title": "Publishable",
+            "type": "boolean"
+          },
+          "published_question_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published Question Id"
+          },
+          "question_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Number printed in the source.",
+            "title": "Question Number"
+          },
+          "question_type": {
+            "enum": [
+              "MCQ",
+              "SHORT_ANSWER",
+              "ESSAY"
+            ],
+            "title": "Question Type",
+            "type": "string"
+          },
+          "review_status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "title": "Review Status",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "validations": {
+            "items": {
+              "$ref": "#/components/schemas/DraftValidation"
+            },
+            "title": "Validations",
+            "type": "array"
+          },
+          "version": {
+            "description": "Send as `base_version` when editing.",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "import_id",
+          "position",
+          "question_number",
+          "question_type",
+          "is_multi_answer",
+          "review_status",
+          "published_question_id",
+          "validations",
+          "answer_missing",
+          "pages",
+          "publishable",
+          "publish_errors",
+          "payload",
+          "version",
+          "reviewed_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ImportDraft",
+        "type": "object"
+      },
+      "ImportDraftList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImportDraft"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ImportDraftList",
+        "type": "object"
+      },
+      "ImportPublishRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "draft_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Draft Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "draft_ids"
+        ],
+        "title": "ImportPublishRequest",
+        "type": "object"
+      },
+      "ImportPublishResult": {
+        "properties": {
+          "items": {
+            "description": "In request order.",
+            "items": {
+              "$ref": "#/components/schemas/ImportPublishedDraft"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ImportPublishResult",
+        "type": "object"
+      },
+      "ImportPublishedDraft": {
+        "properties": {
+          "draft_id": {
+            "format": "uuid",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "question_id"
+        ],
+        "title": "ImportPublishedDraft",
+        "type": "object"
+      },
+      "ImportRun": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "document_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Title"
+          },
+          "draft_count": {
+            "title": "Draft Count",
+            "type": "integer"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the last job failed (stable code).",
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The run's current job; poll `GET /jobs/{id}`.",
+            "title": "Job Id"
+          },
+          "published_count": {
+            "title": "Published Count",
+            "type": "integer"
+          },
+          "source_document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Id"
+          },
+          "source_document_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The document revision the import reads (active when it started).",
+            "title": "Source Document Revision Id"
+          },
+          "status": {
+            "description": "queued | running | succeeded | failed | cancelled",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "status",
+          "job_id",
+          "error_code",
+          "source_document_id",
+          "source_document_revision_id",
+          "document_title",
+          "draft_count",
+          "published_count",
+          "created_at",
+          "updated_at",
+          "finished_at"
+        ],
+        "title": "ImportRun",
+        "type": "object"
+      },
+      "ImportRunList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImportRun"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ImportRunList",
+        "type": "object"
+      },
       "IssuedShareLink": {
         "properties": {
           "allow_fork": {
@@ -1855,6 +2589,149 @@
           "revisions"
         ],
         "title": "QuestionDetail",
+        "type": "object"
+      },
+      "QuestionDraftUpdate": {
+        "additionalProperties": false,
+        "description": "Partial update: omitted fields are kept; `null` clears a nullable field (an answer set\nto null means unknown).",
+        "properties": {
+          "accepted_answers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Answers"
+          },
+          "base_version": {
+            "description": "`version` of the draft being edited.",
+            "maxLength": 64,
+            "title": "Base Version",
+            "type": "string"
+          },
+          "correct_option_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct Option Ids"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "is_multi_answer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Multi Answer"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/QuestionOption"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "question_number": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Number"
+          },
+          "question_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "MCQ",
+                  "SHORT_ANSWER",
+                  "ESSAY"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Type"
+          },
+          "review_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "approved",
+                  "rejected"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "approve (needs a publishable draft) / reject / back to pending. A content edit without it returns an approved draft to pending.",
+            "title": "Review Status"
+          },
+          "stem": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stem"
+          }
+        },
+        "required": [
+          "base_version"
+        ],
+        "title": "QuestionDraftUpdate",
         "type": "object"
       },
       "QuestionList": {
@@ -4132,6 +5009,519 @@
         ]
       }
     },
+    "/api/v1/question-drafts/{draft_id}": {
+      "patch": {
+        "description": "Edit a draft (e.g. enter the answer the source did not give), approve or reject it.\n409 `stale-draft` when `base_version` is outdated, 409 `draft-published` once published.",
+        "operationId": "updateQuestionDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionDraftUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDraft"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Update Question Draft",
+        "tags": [
+          "question-imports"
+        ]
+      }
+    },
+    "/api/v1/question-imports/{import_id}": {
+      "get": {
+        "operationId": "getQuestionImport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Import Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Question Import",
+        "tags": [
+          "question-imports"
+        ]
+      }
+    },
+    "/api/v1/question-imports/{import_id}/drafts": {
+      "get": {
+        "description": "The run's drafts in source order, with validations, provenance pages and answer flags.\nDrafts a failed job persisted are listed too (they are kept for the retry).",
+        "operationId": "listQuestionImportDrafts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Import Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDraftList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Question Import Drafts",
+        "tags": [
+          "question-imports"
+        ]
+      }
+    },
+    "/api/v1/question-imports/{import_id}/publish": {
+      "post": {
+        "description": "Approve and register exactly these drafts as CONFIRMED questions (QIMPORT-01-AC03).\nAll or nothing: an id that is not a draft of this import is 404, a draft that cannot be\nconfirmed (e.g. an MCQ without an answer) is 422. Already published drafts return their\nquestion (idempotent).",
+        "operationId": "publishQuestionImportDrafts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Import Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportPublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportPublishResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Publish Question Import Drafts",
+        "tags": [
+          "question-imports"
+        ]
+      }
+    },
+    "/api/v1/question-imports/{import_id}/retry": {
+      "post": {
+        "description": "Run a failed (or cancelled) import again as a new job of the same run\n(QIMPORT-01-AC04). The new job keeps the drafts the failed one persisted and adds only the\nmissing ones. 409 `import-not-retryable` unless the run failed or was cancelled.",
+        "operationId": "retryQuestionImport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Import Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Retry Question Import",
+        "tags": [
+          "question-imports"
+        ]
+      }
+    },
     "/api/v1/questions/{question_id}": {
       "delete": {
         "description": "Soft delete (editor+). Revisions and attempts stay for history; the question then answers\n404 everywhere and leaves the bank and the overview.",
@@ -5679,6 +7069,233 @@
         "summary": "Create Upload Intent",
         "tags": [
           "documents"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/question-imports": {
+      "get": {
+        "description": "The workspace's import runs, newest first.",
+        "operationId": "listQuestionImports",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportRunList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Question Imports",
+        "tags": [
+          "question-imports"
+        ]
+      },
+      "post": {
+        "description": "Start extracting draft questions from a question paper (QIMPORT-01-AC01). 409\n`document-not-ready` while the paper is still processing (or failed).",
+        "operationId": "createQuestionImport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Question Import",
+        "tags": [
+          "question-imports"
         ]
       }
     },

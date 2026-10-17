@@ -152,6 +152,11 @@ class WorkerSettings(BaseSettings):
         default=60, ge=0, validation_alias="WORKER_DOCUMENT_LOCK_WAIT_SECONDS"
     )
 
+    # -- question.import (M4.4a) --------------------------------------------------------------
+    # Opt-in LLM refinement of extracted questions (needs LLM_API_KEY / LLM_MODEL; sends
+    # question text to the provider, docs/deployment.md §6). Never used in APP_ENV=test.
+    question_import_llm: bool = Field(default=False, validation_alias="WORKER_QUESTION_IMPORT_LLM")
+
     @model_validator(mode="after")
     def _check_limits(self) -> WorkerSettings:
         if self.task_soft_time_limit_seconds >= self.task_time_limit_seconds:

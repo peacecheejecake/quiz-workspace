@@ -14,8 +14,8 @@ from typing import Any
 
 import pytest
 
-# RED (M4.0): remove `red` when M4.4a makes these GREEN.
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+# GREEN since M4.4a (RED in M4.0). Jobs run in-process (conftest.JobWorker).
+pytestmark = pytest.mark.infra
 
 
 def _no_imports_yet(client: Any, workspace_id: str) -> None:

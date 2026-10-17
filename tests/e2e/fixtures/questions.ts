@@ -47,6 +47,18 @@
 //      ImportRun = {id, status, job_id, source_document_id}; the job is polled at GET /jobs/{id}.
 //      Draft = {id, position, question_type, review_status, published_question_id, validations,
 //               payload: QuestionDraft (book_core schema_version 1)}
+//      M4.4a confirmed the above and added (contracts/openapi.json is the reference):
+//      ImportRun += {source_document_revision_id, document_title, error_code, draft_count,
+//                    published_count, created_at, updated_at, finished_at}
+//      Draft += {import_id, question_number, is_multi_answer, answer_missing, pages,
+//                publishable, publish_errors: [{field, message}], version, ...timestamps}
+//      PATCH /question-drafts/{id} {base_version: Draft.version, question_type?, stem?, options?,
+//            correct_option_ids?, is_multi_answer?, accepted_answers?, explanation?,
+//            question_number?, review_status?: pending|approved|rejected} → 200 Draft; a stale
+//            base_version → 409 stale-draft; a published draft → 409 draft-published; approving
+//            a draft that is not publishable → 422 (validations are recomputed after an edit)
+//      Errors: start from a non-ready paper → 409 document-not-ready; a book or unknown document
+//      → 422; retry of a run that is not failed/cancelled → 409 import-not-retryable.
 //   A5 QIMPORT-01-AC01 says "a PDF with 5 questions → 5 drafts"; the only synthetic question
 //      paper (tests/fixtures/pdfs/questions-ko.pdf, M1.1) has 8, so the tests expect one draft per
 //      truth question (8). Its key covers 1, 2, 4, 5, 8: questions 3 (MCQ), 6 (short), 7 (essay)

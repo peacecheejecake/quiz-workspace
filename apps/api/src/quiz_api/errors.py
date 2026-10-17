@@ -52,6 +52,14 @@ class ProblemType(StrEnum):
     PRACTICE_SESSION_SUBMITTED = "urn:quiz-workspace:problem:practice-session-submitted"
     # 409: self-grade of a session that is not awaiting a grade (still open or already graded).
     PRACTICE_SESSION_NOT_PENDING = "urn:quiz-workspace:problem:practice-session-not-pending"
+    # 409: a question import needs a `question_paper` document that finished processing.
+    DOCUMENT_NOT_READY = "urn:quiz-workspace:problem:document-not-ready"
+    # 409: only a failed or cancelled import run can be retried.
+    IMPORT_NOT_RETRYABLE = "urn:quiz-workspace:problem:import-not-retryable"
+    # 409: a draft edit was based on an outdated version of the draft (reload and retry).
+    STALE_DRAFT = "urn:quiz-workspace:problem:stale-draft"
+    # 409: the draft is already published as a question; edit the question instead.
+    DRAFT_PUBLISHED = "urn:quiz-workspace:problem:draft-published"
 
 
 class ProblemException(StarletteHTTPException):
