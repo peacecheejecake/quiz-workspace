@@ -1,0 +1,304 @@
+{
+  "$comment": "Shared truth table for the question study status (docs/questions.md §2.1, §7), checked by packages/ui (deriveDotStatus, summarizeStatuses) and apps/api (quiz_api.question_status). Priority: retry > incorrect > correct > viewed > unseen; favorite never changes the status and is an overlapping count.",
+  "derive": [
+    {
+      "state": {
+        "first_viewed_at": null,
+        "last_graded_result": null,
+        "needs_retry": false,
+        "is_favorite": false
+      },
+      "status": "unseen"
+    },
+    {
+      "state": {
+        "first_viewed_at": null,
+        "last_graded_result": null,
+        "needs_retry": false,
+        "is_favorite": true
+      },
+      "status": "unseen"
+    },
+    {
+      "state": {
+        "first_viewed_at": null,
+        "last_graded_result": null,
+        "needs_retry": true,
+        "is_favorite": false
+      },
+      "status": "retry"
+    },
+    {
+      "state": {
+        "first_viewed_at": null,
+        "last_graded_result": null,
+        "needs_retry": true,
+        "is_favorite": true
+      },
+      "status": "retry"
+    },
+    {
+      "state": {
+        "first_viewed_at": null,
+        "last_graded_result": "incorrect",
+        "needs_retry": false,
+        "is_favorite": false
+      },
+      "status": "incorrect"
+    },
+    {
+      "state": {
+        "first_viewed_at": null,
+        "last_graded_result": "incorrect",
+        "needs_retry": false,
+        "is_favorite": true
+      },
+      "status": "incorrect"
+    },
+    {
+      "state": {
+        "first_viewed_at": null,
+        "last_graded_result": "incorrect",
+        "needs_retry": true,
+        "is_favorite": false
+      },
+      "status": "retry"
+    },
+    {
+      "state": {
+        "first_viewed_at": null,
+        "last_graded_result": "incorrect",
+        "needs_retry": true,
+        "is_favorite": true
+      },
+      "status": "retry"
+    },
+    {
+      "state": {
+        "first_viewed_at": null,
+        "last_graded_result": "correct",
+        "needs_retry": false,
+        "is_favorite": false
+      },
+      "status": "correct"
+    },
+    {
+      "state": {
+        "first_viewed_at": null,
+        "last_graded_result": "correct",
+        "needs_retry": false,
+        "is_favorite": true
+      },
+      "status": "correct"
+    },
+    {
+      "state": {
+        "first_viewed_at": null,
+        "last_graded_result": "correct",
+        "needs_retry": true,
+        "is_favorite": false
+      },
+      "status": "retry"
+    },
+    {
+      "state": {
+        "first_viewed_at": null,
+        "last_graded_result": "correct",
+        "needs_retry": true,
+        "is_favorite": true
+      },
+      "status": "retry"
+    },
+    {
+      "state": {
+        "first_viewed_at": "2026-10-01T09:00:00Z",
+        "last_graded_result": null,
+        "needs_retry": false,
+        "is_favorite": false
+      },
+      "status": "viewed"
+    },
+    {
+      "state": {
+        "first_viewed_at": "2026-10-01T09:00:00Z",
+        "last_graded_result": null,
+        "needs_retry": false,
+        "is_favorite": true
+      },
+      "status": "viewed"
+    },
+    {
+      "state": {
+        "first_viewed_at": "2026-10-01T09:00:00Z",
+        "last_graded_result": null,
+        "needs_retry": true,
+        "is_favorite": false
+      },
+      "status": "retry"
+    },
+    {
+      "state": {
+        "first_viewed_at": "2026-10-01T09:00:00Z",
+        "last_graded_result": null,
+        "needs_retry": true,
+        "is_favorite": true
+      },
+      "status": "retry"
+    },
+    {
+      "state": {
+        "first_viewed_at": "2026-10-01T09:00:00Z",
+        "last_graded_result": "incorrect",
+        "needs_retry": false,
+        "is_favorite": false
+      },
+      "status": "incorrect"
+    },
+    {
+      "state": {
+        "first_viewed_at": "2026-10-01T09:00:00Z",
+        "last_graded_result": "incorrect",
+        "needs_retry": false,
+        "is_favorite": true
+      },
+      "status": "incorrect"
+    },
+    {
+      "state": {
+        "first_viewed_at": "2026-10-01T09:00:00Z",
+        "last_graded_result": "incorrect",
+        "needs_retry": true,
+        "is_favorite": false
+      },
+      "status": "retry"
+    },
+    {
+      "state": {
+        "first_viewed_at": "2026-10-01T09:00:00Z",
+        "last_graded_result": "incorrect",
+        "needs_retry": true,
+        "is_favorite": true
+      },
+      "status": "retry"
+    },
+    {
+      "state": {
+        "first_viewed_at": "2026-10-01T09:00:00Z",
+        "last_graded_result": "correct",
+        "needs_retry": false,
+        "is_favorite": false
+      },
+      "status": "correct"
+    },
+    {
+      "state": {
+        "first_viewed_at": "2026-10-01T09:00:00Z",
+        "last_graded_result": "correct",
+        "needs_retry": false,
+        "is_favorite": true
+      },
+      "status": "correct"
+    },
+    {
+      "state": {
+        "first_viewed_at": "2026-10-01T09:00:00Z",
+        "last_graded_result": "correct",
+        "needs_retry": true,
+        "is_favorite": false
+      },
+      "status": "retry"
+    },
+    {
+      "state": {
+        "first_viewed_at": "2026-10-01T09:00:00Z",
+        "last_graded_result": "correct",
+        "needs_retry": true,
+        "is_favorite": true
+      },
+      "status": "retry"
+    }
+  ],
+  "summarize": [
+    {
+      "name": "empty",
+      "items": [],
+      "counts": {
+        "total": 0,
+        "unseen": 0,
+        "viewed": 0,
+        "incorrect": 0,
+        "correct": 0,
+        "retry": 0,
+        "favorite": 0
+      }
+    },
+    {
+      "name": "exclusive statuses, overlapping favorites",
+      "items": [
+        {
+          "status": "unseen",
+          "is_favorite": false
+        },
+        {
+          "status": "unseen",
+          "is_favorite": true
+        },
+        {
+          "status": "viewed",
+          "is_favorite": false
+        },
+        {
+          "status": "incorrect",
+          "is_favorite": true
+        },
+        {
+          "status": "correct",
+          "is_favorite": false
+        },
+        {
+          "status": "retry",
+          "is_favorite": true
+        },
+        {
+          "status": "retry",
+          "is_favorite": false
+        }
+      ],
+      "counts": {
+        "total": 7,
+        "unseen": 2,
+        "viewed": 1,
+        "incorrect": 1,
+        "correct": 1,
+        "retry": 2,
+        "favorite": 3
+      }
+    },
+    {
+      "name": "favorites inside one status",
+      "items": [
+        {
+          "status": "correct",
+          "is_favorite": true
+        },
+        {
+          "status": "correct",
+          "is_favorite": true
+        },
+        {
+          "status": "viewed",
+          "is_favorite": false
+        }
+      ],
+      "counts": {
+        "total": 3,
+        "unseen": 0,
+        "viewed": 1,
+        "incorrect": 0,
+        "correct": 2,
+        "retry": 0,
+        "favorite": 2
+      }
+    }
+  ]
+}

@@ -15,7 +15,9 @@ from typing import Any
 
 import pytest
 
-# RED (M5.0): remove `red` when M5.1/M5.2 make these GREEN.
+# RED (M5.0): remove `red` when M5.1/M5.2 make these GREEN. M5.1 added the overview endpoint
+# (its own guarantees: test_overview_api.py); every test here still drives state through the
+# M5.2 practice/my-state API, and AC01 also through the M4.4a import API.
 pytestmark = [pytest.mark.infra, pytest.mark.red]
 
 ANSWER_KEYS = {"correct_option_ids", "accepted_answers", "explanation", "rubric", "correct_answer"}
