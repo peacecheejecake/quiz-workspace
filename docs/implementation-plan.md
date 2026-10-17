@@ -374,6 +374,8 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-10-17 | 공유 링크 비밀값은 256-bit 랜덤, DB에는 SHA-256 digest만 저장(pepper 없음). 발급 응답에서만 평문 제공, idempotent replay는 비밀값 없이 metadata만 반환. | workspace-sharing.md §2, pepper 회전 시 전체 링크 무효화 위험 |
 | 2026-10-17 | 문서 publish는 DB transaction이 권위 있는 전환이고, Qdrant activation/GC는 mirror로서 실패 시 지속 재시도하는 후속 의무로 처리한다. | 검색은 DB published revision id로 범위를 정함 |
 | 2026-10-17 | Job 진행 상태 SSE는 EventSource 대신 fetch streaming + Bearer header를 사용한다(토큰을 URL에 넣지 않음). | auth.md 토큰 비노출 |
+| 2026-10-17 | 브라우저는 FastAPI를 직접 호출하지 않고 Next.js 같은 출처 route handler/server action(BFF)을 거친다. 서버가 `getClaims()`로 세션을 검증하고 Bearer로 API에 전달한다. 인가는 여전히 FastAPI가 판단. | A3에서 session cookie를 HttpOnly로 고정 → 브라우저 JS에 access token 미노출 |
+| 2026-10-17 | 문서 업로드: 6 MiB 이하는 단일 PUT, 초과는 TUS(`tus-js-client` 고정, 재개 상태는 메모리만). sha256은 Web Worker에서 계산(CSP `worker-src 'self'`). | deployment.md §2 |
 
 ## 8. 진행 현황
 
@@ -422,7 +424,10 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M4.2a question bank API | ✅ | b996a29 · 9353c09 | QBANK contract GREEN. P2×2(cursor 500, NUL option id 500) → TypeAdapter·제어문자 거부·DataError→422 + property test → 지적 없음 |
 | S1a share links owner API | ✅ | 8a4a469 · 12a51a2 | migration 224000 적용. SHA-256 digest만 저장. P2(replay 전 만료 검사) → 반영 → 지적 없음 |
 | M3.2b parse/index job | ✅ | e61447c · aa7d181 | job API·SSE. P1(workspace 재검사)·P2(publish 후 Qdrant 복구) → SECURITY DEFINER 함수로 재검사 + `document.index_sync` 의무 job → 지적 없음. migration 230000 적용 |
-| M5.1 overview API | ◐ | 10ff24d | 지적 없음. counts는 chapter/type/q만 반영(상태 chip은 filter와 독립), chapter 번호는 제목 parse. EXPLAIN test 불안정 수정 중 |
+| M5.1 overview API | ✅ | 10ff24d · 2bc9049 | 지적 없음. counts는 chapter/type/q만 반영, chapter 번호는 제목 parse, TS/Python 상태 규칙 공유 truth table. EXPLAIN test를 index 이름 무관 검사로 수정 |
+| M4.2b question bank UI | ✅ | 55dd56d · 8f192ea | AC01·03·04 GREEN(AC02는 M3.4 outline 대기). P2×2(편집 시 출처 재고정, 오래된 page 응답) → 반영 → 지적 없음 |
+| M3.3 documents library UI | ◐ | 8b823b5 | DOC-01 AC01~04 GREEN(chromium·webkit). P2×2(만료 intent 재시도 시 중복 문서, TUS 로딩 중 취소) 수정 중 |
+| M3.4 · M5.2 | ◐ | — | 진행 중 |
 | M4.3 LLM·extractor | ✅ | d104c02 · 9b335a6 · a6cb4a2 | P1(보기 swap)·P2(세로 정답표) → 반영 → P1(원문자 숫자 crash 회귀) → decimal-only + never-raise property test(600 seed) → 지적 없음 |
 | (통합) worktree 제외 설정 | ✅ | 6704d1c | 사소한 설정 수정, 리뷰 생략 |
 
