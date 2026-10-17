@@ -493,6 +493,11 @@ def test_auth_api_ac01_valid_token_returns_own_profile(
         assert "no-store" in res.headers.get("cache-control", ""), "auth responses are per-user"
         body = res.json()
         assert body["id"] == me.id
+        # A1.3: the profile is initialised (idempotently) on the first authenticated call.
+        assert isinstance(body["profile"], dict), body
+        again = api.client.get(ME, headers=_bearer(session.access_token))
+        assert again.status_code == 200
+        assert again.json() == body
         assert other.id not in res.text
         assert other.email not in res.text
         # The token is never echoed back.

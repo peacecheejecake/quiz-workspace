@@ -4,10 +4,15 @@ All handled errors (401/403/404/405/422/500 and any `HTTPException`) are rendere
 `application/problem+json` with the same `Problem` shape plus the request id.
 401 = missing/expired/invalid credentials; 403 = authenticated but not authorized
 (docs/auth.md §5). Handlers never echo request input or internal exception text.
+
+Most problems use `type: about:blank` (the status says it all). Where a client must tell two
+failures with the same status apart, the route raises `ProblemException` with one of the
+`ProblemType` URIs below; they are part of the API contract.
 """
 
 from __future__ import annotations
 
+from enum import StrEnum
 from http import HTTPStatus
 from typing import Any
 
@@ -20,6 +25,29 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from quiz_api.middleware import REQUEST_ID_HEADER
 
 PROBLEM_MEDIA_TYPE = "application/problem+json"
+
+
+class ProblemType(StrEnum):
+    """Problem `type` URIs that distinguish failures sharing a status code (URNs: not links)."""
+
+    # 403: the caller is a member but their role does not allow the action.
+    INSUFFICIENT_ROLE = "urn:quiz-workspace:problem:insufficient-role"
+    # 403: the workspace is archived (read-only); restore it to write again.
+    WORKSPACE_ARCHIVED = "urn:quiz-workspace:problem:workspace-archived"
+
+
+class ProblemException(StarletteHTTPException):
+    """An HTTP error rendered with a specific problem `type`."""
+
+    def __init__(
+        self,
+        status_code: int,
+        problem_type: ProblemType,
+        detail: str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        super().__init__(status_code=status_code, detail=detail, headers=headers)
+        self.problem_type = problem_type
 
 
 class ValidationIssue(BaseModel):
@@ -71,11 +99,13 @@ def problem_response(
     request: Request,
     status: int,
     *,
+    problem_type: str = "about:blank",
     detail: str | None = None,
     errors: list[ValidationIssue] | None = None,
     headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     problem = Problem(
+        type=problem_type,
         title=_title(status),
         status=status,
         detail=detail,
@@ -102,7 +132,10 @@ async def _http_exception_handler(request: Request, exc: StarletteHTTPException)
     headers = dict(exc.headers) if exc.headers else None
     if exc.status_code == HTTPStatus.UNAUTHORIZED:
         headers = {"WWW-Authenticate": "Bearer", **(headers or {})}
-    return problem_response(request, exc.status_code, detail=detail, headers=headers)
+    problem_type = getattr(exc, "problem_type", "about:blank")
+    return problem_response(
+        request, exc.status_code, problem_type=problem_type, detail=detail, headers=headers
+    )
 
 
 async def _validation_exception_handler(
