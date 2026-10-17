@@ -46,11 +46,13 @@ select function_privs_are('public', 'set_updated_at', array[]::text[], 'authenti
   array[]::text[]);
 
 -- quiz_api role attributes ----------------------------------------------------------------------
+-- rolcanlogin is deliberately not asserted: the migration creates the role NOLOGIN, but local
+-- setup grants LOGIN out of band and roles are cluster-wide (they survive `db reset`).
 select is(
-  (select row(rolcanlogin, rolsuper, rolbypassrls, rolcreaterole, rolcreatedb)::text
+  (select row(rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolreplication, rolinherit)::text
      from pg_roles where rolname = 'quiz_api'),
-  row(false, false, false, false, false)::text,
-  'quiz_api is NOLOGIN, not superuser, cannot bypass RLS or create roles/databases'
+  row(false, false, false, false, false, false)::text,
+  'quiz_api is not superuser/replication, cannot bypass RLS, create roles/databases, or inherit'
 );
 
 -- Fixtures (rolled back) ------------------------------------------------------------------------
