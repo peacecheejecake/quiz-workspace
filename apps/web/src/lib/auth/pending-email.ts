@@ -19,6 +19,20 @@ export function pendingEmailCookie(email: string, secure: boolean): string {
   ].join('; ');
 }
 
+/**
+ * Same cookie for server code (`cookies().set`). Deliberately not HttpOnly: the browser must be
+ * able to overwrite it after a later sign-up or a resend to another address.
+ */
+export function pendingEmailCookieOptions(secure: boolean) {
+  return {
+    path: PENDING_EMAIL_PATH,
+    maxAge: PENDING_EMAIL_MAX_AGE,
+    sameSite: 'lax' as const,
+    secure,
+    httpOnly: false,
+  };
+}
+
 /** Cookie value → address, or undefined when absent or not an email. */
 export function parsePendingEmail(raw: string | undefined): string | undefined {
   if (!raw) return undefined;

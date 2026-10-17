@@ -3,10 +3,11 @@
 // Server Actions for password sign-in and sign-out. Credentials go straight to Supabase Auth from
 // the server; session cookies are written by the server client (HttpOnly handling stays in
 // @supabase/ssr). Passwords and tokens are never logged or returned.
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { isSessionCookie } from '@/lib/supabase/session-guard';
+import { PENDING_EMAIL_COOKIE, pendingEmailCookieOptions } from './pending-email';
 import { LOGIN_PATH } from './routes';
 import { safeNextPath } from './safe-next';
 import { classifySignInError, SIGN_IN_MESSAGES } from './sign-in-errors';
@@ -31,6 +32,12 @@ export async function signInAction(_prev: SignInState, formData: FormData): Prom
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       const kind = classifySignInError(error);
+      if (kind === 'emailNotConfirmed') {
+        // Hand this address to /auth/verify so "resend" targets it, not an older pending one.
+        // Only reachable with the correct password, so it reveals nothing about other accounts.
+        const secure = (await headers()).get('origin')?.startsWith('https:') ?? false;
+        (await cookies()).set(PENDING_EMAIL_COOKIE, email, pendingEmailCookieOptions(secure));
+      }
       failure = {
         error: SIGN_IN_MESSAGES[kind],
         email,

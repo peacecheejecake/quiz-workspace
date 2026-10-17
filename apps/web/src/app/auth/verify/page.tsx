@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { AuthLayout } from '@/components/auth/auth-layout';
 import styles from '@/components/auth/auth-form.module.css';
-import { VerificationResend } from '@/components/auth/verification-notice';
+import { VerificationNotice } from '@/components/auth/verification-notice';
 import { stubMetadata } from '@/components/stub-screen';
 import { parsePendingEmail, PENDING_EMAIL_COOKIE } from '@/lib/auth/pending-email';
 
@@ -26,17 +26,7 @@ export default async function Page() {
         </>
       }
     >
-      <p className={styles.body}>
-        {email ? (
-          <>
-            <span className={styles.email}>{email}</span> 주소로 인증 메일을 보냈습니다.
-          </>
-        ) : (
-          '가입할 때 입력한 주소로 인증 메일을 보냈습니다.'
-        )}{' '}
-        메일의 링크를 열면 인증이 완료되고, 그 전에는 Workspace를 이용할 수 없습니다.
-      </p>
-      <VerificationResend email={email} />
+      <VerificationNotice email={email} />
       <p className={styles.fine}>
         메일이 보이지 않으면 스팸함을 확인해 주세요. 이메일 주소를 잘못 입력했다면 &lsquo;다른
         이메일로 가입하기&rsquo;에서 올바른 주소로 다시 가입해 주세요.

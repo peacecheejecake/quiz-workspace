@@ -92,7 +92,7 @@ PR opened
 ## 6. Secrets / Security
 
 - Public: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`는 공개 가능한 값. 접근 권한 자체는 JWT/RLS/API에서 판정.
-- Server only: `DATABASE_URL`, `SUPABASE_SECRET_KEY`, `QDRANT_API_KEY`, `REDIS_URL`, `LLM_API_KEY`, Storage 관리 권한. 절대로 `NEXT_PUBLIC_` 접두사 사용 금지.
+- Server only: `DATABASE_URL`, `SUPABASE_SECRET_KEY`, `QDRANT_API_KEY`, `REDIS_URL`, `LLM_API_KEY`, `AUTH_RECOVERY_MARKER_SECRET`(Next.js 서버, 비밀번호 재설정 recovery marker HMAC 키, `openssl rand -base64 32`), Storage 관리 권한. 절대로 `NEXT_PUBLIC_` 접두사 사용 금지.
 - Qdrant API key와 Redis는 내부 서비스에서만 사용; 프론트가 Qdrant 직접 검색하지 않는다.
 - 메일·파일 저장·LLM 공급자와 콘텐츠의 데이터 처리 지역, 기록·보존 정책을 점검. 저작권 있는 도서는 비공개 storage + 최소 권한 + 접근 로그.
 - 로그에 검색 원문·비밀번호·JWT·원본 PDF 본문을 기본으로 남기지 않는다. 임베딩/LLM 외부 API로 책 원문을 전송할 때 프라이버시·저작권 조건을 확인한다.

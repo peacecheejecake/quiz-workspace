@@ -98,3 +98,42 @@ test(
     }
   },
 );
+
+test(
+  'AUTH-03-AC03 unconfirmed sign-in sends the verify screen to that address, which can be changed',
+  { tag: '@infra' },
+  async ({ page, context, baseURL, userFactory }) => {
+    // No mail is sent here: the user is created unconfirmed through the admin API and resend is
+    // never clicked.
+    const user = await userFactory.create({ label: 'auth03-ac03-addr', confirmed: false });
+    const stale = newCredentials('auth03-ac03-stale').email;
+    // An older pending address from a previous sign-up in this browser (same cookie the sign-up
+    // form writes: path /auth/verify, host-only).
+    await context.addCookies([
+      {
+        name: 'qz_verify_email',
+        value: encodeURIComponent(stale),
+        domain: new URL(baseURL ?? '').hostname,
+        path: '/auth/verify',
+        sameSite: 'Lax',
+      },
+    ]);
+
+    await submitLogin(page, user);
+    await page
+      .getByRole('main')
+      .getByRole('link', { name: /인증 메일|verification/i })
+      .click();
+    await expect(page).toHaveURL(VERIFY_SCREEN);
+    const main = page.getByRole('main');
+    await expect(main).toContainText(user.email);
+    await expect(main).not.toContainText(stale);
+
+    // The target address can be changed on demand.
+    await expect(authUi.email(page)).toHaveCount(0);
+    await main.getByRole('button', { name: /받는 주소 바꾸기|change address/i }).click();
+    await expect(authUi.email(page)).toBeFocused();
+    await expect(authUi.email(page)).toHaveValue(user.email);
+    await expect(authUi.resendButton(page)).toBeEnabled();
+  },
+);

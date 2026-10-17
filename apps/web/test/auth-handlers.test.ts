@@ -52,9 +52,11 @@ vi.mock('@supabase/ssr', () => ({
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:54321';
 process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test';
 process.env.NEXT_PUBLIC_API_BASE_URL = 'http://127.0.0.1:8000';
+process.env.AUTH_RECOVERY_MARKER_SECRET = 'handler-test-secret-0123456789abcdefghijkl';
 
 const { GET } = await import('../src/app/auth/callback/route');
 const { updateSession } = await import('../src/lib/supabase/proxy');
+const { verifyRecoveryMarker } = await import('../src/lib/auth/recovery');
 
 const ORIGIN = 'http://127.0.0.1:3000';
 const request = (path: string) => new NextRequest(new URL(path, ORIGIN));
@@ -195,12 +197,21 @@ describe('callback recovery marker (AUTH-06 gate)', () => {
 
   it('marks the new session after a recovery link (HttpOnly, path-scoped, short-lived)', async () => {
     auth.verifyOtp.mockResolvedValue({
-      data: { session: { access_token: token({ session_id: 'sess-1' }) } },
+      data: { session: { access_token: token({ session_id: 'sess-1', sub: 'user-1' }) } },
       error: null,
     });
     const res = await GET(request('/auth/callback?token_hash=h&type=recovery'));
     const cookie = markerCookie(res) ?? '';
-    expect(cookie).toContain('qz_recovery=sess-1');
+    const value = /qz_recovery=([^;]+)/.exec(cookie)?.[1] ?? '';
+    // Signed for this session and user; the raw session id alone is never the marker.
+    expect(value).not.toBe('sess-1');
+    expect(
+      verifyRecoveryMarker(
+        decodeURIComponent(value),
+        Math.floor(Date.now() / 1000),
+        process.env.AUTH_RECOVERY_MARKER_SECRET ?? '',
+      ),
+    ).toEqual({ sessionId: 'sess-1', sub: 'user-1' });
     expect(cookie).toMatch(/HttpOnly/i);
     expect(cookie).toContain('Path=/reset-password');
     expect(cookie).toContain('Max-Age=900');
@@ -209,7 +220,7 @@ describe('callback recovery marker (AUTH-06 gate)', () => {
 
   it('clears any marker after a non-recovery link', async () => {
     auth.verifyOtp.mockResolvedValue({
-      data: { session: { access_token: token({ session_id: 'sess-2' }) } },
+      data: { session: { access_token: token({ session_id: 'sess-2', sub: 'user-1' }) } },
       error: null,
     });
     const res = await GET(request('/auth/callback?token_hash=h&type=email'));

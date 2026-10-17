@@ -10,7 +10,13 @@ import {
   planCallback,
   type AuthErrorLike,
 } from '@/lib/auth/callback';
-import { recoveryMarkerCookie, sessionIdFromAccessToken } from '@/lib/auth/recovery';
+import {
+  identityFromAccessToken,
+  recoveryMarkerCookie,
+  signRecoveryMarker,
+  type RecoveryIdentity,
+} from '@/lib/auth/recovery';
+import { resolveRecoveryMarkerSecret } from '@/lib/auth/recovery-secret';
 import { relativeRedirect } from '@/lib/http/redirect';
 
 export const dynamic = 'force-dynamic';
@@ -27,9 +33,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const cacheHeaders: Record<string, string> = {};
 
   let location: string;
-  // Recovery marker for `/reset-password` (lib/auth/recovery.ts): set to the new session's id
+  // Recovery marker for `/reset-password` (lib/auth/recovery.ts): signed for the new session
   // after a recovery link, cleared after any other successful sign-in link.
-  let recoverySessionId: string | null | undefined;
+  let recoveryIdentity: RecoveryIdentity | null | undefined;
   if (plan.kind === 'fail') {
     location = authErrorPath(plan.reason, plan.flow);
   } else {
@@ -52,8 +58,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       error = result.error;
       if (!error) {
         const isRecovery = plan.kind === 'verify-otp' && plan.type === 'recovery';
-        recoverySessionId = isRecovery
-          ? (sessionIdFromAccessToken(result.data?.session?.access_token) ?? null)
+        recoveryIdentity = isRecovery
+          ? (identityFromAccessToken(result.data?.session?.access_token) ?? null)
           : null;
       }
     } catch {
@@ -66,9 +72,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const response = relativeRedirect(location, 303);
   for (const { name, value, options } of pending) response.cookies.set(name, value, options);
-  if (recoverySessionId !== undefined) {
+  if (recoveryIdentity !== undefined) {
     const secure = request.nextUrl.protocol === 'https:';
-    const marker = recoveryMarkerCookie(recoverySessionId, secure);
+    const signed = recoveryIdentity
+      ? signRecoveryMarker(
+          recoveryIdentity,
+          Math.floor(Date.now() / 1000),
+          resolveRecoveryMarkerSecret(),
+        )
+      : null;
+    const marker = recoveryMarkerCookie(signed, secure);
     response.cookies.set(marker.name, marker.value, marker.options);
   }
   for (const [key, value] of Object.entries(cacheHeaders)) response.headers.set(key, value);

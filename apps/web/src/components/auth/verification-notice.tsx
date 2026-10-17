@@ -3,8 +3,10 @@
 // `VerificationNotice` resend control (AUTH-03). Resends the sign-up confirmation through browser
 // supabase-js, then blocks further sends for a cooldown with a visible countdown (AUTH-03-AC02).
 // Auth throttling (429) starts the same cooldown. Unknown/confirmed addresses get the same
-// "sent" answer as pending ones, so the control never reveals whether an account exists. Without a
-// known pending address (e.g. arriving from /auth/error) the user types it.
+// "sent" answer as pending ones, so the control never reveals whether an account exists. The
+// address comes from the pending-email cookie (set by sign-up, or by sign-in for an unconfirmed
+// account); the user can switch to another address, and without one (e.g. arriving from
+// /auth/error) types it.
 import { Button, Input } from '@quiz/ui';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
@@ -13,6 +15,7 @@ import {
   retryAfterSeconds,
   SHORT_THROTTLE_SECONDS,
 } from '@/lib/auth/flow-errors';
+import { pendingEmailCookie } from '@/lib/auth/pending-email';
 import { normalizeEmail, validateEmail, VALIDATION_MESSAGES } from '@/lib/auth/validation';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import styles from './auth-form.module.css';
@@ -25,7 +28,9 @@ type Outcome =
   | { kind: 'error'; message: string; attempt: number }
   | undefined;
 
-export function VerificationResend({ email: knownEmail }: { email?: string | undefined }) {
+export function VerificationNotice({ email: initialEmail }: { email?: string | undefined }) {
+  const [target, setTarget] = useState(initialEmail);
+  const [editing, setEditing] = useState(!initialEmail);
   const [pending, setPending] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState<number>();
   const [now, setNow] = useState(() => Date.now());
@@ -50,6 +55,12 @@ export function VerificationResend({ email: knownEmail }: { email?: string | und
     return () => window.clearInterval(timer);
   }, [cooldownUntil]);
 
+  // Opening "받는 주소 바꾸기" moves focus into the address field.
+  const openedByUser = useRef(false);
+  useEffect(() => {
+    if (editing && openedByUser.current) emailRef.current?.focus();
+  }, [editing]);
+
   function startCooldown() {
     const start = Date.now();
     setNow(start);
@@ -59,8 +70,9 @@ export function VerificationResend({ email: knownEmail }: { email?: string | und
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending || coolingDown) return;
-    const email = knownEmail ?? normalizeEmail(new FormData(event.currentTarget).get('email'));
-    const invalid = knownEmail ? undefined : validateEmail(email);
+    const email =
+      editing || !target ? normalizeEmail(new FormData(event.currentTarget).get('email')) : target;
+    const invalid = validateEmail(email);
     setEmailError(invalid);
     if (invalid) {
       emailRef.current?.focus();
@@ -95,7 +107,12 @@ export function VerificationResend({ email: knownEmail }: { email?: string | und
     if (kind === 'ok') {
       startCooldown();
       setOutcome({ kind: 'sent', attempt });
-    } else if (kind === 'invalidEmail' && !knownEmail) {
+      if (email !== target) {
+        setTarget(email);
+        document.cookie = pendingEmailCookie(email, window.location.protocol === 'https:');
+      }
+      setEditing(false);
+    } else if (kind === 'invalidEmail' && (editing || !target)) {
       setEmailError(VALIDATION_MESSAGES.emailInvalid);
       setOutcome(undefined);
       emailRef.current?.focus();
@@ -110,48 +127,75 @@ export function VerificationResend({ email: knownEmail }: { email?: string | und
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate className={styles.form}>
-      {outcome?.kind === 'sent' ? (
-        <FormNotice tone="success">
-          <p>인증 메일을 다시 보냈습니다. 받은 편지함과 스팸함을 확인해 주세요.</p>
-        </FormNotice>
-      ) : null}
-      {outcome?.kind === 'error' ? (
-        <FormNotice tone="danger" focusKey={outcome.attempt}>
-          <p>{outcome.message}</p>
-        </FormNotice>
-      ) : null}
-      {knownEmail ? null : (
-        <Input
-          ref={emailRef}
-          label="이메일"
-          name="email"
-          type="email"
-          autoComplete="email"
-          inputMode="email"
-          autoCapitalize="none"
-          spellCheck={false}
-          required
-          description="가입할 때 입력한 이메일 주소로 인증 메일을 다시 보냅니다."
-          error={emailError}
-          onChange={() => setEmailError(undefined)}
-        />
-      )}
-      <Button
-        type="submit"
-        variant="primary"
-        loading={pending}
-        disabled={coolingDown}
-        aria-describedby={coolingDown ? 'resend-cooldown' : undefined}
-        className={styles.submit}
-      >
-        인증 메일 다시 보내기
-      </Button>
-      {coolingDown ? (
-        <p id="resend-cooldown" className={styles.fine}>
-          메일을 너무 자주 보낼 수 없습니다. {remaining}초 후에 다시 보낼 수 있습니다.
-        </p>
-      ) : null}
-    </form>
+    <>
+      <p className={styles.body}>
+        {target ? (
+          <>
+            <span className={styles.email}>{target}</span> 주소로 인증 메일을 보냈습니다.
+          </>
+        ) : (
+          '가입할 때 입력한 주소로 인증 메일을 보냈습니다.'
+        )}{' '}
+        메일의 링크를 열면 인증이 완료되고, 그 전에는 Workspace를 이용할 수 없습니다.
+      </p>
+      <form onSubmit={onSubmit} noValidate className={styles.form}>
+        {outcome?.kind === 'sent' ? (
+          <FormNotice tone="success">
+            <p>인증 메일을 다시 보냈습니다. 받은 편지함과 스팸함을 확인해 주세요.</p>
+          </FormNotice>
+        ) : null}
+        {outcome?.kind === 'error' ? (
+          <FormNotice tone="danger" focusKey={outcome.attempt}>
+            <p>{outcome.message}</p>
+          </FormNotice>
+        ) : null}
+        {editing || !target ? (
+          <Input
+            ref={emailRef}
+            key={target ?? ''}
+            defaultValue={target ?? ''}
+            label="이메일"
+            name="email"
+            type="email"
+            autoComplete="email"
+            inputMode="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+            description="가입할 때 입력한 이메일 주소로 인증 메일을 다시 보냅니다."
+            error={emailError}
+            onChange={() => setEmailError(undefined)}
+          />
+        ) : null}
+        <Button
+          type="submit"
+          variant="primary"
+          loading={pending}
+          disabled={coolingDown}
+          aria-describedby={coolingDown ? 'resend-cooldown' : undefined}
+          className={styles.submit}
+        >
+          인증 메일 다시 보내기
+        </Button>
+        {coolingDown ? (
+          <p id="resend-cooldown" className={styles.fine}>
+            메일을 너무 자주 보낼 수 없습니다. {remaining}초 후에 다시 보낼 수 있습니다.
+          </p>
+        ) : null}
+        {target ? (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              openedByUser.current = true;
+              setEditing((value) => !value);
+              setEmailError(undefined);
+            }}
+            aria-expanded={editing}
+          >
+            {editing ? '주소 변경 취소' : '받는 주소 바꾸기'}
+          </Button>
+        ) : null}
+      </form>
+    </>
   );
 }
