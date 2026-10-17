@@ -33,7 +33,16 @@ class WorkerSettings(BaseSettings):
 
     # Server-only secrets: never log, never put in URLs or responses.
     redis_url: SecretStr | None = Field(default=None, validation_alias="REDIS_URL")
-    database_url: SecretStr | None = Field(default=None, validation_alias="DATABASE_URL")
+    # The worker's own least-privilege role (`quiz_worker`), never the API's DATABASE_URL.
+    # Required in preview/production; locally it selects the Postgres JobStore unless
+    # WORKER_JOB_STORE_PATH asks for the SQLite one.
+    worker_database_url: SecretStr | None = Field(
+        default=None, validation_alias="WORKER_DATABASE_URL"
+    )
+    db_pool_size: int = Field(default=5, ge=1, validation_alias="WORKER_DB_POOL_SIZE")
+    db_connect_timeout_seconds: float = Field(
+        default=5, gt=0, validation_alias="WORKER_DB_CONNECT_TIMEOUT_SECONDS"
+    )
 
     # docs/deployment.md §7: start at concurrency 1 and scale after measuring memory/latency.
     concurrency: int = Field(default=1, ge=1, validation_alias="WORKER_CONCURRENCY")

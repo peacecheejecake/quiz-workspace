@@ -27,6 +27,7 @@ from quiz_worker.envelope import JobEnvelope
 from quiz_worker.errors import JobOutcomeError, JobRetryError
 from quiz_worker.jobs import ECHO_JOB
 from quiz_worker.logging_config import configure_logging
+from quiz_worker.pg_store import PostgresJobStore, create_job_store_engine
 from quiz_worker.reconcile import ReconcileReport, reconcile_jobs
 from quiz_worker.retry import RetryPolicy
 from quiz_worker.runner import (
@@ -218,12 +219,24 @@ def build_celery_config(settings: WorkerSettings) -> dict[str, Any]:
 
 
 def build_job_store(settings: WorkerSettings) -> JobStore:
-    if settings.app_env in {Environment.LOCAL, Environment.TEST}:
-        if settings.job_store_path:
-            return SqliteJobStore(settings.job_store_path)
+    """Postgres (`async_jobs`) wherever a worker database is configured; deployed environments
+    require it. SQLite / in-memory stores exist for local runs and tests only."""
+    local = settings.app_env in {Environment.LOCAL, Environment.TEST}
+    if local and settings.job_store_path:
+        return SqliteJobStore(settings.job_store_path)
+    if settings.worker_database_url is not None:
+        return PostgresJobStore(
+            create_job_store_engine(
+                settings.worker_database_url,
+                pool_size=settings.db_pool_size,
+                connect_timeout_seconds=settings.db_connect_timeout_seconds,
+            )
+        )
+    if local:
         return InMemoryJobStore()
-    # The Postgres JobStore on `async_jobs` lands once P0.9's migration exists.
-    raise RuntimeError(f"no persistent JobStore configured for APP_ENV={settings.app_env}")
+    raise RuntimeError(
+        f"no persistent JobStore configured for APP_ENV={settings.app_env}: set WORKER_DATABASE_URL"
+    )
 
 
 def safe_argsrepr(args: Any) -> str:

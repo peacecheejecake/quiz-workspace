@@ -27,7 +27,7 @@ from quiz_worker.store import (
     TransactionalJobStore,
 )
 
-from .conftest import BOOK_TEXT, TOKEN, EnvelopeFactory, FakeClock
+from .conftest import BOOK_TEXT, TOKEN, EnvelopeFactory, FakeClock, Tenancy
 
 LEASE = 100
 
@@ -414,12 +414,57 @@ def test_lost_worker_on_final_attempt_fails_the_job(
 
 
 def test_create_is_idempotent_on_the_idempotency_key(
-    store: TransactionalJobStore, make_envelope: EnvelopeFactory
+    store: TransactionalJobStore, make_envelope: EnvelopeFactory, tenancy: Tenancy
 ) -> None:
     first = make_envelope(idempotency_key="fork-1")
     again = make_envelope(idempotency_key="fork-1")
-    other_workspace = make_envelope(idempotency_key="fork-1", workspace_id=uuid4())
+    other_workspace = make_envelope(idempotency_key="fork-1", workspace_id=tenancy.new_workspace())
+    other_user = make_envelope(idempotency_key="fork-1", created_by=tenancy.new_user())
+    other_type = make_envelope("workspace.fork", idempotency_key="fork-1")
 
     assert store.create(again, max_attempts=3) == store.create(again, max_attempts=3)
     assert store.create(first, max_attempts=3).job_id == again.job_id
-    assert store.create(other_workspace, max_attempts=3).job_id == other_workspace.job_id
+    # The scope is (workspace_id, created_by, job_type, key), as async_jobs_idempotency_idx.
+    for independent in (other_workspace, other_user, other_type):
+        assert store.create(independent, max_attempts=3).job_id == independent.job_id
+
+
+def test_jobs_without_a_creator_or_key_are_deduplicated_by_job_id_only(
+    store: TransactionalJobStore, make_envelope: EnvelopeFactory
+) -> None:
+    system = make_envelope(idempotency_key="reindex-1", created_by=None)
+    system_again = make_envelope(idempotency_key="reindex-1", created_by=None)
+    keyless = make_envelope().model_copy(update={"idempotency_key": None})
+    keyless_again = keyless.model_copy(update={"job_id": uuid4()})
+
+    for envelope in (system, system_again, keyless, keyless_again):
+        record = store.create(envelope, max_attempts=3)
+        assert record.job_id == envelope.job_id
+        assert record.matches(envelope)
+    # A repeated job id still returns the stored row.
+    assert store.create(system, max_attempts=3) == store.get(system.job_id)
+    with pytest.raises(ValueError, match="job_id already used"):
+        store.create(
+            system.model_copy(update={"created_by": None, "job_type": "other"}), max_attempts=3
+        )
+
+
+def test_creator_is_part_of_the_job_identity(
+    store: TransactionalJobStore,
+    runner: JobRunner,
+    make_envelope: EnvelopeFactory,
+    tenancy: Tenancy,
+) -> None:
+    envelope = make_envelope()
+    record = store.create(envelope, max_attempts=3)
+    assert (record.created_by, record.to_envelope()) == (tenancy.user_id, envelope)
+
+    forged = envelope.model_copy(update={"created_by": tenancy.new_user()})
+    result = runner.run(definition(lambda c, p: None), forged.to_message())
+
+    assert result.error == "invalid_envelope: mismatch"
+    assert store.get(envelope.job_id) == record
+
+    seen: list[object] = []
+    runner.run(definition(lambda c, p: seen.append(c.created_by)), envelope.to_message())
+    assert seen == [tenancy.user_id]
