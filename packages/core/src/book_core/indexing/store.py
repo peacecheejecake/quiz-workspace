@@ -12,7 +12,9 @@ Design (docs/architecture.md §4 indexing flow steps 5-7):
   the embedding cost for nothing the search flow uses.
 - The payload is the full ``SearchChunk`` (so chunks can be read back for context retrieval and
   incremental diffs) plus ``workspace_id``, ``pages``, the embedding ``model``, ``revision_size``
-  (chunk count of the revision; activation refuses a partially written revision) and ``active``.
+  (chunk count of the revision; activation refuses a partially written revision), ``active`` and,
+  when the writer knows it, the ``document_type`` (``book`` / ``question_paper``) so search can
+  leave question papers out by default.
 - Incremental re-index: chunks unchanged since a base revision (same id and ``content_hash``)
   reuse its stored vectors instead of being embedded again; only added/changed children are
   embedded. Re-indexing a revision that is already (partly) indexed only writes missing points
@@ -57,6 +59,7 @@ _KEYWORD_FIELDS = (
     "section_id",
     "level",
     "language",
+    "document_type",
 )
 _SCROLL_PAGE = 256
 # A child whose text has no BM25 terms is stored without a sparse vector.
@@ -150,7 +153,13 @@ def _revision_filter(workspace_id: str, document_id: str, *more: qm.Condition) -
 
 
 def chunk_payload(
-    workspace_id: str, chunk: SearchChunk, *, model_name: str, revision_size: int, active: bool
+    workspace_id: str,
+    chunk: SearchChunk,
+    *,
+    model_name: str,
+    revision_size: int,
+    active: bool,
+    document_type: str | None = None,
 ) -> dict[str, Any]:
     data = chunk.model_dump(mode="json")
     data["chunk_schema_version"] = data.pop("schema_version")
@@ -163,15 +172,26 @@ def chunk_payload(
         revision_size=revision_size,
         active=active,
     )
+    if document_type is not None:
+        data["document_type"] = document_type
     return data
 
 
-def chunk_from_payload(payload: Mapping[str, Any]) -> SearchChunk:
-    data = {
-        k: v
-        for k, v in payload.items()
-        if k not in {"payload_version", "workspace_id", "pages", "model", "revision_size", "active"}
+_PAYLOAD_ONLY_KEYS = frozenset(
+    {
+        "payload_version",
+        "workspace_id",
+        "pages",
+        "model",
+        "revision_size",
+        "active",
+        "document_type",
     }
+)
+
+
+def chunk_from_payload(payload: Mapping[str, Any]) -> SearchChunk:
+    data = {k: v for k, v in payload.items() if k not in _PAYLOAD_ONLY_KEYS}
     data["schema_version"] = data.pop("chunk_schema_version")
     data["id"] = data.pop("chunk_id")
     return SearchChunk.model_validate(data)
@@ -225,6 +245,7 @@ class IndexStore(Protocol):
         chunks: Sequence[SearchChunk],
         *,
         base_revision_id: str | None = None,
+        document_type: str | None = None,
     ) -> IndexReport: ...
 
     def activate_revision(self, workspace_id: str, document_id: str, revision_id: str) -> None: ...
@@ -448,12 +469,14 @@ class QdrantIndexStore:
         chunks: Sequence[SearchChunk],
         *,
         base_revision_id: str | None = None,
+        document_type: str | None = None,
     ) -> IndexReport:
         """Write every chunk of one revision; the revision is *not* activated.
 
         ``base_revision_id`` (default: the currently active revision, if another one) is the
         revision whose stored vectors are reused for unchanged chunks. A failure part-way leaves
         earlier revisions untouched and this revision inactive; calling again resumes it.
+        ``document_type`` is stored on every point (payload only; it does not change vectors).
         """
         for value, what in (
             (workspace_id, "workspace_id"),
@@ -470,6 +493,7 @@ class QdrantIndexStore:
                 revision_id=revision_id,
                 chunks=chunks,
                 base_revision_id=base_revision_id,
+                document_type=document_type,
             )
         )
 
@@ -482,6 +506,7 @@ class QdrantIndexStore:
         revision_id: str,
         chunks: Sequence[SearchChunk],
         base_revision_id: str | None,
+        document_type: str | None = None,
     ) -> IndexReport:
         active = self._active_revision(collection, workspace_id, document_id)
         if base_revision_id is None and active != revision_id:
@@ -496,7 +521,14 @@ class QdrantIndexStore:
             else {}
         )
         plan = self._plan(
-            workspace_id, document_id, revision_id, chunks, existing, base, active == revision_id
+            workspace_id,
+            document_id,
+            revision_id,
+            chunks,
+            existing,
+            base,
+            active == revision_id,
+            document_type,
         )
 
         for batch in _batches(plan.parents, self._batch_size):
@@ -548,6 +580,7 @@ class QdrantIndexStore:
         existing: Mapping[str, _Stored],
         base: Mapping[str, _Stored],
         is_active: bool,
+        document_type: str | None = None,
     ) -> _Plan:
         plan = _Plan()
         model_name = self._embedder.model_name
@@ -559,6 +592,7 @@ class QdrantIndexStore:
                 model_name=model_name,
                 revision_size=len(chunks),
                 active=is_active,
+                document_type=document_type,
             )
             current = existing.get(chunk.id)
             if current is not None and _same_vectors(current.payload, chunk, model_name):

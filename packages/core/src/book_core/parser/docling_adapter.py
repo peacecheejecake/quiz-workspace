@@ -166,6 +166,7 @@ class DoclingParser:
             do_table_structure=self._options.table_structure,
             artifacts_path=self._options.artifacts_path,
             accelerator_options=AcceleratorOptions(device=self._options.device),
+            document_timeout=self._options.document_timeout,
         )
         if ocr:
             options.ocr_options = RapidOcrOptions(lang=[self._options.ocr_lang])

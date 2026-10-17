@@ -70,6 +70,46 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/jobs/{job_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Job
+     * @description Current status of an async job (poll this, or stream `/jobs/{id}/events`).
+     */
+    get: operations['getJob'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/jobs/{job_id}/events': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream Job Events
+     * @description Status transitions and progress of a job as Server-Sent Events.
+     */
+    get: operations['streamJobEvents'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/me': {
     parameters: {
       query?: never;
@@ -424,6 +464,60 @@ export type components = {
        * Format: uuid
        */
       workspace_id: string;
+    };
+    /** Job */
+    Job: {
+      /** Attempts */
+      attempts: number;
+      /** Cancel Requested */
+      cancel_requested: boolean;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Error Code
+       * @description Stable reason of a failed (or `cancelled`) job, e.g. `parse_failed`.
+       */
+      error_code: string | null;
+      /** Finished At */
+      finished_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Job Type
+       * @description e.g. `document.parse`.
+       */
+      job_type: string;
+      /** Max Attempts */
+      max_attempts: number;
+      /**
+       * Progress
+       * @description 0-100 while running (100 once succeeded); null when unknown.
+       */
+      progress: number | null;
+      /**
+       * Stage
+       * @description Current step while running, e.g. `parsing`, `indexing`; null otherwise.
+       */
+      stage: string | null;
+      /** Started At */
+      started_at: string | null;
+      /**
+       * Status
+       * @description queued | running | succeeded | failed | cancelled
+       * @enum {string}
+       */
+      status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
     };
     /** LivenessReport */
     LivenessReport: {
@@ -1031,6 +1125,122 @@ export interface operations {
       };
       /** @description Service Unavailable */
       503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getJob: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Job'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  streamJobEvents: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Server-Sent Events: `event: job` with a `Job` JSON body on connect and on every change, `: keep-alive` comments, `event: gone` if access ends. The stream ends after a terminal status or after a few minutes (reconnect). Send the Bearer token in the Authorization header (use fetch streaming, not EventSource). */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'text/event-stream': string;
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
         headers: {
           [name: string]: unknown;
         };

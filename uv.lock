@@ -1614,6 +1614,7 @@ source = { editable = "apps/worker" }
 dependencies = [
     { name = "book-core" },
     { name = "celery" },
+    { name = "httpx" },
     { name = "kombu" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
@@ -1626,6 +1627,7 @@ dependencies = [
 requires-dist = [
     { name = "book-core", editable = "packages/core" },
     { name = "celery", specifier = ">=5.6.3,<5.7" },
+    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "kombu", specifier = ">=5.6.2,<5.7" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
     { name = "pydantic", specifier = ">=2.12,<3" },

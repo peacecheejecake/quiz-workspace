@@ -97,6 +97,14 @@ async_jobs = Table(
     Column("published_at", DateTime(timezone=True)),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
+    # M3.2b job status API (state columns written by the worker's JobStore).
+    Column("attempts", Integer, nullable=False),
+    Column("max_attempts", Integer, nullable=False),
+    Column("result", JSONB),
+    Column("last_error", Text),
+    Column("started_at", DateTime(timezone=True)),
+    Column("finished_at", DateTime(timezone=True)),
+    Column("cancel_requested_at", DateTime(timezone=True)),
 )
 
 

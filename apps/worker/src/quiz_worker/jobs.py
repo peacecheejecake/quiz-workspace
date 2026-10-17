@@ -2,8 +2,8 @@
 
 `echo` is the wiring example: it validates a versioned payload, honours cancellation (also
 while it waits `delay_seconds`, which lets tests hold a job running) and returns a small
-non-sensitive result. Real jobs (parse/index, import, generation, fork) follow
-the same shape in their own modules and are added to `celery_app.default_definitions()`.
+non-sensitive result. Real jobs follow the same shape in their own modules (`document_job`:
+parse/index) and are added to `celery_app.default_definitions()`.
 """
 
 from __future__ import annotations

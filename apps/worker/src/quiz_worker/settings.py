@@ -9,7 +9,7 @@ from __future__ import annotations
 from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +18,18 @@ class Environment(StrEnum):
     TEST = "test"
     PREVIEW = "preview"
     PRODUCTION = "production"
+
+
+class ParserMode(StrEnum):
+    AUTO = "auto"
+    DOCLING = "docling"
+    FAKE = "fake"
+
+
+class EmbedderMode(StrEnum):
+    AUTO = "auto"
+    QWEN3 = "qwen3"
+    FAKE = "fake"
 
 
 class WorkerSettings(BaseSettings):
@@ -94,11 +106,64 @@ class WorkerSettings(BaseSettings):
     # children, several local workers). Unset -> in-memory store (single process).
     job_store_path: str | None = Field(default=None, validation_alias="WORKER_JOB_STORE_PATH")
 
+    # -- document.parse (M3.2b) ---------------------------------------------------------------
+    # Private Storage (source PDFs, parsed artifacts) with the server-only secret key.
+    supabase_url: str | None = Field(
+        default=None, validation_alias=AliasChoices("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL")
+    )
+    supabase_secret_key: SecretStr | None = Field(
+        default=None, validation_alias="SUPABASE_SECRET_KEY"
+    )
+    storage_timeout_seconds: float = Field(
+        default=60, gt=0, validation_alias="STORAGE_TIMEOUT_SECONDS"
+    )
+    qdrant_url: str | None = Field(default=None, validation_alias="QDRANT_URL")
+    qdrant_api_key: SecretStr | None = Field(default=None, validation_alias="QDRANT_API_KEY")
+    # Namespaces the document collections/alias (previews, test sessions); search must use the
+    # same prefix.
+    qdrant_collection_prefix: str = Field(
+        default="", pattern=r"^[A-Za-z0-9_-]*$", validation_alias="QDRANT_COLLECTION_PREFIX"
+    )
+    # `auto`: fixture-truth FakeParser (Docling for unknown files) in APP_ENV=test, Docling
+    # elsewhere. `fake` never loads models (unknown files fail); never use it in production.
+    parser: ParserMode = Field(default=ParserMode.AUTO, validation_alias="WORKER_PARSER")
+    # `auto`: FakeEmbedder in APP_ENV=test, Qwen3-Embedding elsewhere.
+    embedder: EmbedderMode = Field(default=EmbedderMode.AUTO, validation_alias="WORKER_EMBEDDER")
+    # Synthetic fixtures whose `*.truth.json` the test FakeParser serves by sha256.
+    fixture_pdf_dir: str | None = Field(default=None, validation_alias="WORKER_FIXTURE_PDF_DIR")
+    # Pre-downloaded model weights (Docling `artifacts_path`); with `models_offline` the worker
+    # never contacts the Hugging Face Hub (HF_HUB_OFFLINE=1).
+    models_artifacts_path: str | None = Field(
+        default=None, validation_alias="WORKER_MODELS_ARTIFACTS_PATH"
+    )
+    models_offline: bool = Field(default=False, validation_alias="WORKER_MODELS_OFFLINE")
+    # Input limits checked before parsing (docs/deployment.md §2 step 4).
+    pdf_max_bytes: int = Field(
+        default=50 * 1024 * 1024, ge=1, validation_alias="WORKER_PDF_MAX_BYTES"
+    )
+    pdf_max_pages: int = Field(default=1500, ge=1, validation_alias="WORKER_PDF_MAX_PAGES")
+    # Docling stops converting after this many seconds (the document then fails as too slow);
+    # must stay below the task soft time limit.
+    parse_timeout_seconds: float = Field(
+        default=1200, gt=0, validation_alias="WORKER_PARSE_TIMEOUT_SECONDS"
+    )
+    # How long a job waits for another job on the same document before retrying later.
+    document_lock_wait_seconds: float = Field(
+        default=60, ge=0, validation_alias="WORKER_DOCUMENT_LOCK_WAIT_SECONDS"
+    )
+
     @model_validator(mode="after")
     def _check_limits(self) -> WorkerSettings:
         if self.task_soft_time_limit_seconds >= self.task_time_limit_seconds:
             raise ValueError("WORKER_TASK_SOFT_TIME_LIMIT_SECONDS must be below the hard limit")
+        deployed = self.app_env in {Environment.PREVIEW, Environment.PRODUCTION}
+        if deployed and (self.parser is ParserMode.FAKE or self.embedder is EmbedderMode.FAKE):
+            raise ValueError("fake parser/embedder adapters are for local and test runs only")
         return self
+
+    @property
+    def is_test(self) -> bool:
+        return self.app_env is Environment.TEST
 
     @property
     def lease_seconds(self) -> int:
