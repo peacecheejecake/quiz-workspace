@@ -438,7 +438,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M3.6b search 화면 | ✅ | 0df2934 · 9407384 · 5c8f1be | SEARCH-01 AC01~05 + DOC-02 AC02~05 GREEN(chromium·webkit). PDF jump 위치는 브라우저에서 첫 query term block으로 보정(서버측 개선은 follow-up). P2×2(revision 미유지, stale chapter) → 반영 → P2(지연 초기 검색 race) → 반영 → 지적 없음 |
 | M6.0/M7.0 RED | ✅ | 9ad03b7 | QGEN-01 4 + HISTORY-01 3 E2E, contract 10 RED(404). ScenarioLLMClient fake. 지적 없음 |
 | M4.4b import 화면 | ◐ | 9a263df | QIMPORT-01 AC01~04 GREEN. 공용 `QuestionDraftReview`. P2×2(초기 로드 재시도, publish 200 제한) 수정 중 |
-| S2a sharing 화면 | ◐ | bbcbc21 | WS-SHARE-01-AC01·WS-01-AC06 GREEN, AC02~05는 S1b 의존. P2×2(21+ link revoke, 만료 link 정책 편집) 수정 중 |
+| S2a sharing 화면 | ✅ | bbcbc21 · 27c0039 | WS-SHARE-01 AC01~05 + WS-01-AC06 GREEN(chromium·webkit), artifact-audit 0. P2×2(21+ link revoke, 만료 link 정책 편집) → 반영 → 지적 없음 |
 | S1b shared API | ◐ | bb611bc | share contract 13 GREEN. 무상태 HMAC session cookie, PDF는 API proxy. P2×2(relay 뒤 rate limit key, 미발행 chapter oracle) 수정 중 |
 | M5.5 practice panel | ◐ | e29ae2d | QPLAY-01 AC01~05 GREEN. practice action revalidate 제거(pushState race) → panel 닫힐 때 refresh. P2×2(Back으로 닫을 때 stale, flag 변경 시 채점대기 유실) 수정 중 |
 | M2.6 eval·CLI | ✅ | 8f605ce · 8ef75a4 | seed: Qwen3 hybrid R@5 0.667→rerank 1.0, sweep상 depth 10/k=0 최적(데이터 6 query라 기본값 변경 보류). P1·P2×2 → 반영 → 지적 없음 |
