@@ -51,6 +51,7 @@ describe('FloatingSidePanel (modal)', () => {
 
     await user.click(trigger);
     const dialog = await screen.findByRole('dialog', { name: '문제 3' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(dialog).toHaveAccessibleDescription('객관식');
     expect(dialog).toHaveFocus();
 
