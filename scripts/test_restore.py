@@ -30,7 +30,8 @@ USER = "6d0f3c1e-0000-4000-8000-000000000001"
 WORKSPACE = "6d0f3c1e-0000-4000-8000-000000000002"
 
 # The schema a `db reset` leaves: platform tables, migration-seeded buckets (with Supabase's
-# statement-level delete guard), nothing else.
+# statement-level delete guard), a platform table the admin role may not insert into (Supabase's
+# vector buckets), nothing else.
 SCHEMA = """
 create schema supabase_migrations;
 create table supabase_migrations.schema_migrations (version text primary key);
@@ -44,6 +45,8 @@ create table storage.buckets (
   created_at timestamptz not null default now(), updated_at timestamptz not null default now());
 create table storage.objects (
   id uuid primary key, bucket_id text not null references storage.buckets, name text not null);
+create table storage.buckets_vectors (id text primary key);
+revoke insert on storage.buckets_vectors from current_user;
 create function storage.protect_delete() returns trigger language plpgsql as $$
 begin raise exception 'Direct deletion from storage tables is not allowed'; end $$;
 create trigger protect_buckets_delete before delete on storage.buckets
@@ -80,6 +83,7 @@ def _data_sql(source_pdf_limit: int = 52428800) -> str:
             ],
         )
         + _copy('"storage"."objects"', '"id", "bucket_id", "name"', [])
+        + _copy('"storage"."buckets_vectors"', '"id"', [])
         + "RESET ALL;\n"
     )
 
@@ -151,7 +155,7 @@ def test_restore_into_a_reset_target_with_migration_seeded_buckets(
     result = _restore(_backup(tmp_path / "b", _data_sql()), target)
 
     assert result.returncode == 0, result.stderr
-    assert "row counts match (4 tables)" in result.stdout
+    assert "row counts match (5 tables)" in result.stdout
     assert _rows(target, "select id::text, owner_id::text from public.workspaces") == [
         (WORKSPACE, USER)
     ]

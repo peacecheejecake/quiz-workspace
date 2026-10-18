@@ -9,11 +9,12 @@
 #      supabase/migrations versions (`supabase db push` to a new project, `supabase db reset`
 #      locally) — and no data yet: every table in data.sql is empty except the rows the
 #      migrations themselves seed (SEEDED below: storage.buckets);
-#   3. load db/data.sql in ONE transaction with session_replication_role=replica (triggers and FK
-#      ordering off while loading, as in Supabase's restore guide). The migration-seeded rows are
-#      set aside first, replaced by the backup's rows and must match them (all columns but the
-#      timestamps), otherwise the whole load rolls back. Then every table's row count is compared
-#      with the COPY row counts in data.sql;
+#   3. load db/data.sql (its non-empty COPY blocks) in ONE transaction with
+#      session_replication_role=replica (triggers and FK ordering off while loading, as in
+#      Supabase's restore guide). The migration-seeded rows are set aside first, replaced by the
+#      backup's rows and must match them (all columns but the timestamps), otherwise the whole
+#      load rolls back. Then every table's row count is compared with the COPY row counts in
+#      data.sql;
 #   4. upload Storage objects (upsert, idempotent);
 #   5. rebuild Qdrant: `--reindex` runs `scripts/reindex --all` with the worker environment
 #      (WORKER_DATABASE_URL, QDRANT_*), otherwise the command is printed.
@@ -73,6 +74,18 @@ dump_counts() {
   ' "$dir/db/data.sql" | LC_ALL=C sort
 }
 
+# data.sql without its empty COPY blocks: they carry no rows, and the target's admin role may lack
+# INSERT on unused platform tables (storage.buckets_vectors / vector_indexes are writable only by
+# supabase_storage_admin), which fails even a zero-row COPY. A table with rows is always loaded.
+data_with_rows() {
+  awk '
+    pending != "" { if ($0 == "\\.") { pending = ""; next } print pending; pending = ""; inside = 1 }
+    inside { print; if ($0 == "\\.") inside = 0; next }
+    /^COPY [^ ]+ .* FROM stdin;$/ { pending = $0; next }
+    { print }
+  ' "$dir/db/data.sql"
+}
+
 target_counts() {
   # One count query per table listed in the dump (identifiers quoted by format()).
   local sql="" table
@@ -120,7 +133,7 @@ if [[ $skip_db -eq 0 ]]; then
   start=$SECONDS
   "${psql_cmd[@]}" "$RESTORE_DB_URL" -X -q -v ON_ERROR_STOP=1 --single-transaction \
     -c 'set session_replication_role = replica' -c "$seeded_set_aside" \
-    -f - -c "$seeded_check" <"$dir/db/data.sql" >/dev/null
+    -f - -c "$seeded_check" < <(data_with_rows) >/dev/null
   phase "postgres data" $((SECONDS - start))
 
   diff <(dump_counts) <(target_counts) >/dev/null || {
