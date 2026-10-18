@@ -387,6 +387,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-10-18 | M7.3(컨테이너·CI)은 M7.2와 파일 범위가 겹치지 않아 병렬 착수. CI GREEN 판정은 M7.2 merge 후 전체 E2E 포함으로 수행. | 진행 속도, 의존성 목적(전체 GREEN 후 CI 확정) 유지 |
 | 2026-10-18 | M7.2: app 기본 테마는 OS 설정(prefers-color-scheme)을 따르고 명시적 `data-theme`가 우선. `--color-text-secondary` light 값 `#667085`→`#636D82`(muted surface 대비 4.67:1, design-system v1.1.2). Visual baseline은 pinned Playwright Linux image 렌더 하나로 통일(플랫폼별 baseline 없음). | M7.2 axe |
 | 2026-10-18 | M7.3: API image는 `quiz-api[models]`, worker는 `quiz-worker[models]`(parser·models·llm). Model weight는 image에 굽지 않고 `HF_HOME` volume에 최초 사용 시 적재. CI E2E는 목록에 없는 phase의 screen spec만 제외하고 전부 실행. Restore는 같은 migration 상태의 빈 target에 data-only load. | deployment.md |
+| 2026-10-18 | M7.3 follow-up: restore의 "빈 target"은 사용자 데이터가 없는 상태. migration이 넣는 행(`storage.buckets`)은 load 트랜잭션 안에서 backup 행으로 교체하되 timestamp 외 정의가 다르면 rollback. 그 밖에 data.sql의 어떤 table이라도 행이 있으면 거부. | DEP-06, CI rehearsal |
 
 ## 8. 진행 현황
 

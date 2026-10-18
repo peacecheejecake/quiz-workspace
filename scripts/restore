@@ -7,10 +7,13 @@
 #   1. verify SHA256SUMS and every Storage blob;
 #   2. precondition: the target already has the backup's schema — the same applied
 #      supabase/migrations versions (`supabase db push` to a new project, `supabase db reset`
-#      locally) — and no data yet (no auth users, no workspaces);
+#      locally) — and no data yet: every table in data.sql is empty except the rows the
+#      migrations themselves seed (SEEDED below: storage.buckets);
 #   3. load db/data.sql in ONE transaction with session_replication_role=replica (triggers and FK
-#      ordering off while loading, as in Supabase's restore guide), then compare every table's
-#      row count with the COPY row counts in data.sql;
+#      ordering off while loading, as in Supabase's restore guide). The migration-seeded rows are
+#      set aside first, replaced by the backup's rows and must match them (all columns but the
+#      timestamps), otherwise the whole load rolls back. Then every table's row count is compared
+#      with the COPY row counts in data.sql;
 #   4. upload Storage objects (upsert, idempotent);
 #   5. rebuild Qdrant: `--reindex` runs `scripts/reindex --all` with the worker environment
 #      (WORKER_DATABASE_URL, QDRANT_*), otherwise the command is printed.
@@ -81,6 +84,26 @@ target_counts() {
     tr -d '"' | LC_ALL=C sort
 }
 
+# Tables in data.sql whose rows supabase/migrations inserts (storage buckets, 20261017200000), so a
+# freshly migrated target already has them. Inside the load transaction they are copied aside and
+# deleted, data.sql brings the backup's rows, and every set-aside row must come back identical
+# apart from its timestamps (same migration version => same definition); anything else raises and
+# rolls the load back. Any other non-empty table fails the empty-target precondition.
+SEEDED="storage.buckets"
+seeded_set_aside="" seeded_check=""
+n=0
+for table in $SEEDED; do
+  n=$((n + 1))
+  rel="\"${table%%.*}\".\"${table#*.}\"" tmp="restore_seeded_$n"
+  seeded_set_aside+="create temp table $tmp on commit drop as select * from $rel;
+    delete from $rel; "
+  seeded_check+="do \$\$ begin if exists (select 1 from pg_temp.$tmp s where not exists (
+    select 1 from $rel r
+     where to_jsonb(r) - 'created_at' - 'updated_at' = to_jsonb(s) - 'created_at' - 'updated_at'))
+  then raise exception 'restore: % rows seeded by the migrations differ from the backup', '$table';
+  end if; end \$\$; "
+done
+
 if [[ $skip_db -eq 0 ]]; then
   [[ -n ${RESTORE_DB_URL:-} ]] || die "RESTORE_DB_URL is required"
   q() { "${psql_cmd[@]}" "$RESTORE_DB_URL" -X -At -v ON_ERROR_STOP=1 -c "$1"; }
@@ -89,11 +112,15 @@ if [[ $skip_db -eq 0 ]]; then
     die "target migrations differ from the backup's (apply supabase/migrations first)"
   [[ "$(q 'select (select count(*) from auth.users) + (select count(*) from public.workspaces)')" == 0 ]] ||
     die "target is not empty (auth.users / public.workspaces have rows)"
+  nonempty="$(target_counts | awk -F'\t' -v seeded=" $SEEDED " \
+    'index(seeded, " " $1 " ") == 0 && $2 != 0 { printf " %s", $1 }')"
+  [[ -z $nonempty ]] || die "target is not empty (rows in:$nonempty)"
   [[ $yes -eq 1 ]] || die "refusing to write without --yes"
 
   start=$SECONDS
   "${psql_cmd[@]}" "$RESTORE_DB_URL" -X -q -v ON_ERROR_STOP=1 --single-transaction \
-    -c 'set session_replication_role = replica' -f - <"$dir/db/data.sql" >/dev/null
+    -c 'set session_replication_role = replica' -c "$seeded_set_aside" \
+    -f - -c "$seeded_check" <"$dir/db/data.sql" >/dev/null
   phase "postgres data" $((SECONDS - start))
 
   diff <(dump_counts) <(target_counts) >/dev/null || {
