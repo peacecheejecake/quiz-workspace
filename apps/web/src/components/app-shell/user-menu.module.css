@@ -1,5 +1,15 @@
+/* min-width: 0 lets a long email shrink and truncate instead of widening the header. */
 .trigger {
+  min-width: 0;
+  max-width: min(280px, 40vw);
   margin-left: auto;
+}
+
+.triggerLabel {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .content {

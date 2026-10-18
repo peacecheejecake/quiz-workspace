@@ -36,6 +36,11 @@ test(
       /계정 보안|보안 설정|security/i,
     );
     await expect(main.getByText(email, { exact: true })).toBeVisible();
+    // The app-shell account button shows the same email (UX1), full value in its name/title.
+    const account = authUi.accountButton(page);
+    await expect(account).toContainText(email);
+    expect(await account.getAttribute('aria-label')).toContain(email);
+    await expect(account).toHaveAttribute('title', email);
     await expect(authUi.newPassword(page)).toBeVisible();
     await expect(authUi.confirmNewPassword(page)).toBeVisible();
     await expect(authUi.updatePasswordButton(page)).toBeVisible();

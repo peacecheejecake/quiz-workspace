@@ -7,6 +7,7 @@
 import type { Page } from '@playwright/test';
 import { expectAccessible } from '../fixtures/a11y.ts';
 import {
+  authUi,
   block,
   book,
   createNumberedQuestions,
@@ -113,7 +114,7 @@ test(
     // A long workspace name truncates in the mobile header: it neither overlaps the account
     // button nor widens the page (mobile browsers then zoom out and fixed panels overflow).
     const switcher = await page.getByRole('button', { name: /workspace 전환/i }).boundingBox();
-    const account = await page.getByRole('button', { name: /^(계정|account)$/i }).boundingBox();
+    const account = await authUi.accountButton(page).boundingBox();
     expect(switcher && account && switcher.x + switcher.width <= account.x).toBe(true);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
