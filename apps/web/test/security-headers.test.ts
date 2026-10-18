@@ -163,7 +163,9 @@ describe('isCrossOriginWrite', () => {
       isCrossOriginWrite('POST', new Headers({ host: ownHost, origin }));
     expect(write('https://xn--fa-hia.example', 'xn--fa-hia.example')).toBe(false);
     expect(write('https://fass.example', 'xn--fa-hia.example')).toBe(true);
-    expect(write('https://xn--zz.example', 'xn--zz.example')).toBe(true); // invalid A-label
+    // Unparseable host header (forbidden code point / unclosed IPv6 bracket) fails closed.
+    expect(write('https://app.example.com', 'app exa.example.com')).toBe(true);
+    expect(write('http://[::1]', '[::1')).toBe(true);
   });
 
   it('rejects writes from other origins, opaque origins and cross-site fetches', () => {
