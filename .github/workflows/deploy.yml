@@ -6,7 +6,8 @@
 #     → `supabase db push` (migrations BEFORE any rollout; additive-first, §5)
 #     → Railway api, then worker, onto those digests (API gated on /health/ready)
 #     → Vercel web (prebuilt; staging aliased to WEB_ORIGIN)
-#     → post-deploy smoke (staging: DEP-01/02/05/07 automated set; production: @readonly only)
+#     → post-deploy smoke (staging: DEP-01/02/05/07 automated set; production and the one-time
+#       staging `bootstrap` run, before the smoke accounts exist: @readonly only)
 #
 # Staging first (user decision 2026-10-18, implementation-plan §7): production stays gated until
 # the staging 7-day load test / cost gate passes; the operator then sets the repository variable
@@ -29,6 +30,10 @@ on:
         type: choice
         options: [staging, production]
         required: true
+      bootstrap:
+        description: First staging deploy before the smoke accounts exist (read-only smoke only)
+        type: boolean
+        default: false
       skip_migrations:
         description: Skip `supabase db push` (rollback to an older commit; see runbook)
         type: boolean
@@ -79,6 +84,7 @@ jobs:
         env:
           REF: ${{ github.ref }}
           PRODUCTION_DEPLOY_ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
+          BOOTSTRAP: ${{ inputs.bootstrap }}
         run: |
           set -euo pipefail
           if [[ $TARGET == production && ${PRODUCTION_DEPLOY_ENABLED:-} != true ]]; then
@@ -94,7 +100,13 @@ jobs:
           required=(SUPABASE_DB_URL VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_CLI_VERSION
             RAILWAY_TOKEN RAILWAY_ENVIRONMENT_ID RAILWAY_API_SERVICE_ID RAILWAY_WORKER_SERVICE_ID
             WEB_ORIGIN SMOKE_API_URL SMOKE_SUPABASE_URL SMOKE_SUPABASE_PUBLISHABLE_KEY)
-          if [[ $TARGET == staging ]]; then
+          if [[ $BOOTSTRAP == true && $TARGET != staging ]]; then
+            echo '::error::bootstrap is for the first staging deploy only'
+            exit 1
+          fi
+          if [[ $TARGET == staging && $BOOTSTRAP == true ]]; then
+            echo '::warning::BOOTSTRAP: smoke accounts not required; only @readonly smoke runs. Create the accounts (runbook §3) and re-run without bootstrap to complete DEP-01/02/05.'
+          elif [[ $TARGET == staging ]]; then
             required+=(SMOKE_USER_A_EMAIL SMOKE_USER_A_PASSWORD SMOKE_USER_B_EMAIL SMOKE_USER_B_PASSWORD)
           fi
           missing=()
@@ -244,15 +256,19 @@ jobs:
 
       # --- post-deploy smoke --------------------------------------------------------------------
       - name: Install Chromium (smoke sign-in)
-        if: ${{ inputs.environment == 'staging' }}
+        if: ${{ inputs.environment == 'staging' && !inputs.bootstrap }}
         run: pnpm exec playwright install --with-deps chromium
       - name: Smoke
         env:
           E2E_BASE_URL: ${{ vars.WEB_ORIGIN }}
           SMOKE_TARGET: ${{ inputs.environment }}
+          BOOTSTRAP: ${{ inputs.bootstrap }}
         run: |
           set -euo pipefail
-          if [[ $TARGET == staging ]]; then
+          if [[ $BOOTSTRAP == true ]]; then
+            echo '::warning::BOOTSTRAP run: account-dependent smoke (DEP-01 sign-in, DEP-02 upload, DEP-05) skipped'
+            pnpm smoke --grep @readonly
+          elif [[ $TARGET == staging ]]; then
             make smoke-staging
           else
             pnpm smoke --grep @readonly

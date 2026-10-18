@@ -97,8 +97,8 @@ make check-env ENV=staging ARGS="--check api=$HOME/secure/quiz/api.staging.env \
    Dashboard에서 확인·설정: JWT signing key를 비대칭(ES256)으로 rotate, access token 만료 3600s, Storage bucket `source-pdfs`·`parsed-artifacts`가 private, Auth → URL Configuration의 redirect 목록이 `https://<web>/auth/callback` 하나뿐인지.
 3. **Railway / Vercel 변수 입력**: 2장에서 검증한 값만 넣는다.
 4. **GitHub Environment `staging`**: secrets `SUPABASE_DB_URL`, `VERCEL_TOKEN`, `RAILWAY_TOKEN`, `SMOKE_USER_*`; variables `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `RAILWAY_ENVIRONMENT_ID`, `RAILWAY_API_SERVICE_ID`, `RAILWAY_WORKER_SERVICE_ID`, `WEB_ORIGIN`, `SMOKE_API_URL`, `SMOKE_SUPABASE_URL`, `SMOKE_SUPABASE_PUBLISHABLE_KEY`, (선택) `SMOKE_QDRANT_URL`. Repository variable `VERCEL_CLI_VERSION`(2주 이상 지난 정확한 `x.y.z`).
-5. **Workflow 실행**: Actions → Deploy → `environment=staging`(ref `develop` 또는 `main`). preflight가 누락 이름을 출력하면 채우고 다시 실행.
-6. **Smoke 계정**: 첫 배포 후 staging 화면에서 실제 메일함으로 두 번 가입·메일 확인(SMTP와 DEP-01 가입 흐름 확인) → GitHub secrets `SMOKE_USER_{A,B}_*`에 넣고 workflow를 다시 실행하거나 로컬에서 `make smoke-staging`.
+5. **첫 workflow 실행(bootstrap)**: smoke 계정은 staging 화면에서 가입해야 하므로 첫 실행만 Actions → Deploy → `environment=staging`, **`bootstrap=true`**(ref `develop` 또는 `main`). preflight가 `SMOKE_USER_*`를 요구하지 않고, smoke는 `@readonly` 점검만 실행하며 run에 BOOTSTRAP 경고가 남는다. 이 run은 배포 완료로 보지 않는다. 누락 이름이 출력되면 채우고 다시 실행. `bootstrap`은 staging에서만 허용된다.
+6. **Smoke 계정 → 정식 실행**: staging 화면에서 실제 메일함으로 두 번 가입·메일 확인(SMTP와 DEP-01 가입 흐름 확인) → GitHub secrets `SMOKE_USER_{A,B}_*`에 넣고 **`bootstrap` 없이** workflow를 다시 실행(전체 smoke: DEP-01 로그인, DEP-02 업로드 객체, DEP-05). 이후 배포는 항상 bootstrap 없이 실행한다. (Supabase Admin으로 계정을 미리 만드는 방법은 secret key를 운영자 셸에 꺼내야 하고 실제 메일 흐름을 건너뛰므로 쓰지 않는다.)
 7. **수동 DEP 점검**(4장).
 8. **HF_HOME volume**: 첫 검색·파싱 후 모델이 volume에 남는지 확인하고 `WORKER_MODELS_OFFLINE=true`. 비root(uid 10001)가 volume에 쓰지 못하면 `RAILWAY_RUN_UID=0`을 쓰지 말고 volume 없이(재시작마다 다운로드) 운영하면서 기록한다.
 9. **7일 부하·비용 측정**(deployment.md §8): worker RAM/CPU, 검색 지연, Supabase·Qdrant 사용량 → 비용 게이트 판단.

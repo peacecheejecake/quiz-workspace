@@ -101,3 +101,22 @@ def test_production_is_gated_until_the_cost_gate() -> None:
     step = _steps()[_index("Preflight")]
     assert step["env"]["PRODUCTION_DEPLOY_ENABLED"] == "${{ vars.PRODUCTION_DEPLOY_ENABLED }}"
     assert "PRODUCTION_DEPLOY_ENABLED:-} != true" in str(step["run"])
+
+
+def test_bootstrap_skips_only_account_smoke_and_only_on_staging() -> None:
+    inputs = _workflow()[True]["workflow_dispatch"]["inputs"]
+    assert inputs["bootstrap"]["default"] is False
+    preflight = str(_steps()[_index("Preflight")]["run"])
+    assert "bootstrap is for the first staging deploy only" in preflight
+    # Accounts are required on staging unless bootstrapping.
+    assert re.search(
+        r"elif \[\[ \$TARGET == staging \]\]; then\n\s+required\+=\(SMOKE_USER_A_EMAIL", preflight
+    )
+    smoke = _steps()[_index("smoke-staging")]
+    run = str(smoke["run"])
+    assert (
+        run.index("BOOTSTRAP == true")
+        < run.index("pnpm smoke --grep @readonly")
+        < run.index("make smoke-staging")
+    )
+    assert "::warning::" in run
