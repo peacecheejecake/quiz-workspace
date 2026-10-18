@@ -252,8 +252,14 @@ jobs:
           url="$("${vercel[@]}" deploy --prebuilt "${prod[@]}" --token="$VERCEL_TOKEN")"
           [[ $url == https://* ]] || { echo '::error::vercel deploy printed no deployment URL'; exit 1; }
           if [[ $TARGET == staging ]]; then
-            # Staging has a fixed origin (CORS allowlist, Auth redirect allowlist).
-            "${vercel[@]}" alias set "$url" "${WEB_ORIGIN#https://}" --token="$VERCEL_TOKEN"
+            # Staging has a fixed origin (CORS allowlist, Auth redirect allowlist). REST, not
+            # `vercel alias set`: the CLI first loads the user, which a team-scoped token cannot.
+            api=https://api.vercel.com
+            auth=(-H "Authorization: Bearer $VERCEL_TOKEN")
+            id="$(curl -fsS "${auth[@]}" "$api/v13/deployments/${url#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)"
+            curl -fsS -X POST "${auth[@]}" -H 'Content-Type: application/json' \
+              -d "{\"alias\":\"${WEB_ORIGIN#https://}\"}" \
+              "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID" > /dev/null
           fi
           echo "deployment: $url"
 
