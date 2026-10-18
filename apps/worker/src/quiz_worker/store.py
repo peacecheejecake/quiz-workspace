@@ -68,9 +68,9 @@ TERMINAL_STATUSES = frozenset({JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.
 WORKER_LOST_ERROR = "worker_lost: attempts exhausted"
 # last_error written when a lost worker's attempt is handed back to the queue.
 LEASE_EXPIRED_ERROR = "worker_lost: lease expired"
-# last_error written when the worker saw its child die mid-attempt (SIGKILL / OOM kill, hard
-# time limit) and handed the attempt back at once instead of waiting for the lease (M7.4c).
-WORKER_KILLED_ERROR = "worker_lost: worker process killed (out of memory or hard time limit)"
+# last_error written when the worker saw its child die mid-attempt (SIGKILL / OOM kill) and
+# handed the attempt back at once instead of waiting for the lease (M7.4c).
+WORKER_KILLED_ERROR = "worker_lost: worker process killed (out of memory?)"
 
 
 @dataclass(frozen=True, slots=True)

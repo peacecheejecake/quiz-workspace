@@ -5,9 +5,10 @@ Delivery is at-least-once (docs/deployment.md §7): `task_acks_late` +
 `task_acks_on_failure_or_timeout=False` re-queues the message of an attempt killed by the hard
 time limit. The `JobStore` claim makes every re-delivery safe (finished -> no-op, live lease ->
 deferred, expired lease -> new attempt or failed). When the worker sees the child running a job
-die (SIGKILL / OOM kill, hard time limit), `JobRequest` settles that attempt at once
-(`release_lost`, fenced by the dead child's worker id) before the message is re-queued, so the
-re-delivery starts the next attempt instead of waiting out the lease (M7.4c). Jobs whose
+exit (SIGKILL / OOM kill; not a hard time limit, see `settles_lost_attempt`), `JobRequest`
+settles that attempt at once (`release_lost`, fenced by the dead child's worker id) before the
+message is re-queued, so the re-delivery starts the next attempt instead of waiting out the
+lease (M7.4c). Jobs whose
 message is gone anyway are recovered by the `reconcile_jobs` beat task (quiz_worker.reconcile).
 Only JSON is accepted on the wire.
 
@@ -29,7 +30,7 @@ from uuid import UUID
 
 from billiard.einfo import ExceptionInfo
 from celery import Celery, Task, signals
-from celery.exceptions import TimeLimitExceeded, WorkerLostError
+from celery.exceptions import WorkerLostError
 from celery.worker.request import Request
 
 from quiz_worker.document_job import JOB_TYPE as DOCUMENT_PARSE_JOB_TYPE
@@ -140,18 +141,29 @@ def release_lost_attempt(app: Celery, task_id: str, pid: int | str | None) -> No
         job_id_var.reset(token)
 
 
+def settles_lost_attempt(exc: BaseException | None) -> bool:
+    """Whether a task failure proves the pool process running it is already gone.
+
+    Only `WorkerLostError`: billiard reports it after the child exited. A hard
+    `TimeLimitExceeded` is reported from `on_hard_timeout` *before* the child is killed, so the
+    child may still be running (and writing); settling then would let a re-delivery claim the
+    job beside it, and a store round trip there would delay the kill. Hard timeouts keep the
+    lease path: the lease (hard limit + grace) expires shortly after the kill.
+    """
+    # billiard wraps exceptions from the child in ExceptionWithTraceback (`.exc`).
+    exc = getattr(exc, "exc", exc)
+    return isinstance(exc, WorkerLostError)
+
+
 class JobRequest(Request):
     """Worker-side request of a job task: settles a job whose pool process died."""
 
     def on_failure(
         self, exc_info: ExceptionInfo, send_failed_event: bool = True, return_ok: bool = False
     ) -> None:
-        exc = exc_info.exception
-        # billiard wraps exceptions from the child in ExceptionWithTraceback (`.exc`).
-        exc = getattr(exc, "exc", exc)
-        if isinstance(exc, WorkerLostError | TimeLimitExceeded):
-            # Before Celery re-queues the message (reject_on_worker_lost /
-            # acks_on_failure_or_timeout=False), so the re-delivery can claim right away.
+        if settles_lost_attempt(exc_info.exception):
+            # Before Celery re-queues the message (reject_on_worker_lost), so the re-delivery
+            # can claim right away.
             release_lost_attempt(self.task.app, self.id, self.worker_pid)
         super().on_failure(exc_info, send_failed_event=send_failed_event, return_ok=return_ok)
 

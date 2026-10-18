@@ -143,7 +143,7 @@ PR opened
 - 매일 DB 백업(사용 플랜 지원/외부 `pg_dump` 점검), Supabase Storage 객체 version/별도 백업, 주요 workspace의 export 정기 검증.
 - Qdrant는 파생 인덱스이므로 재색인 스크립트 제공. 대량 재생성 시간은 recovery 시간에 포함.
 - Worker job은 at-least-once 실행될 수 있으므로 checksum/idempotency/dedup 적용. stuck/failed job 재시도·격리 큐 모니터링.
-- Worker 자원 한도(M7.4c): Docling in-flight page 수 제한(`WORKER_PARSE_QUEUE_MAX_SIZE`, 기본 8), `document.parse` 전용 시간 한도(기본 soft 6900 s / hard 7200 s, lease = hard + grace), pool process가 죽으면(OOM·hard limit) 해당 attempt를 즉시 재큐/실패 처리, model thread 수는 container CPU quota 기준(`WORKER_NUM_THREADS`). 값과 설명은 `infra/deploy/env-manifest.toml`.
+- Worker 자원 한도(M7.4c): Docling in-flight page 수 제한(`WORKER_PARSE_QUEUE_MAX_SIZE`, 기본 8), `document.parse` 전용 시간 한도(기본 soft 6900 s / hard 7200 s, lease = hard + grace), pool process가 죽으면(OOM 등 SIGKILL) 해당 attempt를 즉시 재큐/실패 처리(hard time limit은 child가 아직 살아 있을 수 있어 lease 만료 경로 유지), model thread 수는 container CPU quota 기준(`WORKER_NUM_THREADS`). 값과 설명은 `infra/deploy/env-manifest.toml`.
 - API `/health/live`, `/health/ready`(DB, Redis, Qdrant 등 필수 의존성), readiness timeout, 일별 검색 smoke query.
 - metrics: 인증 오류, PDF 성공률/시간, 검색 p50/p95, reranker latency, worker queue age, LLM 사용량, DB pool, storage·Qdrant 용량.
 - 비용 알림: managed project당 예산 경고, Worker 최대 동시성 1부터 시작, 모델 지연/메모리 측정 후 scale.

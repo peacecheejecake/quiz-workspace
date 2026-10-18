@@ -8,12 +8,15 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from billiard.einfo import ExceptionWithTraceback  # type: ignore[attr-defined]  # no stub
+from celery.exceptions import TimeLimitExceeded, WorkerLostError
 from pydantic import BaseModel
 from quiz_worker.celery_app import (
     QuizCelery,
     create_celery_app,
     release_lost_attempt,
     run_reconciler,
+    settles_lost_attempt,
     submit_job,
     worker_id_for,
 )
@@ -572,3 +575,14 @@ def test_release_of_a_lost_attempt_is_logged_and_never_raises(
         release_lost_attempt(broken, str(envelope.job_id), 4242)
     assert "could not release a lost job attempt: unexpected_error: RuntimeError" in caplog.text
     assert "db down" not in caplog.text
+
+
+def test_only_an_exited_worker_process_settles_its_attempt() -> None:
+    # A hard TimeLimitExceeded is reported before billiard kills the child (it may still run).
+    assert settles_lost_attempt(WorkerLostError("Worker exited prematurely: signal 9"))
+    assert not settles_lost_attempt(TimeLimitExceeded(7200))
+    assert not settles_lost_attempt(RuntimeError("handler failed"))
+    # Failures from the child arrive wrapped (the original in `.exc`).
+    assert settles_lost_attempt(ExceptionWithTraceback(WorkerLostError("lost"), "tb"))
+    assert not settles_lost_attempt(ExceptionWithTraceback(TimeLimitExceeded(2), "tb"))
+    assert not settles_lost_attempt(None)

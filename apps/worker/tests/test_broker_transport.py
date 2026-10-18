@@ -35,6 +35,7 @@ from quiz_worker.retry import RetryPolicy
 from quiz_worker.runner import JobContext, JobDefinition, JobResult
 from quiz_worker.settings import WorkerSettings, get_settings
 from quiz_worker.store import (
+    LEASE_EXPIRED_ERROR,
     TERMINAL_STATUSES,
     WORKER_KILLED_ERROR,
     WORKER_LOST_ERROR,
@@ -213,12 +214,24 @@ def test_hard_time_limit_never_leaves_a_job_running(
         app, pool="prefork", concurrency=1, perform_ping_check=False, shutdown_timeout=10
     ):
         submit_job(app, envelope)
-        record = _wait_for_terminal(store, envelope.job_id, timeout=60)
+        # Every last_error the row shows on its way (each stays until the next transition).
+        seen: set[str | None] = set()
+
+        def finished(record: JobRecord) -> bool:
+            seen.add(record.last_error)
+            return record.status in TERMINAL_STATUSES
+
+        record = _wait_for(store, envelope.job_id, finished, timeout=60)
         _wait_for_idle_worker()
 
     assert record.status is JobStatus.FAILED
     assert record.attempts == record.max_attempts == 3
     assert record.last_error == WORKER_LOST_ERROR
+    # M7.4c: the hard-limit callback fires before billiard kills the child, so the worker must not
+    # settle the attempt then (a re-delivery could run beside the still-living child); the next
+    # attempts come through the expired lease instead.
+    assert LEASE_EXPIRED_ERROR in seen
+    assert WORKER_KILLED_ERROR not in seen
 
 
 def test_killed_worker_process_is_retried_without_waiting_for_the_lease(
