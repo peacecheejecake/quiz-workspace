@@ -1,12 +1,22 @@
 // AUTH-03 — 이메일 인증 대기 (`/auth/verify`), docs/screens/auth-verify.md + docs/auth.md §1/§7.
 // Confirmation mails link to `/auth/callback?token_hash=…&type=email` (implementation-plan §7).
-import type { Page } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 import type { UserFactory } from '../fixtures/auth.ts';
 import {
   atPath,
   authUi,
   canSignIn,
+  CAPTCHA_EXPIRED,
+  CAPTCHA_REJECTED,
+  CAPTCHA_REQUIRED,
+  captchaTokenOf,
+  captchaUi,
+  DUMMY_TOKEN,
   expect,
+  expectBlockedForCaptcha,
+  expectCaptchaVerified,
+  expectNoMotion,
+  formAlert,
   findUserIdByEmail,
   isEmailConfirmed,
   newCredentials,
@@ -137,3 +147,101 @@ test(
     await expect(authUi.resendButton(page)).toBeEnabled();
   },
 );
+
+/** Pending-address cookie as the sign-up form writes it, so /auth/verify offers "resend" to it. */
+async function pendingAddress(context: BrowserContext, baseURL: string | undefined, email: string) {
+  await context.addCookies([
+    {
+      name: 'qz_verify_email',
+      value: encodeURIComponent(email),
+      domain: new URL(baseURL ?? '').hostname,
+      path: '/auth/verify',
+      sameSite: 'Lax',
+    },
+  ]);
+}
+
+/** Answers resend calls locally (no mail, no per-address frequency limit) and records tokens. */
+async function stubResend(page: Page, answer: { status: number; body: unknown }) {
+  const tokens: (string | undefined)[] = [];
+  await page.route('**/auth/v1/resend**', async (route) => {
+    tokens.push(captchaTokenOf(route.request().postData()));
+    await route.fulfill({
+      status: answer.status,
+      contentType: 'application/json',
+      body: JSON.stringify(answer.body),
+    });
+  });
+  return tokens;
+}
+
+test('AUTH-03-AC04 security check gates resend, its token goes with the request and is never reused', async ({
+  page,
+  context,
+  baseURL,
+  turnstile,
+}) => {
+  await pendingAddress(context, baseURL, newCredentials('auth03-ac04').email);
+  const tokens = await stubResend(page, { status: 200, body: {} });
+  turnstile.mode = 'interactive';
+  await page.clock.install();
+  await page.goto('/auth/verify');
+  await expect(captchaUi.group(page)).toBeVisible();
+
+  const resend = authUi.resendButton(page);
+  await expectBlockedForCaptcha(resend);
+  await resend.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('main').getByText(CAPTCHA_REQUIRED).first()).toBeVisible();
+  await expect(captchaUi.group(page)).toBeFocused();
+  expect(tokens).toEqual([]);
+
+  await turnstile.solve(page);
+  await resend.click();
+  await expect(page.getByRole('main')).toContainText(/다시 보냈|resent|sent again/i);
+  expect(tokens).toEqual([DUMMY_TOKEN]);
+  await expect.poll(async () => (await turnstile.stats(page)).resets).toBeGreaterThanOrEqual(1);
+
+  // After the cooldown the control still waits for a new token before sending again.
+  await page.clock.fastForward('01:05');
+  await expectBlockedForCaptcha(resend);
+  await turnstile.solve(page);
+  await resend.click();
+  await expect.poll(() => tokens.length).toBe(2);
+  expect(tokens).toEqual([DUMMY_TOKEN, DUMMY_TOKEN]);
+});
+
+test('AUTH-03-AC05 rejected or expired security check on resend explains itself and recovers by keyboard', async ({
+  page,
+  context,
+  baseURL,
+  turnstile,
+}) => {
+  await pendingAddress(context, baseURL, newCredentials('auth03-ac05').email);
+  const tokens = await stubResend(page, {
+    status: 400,
+    body: {
+      code: 400,
+      error_code: 'captcha_failed',
+      msg: 'captcha protection: request disallowed',
+    },
+  });
+  await page.goto('/auth/verify');
+  await expectCaptchaVerified(page);
+  await authUi.resendButton(page).click();
+  await expect.poll(() => tokens.length).toBe(1);
+  const alert = formAlert(page);
+  await expect(alert).toContainText(CAPTCHA_REJECTED);
+  await expect(alert).not.toContainText(/captcha_failed|request disallowed|400/);
+  // No cooldown for a refused check: a fresh token makes resend available again.
+  await expectCaptchaVerified(page);
+  await expect(authUi.resendButton(page)).not.toHaveAttribute('aria-disabled', 'true');
+
+  await turnstile.expire(page);
+  await expect(captchaUi.status(page)).toContainText(CAPTCHA_EXPIRED);
+  await expectBlockedForCaptcha(authUi.resendButton(page));
+  await captchaUi.retry(page).focus();
+  await page.keyboard.press('Enter');
+  await expectCaptchaVerified(page);
+  await expectNoMotion(captchaUi.group(page));
+});
