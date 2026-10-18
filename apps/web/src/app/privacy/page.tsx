@@ -21,7 +21,9 @@ export default function Page() {
   return (
     <LegalPlaceholder title="개인정보 처리방침">
       <section aria-labelledby="privacy-processors" className={styles.panel}>
-        <h2 id="privacy-processors" className={styles.panelTitle}>처리 위탁(초안)</h2>
+        <h2 id="privacy-processors" className={styles.panelTitle}>
+          처리 위탁(초안)
+        </h2>
         <p>서비스 제공을 위해 다음 업체가 데이터를 처리합니다.</p>
         <ul>
           {PROCESSORS.map((p) => (

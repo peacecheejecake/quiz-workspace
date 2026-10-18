@@ -3393,6 +3393,11 @@ export type components = {
     };
     /** SearchResponse */
     SearchResponse: {
+      /**
+       * Degraded
+       * @description Degradations of this answer (SEARCH-01-AC06). `dense_unavailable`: the query could not be embedded, so `semantic`/`hybrid` returned keyword (BM25) results only.
+       */
+      degraded?: 'dense_unavailable'[];
       /** Items */
       items: components['schemas']['SearchItem'][];
       /**
@@ -3553,6 +3558,11 @@ export type components = {
     };
     /** SharedSearchResponse */
     SharedSearchResponse: {
+      /**
+       * Degraded
+       * @description As in `SearchResponse`: `dense_unavailable` = keyword (BM25) results only.
+       */
+      degraded?: 'dense_unavailable'[];
       /** Items */
       items: components['schemas']['SearchItem'][];
       /**

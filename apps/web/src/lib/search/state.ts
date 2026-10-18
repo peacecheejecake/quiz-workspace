@@ -111,6 +111,21 @@ const WARNING_MESSAGES: readonly [RegExp, string][] = [
   [/^reranker failed/i, '결과 순서 보정을 건너뛰고 기본 순서로 표시합니다.'],
 ];
 
+/** SEARCH-01-AC06: copy for the API's `degraded` codes (non-blocking notice next to results). */
+export const DEGRADED_MESSAGES: Readonly<Record<string, string>> = {
+  dense_unavailable: '의미 검색을 일시적으로 사용할 수 없어 키워드 결과만 표시합니다.',
+};
+
+/** Korean notices for `degraded` codes (unknown codes dropped, duplicates merged). */
+export function degradedMessages(codes: readonly string[] | undefined): string[] {
+  const out: string[] = [];
+  for (const code of codes ?? []) {
+    const message = DEGRADED_MESSAGES[code];
+    if (message && !out.includes(message)) out.push(message);
+  }
+  return out;
+}
+
 /** Korean guidance for the API's warnings (unknown warnings are dropped, duplicates merged). */
 export function warningMessages(warnings: readonly string[]): string[] {
   const out: string[] = [];

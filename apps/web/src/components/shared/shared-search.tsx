@@ -9,7 +9,7 @@ import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { DocumentExcerptPanel } from '@/components/search/document-excerpt-panel';
 import { hitKey, SearchResultList } from '@/components/search/search-result-list';
 import type { SearchClient, SearchItem } from '@/lib/search/client';
-import { MAX_QUERY_CHARS } from '@/lib/search/state';
+import { degradedMessages, MAX_QUERY_CHARS } from '@/lib/search/state';
 import type { SharedClient } from '@/lib/shared/client';
 import { endsShareView, sharedFailureMessage } from '@/lib/shared/messages';
 import { sharedDocumentHref } from '@/lib/shared/view-state';
@@ -25,7 +25,13 @@ type SearchState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading' }
   | { readonly status: 'error'; readonly message: string }
-  | { readonly status: 'done'; readonly items: readonly SearchItem[]; readonly truncated: boolean };
+  | {
+      readonly status: 'done';
+      readonly items: readonly SearchItem[];
+      readonly truncated: boolean;
+      /** SEARCH-01-AC06 notices (keyword results only). */
+      readonly degraded: readonly string[];
+    };
 
 /** The shared API has no single-block read: the jump uses the hit's own location. */
 const NO_BLOCK_READS: Pick<SearchClient, 'block'> = {
@@ -53,7 +59,12 @@ export function SharedSearch({ shareId, client, onUnavailable }: SharedSearchPro
     try {
       const result = await client.search(q, controller.signal);
       if (controller.signal.aborted) return;
-      setState({ status: 'done', items: result.items, truncated: result.truncated });
+      setState({
+        status: 'done',
+        items: result.items,
+        truncated: result.truncated,
+        degraded: degradedMessages(result.degraded),
+      });
     } catch (error) {
       if (controller.signal.aborted) return;
       if (endsShareView(error)) onUnavailable();
@@ -88,7 +99,7 @@ export function SharedSearch({ shareId, client, onUnavailable }: SharedSearchPro
           : state.status === 'done'
             ? state.items.length === 0
               ? '검색 결과가 없습니다.'
-              : `검색 결과 ${state.items.length}건${state.truncated ? ' (검색어가 길어 앞부분만 사용했습니다)' : ''}`
+              : `검색 결과 ${state.items.length}건${state.truncated ? ' (검색어가 길어 앞부분만 사용했습니다)' : ''}${state.degraded.length > 0 ? ` ${state.degraded.join(' ')}` : ''}`
             : ''}
       </p>
       {state.status === 'error' ? (
