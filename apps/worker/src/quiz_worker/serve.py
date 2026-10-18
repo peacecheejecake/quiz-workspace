@@ -15,6 +15,7 @@ from collections.abc import Sequence
 import billiard
 
 from quiz_worker.celery_app import DEFAULT_QUEUE, app_from_environment
+from quiz_worker.resources import configure_threads
 from quiz_worker.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -54,8 +55,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     if settings.task_always_eager:
         raise SystemExit("WORKER_TASK_ALWAYS_EAGER is for tests; unset it to run a worker")
     prepare_pool_start_method()
+    # Before the pool starts and before anything imports torch: children inherit the variables.
+    threads = configure_threads(settings.num_threads)
     app = app_from_environment()
-    logger.info("starting worker (env=%s, concurrency=%d)", settings.app_env, settings.concurrency)
+    logger.info(
+        "starting worker (env=%s, concurrency=%d, threads=%d)",
+        settings.app_env,
+        settings.concurrency,
+        threads,
+    )
     worker_argv = build_worker_argv(
         settings.concurrency, settings.log_level, beat=settings.embedded_beat
     )

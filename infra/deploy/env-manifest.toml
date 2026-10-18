@@ -490,6 +490,22 @@ provider = "default"
 note = "1; raise only after measuring memory (docs/deployment.md §7)"
 
 [[var]]
+name = "WORKER_NUM_THREADS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "unset = the container's CPU limit (cgroup quota), not the host's CPUs; sets OMP/MKL/OPENBLAS/DOCLING_NUM_THREADS for Docling and torch"
+
+[[var]]
+name = "OMP_NUM_THREADS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "leave unset: the worker derives it (WORKER_NUM_THREADS / CPU quota); an explicit value is kept unless WORKER_NUM_THREADS is set"
+
+[[var]]
 name = "WORKER_MAX_TASKS_PER_CHILD"
 services = ["worker"]
 kind = "config"

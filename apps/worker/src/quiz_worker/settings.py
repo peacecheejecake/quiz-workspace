@@ -91,6 +91,9 @@ class WorkerSettings(BaseSettings):
     max_memory_per_child_mb: int = Field(
         default=0, ge=0, validation_alias="WORKER_MAX_MEMORY_PER_CHILD_MB"
     )
+    # CPU threads per pool process for Docling / torch / BLAS (quiz_worker.resources). Unset:
+    # the container's CPU limit (cgroup quota), not the host's CPU count.
+    num_threads: int | None = Field(default=None, ge=1, validation_alias="WORKER_NUM_THREADS")
     # Run tasks in-process (tests / wiring only); never enable in a deployed worker.
     task_always_eager: bool = Field(default=False, validation_alias="WORKER_TASK_ALWAYS_EAGER")
 

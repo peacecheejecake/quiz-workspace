@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any
 
 import pytest
 import qdrant_client
 from pydantic import ValidationError
+from quiz_worker import resources, serve
 from quiz_worker.adapters import build_index_store, parser_options
 from quiz_worker.celery_app import (
     build_celery_config,
@@ -19,7 +22,7 @@ from quiz_worker.celery_app import (
 from quiz_worker.document_job import JOB_TYPE as DOCUMENT_PARSE_JOB_TYPE
 from quiz_worker.jobs import EchoPayloadV1
 from quiz_worker.runner import JobContext, JobDefinition, JobResult
-from quiz_worker.settings import WorkerSettings
+from quiz_worker.settings import WorkerSettings, get_settings
 from quiz_worker.store import InMemoryJobStore
 
 from .conftest import EnvelopeFactory
@@ -180,3 +183,84 @@ def test_pool_process_recycling_is_configurable() -> None:
 
     assert conf["worker_max_tasks_per_child"] == 1
     assert conf["worker_max_memory_per_child"] == 1500 * 1024
+
+
+# -- Thread counts from the container's CPU limit ------------------------------------------------
+
+
+def _cgroup(tmp_path: Path, files: dict[str, str]) -> Path:
+    for name, content in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="ascii")
+    return tmp_path
+
+
+@pytest.mark.parametrize(
+    ("files", "quota"),
+    [
+        ({"cpu.max": "200000 100000\n"}, 2.0),
+        ({"cpu.max": "150000 100000\n"}, 1.5),
+        ({"cpu.max": "max 100000\n"}, None),
+        ({"cpu/cpu.cfs_quota_us": "300000\n", "cpu/cpu.cfs_period_us": "100000\n"}, 3.0),
+        ({"cpu/cpu.cfs_quota_us": "-1\n", "cpu/cpu.cfs_period_us": "100000\n"}, None),
+        ({}, None),
+    ],
+)
+def test_cgroup_cpu_quota(tmp_path: Path, files: dict[str, str], quota: float | None) -> None:
+    assert resources.cgroup_cpu_quota(_cgroup(tmp_path, files)) == quota
+
+
+def test_available_cpus_follow_the_quota_not_the_host(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(os, "sched_getaffinity", lambda pid: set(range(8)), raising=False)
+
+    assert resources.available_cpus(_cgroup(tmp_path / "a", {"cpu.max": "150000 100000"})) == 2
+    assert resources.available_cpus(_cgroup(tmp_path / "b", {"cpu.max": "max 100000"})) == 8
+    assert resources.available_cpus(_cgroup(tmp_path / "c", {"cpu.max": "10000 100000"})) == 1
+
+
+def test_thread_variables_default_to_the_cpu_limit_and_keep_operator_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(os, "sched_getaffinity", lambda pid: set(range(8)), raising=False)
+    root = _cgroup(tmp_path, {"cpu.max": "200000 100000"})
+
+    env: dict[str, str] = {}
+    assert resources.configure_threads(None, env, cgroup_root=root) == 2
+    assert env == dict.fromkeys(resources.THREAD_VARIABLES, "2")
+
+    operator = {"OMP_NUM_THREADS": "3"}
+    assert resources.configure_threads(None, operator, cgroup_root=root) == 3
+    assert operator["OMP_NUM_THREADS"] == "3"
+    assert operator["MKL_NUM_THREADS"] == "2"
+
+    explicit = {"OMP_NUM_THREADS": "3", "DOCLING_NUM_THREADS": "6"}
+    assert resources.configure_threads(4, explicit, cgroup_root=root) == 4
+    assert explicit == dict.fromkeys(resources.THREAD_VARIABLES, "4")
+
+
+def test_serve_sets_threads_before_the_pool_starts(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in resources.THREAD_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("WORKER_NUM_THREADS", "3")
+    monkeypatch.setenv("WORKER_TASK_ALWAYS_EAGER", "false")
+    monkeypatch.setattr(serve, "prepare_pool_start_method", lambda: "fork")
+    seen: dict[str, str | None] = {}
+
+    class FakeApp:
+        def worker_main(self, argv: list[str]) -> None:
+            seen["omp"] = os.environ.get("OMP_NUM_THREADS")
+
+    monkeypatch.setattr(serve, "app_from_environment", FakeApp)
+    get_settings.cache_clear()
+    try:
+        serve.main([])
+    finally:
+        get_settings.cache_clear()
+
+    assert seen == {"omp": "3"}
+    assert parser_options(_settings(WORKER_NUM_THREADS="3")).num_threads == 3

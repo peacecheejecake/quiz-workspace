@@ -198,6 +198,8 @@ def parser_options(settings: WorkerSettings) -> ParserOptions:
         document_timeout=settings.parse_timeout_seconds,
         queue_max_size=settings.parse_queue_max_size,
         page_batch_size=settings.parse_page_batch_size,
+        # None: Docling reads DOCLING_NUM_THREADS / OMP_NUM_THREADS (set by serve).
+        num_threads=settings.num_threads,
     )
 
 
