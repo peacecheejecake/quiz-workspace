@@ -157,3 +157,26 @@ def test_a_document_attempt_is_leased_for_the_document_limit(
 def test_document_limits_are_validated(env: dict[str, str], message: str) -> None:
     with pytest.raises(ValidationError, match=message):
         _settings(**env)
+
+
+# -- Pool process recycling ------------------------------------------------------------------
+
+
+def test_pool_processes_are_kept_unless_recycling_is_configured() -> None:
+    conf = build_celery_config(_settings(WORKER_TASK_ALWAYS_EAGER="true"))
+
+    assert conf["worker_max_tasks_per_child"] is None
+    assert conf["worker_max_memory_per_child"] is None
+
+
+def test_pool_process_recycling_is_configurable() -> None:
+    conf = build_celery_config(
+        _settings(
+            WORKER_TASK_ALWAYS_EAGER="true",
+            WORKER_MAX_TASKS_PER_CHILD="1",
+            WORKER_MAX_MEMORY_PER_CHILD_MB="1500",
+        )
+    )
+
+    assert conf["worker_max_tasks_per_child"] == 1
+    assert conf["worker_max_memory_per_child"] == 1500 * 1024

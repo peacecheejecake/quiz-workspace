@@ -287,6 +287,9 @@ def build_celery_config(settings: WorkerSettings) -> dict[str, Any]:
         "task_acks_on_failure_or_timeout": False,
         "worker_prefetch_multiplier": 1,
         "worker_concurrency": settings.concurrency,
+        "worker_max_tasks_per_child": settings.max_tasks_per_child or None,
+        # Celery takes KiB.
+        "worker_max_memory_per_child": (settings.max_memory_per_child_mb * 1024) or None,
         "worker_cancel_long_running_tasks_on_connection_loss": True,
         "task_soft_time_limit": settings.task_soft_time_limit_seconds or None,
         "task_time_limit": settings.task_time_limit_seconds,

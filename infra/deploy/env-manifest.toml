@@ -490,6 +490,22 @@ provider = "default"
 note = "1; raise only after measuring memory (docs/deployment.md §7)"
 
 [[var]]
+name = "WORKER_MAX_TASKS_PER_CHILD"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "0 (never); 1 replaces the pool process after every task so model memory is returned between jobs"
+
+[[var]]
+name = "WORKER_MAX_MEMORY_PER_CHILD_MB"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "0 (off); replace the pool process after a task that left it above this resident size"
+
+[[var]]
 name = "WORKER_TASK_SOFT_TIME_LIMIT_SECONDS"
 services = ["worker"]
 kind = "config"
