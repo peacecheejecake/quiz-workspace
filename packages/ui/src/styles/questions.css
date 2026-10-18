@@ -1,0 +1,303 @@
+/*
+ * Question heatmap, markers and study-state controls (docs/design-system.md §6/§6.1,
+ * docs/questions.md §3). Marker color comes only from --question-status-* via data-status.
+ */
+/*
+ * The dot sets the cell size on itself too, so a standalone QuestionDot (panel header, bank
+ * list, stories) gets the touch size without a heatmap ancestor.
+ */
+.qz-heatmap,
+.qz-heatmap-legend,
+.qz-status-summary,
+.qz-question-dot {
+  --qz-heatmap-cell: var(--heatmap-cell);
+}
+
+/* Touch-sized cells on mobile and coarse pointers (min 32px). */
+@media (width < 768px), (pointer: coarse) {
+  .qz-heatmap,
+  .qz-heatmap-legend,
+  .qz-status-summary,
+  .qz-question-dot {
+    --qz-heatmap-cell: var(--heatmap-cell-touch);
+  }
+}
+
+/* Marker: same viewBox and 16px box for square and star. */
+.qz-question-marker {
+  display: block;
+  flex: none;
+  width: var(--heatmap-dot);
+  height: var(--heatmap-dot);
+  overflow: visible;
+  color: var(--color-text-secondary);
+  transform-origin: center;
+  transition: transform var(--duration-marker) ease-out;
+}
+
+/*
+ * Outline of the same hue mixed 50% toward the primary text color. Light unseen/retry fills are
+ * below 3:1 against the surface; the outline is ≥ 3.6:1 on surface/canvas/surface-muted in both
+ * themes (test/question-marker-contrast.test.ts). 1.5 viewBox units ≈ 1 CSS px at 16px.
+ */
+.qz-question-marker__shape {
+  stroke: color-mix(in srgb, currentColor 50%, var(--color-text-primary));
+  stroke-width: 1.5;
+}
+
+.qz-question-marker[data-status='unseen'] {
+  color: var(--question-status-unseen);
+}
+
+.qz-question-marker[data-status='viewed'] {
+  color: var(--question-status-viewed);
+}
+
+.qz-question-marker[data-status='incorrect'] {
+  color: var(--question-status-incorrect);
+}
+
+.qz-question-marker[data-status='correct'] {
+  color: var(--question-status-correct);
+}
+
+.qz-question-marker[data-status='retry'] {
+  color: var(--question-status-retry);
+}
+
+@media (forced-colors: active) {
+  .qz-question-marker__shape {
+    stroke: CanvasText;
+  }
+}
+
+/* Dot: fixed cell, centered marker; only the marker scales (no layout shift). */
+.qz-question-dot {
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: var(--qz-heatmap-cell);
+  height: var(--qz-heatmap-cell);
+  margin: 0;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.qz-question-dot:focus {
+  outline: none;
+}
+
+.qz-question-dot:focus-visible {
+  z-index: var(--z-raised);
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+/* Selected (open in the panel): ring only, the status color never changes. */
+.qz-question-dot[data-selected] {
+  border-color: var(--color-accent);
+}
+
+.qz-question-dot:focus-visible .qz-question-marker {
+  transform: scale(var(--heatmap-marker-hover-scale));
+}
+
+/* Touch devices: no hover scale (a tap opens the panel directly). */
+@media (hover: hover) {
+  .qz-question-dot:hover {
+    z-index: var(--z-raised);
+  }
+
+  .qz-question-dot:hover .qz-question-marker {
+    transform: scale(var(--heatmap-marker-hover-scale));
+  }
+}
+
+@media (forced-colors: active) {
+  .qz-question-dot:focus-visible {
+    outline-color: Highlight;
+  }
+
+  .qz-question-dot[data-selected] {
+    border-color: Highlight;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* !important beats the global 0.01ms reduced-motion reset (design-tokens base.css): the
+     marker must switch scale instantly, with no transition at all (QOV-01-AC04). */
+  .qz-question-marker {
+    transition: none !important;
+  }
+}
+
+/* Heatmap layout: one fixed-cell grid per chapter, columns follow the available width. */
+.qz-heatmap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+.qz-heatmap__chapter-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.qz-heatmap__title {
+  margin: 0;
+  font-size: var(--font-size-body-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+.qz-heatmap__count {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.qz-heatmap__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--qz-heatmap-cell));
+  gap: var(--heatmap-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qz-heatmap__cell {
+  display: block;
+  width: var(--qz-heatmap-cell);
+  height: var(--qz-heatmap-cell);
+}
+
+/* Preview (Radix Tooltip content styled as a glass popover). */
+.qz-question-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: min(320px, calc(100vw - 2 * var(--space-4)));
+}
+
+.qz-question-preview p {
+  margin: 0;
+}
+
+.qz-question-preview__meta {
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.qz-question-preview__chapter,
+.qz-question-preview__status {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.qz-question-preview__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.qz-question-preview__stem {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-normal);
+}
+
+/* Legend */
+.qz-heatmap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-label);
+}
+
+.qz-heatmap-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Status summary chips: wrap on wide screens, one scrollable row on mobile. */
+.qz-status-summary {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+}
+
+.qz-status-summary:focus {
+  outline: none;
+}
+
+.qz-status-summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.qz-status-summary__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qz-status-summary__chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-normal);
+  white-space: nowrap;
+}
+
+.qz-status-summary__count {
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (width < 768px) {
+  .qz-status-summary {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .qz-status-summary__list {
+    flex-wrap: nowrap;
+    padding-bottom: var(--space-1);
+  }
+}
+
+/* Favorite / retry toggles: the "on" state adds a tinted fill and border, the label flips. */
+.qz-study-toggle[data-state='on'] {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
+  color: var(--color-accent);
+}

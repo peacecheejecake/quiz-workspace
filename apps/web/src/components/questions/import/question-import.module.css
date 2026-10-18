@@ -1,0 +1,169 @@
+/* QIMPORT-01 question PDF import. Semantic tokens only. */
+
+.screen {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.readOnly {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  font-size: var(--font-size-body);
+}
+
+.alert {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-body);
+}
+
+.failure {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.failure > p {
+  margin: 0;
+}
+
+.status:not([data-empty='true']) {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.status > p {
+  margin: 0;
+}
+
+.link {
+  color: var(--color-text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Progress (ImportJobProgress) */
+.progressBox {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.progressText {
+  margin: 0;
+  font-size: var(--font-size-body);
+}
+
+.progressFile {
+  color: var(--color-text-secondary);
+}
+
+.progress {
+  position: relative;
+  max-width: 32rem;
+  height: var(--space-2);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  transition: width var(--duration-panel-enter) ease-out;
+}
+
+.progress[data-indeterminate='true'] .progressFill {
+  width: 30%;
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressFill {
+    transition: none;
+  }
+}
+
+/* Drafts */
+.drafts {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.draftsHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--font-size-section-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+.count {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-regular);
+}
+
+.meta {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+/* Source comparison panel */
+.compare {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.compareDraft {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.comparePage {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.compareStem {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.compareOptions {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-inline-start: var(--space-5);
+}
+
+.compareViewer {
+  min-height: 24rem;
+}

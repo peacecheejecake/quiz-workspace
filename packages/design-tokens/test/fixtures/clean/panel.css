@@ -1,0 +1,6 @@
+/* Fixture for the raw-color guard test: semantic tokens only (must pass). */
+.panel {
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-stroke);
+  box-shadow: var(--shadow-floating);
+}

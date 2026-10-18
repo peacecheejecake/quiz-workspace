@@ -1,0 +1,5 @@
+/* Fixture for the raw-color guard test: ad-hoc color functions (must be rejected). */
+.panel {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: hsl(220 20% 90%);
+}

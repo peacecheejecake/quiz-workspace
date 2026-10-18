@@ -1,0 +1,485 @@
+/* Button / IconButton */
+.qz-button,
+.qz-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--qz-transition-fast),
+    border-color var(--qz-transition-fast),
+    color var(--qz-transition-fast);
+}
+
+.qz-button {
+  padding: 0 var(--space-4);
+}
+
+.qz-button[data-size='sm'] {
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-label);
+}
+
+.qz-icon-button {
+  width: 40px;
+  height: 40px;
+  min-height: 0;
+  flex: none;
+  padding: 0;
+}
+
+.qz-icon-button[data-size='sm'] {
+  width: 32px;
+  height: 32px;
+}
+
+.qz-icon-button__icon {
+  display: inline-flex;
+}
+
+:is(.qz-button, .qz-icon-button)[data-variant='primary'] {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+:is(.qz-button, .qz-icon-button)[data-variant='primary']:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 86%, var(--color-text-primary));
+}
+
+:is(.qz-button, .qz-icon-button)[data-variant='primary']:active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 76%, var(--color-text-primary));
+}
+
+:is(.qz-button, .qz-icon-button)[data-variant='secondary'] {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+:is(.qz-button, .qz-icon-button):is([data-variant='secondary'], [data-variant='ghost']):hover:not(
+    :disabled
+  ) {
+  background: var(--color-surface-muted);
+}
+
+:is(.qz-button, .qz-icon-button):is([data-variant='secondary'], [data-variant='ghost']):active:not(
+    :disabled
+  ) {
+  background: color-mix(in srgb, var(--color-surface-muted) 80%, var(--color-border));
+}
+
+:is(.qz-button, .qz-icon-button):disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.qz-button[data-loading] {
+  cursor: progress;
+  opacity: 0.8;
+}
+
+@media (forced-colors: active) {
+  :is(.qz-button, .qz-icon-button) {
+    border-color: ButtonText;
+  }
+}
+
+/* Field (Input / Textarea) */
+.qz-field {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--color-text-primary);
+}
+
+.qz-field__label {
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+.qz-field__description {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-normal);
+}
+
+.qz-field__error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-normal);
+}
+
+.qz-field__error svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--color-danger);
+}
+
+.qz-control {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  /* 16px avoids iOS zoom-on-focus. */
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-normal);
+  transition: border-color var(--qz-transition-fast);
+}
+
+.qz-control::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 1;
+}
+
+.qz-control:hover:not(:disabled) {
+  border-color: var(--color-text-primary);
+}
+
+.qz-control[aria-invalid='true'] {
+  border-color: var(--color-danger);
+  border-width: 2px;
+  padding: calc(var(--space-2) - 1px) calc(var(--space-3) - 1px);
+}
+
+.qz-control:disabled {
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+}
+
+.qz-control--multiline {
+  min-height: 96px;
+  resize: vertical;
+}
+
+/* Checkbox */
+.qz-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+}
+
+.qz-checkbox__box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 2px;
+  padding: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-on-accent);
+  cursor: pointer;
+}
+
+.qz-checkbox__box:is([data-state='checked'], [data-state='indeterminate']) {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.qz-checkbox__box:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.qz-checkbox__indicator {
+  display: inline-flex;
+}
+
+.qz-checkbox__text {
+  display: grid;
+  gap: 2px;
+}
+
+.qz-checkbox__label {
+  font-size: var(--font-size-body);
+  /* Matches the 20px box + 2px margins so the first line centers on the box. */
+  line-height: 24px;
+  cursor: pointer;
+}
+
+/* Switch */
+.qz-switch {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  color: var(--color-text-primary);
+}
+
+.qz-switch__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.qz-switch__label {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  line-height: 24px;
+  cursor: pointer;
+}
+
+.qz-switch__control {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 24px;
+}
+
+.qz-switch__state {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.qz-switch__track {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  width: 44px;
+  height: 24px;
+  padding: 2px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  cursor: pointer;
+  transition:
+    background-color var(--qz-transition-fast),
+    border-color var(--qz-transition-fast);
+}
+
+.qz-switch__track[data-state='checked'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.qz-switch__track:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.qz-switch__thumb {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  transition: transform var(--qz-transition-fast);
+}
+
+.qz-switch__thumb[data-state='checked'] {
+  transform: translateX(20px);
+  border-color: var(--color-surface);
+}
+
+/* Tabs */
+.qz-tabs__list {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.qz-tabs__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  margin-bottom: -1px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.qz-tabs__trigger:hover {
+  color: var(--color-text-primary);
+}
+
+/* Selection is shown by text weight/color and a bar, and exposed as aria-selected. */
+.qz-tabs__trigger[data-state='active'] {
+  border-bottom-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.qz-tabs__content {
+  padding-top: var(--space-4);
+}
+
+@media (forced-colors: active) {
+  .qz-tabs__trigger[data-state='active'] {
+    border-bottom-color: Highlight;
+  }
+}
+
+/* Select */
+.qz-select__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  text-align: start;
+  cursor: pointer;
+}
+
+.qz-select__value {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qz-select__trigger[data-placeholder] .qz-select__value {
+  color: var(--color-text-secondary);
+}
+
+.qz-select__icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-text-secondary);
+}
+
+.qz-select__content {
+  z-index: var(--z-popover);
+  box-sizing: border-box;
+  min-width: var(--radix-select-trigger-width);
+  max-width: min(420px, calc(100vw - 2 * var(--space-4)));
+  max-height: min(360px, var(--radix-select-content-available-height));
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+}
+
+.qz-select__viewport {
+  padding: var(--space-1);
+}
+
+.qz-select__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  outline: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.qz-select__item[data-highlighted] {
+  background: var(--color-surface-muted);
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.qz-select__item[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* The selected option shows a check mark and is exposed as aria-selected (not color alone). */
+.qz-select__indicator {
+  display: inline-flex;
+  flex: none;
+}
+
+@media (forced-colors: active) {
+  .qz-select__item[data-highlighted] {
+    outline-color: Highlight;
+  }
+}
+
+/* RadioGroup */
+.qz-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.qz-radio-group[data-orientation='horizontal'] {
+  flex-flow: row wrap;
+  column-gap: var(--space-4);
+}
+
+.qz-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.qz-radio__circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 2px;
+  padding: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.qz-radio__circle[data-state='checked'] {
+  border: 2px solid var(--color-accent);
+}
+
+.qz-radio__circle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.qz-radio__indicator {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+}
+
+@media (forced-colors: active) {
+  .qz-radio__indicator {
+    background: Highlight;
+  }
+}

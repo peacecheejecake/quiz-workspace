@@ -1,0 +1,27 @@
+{
+  "name": "@quiz/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Typed client for the Quiz Workspace API, generated from contracts/openapi.json.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.ts",
+    "check:generated": "node scripts/generate.ts --check",
+    "lint": "pnpm run check:generated",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "openapi-typescript": "^7.13.0",
+    "prettier": "^3",
+    "typescript": "~6.0.3",
+    "vitest": "^5"
+  }
+}

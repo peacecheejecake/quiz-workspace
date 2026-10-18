@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "synthetic": true,
+  "queries": [
+    {
+      "id": "q-ko-01",
+      "language": "ko",
+      "query": "정수장에서 염소를 넣는 이유",
+      "relevant": [
+        {
+          "fixture_id": "book-ko",
+          "section_id": "ch2-s2",
+          "grade": 2
+        },
+        {
+          "fixture_id": "book-en",
+          "section_id": "ch2-s2",
+          "grade": 2
+        }
+      ]
+    },
+    {
+      "id": "q-ko-02",
+      "language": "ko",
+      "query": "빗물이 땅속으로 스며드는 과정",
+      "relevant": [
+        {
+          "fixture_id": "book-ko",
+          "section_id": "ch1-s2",
+          "grade": 2
+        },
+        {
+          "fixture_id": "book-en",
+          "section_id": "ch1-s2",
+          "grade": 2
+        }
+      ]
+    },
+    {
+      "id": "q-ko-03",
+      "language": "ko",
+      "query": "구름은 어떻게 만들어지나",
+      "relevant": [
+        {
+          "fixture_id": "book-ko",
+          "section_id": "ch1-s1",
+          "grade": 2
+        },
+        {
+          "fixture_id": "book-en",
+          "section_id": "ch1-s1",
+          "grade": 2
+        }
+      ]
+    },
+    {
+      "id": "q-en-01",
+      "language": "en",
+      "query": "why is a coagulant added before sedimentation",
+      "relevant": [
+        {
+          "fixture_id": "book-ko",
+          "section_id": "ch2-s1",
+          "grade": 2
+        },
+        {
+          "fixture_id": "book-en",
+          "section_id": "ch2-s1",
+          "grade": 2
+        }
+      ]
+    },
+    {
+      "id": "q-en-02",
+      "language": "en",
+      "query": "how do paved cities change surface runoff",
+      "relevant": [
+        {
+          "fixture_id": "book-ko",
+          "section_id": "ch1-s2",
+          "grade": 2
+        },
+        {
+          "fixture_id": "book-en",
+          "section_id": "ch1-s2",
+          "grade": 2
+        }
+      ]
+    },
+    {
+      "id": "q-en-03",
+      "language": "en",
+      "query": "retention time of each water treatment stage",
+      "relevant": [
+        {
+          "fixture_id": "book-ko",
+          "section_id": "ch2-s1",
+          "grade": 2
+        },
+        {
+          "fixture_id": "book-en",
+          "section_id": "ch2-s1",
+          "grade": 2
+        }
+      ]
+    }
+  ]
+}

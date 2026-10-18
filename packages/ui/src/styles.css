@@ -1,0 +1,14 @@
+/*
+ * @quiz/ui stylesheet. Import once at the app root (Next.js: app/layout.tsx):
+ *   import '@quiz/ui/styles.css';
+ * It pulls in the generated token variables and token-only base styles, then the kit's
+ * component classes (`qz-*`). Everything references semantic tokens; the raw-color guard
+ * (`pnpm --filter @quiz/design-tokens check:raw-colors`) scans this package.
+ */
+@import '@quiz/design-tokens/tokens.css';
+@import '@quiz/design-tokens/base.css';
+@import './styles/foundation.css';
+@import './styles/controls.css';
+@import './styles/overlays.css';
+@import './styles/layout.css';
+@import './styles/questions.css';

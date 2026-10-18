@@ -1,0 +1,4 @@
+-- Local development seed, applied by `supabase db reset` (supabase/config.toml [db.seed]).
+--
+-- Intentionally empty: no users, credentials, or secrets belong here. Per-test users and
+-- workspaces are created by the E2E/test harness (P0.10), never by this file.

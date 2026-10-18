@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+# Restore a `scripts/backup` directory into an EMPTY target (M7.3, DEP-06):
+#
+#   scripts/restore <backup-dir> --yes [--skip-db] [--skip-storage] [--reindex]
+#
+# Procedure (supabase/migrations stays the only schema owner, implementation-plan §7):
+#   1. verify SHA256SUMS and every Storage blob;
+#   2. precondition: the target already has the backup's schema — the same applied
+#      supabase/migrations versions (`supabase db push` to a new project, `supabase db reset`
+#      locally) — and no data yet: every table in data.sql is empty except the rows the
+#      migrations themselves seed (SEEDED below: storage.buckets);
+#   3. load db/data.sql (its non-empty COPY blocks) in ONE transaction with
+#      session_replication_role=replica (triggers and FK ordering off while loading, as in
+#      Supabase's restore guide). The migration-seeded rows are set aside first, replaced by the
+#      backup's rows and must match them (all columns but the timestamps), otherwise the whole
+#      load rolls back. Then every table's row count is compared with the COPY row counts in
+#      data.sql;
+#   4. upload Storage objects (upsert, idempotent);
+#   5. rebuild Qdrant: `--reindex` runs `scripts/reindex --all` with the worker environment
+#      (WORKER_DATABASE_URL, QDRANT_*), otherwise the command is printed.
+#
+# Environment
+#   RESTORE_DB_URL       admin connection to the TARGET (required; never defaults to anything)
+#   SUPABASE_URL / SUPABASE_SECRET_KEY   the TARGET project's Storage (step 4), from the
+#                        environment or the repo-root .env; checked against the Storage API
+#                        before the database is touched (skipped with --skip-storage)
+#   PSQL                 psql command (default `psql`); it must understand the target's pg_dump
+#                        output (PostgreSQL client 17, or 16.10+/15.14+ for `\restrict`)
+#
+# Each phase prints its duration (RTO measurement, see scripts/backup).
+set -euo pipefail
+
+usage() {
+  sed -n '2,4p' "$0" | sed 's/^# \{0,1\}//'
+  exit 2
+}
+
+dir=""
+yes=0 skip_db=0 skip_storage=0 do_reindex=0
+for arg in "$@"; do
+  case $arg in
+    --yes) yes=1 ;;
+    --skip-db) skip_db=1 ;;
+    --skip-storage) skip_storage=1 ;;
+    --reindex) do_reindex=1 ;;
+    -*) usage ;;
+    *) [[ -z $dir ]] || usage; dir=$arg ;;
+  esac
+done
+[[ -n $dir && -d $dir ]] || usage
+dir="$(cd "$dir" && pwd)"
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+read -r -a psql_cmd <<<"${PSQL:-psql}"
+phase() { printf 'restore: %-28s %ss\n' "$1" "$2"; }
+die() { echo "restore: $*" >&2; exit 1; }
+
+start=$SECONDS
+(cd "$dir" && shasum -a 256 --quiet -c SHA256SUMS) || die "SHA256SUMS mismatch"
+(cd "$repo" && uv run --no-sync python -m quiz_worker.storage_backup verify --from "$dir/storage") \
+  >/dev/null || die "Storage blobs do not match their manifest"
+phase "verify backup" $((SECONDS - start))
+
+if [[ $skip_storage -eq 0 ]]; then
+  (cd "$repo" && uv run --no-sync python -m quiz_worker.storage_backup check) >/dev/null ||
+    die "Storage target is not configured or rejects the key (SUPABASE_URL / SUPABASE_SECRET_KEY)"
+fi
+
+# Row counts per table in data.sql: `COPY "schema"."table" (...) FROM stdin;` … `\.`
+dump_counts() {
+  awk '
+    /^COPY [^ ]+ .* FROM stdin;$/ { t = $2; gsub(/"/, "", t); n = 0; inside = 1; next }
+    inside && $0 == "\\." { print t "\t" n; inside = 0; next }
+    inside { n++ }
+  ' "$dir/db/data.sql" | LC_ALL=C sort
+}
+
+# data.sql without its empty COPY blocks: they carry no rows, and the target's admin role may lack
+# INSERT on unused platform tables (storage.buckets_vectors / vector_indexes are writable only by
+# supabase_storage_admin), which fails even a zero-row COPY. A table with rows is always loaded.
+data_with_rows() {
+  awk '
+    pending != "" { if ($0 == "\\.") { pending = ""; next } print pending; pending = ""; inside = 1 }
+    inside { print; if ($0 == "\\.") inside = 0; next }
+    /^COPY [^ ]+ .* FROM stdin;$/ { pending = $0; next }
+    { print }
+  ' "$dir/db/data.sql"
+}
+
+target_counts() {
+  # One count query per table listed in the dump (identifiers quoted by format()).
+  local sql="" table
+  while IFS=$'\t' read -r table _; do
+    sql+="select '${table}' || chr(9) || count(*) from ${table//./\".\"} union all "
+  done < <(dump_counts | sed 's/^/"/; s/\t/"\t/')
+  [[ -n $sql ]] || return 0
+  "${psql_cmd[@]}" "$RESTORE_DB_URL" -X -At -v ON_ERROR_STOP=1 -c "${sql% union all }" |
+    tr -d '"' | LC_ALL=C sort
+}
+
+# Tables in data.sql whose rows supabase/migrations inserts (storage buckets, 20261017200000), so a
+# freshly migrated target already has them. Inside the load transaction they are copied aside and
+# deleted, data.sql brings the backup's rows, and every set-aside row must come back identical
+# apart from its timestamps (same migration version => same definition); anything else raises and
+# rolls the load back. Any other non-empty table fails the empty-target precondition.
+SEEDED="storage.buckets"
+seeded_set_aside="" seeded_check=""
+n=0
+for table in $SEEDED; do
+  n=$((n + 1))
+  rel="\"${table%%.*}\".\"${table#*.}\"" tmp="restore_seeded_$n"
+  seeded_set_aside+="create temp table $tmp on commit drop as select * from $rel;
+    delete from $rel; "
+  seeded_check+="do \$\$ begin if exists (select 1 from pg_temp.$tmp s where not exists (
+    select 1 from $rel r
+     where to_jsonb(r) - 'created_at' - 'updated_at' = to_jsonb(s) - 'created_at' - 'updated_at'))
+  then raise exception 'restore: % rows seeded by the migrations differ from the backup', '$table';
+  end if; end \$\$; "
+done
+
+if [[ $skip_db -eq 0 ]]; then
+  [[ -n ${RESTORE_DB_URL:-} ]] || die "RESTORE_DB_URL is required"
+  q() { "${psql_cmd[@]}" "$RESTORE_DB_URL" -X -At -v ON_ERROR_STOP=1 -c "$1"; }
+  [[ "$(q 'select version from supabase_migrations.schema_migrations order by version')" == \
+    "$(cat "$dir/db/migrations.txt")" ]] ||
+    die "target migrations differ from the backup's (apply supabase/migrations first)"
+  [[ "$(q 'select (select count(*) from auth.users) + (select count(*) from public.workspaces)')" == 0 ]] ||
+    die "target is not empty (auth.users / public.workspaces have rows)"
+  nonempty="$(target_counts | awk -F'\t' -v seeded=" $SEEDED " \
+    'index(seeded, " " $1 " ") == 0 && $2 != 0 { printf " %s", $1 }')"
+  [[ -z $nonempty ]] || die "target is not empty (rows in:$nonempty)"
+  [[ $yes -eq 1 ]] || die "refusing to write without --yes"
+
+  start=$SECONDS
+  "${psql_cmd[@]}" "$RESTORE_DB_URL" -X -q -v ON_ERROR_STOP=1 --single-transaction \
+    -c 'set session_replication_role = replica' -c "$seeded_set_aside" \
+    -f - -c "$seeded_check" < <(data_with_rows) >/dev/null
+  phase "postgres data" $((SECONDS - start))
+
+  diff <(dump_counts) <(target_counts) >/dev/null || {
+    diff <(dump_counts) <(target_counts) | sed -n '1,20p' >&2
+    die "row counts differ after the load"
+  }
+  echo "restore: row counts match ($(dump_counts | wc -l | tr -d ' ') tables)"
+fi
+
+if [[ $skip_storage -eq 0 ]]; then
+  [[ $yes -eq 1 ]] || die "refusing to write without --yes"
+  start=$SECONDS
+  (cd "$repo" && uv run --no-sync python -m quiz_worker.storage_backup restore --from "$dir/storage")
+  phase "storage objects" $((SECONDS - start))
+fi
+
+if [[ $do_reindex -eq 1 ]]; then
+  start=$SECONDS
+  "$repo/scripts/reindex" --all
+  phase "qdrant reindex" $((SECONDS - start))
+else
+  echo "restore: next, rebuild the index: scripts/reindex --all (worker environment of the target)"
+fi

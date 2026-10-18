@@ -1,0 +1,78 @@
+"""Retrieval evaluation (Task M2.6, docs/architecture.md §9): datasets with graded KO/EN
+judgements, Recall@k / MRR@k / nDCG@k, a runner over keyword/semantic/hybrid x reranker off/on
+with per-direction (KO->KO, KO->EN, EN->KO, EN->EN) metrics, the hit -> PDF location check,
+latency percentiles, an RRF k / candidate depth sweep, and JSON + Markdown reports."""
+
+from book_core.evaluation.dataset import (
+    CorpusDocument,
+    Dataset,
+    DatasetDocument,
+    DatasetError,
+    DatasetFile,
+    EvalQuery,
+    Judgement,
+    corpus_document,
+    load_dataset,
+)
+from book_core.evaluation.metrics import (
+    dcg,
+    first_relevant_rank,
+    mean,
+    ndcg_at,
+    percentile,
+    recall_at,
+    reciprocal_rank_at,
+)
+from book_core.evaluation.report import render_markdown
+from book_core.evaluation.runner import (
+    DEFAULT_WORKSPACE,
+    LOCATION_DEPTH,
+    METRIC_NAMES,
+    REPORT_SCHEMA_VERSION,
+    EvalConfig,
+    EvalIndex,
+    Evaluator,
+    SweepConfig,
+    build_index,
+    drop_prefixed,
+    evaluate,
+    make_embedder,
+    make_reranker,
+    qdrant_client,
+    sweep,
+)
+
+__all__ = [
+    "DEFAULT_WORKSPACE",
+    "LOCATION_DEPTH",
+    "METRIC_NAMES",
+    "REPORT_SCHEMA_VERSION",
+    "CorpusDocument",
+    "Dataset",
+    "DatasetDocument",
+    "DatasetError",
+    "DatasetFile",
+    "EvalConfig",
+    "EvalIndex",
+    "EvalQuery",
+    "Evaluator",
+    "Judgement",
+    "SweepConfig",
+    "build_index",
+    "corpus_document",
+    "dcg",
+    "drop_prefixed",
+    "evaluate",
+    "first_relevant_rank",
+    "load_dataset",
+    "make_embedder",
+    "make_reranker",
+    "mean",
+    "ndcg_at",
+    "percentile",
+    "qdrant_client",
+    "recall_at",
+    "reciprocal_rank_at",
+    "render_markdown",
+    "sweep",
+]

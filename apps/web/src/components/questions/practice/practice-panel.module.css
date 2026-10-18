@@ -1,0 +1,133 @@
+/* QPLAY-01 practice panel body and footer. Semantic tokens only. */
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.stem {
+  margin: 0;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-relaxed);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.choices {
+  display: grid;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  margin-block-end: var(--space-2);
+  padding: 0;
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.notice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.loading {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.error {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  margin: 0;
+  color: var(--color-danger);
+}
+
+.error p {
+  margin: 0;
+}
+
+/* Result text (정답/오답/채점 대기) carries the meaning; color only reinforces it. */
+.result {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.result:empty {
+  display: none;
+}
+
+.result:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.result[data-result='correct'] {
+  color: var(--color-success);
+}
+
+.result[data-result='incorrect'] {
+  color: var(--color-danger);
+}
+
+.result[data-result='pending'] {
+  color: var(--color-text-secondary);
+}
+
+.reveal {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.reveal:empty {
+  display: none;
+}
+
+.revealTitle {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.revealText {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  inline-size: 100%;
+}
+
+.selfGrade {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.nav {
+  display: flex;
+  gap: var(--space-2);
+  margin-inline-start: auto;
+}

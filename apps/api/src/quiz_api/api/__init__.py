@@ -1,0 +1,47 @@
+"""Versioned API surface mounted at `/api/v1`.
+
+Feature tasks add their routers here, e.g. `api_router.include_router(workspaces.router)`.
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter
+
+from quiz_api.api import (
+    document_revisions,
+    documents,
+    forks,
+    history,
+    jobs,
+    me,
+    practice,
+    question_generations,
+    question_imports,
+    question_overview,
+    questions,
+    search,
+    share_links,
+    shared,
+    workspaces,
+)
+from quiz_api.errors import problem_responses
+
+API_V1_PREFIX = "/api/v1"
+
+# Every v1 route documents the shared problem shape for auth, not-found and validation errors.
+api_router = APIRouter(responses=problem_responses(401, 403, 404, 422))
+api_router.include_router(me.router)
+api_router.include_router(workspaces.router)
+api_router.include_router(documents.router)
+api_router.include_router(document_revisions.router)
+api_router.include_router(search.router)
+api_router.include_router(questions.router)
+api_router.include_router(question_overview.router)
+api_router.include_router(question_imports.router)
+api_router.include_router(question_generations.router)
+api_router.include_router(practice.router)
+api_router.include_router(share_links.router)
+api_router.include_router(shared.router)
+api_router.include_router(forks.router)
+api_router.include_router(jobs.router)
+api_router.include_router(history.router)

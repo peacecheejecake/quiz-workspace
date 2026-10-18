@@ -36,7 +36,7 @@
 | `--color-surface` | `#FFFFFF` | 카드·읽기 화면 |
 | `--color-surface-muted` | `#F0F3F7` | subtle group |
 | `--color-text-primary` | `#172033` | 기본 텍스트 |
-| `--color-text-secondary` | `#667085` | 보조 텍스트 |
+| `--color-text-secondary` | `#636D82` | 보조 텍스트(surface-muted 위에서도 4.5:1 이상) |
 | `--color-border` | `#DEE3EB` | 표면·필드 경계 |
 | `--color-accent` | `#5268D8` | primary action, navigation |
 | `--color-focus` | `#356CFF` | focus outline |
@@ -47,6 +47,16 @@
 | `--question-status-incorrect` | `#E0525E` | 틀린 문제 |
 | `--question-status-correct` | `#26865C` | 맞은 문제 |
 | `--question-status-retry` | `#E9B447` | 다시 풀기 |
+| `--color-border-strong` | `#7D8799` | 입력 컨트롤 경계(표면 대비 3:1 이상) |
+| `--color-on-accent` | `#FFFFFF` | accent 채움 위 텍스트·아이콘 |
+| `--color-danger` | `#C42B3A` | 오류·파괴적 동작 피드백(텍스트 대비 4.5:1 이상) |
+| `--color-success` | `#1E7A52` | 성공 피드백(텍스트 대비 4.5:1 이상) |
+| `--color-warning` | `#8F5F00` | 경고 피드백(텍스트 대비 4.5:1 이상) |
+| `--color-scrim` | `rgba(247,248,250,.64)` | modal·drawer backdrop |
+
+**v1.1.1 추가:** `--color-border-strong`, `--color-on-accent`, `--color-danger`/`success`/`warning`, `--color-scrim`, typography scale(`--font-size-*`, `--line-height-*`, `--font-weight-*`), breakpoint(`--breakpoint-*`). feedback 색은 question-status 토큰을 재사용하지 않으며(의미가 다름), canvas·surface 위 텍스트로 4.5:1 이상을 만족한다.
+
+**v1.1.2 (M7.2):** `--color-text-secondary` light `#667085` → `#636D82`. 보조 텍스트가 선택·현재 항목, 메타 정보 등 `--color-surface-muted` 위에도 쓰여 4.47:1로 AA에 미달했다(axe 전 화면 검사). 같은 색조로 4.67:1(muted)·4.89:1(canvas)·5.2:1(surface)을 만족한다. 앱은 별도 선택이 없으면 OS `prefers-color-scheme`을 따라 Dark token을 적용한다(`[data-theme]`가 있으면 그 값이 우선).
 
 **상태 점은 기본 표면과 충분히 구분되도록** 최소 얇은 outline과 범례를 갖는다. 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
 
@@ -69,6 +79,12 @@
   --question-status-incorrect: #F17B84;
   --question-status-correct: #4BC68E;
   --question-status-retry: #F4C763;
+  --color-border-strong: #7A8799;
+  --color-on-accent: #11151D;
+  --color-danger: #FF8A93;
+  --color-success: #4FCB92;
+  --color-warning: #F2C14E;
+  --color-scrim: rgba(17, 21, 29, 0.64);
 }
 ```
 
@@ -83,7 +99,7 @@
   --color-surface: #FFFFFF;
   --color-surface-muted: #F0F3F7;
   --color-text-primary: #172033;
-  --color-text-secondary: #667085;
+  --color-text-secondary: #636D82;
   --color-border: #DEE3EB;
   --color-accent: #5268D8;
   --color-focus: #356CFF;
@@ -94,8 +110,26 @@
   --question-status-incorrect: #E0525E;
   --question-status-correct: #26865C;
   --question-status-retry: #E9B447;
+  --color-border-strong: #7D8799;
+  --color-on-accent: #FFFFFF;
+  --color-danger: #C42B3A;
+  --color-success: #1E7A52;
+  --color-warning: #8F5F00;
+  --color-scrim: rgba(247,248,250,.64);
 
   --font-sans: "Pretendard", "Inter", system-ui, -apple-system, sans-serif;
+  --font-size-label-sm: 12px;
+  --font-size-label: 13px;
+  --font-size-body: 14px;
+  --font-size-body-lg: 16px;
+  --font-size-section-title: 18px;
+  --font-size-page-title: 26px;
+  --line-height-tight: 1.2;
+  --line-height-snug: 1.4;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.6;
+  --font-weight-regular: 400;
+  --font-weight-semibold: 600;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -114,6 +148,8 @@
   --app-header-height: 64px;
   --app-sidebar-width: 232px;
   --content-max-width: 1440px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
   --floating-panel-width: 500px;
   --heatmap-cell: 28px;
   --heatmap-gap: 4px;
@@ -149,6 +185,8 @@
 | Label | 12–13px, secondary text |
 | Page title | 24–28px/1.2, 굵기 600 |
 | Section title | 16–18px, 굵기 600 |
+| Typography token | label `--font-size-label-sm`(12)/`--font-size-label`(13), body `--font-size-body`(14)/`--font-size-body-lg`(16, 긴 본문은 `--line-height-relaxed` 1.6), section `--font-size-section-title`(18), page title `--font-size-page-title`(26)/`--line-height-tight`, 굵기 `--font-weight-semibold`(600) |
+| Breakpoint | mobile `< 768px`(`--breakpoint-md`), tablet 768–1023px, desktop `≥ 1024px`(`--breakpoint-lg`, sidebar 표시). CSS 변수는 media query 안에서 쓸 수 없으므로 media query는 같은 px 값을 range 문법(`(width >= 768px)`)으로 쓰고, `packages/ui` 테스트가 토큰 값과 일치하는지 검사한다. TS는 `@quiz/design-tokens`의 `breakpoints`/`mediaQueries`를 사용한다 |
 | Global header | 64px 높이 |
 | Left navigation | 232px 고정(데스크톱), 모바일 drawer |
 | Content area | max-width 1440px, padding 24px(데스크톱) / 16px(모바일) |

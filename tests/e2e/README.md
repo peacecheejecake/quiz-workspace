@@ -1,16 +1,100 @@
-# 화면 명세 우선 Playwright E2E — v1.3
+# 화면 명세 우선 Playwright E2E — v1.3 (P0.10 harness)
 
-이 저장소의 E2E는 **구현 전에 작성한 RED 예제**다. 애플리케이션·fixture·API가 아직 없으므로 실행하거나 GREEN을 확인하지 않았다.
+E2E는 `docs/screens/*.md`의 AC를 먼저 테스트로 옮기고(RED) 구현으로 GREEN을 만드는 계층이다. 원칙은 [e2e-strategy](../../docs/e2e-strategy.md), 순서는 [implementation-plan](../../docs/implementation-plan.md)을 따른다. 이 문서는 harness 사용법이다.
 
-1. `@playwright/test`를 설치하고 `supabase start` + FastAPI + Next.js + Qdrant/Redis로 테스트 환경을 실행한다.
-2. E2E_USER_EMAIL / E2E_USER_PASSWORD, 테스트 Workspace e2e-ws, 해당 질문 Q12/Q13, 원본 Owner 및 별도 수신자 계정을 fixture에 seed한다. 실제 사용자 파일을 쓰지 않는다.
-3. `playwright/.auth/`는 gitignore. `pnpm exec playwright install`, `pnpm exec playwright test`.
-4. RED 원인이 인프라 오류가 아니라 **아직 구현되지 않은 기대 기능**임을 확인한 뒤 AC 단위로 구현한다. 모든 구현 완료 후 CI GREEN 기준을 적용한다.
-5. 동일한 서버 state를 수정하는 병렬 E2E는 격리된 테스트 사용자/데이터로 운영하며 tearDown에서 정리한다.
+## 디렉터리
 
-추가 공유/Fork 테스트:
-- `workspaces/sharing-owner.spec.ts`: Owner 링크 발급·Fork 허용·철회
-- `workspaces/share-public.spec.ts`: guest 읽기만 허용, 비밀값 제거
-- `workspaces/fork.spec.ts`: 로그인된 수신자, Fork ON, 독립 Workspace 생성
+| 경로 | 내용 |
+|---|---|
+| `harness/*.spec.ts` | harness 자체 검사(`HARNESS-nn`). stub route·헤더·locale/timezone·fixture 동작 확인 |
+| `fixtures/` | `test.ts`(공용 `test`/`expect`), `auth.ts`(사용자 팩토리·로그인), `mailpit.ts`(메일 링크), `local-env.ts`(로컬 URL·키, 비로컬 거부) |
+| `setup/` | `auth.setup.ts`/`auth.teardown.ts`: authenticated 프로젝트용 공용 사용자와 `storageState` |
+| `quality/` | M7.2 화면 횡단 품질 검사: `A11Y-nn`(axe), `VISUAL-nn`(visual baseline), `SMOKE-nn`(WebKit/모바일), `PERF-nn`(성능). AC가 아니므로 `e2e:trace`가 이 디렉터리에서만 허용하는 예약 ID를 쓴다 |
+| `_pending/` | harness 이전 starter spec. **실행·lint·format 대상 아님**. 각 RED Task가 화면 명세 경로로 옮겨 확장한다 |
+| 그 외 `auth/`, `workspaces/`, `documents/`, `questions/` … | 화면 명세에 선언된 경로의 AC spec (RED Task가 생성) |
 
-각 화면 문서의 AC ID가 E2E title과 1:1 대응하게 확장한다. 예제는 모든 87 AC를 구현한 것이 아니다. 실제 API 보안·Worker 복제·Storage 접근·철회 경쟁 상황은 별도 통합 테스트로 검증한다. 실서비스 토큰·비밀번호·PDF 및 비밀 URL이 Trace/Artifact에 저장되지 않도록 한다.
+## 실행
+
+```bash
+make e2e-browsers   # 최초 1회: Chromium + WebKit만 설치 (Firefox 미사용)
+make infra-up       # Supabase(Auth, Mailpit) + Qdrant/Redis — @infra 테스트와 사용자 fixture에 필요
+pnpm e2e            # = make e2e. 웹 서버가 없으면 apps/web production build 후 next start
+pnpm e2e --project harness-chromium        # 프로젝트 하나만
+pnpm e2e --grep-invert @infra              # 인프라 없이 돌 수 있는 테스트만
+pnpm exec playwright show-report           # 실패 trace/스크린샷 확인
+pnpm e2e:trace      # = make e2e-trace. AC ↔ test 대조 리포트 (항상 exit 0)
+make infra-down
+```
+
+- **웹 서버**: `next build` + `next start`(production)로 띄운다. 실제 배포와 같은 헤더·번들이며 dev overlay/HMR로 인한 flaky가 없다. 로컬에서는 `E2E_BASE_URL`(기본 `http://127.0.0.1:3000`)에 이미 서버가 떠 있으면(`make web-dev` 등) 재사용한다. CI는 항상 새로 빌드한다.
+- **브라우저 환경 고정**: 모든 프로젝트 `locale: ko-KR`, `timezoneId: Asia/Seoul`, `reducedMotion: reduce`, `colorScheme: light`. 시계가 필요한 테스트는 `page.clock`으로 각자 고정한다.
+- **인프라 의존 테스트**: title에 `@infra` tag를 붙인다. 스택이 꺼져 있으면 skip이 아니라 **실패**한다(`make test-infra`와 같은 원칙).
+
+## 프로젝트
+
+| 프로젝트 | 대상 | 세션 |
+|---|---|---|
+| `harness-chromium` / `harness-webkit` | `harness/*.spec.ts` | 없음 |
+| `unauthenticated-chromium` / `unauthenticated-webkit` | `auth/*.spec.ts`(단, `account-security.spec.ts` 제외), `workspaces/share-public.spec.ts` | 없음(cookie 없는 새 context) |
+| `setup` → `authenticated-chromium` / `authenticated-webkit` → `teardown` | 위 이외의 모든 spec | `playwright/.auth/user.json` |
+
+| `a11y-chromium` | `quality/a11y*.spec.ts` | 없음(테스트마다 사용자 생성) |
+| `smoke-ipad-webkit` / `smoke-iphone-webkit` / `smoke-mobile-chrome` | `quality/smoke.spec.ts` | 없음 |
+| `visual-desktop` / `visual-ipad` | `quality/visual.spec.ts` — 고정 renderer가 있을 때만 등록(아래) | 없음 |
+| `perf-chromium` | `quality/perf.spec.ts` — `E2E_PERF=1`일 때만 등록(`pnpm e2e:perf`) | 없음 |
+
+`setup`/`authenticated-*`/`teardown`은 **authenticated spec이 하나라도 생겼을 때만** 등록된다. `setup`은 사용자 팩토리로 확인 완료 사용자를 만들고 실제 `/login` UI로 로그인해 `storageState`를 저장하므로, `/login`이 stub인 지금은 통과할 수 없다. 세션 형식(Supabase SSR cookie)은 A2.1이 정하며 그때 `setup/auth.setup.ts`를 마무리한다. 가짜 cookie 형식을 만들어 넣지 않는다.
+
+## Fixture
+
+```ts
+import { expect, test, signIn, waitForMailLink } from '../fixtures/test.ts';
+
+test('AUTH-01-AC02 ...', async ({ page, userFactory }) => {
+  const user = await userFactory.create({ label: 'auth01-ac02' }); // 확인 완료 사용자
+  // userFactory.create({ confirmed: false }) → 미확인 사용자(가입·인증 흐름)
+  // signIn(user) → Auth API 세션(accessToken/refreshToken) — API contract 준비용
+  // waitForMailLink(email, { since }) → Mailpit 최신 메일의 단일 링크 (AUTH-03/05/06)
+});
+```
+
+- 테스트마다 고유 사용자(`e2e-<label>-<uuid>@example.test`, 무작위 비밀번호)를 만들고 **teardown에서 삭제**(실패해도 삭제)하며 해당 주소의 Mailpit 메일도 지운다. 쓰기 테스트는 공유 fixture에 병렬로 쓰지 않는다.
+- 사용자 생성·삭제는 Supabase Auth admin API를 쓴다. 키는 `SUPABASE_SECRET_KEY`/`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` 환경 변수 또는 `pnpm exec supabase status -o json`에서 실행 시 읽고 메모리에만 둔다. 커밋·로그·에러 메시지에 남기지 않는다.
+- 모든 fixture는 `E2E_BASE_URL`·`NEXT_PUBLIC_SUPABASE_URL`·`E2E_MAILPIT_URL`이 loopback(127.0.0.1/localhost)이 아니면 즉시 실패한다(운영 프로젝트 보호).
+- 앱에 test 전용 seed/reset endpoint를 만들지 않는다. 데이터는 공개 API(또는 로컬 Auth admin API)로 만든다.
+- **데이터 fixture**(M3.0): `workspaceFactory`(`fixtures/workspaces.ts`) — `member(label)`은 사용자 + API 세션, `create/list/archive/softDelete`는 공개 Workspace API를 호출한다. `fixtures/documents.ts` — 합성 PDF를 공개 업로드 흐름(upload-intent → Storage 직접 업로드 → complete-upload)으로 올리고 `GET /jobs/{id}`를 `expect.poll`로 기다리며, 검색 API를 호출한다. API 호출은 `fixtures/api.ts`(Node `fetch`, trace에 토큰 미기록)로 하고, 엔드포인트가 없으면 `POST /api/v1/workspaces not implemented (404)`처럼 실패한다. 요청/응답 형태와 UI label 계약은 각 파일 머리 주석(`workspace-ui.ts` 포함)에 있다.
+- **DB superuser**(`fixtures/db.ts`, `psql`): teardown에서 테스트 사용자가 소유한 Workspace를 hard delete(`owner_id`가 `on delete restrict`, API는 soft delete만 함)하고, 공개 API가 없는 상태 중 서버 거부가 AC인 경우(DOC-02-AC05 viewer membership)에만 seed한다.
+- **FastAPI**: `playwright.config.ts`가 웹 서버와 함께 `python -m quiz_api.serve`를 `NEXT_PUBLIC_API_BASE_URL`(기본 :8000)에 띄운다(로컬은 이미 떠 있으면 재사용). 병렬 worktree와 포트가 겹치면 `E2E_BASE_URL`/`NEXT_PUBLIC_API_BASE_URL`을 다른 포트로 지정한다(인증 메일 링크는 Supabase `site_url` :3000을 가리키므로 HARNESS-09·메일 기반 AUTH 테스트는 기본 포트에서만 통과).
+- **CAPTCHA**(A4, `fixtures/turnstile.ts`): E2E web build는 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`=Cloudflare 테스트 키(`1x00000000000000000000AA`, `playwright.config.ts`)라 Auth 폼에 Turnstile 위젯이 뜬다. auto fixture `turnstile`이 모든 context에서 `https://challenges.cloudflare.com/**`를 가로채 결정론적 가짜 api.js·iframe을 돌려준다(실제 Cloudflare 호출 없음, 앱 build에 미포함). 기본 `pass`(즉시 `XXXX.DUMMY.TOKEN.XXXX` 발급), `turnstile.mode = 'interactive' | 'fail' | 'unreachable'`은 탐색 전에, 열린 page는 `turnstile.setMode(page, …)`·`expire(page)`·`solve(page)`·`stats(page)`. 로컬 Supabase는 CAPTCHA off라 토큰을 검증하지 않는다(서버 검증은 docs/auth.md §5.1). 이미 떠 있는 웹 서버를 재사용할 때는 그 서버도 site key로 build되어 있어야 한다.
+- **확장 지점**(`fixtures/test.ts`): S0 owner/guest/recipient 공유 fixture. 같은 패턴(생성 → 추적 → teardown 삭제)으로 추가한다.
+
+## Trace/artifact와 비밀값
+
+- `trace: retain-on-failure`, `screenshot: only-on-failure`, `video: on-first-retry`. CI artifact(`playwright-report/`, `test-results/`) 보존 기간 7일.
+- Playwright trace는 `page`/`request`의 네트워크 본문과 `fill` 입력값을 기록한다. 그래서 fixture는 Auth/Mailpit 호출에 **Node `fetch`만** 쓰고, admin 키·세션 토큰·메일 링크는 trace에 들어가지 않는다(실패 trace를 직접 검사해 확인). 메일 링크·토큰을 test title, `console.log`, attachment에 넣지 않는다.
+- 남는 위험: UI 로그인(`setup`, AUTH 화면 테스트)의 trace에는 입력한 비밀번호와 응답 cookie가 포함된다. 모두 **로컬/CI 일회용 스택의 합성 사용자**(테스트 후 삭제, 로컬 전용 서명 키, 1시간 만료)이므로 실사용 비밀이 아니다. 실제 계정·운영 URL은 E2E에 절대 쓰지 않는다.
+- 공유 링크 비밀값은 이 예외에 포함되지 않는다. 공유 spec(`workspaces/{sharing-owner,share-public,fork}.spec.ts`)은 trace·screenshot·video를 끄고, 실패 시 비밀값을 가린 페이지 텍스트(`page-text-redacted`)만 첨부한다. 실행 직후 `pnpm e2e:artifact-audit`가 `test-results/`·`playwright-report/`(trace zip, report 내장 zip 포함)에서 알려진 비밀값과 `#k=` fragment를 찾아 있으면 실패한다(규칙: `fixtures/sharing.ts` 머리 주석).
+
+## 품질 검사 (M7.2)
+
+- **접근성**(`fixtures/a11y.ts` `expectAccessible`): axe-core(`@axe-core/playwright` 고정)로 WCAG 2.0/2.1/2.2 A·AA + best-practice 전체를 light/dark 두 테마에서 검사한다. 규칙 비활성화·영역 제외는 없다. 예외는 `EXEMPTIONS` 한 건뿐: best-practice `region` 규칙을 Radix popper layer(`[data-radix-popper-content-wrapper]`, body로 portal되는 menu/popover/tooltip) 안 노드에만 면제(이유는 파일 주석). 새 화면·상태를 추가하면 `quality/a11y*.spec.ts`에 그 상태의 scan을 추가한다.
+- **WebKit·모바일 smoke**: iPad Pro 11·iPhone 14(WebKit)·Pixel 7(Chrome)에서 tap으로 핵심 흐름(로그인, drawer 내비게이션, Workspace 생성, PDF 업로드→READY, 검색 발췌, heatmap→풀이 패널, 공유 보기)과 해당 viewport의 axe(light). Desktop WebKit은 모든 AC spec이 이미 `*-webkit` 프로젝트로 돈다.
+- **성능**(`pnpm e2e:perf`, 1 worker): 300문항 Workspace로 주요 화면 Web Vitals(LCP/CLS/TTFB/JS 크기)와 overview·문제은행 목록·검색 API p95. 문서에 수치 목표가 없어 web.dev "good" 기준과 느슨한 API 예산으로 회귀만 잡는다. 결과는 test attachment `perf.json`.
+
+### Visual baselines
+
+- 기준(baseline of record)은 **고정 Playwright Linux image**(`mcr.microsoft.com/playwright:v<@playwright/test 버전>-noble`)의 렌더링이다. 폰트·anti-aliasing이 OS마다 달라 macOS 렌더를 기준으로 쓰지 않는다(플랫폼별 baseline도 두지 않음).
+- `pnpm e2e:visual`(= `scripts/visual-run.sh`)이 그 image에서 `playwright run-server`를 띄우고 `E2E_VISUAL_WS_ENDPOINT`를 넘긴다. 테스트 runner·fixture·웹/API 서버는 호스트에 그대로 있고, 브라우저의 loopback 요청만 `exposeNetwork: '<loopback>'`로 호스트에 터널된다(fixture의 loopback 전용 규칙 유지). 의도한 변경 후 `pnpm e2e:visual --update-snapshots`, 다른 E2E 서버를 쓸 때는 평소처럼 `E2E_BASE_URL`/`NEXT_PUBLIC_API_BASE_URL`.
+- 그 image 안에서 직접 돌리는 CI job은 `E2E_VISUAL=1`. 둘 다 없으면 `visual-*` 프로젝트는 등록되지 않는다(로컬 `pnpm e2e`는 Docker 없이도 GREEN; visual은 `pnpm e2e:visual`로 따로 실행).
+- 결정론: ko-KR·Asia/Seoul·reduced motion·animation disabled·caret hide·`document.fonts.ready`, 데이터는 테스트별이지만 보이는 텍스트는 고정(Workspace 이름, 문제 label, 합성 PDF), 시간(`<time>`, `[data-visual-dynamic]`)은 mask. 공유 비밀값은 화면에 없는 상태만 찍는다. baseline: `quality/__screenshots__/<name>-<light|dark>-visual-<desktop|ipad>.png`.
+- `@quiz/ui` Storybook visual(`pnpm --filter @quiz/ui test:visual`)도 같은 renderer를 쓴다.
+
+## RED Task가 할 일
+
+1. `_pending/`의 starter가 있으면 화면 명세에 선언된 경로로 옮기고(`questions/overview.spec.ts` → `questions/questions-overview.spec.ts` 등) `../fixtures/test.ts`의 `test`를 쓰도록 바꾼다. 하드코딩된 `e2e-ws` 같은 ID 대신 factory로 만든 데이터를 쓴다.
+2. test title은 AC ID로 시작한다(`AUTH-01-AC03 ...`). API contract test(예: `AUTH-API-AC01`)는 `tests/integration/`의 pytest 함수 이름에 ID를 넣는다(`def test_auth_api_ac01_missing_jwt_is_401`).
+3. `pnpm e2e`로 RED를 확인한다. 실패 원인이 서버·seed·네트워크가 아닌 **미구현 기능**이어야 한다.
+4. `pnpm e2e:trace --strict --phase <Task>`(예: `A0`)로 해당 화면에 orphan AC/잘못된 경로가 없는지 확인한다. `--screens WS-01,DOC-01`로 화면을 직접 지정할 수도 있다.
+5. Phase가 GREEN이 되면 `.github/workflows/ci.yml`의 `E2E_PHASES`에 Task ID를 추가한다. CI는 `tests/e2e`의 모든 spec에서 **목록에 없는 phase의 화면 spec만 빼고** 실행하며(`e2e:trace --list-specs --exclude-phase`; harness·a11y 등 phase에 속하지 않는 spec은 항상 실행), 목록의 phase에 trace를 강제한다(develop의 진행 중 RED는 CI에서 돌리지 않음). E2E는 `e2e:log-audit --worker`(web :3000, API :8000, `APP_ENV=test` worker)로 돌고 이어서 `e2e:artifact-audit`를 실행한다.
+
+`e2e:trace`는 `docs/screens/*.md`의 `### <ID>-ACnn` 제목과 선언된 spec 경로, `docs/auth.md` §7의 `AUTH-API-ACnn`을 읽고 `tests/e2e/**/*.spec.ts`(`_pending` 제외) title과 `tests/integration/**/*.py`의 test 함수 이름을 대조해 orphan AC, orphan test, 경로 불일치, ID 없는 title, `test.only/skip/fixme`를 보고한다.

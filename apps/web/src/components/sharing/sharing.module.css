@@ -1,0 +1,82 @@
+/* WS-SHARE-01 sharing settings and WorkspaceSharingPanel. Semantic tokens only. */
+
+.screen {
+  display: grid;
+  gap: var(--space-4);
+  max-width: var(--content-max-width);
+}
+
+.lead {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
+}
+
+.panelBody {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.status {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.statusLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-normal);
+}
+
+.error {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.error p {
+  margin: 0;
+}
+
+.issued {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.policy {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.notices {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-normal);
+}
+
+.notices p {
+  margin: 0;
+}

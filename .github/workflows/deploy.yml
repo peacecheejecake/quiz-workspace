@@ -1,0 +1,275 @@
+# Deploy (M7.4a, docs/deployment.md §5, runbook: docs/runbook-deploy.md). Manual only: never runs
+# on push, pull request or schedule.
+#
+#   preflight (ref, secrets, CI green for this commit)
+#     → api/worker images → GHCR, by digest
+#     → `supabase db push` (migrations BEFORE any rollout; additive-first, §5)
+#     → Railway api, then worker, onto those digests (API gated on /health/ready)
+#     → Vercel web (prebuilt; staging aliased to WEB_ORIGIN)
+#     → post-deploy smoke (staging: DEP-01/02/05/07 automated set; production and the one-time
+#       staging `bootstrap` run, before the smoke accounts exist: @readonly only)
+#
+# Staging first (user decision 2026-10-18, implementation-plan §7): production stays gated until
+# the staging 7-day load test / cost gate passes; the operator then sets the repository variable
+# PRODUCTION_DEPLOY_ENABLED=true. Until then a production dispatch fails in preflight.
+#
+# Everything comes from the GitHub Environment named by the `environment` input (staging /
+# production; production should require reviewers and allow only `main`). Names and owners:
+# infra/deploy/env-manifest.toml, services `deploy` and `smoke`. A missing value stops the run in
+# preflight with the list of missing names, before anything is built or changed.
+#
+# One job on purpose: environment secrets need the job to reference the environment, and one job
+# means one approval and a strict order (no rollout without its migration step).
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment (GitHub Environment of the same name)
+        type: choice
+        options: [staging, production]
+        required: true
+      bootstrap:
+        description: First staging deploy before the smoke accounts exist (read-only smoke only)
+        type: boolean
+        default: false
+      skip_migrations:
+        description: Skip `supabase db push` (rollback to an older commit; see runbook)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy · ${{ inputs.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ vars.WEB_ORIGIN }}
+    permissions:
+      contents: read
+      packages: write # push the api/worker images to GHCR
+      actions: read # look up the CI result of this commit
+    env:
+      TARGET: ${{ inputs.environment }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_CLI_VERSION: ${{ vars.VERCEL_CLI_VERSION }}
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+      RAILWAY_API_SERVICE_ID: ${{ vars.RAILWAY_API_SERVICE_ID }}
+      RAILWAY_WORKER_SERVICE_ID: ${{ vars.RAILWAY_WORKER_SERVICE_ID }}
+      WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
+      SMOKE_API_URL: ${{ vars.SMOKE_API_URL }}
+      SMOKE_SUPABASE_URL: ${{ vars.SMOKE_SUPABASE_URL }}
+      SMOKE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SMOKE_SUPABASE_PUBLISHABLE_KEY }}
+      SMOKE_QDRANT_URL: ${{ vars.SMOKE_QDRANT_URL }}
+      SMOKE_USER_A_EMAIL: ${{ secrets.SMOKE_USER_A_EMAIL }}
+      SMOKE_USER_A_PASSWORD: ${{ secrets.SMOKE_USER_A_PASSWORD }}
+      SMOKE_USER_B_EMAIL: ${{ secrets.SMOKE_USER_B_EMAIL }}
+      SMOKE_USER_B_PASSWORD: ${{ secrets.SMOKE_USER_B_PASSWORD }}
+      FORCE_COLOR: '1'
+    steps:
+      - name: Preflight (ref, required secrets and variables)
+        env:
+          REF: ${{ github.ref }}
+          PRODUCTION_DEPLOY_ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
+          BOOTSTRAP: ${{ inputs.bootstrap }}
+        run: |
+          set -euo pipefail
+          if [[ $TARGET == production && ${PRODUCTION_DEPLOY_ENABLED:-} != true ]]; then
+            echo '::error::production is gated until the staging load/cost gate (runbook §9); set PRODUCTION_DEPLOY_ENABLED=true'
+            exit 1
+          fi
+          case "$TARGET/$REF" in
+            production/refs/heads/main | staging/refs/heads/main | staging/refs/heads/develop) ;;
+            *)
+              echo "::error::$TARGET deploys run from main (staging also from develop), not $REF"
+              exit 1 ;;
+          esac
+          required=(SUPABASE_DB_URL VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_CLI_VERSION
+            RAILWAY_TOKEN RAILWAY_ENVIRONMENT_ID RAILWAY_API_SERVICE_ID RAILWAY_WORKER_SERVICE_ID
+            WEB_ORIGIN SMOKE_API_URL SMOKE_SUPABASE_URL SMOKE_SUPABASE_PUBLISHABLE_KEY)
+          if [[ $BOOTSTRAP == true && $TARGET != staging ]]; then
+            echo '::error::bootstrap is for the first staging deploy only'
+            exit 1
+          fi
+          if [[ $TARGET == staging && $BOOTSTRAP == true ]]; then
+            echo '::warning::BOOTSTRAP: smoke accounts not required; only @readonly smoke runs. Create the accounts (runbook §3) and re-run without bootstrap to complete DEP-01/02/05.'
+          elif [[ $TARGET == staging ]]; then
+            required+=(SMOKE_USER_A_EMAIL SMOKE_USER_A_PASSWORD SMOKE_USER_B_EMAIL SMOKE_USER_B_PASSWORD)
+          fi
+          missing=()
+          for name in "${required[@]}"; do
+            [[ -n "${!name:-}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} )); then
+            echo "::error::GitHub Environment '$TARGET' lacks: ${missing[*]} (docs/runbook-deploy.md)"
+            exit 1
+          fi
+          [[ $VERCEL_CLI_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo '::error::VERCEL_CLI_VERSION must be an exact x.y.z version'; exit 1; }
+          for name in WEB_ORIGIN SMOKE_API_URL SMOKE_SUPABASE_URL; do
+            [[ ${!name} == https://* ]] || { echo "::error::$name must be https://"; exit 1; }
+          done
+          echo "preflight: $TARGET from $REF, all ${#required[@]} values present"
+
+      - name: CI passed for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          runs="$(gh run list --repo "$REPO" --workflow ci.yml --commit "$SHA" --status success \
+            --json databaseId --jq length)"
+          if [[ "$runs" == "0" ]]; then
+            echo "::error::no successful CI run for $SHA; deploy only commits that are green"
+            exit 1
+          fi
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - name: Install
+        run: |
+          pnpm install --frozen-lockfile
+          uv sync --locked
+
+      # --- images -------------------------------------------------------------------------------
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Log in to GHCR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+      - name: Image names
+        id: names
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          SHA: ${{ github.sha }}
+        run: |
+          registry="ghcr.io/${REPO_OWNER,,}"
+          {
+            echo "api=$registry/quiz-api"
+            echo "worker=$registry/quiz-worker"
+            echo "tag=$SHA"
+          } >> "$GITHUB_OUTPUT"
+      - name: Build + push api
+        id: api
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ${{ steps.names.outputs.api }}:${{ steps.names.outputs.tag }}
+          cache-from: type=gha,scope=image-api
+      - name: Build + push worker
+        id: worker
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/worker/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ${{ steps.names.outputs.worker }}:${{ steps.names.outputs.tag }}
+          cache-from: type=gha,scope=image-worker
+      - name: Pinned image references
+        id: images
+        env:
+          API: ${{ steps.names.outputs.api }}
+          API_DIGEST: ${{ steps.api.outputs.digest }}
+          WORKER: ${{ steps.names.outputs.worker }}
+          WORKER_DIGEST: ${{ steps.worker.outputs.digest }}
+        run: |
+          set -euo pipefail
+          for d in "$API_DIGEST" "$WORKER_DIGEST"; do
+            [[ $d =~ ^sha256:[0-9a-f]{64}$ ]] || { echo '::error::image push returned no digest'; exit 1; }
+          done
+          {
+            echo "api=$API@$API_DIGEST"
+            echo "worker=$WORKER@$WORKER_DIGEST"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Images ($TARGET)"
+            echo "- api: \`$API@$API_DIGEST\`"
+            echo "- worker: \`$WORKER@$WORKER_DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # --- migrations (before any rollout) ------------------------------------------------------
+      - name: Migrations (supabase db push)
+        if: ${{ !inputs.skip_migrations }}
+        run: |
+          set -euo pipefail
+          pnpm exec supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
+          pnpm exec supabase db push --db-url "$SUPABASE_DB_URL" --yes
+
+      # --- API / worker (Railway) ---------------------------------------------------------------
+      - name: Roll out api (Railway, gated on /health/ready)
+        env:
+          IMAGE: ${{ steps.images.outputs.api }}
+        run: uv run --no-sync python scripts/deploy/railway_deploy.py --service api --image "$IMAGE"
+      - name: Roll out worker (Railway)
+        env:
+          IMAGE: ${{ steps.images.outputs.worker }}
+        run: uv run --no-sync python scripts/deploy/railway_deploy.py --service worker --image "$IMAGE"
+
+      # --- web (Vercel) -------------------------------------------------------------------------
+      # Project settings (Root Directory apps/web, env values incl. NEXT_PUBLIC_*) live in Vercel;
+      # apps/web/vercel.json pins framework/install/build and turns off git deployments.
+      - name: Deploy web (Vercel)
+        id: web
+        run: |
+          set -euo pipefail
+          vercel=(npx --yes "vercel@$VERCEL_CLI_VERSION")
+          if [[ $TARGET == production ]]; then env=production; prod=(--prod); else env=preview; prod=(); fi
+          "${vercel[@]}" pull --yes --environment="$env" --token="$VERCEL_TOKEN"
+          "${vercel[@]}" build "${prod[@]}" --token="$VERCEL_TOKEN"
+          url="$("${vercel[@]}" deploy --prebuilt "${prod[@]}" --token="$VERCEL_TOKEN")"
+          [[ $url == https://* ]] || { echo '::error::vercel deploy printed no deployment URL'; exit 1; }
+          if [[ $TARGET == staging ]]; then
+            # Staging has a fixed origin (CORS allowlist, Auth redirect allowlist).
+            "${vercel[@]}" alias set "$url" "${WEB_ORIGIN#https://}" --token="$VERCEL_TOKEN"
+          fi
+          echo "deployment: $url"
+
+      # --- post-deploy smoke --------------------------------------------------------------------
+      - name: Install Chromium (smoke sign-in)
+        if: ${{ inputs.environment == 'staging' && !inputs.bootstrap }}
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Smoke
+        env:
+          E2E_BASE_URL: ${{ vars.WEB_ORIGIN }}
+          SMOKE_TARGET: ${{ inputs.environment }}
+          BOOTSTRAP: ${{ inputs.bootstrap }}
+        run: |
+          set -euo pipefail
+          if [[ $BOOTSTRAP == true ]]; then
+            echo '::warning::BOOTSTRAP run: account-dependent smoke (DEP-01 sign-in, DEP-02 upload, DEP-05) skipped'
+            pnpm smoke --grep @readonly
+          elif [[ $TARGET == staging ]]; then
+            make smoke-staging
+          else
+            pnpm smoke --grep @readonly
+          fi

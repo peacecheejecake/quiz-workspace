@@ -1,0 +1,30 @@
+{
+  "name": "@quiz/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Semantic design tokens: tokens.json source, generated CSS variables and TS module.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./generated/tokens.css",
+    "./base.css": "./src/base.css",
+    "./tokens.json": "./tokens.json"
+  },
+  "sideEffects": [
+    "*.css"
+  ],
+  "scripts": {
+    "build": "node build-tokens.ts",
+    "check:generated": "node build-tokens.ts --check",
+    "check:raw-colors": "node scripts/check-raw-colors.ts",
+    "lint": "pnpm run check:generated && pnpm run check:raw-colors",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "prettier": "^3",
+    "typescript": "~6.0.3",
+    "vitest": "^5"
+  }
+}

@@ -1,0 +1,371 @@
+# CI (M7.3, docs/deployment.md §5): static checks → unit → contracts ‖ container images ‖ UI
+# visual baselines, then the local stack (Supabase CLI + Qdrant/Redis) → DB tests → infra
+# integration tests → E2E (screens, a11y, WebKit/mobile smoke) with the worker and log/artifact
+# audits → app visual baselines → backup/restore rehearsal (DEP-06). Nightly (schedule) runs all of
+# it plus Web Vitals/API latency (`e2e:perf`) and the real-model tests.
+#
+#   checks ──► integration (+ perf on schedule / manual)
+#   images (api · worker · web, no push)
+#   visual-ui (@quiz/ui Storybook baselines)
+#   models (schedule / manual only)
+#
+# Visual baselines are Linux renders of the pinned Playwright image (tests/e2e/README.md "Visual
+# baselines"): scripts/visual-run.sh starts `playwright run-server` in
+# mcr.microsoft.com/playwright:v<installed @playwright/test>-noble and the runner connects to it.
+#
+# E2E_PHASES lists the RED phases whose specs are GREEN (`scripts/e2e-trace.ts` PHASES); the trace
+# gate is strict for them. E2E runs every spec under tests/e2e except the screen specs of phases
+# NOT listed here, so cross-cutting suites (harness, a11y, visual, …) always run. A new RED phase on
+# develop stays out of CI until its implementing Task appends it (implementation-plan §7).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+  schedule:
+    - cron: '17 18 * * *' # 03:17 KST: real-model tests (decision log: nightly, HF cache)
+  workflow_dispatch:
+    inputs:
+      models:
+        description: Also run the real-model tests (make test-models)
+        type: boolean
+        default: false
+      perf:
+        description: Also run the Web Vitals / API latency checks (pnpm e2e:perf)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  E2E_PHASES: P0.10,A0,M3.0,M4.0,M5.0,M6.0,M7.0,S0
+  FORCE_COLOR: '1'
+
+jobs:
+  checks:
+    name: lint · typecheck · unit · contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - name: Install
+        run: |
+          pnpm install --frozen-lockfile
+          uv sync --locked
+      - name: Lint (eslint, prettier, ruff, package lint, contracts)
+        run: make lint
+      - name: Typecheck
+        run: make typecheck
+      - name: Unit tests
+        run: make test
+      - name: AC traceability (implemented phases)
+        run: pnpm e2e:trace --strict --phase "$E2E_PHASES"
+
+  images:
+    name: image · ${{ matrix.image }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, worker, web]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Built and loaded locally only (no registry push until M7.4). Public placeholder values for
+      # the web image's build-time NEXT_PUBLIC_* (docs/deployment.md §6): never secrets.
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/${{ matrix.image }}/Dockerfile
+          tags: quiz-${{ matrix.image }}:ci
+          push: false
+          load: true
+          provenance: false
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=ci-placeholder-publishable-key
+            NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+          cache-from: type=gha,scope=image-${{ matrix.image }}
+          cache-to: type=gha,scope=image-${{ matrix.image }},mode=max
+      - name: Smoke (boots, non-root, healthcheck command)
+        env:
+          IMAGE: quiz-${{ matrix.image }}:ci
+          KIND: ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          [[ "$(docker image inspect -f '{{.Config.User}}' "$IMAGE")" != "" ]]
+          docker image inspect -f '{{.Config.Healthcheck.Test}}' "$IMAGE" | grep -q .
+          case "$KIND" in
+            api)
+              # The production default refuses an insecure configuration.
+              if docker run --rm "$IMAGE" >/dev/null 2>&1; then
+                echo "API image started without production configuration" >&2
+                exit 1
+              fi
+              docker run -d --name smoke -p 127.0.0.1:8000:8000 -e APP_ENV=test "$IMAGE"
+              url=http://127.0.0.1:8000/health/live ;;
+            web)
+              docker run -d --name smoke -p 127.0.0.1:3000:3000 "$IMAGE"
+              url=http://127.0.0.1:3000/login ;;
+            worker)
+              docker run --rm "$IMAGE" python -m quiz_worker.reindex --help >/dev/null
+              docker run --rm "$IMAGE" python -c 'import docling.document_converter, torch, transformers, cv2'
+              docker image ls "$IMAGE"
+              exit 0 ;;
+          esac
+          for _ in $(seq 1 30); do curl -fsS -o /dev/null "$url" && break; sleep 1; done
+          curl -fsS -o /dev/null "$url"
+          docker image ls "$IMAGE"
+          docker rm -f smoke
+
+  integration:
+    name: db · infra · e2e · restore
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - name: Install
+        run: |
+          pnpm install --frozen-lockfile
+          uv sync --locked
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - name: Install Playwright browsers (Chromium + WebKit)
+        run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Start local stack
+        run: make infra-up
+      # The apps, pytest and Playwright read the git-ignored root .env locally; CI writes the same
+      # file from .env.example plus the generated local keys (masked) and exports the keys too.
+      - name: Local .env (throwaway stack keys, masked)
+        run: |
+          status="$(pnpm exec supabase status -o json | sed -n '/^{/,$p')"
+          publishable="$(jq -r .PUBLISHABLE_KEY <<<"$status")"
+          secret="$(jq -r .SECRET_KEY <<<"$status")"
+          echo "::add-mask::$publishable"
+          echo "::add-mask::$secret"
+          umask 077
+          sed -e "s|^NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=.*|NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$publishable|" \
+              -e "s|^SUPABASE_SECRET_KEY=.*|SUPABASE_SECRET_KEY=$secret|" .env.example > .env
+          {
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$publishable"
+            echo "SUPABASE_SECRET_KEY=$secret"
+          } >> "$GITHUB_ENV"
+      - name: Enable local quiz_api / quiz_worker login (CI-only password)
+        run: |
+          for role in quiz_api quiz_worker; do
+            psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 \
+              -c "alter role $role with login password 'change-me-local'"
+          done
+
+      - name: DB tests (pgTAP)
+        run: make db-test
+      - name: Infra integration tests
+        run: make test-infra
+
+      # Web (:3000, the Supabase site_url that auth mail links and HARNESS-09 expect), API (:8000)
+      # and the Celery worker are started by e2e:log-audit, which fails on secrets in their logs.
+      # APP_ENV=test selects the fixture parser, the fake embedder and the scripted LLM.
+      - name: E2E (all GREEN phases + cross-cutting specs, with worker and log audit)
+        env:
+          APP_ENV: test
+          WORKER_LLM_SCENARIO_FILE: ${{ github.workspace }}/tests/fixtures/llm/generation-scenarios.json
+        run: |
+          # Skip only the screen specs of phases that are not GREEN yet (none once every phase is
+          # listed). A blank entry would be an empty Playwright filter matching every spec.
+          mapfile -t excluded < <(node scripts/e2e-trace.ts --list-specs --exclude-phase "$E2E_PHASES")
+          specs=()
+          while IFS= read -r spec; do
+            skip=0
+            for ex in "${excluded[@]}"; do
+              if [[ -n $ex && $spec == "$ex" ]]; then skip=1; fi
+            done
+            if [[ $skip -eq 0 ]]; then specs+=("$spec"); fi
+          done < <(find tests/e2e -name '*.spec.ts' -not -path '*/_pending/*' | LC_ALL=C sort)
+          echo "E2E specs (${#specs[@]}): ${specs[*]}"
+          # tests/e2e/quality/ (a11y-chromium, smoke-{ipad,iphone}-webkit, smoke-mobile-chrome) is
+          # in this list; its visual/perf projects only exist when their renderer/flag is set.
+          printf '%s\n' "${specs[@]}" | grep -q '^tests/e2e/quality/a11y.spec.ts$'
+          pnpm e2e:log-audit --worker --web-port 3000 --api-port 8000 -- "${specs[@]}"
+
+      # App screenshots against the pinned renderer (visual-desktop, visual-ipad), same servers and
+      # worker (reusing the web build); own output/report dirs so the E2E artifacts stay.
+      - name: Visual baselines (app, pinned Linux renderer)
+        if: ${{ !cancelled() }}
+        env:
+          APP_ENV: test
+          WORKER_LLM_SCENARIO_FILE: ${{ github.workspace }}/tests/fixtures/llm/generation-scenarios.json
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-visual
+        run: >-
+          scripts/visual-run.sh pnpm e2e:log-audit --worker --no-build --web-port 3000 --api-port 8000
+          -- tests/e2e/quality/visual.spec.ts --project=visual-desktop --project=visual-ipad
+          --output=test-results-visual
+
+      - name: Web Vitals / API latency (nightly)
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.perf)) }}
+        env:
+          APP_ENV: test
+          E2E_PERF: '1'
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-perf
+        run: >-
+          pnpm e2e:log-audit --worker --no-build --web-port 3000 --api-port 8000
+          -- tests/e2e/quality/perf.spec.ts --project=perf-chromium --workers=1
+          --output=test-results-perf
+
+      - name: E2E artifact audit (no share secrets in traces/reports)
+        if: ${{ !cancelled() }}
+        run: >-
+          pnpm e2e:artifact-audit test-results playwright-report test-results-visual
+          playwright-report-visual test-results-perf playwright-report-perf
+
+      # DEP-06 rehearsal on the throwaway stack: back up, wipe the DB and the index, restore,
+      # rebuild Qdrant from Postgres. The backup holds synthetic users only and is never uploaded.
+      - name: Backup → reset → restore → reindex (DEP-06)
+        env:
+          APP_ENV: test
+          RESTORE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: |
+          set -euo pipefail
+          backup="$RUNNER_TEMP/backup"
+          probe="$RUNNER_TEMP/restore-probe.json"
+          # The E2E fixtures delete their data, so seed one published synthetic document (real
+          # upload + document.parse path) that the restore must bring back.
+          uv run --no-sync python scripts/restore_probe.py seed --state "$probe"
+          scripts/backup "$backup"
+          before="$(psql "$RESTORE_DB_URL" -X -At -c 'select count(*) from public.documents')"
+          make db-reset
+          # `db reset` re-initialises the cluster: the migrations recreate quiz_api / quiz_worker
+          # NOLOGIN, so the reindex (worker role) needs the CI-only login again, as after infra-up.
+          for role in quiz_api quiz_worker; do
+            psql "$RESTORE_DB_URL" -X -v ON_ERROR_STOP=1 \
+              -c "alter role $role with login password 'change-me-local'"
+          done
+          uv run --no-sync python - <<'PY'
+          from qdrant_client import QdrantClient
+          from qdrant_client import models as qm
+          client = QdrantClient(url="http://127.0.0.1:6333")
+          client.update_collection_aliases(change_aliases_operations=[
+              qm.DeleteAliasOperation(delete_alias=qm.DeleteAlias(alias_name=a.alias_name))
+              for a in client.get_aliases().aliases
+          ])
+          for collection in client.get_collections().collections:
+              client.delete_collection(collection.name)
+          PY
+          scripts/restore "$backup" --yes --reindex | tee "$RUNNER_TEMP/restore.log"
+          after="$(psql "$RESTORE_DB_URL" -X -At -c 'select count(*) from public.documents')"
+          [[ "$before" == "$after" ]]
+          summary="$(grep '"summary"' "$RUNNER_TEMP/restore.log")"
+          jq -e '.summary.failed == 0 and .summary.busy == 0 and .summary.indexed > 0' <<<"$summary"
+          # That document: same active revision, original Storage bytes, active in Qdrant.
+          uv run --no-sync python scripts/restore_probe.py verify --state "$probe"
+          rm -rf "$backup"
+
+      # Reports hold traces/screenshots of failed tests: synthetic users on this throwaway stack
+      # only (tests/e2e/README.md), kept briefly.
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+            playwright-report-visual/
+            test-results-visual/
+            playwright-report-perf/
+            test-results-perf/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop local stack
+        if: ${{ always() }}
+        run: make infra-down
+
+  visual-ui:
+    name: visual · @quiz/ui Storybook
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # Storybook build + screenshots in the pinned renderer (scripts/visual-run.sh, Docker).
+      - name: Storybook visual baselines
+        run: pnpm --filter @quiz/ui test:visual
+      - name: Upload visual diffs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ui-visual-diffs
+          path: packages/ui/test-results/visual/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  models:
+    name: real-model tests (nightly)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.models)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      HF_HOME: ${{ github.workspace }}/.hf-cache
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - name: Install
+        run: uv sync --locked
+      # Model revisions are pinned in book_core (embedding/reranker) and by the Docling version in
+      # uv.lock, so the lockfile identifies the weights.
+      - name: Cache model weights
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .hf-cache
+          key: hf-${{ runner.os }}-${{ hashFiles('uv.lock', 'packages/core/src/book_core/embedding/qwen3.py', 'packages/core/src/book_core/reranker/qwen3.py') }}
+      - name: Real-model tests
+        run: make test-models
