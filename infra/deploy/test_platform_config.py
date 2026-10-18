@@ -135,6 +135,14 @@ def test_supabase_remote_auth_deltas(name: str) -> None:
     for key in ("host", "user", "pass", "admin_email"):
         assert ENV_REF.match(smtp[key]), f"remotes.{name}.auth.email.smtp.{key} must be env(...)"
 
+    # docs/auth.md 5.1: Turnstile CAPTCHA on, secret only from the operator's environment.
+    captcha = auth["captcha"]
+    assert captcha == {
+        "enabled": True,
+        "provider": "turnstile",
+        "secret": "env(SUPABASE_AUTH_CAPTCHA_SECRET)",
+    }
+
     # Inherited from [auth]: confirmations on, short-lived access tokens, rotation on.
     assert config["auth"]["email"]["enable_confirmations"] is True
     assert config["auth"]["jwt_expiry"] <= 3600
@@ -150,6 +158,9 @@ def test_supabase_remotes_target_distinct_projects() -> None:
 
 def test_supabase_local_auth_is_untouched() -> None:
     auth = tomllib.loads(SUPABASE.read_text(encoding="utf-8"))["auth"]
+    # Local/test: Supabase never calls Cloudflare (the web widget is faked in E2E).
+    assert auth["captcha"]["enabled"] is False
+    assert auth["captcha"]["provider"] == "turnstile"
     assert auth["site_url"] == "http://127.0.0.1:3000"
     assert auth["additional_redirect_urls"] == ["http://127.0.0.1:3000/auth/callback"]
     assert "smtp" not in auth["email"]

@@ -10,7 +10,7 @@
 |---|---|
 | `apps/web/vercel.json` | Vercel 빌드 설정(Root Directory `apps/web`, git 자동 배포 끔) |
 | `infra/deploy/railway-services.toml` | Railway api/worker 배포 설정(이미지 CMD, healthcheck, restart, replica, volume 경로) |
-| `supabase/config.toml` `[remotes.staging]` / `[remotes.production]` | hosted Auth 설정 delta(site_url, redirect, SMTP, rate limit) |
+| `supabase/config.toml` `[remotes.staging]` / `[remotes.production]` | hosted Auth 설정 delta(site_url, redirect, SMTP, rate limit, Turnstile CAPTCHA) |
 | `infra/deploy/env-manifest.toml` | 서비스·환경별 변수 전체 목록(공개/비밀, 필수/선택/금지, 제공자) |
 | `scripts/check_env.py` (`make check-env`) | env 파일 검증(값은 출력하지 않음), `--template`으로 빈 양식 생성 |
 | `.github/workflows/deploy.yml` | 수동 배포: preflight → 이미지(digest) → migration → Railway → Vercel → smoke |
@@ -34,7 +34,11 @@
    - 이미지 pull: GHCR package를 public으로 두거나(이미지에는 코드만 있고 secret 없음), private이면 Railway 서비스 설정의 registry credential(플랜 확인)에 GHCR read-only token을 넣는다 — **사용자 결정**.
 5. **Vercel**: GitHub repo import → Root Directory `apps/web`, Framework Next.js, Node 24. `vercel.json`이 git 자동 배포를 끄므로 배포는 workflow만 한다. staging 도메인(예: `staging.quiz.example`)을 project에 추가(production branch에 연결하지 않음; workflow가 preview 배포에 alias). Team id / Project id(→ `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`), Account → Tokens에서 만료가 있는 token(→ `VERCEL_TOKEN`).
    - Deployment Protection(Vercel Authentication)이 staging 도메인을 막으면 smoke와 사용자가 401을 받는다. staging 도메인에 대해 끌지 여부는 **사용자 결정**(staging 데이터는 합성 계정만 사용).
-6. **GitHub**: Settings → Environments → `staging`(deployment branches: `develop`, `main`). production environment는 비용 게이트 후 만든다(§9).
+6. **Cloudflare Turnstile**(Auth CAPTCHA, auth.md §5.1): 가입·로그인·인증 메일 재전송·재설정 메일 요청은 Turnstile 토큰이 있어야 Supabase Auth가 받아 준다. web의 sitekey와 Supabase의 secret은 **같은 widget에서 나온 한 쌍**이어야 한다(한쪽만 바뀌면 모든 가입·로그인이 실패).
+   - **staging 기본: Cloudflare 공식 테스트 키 쌍** — sitekey `1x00000000000000000000AA`(항상 통과, 위젯 표시), secret `1x0000000000000000000000000000000AA`(항상 통과, dummy token만 수락). 실제 위젯·실제 Supabase 검증 경로를 그대로 타면서 smoke 계정의 자동 로그인(`tests/smoke`가 dummy token을 보냄)이 가능하다. 봇 방어는 없으므로 staging 도메인을 공개 홍보하지 않는다.
+   - staging에 실제 키를 쓰려면(선택) 아래 production과 같은 방법으로 staging 전용 widget을 만든다. 그러면 DEP smoke의 로그인 단계(DEP-01 UI 로그인, password grant)는 자동으로 통과하지 못하므로 수동 점검으로 바꾼다.
+   - **production(게이트 후)**: Cloudflare dashboard → Turnstile → **Add widget**: 이름 `quiz-production`, **Hostname management**에 production web 도메인만(예: `quiz.example`; wildcard·`localhost`·preview 도메인 넣지 않음), Widget mode **Managed**, pre-clearance **No**. 발급된 **Site Key**(`0x…`, 공개) → Vercel `NEXT_PUBLIC_TURNSTILE_SITE_KEY`(Production), **Secret Key**(`0x…`, 비밀) → `config push` 셸의 `SUPABASE_AUTH_CAPTCHA_SECRET`. production은 테스트 키를 넣으면 `check_env.py`가 거부한다.
+7. **GitHub**: Settings → Environments → `staging`(deployment branches: `develop`, `main`). production environment는 비용 게이트 후 만든다(§9).
 
 ## 2. Secret 생성
 
@@ -49,6 +53,8 @@
 | `QDRANT_API_KEY` | Qdrant Cloud | Railway `api`, `worker` |
 | `REDIS_URL` | Railway reference variable `${{Redis.REDIS_URL}}` | Railway `api`, `worker` |
 | `SUPABASE_AUTH_SMTP_*` | SMTP 제공자 | `config push` 셸에서만 |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | 1장 6단계(staging: 테스트 sitekey, production: widget Site Key). 공개 값, build 시 inline | Vercel (Preview=staging / Production) — 값을 바꾸면 **재배포**해야 반영 |
+| `SUPABASE_AUTH_CAPTCHA_SECRET` | 1장 6단계(staging: 테스트 secret, production: widget Secret Key) | `config push` 셸에서만 (web·Railway·GitHub에 넣지 않음) |
 | `SUPABASE_ACCESS_TOKEN` | Supabase → Account → Access Tokens (운영자 전용, CI에 넣지 않음) | `config push` 셸에서만 |
 | `VERCEL_TOKEN`, `RAILWAY_TOKEN`, `SUPABASE_DB_URL` | 위 1장 | GitHub Environment secrets |
 | `SMOKE_USER_{A,B}_{EMAIL,PASSWORD}` | 3장 5단계의 smoke 계정 | GitHub Environment secrets |
@@ -66,7 +72,7 @@ make check-env ENV=staging ARGS="--check api=$HOME/secure/quiz/api.staging.env \
   --check worker=$HOME/secure/quiz/worker.staging.env --check web=$HOME/secure/quiz/web.staging.env"
 ```
 
-검증은 필수 누락, `https://` 아님, CORS wildcard·path, 32자 미만 HMAC key, 공개 key/secret key 바뀜, fake adapter·test 전용 변수(`WORKER_TASK_ALWAYS_EAGER`, `FORWARDED_ALLOW_IPS`, `RAILWAY_RUN_UID` 등), manifest에 없는 `NEXT_PUBLIC_*`, web·api의 `RELAY_CLIENT_SECRET` 불일치를 오류로 낸다. 출력에는 변수 이름만 나온다.
+검증은 필수 누락, `https://` 아님, Turnstile 키 형식(항상 실패/challenge 테스트 키 거부, production의 테스트 키 거부, web sitekey와 Supabase secret 중 하나만 테스트 키인 짝 불일치 — `--check web=… --check supabase-config=…`를 함께 줄 때), CORS wildcard·path, 32자 미만 HMAC key, 공개 key/secret key 바뀜, fake adapter·test 전용 변수(`WORKER_TASK_ALWAYS_EAGER`, `FORWARDED_ALLOW_IPS`, `RAILWAY_RUN_UID` 등), manifest에 없는 `NEXT_PUBLIC_*`, web·api의 `RELAY_CLIENT_SECRET` 불일치를 오류로 낸다. 출력에는 변수 이름만 나온다.
 
 주요 값:
 
@@ -88,13 +94,14 @@ make check-env ENV=staging ARGS="--check api=$HOME/secure/quiz/api.staging.env \
    psql "$SUPABASE_DB_URL" -c "alter role quiz_worker with login password '<hex>'"
    ```
    이후 migration은 workflow가 rollout 전에 적용한다(`db push`는 role을 다시 만들지 않으므로 login은 유지).
-2. **Auth 설정 push**(SMTP·site_url·redirect·rate limit·메일 템플릿):
+2. **Auth 설정 push**(SMTP·site_url·redirect·rate limit·Turnstile CAPTCHA·메일 템플릿). CAPTCHA는 push 즉시 켜지므로 같은 짝의 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`로 build된 web을 함께 배포한다(첫 배포 전이면 순서 무관):
    ```bash
-   set -a; . ~/secure/quiz/supabase-config.staging.env; set +a   # SUPABASE_ACCESS_TOKEN, SUPABASE_AUTH_*
-   uv run python scripts/check_env.py --env staging --check supabase-config=-
+   set -a; . ~/secure/quiz/supabase-config.staging.env; set +a   # SUPABASE_ACCESS_TOKEN, SUPABASE_AUTH_* (CAPTCHA secret 포함)
+   uv run python scripts/check_env.py --env staging --check supabase-config=- \
+     --check web=$HOME/secure/quiz/web.staging.env      # sitekey ↔ secret 짝 검사 포함
    pnpm exec supabase config push --project-ref <staging ref>
    ```
-   Dashboard에서 확인·설정: JWT signing key를 비대칭(ES256)으로 rotate, access token 만료 3600s, Storage bucket `source-pdfs`·`parsed-artifacts`가 private, Auth → URL Configuration의 redirect 목록이 `https://<web>/auth/callback` 하나뿐인지.
+   Dashboard에서 확인·설정: JWT signing key를 비대칭(ES256)으로 rotate, access token 만료 3600s, Storage bucket `source-pdfs`·`parsed-artifacts`가 private, Auth → URL Configuration의 redirect 목록이 `https://<web>/auth/callback` 하나뿐인지, Auth → Attack Protection에서 CAPTCHA가 Turnstile로 켜져 있는지.
 3. **Railway / Vercel 변수 입력**: 2장에서 검증한 값만 넣는다.
 4. **GitHub Environment `staging`**: secrets `SUPABASE_DB_URL`, `VERCEL_TOKEN`, `RAILWAY_TOKEN`, `SMOKE_USER_*`; variables `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `RAILWAY_ENVIRONMENT_ID`, `RAILWAY_API_SERVICE_ID`, `RAILWAY_WORKER_SERVICE_ID`, `WEB_ORIGIN`, `SMOKE_API_URL`, `SMOKE_SUPABASE_URL`, `SMOKE_SUPABASE_PUBLISHABLE_KEY`, (선택) `SMOKE_QDRANT_URL`. Repository variable `VERCEL_CLI_VERSION`(2주 이상 지난 정확한 `x.y.z`).
 5. **Workflow 실행**: Actions → Deploy → `environment=staging`(ref `develop` 또는 `main`). preflight가 누락 이름을 출력하면 채우고 다시 실행.
@@ -147,10 +154,10 @@ smoke 계정의 workspace는 API에서 soft-delete만 되므로 누적된다(합
 staging 7일 부하·비용 게이트를 통과한 뒤에만 진행한다. workflow는 repository variable `PRODUCTION_DEPLOY_ENABLED=true`가 없으면 production을 preflight에서 거부한다.
 
 1. Supabase production project를 **새로** 만든다(staging과 공유하지 않음, branching 미사용). ref를 `[remotes.production] project_id`(`replaceproductionref`)에 넣는다.
-2. 1~3장을 production 값으로 반복(모든 HMAC secret은 새로 생성, Qdrant·Railway·Vercel production 환경, `APP_ENV=production`).
+2. 1~3장을 production 값으로 반복(Turnstile은 1장 6단계의 production widget 실제 키, 모든 HMAC secret은 새로 생성, Qdrant·Railway·Vercel production 환경, `APP_ENV=production`).
 3. GitHub Environment `production`: deployment branch `main`만, required reviewers 지정. smoke 계정 secrets는 필요 없다(`@readonly` 점검만 실행).
 4. `PRODUCTION_DEPLOY_ENABLED=true` 설정 → Deploy workflow `environment=production`(ref `main`) → 승인.
-5. 운영 확인: 실제 메일로 가입·재설정 1회, 백업 정책(플랜의 일일 백업 + `make backup`), 예산 알림.
+5. 운영 확인: 실제 메일로 가입·재설정 1회(Turnstile 위젯이 뜨고 통과하는지, 위젯 없이 Auth API를 직접 부르면 `captcha_failed`로 거부되는지), 백업 정책(플랜의 일일 백업 + `make backup`), 예산 알림.
 
 ## 7. 남은 사용자 결정
 
@@ -160,7 +167,7 @@ staging 7일 부하·비용 게이트를 통과한 뒤에만 진행한다. workf
 - staging 도메인의 Vercel Deployment Protection.
 - LLM 사용 여부·모델·예산(`LLM_API_KEY`/`LLM_MODEL`; 미설정 시 문제 생성 비활성).
 - `/terms`, `/privacy` 실제 문구(현재 placeholder).
-- CAPTCHA: 문서(§6.1)는 Auth CAPTCHA를 요구하지만 web에 CAPTCHA 위젯이 없어 켜면 가입·로그인이 깨진다 → 별도 Task로 구현 후 활성화.
+- CAPTCHA(A4 구현 완료): staging을 기본값인 Turnstile 테스트 키 쌍으로 둘지, staging 전용 실제 widget을 쓸지(그 경우 DEP smoke 로그인 단계는 수동). production은 실제 widget 필수.
 
 ## 8. 첫 staging 배포에서 확인할 가정
 
@@ -168,4 +175,5 @@ staging 7일 부하·비용 게이트를 통과한 뒤에만 진행한다. workf
 - Railway volume이 uid 10001에 쓰기 가능한지(3장 8단계).
 - Vercel이 `x-real-ip`를 client 주소로 덮어쓰는지(공유 링크 rate limit의 client 구분).
 - Supabase session pooler로 `quiz_api.<ref>`/`quiz_worker.<ref>` 로그인, GitHub runner(IPv4)에서 `db push`.
-- `supabase config push`가 `[remotes.staging]`을 적용하는지(`--project-ref`가 `project_id`와 같아야 함).
+- `supabase config push`가 `[remotes.staging]`을 적용하는지(`--project-ref`가 `project_id`와 같아야 함). `[remotes.staging.auth.captcha]`(Turnstile)가 Dashboard Attack Protection에 반영되는지.
+- Turnstile 테스트 sitekey 위젯이 headless Chromium(DEP-01 UI 로그인)에서 상호작용 없이 통과하는지.

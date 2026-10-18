@@ -61,6 +61,8 @@ SAMPLES = {
     "semver": "1.2.3",
     "smoke_target": "staging",
     "auth_callback": "https://quiz.example/auth/callback",
+    "turnstile_site_key": "0x4AAAAAAAexampleSiteKey0",
+    "turnstile_secret": "0x" + SECRET_MARK,
 }
 
 
@@ -261,6 +263,64 @@ def test_auth_callback_must_follow_the_site_url() -> None:
     assert report.errors == [
         "supabase-config SUPABASE_AUTH_REDIRECT_URL: must be exactly "
         "<SUPABASE_AUTH_SITE_URL>/auth/callback"
+    ]
+
+
+TEST_SITE_KEY = "1x00000000000000000000AA"
+TEST_SECRET = "1x0000000000000000000000000000000AA"  # noqa: S105 - Cloudflare's public test key
+
+
+def _captcha_sources(environment: str, site: str, secret: str) -> dict[str, dict[str, str]]:
+    web = valid_env("web", environment) | {"NEXT_PUBLIC_TURNSTILE_SITE_KEY": site}
+    config = valid_env("supabase-config", environment) | {"SUPABASE_AUTH_CAPTCHA_SECRET": secret}
+    return {"web": web, "supabase-config": config}
+
+
+def test_captcha_keys_are_required_and_paired() -> None:
+    # docs/auth.md 5.1: CAPTCHA is on in every deployment; the web sitekey and the Supabase
+    # secret come from the same widget (or are both Cloudflare's always-passes test keys).
+    required = {v.name for v in MANIFEST.vars if v.required == MANIFEST.environments}
+    assert {"NEXT_PUBLIC_TURNSTILE_SITE_KEY", "SUPABASE_AUTH_CAPTCHA_SECRET"} <= required
+    (secret,) = [v for v in MANIFEST.vars if v.name == "SUPABASE_AUTH_CAPTCHA_SECRET"]
+    assert secret.kind == "secret"
+    assert secret.services == ("supabase-config",)
+
+    staging = check_env.run_checks(
+        MANIFEST, "staging", _captcha_sources("staging", TEST_SITE_KEY, TEST_SECRET)
+    )
+    assert staging.errors == []
+
+    mixed = check_env.run_checks(
+        MANIFEST, "staging", _captcha_sources("staging", TEST_SITE_KEY, "0x" + SECRET_MARK)
+    )
+    assert len(mixed.errors) == 1
+    assert "one is a Cloudflare test key and the other is not" in mixed.errors[0]
+    assert SECRET_MARK not in "".join(mixed.errors)
+
+
+def test_production_refuses_turnstile_test_keys() -> None:
+    report = check_env.run_checks(
+        MANIFEST, "production", _captcha_sources("production", TEST_SITE_KEY, TEST_SECRET)
+    )
+    assert report.errors == [
+        "web NEXT_PUBLIC_TURNSTILE_SITE_KEY: Cloudflare Turnstile test keys are not allowed in "
+        "production",
+        "supabase-config SUPABASE_AUTH_CAPTCHA_SECRET: Cloudflare Turnstile test keys are not "
+        "allowed in production",
+    ]
+
+
+def test_never_passing_or_malformed_turnstile_keys_are_errors() -> None:
+    report = check_env.run_checks(
+        MANIFEST,
+        "staging",
+        _captcha_sources("staging", "2x00000000000000000000AB", "not-a-" + SECRET_MARK),
+    )
+    assert report.errors == [
+        "web NEXT_PUBLIC_TURNSTILE_SITE_KEY: is a Cloudflare test key that never passes; use a "
+        "real key or the 1x test key",
+        "supabase-config SUPABASE_AUTH_CAPTCHA_SECRET: must be a Cloudflare Turnstile secret key "
+        "(0x…)",
     ]
 
 

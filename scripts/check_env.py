@@ -123,6 +123,27 @@ def _secret_key(value: str) -> str | None:
     return None if value.strip() else "must not be empty"
 
 
+# Cloudflare Turnstile (docs/auth.md §5.1). Real keys start with `0x`; the documented test keys
+# with `1x` (always passes), `2x` (always fails) or `3x` (forces a challenge / token spent).
+_TURNSTILE_KEY = re.compile(r"[0-9]x[A-Za-z0-9_-]{20,}")
+
+
+def _turnstile(kind: str) -> Rule:
+    def rule(value: str) -> str | None:
+        key = value.strip()
+        if not _TURNSTILE_KEY.fullmatch(key):
+            return f"must be a Cloudflare Turnstile {kind} (0x…)"
+        if key[:2] in ("2x", "3x"):
+            return "is a Cloudflare test key that never passes; use a real key or the 1x test key"
+        return None
+
+    return rule
+
+
+def is_turnstile_test_key(value: str) -> bool:
+    return value.strip().startswith("1x")
+
+
 CHECKS: dict[str, Rule] = {
     "https_url": _https_url,
     "https_origin": _https_origin,
@@ -148,6 +169,8 @@ CHECKS: dict[str, Rule] = {
     ),
     "semver": _matches(r"\d+\.\d+\.\d+", "must be an exact version (x.y.z)"),
     "smoke_target": _matches(r"local|staging|production", "must be local, staging or production"),
+    "turnstile_site_key": _turnstile("sitekey"),
+    "turnstile_secret": _turnstile("secret key"),
     # Context-dependent rules (APP_ENV, auth callback) are handled in `check_service`.
     "app_env": lambda _value: None,
     "auth_callback": lambda _value: None,
@@ -323,6 +346,13 @@ def check_service(
             site = env.get("SUPABASE_AUTH_SITE_URL", "").strip().rstrip("/")
             if value.strip() != f"{site}/auth/callback" or _https_url(value):
                 problem = "must be exactly <SUPABASE_AUTH_SITE_URL>/auth/callback"
+        if (
+            not problem
+            and var.check in ("turnstile_site_key", "turnstile_secret")
+            and environment == "production"
+            and is_turnstile_test_key(value)
+        ):
+            problem = "Cloudflare Turnstile test keys are not allowed in production"
         if problem:
             report.errors.append(f"{label}: {problem}")
         else:
@@ -356,6 +386,27 @@ def check_same(
             report.errors.append(f"{var.name}: differs between {services} (must be identical)")
 
 
+CAPTCHA_PAIR = (
+    ("web", "NEXT_PUBLIC_TURNSTILE_SITE_KEY"),
+    ("supabase-config", "SUPABASE_AUTH_CAPTCHA_SECRET"),
+)
+
+
+def check_captcha_pair(sources: Mapping[str, Mapping[str, str]], report: Report) -> None:
+    """The web sitekey and the Supabase secret must both be test keys or both be real keys: a
+    test sitekey only yields the dummy token, which a real secret rejects (and vice versa)."""
+    kinds = {
+        name: is_turnstile_test_key(sources[service][name])
+        for service, name in CAPTCHA_PAIR
+        if service in sources and _is_set(sources[service], name)
+    }
+    if len(kinds) == 2 and len(set(kinds.values())) == 2:
+        report.errors.append(
+            "NEXT_PUBLIC_TURNSTILE_SITE_KEY and SUPABASE_AUTH_CAPTCHA_SECRET: one is a Cloudflare "
+            "test key and the other is not (same widget, or both test keys)"
+        )
+
+
 def run_checks(
     manifest: Manifest, environment: str, sources: Mapping[str, Mapping[str, str]]
 ) -> Report:
@@ -363,6 +414,7 @@ def run_checks(
     for service, env in sources.items():
         check_service(manifest, service, environment, env, report)
     check_same(manifest, sources, report)
+    check_captcha_pair(sources, report)
     return report
 
 
