@@ -9,6 +9,7 @@ real Docling on ``book-ko.pdf`` through the console script.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -34,6 +35,9 @@ SMALL_CONFIG = ChunkerConfig(
 BOOK_TEXT = "UNIQUE-BOOK-SENTENCE-7f3a must never reach stderr"
 
 runner = CliRunner()
+# Typer forces a Rich terminal when GITHUB_ACTIONS/FORCE_COLOR/PY_COLORS is set (read at import
+# time), so usage errors carry ANSI styles that split words; assertions check the plain text.
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 def _pdf(book: str) -> Path:
@@ -56,7 +60,7 @@ def _expected(book: str) -> tuple[ParsedDocument, DocumentRevision]:
 
 def _invoke(args: list[str], stdin: bytes | None = None) -> tuple[int, bytes, str]:
     result = runner.invoke(app, args, input=stdin)
-    return result.exit_code, result.stdout_bytes, result.stderr
+    return result.exit_code, result.stdout_bytes, ANSI_ESCAPE.sub("", result.stderr)
 
 
 def _ok(args: list[str], stdin: bytes | None = None) -> tuple[bytes, str]:

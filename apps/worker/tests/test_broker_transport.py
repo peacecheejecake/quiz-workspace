@@ -18,6 +18,7 @@ from uuid import UUID
 
 import pytest
 from celery.contrib.testing.worker import start_worker
+from celery.worker import state as worker_state
 from fakeredis import TcpFakeServer
 from pydantic import SecretStr
 from quiz_worker.celery_app import (
@@ -81,6 +82,18 @@ def _wait_for_terminal(
             return record
         time.sleep(0.05)
     raise AssertionError(f"job did not finish within {timeout}s: {store.get(job_id)}")
+
+
+def _wait_for_idle_worker(timeout: float = 15) -> None:
+    # The store turns terminal inside the attempt that claims the job, before that request has
+    # reported back to the worker. Leaving `start_worker` then cold-terminates the pool with a
+    # child still mid-request, and on a loaded runner that child can outlive `shutdown_timeout`
+    # (billiard joins it without a timeout). Shut down only once the worker holds no requests.
+    deadline = time.monotonic() + timeout
+    while worker_state.active_requests or worker_state.reserved_requests:
+        if time.monotonic() >= deadline:
+            raise AssertionError(f"worker still busy after {timeout}s")
+        time.sleep(0.05)
 
 
 def test_messages_are_json_and_hide_the_envelope_from_celery_logs(
@@ -198,6 +211,7 @@ def test_hard_time_limit_never_leaves_a_job_running(
     ):
         submit_job(app, envelope)
         record = _wait_for_terminal(store, envelope.job_id, timeout=60)
+        _wait_for_idle_worker()
 
     assert record.status is JobStatus.FAILED
     assert record.attempts == record.max_attempts == 3
