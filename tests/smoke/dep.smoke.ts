@@ -37,7 +37,8 @@ if (env.deployed) {
       // Either no plain-HTTP listener at all, or a redirect to https.
       if (plain) {
         expect([301, 302, 307, 308], `${new URL(base).host} over http`).toContain(plain.status);
-        expect(plain.headers.get('location') ?? '').toMatch(/^https:\/\//);
+        const location = plain.headers.get('location') ?? '';
+        expect(location.startsWith('https://'), 'redirect target is https').toBe(true);
       }
     }
   });
@@ -123,7 +124,7 @@ test('DEP-02 private buckets refuse anonymous reads, listings and uploads', READ
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ prefix: '', limit: 10 }),
     });
-    if (listing.status === 200) expect(listing.body).toEqual([]);
+    if (listing.status === 200) expect(listing.body?.length ?? 0, `${bucket} listing size`).toBe(0);
     else expect(listing.status).toBeGreaterThanOrEqual(400);
 
     const upload = await supabase(`/storage/v1/object/${bucket}/smoke/${randomUUID()}.pdf`, {
@@ -153,7 +154,8 @@ if (hasAccounts()) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ prefix: '', limit: 10 }),
       });
-      if (listing.status === 200) expect(listing.body).toEqual([]);
+      if (listing.status === 200)
+        expect(listing.body?.length ?? 0, `${bucket} listing size`).toBe(0);
       else expect(listing.status).toBeGreaterThanOrEqual(400);
       const upload = await supabase(`/storage/v1/object/${bucket}/smoke/${randomUUID()}.pdf`, {
         method: 'POST',
@@ -226,7 +228,7 @@ if (hasAccounts()) {
 test('DEP-07 the Supabase Data API exposes no application table', READONLY, async () => {
   for (const table of ['workspaces', 'documents', 'questions', 'attempts', 'async_jobs']) {
     const res = await supabase<unknown[]>(`/rest/v1/${table}?select=*&limit=1`);
-    if (res.status === 200) expect(res.body, table).toEqual([]);
+    if (res.status === 200) expect(res.body?.length ?? 0, `${table} rows`).toBe(0);
     else expect(res.status, table).toBeGreaterThanOrEqual(400);
   }
 });
@@ -236,7 +238,7 @@ if (hasAccounts()) {
     const jwt = await accessToken(accounts().a);
     for (const table of ['workspaces', 'workspace_memberships', 'questions', 'profiles']) {
       const res = await supabase<unknown[]>(`/rest/v1/${table}?select=*&limit=1`, { token: jwt });
-      if (res.status === 200) expect(res.body, table).toEqual([]);
+      if (res.status === 200) expect(res.body?.length ?? 0, `${table} rows`).toBe(0);
       else expect(res.status, table).toBeGreaterThanOrEqual(400);
     }
   });
@@ -270,7 +272,10 @@ test('DEP-07 readiness is green and names dependencies only', READONLY, async ()
   for (const [name, check] of Object.entries(ready.body?.checks ?? {})) {
     expect(check.status, name).toBe('ok');
   }
-  expect(ready.text).not.toMatch(/:\/\/|@|password|secret/i);
+  // Boolean only: the body itself must not reach the failure output.
+  expect(/:\/\/|@|password|secret/i.test(ready.text), 'readiness body names no endpoint').toBe(
+    false,
+  );
 });
 
 test('DEP-07 web security headers, CSP origins and share no-store', READONLY, async () => {
@@ -327,13 +332,21 @@ function nonAnonJwts(text: string): number {
   return count;
 }
 
+/** Leak categories in a response body; never the matched text (failure output reaches CI logs). */
+function leaksIn(resource: string, text: string): string[] {
+  const found = BUNDLE_LEAKS.filter(([, pattern]) => pattern.test(text)).map(
+    ([kind]) => `${resource}: ${kind}`,
+  );
+  if (nonAnonJwts(text) > 0) found.push(`${resource}: non-anon JWT`);
+  return found;
+}
+
 test('DEP-07 client bundles carry no server secrets', READONLY, async () => {
   const scripts = new Set<string>();
-  for (const page of ['/login', '/signup', '/forgot-password', `/share/${randomUUID()}`]) {
-    const res = await raw(`${env.webUrl}${page}`);
-    expect(nonAnonJwts(res.text), `${page} HTML`).toBe(0);
-    for (const [kind, pattern] of BUNDLE_LEAKS)
-      expect(res.text, `${kind} in ${page}`).not.toMatch(pattern);
+  const findings: string[] = [];
+  for (const page of ['/login', '/signup', '/forgot-password', '/share/{id}']) {
+    const res = await raw(`${env.webUrl}${page.replace('{id}', randomUUID())}`);
+    findings.push(...leaksIn(`${page} HTML`, res.text));
     for (const [, src] of res.text.matchAll(/src="(\/_next\/static\/[^"]+\.js)"/g)) {
       if (src) scripts.add(src);
     }
@@ -341,11 +354,11 @@ test('DEP-07 client bundles carry no server secrets', READONLY, async () => {
   expect(scripts.size).toBeGreaterThan(0);
   for (const src of scripts) {
     const res = await raw(`${env.webUrl}${src}`);
-    expect(res.status, src).toBe(200);
-    expect(nonAnonJwts(res.text), `JWT in ${src}`).toBe(0);
-    for (const [kind, pattern] of BUNDLE_LEAKS)
-      expect(res.text, `${kind} in ${src}`).not.toMatch(pattern);
+    if (res.status !== 200) findings.push(`${src}: HTTP ${res.status}`);
+    else findings.push(...leaksIn(src, res.text));
   }
+  // Resource + category only.
+  expect(findings).toEqual([]);
 });
 
 if (env.qdrantUrl) {
