@@ -154,6 +154,18 @@ CHECKS: dict[str, Rule] = {
 }
 
 
+UNPARSABLE = "could not be parsed (malformed value; fix it at the source)"
+
+
+def _apply(check: str, value: str) -> str | None:
+    """Runs a rule; a parser exception (e.g. urlsplit's NFKC netloc error, which quotes the
+    netloc and so the password) becomes a fixed reason that never carries the value."""
+    try:
+        return CHECKS[check](value)
+    except Exception:  # any parser failure; its message is deliberately discarded
+        return UNPARSABLE
+
+
 # --- manifest ------------------------------------------------------------------------------------
 
 
@@ -316,12 +328,12 @@ def check_service(
                 report.errors.append(f"{label}: missing (required when {var.requires} is set)")
             continue
         value = env[var.name]
-        problem = CHECKS[var.check](value) if var.check else None
+        problem = _apply(var.check, value) if var.check else None
         if var.check == "app_env" and value.strip() != manifest.app_env[environment]:
             problem = f"must be {manifest.app_env[environment]} in {environment}"
         if var.check == "auth_callback":
             site = env.get("SUPABASE_AUTH_SITE_URL", "").strip().rstrip("/")
-            if value.strip() != f"{site}/auth/callback" or _https_url(value):
+            if value.strip() != f"{site}/auth/callback" or _apply("https_url", value):
                 problem = "must be exactly <SUPABASE_AUTH_SITE_URL>/auth/callback"
         if problem:
             report.errors.append(f"{label}: {problem}")

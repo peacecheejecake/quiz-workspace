@@ -312,3 +312,24 @@ def test_listing_names_every_variable(capsys: pytest.CaptureFixture[str]) -> Non
     assert check_env.main(["--list"]) == 0
     out = capsys.readouterr().out
     assert all(v.name in out for v in MANIFEST.vars)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql://quiz_api:sensitive-password\uff20host/db",  # fullwidth @: NFKC error
+        "postgresql://quiz_api:sensitive-password@[::1/db",  # unbalanced IPv6 bracket
+    ],
+)
+def test_malformed_credential_urls_never_reach_the_output(
+    url: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = valid_env("api", "staging") | {"DATABASE_URL": url}
+    path = tmp_path / "api.env"
+    path.write_text("".join(f"{k}={v}\n" for k, v in env.items()), encoding="utf-8")
+    assert check_env.main(["--env", "staging", "--check", f"api={path}"]) == 1
+    out = capsys.readouterr()
+    text = out.out + out.err
+    assert "api DATABASE_URL: could not be parsed" in text
+    assert "sensitive-password" not in text
+    assert "quiz_api:" not in text
