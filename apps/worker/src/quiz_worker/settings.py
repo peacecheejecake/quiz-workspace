@@ -27,8 +27,10 @@ class ParserMode(StrEnum):
 
 
 class EmbedderMode(StrEnum):
+    # Same values as book_core.embedding.EmbedderMode (shared with the API's query embedder).
     AUTO = "auto"
     QWEN3 = "qwen3"
+    WORKERS_AI = "workers_ai"
     FAKE = "fake"
 
 
@@ -127,8 +129,23 @@ class WorkerSettings(BaseSettings):
     # `auto`: fixture-truth FakeParser (Docling for unknown files) in APP_ENV=test, Docling
     # elsewhere. `fake` never loads models (unknown files fail); never use it in production.
     parser: ParserMode = Field(default=ParserMode.AUTO, validation_alias="WORKER_PARSER")
-    # `auto`: FakeEmbedder in APP_ENV=test, Qwen3-Embedding elsewhere.
+    # `auto`: FakeEmbedder in APP_ENV=test, Qwen3-Embedding elsewhere. `workers_ai`: the same
+    # model on Cloudflare Workers AI (staging/production, M7.4b; sends chunk text to Cloudflare).
     embedder: EmbedderMode = Field(default=EmbedderMode.AUTO, validation_alias="WORKER_EMBEDDER")
+    # Cloudflare Workers AI (WORKER_EMBEDDER=workers_ai). The token is server-only (api + worker,
+    # never web): an account API token with Workers AI permission only.
+    cloudflare_account_id: str | None = Field(
+        default=None, validation_alias="CLOUDFLARE_ACCOUNT_ID"
+    )
+    cloudflare_api_token: SecretStr | None = Field(
+        default=None, validation_alias="CLOUDFLARE_API_TOKEN"
+    )
+    cloudflare_ai_batch_size: int = Field(
+        default=16, ge=1, le=100, validation_alias="CLOUDFLARE_AI_BATCH_SIZE"
+    )
+    cloudflare_ai_timeout_seconds: float = Field(
+        default=30, gt=0, le=300, validation_alias="CLOUDFLARE_AI_TIMEOUT_SECONDS"
+    )
     # Synthetic fixtures whose `*.truth.json` the test FakeParser serves by sha256.
     fixture_pdf_dir: str | None = Field(default=None, validation_alias="WORKER_FIXTURE_PDF_DIR")
     # Pre-downloaded model weights (Docling `artifacts_path`); with `models_offline` the worker
