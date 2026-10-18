@@ -138,6 +138,26 @@ describe('SearchScreen', () => {
     expect(window.location.search).toBe('?q=zzz&mode=keyword');
   });
 
+  it('SEARCH-01-AC06 shows the degraded notice next to the empty state when BM25 finds nothing', async () => {
+    const user = userEvent.setup();
+    const client = makeClient(async () => ({
+      ...response([]),
+      mode: 'hybrid',
+      degraded: ['dense_unavailable'],
+    }));
+    render(<SearchScreen workspaceId={WS} documents={[]} initial={INITIAL} client={client} />);
+    await submit(user, 'zzz');
+
+    expect(await screen.findByRole('heading', { name: '검색 결과가 없습니다' })).toBeVisible();
+    const notice = screen
+      .getAllByRole('status')
+      .find((el) =>
+        /의미 검색을 일시적으로 사용할 수 없어 키워드 결과만/.test(el.textContent ?? ''),
+      );
+    expect(notice).toBeDefined();
+    expect(notice).toBeVisible();
+  });
+
   it('asks for a query instead of searching blank input', async () => {
     const user = userEvent.setup();
     const client = makeClient(async () => response([]));

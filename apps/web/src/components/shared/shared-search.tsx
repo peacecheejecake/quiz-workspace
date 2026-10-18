@@ -99,9 +99,15 @@ export function SharedSearch({ shareId, client, onUnavailable }: SharedSearchPro
           : state.status === 'done'
             ? state.items.length === 0
               ? '검색 결과가 없습니다.'
-              : `검색 결과 ${state.items.length}건${state.truncated ? ' (검색어가 길어 앞부분만 사용했습니다)' : ''}${state.degraded.length > 0 ? ` ${state.degraded.join(' ')}` : ''}`
+              : `검색 결과 ${state.items.length}건${state.truncated ? ' (검색어가 길어 앞부분만 사용했습니다)' : ''}`
             : ''}
       </p>
+      {/* SEARCH-01-AC06: whatever the number of results, including none. */}
+      {state.status === 'done' && state.degraded.length > 0 ? (
+        <p className={styles.note} role="status">
+          {state.degraded.join(' ')}
+        </p>
+      ) : null}
       {state.status === 'error' ? (
         <p className={styles.alert} role="alert">
           {state.message}

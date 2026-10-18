@@ -26,8 +26,18 @@ import {
   type Problem,
   type SearchItem,
 } from '../fixtures/test.ts';
+import {
+  createShareLink,
+  expectFragmentRemoved,
+  NO_VISUAL_ARTIFACTS,
+  openShareWithSecret,
+  sharedUi,
+} from '../fixtures/sharing.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
+// The AC06 shared-view case opens a share link: its secret must never land in a trace, screenshot
+// or video (tests/e2e/README.md, fixtures/sharing.ts). Playwright allows this option per file only.
+test.use(NO_VISUAL_ARTIFACTS);
 test.describe.configure({ timeout: 2 * JOB_TIMEOUT_MS + 60_000 });
 
 const EN = book('book-en');
@@ -40,6 +50,8 @@ const RANDOM_ID = '00000000-0000-4000-8000-000000000000';
 // APP_ENV=test only: a query containing this marker makes the API's query embedder fail like an
 // unavailable hosted embedder (quiz_api.search_engine, M7.4b), deterministically.
 const EMBEDDING_FAILURE_MARKER = 'E2E-FAIL-EMBEDDING';
+// No document contains it: with the marker, the keyword fallback finds nothing.
+const NONSENSE = 'zqxjv-없는-검색어-0000';
 const DEGRADED_NOTICE =
   /의미 검색을 일시적으로 사용할 수 없어 키워드 결과만|semantic search is temporarily unavailable/i;
 
@@ -304,5 +316,49 @@ test(
     await runSearch(page, 'chlorine', 'hybrid');
     await expect(items.first()).toBeVisible();
     await expect(page.getByRole('main')).not.toContainText(DEGRADED_NOTICE);
+
+    // Degraded and the keyword fallback finds nothing: the empty state AND the notice.
+    const emptyFailing = `${NONSENSE} ${EMBEDDING_FAILURE_MARKER}`;
+    const empty = await run(emptyFailing, 'hybrid');
+    expect(empty.degraded).toEqual(['dense_unavailable']);
+    expect(empty.items).toEqual([]);
+    // Fresh page: a mode switch re-runs the last search and Enter waits for it.
+    await page.goto(`/workspaces/${ws.id}/search`);
+    await runSearch(page, emptyFailing, 'hybrid');
+    await expect(searchUi.emptyState(page)).toBeVisible();
+    await expect(notice).toBeVisible();
   },
 );
+
+test.describe('shared view', () => {
+  test(
+    'SEARCH-01-AC06 the shared view shows the keyword-only notice, also when nothing is found',
+    { tag: '@infra' },
+    async ({ page, workspaceFactory }) => {
+      const owner = await workspaceFactory.member('search01-ac06-share');
+      const ws = await workspaceFactory.create(owner);
+      await uploadReadyBook(owner, ws.id, 'book-en');
+      const link = await createShareLink(owner, ws.id);
+
+      await openShareWithSecret(page, link.id, link.secret);
+      await expect(sharedUi.readOnlyNotice(page)).toBeVisible();
+      await expectFragmentRemoved(page, link.id);
+      const notice = page.getByRole('status').filter({ hasText: DEGRADED_NOTICE });
+
+      await sharedUi.searchBox(page).fill('chlorine');
+      await sharedUi.searchBox(page).press('Enter');
+      await expect(sharedUi.results(page).getByRole('listitem').first()).toBeVisible();
+      await expect(notice).toHaveCount(0);
+
+      await sharedUi.searchBox(page).fill(`chlorine ${EMBEDDING_FAILURE_MARKER}`);
+      await sharedUi.searchBox(page).press('Enter');
+      await expect(sharedUi.results(page).getByRole('listitem').first()).toBeVisible();
+      await expect(notice).toBeVisible();
+
+      await sharedUi.searchBox(page).fill(`${NONSENSE} ${EMBEDDING_FAILURE_MARKER}`);
+      await sharedUi.searchBox(page).press('Enter');
+      await expect(page.getByText('검색 결과가 없습니다.')).toBeVisible();
+      await expect(notice).toBeVisible();
+    },
+  );
+});
