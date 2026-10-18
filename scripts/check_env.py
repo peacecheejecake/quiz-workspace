@@ -111,6 +111,13 @@ def _not_fake(value: str) -> str | None:
     return "fake adapters are for local/test only" if value.strip().lower() == "fake" else None
 
 
+def _embedder_mode(value: str) -> str | None:
+    mode = value.strip().lower()
+    if mode == "fake":
+        return "fake adapters are for local/test only"
+    return None if mode in ("auto", "qwen3", "workers_ai") else "must be auto, qwen3 or workers_ai"
+
+
 def _publishable_key(value: str) -> str | None:
     if value.startswith("sb_secret_"):
         return "is a SECRET key; use the publishable key (sb_publishable_…)"
@@ -135,6 +142,8 @@ CHECKS: dict[str, Rule] = {
     "number": _number,
     "bool": _matches(r"(?i)true|false|1|0|yes|no", "must be true or false"),
     "not_fake": _not_fake,
+    "embedder_mode": _embedder_mode,
+    "cloudflare_account_id": _matches(r"[0-9a-fA-F]{32}", "must be the 32-character account id"),
     "log_level": _matches(r"(?i)DEBUG|INFO|WARNING|ERROR|CRITICAL", "must be a log level"),
     "header_name": _matches(r"[a-z0-9-]+", "must be a lowercase header name"),
     "collection_prefix": _matches(r"[A-Za-z0-9_-]*", "only letters, digits, _ and -"),
@@ -181,6 +190,8 @@ class Var:
     requires: str | None
     provider: str
     note: str
+    required_when: tuple[str, str] | None = None
+    never_on: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -229,6 +240,16 @@ def load_manifest(path: Path = MANIFEST) -> Manifest:
         )
         if set(required) - set(environments):
             raise ManifestError(f"{name}: required lists an unknown environment")
+        when_raw = raw.get("required_when")
+        required_when: tuple[str, str] | None = None
+        if when_raw is not None:
+            when_name, sep, when_value = str(when_raw).partition("=")
+            if not sep or not when_name or not when_value:
+                raise ManifestError(f"{name}: required_when must be NAME=value")
+            required_when = (when_name, when_value)
+        never_on = tuple(raw.get("never_on", ()))
+        if set(never_on) - services.keys() or set(never_on) & set(raw["services"]):
+            raise ManifestError(f"{name}: never_on must list other known services")
         out.append(
             Var(
                 name=name,
@@ -241,12 +262,16 @@ def load_manifest(path: Path = MANIFEST) -> Manifest:
                 requires=raw.get("requires"),
                 provider=raw.get("provider", ""),
                 note=raw.get("note", ""),
+                required_when=required_when,
+                never_on=never_on,
             )
         )
     names = {v.name for v in out}
     for var in out:
         if var.requires and var.requires not in names:
             raise ManifestError(f"{var.name}: requires unknown {var.requires}")
+        if var.required_when and var.required_when[0] not in names:
+            raise ManifestError(f"{var.name}: required_when names unknown {var.required_when[0]}")
         if var.kind == "secret" and var.name.startswith("NEXT_PUBLIC_"):
             raise ManifestError(f"{var.name}: a secret must never use the NEXT_PUBLIC_ prefix")
         if var.name.startswith("NEXT_PUBLIC_") and var.kind != "public":
@@ -326,6 +351,11 @@ def check_service(
                 report.errors.append(f"{label}: missing (required in {environment})")
             elif var.requires and _is_set(env, var.requires):
                 report.errors.append(f"{label}: missing (required when {var.requires} is set)")
+            elif var.required_when and (
+                env.get(var.required_when[0], "").strip().lower() == var.required_when[1]
+            ):
+                when = "=".join(var.required_when)
+                report.errors.append(f"{label}: missing (required when {when})")
             continue
         value = env[var.name]
         problem = _apply(var.check, value) if var.check else None
@@ -340,10 +370,13 @@ def check_service(
         else:
             report.ok.append(label)
 
+    never_here = {v.name for v in manifest.vars if service in v.never_on}
     for name in sorted(env):
         if name in known_names:
             continue
-        if name in all_forbidden:
+        if name in never_here:
+            report.errors.append(f"{service} {name}: must not be set on {service} (server-only)")
+        elif name in all_forbidden:
             report.errors.append(f"{service} {name}: must not be set in {environment}")
         elif name.startswith("NEXT_PUBLIC_"):
             # Anything NEXT_PUBLIC_ ships to every browser: only the listed public values may.

@@ -22,9 +22,10 @@ dependencies = [
   "book-core",
 ]
 
-# Deployed images (apps/api/Dockerfile) install this extra: workspace search embeds queries with
-# Qwen3-Embedding outside APP_ENV=test (implementation-plan §7, M3.6a). Local dev gets it through
-# the root dev group.
+# Local Qwen3 query embedding (WORKER_EMBEDDER=auto/qwen3 outside APP_ENV=test, M3.6a). The
+# default API image leaves it out and embeds on Cloudflare Workers AI (M7.4b);
+# `--build-arg API_EXTRAS=models` builds the local-model image. Local dev gets it through the root
+# dev group.
 [project.optional-dependencies]
 models = ["book-core[models]"]
 

@@ -2,13 +2,16 @@
 #
 #   docker build -f apps/api/Dockerfile -t quiz-api .
 #
-# - uv workspace, locked (`uv sync --locked`), no dev group, `quiz-api[models]`: workspace search
-#   embeds queries with Qwen3-Embedding outside APP_ENV=test (implementation-plan §7, M3.6a), so
-#   the image carries transformers + CPU torch. Workspace members are installed non-editable into
-#   /opt/venv; the runtime stage copies only that venv.
-# - Model weights are NOT baked in: they load into HF_HOME (/var/cache/huggingface) on the first
-#   search. Mount a persistent volume there and, once it is warm, set WORKER_MODELS_OFFLINE=true
-#   (the API reads the worker's variable) so the process never contacts the Hugging Face Hub.
+# - uv workspace, locked (`uv sync --locked`), no dev group. Workspace members are installed
+#   non-editable into /opt/venv; the runtime stage copies only that venv.
+# - Default build (`API_EXTRAS` empty, M7.4b): no torch/transformers. Staging/production embed
+#   search queries on Cloudflare Workers AI (WORKER_EMBEDDER=workers_ai + CLOUDFLARE_*), so the
+#   API fits the Railway trial's 1 GB. With a local-model WORKER_EMBEDDER (auto/qwen3) in
+#   preview/production this image refuses to start (quiz_api.settings).
+# - Local-model image (eval, nightly, self-hosted): `--build-arg API_EXTRAS=models`
+#   (`make image-api-models`) adds transformers + CPU torch; Qwen3 weights then load into HF_HOME
+#   (/var/cache/huggingface) on the first search. Mount a persistent volume there and, once warm,
+#   set WORKER_MODELS_OFFLINE=true so the process never contacts the Hugging Face Hub.
 # - No secrets at build time; every credential is a runtime environment variable
 #   (docs/deployment.md §6). APP_ENV defaults to production so the startup guard refuses an
 #   insecure configuration unless local/test is chosen explicitly.
@@ -23,6 +26,8 @@ ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.7@sha256:95f2aa1fe59274951cfe9b0cbc7972e8
 FROM ${UV_IMAGE} AS uv
 
 FROM ${PYTHON_IMAGE} AS build
+# Empty = hosted embedder only; `models` = local Qwen3 (transformers + CPU torch).
+ARG API_EXTRAS=""
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -35,11 +40,11 @@ COPY apps/api/pyproject.toml apps/api/pyproject.toml
 COPY apps/worker/pyproject.toml apps/worker/pyproject.toml
 COPY packages/core/pyproject.toml packages/core/pyproject.toml
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --package quiz-api --extra models --no-install-workspace
+    uv sync --locked --no-dev --package quiz-api ${API_EXTRAS:+--extra "$API_EXTRAS"} --no-install-workspace
 COPY packages/core/src packages/core/src
 COPY apps/api/src apps/api/src
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --package quiz-api --extra models --no-editable
+    uv sync --locked --no-dev --package quiz-api ${API_EXTRAS:+--extra "$API_EXTRAS"} --no-editable
 
 FROM ${PYTHON_IMAGE} AS runtime
 RUN groupadd --system --gid 10001 app \

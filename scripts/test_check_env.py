@@ -379,9 +379,9 @@ def test_embedder_mode_values_are_checked() -> None:
         env["WORKER_EMBEDDER"] = value
         errors = check_env.run_checks(MANIFEST, "production", {"api": env}).errors
         if ok is None:  # valid mode; only its credentials are missing
-            assert all("WORKER_EMBEDDER" not in e for e in errors)
+            assert all(not e.startswith("api WORKER_EMBEDDER") for e in errors)
         else:
-            assert any("WORKER_EMBEDDER" in e for e in errors) is not ok
+            assert any(e.startswith("api WORKER_EMBEDDER") for e in errors) is not ok
     env["WORKER_EMBEDDER"] = "workers-ai"
     errors = check_env.run_checks(MANIFEST, "production", {"api": env}).errors
     assert "api WORKER_EMBEDDER: must be auto, qwen3 or workers_ai" in errors

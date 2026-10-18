@@ -27,7 +27,7 @@ SIGNING_KEYS := supabase/signing_keys.json
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
 	test test-ts test-py test-infra test-models test-llm test-workers-ai eval eval-models eval-workers-ai auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
-	e2e e2e-browsers e2e-trace test-red images image-api image-worker image-web reindex backup restore \
+	e2e e2e-browsers e2e-trace test-red images image-api image-api-models image-worker image-web reindex backup restore \
 	check-env smoke-local smoke-staging
 
 help: ## List targets
@@ -205,8 +205,11 @@ WEB_ARGS ?= --build-arg NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 \
 
 images: image-api image-worker image-web ## Build the api/worker/web container images (local tags)
 
-image-api:
+image-api: ## API image without local models (hosted Workers AI query embedder, M7.4b)
 	docker build -f apps/api/Dockerfile -t quiz-api:$(IMAGE_TAG) .
+
+image-api-models: ## API image with local Qwen3 (torch + transformers) for eval/nightly/self-hosting
+	docker build -f apps/api/Dockerfile --build-arg API_EXTRAS=models -t quiz-api-models:$(IMAGE_TAG) .
 
 image-worker:
 	docker build -f apps/worker/Dockerfile -t quiz-worker:$(IMAGE_TAG) .
