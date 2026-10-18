@@ -19,6 +19,7 @@ from book_core.search.query import (
     prepare_query,
 )
 from book_core.search.service import (
+    DEGRADED_DENSE_UNAVAILABLE,
     MAX_CANDIDATES,
     MAX_RESULTS,
     RankedHit,
@@ -33,6 +34,7 @@ from book_core.search.service import (
 __all__ = [
     "DEFAULT_MAX_QUERY_CHARS",
     "DEFAULT_RRF_K",
+    "DEGRADED_DENSE_UNAVAILABLE",
     "MAX_CANDIDATES",
     "MAX_RESULTS",
     "UNIT_SEPARATOR",

@@ -2,11 +2,24 @@
 
 ``FakeEmbedder`` is deterministic and model-free (tests, E2E). ``Qwen3Embedder`` and the chunker
 tokenizer ``Qwen3Tokenizer`` need the ``models`` extra; torch/transformers are imported only when a
-model is first used, so importing this package stays light.
+model is first used, so importing this package stays light. ``WorkersAIEmbedder``
+(``book_core.embedding.workers_ai``, M7.4b) runs the same model on Cloudflare Workers AI over HTTPS
+(no extra needed). Every adapter failure is an ``EmbeddingUnavailableError`` subclass.
 """
 
-from book_core.embedding.base import Embedder
-from book_core.embedding.factory import EmbedderMode, select_embedder, uses_fake_embedder
+from book_core.embedding.base import (
+    Embedder,
+    EmbeddingAuthError,
+    EmbeddingQuotaExceededError,
+    EmbeddingResponseError,
+    EmbeddingUnavailableError,
+)
+from book_core.embedding.factory import (
+    EmbedderMode,
+    select_embedder,
+    uses_fake_embedder,
+    uses_local_model,
+)
 from book_core.embedding.fake import FakeEmbedder
 from book_core.embedding.qwen3 import (
     DEFAULT_MODEL_ID,
@@ -24,6 +37,10 @@ __all__ = [
     "DEFAULT_REVISION",
     "Embedder",
     "EmbedderMode",
+    "EmbeddingAuthError",
+    "EmbeddingQuotaExceededError",
+    "EmbeddingResponseError",
+    "EmbeddingUnavailableError",
     "FakeEmbedder",
     "ModelUnavailableError",
     "Qwen3Embedder",
@@ -31,4 +48,5 @@ __all__ = [
     "Qwen3Tokenizer",
     "select_embedder",
     "uses_fake_embedder",
+    "uses_local_model",
 ]

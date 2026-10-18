@@ -5,7 +5,10 @@ server-built ``SearchScope`` (workspace + published revision ids) and the reques
 applied inside the Qdrant filter; hybrid fuses the two candidate lists with RRF; an optional
 reranker rescores the top ``rerank_top`` (M2.4; ``SearchLimits.rerank`` = ``off`` skips it); the
 first ``results`` are returned. A failing reranker never fails the search: the first-stage order
-is kept and the result carries a warning.
+is kept and the result carries a warning. An unavailable query embedder
+(``EmbeddingUnavailableError``, e.g. the hosted Workers AI embedder rate-limited or down; M7.4b,
+SEARCH-01-AC06) never fails a semantic/hybrid search either: it continues on the BM25 list alone
+and ``SearchResult.degraded`` carries ``dense_unavailable``. Index (Qdrant) errors still raise.
 
 Scores are reported as what they are (``bm25`` = Qdrant sparse dot product with IDF, ``cosine``,
 ``rrf``, ``rerank``); they are never normalised into a common scale. The raw component scores of
@@ -33,6 +36,7 @@ from book_core.contracts import (
     SearchMode,
     Section,
 )
+from book_core.embedding import EmbeddingUnavailableError
 from book_core.indexing import Candidate, IndexStore, SearchScope
 from book_core.reranker import Reranker
 from book_core.search.fusion import DEFAULT_RRF_K, reciprocal_rank_fusion
@@ -42,6 +46,9 @@ logger = logging.getLogger(__name__)
 
 MAX_CANDIDATES = 200
 MAX_RESULTS = 100
+
+# `SearchResult.degraded` code: the dense (embedding) side was unavailable, BM25 results only.
+DEGRADED_DENSE_UNAVAILABLE = "dense_unavailable"
 
 ChunkKey = tuple[str, str, str]
 """(document_id, revision_id, chunk_id): one indexed point within a scope."""
@@ -148,6 +155,8 @@ class SearchResult:
     truncated: bool = False
     warnings: tuple[str, ...] = ()
     candidates: Mapping[str, int] = field(default_factory=dict)
+    # Machine-readable degradations (``DEGRADED_DENSE_UNAVAILABLE``); empty when complete.
+    degraded: tuple[str, ...] = ()
 
 
 class SearchService:
@@ -196,6 +205,7 @@ class SearchService:
         filters = filters or SearchFilters()
         prepared = prepare_query(query, max_chars=self._max_query_chars)
         limits, warnings = (limits or self._limits).capped()
+        degraded: list[str] = []
         if prepared.truncated:
             warnings.append(
                 f"query truncated from {prepared.original_length} to {len(prepared.text)} "
@@ -211,6 +221,7 @@ class SearchService:
                 truncated=prepared.truncated,
                 warnings=tuple(warnings),
                 candidates=dict(counts),
+                degraded=tuple(degraded),
             )
 
         narrowed = _narrow(scope, filters, sections)
@@ -219,19 +230,39 @@ class SearchService:
             return result([], {})
 
         lists: dict[str, list[Candidate]] = {}
-        if mode in (SearchMode.KEYWORD, SearchMode.HYBRID):
+
+        def keyword_list() -> None:
             keyword = self._store.keyword_candidates(
                 narrowed, prepared.text, limits.keyword_candidates
             )
             if not keyword and mode is SearchMode.KEYWORD:
                 warnings.append("no keyword matches")
             lists[ScoreType.BM25.value] = _in_scope(keyword, narrowed)
+
+        if mode in (SearchMode.KEYWORD, SearchMode.HYBRID):
+            keyword_list()
         if mode in (SearchMode.SEMANTIC, SearchMode.HYBRID):
-            dense = self._store.dense_candidates(narrowed, prepared.text, limits.dense_candidates)
-            lists[ScoreType.COSINE.value] = _in_scope(dense, narrowed)
+            try:
+                dense = self._store.dense_candidates(
+                    narrowed, prepared.text, limits.dense_candidates
+                )
+            except EmbeddingUnavailableError as exc:
+                # Type and code only: never the query (it is user content).
+                logger.warning(
+                    "search: query embedding unavailable (%s, %s); BM25 results only",
+                    type(exc).__name__,
+                    exc.code,
+                )
+                degraded.append(DEGRADED_DENSE_UNAVAILABLE)
+                if mode is SearchMode.SEMANTIC:
+                    keyword_list()
+            else:
+                lists[ScoreType.COSINE.value] = _in_scope(dense, narrowed)
         counts = {name: len(items) for name, items in lists.items()}
 
-        ranked = _first_stage(mode, lists, limits.rrf_k)
+        # Without the dense list (degraded) the BM25 list alone is the first stage.
+        stage_mode = SearchMode.KEYWORD if degraded else mode
+        ranked = _first_stage(stage_mode, lists, limits.rrf_k)
         if self._reranker is not None and ranked and limits.rerank is RerankMode.TOP_K:
             try:
                 ranked = _rerank(self._reranker, prepared.text, ranked[: limits.rerank_top])
@@ -273,7 +304,8 @@ class SearchService:
                         document_id=chunk.document_id,
                         revision_id=chunk.revision_id,
                         section_id=chunk.section_id,
-                        mode=mode,
+                        # The mode that produced the hit (keyword when degraded).
+                        mode=stage_mode,
                         score_type=item.score_type,
                         score=item.score,
                         rank=rank,
