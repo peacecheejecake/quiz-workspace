@@ -28,7 +28,7 @@ SIGNING_KEYS := supabase/signing_keys.json
 	test test-ts test-py test-infra test-models test-llm eval eval-models auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
 	e2e e2e-browsers e2e-trace test-red images image-api image-worker image-web reindex backup restore \
-	check-env
+	check-env smoke-local smoke-staging
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -63,6 +63,7 @@ typecheck: typecheck-ts typecheck-py ## Type-check (tsc per package, mypy per Py
 typecheck-ts:
 	pnpm -r --if-present run typecheck
 	pnpm exec tsc -p tests/e2e/tsconfig.json
+	pnpm exec tsc -p tests/smoke/tsconfig.json
 
 typecheck-py:
 ifeq ($(strip $(PY_PRESENT)),)
@@ -217,3 +218,20 @@ restore: ## Restore DIR into an EMPTY target at the same migration version (REST
 check-env: ## Validate deployment env files against the manifest, ENV=staging|production ARGS="--check api=<file>"
 	@test -n "$(ENV)$(findstring --list,$(ARGS))" || { echo 'usage: make check-env ENV=staging|production ARGS="--check <service>=<file>"'; exit 2; }
 	uv run python scripts/check_env.py $(if $(ENV),--env $(ENV)) $(ARGS)
+
+# Deployment smoke DEP-01..07 (M7.4a; tests/smoke, docs/runbook-deploy.md "Staging smoke").
+# smoke-local: against the local stack (needs infra-up); e2e:log-audit starts web/API/worker on
+# SMOKE_WEB_PORT/SMOKE_API_PORT with captured logs and fails on secrets in them. APP_ENV=test so the
+# DEP-03 seed parses with the fixture parser. DEP-03 runs in two invocations around a restart:
+#   make smoke-local ARGS=--grep=DEP-03 SMOKE_DEP03_PHASE=seed, then the same with =verify.
+# smoke-staging: against a deployed environment; the SMOKE_* / E2E_BASE_URL variables come from
+# the shell (infra/deploy/env-manifest.toml, service `smoke`).
+SMOKE_WEB_PORT ?= 3160
+SMOKE_API_PORT ?= 8160
+smoke-local: ## DEP smoke against the local stack (starts web/API/worker with log audit; needs infra-up)
+	APP_ENV=test SMOKE_TARGET=local pnpm e2e:log-audit --worker --web-port $(SMOKE_WEB_PORT) \
+		--api-port $(SMOKE_API_PORT) $(if $(NO_BUILD),--no-build) -- --config tests/smoke/playwright.config.ts $(ARGS)
+
+smoke-staging: ## DEP smoke against staging (env: SMOKE_* + E2E_BASE_URL); manual DEP steps: docs/runbook-deploy.md
+	SMOKE_TARGET=$${SMOKE_TARGET:-staging} pnpm smoke $(ARGS)
+	@echo 'smoke: automated DEP checks done. Manual: DEP-01 reset mail, DEP-03 restart, DEP-04, DEP-06, DEP-07 log export (docs/runbook-deploy.md).'

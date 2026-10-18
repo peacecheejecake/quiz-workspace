@@ -11,6 +11,12 @@
 //   pnpm e2e:log-audit -- tests/e2e/auth/login.spec.ts tests/e2e/auth/callback.spec.ts \
 //     --project unauthenticated-chromium
 //
+// `--scan <file>` (repeatable) audits log files that already exist instead, e.g. API/worker/web
+// logs exported from Railway and Vercel after the staging smoke (DEP-07, docs/runbook-deploy.md);
+// no server or Playwright is started then:
+//
+//   pnpm e2e:log-audit --scan api.log --scan worker.log --scan web.log
+//
 // Logs land in a fresh temp directory (Playwright wipes test-results/ when it starts); the path is
 // printed at the end. Runs on plain Node (type stripping).
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -55,6 +61,7 @@ interface Options {
   apiPort: number;
   build: boolean;
   worker: boolean;
+  scan: string[];
   playwrightArgs: string[];
 }
 
@@ -66,6 +73,7 @@ export function parseArgs(argv: readonly string[]): Options {
     apiPort: 8160,
     build: true,
     worker: false,
+    scan: [],
     playwrightArgs: split === -1 ? [] : argv.slice(split + 1),
   };
   for (let i = 0; i < own.length; i++) {
@@ -74,7 +82,11 @@ export function parseArgs(argv: readonly string[]): Options {
     else if (arg === '--worker') options.worker = true;
     else if (arg === '--web-port') options.webPort = Number(own[++i]);
     else if (arg === '--api-port') options.apiPort = Number(own[++i]);
-    else throw new Error(`unknown option ${arg}`);
+    else if (arg === '--scan') {
+      const file = own[++i];
+      if (!file) throw new Error('--scan needs a file');
+      options.scan.push(file);
+    } else throw new Error(`unknown option ${arg}`);
   }
   return options;
 }
@@ -136,8 +148,27 @@ export function stop(child: ChildProcess): void {
   }
 }
 
+/** Audits existing log files; an empty file fails (an export that captured nothing). */
+export function scanFiles(files: readonly string[]): { findings: Finding[]; empty: string[] } {
+  const findings: Finding[] = [];
+  const empty: string[] = [];
+  for (const file of files) {
+    const text = readFileSync(file, 'utf8');
+    if (!text.trim()) empty.push(file);
+    findings.push(...scanLog(file, text));
+  }
+  return { findings, empty };
+}
+
 async function main(): Promise<number> {
   const options = parseArgs(process.argv.slice(2));
+  if (options.scan.length > 0) {
+    const { findings, empty } = scanFiles(options.scan);
+    for (const file of empty) console.error(`log-audit: ${file} is empty (nothing was exported)`);
+    for (const f of findings) console.error(`log-audit: ${f.kind} in ${f.file}:${f.line}`);
+    console.log(`log-audit: scanned ${options.scan.length} file(s): ${findings.length} finding(s)`);
+    return findings.length > 0 || empty.length > 0 ? 1 : 0;
+  }
   const webUrl = `http://127.0.0.1:${options.webPort}`;
   const apiUrl = `http://127.0.0.1:${options.apiPort}`;
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321').replace(

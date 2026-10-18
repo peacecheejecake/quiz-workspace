@@ -1,10 +1,10 @@
 // Unit tests for scripts/e2e-log-audit.ts (`node --test scripts/`; part of `make test`).
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { parseArgs, run, scanLog, startLogged, stop } from './e2e-log-audit.ts';
+import { parseArgs, run, scanFiles, scanLog, startLogged, stop } from './e2e-log-audit.ts';
 
 describe('server logging while Playwright runs', () => {
   it('never stalls a server that writes more than a pipe buffer (>1MB) of logs', async () => {
@@ -133,9 +133,27 @@ describe('parseArgs', () => {
         apiPort: 8160,
         build: false,
         worker: false,
+        scan: [],
         playwrightArgs: ['a.spec.ts', '--project', 'p'],
       },
     );
     assert.equal(parseArgs(['--worker', '--', 'x']).worker, true);
+    assert.deepEqual(parseArgs(['--scan', 'a.log', '--scan', 'b.log']).scan, ['a.log', 'b.log']);
+    assert.throws(() => parseArgs(['--scan']), /--scan needs a file/);
+  });
+});
+
+describe('scanFiles (exported platform logs, DEP-07)', () => {
+  it('reports findings by file and line and flags empty exports', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'log-audit-scan-'));
+    const clean = join(dir, 'api.log');
+    const leaky = join(dir, 'web.log');
+    const empty = join(dir, 'worker.log');
+    writeFileSync(clean, 'INFO quiz_api.access GET /health/live 200\n');
+    writeFileSync(leaky, 'ok\nauthorization: Bearer abcdefgh.ijklmnop.qrstuvwx\n');
+    writeFileSync(empty, '');
+    const { findings, empty: blank } = scanFiles([clean, leaky, empty]);
+    assert.deepEqual(findings, [{ file: leaky, line: 2, kind: 'bearer token' }]);
+    assert.deepEqual(blank, [empty]);
   });
 });

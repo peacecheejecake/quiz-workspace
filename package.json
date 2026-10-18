@@ -19,7 +19,8 @@
     "e2e:visual": "scripts/visual-run.sh playwright test --project=visual-desktop --project=visual-ipad",
     "e2e:perf": "E2E_PERF=1 playwright test --project=perf-chromium --workers=1",
     "e2e:log-audit": "node scripts/e2e-log-audit.ts",
-    "e2e:artifact-audit": "node scripts/e2e-artifact-audit.ts"
+    "e2e:artifact-audit": "node scripts/e2e-artifact-audit.ts",
+    "smoke": "playwright test --config tests/smoke/playwright.config.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
