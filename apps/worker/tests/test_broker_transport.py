@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import base64
 import json
+import os
+import signal
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -34,6 +36,7 @@ from quiz_worker.runner import JobContext, JobDefinition, JobResult
 from quiz_worker.settings import WorkerSettings, get_settings
 from quiz_worker.store import (
     TERMINAL_STATUSES,
+    WORKER_KILLED_ERROR,
     WORKER_LOST_ERROR,
     JobRecord,
     JobStatus,
@@ -216,3 +219,66 @@ def test_hard_time_limit_never_leaves_a_job_running(
     assert record.status is JobStatus.FAILED
     assert record.attempts == record.max_attempts == 3
     assert record.last_error == WORKER_LOST_ERROR
+
+
+def test_killed_worker_process_is_retried_without_waiting_for_the_lease(
+    redis_server: TcpFakeServer,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    make_envelope: EnvelopeFactory,
+) -> None:
+    # M7.4c: an OOM kill (SIGKILL) of the prefork child used to leave the job `running` until the
+    # lease (here 20 min) expired. The worker now settles the attempt when it sees the child die,
+    # and the re-queued message starts attempt 2 at once.
+    port = redis_server.server_address[1]
+    for name, value in {
+        "APP_ENV": "test",
+        "REDIS_URL": f"redis://127.0.0.1:{port}/0",
+        "WORKER_JOB_STORE_PATH": str(tmp_path / "jobs.sqlite3"),
+        "WORKER_TASK_TIME_LIMIT_SECONDS": "600",
+        "WORKER_TASK_SOFT_TIME_LIMIT_SECONDS": "0",
+        "WORKER_LEASE_GRACE_SECONDS": "600",
+        "WORKER_TASK_ALWAYS_EAGER": "false",
+    }.items():
+        monkeypatch.setenv(name, value)
+    get_settings.cache_clear()
+    try:
+        app = create_celery_app(get_settings())
+    finally:
+        get_settings.cache_clear()
+    store = app.job_store
+    assert isinstance(store, SqliteJobStore)
+    envelope = make_envelope(payload={"message": "oom", "delay_seconds": 3})
+
+    with start_worker(
+        app, pool="prefork", concurrency=1, perform_ping_check=False, shutdown_timeout=10
+    ) as worker:
+        submit_job(app, envelope)
+        running = _wait_for(store, envelope.job_id, lambda r: r.status is JobStatus.RUNNING)
+        assert running.locked_by is not None
+        pid = int(running.locked_by.rsplit(":", 1)[1])
+        # Only ever signal this worker's own pool child.
+        assert worker.pool is not None
+        pool_info: Any = worker.pool.info  # a property at runtime
+        assert pid in pool_info["processes"]
+        os.kill(pid, signal.SIGKILL)
+        record = _wait_for_terminal(store, envelope.job_id, timeout=60)
+        _wait_for_idle_worker()
+
+    assert (record.status, record.attempts) == (JobStatus.SUCCEEDED, 2)
+    assert record.last_error == WORKER_KILLED_ERROR
+
+
+def _wait_for(
+    store: TransactionalJobStore,
+    job_id: UUID,
+    predicate: Callable[[JobRecord], bool],
+    timeout: float = 30,
+) -> JobRecord:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        record = store.get(job_id)
+        if record is not None and predicate(record):
+            return record
+        time.sleep(0.02)
+    raise AssertionError(f"job did not reach the state within {timeout}s: {store.get(job_id)}")

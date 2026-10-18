@@ -5,11 +5,18 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel
-from quiz_worker.celery_app import QuizCelery, create_celery_app, run_reconciler, submit_job
+from quiz_worker.celery_app import (
+    QuizCelery,
+    create_celery_app,
+    release_lost_attempt,
+    run_reconciler,
+    submit_job,
+    worker_id_for,
+)
 from quiz_worker.reconcile import ReconcileReport, reconcile_jobs
 from quiz_worker.retry import RetryPolicy
 from quiz_worker.runner import (
@@ -23,6 +30,7 @@ from quiz_worker.runner import (
 from quiz_worker.settings import WorkerSettings
 from quiz_worker.store import (
     LEASE_EXPIRED_ERROR,
+    WORKER_KILLED_ERROR,
     WORKER_LOST_ERROR,
     InMemoryJobStore,
     JobRecord,
@@ -454,3 +462,113 @@ def test_unknown_job_type_is_not_republished(make_envelope: EnvelopeFactory) -> 
 
     assert (report.republished, report.publish_errors) == (0, 1)
     assert recorder.published == []
+
+
+# -- A worker process that died mid-attempt (M7.4c) ------------------------------------------
+
+
+def test_lost_worker_process_is_requeued_without_waiting_for_the_lease(
+    store: TransactionalJobStore,
+    runner: JobRunner,
+    make_envelope: EnvelopeFactory,
+    clock: FakeClock,
+) -> None:
+    # An OOM-killed child used to leave the job `running` until its lease ran out (~32 min);
+    # the worker now settles the attempt as soon as it sees the child die.
+    recorder = Recorder()
+    envelope = make_envelope()
+    store.create(envelope, max_attempts=3)
+    store.claim(envelope, worker_id="node:101", lease_seconds=LEASE)
+
+    assert store.release_lost(envelope.job_id, worker_id="node:202") is None
+    assert store.release_lost(envelope.job_id, worker_id="node") is None
+    released = store.release_lost(envelope.job_id, worker_id="node:101")
+
+    assert released is not None
+    assert (released.status, released.attempts) == (JobStatus.QUEUED, 1)
+    assert released.last_error == WORKER_KILLED_ERROR
+    assert (released.locked_by, released.lease_expires_at) == (None, None)
+    # The message is re-queued right after, so the reconciler must not publish a duplicate.
+    assert released.published_at == clock()
+    assert (
+        store.find_republish_candidates(
+            unpublished_grace_seconds=GRACE, stale_after_seconds=STALE, limit=10
+        )
+        == []
+    )
+    assert store.get(envelope.job_id) == released
+    # The re-delivered message starts the next attempt at once (no lease left to wait out).
+    result = runner.run(definition(recorder), envelope.to_message())
+    assert result.outcome is RunOutcome.SUCCEEDED
+    assert (recorder.calls, store.get(envelope.job_id).attempts) == (1, 2)  # type: ignore[union-attr]
+    assert store.release_lost(envelope.job_id, worker_id="w1") is None
+
+
+def test_lost_worker_process_on_the_final_attempt_fails_with_cleanup(
+    store: TransactionalJobStore,
+    runner: JobRunner,
+    make_envelope: EnvelopeFactory,
+) -> None:
+    recorder = Recorder()
+    envelope = make_envelope()
+    store.create(envelope, max_attempts=1)
+    store.claim(envelope, worker_id="node:101", lease_seconds=LEASE)
+
+    failed = store.release_lost(envelope.job_id, worker_id="node:101")
+
+    assert failed is not None
+    assert (failed.status, failed.last_error) == (JobStatus.FAILED, WORKER_LOST_ERROR)
+    assert failed.cleanup_pending
+    # The re-queued message finds the job finished and runs its cleanup.
+    result = runner.run(definition(recorder, max_attempts=1), envelope.to_message())
+    assert result.outcome is RunOutcome.DUPLICATE_FINISHED
+    assert recorder.calls == 0
+    assert recorder.cleanups == [(1, "failed")]
+
+
+def test_lost_worker_process_with_a_cancel_request_is_cancelled(
+    store: TransactionalJobStore, make_envelope: EnvelopeFactory
+) -> None:
+    envelope = make_envelope()
+    store.create(envelope, max_attempts=3)
+    store.claim(envelope, worker_id="node:101", lease_seconds=LEASE)
+    store.request_cancel(envelope.job_id)
+
+    cancelled = store.release_lost(envelope.job_id, worker_id="node:101")
+
+    assert cancelled is not None
+    assert cancelled.status is JobStatus.CANCELLED
+    assert cancelled.cleanup_pending
+
+
+def test_release_of_a_lost_attempt_is_logged_and_never_raises(
+    store: TransactionalJobStore,
+    make_envelope: EnvelopeFactory,
+    eager_settings: WorkerSettings,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app = create_celery_app(eager_settings, job_store=store)
+    envelope = make_envelope(payload={"message": BOOK_TEXT})
+    store.create(envelope, max_attempts=3)
+    store.claim(envelope, worker_id=worker_id_for(4242), lease_seconds=LEASE)
+
+    with caplog.at_level(logging.WARNING):
+        release_lost_attempt(app, str(envelope.job_id), None)  # the child never accepted it
+        release_lost_attempt(app, "not-a-job-id", 4242)
+        release_lost_attempt(app, str(envelope.job_id), 4243)  # another child's claim
+        assert store.get(envelope.job_id).status is JobStatus.RUNNING  # type: ignore[union-attr]
+        release_lost_attempt(app, str(envelope.job_id), "4242")
+
+    assert store.get(envelope.job_id).status is JobStatus.QUEUED  # type: ignore[union-attr]
+    assert "lost with its worker process" in caplog.text
+    assert BOOK_TEXT not in caplog.text
+
+    class BrokenStore(InMemoryJobStore):
+        def release_lost(self, job_id: UUID, *, worker_id: str) -> JobRecord | None:
+            raise RuntimeError(f"db down {BOOK_TEXT}")
+
+    broken = create_celery_app(eager_settings, job_store=BrokenStore())
+    with caplog.at_level(logging.ERROR):
+        release_lost_attempt(broken, str(envelope.job_id), 4242)
+    assert "could not release a lost job attempt: unexpected_error: RuntimeError" in caplog.text
+    assert "db down" not in caplog.text

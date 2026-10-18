@@ -9,6 +9,7 @@ State machine (statuses mirror `async_jobs.status`)::
 
     queued + cancel requested --claim--> cancelled (the handler never runs)
     running + lease expired --claim / recover_expired--> queued | failed | cancelled
+    running + its worker process died --release_lost--> queued | failed | cancelled
 
 Guarantees every implementation must provide:
 - `claim` is atomic. A job in a terminal state is never claimed again (duplicate delivery
@@ -67,6 +68,9 @@ TERMINAL_STATUSES = frozenset({JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.
 WORKER_LOST_ERROR = "worker_lost: attempts exhausted"
 # last_error written when a lost worker's attempt is handed back to the queue.
 LEASE_EXPIRED_ERROR = "worker_lost: lease expired"
+# last_error written when the worker saw its child die mid-attempt (SIGKILL / OOM kill, hard
+# time limit) and handed the attempt back at once instead of waiting for the lease (M7.4c).
+WORKER_KILLED_ERROR = "worker_lost: worker process killed (out of memory or hard time limit)"
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,6 +216,14 @@ class JobStore(Protocol):
         Returns None when the row moved on (a live worker or another reconciler won)."""
         ...
 
+    def release_lost(self, job_id: UUID, *, worker_id: str) -> JobRecord | None:
+        """The process `worker_id` died while running this job: settle its attempt now, like
+        an expired lease (requeue, or fail when attempts are exhausted, or cancel when cancel
+        was requested), without waiting for the lease. A requeued row is marked published: the
+        caller re-queues the message right after. Returns None unless `worker_id` still holds
+        the running attempt (another attempt or a finished job is never touched)."""
+        ...
+
     def claim_cleanup(
         self, job_id: UUID, *, lease_seconds: float, max_attempts: int
     ) -> JobRecord | None:
@@ -311,8 +323,15 @@ def _owned(record: JobRecord | None, job_id: UUID, attempt: int) -> JobRecord:
     return record
 
 
-def _settle_expired(record: JobRecord, now: datetime) -> JobRecord:
-    """Terminal or requeued row for a running attempt whose lease expired."""
+def _settle_expired(
+    record: JobRecord,
+    now: datetime,
+    *,
+    error: str = LEASE_EXPIRED_ERROR,
+    published_at: datetime | None = None,
+) -> JobRecord:
+    """Terminal or requeued row for a running attempt whose lease expired (or whose worker
+    process is known to be dead)."""
     if record.cancel_requested_at is not None:
         return _finish(record, JobStatus.CANCELLED, now)
     if record.attempts >= record.max_attempts:
@@ -320,10 +339,10 @@ def _settle_expired(record: JobRecord, now: datetime) -> JobRecord:
     return replace(
         record,
         status=JobStatus.QUEUED,
-        last_error=LEASE_EXPIRED_ERROR,
+        last_error=error,
         locked_by=None,
         lease_expires_at=None,
-        published_at=None,
+        published_at=published_at,
         updated_at=now,
     )
 
@@ -507,6 +526,15 @@ class TransactionalJobStore:
             if r is None or r.attempts != attempt or not _lease_expired(r, now):
                 return None, None
             settled = _settle_expired(r, now)
+            return settled, settled
+
+        return self._atomic(job_id, mutate)
+
+    def release_lost(self, job_id: UUID, *, worker_id: str) -> JobRecord | None:
+        def mutate(r: JobRecord | None, now: datetime) -> tuple[JobRecord | None, JobRecord | None]:
+            if r is None or r.status is not JobStatus.RUNNING or r.locked_by != worker_id:
+                return None, None
+            settled = _settle_expired(r, now, error=WORKER_KILLED_ERROR, published_at=now)
             return settled, settled
 
         return self._atomic(job_id, mutate)

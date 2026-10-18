@@ -4,9 +4,12 @@ Delivery is at-least-once (docs/deployment.md §7): `task_acks_late` +
 `task_reject_on_worker_lost` re-deliver a message whose worker died, and
 `task_acks_on_failure_or_timeout=False` re-queues the message of an attempt killed by the hard
 time limit. The `JobStore` claim makes every re-delivery safe (finished -> no-op, live lease ->
-deferred, expired lease -> new attempt or failed). Jobs whose message is gone anyway are
-recovered by the `reconcile_jobs` beat task (quiz_worker.reconcile). Only JSON is accepted on
-the wire.
+deferred, expired lease -> new attempt or failed). When the worker sees the child running a job
+die (SIGKILL / OOM kill, hard time limit), `JobRequest` settles that attempt at once
+(`release_lost`, fenced by the dead child's worker id) before the message is re-queued, so the
+re-delivery starts the next attempt instead of waiting out the lease (M7.4c). Jobs whose
+message is gone anyway are recovered by the `reconcile_jobs` beat task (quiz_worker.reconcile).
+Only JSON is accepted on the wire.
 
 Nothing sensitive reaches Celery's own logs, events or result backend: the message argument
 is hidden behind `argsrepr`, task return values are `RunResult.summary()`, and failures are
@@ -16,13 +19,18 @@ re-raised as `JobOutcomeError` carrying only the sanitized error.
 from __future__ import annotations
 
 import contextlib
+import logging
+import os
 import socket
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from billiard.einfo import ExceptionInfo
 from celery import Celery, Task, signals
+from celery.exceptions import TimeLimitExceeded, WorkerLostError
+from celery.worker.request import Request
 
 from quiz_worker.document_job import JOB_TYPE as DOCUMENT_PARSE_JOB_TYPE
 from quiz_worker.document_job import (
@@ -31,10 +39,10 @@ from quiz_worker.document_job import (
     index_sync_definition,
 )
 from quiz_worker.envelope import JobEnvelope
-from quiz_worker.errors import JobOutcomeError, JobRetryError
+from quiz_worker.errors import JobOutcomeError, JobRetryError, sanitize_error
 from quiz_worker.fork_job import LazyForkDeps, workspace_fork_definition
 from quiz_worker.jobs import ECHO_JOB
-from quiz_worker.logging_config import configure_logging
+from quiz_worker.logging_config import configure_logging, job_id_var
 from quiz_worker.pg_store import PostgresJobStore, create_job_store_engine
 from quiz_worker.question_generation_job import (
     LazyGenerationDeps,
@@ -52,6 +60,8 @@ from quiz_worker.runner import (
 )
 from quiz_worker.settings import Environment, WorkerSettings, get_settings
 from quiz_worker.store import InMemoryJobStore, JobRecord, JobStatus, JobStore, SqliteJobStore
+
+logger = logging.getLogger(__name__)
 
 TASK_NAME_PREFIX = "quiz.jobs."
 DEFAULT_QUEUE = "quiz.jobs"
@@ -99,6 +109,53 @@ class QuizCelery(Celery):
         return (app_from_environment, ())
 
 
+def worker_id_for(pid: int) -> str:
+    """The `locked_by` of an attempt: host plus the process running it, so the worker's main
+    process can tell which claim died with a pool child. The OS host name, not Celery's node
+    name: spawned pool children do not know the node name."""
+    return f"{socket.gethostname()}:{pid}"
+
+
+def release_lost_attempt(app: Celery, task_id: str, pid: int | str | None) -> None:
+    """Settle the attempt the dead child `pid` was running (no-op if it held none)."""
+    if pid is None or not isinstance(app, QuizCelery):
+        return
+    try:
+        job_id = UUID(task_id)
+    except (TypeError, ValueError):
+        return
+    token = job_id_var.set(str(job_id))
+    try:
+        record = app.job_store.release_lost(job_id, worker_id=worker_id_for(int(pid)))
+        if record is not None:
+            logger.warning(
+                "job attempt %d lost with its worker process; job is now %s",
+                record.attempts,
+                record.status.value,
+            )
+    except Exception as exc:
+        # The lease still expires; the reconciler or a re-delivery settles the job then.
+        logger.error("could not release a lost job attempt: %s", sanitize_error(exc))
+    finally:
+        job_id_var.reset(token)
+
+
+class JobRequest(Request):
+    """Worker-side request of a job task: settles a job whose pool process died."""
+
+    def on_failure(
+        self, exc_info: ExceptionInfo, send_failed_event: bool = True, return_ok: bool = False
+    ) -> None:
+        exc = exc_info.exception
+        # billiard wraps exceptions from the child in ExceptionWithTraceback (`.exc`).
+        exc = getattr(exc, "exc", exc)
+        if isinstance(exc, WorkerLostError | TimeLimitExceeded):
+            # Before Celery re-queues the message (reject_on_worker_lost /
+            # acks_on_failure_or_timeout=False), so the re-delivery can claim right away.
+            release_lost_attempt(self.task.app, self.id, self.worker_pid)
+        super().on_failure(exc_info, send_failed_event=send_failed_event, return_ok=return_ok)
+
+
 if TYPE_CHECKING:
     # celery-types makes Task generic; the runtime class is not subscriptable.
     _TaskBase = Task[[dict[str, Any]], dict[str, Any]]
@@ -116,6 +173,7 @@ class IdempotentJobTask(_TaskBase):
     acks_late = True
     reject_on_worker_lost = True
     typing = True
+    Request = "quiz_worker.celery_app:JobRequest"
 
     def apply_async(  # type: ignore[override]
         self, args: Any = None, kwargs: Any = None, **options: Any
@@ -161,8 +219,7 @@ class IdempotentJobTask(_TaskBase):
                 return result.summary()
 
     def _worker_id(self) -> str:
-        hostname = self.request.hostname
-        return hostname or f"eager@{socket.gethostname()}"
+        return worker_id_for(os.getpid())
 
 
 def install_logging_hooks(settings: WorkerSettings) -> None:
