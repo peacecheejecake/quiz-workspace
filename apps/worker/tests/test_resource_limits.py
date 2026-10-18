@@ -9,7 +9,6 @@ import qdrant_client
 from pydantic import ValidationError
 from quiz_worker.adapters import build_index_store, parser_options
 from quiz_worker.celery_app import (
-    DOCUMENT_PARSE_JOB_TYPE,
     build_celery_config,
     cleanup_policy_for,
     create_celery_app,
@@ -17,6 +16,7 @@ from quiz_worker.celery_app import (
     submit_job,
     task_name,
 )
+from quiz_worker.document_job import JOB_TYPE as DOCUMENT_PARSE_JOB_TYPE
 from quiz_worker.jobs import EchoPayloadV1
 from quiz_worker.runner import JobContext, JobDefinition, JobResult
 from quiz_worker.settings import WorkerSettings
@@ -83,6 +83,7 @@ def test_document_parse_runs_under_its_own_longer_limits() -> None:
         assert limits.soft_seconds is not None
         assert limits.soft_seconds < limits.hard_seconds
         assert limits.lease_seconds == limits.hard_seconds + settings.lease_grace_seconds
+    assert document.soft_seconds is not None
     assert settings.parse_timeout_seconds < document.soft_seconds
 
 
