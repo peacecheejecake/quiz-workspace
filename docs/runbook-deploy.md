@@ -21,12 +21,12 @@
 
 ## 1. 계정·프로젝트 만들기 (staging)
 
-순서대로 진행한다. 지역(region)은 Supabase·Railway·Vercel function을 **같은 지역**으로 맞춘다(사용자 결정, 예: 서울/도쿄 인접 지역).
+순서대로 진행한다. 지역(region)은 **Singapore**로 맞춘다(사용자 결정 2026-10-18): Supabase `ap-southeast-1`, Railway `asia-southeast1-eqsg3a`(Railway에는 Tokyo 지역이 없음), Vercel function region은 Singapore(`sin1`)를 권장한다(Vercel project Settings → Functions; 아직 확정 아님).
 
 1. **SMTP 제공자**: 발신 도메인을 등록하고 SPF·DKIM(가능하면 DMARC) DNS를 설정한다. SMTP host/port 587/user/password(API key), 발신 주소를 받는다.
 2. **Supabase**: staging project는 생성됨 — ref `jpyupavjpmlxtuolrvvs`, 지역 Singapore(`ap-southeast-1`), `supabase/config.toml`의 `[remotes.staging] project_id`에 반영됨(ref는 secret 아님). DB 비밀번호는 `openssl rand -hex 32`로 재설정해 두고 password manager에 보관한다. URL은 `https://jpyupavjpmlxtuolrvvs.supabase.co`.
 3. **Qdrant Cloud**: staging cluster 생성(Free tier는 개발·테스트 전용, deployment.md §8), API key 발급, cluster URL(`https://…:6333`).
-4. **Railway**: project 생성, environment `staging`. 서비스 3개:
+4. **Railway**: project(staging project는 생성됨), environment `staging`. 서비스 3개 모두 Settings → Deploy → Regions에서 `asia-southeast1-eqsg3a`(Singapore)로 둔다(`infra/deploy/railway-services.toml` `[project] region`; 배포 script는 region을 바꾸지 않음):
    - `Redis`(Railway Redis 템플릿). public TCP proxy는 만들지 않는다.
    - `api`: **Empty Service**(소스는 배포 workflow가 이미지 digest로 지정). Settings → Networking → public domain 생성(→ `NEXT_PUBLIC_API_BASE_URL`, `SMOKE_API_URL`). Volume을 `/var/cache/huggingface`에 연결.
    - `worker`: Empty Service, public domain 없음, Volume `/var/cache/huggingface`.
@@ -155,7 +155,7 @@ staging 7일 부하·비용 게이트를 통과한 뒤에만 진행한다. workf
 ## 7. 남은 사용자 결정
 
 - 플랜·비용: Vercel(Hobby는 비상업 제한), Supabase(Free는 pause·메일 제한), Railway 사용량, Qdrant(Free는 테스트 전용). 비용 게이트 기준(7일 측정 후).
-- 지역, 도메인(web·api·staging), SMTP 제공자와 발신 도메인.
+- 도메인(web·api·staging), SMTP 제공자와 발신 도메인. (지역은 Singapore로 결정됨.)
 - GHCR 이미지 공개 여부 vs Railway registry credential.
 - staging 도메인의 Vercel Deployment Protection.
 - LLM 사용 여부·모델·예산(`LLM_API_KEY`/`LLM_MODEL`; 미설정 시 문제 생성 비활성).

@@ -20,6 +20,15 @@
 [registry]
 host = "ghcr.io"
 
+# Region of every service in the project — api, worker and Redis (user decision 2026-10-18:
+# Singapore, next to the staging Supabase project in ap-southeast-1; Railway has no Tokyo
+# region). Set once per service in the dashboard (Settings → Deploy → Regions);
+# scripts/deploy/railway_deploy.py does not change it, because the API field for it is not
+# confirmed yet. Checked by infra/deploy/test_platform_config.py.
+[project]
+region = "asia-southeast1-eqsg3a"
+services_in_region = ["api", "worker", "Redis"]
+
 [services.api]
 image = "quiz-api"
 dockerfile = "apps/api/Dockerfile"

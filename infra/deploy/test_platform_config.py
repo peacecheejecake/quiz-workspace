@@ -153,3 +153,9 @@ def test_supabase_local_auth_is_untouched() -> None:
     assert auth["site_url"] == "http://127.0.0.1:3000"
     assert auth["additional_redirect_urls"] == ["http://127.0.0.1:3000/auth/callback"]
     assert "smtp" not in auth["email"]
+
+
+def test_railway_region_is_singapore_for_every_service() -> None:
+    config = _railway()
+    assert config["project"]["region"] == "asia-southeast1-eqsg3a"
+    assert set(config["project"]["services_in_region"]) == {*config["services"], "Redis"}
