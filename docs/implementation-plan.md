@@ -79,6 +79,7 @@ flowchart LR
 | A2.2 | 화면 AUTH-01~07 (`AuthLayout`, `SignInForm`, `SignUpForm`, `PasswordResetForm`, `VerificationNotice`) | A2.1, P0.4 | AUTH-01~07 AC GREEN |
 | A2.3 | ACCOUNT-01 보안 설정 화면 | A2.2 | ACCOUNT-01 AC GREEN |
 | A3 | 릴리즈 준비(로컬 범위): AUTH-API-AC02/03, CORS·CSRF·쿠키 정책, 로그 마스킹. staging SMTP/도메인은 M7.4로 이월 | A1.3, A2.3 | Auth 전 AC + API AC GREEN |
+| A4 | Auth CAPTCHA(Cloudflare Turnstile via Supabase Auth captcha): spec(auth.md §5.1, AUTH-01-AC05/06·AUTH-02-AC04/05·AUTH-03-AC04/05·AUTH-05-AC04/05) → RED → 공용 `TurnstileWidget` + 4개 폼 `captchaToken` 전달·호출마다 reset, CSP, `[remotes.*.auth.captcha]`, env manifest, runbook | A3, M7.4a | 신규 8 AC GREEN(chromium·webkit), 기존 Auth AC 회귀 없음, a11y·trace strict, 별도 Supabase 스택에서 서버 검증 확인 |
 
 ### M1 — Parser·Chunker
 
@@ -198,6 +199,7 @@ flowchart TB
     A11 --> A21[A2.1 web session] --> A22[A2.2 auth screens] --> A23[A2.3 account]
     A13 --> A3[A3 readiness]
     A23 --> A3
+    A3 --> A4[A4 captcha]
   end
   P010 --> A0
   A0 ==> A12
@@ -294,6 +296,7 @@ flowchart TB
     M72 --> M73[M7.3 CI/containers] --> M74a[M7.4a deploy prep] --> M74[M7.4 deploy ⛔]
   end
   M30 --> M70
+  M74a --> A4
   M70 ==> M71
   M52 --> M71
   M55 --> M72
@@ -395,6 +398,11 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-10-18 | M7.4a 문서 충돌: deployment.md §6.1은 Auth CAPTCHA를 요구하지만 web에 CAPTCHA 위젯이 없어 켜면 가입·로그인이 깨진다 → `[remotes.*]`에서 CAPTCHA off 유지, hosted rate limit만 적용. CAPTCHA는 별도 Task(위젯 + token 전달) 후 활성화. | 보수적 선택(동작하는 인증 우선) |
 | 2026-10-18 | M7.4a: Railway volume이 uid 10001에 쓰기 불가하면 `RAILWAY_RUN_UID=0`(root 실행) 대신 volume 없이 운영(env manifest가 그 변수를 금지). staging 첫 배포에서 확인. | 비root 이미지 불변식(M7.3) |
 | 2026-10-18 | M7.4a: staging smoke는 traces/스크린샷/report 없이 실행하고 합성 smoke 계정 2개(사전 가입)를 쓴다. production은 `@readonly` 점검만. DEP-04·DEP-06은 CI(`APP_ENV=test` 실패 marker, restore rehearsal)로 자동 검증하고 staging에서는 runbook 수동 절차. | 실제 JWT·비밀번호가 artifact에 남지 않음 |
+| 2026-10-18 | **사용자 결정**: Auth CAPTCHA를 지금 구현(A4), provider = Cloudflare Turnstile. 토큰 검증은 Supabase Auth(`[auth.captcha]`)가 하고 web은 `signInWithPassword`·`signUp`·`resend`·`resetPasswordForEmail`에 `captchaToken`만 붙인다. M7.4a의 'CAPTCHA off' 결정을 대체. | deployment.md §6.1, 사용자 |
+| 2026-10-18 | A4: local/test Supabase는 `[auth.captcha] enabled = false` 유지(수백 개 Auth 호출·fixture password grant가 Cloudflare 네트워크에 의존하지 않음, 공유 스택 재시작 불필요). web은 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`가 있으면 켜지고(E2E build는 테스트 키 `1x00000000000000000000AA`), 브라우저의 Turnstile script는 E2E fixture의 결정론적 가짜로 대체(`tests/e2e/fixtures/turnstile.ts`, 앱 build에 미포함). 서버 측 검증은 테스트 secret을 켠 별도 Supabase 스택에서 확인. | auth.md §5.1, e2e-strategy.md §3 결정론 |
+| 2026-10-18 | A4: staging 기본은 Cloudflare 공식 '항상 통과' 테스트 키 쌍(실제 위젯·실제 Supabase 검증 경로, smoke 계정의 password grant가 dummy token으로 통과). production은 실제 키만(env manifest가 테스트 키 거부). staging에 실제 키를 쓰면 DEP smoke의 로그인 단계는 수동이 된다. | DEP smoke 자동화, 봇 방어는 production 대상 |
+| 2026-10-18 | A4: CAPTCHA AC는 기존 Auth 화면 명세(AUTH-01/02/03/05)에 추가했으므로 trace phase는 A0에 속한다(CI `E2E_PHASES`에 이미 포함). 따라서 A4의 RED 커밋은 단독으로 develop에 merge하지 않고 GREEN 커밋과 함께 merge한다. | e2e-trace PHASES는 화면 단위 |
+| 2026-10-18 | A4: 제출 차단은 `disabled` 대신 `aria-disabled` + 설명 연결(focus 가능, 스크린리더가 사유를 읽음). 토큰은 1회용: 매 Auth 호출 후 reset, AUTH-03 짧은 throttle 자동 재시도는 새 토큰을 받은 뒤에만. | auth.md §5.1, Turnstile token 단일 사용 |
 
 ## 8. 진행 현황
 
@@ -475,5 +483,6 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M3.5 PDF viewer·교정 UI | ✅ | 353277e · f01356a · 57bbf68 | DOC-02 AC01 GREEN(AC02~05는 M3.6a 후 재확인). P2×2 → 반영 → P2(지연 refresh가 새 저장 덮음) → generation counter → 지적 없음 |
 | M4.3 LLM·extractor | ✅ | d104c02 · 9b335a6 · a6cb4a2 | P1(보기 swap)·P2(세로 정답표) → 반영 → P1(원문자 숫자 crash 회귀) → decimal-only + never-raise property test(600 seed) → 지적 없음 |
 | (통합) worktree 제외 설정 | ✅ | 6704d1c | 사소한 설정 수정, 리뷰 생략 |
+| A4 Auth CAPTCHA(Turnstile) | ◐ | — | 진행 중 |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.

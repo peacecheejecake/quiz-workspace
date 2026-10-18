@@ -253,13 +253,13 @@ describe('analyze + strict', () => {
 });
 
 describe('repository docs', () => {
-  it('declares 87 screen ACs, 21 screens with a spec path, and 3 API ACs', () => {
+  it('declares 95 screen ACs, 21 screens with a spec path, and 3 API ACs', () => {
     const report = loadReport(join(import.meta.dirname, '..'));
     const screens = report.screens.filter((s) => s.id !== 'AUTH-API');
     assert.equal(screens.length, 21);
     assert.equal(
       screens.reduce((n, s) => n + s.acs.length, 0),
-      87,
+      95,
     );
     assert.ok(screens.every((s) => s.testPath?.startsWith('tests/e2e/')));
     assert.deepEqual(report.screens.find((s) => s.id === 'AUTH-API')?.acs, [

@@ -85,13 +85,54 @@ workspace_memberships(
 ## 5. 보안 / 에러 / 운영
 
 - 인증 에러 메시지는 과도한 계정 존재 여부 노출을 피한다. 로그인에는 일반화된 자격증명 오류; 비밀번호 복구 요청은 존재 여부와 무관하게 유사한 성공 안내.
-- Supabase Auth rate limit과 CAPTCHA 등의 기능을 설정 가능하게 하며, 인증 요청의 과도한 시도는 로그/알림으로 파악한다.
+- Supabase Auth rate limit과 CAPTCHA(Cloudflare Turnstile, §5.1)를 환경별로 설정 가능하게 하며, 인증 요청의 과도한 시도는 로그/알림으로 파악한다.
 - 운영 메일(확인·복구)은 외부 SMTP를 설정. 기본 테스트 메일 발송만으로 운영하지 않는다.
 - CSRF/세션 쿠키 설정, redirect allowlist, CORS origin allowlist, HTTPS, CSP, referrer 정책을 점검한다. 서버 인증 응답은 사용자간 공유 캐시 금지.
 - 401=토큰 없음/만료/검증 실패; 403=인증은 됐으나 인가 실패. 사용자 화면에 두 경우의 행동을 다르게 안내한다.
 - access-token 만료 전 refresh는 UI가 처리하지만, 계정 차단·즉시 회수처럼 최신 상태가 필요한 고위험 작업은 Auth 서버에서 사용자 상태를 재확인한다.
 - `GET /api/v1/me`: 검증된 사용자 id 및 프로필. `GET /api/v1/me/workspaces`: 접근 가능한 Workspace 목록. 로그인, 가입, 비밀번호 변경 자체는 Supabase SDK/Auth API에서 처리한다.
 - 계정 생성 후 프로필 초기화는 중복 호출에 안전한 `upsert`/재시도 방식으로 구현하고, `auth.users` 직접 수정은 하지 않는다.
+
+### 5.1 CAPTCHA — Cloudflare Turnstile (A4)
+
+봇 가입·자격증명 대입·메일 폭탄을 막기 위해 Supabase Auth의 CAPTCHA 기능(`[auth.captcha] provider = "turnstile"`)을 쓴다. **토큰 검증은 Supabase Auth 서버가** Turnstile secret으로 수행한다(secret은 Supabase 설정에만 존재, web·API·브라우저에 없음). web은 위젯으로 받은 토큰을 해당 Auth 호출에 붙여 보낼 뿐이다.
+
+**토큰이 필요한 호출**(GoTrue가 CAPTCHA 활성 시 `captcha_token`을 요구하는 endpoint):
+
+| 화면 | supabase-js 호출 | Auth endpoint |
+|---|---|---|
+| AUTH-01 로그인 | `signInWithPassword({ email, password, options: { captchaToken } })` (Server Action) | `POST /token?grant_type=password` |
+| AUTH-02 회원가입 | `signUp({ …, options: { captchaToken } })` | `POST /signup` |
+| AUTH-03 인증 메일 재전송 | `resend({ type: 'signup', …, options: { captchaToken } })` | `POST /resend` |
+| AUTH-05 재설정 메일 요청 | `resetPasswordForEmail(email, { captchaToken })` | `POST /recover` |
+
+필요 없는 호출: refresh token·PKCE code 교환(`/token?grant_type=refresh_token|pkce`), `verifyOtp`(callback), `updateUser`(AUTH-06·ACCOUNT-01 비밀번호 변경), `signOut`. `signInWithOtp`·익명 로그인은 MVP에서 쓰지 않는다(도입 시 같은 규칙으로 토큰 필수).
+
+**환경별 설정**
+
+| 환경 | web `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Supabase `[auth.captcha]` |
+|---|---|---|
+| local (`supabase start`) | `.env.example`: Turnstile 공식 테스트 키 `1x00000000000000000000AA`(항상 통과) | `enabled = false`(오프라인·결정론: 수백 개 Auth 호출이 Cloudflare에 의존하지 않음, fixture의 password grant 그대로) |
+| test/E2E | 같은 테스트 키로 build, 브라우저의 `challenges.cloudflare.com` 요청은 Playwright fixture가 **결정론적 가짜 Turnstile**로 대체 | `enabled = false` |
+| staging | 기본은 공식 테스트 키 쌍(site `1x00000000000000000000AA` + secret `1x0000000000000000000000000000000AA`): 실제 위젯·실제 Supabase 검증 경로를 타면서 smoke 계정 자동 로그인이 가능 | `enabled = true`, secret = `env(SUPABASE_AUTH_CAPTCHA_SECRET)` |
+| production | 실제 Turnstile widget sitekey(`0x…`), 테스트 키 금지 | `enabled = true`, 실제 secret, 테스트 secret 금지 |
+
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY`가 비어 있으면 CAPTCHA는 **꺼진 것**이다: 위젯·script를 로드하지 않고, CSP에 Turnstile origin을 넣지 않으며, 호출에 `captchaToken`을 붙이지 않는다(기존 동작). Supabase 측 `enabled`와 반드시 짝을 맞춘다(web만 꺼지면 Auth가 모든 가입·로그인을 거부). 이 짝은 `infra/deploy/env-manifest.toml`(staging/production 필수)과 runbook으로 관리한다.
+- site key는 공개 값(`kind = public`, build 시 inline), secret은 `SUPABASE_AUTH_CAPTCHA_SECRET`으로 `supabase config push` 셸에만 둔다. 둘 다 로그·URL·trace에 남기지 않는다(토큰도 마찬가지: 토큰은 요청 body로만 전달).
+
+**UI·토큰 규칙**(AUTH-01-AC05/06, AUTH-02-AC04/05, AUTH-03-AC04/05, AUTH-05-AC04/05)
+- 공용 `TurnstileWidget`(apps/web): "보안 확인" 제목이 있는 group 안에 Turnstile을 explicit render(`language: 'ko'`, `theme: 'auto'`, `refresh-expired: 'manual'`)하고, 상태를 텍스트로 알리는 `role="status"` 영역(확인 중 / 확인 완료 / 실패 / 만료 / 불러오기 실패)을 둔다. 색만으로 상태를 표현하지 않는다.
+- 토큰이 없으면 제출 버튼은 `aria-disabled="true"`이고 "보안 확인을 완료하면 …할 수 있습니다" 설명에 연결된다. Enter 등으로 제출해도 Auth 호출 없이 같은 사유를 표시하고 보안 확인 영역으로 focus를 옮긴다. 필드 검증 오류가 있으면 필드 오류가 먼저다(기존 AC 유지).
+- 토큰은 **1회용**: Auth 호출을 한 번 할 때마다(성공·실패·네트워크 오류 무관) 위젯을 `reset`하고 보관한 토큰을 버린다. 같은 토큰으로 두 번 호출하지 않는다(AUTH-03의 짧은 throttle 자동 재시도는 새 토큰을 받은 뒤에만 수행).
+- 실패 문구(한국어 우선, 계정 존재·원인 코드 비노출):
+  - 위젯 오류(`error-callback`, 차단): "보안 확인을 완료하지 못했습니다. 다시 시도해 주세요."
+  - 만료(`expired-callback`/`timeout-callback`): "보안 확인 시간이 지났습니다. 다시 확인해 주세요."
+  - script 불러오기 실패: "보안 확인을 불러오지 못했습니다. 네트워크 연결을 확인한 뒤 다시 시도해 주세요."
+  - Supabase가 CAPTCHA를 거부(`captcha_failed`, 400): form 오류 "보안 확인에 실패했습니다. 보안 확인을 다시 완료한 뒤 시도해 주세요."
+  - 위 상태에서는 키보드로 조작 가능한 "보안 확인 다시 하기" 버튼(위젯 reset)을 제공한다.
+- 접근성: Turnstile iframe 자체의 키보드·스크린리더 지원(Cloudflare 제공)에 더해, 위 status·버튼·설명은 모두 라벨이 있는 표준 요소다. 우리 쪽 표시는 애니메이션을 쓰지 않거나 `prefers-reduced-motion: reduce`에서 끈다. 위젯 영역 높이를 미리 확보해 로드 시 레이아웃이 밀리지 않게 한다.
+- CSP(활성 시에만): `script-src`에 `https://challenges.cloudflare.com`(nonce + `'strict-dynamic'` 유지: api.js는 nonce가 붙은 우리 script가 삽입), `frame-src https://challenges.cloudflare.com`(그 외 `'none'` 유지). `connect-src`는 추가하지 않는다(pre-clearance 미사용). 상세: deployment.md §6.1.
+- 테스트: 브라우저 E2E는 실제 Cloudflare를 부르지 않는다. `tests/e2e/fixtures/turnstile.ts`가 `https://challenges.cloudflare.com/turnstile/v0/api.js`를 route로 가로채 같은 API(`render/reset/remove/getResponse`, callback들)를 구현한 가짜 script와 iframe을 돌려준다(통과·실패·상호작용·만료·로드 실패 모드, 토큰은 테스트 키와 같은 `XXXX.DUMMY.TOKEN.XXXX`). 가짜는 테스트 디렉터리에만 있고 앱 build에는 들어가지 않는다. 서버 검증(Supabase가 토큰 없는/잘못된 요청을 거부)은 `enabled = true` + 테스트 secret인 별도 Supabase 스택에서 확인한다(구현 Task 보고·runbook).
 
 ## 6. 독립 Auth 개발 트랙
 
@@ -114,6 +155,8 @@ workspace_memberships(
 - `AUTH-05-AC01`: 존재하는/존재하지 않는 이메일 모두 비밀번호 재설정 요청 시 사용자에게 동일한 안내를 한다.
 - `AUTH-06-AC01`: 만료 링크는 password update를 허용하지 않는다.
 - `AUTH-07-AC01`: 외부 사이트 redirect (`next=https://evil.example`)는 거부된다.
+- `AUTH-01-AC05`·`AUTH-02-AC04`·`AUTH-03-AC04`·`AUTH-05-AC04`: CAPTCHA 활성 시 보안 확인 전 제출 차단, 토큰을 Auth 호출에 전달, 호출마다 위젯 reset(§5.1).
+- `AUTH-01-AC06`·`AUTH-02-AC05`·`AUTH-03-AC05`·`AUTH-05-AC05`: 보안 확인 실패·만료·로드 실패·서버 거부 시 한국어 안내와 키보드로 다시 확인, 상태 텍스트 알림.
 - `AUTH-API-AC01`: JWT 누락·위조·만료 → 401.
 - `AUTH-API-AC02`: 다른 사용자의 Workspace/doc/question 접근 거부, 읽기뿐 아니라 upload URL·Qdrant 검색·SSE·다운로드 포함.
 - `AUTH-API-AC03`: 로그아웃 뒤 refresh token 재사용 불가; 기존 짧은 수명의 access token은 만료시까지 유효할 수 있음을 명시하여 민감 작업 재검증.
