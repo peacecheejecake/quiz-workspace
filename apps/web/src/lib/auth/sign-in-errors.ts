@@ -1,5 +1,6 @@
 // User-facing sign-in error copy (docs/auth.md §5): one generic credentials message whether the
 // account exists or not; raw Auth error codes are never shown.
+import { CAPTCHA_MESSAGES, captchaRequiredMessage, isCaptchaError } from './captcha';
 import type { AuthErrorLike } from './callback';
 
 export const SIGN_IN_MESSAGES = {
@@ -9,6 +10,8 @@ export const SIGN_IN_MESSAGES = {
     '이메일 인증이 아직 완료되지 않았습니다. 받은 편지함의 인증 메일을 확인해 주세요.',
   rateLimited: '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.',
   unavailable: '일시적으로 로그인할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+  captchaRequired: captchaRequiredMessage('로그인할'),
+  captchaFailed: CAPTCHA_MESSAGES.rejected,
 } as const;
 
 export type SignInErrorKind = keyof typeof SIGN_IN_MESSAGES;
@@ -19,6 +22,7 @@ export type SignInErrorKind = keyof typeof SIGN_IN_MESSAGES;
  */
 export function classifySignInError(error: AuthErrorLike): SignInErrorKind {
   if (error.name === 'AuthRetryableFetchError' || (error.status ?? 0) >= 500) return 'unavailable';
+  if (isCaptchaError(error)) return 'captchaFailed';
   if (error.status === 429 || error.code === 'over_request_rate_limit') return 'rateLimited';
   if (error.code === 'email_not_confirmed') return 'emailNotConfirmed';
   return 'credentials';

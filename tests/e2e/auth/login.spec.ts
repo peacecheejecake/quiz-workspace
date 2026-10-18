@@ -4,12 +4,23 @@ import {
   appPath,
   authUi,
   blockForeignHosts,
+  CAPTCHA_EXPIRED,
+  CAPTCHA_FAILED,
+  CAPTCHA_LOAD_FAILED,
+  CAPTCHA_REQUIRED,
+  captchaUi,
+  DUMMY_TOKEN,
   expect,
+  expectBlockedForCaptcha,
+  expectCaptchaVerified,
+  expectNoMotion,
   formAlert,
   LOGIN_SCREEN,
   PROTECTED_LANDING,
+  recordMutations,
   submitLogin,
   test,
+  TEST_SITE_KEY,
 } from '../fixtures/test.ts';
 
 const GENERIC_LOGIN_ERROR =
@@ -138,6 +149,8 @@ test(
     await page.keyboard.press('Tab');
     await expect(authUi.password(page)).toBeFocused();
     await page.keyboard.type(user.password);
+    // CAPTCHA (A4): the always-passes check finishes on its own; Enter submits once it has.
+    await expectCaptchaVerified(page);
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(PROTECTED_LANDING);
   },
@@ -198,3 +211,93 @@ test(
     }
   },
 );
+
+test(
+  'AUTH-01-AC05 security check gates sign-in, its token goes with the request and is never reused',
+  { tag: '@infra' },
+  async ({ page, userFactory, turnstile }) => {
+    const user = await userFactory.create({ label: 'auth01-ac05' });
+    turnstile.mode = 'interactive';
+    await page.goto('/login');
+    await expect(captchaUi.group(page)).toBeVisible();
+    const stats = await turnstile.stats(page);
+    expect(stats.sitekeys).toEqual([TEST_SITE_KEY]);
+    expect(stats.languages).toEqual(['ko']);
+
+    // No token yet: the button says why, and Enter sends nothing.
+    const button = authUi.signInButton(page);
+    await expectBlockedForCaptcha(button);
+    const mutations = recordMutations(page);
+    await authUi.email(page).fill(user.email);
+    await authUi.password(page).fill(`Wrong-${user.password}`);
+    await authUi.password(page).press('Enter');
+    await expect(page.getByRole('main').getByText(CAPTCHA_REQUIRED).first()).toBeVisible();
+    // Focus moves to the security-check region so a screen reader announces it.
+    await expect(captchaUi.group(page)).toBeFocused();
+    expect(mutations).toEqual([]);
+
+    // Solved: the sign-in Server Action carries the token (Auth rejects the wrong password).
+    await turnstile.solve(page);
+    await expect(button).not.toHaveAttribute('aria-disabled', 'true');
+    await button.click();
+    await expect(formAlert(page)).toBeVisible();
+    expect(mutations).toHaveLength(1);
+    expect(mutations[0]?.postData() ?? '').toContain(DUMMY_TOKEN);
+
+    // The attempt spent the token: the widget was reset and the next submit waits for a new one.
+    await expect.poll(async () => (await turnstile.stats(page)).resets).toBeGreaterThanOrEqual(1);
+    await expectBlockedForCaptcha(button);
+    await authUi.password(page).fill(user.password);
+    await authUi.password(page).press('Enter');
+    await expect(page.getByRole('main').getByText(CAPTCHA_REQUIRED).first()).toBeVisible();
+    expect(mutations).toHaveLength(1);
+
+    await turnstile.solve(page);
+    await button.click();
+    await expect(page).toHaveURL(PROTECTED_LANDING);
+    expect(mutations).toHaveLength(2);
+    expect(mutations[1]?.postData() ?? '').toContain(DUMMY_TOKEN);
+  },
+);
+
+test('AUTH-01-AC06 failed, expired or unavailable security check explains itself and recovers by keyboard', async ({
+  page,
+  turnstile,
+}) => {
+  // Server-side rejection (`captcha_failed`) of the sign-in Server Action is not observable from
+  // the browser; its copy is covered by apps/web/test/sign-in-action.test.ts.
+  const button = authUi.signInButton(page);
+  const status = captchaUi.status(page);
+  const retryByKeyboard = async () => {
+    await expect(captchaUi.retry(page)).toBeVisible();
+    await captchaUi.retry(page).focus();
+    await page.keyboard.press('Enter');
+  };
+
+  // The Turnstile script cannot be loaded.
+  turnstile.mode = 'unreachable';
+  await page.goto('/login');
+  await expect(status).toContainText(CAPTCHA_LOAD_FAILED);
+  await expectBlockedForCaptcha(button);
+  turnstile.mode = 'pass';
+  await retryByKeyboard();
+  await expectCaptchaVerified(page);
+  await expect(button).not.toHaveAttribute('aria-disabled', 'true');
+
+  // The token expires before the user submits.
+  await turnstile.expire(page);
+  await expect(status).toContainText(CAPTCHA_EXPIRED);
+  await expectBlockedForCaptcha(button);
+
+  // The new challenge itself fails.
+  await turnstile.setMode(page, 'fail');
+  await retryByKeyboard();
+  await expect(status).toContainText(CAPTCHA_FAILED);
+  await expectBlockedForCaptcha(button);
+  await turnstile.setMode(page, 'pass');
+  await retryByKeyboard();
+  await expectCaptchaVerified(page);
+
+  // Reduced motion (pinned for every project): nothing in the region animates.
+  await expectNoMotion(captchaUi.group(page));
+});

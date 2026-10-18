@@ -91,7 +91,8 @@ PR opened
 
 ## 6. Secrets / Security
 
-- Public: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`는 공개 가능한 값. 접근 권한 자체는 JWT/RLS/API에서 판정.
+- Public: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`(Turnstile widget sitekey, auth.md §5.1)는 공개 가능한 값. 접근 권한 자체는 JWT/RLS/API에서 판정.
+- Supabase 설정 전용: `SUPABASE_AUTH_CAPTCHA_SECRET`(Turnstile secret)은 `supabase config push` 셸에서만 쓰고 web·API·worker 어디에도 두지 않는다. 토큰 검증은 Supabase Auth가 한다.
 - Server only: `DATABASE_URL`, `SUPABASE_SECRET_KEY`, `QDRANT_API_KEY`, `REDIS_URL`, `LLM_API_KEY`, `AUTH_RECOVERY_MARKER_SECRET`(Next.js 서버, 비밀번호 재설정 recovery marker HMAC 키, `openssl rand -base64 32`), Storage 관리 권한. 절대로 `NEXT_PUBLIC_` 접두사 사용 금지.
 - Qdrant API key와 Redis는 내부 서비스에서만 사용; 프론트가 Qdrant 직접 검색하지 않는다.
 - 메일·파일 저장·LLM 공급자와 콘텐츠의 데이터 처리 지역, 기록·보존 정책을 점검. 저작권 있는 도서는 비공개 storage + 최소 권한 + 접근 로그.
@@ -119,13 +120,14 @@ PR opened
 **Web (Next.js).**
 - `src/proxy.ts`가 요청마다 nonce를 만들고 CSP를 응답(및 render용 request header)에 설정한다. 모든 page는 dynamic rendering(root layout `connection()`): 정적 page는 nonce를 가질 수 없다.
   `default-src 'self'; script-src 'self' 'nonce-…' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' <NEXT_PUBLIC_SUPABASE_URL origin> <NEXT_PUBLIC_API_BASE_URL origin>; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'` (+ HTTPS에서 `upgrade-insecure-requests`, `next dev`에서만 `'unsafe-eval'`).
+  CAPTCHA가 켜진 build(`NEXT_PUBLIC_TURNSTILE_SITE_KEY` 설정, auth.md §5.1)에서만 두 directive가 넓어진다: `script-src 'self' 'nonce-…' 'strict-dynamic' https://challenges.cloudflare.com`(CSP3 브라우저는 `'strict-dynamic'` 때문에 host를 무시하고, nonce가 붙은 우리 bundle이 삽입한 api.js만 실행; host는 CSP2 fallback), `frame-src https://challenges.cloudflare.com`(위젯 iframe). `connect-src`는 그대로다(Turnstile pre-clearance 미사용). 그 밖의 directive는 CAPTCHA 여부와 무관하게 동일하다.
   `style-src 'unsafe-inline'`은 의도적: React/Radix가 SSR에서 `style="…"` attribute(Popper 위치, CSS 변수)를 출력하며 nonce는 attribute에 적용되지 않는다. script는 nonce 전용이므로 style 주입으로 script 실행은 불가.
 - HTTPS(`x-forwarded-proto: https`)에서 `Strict-Transport-Security`. 정적 header(`next.config.ts`): `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, `COOP: same-origin`; `/share/**`는 `no-store`, `no-referrer`, `noindex`.
 - CSRF: Server Action은 Next 자체의 `Origin` ↔ host 검사로 보호되고(`serverActions.allowedOrigins` 미설정 유지), 추가로 proxy가 GET/HEAD/OPTIONS 외 요청 중 `Origin`이 자기 host(`x-forwarded-host` 우선)와 다르거나 `Origin` 없이 `Sec-Fetch-Site: cross-site`인 요청을 `403`으로 거부한다(route handler 포함).
 - Supabase session cookie: 서버가 쓰는 모든 `sb-…-auth-token*` cookie는 `HttpOnly; SameSite=Lax; Path=/`, HTTPS에서 `Secure`. 브라우저 client는 session을 읽지 않는 호출(signUp/resend/resetPasswordForEmail)만 한다.
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_API_BASE_URL`은 production에서 `https://`여야 한다(CSP `connect-src`와 mixed content).
 
-**Supabase Auth / 메일 (M7.4에서 적용).** `site_url` = 웹 production origin(HTTPS), `additional_redirect_urls` = `https://<web>/auth/callback`(및 고정 preview alias)만, wildcard 금지. 외부 SMTP(발신 도메인 SPF/DKIM), Auth rate limit·CAPTCHA, JWT signing key는 비대칭(ES256/RS256), access token 만료 ≤ 1h. `AUTH_RECOVERY_MARKER_SECRET`(32 byte random)은 환경별로 다르게.
+**Supabase Auth / 메일 (M7.4에서 적용).** `site_url` = 웹 production origin(HTTPS), `additional_redirect_urls` = `https://<web>/auth/callback`(및 고정 preview alias)만, wildcard 금지. 외부 SMTP(발신 도메인 SPF/DKIM), Auth rate limit, CAPTCHA(`[remotes.*.auth.captcha] enabled = true`, `provider = "turnstile"`, `secret = env(SUPABASE_AUTH_CAPTCHA_SECRET)`; web의 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`와 짝: 한쪽만 켜면 가입·로그인 불가. production은 Cloudflare 테스트 키 금지, staging 기본은 항상 통과 테스트 키 쌍 — auth.md §5.1, runbook-deploy.md §2), JWT signing key는 비대칭(ES256/RS256), access token 만료 ≤ 1h. `AUTH_RECOVERY_MARKER_SECRET`(32 byte random)은 환경별로 다르게.
 
 **로그 검사.** `pnpm e2e:log-audit [--worker] -- <specs> --project …`는 API(INFO)·웹 서버(`--worker`면 Celery worker도) 로그를 캡처해 Playwright를 실행하고 JWT·Bearer/refresh/access token·session cookie 값·email 주소, 공유 session token·공유 링크 비밀값(`#k=`, `"secret"`)·signed Storage URL token·password 값이 있으면 실패한다(DEP-07 staging smoke에서도 같은 명령을 쓴다).
 

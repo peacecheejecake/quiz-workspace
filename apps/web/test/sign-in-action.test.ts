@@ -1,7 +1,7 @@
 // signInAction with mocked Supabase + next/headers: an unconfirmed account (correct password)
 // hands the attempted address to /auth/verify via the pending-email cookie; no other failure
 // touches it (that would reveal nothing new, but would overwrite a real pending address).
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PENDING_EMAIL_COOKIE, PENDING_EMAIL_PATH } from '../src/lib/auth/pending-email';
 
 const auth = { signInWithPassword: vi.fn() };
@@ -84,6 +84,63 @@ describe('signInAction pending verification address', () => {
     expect((await signInAction({}, form('b@example.com'))).emailNotConfirmed).toBeUndefined();
     auth.signInWithPassword.mockResolvedValue({ error: { status: 500 } });
     await signInAction({}, form('b@example.com'));
+    expect(cookieSets).toEqual([]);
+  });
+});
+
+describe('signInAction CAPTCHA token (docs/auth.md §5.1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookieSets.length = 0;
+    origin = 'http://127.0.0.1:3000';
+  });
+  afterEach(() => {
+    delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  });
+
+  function withToken(token: string): FormData {
+    const data = form('b@example.com');
+    data.set('captchaToken', token);
+    return data;
+  }
+
+  it('passes the token to Supabase as options.captchaToken', async () => {
+    process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = '1x00000000000000000000AA';
+    auth.signInWithPassword.mockResolvedValue({ error: { code: 'invalid_credentials' } });
+    await signInAction({}, withToken('XXXX.DUMMY.TOKEN.XXXX'));
+    expect(auth.signInWithPassword).toHaveBeenCalledWith({
+      email: 'b@example.com',
+      password: 'some-password',
+      options: { captchaToken: 'XXXX.DUMMY.TOKEN.XXXX' },
+    });
+  });
+
+  it('never calls Auth without a token while CAPTCHA is on', async () => {
+    process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = '1x00000000000000000000AA';
+    const state = await signInAction({}, withToken('  '));
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
+    expect(state).toEqual({
+      error: '보안 확인을 완료하면 로그인할 수 있습니다.',
+      email: 'b@example.com',
+    });
+  });
+
+  it('sends no captcha option when CAPTCHA is off', async () => {
+    auth.signInWithPassword.mockResolvedValue({ error: { code: 'invalid_credentials' } });
+    await signInAction({}, form('b@example.com'));
+    expect(auth.signInWithPassword).toHaveBeenCalledWith({
+      email: 'b@example.com',
+      password: 'some-password',
+    });
+  });
+
+  it('explains a refused token without Auth details', async () => {
+    process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = '1x00000000000000000000AA';
+    auth.signInWithPassword.mockResolvedValue({
+      error: { code: 'captcha_failed', status: 400, message: 'captcha protection: x' },
+    });
+    const state = await signInAction({}, withToken('spent-token'));
+    expect(state.error).toBe('보안 확인에 실패했습니다. 보안 확인을 마친 뒤 다시 시도해 주세요.');
     expect(cookieSets).toEqual([]);
   });
 });

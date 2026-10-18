@@ -6,7 +6,8 @@
 // "sent" answer as pending ones, so the control never reveals whether an account exists. The
 // address comes from the pending-email cookie (set by sign-up, or by sign-in for an unconfirmed
 // account); the user can switch to another address, and without one (e.g. arriving from
-// /auth/error) types it.
+// /auth/error) types it. With CAPTCHA on, each send carries a fresh Turnstile token and the widget
+// is reset afterwards; the short-throttle retry waits for a new token (docs/auth.md §5.1).
 import { Button, Input } from '@quiz/ui';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
@@ -19,6 +20,7 @@ import { pendingEmailCookie } from '@/lib/auth/pending-email';
 import { normalizeEmail, validateEmail, VALIDATION_MESSAGES } from '@/lib/auth/validation';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import styles from './auth-form.module.css';
+import { useCaptcha } from './captcha-field';
 import { FormNotice } from './form-notice';
 
 export const RESEND_COOLDOWN_SECONDS = 60;
@@ -38,6 +40,7 @@ export function VerificationNotice({ email: initialEmail }: { email?: string | u
   const [emailError, setEmailError] = useState<string>();
   const emailRef = useRef<HTMLInputElement>(null);
   const attempts = useRef(0);
+  const captcha = useCaptcha('인증 메일을 다시 보낼');
 
   const remaining = cooldownUntil ? Math.max(0, Math.ceil((cooldownUntil - now) / 1000)) : 0;
   const coolingDown = remaining > 0;
@@ -78,26 +81,43 @@ export function VerificationNotice({ email: initialEmail }: { email?: string | u
       emailRef.current?.focus();
       return;
     }
+    if (captcha.blocked) {
+      captcha.remind();
+      return;
+    }
 
     setPending(true);
-    const send = () =>
+    const send = (captchaToken: string | undefined) =>
       getSupabaseBrowserClient().auth.resend({
         type: 'signup',
         email,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          ...(captchaToken ? { captchaToken } : {}),
+        },
       });
     let kind: ReturnType<typeof classifyMailRequestError>;
     try {
-      let { error } = await send();
+      let token = captcha.token;
+      let { error } = await send(token);
       // Right after sign-up Auth may still hold this address for a second or two (per-user mail
-      // frequency): wait that out once instead of failing the click.
+      // frequency): wait that out once instead of failing the click. The first call spent the
+      // CAPTCHA token, so the retry waits for a new one (none in time: report the throttle).
       const wait = error ? retryAfterSeconds(error) : undefined;
       if (wait !== undefined && wait <= SHORT_THROTTLE_SECONDS) {
-        await new Promise((resolve) => window.setTimeout(resolve, (wait + 1) * 1000));
-        ({ error } = await send());
+        const delay = new Promise((resolve) => window.setTimeout(resolve, (wait + 1) * 1000));
+        if (token) {
+          const next = captcha.nextToken((wait + 10) * 1000);
+          captcha.reset();
+          token = await next;
+        }
+        await delay;
+        if (!captcha.enabled || token) ({ error } = await send(token));
       }
+      if (token) captcha.reset();
       kind = error ? classifyMailRequestError(error) : 'ok';
     } catch {
+      if (captcha.token) captcha.reset();
       kind = 'unavailable';
     }
     setPending(false);
@@ -120,7 +140,9 @@ export function VerificationNotice({ email: initialEmail }: { email?: string | u
       if (kind === 'rateLimited') startCooldown();
       setOutcome({
         kind: 'error',
-        message: flowMessage(kind === 'rateLimited' ? 'rateLimited' : 'unavailable'),
+        message: flowMessage(
+          kind === 'rateLimited' || kind === 'captchaFailed' ? kind : 'unavailable',
+        ),
         attempt,
       });
     }
@@ -167,12 +189,16 @@ export function VerificationNotice({ email: initialEmail }: { email?: string | u
             onChange={() => setEmailError(undefined)}
           />
         ) : null}
+        {captcha.field}
         <Button
           type="submit"
           variant="primary"
           loading={pending}
           disabled={coolingDown}
-          aria-describedby={coolingDown ? 'resend-cooldown' : undefined}
+          {...(coolingDown ? {} : captcha.submitProps)}
+          aria-describedby={
+            coolingDown ? 'resend-cooldown' : captcha.submitProps['aria-describedby']
+          }
           className={styles.submit}
         >
           인증 메일 다시 보내기
