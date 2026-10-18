@@ -21,7 +21,7 @@ from book_core.parser.docling_adapter import (
     text_layer_pages,
 )
 from docling.datamodel.base_models import ConversionStatus
-from docling.datamodel.pipeline_options import RapidOcrOptions
+from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
 from docling_core.types.doc.base import BoundingBox, CoordOrigin, Size
 from docling_core.types.doc.common.content_layer import ContentLayer
 from docling_core.types.doc.common.reference import ProvenanceItem
@@ -364,3 +364,34 @@ def test_non_pdf_input_raises_parser_error(tmp_path: Path, requested_ocr: list[b
     with pytest.raises(ParserError, match="not a readable PDF"):
         DoclingParser().parse(path)
     assert requested_ocr == []
+
+
+def test_queue_batch_and_threads_reach_the_converter_pipeline() -> None:
+    """The memory bound (in-flight pages) and thread count reach the converter Docling builds;
+    constructing a converter loads no models."""
+    from docling.datamodel.base_models import InputFormat
+
+    parser = DoclingParser(ParserOptions(queue_max_size=8, page_batch_size=2, num_threads=3))
+    converter = parser._converter(False)
+    pipeline = converter.format_to_options[InputFormat.PDF].pipeline_options
+    assert isinstance(pipeline, PdfPipelineOptions)
+    assert pipeline.queue_max_size == 8
+    assert pipeline.layout_batch_size == pipeline.table_batch_size == 2
+    assert pipeline.ocr_batch_size == 2
+    assert pipeline.accelerator_options.num_threads == 3
+
+
+def test_docling_defaults_are_kept_when_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
+    monkeypatch.delenv("DOCLING_NUM_THREADS", raising=False)
+    default = PdfPipelineOptions()
+    pipeline = DoclingParser().pipeline_options(False)
+    assert pipeline.queue_max_size == default.queue_max_size
+    assert pipeline.layout_batch_size == default.layout_batch_size
+    assert pipeline.accelerator_options.num_threads == default.accelerator_options.num_threads
+
+
+@pytest.mark.parametrize("field", ["queue_max_size", "page_batch_size", "num_threads"])
+def test_parser_sizes_must_be_positive(field: str) -> None:
+    with pytest.raises(ValueError, match=field):
+        ParserOptions(**{field: 0})

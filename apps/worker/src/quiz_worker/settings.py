@@ -164,6 +164,15 @@ class WorkerSettings(BaseSettings):
     parse_timeout_seconds: float = Field(
         default=1200, gt=0, validation_alias="WORKER_PARSE_TIMEOUT_SECONDS"
     )
+    # Docling memory bound (M7.4c): pages buffered between pipeline stages, and pages per
+    # layout/table model batch. Docling's own default queue (100) grows with book length (about
+    # 4.5 GB on a 300-page book); 8 keeps the parse near 2.6 GB at about the same speed.
+    parse_queue_max_size: int = Field(
+        default=8, ge=1, validation_alias="WORKER_PARSE_QUEUE_MAX_SIZE"
+    )
+    parse_page_batch_size: int = Field(
+        default=4, ge=1, validation_alias="WORKER_PARSE_PAGE_BATCH_SIZE"
+    )
     # How long a job waits for another job on the same document before retrying later.
     document_lock_wait_seconds: float = Field(
         default=60, ge=0, validation_alias="WORKER_DOCUMENT_LOCK_WAIT_SECONDS"
@@ -184,6 +193,10 @@ class WorkerSettings(BaseSettings):
     def _check_limits(self) -> WorkerSettings:
         if self.task_soft_time_limit_seconds >= self.task_time_limit_seconds:
             raise ValueError("WORKER_TASK_SOFT_TIME_LIMIT_SECONDS must be below the hard limit")
+        if self.parse_page_batch_size > self.parse_queue_max_size:
+            raise ValueError(
+                "WORKER_PARSE_PAGE_BATCH_SIZE must not exceed WORKER_PARSE_QUEUE_MAX_SIZE"
+            )
         deployed = self.app_env in {Environment.PREVIEW, Environment.PRODUCTION}
         if deployed and (self.parser is ParserMode.FAKE or self.embedder is EmbedderMode.FAKE):
             raise ValueError("fake parser/embedder adapters are for local and test runs only")

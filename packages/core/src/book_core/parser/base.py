@@ -27,6 +27,13 @@ class ParserOptions:
     ``device``: model inference device. ``cpu`` keeps output identical across machines.
     ``document_timeout``: seconds after which conversion stops; a document that does not finish
     in time is a ``ParserError`` (never a partial document). ``None`` = no limit.
+    ``queue_max_size``: pages buffered between Docling's pipeline stages. Docling's default (100)
+    lets memory grow with book length (about 4.5 GB on a 300-page book); a small bound (e.g. 8)
+    caps it at a few batches with about the same throughput. ``None`` keeps Docling's default.
+    ``page_batch_size``: pages per layout / table / OCR model batch (memory per batch);
+    ``None`` keeps Docling's default (4).
+    ``num_threads``: CPU threads for Docling's models; ``None`` lets Docling read
+    ``DOCLING_NUM_THREADS`` / ``OMP_NUM_THREADS`` (default 4).
     """
 
     ocr: bool = False
@@ -35,6 +42,15 @@ class ParserOptions:
     artifacts_path: Path | None = None
     device: str = "cpu"
     document_timeout: float | None = None
+    queue_max_size: int | None = None
+    page_batch_size: int | None = None
+    num_threads: int | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("queue_max_size", "page_batch_size", "num_threads"):
+            value = getattr(self, name)
+            if value is not None and value < 1:
+                raise ValueError(f"{name} must be >= 1")
 
 
 @runtime_checkable

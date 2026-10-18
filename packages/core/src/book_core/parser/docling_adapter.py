@@ -24,6 +24,7 @@ import importlib.metadata
 import importlib.util
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 import pypdfium2  # type: ignore[import-untyped]  # no py.typed; used only here
 from docling.datamodel.accelerator_options import AcceleratorOptions
@@ -161,13 +162,24 @@ class DoclingParser:
         )
 
     def pipeline_options(self, ocr: bool) -> PdfPipelineOptions:
+        opts = self._options
+        accelerator: dict[str, Any] = {"device": opts.device}
+        if opts.num_threads is not None:
+            accelerator["num_threads"] = opts.num_threads
         options = PdfPipelineOptions(
             do_ocr=ocr,
-            do_table_structure=self._options.table_structure,
-            artifacts_path=self._options.artifacts_path,
-            accelerator_options=AcceleratorOptions(device=self._options.device),
-            document_timeout=self._options.document_timeout,
+            do_table_structure=opts.table_structure,
+            artifacts_path=opts.artifacts_path,
+            accelerator_options=AcceleratorOptions(**accelerator),
+            document_timeout=opts.document_timeout,
         )
+        # Bounded in-flight pages: memory stays flat in book length (threaded pipeline).
+        if opts.queue_max_size is not None:
+            options.queue_max_size = opts.queue_max_size
+        if opts.page_batch_size is not None:
+            options.layout_batch_size = opts.page_batch_size
+            options.table_batch_size = opts.page_batch_size
+            options.ocr_batch_size = opts.page_batch_size
         if ocr:
             options.ocr_options = RapidOcrOptions(lang=[self._options.ocr_lang])
         return options

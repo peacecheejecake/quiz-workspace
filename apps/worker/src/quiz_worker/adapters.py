@@ -196,6 +196,8 @@ def parser_options(settings: WorkerSettings) -> ParserOptions:
         artifacts_path=Path(artifacts) if artifacts else None,
         device="cpu",
         document_timeout=settings.parse_timeout_seconds,
+        queue_max_size=settings.parse_queue_max_size,
+        page_batch_size=settings.parse_page_batch_size,
     )
 
 

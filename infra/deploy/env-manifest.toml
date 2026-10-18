@@ -609,6 +609,22 @@ provider = "default"
 note = "1200 (below the soft time limit)"
 
 [[var]]
+name = "WORKER_PARSE_QUEUE_MAX_SIZE"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "8; Docling pages in flight between stages (Docling's own 100 grows memory with book length)"
+
+[[var]]
+name = "WORKER_PARSE_PAGE_BATCH_SIZE"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "4; pages per Docling layout/table batch (<= WORKER_PARSE_QUEUE_MAX_SIZE)"
+
+[[var]]
 name = "WORKER_DOCUMENT_LOCK_WAIT_SECONDS"
 services = ["worker"]
 kind = "config"
