@@ -37,6 +37,16 @@ const CHLORINE_EN = block(EN, 'ch2-s2-p2');
 const CHLORINE_PAGE = CHLORINE_EN.parts[0]?.page ?? 0;
 const HANGUL = /[가-힣]/;
 const RANDOM_ID = '00000000-0000-4000-8000-000000000000';
+// APP_ENV=test only: a query containing this marker makes the API's query embedder fail like an
+// unavailable hosted embedder (quiz_api.search_engine, M7.4b), deterministically.
+const EMBEDDING_FAILURE_MARKER = 'E2E-FAIL-EMBEDDING';
+const DEGRADED_NOTICE =
+  /의미 검색을 일시적으로 사용할 수 없어 키워드 결과만|semantic search is temporarily unavailable/i;
+
+interface SearchEnvelope {
+  readonly degraded: readonly string[];
+  readonly items: readonly (SearchItem & { readonly score_type: string })[];
+}
 
 test(
   'SEARCH-01-AC01 a Korean question over an English book shows the related English text and its PDF page',
@@ -239,5 +249,60 @@ test(
     const res = await page.goto(`/workspaces/${ws.id}/search`);
     expect(res?.status()).toBe(404);
     await expect(notFoundHeading(page)).toBeVisible();
+  },
+);
+
+test(
+  'SEARCH-01-AC06 when query embedding is unavailable, search falls back to keyword results with a non-blocking notice',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac06');
+    const ws = await workspaceFactory.create(owner);
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-en');
+    const run = (query: string, mode: 'semantic' | 'hybrid') =>
+      owner.api.ok<SearchEnvelope>('POST', `/workspaces/${ws.id}/search`, { query, mode }, [200]);
+
+    // Control: the dense side works, so hybrid fuses both lists and nothing is degraded.
+    const healthy = await run('chlorine', 'hybrid');
+    expect(healthy.degraded).toEqual([]);
+    expect(healthy.items.length).toBeGreaterThan(0);
+    expect(healthy.items.every((h) => h.score_type === 'rrf')).toBe(true);
+
+    // Dense unavailable: 200 with BM25 hits only, flagged as degraded, in both dense modes.
+    const failing = `chlorine ${EMBEDDING_FAILURE_MARKER}`;
+    for (const mode of ['hybrid', 'semantic'] as const) {
+      const degraded = await run(failing, mode);
+      expect(degraded.degraded, mode).toEqual(['dense_unavailable']);
+      expect(degraded.items.length, mode).toBeGreaterThan(0);
+      expect(
+        degraded.items.every((h) => h.score_type === 'bm25' && h.document_id === documentId),
+        mode,
+      ).toBe(true);
+      expect(
+        degraded.items.some((h) => /chlorine/i.test(h.text)),
+        mode,
+      ).toBe(true);
+    }
+
+    await signInAs(page, owner.user);
+    await page.goto(`/workspaces/${ws.id}/search`);
+    await runSearch(page, failing, 'hybrid');
+    const items = searchUi.resultItems(page);
+    await expect(items.first()).toBeVisible();
+    const notice = page.getByRole('main').getByRole('status').filter({ hasText: DEGRADED_NOTICE });
+    await expect(notice).toBeVisible();
+    // Non-blocking: the results stay usable next to the notice.
+    await items
+      .filter({ hasText: /chlorine/i })
+      .first()
+      .getByRole('button')
+      .first()
+      .click();
+    await expect(searchUi.excerptPanel(page)).toBeVisible();
+
+    // The notice belongs to the degraded answer only.
+    await runSearch(page, 'chlorine', 'hybrid');
+    await expect(items.first()).toBeVisible();
+    await expect(page.getByRole('main')).not.toContainText(DEGRADED_NOTICE);
   },
 );

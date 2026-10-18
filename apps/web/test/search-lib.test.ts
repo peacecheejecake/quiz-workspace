@@ -13,6 +13,7 @@ import {
 import { segmentHighlights } from '../src/lib/search/highlight';
 import { jumpProbe, pickJumpBlock, resolveJumpTarget } from '../src/lib/search/jump';
 import {
+  degradedMessages,
   parseSearchParams,
   pdfLinkFor,
   rateLimitMessage,
@@ -224,6 +225,15 @@ describe('search address-bar state', () => {
       expect.stringContaining('의미 검색'),
     ]);
     expect(rateLimitMessage(7)).toContain('7초');
+  });
+
+  it('SEARCH-01-AC06 maps degraded codes to the non-blocking notice, dropping unknown ones', () => {
+    expect(degradedMessages(['dense_unavailable', 'dense_unavailable', 'later_code'])).toEqual([
+      '의미 검색을 일시적으로 사용할 수 없어 키워드 결과만 표시합니다.',
+    ]);
+    expect(degradedMessages([])).toEqual([]);
+    // Older API responses without the field.
+    expect(degradedMessages(undefined)).toEqual([]);
   });
 });
 

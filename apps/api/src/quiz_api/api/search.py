@@ -25,6 +25,11 @@ bbox) and a paragraph-complete excerpt of that revision (`book_core.search.Excer
 highlight spans for the matched passage and the query terms. Scores are reported as their type
 (`bm25`, `cosine`, `rrf`); no reranker in interactive search (implementation-plan §7).
 
+Dense side unavailable (the query embedder failed: hosted Workers AI rate-limited, out of quota,
+down or timed out): `semantic`/`hybrid` answer 200 with keyword (BM25) hits and
+`degraded: ["dense_unavailable"]` (SEARCH-01-AC06); `SearchService` logs a WARNING without the
+query. Qdrant failures stay 503.
+
 Rate limit: per user, in-process token bucket (`SEARCH_RATE_LIMIT_PER_MINUTE`, `SEARCH_RATE_BURST`;
 a stopgap, see `quiz_api.rate_limit`): 429 with `Retry-After`. Index unreachable: 503. Responses
 are `Cache-Control: no-store` like every /api/v1 response. The query is never logged.
@@ -50,6 +55,7 @@ from book_core.contracts import (
 from book_core.indexing import IndexStoreError, SearchScope
 from book_core.search import (
     DEFAULT_MAX_QUERY_CHARS,
+    DEGRADED_DENSE_UNAVAILABLE,
     ExcerptError,
     ExcerptResolver,
     InvalidQueryError,
@@ -180,6 +186,11 @@ class SearchResponse(BaseModel):
     query_language: str | None = Field(description="Script hint: `ko`, `en`, `mixed` or null.")
     truncated: bool = Field(description="The query was cut to the maximum length.")
     warnings: list[str]
+    degraded: list[Literal["dense_unavailable"]] = Field(
+        default_factory=list,
+        description="Degradations of this answer (SEARCH-01-AC06). `dense_unavailable`: the query "
+        "could not be embedded, so `semantic`/`hybrid` returned keyword (BM25) results only.",
+    )
     items: list[SearchItem]
 
 
@@ -614,6 +625,7 @@ def run_search(
         query_language=result.query_language,
         truncated=result.truncated,
         warnings=[*warnings, *result.warnings],
+        degraded=["dense_unavailable"] if DEGRADED_DENSE_UNAVAILABLE in result.degraded else [],
         items=items,
     )
 

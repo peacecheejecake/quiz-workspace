@@ -13,6 +13,8 @@
 #   check      value rule applied by the checker (see scripts/check_env.py CHECKS)
 #   same       true = identical value on every service listed (compared by digest)
 #   requires   another variable that must be set whenever this one is
+#   required_when  "NAME=value": required whenever NAME has that value (M7.4b)
+#   never_on   services where setting it is an error (server-only values kept off web)
 #   provider   who produces the value
 #   note       short reason / default
 
@@ -353,10 +355,48 @@ note = "300"
 name = "WORKER_EMBEDDER"
 services = ["api", "worker"]
 kind = "config"
-check = "not_fake"
+check = "embedder_mode"
 same = true
+provider = "operator: workers_ai on staging/production (M7.4b; the default API image has no local model)"
+note = "auto/qwen3 = local Qwen3-Embedding (API image built with API_EXTRAS=models), workers_ai = Cloudflare Workers AI; fake is refused"
+
+[[var]]
+name = "CLOUDFLARE_ACCOUNT_ID"
+services = ["api", "worker"]
+kind = "config"
+check = "cloudflare_account_id"
+same = true
+required_when = "WORKER_EMBEDDER=workers_ai"
+never_on = ["web"]
+provider = "Cloudflare dashboard → Workers & Pages → Account details (Account ID)"
+note = "Workers AI REST path; not secret, but kept out of the repository and web"
+
+[[var]]
+name = "CLOUDFLARE_API_TOKEN"
+services = ["api", "worker"]
+kind = "secret"
+check = "nonempty"
+same = true
+required_when = "WORKER_EMBEDDER=workers_ai"
+never_on = ["web"]
+provider = "Cloudflare → My Profile → API Tokens → custom token with Workers AI permission only"
+note = "server-only Bearer token for Workers AI embeddings (book text chunks and queries)"
+
+[[var]]
+name = "CLOUDFLARE_AI_BATCH_SIZE"
+services = ["api", "worker"]
+kind = "config"
+check = "number"
 provider = "default"
-note = "auto (Qwen3-Embedding); fake is refused outside local/test"
+note = "16 documents per Workers AI request"
+
+[[var]]
+name = "CLOUDFLARE_AI_TIMEOUT_SECONDS"
+services = ["api", "worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "per request: api 5 (then BM25 fallback), worker 30"
 
 [[var]]
 name = "WORKER_MODELS_OFFLINE"

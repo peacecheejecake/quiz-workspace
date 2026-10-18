@@ -166,6 +166,10 @@ class SharedSearchResponse(BaseModel):
     query_language: str | None = Field(description="Script hint: `ko`, `en`, `mixed` or null.")
     truncated: bool = Field(description="The query was cut to the maximum length.")
     warnings: list[str]
+    degraded: list[Literal["dense_unavailable"]] = Field(
+        default_factory=list,
+        description="As in `SearchResponse`: `dense_unavailable` = keyword (BM25) results only.",
+    )
     items: list[SearchItem]
 
 

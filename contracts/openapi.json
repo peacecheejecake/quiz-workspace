@@ -4949,6 +4949,15 @@
       },
       "SearchResponse": {
         "properties": {
+          "degraded": {
+            "description": "Degradations of this answer (SEARCH-01-AC06). `dense_unavailable`: the query could not be embedded, so `semantic`/`hybrid` returned keyword (BM25) results only.",
+            "items": {
+              "const": "dense_unavailable",
+              "type": "string"
+            },
+            "title": "Degraded",
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/SearchItem"
@@ -5444,6 +5453,15 @@
       },
       "SharedSearchResponse": {
         "properties": {
+          "degraded": {
+            "description": "As in `SearchResponse`: `dense_unavailable` = keyword (BM25) results only.",
+            "items": {
+              "const": "dense_unavailable",
+              "type": "string"
+            },
+            "title": "Degraded",
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/SearchItem"

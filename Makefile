@@ -25,9 +25,9 @@ SUPABASE := pnpm exec supabase
 SIGNING_KEYS := supabase/signing_keys.json
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
-	test test-ts test-py test-infra test-models test-llm eval eval-models auth-keys infra-up infra-down infra-status infra-reset \
+	test test-ts test-py test-infra test-models test-llm test-workers-ai eval eval-models eval-workers-ai auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
-	e2e e2e-browsers e2e-trace test-red images image-api image-worker image-web reindex backup restore \
+	e2e e2e-browsers e2e-trace test-red images image-api image-api-models image-worker image-web reindex backup restore \
 	check-env smoke-local smoke-staging
 
 help: ## List targets
@@ -80,10 +80,11 @@ test-ts:
 
 # pytest exits 5 when no tests were collected; that is the only non-zero code tolerated.
 # Tests marked `infra` skip (with a reason, listed by -ra) when the local stack is not running.
-# Tests marked `models` (real model weights) or `llm` (real LLM provider) never run here; see
-# `make test-models` / `make test-llm`.
+# Tests marked `models` (real model weights), `llm` (real LLM provider) or `workers_ai` (real
+# Cloudflare Workers AI) never run here; see `make test-models` / `make test-llm` /
+# `make test-workers-ai`.
 test-py:
-	@rc=0; uv run pytest -m "not infra and not models and not llm" || rc=$$?; \
+	@rc=0; uv run pytest -m "not infra and not models and not llm and not workers_ai" || rc=$$?; \
 	if [ $$rc -eq 5 ]; then echo "pytest: no tests collected yet; ok"; exit 0; fi; \
 	exit $$rc
 
@@ -106,6 +107,12 @@ test-models: ## Tests on real model weights (downloads into HF_HOME on first run
 test-llm: ## Tests against the real LLM provider (needs LLM_API_KEY, LLM_MODEL)
 	uv run pytest -m llm
 
+# Real Cloudflare Workers AI calls (M7.4b; opt-in, uses the account's daily neuron quota). Needs
+# CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN; fails, never skips, without them. The parity test
+# also loads the local Qwen3-Embedding weights (HF_HOME). Sends only synthetic text.
+test-workers-ai: ## Workers AI round trip + parity with local Qwen3 (needs CLOUDFLARE_ACCOUNT_ID/_API_TOKEN)
+	uv run pytest -m workers_ai
+
 # Retrieval evaluation (M2.6) on the KO/EN seed set: JSON + Markdown reports in eval/reports/
 # (gitignored except the committed sample-* report). `eval` uses the deterministic fakes and runs
 # offline in seconds; `eval-models` uses Qwen3-Embedding (MRL 256) + Qwen3-Reranker on CPU
@@ -119,6 +126,13 @@ eval: ## Retrieval evaluation with fake models (fast, offline) -> eval/reports/s
 eval-models: ## Retrieval evaluation with Qwen3 embedder + reranker -> eval/reports/seed-qwen3.{json,md}
 	uv run core eval $(EVAL_DATASET) --config eval/configs/models.json \
 		-o eval/reports/seed-qwen3.json --markdown eval/reports/seed-qwen3.md
+
+# Hosted embedder (M7.4b): Cloudflare Workers AI Qwen3-Embedding (1024 dims, no reranker, like
+# staging/production). Needs CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN; sends the synthetic
+# seed books (tests/fixtures/pdfs) to Cloudflare. First staging deploy only (runbook §3).
+eval-workers-ai: ## Retrieval evaluation with the Workers AI embedder -> eval/reports/seed-workers-ai.{json,md}
+	uv run core eval $(EVAL_DATASET) --config eval/configs/workers-ai.json \
+		-o eval/reports/seed-workers-ai.json --markdown eval/reports/seed-workers-ai.md
 
 auth-keys: $(SIGNING_KEYS) ## Generate the local Auth JWT signing key if missing (idempotent)
 
@@ -191,8 +205,11 @@ WEB_ARGS ?= --build-arg NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 \
 
 images: image-api image-worker image-web ## Build the api/worker/web container images (local tags)
 
-image-api:
+image-api: ## API image without local models (hosted Workers AI query embedder, M7.4b)
 	docker build -f apps/api/Dockerfile -t quiz-api:$(IMAGE_TAG) .
+
+image-api-models: ## API image with local Qwen3 (torch + transformers) for eval/nightly/self-hosting
+	docker build -f apps/api/Dockerfile --build-arg API_EXTRAS=models -t quiz-api-models:$(IMAGE_TAG) .
 
 image-worker:
 	docker build -f apps/worker/Dockerfile -t quiz-worker:$(IMAGE_TAG) .

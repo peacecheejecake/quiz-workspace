@@ -222,6 +222,19 @@ test(
     await runSearch(page, 'zqxjv-없는-검색어-0000', 'keyword');
     await expect(searchUi.emptyState(page)).toBeVisible();
     await expectAccessible(page, 'search no results');
+    // SEARCH-01-AC06 degraded state: keyword results + the "dense unavailable" status notice
+    // (APP_ENV=test query-embedding failure marker). Fresh page: a mode switch re-runs the last
+    // search, and Enter does not submit while that request keeps the submit button busy.
+    await page.goto(`/workspaces/${ws.id}/search`);
+    await runSearch(page, `${snippet(target.text, 10)} E2E-FAIL-EMBEDDING`, 'hybrid');
+    await expect(searchUi.resultItems(page).first()).toBeVisible();
+    await expect(
+      page
+        .getByRole('main')
+        .getByRole('status')
+        .filter({ hasText: /의미 검색을 일시적으로/ }),
+    ).toBeVisible();
+    await expectAccessible(page, 'search degraded to keyword results');
   },
 );
 

@@ -23,7 +23,7 @@
 |---|---|
 | PDF parser / OCR | Docling, 필요 시 OCR fallback |
 | Chunking | Docling HybridChunker + 커스텀 hierarchical parent/child |
-| Dense embedding | Qwen3-Embedding-0.6B (성능 평가 후 교체 가능) |
+| Dense embedding | Qwen3-Embedding-0.6B (성능 평가 후 교체 가능). 실행 위치는 `WORKER_EMBEDDER`로 선택(API·worker 같은 값): `qwen3` = 프로세스 내 CPU(transformers, 로컬·eval·nightly), `workers_ai` = Cloudflare Workers AI `@cf/qwen/qwen3-embedding-0.6b`(1024차원, staging/production; M7.4b). 두 실행 위치의 vector는 섞지 않는다: `model_name`이 달라 Qdrant 물리 collection이 분리되고, 전환은 새 collection 재구축 + alias 전환(`make reindex`) |
 | Lexical / sparse search | Qdrant BM25, 다국어 토크나이징 평가 |
 | Vector store / fusion | Qdrant, dense + sparse, RRF |
 | Reranker | Qwen3-Reranker-0.6B (CPU 지연 측정 후 운영 모드 구성) |
@@ -85,6 +85,8 @@ CLI: `core parse`, `core chunk`, `core index`, `core search`, `core excerpt`, `c
 - `ExcerptResolver`: chunk와 별개로 문단 경계를 기준으로 전후 문맥을 복원하고 source bbox·page 제공.
 - KO→KO, KO→EN, EN→KO, EN→EN 별도 평가. 초기에는 강제 번역 없이 multilingual embedding; 필요하면 query translation 후속.
 - PDF text edit 후 stale revision이 검색 결과로 노출되지 않도록 published-revision 필터를 서버에서 강제한다.
+- Dense 불가 시 저하(M7.4b, SEARCH-01-AC06): query embedding이 `EmbeddingUnavailableError`(hosted embedder 429·5xx·timeout·quota)로 실패하면 `hybrid`/`semantic` 검색은 503 대신 BM25 후보만으로 결과를 내고 응답에 `degraded: ["dense_unavailable"]`을 담는다. UI는 비차단 안내를 표시하고 서버는 검색어 없이 WARNING만 남긴다. Qdrant 장애는 계속 503.
+- 색인 쪽(worker)은 저하하지 않는다: 한 chunk라도 embedding이 실패하면 revision을 발행하지 않고(이전 published revision 유지) job을 재시도 가능한 오류(`embedding_quota_exceeded` / `embedding_unavailable`)로 backoff 재시도한다. 이미 쓴 point는 재시도 때 재사용되며, 모든 child chunk가 embedding된 뒤에만 READY.
 
 ## 5. Workspace/Document/Question 도메인
 

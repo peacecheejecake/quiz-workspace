@@ -10,6 +10,14 @@ Production (`APP_ENV` local/preview/production with `auto`): Docling on CPU and 
   contains `INDEX_FAILURE_MARKER` makes indexing fail (non-retryable), so DOC-02-AC04 can fail a
   reindex deterministically. The wrapper is installed only in APP_ENV=test.
 
+`WORKER_EMBEDDER=workers_ai` (staging/production, M7.4b) embeds on Cloudflare Workers AI. Every
+embedder is wrapped in `JobErrorEmbedder`, which turns the adapters' `EmbeddingUnavailableError`s
+from document embedding into job errors with a stable code: `embedding_quota_exceeded` /
+`embedding_unavailable` (retryable, job backoff) and `embedding_not_configured` /
+`embedding_invalid_response` (fail). Indexing writes vectors before the publish transaction, so a
+failed batch leaves the revision a draft (the previous published revision stays live) and the retry
+embeds only the chunks still missing. Query embedding is left as is: search degrades to BM25.
+
 Heavy imports (Docling, torch) happen only when the adapter is first used.
 """
 
@@ -20,11 +28,21 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from book_core.contracts import ParsedDocument
-from book_core.embedding import Embedder, select_embedder, uses_fake_embedder
+from book_core.embedding import (
+    Embedder,
+    EmbedderMode,
+    EmbeddingAuthError,
+    EmbeddingQuotaExceededError,
+    EmbeddingResponseError,
+    EmbeddingUnavailableError,
+    select_embedder,
+    uses_fake_embedder,
+)
+from book_core.embedding.workers_ai import workers_ai_config
 from book_core.indexing import CollectionNames, QdrantIndexStore
 from book_core.parser import FakeParser, ParserOptions, PdfParser, sha256_hex
 
-from quiz_worker.errors import NonRetryableJobError
+from quiz_worker.errors import JobError, NonRetryableJobError
 from quiz_worker.settings import ParserMode, WorkerSettings
 
 INDEX_FAILURE_MARKER = "E2E-FAIL-INDEXING"
@@ -37,6 +55,63 @@ class WorkerNotConfiguredError(NonRetryableJobError):
 
 class IndexingFailedError(NonRetryableJobError):
     code = "indexing_failed"
+
+
+class EmbeddingQuotaExceededJobError(JobError):
+    code = "embedding_quota_exceeded"
+
+
+class EmbeddingUnavailableJobError(JobError):
+    code = "embedding_unavailable"
+
+
+class EmbeddingNotConfiguredJobError(NonRetryableJobError):
+    code = "embedding_not_configured"
+
+
+class EmbeddingInvalidResponseJobError(NonRetryableJobError):
+    code = "embedding_invalid_response"
+
+
+def embedding_job_error(exc: EmbeddingUnavailableError) -> JobError:
+    """The job error for an embedder failure. The adapters write their messages from status codes
+    and counts only (never input text or credentials), so the message is kept."""
+    message = str(exc)
+    if isinstance(exc, EmbeddingAuthError):
+        return EmbeddingNotConfiguredJobError(message)
+    if isinstance(exc, EmbeddingResponseError):
+        return EmbeddingInvalidResponseJobError(message)
+    if isinstance(exc, EmbeddingQuotaExceededError):
+        return EmbeddingQuotaExceededJobError(message)
+    return EmbeddingUnavailableJobError(message)
+
+
+class JobErrorEmbedder:
+    """`Embedder` whose document-embedding failures are job errors (see the module docstring)."""
+
+    def __init__(self, inner: Embedder) -> None:
+        self.inner = inner
+
+    @property
+    def model_name(self) -> str:
+        return self.inner.model_name
+
+    @property
+    def dimension(self) -> int:
+        return self.inner.dimension
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        try:
+            return self.inner.embed_documents(texts)
+        except EmbeddingUnavailableError as exc:
+            raise embedding_job_error(exc) from None
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.inner.embed_query(text)
+
+
+def wrap_embedding_errors(embedder: Embedder) -> JobErrorEmbedder:
+    return JobErrorEmbedder(embedder)
 
 
 class FailureInjectingEmbedder:
@@ -146,16 +221,37 @@ def build_parser(settings: WorkerSettings) -> PdfParser:
 
 def build_embedder(settings: WorkerSettings) -> Embedder:
     # Shared with the API's query embedder (book_core.embedding.select_embedder).
-    if not uses_fake_embedder(settings.embedder.value, test_env=settings.is_test):
+    mode = EmbedderMode(settings.embedder.value)
+    hosted = None
+    if mode is EmbedderMode.WORKERS_AI:
+        token = settings.cloudflare_api_token
+        try:
+            hosted = workers_ai_config(
+                settings.cloudflare_account_id,
+                token.get_secret_value() if token else None,
+                batch_size=settings.cloudflare_ai_batch_size,
+                timeout_seconds=settings.cloudflare_ai_timeout_seconds,
+            )
+        except ValueError:
+            raise WorkerNotConfiguredError(
+                "CLOUDFLARE_ACCOUNT_ID is not a valid account id"
+            ) from None
+        if hosted is None:
+            raise WorkerNotConfiguredError(
+                "WORKER_EMBEDDER=workers_ai needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN"
+            )
+    elif not uses_fake_embedder(mode, test_env=settings.is_test):
         _prepare_offline(settings)
     embedder = select_embedder(
-        settings.embedder.value,
+        mode,
         test_env=settings.is_test,
         local_files_only=settings.models_offline,
+        workers_ai=hosted,
     )
+    wrapped: Embedder = JobErrorEmbedder(embedder)
     if settings.is_test:
-        embedder = FailureInjectingEmbedder(embedder)
-    return embedder
+        wrapped = FailureInjectingEmbedder(wrapped)
+    return wrapped
 
 
 def build_index_store(settings: WorkerSettings) -> QdrantIndexStore:

@@ -11,9 +11,16 @@ from functools import lru_cache
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
-from book_core.embedding.factory import EmbedderMode
+from book_core.embedding.factory import EmbedderMode, uses_local_model
 from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+
+def _has_model_runtime() -> bool:
+    """Whether torch + transformers are installed (the `models` extra; slim images drop it)."""
+    import importlib.util
+
+    return all(importlib.util.find_spec(name) is not None for name in ("torch", "transformers"))
 
 
 class Environment(StrEnum):
@@ -209,6 +216,22 @@ class Settings(BaseSettings):
         default=EmbedderMode.AUTO, validation_alias="WORKER_EMBEDDER"
     )
     search_models_offline: bool = Field(default=False, validation_alias="WORKER_MODELS_OFFLINE")
+    # WORKER_EMBEDDER=workers_ai (M7.4b): the query embedder runs on Cloudflare Workers AI with the
+    # worker's credentials (same model key). The token is server-only; never on the web service.
+    cloudflare_account_id: str | None = Field(
+        default=None, validation_alias="CLOUDFLARE_ACCOUNT_ID"
+    )
+    cloudflare_api_token: SecretStr | None = Field(
+        default=None, validation_alias="CLOUDFLARE_API_TOKEN"
+    )
+    cloudflare_ai_batch_size: int = Field(
+        default=16, ge=1, le=100, validation_alias="CLOUDFLARE_AI_BATCH_SIZE"
+    )
+    # Interactive search waits at most this long per attempt (two attempts) for the query vector
+    # before it degrades to BM25 (SEARCH-01-AC06).
+    cloudflare_ai_timeout_seconds: float = Field(
+        default=5, gt=0, le=300, validation_alias="CLOUDFLARE_AI_TIMEOUT_SECONDS"
+    )
     # Per-user search rate limit (in-process token bucket, a stopgap until a shared limiter):
     # sustained requests per minute and the burst allowed on top. 0 disables it.
     search_rate_per_minute: int = Field(
@@ -271,6 +294,18 @@ class Settings(BaseSettings):
             problems.append("RELAY_CLIENT_SECRET must have at least 32 characters")
         if self.search_embedder is EmbedderMode.FAKE:
             problems.append("WORKER_EMBEDDER=fake is for local and test runs only")
+        if self.search_embedder is EmbedderMode.WORKERS_AI:
+            token = self.cloudflare_api_token
+            if not (self.cloudflare_account_id or "").strip():
+                problems.append("CLOUDFLARE_ACCOUNT_ID is required for WORKER_EMBEDDER=workers_ai")
+            if token is None or not token.get_secret_value().strip():
+                problems.append("CLOUDFLARE_API_TOKEN is required for WORKER_EMBEDDER=workers_ai")
+        elif uses_local_model(self.search_embedder, test_env=False) and not _has_model_runtime():
+            problems.append(
+                f"WORKER_EMBEDDER={self.search_embedder.value} embeds queries in-process but this "
+                "image has no torch/transformers: set WORKER_EMBEDDER=workers_ai or build the API "
+                "image with --build-arg API_EXTRAS=models"
+            )
         if problems:
             raise InsecureConfigurationError(
                 f"Refusing to start with APP_ENV={self.app_env.value}: " + "; ".join(problems)

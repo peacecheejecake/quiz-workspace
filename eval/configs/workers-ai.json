@@ -1,0 +1,13 @@
+{
+  "name": "seed-workers-ai",
+  "embedder": "workers_ai",
+  "embedding_dimension": 1024,
+  "reranker": "none",
+  "modes": ["keyword", "semantic", "hybrid"],
+  "rerank": ["off"],
+  "dense_candidates": 30,
+  "keyword_candidates": 30,
+  "rerank_top": 20,
+  "results": 10,
+  "rrf_k": 60
+}

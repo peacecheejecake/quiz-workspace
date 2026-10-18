@@ -5,7 +5,16 @@
 // published-revision scope. The submitted search is mirrored into the address bar so the back
 // button from the PDF viewer restores it. A newer request always wins: older ones are aborted
 // and their late answers ignored.
-import { Button, Checkbox, EmptyState, Input, PageHeader, RadioGroup, Select } from '@quiz/ui';
+import {
+  Badge,
+  Button,
+  Checkbox,
+  EmptyState,
+  Input,
+  PageHeader,
+  RadioGroup,
+  Select,
+} from '@quiz/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { loginRedirectPath } from '@/lib/auth/routes';
@@ -21,6 +30,7 @@ import {
   type SearchResponse,
 } from '@/lib/search/client';
 import {
+  degradedMessages,
   isSearchMode,
   MAX_QUERY_CHARS,
   MODE_LABELS,
@@ -309,6 +319,7 @@ export function SearchScreen({
         : null;
   const loading = results.status === 'loading';
   const guidance = response ? warningMessages(response.warnings) : [];
+  const degraded = response ? degradedMessages(response.degraded) : [];
 
   return (
     <div className={styles.screen} data-panel-open={panelOpen || undefined}>
@@ -407,6 +418,14 @@ export function SearchScreen({
             now={now}
             onRetry={() => submitted && void run(submitted)}
           />
+        ) : null}
+
+        {/* SEARCH-01-AC06: the dense side failed; keyword results stay usable below. */}
+        {degraded.length > 0 ? (
+          <p role="status" className={styles.degraded}>
+            <Badge tone="warning">키워드 결과</Badge>
+            <span>{degraded.join(' ')}</span>
+          </p>
         ) : null}
 
         {guidance.length > 0 && response && response.items.length > 0 ? (
