@@ -95,3 +95,9 @@ def test_no_secret_is_echoed() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
     for name in ("SUPABASE_DB_URL", "VERCEL_TOKEN", "RAILWAY_TOKEN", "SMOKE_USER_A_PASSWORD"):
         assert not re.search(rf"echo[^\n]*\${name}\b", text), name
+
+
+def test_production_is_gated_until_the_cost_gate() -> None:
+    step = _steps()[_index("Preflight")]
+    assert step["env"]["PRODUCTION_DEPLOY_ENABLED"] == "${{ vars.PRODUCTION_DEPLOY_ENABLED }}"
+    assert "PRODUCTION_DEPLOY_ENABLED:-} != true" in str(step["run"])

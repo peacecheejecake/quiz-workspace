@@ -8,6 +8,10 @@
 #     → Vercel web (prebuilt; staging aliased to WEB_ORIGIN)
 #     → post-deploy smoke (staging: DEP-01/02/05/07 automated set; production: @readonly only)
 #
+# Staging first (user decision 2026-10-18, implementation-plan §7): production stays gated until
+# the staging 7-day load test / cost gate passes; the operator then sets the repository variable
+# PRODUCTION_DEPLOY_ENABLED=true. Until then a production dispatch fails in preflight.
+#
 # Everything comes from the GitHub Environment named by the `environment` input (staging /
 # production; production should require reviewers and allow only `main`). Names and owners:
 # infra/deploy/env-manifest.toml, services `deploy` and `smoke`. A missing value stops the run in
@@ -74,8 +78,13 @@ jobs:
       - name: Preflight (ref, required secrets and variables)
         env:
           REF: ${{ github.ref }}
+          PRODUCTION_DEPLOY_ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
         run: |
           set -euo pipefail
+          if [[ $TARGET == production && ${PRODUCTION_DEPLOY_ENABLED:-} != true ]]; then
+            echo '::error::production is gated until the staging load/cost gate (runbook §9); set PRODUCTION_DEPLOY_ENABLED=true'
+            exit 1
+          fi
           case "$TARGET/$REF" in
             production/refs/heads/main | staging/refs/heads/main | staging/refs/heads/develop) ;;
             *)

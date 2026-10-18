@@ -763,6 +763,15 @@ check = "semver"
 provider = "operator: exact vercel CLI release at least two weeks old (repository variable)"
 
 [[var]]
+name = "PRODUCTION_DEPLOY_ENABLED"
+services = ["deploy"]
+kind = "config"
+required = ["production"]
+check = "bool"
+provider = "operator: repository variable, true only after the staging 7-day load/cost gate"
+note = "gates production deploys (user decision 2026-10-18: staging first)"
+
+[[var]]
 name = "RAILWAY_TOKEN"
 services = ["deploy"]
 kind = "secret"
