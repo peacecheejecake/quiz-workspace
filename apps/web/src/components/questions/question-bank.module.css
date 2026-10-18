@@ -238,21 +238,9 @@
   color: var(--color-success);
 }
 
+/* Toggle styling (off: no border/fill, on: selected fill + weight) comes from the Button kit. */
 .revisionButton {
-  min-height: 32px;
   padding: 0 var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font: inherit;
-  font-size: var(--font-size-label);
-  cursor: pointer;
-}
-
-.revisionButton[aria-pressed='true'] {
-  border-color: var(--color-accent);
-  font-weight: var(--font-weight-semibold);
 }
 
 .revisionPreview {

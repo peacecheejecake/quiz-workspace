@@ -358,6 +358,7 @@ export function SearchScreen({
           }))}
           value={mode}
           onValueChange={onModeChange}
+          optionDescriptions="tooltip"
         />
 
         <div className={styles.filters}>

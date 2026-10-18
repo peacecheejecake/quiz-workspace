@@ -520,7 +520,6 @@ export function QuestionsOverview({
             size="sm"
             aria-pressed={view.status.includes(status)}
             data-status={status}
-            className={styles.chip}
             onClick={() => toggleStatus(status)}
           >
             <span className={styles.swatch} data-status={status} aria-hidden="true" />
@@ -530,7 +529,6 @@ export function QuestionsOverview({
         <Button
           size="sm"
           aria-pressed={view.favorite === true}
-          className={styles.chip}
           onClick={() => navigate({ favorite: view.favorite === true ? null : true })}
         >
           즐겨찾기만
@@ -538,7 +536,6 @@ export function QuestionsOverview({
         <Button
           size="sm"
           aria-pressed={view.retry === true}
-          className={styles.chip}
           onClick={() => navigate({ retry: view.retry === true ? null : true })}
         >
           다시 풀기만

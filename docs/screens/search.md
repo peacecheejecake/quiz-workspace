@@ -9,6 +9,7 @@
 - Dense / BM25 / Hybrid·RRF와 Reranker를 선택할 수 있는 검색 옵션을 제공한다. 검색 API는 server-side workspace filters와 SourceLocation(페이지·block ID·revision)을 반환한다.
 - API와 화면은 owner / viewer / 로그인 상태에 따라 기능과 데이터 표시 범위를 구분한다.
 - 모든 편집·상태 변경은 서버 측 인가·revision 일관성을 검증한다.
+- "검색 방식"(키워드/의미/하이브리드) 선택지의 설명은 Tooltip으로 보여 준다(hover·키보드 focus, `aria-describedby` 유지, hover 없는 기기는 인라인; UX1 2026-10-19, design-system.md §4.1).
 - query embedding을 쓸 수 없으면 키워드(BM25) 결과로 계속 검색하고 비차단 안내를 표시한다(AC06).
 
 ## 수용 기준

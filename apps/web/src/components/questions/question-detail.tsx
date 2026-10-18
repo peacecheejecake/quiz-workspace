@@ -191,15 +191,15 @@ function DetailBody({
               const pressed = (selected ?? detail.revision.id) === r.id;
               return (
                 <li key={r.id}>
-                  <button
-                    type="button"
-                    className={`${styles.revisionButton} qz-focus-ring`}
+                  <Button
+                    size="sm"
+                    className={styles.revisionButton}
                     aria-pressed={pressed}
                     onClick={() => void showRevision(r.id)}
                   >
                     버전 {r.version}
                     {active ? ' (현재)' : ''} · {formatDateTime(r.created_at)}
-                  </button>
+                  </Button>
                 </li>
               );
             })}
