@@ -1,6 +1,6 @@
-# Design System v1.1 — Minimal Glass (Platform v1.2)
+# Design System v1.2 — Minimal Glass (Platform v1.2)
 
-**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16  
+**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19  
 **적용:** 전역 Workspace UI, 문서 뷰어, 검색, Questions heatmap, floating side panels  
 **키워드:** minimalism, restrained glassmorphism, readability, focus, consistent semantics
 
@@ -37,10 +37,11 @@
 | `--color-surface-muted` | `#F0F3F7` | subtle group |
 | `--color-text-primary` | `#172033` | 기본 텍스트 |
 | `--color-text-secondary` | `#636D82` | 보조 텍스트(surface-muted 위에서도 4.5:1 이상) |
-| `--color-border` | `#DEE3EB` | 표면·필드 경계 |
+| `--color-border` | `#E6E9EF` | 표면 경계·구분선(장식용, 필수 경계는 `--color-border-strong`) |
 | `--color-accent` | `#5268D8` | primary action, navigation |
 | `--color-focus` | `#356CFF` | focus outline |
-| `--color-glass` | `rgba(255,255,255,.78)` | floating glass surface |
+| `--color-glass` | `rgba(246,248,252,.9)` | floating glass surface(아주 옅은 tint) |
+| `--color-glass-solid` | `#F6F8FC` | glass의 불투명 대응색(reduced transparency·blur 미지원 fallback, 모바일 sheet) |
 | `--color-glass-stroke` | `rgba(255,255,255,.66)` | inset/translucent border |
 | `--question-status-unseen` | `#D9DEE5` | 보지 않은 문제 |
 | `--question-status-viewed` | `#858E9B` | 보기만 한 문제 |
@@ -53,10 +54,15 @@
 | `--color-success` | `#1E7A52` | 성공 피드백(텍스트 대비 4.5:1 이상) |
 | `--color-warning` | `#8F5F00` | 경고 피드백(텍스트 대비 4.5:1 이상) |
 | `--color-scrim` | `rgba(247,248,250,.64)` | modal·drawer backdrop |
+| `--color-state-hover` | `#ECEFF4` | 버튼·메뉴 항목·탭 hover 배경 |
+| `--color-state-pressed` | `#E3E7EE` | 누르는 동안(`:active`) 배경 |
+| `--color-state-selected` | `#E4E9FB` | 선택·켜짐 상태(`aria-pressed="true"`, `data-state="on"`) 배경 — hover와 다른 accent tint |
 
 **v1.1.1 추가:** `--color-border-strong`, `--color-on-accent`, `--color-danger`/`success`/`warning`, `--color-scrim`, typography scale(`--font-size-*`, `--line-height-*`, `--font-weight-*`), breakpoint(`--breakpoint-*`). feedback 색은 question-status 토큰을 재사용하지 않으며(의미가 다름), canvas·surface 위 텍스트로 4.5:1 이상을 만족한다.
 
 **v1.1.2 (M7.2):** `--color-text-secondary` light `#667085` → `#636D82`. 보조 텍스트가 선택·현재 항목, 메타 정보 등 `--color-surface-muted` 위에도 쓰여 4.47:1로 AA에 미달했다(axe 전 화면 검사). 같은 색조로 4.67:1(muted)·4.89:1(canvas)·5.2:1(surface)을 만족한다. 앱은 별도 선택이 없으면 OS `prefers-color-scheme`을 따라 Dark token을 적용한다(`[data-theme]`가 있으면 그 값이 우선).
+
+**v1.2 (UX1, 2026-10-19 사용자 피드백):** glass는 더 불투명하게(light `.78`→`.9`, dark `.79`→`.9`), 순백 대신 아주 옅은 tint(`#F6F8FC` 계열)를 쓰고 불투명 fallback은 같은 색의 `--color-glass-solid`다. `--color-border`는 더 옅게(light `#DEE3EB`→`#E6E9EF`, dark `#364251`→`#2D3745`): 장식용 구분선 전용이며, 입력 필드·체크박스·라디오처럼 경계가 유일한 식별 수단인 컨트롤은 계속 `--color-border-strong`(3:1)을 쓴다. 상호작용 상태 배경 `--color-state-hover`/`-pressed`/`-selected`를 추가했다(§4.1). 대비: text-primary는 세 상태 배경 모두에서, text-secondary는 hover 배경에서 4.5:1 이상(`contrast.test.ts`).
 
 **상태 점은 기본 표면과 충분히 구분되도록** 최소 얇은 outline과 범례를 갖는다. 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
 
@@ -69,10 +75,11 @@
   --color-surface-muted: #27313E;
   --color-text-primary: #F2F5F9;
   --color-text-secondary: #ACB7C5;
-  --color-border: #364251;
+  --color-border: #2D3745;
   --color-accent: #8CA0FF;
   --color-focus: #A2B3FF;
-  --color-glass: rgba(27, 34, 45, 0.79);
+  --color-glass: rgba(30, 38, 51, 0.9);
+  --color-glass-solid: #1E2633;
   --color-glass-stroke: rgba(255,255,255,.12);
   --question-status-unseen: #4E5967;
   --question-status-viewed: #9EA7B4;
@@ -85,6 +92,9 @@
   --color-success: #4FCB92;
   --color-warning: #F2C14E;
   --color-scrim: rgba(17, 21, 29, 0.64);
+  --color-state-hover: #2A3442;
+  --color-state-pressed: #334051;
+  --color-state-selected: #2E3958;
 }
 ```
 
@@ -100,10 +110,11 @@
   --color-surface-muted: #F0F3F7;
   --color-text-primary: #172033;
   --color-text-secondary: #636D82;
-  --color-border: #DEE3EB;
+  --color-border: #E6E9EF;
   --color-accent: #5268D8;
   --color-focus: #356CFF;
-  --color-glass: rgba(255,255,255,.78);
+  --color-glass: rgba(246,248,252,.9);
+  --color-glass-solid: #F6F8FC;
   --color-glass-stroke: rgba(255,255,255,.66);
   --question-status-unseen: #D9DEE5;
   --question-status-viewed: #858E9B;
@@ -116,6 +127,9 @@
   --color-success: #1E7A52;
   --color-warning: #8F5F00;
   --color-scrim: rgba(247,248,250,.64);
+  --color-state-hover: #ECEFF4;
+  --color-state-pressed: #E3E7EE;
+  --color-state-selected: #E4E9FB;
 
   --font-sans: "Pretendard", "Inter", system-ui, -apple-system, sans-serif;
   --font-size-label-sm: 12px;
@@ -167,10 +181,10 @@
 
 /* 적은 투명도를 선호하거나 blur 지원이 없는 환경의 fallback */
 @supports not (backdrop-filter: blur(1px)) {
-  .glass-surface { background: var(--color-surface); }
+  .glass-surface { background: var(--color-glass-solid); }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .glass-surface { background: var(--color-surface); backdrop-filter: none; }
+  .glass-surface { background: var(--color-glass-solid); backdrop-filter: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
@@ -192,9 +206,18 @@
 | Content area | max-width 1440px, padding 24px(데스크톱) / 16px(모바일) |
 | Border radius | 기본 10px, 떠 있는 패널 16–20px |
 | Layering | 기본 카드 0–1, popover 20, side panel 40, modal 60, toast 70 |
-| Animation | panel enter/exit 약 180–240ms, transform+opacity, reduced-motion 대응 |
+| Animation | panel enter/exit 약 180–240ms, transform+opacity, reduced-motion 대응. 컴포넌트 상태 전환(hover·active·selected·focus 배경/색)은 `--duration-state`(120ms) `--easing-standard`로 전환하고, reduced-motion에서는 즉시 변경 |
 
 Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과를 과용하지 않는다. 기본 표면은 opaque white/dark surface다.
+
+### 4.1 상호작용 상태·경계 (v1.2, UX1)
+
+- **Hover와 선택은 다른 배경:** hover `--color-state-hover`(중립 회색), 누르는 동안 `--color-state-pressed`, 선택·켜짐(`aria-pressed="true"`, `data-state="on"`) `--color-state-selected`(accent tint) + 굵기·아이콘 변화. 선택 상태에만 생기는 테두리는 쓰지 않는다.
+- **Toggle 버튼:** 꺼진 상태에 테두리·배경이 없다(ghost). 켜짐은 배경 채움 + `aria-pressed`(또는 바뀌는 label) + 굵기/아이콘으로 전달하며 색만으로 구분하지 않는다. `Button`/`IconButton` primitive가 `aria-pressed`/`data-state`를 보고 처리하므로 기능 코드는 테두리·배경을 따로 지정하지 않는다.
+- **테두리 최소화:** Badge·tab 수 표시에는 테두리·원형 배경을 두지 않는다. 구분선은 1px `--color-border`. 2px는 오류 입력(`aria-invalid`)과 focus ring에만 쓴다. 입력 필드·체크박스·라디오·스위치 경계는 `--color-border-strong`을 유지한다.
+- **Focus:** `:focus-visible` ring(2px `--color-focus`)은 그대로이며, 메뉴·Select 항목의 ring도 키보드 focus(`:focus-visible`)에서만 그린다(pointer hover는 배경만).
+- **전환:** 상태 전환은 `--duration-state`/`--easing-standard`, `prefers-reduced-motion: reduce`에서는 즉시.
+- **메뉴·선택 항목 설명은 Tooltip:** 선택지 옆 설명 문구는 항상 보이는 텍스트 대신 공통 `Tooltip`(hover·키보드 focus)으로 보여 주고, 같은 문구를 숨김 텍스트로 `aria-describedby`에 연결한다. hover가 없는 기기(`(hover: none)`)에서는 설명을 인라인 텍스트로 계속 표시한다. 오답·정답 표시, 비활성 사유처럼 필수 정보는 tooltip으로 옮기지 않는다.
 
 ## 5. Floating Side Panel
 

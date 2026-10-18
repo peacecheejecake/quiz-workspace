@@ -103,3 +103,22 @@ export const RadioGroupStates: Story = {
     </div>
   ),
 };
+
+/**
+ * Option descriptions as tooltips (`optionDescriptions="tooltip"`): shown on hover and keyboard
+ * focus, linked by aria-describedby, inline on devices without hover (design-system.md §4.1).
+ */
+export const RadioGroupTooltipDescriptions: Story = {
+  render: () => (
+    <RadioGroup
+      label="검색 방식"
+      optionDescriptions="tooltip"
+      defaultValue="keyword"
+      options={[
+        { value: 'keyword', label: '키워드', description: '입력한 단어가 그대로 들어 있는 문단' },
+        { value: 'semantic', label: '의미', description: '뜻이 비슷한 문단' },
+        { value: 'hybrid', label: '하이브리드', description: '키워드와 의미 검색을 함께 사용' },
+      ]}
+    />
+  ),
+};

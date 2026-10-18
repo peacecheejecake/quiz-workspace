@@ -20,8 +20,10 @@ const meta = {
         component:
           'Text button. Variants: primary (one per view), secondary, ghost. Keyboard: Tab to ' +
           'focus (shared FocusRing), Enter/Space to activate. `loading` sets aria-busy and ' +
-          'disables the button. Tokens: --color-accent, --color-surface, --color-surface-muted, ' +
-          '--color-border, --color-focus, --radius-md.',
+          'disables the button. Hover, pressed and selected use different backgrounds ' +
+          '(--color-state-hover / -pressed / -selected); toggles (aria-pressed) have no border ' +
+          'or fill while off. Tokens: --color-accent, --color-surface, --color-state-*, ' +
+          '--color-border, --color-focus, --radius-md, --duration-state, --easing-standard.',
       },
     },
   },
@@ -62,6 +64,26 @@ export const AsLink: Story = {
 };
 
 export const Dark: Story = { ...Variants, globals: { theme: 'dark' } };
+
+/** Toggle buttons: off = no border/fill, on = selected fill + semibold, exposed as aria-pressed. */
+export const Toggles: Story = {
+  render: (args) => (
+    <div style={row}>
+      <Button {...args} size="sm" aria-pressed={false}>
+        꺼짐
+      </Button>
+      <Button {...args} size="sm" aria-pressed>
+        켜짐
+      </Button>
+      <Button {...args} size="sm" variant="ghost">
+        Ghost
+      </Button>
+    </div>
+  ),
+};
+
+export const TogglesHover: Story = { ...Toggles, parameters: { pseudo: { hover: true } } };
+export const TogglesDark: Story = { ...Toggles, globals: { theme: 'dark' } };
 
 export const IconButtons: StoryObj<typeof IconButton> = {
   render: () => (

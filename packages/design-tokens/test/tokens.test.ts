@@ -80,12 +80,13 @@ const genDark = declarations(cssBlock(css, /\[data-theme=["']dark["']\]/));
 
 describe('spec extraction (guards against a vacuous comparison)', () => {
   it('finds every color token of §3.1, §3.2 and the §3.3 :root example', () => {
-    // 15 v1.1 colors + 6 v1.1.1 additions (border-strong, on-accent, danger/success/warning, scrim).
-    expect(Object.keys(docLight)).toHaveLength(21);
-    expect(Object.keys(docDark)).toHaveLength(21);
-    // 21 colors + 23 font/space/radius/glass/shadow/layout/heatmap vars + 12 typography
+    // 15 v1.1 colors + 6 v1.1.1 additions (border-strong, on-accent, danger/success/warning, scrim)
+    // + 4 v1.2 additions (glass-solid, state-hover/pressed/selected).
+    expect(Object.keys(docLight)).toHaveLength(25);
+    expect(Object.keys(docDark)).toHaveLength(25);
+    // 25 colors + 23 font/space/radius/glass/shadow/layout/heatmap vars + 12 typography
     // + 2 breakpoints + color-scheme.
-    expect(Object.keys(docRoot)).toHaveLength(59);
+    expect(Object.keys(docRoot)).toHaveLength(63);
   });
 });
 

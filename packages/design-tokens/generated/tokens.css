@@ -6,10 +6,11 @@
   --color-surface-muted: #f0f3f7;
   --color-text-primary: #172033;
   --color-text-secondary: #636d82;
-  --color-border: #dee3eb;
+  --color-border: #e6e9ef;
   --color-accent: #5268d8;
   --color-focus: #356cff;
-  --color-glass: rgba(255, 255, 255, 0.78);
+  --color-glass: rgba(246, 248, 252, 0.9);
+  --color-glass-solid: #f6f8fc;
   --color-glass-stroke: rgba(255, 255, 255, 0.66);
   --color-border-strong: #7d8799;
   --color-on-accent: #ffffff;
@@ -17,6 +18,9 @@
   --color-success: #1e7a52;
   --color-warning: #8f5f00;
   --color-scrim: rgba(247, 248, 250, 0.64);
+  --color-state-hover: #eceff4;
+  --color-state-pressed: #e3e7ee;
+  --color-state-selected: #e4e9fb;
   --question-status-unseen: #d9dee5;
   --question-status-viewed: #858e9b;
   --question-status-incorrect: #e0525e;
@@ -69,6 +73,8 @@
   --duration-panel-enter: 240ms;
   --duration-panel-exit: 180ms;
   --duration-marker: 150ms;
+  --duration-state: 120ms;
+  --easing-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
 [data-theme='dark'] {
@@ -78,10 +84,11 @@
   --color-surface-muted: #27313e;
   --color-text-primary: #f2f5f9;
   --color-text-secondary: #acb7c5;
-  --color-border: #364251;
+  --color-border: #2d3745;
   --color-accent: #8ca0ff;
   --color-focus: #a2b3ff;
-  --color-glass: rgba(27, 34, 45, 0.79);
+  --color-glass: rgba(30, 38, 51, 0.9);
+  --color-glass-solid: #1e2633;
   --color-glass-stroke: rgba(255, 255, 255, 0.12);
   --color-border-strong: #7a8799;
   --color-on-accent: #11151d;
@@ -89,6 +96,9 @@
   --color-success: #4fcb92;
   --color-warning: #f2c14e;
   --color-scrim: rgba(17, 21, 29, 0.64);
+  --color-state-hover: #2a3442;
+  --color-state-pressed: #334051;
+  --color-state-selected: #2e3958;
   --question-status-unseen: #4e5967;
   --question-status-viewed: #9ea7b4;
   --question-status-incorrect: #f17b84;
@@ -103,10 +113,11 @@
   --color-surface-muted: #f0f3f7;
   --color-text-primary: #172033;
   --color-text-secondary: #636d82;
-  --color-border: #dee3eb;
+  --color-border: #e6e9ef;
   --color-accent: #5268d8;
   --color-focus: #356cff;
-  --color-glass: rgba(255, 255, 255, 0.78);
+  --color-glass: rgba(246, 248, 252, 0.9);
+  --color-glass-solid: #f6f8fc;
   --color-glass-stroke: rgba(255, 255, 255, 0.66);
   --color-border-strong: #7d8799;
   --color-on-accent: #ffffff;
@@ -114,6 +125,9 @@
   --color-success: #1e7a52;
   --color-warning: #8f5f00;
   --color-scrim: rgba(247, 248, 250, 0.64);
+  --color-state-hover: #eceff4;
+  --color-state-pressed: #e3e7ee;
+  --color-state-selected: #e4e9fb;
   --question-status-unseen: #d9dee5;
   --question-status-viewed: #858e9b;
   --question-status-incorrect: #e0525e;
@@ -129,10 +143,11 @@
     --color-surface-muted: #27313e;
     --color-text-primary: #f2f5f9;
     --color-text-secondary: #acb7c5;
-    --color-border: #364251;
+    --color-border: #2d3745;
     --color-accent: #8ca0ff;
     --color-focus: #a2b3ff;
-    --color-glass: rgba(27, 34, 45, 0.79);
+    --color-glass: rgba(30, 38, 51, 0.9);
+    --color-glass-solid: #1e2633;
     --color-glass-stroke: rgba(255, 255, 255, 0.12);
     --color-border-strong: #7a8799;
     --color-on-accent: #11151d;
@@ -140,6 +155,9 @@
     --color-success: #4fcb92;
     --color-warning: #f2c14e;
     --color-scrim: rgba(17, 21, 29, 0.64);
+    --color-state-hover: #2a3442;
+    --color-state-pressed: #334051;
+    --color-state-selected: #2e3958;
     --question-status-unseen: #4e5967;
     --question-status-viewed: #9ea7b4;
     --question-status-incorrect: #f17b84;

@@ -4,6 +4,7 @@ import { RadioGroup as RadixRadioGroup } from 'radix-ui';
 import { useId, type ReactNode } from 'react';
 import { cx } from '../internal/cx';
 import { AlertIcon } from './icons';
+import { Tooltip } from './Tooltip';
 
 export interface RadioOption {
   value: string;
@@ -26,6 +27,12 @@ export interface RadioGroupProps {
   required?: boolean;
   name?: string;
   orientation?: 'horizontal' | 'vertical';
+  /**
+   * How option descriptions show (design-system.md §4.1). `tooltip`: a Tooltip on hover and
+   * keyboard focus, inline text on devices without hover; the text stays linked to the radio
+   * through aria-describedby either way. Use `inline` for essential information.
+   */
+  optionDescriptions?: 'inline' | 'tooltip';
   className?: string;
 }
 
@@ -46,6 +53,7 @@ export function RadioGroup({
   required,
   name,
   orientation = 'horizontal',
+  optionDescriptions = 'inline',
   className,
 }: RadioGroupProps) {
   const id = useId();
@@ -76,8 +84,13 @@ export function RadioGroup({
       >
         {options.map((option) => {
           const itemId = `${id}-${option.value}`;
-          return (
-            <div key={option.value} className="qz-radio">
+          const asTooltip = optionDescriptions === 'tooltip' && Boolean(option.description);
+          const row = (
+            <div
+              key={option.value}
+              className="qz-radio"
+              data-description={asTooltip ? 'tooltip' : undefined}
+            >
               <RadixRadioGroup.Item
                 id={itemId}
                 value={option.value}
@@ -92,12 +105,24 @@ export function RadioGroup({
                   {option.label}
                 </label>
                 {option.description ? (
-                  <p id={`${itemId}-description`} className="qz-field__description">
+                  <p
+                    id={`${itemId}-description`}
+                    className={cx('qz-field__description', asTooltip && 'qz-radio__description')}
+                  >
                     {option.description}
                   </p>
                 ) : null}
               </div>
             </div>
+          );
+          // The row (radio + label) is the trigger: hover anywhere on it, or focus on the radio
+          // (focus bubbles in React), opens the tooltip.
+          return asTooltip ? (
+            <Tooltip key={option.value} content={option.description} side="bottom">
+              {row}
+            </Tooltip>
+          ) : (
+            row
           );
         })}
       </RadixRadioGroup.Root>

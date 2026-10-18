@@ -1,6 +1,7 @@
-/* Kit-internal motion value; colors, type and breakpoints come from @quiz/design-tokens. */
+/* State transitions (hover/active/selected/focus) from the motion tokens (design-system.md §4.1);
+   reduced motion collapses every transition in @quiz/design-tokens/base.css. */
 :root {
-  --qz-transition-fast: 120ms ease-out;
+  --qz-transition-fast: var(--duration-state) var(--easing-standard);
 }
 
 .qz-theme-scope {
@@ -77,7 +78,6 @@
   align-items: center;
   gap: 6px;
   padding: 2px var(--space-2);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
   background: var(--color-surface-muted);
   color: var(--color-text-primary);
@@ -88,8 +88,13 @@
 }
 
 .qz-badge[data-tone='accent'] {
-  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
-  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-surface));
+  background: var(--color-state-selected);
+}
+
+@media (forced-colors: active) {
+  .qz-badge {
+    border: 1px solid CanvasText;
+  }
 }
 
 .qz-badge__dot {

@@ -1,7 +1,8 @@
 /*
  * Token-only base styles from docs/design-system.md §3.3. Import after tokens.css.
  * Glass is reserved for interaction layers (floating panels, popovers, top bar); the opaque
- * surface is the fallback when blur is unsupported or the user prefers reduced transparency.
+ * tinted --color-glass-solid is the fallback when blur is unsupported or the user prefers reduced
+ * transparency, so the layer keeps the same color either way.
  */
 .glass-surface {
   background: var(--color-glass);
@@ -13,13 +14,13 @@
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass-surface {
-    background: var(--color-surface);
+    background: var(--color-glass-solid);
   }
 }
 
 @media (prefers-reduced-transparency: reduce) {
   .glass-surface {
-    background: var(--color-surface);
+    background: var(--color-glass-solid);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }

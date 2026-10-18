@@ -269,9 +269,8 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
-  background: var(--color-surface);
+  background: var(--color-surface-muted);
   color: var(--color-text-primary);
   font-size: var(--font-size-label);
   line-height: var(--line-height-normal);
@@ -295,9 +294,8 @@
   }
 }
 
-/* Favorite / retry toggles: the "on" state adds a tinted fill and border, the label flips. */
+/* Favorite / retry toggles: the "on" state gets the shared selected fill (controls.css) and an
+   accent icon; the label flips and the favorite star fills, so it is never color alone. */
 .qz-study-toggle[data-state='on'] {
-  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-surface));
-  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
   color: var(--color-accent);
 }

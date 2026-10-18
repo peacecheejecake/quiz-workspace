@@ -70,6 +70,45 @@ describe('RadioGroup', () => {
     expect(await axeViolations()).toEqual([]);
   });
 
+  it('shows option descriptions as a tooltip on keyboard focus, still linked by aria-describedby', async () => {
+    const user = userEvent.setup();
+    render(
+      <RadioGroup
+        label="검색 방식"
+        options={[
+          { value: 'keyword', label: '키워드', description: '단어가 그대로 들어 있는 문단' },
+          { value: 'semantic', label: '의미', description: '뜻이 비슷한 문단' },
+        ]}
+        defaultValue="keyword"
+        optionDescriptions="tooltip"
+      />,
+    );
+    const keyword = screen.getByRole('radio', { name: '키워드' });
+    // The description stays the radio's accessible description whether or not a tooltip shows.
+    expect(keyword).toHaveAccessibleDescription('단어가 그대로 들어 있는 문단');
+    expect(document.querySelectorAll('.qz-radio__description')).toHaveLength(2);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    await user.tab();
+    expect(keyword).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('단어가 그대로 들어 있는 문단');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('keeps option descriptions as inline text by default', () => {
+    render(
+      <RadioGroup
+        label="보기"
+        options={[{ value: 'a', label: '가', description: '정답' }]}
+        defaultValue="a"
+      />,
+    );
+    expect(screen.getByRole('radio', { name: '가' })).toHaveAccessibleDescription('정답');
+    expect(document.querySelector('.qz-radio__description')).toBeNull();
+  });
+
   it('disables every radio when the group is disabled', () => {
     render(<RadioGroup label="문제 유형" options={TYPES.slice(1)} defaultValue="MCQ" disabled />);
     for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled();

@@ -45,6 +45,16 @@ const REQUIRED: Pair[] = [
   // Secondary text also labels current/selected rows and metadata on muted surfaces (M7.2 axe).
   ['color-text-secondary', 'color-surface-muted', TEXT_MIN],
   ['color-text-primary', 'color-surface-muted', TEXT_MIN],
+  // Interaction state backgrounds (design-system.md §4.1): labels stay readable on every state;
+  // secondary text (nav links, menu metadata) also sits on the hover background.
+  ['color-text-primary', 'color-state-hover', TEXT_MIN],
+  ['color-text-primary', 'color-state-pressed', TEXT_MIN],
+  ['color-text-primary', 'color-state-selected', TEXT_MIN],
+  ['color-text-secondary', 'color-state-hover', TEXT_MIN],
+  // Glass fallback surface (reduced transparency) carries the same text as glass.
+  ['color-text-primary', 'color-glass-solid', TEXT_MIN],
+  ['color-text-secondary', 'color-glass-solid', TEXT_MIN],
+  ['color-focus', 'color-state-selected', NON_TEXT_MIN],
   // Tooltip: inverted text.
   ['color-canvas', 'color-text-primary', TEXT_MIN],
   ...NON_TEXT_TOKENS.flatMap((fg) => BACKGROUNDS.map((bg): Pair => [fg, bg, NON_TEXT_MIN])),
