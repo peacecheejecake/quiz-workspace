@@ -215,7 +215,8 @@ scripts/codex-review.sh --commit HEAD --title "<Task ID>: <summary>"
 ```
 
 The API connects as the least-privilege role `quiz_api` (NOLOGIN in migrations). One-time local
-step after `infra-up` (roles survive `db reset`; local-only password, never committed):
+step after `infra-up` and again after every `db reset`, which re-creates the roles NOLOGIN
+(local-only password, never committed):
 `psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -c "alter role quiz_api with login password 'change-me-local'"`.
 
 New TS packages extend `tsconfig.base.json` and expose `typecheck`/`test` scripts; ESLint and
