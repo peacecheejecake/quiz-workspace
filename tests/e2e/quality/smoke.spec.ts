@@ -110,6 +110,14 @@ test(
     const dot = overviewUi.dot(page, 1);
     // Touch targets: 32px cells on touch/mobile (design-system.md §6).
     expect(await dot.boundingBox()).toMatchObject({ width: 32, height: 32 });
+    // A long workspace name truncates in the mobile header: it neither overlaps the account
+    // button nor widens the page (mobile browsers then zoom out and fixed panels overflow).
+    const switcher = await page.getByRole('button', { name: /workspace 전환/i }).boundingBox();
+    const account = await page.getByRole('button', { name: /^(계정|account)$/i }).boundingBox();
+    expect(switcher && account && switcher.x + switcher.width <= account.x).toBe(true);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
     await expectAccessible(page, 'questions overview', LIGHT);
 
     await dot.tap();

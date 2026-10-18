@@ -129,7 +129,10 @@
   min-width: 0;
 }
 
+/* min-width: 0 lets the trigger shrink below its text so the name truncates instead of
+   overlapping the account button or widening a narrow page. */
 .switcherTrigger {
+  min-width: 0;
   max-width: min(320px, 50vw);
 }
 
