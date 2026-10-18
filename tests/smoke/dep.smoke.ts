@@ -12,6 +12,9 @@ import {
   deleteWorkspace,
   raw,
   supabase,
+  uploadFixturePdf,
+  waitForJob,
+  type Reply,
 } from './client.ts';
 import { accounts, hasAccounts, smokeEnv } from './env.ts';
 
@@ -110,39 +113,44 @@ if (hasAccounts()) {
 
 // --- DEP-02 private Storage --------------------------------------------------------------------
 
-test('DEP-02 private buckets refuse anonymous reads, listings and uploads', READONLY, async () => {
-  for (const bucket of PRIVATE_BUCKETS) {
-    const key = `workspaces/${randomUUID()}/documents/${randomUUID()}/source.pdf`;
-    const publicUrl = await raw(`${env.supabaseUrl}/storage/v1/object/public/${bucket}/${key}`);
-    expect(publicUrl.status, `${bucket} public URL`).toBeGreaterThanOrEqual(400);
+test(
+  'DEP-02 private buckets refuse anonymous probes (random keys, read-only)',
+  READONLY,
+  async () => {
+    for (const bucket of PRIVATE_BUCKETS) {
+      const key = `workspaces/${randomUUID()}/documents/${randomUUID()}/source.pdf`;
+      const publicUrl = await raw(`${env.supabaseUrl}/storage/v1/object/public/${bucket}/${key}`);
+      expect(publicUrl.status, `${bucket} public URL`).toBeGreaterThanOrEqual(400);
 
-    const direct = await supabase(`/storage/v1/object/${bucket}/${key}`);
-    expect(direct.status, `${bucket} anonymous object`).toBeGreaterThanOrEqual(400);
+      const direct = await supabase(`/storage/v1/object/${bucket}/${key}`);
+      expect(direct.status, `${bucket} anonymous object`).toBeGreaterThanOrEqual(400);
 
-    const listing = await supabase<unknown[]>(`/storage/v1/object/list/${bucket}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prefix: '', limit: 10 }),
-    });
-    if (listing.status === 200) expect(listing.body?.length ?? 0, `${bucket} listing size`).toBe(0);
-    else expect(listing.status).toBeGreaterThanOrEqual(400);
+      const listing = await supabase<unknown[]>(`/storage/v1/object/list/${bucket}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prefix: '', limit: 10 }),
+      });
+      if (listing.status === 200)
+        expect(listing.body?.length ?? 0, `${bucket} listing size`).toBe(0);
+      else expect(listing.status).toBeGreaterThanOrEqual(400);
 
-    const upload = await supabase(`/storage/v1/object/${bucket}/smoke/${randomUUID()}.pdf`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/pdf' },
-      body: '%PDF-1.4 smoke',
-    });
-    expect(upload.status, `${bucket} anonymous upload`).toBeGreaterThanOrEqual(400);
-  }
-  const buckets = await supabase<{ name: string }[]>('/storage/v1/bucket');
-  if (buckets.status === 200) {
-    expect((buckets.body ?? []).map((b) => b.name)).not.toEqual(
-      expect.arrayContaining(PRIVATE_BUCKETS),
-    );
-  }
-  const signedRead = await raw(`${env.apiUrl}/api/v1/documents/${randomUUID()}/source-url`);
-  expect(signedRead.status).toBe(401);
-});
+      const upload = await supabase(`/storage/v1/object/${bucket}/smoke/${randomUUID()}.pdf`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/pdf' },
+        body: '%PDF-1.4 smoke',
+      });
+      expect(upload.status, `${bucket} anonymous upload`).toBeGreaterThanOrEqual(400);
+    }
+    const buckets = await supabase<{ name: string }[]>('/storage/v1/bucket');
+    if (buckets.status === 200) {
+      expect((buckets.body ?? []).map((b) => b.name)).not.toEqual(
+        expect.arrayContaining(PRIVATE_BUCKETS),
+      );
+    }
+    const signedRead = await raw(`${env.apiUrl}/api/v1/documents/${randomUUID()}/source-url`);
+    expect(signedRead.status).toBe(401);
+  },
+);
 
 if (hasAccounts()) {
   test('DEP-02 a signed-in user cannot bypass the API to reach Storage', async () => {
@@ -164,6 +172,55 @@ if (hasAccounts()) {
         body: '%PDF-1.4 smoke',
       });
       expect(upload.status, `${bucket} upload with a user JWT`).toBeGreaterThanOrEqual(400);
+    }
+  });
+}
+
+if (hasAccounts()) {
+  test('DEP-02 a real uploaded PDF is unreachable without a signature or the API', async () => {
+    test.setTimeout(smokeEnv().jobTimeoutMs + 120_000);
+    const owner = await Api.as('a');
+    const ws = await createWorkspace(owner, 'dep02');
+    try {
+      // Known object through the authorized path (a random key would pass even if public).
+      const pdf = await uploadFixturePdf(owner, ws.id);
+      await waitForJob(owner, pdf.jobId);
+      const object = `${encodeURIComponent(pdf.bucket)}/${pdf.key
+        .split('/')
+        .map(encodeURIComponent)
+        .join('/')}`;
+      const jwt = await accessToken(accounts().a);
+      const probes: [string, Promise<Reply>][] = [
+        ['unsigned public URL', raw(`${env.supabaseUrl}/storage/v1/object/public/${object}`)],
+        ['anonymous object', supabase(`/storage/v1/object/${object}`)],
+        ['anonymous authenticated route', supabase(`/storage/v1/object/authenticated/${object}`)],
+        ['owner JWT, bypassing the API', supabase(`/storage/v1/object/${object}`, { token: jwt })],
+        [
+          'owner JWT, authenticated route',
+          supabase(`/storage/v1/object/authenticated/${object}`, { token: jwt }),
+        ],
+      ];
+      for (const [what, probe] of probes) {
+        expect((await probe).status, what).toBeGreaterThanOrEqual(400);
+      }
+      // The API's signed read URL works only with its signature: strip the query, it must fail.
+      const signed = await owner.ok<{ url: string }>(
+        'GET',
+        `/documents/${pdf.documentId}/source-url`,
+        undefined,
+        [200],
+      );
+      const withToken = await raw(signed.url);
+      expect(withToken.status, 'signed read URL').toBe(200);
+      const unsigned = new URL(signed.url);
+      unsigned.search = '';
+      expect(
+        (await raw(unsigned.toString())).status,
+        'signed URL without its token',
+      ).toBeGreaterThanOrEqual(400);
+      await owner.ok('DELETE', `/documents/${pdf.documentId}`, undefined, [200, 204]);
+    } finally {
+      await deleteWorkspace(owner, ws.id);
     }
   });
 }

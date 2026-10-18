@@ -1,7 +1,11 @@
 // HTTP helpers for the deployment smoke. Node `fetch` only (never Playwright `request`, which
 // lands in traces): JWTs, passwords and signed URLs stay in memory. Errors carry statuses, never
 // bodies that could echo credentials.
-import { accounts, smokeEnv, type Account } from './env.ts';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { expect } from '@playwright/test';
+import { accounts, REPO_ROOT, smokeEnv, type Account } from './env.ts';
 
 export const API_PREFIX = '/api/v1';
 
@@ -150,4 +154,83 @@ export function createMcq(owner: Api, workspaceId: string): Promise<Question> {
     },
     [201],
   );
+}
+
+export interface Job {
+  readonly id: string;
+  readonly status: string;
+  readonly finished_at: string | null;
+}
+
+export interface UploadedPdf {
+  readonly documentId: string;
+  readonly jobId: string;
+  /** Storage location of the source PDF, read from the signed upload URL's path. */
+  readonly bucket: string;
+  readonly key: string;
+}
+
+const FIXTURE_PDF = join(REPO_ROOT, 'tests/fixtures/pdfs/book-en.pdf');
+const SIGNED_UPLOAD_PATH = /\/storage\/v1\/object\/upload\/sign\/([^/]+)\/(.+)$/;
+
+/**
+ * The synthetic fixture PDF through the real, authorized path: upload-intent → PUT to the signed
+ * Storage URL → complete-upload. The signed URL is used once and never logged or returned.
+ */
+export async function uploadFixturePdf(owner: Api, workspaceId: string): Promise<UploadedPdf> {
+  const bytes = readFileSync(FIXTURE_PDF);
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const intent = await owner.ok<{
+    upload_id: string;
+    upload_url: string;
+    upload_headers?: Record<string, string>;
+  }>(
+    'POST',
+    `/workspaces/${workspaceId}/documents/upload-intent`,
+    {
+      filename: 'smoke-book-en.pdf',
+      size_bytes: bytes.length,
+      content_type: 'application/pdf',
+      sha256,
+    },
+    [200, 201],
+  );
+  const location = SIGNED_UPLOAD_PATH.exec(new URL(intent.upload_url).pathname);
+  if (!location?.[1] || !location[2])
+    throw new Error('upload_url is not a signed Storage upload URL');
+  const put = await raw(intent.upload_url, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/pdf', ...intent.upload_headers },
+    body: bytes,
+  });
+  if (put.status >= 300) throw new Error(`direct Storage upload failed: HTTP ${put.status}`);
+  const done = await owner.ok<{ document_id: string; job_id: string }>(
+    'POST',
+    '/documents/complete-upload',
+    { upload_id: intent.upload_id, sha256 },
+    [202],
+  );
+  return {
+    documentId: done.document_id,
+    jobId: done.job_id,
+    bucket: decodeURIComponent(location[1]),
+    key: decodeURIComponent(location[2]),
+  };
+}
+
+/** Polls the job (no sleeps) until it is terminal and returns it. */
+export async function waitForJob(owner: Api, jobId: string): Promise<Job> {
+  let job: Job | undefined;
+  await expect
+    .poll(
+      async () => (job = await owner.ok<Job>('GET', `/jobs/${jobId}`, undefined, [200])).status,
+      {
+        message: 'job reaches a terminal status',
+        timeout: smokeEnv().jobTimeoutMs,
+        intervals: [2_000, 5_000, 10_000],
+      },
+    )
+    .toMatch(/^(succeeded|failed|cancelled)$/);
+  if (!job) throw new Error('job was never read');
+  return job;
 }

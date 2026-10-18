@@ -11,23 +11,23 @@
 //           workspace is deleted (SMOKE_KEEP=1 keeps it)
 //
 // Without SMOKE_DEP03_PHASE this file declares no test.
-import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { Api, createMcq, createWorkspace, deleteWorkspace, raw } from './client.ts';
-import { REPO_ROOT, smokeEnv } from './env.ts';
+import {
+  Api,
+  createMcq,
+  createWorkspace,
+  deleteWorkspace,
+  uploadFixturePdf,
+  waitForJob,
+  type Job,
+} from './client.ts';
+import { smokeEnv } from './env.ts';
 
 const phase = process.env.SMOKE_DEP03_PHASE?.trim();
 const env = smokeEnv();
 const STATE = join(env.stateDir, 'dep03.json');
-const FIXTURE = join(REPO_ROOT, 'tests/fixtures/pdfs/book-en.pdf');
-
-interface Job {
-  readonly id: string;
-  readonly status: string;
-  readonly finished_at: string | null;
-}
 
 interface State {
   readonly workspaceId: string;
@@ -57,54 +57,13 @@ if (phase === 'seed') {
     const owner = await Api.as('a');
     const ws = await createWorkspace(owner, 'dep03');
 
-    const bytes = readFileSync(FIXTURE);
-    const sha256 = createHash('sha256').update(bytes).digest('hex');
-    const intent = await owner.ok<{
-      upload_id: string;
-      upload_url: string;
-      upload_headers?: Record<string, string>;
-    }>(
-      'POST',
-      `/workspaces/${ws.id}/documents/upload-intent`,
-      {
-        filename: 'smoke-book-en.pdf',
-        size_bytes: bytes.length,
-        content_type: 'application/pdf',
-        sha256,
-      },
-      [200, 201],
-    );
-    // Signed Storage URL: used once, never logged or stored.
-    const put = await raw(intent.upload_url, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/pdf', ...intent.upload_headers },
-      body: bytes,
-    });
-    expect(put.status, 'direct Storage upload').toBeLessThan(300);
-    const done = await owner.ok<{ document_id: string; job_id: string }>(
-      'POST',
-      '/documents/complete-upload',
-      { upload_id: intent.upload_id, sha256 },
-      [202],
-    );
-
-    let job: Job | undefined;
-    await expect
-      .poll(
-        async () =>
-          (job = await owner.ok<Job>('GET', `/jobs/${done.job_id}`, undefined, [200])).status,
-        {
-          message: 'document.parse job reaches a terminal status',
-          timeout: env.jobTimeoutMs,
-          intervals: [2_000, 5_000, 10_000],
-        },
-      )
-      .toMatch(/^(succeeded|failed|cancelled)$/);
-    expect(job?.status).toBe('succeeded');
+    const done = await uploadFixturePdf(owner, ws.id);
+    const job = await waitForJob(owner, done.jobId);
+    expect(job.status).toBe('succeeded');
 
     const document = await owner.ok<{ active_revision_id: string | null }>(
       'GET',
-      `/documents/${done.document_id}`,
+      `/documents/${done.documentId}`,
       undefined,
       [200],
     );
@@ -127,11 +86,11 @@ if (phase === 'seed') {
 
     const state: State = {
       workspaceId: ws.id,
-      documentId: done.document_id,
-      jobId: done.job_id,
-      jobFinishedAt: job?.finished_at ?? null,
+      documentId: done.documentId,
+      jobId: done.jobId,
+      jobFinishedAt: job.finished_at,
       activeRevisionId,
-      revisionIds: await revisionIds(owner, done.document_id),
+      revisionIds: await revisionIds(owner, done.documentId),
       questionId: question.id,
       questionRevisionId: question.revision.id,
       attemptId: submitted.attempt_id,
