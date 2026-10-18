@@ -4,6 +4,7 @@ import { Dialog } from 'radix-ui';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { cx } from '../internal/cx';
 import { LayerProvider } from '../internal/layer';
+import { ScrollRegion } from '../internal/scroll-region';
 import { IconButton } from '../primitives/IconButton';
 import { CloseIcon } from '../primitives/icons';
 
@@ -77,7 +78,7 @@ export function ModalDialog({
                 </Dialog.Close>
               ) : null}
             </div>
-            <div className="qz-modal__body">{children}</div>
+            <ScrollRegion className="qz-modal__body">{children}</ScrollRegion>
             {footer ? <div className="qz-modal__footer">{footer}</div> : null}
           </LayerProvider>
         </Dialog.Content>

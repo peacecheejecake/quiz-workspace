@@ -105,6 +105,25 @@
   line-height: var(--line-height-relaxed);
 }
 
+/* A long body without focusable content is a tab stop (internal/scroll-region.tsx). */
+.qz-panel__body[data-scroll-focus]:focus,
+.qz-modal__body[data-scroll-focus]:focus {
+  outline: none;
+}
+
+.qz-panel__body[data-scroll-focus]:focus-visible,
+.qz-modal__body[data-scroll-focus]:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+@media (forced-colors: active) {
+  .qz-panel__body[data-scroll-focus]:focus-visible,
+  .qz-modal__body[data-scroll-focus]:focus-visible {
+    outline-color: Highlight;
+  }
+}
+
 .qz-panel__footer,
 .qz-modal__footer {
   display: flex;

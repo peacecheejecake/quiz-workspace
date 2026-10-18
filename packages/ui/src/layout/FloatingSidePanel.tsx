@@ -4,6 +4,7 @@ import { Dialog } from 'radix-ui';
 import { useRef, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 import { cx } from '../internal/cx';
 import { LayerProvider } from '../internal/layer';
+import { ScrollRegion } from '../internal/scroll-region';
 import { handOffFocus } from '../internal/tabbable';
 import { IconButton } from '../primitives/IconButton';
 import { CloseIcon } from '../primitives/icons';
@@ -150,7 +151,7 @@ export function FloatingSidePanel({
                 <IconButton label={closeLabel} icon={<CloseIcon />} />
               </Dialog.Close>
             </div>
-            <div className="qz-panel__body">{children}</div>
+            <ScrollRegion className="qz-panel__body">{children}</ScrollRegion>
             {footer ? <div className="qz-panel__footer">{footer}</div> : null}
           </LayerProvider>
         </Dialog.Content>

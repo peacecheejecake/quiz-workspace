@@ -1,8 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { describe, expect, it } from 'vitest';
-import { Button, FloatingSidePanel, Input } from '../src';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { Button, FloatingSidePanel, Input, ModalDialog } from '../src';
 
 describe('FloatingSidePanel container', () => {
   it('portals into the given element so the panel stays in that landmark', async () => {
@@ -264,5 +264,92 @@ describe('FloatingSidePanel (non-modal) focus handoff skips unfocusable candidat
     expect(dialog).toHaveFocus();
     await user.tab({ shift: true });
     expect(screen.getByRole('button', { name: '앞 버튼' })).toHaveFocus();
+  });
+});
+
+describe('overlay body scroll region (axe scrollable-region-focusable)', () => {
+  // jsdom has no layout: bodies report 600px of content in a 200px box unless marked short.
+  const scrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+  const clientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+  beforeEach(() => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.querySelector('[data-short]') ? 100 : 600;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get: () => 200,
+    });
+  });
+  afterEach(() => {
+    if (scrollHeight) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', scrollHeight);
+    if (clientHeight) Object.defineProperty(HTMLElement.prototype, 'clientHeight', clientHeight);
+  });
+
+  const bodyOf = (dialog: HTMLElement) =>
+    dialog.querySelector<HTMLElement>('.qz-panel__body, .qz-modal__body');
+
+  it('makes a long body without focusable content a named, keyboard-reachable group', async () => {
+    const user = userEvent.setup();
+    render(
+      <FloatingSidePanel defaultOpen modal={false} title="원문 발췌">
+        <p>긴 발췌 본문</p>
+      </FloatingSidePanel>,
+    );
+    const dialog = await screen.findByRole('dialog', { name: '원문 발췌' });
+    const body = await screen.findByRole('group', { name: '원문 발췌' });
+    expect(body).toBe(bodyOf(dialog));
+    expect(body).toHaveAttribute('tabindex', '0');
+    await user.tab();
+    await user.tab();
+    expect(body).toHaveFocus();
+  });
+
+  it('keeps short bodies and bodies with focusable content out of the tab order', async () => {
+    render(
+      <>
+        <FloatingSidePanel defaultOpen modal={false} title="짧은 패널">
+          <p data-short>짧은 본문</p>
+        </FloatingSidePanel>
+        <FloatingSidePanel defaultOpen modal={false} title="버튼 패널">
+          <Button>원문으로 이동</Button>
+        </FloatingSidePanel>
+      </>,
+    );
+    for (const name of ['짧은 패널', '버튼 패널']) {
+      const body = bodyOf(await screen.findByRole('dialog', { name }));
+      expect(body).not.toHaveAttribute('tabindex');
+      expect(body).not.toHaveAttribute('role');
+    }
+  });
+
+  it('follows content changes: focusable once its only control goes away', async () => {
+    function Toggle() {
+      const [withButton, setWithButton] = useState(true);
+      return (
+        <FloatingSidePanel defaultOpen modal={false} title="발췌">
+          {withButton ? <Button onClick={() => setWithButton(false)}>숨기기</Button> : <p>본문</p>}
+        </FloatingSidePanel>
+      );
+    }
+    const user = userEvent.setup();
+    render(<Toggle />);
+    const body = bodyOf(await screen.findByRole('dialog', { name: '발췌' }));
+    expect(body).not.toHaveAttribute('tabindex');
+    await user.click(screen.getByRole('button', { name: '숨기기' }));
+    await waitFor(() => expect(body).toHaveAttribute('tabindex', '0'));
+  });
+
+  it('applies to ModalDialog bodies too', async () => {
+    render(
+      <ModalDialog defaultOpen title="안내" closeLabel={null}>
+        <p>긴 안내문</p>
+      </ModalDialog>,
+    );
+    const dialog = await screen.findByRole('dialog', { name: '안내' });
+    await waitFor(() => expect(bodyOf(dialog)).toHaveAttribute('tabindex', '0'));
+    expect(screen.getByRole('group', { name: '안내' })).toBe(bodyOf(dialog));
   });
 });
