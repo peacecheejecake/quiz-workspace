@@ -27,7 +27,8 @@ SIGNING_KEYS := supabase/signing_keys.json
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
 	test test-ts test-py test-infra test-models test-llm eval eval-models auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
-	e2e e2e-browsers e2e-trace test-red images image-api image-worker image-web reindex backup restore
+	e2e e2e-browsers e2e-trace test-red images image-api image-worker image-web reindex backup restore \
+	check-env
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -209,3 +210,10 @@ backup: ## Postgres dump + Storage objects into DIR (needs infra-up locally), e.
 restore: ## Restore DIR into an EMPTY target at the same migration version (RESTORE_DB_URL), ARGS="--yes --reindex"
 	@test -n "$(DIR)" || { echo 'usage: make restore DIR=<backup directory> ARGS="--yes [--reindex]"'; exit 2; }
 	scripts/restore "$(DIR)" $(ARGS)
+
+# Deployment environment (M7.4a): validate env files against infra/deploy/env-manifest.toml without
+# printing values, e.g. ENV=staging ARGS="--check api=api.staging.env --check web=web.staging.env"
+# (`--template <service>` prints a fill-in file, `--list` the whole manifest).
+check-env: ## Validate deployment env files against the manifest, ENV=staging|production ARGS="--check api=<file>"
+	@test -n "$(ENV)$(findstring --list,$(ARGS))" || { echo 'usage: make check-env ENV=staging|production ARGS="--check <service>=<file>"'; exit 2; }
+	uv run python scripts/check_env.py $(if $(ENV),--env $(ENV)) $(ARGS)

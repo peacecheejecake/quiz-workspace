@@ -1,0 +1,964 @@
+# Environment manifest (M7.4a): every variable each deployed service reads, per environment.
+# Names only — never commit a value. Checked by `scripts/check_env.py` (values are validated, never
+# printed) and cross-checked against the code and .env.example by scripts/test_check_env.py.
+# Runbook (who generates what, where it goes): docs/runbook-deploy.md.
+#
+# Per variable:
+#   services   where it is set (see [services])
+#   kind       public  = browser-visible build value (NEXT_PUBLIC_*, docs/deployment.md §6)
+#              config  = server-side, not secret (URLs, limits, flags)
+#              secret  = server-only credential: never NEXT_PUBLIC_, never logged
+#   required   true = staging and production; or a list of environments; default false
+#   forbidden  true = must NOT be set in staging/production (test-only or unsafe switches)
+#   check      value rule applied by the checker (see scripts/check_env.py CHECKS)
+#   same       true = identical value on every service listed (compared by digest)
+#   requires   another variable that must be set whenever this one is
+#   provider   who produces the value
+#   note       short reason / default
+
+[meta]
+environments = ["staging", "production"]
+# APP_ENV per environment (docs/deployment.md §4: staging is the `preview` environment).
+app_env = { staging = "preview", production = "production" }
+# Injected by the platform; ignored by the unknown-variable warning (forbidden names still fail).
+platform_prefixes = ["RAILWAY_", "VERCEL_", "NODE_", "NEXT_RUNTIME", "HOSTNAME", "PORT", "PATH", "HOME", "PWD", "TZ", "LANG", "HF_HUB_", "PYTHON", "UV_"]
+
+[services]
+web = "Vercel project apps/web → Settings → Environment Variables (Preview = staging, Production = production)"
+api = "Railway service `api` → Variables (Railway environment staging / production)"
+worker = "Railway service `worker` → Variables (Railway environment staging / production)"
+deploy = "GitHub → Settings → Environments → staging / production (secrets and variables) for .github/workflows/deploy.yml"
+smoke = "GitHub Environment (deploy workflow smoke step) or the operator shell for `make smoke-staging`"
+supabase-config = "operator shell for `pnpm exec supabase config push` (supabase/config.toml [remotes.*])"
+ops = "operator shell for `make backup` / `make restore` (never a service)"
+
+# ------------------------------------------------------------------------------------------------
+# Shared
+# ------------------------------------------------------------------------------------------------
+[[var]]
+name = "APP_ENV"
+services = ["web", "api", "worker"]
+kind = "config"
+required = true
+check = "app_env"
+provider = "operator"
+note = "preview (staging) / production; enables the startup guards and HSTS"
+
+[[var]]
+name = "LOG_LEVEL"
+services = ["api", "worker"]
+kind = "config"
+check = "log_level"
+provider = "default"
+note = "INFO"
+
+# ------------------------------------------------------------------------------------------------
+# Web (Next.js on Vercel)
+# ------------------------------------------------------------------------------------------------
+[[var]]
+name = "NEXT_PUBLIC_SUPABASE_URL"
+services = ["web"]
+kind = "public"
+required = true
+check = "https_url"
+provider = "Supabase → Project Settings → API (Project URL)"
+note = "inlined at build time; CSP connect-src"
+
+[[var]]
+name = "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+services = ["web"]
+kind = "public"
+required = true
+check = "publishable_key"
+provider = "Supabase → Project Settings → API Keys (publishable)"
+note = "public by design; access is decided by JWT/RLS/API"
+
+[[var]]
+name = "NEXT_PUBLIC_API_BASE_URL"
+services = ["web"]
+kind = "public"
+required = true
+check = "https_url"
+provider = "Railway api public domain (or custom domain)"
+note = "the Next.js server calls FastAPI here; CSP connect-src"
+
+[[var]]
+name = "AUTH_RECOVERY_MARKER_SECRET"
+services = ["web"]
+kind = "secret"
+required = true
+check = "min32"
+provider = "operator: openssl rand -base64 48 (different per environment)"
+note = "HMAC key of the /reset-password recovery marker"
+
+[[var]]
+name = "RELAY_CLIENT_SECRET"
+services = ["web", "api"]
+kind = "secret"
+required = true
+check = "min32"
+same = true
+provider = "operator: openssl rand -base64 48 (same value on web and api)"
+note = "signed relay client id; without it /shared answers 503"
+
+[[var]]
+name = "RELAY_CLIENT_IP_HEADER"
+services = ["web"]
+kind = "config"
+required = true
+check = "header_name"
+provider = "operator: x-real-ip (Vercel overwrites it with the client address)"
+note = "edge header the relay hashes; never a header a browser can set"
+
+# ------------------------------------------------------------------------------------------------
+# API (FastAPI on Railway) — apps/api/src/quiz_api/settings.py
+# ------------------------------------------------------------------------------------------------
+[[var]]
+name = "DATABASE_URL"
+services = ["api"]
+kind = "secret"
+required = true
+check = "postgres_url"
+provider = "Supabase session pooler URL with role quiz_api (password set by the operator)"
+note = "least-privilege role quiz_api, never postgres"
+
+[[var]]
+name = "REDIS_URL"
+services = ["api", "worker"]
+kind = "secret"
+required = true
+check = "redis_url"
+same = true
+provider = "Railway Redis (reference variable, private network)"
+
+[[var]]
+name = "QDRANT_URL"
+services = ["api", "worker"]
+kind = "config"
+required = true
+check = "https_url"
+same = true
+provider = "Qdrant Cloud cluster URL"
+
+[[var]]
+name = "QDRANT_API_KEY"
+services = ["api", "worker"]
+kind = "secret"
+required = true
+check = "nonempty"
+same = true
+provider = "Qdrant Cloud → cluster → API keys"
+
+[[var]]
+name = "QDRANT_COLLECTION_PREFIX"
+services = ["api", "worker"]
+kind = "config"
+check = "collection_prefix"
+same = true
+provider = "default"
+note = "empty; set (e.g. staging_) only if staging and production share a cluster"
+
+[[var]]
+name = "SUPABASE_JWT_ISSUER"
+services = ["api"]
+kind = "config"
+required = true
+check = "https_url"
+provider = "https://<ref>.supabase.co/auth/v1"
+
+[[var]]
+name = "SUPABASE_JWKS_URL"
+services = ["api"]
+kind = "config"
+required = true
+check = "https_url"
+provider = "https://<ref>.supabase.co/auth/v1/.well-known/jwks.json"
+
+[[var]]
+name = "SUPABASE_JWT_AUDIENCE"
+services = ["api"]
+kind = "config"
+provider = "default"
+note = "authenticated"
+
+[[var]]
+name = "JWT_LEEWAY_SECONDS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "30"
+
+[[var]]
+name = "JWKS_CACHE_TTL_SECONDS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "600"
+
+[[var]]
+name = "JWKS_MIN_REFRESH_INTERVAL_SECONDS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "30"
+
+[[var]]
+name = "JWKS_MAX_STALE_SECONDS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "3600"
+
+[[var]]
+name = "JWKS_FETCH_TIMEOUT_SECONDS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "3"
+
+[[var]]
+name = "CORS_ALLOWED_ORIGINS"
+services = ["api"]
+kind = "config"
+required = true
+check = "origin_list"
+provider = "operator: the web origin(s), e.g. https://quiz.example"
+note = "https only, ASCII/punycode, no wildcard or path"
+
+[[var]]
+name = "CORS_MAX_AGE_SECONDS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "600 (0–7200)"
+
+[[var]]
+name = "WEB_ORIGIN"
+services = ["api"]
+kind = "config"
+required = true
+check = "https_origin"
+provider = "operator: the web origin owners copy share links from"
+note = "defaults to the first CORS origin; set explicitly in deployments"
+
+[[var]]
+name = "SHARE_SESSION_SECRET"
+services = ["api"]
+kind = "secret"
+required = true
+check = "min32"
+provider = "operator: openssl rand -base64 48 (different per environment)"
+note = "guest share session HMAC; without it /shared answers 503"
+
+[[var]]
+name = "SHARE_SESSION_TTL_SECONDS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "14400 (≤ 28800)"
+
+[[var]]
+name = "SHARE_EXCHANGE_RATE_LIMIT_PER_MINUTE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "20"
+
+[[var]]
+name = "SHARE_EXCHANGE_LINK_RATE_LIMIT_PER_MINUTE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "300"
+
+[[var]]
+name = "SHARE_FORK_RATE_LIMIT_PER_MINUTE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "5"
+
+[[var]]
+name = "SUPABASE_URL"
+services = ["api", "worker"]
+kind = "config"
+required = true
+check = "https_url"
+same = true
+provider = "Supabase Project URL (https://<ref>.supabase.co)"
+note = "Storage; the code also accepts NEXT_PUBLIC_SUPABASE_URL, set this name on Railway"
+
+[[var]]
+name = "STORAGE_PUBLIC_URL"
+services = ["api"]
+kind = "config"
+check = "https_url"
+provider = "default"
+note = "unset: signed URLs use SUPABASE_URL"
+
+[[var]]
+name = "SUPABASE_SECRET_KEY"
+services = ["api", "worker"]
+kind = "secret"
+required = true
+check = "secret_key"
+same = true
+provider = "Supabase → Project Settings → API Keys (secret key, sb_secret_…)"
+note = "private Storage only; never in the web project"
+
+[[var]]
+name = "STORAGE_TIMEOUT_SECONDS"
+services = ["api", "worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "api 30 / worker 60"
+
+[[var]]
+name = "UPLOAD_INTENT_TTL_SECONDS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "3600"
+
+[[var]]
+name = "SIGNED_READ_URL_TTL_SECONDS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "300"
+
+[[var]]
+name = "WORKER_EMBEDDER"
+services = ["api", "worker"]
+kind = "config"
+check = "not_fake"
+same = true
+provider = "default"
+note = "auto (Qwen3-Embedding); fake is refused outside local/test"
+
+[[var]]
+name = "WORKER_MODELS_OFFLINE"
+services = ["api", "worker"]
+kind = "config"
+check = "bool"
+provider = "operator"
+note = "false until the HF_HOME volume is warm, then true"
+
+[[var]]
+name = "SEARCH_RATE_LIMIT_PER_MINUTE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "60"
+
+[[var]]
+name = "SEARCH_RATE_BURST"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "20"
+
+[[var]]
+name = "DB_POOL_SIZE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "5 (keep within the pooler's per-role limit)"
+
+[[var]]
+name = "DB_CONNECT_TIMEOUT_SECONDS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "3"
+
+[[var]]
+name = "READINESS_TIMEOUT_SECONDS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "2"
+
+[[var]]
+name = "HF_HOME"
+services = ["api", "worker"]
+kind = "config"
+provider = "image default /var/cache/huggingface (= Railway volume mount)"
+note = "leave unset"
+
+# ------------------------------------------------------------------------------------------------
+# Worker (Celery on Railway) — apps/worker/src/quiz_worker/settings.py, book_core.llm.config
+# ------------------------------------------------------------------------------------------------
+[[var]]
+name = "WORKER_DATABASE_URL"
+services = ["worker"]
+kind = "secret"
+required = true
+check = "postgres_url"
+provider = "Supabase session pooler URL with role quiz_worker (password set by the operator)"
+note = "never the API's DATABASE_URL"
+
+[[var]]
+name = "WORKER_DB_POOL_SIZE"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "5"
+
+[[var]]
+name = "WORKER_DB_CONNECT_TIMEOUT_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "5"
+
+[[var]]
+name = "WORKER_CONCURRENCY"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "1; raise only after measuring memory (docs/deployment.md §7)"
+
+[[var]]
+name = "WORKER_TASK_SOFT_TIME_LIMIT_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "1500"
+
+[[var]]
+name = "WORKER_TASK_TIME_LIMIT_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "1800"
+
+[[var]]
+name = "WORKER_LEASE_GRACE_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "120"
+
+[[var]]
+name = "WORKER_RECONCILE_INTERVAL_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "60"
+
+[[var]]
+name = "WORKER_RECONCILE_UNPUBLISHED_GRACE_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "60"
+
+[[var]]
+name = "WORKER_RECONCILE_STALE_AFTER_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "the lease"
+
+[[var]]
+name = "WORKER_CLEANUP_MAX_ATTEMPTS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "8"
+
+[[var]]
+name = "WORKER_CLEANUP_BASE_DELAY_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "60"
+
+[[var]]
+name = "WORKER_CLEANUP_MAX_DELAY_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "3600"
+
+[[var]]
+name = "WORKER_EMBEDDED_BEAT"
+services = ["worker"]
+kind = "config"
+check = "bool"
+provider = "default"
+note = "true (reconciler schedule)"
+
+[[var]]
+name = "WORKER_PARSER"
+services = ["worker"]
+kind = "config"
+check = "not_fake"
+provider = "default"
+note = "auto (Docling)"
+
+[[var]]
+name = "WORKER_MODELS_ARTIFACTS_PATH"
+services = ["worker"]
+kind = "config"
+provider = "default"
+note = "unset (weights load into HF_HOME)"
+
+[[var]]
+name = "WORKER_PDF_MAX_BYTES"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "52428800"
+
+[[var]]
+name = "WORKER_PDF_MAX_PAGES"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "1500"
+
+[[var]]
+name = "WORKER_PARSE_TIMEOUT_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "1200 (below the soft time limit)"
+
+[[var]]
+name = "WORKER_DOCUMENT_LOCK_WAIT_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "60"
+
+[[var]]
+name = "WORKER_QUESTION_IMPORT_LLM"
+services = ["worker"]
+kind = "config"
+check = "bool"
+provider = "operator"
+note = "false; true sends question text to the LLM provider (needs LLM_API_KEY)"
+
+[[var]]
+name = "LLM_API_KEY"
+services = ["worker"]
+kind = "secret"
+check = "nonempty"
+provider = "LLM provider console (Anthropic)"
+note = "optional; unset disables question generation (QGEN) — a user decision (cost, data policy)"
+
+[[var]]
+name = "LLM_MODEL"
+services = ["worker"]
+kind = "config"
+requires = "LLM_API_KEY"
+provider = "operator: the approved model id (no default)"
+note = "required whenever LLM_API_KEY is set"
+
+[[var]]
+name = "LLM_PROVIDER"
+services = ["worker"]
+kind = "config"
+provider = "default"
+note = "anthropic"
+
+[[var]]
+name = "LLM_BASE_URL"
+services = ["worker"]
+kind = "config"
+check = "https_url"
+provider = "default"
+note = "unset (provider default)"
+
+[[var]]
+name = "LLM_TIMEOUT_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "120"
+
+[[var]]
+name = "LLM_MAX_RETRIES"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "2"
+
+[[var]]
+name = "LLM_MAX_TOKENS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "16000"
+
+[[var]]
+name = "LLM_EFFORT"
+services = ["worker"]
+kind = "config"
+provider = "default"
+note = "unset | low | medium | high | xhigh | max"
+
+[[var]]
+name = "LLM_PRICE_INPUT_USD_PER_MTOK"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "operator (provider price list)"
+note = "optional cost accounting, with the output price"
+
+[[var]]
+name = "LLM_PRICE_OUTPUT_USD_PER_MTOK"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "operator (provider price list)"
+
+[[var]]
+name = "LLM_PRICE_CACHE_READ_USD_PER_MTOK"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "operator (provider price list)"
+
+[[var]]
+name = "LLM_PRICE_CACHE_WRITE_USD_PER_MTOK"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "operator (provider price list)"
+
+# ------------------------------------------------------------------------------------------------
+# Forbidden in deployments (test-only switches, unsafe overrides)
+# ------------------------------------------------------------------------------------------------
+[[var]]
+name = "WORKER_TASK_ALWAYS_EAGER"
+services = ["worker"]
+kind = "config"
+forbidden = true
+note = "tests only: runs tasks in-process"
+
+[[var]]
+name = "WORKER_JOB_STORE_PATH"
+services = ["worker"]
+kind = "config"
+forbidden = true
+note = "local SQLite job store"
+
+[[var]]
+name = "WORKER_FIXTURE_PDF_DIR"
+services = ["worker"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test fixture parser"
+
+[[var]]
+name = "WORKER_LLM_SCENARIO_FILE"
+services = ["worker"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test scripted LLM"
+
+[[var]]
+name = "FORWARDED_ALLOW_IPS"
+services = ["api"]
+kind = "config"
+forbidden = true
+note = "the launcher runs proxy_headers=False; never trust X-Forwarded-For (S4)"
+
+[[var]]
+name = "RAILWAY_RUN_UID"
+services = ["api", "worker"]
+kind = "config"
+forbidden = true
+note = "would run the image as root (volume ownership workaround); images stay non-root"
+
+[[var]]
+name = "NEXT_OUTPUT"
+services = ["web"]
+kind = "config"
+forbidden = true
+note = "standalone output is for the Docker image; Vercel builds its own output"
+
+# ------------------------------------------------------------------------------------------------
+# Deploy workflow (.github/workflows/deploy.yml): GitHub Environment secrets / variables
+# ------------------------------------------------------------------------------------------------
+[[var]]
+name = "SUPABASE_DB_URL"
+services = ["deploy"]
+kind = "secret"
+required = true
+check = "postgres_url"
+provider = "Supabase → Connect → Session pooler (role postgres, database password), percent-encoded"
+note = "only `supabase db push` uses it (migrations before rollout)"
+
+[[var]]
+name = "VERCEL_TOKEN"
+services = ["deploy"]
+kind = "secret"
+required = true
+check = "nonempty"
+provider = "Vercel → Account Settings → Tokens (scoped to the team, with expiry)"
+
+[[var]]
+name = "VERCEL_ORG_ID"
+services = ["deploy"]
+kind = "config"
+required = true
+check = "nonempty"
+provider = "Vercel team id (Settings → General) / .vercel/project.json after `vercel link`"
+
+[[var]]
+name = "VERCEL_PROJECT_ID"
+services = ["deploy"]
+kind = "config"
+required = true
+check = "nonempty"
+provider = "Vercel project → Settings → General (Project ID)"
+
+[[var]]
+name = "VERCEL_CLI_VERSION"
+services = ["deploy"]
+kind = "config"
+required = true
+check = "semver"
+provider = "operator: exact vercel CLI release at least two weeks old (repository variable)"
+
+[[var]]
+name = "RAILWAY_TOKEN"
+services = ["deploy"]
+kind = "secret"
+required = true
+check = "nonempty"
+provider = "Railway → project → Settings → Tokens (project token for this environment)"
+
+[[var]]
+name = "RAILWAY_ENVIRONMENT_ID"
+services = ["deploy"]
+kind = "config"
+required = true
+check = "uuid"
+provider = "Railway environment id (dashboard URL / Cmd-K → copy environment id)"
+
+[[var]]
+name = "RAILWAY_API_SERVICE_ID"
+services = ["deploy"]
+kind = "config"
+required = true
+check = "uuid"
+provider = "Railway service `api` id"
+
+[[var]]
+name = "RAILWAY_WORKER_SERVICE_ID"
+services = ["deploy"]
+kind = "config"
+required = true
+check = "uuid"
+provider = "Railway service `worker` id"
+
+# ------------------------------------------------------------------------------------------------
+# Staging smoke (tests/smoke, `make smoke-staging`)
+# ------------------------------------------------------------------------------------------------
+[[var]]
+name = "SMOKE_TARGET"
+services = ["smoke"]
+kind = "config"
+required = true
+check = "smoke_target"
+provider = "operator / workflow"
+note = "local | staging | production"
+
+[[var]]
+name = "E2E_BASE_URL"
+services = ["smoke"]
+kind = "config"
+required = true
+check = "https_origin"
+provider = "the web origin under test"
+
+[[var]]
+name = "SMOKE_API_URL"
+services = ["smoke"]
+kind = "config"
+required = true
+check = "https_origin"
+provider = "the API origin (= NEXT_PUBLIC_API_BASE_URL)"
+
+[[var]]
+name = "SMOKE_SUPABASE_URL"
+services = ["smoke"]
+kind = "config"
+required = true
+check = "https_url"
+provider = "= NEXT_PUBLIC_SUPABASE_URL"
+
+[[var]]
+name = "SMOKE_SUPABASE_PUBLISHABLE_KEY"
+services = ["smoke"]
+kind = "public"
+required = true
+check = "publishable_key"
+provider = "= NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+note = "public value; not NEXT_PUBLIC_ because no bundle reads it"
+
+[[var]]
+name = "SMOKE_USER_A_EMAIL"
+services = ["smoke"]
+kind = "secret"
+required = ["staging"]
+check = "email"
+provider = "operator: dedicated confirmed smoke account (staging only)"
+
+[[var]]
+name = "SMOKE_USER_A_PASSWORD"
+services = ["smoke"]
+kind = "secret"
+required = ["staging"]
+check = "min12"
+provider = "operator: password manager"
+
+[[var]]
+name = "SMOKE_USER_B_EMAIL"
+services = ["smoke"]
+kind = "secret"
+required = ["staging"]
+check = "email"
+provider = "operator: second confirmed smoke account (cross-user checks)"
+
+[[var]]
+name = "SMOKE_USER_B_PASSWORD"
+services = ["smoke"]
+kind = "secret"
+required = ["staging"]
+check = "min12"
+provider = "operator: password manager"
+
+[[var]]
+name = "SMOKE_QDRANT_URL"
+services = ["smoke"]
+kind = "config"
+check = "https_url"
+provider = "= QDRANT_URL (enables the unauthenticated-Qdrant check)"
+
+[[var]]
+name = "SMOKE_STATE_DIR"
+services = ["smoke"]
+kind = "config"
+provider = "operator"
+note = "DEP-03 seed/verify state (ids only); default test-results-smoke/"
+
+# ------------------------------------------------------------------------------------------------
+# `supabase config push` (supabase/config.toml [remotes.*])
+# ------------------------------------------------------------------------------------------------
+[[var]]
+name = "SUPABASE_ACCESS_TOKEN"
+services = ["supabase-config"]
+kind = "secret"
+required = true
+check = "nonempty"
+provider = "Supabase → Account → Access Tokens (operator only, never in CI)"
+
+[[var]]
+name = "SUPABASE_AUTH_SITE_URL"
+services = ["supabase-config"]
+kind = "config"
+required = true
+check = "https_origin"
+provider = "the web origin of this environment"
+
+[[var]]
+name = "SUPABASE_AUTH_REDIRECT_URL"
+services = ["supabase-config"]
+kind = "config"
+required = true
+check = "auth_callback"
+provider = "<SUPABASE_AUTH_SITE_URL>/auth/callback"
+
+[[var]]
+name = "SUPABASE_AUTH_SMTP_HOST"
+services = ["supabase-config"]
+kind = "config"
+required = true
+check = "hostname"
+provider = "SMTP provider"
+
+[[var]]
+name = "SUPABASE_AUTH_SMTP_USER"
+services = ["supabase-config"]
+kind = "secret"
+required = true
+check = "nonempty"
+provider = "SMTP provider"
+
+[[var]]
+name = "SUPABASE_AUTH_SMTP_PASS"
+services = ["supabase-config"]
+kind = "secret"
+required = true
+check = "nonempty"
+provider = "SMTP provider (API key / SMTP password)"
+
+[[var]]
+name = "SUPABASE_AUTH_SMTP_ADMIN_EMAIL"
+services = ["supabase-config"]
+kind = "config"
+required = true
+check = "email"
+provider = "sender address on the SPF/DKIM-verified domain"
+
+# ------------------------------------------------------------------------------------------------
+# Operations (make backup / make restore)
+# ------------------------------------------------------------------------------------------------
+[[var]]
+name = "BACKUP_DB_URL"
+services = ["ops"]
+kind = "secret"
+check = "postgres_url"
+provider = "Supabase session pooler URL (role postgres)"
+note = "source of `make backup`"
+
+[[var]]
+name = "RESTORE_DB_URL"
+services = ["ops"]
+kind = "secret"
+check = "postgres_url"
+provider = "an EMPTY target at the same migration version"
+note = "never the live project"
