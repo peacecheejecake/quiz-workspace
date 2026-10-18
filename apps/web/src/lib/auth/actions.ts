@@ -5,7 +5,9 @@
 // @supabase/ssr). Passwords and tokens are never logged or returned.
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { turnstileSiteKey } from '@/env';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { CAPTCHA_FIELD } from './captcha';
 import { endBrowserSession } from './end-session';
 import { PENDING_EMAIL_COOKIE, pendingEmailCookieOptions } from './pending-email';
 import { LOGIN_PATH } from './routes';
@@ -25,11 +27,20 @@ export async function signInAction(_prev: SignInState, formData: FormData): Prom
   const password = String(formData.get('password') ?? '');
   const next = safeNextPath(formData.get('next'));
   if (!email || !password) return { error: SIGN_IN_MESSAGES.required, email };
+  // CAPTCHA on (docs/auth.md §5.1): Auth would refuse a call without a token; never send one.
+  const captchaToken = String(formData.get(CAPTCHA_FIELD) ?? '').trim() || undefined;
+  if (turnstileSiteKey() !== undefined && !captchaToken) {
+    return { error: SIGN_IN_MESSAGES.captchaRequired, email };
+  }
 
   let failure: SignInState | undefined;
   try {
     const supabase = await createSupabaseServerClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      ...(captchaToken ? { options: { captchaToken } } : {}),
+    });
     if (error) {
       const kind = classifySignInError(error);
       if (kind === 'emailNotConfirmed') {

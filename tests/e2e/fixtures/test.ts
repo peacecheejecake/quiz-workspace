@@ -20,6 +20,7 @@
 // Never add test-only seed/reset endpoints to the production app (AGENTS.md §5).
 import { test as base, expect } from '@playwright/test';
 import { UserFactory } from './auth.ts';
+import { FakeTurnstile } from './turnstile.ts';
 import { deleteMessagesFor } from './mailpit.ts';
 import { WorkspaceFactory } from './workspaces.ts';
 
@@ -28,9 +29,22 @@ export interface E2EFixtures {
   userFactory: UserFactory;
   /** Per-test members and workspaces (public API); purged before the users are deleted. */
   workspaceFactory: WorkspaceFactory;
+  /**
+   * Deterministic Cloudflare Turnstile for every context (auto): no request ever reaches
+   * challenges.cloudflare.com. Set `turnstile.mode` before navigating (default `pass`).
+   */
+  turnstile: FakeTurnstile;
 }
 
 export const test = base.extend<E2EFixtures>({
+  turnstile: [
+    async ({ context }, use) => {
+      const fake = new FakeTurnstile();
+      await fake.install(context);
+      await use(fake);
+    },
+    { auto: true },
+  ],
   // Playwright reads fixture dependencies from the destructuring pattern; none are needed here.
   // eslint-disable-next-line no-empty-pattern
   userFactory: async ({}, use) => {
@@ -67,6 +81,7 @@ export {
   verifyTokenHashStatus,
 } from './auth.ts';
 export * from './auth-ui.ts';
+export * from './turnstile.ts';
 export { ApiClient, PROBLEM_TYPES, type ApiResponse, type Problem } from './api.ts';
 export * from './documents.ts';
 export * from './generation.ts';

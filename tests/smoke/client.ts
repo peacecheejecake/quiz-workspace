@@ -8,6 +8,8 @@ import { expect } from '@playwright/test';
 import { accounts, REPO_ROOT, smokeEnv, type Account } from './env.ts';
 
 export const API_PREFIX = '/api/v1';
+/** The only token Cloudflare's Turnstile test secret keys accept. */
+export const TURNSTILE_TEST_TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
 
 export interface Reply<T = unknown> {
   readonly status: number;
@@ -64,10 +66,20 @@ export function accessToken(account: Account): Promise<string> {
       const res = await supabase<{ access_token?: string }>('/auth/v1/token?grant_type=password', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: account.email, password: account.password }),
+        body: JSON.stringify({
+          email: account.email,
+          password: account.password,
+          // Turnstile test token (docs/auth.md §5.1): staging pairs the always-passes test keys,
+          // so Auth accepts it; with CAPTCHA off (local) Auth ignores it.
+          gotrue_meta_security: { captcha_token: TURNSTILE_TEST_TOKEN },
+        }),
       });
       if (res.status !== 200 || !res.body?.access_token) {
-        throw new Error(`smoke sign-in failed: HTTP ${res.status}`);
+        const hint =
+          res.status === 400
+            ? ' (CAPTCHA? staging must use the Turnstile test key pair, docs/runbook-deploy.md §2)'
+            : '';
+        throw new Error(`smoke sign-in failed: HTTP ${res.status}${hint}`);
       }
       return res.body.access_token;
     })();

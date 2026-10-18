@@ -25,3 +25,5 @@ tests/e2e/_pending/
 tests/fixtures/pdfs/
 # Generated retrieval reports (core eval, M2.6); a test checks the committed sample is current.
 eval/reports/
+# Supabase CLI state (linked project, version cache); gitignored in supabase/.gitignore.
+supabase/.temp/

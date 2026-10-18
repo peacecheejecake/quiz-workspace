@@ -176,7 +176,15 @@ async function main(): Promise<number> {
     '',
   );
   const dir = mkdtempSync(join(tmpdir(), 'quiz-log-audit-'));
-  const env = { ...process.env, NEXT_PUBLIC_API_BASE_URL: apiUrl, E2E_BASE_URL: webUrl };
+  const env = {
+    ...process.env,
+    NEXT_PUBLIC_API_BASE_URL: apiUrl,
+    E2E_BASE_URL: webUrl,
+    // Same as playwright.config.ts: the E2E web build has the auth CAPTCHA on with Cloudflare's
+    // always-passes test sitekey; tests/e2e/fixtures/turnstile.ts answers the browser's requests.
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY:
+      process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || '1x00000000000000000000AA',
+  };
 
   if (options.build) {
     const build = await run('pnpm', ['--filter', '@quiz/web', 'build'], env);

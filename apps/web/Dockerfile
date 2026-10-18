@@ -4,7 +4,11 @@
 #   docker build -f apps/web/Dockerfile -t quiz-web \
 #     --build-arg NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co \
 #     --build-arg NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable key> \
-#     --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.org .
+#     --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.org \
+#     --build-arg NEXT_PUBLIC_TURNSTILE_SITE_KEY=<Turnstile sitekey> .
+#
+# NEXT_PUBLIC_TURNSTILE_SITE_KEY is optional: empty builds the auth forms without CAPTCHA, which
+# only works against a Supabase project with CAPTCHA off (docs/auth.md §5.1).
 #
 # - `NEXT_PUBLIC_*` values are inlined into the client bundles at build time, so they are build
 #   arguments. They are public by definition (docs/deployment.md §6); nothing else is. Server-only
@@ -38,6 +42,7 @@ COPY apps/web apps/web
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
 RUN test -n "$NEXT_PUBLIC_SUPABASE_URL" && test -n "$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" \
       && test -n "$NEXT_PUBLIC_API_BASE_URL" \
       || { echo 'NEXT_PUBLIC_* build arguments are required' >&2; exit 1; }

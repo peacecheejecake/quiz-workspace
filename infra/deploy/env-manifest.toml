@@ -85,6 +85,15 @@ provider = "Railway api public domain (or custom domain)"
 note = "the Next.js server calls FastAPI here; CSP connect-src"
 
 [[var]]
+name = "NEXT_PUBLIC_TURNSTILE_SITE_KEY"
+services = ["web"]
+kind = "public"
+required = true
+check = "turnstile_site_key"
+provider = "Cloudflare → Turnstile → widget sitekey (0x…); staging default: test key 1x00000000000000000000AA"
+note = "inlined at build time; turns the auth CAPTCHA on (docs/auth.md §5.1); pairs with SUPABASE_AUTH_CAPTCHA_SECRET; test keys refused in production"
+
+[[var]]
 name = "AUTH_RECOVERY_MARKER_SECRET"
 services = ["web"]
 kind = "secret"
@@ -992,6 +1001,15 @@ kind = "config"
 required = true
 check = "email"
 provider = "sender address on the SPF/DKIM-verified domain"
+
+[[var]]
+name = "SUPABASE_AUTH_CAPTCHA_SECRET"
+services = ["supabase-config"]
+kind = "secret"
+required = true
+check = "turnstile_secret"
+provider = "Cloudflare → Turnstile → the same widget's secret key; staging default: test secret 1x0000000000000000000000000000000AA"
+note = "Supabase Auth verifies CAPTCHA tokens with it ([remotes.*.auth.captcha]); never on web/api/worker; test keys refused in production"
 
 # ------------------------------------------------------------------------------------------------
 # Operations (make backup / make restore)

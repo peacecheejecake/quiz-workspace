@@ -16,6 +16,7 @@ import {
   createNumberedQuestions,
   docUi,
   editorUi,
+  expectCaptchaVerified,
   JOB_TIMEOUT_MS,
   overviewPath,
   overviewUi,
@@ -75,10 +76,13 @@ async function snap(page: Page, name: string, extraMask: Locator[] = []): Promis
 test('VISUAL-01 sign-in and sign-up forms, with field errors', async ({ page }) => {
   await page.goto('/login');
   await expect(authUi.email(page)).toBeVisible();
+  // Settled security check (A4, deterministic fake Turnstile in its "passed" state).
+  await expectCaptchaVerified(page);
   await snap(page, 'login');
   await page.goto('/signup');
   await authUi.signUpButton(page).click();
   await expect(page.locator('[aria-invalid="true"]').first()).toBeVisible();
+  await expectCaptchaVerified(page);
   await page.mouse.move(0, 0);
   await snap(page, 'signup-errors');
 });

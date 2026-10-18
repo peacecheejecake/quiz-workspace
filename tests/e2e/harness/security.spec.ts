@@ -124,3 +124,31 @@ test('HARNESS-12 cross-origin POSTs to a Server Action or route handler are reje
   // Route handlers (GET-only today) are covered by the same guard.
   expect((await post('https://evil.example', '/auth/callback')).status()).toBe(403);
 });
+
+test('HARNESS-16 CAPTCHA widens only script-src and frame-src, to the Turnstile origin', async ({
+  page,
+}) => {
+  // The E2E build has NEXT_PUBLIC_TURNSTILE_SITE_KEY set (playwright.config.ts), so the widget
+  // loads (from tests/e2e/fixtures/turnstile.ts) under the real CSP. docs/deployment.md §6.1.
+  const violations = await recordCspViolations(page);
+  const turnstile = 'https://challenges.cloudflare.com';
+  for (const path of ['/login', '/signup', '/forgot-password', '/auth/verify']) {
+    const res = await page.goto(path);
+    const csp = cspDirectives(res?.headers()['content-security-policy']);
+    const scriptSrc = csp.get('script-src') ?? [];
+    expect(scriptSrc, path).toContain("'strict-dynamic'");
+    expect(
+      scriptSrc.find((v) => v.startsWith("'nonce-")),
+      path,
+    ).toBeTruthy();
+    expect(scriptSrc, path).toContain(turnstile);
+    expect(csp.get('frame-src'), path).toEqual([turnstile]);
+    expect(csp.get('connect-src') ?? [], path).not.toContain(turnstile);
+    expect(csp.get('frame-ancestors'), path).toEqual(["'none'"]);
+    expect(csp.get('default-src'), path).toEqual(["'self'"]);
+    // The widget really rendered under that policy.
+    await expect(page.locator(`iframe[src^="${turnstile}/"]`), path).toBeAttached();
+    await page.waitForLoadState('networkidle');
+    expect(await violations(), path).toEqual([]);
+  }
+});

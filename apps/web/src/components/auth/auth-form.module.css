@@ -8,6 +8,13 @@
   min-height: 44px;
 }
 
+/* Blocked until the security check has a token (docs/auth.md §5.1): stays focusable so its
+   description (the reason) is announced; looks like the native disabled state. */
+.submit[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .notice {
   display: flex;
   align-items: flex-start;

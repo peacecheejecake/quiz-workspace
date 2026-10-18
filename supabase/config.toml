@@ -222,8 +222,10 @@ token_verifications = 30
 # Number of Web3 logins that can be made in a 5 minute interval per IP address.
 web3 = 30
 
-# CAPTCHA is supported (docs/auth.md §5) but disabled locally so E2E can sign up without a
-# challenge. Hosted projects enable it with the secret from the environment, never a literal:
+# CAPTCHA (Cloudflare Turnstile, docs/auth.md §5.1) is off locally: hundreds of E2E/integration
+# Auth calls (and the fixtures' password grants) must not depend on Cloudflare. The web widget
+# still runs locally (test sitekey, faked in E2E); Supabase just does not verify the token.
+# Hosted projects turn it on in [remotes.*.auth.captcha] with the secret from the environment.
 [auth.captcha]
 enabled = false
 provider = "turnstile"
@@ -459,8 +461,6 @@ enabled = true
 # `supabase-config`); nothing secret is committed.
 #
 # Not set here on purpose:
-# - CAPTCHA stays off: the web app sends no CAPTCHA token yet, so enabling it would break signup
-#   and sign-in (implementation-plan §7, M7.4a). Rate limits below are the interim protection.
 # - JWT signing keys: hosted projects rotate to an asymmetric (ES256) key in the dashboard
 #   (`signing_keys_path` is the local key only). Access tokens keep `jwt_expiry = 3600` (≤ 1 h).
 # -----------------------------------------------------------------------------------------------
@@ -481,6 +481,13 @@ email_sent = 30
 token_refresh = 150
 sign_in_sign_ups = 30
 token_verifications = 30
+
+# Turnstile CAPTCHA on signup, password sign-in, resend and recovery (docs/auth.md §5.1). The
+# secret pairs with the web's NEXT_PUBLIC_TURNSTILE_SITE_KEY (same widget, or both Cloudflare's always-passes test keys).
+[remotes.staging.auth.captcha]
+enabled = true
+provider = "turnstile"
+secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"
 
 [remotes.staging.auth.email]
 max_frequency = "60s"
@@ -509,6 +516,13 @@ email_sent = 30
 token_refresh = 150
 sign_in_sign_ups = 30
 token_verifications = 30
+
+# Turnstile CAPTCHA on signup, password sign-in, resend and recovery (docs/auth.md §5.1). The
+# secret pairs with the web's NEXT_PUBLIC_TURNSTILE_SITE_KEY (same widget; test keys are refused).
+[remotes.production.auth.captcha]
+enabled = true
+provider = "turnstile"
+secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"
 
 [remotes.production.auth.email]
 max_frequency = "60s"

@@ -39,6 +39,8 @@ const apiEnv = {
   CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS || BASE_URL,
 };
 
+// Mirrors TEST_SITE_KEY in tests/e2e/fixtures/turnstile.ts (the config does not import fixtures).
+const TURNSTILE_TEST_SITE_KEY = '1x00000000000000000000AA';
 const TEST_DIR = 'tests/e2e';
 const SPEC = /.*\.spec\.ts$/;
 const PENDING = '**/_pending/**';
@@ -138,7 +140,13 @@ export default defineConfig({
     {
       command: `pnpm --filter @quiz/web build && pnpm --filter @quiz/web exec next start --hostname ${hostname} --port ${port || '3000'}`,
       url: `${BASE_URL}/login`,
-      env: { NEXT_PUBLIC_API_BASE_URL: API_URL },
+      env: {
+        NEXT_PUBLIC_API_BASE_URL: API_URL,
+        // CAPTCHA on (docs/auth.md §5.1): Cloudflare's always-passes test sitekey. The browser's
+        // Turnstile requests are answered by tests/e2e/fixtures/turnstile.ts, never by Cloudflare.
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY:
+          process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || TURNSTILE_TEST_SITE_KEY,
+      },
       reuseExistingServer: REUSE_SERVERS,
       timeout: 180_000,
       stdout: 'ignore',

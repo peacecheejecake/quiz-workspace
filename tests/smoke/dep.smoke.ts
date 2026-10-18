@@ -346,6 +346,14 @@ test('DEP-07 web security headers, CSP origins and share no-store', READONLY, as
   const connect = /connect-src ([^;]+)/.exec(csp)?.[1]?.split(/\s+/) ?? [];
   expect(connect).toContain(origin(env.apiUrl));
   expect(connect).toContain(origin(env.supabaseUrl));
+  // Turnstile CAPTCHA (docs/auth.md §5.1): on in every deployment; frames only from Cloudflare.
+  const frames = /frame-src ([^;]+)/.exec(csp)?.[1]?.trim().split(/\s+/) ?? [];
+  if (env.deployed) {
+    expect(frames).toEqual(['https://challenges.cloudflare.com']);
+  } else {
+    expect([["'none'"], ['https://challenges.cloudflare.com']]).toContainEqual(frames);
+  }
+  expect(connect).not.toContain('https://challenges.cloudflare.com');
   expect(login.headers.get('x-powered-by')).toBeNull();
 
   const share = await raw(`${env.webUrl}/share/${randomUUID()}`);
