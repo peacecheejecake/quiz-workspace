@@ -50,9 +50,10 @@ test.describe.configure({ timeout: JOB_TIMEOUT_MS + 90_000 });
 
 const BOOK = book('book-ko');
 
-/** Dynamic regions: timestamps (server dates, relative times). */
+/** Dynamic regions: timestamps (server dates, relative times) and the per-test user's email in
+ *  the header account button (UX1). */
 function dynamic(page: Page): Locator[] {
-  return [page.locator('time'), page.locator('[data-visual-dynamic]')];
+  return [page.locator('time'), page.locator('[data-visual-dynamic]'), authUi.accountButton(page)];
 }
 
 async function ready(page: Page): Promise<void> {
