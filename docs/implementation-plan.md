@@ -169,7 +169,8 @@ flowchart LR
 | M7.1 | activities/attempts/jobs 조회 API + HISTORY-01 화면 | M7.0, M5.2 | HISTORY-01 AC GREEN |
 | M7.2 | 전 화면 a11y(axe)·visual baseline(light/dark, desktop/iPad)·WebKit/모바일 smoke, 성능 점검 | M5.5, M6.3, S4 | 전체 E2E GREEN, `e2e:trace` orphan 0 |
 | M7.3 | 컨테이너화(web/api/worker Dockerfile), CI 전체 파이프라인, 색인 재생성·백업 복원 스크립트 | M7.2 | CI GREEN |
-| M7.4 ⛔ | Staging/Production 배포(Vercel·Supabase·Railway·Qdrant Cloud), SMTP, DEP-01~07 | M7.3 | **사용자 계정·비용 승인 필요** |
+| M7.4a | 계정 없는 배포 준비: platform config as code, env manifest·검사기, deploy workflow, DEP smoke runner, runbook | M7.3 | 오프라인 검증 GREEN, `make smoke-local` GREEN |
+| M7.4 ⛔ | Staging 배포(구성 A) → 7일 부하·비용 게이트 → Production, SMTP, DEP-01~07 | M7.4a | **사용자 계정·비용 승인 필요** |
 
 ## 4. Task 의존 그래프
 
@@ -290,7 +291,7 @@ flowchart TB
   subgraph M7[M7 Harden·Release]
     M70[M7.0 RED]
     M71[M7.1 HISTORY-01] --> M72[M7.2 a11y/visual]
-    M72 --> M73[M7.3 CI/containers] --> M74[M7.4 deploy ⛔]
+    M72 --> M73[M7.3 CI/containers] --> M74a[M7.4a deploy prep] --> M74[M7.4 deploy ⛔]
   end
   M30 --> M70
   M70 ==> M71
@@ -325,7 +326,7 @@ flowchart TB
 | W17 | M5.2 · M6.2 · S3b | |
 | W18 | M5.4 · M6.3 · M7.1 · S4 | |
 | W19 | M5.5 | |
-| W20 | M7.2 → M7.3 → M7.4⛔ | |
+| W20 | M7.2 → M7.3 → M7.4a → M7.4⛔ | |
 
 Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 Task를 즉시 착수한다.
 
@@ -388,6 +389,12 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-10-18 | M7.2: app 기본 테마는 OS 설정(prefers-color-scheme)을 따르고 명시적 `data-theme`가 우선. `--color-text-secondary` light 값 `#667085`→`#636D82`(muted surface 대비 4.67:1, design-system v1.1.2). Visual baseline은 pinned Playwright Linux image 렌더 하나로 통일(플랫폼별 baseline 없음). | M7.2 axe |
 | 2026-10-18 | M7.3: API image는 `quiz-api[models]`, worker는 `quiz-worker[models]`(parser·models·llm). Model weight는 image에 굽지 않고 `HF_HOME` volume에 최초 사용 시 적재. CI E2E는 목록에 없는 phase의 screen spec만 제외하고 전부 실행. Restore는 같은 migration 상태의 빈 target에 data-only load. | deployment.md |
 | 2026-10-18 | M7.3 follow-up: restore의 "빈 target"은 사용자 데이터가 없는 상태. migration이 넣는 행(`storage.buckets`)은 load 트랜잭션 안에서 backup 행으로 교체하되 timestamp 외 정의가 다르면 rollback. 그 밖에 data.sql의 어떤 table이라도 행이 있으면 거부. | DEP-06, CI rehearsal |
+| 2026-10-18 | **사용자 결정**: 배포 구성 A(Vercel web + Supabase + Railway api/worker/Redis + Qdrant Cloud). staging 먼저, production은 staging 7일 부하·비용 게이트 후(workflow는 `PRODUCTION_DEPLOY_ENABLED=true` 전까지 production 거부). Supabase는 환경별 별도 project(지금 staging만), branching 미사용. | deployment.md §3·§8, 비용 미확정 |
+| 2026-10-18 | M7.4a: Railway는 workflow가 GHCR에 push한 이미지를 **digest로** 실행(소스 빌드 없음). Railway config-as-code(railway.json)는 소스 빌드 서비스에만 적용되므로 배포 설정은 `infra/deploy/railway-services.toml`에 두고 `railway_deploy.py`가 GraphQL로 매 rollout 적용. API rollout은 `/health/ready`로 gate, worker는 HTTP 없음 → restart ALWAYS. | 재현 가능한 rollout, digest 고정 |
+| 2026-10-18 | M7.4a: Vercel git 자동 배포 끔(`vercel.json`) → 모든 배포는 workflow에서 migration(`supabase db push`) 뒤에. 첫 migration·`quiz_api`/`quiz_worker` login 설정·`supabase config push`는 운영자 수동(access token을 CI에 두지 않음). | deployment.md §5 순서, 최소 권한 |
+| 2026-10-18 | M7.4a 문서 충돌: deployment.md §6.1은 Auth CAPTCHA를 요구하지만 web에 CAPTCHA 위젯이 없어 켜면 가입·로그인이 깨진다 → `[remotes.*]`에서 CAPTCHA off 유지, hosted rate limit만 적용. CAPTCHA는 별도 Task(위젯 + token 전달) 후 활성화. | 보수적 선택(동작하는 인증 우선) |
+| 2026-10-18 | M7.4a: Railway volume이 uid 10001에 쓰기 불가하면 `RAILWAY_RUN_UID=0`(root 실행) 대신 volume 없이 운영(env manifest가 그 변수를 금지). staging 첫 배포에서 확인. | 비root 이미지 불변식(M7.3) |
+| 2026-10-18 | M7.4a: staging smoke는 traces/스크린샷/report 없이 실행하고 합성 smoke 계정 2개(사전 가입)를 쓴다. production은 `@readonly` 점검만. DEP-04·DEP-06은 CI(`APP_ENV=test` 실패 marker, restore rehearsal)로 자동 검증하고 staging에서는 runbook 수동 절차. | 실제 JWT·비밀번호가 artifact에 남지 않음 |
 
 ## 8. 진행 현황
 
@@ -457,7 +464,8 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | S4 security 검증 | ✅ | fac8c44 · 35dafb6 | 취약점 4건 발견·수정(share id 표기 변형 rate limit 우회, uvicorn XFF 신뢰, 500 캐시 가능, 확장자 경로 CSRF guard 우회). OpenAPI 기반 authz matrix 236+, share 공격, leak test, HARNESS-13~15. test-infra 555 GREEN, log/artifact audit 0. 지적 없음 |
 | M7.2 a11y·visual·perf | ✅ | d149be5 · 3fabcf9 | axe(WCAG 2.2 AA) 21개 화면 light/dark, visual baseline 48(desktop·iPad, pinned Linux renderer), WebKit/모바일 smoke, perf(LCP ≤160ms, API p95 ≤25ms). 수정: dark theme 미적용, secondary text 대비, 중복 landmark. P2(visual이 CI 미연결) → M7.3 fix에서 연결. 전체 E2E 259/259 + visual 10 + UI visual 8 GREEN, e2e:trace orphan 0 |
 | M7.3 컨테이너·CI | ✅ | 1fec1cc · 3075270 · 6c19edf · d92343b | web/api/worker image(non-root, pinned digest) build·boot 확인, CI: checks·images·integration(worker E2E 전체 phase, visual, log/artifact audit, backup/restore rehearsal)·nightly perf/models, actionlint 0. reindex·backup·restore script. P1×2(restore 설정, rehearsal seed)·P2×2(storage inventory 일관성, visual gate) → 반영 → P2(probe의 Qdrant 원격 검사) → 반영 → 지적 없음. 실제 GitHub CI 첫 GREEN: run 39101748833 (`623b26a`). 그 전 실패 4회 → 수정: Node 24.x 의존 단언(7f6f855), CI ANSI 출력·Celery 종료 경쟁(61bf5d3), 모바일 헤더 overflow(d62a542)·스크롤 영역 키보드 접근(b4744b9), reset 대상 restore(3fd66b9·ca6270b·d50d8b2) — Codex 지적 없음 |
-| M7.4 배포 | ⛔ | — | 사용자 승인 대기: Vercel·Supabase·Railway·Qdrant Cloud 계정, SMTP, 비용 승인, secret 값(`SHARE_SESSION_SECRET`, `RELAY_CLIENT_SECRET`, `AUTH_RECOVERY_MARKER_SECRET`, LLM key), web image `NEXT_PUBLIC_*`, /terms·/privacy 실제 문구 |
+| M7.4a 배포 준비(계정 없음) | ✅ | 9677554 · b7c08f9 · 1302835 · c3d4b1e · 4d06a6a · b5acd9e | platform config(vercel.json, railway-services.toml, supabase `[remotes.*]`) + 불변식 test, env manifest(`make check-env`, 값 비출력), deploy workflow(수동·digest·migration 선행·smoke, production gate), Railway rollout script(mock API test), DEP smoke(`make smoke-local` 12/12 + DEP-03 seed/verify 재시작 GREEN, log audit 0), `e2e:log-audit --scan`, runbook. actionlint 0, lint·typecheck·test GREEN. Codex 리뷰 대기 |
+| M7.4 배포 | ⛔ | — | 사용자 작업 대기(runbook-deploy.md): staging 계정(Supabase project·Railway·Vercel·Qdrant Cloud·SMTP 도메인), secret 생성·입력, GitHub Environment `staging`, smoke 계정 2개, 첫 수동 migration·role login·`config push`; 사용자 결정: 지역·도메인, GHCR 공개 여부, staging Deployment Protection, LLM 사용 여부, /terms·/privacy 문구; 첫 배포에서 확인: Railway GraphQL·volume 권한·Vercel `x-real-ip`. production은 7일 부하·비용 게이트 후. CAPTCHA는 별도 Task |
 | (통합) 전체 E2E 회귀 | ✅ | 909195f | worker 포함 234/234 GREEN(chromium·webkit) |
 | M4.4b import 화면 | ✅ | 9a263df · c02d89a | QIMPORT-01 AC01~04 GREEN. 공용 `QuestionDraftReview`. P2×2(초기 로드 재시도, publish 200 제한) → 상태 직접 갱신 + 200개 batch → 지적 없음 |
 | S2a sharing 화면 | ✅ | bbcbc21 · 27c0039 | WS-SHARE-01 AC01~05 + WS-01-AC06 GREEN(chromium·webkit), artifact-audit 0. P2×2(21+ link revoke, 만료 link 정책 편집) → 반영 → 지적 없음 |
