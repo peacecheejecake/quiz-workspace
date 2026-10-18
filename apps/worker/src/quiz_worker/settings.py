@@ -68,6 +68,15 @@ class WorkerSettings(BaseSettings):
     task_time_limit_seconds: int = Field(
         default=1800, ge=1, validation_alias="WORKER_TASK_TIME_LIMIT_SECONDS"
     )
+    # document.parse (Docling + embedding of a whole book) gets its own, longer limits (M7.4c):
+    # a 300-page book took ~45 min on 8 slow vCPUs, far past the limits above, so it retried
+    # until attempts ran out. Its lease and the broker visibility timeout follow these.
+    document_task_soft_time_limit_seconds: int = Field(
+        default=6900, ge=0, validation_alias="WORKER_DOCUMENT_TASK_SOFT_TIME_LIMIT_SECONDS"
+    )
+    document_task_time_limit_seconds: int = Field(
+        default=7200, ge=1, validation_alias="WORKER_DOCUMENT_TASK_TIME_LIMIT_SECONDS"
+    )
     # A claim's lease outlives the hard time limit by this margin, so a live attempt is never
     # treated as abandoned while the worker could still be running it.
     lease_grace_seconds: int = Field(
@@ -160,9 +169,9 @@ class WorkerSettings(BaseSettings):
     )
     pdf_max_pages: int = Field(default=1500, ge=1, validation_alias="WORKER_PDF_MAX_PAGES")
     # Docling stops converting after this many seconds (the document then fails as too slow);
-    # must stay below the task soft time limit.
+    # must stay below the document task's soft time limit, leaving time for indexing.
     parse_timeout_seconds: float = Field(
-        default=1200, gt=0, validation_alias="WORKER_PARSE_TIMEOUT_SECONDS"
+        default=3600, gt=0, validation_alias="WORKER_PARSE_TIMEOUT_SECONDS"
     )
     # Docling memory bound (M7.4c): pages buffered between pipeline stages, and pages per
     # layout/table model batch. Docling's own default queue (100) grows with book length (about
@@ -193,6 +202,16 @@ class WorkerSettings(BaseSettings):
     def _check_limits(self) -> WorkerSettings:
         if self.task_soft_time_limit_seconds >= self.task_time_limit_seconds:
             raise ValueError("WORKER_TASK_SOFT_TIME_LIMIT_SECONDS must be below the hard limit")
+        doc_soft = self.document_task_soft_time_limit_seconds
+        doc_hard = self.document_task_time_limit_seconds
+        if doc_soft >= doc_hard:
+            raise ValueError(
+                "WORKER_DOCUMENT_TASK_SOFT_TIME_LIMIT_SECONDS must be below the hard limit"
+            )
+        if self.parse_timeout_seconds >= (doc_soft or doc_hard):
+            raise ValueError(
+                "WORKER_PARSE_TIMEOUT_SECONDS must be below the document task time limits"
+            )
         if self.parse_page_batch_size > self.parse_queue_max_size:
             raise ValueError(
                 "WORKER_PARSE_PAGE_BATCH_SIZE must not exceed WORKER_PARSE_QUEUE_MAX_SIZE"
@@ -208,16 +227,27 @@ class WorkerSettings(BaseSettings):
 
     @property
     def lease_seconds(self) -> int:
+        """Lease of a job running under the default task time limits."""
         return self.task_time_limit_seconds + self.lease_grace_seconds
 
     @property
+    def document_lease_seconds(self) -> int:
+        """Lease of a document.parse attempt (its own, longer hard limit)."""
+        return self.document_task_time_limit_seconds + self.lease_grace_seconds
+
+    @property
+    def max_lease_seconds(self) -> int:
+        return max(self.lease_seconds, self.document_lease_seconds)
+
+    @property
     def reconcile_stale_after(self) -> float:
-        return self.reconcile_stale_after_seconds or float(self.lease_seconds)
+        # Past every lease, so a deferred duplicate (countdown = lease left) is never raced.
+        return self.reconcile_stale_after_seconds or float(self.max_lease_seconds)
 
     @property
     def broker_visibility_timeout_seconds(self) -> int:
         # Redis re-delivers unacked messages after this; keep it past any live lease.
-        return self.lease_seconds + 60
+        return self.max_lease_seconds + 60
 
 
 @lru_cache(maxsize=1)

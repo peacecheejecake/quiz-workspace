@@ -18,11 +18,13 @@ from __future__ import annotations
 import contextlib
 import socket
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from celery import Celery, Task, signals
 
+from quiz_worker.document_job import JOB_TYPE as DOCUMENT_PARSE_JOB_TYPE
 from quiz_worker.document_job import (
     LazyDeps,
     document_parse_definition,
@@ -54,6 +56,31 @@ from quiz_worker.store import InMemoryJobStore, JobRecord, JobStatus, JobStore, 
 TASK_NAME_PREFIX = "quiz.jobs."
 DEFAULT_QUEUE = "quiz.jobs"
 RECONCILE_TASK_NAME = "quiz.maintenance.reconcile_jobs"
+# Job types that run under the document task time limits (whole-book parse + embedding).
+DOCUMENT_LIMIT_JOB_TYPES = frozenset({DOCUMENT_PARSE_JOB_TYPE})
+
+
+@dataclass(frozen=True)
+class JobTimeLimits:
+    """Celery soft/hard limits of a job type and the claim lease that covers them."""
+
+    soft_seconds: int | None
+    hard_seconds: int
+    lease_seconds: int
+
+
+def job_time_limits(settings: WorkerSettings, job_type: str) -> JobTimeLimits:
+    if job_type in DOCUMENT_LIMIT_JOB_TYPES:
+        return JobTimeLimits(
+            soft_seconds=settings.document_task_soft_time_limit_seconds or None,
+            hard_seconds=settings.document_task_time_limit_seconds,
+            lease_seconds=settings.document_lease_seconds,
+        )
+    return JobTimeLimits(
+        soft_seconds=settings.task_soft_time_limit_seconds or None,
+        hard_seconds=settings.task_time_limit_seconds,
+        lease_seconds=settings.lease_seconds,
+    )
 
 
 class QuizCelery(Celery):
@@ -106,7 +133,9 @@ class IdempotentJobTask(_TaskBase):
         runner = JobRunner(
             app.job_store,
             worker_id=self._worker_id(),
-            lease_seconds=app.worker_settings.lease_seconds,
+            lease_seconds=job_time_limits(
+                app.worker_settings, self.job_definition.job_type
+            ).lease_seconds,
             cleanup_policy=cleanup_policy_for(app.worker_settings),
         )
         result = runner.run(self.job_definition, raw_envelope)
@@ -272,11 +301,15 @@ def register_job(app: QuizCelery, definition: JobDefinition[Any]) -> IdempotentJ
     def run(self: IdempotentJobTask, envelope: dict[str, Any]) -> dict[str, Any]:
         return self.execute_job(envelope)
 
+    limits = job_time_limits(app.worker_settings, definition.job_type)
     task = app.task(
         bind=True,
         base=IdempotentJobTask,
         name=task_name(definition.job_type),
         job_definition=definition,
+        # Per task type, overriding task_time_limit; the claim lease follows (execute_job).
+        time_limit=limits.hard_seconds,
+        soft_time_limit=limits.soft_seconds,
         shared=False,
     )(run)
     app.job_definitions[definition.job_type] = definition
@@ -342,8 +375,8 @@ def cleanup_policy_for(settings: WorkerSettings) -> CleanupPolicy:
                 settings.cleanup_max_delay_seconds, settings.cleanup_base_delay_seconds
             ),
         ),
-        # A cleanup try runs inside a task, so the hard time limit bounds it.
-        lease_seconds=settings.lease_seconds,
+        # A cleanup try runs inside a task, so the longest hard time limit bounds it.
+        lease_seconds=settings.max_lease_seconds,
     )
 
 

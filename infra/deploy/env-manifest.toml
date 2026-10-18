@@ -506,6 +506,22 @@ provider = "default"
 note = "1800"
 
 [[var]]
+name = "WORKER_DOCUMENT_TASK_SOFT_TIME_LIMIT_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "6900; document.parse only (whole-book parse + embedding), below its hard limit"
+
+[[var]]
+name = "WORKER_DOCUMENT_TASK_TIME_LIMIT_SECONDS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "7200; document.parse lease = this + grace; broker visibility and reconciler follow the longest lease"
+
+[[var]]
 name = "WORKER_LEASE_GRACE_SECONDS"
 services = ["worker"]
 kind = "config"
@@ -606,7 +622,7 @@ services = ["worker"]
 kind = "config"
 check = "number"
 provider = "default"
-note = "1200 (below the soft time limit)"
+note = "3600 (below the document task soft time limit, leaving time for indexing)"
 
 [[var]]
 name = "WORKER_PARSE_QUEUE_MAX_SIZE"

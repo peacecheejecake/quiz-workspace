@@ -72,7 +72,7 @@ def test_soft_time_limit_zero_disables_it(monkeypatch: pytest.MonkeyPatch) -> No
     settings = WorkerSettings(_env_file=None)  # type: ignore[call-arg]
 
     assert settings.task_soft_time_limit_seconds == 0
-    assert settings.reconcile_stale_after == settings.lease_seconds
+    assert settings.reconcile_stale_after == settings.max_lease_seconds
 
 
 def test_serve_refuses_eager_mode(monkeypatch: pytest.MonkeyPatch) -> None:
