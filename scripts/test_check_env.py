@@ -333,3 +333,55 @@ def test_malformed_credential_urls_never_reach_the_output(
     assert "api DATABASE_URL: could not be parsed" in text
     assert "sensitive-password" not in text
     assert "quiz_api:" not in text
+
+
+# --- M7.4b: Cloudflare Workers AI embedder --------------------------------------------------------
+
+
+def test_workers_ai_credentials_are_required_only_in_workers_ai_mode() -> None:
+    for service in ("api", "worker"):
+        env = valid_env(service, "staging")
+        env["WORKER_EMBEDDER"] = "workers_ai"
+        report = check_env.run_checks(MANIFEST, "staging", {service: env})
+        assert (
+            f"{service} CLOUDFLARE_ACCOUNT_ID: missing (required when WORKER_EMBEDDER=workers_ai)"
+            in report.errors
+        )
+        assert (
+            f"{service} CLOUDFLARE_API_TOKEN: missing (required when WORKER_EMBEDDER=workers_ai)"
+            in report.errors
+        )
+        env["CLOUDFLARE_ACCOUNT_ID"] = "0123456789abcdef0123456789abcdef"
+        env["CLOUDFLARE_API_TOKEN"] = SECRET_MARK
+        assert check_env.run_checks(MANIFEST, "staging", {service: env}).errors == []
+        env["WORKER_EMBEDDER"] = "auto"
+        del env["CLOUDFLARE_API_TOKEN"], env["CLOUDFLARE_ACCOUNT_ID"]
+        assert check_env.run_checks(MANIFEST, "staging", {service: env}).errors == []
+
+
+def test_workers_ai_token_is_a_server_secret_never_on_web() -> None:
+    (token,) = [v for v in MANIFEST.vars if v.name == "CLOUDFLARE_API_TOKEN"]
+    assert token.kind == "secret"
+    assert set(token.services) == {"api", "worker"}
+    assert token.same
+    web = valid_env("web", "staging")
+    web["CLOUDFLARE_API_TOKEN"] = SECRET_MARK
+    web["CLOUDFLARE_ACCOUNT_ID"] = "0123456789abcdef0123456789abcdef"
+    report = check_env.run_checks(MANIFEST, "staging", {"web": web})
+    assert "web CLOUDFLARE_API_TOKEN: must not be set on web (server-only)" in report.errors
+    assert "web CLOUDFLARE_ACCOUNT_ID: must not be set on web (server-only)" in report.errors
+    assert all(SECRET_MARK not in line for line in report.errors + report.warnings)
+
+
+def test_embedder_mode_values_are_checked() -> None:
+    env = valid_env("api", "production")
+    for value, ok in (("auto", True), ("qwen3", True), ("workers_ai", None), ("fake", False)):
+        env["WORKER_EMBEDDER"] = value
+        errors = check_env.run_checks(MANIFEST, "production", {"api": env}).errors
+        if ok is None:  # valid mode; only its credentials are missing
+            assert all("WORKER_EMBEDDER" not in e for e in errors)
+        else:
+            assert any("WORKER_EMBEDDER" in e for e in errors) is not ok
+    env["WORKER_EMBEDDER"] = "workers-ai"
+    errors = check_env.run_checks(MANIFEST, "production", {"api": env}).errors
+    assert "api WORKER_EMBEDDER: must be auto, qwen3 or workers_ai" in errors

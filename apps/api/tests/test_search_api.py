@@ -626,3 +626,157 @@ def test_deployed_settings_refuse_the_fake_embedder() -> None:
     )
     with pytest.raises(InsecureConfigurationError, match="WORKER_EMBEDDER"):
         settings.ensure_secure_deployment()
+
+
+# --- M7.4b: hosted embedder, degraded search (SEARCH-01-AC06) ---------------------------------
+
+CF_ACCOUNT = "0123456789abcdef0123456789abcdef"
+CF_TOKEN = "cf-token-that-must-never-be-printed-0123456789"  # noqa: S105
+
+
+@pytest.fixture
+def degradable(app: FastAPI, world: World) -> World:
+    """The world's index searched through the APP_ENV=test query embedder (failure marker)."""
+    from quiz_api.search_engine import QueryFailureInjectingEmbedder
+
+    store = QdrantIndexStore(
+        world.store._client,  # same in-memory collections as the world's store
+        QueryFailureInjectingEmbedder(FakeEmbedder()),
+    )
+    app.state.search_engine = SearchEngine(app.state.settings, store_factory=lambda _s: store)
+    return world
+
+
+@pytest.mark.parametrize("mode", ["hybrid", "semantic"])
+def test_unavailable_query_embedding_degrades_to_keyword_results(
+    degradable: World,
+    caller: Callable[[], Caller],
+    mode: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from quiz_api.search_engine import QUERY_EMBEDDING_FAILURE_MARKER
+
+    alice = caller()
+    ws = _member(degradable, alice)
+    degradable.add(ws, "book-en")
+
+    healthy = alice.search(ws, query="chlorine disinfection", mode=mode).json()
+    assert healthy["degraded"] == []
+    expected = {"hybrid": {"rrf"}, "semantic": {"cosine"}}[mode]
+    assert {i["score_type"] for i in healthy["items"]} == expected
+
+    caplog.set_level("INFO")
+    query = f"chlorine disinfection {QUERY_EMBEDDING_FAILURE_MARKER}"
+    res = alice.search(ws, query=query, mode=mode)
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["degraded"] == ["dense_unavailable"]
+    assert body["mode"] == mode
+    assert body["items"]
+    assert {i["score_type"] for i in body["items"]} == {"bm25"}
+    assert any("chlorine" in i["text"].lower() for i in body["items"])
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert warnings, "the degrade is logged"
+    assert "chlorine" not in caplog.text
+    assert QUERY_EMBEDDING_FAILURE_MARKER not in caplog.text
+
+
+def test_keyword_search_is_never_degraded(degradable: World, caller: Callable[[], Caller]) -> None:
+    from quiz_api.search_engine import QUERY_EMBEDDING_FAILURE_MARKER
+
+    alice = caller()
+    ws = _member(degradable, alice)
+    degradable.add(ws, "book-en")
+    query = f"chlorine {QUERY_EMBEDDING_FAILURE_MARKER}"
+    body = alice.search(ws, query=query, mode="keyword").json()
+    assert body["degraded"] == []
+    assert body["items"]
+
+
+def test_an_empty_scope_is_not_degraded(world: World, caller: Callable[[], Caller]) -> None:
+    alice = caller()
+    ws = _member(world, alice)
+    assert alice.search(ws, query="chlorine", mode="hybrid").json()["degraded"] == []
+
+
+def test_the_query_failure_marker_is_installed_only_in_app_env_test() -> None:
+    from book_core.embedding import EmbeddingUnavailableError
+    from quiz_api.search_engine import QUERY_EMBEDDING_FAILURE_MARKER, build_query_embedder
+
+    marked = f"x {QUERY_EMBEDDING_FAILURE_MARKER}"
+    test_embedder = build_query_embedder(
+        Settings.model_construct(app_env=Environment.TEST, search_embedder=EmbedderMode.AUTO)
+    )
+    with pytest.raises(EmbeddingUnavailableError):
+        test_embedder.embed_query(marked)
+    assert len(test_embedder.embed_query("fine")) == test_embedder.dimension
+    local = build_query_embedder(
+        Settings.model_construct(app_env=Environment.LOCAL, search_embedder=EmbedderMode.FAKE)
+    )
+    assert len(local.embed_query(marked)) == local.dimension
+
+
+def test_api_and_worker_build_the_same_hosted_embedder() -> None:
+    from book_core.embedding.workers_ai import WorkersAIEmbedder
+    from quiz_api.search_engine import build_query_embedder
+    from quiz_worker.adapters import build_embedder
+    from quiz_worker.settings import WorkerSettings
+
+    env = {
+        "APP_ENV": "local",
+        "WORKER_EMBEDDER": "workers_ai",
+        "CLOUDFLARE_ACCOUNT_ID": CF_ACCOUNT,
+        "CLOUDFLARE_API_TOKEN": CF_TOKEN,
+        "CLOUDFLARE_AI_TIMEOUT_SECONDS": "12",
+    }
+    api_settings = Settings.model_validate(env)
+    assert CF_TOKEN not in repr(api_settings)
+    api_embedder = build_query_embedder(api_settings)
+    assert isinstance(api_embedder, WorkersAIEmbedder)
+    assert api_embedder.config.timeout_seconds == 12
+    assert api_embedder.model_name == build_embedder(WorkerSettings.model_validate(env)).model_name
+
+
+def _deployed(**values: Any) -> Settings:
+    return Settings.model_construct(
+        app_env=Environment.PRODUCTION,
+        supabase_jwt_issuer="https://auth.example/auth/v1",
+        supabase_jwks_url="https://auth.example/auth/v1/.well-known/jwks.json",
+        cors_allowed_origins=("https://app.example",),
+        **values,
+    )
+
+
+def test_deployed_workers_ai_mode_needs_its_credentials() -> None:
+    from pydantic import SecretStr
+
+    with pytest.raises(InsecureConfigurationError) as info:
+        _deployed(search_embedder=EmbedderMode.WORKERS_AI).ensure_secure_deployment()
+    assert "CLOUDFLARE_ACCOUNT_ID" in str(info.value)
+    assert "CLOUDFLARE_API_TOKEN" in str(info.value)
+    ok = _deployed(
+        search_embedder=EmbedderMode.WORKERS_AI,
+        cloudflare_account_id=CF_ACCOUNT,
+        cloudflare_api_token=SecretStr(CF_TOKEN),
+    )
+    assert ok.ensure_secure_deployment() is ok
+
+
+@pytest.mark.parametrize("mode", [EmbedderMode.AUTO, EmbedderMode.QWEN3])
+def test_deployed_local_model_mode_needs_the_models_extra(
+    mode: EmbedderMode, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import importlib.util
+
+    real = importlib.util.find_spec
+
+    def find_spec(name: str, *args: Any) -> Any:
+        return None if name in ("torch", "transformers") else real(name, *args)
+
+    monkeypatch.setattr(importlib.util, "find_spec", find_spec)
+    with pytest.raises(InsecureConfigurationError, match="API_EXTRAS=models"):
+        _deployed(search_embedder=mode).ensure_secure_deployment()
+    monkeypatch.undo()
+    settings = _deployed(search_embedder=mode)
+    assert settings.ensure_secure_deployment() is settings

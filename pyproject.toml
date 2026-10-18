@@ -116,4 +116,5 @@ markers = [
   "models: runs real model weights (Docling layout/TableFormer, Qwen3-Embedding; downloads into HF_HOME); excluded from `make test`, run via `make test-models` (nightly)",
   "red: RED-phase test for a feature not implemented yet (AGENTS.md §3); excluded from `make test-infra`, run via `make test-red`; the implementing Task removes the marker",
   "llm: calls the real LLM provider (needs LLM_API_KEY + LLM_MODEL, costs money, sends only synthetic text); excluded from `make test`, run via `make test-llm`",
+  "workers_ai: calls the real Cloudflare Workers AI API (needs CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN, uses the daily neuron quota, sends only synthetic text; parity also needs local Qwen3 weights); excluded from `make test`, run via `make test-workers-ai`",
 ]
