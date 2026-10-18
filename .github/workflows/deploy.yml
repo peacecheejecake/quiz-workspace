@@ -222,6 +222,9 @@ jobs:
         if: ${{ !inputs.skip_migrations }}
         run: |
           set -euo pipefail
+          # config.toml names the gitignored local signing key; the CLI refuses to load without it.
+          # The throwaway key never reaches the remote project.
+          make auth-keys
           pnpm exec supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
           pnpm exec supabase db push --db-url "$SUPABASE_DB_URL" --yes
 
