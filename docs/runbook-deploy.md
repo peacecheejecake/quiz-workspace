@@ -24,7 +24,7 @@
 순서대로 진행한다. 지역(region)은 Supabase·Railway·Vercel function을 **같은 지역**으로 맞춘다(사용자 결정, 예: 서울/도쿄 인접 지역).
 
 1. **SMTP 제공자**: 발신 도메인을 등록하고 SPF·DKIM(가능하면 DMARC) DNS를 설정한다. SMTP host/port 587/user/password(API key), 발신 주소를 받는다.
-2. **Supabase**: project `quiz-staging` 생성(DB 비밀번호는 `openssl rand -hex 32`). project ref(20자 소문자)를 `supabase/config.toml`의 `[remotes.staging] project_id` placeholder(`replacestagingrefnow`) 대신 넣고 커밋한다(ref는 secret 아님).
+2. **Supabase**: staging project는 생성됨 — ref `jpyupavjpmlxtuolrvvs`, 지역 Singapore(`ap-southeast-1`), `supabase/config.toml`의 `[remotes.staging] project_id`에 반영됨(ref는 secret 아님). DB 비밀번호는 `openssl rand -hex 32`로 재설정해 두고 password manager에 보관한다. URL은 `https://jpyupavjpmlxtuolrvvs.supabase.co`.
 3. **Qdrant Cloud**: staging cluster 생성(Free tier는 개발·테스트 전용, deployment.md §8), API key 발급, cluster URL(`https://…:6333`).
 4. **Railway**: project 생성, environment `staging`. 서비스 3개:
    - `Redis`(Railway Redis 템플릿). public TCP proxy는 만들지 않는다.
@@ -92,7 +92,7 @@ make check-env ENV=staging ARGS="--check api=$HOME/secure/quiz/api.staging.env \
    ```bash
    set -a; . ~/secure/quiz/supabase-config.staging.env; set +a   # SUPABASE_ACCESS_TOKEN, SUPABASE_AUTH_*
    uv run python scripts/check_env.py --env staging --check supabase-config=-
-   pnpm exec supabase config push --project-ref <staging ref>
+   pnpm exec supabase config push --project-ref jpyupavjpmlxtuolrvvs
    ```
    Dashboard에서 확인·설정: JWT signing key를 비대칭(ES256)으로 rotate, access token 만료 3600s, Storage bucket `source-pdfs`·`parsed-artifacts`가 private, Auth → URL Configuration의 redirect 목록이 `https://<web>/auth/callback` 하나뿐인지.
 3. **Railway / Vercel 변수 입력**: 2장에서 검증한 값만 넣는다.
@@ -107,7 +107,7 @@ make check-env ENV=staging ARGS="--check api=$HOME/secure/quiz/api.staging.env \
 
 ```bash
 export SMOKE_TARGET=staging E2E_BASE_URL=https://staging.quiz.example \
-  SMOKE_API_URL=https://<api domain> SMOKE_SUPABASE_URL=https://<ref>.supabase.co \
+  SMOKE_API_URL=https://<api domain> SMOKE_SUPABASE_URL=https://jpyupavjpmlxtuolrvvs.supabase.co \
   SMOKE_SUPABASE_PUBLISHABLE_KEY=<publishable> SMOKE_QDRANT_URL=https://<cluster>:6333
 # SMOKE_USER_{A,B}_{EMAIL,PASSWORD}는 password manager에서 셸로만 export
 make smoke-staging

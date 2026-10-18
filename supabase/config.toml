@@ -451,8 +451,9 @@ enabled = true
 # docs/runbook-deploy.md). A `[remotes.<name>]` block overrides the settings above only when the
 # CLI targets the project whose ref equals its `project_id`
 # (`pnpm exec supabase config push --project-ref <ref>`); local `supabase start` never uses it.
-# The refs below are placeholders (the CLI requires the 20-letter shape): replace each with the
-# real project ref once the project exists (a ref is not a secret). Values that differ per
+# Staging is the Singapore project (ap-southeast-1, user decision 2026-10-18); the production ref
+# is a placeholder (the CLI requires the 20-letter shape) until that project exists after the
+# staging cost gate. A ref is not a secret. Values that differ per
 # environment or are secret come from the shell environment of the operator running
 # `config push` (`env(...)`, names listed in infra/deploy/env-manifest.toml under
 # `supabase-config`); nothing secret is committed.
@@ -464,7 +465,7 @@ enabled = true
 #   (`signing_keys_path` is the local key only). Access tokens keep `jwt_expiry = 3600` (≤ 1 h).
 # -----------------------------------------------------------------------------------------------
 [remotes.staging]
-project_id = "replacestagingrefnow"
+project_id = "jpyupavjpmlxtuolrvvs"
 
 [remotes.staging.db.seed]
 enabled = false
