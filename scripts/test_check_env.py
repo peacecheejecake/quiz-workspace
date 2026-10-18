@@ -256,6 +256,16 @@ def test_keys_are_not_swapped() -> None:
     ]
 
 
+def test_masked_secret_key_is_an_error_without_the_value() -> None:
+    api = valid_env("api", "staging")
+    api["SUPABASE_SECRET_KEY"] = "sb_secret_ab12" + "•" * 27
+    report = check_env.run_checks(MANIFEST, "staging", {"api": api})
+    assert report.errors == [
+        "api SUPABASE_SECRET_KEY: contains non-ASCII or control characters "
+        "(a masked or mis-copied value?)"
+    ]
+
+
 def test_auth_callback_must_follow_the_site_url() -> None:
     env = valid_env("supabase-config", "production")
     env["SUPABASE_AUTH_REDIRECT_URL"] = "https://evil.example/auth/callback"
@@ -390,7 +400,10 @@ def test_malformed_credential_urls_never_reach_the_output(
     assert check_env.main(["--env", "staging", "--check", f"api={path}"]) == 1
     out = capsys.readouterr()
     text = out.out + out.err
-    assert "api DATABASE_URL: could not be parsed" in text
+    assert (
+        "api DATABASE_URL: could not be parsed" in text
+        or "api DATABASE_URL: contains non-ASCII" in text
+    )
     assert "sensitive-password" not in text
     assert "quiz_api:" not in text
 

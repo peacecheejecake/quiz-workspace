@@ -192,6 +192,10 @@ UNPARSABLE = "could not be parsed (malformed value; fix it at the source)"
 def _apply(check: str, value: str) -> str | None:
     """Runs a rule; a parser exception (e.g. urlsplit's NFKC netloc error, which quotes the
     netloc and so the password) becomes a fixed reason that never carries the value."""
+    # Credentials and URLs end up in HTTP headers; a non-ASCII character usually means a value
+    # copied from a UI or CLI listing that masks it (e.g. `sb_secret_ab12••••`).
+    if not (value.isascii() and value.isprintable()):
+        return "contains non-ASCII or control characters (a masked or mis-copied value?)"
     try:
         return CHECKS[check](value)
     except Exception:  # any parser failure; its message is deliberately discarded
