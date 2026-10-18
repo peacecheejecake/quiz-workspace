@@ -47,8 +47,9 @@ def select_embedder(
     local_files_only: bool = False,
     workers_ai: WorkersAIConfig | None = None,
 ) -> Embedder:
-    """The embedder for ``mode``. Qwen3 weights load lazily on first use (or when its
-    ``dimension`` is first read); ``workers_ai`` needs ``workers_ai`` (credentials) and never
+    """The embedder for ``mode``. Qwen3 weights load lazily on the first embedding: its
+    ``dimension`` is the pinned model's known size, so reading it (the index store does at
+    construction) loads nothing. ``workers_ai`` needs ``workers_ai`` (credentials) and never
     calls the API before the first embedding."""
     if uses_fake_embedder(mode, test_env=test_env):
         return FakeEmbedder()
@@ -60,9 +61,11 @@ def select_embedder(
         from book_core.embedding.workers_ai import WorkersAIEmbedder
 
         return WorkersAIEmbedder(workers_ai)
-    from book_core.embedding.qwen3 import Qwen3Embedder, Qwen3EmbedderConfig
+    from book_core.embedding.qwen3 import DEFAULT_HIDDEN_SIZE, Qwen3Embedder, Qwen3EmbedderConfig
 
-    return Qwen3Embedder(Qwen3EmbedderConfig(local_files_only=local_files_only))
+    return Qwen3Embedder(
+        Qwen3EmbedderConfig(local_files_only=local_files_only, hidden_size=DEFAULT_HIDDEN_SIZE)
+    )
 
 
 __all__ = ["EmbedderMode", "select_embedder", "uses_fake_embedder", "uses_local_model"]

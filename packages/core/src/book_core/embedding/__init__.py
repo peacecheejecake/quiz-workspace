@@ -22,6 +22,7 @@ from book_core.embedding.factory import (
 )
 from book_core.embedding.fake import FakeEmbedder
 from book_core.embedding.qwen3 import (
+    DEFAULT_HIDDEN_SIZE,
     DEFAULT_MODEL_ID,
     DEFAULT_QUERY_INSTRUCTION,
     DEFAULT_REVISION,
@@ -32,6 +33,7 @@ from book_core.embedding.qwen3 import (
 )
 
 __all__ = [
+    "DEFAULT_HIDDEN_SIZE",
     "DEFAULT_MODEL_ID",
     "DEFAULT_QUERY_INSTRUCTION",
     "DEFAULT_REVISION",

@@ -18,15 +18,18 @@ import pytest
 import torch
 from book_core.chunker import Tokenizer
 from book_core.embedding import (
+    DEFAULT_HIDDEN_SIZE,
     DEFAULT_MODEL_ID,
     DEFAULT_QUERY_INSTRUCTION,
     DEFAULT_REVISION,
     Embedder,
+    EmbedderMode,
     FakeEmbedder,
     ModelUnavailableError,
     Qwen3Embedder,
     Qwen3EmbedderConfig,
     Qwen3Tokenizer,
+    select_embedder,
 )
 from book_core.embedding.qwen3 import last_token_pool
 
@@ -266,3 +269,41 @@ def test_missing_weights_raise_model_unavailable(tmp_path: Path) -> None:
     tokenizer = Qwen3Tokenizer(cache_dir=tmp_path, local_files_only=True)
     with pytest.raises(ModelUnavailableError, match="HF_HUB_OFFLINE"):
         tokenizer.count("q")
+
+
+def test_known_hidden_size_answers_dimension_without_loading() -> None:
+    embedder, _, loads = _embedder(ScriptedBackend(hidden_size=64), hidden_size=64)
+    assert embedder.dimension == 64
+    assert embedder.model_name == f"{DEFAULT_MODEL_ID}@{DEFAULT_REVISION}"
+    assert loads == []
+    [vector] = embedder.embed_documents(["water"])
+    assert len(vector) == 64
+    assert len(loads) == 1
+
+
+def test_known_hidden_size_is_checked_on_load() -> None:
+    embedder, _, _ = _embedder(ScriptedBackend(hidden_size=48), hidden_size=64)
+    with pytest.raises(ValueError, match="differs from the configured hidden_size 64"):
+        embedder.embed_query("q")
+    with pytest.raises(ValueError, match="exceeds hidden_size"):
+        Qwen3EmbedderConfig(dimension=128, hidden_size=64)
+
+
+def test_selected_qwen3_embedder_and_index_store_load_no_weights(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The worker builds the index store (which reads the model key, hence the dimension) before
+    parsing; that must not pull ~3 GB of weights in under Docling."""
+    from book_core.embedding import qwen3
+    from book_core.indexing import QdrantIndexStore
+
+    def refuse(config: Qwen3EmbedderConfig) -> None:
+        raise AssertionError("model weights loaded")
+
+    monkeypatch.setattr(qwen3, "_TransformersBackend", refuse)
+    embedder = select_embedder(EmbedderMode.QWEN3, test_env=False)
+    assert isinstance(embedder, Qwen3Embedder)
+    assert embedder.dimension == DEFAULT_HIDDEN_SIZE == 1024
+    assert embedder.model_name == f"{DEFAULT_MODEL_ID}@{DEFAULT_REVISION}"
+    store = QdrantIndexStore(object(), embedder)  # type: ignore[arg-type]
+    assert store.collection_metadata()["dimension"] == 1024

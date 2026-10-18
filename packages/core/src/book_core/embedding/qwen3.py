@@ -33,6 +33,9 @@ DEFAULT_REVISION = "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
 DEFAULT_QUERY_INSTRUCTION = (
     "Given a web search query, retrieve relevant passages that answer the query"
 )
+# Output (hidden) size of DEFAULT_MODEL_ID at DEFAULT_REVISION. Lets callers learn the vector
+# size without loading ~3 GB of fp32 weights (the index store reads it at construction).
+DEFAULT_HIDDEN_SIZE = 1024
 MIN_DIMENSION = 32
 
 Dtype = Literal["float32", "bfloat16", "float16"]
@@ -49,6 +52,9 @@ class Qwen3EmbedderConfig:
     - ``max_length``: tokens per input including the appended end-of-text token; longer inputs
       are truncated. Chunks are budgeted far below it (``ChunkerConfig.max_tokens``).
     - ``dimension``: MRL output size; ``None`` keeps the model's hidden size (1024 for 0.6B).
+    - ``hidden_size``: the model's hidden size when known in advance (``DEFAULT_HIDDEN_SIZE`` for
+      the pinned model). ``Qwen3Embedder.dimension`` then answers without loading the weights,
+      and loading checks it. It is not part of ``model_name`` (the vector space is unchanged).
     - ``query_instruction``: task description for queries; empty embeds queries like documents.
     - ``num_threads``: if set, ``torch.set_num_threads`` at load (process-wide) for reproducible
       CPU timings; numerics are deterministic for identical inputs either way.
@@ -62,6 +68,7 @@ class Qwen3EmbedderConfig:
     batch_size: int = 8
     max_length: int = 2048
     dimension: int | None = None
+    hidden_size: int | None = None
     query_instruction: str = DEFAULT_QUERY_INSTRUCTION
     num_threads: int | None = None
     cache_dir: Path | None = None
@@ -80,6 +87,14 @@ class Qwen3EmbedderConfig:
             raise ValueError("max_length must be >= 8")
         if self.dimension is not None and self.dimension < MIN_DIMENSION:
             raise ValueError(f"dimension must be >= {MIN_DIMENSION}")
+        if self.hidden_size is not None and self.hidden_size < MIN_DIMENSION:
+            raise ValueError(f"hidden_size must be >= {MIN_DIMENSION}")
+        if (
+            self.dimension is not None
+            and self.hidden_size is not None
+            and self.dimension > self.hidden_size
+        ):
+            raise ValueError(f"dimension {self.dimension} exceeds hidden_size {self.hidden_size}")
         if self.num_threads is not None and self.num_threads < 1:
             raise ValueError("num_threads must be >= 1")
 
@@ -212,6 +227,8 @@ class Qwen3Embedder:
     def dimension(self) -> int:
         if self._config.dimension is not None:
             return self._config.dimension
+        if self._config.hidden_size is not None:
+            return self._config.hidden_size
         return self._load().hidden_size
 
     def query_text(self, text: str) -> str:
@@ -228,6 +245,12 @@ class Qwen3Embedder:
     def _load(self) -> EncoderBackend:
         if self._backend is None:
             backend = self._loader(self._config)
+            expected = self._config.hidden_size
+            if expected is not None and backend.hidden_size != expected:
+                raise ValueError(
+                    f"model hidden size {backend.hidden_size} differs from the configured "
+                    f"hidden_size {expected}"
+                )
             dim = self._config.dimension
             if dim is not None and dim > backend.hidden_size:
                 raise ValueError(
