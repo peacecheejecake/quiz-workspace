@@ -100,7 +100,7 @@ class EvalConfig(_Model):
     """
 
     name: Annotated[str, Field(min_length=1, pattern=r"^[A-Za-z0-9_.-]+$")] = "default"
-    embedder: Literal["fake", "qwen3"] = "fake"
+    embedder: Literal["fake", "qwen3", "workers_ai"] = "fake"
     embedding_dimension: Annotated[int, Field(ge=1)] | None = None
     reranker: Literal["none", "fake", "qwen3"] = "fake"
     modes: Annotated[tuple[SearchMode, ...], Field(min_length=1)] = tuple(SearchMode)
@@ -139,6 +139,24 @@ def make_embedder(kind: str, dimension: int | None = None) -> Embedder:
         from book_core.embedding import Qwen3Embedder, Qwen3EmbedderConfig
 
         return Qwen3Embedder(Qwen3EmbedderConfig(dimension=dimension))
+    if kind == "workers_ai":
+        # The staging/production embedder (M7.4b): Cloudflare Workers AI, full 1024 dimensions.
+        import os
+
+        from book_core.embedding.workers_ai import (
+            WORKERS_AI_DIMENSION,
+            WorkersAIEmbedder,
+            workers_ai_config,
+        )
+
+        if dimension not in (None, WORKERS_AI_DIMENSION):
+            raise ValueError(f"workers_ai embeds {WORKERS_AI_DIMENSION} dimensions only")
+        config = workers_ai_config(
+            os.environ.get("CLOUDFLARE_ACCOUNT_ID"), os.environ.get("CLOUDFLARE_API_TOKEN")
+        )
+        if config is None:
+            raise ValueError("workers_ai needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN")
+        return WorkersAIEmbedder(config)
     raise ValueError(f"unknown embedder {kind!r}")
 
 

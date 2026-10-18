@@ -518,6 +518,8 @@ def chunk(
 class EmbedderName(StrEnum):
     FAKE = "fake"
     QWEN3 = "qwen3"
+    # Cloudflare Workers AI (needs CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN; sends text).
+    WORKERS_AI = "workers_ai"
 
 
 class RerankerName(StrEnum):

@@ -180,7 +180,7 @@ def test_config_validation_and_secret_free_repr() -> None:
         {"account_id": ACCOUNT, "api_token": TOKEN, "max_attempts": 0},
     ):
         with pytest.raises(ValueError, match=r"must|account|token") as info:
-            WorkersAIConfig(**bad)  # type: ignore[arg-type]
+            WorkersAIConfig(**bad)
         assert TOKEN not in str(info.value)
 
 
@@ -209,7 +209,7 @@ def test_factory_selects_workers_ai_with_its_config_only() -> None:
         httpx.Response(200, json={"success": True, "result": {"shape": [1, 1024]}}),
         httpx.Response(200, content=b"not json"),
         httpx.Response(200, json={"success": False, "errors": [], "result": None}),
-        _ok([[float("nan")] * WORKERS_AI_DIMENSION]),
+        _ok([[0.0] * WORKERS_AI_DIMENSION]),  # zero vector (cannot be normalised)
     ],
 )
 def test_malformed_responses_are_typed_errors(response: httpx.Response) -> None:
@@ -364,3 +364,29 @@ def test_errors_and_logs_never_carry_input_text_token_or_account(
         assert ACCOUNT not in text
     assert info.value.__cause__ is None
     assert info.value.__suppress_context__ is True
+
+
+# --- eval scaffolding (never runs the API here) ---------------------------------------------------
+
+
+def test_the_workers_ai_eval_config_is_valid_and_needs_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pathlib import Path
+
+    from book_core.evaluation.runner import EvalConfig, make_embedder
+
+    path = Path(__file__).resolve().parents[3] / "eval" / "configs" / "workers-ai.json"
+    config = EvalConfig.model_validate_json(path.read_text(encoding="utf-8"))
+    assert config.embedder == "workers_ai"
+    assert config.embedding_dimension == WORKERS_AI_DIMENSION
+    assert config.reranker == "none"  # like staging/production
+    monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    with pytest.raises(ValueError, match="CLOUDFLARE_ACCOUNT_ID"):
+        make_embedder("workers_ai", config.embedding_dimension)
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", ACCOUNT)
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", TOKEN)
+    assert isinstance(make_embedder("workers_ai", None), WorkersAIEmbedder)
+    with pytest.raises(ValueError, match="1024"):
+        make_embedder("workers_ai", 256)
