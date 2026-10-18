@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getPublicEnv } from '@/env';
+import { getPublicEnv, turnstileSiteKey } from '@/env';
 import {
   buildContentSecurityPolicy,
   createNonce,
@@ -27,6 +27,7 @@ export async function proxy(request: NextRequest) {
     connectOrigins: [supabaseUrl, apiBaseUrl],
     dev: process.env.NODE_ENV === 'development',
     https,
+    captcha: turnstileSiteKey() !== undefined,
   });
   // Next reads the nonce from the request's CSP header and stamps it on its own <script> tags;
   // `updateSession` forwards these request headers to the render.

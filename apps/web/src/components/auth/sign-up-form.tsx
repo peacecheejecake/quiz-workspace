@@ -4,7 +4,8 @@
 // confirmation) so invalid input never calls the Auth API (AUTH-02-AC02), then signs up through
 // browser supabase-js (implementation-plan §7). An address that already has an account looks
 // exactly like a new one (AUTH-02-AC03): Auth answers both with "check your email", and any
-// existence error is treated the same way.
+// existence error is treated the same way. With CAPTCHA on, the Turnstile token goes with the
+// call and is discarded afterwards (docs/auth.md §5.1, AUTH-02-AC04/05).
 import { Button, Input } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -20,6 +21,7 @@ import {
 } from '@/lib/auth/validation';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import styles from './auth-form.module.css';
+import { useCaptcha } from './captcha-field';
 import { FormNotice } from './form-notice';
 import { useFormErrors } from './use-form-errors';
 
@@ -30,6 +32,7 @@ export function SignUpForm() {
   const { formRef, errors, show, clear } = useFormErrors<Field>();
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<{ message: string; attempt: number }>();
+  const captcha = useCaptcha('회원가입할');
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,19 +44,29 @@ export function SignUpForm() {
     show(found);
     setFormError(undefined);
     if (hasErrors(found)) return;
+    if (captcha.blocked) {
+      captcha.remind();
+      return;
+    }
 
     setPending(true);
+    const captchaToken = captcha.token;
     let kind: ReturnType<typeof classifySignUpError>;
     try {
       const { error } = await getSupabaseBrowserClient().auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          ...(captchaToken ? { captchaToken } : {}),
+        },
       });
       kind = error ? classifySignUpError(error) : 'ok';
     } catch {
       kind = 'unavailable';
     }
+    // Single-use: never send this token again, whatever the outcome.
+    if (captchaToken) captcha.reset();
 
     if (kind === 'ok') {
       document.cookie = pendingEmailCookie(email, window.location.protocol === 'https:');
@@ -112,7 +125,14 @@ export function SignUpForm() {
         가입하면 <Link href="/terms">이용약관</Link>과{' '}
         <Link href="/privacy">개인정보 처리방침</Link>에 동의하는 것으로 간주됩니다.
       </p>
-      <Button type="submit" variant="primary" loading={pending} className={styles.submit}>
+      {captcha.field}
+      <Button
+        type="submit"
+        variant="primary"
+        loading={pending}
+        className={styles.submit}
+        {...captcha.submitProps}
+      >
         회원가입
       </Button>
     </form>

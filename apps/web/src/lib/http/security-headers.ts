@@ -6,6 +6,12 @@
 // attributes (Popper positioning, CSS custom properties such as sizes), and a nonce cannot cover
 // attributes. Style injection cannot run script, and script-src stays strict (nonce +
 // 'strict-dynamic', no 'unsafe-inline').
+//
+// With the auth CAPTCHA on (docs/auth.md §5.1) exactly two directives widen, to the Turnstile
+// origin only: script-src (CSP3 browsers ignore the host under 'strict-dynamic' and run api.js
+// because our nonce-trusted bundle inserts it; the host is the CSP2 fallback) and frame-src (the
+// widget iframe). connect-src stays as is (no pre-clearance).
+import { TURNSTILE_ORIGIN } from '@/lib/auth/captcha';
 
 export const NONCE_HEADER = 'x-nonce';
 export const HSTS_VALUE = 'max-age=63072000; includeSubDomains';
@@ -23,6 +29,8 @@ export interface CspOptions {
   /** `next dev` needs eval for React's dev tooling; never in production builds. */
   readonly dev?: boolean;
   readonly https?: boolean;
+  /** Auth CAPTCHA (Cloudflare Turnstile) enabled for this build. */
+  readonly captcha?: boolean;
 }
 
 function originOf(url: string): string | null {
@@ -39,6 +47,7 @@ export function buildContentSecurityPolicy({
   connectOrigins,
   dev = false,
   https = false,
+  captcha = false,
 }: CspOptions): string {
   const connect = [...new Set(connectOrigins.map(originOf).filter((o): o is string => o !== null))];
   const directives: [string, ...string[]][] = [
@@ -48,6 +57,7 @@ export function buildContentSecurityPolicy({
       "'self'",
       `'nonce-${nonce}'`,
       "'strict-dynamic'",
+      ...(captcha ? [TURNSTILE_ORIGIN] : []),
       ...(dev ? ["'unsafe-eval'"] : []),
     ],
     ['style-src', "'self'", "'unsafe-inline'"],
@@ -57,7 +67,7 @@ export function buildContentSecurityPolicy({
     // Same-origin dedicated workers (DOC-01 file hashing). Without it workers fall back to
     // script-src, where 'strict-dynamic' ignores 'self' and blocks them.
     ['worker-src', "'self'"],
-    ['frame-src', "'none'"],
+    ['frame-src', captcha ? TURNSTILE_ORIGIN : "'none'"],
     ['frame-ancestors', "'none'"],
     ['base-uri', "'self'"],
     ['object-src', "'none'"],

@@ -51,6 +51,15 @@ export function parsePublicEnv(raw: RawPublicEnv): PublicEnv {
   return result as PublicEnv;
 }
 
+/**
+ * Cloudflare Turnstile sitekey (docs/auth.md §5.1). Optional: unset or blank = auth CAPTCHA off
+ * (no widget, no Turnstile origins in the CSP, no `captchaToken`). Must match Supabase
+ * `[auth.captcha]` of the same environment.
+ */
+export function turnstileSiteKey(): string | undefined {
+  return process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || undefined;
+}
+
 let cached: PublicEnv | undefined;
 
 /**

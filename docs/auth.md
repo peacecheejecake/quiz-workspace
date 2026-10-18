@@ -128,7 +128,7 @@ workspace_memberships(
   - 위젯 오류(`error-callback`, 차단): "보안 확인을 완료하지 못했습니다. 다시 시도해 주세요."
   - 만료(`expired-callback`/`timeout-callback`): "보안 확인 시간이 지났습니다. 다시 확인해 주세요."
   - script 불러오기 실패: "보안 확인을 불러오지 못했습니다. 네트워크 연결을 확인한 뒤 다시 시도해 주세요."
-  - Supabase가 CAPTCHA를 거부(`captcha_failed`, 400): form 오류 "보안 확인에 실패했습니다. 보안 확인을 다시 완료한 뒤 시도해 주세요."
+  - Supabase가 CAPTCHA를 거부(`captcha_failed`, 400): form 오류 "보안 확인에 실패했습니다. 보안 확인을 마친 뒤 다시 시도해 주세요."
   - 위 상태에서는 키보드로 조작 가능한 "보안 확인 다시 하기" 버튼(위젯 reset)을 제공한다.
 - 접근성: Turnstile iframe 자체의 키보드·스크린리더 지원(Cloudflare 제공)에 더해, 위 status·버튼·설명은 모두 라벨이 있는 표준 요소다. 우리 쪽 표시는 애니메이션을 쓰지 않거나 `prefers-reduced-motion: reduce`에서 끈다. 위젯 영역 높이를 미리 확보해 로드 시 레이아웃이 밀리지 않게 한다.
 - CSP(활성 시에만): `script-src`에 `https://challenges.cloudflare.com`(nonce + `'strict-dynamic'` 유지: api.js는 nonce가 붙은 우리 script가 삽입), `frame-src https://challenges.cloudflare.com`(그 외 `'none'` 유지). `connect-src`는 추가하지 않는다(pre-clearance 미사용). 상세: deployment.md §6.1.

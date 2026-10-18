@@ -101,6 +101,29 @@ describe('buildContentSecurityPolicy', () => {
     );
     expect(https.has('upgrade-insecure-requests')).toBe(true);
   });
+
+  it('keeps frames off without CAPTCHA', () => {
+    expect(csp.get('frame-src')).toEqual(["'none'"]);
+    expect(csp.get('script-src')).not.toContain('https://challenges.cloudflare.com');
+  });
+
+  it('with CAPTCHA widens only script-src and frame-src, to the Turnstile origin', () => {
+    const base = { nonce: 'n', connectOrigins: ['https://api.example.com'] };
+    const off = directives(buildContentSecurityPolicy(base));
+    const on = directives(buildContentSecurityPolicy({ ...base, captcha: true }));
+    expect(on.get('script-src')).toEqual([
+      "'self'",
+      "'nonce-n'",
+      "'strict-dynamic'",
+      'https://challenges.cloudflare.com',
+    ]);
+    expect(on.get('frame-src')).toEqual(['https://challenges.cloudflare.com']);
+    for (const [name, values] of off) {
+      if (name === 'script-src' || name === 'frame-src') continue;
+      expect(on.get(name), name).toEqual(values);
+    }
+    expect(on.size).toBe(off.size);
+  });
 });
 
 describe('createNonce', () => {
