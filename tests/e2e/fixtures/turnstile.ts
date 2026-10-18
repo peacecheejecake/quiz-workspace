@@ -160,7 +160,7 @@ function frameHtml(id: string, mode: string): string {
 <style>:root{color-scheme:light dark}body{margin:0;height:65px;display:flex;align-items:center;
 padding:0 12px;box-sizing:border-box;font:14px system-ui,sans-serif;background:Canvas;color:CanvasText;
 border:1px solid GrayText}p{margin:0}</style></head>
-<body><main>${body}</main>
+<body><div>${body}</div>
 <script>
 const box = document.getElementById('human');
 if (box) box.addEventListener('change', () => {
@@ -258,18 +258,27 @@ export async function expectBlockedForCaptcha(button: Locator): Promise<void> {
   await expect(button).toHaveAccessibleDescription(CAPTCHA_REQUIRED);
 }
 
-/** No element in the security-check region animates or transitions (reduced motion). */
+/**
+ * No element in the security-check region animates or transitions (reduced motion). Durations up
+ * to 1 ms count as none: the global reduced-motion reset (design-tokens base.css) sets 0.01 ms.
+ */
 export async function expectNoMotion(region: Locator): Promise<void> {
-  const moving = await region.evaluate(
-    (root) =>
-      [root, ...root.querySelectorAll('*')]
-        .map((el) => getComputedStyle(el))
-        .filter(
-          (s) =>
-            (s.animationName !== 'none' && s.animationDuration !== '0s') ||
-            s.transitionDuration.split(',').some((d) => parseFloat(d) > 0),
-        ).length,
-  );
+  const moving = await region.evaluate((root) => {
+    const seconds = (value: string) =>
+      Math.max(
+        ...value.split(',').map((d) => {
+          const n = parseFloat(d);
+          return d.trim().endsWith('ms') ? n / 1000 : n;
+        }),
+      );
+    return [root, ...root.querySelectorAll('*')]
+      .map((el) => getComputedStyle(el))
+      .filter(
+        (s) =>
+          (s.animationName !== 'none' && seconds(s.animationDuration) > 0.001) ||
+          seconds(s.transitionDuration) > 0.001,
+      ).length;
+  });
   expect(moving, 'animated elements in the security-check region').toBe(0);
 }
 

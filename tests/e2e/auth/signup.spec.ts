@@ -110,6 +110,8 @@ test(
       await fillSignup(page, email, fresh.password);
       await expect(page, email).toHaveURL(VERIFY_SCREEN);
       await expect(page.getByRole('main')).not.toContainText(ACCOUNT_EXISTENCE);
+      // Compare settled screens: the resend form's security check (A4) has finished.
+      await expectCaptchaVerified(page);
       screens.push(((await page.getByRole('main').innerText()) ?? '').replaceAll(email, '<email>'));
     }
     expect(screens[1]).toBe(screens[0]);

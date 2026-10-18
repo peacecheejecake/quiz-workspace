@@ -9,6 +9,7 @@ import type { Page } from '@playwright/test';
 import { expectAccessible } from '../fixtures/a11y.ts';
 import {
   authUi,
+  captchaUi,
   bankUi,
   createNumberedQuestions,
   createQuestion,
@@ -64,7 +65,18 @@ async function settle(page: Page): Promise<void> {
   await page.waitForLoadState('networkidle').catch(() => undefined);
 }
 
-test('A11Y-01 public auth screens and their error states', async ({ page }) => {
+test('A11Y-01 public auth screens and their error states', async ({ page, turnstile }) => {
+  // Security check (A4) states: interactive challenge pending, then the script unavailable.
+  turnstile.mode = 'interactive';
+  await page.goto('/signup');
+  await expect(captchaUi.group(page)).toBeVisible();
+  await expectAccessible(page, 'signup security check pending');
+  turnstile.mode = 'unreachable';
+  await page.goto('/login');
+  await expect(captchaUi.retry(page)).toBeVisible();
+  await expectAccessible(page, 'login security check unavailable');
+  turnstile.mode = 'pass';
+
   await page.goto('/login');
   await expect(authUi.email(page)).toBeVisible();
   await expectAccessible(page, 'login');

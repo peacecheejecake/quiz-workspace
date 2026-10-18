@@ -26,6 +26,14 @@ const FORGOT_SCREEN = atPath(/^\/forgot-password$/);
 const SUCCESS_NOTICE =
   /(재설정|비밀번호).*(메일|이메일|링크).*(보냈|발송|전송|확인)|(check your (email|inbox)|reset link (has been |was )?sent|if an account exists)/i;
 
+/**
+ * The confirmation itself (a status notice), not any container whose combined text happens to
+ * match: the security-check region ("보안 확인", A4) sits in the same form.
+ */
+function successNotice(page: Page) {
+  return page.getByRole('main').getByRole('status').filter({ hasText: SUCCESS_NOTICE });
+}
+
 async function requestReset(page: Page, email: string): Promise<void> {
   await page.goto('/forgot-password');
   await expect(authUi.email(page)).toBeVisible();
@@ -45,7 +53,7 @@ test(
     const since = new Date();
     for (const email of [existing.email, unknown.email]) {
       await requestReset(page, email);
-      await expect(page.getByRole('main').getByText(SUCCESS_NOTICE).first(), email).toBeVisible();
+      await expect(successNotice(page).first(), email).toBeVisible();
       await expect(page, email).toHaveURL(FORGOT_SCREEN);
       screens.push((await page.getByRole('main').innerText()).replaceAll(email, '<email>'));
     }
@@ -65,7 +73,7 @@ test('AUTH-05-AC02 malformed email shows a field error and sends no request', as
   await authUi.sendResetButton(page).click();
 
   await expectFieldError(authUi.email(page), /이메일 (형식|주소)|valid email|email address/i);
-  await expect(page.getByRole('main').getByText(SUCCESS_NOTICE)).toHaveCount(0);
+  await expect(successNotice(page)).toHaveCount(0);
   expect(mutations.map((r) => `${r.method()} ${new URL(r.url()).pathname}`)).toEqual([]);
 });
 
@@ -104,7 +112,7 @@ test('AUTH-05-AC03 rate limit and server failure show a retry notice without det
     await expect(alert).not.toContainText(failure.body.error_code);
     await expect(alert).not.toContainText(failure.body.msg);
     await expect(alert).not.toContainText(email);
-    await expect(page.getByRole('main').getByText(SUCCESS_NOTICE)).toHaveCount(0);
+    await expect(successNotice(page)).toHaveCount(0);
     await page.unrouteAll();
   }
 });
@@ -152,7 +160,7 @@ test(
 
     await turnstile.solve(page);
     await button.click();
-    await expect(page.getByRole('main').getByText(SUCCESS_NOTICE).first()).toBeVisible();
+    await expect(successNotice(page).first()).toBeVisible();
     expect(tokens).toEqual([DUMMY_TOKEN, DUMMY_TOKEN]);
   },
 );
@@ -194,7 +202,7 @@ test('AUTH-05-AC05 rejected, failed or unavailable security check explains itsel
   const alert = formAlert(page);
   await expect(alert).toContainText(CAPTCHA_REJECTED);
   await expect(alert).not.toContainText(/captcha_failed|timeout-or-duplicate|400/);
-  await expect(page.getByRole('main').getByText(SUCCESS_NOTICE)).toHaveCount(0);
+  await expect(successNotice(page)).toHaveCount(0);
   await expectCaptchaVerified(page);
   await expectNoMotion(captchaUi.group(page));
 });
