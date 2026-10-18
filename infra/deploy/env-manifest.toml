@@ -974,7 +974,7 @@ name = "SMOKE_USER_A_PASSWORD"
 services = ["smoke"]
 kind = "secret"
 required = ["staging"]
-check = "min12"
+check = "password"
 provider = "operator: password manager"
 
 [[var]]
@@ -990,7 +990,7 @@ name = "SMOKE_USER_B_PASSWORD"
 services = ["smoke"]
 kind = "secret"
 required = ["staging"]
-check = "min12"
+check = "password"
 provider = "operator: password manager"
 
 [[var]]

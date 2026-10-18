@@ -158,6 +158,7 @@ CHECKS: dict[str, Rule] = {
     "postgres_url": _scheme_url("postgresql", "postgres"),
     "redis_url": _scheme_url("redis", "rediss"),
     "min12": _min_chars(12),
+    "password": _min_chars(12),
     "min32": _min_chars(32),
     "nonempty": _min_chars(1),
     "number": _number,
@@ -186,16 +187,23 @@ CHECKS: dict[str, Rule] = {
 }
 
 
+# Values that never reach an HTTP header or URL.
+UNICODE_CHECKS = frozenset({"password"})
+
 UNPARSABLE = "could not be parsed (malformed value; fix it at the source)"
 
 
 def _apply(check: str, value: str) -> str | None:
     """Runs a rule; a parser exception (e.g. urlsplit's NFKC netloc error, which quotes the
     netloc and so the password) becomes a fixed reason that never carries the value."""
+    # A control character is never valid.
+    if not value.isprintable():
+        return "contains control characters (a mis-copied value?)"
     # Credentials and URLs end up in HTTP headers; a non-ASCII character usually means a value
-    # copied from a UI or CLI listing that masks it (e.g. `sb_secret_ab12••••`).
-    if not (value.isascii() and value.isprintable()):
-        return "contains non-ASCII or control characters (a masked or mis-copied value?)"
+    # copied from a UI or CLI listing that masks it (e.g. `sb_secret_ab12••••`). User passwords
+    # are only sent in JSON bodies, so any printable Unicode is valid there.
+    if check not in UNICODE_CHECKS and not value.isascii():
+        return "contains non-ASCII characters (a masked or mis-copied value?)"
     try:
         return CHECKS[check](value)
     except Exception:  # any parser failure; its message is deliberately discarded

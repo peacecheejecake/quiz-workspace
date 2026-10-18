@@ -45,6 +45,7 @@ SAMPLES = {
     "postgres_url": "postgresql://quiz_api.ref:pw@aws-0-x.pooler.supabase.com:5432/postgres",
     "redis_url": "redis://default:pw@redis.railway.internal:6379",
     "min12": SECRET_MARK,
+    "password": SECRET_MARK,
     "min32": SECRET_MARK,
     "nonempty": SECRET_MARK,
     "number": "5",
@@ -261,9 +262,28 @@ def test_masked_secret_key_is_an_error_without_the_value() -> None:
     api["SUPABASE_SECRET_KEY"] = "sb_secret_ab12" + "•" * 27
     report = check_env.run_checks(MANIFEST, "staging", {"api": api})
     assert report.errors == [
-        "api SUPABASE_SECRET_KEY: contains non-ASCII or control characters "
-        "(a masked or mis-copied value?)"
+        "api SUPABASE_SECRET_KEY: contains non-ASCII characters (a masked or mis-copied value?)"
     ]
+    assert "ab12" not in "".join(report.errors)
+
+
+def test_unicode_password_passes_the_smoke_password_rule() -> None:
+    smoke = valid_env("smoke", "staging")
+    smoke["SMOKE_USER_A_PASSWORD"] = "비밀번호-Pässwörd-🔑-2026"  # noqa: S105 - synthetic
+    smoke["SMOKE_USER_B_PASSWORD"] = "パスワード" + SECRET_MARK
+    report = check_env.run_checks(MANIFEST, "staging", {"smoke": smoke})
+    assert report.errors == []
+
+
+@pytest.mark.parametrize("control", ["\x00", "\n", "\x1b", "\u200b"])
+def test_control_character_in_a_password_is_an_error_without_the_value(control: str) -> None:
+    smoke = valid_env("smoke", "staging")
+    smoke["SMOKE_USER_A_PASSWORD"] = SECRET_MARK + control + "비밀번호"
+    report = check_env.run_checks(MANIFEST, "staging", {"smoke": smoke})
+    assert report.errors == [
+        "smoke SMOKE_USER_A_PASSWORD: contains control characters (a mis-copied value?)"
+    ]
+    assert SECRET_MARK not in "".join(report.errors)
 
 
 def test_auth_callback_must_follow_the_site_url() -> None:
