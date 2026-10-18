@@ -147,12 +147,9 @@ def test_a_document_attempt_is_leased_for_the_document_limit(
             "WORKER_PARSE_TIMEOUT_SECONDS",
         ),
         (
-            {
-                "WORKER_DOCUMENT_TASK_SOFT_TIME_LIMIT_SECONDS": "0",
-                "WORKER_DOCUMENT_TASK_TIME_LIMIT_SECONDS": "3000",
-                "WORKER_PARSE_TIMEOUT_SECONDS": "3000",
-            },
-            "WORKER_PARSE_TIMEOUT_SECONDS",
+            # A disabled soft limit would fall back to the (shorter) default one.
+            {"WORKER_DOCUMENT_TASK_SOFT_TIME_LIMIT_SECONDS": "0"},
+            "WORKER_DOCUMENT_TASK_SOFT_TIME_LIMIT_SECONDS",
         ),
     ],
 )

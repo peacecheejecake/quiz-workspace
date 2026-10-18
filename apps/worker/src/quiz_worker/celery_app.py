@@ -72,7 +72,7 @@ class JobTimeLimits:
 def job_time_limits(settings: WorkerSettings, job_type: str) -> JobTimeLimits:
     if job_type in DOCUMENT_LIMIT_JOB_TYPES:
         return JobTimeLimits(
-            soft_seconds=settings.document_task_soft_time_limit_seconds or None,
+            soft_seconds=settings.document_task_soft_time_limit_seconds,
             hard_seconds=settings.document_task_time_limit_seconds,
             lease_seconds=settings.document_lease_seconds,
         )
@@ -301,19 +301,19 @@ def register_job(app: QuizCelery, definition: JobDefinition[Any]) -> IdempotentJ
     def run(self: IdempotentJobTask, envelope: dict[str, Any]) -> dict[str, Any]:
         return self.execute_job(envelope)
 
-    limits = job_time_limits(app.worker_settings, definition.job_type)
     task = app.task(
         bind=True,
         base=IdempotentJobTask,
         name=task_name(definition.job_type),
         job_definition=definition,
-        # Per task type, overriding task_time_limit; the claim lease follows (execute_job).
-        time_limit=limits.hard_seconds,
-        soft_time_limit=limits.soft_seconds,
         shared=False,
     )(run)
-    app.job_definitions[definition.job_type] = definition
     assert isinstance(task, IdempotentJobTask)  # noqa: S101 - base= guarantees the class
+    # Per job type, overriding task_time_limit; the claim lease follows (execute_job).
+    limits = job_time_limits(app.worker_settings, definition.job_type)
+    task.time_limit = limits.hard_seconds
+    task.soft_time_limit = limits.soft_seconds
+    app.job_definitions[definition.job_type] = definition
     return task
 
 

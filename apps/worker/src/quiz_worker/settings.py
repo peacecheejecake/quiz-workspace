@@ -70,9 +70,10 @@ class WorkerSettings(BaseSettings):
     )
     # document.parse (Docling + embedding of a whole book) gets its own, longer limits (M7.4c):
     # a 300-page book took ~45 min on 8 slow vCPUs, far past the limits above, so it retried
-    # until attempts ran out. Its lease and the broker visibility timeout follow these.
+    # until attempts ran out. Its lease and the broker visibility timeout follow these. The soft
+    # limit cannot be disabled here (0 would fall back to the default soft limit).
     document_task_soft_time_limit_seconds: int = Field(
-        default=6900, ge=0, validation_alias="WORKER_DOCUMENT_TASK_SOFT_TIME_LIMIT_SECONDS"
+        default=6900, ge=1, validation_alias="WORKER_DOCUMENT_TASK_SOFT_TIME_LIMIT_SECONDS"
     )
     document_task_time_limit_seconds: int = Field(
         default=7200, ge=1, validation_alias="WORKER_DOCUMENT_TASK_TIME_LIMIT_SECONDS"
@@ -208,7 +209,7 @@ class WorkerSettings(BaseSettings):
             raise ValueError(
                 "WORKER_DOCUMENT_TASK_SOFT_TIME_LIMIT_SECONDS must be below the hard limit"
             )
-        if self.parse_timeout_seconds >= (doc_soft or doc_hard):
+        if self.parse_timeout_seconds >= doc_soft:
             raise ValueError(
                 "WORKER_PARSE_TIMEOUT_SECONDS must be below the document task time limits"
             )
