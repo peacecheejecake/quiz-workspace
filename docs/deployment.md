@@ -158,6 +158,10 @@ PR opened
 - `DEP-06`: backup에서 Postgres/Storage 복원 후 재색인 가능한 절차 확인.
 - `DEP-07`: secrets, direct DB/Qdrant access, CORS, redirect allowlist 노출 테스트 통과.
 
+### 실행 절차 (M7.4a)
+
+계정 생성·secret 생성 위치·첫 staging 배포 순서·롤백·smoke(DEP 자동/수동 구분)는 [runbook-deploy.md](runbook-deploy.md). 변수 목록의 기준은 `infra/deploy/env-manifest.toml`(검증: `make check-env`), 배포는 `.github/workflows/deploy.yml`(수동 실행, migration → API/Worker → Web → smoke). 2026-10-18 결정: 구성 A, staging 먼저(production은 7일 부하·비용 게이트 후), 환경별 Supabase project.
+
 ### 공식 참고
 
 - https://supabase.com/docs/guides/functions/limits
