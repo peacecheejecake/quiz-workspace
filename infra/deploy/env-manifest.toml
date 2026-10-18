@@ -240,12 +240,12 @@ note = "600 (0–7200)"
 
 [[var]]
 name = "WEB_ORIGIN"
-services = ["api"]
+services = ["api", "deploy"]
 kind = "config"
 required = true
 check = "https_origin"
 provider = "operator: the web origin owners copy share links from"
-note = "defaults to the first CORS origin; set explicitly in deployments"
+note = "defaults to the first CORS origin; set explicitly in deployments; the deploy workflow aliases staging to it and smokes it"
 
 [[var]]
 name = "SHARE_SESSION_SECRET"
