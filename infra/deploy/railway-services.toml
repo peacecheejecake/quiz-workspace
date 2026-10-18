@@ -1,0 +1,45 @@
+# Railway services for the API and the Celery worker (M7.4a, docs/deployment.md §1 option A).
+# Runbook: docs/runbook-deploy.md. Read by scripts/deploy/railway_deploy.py (deploy workflow) and
+# checked by infra/deploy/test_platform_config.py.
+#
+# Railway runs the images the deploy workflow built from apps/{api,worker}/Dockerfile and pushed
+# to GHCR, pinned by digest (`ghcr.io/<owner>/<image>@sha256:…`); Railway never builds from
+# source. Railway's own config-as-code (railway.json) only applies to source-built services, so
+# the deploy settings live here and the workflow applies them on every rollout.
+#
+# - start_command = "" keeps the image CMD: `python -m quiz_api.serve --host 0.0.0.0 --port $PORT`
+#   and `python -m quiz_worker.serve` (the only supported launchers; never bare uvicorn/celery).
+# - Railway health checks are HTTP: the API gates each rollout on /health/ready (DB, Redis,
+#   Qdrant); the worker has no HTTP port, so it relies on the restart policy (its Docker
+#   HEALTHCHECK is for other runtimes).
+# - HF_HOME volume (implementation-plan §7, M7.3): created once per service in the Railway
+#   dashboard at `volume_mount_path`. The images run as uid 10001; never set RAILWAY_RUN_UID=0
+#   to work around volume ownership (env manifest forbids it).
+# - Worker concurrency starts at 1, one replica (docs/deployment.md §7).
+
+[registry]
+host = "ghcr.io"
+
+[services.api]
+image = "quiz-api"
+dockerfile = "apps/api/Dockerfile"
+start_command = ""
+healthcheck_path = "/health/ready"
+healthcheck_timeout_seconds = 120
+restart_policy = "ON_FAILURE"
+restart_policy_max_retries = 5
+replicas = 1
+volume_mount_path = "/var/cache/huggingface"
+public_domain = true
+
+[services.worker]
+image = "quiz-worker"
+dockerfile = "apps/worker/Dockerfile"
+start_command = ""
+healthcheck_path = ""
+healthcheck_timeout_seconds = 0
+restart_policy = "ALWAYS"
+restart_policy_max_retries = 0
+replicas = 1
+volume_mount_path = "/var/cache/huggingface"
+public_domain = false

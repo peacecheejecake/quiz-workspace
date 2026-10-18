@@ -445,3 +445,78 @@ enabled = true
 # formatted with uppercase keywords, indent 2, max width 180, trailing commas,
 # and column/key alignment. Set to "null" to emit raw, unformatted SQL.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
+
+# -----------------------------------------------------------------------------------------------
+# Hosted projects (M7.4a, docs/deployment.md §6.1 "Supabase Auth / 메일", runbook:
+# docs/runbook-deploy.md). A `[remotes.<name>]` block overrides the settings above only when the
+# CLI targets the project whose ref equals its `project_id`
+# (`pnpm exec supabase config push --project-ref <ref>`); local `supabase start` never uses it.
+# The refs below are placeholders (the CLI requires the 20-letter shape): replace each with the
+# real project ref once the project exists (a ref is not a secret). Values that differ per
+# environment or are secret come from the shell environment of the operator running
+# `config push` (`env(...)`, names listed in infra/deploy/env-manifest.toml under
+# `supabase-config`); nothing secret is committed.
+#
+# Not set here on purpose:
+# - CAPTCHA stays off: the web app sends no CAPTCHA token yet, so enabling it would break signup
+#   and sign-in (implementation-plan §7, M7.4a). Rate limits below are the interim protection.
+# - JWT signing keys: hosted projects rotate to an asymmetric (ES256) key in the dashboard
+#   (`signing_keys_path` is the local key only). Access tokens keep `jwt_expiry = 3600` (≤ 1 h).
+# -----------------------------------------------------------------------------------------------
+[remotes.staging]
+project_id = "replacestagingrefnow"
+
+[remotes.staging.db.seed]
+enabled = false
+
+[remotes.staging.auth]
+# HTTPS web origin of this environment, e.g. https://staging.quiz.example
+site_url = "env(SUPABASE_AUTH_SITE_URL)"
+# Exactly `<site_url>/auth/callback` (no wildcard, no foreign host).
+additional_redirect_urls = ["env(SUPABASE_AUTH_REDIRECT_URL)"]
+
+[remotes.staging.auth.rate_limit]
+email_sent = 30
+token_refresh = 150
+sign_in_sign_ups = 30
+token_verifications = 30
+
+[remotes.staging.auth.email]
+max_frequency = "60s"
+
+[remotes.staging.auth.email.smtp]
+enabled = true
+host = "env(SUPABASE_AUTH_SMTP_HOST)"
+port = 587
+user = "env(SUPABASE_AUTH_SMTP_USER)"
+pass = "env(SUPABASE_AUTH_SMTP_PASS)"
+admin_email = "env(SUPABASE_AUTH_SMTP_ADMIN_EMAIL)"
+sender_name = "Quiz Workspace"
+
+[remotes.production]
+project_id = "replaceproductionref"
+
+[remotes.production.db.seed]
+enabled = false
+
+[remotes.production.auth]
+site_url = "env(SUPABASE_AUTH_SITE_URL)"
+additional_redirect_urls = ["env(SUPABASE_AUTH_REDIRECT_URL)"]
+
+[remotes.production.auth.rate_limit]
+email_sent = 30
+token_refresh = 150
+sign_in_sign_ups = 30
+token_verifications = 30
+
+[remotes.production.auth.email]
+max_frequency = "60s"
+
+[remotes.production.auth.email.smtp]
+enabled = true
+host = "env(SUPABASE_AUTH_SMTP_HOST)"
+port = 587
+user = "env(SUPABASE_AUTH_SMTP_USER)"
+pass = "env(SUPABASE_AUTH_SMTP_PASS)"
+admin_email = "env(SUPABASE_AUTH_SMTP_ADMIN_EMAIL)"
+sender_name = "Quiz Workspace"
