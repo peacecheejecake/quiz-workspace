@@ -88,6 +88,37 @@ describe('parsers', () => {
     );
   });
 
+  it('follows imported aliases of test and flags describe on unknown identifiers', () => {
+    const src = [
+      "import { expect, test } from '../fixtures/test.ts';",
+      "import { createShareLink, test as sharingTest } from '../fixtures/sharing.ts';",
+      "test('SEARCH-01-AC06 workspace page', async () => {});",
+      "sharingTest.describe('shared view', () => {",
+      "  sharingTest('SEARCH-01-AC06 shared view', async () => {});",
+      "  sharingTest.skip('SEARCH-01-AC07 later', async () => {});",
+      '});',
+      "other.describe('group', () => { other('SEARCH-01-AC08 invisible', () => {}); });",
+      "other.describe.only('focused group', () => {});",
+    ].join('\n');
+    const { tests, violations } = parsePlaywrightTests('tests/e2e/search/search.spec.ts', src);
+    assert.deepEqual(
+      tests.map((t) => [t.line, t.id]),
+      [
+        [3, 'SEARCH-01-AC06'],
+        [5, 'SEARCH-01-AC06'],
+        [6, 'SEARCH-01-AC07'],
+      ],
+    );
+    assert.deepEqual(
+      violations.map((v) => [v.line, v.text, v.reason === undefined]),
+      [
+        [6, 'sharingTest.skip', true],
+        [8, 'other.describe', false],
+        [9, 'other.describe', false],
+      ],
+    );
+  });
+
   it('maps pytest names with an AC ID and ignores the rest', () => {
     const src = [
       'def test_auth_api_ac01_missing_jwt_is_401(client):',

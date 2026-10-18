@@ -41,7 +41,12 @@ export interface Violation {
   readonly file: string;
   readonly line: number;
   readonly text: string;
+  /** Why it is a problem; defaults to "no focused/skipped tests". */
+  readonly reason?: string;
 }
+
+const UNKNOWN_ALIAS =
+  'unrecognized test identifier: import `test` (or `test as <alias>`) from tests/e2e/fixtures';
 
 export const API_SCREEN_ID = 'AUTH-API';
 export const HARNESS_DIR = 'tests/e2e/harness/';
@@ -124,9 +129,31 @@ function literalTitle(node: ts.Node | undefined): string | undefined {
 }
 
 /**
+ * Local names bound to a test function by an import: `import { test }`, `import { test as
+ * sharingTest }` (fixtures/sharing.ts' extended test) or `import { setup }` — from any module
+ * (tests/e2e/fixtures/*, @playwright/test).
+ */
+function testIdentifiers(source: ts.SourceFile): Set<string> {
+  const names = new Set(TEST_FNS);
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const element of bindings.elements) {
+      const imported = (element.propertyName ?? element.name).text;
+      if (TEST_FNS.has(imported)) names.add(element.name.text);
+    }
+  }
+  return names;
+}
+
+/**
  * Executable `test(...)` / `test.<modifier>(...)` / `setup(...)` calls with a literal title, found
- * with the TypeScript parser so commented-out code and string contents never count.
- * `test.only/skip/fixme` and `test.describe.only/skip/fixme` are reported as violations.
+ * with the TypeScript parser so commented-out code and string contents never count. Imported
+ * aliases of `test`/`setup` count the same. `test.only/skip/fixme` and
+ * `test.describe.only/skip/fixme` are reported as violations, and so is `<x>.describe(...)` on an
+ * identifier that is not a known test function (an alias this parser cannot resolve would
+ * otherwise drop its tests from the trace silently).
  */
 export function parsePlaywrightTests(
   file: string,
@@ -137,17 +164,33 @@ export function parsePlaywrightTests(
     source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
   const tests: TestCase[] = [];
   const violations: Violation[] = [];
+  const fns = testIdentifiers(source);
 
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
       const callee = node.expression;
       let isTest = false;
       if (ts.isIdentifier(callee)) {
-        isTest = TEST_FNS.has(callee.text);
+        isTest = fns.has(callee.text);
       } else if (ts.isPropertyAccessExpression(callee)) {
         const modifier = callee.name.text;
         const target = callee.expression;
-        if (ts.isIdentifier(target) && TEST_FNS.has(target.text) && TEST_MODIFIERS.has(modifier)) {
+        // `<x>.describe(...)` / `<x>.describe.<m>(...)` on an unknown identifier.
+        const describeOwner =
+          modifier === 'describe'
+            ? target
+            : ts.isPropertyAccessExpression(target) && target.name.text === 'describe'
+              ? target.expression
+              : undefined;
+        if (describeOwner && ts.isIdentifier(describeOwner) && !fns.has(describeOwner.text)) {
+          violations.push({
+            file,
+            line: lineOf(callee),
+            text: `${describeOwner.text}.describe`,
+            reason: UNKNOWN_ALIAS,
+          });
+        }
+        if (ts.isIdentifier(target) && fns.has(target.text) && TEST_MODIFIERS.has(modifier)) {
           isTest = true;
           if (FOCUS_OR_SKIP.has(modifier)) {
             violations.push({ file, line: lineOf(callee), text: `${target.text}.${modifier}` });
@@ -157,7 +200,7 @@ export function parsePlaywrightTests(
           ts.isPropertyAccessExpression(target) &&
           target.name.text === 'describe' &&
           ts.isIdentifier(target.expression) &&
-          TEST_FNS.has(target.expression.text)
+          fns.has(target.expression.text)
         ) {
           const text = `${target.expression.text}.describe.${modifier}`;
           violations.push({ file, line: lineOf(callee), text });
@@ -325,7 +368,7 @@ export function strictProblems(report: Report, selected: ReadonlySet<string>): s
   for (const t of report.untitledTests)
     problems.push(`untitled test ${t.file}:${t.line} "${t.title}": title must start with an AC ID`);
   for (const v of report.violations)
-    problems.push(`${v.text} at ${v.file}:${v.line}: no focused/skipped tests`);
+    problems.push(`${v.text} at ${v.file}:${v.line}: ${v.reason ?? 'no focused/skipped tests'}`);
   return problems;
 }
 
@@ -372,8 +415,10 @@ export function formatReport(report: Report): string {
   );
   section('Tests without a leading AC/HARNESS ID', report.untitledTests.map(where));
   section(
-    'Focused/skipped tests',
-    report.violations.map((v) => `${v.file}:${v.line} ${v.text}`),
+    'Focused/skipped tests and unrecognized test identifiers',
+    report.violations.map(
+      (v) => `${v.file}:${v.line} ${v.text}${v.reason ? ` (${v.reason})` : ''}`,
+    ),
   );
   return lines.join('\n');
 }
