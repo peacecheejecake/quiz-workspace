@@ -32,11 +32,13 @@ import {
   NO_VISUAL_ARTIFACTS,
   openShareWithSecret,
   sharedUi,
+  test as sharingTest,
 } from '../fixtures/sharing.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
-// The AC06 shared-view case opens a share link: its secret must never land in a trace, screenshot
-// or video (tests/e2e/README.md, fixtures/sharing.ts). Playwright allows this option per file only.
+// The AC06 shared-view case opens a share link. Like every sharing spec it runs without trace,
+// screenshot and video (a trace records the secret exchange; the sharing fixture redacts page text
+// and errors, not traces), and Playwright allows these options per file only, not per describe.
 test.use(NO_VISUAL_ARTIFACTS);
 test.describe.configure({ timeout: 2 * JOB_TIMEOUT_MS + 60_000 });
 
@@ -330,8 +332,10 @@ test(
   },
 );
 
-test.describe('shared view', () => {
-  test(
+// Opens a share link, so it runs on the sharing fixtures (fixtures/sharing.ts): link cleanup,
+// secret digests for `e2e:artifact-audit`, a redacted page text and redacted errors on failure.
+sharingTest.describe('shared view', () => {
+  sharingTest(
     'SEARCH-01-AC06 the shared view shows the keyword-only notice, also when nothing is found',
     { tag: '@infra' },
     async ({ page, workspaceFactory }) => {
