@@ -394,4 +394,4 @@ def test_docling_defaults_are_kept_when_not_configured(monkeypatch: pytest.Monke
 @pytest.mark.parametrize("field", ["queue_max_size", "page_batch_size", "num_threads"])
 def test_parser_sizes_must_be_positive(field: str) -> None:
     with pytest.raises(ValueError, match=field):
-        ParserOptions(**{field: 0})
+        ParserOptions(**{field: 0})  # type: ignore[arg-type]
