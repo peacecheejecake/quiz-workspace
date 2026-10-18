@@ -70,7 +70,13 @@ export function DocumentsLibrary({
   const [pendingDelete, setPendingDelete] = useState<DocumentRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Points at whichever upload button is rendered (header, or the empty-state CTA).
   const uploadButtonRef = useRef<HTMLButtonElement>(null);
+  // Bumped to move focus to the upload button after the next render (the button may change).
+  const [focusUpload, setFocusUpload] = useState(0);
+  useEffect(() => {
+    if (focusUpload > 0) uploadButtonRef.current?.focus();
+  }, [focusUpload]);
   const files = useRef(new Map<string, File>());
   const contexts = useRef(new Map<string, UploadContext>());
   const controllers = useRef(new Map<string, AbortController>());
@@ -164,7 +170,7 @@ export function DocumentsLibrary({
     contexts.current.delete(localId);
     dispatch({ type: 'remove', localId });
     setAnnouncement('업로드를 취소했습니다.');
-    uploadButtonRef.current?.focus();
+    setFocusUpload((n) => n + 1);
   }, []);
 
   const retry = useCallback(
@@ -234,6 +240,8 @@ export function DocumentsLibrary({
 
   const rows = buildRows(documents, uploads);
   const empty = rows.length === 0;
+  // While the empty state shows its upload CTA, the header has none (UX1, DOC-01-AC01).
+  const emptyStateCta = canEdit && empty && !listFailed;
 
   const uploadButton = (ref?: Ref<HTMLButtonElement>) => (
     <Button ref={ref} variant="primary" onClick={() => inputRef.current?.click()}>
@@ -271,7 +279,7 @@ export function DocumentsLibrary({
       <PageHeader
         title="문서"
         description="PDF를 올리면 원문을 분석하고 검색 색인을 만듭니다. PDF는 최대 50MB까지 올릴 수 있습니다."
-        actions={canEdit ? uploadButton(uploadButtonRef) : undefined}
+        actions={canEdit && !emptyStateCta ? uploadButton(uploadButtonRef) : undefined}
       />
       {canEdit ? (
         <input
@@ -327,7 +335,7 @@ export function DocumentsLibrary({
                 ? 'PDF를 업로드하면 원문 검색과 문제 만들기에 사용할 수 있습니다.'
                 : '이 Workspace에 업로드된 PDF가 아직 없습니다.'
             }
-            action={canEdit ? uploadButton() : undefined}
+            action={emptyStateCta ? uploadButton(uploadButtonRef) : undefined}
           />
         ) : (
           <ul className={styles.list}>

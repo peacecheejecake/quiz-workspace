@@ -9,11 +9,11 @@ import { ToastProvider } from '@quiz/ui';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceFormState } from '../src/lib/workspaces/actions';
 
-const nav = { pathname: '/workspaces' };
+const nav = { pathname: '/workspaces', search: '' };
 vi.mock('next/navigation', () => ({
   usePathname: () => nav.pathname,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
 const createWorkspaceAction =
@@ -34,6 +34,7 @@ const { CreateWorkspaceButton, CreateWorkspaceProvider } =
   await import('../src/components/workspaces/create-workspace');
 const { AppFrame, drawerFor } = await import('../src/components/app-shell/app-frame');
 const { WorkspaceListItem } = await import('../src/components/workspaces/workspace-list-item');
+const { WorkspaceTabs } = await import('../src/components/workspaces/workspace-tabs');
 
 const WS_ID = '3f2b6f0e-8a4c-4d7e-9a51-1c2d3e4f5a6b';
 
@@ -59,6 +60,50 @@ beforeEach(() => {
   createWorkspaceAction.mockReset();
   renameWorkspaceAction.mockReset();
   nav.pathname = '/workspaces';
+  nav.search = '';
+});
+
+describe('WS-01 home header (UX1)', () => {
+  const workspace = {
+    id: WS_ID,
+    name: '물리 1',
+    role: 'owner',
+    status: 'active',
+    created_at: '2026-10-01T00:00:00Z',
+    updated_at: '2026-10-01T00:00:00Z',
+  } as unknown as Parameters<typeof WorkspaceTabs>[0]['active'][number];
+
+  function renderTabs(active: (typeof workspace)[], archived: (typeof workspace)[] = []) {
+    return render(
+      <ToastProvider>
+        <CreateWorkspaceProvider>
+          <WorkspaceTabs active={active} archived={archived} />
+        </CreateWorkspaceProvider>
+      </ToastProvider>,
+    );
+  }
+
+  it('WS-01-AC01 shows exactly one create CTA (the empty state) when there are no workspaces', () => {
+    renderTabs([]);
+    expect(screen.getAllByRole('button', { name: 'Workspace 만들기' })).toHaveLength(1);
+    expect(screen.queryByText(/자료와 문제를 Workspace 단위로/)).toBeNull();
+  });
+
+  it('keeps the header CTA when workspaces exist and on the archived tab', () => {
+    const { unmount } = renderTabs([workspace]);
+    expect(screen.getAllByRole('button', { name: 'Workspace 만들기' })).toHaveLength(1);
+    unmount();
+    nav.search = 'status=archived';
+    renderTabs([], [{ ...workspace, status: 'archived' }]);
+    expect(screen.getAllByRole('button', { name: 'Workspace 만들기' })).toHaveLength(1);
+  });
+
+  it('shows tab counts as plain text inside the tab name, without a badge', () => {
+    renderTabs([workspace], []);
+    const active = screen.getByRole('tab', { name: '활성 1' });
+    expect(active.querySelector('.qz-badge')).toBeNull();
+    expect(screen.getByRole('tab', { name: '보관됨 0' })).toBeInTheDocument();
+  });
 });
 
 describe('create workspace dialog', () => {

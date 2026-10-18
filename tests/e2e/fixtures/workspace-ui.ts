@@ -2,12 +2,14 @@
 // AGENTS.md §5). This is the UI contract M3.0 assumes for M3.1b/M3.3/M3.5/M3.6b; the specs only
 // reach elements through these helpers so a deliberate label change is a one-line edit here.
 //
-//   WS-01      "Workspace 만들기" button (empty state + header), create dialog with "Workspace 이름",
+//   WS-01      "Workspace 만들기" button (empty-state CTA when there is no active workspace,
+//              otherwise in the header), create dialog with "Workspace 이름",
 //              tabs "활성"/"보관됨", one list item per workspace (link = workspace name, role
 //              badge "소유자"/"Owner"), per-item "더보기" menu: 공유 · 보관 · 삭제; delete asks for
 //              confirmation in an alertdialog. Unknown/deleted/foreign workspace routes render the
 //              app's not-found page with HTTP 404.
-//   DOC-01     "PDF 업로드" button opening a file chooser; one list item/row per document with an
+//   DOC-01     "PDF 업로드" button opening a file chooser (empty-state CTA when there are no
+//              documents, otherwise in the header); one list item/row per document with an
 //              upload progressbar, processing status, "준비 완료"/"Ready"; "취소"/"다시 시도".
 //   DOC-02     outline tree "목차" (treeitems), PDF viewer region with a "현재 페이지" field and a
 //              labelled source highlight, text editor region "원문" whose current block carries
@@ -34,10 +36,9 @@ export const notFoundHeading = (page: Page): Locator =>
 export const main = (page: Page): Locator => page.getByRole('main');
 
 export const wsUi = {
-  createButton: (page: Page) =>
-    main(page)
-      .getByRole('button', { name: /workspace (만들기|생성)|(create|new) workspace/i })
-      .first(),
+  createButton: (page: Page): Locator => wsUi.createButtons(page).first(),
+  createButtons: (page: Page) =>
+    main(page).getByRole('button', { name: /workspace (만들기|생성)|(create|new) workspace/i }),
   emptyState: (page: Page) =>
     main(page).getByRole('heading', { name: /workspace(가|이)? 없|no workspaces/i }),
   createDialog: (page: Page) =>
@@ -76,10 +77,9 @@ export const DELETE_ACTION = /^(삭제|삭제하기|delete)$/i;
 export const SHARE_ACTION = /^(공유|공유 설정|share|sharing)/i;
 
 export const docUi = {
-  uploadButton: (page: Page) =>
-    main(page)
-      .getByRole('button', { name: /pdf 업로드|업로드|upload( pdf)?/i })
-      .first(),
+  uploadButton: (page: Page): Locator => docUi.uploadButtons(page).first(),
+  uploadButtons: (page: Page) =>
+    main(page).getByRole('button', { name: /pdf 업로드|업로드|upload( pdf)?/i }),
   emptyState: (page: Page) =>
     main(page).getByRole('heading', { name: /문서가 없|pdf가 없|no documents/i }),
   /** A document row/list item, matched by its displayed title or file name. */

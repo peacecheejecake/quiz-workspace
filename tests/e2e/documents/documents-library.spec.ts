@@ -68,6 +68,8 @@ test(
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(/문서|documents/i);
     await expect(docUi.emptyState(page)).toBeVisible();
     await expect(docUi.uploadButton(page)).toBeEnabled();
+    // One upload button only: the empty state's; the header button is hidden meanwhile (UX1).
+    await expect(docUi.uploadButtons(page)).toHaveCount(1);
   },
 );
 

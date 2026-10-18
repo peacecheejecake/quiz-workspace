@@ -42,6 +42,8 @@ test(
     await page.goto('/workspaces');
     await expect(wsUi.emptyState(page)).toBeVisible();
     await expect(wsUi.createButton(page)).toBeEnabled();
+    // One CTA only: the empty state's; the header button is hidden while it shows (UX1).
+    await expect(wsUi.createButtons(page)).toHaveCount(1);
     await expect(main(page).getByRole('listitem')).toHaveCount(0);
     expect(await workspaceFactory.list(member, 'active')).toEqual([]);
   },
