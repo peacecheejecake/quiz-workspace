@@ -271,6 +271,12 @@ jobs:
           scripts/backup "$backup"
           before="$(psql "$RESTORE_DB_URL" -X -At -c 'select count(*) from public.documents')"
           make db-reset
+          # `db reset` re-initialises the cluster: the migrations recreate quiz_api / quiz_worker
+          # NOLOGIN, so the reindex (worker role) needs the CI-only login again, as after infra-up.
+          for role in quiz_api quiz_worker; do
+            psql "$RESTORE_DB_URL" -X -v ON_ERROR_STOP=1 \
+              -c "alter role $role with login password 'change-me-local'"
+          done
           uv run --no-sync python - <<'PY'
           from qdrant_client import QdrantClient
           from qdrant_client import models as qm
