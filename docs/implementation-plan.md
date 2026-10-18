@@ -172,6 +172,7 @@ flowchart LR
 | M7.3 | 컨테이너화(web/api/worker Dockerfile), CI 전체 파이프라인, 색인 재생성·백업 복원 스크립트 | M7.2 | CI GREEN |
 | M7.4a | 계정 없는 배포 준비: platform config as code, env manifest·검사기, deploy workflow, DEP smoke runner, runbook | M7.3 | 오프라인 검증 GREEN, `make smoke-local` GREEN |
 | M7.4b | Hosted embedding: Cloudflare Workers AI `@cf/qwen/qwen3-embedding-0.6b` adapter(`WORKER_EMBEDDER=workers_ai`, API·worker 공용), 색인 재시도 오류 code, 검색 BM25 저하 + 안내(SEARCH-01-AC06), 모델 없는 API 이미지, env manifest, parity/eval scaffolding(실행은 계정 생성 후) | M7.4a | SEARCH-01-AC06 GREEN, adapter contract test(HTTP mock) GREEN, slim API 이미지 boot, `workers_ai` marker test는 자격 없이 실패 |
+| M7.4c | Worker 메모리·시간 한도: Docling in-flight page queue 제한, embedding model 지연 로드(dimension 선언), `document.parse` 전용 시간 한도·lease, pool process 사망(OOM·hard limit) 시 즉시 재큐, thread 수 = container CPU quota, pool process 재활용 설정 | M7.4b | worker·core unit test(설정 전달·무로드·lease 유도·SIGKILL prefork) GREEN, env manifest·check-env GREEN |
 | M7.4 🔄 | Staging 배포(구성 A) → 7일 부하·비용 게이트 → Production, SMTP, DEP-01~07 | M7.4a | **사용자 계정·비용 승인 필요** |
 
 ## 4. Task 의존 그래프
@@ -296,6 +297,7 @@ flowchart TB
     M71[M7.1 HISTORY-01] --> M72[M7.2 a11y/visual]
     M72 --> M73[M7.3 CI/containers] --> M74a[M7.4a deploy prep] --> M74[M7.4 deploy ⛔]
     M74a --> M74b[M7.4b Workers AI embedding] --> M74
+    M74b --> M74c[M7.4c worker memory/time limits] --> M74
   end
   M30 --> M70
   M74a --> A4
@@ -331,7 +333,7 @@ flowchart TB
 | W17 | M5.2 · M6.2 · S3b | |
 | W18 | M5.4 · M6.3 · M7.1 · S4 | |
 | W19 | M5.5 | |
-| W20 | M7.2 → M7.3 → M7.4a → M7.4b → M7.4⛔ | |
+| W20 | M7.2 → M7.3 → M7.4a → M7.4b → M7.4c → M7.4⛔ | |
 
 Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 Task를 즉시 착수한다.
 
@@ -413,6 +415,9 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-10-18 | **사용자 결정(M7.4b)**: Reranker는 계속 off(Workers AI에 다국어 reranker 없음). 변경 없음. | §7 기존 결정 유지 |
 | 2026-10-18 | **사용자 결정(M7.4b)**: 검색 시 embedding 장애 → BM25만으로 계속 + 경고. 해석: 응답 `degraded: ["dense_unavailable"]`(code 목록, `warnings`와 별개), UI는 `role="status"` 비차단 안내 "의미 검색을 일시적으로 사용할 수 없어 키워드 결과만 표시합니다", 서버 WARNING(검색어 없음). `semantic` 모드도 BM25 결과로 대체하고 같은 안내. Qdrant 장애는 503 유지. SEARCH-01-AC06 추가. | 검색 가용성 우선 |
 | 2026-10-18 | M7.4b: Workers AI 요청 형식은 공개 schema 기준 가정 — 문서는 `{"documents": [...]}`, query는 `{"queries": [q], "instruction": DEFAULT_QUERY_INSTRUCTION}`(로컬 Qwen3와 같은 instruction), 응답 `result.data`(1024차원, 첫 응답에서 검증). `model_name = cloudflare-workers-ai:@cf/qwen/qwen3-embedding-0.6b` → 로컬 Qwen3와 다른 물리 collection. 실제 parity(`make test-workers-ai`)는 계정 생성 후 첫 staging 배포 때 실행. | 계정 없음: 실제 API 호출 금지 |
+| 2026-10-19 | M7.4c: 시간 한도는 page 수에 비례시키지 않고 **job type별 고정 한도**로 한다. Celery hard limit은 task 시작 시 정해지고 page 수는 handler가 PDF를 받은 뒤에야 알 수 있으며, API가 publish 시 page 수를 모르기 때문(per-message limit은 API·reconciler 변경 필요). → `document.parse`만 `WORKER_DOCUMENT_TASK_SOFT/TIME_LIMIT_SECONDS`(기본 6900/7200 s), lease = 그 hard + grace; 나머지 job은 1500/1800 s 유지. broker visibility timeout·reconciler stale-after·cleanup lease는 가장 긴 lease를 따른다. `WORKER_PARSE_TIMEOUT_SECONDS` 기본 1200 → 3600(< document soft 한도, 검증). document soft 한도는 0(끄기) 불가: per-task `None`은 전역 soft 한도로 떨어진다. | RAM 측정: 300쪽 ingest 약 45분(8 vCPU) |
+| 2026-10-19 | M7.4c: pool process 사망 감지는 worker 주 프로세스의 `JobRequest.on_failure`(WorkerLostError·TimeLimitExceeded)에서 `JobStore.release_lost`로 그 attempt를 즉시 정리(재큐 시 published 표시, 마지막 attempt면 `worker_lost: attempts exhausted` + cleanup, cancel 요청이면 cancelled) → Celery가 message를 재큐하면 바로 다음 attempt. 펜스: `locked_by = <OS host>:<pid>`(spawn child는 Celery node 이름을 모름) — 죽은 child의 claim만 해제. 재큐에는 backoff 없음(OOM이 결정적이면 max_attempts 3회 안에 실패로 끝남). lease 만료·reconciler 경로는 그대로 fallback. | at-least-once·attempt fencing 유지 |
+| 2026-10-19 | M7.4c: 로컬 Qwen3 embedder의 `dimension`은 pinned 모델의 알려진 hidden size(1024)로 답한다(`Qwen3EmbedderConfig.hidden_size`, `select_embedder`가 설정, 로드 시 검증). `model_name`·collection 이름은 그대로. Docling queue 기본값은 book_core에서는 Docling 기본(재현성 유지), worker 설정에서만 8. pool process 재활용(`WORKER_MAX_TASKS_PER_CHILD`/`_MEMORY_PER_CHILD_MB`)은 기본 off, Railway 상주 메모리 과금 시 1 권장(runbook). | 측정: Qwen3 선로드 ~2.9 GB, queue 100→8: 4.5→2.6 GB |
 
 ## 8. 진행 현황
 
@@ -484,6 +489,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M7.3 컨테이너·CI | ✅ | 1fec1cc · 3075270 · 6c19edf · d92343b | web/api/worker image(non-root, pinned digest) build·boot 확인, CI: checks·images·integration(worker E2E 전체 phase, visual, log/artifact audit, backup/restore rehearsal)·nightly perf/models, actionlint 0. reindex·backup·restore script. P1×2(restore 설정, rehearsal seed)·P2×2(storage inventory 일관성, visual gate) → 반영 → P2(probe의 Qdrant 원격 검사) → 반영 → 지적 없음. 실제 GitHub CI 첫 GREEN: run 39101748833 (`623b26a`). 그 전 실패 4회 → 수정: Node 24.x 의존 단언(7f6f855), CI ANSI 출력·Celery 종료 경쟁(61bf5d3), 모바일 헤더 overflow(d62a542)·스크롤 영역 키보드 접근(b4744b9), reset 대상 restore(3fd66b9·ca6270b·d50d8b2) — Codex 지적 없음 |
 | M7.4a 배포 준비(계정 없음) | ✅ | 9677554 · b7c08f9 · 1302835 · c3d4b1e · 4d06a6a · b5acd9e | platform config(vercel.json, railway-services.toml, supabase `[remotes.*]`) + 불변식 test, env manifest(`make check-env`, 값 비출력), deploy workflow(수동·digest·migration 선행·smoke, production gate), Railway rollout script(mock API test), DEP smoke(`make smoke-local` 12/12 + DEP-03 seed/verify 재시작 GREEN, log audit 0), `e2e:log-audit --scan`, runbook. actionlint 0, lint·typecheck·test GREEN. Codex 리뷰 대기 |
 | M7.4b Workers AI embedding | ✅ | 6119b84 · 6e35965 · 31e4e10 · 131d3f4 · 89aebc7 · c2c68e8 · ba6576f (merge develop 66576a3) | Codex 리뷰 P2 3건 수정(f6f11ab · 1921514 · 1ec0f15), develop CI GREEN(run 39111753151). SEARCH-01-AC06 GREEN(chromium·webkit), A11Y 전체·share-public GREEN, log audit 0. adapter contract(HTTP mock)·degrade·worker 재시도·check_env test GREEN; lint·typecheck·test(1674+600)·contracts-check GREEN. API 이미지 1.26 GB → 373 MB(non-root, healthcheck, boot smoke). 실제 Workers AI 호출 없음: `make test-workers-ai`/`make eval-workers-ai`는 계정 생성 후(runbook §3 9단계). 후속: 검색 버튼 loading 중 Enter 미제출(모드 전환 재검색과 경합, 기존 동작) |
+| M7.4c worker 메모리·시간 한도 | 🔄 | 7641be2 · a59eac9 · 6bece20 · eec7a0e · 87e5b21 · da0e228 · 237d86b · d3d8798 · ea7277b | Codex 리뷰 대기. 새 설정: `WORKER_PARSE_QUEUE_MAX_SIZE=8`·`WORKER_PARSE_PAGE_BATCH_SIZE=4`, `WORKER_DOCUMENT_TASK_SOFT/TIME_LIMIT_SECONDS=6900/7200`(`WORKER_PARSE_TIMEOUT_SECONDS` 1200→3600), `WORKER_MAX_TASKS_PER_CHILD=0`·`WORKER_MAX_MEMORY_PER_CHILD_MB=0`, `WORKER_NUM_THREADS`(미설정 = cgroup CPU quota). Qwen3 `dimension`은 무로드(1024), pool process 사망 시 `release_lost`로 즉시 재큐(real prefork SIGKILL test: lease 20분인데 attempt 2가 수 초 내 성공). fmt-check·lint·typecheck·contracts-check GREEN, `make test` 1713 passed, `pytest apps/worker packages/core` 1166 passed(실패 5 = 자격 필요한 LLM·Workers AI live test, 설계상 실패), `make test-infra` 566 passed. 메모리 spot-check(macOS native, 309쪽 합성 책, Docling만): queue 100 → peak RSS 4.72 GB / 138 s, queue 8 → 4.07 GB / 135 s(RSS는 mmap weight 포함; Docker anon 기준 측정은 4.5 → 2.6 GB). 후속: Qwen3 embed batch 설정(`WORKER_EMBED_BATCH_SIZE`, 로컬 embedder 사용 시), API 쪽 thread 수, amd64 target에서 시간 재측정 |
 | M7.4 배포 | 🔄 | c64169a · 3dbbfa6 | **staging 1차 배포 완료**(deploy run 39138438654, bootstrap): Supabase `jpyupavjpmlxtuolrvvs`(Singapore, migration 17개, role login), Railway api·worker·Redis(Singapore, `/health/ready` db·redis·qdrant ok), Vercel `quiz-workspace-stg.vercel.app`(sin1, Deployment Protection off), Qdrant Cloud, Workers AI embedding. @readonly smoke 10/10 GREEN(DEP-01·02·07). 실제 Workers AI: `make test-workers-ai` 3/3 GREEN(round trip·로컬 Qwen3 parity), `make eval-workers-ai`(seed) semantic R@10 1.000·nDCG@10 0.888, hybrid R@10 0.917·nDCG@10 0.759, keyword R@10 0.500. 배포 workflow 수정: db push 전 로컬 signing key 생성(c64169a), staging alias는 Vercel REST(team token은 `vercel alias` 불가, 3dbbfa6). 남은 것: SMTP(Resend, `mail.red-10-proto.xyz`) → `config push`(site_url·redirect·Turnstile 테스트 키·rate limit) → smoke 계정 2개 → non-bootstrap 배포(DEP-01 sign-in·02 upload·05), DEP-03 재시작·DEP-04/06 수동 확인, 7일 부하·비용 게이트. RAM 측정(로컬 모델 구성): worker 300쪽 ingest는 Docling만 ~4.5 GB·시간 한도 1800s 초과 → Railway trial 1 GB worker는 소형 PDF만; 후속 M7.4c 후보(Docling queue 크기·task 시간 한도·OOM fail-fast). production은 게이트 후 |
 | (통합) 전체 E2E 회귀 | ✅ | 909195f | worker 포함 234/234 GREEN(chromium·webkit) |
 | M4.4b import 화면 | ✅ | 9a263df · c02d89a | QIMPORT-01 AC01~04 GREEN. 공용 `QuestionDraftReview`. P2×2(초기 로드 재시도, publish 200 제한) → 상태 직접 갱신 + 200개 batch → 지적 없음 |
