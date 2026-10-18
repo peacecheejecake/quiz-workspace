@@ -19,8 +19,12 @@ flowchart TD
   WK -->|document revisions, jobs| P
   API --> Q[(Qdrant Cloud)]
   WK -->|index/embeddings| Q
-  WK -->|Docling, Qwen embedding/reranker, LLM provider| MODELS[Core/Models]
+  WK -->|Docling, LLM provider| MODELS[Core/Models]
+  WK -->|chunk text → embeddings| CF[Cloudflare Workers AI\nqwen3-embedding-0.6b]
+  API -->|query text → embedding| CF
 ```
+
+- Embedding(M7.4b, 사용자 결정 2026-10-18): staging/production은 `WORKER_EMBEDDER=workers_ai` — worker는 문서 chunk, API는 검색어만 Cloudflare Workers AI REST(`POST https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/qwen/qwen3-embedding-0.6b`, `Authorization: Bearer $CLOUDFLARE_API_TOKEN`)로 embedding한다. 그래서 API 이미지는 기본 빌드에서 torch/transformers를 넣지 않는다(`API_EXTRAS` 빈 값; 로컬 모델 이미지는 `--build-arg API_EXTRAS=models`). worker는 Docling 때문에 계속 torch를 가진다. Reranker는 꺼진 채 유지(Workers AI에 다국어 reranker 없음). 로컬 Qwen3와 Workers AI vector는 같은 collection에 섞지 않는다(`model_name`이 달라 물리 collection 분리, 전환은 reindex + alias).
 
 - Frontend: Vercel의 Next.js 웹 호스팅(비상용·개인 프로젝트 여부에 따라 플랜 확인). API는 인증 외 비즈니스 데이터 요청을 FastAPI로 전달한다.
 - Supabase: 사용자·메일 인증, Postgres metadata + canonical text/revisions, 비공개 `source-pdfs`와 `parsed-artifacts` 버킷을 제공한다.
@@ -96,6 +100,7 @@ PR opened
 - Qdrant API key와 Redis는 내부 서비스에서만 사용; 프론트가 Qdrant 직접 검색하지 않는다.
 - 메일·파일 저장·LLM 공급자와 콘텐츠의 데이터 처리 지역, 기록·보존 정책을 점검. 저작권 있는 도서는 비공개 storage + 최소 권한 + 접근 로그.
 - 로그에 검색 원문·비밀번호·JWT·원본 PDF 본문을 기본으로 남기지 않는다. 임베딩/LLM 외부 API로 책 원문을 전송할 때 프라이버시·저작권 조건을 확인한다.
+- **외부 전송(M7.4b, 사용자 결정 2026-10-18)**: 책 원문 chunk와 검색어는 embedding 계산을 위해 Cloudflare Workers AI로 전송될 수 있다(`WORKER_EMBEDDER=workers_ai`). Cloudflare는 처리 수탁자(sub-processor)로 `/privacy`에 명시한다(최종 법률 문구는 사용자 몫). `CLOUDFLARE_API_TOKEN`은 server-only secret(api·worker; web 금지, `NEXT_PUBLIC_` 금지)이며 **Workers AI 권한만** 가진 account API token을 쓴다. 요청·오류 메시지·로그·job `last_error`에는 입력 텍스트·token·account id가 들어가지 않는다(오류는 `embedding_quota_exceeded` / `embedding_unavailable` 같은 code만).
 - Rate limit: 인증 요청, 업로드 요청, 문제 생성 LLM 호출, 검색 및 공개 API 별도 제한.
 
 ### 6.1 Auth release readiness 설정 (A3, 로컬 범위 구현 · 배포 적용은 M7.4)
@@ -145,6 +150,8 @@ PR opened
 - Supabase Free는 저활동 시 프로젝트 pause 및 메일 제한 등이 있어 지속 운영 보장용으로 간주하지 않는다. Production에서는 Custom SMTP와 백업 가능 여부를 먼저 확인한다.
 - Qdrant Cloud Free: 문서상 0.5 vCPU/1GB RAM/4GB 디스크, 비활성 시 pause 또는 삭제 정책이 있어 개발/테스트 한정 사용. 운영에는 유료 plan을 검토한다.
 - Railway는 Hobby 최소 요금과 사용량 기반 추가 청구가 있다. **Embedding+Reranker Worker의 RAM/CPU가 실제 비용의 주요 변수**이므로 1~2권으로 측정한 뒤 확정.
+- **Cloudflare Workers AI(M7.4b)**: Workers **Free** plan(사용자 결정 2026-10-18) — 하루 10,000 neurons 무료, 초과 요청은 오류로 거부된다(과금 없음). `qwen3-embedding-0.6b`는 공개 가격 $0.0118 / 1M input tokens(≈ $0.011 / 1,000 neurons 환산 시 하루 약 900만 token; 정확한 neuron 환산은 Cloudflare dashboard에서 첫 staging 색인 후 확인). quota 초과·429·5xx는 worker에서 재시도 가능한 job 실패(backoff), API 검색에서는 BM25 저하(SEARCH-01-AC06)로 처리한다.
+- **Railway Hobby 업그레이드 보류**(2026-10-18): trial(서비스당 1 GB RAM)에서 시작한다. API는 hosted embedder를 써서 모델을 메모리에 올리지 않고, 남는 RAM 변수는 Docling worker다.
 - Vercel Hobby는 개인·비상업 목적 제한이 있다. 외부 사용자에게 상용 서비스를 제공한다면 적절한 유료 플랜을 선택해야 한다.
 - 월 비용은 서비스 조합, 사용량, 모델 배치에 따라 크게 달라지므로 고정 총액을 추정하지 않는다. 비용 게이트는 staging 7일 load test 후 확정한다.
 

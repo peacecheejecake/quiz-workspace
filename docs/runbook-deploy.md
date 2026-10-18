@@ -35,6 +35,12 @@
 5. **Vercel**: GitHub repo import → Root Directory `apps/web`, Framework Next.js, Node 24. `vercel.json`이 git 자동 배포를 끄므로 배포는 workflow만 한다. staging 도메인(예: `staging.quiz.example`)을 project에 추가(production branch에 연결하지 않음; workflow가 preview 배포에 alias). Team id / Project id(→ `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`), Account → Tokens에서 만료가 있는 token(→ `VERCEL_TOKEN`).
    - Deployment Protection(Vercel Authentication)이 staging 도메인을 막으면 smoke와 사용자가 401을 받는다. staging 도메인에 대해 끌지 여부는 **사용자 결정**(staging 데이터는 합성 계정만 사용).
 6. **GitHub**: Settings → Environments → `staging`(deployment branches: `develop`, `main`). production environment는 비용 게이트 후 만든다(§9).
+7. **Cloudflare (Workers AI embedding, M7.4b)**: Cloudflare 계정을 만들고 Workers **Free** plan으로 둔다(하루 10,000 neurons, 초과 시 오류; deployment.md §8).
+   - Account ID: dashboard → Workers & Pages → 우측 Account details(또는 URL의 `/<account id>/`) → `CLOUDFLARE_ACCOUNT_ID`(secret은 아니지만 저장소에 쓰지 않음).
+   - API token: My Profile → API Tokens → Create Token → **Custom token**, 권한은 **Workers AI만**(Cloudflare 문서의 "Workers AI" template = Account · Workers AI · Read + Edit; 다른 권한·zone 권한은 넣지 않는다. Read만으로 `ai/run`이 되는지는 첫 parity 실행에서 확인하고 되면 Edit를 뺀다), Account Resources는 이 account 하나, 만료일 지정, client IP 제한 없음(Railway egress IP가 고정이 아님) → `CLOUDFLARE_API_TOKEN`.
+   - 보관: 두 값을 `~/.secrets/quiz-workspace/staging/cloudflare.env`(`chmod 600`, 저장소 밖)에 `CLOUDFLARE_ACCOUNT_ID=…`, `CLOUDFLARE_API_TOKEN=…`로 저장하고 Railway `api`·`worker` 변수에 넣는다(Vercel 금지). 채팅·이슈에 붙이지 않는다.
+   - `WORKER_EMBEDDER=workers_ai`를 Railway `api`·`worker` 양쪽에 같은 값으로 둔다(check-env `same`).
+   - 이 모드에서 API는 모델을 읽지 않으므로 `api`의 `/var/cache/huggingface` volume은 필요 없다(worker는 Docling 모델 때문에 유지).
 
 ## 2. Secret 생성
 
@@ -52,6 +58,7 @@
 | `SUPABASE_ACCESS_TOKEN` | Supabase → Account → Access Tokens (운영자 전용, CI에 넣지 않음) | `config push` 셸에서만 |
 | `VERCEL_TOKEN`, `RAILWAY_TOKEN`, `SUPABASE_DB_URL` | 위 1장 | GitHub Environment secrets |
 | `SMOKE_USER_{A,B}_{EMAIL,PASSWORD}` | 3장 5단계의 smoke 계정 | GitHub Environment secrets |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | 1장 7단계(Workers AI Read 권한만의 custom token) | Railway `api`, `worker` (Vercel 금지; `WORKER_EMBEDDER=workers_ai`일 때 필수) |
 | `LLM_API_KEY`, `LLM_MODEL` | LLM 제공자(선택, **사용자 결정**: 비용·데이터 정책) | Railway `worker` |
 
 서비스별 전체 목록과 기본값은 manifest가 기준이다:
@@ -101,7 +108,14 @@ make check-env ENV=staging ARGS="--check api=$HOME/secure/quiz/api.staging.env \
 6. **Smoke 계정 → 정식 실행**: staging 화면에서 실제 메일함으로 두 번 가입·메일 확인(SMTP와 DEP-01 가입 흐름 확인) → GitHub secrets `SMOKE_USER_{A,B}_*`에 넣고 **`bootstrap` 없이** workflow를 다시 실행(전체 smoke: DEP-01 로그인, DEP-02 업로드 객체, DEP-05). 이후 배포는 항상 bootstrap 없이 실행한다. (Supabase Admin으로 계정을 미리 만드는 방법은 secret key를 운영자 셸에 꺼내야 하고 실제 메일 흐름을 건너뛰므로 쓰지 않는다.)
 7. **수동 DEP 점검**(4장).
 8. **HF_HOME volume**: 첫 검색·파싱 후 모델이 volume에 남는지 확인하고 `WORKER_MODELS_OFFLINE=true`. 비root(uid 10001)가 volume에 쓰지 못하면 `RAILWAY_RUN_UID=0`을 쓰지 말고 volume 없이(재시작마다 다운로드) 운영하면서 기록한다.
-9. **7일 부하·비용 측정**(deployment.md §8): worker RAM/CPU, 검색 지연, Supabase·Qdrant 사용량 → 비용 게이트 판단.
+9. **Workers AI parity·eval(첫 staging 배포 때 1회, M7.4b)**: 운영자 셸에서만 실행한다(합성 KO/EN 텍스트만 전송, 책 원문 없음).
+   ```bash
+   set -a; . ~/.secrets/quiz-workspace/staging/cloudflare.env; set +a
+   make test-workers-ai     # 로컬 Qwen3(HF_HOME) vs Workers AI cosine parity + 오류 계약; 자격 없으면 실패(skip 아님)
+   make eval-workers-ai     # eval/configs/workers-ai.json(1024차원, rerank off) → eval/reports/seed-workers-ai.{json,md}
+   ```
+   parity가 실패하면(평균 cosine 기준 미달) 요청 형식(`documents` / `queries`+`instruction`) 가정을 먼저 확인하고 결과를 implementation-plan §7에 기록한다. Cloudflare dashboard → AI → Workers AI에서 neuron 사용량을 확인해 deployment.md §8의 환산을 갱신한다.
+10. **7일 부하·비용 측정**(deployment.md §8): worker RAM/CPU, 검색 지연, Supabase·Qdrant 사용량 → 비용 게이트 판단.
 
 ## 4. Staging smoke (DEP-01~07)
 
@@ -163,6 +177,8 @@ staging 7일 부하·비용 게이트를 통과한 뒤에만 진행한다. workf
 - CAPTCHA: 문서(§6.1)는 Auth CAPTCHA를 요구하지만 web에 CAPTCHA 위젯이 없어 켜면 가입·로그인이 깨진다 → 별도 Task로 구현 후 활성화.
 
 ## 8. 첫 staging 배포에서 확인할 가정
+
+- Workers AI `@cf/qwen/qwen3-embedding-0.6b` 입력 형식(`documents` 배열, query는 `queries` + `instruction`)과 출력(`result.data`, 1024차원)이 adapter 가정과 같은지(3장 9단계 parity), 한 요청 batch 상한(기본 `CLOUDFLARE_AI_BATCH_SIZE=16`), Free plan quota 초과 응답의 status/code(adapter는 429와 quota 관련 오류 code를 `embedding_quota_exceeded`로 분류).
 
 - Railway GraphQL(`serviceInstanceUpdate`, `serviceInstanceDeployV2`, `deployment`)과 `Project-Access-Token` header — 실패 시 `railway_deploy.py`가 단계 이름과 Railway 메시지를 출력한다.
 - Railway volume이 uid 10001에 쓰기 가능한지(3장 8단계).

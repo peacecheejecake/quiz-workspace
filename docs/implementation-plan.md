@@ -170,6 +170,7 @@ flowchart LR
 | M7.2 | 전 화면 a11y(axe)·visual baseline(light/dark, desktop/iPad)·WebKit/모바일 smoke, 성능 점검 | M5.5, M6.3, S4 | 전체 E2E GREEN, `e2e:trace` orphan 0 |
 | M7.3 | 컨테이너화(web/api/worker Dockerfile), CI 전체 파이프라인, 색인 재생성·백업 복원 스크립트 | M7.2 | CI GREEN |
 | M7.4a | 계정 없는 배포 준비: platform config as code, env manifest·검사기, deploy workflow, DEP smoke runner, runbook | M7.3 | 오프라인 검증 GREEN, `make smoke-local` GREEN |
+| M7.4b | Hosted embedding: Cloudflare Workers AI `@cf/qwen/qwen3-embedding-0.6b` adapter(`WORKER_EMBEDDER=workers_ai`, API·worker 공용), 색인 재시도 오류 code, 검색 BM25 저하 + 안내(SEARCH-01-AC06), 모델 없는 API 이미지, env manifest, parity/eval scaffolding(실행은 계정 생성 후) | M7.4a | SEARCH-01-AC06 GREEN, adapter contract test(HTTP mock) GREEN, slim API 이미지 boot, `workers_ai` marker test는 자격 없이 실패 |
 | M7.4 ⛔ | Staging 배포(구성 A) → 7일 부하·비용 게이트 → Production, SMTP, DEP-01~07 | M7.4a | **사용자 계정·비용 승인 필요** |
 
 ## 4. Task 의존 그래프
@@ -292,6 +293,7 @@ flowchart TB
     M70[M7.0 RED]
     M71[M7.1 HISTORY-01] --> M72[M7.2 a11y/visual]
     M72 --> M73[M7.3 CI/containers] --> M74a[M7.4a deploy prep] --> M74[M7.4 deploy ⛔]
+    M74a --> M74b[M7.4b Workers AI embedding] --> M74
   end
   M30 --> M70
   M70 ==> M71
@@ -326,7 +328,7 @@ flowchart TB
 | W17 | M5.2 · M6.2 · S3b | |
 | W18 | M5.4 · M6.3 · M7.1 · S4 | |
 | W19 | M5.5 | |
-| W20 | M7.2 → M7.3 → M7.4a → M7.4⛔ | |
+| W20 | M7.2 → M7.3 → M7.4a → M7.4b → M7.4⛔ | |
 
 Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 Task를 즉시 착수한다.
 
@@ -397,6 +399,12 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-10-18 | M7.4a: staging smoke는 traces/스크린샷/report 없이 실행하고 합성 smoke 계정 2개(사전 가입)를 쓴다. production은 `@readonly` 점검만. DEP-04·DEP-06은 CI(`APP_ENV=test` 실패 marker, restore rehearsal)로 자동 검증하고 staging에서는 runbook 수동 절차. | 실제 JWT·비밀번호가 artifact에 남지 않음 |
 | 2026-10-18 | **사용자 결정**: staging Supabase project = ref `jpyupavjpmlxtuolrvvs`, 지역 Singapore(`ap-southeast-1`) → `[remotes.staging] project_id`. production ref는 비용 게이트 후 새 project로. | 환경별 project 결정의 staging 적용 |
 | 2026-10-18 | **사용자 결정**: Railway 지역 Singapore(`asia-southeast1-eqsg3a`)로 api·worker·Redis 모두(Tokyo 없음, Supabase와 같은 지역). Region은 dashboard에서 서비스별로 설정하고 `railway-services.toml` `[project] region`에 기록·test로 고정; 배포 script는 region을 바꾸지 않는다(API field 미확인). | 지연·egress 최소화 |
+| 2026-10-18 | **사용자 결정(M7.4b)**: 책 원문 chunk를 Cloudflare Workers AI로 보내 embedding해도 된다. `/privacy`에 Cloudflare를 처리 수탁자로 명시한다(placeholder 페이지에 수탁자 목록 초안을 넣음; 최종 법률 문구는 사용자). | 배포 메모리 제약(Railway trial)에서 query embedding을 API 밖으로 |
+| 2026-10-18 | **사용자 결정(M7.4b)**: Cloudflare Workers **Free** plan(10,000 neurons/day, 초과 시 오류). → worker: quota·429·5xx·timeout은 재시도 가능한 job 실패(`embedding_quota_exceeded` / `embedding_unavailable`, backoff); 모든 chunk가 embedding된 경우에만 발행(READY), 부분 vector로 발행하지 않음. | 비용 0 유지, revision 일관성 |
+| 2026-10-18 | **사용자 결정(M7.4b)**: Railway Hobby 업그레이드 보류(trial 1 GB RAM/service). → API 이미지 기본 빌드는 `models` extra 없음(torch/transformers 제외, `API_EXTRAS=models`로 로컬 모델 이미지 빌드 유지); worker는 Docling 유지. 배포 환경에서 `WORKER_EMBEDDER`가 로컬 모델(`auto`/`qwen3`)인데 transformers가 없으면 API가 기동을 거부한다. | 1 GB 안에서 API 동작 |
+| 2026-10-18 | **사용자 결정(M7.4b)**: Reranker는 계속 off(Workers AI에 다국어 reranker 없음). 변경 없음. | §7 기존 결정 유지 |
+| 2026-10-18 | **사용자 결정(M7.4b)**: 검색 시 embedding 장애 → BM25만으로 계속 + 경고. 해석: 응답 `degraded: ["dense_unavailable"]`(code 목록, `warnings`와 별개), UI는 `role="status"` 비차단 안내 "의미 검색을 일시적으로 사용할 수 없어 키워드 결과만 표시합니다", 서버 WARNING(검색어 없음). `semantic` 모드도 BM25 결과로 대체하고 같은 안내. Qdrant 장애는 503 유지. SEARCH-01-AC06 추가. | 검색 가용성 우선 |
+| 2026-10-18 | M7.4b: Workers AI 요청 형식은 공개 schema 기준 가정 — 문서는 `{"documents": [...]}`, query는 `{"queries": [q], "instruction": DEFAULT_QUERY_INSTRUCTION}`(로컬 Qwen3와 같은 instruction), 응답 `result.data`(1024차원, 첫 응답에서 검증). `model_name = cloudflare-workers-ai:@cf/qwen/qwen3-embedding-0.6b` → 로컬 Qwen3와 다른 물리 collection. 실제 parity(`make test-workers-ai`)는 계정 생성 후 첫 staging 배포 때 실행. | 계정 없음: 실제 API 호출 금지 |
 
 ## 8. 진행 현황
 
@@ -467,6 +475,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M7.2 a11y·visual·perf | ✅ | d149be5 · 3fabcf9 | axe(WCAG 2.2 AA) 21개 화면 light/dark, visual baseline 48(desktop·iPad, pinned Linux renderer), WebKit/모바일 smoke, perf(LCP ≤160ms, API p95 ≤25ms). 수정: dark theme 미적용, secondary text 대비, 중복 landmark. P2(visual이 CI 미연결) → M7.3 fix에서 연결. 전체 E2E 259/259 + visual 10 + UI visual 8 GREEN, e2e:trace orphan 0 |
 | M7.3 컨테이너·CI | ✅ | 1fec1cc · 3075270 · 6c19edf · d92343b | web/api/worker image(non-root, pinned digest) build·boot 확인, CI: checks·images·integration(worker E2E 전체 phase, visual, log/artifact audit, backup/restore rehearsal)·nightly perf/models, actionlint 0. reindex·backup·restore script. P1×2(restore 설정, rehearsal seed)·P2×2(storage inventory 일관성, visual gate) → 반영 → P2(probe의 Qdrant 원격 검사) → 반영 → 지적 없음. 실제 GitHub CI 첫 GREEN: run 39101748833 (`623b26a`). 그 전 실패 4회 → 수정: Node 24.x 의존 단언(7f6f855), CI ANSI 출력·Celery 종료 경쟁(61bf5d3), 모바일 헤더 overflow(d62a542)·스크롤 영역 키보드 접근(b4744b9), reset 대상 restore(3fd66b9·ca6270b·d50d8b2) — Codex 지적 없음 |
 | M7.4a 배포 준비(계정 없음) | ✅ | 9677554 · b7c08f9 · 1302835 · c3d4b1e · 4d06a6a · b5acd9e | platform config(vercel.json, railway-services.toml, supabase `[remotes.*]`) + 불변식 test, env manifest(`make check-env`, 값 비출력), deploy workflow(수동·digest·migration 선행·smoke, production gate), Railway rollout script(mock API test), DEP smoke(`make smoke-local` 12/12 + DEP-03 seed/verify 재시작 GREEN, log audit 0), `e2e:log-audit --scan`, runbook. actionlint 0, lint·typecheck·test GREEN. Codex 리뷰 대기 |
+| M7.4b Workers AI embedding | 🔄 | — | 구현 중(branch `m7.4b-workers-ai`) |
 | M7.4 배포 | ⛔ | — | 사용자 작업 대기(runbook-deploy.md): staging 계정(Supabase project·Railway·Vercel·Qdrant Cloud·SMTP 도메인), secret 생성·입력, GitHub Environment `staging`, smoke 계정 2개, 첫 수동 migration·role login·`config push`; 사용자 결정: 도메인, GHCR 공개 여부, staging Deployment Protection, LLM 사용 여부, /terms·/privacy 문구; 첫 배포에서 확인: Railway GraphQL·volume 권한·Vercel `x-real-ip`. production은 7일 부하·비용 게이트 후. CAPTCHA는 별도 Task |
 | (통합) 전체 E2E 회귀 | ✅ | 909195f | worker 포함 234/234 GREEN(chromium·webkit) |
 | M4.4b import 화면 | ✅ | 9a263df · c02d89a | QIMPORT-01 AC01~04 GREEN. 공용 `QuestionDraftReview`. P2×2(초기 로드 재시도, publish 200 제한) → 상태 직접 갱신 + 200개 batch → 지적 없음 |
