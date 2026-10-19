@@ -415,6 +415,39 @@ test(
   },
 );
 
+test(
+  'SEARCH-01-AC07 browser Back restores the earlier search in the box and the results',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac07-back');
+    const ws = await workspaceFactory.create(owner);
+    await uploadReadyBook(owner, ws.id, 'book-en');
+
+    await signInAs(page, owner.user);
+    await page.goto(searchPath(ws.id));
+    await runSearch(page, 'chlorine', 'keyword');
+    const items = searchUi.resultItems(page);
+    await expect(items.filter({ hasText: /chlorine/i }).first()).toBeVisible();
+    // A dialog opens on a new history entry; a second search replaces that entry's query.
+    await homeUi.documentsButton(page).click();
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
+    await searchUi.box(page).fill('evaporation');
+    await searchUi.box(page).press('Enter');
+    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'evaporation');
+    await expect(items.filter({ hasText: /evaporat/i }).first()).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get('q') === 'chlorine' && !url.searchParams.has('panel'),
+    );
+    await expect(homeUi.documentsDialog(page)).toHaveCount(0);
+    await expect(searchUi.box(page)).toHaveValue('chlorine');
+    // The restored search runs again: every listed hit is a chlorine hit once it settles.
+    await expect(items.filter({ hasNotText: /chlorine/i })).toHaveCount(0);
+    await expect(items.first()).toBeVisible();
+  },
+);
+
 // Opens a share link, so it runs on the sharing fixtures (fixtures/sharing.ts): link cleanup,
 // secret digests for `e2e:artifact-audit`, a redacted page text and redacted errors on failure.
 sharingTest.describe('shared view', () => {

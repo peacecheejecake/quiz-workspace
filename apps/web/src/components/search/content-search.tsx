@@ -97,6 +97,11 @@ export interface ContentSearch {
   readonly retry: () => void;
   /** Forgets the results (the home's "검색 결과 닫기"). */
   readonly clear: () => void;
+  /**
+   * Follows the address bar (browser Back/Forward): runs `q` with its options when it differs from
+   * the last search, or clears the results for null. No-op when they already match.
+   */
+  readonly sync: (q: SearchQuery | null) => void;
   readonly setMode: (value: string) => void;
   readonly setDocument: (value: string) => void;
   readonly setChapter: (value: string) => void;
@@ -134,6 +139,9 @@ export function useContentSearch({
    */
   const pendingInitialRef = useRef<{ documentId: string; generation: number } | null>(null);
 
+  /** The last search run (or null once cleared), updated synchronously, unlike `submitted`. */
+  const latestRef = useRef<SearchQuery | null>(null);
+
   const run = useCallback(
     async (q: SearchQuery) => {
       controllerRef.current?.abort();
@@ -141,6 +149,7 @@ export function useContentSearch({
       controllerRef.current = controller;
       const generation = ++generationRef.current;
       pendingInitialRef.current = null; // any search supersedes a deferred one
+      latestRef.current = q;
       setSubmitted(q);
       setPanelOpen(false);
       setResults((current) => ({
@@ -292,9 +301,32 @@ export function useContentSearch({
       controllerRef.current?.abort();
       generationRef.current += 1;
       pendingInitialRef.current = null;
+      latestRef.current = null;
       setSubmitted(null);
       setResults({ status: 'idle' });
       setPanelOpen(false);
+    },
+    sync: (q) => {
+      const last = latestRef.current;
+      if (q === null) {
+        if (!last) return;
+        controllerRef.current?.abort();
+        generationRef.current += 1;
+        pendingInitialRef.current = null;
+        latestRef.current = null;
+        setSubmitted(null);
+        setResults({ status: 'idle' });
+        setPanelOpen(false);
+        return;
+      }
+      if (last && sameSearch(last, q)) return;
+      setModeState(q.mode);
+      setDocumentId(q.documentId);
+      chapterIdRef.current = q.chapterId;
+      setChapterId(q.chapterId);
+      setPapers(q.includeQuestionPapers);
+      setChapterNotice(null);
+      void run(q);
     },
     setMode: (value) => {
       if (!isSearchMode(value)) return;
@@ -326,6 +358,16 @@ export function useContentSearch({
     },
     closeHit: () => setPanelOpen(false),
   };
+}
+
+function sameSearch(a: SearchQuery, b: SearchQuery): boolean {
+  return (
+    a.query === b.query &&
+    a.mode === b.mode &&
+    a.documentId === b.documentId &&
+    (a.documentId ? a.chapterId : null) === (b.documentId ? b.chapterId : null) &&
+    a.includeQuestionPapers === b.includeQuestionPapers
+  );
 }
 
 /** The content-search options of the "검색 옵션" popover. */

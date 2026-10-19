@@ -35,7 +35,7 @@ import {
 } from '@quiz/ui';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useState, useTransition, type FormEvent } from 'react';
+import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
@@ -60,7 +60,7 @@ import {
 import type { PlacedQuestion } from '@/lib/questions/overview-placement';
 import type { QuestionFailureKind } from '@/lib/questions/problems';
 import type { SearchQuery } from '@/lib/search/client';
-import { MAX_QUERY_CHARS } from '@/lib/search/state';
+import { MAX_QUERY_CHARS, parseSearchParams, searchParamsFor } from '@/lib/search/state';
 import {
   parsePanels,
   parseScope,
@@ -192,6 +192,30 @@ export function WorkspaceHome({
     initial: initialSearch,
     runInitial: scopeIncludesContent(scope),
   });
+
+  // The address bar can change under us (browser Back/Forward restores an earlier search): the
+  // search box, the content options and the executed content search follow it. Our own updates
+  // write the same state they already show, so following them is a no-op.
+  const urlQ = searchParams.get('q') ?? '';
+  const [seenQ, setSeenQ] = useState(urlQ);
+  if (seenQ !== urlQ) {
+    setSeenQ(urlQ);
+    setDraft(urlQ);
+  }
+  const contentKey =
+    urlQ && scopeIncludesContent(scope)
+      ? searchParamsFor(parseSearchParams(Object.fromEntries(searchParams)))
+      : '';
+  const syncedContentKey = useRef(contentKey);
+  const syncContent = content.sync;
+  useEffect(() => {
+    if (syncedContentKey.current === contentKey) return;
+    syncedContentKey.current = contentKey;
+    const q = contentKey
+      ? parseSearchParams(Object.fromEntries(new URLSearchParams(contentKey)))
+      : null;
+    void Promise.resolve().then(() => syncContent(q));
+  }, [contentKey, syncContent]);
 
   /** Runs `query` under `nextScope`: content results, heatmap filter and the URL. */
   function applySearch(query: string, nextScope: SearchScope) {

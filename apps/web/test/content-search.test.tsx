@@ -47,11 +47,14 @@ function SearchScreen({
   documents,
   initial,
   client,
+  syncTo,
 }: {
   workspaceId: string;
   documents: readonly SearchDocumentOption[];
   initial: SearchQuery;
   client: SearchClient;
+  /** What the home hands to `sync` when the address bar changes (Back/Forward). */
+  syncTo?: SearchQuery | null;
 }) {
   const search = useContentSearch({ workspaceId, initial, runInitial: true, client });
   const [draft, setDraft] = useState(initial.query);
@@ -72,6 +75,11 @@ function SearchScreen({
         />
         <button type="submit">검색</button>
       </form>
+      {syncTo !== undefined ? (
+        <button type="button" onClick={() => search.sync(syncTo)}>
+          주소 따라가기
+        </button>
+      ) : null}
       <ContentSearchOptions search={search} documents={documents} />
       <ContentSearchResults workspaceId={workspaceId} search={search} onClose={search.clear} />
     </main>
@@ -466,5 +474,50 @@ describe('closing the content results', () => {
     await user.click(screen.getByRole('button', { name: '검색 결과 닫기' }));
     expect(screen.queryByRole('heading', { name: '원문 검색 결과' })).toBeNull();
     expect(screen.queryByRole('list', { name: '검색 결과' })).toBeNull();
+  });
+});
+
+describe('following the address bar (browser Back/Forward)', () => {
+  it('runs the restored search with its options, ignores an unchanged one and clears on null', async () => {
+    const user = userEvent.setup();
+    const client = makeClient(async (_ws, q) =>
+      response([hit({ document_title: `hit for ${q.query}` })]),
+    );
+    const restored: SearchQuery = { ...INITIAL, query: 'chlorine', mode: 'keyword' };
+    const { rerender } = render(
+      <SearchScreen
+        workspaceId={WS}
+        documents={[]}
+        initial={INITIAL}
+        client={client}
+        syncTo={restored}
+      />,
+    );
+    await submit(user, 'water');
+    expect(await screen.findByText('hit for water')).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: '주소 따라가기' }));
+    expect(await screen.findByText('hit for chlorine')).toBeVisible();
+    expect(client.search).toHaveBeenCalledTimes(2);
+    expect(client.search.mock.calls[1]?.[1]).toMatchObject({ query: 'chlorine', mode: 'keyword' });
+    expect(screen.getByRole('radio', { name: '키워드' })).toBeChecked();
+
+    // The same state again (our own URL write): no new request.
+    await user.click(screen.getByRole('button', { name: '주소 따라가기' }));
+    expect(client.search).toHaveBeenCalledTimes(2);
+
+    rerender(
+      <SearchScreen
+        workspaceId={WS}
+        documents={[]}
+        initial={INITIAL}
+        client={client}
+        syncTo={null}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: '주소 따라가기' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: '원문 검색 결과' })).toBeNull(),
+    );
   });
 });
