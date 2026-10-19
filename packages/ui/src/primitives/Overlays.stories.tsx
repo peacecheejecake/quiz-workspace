@@ -2,6 +2,15 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ToastProvider, useToast } from '../feedback/Toast';
 import { DialogClose, ModalDialog } from '../layout/ModalDialog';
 import { Button } from './Button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './DropdownMenu';
 import { IconButton } from './IconButton';
 import { MenuIcon } from './icons';
 import { Popover, PopoverContent, PopoverTrigger } from './Popover';
@@ -128,4 +137,41 @@ export const ModalForcedChoice: Story = {
       계속하려면 다시 로그인하세요.
     </ModalDialog>
   ),
+};
+
+export const Menu: Story = {
+  name: 'DropdownMenu (groups, links)',
+  render: () => (
+    <DropdownMenu defaultOpen modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost">운영체제 ▾</Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" aria-label="Workspace 전환">
+        <DropdownMenuGroup aria-labelledby="story-menu-group">
+          <DropdownMenuLabel id="story-menu-group">내 Workspace</DropdownMenuLabel>
+          <DropdownMenuItem asChild>
+            <a href="#os" aria-current="true">
+              운영체제
+            </a>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <a href="#ds">자료구조</a>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <a href="#all">모든 Workspace 보기</a>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A labelled group, a separator, then a standalone entry. Link items keep the menu ' +
+          'text color and never show an underline (visited, hover, focus, active).',
+      },
+    },
+  },
 };

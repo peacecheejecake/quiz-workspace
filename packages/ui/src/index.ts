@@ -11,11 +11,17 @@ export type { CheckboxProps } from './primitives/Checkbox';
 export {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './primitives/DropdownMenu';
-export type { DropdownMenuContentProps, DropdownMenuItemProps } from './primitives/DropdownMenu';
+export type {
+  DropdownMenuContentProps,
+  DropdownMenuGroupProps,
+  DropdownMenuItemProps,
+} from './primitives/DropdownMenu';
 export { FocusRing, focusRingClassName } from './primitives/FocusRing';
 export type { FocusRingProps } from './primitives/FocusRing';
 export { IconButton } from './primitives/IconButton';
