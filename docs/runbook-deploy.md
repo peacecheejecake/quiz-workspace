@@ -3,7 +3,7 @@
 **상태:** 계정 없이 준비 완료(M7.4a), 실제 배포는 M7.4  
 **연계:** `deployment.md`(설계 기준), `auth.md` §5, `implementation-plan.md` §7·§8  
 **결정(2026-10-18, 사용자):** 구성 **A**(Vercel web + Supabase + Railway api/worker/Redis + Qdrant Cloud). Supabase는 **환경마다 별도 project**, Supabase branching은 쓰지 않는다.  
-**결정(2026-10-19, 사용자, M7.4p):** staging 7일 부하·비용 게이트를 **면제**하고 production을 지금 배포한다. **staging = `develop`**(CI GREEN 후 자동 배포, 수동 dispatch도 `develop`만), **production = `main`**(수동 dispatch + GitHub Environment `production` 승인). production web origin `https://quiz.red-10-proto.xyz`, Railway는 같은 project의 environment `production`, Qdrant는 staging과 같은 Free cluster를 `QDRANT_COLLECTION_PREFIX=prod_`로 분리, Supabase는 새 Singapore project.
+**결정(2026-10-19, 사용자, M7.4p):** staging 7일 부하·비용 게이트를 **면제**하고 production을 지금 배포한다. **staging = `develop`**(CI GREEN 후 자동 배포, 수동 dispatch도 `develop`만), **production = `main`**(수동 dispatch + GitHub Environment `production` 승인). production web origin `https://quiz.red-10-proto.xyz`(staging과 **별도 Vercel project**), Railway는 같은 project의 environment `production`, Qdrant는 staging과 같은 Free cluster를 `QDRANT_COLLECTION_PREFIX=prod_`로 분리, Supabase는 새 Singapore project.
 
 이 문서는 사용자가 직접 수행하는 단계(계정, secret 생성·입력, 첫 배포, 롤백)를 순서대로 적는다. 저장소에 들어 있는 것:
 
@@ -51,7 +51,7 @@
 
 | 변수 | 생성 방법 | 넣는 곳 |
 |---|---|---|
-| `AUTH_RECOVERY_MARKER_SECRET` | `openssl rand -base64 48` (환경마다 다르게) | Vercel (Preview=staging) |
+| `AUTH_RECOVERY_MARKER_SECRET` | `openssl rand -base64 48` (환경마다 다르게) | Vercel (staging project의 Preview / production project의 Production) |
 | `RELAY_CLIENT_SECRET` | `openssl rand -base64 48` (web·api **같은 값**, 환경마다 다르게) | Vercel + Railway `api` |
 | `SHARE_SESSION_SECRET` | `openssl rand -base64 48` (환경마다 다르게) | Railway `api` |
 | `quiz_api` / `quiz_worker` DB 비밀번호 | `openssl rand -hex 32` (hex: URL percent-encoding 불필요) | `DATABASE_URL` / `WORKER_DATABASE_URL` |
@@ -60,7 +60,7 @@
 | `QDRANT_API_KEY` | Qdrant Cloud | Railway `api`, `worker` |
 | `REDIS_URL` | Railway reference variable `${{Redis.REDIS_URL}}` | Railway `api`, `worker` |
 | `SUPABASE_AUTH_SMTP_*` | SMTP 제공자 | `config push` 셸에서만 |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | 1장 6단계(staging: 테스트 sitekey, production: widget Site Key). 공개 값, build 시 inline | Vercel (Preview=staging / Production) — 값을 바꾸면 **재배포**해야 반영 |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | 1장 6단계(staging: 테스트 sitekey, production: widget Site Key). 공개 값, build 시 inline | Vercel (staging project의 Preview / production project의 Production) — 값을 바꾸면 **재배포**해야 반영 |
 | `SUPABASE_AUTH_CAPTCHA_SECRET` | 1장 6단계(staging: 테스트 secret, production: widget Secret Key) | `config push` 셸에서만 (web·Railway·GitHub에 넣지 않음) |
 | `SUPABASE_ACCESS_TOKEN` | Supabase → Account → Access Tokens (운영자 전용, CI에 넣지 않음) | `config push` 셸에서만 |
 | `VERCEL_TOKEN`, `RAILWAY_TOKEN`, `SUPABASE_DB_URL` | 위 1장 | GitHub Environment secrets |
@@ -181,10 +181,11 @@ smoke 계정의 workspace는 API에서 soft-delete만 되므로 누적된다(합
    - api·worker 변수(2장 표; `--template`으로 양식 생성): `APP_ENV=production`, `CORS_ALLOWED_ORIGINS=https://quiz.red-10-proto.xyz`, `REDIS_URL=${{Redis.REDIS_URL}}`(production environment의 Redis), production Supabase 값, `RELAY_CLIENT_SECRET`·`SHARE_SESSION_SECRET`·role 비밀번호는 새로 생성, `WORKER_EMBEDDER=workers_ai`와 Cloudflare 자격(staging과 같은 account면 Free quota 하루 10,000 neurons를 **staging과 나눠 씀**), Qdrant는 3단계.
 3. **Qdrant**: staging과 같은 Free cluster(`QDRANT_URL` 동일). api·worker 모두 `QDRANT_COLLECTION_PREFIX=prod_`(check-env `same`; production에서 빈 값은 오류). staging은 빈 prefix(무접두 namespace)이므로 `prod_…` collection과 겹치지 않는다. `QDRANT_API_KEY`는 cluster key를 그대로 쓰거나 production용 key를 따로 발급해 따로 폐기할 수 있게 한다(권장). 운영 중 staging에서 `make reindex`/collection 정리를 할 때 `prod_` collection을 건드리지 않는다.
 4. **Cloudflare Turnstile**: 1장 6단계의 production widget(`quiz-production`, Hostname `quiz.red-10-proto.xyz`만) — Site Key → Vercel Production `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, Secret Key → `config push` 셸의 `SUPABASE_AUTH_CAPTCHA_SECRET`. 테스트 키는 check-env가 거부한다.
-5. **Vercel**(같은 project, **Production** environment):
-   - Settings → Environment Variables → **Production**에만 production 값(`NEXT_PUBLIC_SUPABASE_URL`·publishable key·`NEXT_PUBLIC_API_BASE_URL`·`NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `APP_ENV=production`, 새 `AUTH_RECOVERY_MARKER_SECRET`, api와 같은 production `RELAY_CLIENT_SECRET`, `RELAY_CLIENT_IP_HEADER=x-real-ip`). Preview(=staging) 값은 그대로 둔다.
-   - Settings → Domains → **Add** `quiz.red-10-proto.xyz` → Production에 연결. Vercel이 보여 주는 CNAME 값(project별 `….vercel-dns….com` 또는 `cname.vercel-dns.com`)을 **가비아 DNS**(My가비아 → 도메인 → `red-10-proto.xyz` → DNS 관리 → 레코드 추가)에 type `CNAME`, 호스트 `quiz`, 값 = Vercel 표시값(끝의 `.` 포함 여부는 가비아 입력 형식에 따름), TTL 기본으로 넣는다. 기존 `mail` 하위 SPF/DKIM/DMARC 레코드는 건드리지 않는다. Vercel에서 Valid Configuration + 인증서 발급을 확인한다.
-   - workflow는 `vercel deploy --prebuilt --prod`로 배포하고, Production domain이 그 배포에 자동으로 붙는다(alias step은 staging 전용).
+5. **Vercel — production 전용 project를 따로 만든다**(사용자 결정 2026-10-19, Codex P1): staging alias `quiz-workspace-stg.vercel.app`은 staging project의 기본 **production** domain이라, 같은 project에 `--prod` 배포를 하면 그 alias가 production 배포로 옮겨 간다. 그래서 staging project는 그대로(preview 배포 + alias, `--prod` 없음) 두고:
+   - Add New → Project → 같은 GitHub repo import, 이름 예: `quiz-workspace`, Root Directory `apps/web`, Framework Next.js, Node 24, Functions region `sin1`. `vercel.json`이 git 자동 배포를 끈다. Project ID → GitHub Environment `production`의 `VERCEL_PROJECT_ID`(staging과 다른 값; `VERCEL_ORG_ID`는 같은 team이면 같음). Deployment Protection은 production domain에 걸리지 않는지 확인한다.
+   - 이 project의 Settings → Environment Variables → **Production**에 production 값(`NEXT_PUBLIC_SUPABASE_URL`·publishable key·`NEXT_PUBLIC_API_BASE_URL`·`NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `APP_ENV=production`, 새 `AUTH_RECOVERY_MARKER_SECRET`, api와 같은 production `RELAY_CLIENT_SECRET`, `RELAY_CLIENT_IP_HEADER=x-real-ip`). staging project의 값은 건드리지 않는다.
+   - 이 project의 Settings → Domains → **Add** `quiz.red-10-proto.xyz` → Production에 연결. Vercel이 보여 주는 CNAME 값(project별 `….vercel-dns….com` 또는 `cname.vercel-dns.com`)을 **가비아 DNS**(My가비아 → 도메인 → `red-10-proto.xyz` → DNS 관리 → 레코드 추가)에 type `CNAME`, 호스트 `quiz`, 값 = Vercel 표시값(끝의 `.` 포함 여부는 가비아 입력 형식에 따름), TTL 기본으로 넣는다. 기존 `mail` 하위 SPF/DKIM/DMARC 레코드는 건드리지 않는다. Vercel에서 Valid Configuration + 인증서 발급을 확인한다.
+   - workflow는 production에서만 `vercel deploy --prebuilt --prod`로 이 project에 배포하고, Production domain이 그 배포에 자동으로 붙는다. staging은 `--prod` 없이 preview 배포 후 alias(workflow test가 고정).
 6. **Auth 설정 push**(3장 2단계를 production 값으로):
    ```bash
    set -a; . ~/secure/quiz/supabase-config.production.env; set +a   # SITE_URL=https://quiz.red-10-proto.xyz, REDIRECT=…/auth/callback, SMTP, 실제 CAPTCHA secret
@@ -207,8 +208,8 @@ smoke 계정의 workspace는 API에서 soft-delete만 되므로 누적된다(합
    make check-env ENV=production ARGS="--check api=$HOME/secure/quiz/api.production.env \
      --check worker=$HOME/secure/quiz/worker.production.env --check web=$HOME/secure/quiz/web.production.env"
    ```
-9. **GitHub Environment `production`**: Settings → Environments → New → `production` → Deployment branches **Selected branches** `main`만, **Required reviewers**(사용자; 혼자 운영하면 "Prevent self-review"는 끈다). secrets `SUPABASE_DB_URL`, `VERCEL_TOKEN`, `RAILWAY_TOKEN`(production token); variables `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `RAILWAY_ENVIRONMENT_ID`, `RAILWAY_API_SERVICE_ID`, `RAILWAY_WORKER_SERVICE_ID`, `WEB_ORIGIN=https://quiz.red-10-proto.xyz`, `SMOKE_API_URL`, `SMOKE_SUPABASE_URL`, `SMOKE_SUPABASE_PUBLISHABLE_KEY`, (선택) `SMOKE_QDRANT_URL`. smoke 계정 secrets는 필요 없다(`@readonly`만). Repository variable `PRODUCTION_DEPLOY_ENABLED=true`.
-10. **`main` 준비**: 배포할 commit이 `main`에 있어야 한다. `develop`의 모든 테스트가 GREEN일 때만 `main`을 `develop`으로 fast-forward하고(push는 사용자 승인), `main` push의 CI가 GREEN인지 확인한다(dispatch preflight가 그 commit의 성공한 CI run을 찾는다).
+9. **GitHub Environment `production`**: Settings → Environments → New → `production` → Deployment branches **Selected branches** `main`만, **Required reviewers**(사용자; 혼자 운영하면 "Prevent self-review"는 끈다). secrets `SUPABASE_DB_URL`, `VERCEL_TOKEN`, `RAILWAY_TOKEN`(production token); variables `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`(**production project**의 id, 5단계), `RAILWAY_ENVIRONMENT_ID`, `RAILWAY_API_SERVICE_ID`, `RAILWAY_WORKER_SERVICE_ID`, `WEB_ORIGIN=https://quiz.red-10-proto.xyz`, `SMOKE_API_URL`, `SMOKE_SUPABASE_URL`, `SMOKE_SUPABASE_PUBLISHABLE_KEY`, (선택) `SMOKE_QDRANT_URL`. smoke 계정 secrets는 필요 없다(`@readonly`만). Repository variable `PRODUCTION_DEPLOY_ENABLED=true`.
+10. **`main` 준비**: 배포할 commit이 `main`에 있어야 한다. `develop`의 모든 테스트가 GREEN일 때만 `main`을 `develop`으로 fast-forward하고(push는 사용자 승인), `main` push의 CI가 GREEN인지 확인한다(dispatch는 그 commit의 최신 CI push run에서 선행 job — checks·images·integration·visual-ui — 이 모두 success인지 확인한다. `develop`에서 자동 배포 job만 실패한 commit도 수동 재배포·bootstrap은 가능).
 11. **배포**: Actions → Deploy → Run workflow → **Use workflow from `main`**, `environment=production`(bootstrap·skip_migrations 끔) → 승인. preflight가 누락 이름을 출력하면 채우고 다시 실행.
 12. **`@readonly` smoke**: workflow의 Smoke step이 `pnpm smoke --grep @readonly`를 production에 실행한다(DEP-01 HTTPS·HSTS·CORS, DEP-02 익명 Storage 거부, DEP-07 header·Data API·bundle·Qdrant 무키). 필요하면 운영자 셸에서 다시:
     ```bash

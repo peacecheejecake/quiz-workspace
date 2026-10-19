@@ -90,7 +90,7 @@ PR opened
 
 - 변경사항은 screen requirements + E2E tests **먼저 작성**되어야 merge 가능한 PR로 본다. 테스트는 최초 RED 실행의 실패 이유를 PR에 기록한다.
 - 스테이징·프로덕션 환경의 Auth redirect domain, JWKS issuer, CORS, secrets, SMTP, Storage 정책을 별도로 설정.
-- 배포 branch(사용자 결정 2026-10-19, M7.4p): **staging = `develop`**, **production = `main`**. `develop` push의 CI가 모두 GREEN이면 CI의 마지막 job이 `deploy.yml`을 호출해 staging에 자동 배포한다(수동 dispatch도 `develop`에서만). production은 `main`에서 수동 dispatch + GitHub Environment `production`(deployment branch `main`, required reviewers) 승인으로만 배포한다. 다른 branch·tag·PR ref는 preflight가 거부한다.
+- 배포 branch(사용자 결정 2026-10-19, M7.4p): **staging = `develop`**, **production = `main`**. `develop` push의 CI가 모두 GREEN이면 CI의 마지막 job이 `deploy.yml`을 호출해 staging에 자동 배포한다(수동 dispatch도 `develop`에서만). production은 `main`에서 수동 dispatch + GitHub Environment `production`(deployment branch `main`, required reviewers) 승인으로만 배포한다. web은 환경마다 별도 Vercel project(staging: preview 배포 + 고정 alias, production: `--prod` + `quiz.red-10-proto.xyz`). 수동 dispatch는 그 commit의 CI push run에서 선행 job(checks·images·integration·visual-ui)이 모두 success인지 확인한다(자동 배포 job의 실패는 무관). 다른 branch·tag·PR ref는 preflight가 거부한다.
 - 배포 시 API/schema 호환 기간을 유지하고 worker는 idempotent job 및 task schema version을 사용한다.
 - SQL migration은 additive-first → 코드 deploy → cleanup 방식. 컬렉션 업그레이드는 `documents_v2`/`questions_v2` 구축 후 alias/active index 전환. 실패 시 rollback 경로 보존.
 
@@ -172,7 +172,7 @@ PR opened
 
 ### 실행 절차 (M7.4a)
 
-계정 생성·secret 생성 위치·첫 staging 배포 순서·롤백·smoke(DEP 자동/수동 구분)는 [runbook-deploy.md](runbook-deploy.md). 변수 목록의 기준은 `infra/deploy/env-manifest.toml`(검증: `make check-env`), 배포는 `.github/workflows/deploy.yml`(migration → API/Worker → Web → smoke; staging은 `develop` push의 CI GREEN 후 자동 + `develop` 수동, production은 `main` 수동 + 승인). 2026-10-18 결정: 구성 A, 환경별 Supabase project. 2026-10-19 결정: staging은 `develop` 기준, 7일 게이트 면제 후 production 배포(web `https://quiz.red-10-proto.xyz`, 같은 Railway project의 `production` environment, Qdrant cluster 공유 + prefix, 새 Singapore Supabase project).
+계정 생성·secret 생성 위치·첫 staging 배포 순서·롤백·smoke(DEP 자동/수동 구분)는 [runbook-deploy.md](runbook-deploy.md). 변수 목록의 기준은 `infra/deploy/env-manifest.toml`(검증: `make check-env`), 배포는 `.github/workflows/deploy.yml`(migration → API/Worker → Web → smoke; staging은 `develop` push의 CI GREEN 후 자동 + `develop` 수동, production은 `main` 수동 + 승인). 2026-10-18 결정: 구성 A, 환경별 Supabase project. 2026-10-19 결정: staging은 `develop` 기준, 7일 게이트 면제 후 production 배포(web `https://quiz.red-10-proto.xyz`는 staging과 별도 Vercel project — staging alias가 staging project의 production domain이라 같은 project에 `--prod` 배포 금지, 같은 Railway project의 `production` environment, Qdrant cluster 공유 + prefix, 새 Singapore Supabase project).
 
 ### 공식 참고
 

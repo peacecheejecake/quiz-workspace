@@ -26,7 +26,7 @@ app_env = { staging = "preview", production = "production" }
 platform_prefixes = ["RAILWAY_", "VERCEL_", "NODE_", "NEXT_RUNTIME", "HOSTNAME", "PORT", "PATH", "HOME", "PWD", "TZ", "LANG", "HF_HUB_", "PYTHON", "UV_"]
 
 [services]
-web = "Vercel project apps/web → Settings → Environment Variables (Preview = staging, Production = production)"
+web = "Vercel → Settings → Environment Variables: staging project (Preview) / separate production project (Production), both Root Directory apps/web"
 api = "Railway service `api` → Variables (Railway environment staging / production)"
 worker = "Railway service `worker` → Variables (Railway environment staging / production)"
 deploy = "GitHub → Settings → Environments → staging / production (secrets and variables) for .github/workflows/deploy.yml"
@@ -866,7 +866,7 @@ services = ["deploy"]
 kind = "config"
 required = true
 check = "nonempty"
-provider = "Vercel project → Settings → General (Project ID)"
+provider = "Vercel project → Settings → General (Project ID); staging and production are separate projects, so each GitHub Environment has its own"
 
 [[var]]
 name = "VERCEL_CLI_VERSION"

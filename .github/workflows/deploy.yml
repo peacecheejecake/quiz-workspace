@@ -9,8 +9,8 @@
 #     → api/worker images → GHCR, by digest
 #     → `supabase db push` (migrations BEFORE any rollout; additive-first, §5)
 #     → Railway api, then worker, onto those digests (API gated on /health/ready)
-#     → Vercel web (prebuilt; staging aliased to WEB_ORIGIN, production on the project's
-#       production domain)
+#     → Vercel web (prebuilt; staging: preview deploy aliased to WEB_ORIGIN; production: `--prod`
+#       in the separate production Vercel project, domain quiz.red-10-proto.xyz)
 #     → post-deploy smoke (staging: DEP-01/02/05/07 automated set; production and the one-time
 #       staging `bootstrap` run, before the smoke accounts exist: @readonly only)
 #
@@ -167,18 +167,43 @@ jobs:
       # required CI job green for this commit. Preflight admits a push only from ci.yml.
       - name: CI passed for this commit
         if: ${{ github.event_name == 'workflow_dispatch' }}
+        # Judged by the prerequisite jobs, not the run conclusion: a failed `deploy · staging` job
+        # makes the CI run fail, and must not block a manual recovery/bootstrap of that commit.
+        # REQUIRED_CI_JOBS = display names of ci.yml `deploy-staging.needs` (matrix expanded);
+        # infra/deploy/test_deploy_workflow.py keeps the two in sync.
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
           REPO: ${{ github.repository }}
+          REQUIRED_CI_JOBS: |
+            lint · typecheck · unit · contracts
+            image · api
+            image · worker
+            image · web
+            db · infra · e2e · restore
+            visual · @quiz/ui Storybook
         run: |
           set -euo pipefail
-          runs="$(gh run list --repo "$REPO" --workflow ci.yml --commit "$SHA" --status success \
-            --json databaseId --jq length)"
-          if [[ "$runs" == "0" ]]; then
-            echo "::error::no successful CI run for $SHA; deploy only commits that are green"
+          run_id="$(gh run list --repo "$REPO" --workflow ci.yml --commit "$SHA" --event push \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          if [[ -z $run_id ]]; then
+            echo "::error::no CI push run for $SHA; deploy only commits that are green"
             exit 1
           fi
+          # Latest attempt of each job of that run: "<name>\t<conclusion>".
+          jobs="$(gh run view "$run_id" --repo "$REPO" --json jobs \
+            --jq '.jobs[] | "\(.name)\t\(.conclusion)"')"
+          bad=()
+          while IFS= read -r name; do
+            [[ -n $name ]] || continue
+            conclusion="$(awk -F '\t' -v n="$name" '$1 == n { print $2; exit }' <<<"$jobs")"
+            [[ $conclusion == success ]] || bad+=("$name: ${conclusion:-missing}")
+          done <<<"$REQUIRED_CI_JOBS"
+          if (( ${#bad[@]} )); then
+            printf '::error::CI run %s for %s is not green: %s\n' "$run_id" "$SHA" "${bad[*]}"
+            exit 1
+          fi
+          echo "CI run $run_id: every required job succeeded for $SHA"
 
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -282,16 +307,20 @@ jobs:
 
       # --- web (Vercel) -------------------------------------------------------------------------
       # Project settings (Root Directory apps/web, env values incl. NEXT_PUBLIC_*) live in Vercel;
-      # apps/web/vercel.json pins framework/install/build and turns off git deployments.
+      # apps/web/vercel.json pins framework/install/build and turns off git deployments. Staging
+      # and production are SEPARATE Vercel projects (each GitHub Environment has its own
+      # VERCEL_PROJECT_ID): staging's alias is its project's default production domain, so a
+      # `--prod` deploy there would move it. Staging therefore never deploys with `--prod`.
       - name: Deploy web (Vercel)
         id: web
         run: |
           set -euo pipefail
           vercel=(npx --yes "vercel@$VERCEL_CLI_VERSION")
+          # `${prod[@]+…}`: an empty array under `set -u` also on bash < 4.4 (the workflow test).
           if [[ $TARGET == production ]]; then env=production; prod=(--prod); else env=preview; prod=(); fi
           "${vercel[@]}" pull --yes --environment="$env" --token="$VERCEL_TOKEN"
-          "${vercel[@]}" build "${prod[@]}" --token="$VERCEL_TOKEN"
-          url="$("${vercel[@]}" deploy --prebuilt "${prod[@]}" --token="$VERCEL_TOKEN")"
+          "${vercel[@]}" build ${prod[@]+"${prod[@]}"} --token="$VERCEL_TOKEN"
+          url="$("${vercel[@]}" deploy --prebuilt ${prod[@]+"${prod[@]}"} --token="$VERCEL_TOKEN")"
           [[ $url == https://* ]] || { echo '::error::vercel deploy printed no deployment URL'; exit 1; }
           if [[ $TARGET == staging ]]; then
             # Staging has a fixed origin (CORS allowlist, Auth redirect allowlist). REST, not
