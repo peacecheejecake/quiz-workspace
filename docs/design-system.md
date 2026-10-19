@@ -299,6 +299,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - Panel Header: title / breadcrumb / action icons(즐겨찾기·다시 풀기) / close.
 - Panel Footer: submit, self-grade, next/previous, loading/error 상태.
 - Modal focus trap, title/description, Escape and focus restore는 Radix 기반으로 구성. Non-modal은 배경과 panel 간 키보드 이동을 허용.
+- **여러 패널 쌓기 (v1.2.2, UX3b):** floating panel·dialog가 여러 개 열려 있으면 **나중에 연 것이 위**에 온다(portal DOM 순서와 무관). 열린 순서의 rank r에 대해 z-index는 `min(--z-side-panel + 2r, --z-modal - 2)`이고, 그 안에서 portal로 뜨는 popover·tooltip·menu는 +1(`LayerProvider`/`useLayerStyle`)이다. 닫았다가 다시 연 패널은 맨 위로 올라온다. 가운데 modal dialog(`--z-modal`)는 항상 모든 패널 위다. 사이드 패널이 아닌 floating dialog도 kit 내부 `useFloatingLayer(open)`을 써서 같은 순서에 참여한다.
 
 ## 6. QuestionDot / Heatmap 컴포넌트 계약
 
