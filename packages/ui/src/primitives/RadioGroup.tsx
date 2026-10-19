@@ -66,7 +66,7 @@ export function RadioGroup({
     undefined;
   return (
     <div className={cx('qz-field', className)} data-invalid={hasError || undefined}>
-      <span id={labelId} className={cx('qz-field__label', hideLabel && 'qz-visually-hidden')}>
+      <span id={labelId} className={cx('label', hideLabel && 'qz-visually-hidden')}>
         {label}
       </span>
       <RadixRadioGroup.Root
@@ -94,21 +94,18 @@ export function RadioGroup({
               <RadixRadioGroup.Item
                 id={itemId}
                 value={option.value}
-                className="qz-radio__circle qz-focus-ring"
+                className="circle qz-focus-ring"
                 aria-describedby={option.description ? `${itemId}-description` : undefined}
                 {...(option.disabled ? { disabled: true } : {})}
               >
-                <RadixRadioGroup.Indicator className="qz-radio__indicator" />
+                <RadixRadioGroup.Indicator className="indicator" />
               </RadixRadioGroup.Item>
-              <div className="qz-checkbox__text">
-                <label htmlFor={itemId} className="qz-checkbox__label">
+              <div className="text">
+                <label htmlFor={itemId} className="label">
                   {option.label}
                 </label>
                 {option.description ? (
-                  <p
-                    id={`${itemId}-description`}
-                    className={cx('qz-field__description', asTooltip && 'qz-radio__description')}
-                  >
+                  <p id={`${itemId}-description`} className="description">
                     {option.description}
                   </p>
                 ) : null}
@@ -127,12 +124,12 @@ export function RadioGroup({
         })}
       </RadixRadioGroup.Root>
       {description ? (
-        <p id={descriptionId} className="qz-field__description">
+        <p id={descriptionId} className="description">
           {description}
         </p>
       ) : null}
       {hasError ? (
-        <p id={errorId} className="qz-field__error">
+        <p id={errorId} className="error">
           <AlertIcon width={16} height={16} />
           <span>{error}</span>
         </p>

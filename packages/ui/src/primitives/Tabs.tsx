@@ -19,17 +19,13 @@ export function Tabs({ className, ...rest }: TabsProps) {
 
 /** Give the list an accessible name (`aria-label`) describing what the tabs switch. */
 export function TabsList({ className, ...rest }: TabsListProps) {
-  return <RadixTabs.List className={cx('qz-tabs__list', className)} {...rest} />;
+  return <RadixTabs.List className={cx('list', className)} {...rest} />;
 }
 
 export function TabsTrigger({ className, ...rest }: TabsTriggerProps) {
-  return (
-    <RadixTabs.Trigger className={cx('qz-tabs__trigger', 'qz-focus-ring', className)} {...rest} />
-  );
+  return <RadixTabs.Trigger className={cx('trigger', 'qz-focus-ring', className)} {...rest} />;
 }
 
 export function TabsContent({ className, ...rest }: TabsContentProps) {
-  return (
-    <RadixTabs.Content className={cx('qz-tabs__content', 'qz-focus-ring', className)} {...rest} />
-  );
+  return <RadixTabs.Content className={cx('content', 'qz-focus-ring', className)} {...rest} />;
 }

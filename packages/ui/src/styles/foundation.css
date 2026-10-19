@@ -85,36 +85,34 @@
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-normal);
   white-space: nowrap;
-}
 
-.qz-badge[data-tone='accent'] {
-  background: var(--color-state-selected);
-}
+  &[data-tone='accent'] {
+    background: var(--color-state-selected);
+  }
 
-@media (forced-colors: active) {
-  .qz-badge {
+  @media (forced-colors: active) {
     border: 1px solid CanvasText;
   }
-}
 
-.qz-badge__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-pill);
-  background: currentColor;
-  outline: 1px solid var(--color-border);
-}
+  > .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    background: currentColor;
+    outline: 1px solid var(--color-border);
+  }
 
-.qz-badge[data-tone='success'] .qz-badge__dot {
-  background: var(--color-success);
-}
+  &[data-tone='success'] > .dot {
+    background: var(--color-success);
+  }
 
-.qz-badge[data-tone='warning'] .qz-badge__dot {
-  background: var(--color-warning);
-}
+  &[data-tone='warning'] > .dot {
+    background: var(--color-warning);
+  }
 
-.qz-badge[data-tone='danger'] .qz-badge__dot {
-  background: var(--color-danger);
+  &[data-tone='danger'] > .dot {
+    background: var(--color-danger);
+  }
 }
 
 /* Skeleton */
@@ -176,28 +174,28 @@
   padding: var(--space-8) var(--space-4);
   text-align: center;
   color: var(--color-text-primary);
-}
 
-.qz-empty-state__icon {
-  color: var(--color-text-secondary);
-  margin-bottom: var(--space-2);
-}
+  > .icon {
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-2);
+  }
 
-.qz-empty-state__title {
-  margin: 0;
-  font-size: var(--font-size-section-title);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-snug);
-}
+  > .title {
+    margin: 0;
+    font-size: var(--font-size-section-title);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-snug);
+  }
 
-.qz-empty-state__description {
-  margin: 0;
-  max-width: 48ch;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-body);
-  line-height: var(--line-height-relaxed);
-}
+  > .description {
+    margin: 0;
+    max-width: 48ch;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-body);
+    line-height: var(--line-height-relaxed);
+  }
 
-.qz-empty-state__action {
-  margin-top: var(--space-3);
+  > .action {
+    margin-top: var(--space-3);
+  }
 }

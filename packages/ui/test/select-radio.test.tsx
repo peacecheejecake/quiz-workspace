@@ -86,7 +86,9 @@ describe('RadioGroup', () => {
     const keyword = screen.getByRole('radio', { name: '키워드' });
     // The description stays the radio's accessible description whether or not a tooltip shows.
     expect(keyword).toHaveAccessibleDescription('단어가 그대로 들어 있는 문단');
-    expect(document.querySelectorAll('.qz-radio__description')).toHaveLength(2);
+    expect(
+      document.querySelectorAll(".qz-radio[data-description='tooltip'] > .text > .description"),
+    ).toHaveLength(2);
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 
     await user.tab();
@@ -106,7 +108,7 @@ describe('RadioGroup', () => {
       />,
     );
     expect(screen.getByRole('radio', { name: '가' })).toHaveAccessibleDescription('정답');
-    expect(document.querySelector('.qz-radio__description')).toBeNull();
+    expect(document.querySelector(".qz-radio[data-description='tooltip']")).toBeNull();
   });
 
   it('disables every radio when the group is disabled', () => {

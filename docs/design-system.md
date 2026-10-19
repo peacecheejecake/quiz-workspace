@@ -22,6 +22,26 @@
 - Storybook: states, interactions, light/dark, responsive 사례 문서.
 - Accessibility QA: WCAG 2.2 AA를 목표로, 색상만으로 상태 전달하지 않기, pointer target, keyboard navigation 및 focus 복구 점검.
 
+### 2.1 kit CSS 클래스 명명 (UX3a)
+
+`packages/ui` 스타일시트는 BEM(`block__element--modifier`)을 쓰지 않고 계층형 이름을 쓴다.
+
+- **block만 `qz-` 접두사**를 가진다(`qz-panel`, `qz-button`, `qz-select-content`). 다른 block 안에 놓이는 컴포넌트(예: `qz-radio`, `qz-question-marker`)도 자기 block 이름을 유지한다.
+- **element는 접두사 없는 짧은 이름**(`header`, `title`, `body`)이며 CSS에서는 부모 block 아래 native CSS nesting과 자식 결합자(`>`)로만 선택한다. 짧은 이름이 안쪽에 중첩된 다른 컴포넌트의 같은 이름 element에 새지 않도록 descendant 선택자 대신 DOM 경로 그대로의 `>` 체인을 쓴다.
+
+  ```css
+  .qz-panel {
+    > .header { … }
+    > .header > .heading > .title { … }
+    &[data-size='wide'] { … }
+  }
+  ```
+
+- **modifier는 클래스가 아니라 `data-*` 속성**(`data-size`, `data-tone`, `data-multiline`)이거나 Radix가 주는 `data-state`/`aria-*`를 쓴다.
+- 유틸리티(`qz-focus-ring`, `qz-visually-hidden`, `qz-theme-scope`, `glass-surface`)는 그대로 둔다.
+- 여러 block의 element를 묶는 규칙(focus 경계, hover)은 기존 cascade 순서를 유지해야 하므로 specificity를 바꿀 때는 `:where()`로 보존하고 이유를 주석으로 남긴다.
+- 기능 코드(`apps/web`)의 스타일은 kit element 클래스를 재사용하거나 덮어쓰지 않고 CSS Modules(camelCase)를 쓴다. kit 스타일은 block 루트의 `className`으로만 조정한다.
+
 참조: https://www.radix-ui.com/primitives/docs/components/dialog  
 참조: https://www.w3.org/TR/WCAG22/  
 참조: https://www.w3.org/WAI/WCAG22/Understanding/use-of-color

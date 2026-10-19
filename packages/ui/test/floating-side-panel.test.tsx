@@ -131,10 +131,10 @@ describe('FloatingSidePanel (modal)', () => {
     render(<ModalPanel />);
     await user.click(screen.getByRole('button', { name: '문제 열기' }));
     const dialog = await screen.findByRole('dialog');
-    expect(dialog.querySelector('.qz-panel__header')).toContainElement(
+    expect(dialog.querySelector(':scope > .header')).toContainElement(
       screen.getByRole('button', { name: '즐겨찾기' }),
     );
-    expect(dialog.querySelector('.qz-panel__footer')).toContainElement(
+    expect(dialog.querySelector(':scope > .footer')).toContainElement(
       screen.getByRole('button', { name: '제출' }),
     );
   });
@@ -288,8 +288,7 @@ describe('overlay body scroll region (axe scrollable-region-focusable)', () => {
     if (clientHeight) Object.defineProperty(HTMLElement.prototype, 'clientHeight', clientHeight);
   });
 
-  const bodyOf = (dialog: HTMLElement) =>
-    dialog.querySelector<HTMLElement>('.qz-panel__body, .qz-modal__body');
+  const bodyOf = (dialog: HTMLElement) => dialog.querySelector<HTMLElement>(':scope > .body');
 
   it('makes a long body without focusable content a named, keyboard-reachable group', async () => {
     const user = userEvent.setup();

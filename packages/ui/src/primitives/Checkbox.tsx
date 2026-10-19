@@ -21,10 +21,10 @@ export function Checkbox({ label, description, id, className, ...rest }: Checkbo
       <RadixCheckbox.Root
         id={controlId}
         aria-describedby={description ? descriptionId : undefined}
-        className="qz-checkbox__box qz-focus-ring"
+        className="box qz-focus-ring"
         {...rest}
       >
-        <RadixCheckbox.Indicator className="qz-checkbox__indicator">
+        <RadixCheckbox.Indicator className="indicator">
           {rest.checked === 'indeterminate' ? (
             <MinusIcon width={14} height={14} strokeWidth={3} />
           ) : (
@@ -32,12 +32,12 @@ export function Checkbox({ label, description, id, className, ...rest }: Checkbo
           )}
         </RadixCheckbox.Indicator>
       </RadixCheckbox.Root>
-      <div className="qz-checkbox__text">
-        <label htmlFor={controlId} className="qz-checkbox__label">
+      <div className="text">
+        <label htmlFor={controlId} className="label">
           {label}
         </label>
         {description ? (
-          <p id={descriptionId} className="qz-field__description">
+          <p id={descriptionId} className="description">
             {description}
           </p>
         ) : null}

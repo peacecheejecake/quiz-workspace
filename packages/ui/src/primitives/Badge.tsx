@@ -15,7 +15,7 @@ export function Badge({ tone = 'neutral', className, children, ...rest }: BadgeP
   const hasDot = tone === 'success' || tone === 'warning' || tone === 'danger';
   return (
     <span data-tone={tone} className={cx('qz-badge', className)} {...rest}>
-      {hasDot ? <span className="qz-badge__dot" aria-hidden="true" /> : null}
+      {hasDot ? <span className="dot" aria-hidden="true" /> : null}
       {children}
     </span>
   );

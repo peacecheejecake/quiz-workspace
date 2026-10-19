@@ -137,22 +137,20 @@ export function FloatingSidePanel({
           }}
         >
           <LayerProvider value="var(--z-side-panel)">
-            <div className="qz-panel__header">
-              <div className="qz-panel__heading">
-                <Dialog.Title className="qz-panel__title">{title}</Dialog.Title>
+            <div className="header">
+              <div className="heading">
+                <Dialog.Title className="title">{title}</Dialog.Title>
                 {description ? (
-                  <Dialog.Description className="qz-panel__description">
-                    {description}
-                  </Dialog.Description>
+                  <Dialog.Description className="description">{description}</Dialog.Description>
                 ) : null}
               </div>
-              {headerActions ? <div className="qz-panel__actions">{headerActions}</div> : null}
+              {headerActions ? <div className="actions">{headerActions}</div> : null}
               <Dialog.Close asChild>
                 <IconButton label={closeLabel} icon={<CloseIcon />} />
               </Dialog.Close>
             </div>
-            <ScrollRegion className="qz-panel__body">{children}</ScrollRegion>
-            {footer ? <div className="qz-panel__footer">{footer}</div> : null}
+            <ScrollRegion className="body">{children}</ScrollRegion>
+            {footer ? <div className="footer">{footer}</div> : null}
           </LayerProvider>
         </Dialog.Content>
       </Dialog.Portal>
