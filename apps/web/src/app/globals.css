@@ -19,6 +19,8 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Default ring for borderless targets; bordered ones draw it inset over a recolored border so a
+   focused element has one boundary (design-system.md §4.1). */
 :focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;

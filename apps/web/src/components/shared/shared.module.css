@@ -230,6 +230,12 @@
   box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
+/* Single focus boundary: the ring covers the recolored border (design-system.md §4.1). */
+button.questionButton:focus-visible {
+  border-color: var(--color-focus);
+  outline-offset: -2px;
+}
+
 .questionNumber {
   grid-row: span 2;
   min-width: 2ch;

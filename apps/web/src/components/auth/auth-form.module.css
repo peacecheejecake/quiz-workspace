@@ -33,9 +33,11 @@
   outline: none;
 }
 
+/* Single focus boundary: the ring covers the recolored border (design-system.md §4.1). */
 .notice:focus-visible {
+  border-color: var(--color-focus);
   outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
 .notice svg {
@@ -43,7 +45,7 @@
   margin-top: 2px;
 }
 
-.notice[data-tone='danger'] {
+.notice[data-tone='danger']:not(:focus-visible) {
   border-color: var(--color-danger);
 }
 
@@ -51,7 +53,7 @@
   color: var(--color-danger);
 }
 
-.notice[data-tone='success'] {
+.notice[data-tone='success']:not(:focus-visible) {
   border-color: var(--color-success);
 }
 

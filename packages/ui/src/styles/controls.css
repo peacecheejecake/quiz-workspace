@@ -571,3 +571,51 @@
     background: Highlight;
   }
 }
+
+/*
+ * Focused bordered controls show one boundary, never their own border plus a separate ring
+ * (design-system.md §4.1). The border is recolored to the focus color and the 2px ring sits on it:
+ * - Inset (offset -2px) for fields, Select trigger, secondary buttons and tabs: the ring covers
+ *   the border, so the box and its content never move. A focused invalid field shows the ring;
+ *   the error text, icon and aria-invalid stay, and the 2px danger border returns on blur.
+ * - Flush outside (offset 0) for the 20–24px checkbox, radio and switch: an inset ring would
+ *   vanish on the checked accent fill, so the ring continues the recolored border outward.
+ */
+:is(
+    .qz-control,
+    .qz-tabs__trigger,
+    :is(.qz-button, .qz-icon-button)[data-variant='secondary']:not(
+        [aria-pressed],
+        [data-state='on'],
+        [data-state='off']
+      )
+  ).qz-focus-ring:focus-visible {
+  border-color: var(--color-focus);
+  outline-offset: -2px;
+}
+
+:is(.qz-checkbox__box, .qz-radio__circle, .qz-switch__track).qz-focus-ring:focus-visible {
+  border-color: var(--color-focus);
+  outline-offset: 0;
+}
+
+@media (forced-colors: active) {
+  :is(
+      .qz-control,
+      .qz-tabs__trigger,
+      .qz-checkbox__box,
+      .qz-radio__circle,
+      .qz-switch__track,
+      :is(.qz-button, .qz-icon-button):not([aria-pressed='true'], [data-state='on'])
+    ).qz-focus-ring:focus-visible {
+    border-color: Highlight;
+  }
+
+  /* Every button has a ButtonText border here, so each one takes the inset ring. */
+  :is(.qz-button, .qz-icon-button):not(
+      [aria-pressed='true'],
+      [data-state='on']
+    ).qz-focus-ring:focus-visible {
+    outline-offset: -2px;
+  }
+}

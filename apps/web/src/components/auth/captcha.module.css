@@ -15,9 +15,12 @@
   outline: none;
 }
 
-.region:focus-visible {
+/* Single focus boundary: the ring covers the recolored border (design-system.md §4.1). */
+.region:focus-visible,
+.region[data-status]:focus-visible {
+  border-color: var(--color-focus);
   outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
 .region[data-status='failed'],

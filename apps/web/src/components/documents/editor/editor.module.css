@@ -138,6 +138,11 @@
   box-shadow: inset 0 -2px 0 var(--color-accent);
 }
 
+/* Inset ring: an outset one would touch the group's border (one boundary, design-system.md §4.1). */
+button.viewSwitchButton:focus-visible {
+  outline-offset: -2px;
+}
+
 .split {
   display: grid;
   gap: var(--space-3);
@@ -318,9 +323,11 @@
   text-align: center;
 }
 
+/* Single focus boundary: the ring covers the recolored border (design-system.md §4.1). */
 .pageInput:focus-visible {
+  border-color: var(--color-focus);
   outline: 2px solid var(--color-focus);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
 
 .pageCount,
@@ -505,12 +512,14 @@
   resize: vertical;
 }
 
+/* Single focus boundary: the ring covers the recolored border (design-system.md §4.1). */
 .blockField:focus-visible {
+  border-color: var(--color-focus);
   outline: 2px solid var(--color-focus);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
 
-.blockField[aria-invalid='true'] {
+.blockField[aria-invalid='true']:not(:focus-visible) {
   border-color: var(--color-danger);
 }
 
