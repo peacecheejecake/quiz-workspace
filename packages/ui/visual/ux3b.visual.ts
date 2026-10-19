@@ -21,7 +21,7 @@ function tokenColor(page: Page, token: string): Promise<string> {
   }, token);
 }
 
-/** WCAG relative luminance of a computed `rgb()` color. */
+/** WCAG relative luminance of a computed (sRGB channel list) color. */
 function luminance(rgb: string): number {
   const [r = 0, g = 0, b = 0] = (rgb.match(/\d+(\.\d+)?/g) ?? []).map((v) => {
     const c = Number(v) / 255;
