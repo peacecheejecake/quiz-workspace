@@ -82,12 +82,13 @@ describe('spec extraction (guards against a vacuous comparison)', () => {
   it('finds every color token of §3.1, §3.2 and the §3.3 :root example', () => {
     // 15 v1.1 colors + 6 v1.1.1 additions (border-strong, on-accent, danger/success/warning, scrim)
     // + 4 v1.2 additions (glass-solid, state-hover/pressed/selected)
-    // + 3 v1.2.1 additions (accent-hover/pressed, state-selected-hover).
-    expect(Object.keys(docLight)).toHaveLength(28);
-    expect(Object.keys(docDark)).toHaveLength(28);
-    // 28 colors + 23 font/space/radius/glass/shadow/layout/heatmap vars + 12 typography
+    // + 3 v1.2.1 additions (accent-hover/pressed, state-selected-hover)
+    // + 4 v1.2.2 switch track colors (track, track-hover, track-border, track-checked-border).
+    expect(Object.keys(docLight)).toHaveLength(32);
+    expect(Object.keys(docDark)).toHaveLength(32);
+    // 32 colors + 23 font/space/radius/glass/shadow/layout/heatmap vars + 12 typography
     // + 2 breakpoints + color-scheme.
-    expect(Object.keys(docRoot)).toHaveLength(66);
+    expect(Object.keys(docRoot)).toHaveLength(70);
   });
 });
 

@@ -24,6 +24,10 @@
   --color-state-pressed: #e3e7ee;
   --color-state-selected: #e4e9fb;
   --color-state-selected-hover: #d2daf7;
+  --color-switch-track: #7d8799;
+  --color-switch-track-hover: #687285;
+  --color-switch-track-border: #b9c0cc;
+  --color-switch-track-checked-border: #8c9ce6;
   --question-status-unseen: #d9dee5;
   --question-status-viewed: #858e9b;
   --question-status-incorrect: #e0525e;
@@ -105,6 +109,10 @@
   --color-state-pressed: #334051;
   --color-state-selected: #2e3958;
   --color-state-selected-hover: #39456c;
+  --color-switch-track: #6e7a8c;
+  --color-switch-track-hover: #808c9e;
+  --color-switch-track-border: #8a95a6;
+  --color-switch-track-checked-border: #b4c1ff;
   --question-status-unseen: #4e5967;
   --question-status-viewed: #9ea7b4;
   --question-status-incorrect: #f17b84;
@@ -137,6 +145,10 @@
   --color-state-pressed: #e3e7ee;
   --color-state-selected: #e4e9fb;
   --color-state-selected-hover: #d2daf7;
+  --color-switch-track: #7d8799;
+  --color-switch-track-hover: #687285;
+  --color-switch-track-border: #b9c0cc;
+  --color-switch-track-checked-border: #8c9ce6;
   --question-status-unseen: #d9dee5;
   --question-status-viewed: #858e9b;
   --question-status-incorrect: #e0525e;
@@ -170,6 +182,10 @@
     --color-state-pressed: #334051;
     --color-state-selected: #2e3958;
     --color-state-selected-hover: #39456c;
+    --color-switch-track: #6e7a8c;
+    --color-switch-track-hover: #808c9e;
+    --color-switch-track-border: #8a95a6;
+    --color-switch-track-checked-border: #b4c1ff;
     --question-status-unseen: #4e5967;
     --question-status-viewed: #9ea7b4;
     --question-status-incorrect: #f17b84;

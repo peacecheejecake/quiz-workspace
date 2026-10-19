@@ -329,9 +329,10 @@
     width: 44px;
     height: 24px;
     padding: 2px;
-    border: 1px solid var(--color-border-strong);
+    /* The fill carries the 3:1 control boundary; the border is a lighter rim (v1.2.2). */
+    border: 1px solid var(--color-switch-track-border);
     border-radius: var(--radius-pill);
-    background: var(--color-surface-muted);
+    background: var(--color-switch-track);
     cursor: pointer;
     transition:
       background-color var(--qz-transition-fast),
@@ -339,7 +340,7 @@
   }
 
   > .control > .track[data-state='checked'] {
-    border-color: var(--color-accent);
+    border-color: var(--color-switch-track-checked-border);
     background: var(--color-accent);
   }
 
@@ -354,14 +355,28 @@
     height: 18px;
     border-radius: var(--radius-pill);
     box-sizing: border-box;
-    border: 1px solid var(--color-border-strong);
-    background: var(--color-surface);
+    border: 1px solid transparent;
+    background: var(--color-on-accent);
     transition: transform var(--qz-transition-fast);
   }
 
   > .control > .track > .thumb[data-state='checked'] {
     transform: translateX(20px);
-    border-color: var(--color-surface);
+  }
+
+  @media (forced-colors: active) {
+    > .control > .track {
+      border-color: CanvasText;
+    }
+
+    > .control > .track > .thumb {
+      border-color: CanvasText;
+      background: CanvasText;
+    }
+
+    > .control > .track[data-state='checked'] > .thumb {
+      background: Highlight;
+    }
   }
 }
 
@@ -597,12 +612,17 @@
  * checked steps the accent fill. A focused control keeps the focus-colored boundary below.
  */
 @media (hover: hover) {
-  :is(.qz-checkbox > .box, .qz-radio > .circle, .qz-switch > .control > .track):not(
+  :is(.qz-checkbox > .box, .qz-radio > .circle):not(
       [data-state='checked'],
       [data-state='indeterminate'],
       :disabled
     ):hover {
     border-color: var(--color-text-primary);
+  }
+
+  /* The switch keeps its light rim; the unchecked fill darkens (light) / lifts (dark) instead. */
+  .qz-switch > .control > .track:not([data-state='checked'], :disabled):hover {
+    background: var(--color-switch-track-hover);
   }
 
   :is(.qz-checkbox > .box, .qz-switch > .control > .track):is(
@@ -612,7 +632,7 @@
     background: var(--color-accent-hover);
   }
 
-  :is(.qz-checkbox > .box, .qz-radio > .circle, .qz-switch > .control > .track):is(
+  :is(.qz-checkbox > .box, .qz-radio > .circle):is(
       [data-state='checked'],
       [data-state='indeterminate']
     ):not(:disabled, :focus-visible):hover {

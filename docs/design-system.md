@@ -80,6 +80,10 @@
 | `--color-state-pressed` | `#E3E7EE` | 누르는 동안(`:active`) 배경 |
 | `--color-state-selected` | `#E4E9FB` | 선택·켜짐 상태(`aria-pressed="true"`, `data-state="on"`) 배경 — hover와 다른 accent tint |
 | `--color-state-selected-hover` | `#D2DAF7` | 선택·켜짐 상태 위 hover 배경 |
+| `--color-switch-track` | `#7D8799` | 꺼진 스위치 track 채움(표면 대비 3:1 이상, 컨트롤 경계) |
+| `--color-switch-track-hover` | `#687285` | 꺼진 스위치 track hover 채움 |
+| `--color-switch-track-border` | `#B9C0CC` | 꺼진 스위치 track 테두리(채움보다 연함) |
+| `--color-switch-track-checked-border` | `#8C9CE6` | 켜진 스위치 track 테두리(accent 채움보다 연함) |
 
 **v1.1.1 추가:** `--color-border-strong`, `--color-on-accent`, `--color-danger`/`success`/`warning`, `--color-scrim`, typography scale(`--font-size-*`, `--line-height-*`, `--font-weight-*`), breakpoint(`--breakpoint-*`). feedback 색은 question-status 토큰을 재사용하지 않으며(의미가 다름), canvas·surface 위 텍스트로 4.5:1 이상을 만족한다.
 
@@ -88,6 +92,8 @@
 **v1.2 (UX1, 2026-10-19 사용자 피드백):** glass는 더 불투명하게(light `.78`→`.9`, dark `.79`→`.9`), 순백 대신 아주 옅은 tint(`#F6F8FC` 계열)를 쓰고 불투명 fallback은 같은 색의 `--color-glass-solid`다. `--color-border`는 더 옅게(light `#DEE3EB`→`#E6E9EF`, dark `#364251`→`#2D3745`): 장식용 구분선 전용이며, 입력 필드·체크박스·라디오처럼 경계가 유일한 식별 수단인 컨트롤은 계속 `--color-border-strong`(3:1)을 쓴다. 상호작용 상태 배경 `--color-state-hover`/`-pressed`/`-selected`를 추가했다(§4.1). 대비: text-primary는 세 상태 배경 모두에서, text-secondary는 hover 배경에서 4.5:1 이상(`contrast.test.ts`).
 
 **v1.2.1 (UX2, 2026-10-19 사용자 피드백):** 모든 버튼 종류에 보이는 hover를 둔다(§4.1). accent 채움(primary)용 `--color-accent-hover`/`--color-accent-pressed`(light는 더 어둡게, dark는 더 밝게)와 켜진 toggle용 `--color-state-selected-hover`를 추가했다. 대비: `--color-on-accent`는 accent·hover·pressed 채움 모두에서, text-primary는 selected-hover에서 4.5:1 이상이며, hover·pressed 채움은 기본 accent와 서로 구분된다(`contrast.test.ts`).
+
+**v1.2.2 (UX3b, 2026-10-20 사용자 피드백):** 스위치 track 테두리를 채움보다 연한 색으로 바꿨다. 꺼진 track은 옅은 회색 + 진한 테두리 대신 `--color-switch-track` 채움(표면·canvas·muted·glass 대비 3:1 이상)이 컨트롤 경계를 맡고, 테두리 `--color-switch-track-border`는 그 채움보다 밝다. 켜진 track은 accent 채움 + 더 밝은 `--color-switch-track-checked-border`. thumb은 두 상태 모두 `--color-on-accent`(track 대비 3:1 이상)이며 켜짐/꺼짐은 thumb 위치·`aria-checked`·상태 문구로 전달한다(색만으로 구분하지 않음). 꺼진 track hover는 테두리가 아니라 채움이 `--color-switch-track-hover`로 바뀐다(`contrast.test.ts`).
 
 **상태 점은 기본 표면과 충분히 구분되도록** 최소 얇은 outline과 범례를 갖는다. 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
 
@@ -123,6 +129,10 @@
   --color-state-pressed: #334051;
   --color-state-selected: #2E3958;
   --color-state-selected-hover: #39456C;
+  --color-switch-track: #6E7A8C;
+  --color-switch-track-hover: #808C9E;
+  --color-switch-track-border: #8A95A6;
+  --color-switch-track-checked-border: #B4C1FF;
 }
 ```
 
@@ -161,6 +171,10 @@
   --color-state-pressed: #E3E7EE;
   --color-state-selected: #E4E9FB;
   --color-state-selected-hover: #D2DAF7;
+  --color-switch-track: #7D8799;
+  --color-switch-track-hover: #687285;
+  --color-switch-track-border: #B9C0CC;
+  --color-switch-track-checked-border: #8C9CE6;
 
   --font-sans: "Pretendard", "Inter", system-ui, -apple-system, sans-serif;
   --font-size-label-sm: 12px;
@@ -245,7 +259,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 
 - **Hover와 선택은 다른 배경:** hover `--color-state-hover`(중립 회색), 누르는 동안 `--color-state-pressed`, 선택·켜짐(`aria-pressed="true"`, `data-state="on"`) `--color-state-selected`(accent tint) + 굵기·아이콘 변화. 선택 상태에만 생기는 테두리는 쓰지 않는다.
 - **Toggle 버튼:** 꺼진 상태에 테두리·배경이 없다(ghost). 켜짐은 배경 채움 + `aria-pressed`(또는 바뀌는 label) + 굵기/아이콘으로 전달하며 색만으로 구분하지 않는다. `Button`/`IconButton` primitive가 `aria-pressed`/`data-state`를 보고 처리하므로 기능 코드는 테두리·배경을 따로 지정하지 않는다.
-- **테두리 최소화:** Badge·tab 수 표시에는 테두리·원형 배경을 두지 않는다. 구분선은 1px `--color-border`. 2px는 오류 입력(`aria-invalid`)과 focus ring에만 쓴다. 입력 필드·체크박스·라디오·스위치의 평소 경계는 `--color-border-strong`이며, focus 중에는 아래 규칙대로 focus 색으로 바뀐다.
+- **테두리 최소화:** Badge·tab 수 표시에는 테두리·원형 배경을 두지 않는다. 구분선은 1px `--color-border`. 2px는 오류 입력(`aria-invalid`)과 focus ring에만 쓴다. 입력 필드·체크박스·라디오의 평소 경계는 `--color-border-strong`이고 스위치 track은 `--color-switch-track` 채움이 경계를 맡으며(테두리는 채움보다 연함, v1.2.2), focus 중에는 아래 규칙대로 focus 색으로 바뀐다.
 - **Focus:** `:focus-visible` ring은 2px `--color-focus`(forced-colors에서는 `Highlight`)이며, 메뉴·Select 항목의 ring도 키보드 focus(`:focus-visible`)에서만 그린다(pointer hover는 배경만).
 - **Focus 경계는 하나:** 테두리가 있는 요소는 자기 테두리와 별도의 focus ring이 겹쳐 이중 테두리로 보이지 않게 한다. focus 중에는 테두리 색을 `--color-focus`로 바꾸고 ring을 그 위에 그린다. 테두리 두께는 바꾸지 않으므로 레이아웃 이동이 없다.
   - 입력 필드(`Input`·`Textarea`·`Select` trigger), secondary 버튼, tab, 테두리가 있는 카드·버튼·입력(기능 CSS 포함), heatmap 선택 dot: ring을 안쪽(`outline-offset: -2px`)에 그려 테두리를 덮는다. 테두리가 있는 그룹 안의 버튼(segmented view switch)도 그룹 테두리와 붙지 않게 안쪽 ring을 쓴다.
@@ -262,7 +276,8 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
   | toggle 꺼짐(`aria-pressed="false"`, `data-state="off"`) | 투명, 테두리 없음 | `--color-state-hover` | `--color-state-pressed` | — |
   | toggle 켜짐(`aria-pressed="true"`, `data-state="on"`) | `--color-state-selected` + 굵기/아이콘 | `--color-state-selected-hover` | `--color-state-pressed` | 기본이 곧 켜짐 |
   | tab trigger | 투명 | `--color-state-hover` + text-primary | `--color-state-pressed` | 하단 accent bar + text-primary |
-  | 체크박스·라디오·스위치 | `--color-border-strong` 경계 | 꺼짐: 경계 `--color-text-primary`, 켜짐: 채움·경계 `--color-accent-hover` | — | accent 채움 |
+  | 체크박스·라디오 | `--color-border-strong` 경계 | 꺼짐: 경계 `--color-text-primary`, 켜짐: 채움·경계 `--color-accent-hover` | — | accent 채움 |
+  | 스위치 | `--color-switch-track` 채움 + 더 연한 `--color-switch-track-border` | 꺼짐: 채움 `--color-switch-track-hover`, 켜짐: 채움 `--color-accent-hover` | — | accent 채움 + `--color-switch-track-checked-border` |
   | 기능 CSS의 버튼(segmented view switch, 목록 항목 버튼, outline tree 항목) | 각자 | `--color-state-hover`(view switch 꺼진 칸은 text-primary도) | view switch: `--color-state-pressed` | 기존 선택 표시(표면·bar·굵기) 유지 |
   | 텍스트 버튼(`linkButton`)·링크 | 밑줄 | 밑줄이 굵어지거나(텍스트 버튼) 밑줄 표시(링크) | — | — |
 
