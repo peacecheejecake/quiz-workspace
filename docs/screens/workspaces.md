@@ -10,6 +10,7 @@
 - 입력 컴포넌트에 필수 라벨·설명·에러를 연결하고 키보드와 스크린리더에 대한 접근성을 보장한다.
 - Supabase Auth를 사용하되 인증 경계와 리소스 인가는 FastAPI가 재검증한다.
 
+- Workspace 이름(목록 항목·switcher)은 Workspace 홈 `/workspaces/:workspaceId`(QOV-01)로 간다. 활성/보관됨 탭은 이미 받은 두 목록 사이를 서버 왕복 없이 바로 바꾼다(UX3c 2026-10-20).
 - 헤더는 제목 "Workspace"만 두고 설명 문구는 두지 않는다. 활성/보관됨 탭의 개수는 원형 badge 없이 탭 이름 옆 숫자 텍스트로 표시하며 탭의 접근성 이름에 포함된다(예: "활성 2"). (UX1)
 
 ## 수용 기준
@@ -48,7 +49,7 @@
 
 - **Given:** Owner가 공유 메뉴를 선택하면 WS-SHARE-01 설정으로 이동하며 타인은 설정 API에 접근할 수 없다.
 - **When:** 해당 조작·라우트 접근 또는 서버 API 요청
-- **Then:** Owner가 공유 메뉴를 선택하면 WS-SHARE-01 설정으로 이동하며 타인은 설정 API에 접근할 수 없다.
+- **Then:** Owner가 공유 메뉴를 선택하면 WS-SHARE-01 설정(Workspace 홈의 링크 공유 dialog, `?panel=share` — UX3c)으로 이동하며 타인은 설정 API에 접근할 수 없다.
 
 ## E2E-first 구현 규칙
 - 해당 AC ID를 Playwright 시나리오로 먼저 작성하고 기대된 RED 실패를 확인한 뒤 구현한다.

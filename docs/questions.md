@@ -8,7 +8,7 @@
 
 Questions는 다음의 4개 하위 영역을 갖는다.
 
-1. **Overview (기본 홈):** 문제 1개당 점 1개인 GitHub contribution-style heatmap. 챕터 그룹, 상태 분포, 검색·필터, quick preview, floating practice panel.
+1. **Overview (기본 홈):** 문제 1개당 점 1개인 GitHub contribution-style heatmap. 챕터 그룹, 검색·필터, quick preview, floating practice panel. UX3c(2026-10-20)부터 Workspace 홈 자체이며 화면 구성은 `screens/questions-overview.md` "Workspace 홈 레이아웃"이 기준이다(아래 와이어프레임은 v1.2 기록).
 2. **Bank:** 문제 목록/상세, 직접 등록·수정, 출처 연결, 즐겨찾기·다시 풀기, 히스토리.
 3. **Generate:** 등록된 문제를 선택해 shuffle/문구 변형/정오 반전/유사 개념 출제 후 diff+근거 확인/승인.
 4. **Import:** 문제 PDF를 구조화하여 검토 후 Bank에 등록.
@@ -99,7 +99,7 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 - 기본 marker는 둥근 모서리 정사각형 `16x16px`, radius `4~5px`. 즐겨찾기는 **모서리가 부드러운 5각 star silhouette(SVG `stroke-linejoin=round`)**로 교체한다. favorite도 기본 visual bounding box는 `16x16px`; 두 모양 모두 상태 색상을 적용한다.
 - 각 marker를 중심 정렬한 클릭 영역 `28x28px`, 그리드 셀 간격 `4px`(mobile touch는 최소 32px 셀). **hover/focus-visible** 시 marker만 `scale(1.18)`(토큰으로 관리), 정렬·셀 크기는 그대로 두어 레이아웃이 움직이지 않는다. `prefers-reduced-motion`에서는 애니메이션을 비활성화한다.
 - viewport 폭에 따라 열 수 자동 변경. 챕터별 줄바꿈; 매우 많은 문제(예: 2,000개 이상)에서는 windowing/virtualization 검토.
-- 범례, 현재 필터에 포함된 문제 수, 상태별 집계, 즐겨찾기·다시 풀기 필터 제공.
+- 현재 필터에 포함된 문제 수, 상태 필터(색 견본 + 텍스트, 기본 접힘), 즐겨찾기·다시 풀기 필터 제공. 상태 범례와 상태별 집계는 UX3c(2026-10-20, 사용자 결정)로 삭제했다 — 펼친 상태 필터가 범례 역할을 한다.
 
 ### 3.2 인터랙션
 
@@ -108,7 +108,7 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 - `Esc`: popover 또는 panel 닫기. 닫힌 뒤 기존 점으로 focus 복귀.
 - mobile/touch: hover 없음. 첫 tap에 패널 열기, preview는 패널 상단에 포함. 전체 페이지 문제 풀이로 전환 가능.
 - `aria-label`: 예: `3장 12번 문제, 객관식, 마지막 결과 오답, 다시 풀기 표시됨, 즐겨찾기`.
-- **색상만으로 의미를 전달하지 않는다.** 상태 범례의 텍스트·tooltip·screen reader label을 제공한다.
+- **색상만으로 의미를 전달하지 않는다.** marker의 screen reader label·preview popover의 상태 텍스트·상태 필터의 텍스트를 제공한다.
 - 문제 풀이 패널에서 다음/이전 문제로 이동하면 URL query string을 갱신하여 딥링크와 브라우저 뒤로가기를 지원한다.
 
 ## 4. 문제 풀이 및 채점 정책
