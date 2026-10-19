@@ -43,6 +43,24 @@ export function DropdownMenuItem({ className, tone = 'default', ...rest }: Dropd
   return <RadixDropdownMenu.Item data-tone={tone} className={cx('item', className)} {...rest} />;
 }
 
+export type DropdownMenuGroupProps = ComponentProps<typeof RadixDropdownMenu.Group>;
+
+/**
+ * Group of related items (role="group"). Pass `aria-labelledby` pointing at a
+ * `DropdownMenuLabel` inside it so the group is named for screen readers.
+ */
+export function DropdownMenuGroup({ className, ...rest }: DropdownMenuGroupProps) {
+  return <RadixDropdownMenu.Group className={cx('group', className)} {...rest} />;
+}
+
+/** Non-interactive heading of a menu section (not focusable, skipped by the arrow keys). */
+export function DropdownMenuLabel({
+  className,
+  ...rest
+}: ComponentProps<typeof RadixDropdownMenu.Label>) {
+  return <RadixDropdownMenu.Label className={cx('label', className)} {...rest} />;
+}
+
 export function DropdownMenuSeparator({
   className,
   ...rest

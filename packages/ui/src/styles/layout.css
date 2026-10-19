@@ -36,7 +36,7 @@
     align-items: center;
     gap: var(--space-2);
     height: var(--app-header-height);
-    padding-inline: var(--space-4);
+    padding-inline: var(--space-3);
     border-width: 0 0 1px;
     border-color: var(--color-border);
     border-radius: 0;
@@ -78,13 +78,13 @@
 
   @media (width >= 768px) {
     > .body > .main > .content {
-      padding: var(--space-6);
+      padding: var(--space-5);
     }
   }
 
   @media (width >= 1024px) {
     > .header {
-      padding-inline: var(--space-6);
+      padding-inline: var(--space-5);
     }
 
     > .header > .menu-button {
@@ -100,7 +100,7 @@
       width: var(--app-sidebar-width);
       height: calc(100dvh - var(--app-header-height));
       overflow-y: auto;
-      padding: var(--space-4) var(--space-3);
+      padding: var(--space-3) var(--space-2);
       border-right: 1px solid var(--color-border);
       background: var(--color-surface);
     }
@@ -113,8 +113,8 @@
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
-  gap: var(--space-4);
-  margin-bottom: var(--space-6);
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
   color: var(--color-text-primary);
 
   > .text {
@@ -123,7 +123,17 @@
     min-width: 0;
   }
 
-  > .text > .breadcrumb {
+  /* Back link and breadcrumb row above the title. */
+  > .text > .nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-3);
+    min-width: 0;
+  }
+
+  > .text > .nav > .breadcrumb {
+    min-width: 0;
     color: var(--color-text-secondary);
     font-size: var(--font-size-label);
   }
@@ -146,5 +156,103 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
+  }
+}
+
+/* Breadcrumb: secondary links, the current page in primary text (aria-current, weight). */
+.qz-breadcrumb {
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-snug);
+
+  > .list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  > .list > .item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  > .list > .item > .separator {
+    flex: none;
+    color: var(--color-text-secondary);
+  }
+
+  /* 24px tall hit area (WCAG 2.2 target size) without growing the text line. */
+  > .list > .item > .link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    transition: color var(--qz-transition-fast);
+  }
+
+  @media (hover: hover) {
+    > .list > .item > .link:hover {
+      color: var(--color-text-primary);
+      text-decoration: underline;
+    }
+  }
+
+  > .list > .item > .current {
+    overflow: hidden;
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-semibold);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* BackLink: ghost-button-like arrow + label. */
+.qz-back-link {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-height-sm);
+  margin-inline-start: calc(-1 * var(--space-2));
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--qz-transition-fast),
+    color var(--qz-transition-fast);
+
+  &[data-icon-only] {
+    justify-content: center;
+    width: var(--control-height-sm);
+    padding: 0;
+  }
+
+  @media (hover: hover) {
+    &:hover {
+      background: var(--color-state-hover);
+      color: var(--color-text-primary);
+    }
+  }
+
+  &:active {
+    background: var(--color-state-pressed);
+    color: var(--color-text-primary);
   }
 }

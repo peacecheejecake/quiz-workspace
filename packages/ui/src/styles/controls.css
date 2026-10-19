@@ -5,7 +5,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  min-height: 40px;
+  min-height: var(--control-height-md);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
@@ -24,26 +24,26 @@
 }
 
 .qz-button {
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-3);
 }
 
 .qz-button[data-size='sm'] {
-  min-height: 32px;
+  min-height: var(--control-height-sm);
   padding: 0 var(--space-3);
   font-size: var(--font-size-label);
 }
 
 .qz-icon-button {
-  width: 40px;
-  height: 40px;
+  width: var(--control-height-md);
+  height: var(--control-height-md);
   min-height: 0;
   flex: none;
   padding: 0;
 }
 
 .qz-icon-button[data-size='sm'] {
-  width: 32px;
-  height: 32px;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
 }
 
 .qz-icon-button > .icon {
@@ -190,8 +190,8 @@
 .qz-control {
   box-sizing: border-box;
   width: 100%;
-  min-height: 40px;
-  padding: var(--space-2) var(--space-3);
+  min-height: var(--control-height-md);
+  padding: var(--space-1) var(--space-3);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -217,7 +217,7 @@
 .qz-control[aria-invalid='true'] {
   border-color: var(--color-danger);
   border-width: 2px;
-  padding: calc(var(--space-2) - 1px) calc(var(--space-3) - 1px);
+  padding: calc(var(--space-1) - 1px) calc(var(--space-3) - 1px);
 }
 
 .qz-control:disabled {
@@ -227,7 +227,7 @@
 }
 
 .qz-control[data-multiline] {
-  min-height: 96px;
+  min-height: 80px;
   resize: vertical;
 }
 
@@ -292,7 +292,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--space-3);
   color: var(--color-text-primary);
 
   > .text {
@@ -329,9 +329,10 @@
     width: 44px;
     height: 24px;
     padding: 2px;
-    border: 1px solid var(--color-border-strong);
+    /* The fill carries the 3:1 control boundary; the border is a lighter rim (v1.2.2). */
+    border: 1px solid var(--color-switch-track-border);
     border-radius: var(--radius-pill);
-    background: var(--color-surface-muted);
+    background: var(--color-switch-track);
     cursor: pointer;
     transition:
       background-color var(--qz-transition-fast),
@@ -339,7 +340,7 @@
   }
 
   > .control > .track[data-state='checked'] {
-    border-color: var(--color-accent);
+    border-color: var(--color-switch-track-checked-border);
     background: var(--color-accent);
   }
 
@@ -354,14 +355,95 @@
     height: 18px;
     border-radius: var(--radius-pill);
     box-sizing: border-box;
-    border: 1px solid var(--color-border-strong);
-    background: var(--color-surface);
+    border: 1px solid transparent;
+    background: var(--color-on-accent);
     transition: transform var(--qz-transition-fast);
   }
 
   > .control > .track > .thumb[data-state='checked'] {
     transform: translateX(20px);
-    border-color: var(--color-surface);
+  }
+
+  @media (forced-colors: active) {
+    > .control > .track {
+      border-color: CanvasText;
+    }
+
+    > .control > .track > .thumb {
+      border-color: CanvasText;
+      background: CanvasText;
+    }
+
+    > .control > .track[data-state='checked'] > .thumb {
+      background: Highlight;
+    }
+  }
+}
+
+/* Dropzone: dashed drop region; drag-over is shown by a solid accent border + tint and the
+   title stays the same (the pick button is the non-drag path). */
+.qz-dropzone {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-5) var(--space-4);
+  border: 2px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  text-align: center;
+  transition:
+    background-color var(--qz-transition-fast),
+    border-color var(--qz-transition-fast);
+
+  > .icon {
+    display: inline-flex;
+    margin-bottom: var(--space-1);
+    color: var(--color-text-secondary);
+  }
+
+  > .title {
+    margin: 0;
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-snug);
+  }
+
+  > .description {
+    margin: 0;
+    max-width: 48ch;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-label);
+    line-height: var(--line-height-normal);
+  }
+
+  > .pick {
+    margin-top: var(--space-2);
+  }
+
+  &[data-dragging] {
+    border-style: solid;
+    border-color: var(--color-accent);
+    background: var(--color-state-selected);
+  }
+
+  &[data-dragging] > .icon {
+    color: var(--color-accent);
+  }
+
+  &[data-disabled] {
+    background: var(--color-surface-muted);
+    color: var(--color-text-secondary);
+  }
+
+  @media (forced-colors: active) {
+    border-color: CanvasText;
+
+    &[data-dragging] {
+      border-color: Highlight;
+    }
   }
 }
 
@@ -378,7 +460,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    min-height: 40px;
+    min-height: var(--control-height-md);
     margin-bottom: -1px;
     padding: 0 var(--space-3);
     border: 0;
@@ -416,7 +498,7 @@
   }
 
   > .content {
-    padding-top: var(--space-4);
+    padding-top: var(--space-3);
   }
 
   @media (forced-colors: active) {
@@ -475,7 +557,7 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
-    min-height: 40px;
+    min-height: var(--control-height-md);
     padding: 0 var(--space-3);
     border-radius: var(--radius-sm);
     outline: none;
@@ -521,7 +603,7 @@
 
   &[data-orientation='horizontal'] {
     flex-flow: row wrap;
-    column-gap: var(--space-4);
+    column-gap: var(--space-3);
   }
 }
 
@@ -597,12 +679,17 @@
  * checked steps the accent fill. A focused control keeps the focus-colored boundary below.
  */
 @media (hover: hover) {
-  :is(.qz-checkbox > .box, .qz-radio > .circle, .qz-switch > .control > .track):not(
+  :is(.qz-checkbox > .box, .qz-radio > .circle):not(
       [data-state='checked'],
       [data-state='indeterminate'],
       :disabled
     ):hover {
     border-color: var(--color-text-primary);
+  }
+
+  /* The switch keeps its light rim; the unchecked fill darkens (light) / lifts (dark) instead. */
+  .qz-switch > .control > .track:not([data-state='checked'], :disabled):hover {
+    background: var(--color-switch-track-hover);
   }
 
   :is(.qz-checkbox > .box, .qz-switch > .control > .track):is(
@@ -612,7 +699,7 @@
     background: var(--color-accent-hover);
   }
 
-  :is(.qz-checkbox > .box, .qz-radio > .circle, .qz-switch > .control > .track):is(
+  :is(.qz-checkbox > .box, .qz-radio > .circle):is(
       [data-state='checked'],
       [data-state='indeterminate']
     ):not(:disabled, :focus-visible):hover {

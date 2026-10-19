@@ -5,7 +5,7 @@
 // see the active published revision without edit controls; editors see the latest revision (the
 // correction draft when there is one), correct blocks inline, publish the draft (index job
 // followed live) and roll back from the revision history. FastAPI decides every write.
-import { Button, PageHeader } from '@quiz/ui';
+import { Breadcrumb, Button, PageHeader } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -573,9 +573,13 @@ export function DocumentEditor({
       <PageHeader
         title={document.title}
         breadcrumb={
-          <nav aria-label="위치">
-            <Link href={`/workspaces/${workspaceId}/documents`}>문서</Link>
-          </nav>
+          <Breadcrumb
+            linkComponent={Link}
+            items={[
+              { label: '문서', href: `/workspaces/${workspaceId}/documents` },
+              { label: document.title },
+            ]}
+          />
         }
         description={document.filename !== document.title ? document.filename : undefined}
       />

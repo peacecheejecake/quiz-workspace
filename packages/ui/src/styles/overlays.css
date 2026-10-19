@@ -65,14 +65,14 @@
     display: flex;
     align-items: flex-start;
     gap: var(--space-2);
-    padding: var(--space-4) var(--space-4) var(--space-3) var(--space-6);
+    padding: var(--space-3) var(--space-3) var(--space-2) var(--space-5);
     border-bottom: 1px solid var(--color-border);
   }
 
   > .header > .heading {
     flex: 1;
     min-width: 0;
-    padding-top: var(--space-2);
+    padding-top: var(--space-1);
   }
 
   > .header > .heading > .title {
@@ -102,7 +102,7 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: var(--space-5) var(--space-6);
+    padding: var(--space-4) var(--space-5);
     font-size: var(--font-size-body-lg);
     line-height: var(--line-height-relaxed);
   }
@@ -131,7 +131,7 @@
     align-items: center;
     justify-content: flex-end;
     gap: var(--space-2);
-    padding: var(--space-3) var(--space-6) var(--space-4);
+    padding: var(--space-2) var(--space-5) var(--space-3);
     border-top: 1px solid var(--color-border);
   }
 }
@@ -216,7 +216,7 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    padding: var(--space-5) var(--space-6);
+    padding: var(--space-4) var(--space-5);
     font-size: var(--font-size-body-lg);
     line-height: var(--line-height-relaxed);
   }
@@ -229,7 +229,7 @@
   box-sizing: border-box;
   min-width: 220px;
   max-width: min(360px, calc(100vw - 2 * var(--space-4)));
-  padding: var(--space-4);
+  padding: var(--space-3);
   border-radius: var(--radius-lg);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
@@ -237,7 +237,7 @@
   line-height: var(--line-height-normal);
 
   &:has(> .close) {
-    padding-right: calc(var(--space-4) + 32px);
+    padding-right: calc(var(--space-3) + var(--control-height-sm));
   }
 
   > .close {
@@ -389,7 +389,7 @@
   > .nav {
     flex: 1;
     overflow-y: auto;
-    padding: var(--space-4) var(--space-3);
+    padding: var(--space-3) var(--space-2);
   }
 }
 
@@ -497,48 +497,75 @@
     animation: qz-fade-in var(--duration-marker) ease-out;
   }
 
-  > .item {
+  /* Items sit directly in the menu or in a DropdownMenuGroup. */
+  > .item,
+  > .group > .item {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    min-height: 40px;
+    min-height: var(--control-height-md);
     padding: 0 var(--space-3);
     border-radius: var(--radius-sm);
+    /* Items rendered as links (asChild + <a>) keep the menu text color and never show an
+       underline, whether unvisited, visited, hovered, focused or pressed. */
+    color: var(--color-text-primary);
+    text-decoration: none;
     outline: none;
     cursor: pointer;
     user-select: none;
     transition: background-color var(--qz-transition-fast);
+
+    /* Pointer highlight is a background only; the ring marks keyboard focus (§4.1). */
+    &[data-highlighted] {
+      background: var(--color-state-hover);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-focus);
+      outline-offset: -2px;
+    }
+
+    &[data-disabled] {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    &[data-tone='danger'] {
+      color: var(--color-danger);
+    }
+
+    /* The current entry (e.g. the open workspace) is marked by weight, not color alone. */
+    &[aria-current]:not([aria-current='false']) {
+      font-weight: var(--font-weight-semibold);
+    }
   }
 
-  /* Pointer highlight is a background only; the ring marks keyboard focus (§4.1). */
-  > .item[data-highlighted] {
-    background: var(--color-state-hover);
-  }
-
-  > .item:focus-visible {
-    outline: 2px solid var(--color-focus);
-    outline-offset: -2px;
-  }
-
-  > .item[data-disabled] {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-
-  > .item[data-tone='danger'] {
-    color: var(--color-danger);
+  > .label,
+  > .group > .label {
+    padding: var(--space-2) var(--space-3) var(--space-1);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-label-sm);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-snug);
   }
 
   > .separator {
     height: 1px;
-    margin: var(--space-1) 0;
+    margin: var(--space-1) calc(-1 * var(--space-1));
     background: var(--color-border);
   }
 
   @media (forced-colors: active) {
-    > .item:is([data-highlighted], :focus-visible) {
-      outline: 2px solid Highlight;
-      outline-offset: -2px;
+    > .item,
+    > .group > .item {
+      &:is([data-highlighted], :focus-visible) {
+        outline: 2px solid Highlight;
+        outline-offset: -2px;
+      }
+    }
+
+    > .separator {
+      background: CanvasText;
     }
   }
 }

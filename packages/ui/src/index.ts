@@ -11,23 +11,34 @@ export type { CheckboxProps } from './primitives/Checkbox';
 export {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './primitives/DropdownMenu';
-export type { DropdownMenuContentProps, DropdownMenuItemProps } from './primitives/DropdownMenu';
+export type {
+  DropdownMenuContentProps,
+  DropdownMenuGroupProps,
+  DropdownMenuItemProps,
+} from './primitives/DropdownMenu';
+export { Dropzone } from './primitives/Dropzone';
+export type { DropzoneProps } from './primitives/Dropzone';
 export { FocusRing, focusRingClassName } from './primitives/FocusRing';
 export type { FocusRingProps } from './primitives/FocusRing';
 export { IconButton } from './primitives/IconButton';
 export type { IconButtonProps } from './primitives/IconButton';
 export {
   AlertIcon,
+  ArrowLeftIcon,
   CheckIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   CloseIcon,
   MenuIcon,
   MinusIcon,
   MoreIcon,
+  UploadIcon,
 } from './primitives/icons';
 export { Input } from './primitives/Input';
 export type { InputProps } from './primitives/Input';
@@ -59,6 +70,7 @@ export type {
 export { Textarea } from './primitives/Textarea';
 export type { TextareaProps } from './primitives/Textarea';
 export { Tooltip } from './primitives/Tooltip';
+export { TOOLTIP_DELAY_MS, TOOLTIP_DESCRIPTION_DELAY_MS } from './primitives/tooltip-delay';
 export type { TooltipProps } from './primitives/Tooltip';
 
 export { EmptyState } from './feedback/EmptyState';
@@ -66,6 +78,13 @@ export type { EmptyStateProps } from './feedback/EmptyState';
 export { ToastProvider, useToast } from './feedback/Toast';
 export type { ToastOptions, ToastProviderProps, ToastTone } from './feedback/Toast';
 
+export { BackLink, Breadcrumb } from './layout/Breadcrumb';
+export type {
+  BackLinkProps,
+  BreadcrumbItem,
+  BreadcrumbProps,
+  LinkComponent,
+} from './layout/Breadcrumb';
 export { AppShell } from './layout/AppShell';
 export type { AppShellProps } from './layout/AppShell';
 export { ConfirmDialog } from './layout/ConfirmDialog';

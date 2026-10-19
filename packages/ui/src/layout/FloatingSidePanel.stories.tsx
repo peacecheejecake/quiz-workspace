@@ -218,3 +218,38 @@ export const Tablet: Story = {
   ...NonModal,
   globals: { viewport: { value: 'tablet', isRotated: false } },
 };
+
+function StackedDemo() {
+  const [first, setFirst] = useState(true);
+  const [second, setSecond] = useState(false);
+  return (
+    <div style={{ padding: 'var(--space-6)' }}>
+      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
+        <Button onClick={() => setFirst(true)}>검색 발췌 열기</Button>
+        <Button onClick={() => setSecond(true)}>문제 생성 열기</Button>
+      </div>
+      <Background />
+      <FloatingSidePanel open={second} onOpenChange={setSecond} modal={false} title="문제 생성">
+        <p style={{ margin: 0 }}>나중에 연 패널이 위에 쌓입니다.</p>
+      </FloatingSidePanel>
+      <FloatingSidePanel open={first} onOpenChange={setFirst} modal={false} title="검색 발췌">
+        <p style={{ margin: 0 }}>먼저 연 패널입니다. 닫았다가 다시 열면 맨 위로 올라옵니다.</p>
+      </FloatingSidePanel>
+    </div>
+  );
+}
+
+export const Stacked: Story = {
+  name: 'Several open panels (stacking)',
+  render: () => <StackedDemo />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The most recently opened floating layer stacks on top regardless of portal DOM ' +
+          'order (rank r = --z-side-panel + 2r, capped below --z-modal; popovers inside take ' +
+          '+1). Re-opening an earlier panel brings it to the top. Modal dialogs stay above.',
+      },
+    },
+  },
+};

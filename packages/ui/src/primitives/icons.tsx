@@ -79,3 +79,30 @@ export function AlertIcon(props: IconProps) {
     </BaseIcon>
   );
 }
+
+/** Tray with an upward arrow (file drop / upload). */
+export function UploadIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" />
+    </BaseIcon>
+  );
+}
+
+/** Back navigation arrow. */
+export function ArrowLeftIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="M19 12H5M11 6l-6 6 6 6" />
+    </BaseIcon>
+  );
+}
+
+/** Breadcrumb separator. */
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="m9 6 6 6-6 6" />
+    </BaseIcon>
+  );
+}

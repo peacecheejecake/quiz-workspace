@@ -5,6 +5,7 @@ import { useId, type ReactNode } from 'react';
 import { cx } from '../internal/cx';
 import { AlertIcon } from './icons';
 import { Tooltip } from './Tooltip';
+import { TOOLTIP_DESCRIPTION_DELAY_MS } from './tooltip-delay';
 
 export interface RadioOption {
   value: string;
@@ -115,7 +116,12 @@ export function RadioGroup({
           // The row (radio + label) is the trigger: hover anywhere on it, or focus on the radio
           // (focus bubbles in React), opens the tooltip.
           return asTooltip ? (
-            <Tooltip key={option.value} content={option.description} side="bottom">
+            <Tooltip
+              key={option.value}
+              content={option.description}
+              side="bottom"
+              delayDuration={TOOLTIP_DESCRIPTION_DELAY_MS}
+            >
               {row}
             </Tooltip>
           ) : (

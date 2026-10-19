@@ -1,9 +1,9 @@
 'use client';
 
 import { Dialog } from 'radix-ui';
-import { useRef, type ComponentProps, type ReactElement, type ReactNode } from 'react';
+import { useRef, useState, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 import { cx } from '../internal/cx';
-import { LayerProvider } from '../internal/layer';
+import { LayerProvider, useFloatingLayer } from '../internal/layer';
 import { ScrollRegion } from '../internal/scroll-region';
 import { handOffFocus } from '../internal/tabbable';
 import { IconButton } from '../primitives/IconButton';
@@ -81,12 +81,27 @@ export function FloatingSidePanel({
   // Element focused when the panel opened. Panels are often opened from controls that are not
   // a Radix trigger (heatmap dots, search results); focus must still return there on close.
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  // Track the open state even when uncontrolled so the panel can take its stacking rank: the
+  // most recently opened floating layer is on top (internal/layer.tsx).
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen ?? false);
+  const isOpen = open ?? uncontrolledOpen;
+  const handleOpenChange = (next: boolean) => {
+    if (open === undefined) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
+  const layer = useFloatingLayer(isOpen);
 
   return (
-    <Dialog.Root open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange} modal={modal}>
+    <Dialog.Root open={isOpen} onOpenChange={handleOpenChange} modal={modal}>
       {trigger ? <Dialog.Trigger asChild>{trigger}</Dialog.Trigger> : null}
       <Dialog.Portal container={container}>
-        {modal ? <Dialog.Overlay className="qz-backdrop" data-layer="panel" /> : null}
+        {modal ? (
+          <Dialog.Overlay
+            className="qz-backdrop"
+            data-layer="panel"
+            style={{ zIndex: layer.zIndex }}
+          />
+        ) : null}
         <Dialog.Content
           ref={contentRef}
           // Radix hides the background from assistive technology but does not set aria-modal.
@@ -95,6 +110,8 @@ export function FloatingSidePanel({
           data-size={size}
           data-mobile-layout={mobileLayout}
           className={cx('qz-panel', 'glass-surface', className)}
+          data-layer-rank={layer.rank}
+          style={{ zIndex: layer.zIndex }}
           {...(description ? {} : { 'aria-describedby': undefined })}
           onOpenAutoFocus={(event) => {
             returnFocusRef.current =
@@ -136,7 +153,7 @@ export function FloatingSidePanel({
             }
           }}
         >
-          <LayerProvider value="var(--z-side-panel)">
+          <LayerProvider value={layer.zIndex}>
             <div className="header">
               <div className="heading">
                 <Dialog.Title className="title">{title}</Dialog.Title>
