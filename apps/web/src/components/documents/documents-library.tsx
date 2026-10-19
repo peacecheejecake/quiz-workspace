@@ -242,6 +242,10 @@ export function DocumentsLibrary({
   const empty = rows.length === 0;
   // While the empty state shows its upload CTA, the header has none (UX1, DOC-01-AC01).
   const emptyStateCta = canEdit && empty && !listFailed;
+  // The drag hint is the empty state's description; with documents it sits above the list (UX2).
+  const dropHint = dragging
+    ? '놓으면 업로드를 시작합니다.'
+    : 'PDF 파일을 이 영역에 끌어다 놓아도 업로드할 수 있습니다.';
 
   const uploadButton = (ref?: Ref<HTMLButtonElement>) => (
     <Button ref={ref} variant="primary" onClick={() => inputRef.current?.click()}>
@@ -320,21 +324,11 @@ export function DocumentsLibrary({
             </Button>
           </p>
         ) : null}
-        {canEdit ? (
-          <p className={styles.dropHint}>
-            {dragging
-              ? '놓으면 업로드를 시작합니다.'
-              : 'PDF 파일을 이 영역에 끌어다 놓아도 업로드할 수 있습니다.'}
-          </p>
-        ) : null}
+        {canEdit && !emptyStateCta ? <p className={styles.dropHint}>{dropHint}</p> : null}
         {empty && !listFailed ? (
           <EmptyState
             title="아직 문서가 없습니다"
-            description={
-              canEdit
-                ? 'PDF를 업로드하면 원문 검색과 문제 만들기에 사용할 수 있습니다.'
-                : '이 Workspace에 업로드된 PDF가 아직 없습니다.'
-            }
+            description={canEdit ? dropHint : '이 Workspace에 업로드된 PDF가 아직 없습니다.'}
             action={emptyStateCta ? uploadButton(uploadButtonRef) : undefined}
           />
         ) : (

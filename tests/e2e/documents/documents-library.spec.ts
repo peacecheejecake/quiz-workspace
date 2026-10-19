@@ -70,6 +70,12 @@ test(
     await expect(docUi.uploadButton(page)).toBeEnabled();
     // One upload button only: the empty state's; the header button is hidden meanwhile (UX1).
     await expect(docUi.uploadButtons(page)).toHaveCount(1);
+    // The drag-and-drop hint is the empty state's description, shown once (UX2).
+    const dropHint = /끌어다 놓아도 업로드|drag (and drop|a pdf)/i;
+    await expect(docUi.emptyState(page).locator('xpath=following-sibling::p[1]')).toHaveText(
+      dropHint,
+    );
+    await expect(page.getByRole('main').getByText(dropHint)).toHaveCount(1);
   },
 );
 
