@@ -42,6 +42,9 @@ const NON_TEXT_TOKENS = ['color-border-strong', 'color-focus'] as const;
 const REQUIRED: Pair[] = [
   ...TEXT_TOKENS.flatMap((fg) => BACKGROUNDS.map((bg): Pair => [fg, bg, TEXT_MIN])),
   ['color-on-accent', 'color-accent', TEXT_MIN],
+  // Primary (accent-filled) buttons keep their label readable on hover and while pressed (UX2).
+  ['color-on-accent', 'color-accent-hover', TEXT_MIN],
+  ['color-on-accent', 'color-accent-pressed', TEXT_MIN],
   // Secondary text also labels current/selected rows and metadata on muted surfaces (M7.2 axe).
   ['color-text-secondary', 'color-surface-muted', TEXT_MIN],
   ['color-text-primary', 'color-surface-muted', TEXT_MIN],
@@ -51,6 +54,7 @@ const REQUIRED: Pair[] = [
   ['color-text-primary', 'color-state-pressed', TEXT_MIN],
   ['color-text-primary', 'color-state-selected', TEXT_MIN],
   ['color-text-secondary', 'color-state-hover', TEXT_MIN],
+  ['color-text-primary', 'color-state-selected-hover', TEXT_MIN],
   // Glass fallback surface (reduced transparency) carries the same text as glass.
   ['color-text-primary', 'color-glass-solid', TEXT_MIN],
   ['color-text-secondary', 'color-glass-solid', TEXT_MIN],
@@ -83,6 +87,29 @@ describe('contrastRatio', () => {
 describe.each(themeNames)('%s theme contrast', (theme) => {
   it.each(REQUIRED)('%s on %s ≥ %s:1', (fg, bg, min) => {
     expect(ratio(theme, fg, bg)).toBeGreaterThanOrEqual(min);
+  });
+
+  // Hover must read as a change from rest and stay distinct from pressed and selected
+  // (design-system.md §4.1): the accent fill steps by a visible luminance ratio, and the four
+  // neutral/selected state backgrounds are pairwise different.
+  it('accent hover and pressed fills step visibly away from the accent and each other', () => {
+    const MIN_STEP = 1.08;
+    expect(ratio(theme, 'color-accent-hover', 'color-accent')).toBeGreaterThanOrEqual(MIN_STEP);
+    expect(ratio(theme, 'color-accent-pressed', 'color-accent')).toBeGreaterThanOrEqual(MIN_STEP);
+    expect(ratio(theme, 'color-accent-pressed', 'color-accent-hover')).toBeGreaterThanOrEqual(
+      MIN_STEP,
+    );
+  });
+
+  it('hover, pressed, selected and selected-hover backgrounds are all different', () => {
+    const t = themedTokens[theme];
+    const values = [
+      t['color-state-hover'],
+      t['color-state-pressed'],
+      t['color-state-selected'],
+      t['color-state-selected-hover'],
+    ].map((v) => v.toLowerCase());
+    expect(new Set(values).size).toBe(values.length);
   });
 
   it('feedback colors are distinct from question status colors', () => {

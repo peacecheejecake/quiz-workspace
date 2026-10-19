@@ -8,6 +8,8 @@
   --color-text-secondary: #636d82;
   --color-border: #e6e9ef;
   --color-accent: #5268d8;
+  --color-accent-hover: #4a5ec1;
+  --color-accent-pressed: #4355ad;
   --color-focus: #356cff;
   --color-glass: rgba(246, 248, 252, 0.9);
   --color-glass-solid: #f6f8fc;
@@ -21,6 +23,7 @@
   --color-state-hover: #eceff4;
   --color-state-pressed: #e3e7ee;
   --color-state-selected: #e4e9fb;
+  --color-state-selected-hover: #d2daf7;
   --question-status-unseen: #d9dee5;
   --question-status-viewed: #858e9b;
   --question-status-incorrect: #e0525e;
@@ -86,6 +89,8 @@
   --color-text-secondary: #acb7c5;
   --color-border: #2d3745;
   --color-accent: #8ca0ff;
+  --color-accent-hover: #9aacfe;
+  --color-accent-pressed: #a7b6fd;
   --color-focus: #a2b3ff;
   --color-glass: rgba(30, 38, 51, 0.9);
   --color-glass-solid: #1e2633;
@@ -99,6 +104,7 @@
   --color-state-hover: #2a3442;
   --color-state-pressed: #334051;
   --color-state-selected: #2e3958;
+  --color-state-selected-hover: #39456c;
   --question-status-unseen: #4e5967;
   --question-status-viewed: #9ea7b4;
   --question-status-incorrect: #f17b84;
@@ -115,6 +121,8 @@
   --color-text-secondary: #636d82;
   --color-border: #e6e9ef;
   --color-accent: #5268d8;
+  --color-accent-hover: #4a5ec1;
+  --color-accent-pressed: #4355ad;
   --color-focus: #356cff;
   --color-glass: rgba(246, 248, 252, 0.9);
   --color-glass-solid: #f6f8fc;
@@ -128,6 +136,7 @@
   --color-state-hover: #eceff4;
   --color-state-pressed: #e3e7ee;
   --color-state-selected: #e4e9fb;
+  --color-state-selected-hover: #d2daf7;
   --question-status-unseen: #d9dee5;
   --question-status-viewed: #858e9b;
   --question-status-incorrect: #e0525e;
@@ -145,6 +154,8 @@
     --color-text-secondary: #acb7c5;
     --color-border: #2d3745;
     --color-accent: #8ca0ff;
+    --color-accent-hover: #9aacfe;
+    --color-accent-pressed: #a7b6fd;
     --color-focus: #a2b3ff;
     --color-glass: rgba(30, 38, 51, 0.9);
     --color-glass-solid: #1e2633;
@@ -158,6 +169,7 @@
     --color-state-hover: #2a3442;
     --color-state-pressed: #334051;
     --color-state-selected: #2e3958;
+    --color-state-selected-hover: #39456c;
     --question-status-unseen: #4e5967;
     --question-status-viewed: #9ea7b4;
     --question-status-incorrect: #f17b84;

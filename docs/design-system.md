@@ -1,6 +1,6 @@
 # Design System v1.2 — Minimal Glass (Platform v1.2)
 
-**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19  
+**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19 · v1.2.1 버튼 hover 개정 2026-10-19  
 **적용:** 전역 Workspace UI, 문서 뷰어, 검색, Questions heatmap, floating side panels  
 **키워드:** minimalism, restrained glassmorphism, readability, focus, consistent semantics
 
@@ -39,6 +39,8 @@
 | `--color-text-secondary` | `#636D82` | 보조 텍스트(surface-muted 위에서도 4.5:1 이상) |
 | `--color-border` | `#E6E9EF` | 표면 경계·구분선(장식용, 필수 경계는 `--color-border-strong`) |
 | `--color-accent` | `#5268D8` | primary action, navigation |
+| `--color-accent-hover` | `#4A5EC1` | primary(accent 채움) 버튼·체크된 선택 컨트롤 hover |
+| `--color-accent-pressed` | `#4355AD` | primary 버튼 누르는 동안(`:active`) |
 | `--color-focus` | `#356CFF` | focus outline |
 | `--color-glass` | `rgba(246,248,252,.9)` | floating glass surface(아주 옅은 tint) |
 | `--color-glass-solid` | `#F6F8FC` | glass의 불투명 대응색(reduced transparency·blur 미지원 fallback, 모바일 sheet) |
@@ -57,12 +59,15 @@
 | `--color-state-hover` | `#ECEFF4` | 버튼·메뉴 항목·탭 hover 배경 |
 | `--color-state-pressed` | `#E3E7EE` | 누르는 동안(`:active`) 배경 |
 | `--color-state-selected` | `#E4E9FB` | 선택·켜짐 상태(`aria-pressed="true"`, `data-state="on"`) 배경 — hover와 다른 accent tint |
+| `--color-state-selected-hover` | `#D2DAF7` | 선택·켜짐 상태 위 hover 배경 |
 
 **v1.1.1 추가:** `--color-border-strong`, `--color-on-accent`, `--color-danger`/`success`/`warning`, `--color-scrim`, typography scale(`--font-size-*`, `--line-height-*`, `--font-weight-*`), breakpoint(`--breakpoint-*`). feedback 색은 question-status 토큰을 재사용하지 않으며(의미가 다름), canvas·surface 위 텍스트로 4.5:1 이상을 만족한다.
 
 **v1.1.2 (M7.2):** `--color-text-secondary` light `#667085` → `#636D82`. 보조 텍스트가 선택·현재 항목, 메타 정보 등 `--color-surface-muted` 위에도 쓰여 4.47:1로 AA에 미달했다(axe 전 화면 검사). 같은 색조로 4.67:1(muted)·4.89:1(canvas)·5.2:1(surface)을 만족한다. 앱은 별도 선택이 없으면 OS `prefers-color-scheme`을 따라 Dark token을 적용한다(`[data-theme]`가 있으면 그 값이 우선).
 
 **v1.2 (UX1, 2026-10-19 사용자 피드백):** glass는 더 불투명하게(light `.78`→`.9`, dark `.79`→`.9`), 순백 대신 아주 옅은 tint(`#F6F8FC` 계열)를 쓰고 불투명 fallback은 같은 색의 `--color-glass-solid`다. `--color-border`는 더 옅게(light `#DEE3EB`→`#E6E9EF`, dark `#364251`→`#2D3745`): 장식용 구분선 전용이며, 입력 필드·체크박스·라디오처럼 경계가 유일한 식별 수단인 컨트롤은 계속 `--color-border-strong`(3:1)을 쓴다. 상호작용 상태 배경 `--color-state-hover`/`-pressed`/`-selected`를 추가했다(§4.1). 대비: text-primary는 세 상태 배경 모두에서, text-secondary는 hover 배경에서 4.5:1 이상(`contrast.test.ts`).
+
+**v1.2.1 (UX2, 2026-10-19 사용자 피드백):** 모든 버튼 종류에 보이는 hover를 둔다(§4.1). accent 채움(primary)용 `--color-accent-hover`/`--color-accent-pressed`(light는 더 어둡게, dark는 더 밝게)와 켜진 toggle용 `--color-state-selected-hover`를 추가했다. 대비: `--color-on-accent`는 accent·hover·pressed 채움 모두에서, text-primary는 selected-hover에서 4.5:1 이상이며, hover·pressed 채움은 기본 accent와 서로 구분된다(`contrast.test.ts`).
 
 **상태 점은 기본 표면과 충분히 구분되도록** 최소 얇은 outline과 범례를 갖는다. 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
 
@@ -77,6 +82,8 @@
   --color-text-secondary: #ACB7C5;
   --color-border: #2D3745;
   --color-accent: #8CA0FF;
+  --color-accent-hover: #9AACFE;
+  --color-accent-pressed: #A7B6FD;
   --color-focus: #A2B3FF;
   --color-glass: rgba(30, 38, 51, 0.9);
   --color-glass-solid: #1E2633;
@@ -95,6 +102,7 @@
   --color-state-hover: #2A3442;
   --color-state-pressed: #334051;
   --color-state-selected: #2E3958;
+  --color-state-selected-hover: #39456C;
 }
 ```
 
@@ -112,6 +120,8 @@
   --color-text-secondary: #636D82;
   --color-border: #E6E9EF;
   --color-accent: #5268D8;
+  --color-accent-hover: #4A5EC1;
+  --color-accent-pressed: #4355AD;
   --color-focus: #356CFF;
   --color-glass: rgba(246,248,252,.9);
   --color-glass-solid: #F6F8FC;
@@ -130,6 +140,7 @@
   --color-state-hover: #ECEFF4;
   --color-state-pressed: #E3E7EE;
   --color-state-selected: #E4E9FB;
+  --color-state-selected-hover: #D2DAF7;
 
   --font-sans: "Pretendard", "Inter", system-ui, -apple-system, sans-serif;
   --font-size-label-sm: 12px;
@@ -210,7 +221,7 @@
 
 Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과를 과용하지 않는다. 기본 표면은 opaque white/dark surface다.
 
-### 4.1 상호작용 상태·경계 (v1.2, UX1)
+### 4.1 상호작용 상태·경계 (v1.2, UX1 · v1.2.1, UX2)
 
 - **Hover와 선택은 다른 배경:** hover `--color-state-hover`(중립 회색), 누르는 동안 `--color-state-pressed`, 선택·켜짐(`aria-pressed="true"`, `data-state="on"`) `--color-state-selected`(accent tint) + 굵기·아이콘 변화. 선택 상태에만 생기는 테두리는 쓰지 않는다.
 - **Toggle 버튼:** 꺼진 상태에 테두리·배경이 없다(ghost). 켜짐은 배경 채움 + `aria-pressed`(또는 바뀌는 label) + 굵기/아이콘으로 전달하며 색만으로 구분하지 않는다. `Button`/`IconButton` primitive가 `aria-pressed`/`data-state`를 보고 처리하므로 기능 코드는 테두리·배경을 따로 지정하지 않는다.
@@ -221,7 +232,22 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
   - 체크박스·라디오·스위치: 체크 상태의 accent 채움 위에서는 안쪽 ring이 보이지 않으므로 ring을 테두리 바로 바깥(`outline-offset: 0`)에 붙여 바뀐 테두리와 하나의 경계로 이어지게 한다.
   - 오류 입력이 focus되면 ring이 우선한다(오류 테두리는 ring에 덮이고 blur 시 돌아온다). 오류 문구·아이콘·`aria-invalid`가 계속 남으므로 오류 여부는 색에 의존하지 않고 인식된다.
   - 테두리가 없는 요소(링크, primary·ghost 버튼, toggle 버튼)는 기존처럼 2px 바깥 간격(`outline-offset: 2px`)으로 ring을 그린다.
-- **전환:** 상태 전환은 `--duration-state`/`--easing-standard`, `prefers-reduced-motion: reduce`에서는 즉시.
+- **모든 버튼에 hover (v1.2.1, UX2):** 버튼 종류마다 hover가 눈에 보이고, 누르는 동안(pressed)·선택(selected)과 다른 모습이다.
+
+  | 종류 | 기본 | hover | pressed(`:active`) | 켜짐/선택 |
+  |---|---|---|---|---|
+  | primary(`Button`·`IconButton`) | `--color-accent` 채움 | `--color-accent-hover` | `--color-accent-pressed` | — |
+  | secondary | `--color-surface` + 1px `--color-border` | `--color-state-hover` | `--color-state-pressed` | — |
+  | ghost(`IconButton` 기본 포함) | 투명 | `--color-state-hover` | `--color-state-pressed` | — |
+  | toggle 꺼짐(`aria-pressed="false"`, `data-state="off"`) | 투명, 테두리 없음 | `--color-state-hover` | `--color-state-pressed` | — |
+  | toggle 켜짐(`aria-pressed="true"`, `data-state="on"`) | `--color-state-selected` + 굵기/아이콘 | `--color-state-selected-hover` | `--color-state-pressed` | 기본이 곧 켜짐 |
+  | tab trigger | 투명 | `--color-state-hover` + text-primary | `--color-state-pressed` | 하단 accent bar + text-primary |
+  | 체크박스·라디오·스위치 | `--color-border-strong` 경계 | 꺼짐: 경계 `--color-text-primary`, 켜짐: 채움·경계 `--color-accent-hover` | — | accent 채움 |
+  | 기능 CSS의 버튼(segmented view switch, 목록 항목 버튼, outline tree 항목) | 각자 | `--color-state-hover`(view switch 꺼진 칸은 text-primary도) | view switch: `--color-state-pressed` | 기존 선택 표시(표면·bar·굵기) 유지 |
+  | 텍스트 버튼(`linkButton`)·링크 | 밑줄 | 밑줄이 굵어지거나(텍스트 버튼) 밑줄 표시(링크) | — | — |
+
+  hover는 `@media (hover: hover)` 안에서만 적용해 터치 후 hover가 남지 않게 하고, 비활성(`:disabled`)에는 적용하지 않는다. pressed는 모든 입력에 적용한다. focus 중인 테두리 컨트롤은 hover 중에도 focus 경계 하나를 유지한다(아래 "Focus 경계는 하나"). 기능 코드는 kit `Button`/`IconButton`을 쓰고, 부득이한 버튼형 클래스도 위 토큰만 쓴다.
+- **전환:** 상태 전환은 `--duration-state`/`--easing-standard`(kit 변수 `--qz-transition-fast`), `prefers-reduced-motion: reduce`에서는 즉시(`@quiz/design-tokens/base.css`).
 - **메뉴·선택 항목 설명은 Tooltip:** 선택지 옆 설명 문구는 항상 보이는 텍스트 대신 공통 `Tooltip`(hover·키보드 focus)으로 보여 주고, 같은 문구를 숨김 텍스트로 `aria-describedby`에 연결한다. hover가 없는 기기(`(hover: none)`)에서는 설명을 인라인 텍스트로 계속 표시한다. 오답·정답 표시, 비활성 사유처럼 필수 정보는 tooltip으로 옮기지 않는다.
 
 ## 5. Floating Side Panel

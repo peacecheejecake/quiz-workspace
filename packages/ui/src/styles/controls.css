@@ -55,30 +55,9 @@
   color: var(--color-on-accent);
 }
 
-:is(.qz-button, .qz-icon-button)[data-variant='primary']:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-accent) 86%, var(--color-text-primary));
-}
-
-:is(.qz-button, .qz-icon-button)[data-variant='primary']:active:not(:disabled) {
-  background: color-mix(in srgb, var(--color-accent) 76%, var(--color-text-primary));
-}
-
 :is(.qz-button, .qz-icon-button)[data-variant='secondary'] {
   background: var(--color-surface);
   border-color: var(--color-border);
-}
-
-/* Hover, pressed (while held) and selected/on use three different backgrounds (§4.1). */
-:is(.qz-button, .qz-icon-button):is([data-variant='secondary'], [data-variant='ghost']):hover:not(
-    :disabled
-  ) {
-  background: var(--color-state-hover);
-}
-
-:is(.qz-button, .qz-icon-button):is([data-variant='secondary'], [data-variant='ghost']):active:not(
-    :disabled
-  ) {
-  background: var(--color-state-pressed);
 }
 
 /*
@@ -93,23 +72,45 @@
   background: transparent;
 }
 
-:is(.qz-button, .qz-icon-button):is([aria-pressed], [data-state='off']):not(
-    [data-variant='primary'],
-    [aria-pressed='true']
-  ):hover:not(:disabled) {
-  background: var(--color-state-hover);
-}
-
 :is(.qz-button, .qz-icon-button):is([aria-pressed='true'], [data-state='on']):not(
     [data-variant='primary']
   ) {
   background: var(--color-state-selected);
 }
 
-:is(.qz-button, .qz-icon-button):is([aria-pressed='true'], [data-state='on']):not(
-    [data-variant='primary']
-  ):hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-state-selected) 88%, var(--color-accent));
+/*
+ * Hover, pressed (while held) and selected/on use three different backgrounds (§4.1). Filled
+ * (primary) buttons step the accent fill (--color-accent-hover / -pressed); the others use the
+ * neutral state tokens. Hover applies only to hover-capable pointers, so a tap never leaves a
+ * sticky hover; pressed (:active) applies everywhere.
+ */
+@media (hover: hover) {
+  :is(.qz-button, .qz-icon-button)[data-variant='primary']:hover:not(:disabled) {
+    background: var(--color-accent-hover);
+  }
+
+  /* Secondary, ghost and toggles while off. */
+  :is(.qz-button, .qz-icon-button):is([data-variant='secondary'], [data-variant='ghost']):hover:not(
+      :disabled
+    ) {
+    background: var(--color-state-hover);
+  }
+
+  :is(.qz-button, .qz-icon-button):is([aria-pressed='true'], [data-state='on']):not(
+      [data-variant='primary']
+    ):hover:not(:disabled) {
+    background: var(--color-state-selected-hover);
+  }
+}
+
+:is(.qz-button, .qz-icon-button)[data-variant='primary']:active:not(:disabled) {
+  background: var(--color-accent-pressed);
+}
+
+:is(.qz-button, .qz-icon-button):is([data-variant='secondary'], [data-variant='ghost']):active:not(
+    :disabled
+  ) {
+  background: var(--color-state-pressed);
 }
 
 :is(.qz-button, .qz-icon-button):is([aria-pressed], [data-state='on'], [data-state='off']):not(
@@ -204,8 +205,10 @@
   opacity: 1;
 }
 
-.qz-control:hover:not(:disabled) {
-  border-color: var(--color-text-primary);
+@media (hover: hover) {
+  .qz-control:hover:not(:disabled) {
+    border-color: var(--color-text-primary);
+  }
 }
 
 .qz-control[aria-invalid='true'] {
@@ -387,8 +390,15 @@
     color var(--qz-transition-fast);
 }
 
-.qz-tabs__trigger:hover {
-  background: var(--color-state-hover);
+@media (hover: hover) {
+  .qz-tabs__trigger:hover:not(:disabled) {
+    background: var(--color-state-hover);
+    color: var(--color-text-primary);
+  }
+}
+
+.qz-tabs__trigger:active:not(:disabled) {
+  background: var(--color-state-pressed);
   color: var(--color-text-primary);
 }
 
@@ -569,6 +579,38 @@
 @media (forced-colors: active) {
   .qz-radio__indicator {
     background: Highlight;
+  }
+}
+
+/*
+ * Hover for the button-like choice controls (§4.1): unchecked darkens the border like a field,
+ * checked steps the accent fill. A focused control keeps the focus-colored boundary below.
+ */
+@media (hover: hover) {
+  :is(.qz-checkbox__box, .qz-radio__circle, .qz-switch__track):not(
+      [data-state='checked'],
+      [data-state='indeterminate'],
+      :disabled
+    ):hover {
+    border-color: var(--color-text-primary);
+  }
+
+  :is(.qz-checkbox__box, .qz-switch__track):is(
+      [data-state='checked'],
+      [data-state='indeterminate']
+    ):not(:disabled):hover {
+    background: var(--color-accent-hover);
+  }
+
+  :is(.qz-checkbox__box, .qz-radio__circle, .qz-switch__track):is(
+      [data-state='checked'],
+      [data-state='indeterminate']
+    ):not(:disabled, :focus-visible):hover {
+    border-color: var(--color-accent-hover);
+  }
+
+  .qz-radio__circle[data-state='checked']:not(:disabled):hover .qz-radio__indicator {
+    background: var(--color-accent-hover);
   }
 }
 

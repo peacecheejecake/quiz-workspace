@@ -20,10 +20,13 @@ const meta = {
         component:
           'Text button. Variants: primary (one per view), secondary, ghost. Keyboard: Tab to ' +
           'focus (shared FocusRing), Enter/Space to activate. `loading` sets aria-busy and ' +
-          'disables the button. Hover, pressed and selected use different backgrounds ' +
-          '(--color-state-hover / -pressed / -selected); toggles (aria-pressed) have no border ' +
-          'or fill while off. Tokens: --color-accent, --color-surface, --color-state-*, ' +
-          '--color-border, --color-focus, --radius-md, --duration-state, --easing-standard.',
+          'disables the button. Every variant has a hover distinct from pressed and selected: ' +
+          'primary steps the fill (--color-accent-hover / -pressed), the others use ' +
+          '--color-state-hover / -pressed, toggles on use --color-state-selected(-hover). Hover ' +
+          'applies only to hover-capable pointers and never to disabled buttons. Toggles ' +
+          '(aria-pressed) have no border or fill while off. Tokens: --color-accent(-hover, ' +
+          '-pressed), --color-surface, --color-state-*, --color-border, --color-focus, ' +
+          '--radius-md, --duration-state, --easing-standard.',
       },
     },
   },
@@ -64,6 +67,8 @@ export const AsLink: Story = {
 };
 
 export const Dark: Story = { ...Variants, globals: { theme: 'dark' } };
+export const HoverDark: Story = { ...Hover, globals: { theme: 'dark' } };
+export const ActiveDark: Story = { ...Active, globals: { theme: 'dark' } };
 
 /** Toggle buttons: off = no border/fill, on = selected fill + semibold, exposed as aria-pressed. */
 export const Toggles: Story = {
@@ -83,7 +88,9 @@ export const Toggles: Story = {
 };
 
 export const TogglesHover: Story = { ...Toggles, parameters: { pseudo: { hover: true } } };
+export const TogglesActive: Story = { ...Toggles, parameters: { pseudo: { active: true } } };
 export const TogglesDark: Story = { ...Toggles, globals: { theme: 'dark' } };
+export const TogglesHoverDark: Story = { ...TogglesHover, globals: { theme: 'dark' } };
 
 export const IconButtons: StoryObj<typeof IconButton> = {
   render: () => (
@@ -109,4 +116,14 @@ export const IconButtons: StoryObj<typeof IconButton> = {
 export const IconButtonsFocus: StoryObj<typeof IconButton> = {
   ...IconButtons,
   parameters: { pseudo: { focusVisible: true } },
+};
+
+export const IconButtonsHover: StoryObj<typeof IconButton> = {
+  ...IconButtons,
+  parameters: { pseudo: { hover: true } },
+};
+
+export const IconButtonsHoverDark: StoryObj<typeof IconButton> = {
+  ...IconButtonsHover,
+  globals: { theme: 'dark' },
 };

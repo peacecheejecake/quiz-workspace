@@ -218,9 +218,17 @@
   font: inherit;
   text-align: start;
   cursor: pointer;
+  transition: background-color var(--qz-transition-fast);
 }
 
-.questionButton:hover,
+/* Hover is the neutral state background; the current question adds the strong border and the
+   accent bar (design-system.md §4.1). */
+@media (hover: hover) {
+  .questionButton:hover {
+    background: var(--color-state-hover);
+  }
+}
+
 .questionButton[aria-current='true'] {
   border-color: var(--color-border-strong);
   background: var(--color-surface-muted);

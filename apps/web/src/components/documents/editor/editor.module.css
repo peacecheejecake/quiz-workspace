@@ -129,6 +129,23 @@
   font: inherit;
   font-size: var(--font-size-body);
   cursor: pointer;
+  transition:
+    background-color var(--qz-transition-fast),
+    color var(--qz-transition-fast);
+}
+
+/* Off segments: hover and pressed backgrounds + primary text; the on segment keeps its surface,
+   bar and weight (design-system.md §4.1). */
+@media (hover: hover) {
+  .viewSwitchButton:not([aria-pressed='true']):hover {
+    background: var(--color-state-hover);
+    color: var(--color-text-primary);
+  }
+}
+
+.viewSwitchButton:not([aria-pressed='true']):active {
+  background: var(--color-state-pressed);
+  color: var(--color-text-primary);
 }
 
 .viewSwitchButton[aria-pressed='true'] {
@@ -241,10 +258,13 @@ button.viewSwitchButton:focus-visible {
   font-size: var(--font-size-body);
   line-height: var(--line-height-snug);
   cursor: pointer;
+  transition: background-color var(--qz-transition-fast);
 }
 
-.treeItem:hover {
-  background: var(--color-surface-muted);
+@media (hover: hover) {
+  .treeItem:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .treeItem:focus-visible {
@@ -555,4 +575,11 @@ button.viewSwitchButton:focus-visible {
   font: inherit;
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* Text button: hover thickens the underline (no fill, so it reads as a link-style action). */
+@media (hover: hover) {
+  .linkButton:hover {
+    text-decoration-thickness: 2px;
+  }
 }
