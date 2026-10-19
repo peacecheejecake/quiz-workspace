@@ -515,6 +515,6 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M3.5 PDF viewer·교정 UI | ✅ | 353277e · f01356a · 57bbf68 | DOC-02 AC01 GREEN(AC02~05는 M3.6a 후 재확인). P2×2 → 반영 → P2(지연 refresh가 새 저장 덮음) → generation counter → 지적 없음 |
 | M4.3 LLM·extractor | ✅ | d104c02 · 9b335a6 · a6cb4a2 | P1(보기 swap)·P2(세로 정답표) → 반영 → P1(원문자 숫자 crash 회귀) → decimal-only + never-raise property test(600 seed) → 지적 없음 |
 | (통합) worktree 제외 설정 | ✅ | 6704d1c | 사소한 설정 수정, 리뷰 생략 |
-| A4 Auth CAPTCHA(Turnstile) | ◐ | 6967985 · a9f80b1 · ed21a68 · 7282f2e · 1847000 · a98109d | 구현 완료·리뷰 대기. 신규 8 AC + HARNESS-16 GREEN(chromium·webkit), auth·harness·a11y·smoke 130/130(log-audit 0), VISUAL-01 baseline 갱신. CAPTCHA를 켠 별도 Supabase 스택(테스트 secret)에서 토큰 없는 signup/password/recover/resend → `captcha_failed`, auth 폼 E2E 19/19 통과, 항상 실패 secret에서는 모두 거부 확인. merge 후: `.env`에 `NEXT_PUBLIC_TURNSTILE_SITE_KEY` 추가(재사용하는 웹 서버 재build) |
+| A4 Auth CAPTCHA(Turnstile) | ✅ | 6967985 · a9f80b1 · ed21a68 · 7282f2e · 1847000 · a98109d | Codex 리뷰 지적 없음(2026-10-18), merge 892a613. staging은 테스트 키 쌍, production은 실제 widget(`quiz.red-10-proto.xyz`)으로 배포(M7.4). 신규 8 AC + HARNESS-16 GREEN(chromium·webkit), auth·harness·a11y·smoke 130/130(log-audit 0), VISUAL-01 baseline 갱신. CAPTCHA를 켠 별도 Supabase 스택(테스트 secret)에서 토큰 없는 signup/password/recover/resend → `captcha_failed`, auth 폼 E2E 19/19 통과, 항상 실패 secret에서는 모두 거부 확인. merge 후: `.env`에 `NEXT_PUBLIC_TURNSTILE_SITE_KEY` 추가(재사용하는 웹 서버 재build) |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.
