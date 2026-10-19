@@ -710,6 +710,17 @@
             ],
             "description": "The newest revision (a draft while a parse or correction is pending)."
           },
+          "processing_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentProcessingJob"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The queued or running parse job; null when there is none."
+          },
           "sha256": {
             "title": "Sha256",
             "type": "string"
@@ -779,6 +790,78 @@
         "title": "DocumentList",
         "type": "object"
       },
+      "DocumentProcessingJob": {
+        "description": "The document's queued or running parse job, so a list shows progress without following\nthe job (UX3-JOB, DOC-01-AC05).",
+        "properties": {
+          "created_at": {
+            "description": "When the job was queued.",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "description": "Poll `GET /jobs/{id}` or stream its events for more.",
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "0-99 while running; null when unknown.",
+            "title": "Progress"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current step while running: `preparing` (loading the parser's models), `downloading`, `parsing`, `structuring`, `loading`, `chunking`, `indexing`, `publishing`; null when not reported yet.",
+            "title": "Stage"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When a worker first started it.",
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "stage",
+          "progress",
+          "created_at",
+          "started_at"
+        ],
+        "title": "DocumentProcessingJob",
+        "type": "object"
+      },
       "DocumentSummary": {
         "properties": {
           "active_revision_id": {
@@ -827,6 +910,17 @@
             ],
             "description": "Why the last processing attempt failed.",
             "title": "Last Error"
+          },
+          "processing_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentProcessingJob"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The queued or running parse job; null when there is none."
           },
           "sha256": {
             "title": "Sha256",
@@ -11793,7 +11887,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/documents": {
       "get": {
-        "description": "The workspace's documents (not soft-deleted), newest first.",
+        "description": "The workspace's documents (not soft-deleted), newest first, each with its queued or\nrunning parse job.",
         "operationId": "listDocuments",
         "parameters": [
           {
