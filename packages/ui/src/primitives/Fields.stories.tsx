@@ -3,6 +3,7 @@ import { Checkbox } from './Checkbox';
 import { Input } from './Input';
 import { RadioGroup } from './RadioGroup';
 import { Select } from './Select';
+import { Switch } from './Switch';
 import { Textarea } from './Textarea';
 
 const stack = { display: 'grid', gap: 'var(--space-5)', maxWidth: 360 } as const;
@@ -67,6 +68,20 @@ export const CheckboxFocus: Story = {
   ...CheckboxStates,
   parameters: { pseudo: { focusVisible: true } },
 };
+
+/** Switch: the fill is the control boundary, the border a lighter rim; thumb + text carry state. */
+export const SwitchStates: Story = {
+  render: () => (
+    <div style={stack} data-testid="switch-states">
+      <Switch label="꺼짐" checked={false} onCheckedChange={() => undefined} />
+      <Switch label="켜짐" checked onCheckedChange={() => undefined} />
+      <Switch label="비활성" checked={false} disabled />
+      <Switch label="비활성 켜짐" checked disabled />
+    </div>
+  ),
+};
+
+export const SwitchStatesDark: Story = { ...SwitchStates, globals: { theme: 'dark' } };
 
 const TYPE_OPTIONS = [
   { value: 'ALL', label: '전체 유형' },
