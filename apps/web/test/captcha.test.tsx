@@ -101,6 +101,8 @@ describe('useCaptcha', () => {
 
     act(() => last().callback?.('token-1'));
     expect(status()).toHaveTextContent('보안 확인 완료');
+    // UX3b: no visible "verified" text; the status line is only announced.
+    expect(status()).toHaveClass('qz-visually-hidden');
     expect(button()).not.toHaveAttribute('aria-disabled');
     await userEvent.click(button());
     expect(submitted).toHaveBeenCalledWith('token-1');
