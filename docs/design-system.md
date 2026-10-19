@@ -283,7 +283,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 
   hover는 `@media (hover: hover)` 안에서만 적용해 터치 후 hover가 남지 않게 하고, 비활성(`:disabled`)에는 적용하지 않는다. pressed는 모든 입력에 적용한다. focus 중인 테두리 컨트롤은 hover 중에도 focus 경계 하나를 유지한다(아래 "Focus 경계는 하나"). 기능 코드는 kit `Button`/`IconButton`을 쓰고, 부득이한 버튼형 클래스도 위 토큰만 쓴다.
 - **전환:** 상태 전환은 `--duration-state`/`--easing-standard`(kit 변수 `--qz-transition-fast`), `prefers-reduced-motion: reduce`에서는 즉시(`@quiz/design-tokens/base.css`).
-- **메뉴·선택 항목 설명은 Tooltip:** 선택지 옆 설명 문구는 항상 보이는 텍스트 대신 공통 `Tooltip`(hover·키보드 focus)으로 보여 주고, 같은 문구를 숨김 텍스트로 `aria-describedby`에 연결한다. hover가 없는 기기(`(hover: none)`)에서는 설명을 인라인 텍스트로 계속 표시한다. 오답·정답 표시, 비활성 사유처럼 필수 정보는 tooltip으로 옮기지 않는다.
+- **메뉴·선택 항목 설명은 Tooltip:** 선택지 옆 설명 문구는 항상 보이는 텍스트 대신 공통 `Tooltip`(hover·키보드 focus)으로 보여 주고(hover 지연: 일반 tooltip `TOOLTIP_DELAY_MS` 300ms, 선택지 설명 `TOOLTIP_DESCRIPTION_DELAY_MS` 700ms — 포인터가 선택지 목록을 지나갈 때 설명이 연달아 뜨지 않게 함. 키보드 focus는 지연 없이 즉시, v1.2.2), 같은 문구를 숨김 텍스트로 `aria-describedby`에 연결한다. hover가 없는 기기(`(hover: none)`)에서는 설명을 인라인 텍스트로 계속 표시한다. 오답·정답 표시, 비활성 사유처럼 필수 정보는 tooltip으로 옮기지 않는다.
 
 ## 5. Floating Side Panel
 
