@@ -8,14 +8,23 @@
 //              badge "소유자"/"Owner"), per-item "더보기" menu: 공유 · 보관 · 삭제; delete asks for
 //              confirmation in an alertdialog. Unknown/deleted/foreign workspace routes render the
 //              app's not-found page with HTTP 404.
-//   DOC-01     "PDF 업로드" button opening a file chooser (empty-state CTA when there are no
-//              documents, otherwise in the header); one list item/row per document with an
-//              upload progressbar, processing status, "준비 완료"/"Ready"; "취소"/"다시 시도".
+//   Home       (UX3c) `/workspaces/:id`: hidden h1 (workspace name), header with the unified
+//              search (searchbox "검색어", icon button "검색", text button "검색 옵션" →
+//              popover with checkboxes "문제"/"내용" and the options), buttons "문서 n",
+//              "문제은행" (link), "이력" (icon), "공유하기" (owner); dialogs are non-modal
+//              FloatingSidePanels inside <main> named "문서 관리", "문제 PDF 관리", "문제 생성",
+//              "이력", "링크 공유" (`?panel=documents|question-pdfs|generate|history|share`).
+//   DOC-01     "문서 관리" dialog: dashed Dropzone whose "PDF 업로드" button opens a file
+//              chooser (the only upload button); one list item per book document with an
+//              upload progressbar, processing status, "준비 완료"/"Ready"; "취소"/"다시 시도";
+//              trash icon button "<title> 삭제".
 //   DOC-02     outline tree "목차" (treeitems), PDF viewer region with a "현재 페이지" field and a
 //              labelled source highlight, text editor region "원문" whose current block carries
 //              aria-current="true"; block "편집"/"저장", revision status "초안"/"발행됨", "발행".
-//   SEARCH-01  searchbox "검색", radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes "문서"/"장",
-//              list "검색 결과" whose items quote the source text in a <blockquote>; excerpt in a non-modal FloatingSidePanel (role=dialog without
+//   SEARCH-01  the home's unified search: searchbox "검색어"; in the "검색 옵션" popover (portalled
+//              to <body>) radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes "문서"/"장";
+//              region "원문 검색 결과" with list "검색 결과" whose items quote the source text in a
+//              <blockquote>; excerpt in a non-modal FloatingSidePanel (role=dialog without
 //              aria-modal) with "PDF에서 보기".
 import { expect, type Locator, type Page } from '@playwright/test';
 import { PROTECTED_LANDING, submitLogin } from './auth-ui.ts';
@@ -34,6 +43,67 @@ export const notFoundHeading = (page: Page): Locator =>
 
 /** The app's main landmark (AppShell owns it on protected routes). */
 export const main = (page: Page): Locator => page.getByRole('main');
+
+/** The workspace home (UX3c), optionally with a query (`panel=…`, `q=…`). */
+export function homePath(workspaceId: string, query = ''): string {
+  return `/workspaces/${workspaceId}${query ? `?${query}` : ''}`;
+}
+
+/** The home with the "문서 관리" dialog open (`/documents` redirects here). */
+export function documentsPath(workspaceId: string): string {
+  return homePath(workspaceId, 'panel=documents');
+}
+
+/** The home with the unified search limited to 원문 (`/search` redirects here). */
+export function searchPath(workspaceId: string): string {
+  return homePath(workspaceId, 'scope=content');
+}
+
+export const homeUi = {
+  header: (page: Page) => main(page).getByRole('search', { name: /통합 검색|search/i }),
+  documentsButton: (page: Page) =>
+    main(page).getByRole('button', { name: /^(문서|documents)\s*\d+$/i }),
+  bankLink: (page: Page) => main(page).getByRole('link', { name: /^(문제은행|question bank)$/i }),
+  historyButton: (page: Page) => main(page).getByRole('button', { name: /^(이력|history)$/i }),
+  shareButton: (page: Page) => main(page).getByRole('button', { name: /^(공유하기|share)$/i }),
+  questionPdfsButton: (page: Page) =>
+    main(page).getByRole('button', { name: /^(문제 pdf 관리|question pdfs?)$/i }),
+  generateButton: (page: Page) =>
+    main(page).getByRole('button', { name: /^(문제 생성|generate questions?)$/i }),
+  dialog: (page: Page, name: RegExp) => main(page).getByRole('dialog', { name }),
+  documentsDialog: (page: Page) => homeUi.dialog(page, /^(문서 관리|documents)$/i),
+  questionPdfsDialog: (page: Page) => homeUi.dialog(page, /^(문제 pdf 관리|question pdfs?)$/i),
+  generateDialog: (page: Page) => homeUi.dialog(page, /^(문제 생성|generate questions?)$/i),
+  shareDialog: (page: Page) => homeUi.dialog(page, /^(링크 공유|share link)$/i),
+  searchOptionsButton: (page: Page) =>
+    main(page).getByRole('button', { name: /^(검색 옵션|search options)$/i }),
+  searchOptions: (page: Page) =>
+    page.getByRole('dialog', { name: /^(검색 옵션|search options)$/i }),
+  scopeQuestions: (page: Page) =>
+    homeUi.searchOptions(page).getByRole('checkbox', { name: /^(문제|questions)$/i }),
+  scopeContent: (page: Page) =>
+    homeUi.searchOptions(page).getByRole('checkbox', { name: /^(내용|content)$/i }),
+  statusFilterToggle: (page: Page) =>
+    main(page).getByRole('button', { name: /^(상태 필터|status filter)$/i }),
+  statusFilters: (page: Page) =>
+    main(page).getByRole('group', { name: /^(상태 필터|status filter)$/i }),
+};
+
+/** Opens the "검색 옵션" popover (no-op when it is open). */
+export async function openSearchOptions(page: Page): Promise<Locator> {
+  const button = homeUi.searchOptionsButton(page);
+  if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click();
+  const popover = homeUi.searchOptions(page);
+  await expect(popover).toBeVisible();
+  return popover;
+}
+
+/** Closes the "검색 옵션" popover when it is open. */
+export async function closeSearchOptions(page: Page): Promise<void> {
+  if ((await homeUi.searchOptionsButton(page).getAttribute('aria-expanded')) !== 'true') return;
+  await page.keyboard.press('Escape');
+  await expect(homeUi.searchOptions(page)).toBeHidden();
+}
 
 export const wsUi = {
   createButton: (page: Page): Locator => wsUi.createButtons(page).first(),
@@ -80,9 +150,8 @@ export const docUi = {
   uploadButton: (page: Page): Locator => docUi.uploadButtons(page).first(),
   uploadButtons: (page: Page) =>
     main(page).getByRole('button', { name: /pdf 업로드|업로드|upload( pdf)?/i }),
-  emptyState: (page: Page) =>
-    main(page).getByRole('heading', { name: /문서가 없|pdf가 없|no documents/i }),
-  /** A document row/list item, matched by its displayed title or file name. */
+  emptyState: (page: Page) => main(page).getByRole('heading', { name: /문서가 없|no documents/i }),
+  /** A document row/list item, matched by its displayed title. */
   item: (page: Page, title: RegExp) =>
     main(page).getByRole('listitem').or(main(page).getByRole('row')).filter({ hasText: title }),
   uploadProgress: (scope: Locator) => scope.getByRole('progressbar', { name: /업로드|upload/i }),
@@ -130,8 +199,10 @@ export const INDEX_FAILED = /색인.*실패|indexing failed|reindex(ing)? failed
 
 export const searchUi = {
   box: (page: Page) => main(page).getByRole('searchbox', { name: /검색|search/i }),
+  submit: (page: Page) => main(page).getByRole('button', { name: /^(검색|search)$/i }),
+  /** Inside the "검색 옵션" popover (open it first: openSearchOptions). */
   modeGroup: (page: Page) =>
-    main(page).getByRole('radiogroup', { name: /검색 (방식|모드)|search mode/i }),
+    page.getByRole('radiogroup', { name: /검색 (방식|모드)|search mode/i }),
   mode: (page: Page, mode: 'keyword' | 'semantic' | 'hybrid') =>
     searchUi.modeGroup(page).getByRole('radio', {
       name: {
@@ -140,8 +211,13 @@ export const searchUi = {
         hybrid: /하이브리드|hybrid/i,
       }[mode],
     }),
-  documentFilter: (page: Page) => main(page).getByRole('combobox', { name: /^(문서|document)/i }),
-  chapterFilter: (page: Page) => main(page).getByRole('combobox', { name: /^(장|챕터|chapter)/i }),
+  documentFilter: (page: Page) => page.getByRole('combobox', { name: /^(문서|document)$/i }),
+  /** The document-section filter (the heatmap's question filter is "챕터"). */
+  chapterFilter: (page: Page) => page.getByRole('combobox', { name: /^(장|section)$/i }),
+  resultsRegion: (page: Page) =>
+    main(page).getByRole('region', { name: /원문 검색 결과|content results/i }),
+  closeResults: (page: Page) =>
+    main(page).getByRole('button', { name: /검색 결과 닫기|close results/i }),
   results: (page: Page) => main(page).getByRole('list', { name: /검색 결과|search results/i }),
   resultItems: (page: Page) => searchUi.results(page).getByRole('listitem'),
   /** The quoted source text of each result (the part whose language is the book's). */
@@ -164,13 +240,15 @@ export function pageLabel(n: number): RegExp {
   );
 }
 
-/** Runs a search through the UI: mode first, then query + Enter. */
+/** Runs a search through the UI: mode first (search options), then query + Enter. */
 export async function runSearch(
   page: Page,
   query: string,
   mode: 'keyword' | 'semantic' | 'hybrid',
 ): Promise<void> {
+  await openSearchOptions(page);
   await searchUi.mode(page, mode).check();
+  await closeSearchOptions(page);
   await searchUi.box(page).fill(query);
   await searchUi.box(page).press('Enter');
 }

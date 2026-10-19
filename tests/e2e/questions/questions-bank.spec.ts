@@ -19,8 +19,10 @@ import {
   expect,
   fillMcq,
   getQuestion,
+  homeUi,
   JOB_TIMEOUT_MS,
   listQuestions,
+  main,
   mcqInput,
   notFoundHeading,
   outlineNodeId,
@@ -352,5 +354,61 @@ test(
     await expect(bankUi.readOnlyNotice(page)).toBeVisible();
     await expect(bankUi.createButton(page)).toHaveCount(0);
     await expect(bankUi.editButton(bankUi.item(page, text))).toHaveCount(0);
+  },
+);
+
+test(
+  'QBANK-01-AC05 sub-pages reached by a button show a back link and a breadcrumb to the workspace home',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(JOB_TIMEOUT_MS + 60_000);
+    const owner = await workspaceFactory.member('qbank01-ac05');
+    const ws = await workspaceFactory.create(owner);
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    const home = `/workspaces/${ws.id}`;
+    const trail = (current: RegExp) => ({
+      nav: page.getByRole('navigation', { name: /^(위치|breadcrumb)$/i }),
+      current,
+    });
+    async function expectSubPageNav(current: RegExp, middle?: RegExp): Promise<void> {
+      const { nav } = trail(current);
+      await expect(nav).toBeVisible();
+      await expect(nav.getByRole('link', { name: ws.name, exact: true })).toHaveAttribute(
+        'href',
+        home,
+      );
+      if (middle) await expect(nav.getByRole('link', { name: middle })).toBeVisible();
+      await expect(nav.locator('[aria-current="page"]')).toHaveText(current);
+      await expect(main(page).getByRole('link', { name: /workspace 홈|back/i })).toHaveAttribute(
+        'href',
+        home,
+      );
+    }
+
+    await signInAs(page, owner.user);
+    await page.goto(home);
+    await homeUi.bankLink(page).click();
+    await expect(page).toHaveURL((url) => url.pathname === bankPath(ws.id));
+    await expect(bankUi.heading(page)).toHaveText(/문제은행|question bank/i);
+    await expectSubPageNav(/^(문제은행|question bank)$/i);
+    // The breadcrumb's workspace link and the back link both return home.
+    await trail(/./).nav.getByRole('link', { name: ws.name, exact: true }).click();
+    await expect(page).toHaveURL((url) => url.pathname === home);
+    await expect(homeUi.header(page)).toBeVisible();
+    await homeUi.bankLink(page).click();
+    await expect(page).toHaveURL((url) => url.pathname === bankPath(ws.id));
+    await main(page)
+      .getByRole('link', { name: /workspace 홈|back/i })
+      .click();
+    await expect(page).toHaveURL((url) => url.pathname === home);
+    await expect(homeUi.header(page)).toBeVisible();
+
+    // The other sub-pages carry the same navigation.
+    await page.goto(`${home}/questions/import`);
+    await expectSubPageNav(/^(문제 pdf 가져오기|import)/i);
+    await page.goto(`${home}/questions/generate`);
+    await expectSubPageNav(/^(문제 변형 출제|generate)/i);
+    await page.goto(`${home}/documents/${documentId}`);
+    await expectSubPageNav(/물의 순환과 정수 처리|book-ko/i, /^(문서 관리|documents)$/i);
   },
 );

@@ -20,6 +20,8 @@ import {
   generationSourceInput,
   getGeneratedQuestion,
   getOverview,
+  homePath,
+  homeUi,
   JOB_TIMEOUT_MS,
   listAttempts,
   listGenerationDrafts,
@@ -213,5 +215,61 @@ test(
     expect((await getGeneratedQuestion(s.owner, s.source.id)).revision.id).toBe(
       s.source.revision.id,
     );
+  },
+);
+
+test(
+  'QGEN-01-AC05 문제 생성 opens a dialog to pick the source and submit the form, then the review page follows the run',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedSource(workspaceFactory, 'qgen01-ac05', 'disinfection');
+    const candidate = scenarioCandidate('E2E-LLM-OK', GENERATE_TASK.PARAPHRASE);
+
+    await signInAs(page, s.owner.user);
+    await page.goto(homePath(s.workspaceId));
+    await homeUi.generateButton(page).click();
+    await expect(page).toHaveURL(/[?&]panel=generate(&|$)/);
+    const dialog = homeUi.generateDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(dialog).not.toHaveAttribute('aria-modal', 'true');
+    const sources = dialog.getByRole('list', { name: /원본으로 쓸 문제|source question/i });
+    await sources.getByRole('button').filter({ hasText: s.source.revision.stem }).click();
+    await expect(dialog.getByRole('region', { name: /원본 문제|source/i })).toContainText(
+      s.source.revision.stem,
+    );
+    await generateUi.variation(page, 'PARAPHRASE').check();
+    await dialog.getByRole('button', { name: /^(생성|generate)$/i }).click();
+
+    // The review page takes over the run (source + run in the URL).
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === generatePath(s.workspaceId) &&
+        url.searchParams.get('source') === s.source.id &&
+        !!url.searchParams.get('run'),
+    );
+    await expect(generateUi.heading(page)).toHaveText(/문제 변형 출제|변형 출제|generate/i);
+    await expect(generateUi.draftItems(page)).toHaveCount(1, { timeout: JOB_TIMEOUT_MS });
+    await expect(generateUi.draftItems(page).first()).toContainText(candidate.stem.slice(0, 20));
+    expect(await listGenerations(s.owner, s.workspaceId)).toHaveLength(1);
+
+    // 보기 섞기 from the dialog starts no run: the original opens for practice on the home.
+    await page.goto(homePath(s.workspaceId, 'panel=generate'));
+    await homeUi
+      .generateDialog(page)
+      .getByRole('list', { name: /원본으로 쓸 문제|source question/i })
+      .getByRole('button')
+      .filter({ hasText: s.source.revision.stem })
+      .click();
+    await generateUi.variation(page, 'OPTION_SHUFFLE').check();
+    await homeUi
+      .generateDialog(page)
+      .getByRole('button', { name: /^(생성|generate)$/i })
+      .click();
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get('question') === s.source.id && !url.searchParams.has('panel'),
+    );
+    await expect(panelUi.panel(page)).toBeVisible();
+    await expect(homeUi.generateDialog(page)).toHaveCount(0);
+    expect(await listGenerations(s.owner, s.workspaceId)).toHaveLength(1);
   },
 );

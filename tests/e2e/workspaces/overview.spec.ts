@@ -189,8 +189,13 @@ test(
     await signInAs(page, owner.user);
     await page.goto('/workspaces');
     await chooseWorkspaceAction(page, wsUi.item(wsUi.tabPanel(page), ws.name), SHARE_ACTION);
-    await expect(page).toHaveURL((url) => url.pathname === `/workspaces/${ws.id}/settings/sharing`);
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/공유|sharing/i);
+    // UX3c: the workspace home with its "링크 공유" dialog.
+    await expect(page).toHaveURL(
+      (url) => url.pathname === `/workspaces/${ws.id}` && url.searchParams.get('panel') === 'share',
+    );
+    await expect(
+      page.getByRole('main').getByRole('dialog', { name: /^(링크 공유|share link)$/i }),
+    ).toBeVisible();
 
     // docs/workspace-sharing.md §5: owner-only share-link API.
     const own = await owner.api.request('GET', `/workspaces/${ws.id}/share-links`);

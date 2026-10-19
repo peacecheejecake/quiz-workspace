@@ -10,10 +10,12 @@ import {
   book,
   block,
   createNumberedQuestions,
+  documentsPath,
   expect,
   JOB_TIMEOUT_MS,
   overviewPath,
   overviewUi,
+  searchPath,
   searchUi,
   runSearch,
   signInAs,
@@ -127,11 +129,11 @@ test(
     await visit('question bank', bankPath(ws.id), () =>
       expect(page.getByRole('main').getByRole('listitem').first()).toBeVisible(),
     );
-    await visit('documents', `/workspaces/${ws.id}/documents`, async () => undefined);
+    await visit('documents', documentsPath(ws.id), async () => undefined);
     await visit('document editor', `/workspaces/${ws.id}/documents/${documentId}`, () =>
       expect(page.getByRole('tree').first()).toBeVisible(),
     );
-    await visit('search', `/workspaces/${ws.id}/search`, async () => {
+    await visit('search', searchPath(ws.id), async () => {
       await runSearch(page, snippet(block(book('book-ko'), 'ch1-s2-p1').text, 10), 'keyword');
       await expect(searchUi.resultItems(page).first()).toBeVisible();
     });

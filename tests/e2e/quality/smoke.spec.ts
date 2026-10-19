@@ -1,10 +1,9 @@
 // M7.2 WebKit + mobile smoke (docs/e2e-strategy.md §3: WebKit/iPad main flows + Mobile Chrome
 // smoke): the key flows on `smoke-ipad-webkit`, `smoke-iphone-webkit` and `smoke-mobile-chrome`
-// with touch input — sign-in, mobile navigation, workspace creation, PDF upload to READY, search
-// with the excerpt panel, heatmap tap → practice panel → graded answer, and the guest shared view.
+// with touch input — sign-in, workspace creation, opening it from the list, PDF upload to READY in
+// the 문서 관리 dialog, the header's unified search with the excerpt panel, heatmap tap → practice panel → graded answer, and the guest shared view.
 // Every state also gets a light-theme axe scan at the device's viewport (fixtures/a11y.ts).
 // Desktop WebKit runs every AC spec already (authenticated-webkit / unauthenticated-webkit).
-import type { Page } from '@playwright/test';
 import { expectAccessible } from '../fixtures/a11y.ts';
 import {
   authUi,
@@ -12,6 +11,7 @@ import {
   book,
   createNumberedQuestions,
   docUi,
+  homeUi,
   JOB_TIMEOUT_MS,
   overviewPath,
   overviewUi,
@@ -41,21 +41,6 @@ test.describe.configure({ timeout: JOB_TIMEOUT_MS + 90_000 });
 const LIGHT = { schemes: ['light'] } as const;
 const BOOK = book('book-ko');
 
-/** Narrow layouts put the sidebar in a drawer; wide ones (iPad landscape+) show it inline. */
-async function navigate(page: Page, name: RegExp): Promise<void> {
-  const open = page.getByRole('button', { name: /메뉴 열기|open menu/i });
-  if (await open.isVisible()) {
-    await open.tap();
-    const drawer = page.getByRole('dialog', { name: /메뉴|menu/i });
-    await expect(drawer).toBeVisible();
-    await expectAccessible(page, 'navigation drawer', LIGHT);
-    await drawer.getByRole('link', { name }).tap();
-    await expect(drawer).toHaveCount(0);
-  } else {
-    await page.getByRole('navigation').getByRole('link', { name }).first().tap();
-  }
-}
-
 test(
   'SMOKE-01 sign in, create a workspace, upload a PDF to READY and search it',
   { tag: '@infra' },
@@ -75,15 +60,27 @@ test(
     const workspaceId = created?.id ?? '';
     expect(created?.name).toBe('모바일 스모크');
 
-    await page.goto(`/workspaces/${workspaceId}/documents`);
+    // The workspace opens from the list on its home (no workspace sidebar since UX3c).
+    await wsUi
+      .item(wsUi.tabPanel(page), '모바일 스모크')
+      .getByRole('link', { name: '모바일 스모크' })
+      .tap();
+    await expect(page).toHaveURL((url) => url.pathname === `/workspaces/${workspaceId}`);
+    await expect(homeUi.header(page)).toBeVisible();
+    await expectAccessible(page, 'workspace home', LIGHT);
+
+    await homeUi.documentsButton(page).tap();
+    const documents = homeUi.documentsDialog(page);
+    await expect(documents).toBeVisible();
     const chooser = page.waitForEvent('filechooser');
     await docUi.uploadButton(page).tap();
     await (await chooser).setFiles(`${PDF_DIR}/${BOOK.file}`);
     const row = docUi.item(page, /book-ko|물의 순환과 정수 처리/);
     await expect(docUi.ready(row)).toBeVisible({ timeout: JOB_TIMEOUT_MS });
     await expectAccessible(page, 'documents ready', LIGHT);
+    await documents.getByRole('button', { name: /문서 관리 닫기|close/i }).tap();
+    await expect(documents).toHaveCount(0);
 
-    await navigate(page, /^(검색|search)$/i);
     await expect(searchUi.box(page)).toBeVisible();
     const target = block(BOOK, 'ch1-s2-p1');
     await runSearch(page, snippet(target.text, 10), 'keyword');

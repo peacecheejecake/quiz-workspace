@@ -12,7 +12,7 @@
 // extractor via the IMPORT_FAILURE_MARKER file name (A7); a network failure drops a response the
 // server already produced.
 import { mkdirSync } from 'node:fs';
-import type { Page, Route } from '@playwright/test';
+import type { Locator, Page, Route } from '@playwright/test';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 import {
   bankPath,
@@ -20,6 +20,8 @@ import {
   draftFor,
   expect,
   failingOnceCopy,
+  homePath,
+  homeUi,
   importPath,
   importUi,
   JOB_TIMEOUT_MS,
@@ -27,13 +29,17 @@ import {
   listDrafts,
   listImports,
   listQuestions,
+  main,
   pageLabel,
   questionFormUi,
   questionPaper,
   signInAs,
   test,
   truthQuestion,
+  uploadPdf,
   uploadQuestionPaper,
+  uploadReadyBook,
+  waitForJob,
   waitForLatestImport,
   type Draft,
   type TruthQuestion,
@@ -336,5 +342,50 @@ test(
     expect((await listImports(owner, workspaceId)).map((r) => r.id)).toEqual([run.id]);
     await page.goto(bankPath(workspaceId));
     await expect(bankUi.items(page)).toHaveCount(approved.length);
+  },
+);
+
+test(
+  'QIMPORT-01-AC05 문제 PDF 관리 lists question PDFs apart from books, links PDF 가져오기 and hands a dropped PDF to the import',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('qimport01-ac05');
+    const ws = await workspaceFactory.create(owner);
+    await uploadReadyBook(owner, ws.id, 'book-ko');
+    const uploaded = await uploadPdf(owner, ws.id, PAPER, 'question_paper');
+    await waitForJob(owner, uploaded.jobId);
+    const empty = await workspaceFactory.create(owner);
+
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id));
+    // The home has no other "PDF 가져오기" (the button sits in the dialog now).
+    const importButton = (scope: Locator) =>
+      scope.getByRole('link', { name: /^pdf 가져오기$|^import pdf$/i });
+    await expect(importButton(main(page))).toHaveCount(0);
+    await homeUi.questionPdfsButton(page).click();
+    await expect(page).toHaveURL(/[?&]panel=question-pdfs(&|$)/);
+    const dialog = homeUi.questionPdfsDialog(page);
+    await expect(dialog).toBeVisible();
+    const list = dialog.getByRole('list', { name: /문제 pdf 목록|question pdfs/i });
+    await expect(list.getByRole('listitem')).toHaveCount(1);
+    await expect(list).toContainText(PAPER.file.replace(/\.pdf$/, ''));
+    await expect(list).not.toContainText(/book-ko|물의 순환과 정수 처리/);
+    await expect(list.getByText(/^(책|문제지)$/)).toHaveCount(0);
+    await expect(dialog.getByText(/문제 pdf를 여기에 끌어다 놓으세요|drop/i)).toBeVisible();
+    await importButton(dialog).click();
+    await expect(page).toHaveURL((url) => url.pathname === importPath(ws.id));
+
+    // No question PDF yet: the empty text; a PDF picked in the Dropzone starts the import page.
+    await page.goto(homePath(empty.id, 'panel=question-pdfs'));
+    const emptyDialog = homeUi.questionPdfsDialog(page);
+    await expect(emptyDialog.getByText('등록된 문제 pdf가 없습니다.')).toBeVisible();
+    const chooser = page.waitForEvent('filechooser');
+    await emptyDialog.getByRole('button', { name: /pdf 선택|choose/i }).click();
+    await (await chooser).setFiles(PAPER.path);
+    await expect(page).toHaveURL((url) => url.pathname === importPath(empty.id));
+    await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length, {
+      timeout: JOB_TIMEOUT_MS,
+    });
+    expect((await listImports(owner, empty.id)).length).toBe(1);
   },
 );
