@@ -1,5 +1,5 @@
-// HISTORY-01 — 작업·변경·풀이 이력 (`/workspaces/:workspaceId/history`),
-// docs/screens/history-jobs.md; history data model docs/architecture.md §5 (`activity_events`,
+// HISTORY-01 — 작업·변경·풀이 이력, since UX3c the workspace home's "이력" dialog
+// (`/workspaces/:workspaceId?panel=history`, one chronological list), docs/screens/history-jobs.md; history data model docs/architecture.md §5 (`activity_events`,
 // `async_jobs`, `question_attempts`), personal study history private to its user
 // (questions.md §2, workspace-sharing.md, implementation-plan §7).
 //
@@ -88,24 +88,20 @@ test(
 
     await signInAs(page, owner.user);
     await page.goto(historyPath(ws.id));
-    await expect(historyUi.heading(page)).toHaveText(/이력|history/i);
-    await historyUi.open(page, /변경 이력|활동|activity|changes/i);
-    const activities = historyUi.activities(page);
-    await expect(activities).toBeVisible();
+    await expect(historyUi.dialog(page)).toBeVisible();
+    await expect(historyUi.list(page)).toBeVisible();
+    const activities = historyUi.ofKind(page, 'activity');
 
-    const correction = historyUi
-      .items(activities)
-      .filter({ hasText: title })
-      .filter({ hasText: /교정|correct/i });
+    const correction = activities.filter({ hasText: title }).filter({ hasText: /교정|correct/i });
     await expect(correction).toHaveCount(1);
     await expect(correction).toContainText(historyUi.me);
     await expect(correction).toContainText(historyUi.revision(corrected.revisionNumber));
     await expectTimeBetween(correction, started);
 
-    const edit = historyUi
-      .items(activities)
+    const edit = activities
       .filter({ hasText: /(?<!\d)1번 문제|question 1(?!\d)/i })
-      .filter({ hasText: /수정|변경|updated|edited/i });
+      // Not "변경": every activity row carries that kind badge.
+      .filter({ hasText: /수정|updated|edited/i });
     await expect(edit).toHaveCount(1);
     await expect(edit).toContainText(historyUi.me);
     await expect(edit).toContainText(historyUi.revision(2));
@@ -152,12 +148,9 @@ test(
 
     await signInAs(page, owner.user);
     await page.goto(historyPath(ws.id));
-    await expect(historyUi.heading(page)).toHaveText(/이력|history/i);
-    await historyUi.open(page, /작업|jobs?/i);
-    const jobs = historyUi.jobs(page);
-    await expect(jobs).toBeVisible();
+    await expect(historyUi.list(page)).toBeVisible();
 
-    const entry = historyUi.items(jobs).filter({ hasText: historyUi.indexFailed });
+    const entry = historyUi.ofKind(page, 'job').filter({ hasText: historyUi.indexFailed });
     await expect(entry).toHaveCount(1);
     await expect(entry).toContainText(historyUi.retryable);
     const retry = historyUi.retry(entry);
@@ -211,13 +204,11 @@ test(
 
     await signInAs(page, viewer.user);
     await page.goto(historyPath(ws.id));
-    await expect(historyUi.heading(page)).toHaveText(/이력|history/i);
-    await historyUi.open(page, /풀이 이력|내 풀이|attempts|practice history/i);
-    const attempts = historyUi.attempts(page);
-    await expect(attempts).toBeVisible();
-    await expect(historyUi.items(attempts)).toHaveCount(1);
-    await expect(historyUi.items(attempts).first()).toContainText(RESULT_TEXT.correct);
-    await expect(attempts).not.toContainText(RESULT_TEXT.incorrect);
+    await expect(historyUi.list(page)).toBeVisible();
+    const attempts = historyUi.ofKind(page, 'attempt');
+    await expect(attempts).toHaveCount(1);
+    await expect(attempts.first()).toContainText(RESULT_TEXT.correct);
+    await expect(attempts.first()).not.toContainText(RESULT_TEXT.incorrect);
 
     // Each account reads only its own attempts; another user's id is never honoured (H3).
     expect((await listWorkspaceAttempts(viewer, ws.id)).map((a) => a.id)).toEqual([
@@ -240,5 +231,52 @@ test(
     const denied = await outsider.api.request('GET', `/workspaces/${ws.id}/attempts`);
     expect(denied.status).toBe(404);
     expect((denied.body as Problem | undefined)?.detail, 'an authorization 404').toBeTruthy();
+  },
+);
+
+test(
+  'HISTORY-01-AC04 the 이력 button opens one chronological list with a kind badge per entry',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('history01-ac04');
+    const ws = await workspaceFactory.create(owner);
+    const question = await createQuestion(owner, ws.id, numberedMcq('history01-ac04', 1, 0));
+    await answerCorrectly(owner, question);
+    await owner.api.ok(
+      'PATCH',
+      `/questions/${question.id}`,
+      { base_revision_id: question.revision.id, stem: 'history01-ac04 수정된 문제' },
+      [200],
+    );
+
+    await signInAs(page, owner.user);
+    await page.goto(`/workspaces/${ws.id}`);
+    // The icon button sits left of 공유하기 in the workspace header.
+    const button = historyUi.button(page);
+    const share = page.getByRole('button', { name: /^(공유하기|share)$/i });
+    await expect(button).toBeVisible();
+    const [b, s] = await Promise.all([button.boundingBox(), share.boundingBox()]);
+    expect((b?.x ?? 0) < (s?.x ?? 0), 'history button left of 공유하기').toBe(true);
+    await button.click();
+
+    await expect(page).toHaveURL(/[?&]panel=history(&|$)/);
+    const dialog = historyUi.dialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(dialog).not.toHaveAttribute('aria-modal', 'true');
+    await expect(historyUi.list(page)).toBeVisible();
+    await expect(historyUi.ofKind(page, 'attempt')).toHaveCount(1);
+    await expect(historyUi.ofKind(page, 'activity').first()).toBeVisible();
+
+    // Newest first across the three kinds.
+    const times = await historyUi
+      .list(page)
+      .locator(':scope > li time[datetime]')
+      .evaluateAll((els) => els.map((el) => Date.parse(el.getAttribute('datetime') ?? '')));
+    expect(times.length).toBeGreaterThan(1);
+    expect([...times].sort((x, y) => y - x)).toEqual(times);
+
+    await dialog.getByRole('button', { name: /이력 닫기|close/i }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page).not.toHaveURL(/panel=history/);
   },
 );

@@ -14,6 +14,7 @@ import { segmentHighlights } from '../src/lib/search/highlight';
 import { jumpProbe, pickJumpBlock, resolveJumpTarget } from '../src/lib/search/jump';
 import {
   degradedMessages,
+  mergeContentSearch,
   parseSearchParams,
   pdfLinkFor,
   rateLimitMessage,
@@ -165,7 +166,7 @@ describe('search address-bar state', () => {
 
   it('drops invalid values and a chapter without its document', () => {
     expect(
-      parseSearchParams({ q: '  water ', mode: 'fuzzy', document: 'nope', chapter: CHAPTER }),
+      parseSearchParams({ q: '  water ', mode: 'fuzzy', document: 'nope', section: CHAPTER }),
     ).toEqual({
       query: 'water',
       mode: 'hybrid',
@@ -175,6 +176,29 @@ describe('search address-bar state', () => {
     });
     expect(parseSearchParams({ q: 'x'.repeat(5000) }).query).toHaveLength(1000);
     expect(searchParamsFor(parseSearchParams({}))).toBe('');
+  });
+
+  it('merges a content search into the home URL and keeps the other keys', () => {
+    const merged = mergeContentSearch(
+      `?panel=history&chapter=none&status=retry&q=old&mode=keyword&section=${CHAPTER}`,
+      {
+        query: '염소',
+        mode: 'hybrid',
+        documentId: DOC,
+        chapterId: null,
+        includeQuestionPapers: true,
+      },
+    );
+    const params = new URLSearchParams(merged);
+    expect(params.get('panel')).toBe('history');
+    expect(params.get('chapter')).toBe('none');
+    expect(params.get('status')).toBe('retry');
+    expect(params.get('q')).toBe('염소');
+    expect(params.has('mode')).toBe(false);
+    expect(params.get('document')).toBe(DOC);
+    expect(params.has('section')).toBe(false);
+    expect(params.get('papers')).toBe('1');
+    expect(mergeContentSearch('?q=x', { ...parseSearchParams({}) })).toBe('');
   });
 
   it('builds the DOC-02 deep link with page, block and the hit revision', () => {

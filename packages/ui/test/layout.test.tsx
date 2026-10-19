@@ -194,6 +194,67 @@ describe('layering', () => {
       expect(step('A 패널')).toBeGreaterThan(step('B 패널'));
     });
 
+    it('a new raiseKey brings an open panel back to the top (UX3c)', async () => {
+      const user = userEvent.setup();
+      function Raised() {
+        const [raise, setRaise] = useState(0);
+        return (
+          <>
+            <Button onClick={() => setRaise((n) => n + 1)}>A 올리기</Button>
+            <FloatingSidePanel open modal={false} title="A 패널" raiseKey={raise}>
+              A
+            </FloatingSidePanel>
+            <FloatingSidePanel open modal={false} title="B 패널">
+              B
+            </FloatingSidePanel>
+          </>
+        );
+      }
+      render(<Raised />);
+      await screen.findByRole('dialog', { name: 'B 패널' });
+      expect(step('B 패널')).toBeGreaterThan(step('A 패널'));
+      await user.click(screen.getByRole('button', { name: 'A 올리기' }));
+      await waitFor(() => expect(step('A 패널')).toBeGreaterThan(step('B 패널')));
+    });
+
+    it('Escape closes the raised panel holding focus, not the later-mounted one (UX3c)', async () => {
+      const user = userEvent.setup();
+      function Raised() {
+        const [a, setA] = useState(true);
+        const [b, setB] = useState(true);
+        const [raise, setRaise] = useState(0);
+        return (
+          <>
+            <Button onClick={() => setRaise((n) => n + 1)}>A 올리기</Button>
+            <FloatingSidePanel
+              open={a}
+              onOpenChange={setA}
+              modal={false}
+              title="A 패널"
+              raiseKey={raise}
+            >
+              <Button>A 안</Button>
+            </FloatingSidePanel>
+            <FloatingSidePanel open={b} onOpenChange={setB} modal={false} title="B 패널">
+              <Button>B 안</Button>
+            </FloatingSidePanel>
+          </>
+        );
+      }
+      render(<Raised />);
+      await screen.findByRole('dialog', { name: 'B 패널' });
+      await user.click(screen.getByRole('button', { name: 'A 올리기' }));
+      await waitFor(() => expect(step('A 패널')).toBeGreaterThan(step('B 패널')));
+      screen.getByRole('button', { name: 'A 안' }).focus();
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'A 패널' })).toBeNull());
+      expect(screen.getByRole('dialog', { name: 'B 패널' })).toBeInTheDocument();
+      // Then B, with focus inside it, closes on Escape as before.
+      screen.getByRole('button', { name: 'B 안' }).focus();
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'B 패널' })).toBeNull());
+    });
+
     it('stacks uncontrolled panels by opening order too', async () => {
       const user = userEvent.setup();
       render(

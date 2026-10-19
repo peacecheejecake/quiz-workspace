@@ -9,6 +9,7 @@ import type { ApiClient } from '@quiz/api-client';
 import { redirect } from 'next/navigation';
 import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
 import { loginRedirectPath } from '@/lib/auth/routes';
+import { workspaceHomePath } from '@/lib/workspaces/home';
 import { isWorkspaceId as isUuid } from '@/lib/workspaces/validation';
 import {
   classifyShareFailure,
@@ -64,7 +65,7 @@ async function callApi<T>(
   }
   // redirect() throws, so it stays outside the try block.
   if (!outcome.ok && outcome.failure === 'unauthenticated') {
-    redirect(loginRedirectPath(`/workspaces/${workspaceId}/settings/sharing`));
+    redirect(loginRedirectPath(workspaceHomePath(workspaceId, 'panel=share')));
   }
   return outcome;
 }
@@ -142,6 +143,20 @@ async function issuedResult(workspaceId: string, link: Issued): Promise<ShareAct
   }
   if (!isShareUrl(link.share_url, link.id)) return failed('unavailable');
   return withList(workspaceId, { issued: { linkId: link.id, shareUrl: link.share_url } });
+}
+
+/**
+ * The workspace's share links (metadata only, never a secret) for the "링크 공유" dialog, which
+ * opens at once and loads them (UX3c). Owner only: FastAPI answers 403 to other members.
+ */
+export async function listShareLinksAction(workspaceId: string): Promise<ShareActionResult> {
+  if (!isUuid(workspaceId)) return failed('invalid');
+  const result = await callApi(workspaceId, (api) =>
+    api.GET('/api/v1/workspaces/{workspace_id}/share-links', {
+      params: { path: { workspace_id: workspaceId } },
+    }),
+  );
+  return result.ok ? { ok: true, links: result.data.items } : failed(result.failure);
 }
 
 /** Issues a view-only link (owner, not while archived); the URL is in the result only. */

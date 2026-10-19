@@ -13,6 +13,11 @@ import {
   Checkbox,
   ChevronDownIcon,
   ChevronRightIcon,
+  ChevronUpIcon,
+  HistoryIcon,
+  SearchIcon,
+  ShareIcon,
+  TrashIcon,
   CloseIcon,
   ConfirmDialog,
   DialogClose,
@@ -158,6 +163,11 @@ export default function Page() {
             <UploadIcon />
             <ArrowLeftIcon />
             <ChevronRightIcon />
+            <ChevronUpIcon />
+            <SearchIcon />
+            <TrashIcon />
+            <HistoryIcon />
+            <ShareIcon />
           </Surface>
           <GlassSurface>glass</GlassSurface>
           <Tooltip content="설명" delayDuration={TOOLTIP_DELAY_MS + TOOLTIP_DESCRIPTION_DELAY_MS}>

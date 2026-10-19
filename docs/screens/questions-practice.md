@@ -1,7 +1,7 @@
 # QPLAY-01 — 문제 풀이 Floating Side Panel
 
 **상태:** 확정 화면 요구사항 v1.3
-**Route:** `/workspaces/:workspaceId/questions?question=:questionId`
+**Route:** `/workspaces/:workspaceId?question=:questionId` (Workspace 홈 위 panel; 이전 `/questions?question=`은 redirect — UX3c 2026-10-20)
 **테스트:** `tests/e2e/questions/questions-practice.spec.ts`
 **연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
 

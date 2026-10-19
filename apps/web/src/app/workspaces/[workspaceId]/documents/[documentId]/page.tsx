@@ -39,6 +39,7 @@ export default async function Page({
       <DocumentEditor
         key={`${document.id}:${pinnedRevisionId ?? ''}`}
         workspaceId={workspace.id}
+        workspaceName={workspace.name}
         document={document}
         canEdit={canEdit}
         readOnlyReason={readOnlyReason}

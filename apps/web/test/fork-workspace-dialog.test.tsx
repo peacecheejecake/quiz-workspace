@@ -87,7 +87,7 @@ describe('ForkWorkspaceDialog', () => {
     expect(await screen.findByText('Fork 완료', {}, { timeout: 4000 })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '내 사본' })).toHaveAttribute(
       'href',
-      `/workspaces/${TARGET}/documents`,
+      `/workspaces/${TARGET}`,
     );
     expect(client.get).toHaveBeenCalledWith(FORK_ID, expect.any(AbortSignal));
   });

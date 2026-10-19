@@ -11,6 +11,9 @@ import { CloseIcon } from '../primitives/icons';
 
 type ContentProps = ComponentProps<typeof Dialog.Content>;
 
+/** Escape presses a non-modal panel declined because focus was outside it (see onKeyDown). */
+const declinedEscapes = new WeakSet<Event>();
+
 export interface FloatingSidePanelProps {
   open?: boolean;
   defaultOpen?: boolean;
@@ -48,6 +51,11 @@ export interface FloatingSidePanelProps {
   /** Defaults to focusing the panel itself so its title is announced first. */
   onOpenAutoFocus?: ContentProps['onOpenAutoFocus'];
   onCloseAutoFocus?: ContentProps['onCloseAutoFocus'];
+  /**
+   * Changing this while the panel is open brings it to the top of the open floating layers again
+   * (e.g. the button that opened it was pressed while another panel covered it).
+   */
+  raiseKey?: string | number;
   className?: string;
   children?: ReactNode;
 }
@@ -74,6 +82,7 @@ export function FloatingSidePanel({
   container,
   onOpenAutoFocus,
   onCloseAutoFocus,
+  raiseKey,
   className,
   children,
 }: FloatingSidePanelProps) {
@@ -89,7 +98,7 @@ export function FloatingSidePanel({
     if (open === undefined) setUncontrolledOpen(next);
     onOpenChange?.(next);
   };
-  const layer = useFloatingLayer(isOpen);
+  const layer = useFloatingLayer(isOpen, raiseKey);
 
   return (
     <Dialog.Root open={isOpen} onOpenChange={handleOpenChange} modal={modal}>
@@ -146,10 +155,17 @@ export function FloatingSidePanel({
             if (!modal && contentRef.current) {
               handOffFocus(event, contentRef.current, returnFocusRef.current);
             }
+            // Radix lets only the most recently mounted non-modal panel handle Escape; when focus
+            // is in another one (e.g. raised over it), that panel's guard below declined, so the
+            // panel holding focus closes itself.
+            if (event.key === 'Escape' && !modal && declinedEscapes.has(event.nativeEvent)) {
+              handleOpenChange(false);
+            }
           }}
           onEscapeKeyDown={(event) => {
             if (!modal && !contentRef.current?.contains(document.activeElement)) {
               event.preventDefault();
+              declinedEscapes.add(event);
             }
           }}
         >

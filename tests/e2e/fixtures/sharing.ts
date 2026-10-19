@@ -286,8 +286,9 @@ export function sharePath(shareId: string, secret?: string): string {
   return secret === undefined ? `/share/${shareId}` : `/share/${shareId}#k=${secret}`;
 }
 
+/** The home with the "링크 공유" dialog open (UX3c; `/settings/sharing` redirects here). */
 export function sharingSettingsPath(workspaceId: string): string {
-  return `/workspaces/${workspaceId}/settings/sharing`;
+  return `/workspaces/${workspaceId}?panel=share`;
 }
 
 /** Decoded length of a base64url secret. */
@@ -920,7 +921,8 @@ const buttonOrLink = (scope: Page | Locator, name: RegExp) =>
   scope.getByRole('button', { name }).or(scope.getByRole('link', { name }));
 
 export const sharingUi = {
-  heading: (page: Page) => page.getByRole('heading', { level: 1 }),
+  /** The home's "링크 공유" dialog (UX3c: opened by 공유하기 or `?panel=share`). */
+  dialog: (page: Page) => main(page).getByRole('dialog', { name: /^(링크 공유|share link)$/i }),
   offStatus: (page: Page) =>
     main(page)
       .getByText(/공유 (꺼짐|안 함|비활성)|공유 중이 아님|sharing (is )?off|not shared/i)

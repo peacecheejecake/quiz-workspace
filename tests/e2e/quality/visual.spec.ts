@@ -15,13 +15,16 @@ import {
   bankPath,
   createNumberedQuestions,
   docUi,
+  documentsPath,
   editorUi,
   expectCaptchaVerified,
   JOB_TIMEOUT_MS,
   overviewPath,
+  openSearchOptions,
   overviewUi,
   panelUi,
   runSearch,
+  searchPath,
   searchUi,
   setMyState,
   signInAs,
@@ -104,7 +107,7 @@ test(
     await snap(page, 'workspaces-create-dialog');
     await page.keyboard.press('Escape');
 
-    await page.goto(`/workspaces/${ws.id}/documents`);
+    await page.goto(documentsPath(ws.id));
     await expect(docUi.ready(docUi.item(page, /book-ko|물의 순환과 정수 처리/))).toBeVisible();
     await snap(page, 'documents');
   },
@@ -133,6 +136,11 @@ test(
     await expect(overviewUi.dots(page)).toHaveCount(24);
     await page.mouse.move(0, 0);
     await snap(page, 'questions-overview');
+    // UX3c: the unified search's options popover over the home.
+    await openSearchOptions(page);
+    await page.mouse.move(0, 0);
+    await snap(page, 'search-options');
+    await page.keyboard.press('Escape');
 
     await overviewUi.dot(page, 3).click();
     const panel = panelUi.numbered(page, 3);
@@ -157,7 +165,7 @@ test(
     await signInAs(page, owner.user);
 
     const target = block(BOOK, 'ch1-s2-p1');
-    await page.goto(`/workspaces/${ws.id}/search`);
+    await page.goto(searchPath(ws.id));
     await runSearch(page, snippet(target.text, 10), 'keyword');
     await expect(searchUi.resultItems(page).first()).toBeVisible();
     await searchUi.resultItems(page).first().getByRole('button').first().click();

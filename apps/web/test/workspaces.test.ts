@@ -330,7 +330,7 @@ describe('requireWorkspace (workspace layout access check)', () => {
   it('sends expired sessions to /login and surfaces outages as errors', async () => {
     api.GET.mockResolvedValueOnce(problem(401));
     await expect(requireWorkspace(WS_ID)).rejects.toThrow(
-      `REDIRECT /login?next=${encodeURIComponent(`/workspaces/${WS_ID}/documents`)}`,
+      `REDIRECT /login?next=${encodeURIComponent(`/workspaces/${WS_ID}`)}`,
     );
     api.GET.mockResolvedValueOnce(problem(503));
     await expect(requireWorkspace(WS_ID)).rejects.toThrow('HTTP 503');

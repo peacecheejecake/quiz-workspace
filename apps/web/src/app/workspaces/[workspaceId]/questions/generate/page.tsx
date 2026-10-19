@@ -35,6 +35,7 @@ export default async function Page({
         <QuestionGeneration
           key={`${workspace.id}:${data.source.id}`}
           workspaceId={workspace.id}
+          workspaceName={workspace.name}
           readOnly={readOnly}
           source={data.source}
           initialRuns={data.runs}
@@ -46,6 +47,7 @@ export default async function Page({
       ) : (
         <GenerationSourcePicker
           workspaceId={workspace.id}
+          workspaceName={workspace.name}
           candidates={data.candidates}
           sourceMissing={data.sourceMissing}
           loadFailed={data.loadFailed}

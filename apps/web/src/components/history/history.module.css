@@ -1,52 +1,12 @@
-/* HISTORY-01 작업·변경·풀이 이력. Semantic tokens only. */
+/* HISTORY-01 이력 dialog: one chronological list. Semantic tokens only. */
 
-.screen {
-  display: grid;
-  gap: var(--space-5);
-  max-width: var(--content-max-width);
-}
-
-.sections {
-  display: grid;
-  gap: var(--space-5);
-  grid-template-columns: minmax(0, 1fr);
-}
-
-@media (width >= 1024px) {
-  .sections {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
-  }
-
-  .wide {
-    grid-column: 1 / -1;
-  }
-}
-
-.section {
+.panel {
   display: grid;
   gap: var(--space-3);
   min-width: 0;
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
 }
 
-.sectionHeader {
-  display: grid;
-  gap: var(--space-1);
-}
-
-.sectionTitle {
-  margin: 0;
-  font-size: var(--font-size-section-title);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-snug);
-  color: var(--color-text-primary);
-}
-
-.sectionNote {
+.note {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-label);

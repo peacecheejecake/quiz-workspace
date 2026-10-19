@@ -150,11 +150,12 @@
 //             showing that page); "정답 없음" when the key has no answer; checkbox "승인"; "편집"
 //             opens the same question editor; button "승인한 문제 등록" publishes; a failed
 //             import job or publish shows role=alert + "다시 시도".
-//   QOV-01    route /workspaces/{id}/questions; role=group "문제 heatmap" holding one button per
+//   QOV-01    route /workspaces/{id} (the workspace home, UX3c); role=group "문제 heatmap" holding one button per
 //             CONFIRMED question, named by questionDotLabel and carrying data-status; inside it the
 //             marker svg data-testid="question-marker" with data-shape square|star (design-system
-//             §6.1, packages/ui/src/questions); preview role=tooltip; summary region "문제 상태 요약";
-//             legend list "상태 범례".
+//             §6.1, packages/ui/src/questions); preview role=tooltip; status line "현재 필터의 문제 n개";
+//             collapsible group "상태 필터" (toggle button "상태 필터", collapsed by default); no
+//             status summary or legend since UX3c.
 //   QPLAY-01  modal dialog named by the question title (`… 12번 문제`) with "패널 닫기",
 //             toggles "즐겨찾기 추가"/"즐겨찾기 해제" and "다시 풀기 표시"/"다시 풀기 해제" (M5.3
 //             StudyToggles); MCQ options as radios (single) or checkboxes (multi) named by the
@@ -455,8 +456,10 @@ export const bankUi = {
     main(page).getByRole('region', { name: title }),
   noChapterGroup: (page: Page) =>
     main(page).getByRole('region', { name: /챕터 없음|미분류|장 없음|no chapter|unassigned/i }),
-  items: (page: Page) => main(page).getByRole('listitem'),
-  item: (page: Page, stem: string) => main(page).getByRole('listitem').filter({ hasText: stem }),
+  /** Question rows (inside the chapter groups; the page's breadcrumb is a list too). */
+  items: (page: Page) => main(page).getByRole('region').getByRole('listitem'),
+  item: (page: Page, stem: string) =>
+    main(page).getByRole('region').getByRole('listitem').filter({ hasText: stem }),
   editButton: (item: Locator) => item.getByRole('button', { name: /^(편집|수정|edit)/i }),
   readOnlyNotice: (page: Page) =>
     main(page)
@@ -777,8 +780,9 @@ export async function publishDrafts(
 // Overview / practice panel UI (QOV-01, QPLAY-01)
 // ---------------------------------------------------------------------------------------------
 
+/** The workspace home = the heatmap (UX3c; `/questions` redirects here). */
 export function overviewPath(workspaceId: string, questionId?: string): string {
-  const base = `/workspaces/${workspaceId}/questions`;
+  const base = `/workspaces/${workspaceId}`;
   return questionId ? `${base}?question=${questionId}` : base;
 }
 
@@ -795,8 +799,9 @@ export const overviewUi = {
   markers: (page: Page) => overviewUi.heatmap(page).getByTestId('question-marker'),
   marker: (dot: Locator) => dot.getByTestId('question-marker'),
   tooltip: (page: Page) => page.getByRole('tooltip'),
-  summary: (page: Page) =>
-    main(page).getByRole('region', { name: /문제 상태 요약|status summary/i }),
+  /** "현재 필터의 문제 n개" (the status summary and legend are gone since UX3c). */
+  inFilter: (page: Page) =>
+    main(page).getByText(/현재 필터의 문제 \d+개|\d+ questions in (the )?filter/i),
 };
 
 export const panelUi = {

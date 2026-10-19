@@ -15,9 +15,11 @@ import {
   draftFor,
   expect,
   getOverview,
+  homeUi,
   importPaperDrafts,
   JOB_TIMEOUT_MS,
   listAttempts,
+  main,
   overviewItem,
   overviewPath,
   overviewUi,
@@ -25,12 +27,17 @@ import {
   publishDrafts,
   questionPaper,
   scaleOf,
+  searchUi,
+  seedMembership,
   setMyState,
   signInAs,
   startPractice,
   statusColor,
   test,
   truthQuestion,
+  uploadPdf,
+  uploadReadyBook,
+  waitForJob,
   type E2EFixtures,
   type Member,
   type Question,
@@ -104,7 +111,7 @@ test(
     await openOverview(page, s);
     await expect(overviewUi.markers(page)).toHaveCount(100);
     await expect(overviewUi.dots(page)).toHaveCount(100);
-    await expect(overviewUi.summary(page)).toContainText(/전체\s*100|total\s*100/i);
+    await expect(overviewUi.inFilter(page)).toHaveText(/문제 100개|100 questions/i);
 
     // Option shuffles (practice sessions, questions.md §5 OPTION_SHUFFLE) never create a dot.
     for (let i = 0; i < 5; i += 1) await startPractice(s.owner, q(s, 1).id);
@@ -347,5 +354,223 @@ test(
     await page.keyboard.press('Escape');
     await expect(third).toBeFocused();
     expect((await overviewItem(s.owner, s.workspaceId, q(s, 3).id)).status).toBe('viewed');
+  },
+);
+
+test(
+  'QOV-01-AC07 the workspace home has the header and heatmap without a sidebar; old routes redirect into it',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(2 * JOB_TIMEOUT_MS + 60_000);
+    const s = await seed(workspaceFactory, 'qov01-ac07', 2);
+    await uploadReadyBook(s.owner, s.workspaceId, 'book-ko');
+    const paper = await uploadPdf(s.owner, s.workspaceId, questionPaper(), 'question_paper');
+    await waitForJob(s.owner, paper.jobId);
+    await openOverview(page, s);
+    const home = `/workspaces/${s.workspaceId}`;
+
+    // No workspace sidebar (문서/검색/문제/이력/공유 설정) and no visible page title/description.
+    await expect(
+      page.getByRole('navigation', { name: /workspace 메뉴|workspace menu/i }),
+    ).toHaveCount(0);
+    await expect(
+      main(page).getByRole('link', { name: /^(문서|검색|문제|이력|공유 설정)$/ }),
+    ).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    await expect(main(page).getByText(/문제 하나가 점 하나입니다/)).toHaveCount(0);
+
+    // Header: unified search with an icon-only submit, then 문서 n · 문제은행 · 이력 · 공유하기.
+    await expect(homeUi.header(page)).toBeVisible();
+    await expect(searchUi.box(page)).toBeVisible();
+    await expect(searchUi.submit(page)).toHaveText('');
+    await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*1$/); // the book; not the paper
+    await expect(homeUi.bankLink(page)).toBeVisible();
+    await expect(homeUi.historyButton(page)).toBeVisible();
+    await expect(homeUi.shareButton(page)).toBeVisible();
+    const order = await Promise.all(
+      [
+        homeUi.documentsButton(page),
+        homeUi.bankLink(page),
+        homeUi.historyButton(page),
+        homeUi.shareButton(page),
+      ].map(async (l) => (await l.boundingBox())?.x ?? 0),
+    );
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    // The heatmap sits right under the header; no other "PDF 가져오기" on the home.
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expect(
+      main(page)
+        .getByRole('link', { name: /pdf 가져오기/i })
+        .or(main(page).getByRole('button', { name: /pdf 가져오기/i })),
+    ).toHaveCount(0);
+
+    // Old section routes land on the home with the matching dialog or state.
+    await page.goto(`${home}/documents`);
+    await expect(page).toHaveURL(
+      (url) => url.pathname === home && url.searchParams.get('panel') === 'documents',
+    );
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
+    await page.goto(`${home}/history`);
+    await expect(page).toHaveURL((url) => url.searchParams.get('panel') === 'history');
+    await expect(main(page).getByRole('dialog', { name: /^(이력|history)$/i })).toBeVisible();
+    await page.goto(`${home}/settings/sharing`);
+    await expect(page).toHaveURL((url) => url.searchParams.get('panel') === 'share');
+    await expect(homeUi.shareDialog(page)).toBeVisible();
+    await page.goto(`${home}/questions?favorite=true`);
+    await expect(page).toHaveURL(
+      (url) => url.pathname === home && url.searchParams.get('favorite') === 'true',
+    );
+    await expect(overviewUi.heatmap(page)).toHaveCount(0); // no favorites yet: filtered empty state
+    await page.goto(`${home}/search?q=chlorine&mode=keyword`);
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === home &&
+        url.searchParams.get('scope') === 'content' &&
+        url.searchParams.get('q') === 'chlorine',
+    );
+    await expect(searchUi.resultsRegion(page)).toBeVisible();
+
+    // A member who is not the owner: no 공유하기, `?panel=share` opens nothing, the API refuses.
+    const viewer = await workspaceFactory.member('qov01-ac07-viewer');
+    seedMembership(s.workspaceId, viewer.user.id, 'viewer');
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(`${home}?panel=share`);
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expect(homeUi.shareButton(page)).toHaveCount(0);
+    await expect(homeUi.shareDialog(page)).toHaveCount(0);
+    await expect(homeUi.generateButton(page)).toHaveCount(0);
+    const denied = await viewer.api.request('GET', `/workspaces/${s.workspaceId}/share-links`);
+    expect(denied.status).toBe(403);
+  },
+);
+
+test(
+  'QOV-01-AC08 no status legend or summary; the status filter is collapsed until its chevron toggle opens it',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seed(workspaceFactory, 'qov01-ac08', 3);
+    await setMyState(s.owner, q(s, 2).id, { needs_retry: true });
+    await openOverview(page, s);
+
+    await expect(
+      main(page).getByRole('region', { name: /문제 상태 요약|status summary/i }),
+    ).toHaveCount(0);
+    await expect(main(page).getByRole('list', { name: /상태 범례|legend/i })).toHaveCount(0);
+
+    const toggle = homeUi.statusFilterToggle(page);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const controls = await toggle.getAttribute('aria-controls');
+    expect(controls).toBeTruthy();
+    await expect(homeUi.statusFilters(page)).toHaveCount(0); // hidden
+    await expect(toggle.locator('svg')).toHaveCount(1); // chevron icon
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const filters = homeUi.statusFilters(page);
+    await expect(filters).toBeVisible();
+    await expect(filters).toHaveAttribute('id', controls ?? '');
+    // Each status is a swatch plus its text (never colour alone).
+    for (const label of ['미열람', '열람', '오답', '정답', '다시 풀기']) {
+      await expect(filters.getByRole('button', { name: label, exact: true })).toBeVisible();
+    }
+    await filters.getByRole('button', { name: '다시 풀기', exact: true }).click();
+    await expect(page).toHaveURL(/[?&]status=retry(&|$)/);
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+
+    // Collapsing keeps the filter applied.
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(homeUi.statusFilters(page)).toHaveCount(0);
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(page).toHaveURL(/[?&]status=retry(&|$)/);
+  },
+);
+
+test(
+  'QOV-01-AC09 dialogs open at once with a skeleton while loading; sub-pages show their route skeleton',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seed(workspaceFactory, 'qov01-ac09', 2);
+    await openOverview(page, s);
+
+    // Hold the history reads: the dialog is already open, busy, with a status text.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    await page.route(
+      (url) => /\/api\/workspaces\/[^/]+\/(activities|jobs|attempts)$/.test(url.pathname),
+      async (route) => {
+        await gate;
+        await route.fallback();
+      },
+    );
+    await homeUi.historyButton(page).click();
+    const dialog = main(page).getByRole('dialog', { name: /^(이력|history)$/i });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('[aria-busy="true"]')).toBeVisible();
+    await expect(dialog.getByRole('status')).toHaveText(/불러오는 중|loading/i);
+    release();
+    await expect(dialog.getByRole('list', { name: /^(이력|history)$/i })).toBeVisible();
+    await expect(dialog.locator('[aria-busy="true"]')).toHaveCount(0);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+    // 문제은행: the route skeleton shows while the page's server render is held back.
+    let releasePage!: () => void;
+    const pageGate = new Promise<void>((resolve) => (releasePage = resolve));
+    await page.route(
+      (url) => url.pathname.endsWith('/questions/bank'),
+      async (route) => {
+        if (route.request().resourceType() === 'document') return route.fallback();
+        await pageGate;
+        await route.fallback();
+      },
+    );
+    await homeUi.bankLink(page).click();
+    await expect(
+      main(page)
+        .getByRole('status')
+        .filter({ hasText: /문제은행을 불러오는 중/ }),
+    ).toBeVisible();
+    releasePage();
+    await expect(
+      page.getByRole('heading', { level: 1, name: /문제은행|question bank/i }),
+    ).toBeVisible();
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  },
+);
+
+test(
+  'QOV-01-AC10 a dialog opened later stacks above one already open; each closes on its own',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seed(workspaceFactory, 'qov01-ac10', 1);
+    await openOverview(page, s);
+
+    await homeUi.documentsButton(page).click();
+    const documents = homeUi.documentsDialog(page);
+    await expect(documents).toBeVisible();
+    await expect(documents).not.toHaveAttribute('aria-modal', 'true');
+    // The background stays usable while a dialog is open.
+    await homeUi.historyButton(page).click();
+    const history = main(page).getByRole('dialog', { name: /^(이력|history)$/i });
+    await expect(history).toBeVisible();
+    await expect(documents).toBeVisible();
+    await expect(page).toHaveURL(/panel=documents&panel=history/);
+
+    const z = (l: Locator) => l.evaluate((el) => Number(getComputedStyle(el).zIndex));
+    expect(await z(history)).toBeGreaterThan(await z(documents));
+
+    // Pressing 문서 again brings its (covered) dialog back on top.
+    await homeUi.documentsButton(page).click();
+    await expect.poll(async () => (await z(documents)) > (await z(history))).toBe(true);
+
+    await documents.getByRole('button', { name: /문서 관리 닫기|close/i }).click();
+    await expect(documents).toBeHidden();
+    await expect(history).toBeVisible();
+    await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').join() === 'history');
+    await history.getByRole('button', { name: /이력 닫기|close/i }).focus();
+    await page.keyboard.press('Escape');
+    await expect(history).toBeHidden();
+    await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
   },
 );

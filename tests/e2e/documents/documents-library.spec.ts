@@ -1,5 +1,6 @@
-// DOC-01 — Documents 목록·PDF 업로드 (`/workspaces/:workspaceId/documents`),
-// docs/screens/documents-library.md; upload flow docs/deployment.md §2.
+// DOC-01 — 문서 관리 (Documents 목록·PDF 업로드), since UX3c the workspace home's "문서 관리"
+// dialog (`/workspaces/:workspaceId?panel=documents`), docs/screens/documents-library.md; upload
+// flow docs/deployment.md §2.
 //
 // Per-test owner + workspace (public API). The browser uploads `book-ko.pdf` (synthetic) through
 // the real UI: upload-intent → direct upload to the private Storage bucket → complete-upload →
@@ -13,15 +14,21 @@ import { localEndpoints } from '../fixtures/local-env.ts';
 import {
   book,
   docUi,
+  documentsPath,
   expect,
+  homeUi,
   JOB_TIMEOUT_MS,
   listDocuments,
+  main,
   MAX_UPLOAD_BYTES,
+  questionPaper,
   signInAs,
   test,
   type Member,
   type Problem,
+  uploadPdf,
   uploadReadyBook,
+  waitForJob,
 } from '../fixtures/test.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -36,7 +43,8 @@ function isStorageUpload(route: Route): boolean {
 
 async function openLibrary(page: Page, owner: Member, workspaceId: string): Promise<void> {
   await signInAs(page, owner.user);
-  await page.goto(`/workspaces/${workspaceId}/documents`);
+  await page.goto(documentsPath(workspaceId));
+  await expect(homeUi.documentsDialog(page)).toBeVisible();
 }
 
 async function chooseFile(
@@ -66,17 +74,18 @@ test(
     expect(await listDocuments(owner, ws.id)).toEqual([]);
 
     await openLibrary(page, owner, ws.id);
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/문서|documents/i);
+    const dialog = homeUi.documentsDialog(page);
+    // No page title or description inside the dialog (UX3c): its title is the dialog name.
+    await expect(dialog.getByRole('heading', { level: 1 })).toHaveCount(0);
     await expect(docUi.emptyState(page)).toBeVisible();
     await expect(docUi.uploadButton(page)).toBeEnabled();
-    // One upload button only: the empty state's; the header button is hidden meanwhile (UX1).
+    // One upload button only: the Dropzone's (UX1 single CTA, UX3c Dropzone).
     await expect(docUi.uploadButtons(page)).toHaveCount(1);
-    // The drag-and-drop hint is the empty state's description, shown once (UX2).
-    const dropHint = /끌어다 놓아도 업로드|drag (and drop|a pdf)/i;
-    await expect(docUi.emptyState(page).locator('xpath=following-sibling::p[1]')).toHaveText(
-      dropHint,
-    );
-    await expect(page.getByRole('main').getByText(dropHint)).toHaveCount(1);
+    // The drag-and-drop hint is the dashed Dropzone's title, shown once.
+    const dropHint = /여기에 끌어다 놓으세요|drag (and drop|a pdf)/i;
+    await expect(main(page).getByText(dropHint)).toHaveCount(1);
+    const zone = dialog.getByText(dropHint).locator('xpath=..');
+    await expect(zone).toHaveCSS('border-top-style', 'dashed');
   },
 );
 
@@ -274,5 +283,66 @@ test(
     await expect(docUi.emptyState(page)).toBeVisible();
     await expect.poll(async () => (await listDocuments(owner, ws.id)).length).toBe(0);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
+  },
+);
+
+test(
+  'DOC-01-AC06 the 문서 n button opens 문서 관리 with book documents only: status next to the title, date · size, trash delete',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(2 * JOB_TIMEOUT_MS + 60_000);
+    const owner = await workspaceFactory.member('doc01-ac06');
+    const ws = await workspaceFactory.create(owner);
+    await uploadReadyBook(owner, ws.id, 'book-ko');
+    const paper = questionPaper();
+    const uploaded = await uploadPdf(owner, ws.id, paper, 'question_paper');
+    await waitForJob(owner, uploaded.jobId);
+
+    await signInAs(page, owner.user);
+    await page.goto(`/workspaces/${ws.id}`);
+    const button = homeUi.documentsButton(page);
+    await expect(button).toHaveText(/문서\s*1$/); // the question paper is not counted
+    await button.click();
+    await expect(page).toHaveURL(/[?&]panel=documents(&|$)/);
+    const dialog = homeUi.documentsDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(dialog).not.toHaveAttribute('aria-modal', 'true');
+
+    const rows = dialog.getByRole('list', { name: /문서 목록|documents/i }).getByRole('listitem');
+    await expect(rows).toHaveCount(1);
+    await expect(dialog).not.toContainText(paper.file.replace(/\.pdf$/, ''));
+    const row = rows.first();
+    await expect(row.getByText(/^(책|문제지)$/)).toHaveCount(0); // no type badges
+    // The status badge sits right after the title, on the same line.
+    const title = row.getByRole('link', { name: BOOK_TITLE });
+    const status = docUi.ready(row);
+    const [t, s] = await Promise.all([title.boundingBox(), status.boundingBox()]);
+    expect(
+      Math.abs((t?.y ?? 0) + (t?.height ?? 0) / 2 - ((s?.y ?? 0) + (s?.height ?? 0) / 2)),
+    ).toBeLessThan(12);
+    expect((s?.x ?? 0) > (t?.x ?? 0) + (t?.width ?? 0) - 1).toBe(true);
+    // Meta line: "<date time> · <size>", without "수정" or the file name.
+    const meta = row.locator('time').locator('xpath=..');
+    await expect(meta).toHaveText(
+      /^\d{4}\. \d{1,2}\. \d{1,2}\. (오전|오후) \d{1,2}:\d{2}\s*·\s*[\d.]+ (B|KB|MB)$/,
+    );
+    await expect(row).not.toContainText('수정');
+    await expect(row).not.toContainText(BOOK.file);
+    // The file name is in the title's tooltip.
+    await title.hover();
+    await expect(page.getByRole('tooltip')).toHaveText(BOOK.file);
+
+    // Delete is a trash icon button with an accessible name; the count follows.
+    const remove = row.getByRole('button', { name: /삭제|delete/i });
+    await expect(remove).toHaveText('');
+    await expect(remove).toHaveAttribute('title', /삭제|delete/i);
+    await remove.click();
+    const confirm = page.getByRole('alertdialog', { name: /삭제|delete/i });
+    await confirm.getByRole('button', { name: /^(삭제|delete)$/i }).click();
+    await expect(rows).toHaveCount(0);
+    await expect(button).toHaveText(/문서\s*0$/);
+    await expect
+      .poll(async () => (await listDocuments(owner, ws.id)).map((d) => d.document_type))
+      .toEqual(['question_paper']);
   },
 );

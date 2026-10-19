@@ -55,7 +55,7 @@ export async function loadWorkspaceLists(): Promise<WorkspaceLists> {
  */
 export async function requireWorkspace(workspaceId: string): Promise<Workspace> {
   if (!isWorkspaceId(workspaceId)) notFound();
-  const returnTo = `/workspaces/${workspaceId}/documents`;
+  const returnTo = `/workspaces/${workspaceId}`;
   const api = await apiClientOrLogin(returnTo);
   const { data, error, response } = await api.GET('/api/v1/workspaces/{workspace_id}', {
     params: { path: { workspace_id: workspaceId } },

@@ -99,6 +99,21 @@ export function overviewSearch(filters: OverviewFilters, questionId?: string | n
   return query ? `?${query}` : '';
 }
 
+const SCOPE_KEYS = ['chapter', 'type', 'status', 'favorite', 'retry'] as const;
+
+/**
+ * `search` (the workspace home's address-bar query) with the heatmap's scope/state filters
+ * replaced by `filters`'; `q` (owned by the unified search) and every other key are kept.
+ * Returns '' or a string starting with `?`.
+ */
+export function mergeOverviewFilters(search: string, filters: OverviewFilters): string {
+  const params = new URLSearchParams(search);
+  for (const key of SCOPE_KEYS) params.delete(key);
+  for (const [key, value] of overviewFilterParams({ ...filters, q: '' })) params.append(key, value);
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
 /** The open question of the practice panel (`?question=<uuid>`), or null. */
 export function openQuestionId(params: Params): string | null {
   const id = first(params, QUESTION_PARAM);

@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
-// SEARCH-01 screen behaviour the E2E specs cannot force: 429 with Retry-After and 503 states,
-// an older answer never replacing a newer search, mode changes re-running the submitted query,
-// the address bar mirroring the search, and the non-modal excerpt panel's refined PDF jump.
+// SEARCH-01 content search of the workspace home (useContentSearch + its options and results,
+// composed here like the home's unified search does): behaviour the E2E specs cannot force — 429
+// with Retry-After and 503 states, an older answer never replacing a newer search, option changes
+// re-running the submitted query, the home URL mirroring the search next to its other keys, and
+// the non-modal excerpt panel's refined PDF jump.
 import './dom-setup';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SearchDocumentOption } from '../src/components/search/content-search';
 import {
   SearchApiError,
   type ContentBlock,
@@ -35,7 +38,53 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-const { SearchScreen } = await import('../src/components/search/search-screen');
+const { ContentSearchOptions, ContentSearchResults, useContentSearch } =
+  await import('../src/components/search/content-search');
+
+/** The home's unified search reduced to the content part. */
+function SearchScreen({
+  workspaceId,
+  documents,
+  initial,
+  client,
+  syncTo,
+}: {
+  workspaceId: string;
+  documents: readonly SearchDocumentOption[];
+  initial: SearchQuery;
+  client: SearchClient;
+  /** What the home hands to `sync` when the address bar changes (Back/Forward). */
+  syncTo?: SearchQuery | null;
+}) {
+  const search = useContentSearch({ workspaceId, initial, runInitial: true, client });
+  const [draft, setDraft] = useState(initial.query);
+  return (
+    <main>
+      <form
+        role="search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          search.search(draft);
+        }}
+      >
+        <input
+          type="search"
+          aria-label="검색어"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+        <button type="submit">검색</button>
+      </form>
+      {syncTo !== undefined ? (
+        <button type="button" onClick={() => search.sync(syncTo)}>
+          주소 따라가기
+        </button>
+      ) : null}
+      <ContentSearchOptions search={search} documents={documents} />
+      <ContentSearchResults workspaceId={workspaceId} search={search} onClose={search.clear} />
+    </main>
+  );
+}
 
 const WS = '22222222-2222-4222-8222-222222222222';
 const DOC = '11111111-1111-4111-8111-111111111111';
@@ -114,7 +163,7 @@ async function submit(user: ReturnType<typeof userEvent.setup>, query: string) {
 }
 
 beforeEach(() => {
-  window.history.replaceState(null, '', `/workspaces/${WS}/search`);
+  window.history.replaceState(null, '', `/workspaces/${WS}?panel=history`);
   router.push.mockReset();
 });
 
@@ -122,8 +171,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('SearchScreen', () => {
-  it('shows an empty state with guidance from the warnings and mirrors the search in the URL', async () => {
+describe('content search (unified search, scope 내용)', () => {
+  it('SEARCH-01-AC04 shows an empty state with guidance and mirrors the search in the home URL', async () => {
     const user = userEvent.setup();
     const client = makeClient(async () => response([], ['no keyword matches']));
     render(<SearchScreen workspaceId={WS} documents={[]} initial={INITIAL} client={client} />);
@@ -135,7 +184,9 @@ describe('SearchScreen', () => {
     expect(await screen.findByRole('heading', { name: '검색 결과가 없습니다' })).toBeVisible();
     expect(screen.getByText(/의미 검색이나 하이브리드/)).toBeVisible();
     expect(screen.queryByRole('list', { name: '검색 결과' })).toBeNull();
-    expect(window.location.search).toBe('?q=zzz&mode=keyword');
+    expect(screen.getByRole('heading', { name: '원문 검색 결과' })).toBeVisible();
+    // Merged into the home URL: the open dialog stays.
+    expect(window.location.search).toBe('?panel=history&q=zzz&mode=keyword');
   });
 
   it('SEARCH-01-AC06 shows the degraded notice next to the empty state when BM25 finds nothing', async () => {
@@ -156,15 +207,6 @@ describe('SearchScreen', () => {
       );
     expect(notice).toBeDefined();
     expect(notice).toBeVisible();
-  });
-
-  it('asks for a query instead of searching blank input', async () => {
-    const user = userEvent.setup();
-    const client = makeClient(async () => response([]));
-    render(<SearchScreen workspaceId={WS} documents={[]} initial={INITIAL} client={client} />);
-    await user.click(screen.getByRole('button', { name: '검색' }));
-    expect(screen.getByText('검색어를 입력해 주세요.')).toBeVisible();
-    expect(client.search).not.toHaveBeenCalled();
   });
 
   it('re-runs the submitted query when the mode changes and ignores an overtaken answer', async () => {
@@ -291,7 +333,7 @@ describe('SearchScreen', () => {
     window.history.replaceState(
       null,
       '',
-      `/workspaces/${WS}/search?q=water&document=${DOC}&chapter=${stale}`,
+      `/workspaces/${WS}?q=water&document=${DOC}&section=${stale}`,
     );
     const client = makeClient(
       async () => response([hit()]),
@@ -419,5 +461,63 @@ describe('SearchScreen', () => {
       });
       expect(client.search).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('closing the content results', () => {
+  it('forgets the results when "검색 결과 닫기" is pressed', async () => {
+    const user = userEvent.setup();
+    const client = makeClient(async () => response([hit()]));
+    render(<SearchScreen workspaceId={WS} documents={[]} initial={INITIAL} client={client} />);
+    await submit(user, 'water');
+    expect(await screen.findByRole('list', { name: '검색 결과' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: '검색 결과 닫기' }));
+    expect(screen.queryByRole('heading', { name: '원문 검색 결과' })).toBeNull();
+    expect(screen.queryByRole('list', { name: '검색 결과' })).toBeNull();
+  });
+});
+
+describe('following the address bar (browser Back/Forward)', () => {
+  it('runs the restored search with its options, ignores an unchanged one and clears on null', async () => {
+    const user = userEvent.setup();
+    const client = makeClient(async (_ws, q) =>
+      response([hit({ document_title: `hit for ${q.query}` })]),
+    );
+    const restored: SearchQuery = { ...INITIAL, query: 'chlorine', mode: 'keyword' };
+    const { rerender } = render(
+      <SearchScreen
+        workspaceId={WS}
+        documents={[]}
+        initial={INITIAL}
+        client={client}
+        syncTo={restored}
+      />,
+    );
+    await submit(user, 'water');
+    expect(await screen.findByText('hit for water')).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: '주소 따라가기' }));
+    expect(await screen.findByText('hit for chlorine')).toBeVisible();
+    expect(client.search).toHaveBeenCalledTimes(2);
+    expect(client.search.mock.calls[1]?.[1]).toMatchObject({ query: 'chlorine', mode: 'keyword' });
+    expect(screen.getByRole('radio', { name: '키워드' })).toBeChecked();
+
+    // The same state again (our own URL write): no new request.
+    await user.click(screen.getByRole('button', { name: '주소 따라가기' }));
+    expect(client.search).toHaveBeenCalledTimes(2);
+
+    rerender(
+      <SearchScreen
+        workspaceId={WS}
+        documents={[]}
+        initial={INITIAL}
+        client={client}
+        syncTo={null}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: '주소 따라가기' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: '원문 검색 결과' })).toBeNull(),
+    );
   });
 });

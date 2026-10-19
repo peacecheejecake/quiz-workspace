@@ -77,13 +77,14 @@ export interface FloatingLayer {
  * are not side panels should reuse it), and pass `zIndex` to `LayerProvider` so the layer's
  * portalled popovers and tooltips sit just above it.
  */
-export function useFloatingLayer(open: boolean): FloatingLayer {
+export function useFloatingLayer(open: boolean, raiseKey?: unknown): FloatingLayer {
   const id = useId();
+  // A new `raiseKey` while open re-registers the layer, which puts it on top again.
   useIsomorphicLayoutEffect(() => {
     if (!open) return undefined;
     bringToFront(id);
     return () => release(id);
-  }, [id, open]);
+  }, [id, open, raiseKey]);
   const rank = useSyncExternalStore(
     subscribe,
     () => order.indexOf(id),

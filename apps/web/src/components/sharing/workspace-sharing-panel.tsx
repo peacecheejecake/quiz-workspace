@@ -1,7 +1,9 @@
 'use client';
 
 // WS-SHARE-01 `WorkspaceSharingPanel` (docs/design-system.md: owner share link create / revoke /
-// rotate, expiry, Fork switch on the shared FloatingSidePanel). The screen manages one link: the
+// rotate, expiry, Fork switch on the shared FloatingSidePanel). Since UX3c it is the "링크 공유"
+// dialog of the workspace home's `공유하기` button: mounted when it opens, it shows a skeleton
+// while the link metadata loads (listShareLinksAction), so closing it also drops a shown URL. The screen manages one link: the
 // newest active one, else the newest expired one, whose policy stays editable (a later expiry
 // reopens a URL already handed out, also while archived). Policy controls save on change; revoke
 // and rotate are confirmed.
@@ -9,10 +11,28 @@
 // Secret handling (docs/workspace-sharing.md §2): the share URL with `#k=` comes back once from
 // create/rotate and lives only in this component's state while the link stays current — never in
 // storage, a URL, a log or a later server render. Reloading leaves only the link metadata.
-import { Badge, Button, ConfirmDialog, FloatingSidePanel, Input, Switch, useToast } from '@quiz/ui';
-import { useId, useRef, useState, useSyncExternalStore, useTransition } from 'react';
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  FloatingSidePanel,
+  Input,
+  Skeleton,
+  Switch,
+  useToast,
+} from '@quiz/ui';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from 'react';
 import {
   createShareLinkAction,
+  listShareLinksAction,
   revokeShareLinksAction,
   rotateShareLinkAction,
   updateShareLinkAction,
@@ -25,6 +45,7 @@ import {
   parseExpiryDate,
   SHARE_FAILURE_MESSAGES,
   sharingState,
+  type ShareFailureKind,
   type ShareLink,
 } from '@/lib/sharing/model';
 import { keyForAttempt, type PendingCreate } from '@/lib/workspaces/idempotency';
@@ -33,13 +54,14 @@ import styles from './sharing.module.css';
 export interface WorkspaceSharingPanelProps {
   readonly workspaceId: string;
   readonly archived: boolean;
-  readonly initialLinks: readonly ShareLink[];
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   /** Element inside `<main>` the panel is portalled into. */
   readonly container: HTMLElement | null;
-  /** Move focus into the panel when it opens (a reopen), not on the initial page load. */
-  readonly focusOnOpen: boolean;
+  /** Screen id on the dialog body (`data-screen-id`, docs/screens/index.md). */
+  readonly screenId?: string;
+  /** A new value raises the open dialog above the other floating dialogs. */
+  readonly raiseKey?: number;
 }
 
 const noSubscribe = () => () => undefined;
@@ -58,15 +80,33 @@ type Confirm = 'revoke' | 'rotate' | null;
 export function WorkspaceSharingPanel({
   workspaceId,
   archived,
-  initialLinks,
   open,
   onOpenChange,
   container,
-  focusOnOpen,
+  screenId,
+  raiseKey,
 }: WorkspaceSharingPanelProps) {
   const { toast } = useToast();
   const isClient = useIsClient();
-  const [links, setLinks] = useState(initialLinks);
+  const [links, setLinks] = useState<readonly ShareLink[]>([]);
+  /** The first read of the links: in flight, done, or why it failed. */
+  const [loadState, setLoadState] = useState<'loading' | 'ok' | ShareFailureKind>('loading');
+  const loadLinks = useCallback(async () => {
+    setLoadState('loading');
+    let result: ShareActionResult;
+    try {
+      result = await listShareLinksAction(workspaceId);
+    } catch {
+      result = { ok: false, failure: 'unavailable', error: SHARE_FAILURE_MESSAGES.unavailable };
+    }
+    if (result.ok) {
+      setLinks(result.links);
+      setLoadState('ok');
+    } else setLoadState(result.failure);
+  }, [workspaceId]);
+  useEffect(() => {
+    void Promise.resolve().then(loadLinks);
+  }, [loadLinks]);
   const [issued, setIssued] = useState<{ linkId: string; shareUrl: string } | null>(null);
   const [replayed, setReplayed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -200,6 +240,7 @@ export function WorkspaceSharingPanel({
   }
 
   const forkChecked = current ? current.allow_fork : draftFork;
+  const loaded = loadState === 'ok';
 
   return (
     <>
@@ -208,14 +249,12 @@ export function WorkspaceSharingPanel({
         onOpenChange={onOpenChange}
         modal={false}
         container={container}
+        raiseKey={raiseKey}
         title="링크 공유"
         closeLabel="공유 관리 닫기"
         mobileLayout="full"
-        onOpenAutoFocus={(event) => {
-          if (!focusOnOpen) event.preventDefault();
-        }}
         footer={
-          current ? (
+          !loaded ? null : current ? (
             <>
               {archived || !active ? null : (
                 <Button ref={rotateRef} disabled={pending} onClick={() => setConfirm('rotate')}>
@@ -233,117 +272,139 @@ export function WorkspaceSharingPanel({
           )
         }
       >
-        <div className={styles.panelBody}>
-          <section className={styles.status} aria-labelledby={statusId}>
-            <h3 id={statusId} className="qz-visually-hidden">
-              공유 상태
-            </h3>
-            <div role="status" className={styles.statusLine}>
-              {active ? (
-                <>
-                  <Badge tone="success">공유 중</Badge>
-                  <span>링크를 가진 사람은 로그인 없이 볼 수 있습니다.</span>
-                </>
-              ) : (
-                <>
-                  <Badge tone="neutral">공유 꺼짐</Badge>
-                  {lastEnded === 'revoked' ? <Badge tone="warning">철회됨</Badge> : null}
-                  {lastEnded === 'expired' ? <Badge tone="warning">만료됨</Badge> : null}
-                  <span>
-                    {lastEnded === 'revoked'
-                      ? '최근 링크가 철회되어 더 이상 열리지 않습니다.'
-                      : lastEnded === 'expired'
-                        ? '최근 링크가 만료되어 더 이상 열리지 않습니다. 만료일을 오늘 이후로 바꾸면 이미 보낸 링크가 다시 열립니다.'
-                        : '아직 공유 링크가 없습니다.'}
-                  </span>
-                </>
+        <div data-screen-id={screenId}>
+          {loadState === 'loading' ? (
+            <div className={styles.panelBody} aria-busy="true">
+              <p role="status" className="qz-visually-hidden">
+                공유 설정을 불러오는 중입니다.
+              </p>
+              <Skeleton shape="rect" height="2.5rem" />
+              <Skeleton shape="rect" height="4rem" />
+              <Skeleton shape="rect" height="6rem" />
+            </div>
+          ) : !loaded ? (
+            <div role="alert" className={styles.error}>
+              <p>{SHARE_FAILURE_MESSAGES[loadState]}</p>
+              {loadState === 'forbidden' ? null : (
+                <Button size="sm" onClick={() => void loadLinks()}>
+                  다시 시도
+                </Button>
               )}
             </div>
-            {archived ? (
-              <p className={styles.note}>
-                보관된 Workspace에서는 새 링크를 만들거나 재발급할 수 없습니다. 링크 철회와 Fork
-                허용·만료일 변경만 할 수 있습니다.
-              </p>
-            ) : null}
-            {others.length > 0 ? (
-              <p className={styles.note}>
-                철회되지 않은 다른 링크 {others.length}개가 더 있습니다. 링크를 철회하면 함께
-                철회됩니다.
-              </p>
-            ) : null}
-          </section>
+          ) : (
+            <div className={styles.panelBody}>
+              <section className={styles.status} aria-labelledby={statusId}>
+                <h3 id={statusId} className="qz-visually-hidden">
+                  공유 상태
+                </h3>
+                <div role="status" className={styles.statusLine}>
+                  {active ? (
+                    <>
+                      <Badge tone="success">공유 중</Badge>
+                      <span>링크를 가진 사람은 로그인 없이 볼 수 있습니다.</span>
+                    </>
+                  ) : (
+                    <>
+                      <Badge tone="neutral">공유 꺼짐</Badge>
+                      {lastEnded === 'revoked' ? <Badge tone="warning">철회됨</Badge> : null}
+                      {lastEnded === 'expired' ? <Badge tone="warning">만료됨</Badge> : null}
+                      <span>
+                        {lastEnded === 'revoked'
+                          ? '최근 링크가 철회되어 더 이상 열리지 않습니다.'
+                          : lastEnded === 'expired'
+                            ? '최근 링크가 만료되어 더 이상 열리지 않습니다. 만료일을 오늘 이후로 바꾸면 이미 보낸 링크가 다시 열립니다.'
+                            : '아직 공유 링크가 없습니다.'}
+                      </span>
+                    </>
+                  )}
+                </div>
+                {archived ? (
+                  <p className={styles.note}>
+                    보관된 Workspace에서는 새 링크를 만들거나 재발급할 수 없습니다. 링크 철회와 Fork
+                    허용·만료일 변경만 할 수 있습니다.
+                  </p>
+                ) : null}
+                {others.length > 0 ? (
+                  <p className={styles.note}>
+                    철회되지 않은 다른 링크 {others.length}개가 더 있습니다. 링크를 철회하면 함께
+                    철회됩니다.
+                  </p>
+                ) : null}
+              </section>
 
-          {error ? (
-            <p role="alert" className={styles.error}>
-              {error}
-            </p>
-          ) : null}
+              {error ? (
+                <p role="alert" className={styles.error}>
+                  {error}
+                </p>
+              ) : null}
 
-          {shownUrl ? (
-            <section className={styles.issued} aria-label="새 공유 링크">
-              <Input
-                ref={linkFieldRef}
-                label="공유 링크"
-                readOnly
-                value={shownUrl}
-                onFocus={(event) => event.currentTarget.select()}
-                spellCheck={false}
-                autoComplete="off"
-                description="이 링크는 지금 한 번만 표시됩니다. 닫거나 새로 고치면 다시 볼 수 없으니 지금 복사해 두세요."
-              />
-              <div>
-                <Button onClick={copy}>링크 복사</Button>
-              </div>
-            </section>
-          ) : current ? (
-            <p className={styles.note}>
-              보안을 위해 링크 주소는 만들 때 한 번만 보여 드립니다.
-              {replayed ? ' 이 링크의 주소는 이미 표시되었습니다.' : ''} 주소를 잃어버렸다면 링크를
-              재발급하세요.
-            </p>
-          ) : null}
+              {shownUrl ? (
+                <section className={styles.issued} aria-label="새 공유 링크">
+                  <Input
+                    ref={linkFieldRef}
+                    label="공유 링크"
+                    readOnly
+                    value={shownUrl}
+                    onFocus={(event) => event.currentTarget.select()}
+                    spellCheck={false}
+                    autoComplete="off"
+                    description="이 링크는 지금 한 번만 표시됩니다. 닫거나 새로 고치면 다시 볼 수 없으니 지금 복사해 두세요."
+                  />
+                  <div>
+                    <Button onClick={copy}>링크 복사</Button>
+                  </div>
+                </section>
+              ) : current ? (
+                <p className={styles.note}>
+                  보안을 위해 링크 주소는 만들 때 한 번만 보여 드립니다.
+                  {replayed ? ' 이 링크의 주소는 이미 표시되었습니다.' : ''} 주소를 잃어버렸다면
+                  링크를 재발급하세요.
+                </p>
+              ) : null}
 
-          <section className={styles.policy} aria-label="링크 정책">
-            <Switch
-              label="Fork 허용"
-              description="켜면 로그인한 수신자가 이 Workspace의 독립 복사본을 만들 수 있습니다. 기본은 꺼짐입니다."
-              checked={forkChecked}
-              onCheckedChange={onForkChange}
-              disabled={policyDisabled}
-            />
-            <Input
-              type="date"
-              label="만료일"
-              description="비워 두면 만료되지 않습니다. 선택한 날의 끝까지 링크가 열립니다."
-              value={expiryValue}
-              min={today}
-              disabled={policyDisabled}
-              error={expiryError ?? undefined}
-              onChange={(event) => {
-                setExpiryDraft(event.currentTarget.value);
-                setExpiryError(null);
-              }}
-              onBlur={commitExpiry}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  commitExpiry();
-                }
-              }}
-            />
-          </section>
+              <section className={styles.policy} aria-label="링크 정책">
+                <Switch
+                  label="Fork 허용"
+                  description="켜면 로그인한 수신자가 이 Workspace의 독립 복사본을 만들 수 있습니다. 기본은 꺼짐입니다."
+                  checked={forkChecked}
+                  onCheckedChange={onForkChange}
+                  disabled={policyDisabled}
+                />
+                <Input
+                  type="date"
+                  label="만료일"
+                  description="비워 두면 만료되지 않습니다. 선택한 날의 끝까지 링크가 열립니다."
+                  value={expiryValue}
+                  min={today}
+                  disabled={policyDisabled}
+                  error={expiryError ?? undefined}
+                  onChange={(event) => {
+                    setExpiryDraft(event.currentTarget.value);
+                    setExpiryError(null);
+                  }}
+                  onBlur={commitExpiry}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      commitExpiry();
+                    }
+                  }}
+                />
+              </section>
 
-          <section className={styles.notices} aria-label="공개 범위와 저작권">
-            <p>
-              링크를 받은 사람은 로그인 없이 발행된 문서·문제·해설만 읽기 전용으로 볼 수 있습니다.
-              초안, 미발행 수정본, 개인 풀이 기록·즐겨찾기는 공개되지 않으며, 링크는 Workspace
-              멤버십이 아닙니다.
-            </p>
-            <p>
-              공유하거나 Fork를 허용하기 전에 PDF와 문제의 저작권·이용 권리를 확인하세요. 보기 전용
-              링크도 다운로드나 화면 캡처를 막지는 못합니다.
-            </p>
-          </section>
+              <section className={styles.notices} aria-label="공개 범위와 저작권">
+                <p>
+                  링크를 받은 사람은 로그인 없이 발행된 문서·문제·해설만 읽기 전용으로 볼 수
+                  있습니다. 초안, 미발행 수정본, 개인 풀이 기록·즐겨찾기는 공개되지 않으며, 링크는
+                  Workspace 멤버십이 아닙니다.
+                </p>
+                <p>
+                  공유하거나 Fork를 허용하기 전에 PDF와 문제의 저작권·이용 권리를 확인하세요. 보기
+                  전용 링크도 다운로드나 화면 캡처를 막지는 못합니다.
+                </p>
+              </section>
+            </div>
+          )}
         </div>
       </FloatingSidePanel>
 

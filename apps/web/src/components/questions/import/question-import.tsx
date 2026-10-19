@@ -45,6 +45,8 @@ import {
 } from '@/lib/questions/drafts';
 import type { QuestionFormValues } from '@/lib/questions/form';
 import { createImportClient, ImportApiError, importPath } from '@/lib/questions/import-client';
+import { clearPendingImportFile, peekPendingImportFile } from '@/lib/questions/import-handoff';
+import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import { DraftEditor, type DraftSaveResult } from '../drafts/draft-editor';
 import { QuestionDraftReview, type DraftReviewState } from '../drafts/question-draft-review';
 import { ImportJobProgress, type ImportStep } from './import-job-progress';
@@ -55,6 +57,8 @@ export type ImportReadOnly = 'viewer' | 'archived' | null;
 
 export interface QuestionImportProps {
   readonly workspaceId: string;
+  /** Breadcrumb root; defaults to a generic label (unit tests). */
+  readonly workspaceName?: string;
   readonly readOnly: ImportReadOnly;
   readonly initialRun: ImportRun | null;
   readonly initialDrafts: readonly ImportDraft[];
@@ -105,6 +109,7 @@ function isAbort(error: unknown, signal: AbortSignal): boolean {
 
 export function QuestionImport({
   workspaceId,
+  workspaceName = 'Workspace',
   readOnly,
   initialRun,
   initialDrafts,
@@ -342,7 +347,7 @@ export function QuestionImport({
     [deps, newController, router, startImport, workspaceId],
   );
 
-  function chooseFile(list: FileList | null) {
+  function chooseFile(list: FileList | readonly File[] | null) {
     const file = list?.[0];
     if (!file || !canEdit) return;
     const check = validatePdfFile(file);
@@ -424,6 +429,21 @@ export function QuestionImport({
     }
     return () => controller.current?.abort();
     // Only once for the server-rendered run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A PDF dropped on the home's "문제 PDF 관리" dialog (QIMPORT-01-AC05) starts uploading on
+  // arrival. Deferred a tick so a strict-mode remount (cleanup, then the effect again) starts it
+  // once; the hand-off is cleared only when the upload actually starts.
+  useEffect(() => {
+    const handed = canEdit ? peekPendingImportFile(workspaceId) : null;
+    if (!handed) return;
+    const timer = window.setTimeout(() => {
+      clearPendingImportFile();
+      chooseFile([handed]);
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // Only on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -589,6 +609,13 @@ export function QuestionImport({
   return (
     <div className={styles.screen}>
       <PageHeader
+        back={<WorkspaceBackLink workspaceId={workspaceId} />}
+        breadcrumb={
+          <WorkspaceBreadcrumb
+            workspace={{ id: workspaceId, name: workspaceName }}
+            trail={[{ label: '문제 PDF 가져오기' }]}
+          />
+        }
         title="문제 PDF 가져오기"
         description="문제지 PDF를 올리면 문제를 초안으로 추출합니다. 원본과 비교해 검토하고 승인한 문제만 문제은행에 등록됩니다. 정답지에 없는 정답은 만들지 않습니다."
         actions={
