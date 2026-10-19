@@ -22,18 +22,23 @@ export type {
   DropdownMenuGroupProps,
   DropdownMenuItemProps,
 } from './primitives/DropdownMenu';
+export { Dropzone } from './primitives/Dropzone';
+export type { DropzoneProps } from './primitives/Dropzone';
 export { FocusRing, focusRingClassName } from './primitives/FocusRing';
 export type { FocusRingProps } from './primitives/FocusRing';
 export { IconButton } from './primitives/IconButton';
 export type { IconButtonProps } from './primitives/IconButton';
 export {
   AlertIcon,
+  ArrowLeftIcon,
   CheckIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   CloseIcon,
   MenuIcon,
   MinusIcon,
   MoreIcon,
+  UploadIcon,
 } from './primitives/icons';
 export { Input } from './primitives/Input';
 export type { InputProps } from './primitives/Input';

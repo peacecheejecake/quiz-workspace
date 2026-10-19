@@ -3,15 +3,18 @@
 // this list in sync with src/index.ts.
 import {
   AlertIcon,
+  ArrowLeftIcon,
   AppShell,
   Badge,
   Button,
   CheckIcon,
   Checkbox,
   ChevronDownIcon,
+  ChevronRightIcon,
   CloseIcon,
   ConfirmDialog,
   DialogClose,
+  Dropzone,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -56,6 +59,7 @@ import {
   TabsList,
   TabsTrigger,
   Textarea,
+  UploadIcon,
   ThemeProvider,
   ToastProvider,
   TOOLTIP_DELAY_MS,
@@ -73,7 +77,14 @@ import {
 
 const hooks = [useTheme, useToast];
 // Need function props (onOpen / onPressedChange), so a Client Component has to render them.
-const interactive = [QuestionDot, QuestionHeatmap, FavoriteToggle, RetryToggle, ConfirmDialog];
+const interactive = [
+  QuestionDot,
+  QuestionHeatmap,
+  FavoriteToggle,
+  RetryToggle,
+  ConfirmDialog,
+  Dropzone,
+];
 
 // The status helpers are plain functions and must be callable on the server.
 const questions = QUESTION_DOT_STATUSES.map((status, index) => ({
@@ -137,6 +148,9 @@ export default function Page() {
             <MenuIcon />
             <MinusIcon />
             <MoreIcon />
+            <UploadIcon />
+            <ArrowLeftIcon />
+            <ChevronRightIcon />
           </Surface>
           <GlassSurface>glass</GlassSurface>
           <Tooltip content="설명" delayDuration={TOOLTIP_DELAY_MS + TOOLTIP_DESCRIPTION_DELAY_MS}>

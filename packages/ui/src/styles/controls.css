@@ -380,6 +380,73 @@
   }
 }
 
+/* Dropzone: dashed drop region; drag-over is shown by a solid accent border + tint and the
+   title stays the same (the pick button is the non-drag path). */
+.qz-dropzone {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-6) var(--space-4);
+  border: 2px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  text-align: center;
+  transition:
+    background-color var(--qz-transition-fast),
+    border-color var(--qz-transition-fast);
+
+  > .icon {
+    display: inline-flex;
+    margin-bottom: var(--space-1);
+    color: var(--color-text-secondary);
+  }
+
+  > .title {
+    margin: 0;
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-snug);
+  }
+
+  > .description {
+    margin: 0;
+    max-width: 48ch;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-label);
+    line-height: var(--line-height-normal);
+  }
+
+  > .pick {
+    margin-top: var(--space-2);
+  }
+
+  &[data-dragging] {
+    border-style: solid;
+    border-color: var(--color-accent);
+    background: var(--color-state-selected);
+  }
+
+  &[data-dragging] > .icon {
+    color: var(--color-accent);
+  }
+
+  &[data-disabled] {
+    background: var(--color-surface-muted);
+    color: var(--color-text-secondary);
+  }
+
+  @media (forced-colors: active) {
+    border-color: CanvasText;
+
+    &[data-dragging] {
+      border-color: Highlight;
+    }
+  }
+}
+
 /* Tabs */
 .qz-tabs {
   > .list {
