@@ -1,22 +1,30 @@
-# Deploy (M7.4a, docs/deployment.md §5, runbook: docs/runbook-deploy.md). Manual only: never runs
-# on push, pull request or schedule.
+# Deploy (M7.4a/M7.4p, docs/deployment.md §5, runbook: docs/runbook-deploy.md). Two entry points
+# (user decision 2026-10-19); never triggered directly by push, pull request or schedule:
+#   - workflow_call from ci.yml: staging, automatically after every green CI run of a push to
+#     `develop` (the caller's `needs` prove CI green for this commit);
+#   - workflow_dispatch: staging (from `develop`) or production (from `main`; GitHub Environment
+#     `production` with required reviewers).
 #
-#   preflight (ref, secrets, CI green for this commit)
+#   preflight (trigger, ref, secrets, CI green for this commit)
 #     → api/worker images → GHCR, by digest
 #     → `supabase db push` (migrations BEFORE any rollout; additive-first, §5)
 #     → Railway api, then worker, onto those digests (API gated on /health/ready)
-#     → Vercel web (prebuilt; staging aliased to WEB_ORIGIN)
+#     → Vercel web (prebuilt; staging aliased to WEB_ORIGIN, production on the project's
+#       production domain)
 #     → post-deploy smoke (staging: DEP-01/02/05/07 automated set; production and the one-time
 #       staging `bootstrap` run, before the smoke accounts exist: @readonly only)
 #
-# Staging first (user decision 2026-10-18, implementation-plan §7): production stays gated until
-# the staging 7-day load test / cost gate passes; the operator then sets the repository variable
-# PRODUCTION_DEPLOY_ENABLED=true. Until then a production dispatch fails in preflight.
+# Allowed refs: staging ← refs/heads/develop, production ← refs/heads/main, nothing else. In a
+# called workflow `github.*` (ref, sha, event_name, workflow_ref) is the caller's.
+#
+# Production switch: the staging 7-day load/cost gate was waived by user decision 2026-10-19; the
+# operator still turns production on by setting the repository variable
+# PRODUCTION_DEPLOY_ENABLED=true. Without it a production dispatch fails in preflight.
 #
 # Everything comes from the GitHub Environment named by the `environment` input (staging /
-# production; production should require reviewers and allow only `main`). Names and owners:
-# infra/deploy/env-manifest.toml, services `deploy` and `smoke`. A missing value stops the run in
-# preflight with the list of missing names, before anything is built or changed.
+# production). Names and owners: infra/deploy/env-manifest.toml, services `deploy` and `smoke`. A
+# missing value stops the run in preflight with the list of missing names, before anything is
+# built or changed.
 #
 # One job on purpose: environment secrets need the job to reference the environment, and one job
 # means one approval and a strict order (no rollout without its migration step).
@@ -38,19 +46,34 @@ on:
         description: Skip `supabase db push` (rollback to an older commit; see runbook)
         type: boolean
         default: false
+  workflow_call:
+    inputs:
+      environment:
+        description: Target environment (GitHub Environment of the same name)
+        type: string
+        required: true
+      bootstrap:
+        description: First staging deploy before the smoke accounts exist (read-only smoke only)
+        type: boolean
+        default: false
+      skip_migrations:
+        description: Skip `supabase db push` (rollback to an older commit; see runbook)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
-
-concurrency:
-  group: deploy-${{ inputs.environment }}
-  cancel-in-progress: false
 
 jobs:
   deploy:
     name: deploy · ${{ inputs.environment }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    # Job level so it holds for both entry points (ci.yml's workflow-level group does not reach
+    # into the callee): a deploy waits for the running one of its environment, never cancels it.
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
     environment:
       name: ${{ inputs.environment }}
       url: ${{ vars.WEB_ORIGIN }}
@@ -80,21 +103,36 @@ jobs:
       SMOKE_USER_B_PASSWORD: ${{ secrets.SMOKE_USER_B_PASSWORD }}
       FORCE_COLOR: '1'
     steps:
-      - name: Preflight (ref, required secrets and variables)
+      - name: Preflight (trigger, ref, required secrets and variables)
         env:
           REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
+          CALLER: ${{ github.workflow_ref }}
+          REPO: ${{ github.repository }}
           PRODUCTION_DEPLOY_ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
           BOOTSTRAP: ${{ inputs.bootstrap }}
         run: |
           set -euo pipefail
+          # A manual dispatch, or ci.yml calling this workflow on a push to develop.
+          case "$EVENT" in
+            workflow_dispatch) ;;
+            push)
+              if [[ $CALLER != "$REPO/.github/workflows/ci.yml@"* || $TARGET != staging ]]; then
+                echo "::error::push-triggered deploys come only from ci.yml and only to staging"
+                exit 1
+              fi ;;
+            *)
+              echo "::error::deploys run from workflow_dispatch or the CI call, not $EVENT"
+              exit 1 ;;
+          esac
           if [[ $TARGET == production && ${PRODUCTION_DEPLOY_ENABLED:-} != true ]]; then
-            echo '::error::production is gated until the staging load/cost gate (runbook §9); set PRODUCTION_DEPLOY_ENABLED=true'
+            echo '::error::production deploys are off until the operator sets the repository variable PRODUCTION_DEPLOY_ENABLED=true (runbook §6)'
             exit 1
           fi
           case "$TARGET/$REF" in
-            production/refs/heads/main | staging/refs/heads/main | staging/refs/heads/develop) ;;
+            production/refs/heads/main | staging/refs/heads/develop) ;;
             *)
-              echo "::error::$TARGET deploys run from main (staging also from develop), not $REF"
+              echo "::error::staging deploys run from develop and production from main, not $TARGET from $REF"
               exit 1 ;;
           esac
           required=(SUPABASE_DB_URL VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_CLI_VERSION
@@ -124,7 +162,11 @@ jobs:
           done
           echo "preflight: $TARGET from $REF, all ${#required[@]} values present"
 
+      # A dispatch needs a finished green CI run of this commit. The CI call skips the lookup: that
+      # CI run is still in progress (it is the caller), and its `needs` already prove every
+      # required CI job green for this commit. Preflight admits a push only from ci.yml.
       - name: CI passed for this commit
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}

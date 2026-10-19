@@ -53,7 +53,7 @@ SAMPLES = {
     "not_fake": "auto",
     "log_level": "INFO",
     "header_name": "x-real-ip",
-    "collection_prefix": "",
+    "collection_prefix": "prod_",
     "publishable_key": "sb_publishable_example",
     "secret_key": "sb_secret_" + SECRET_MARK,
     "email": "smoke-a@quiz.example",
@@ -245,6 +245,37 @@ def test_conditional_requirement_and_fake_adapters() -> None:
     report = check_env.run_checks(MANIFEST, "production", {"worker": env})
     assert "worker LLM_MODEL: missing (required when LLM_API_KEY is set)" in report.errors
     assert "worker WORKER_PARSER: fake adapters are for local/test only" in report.errors
+
+
+def test_production_needs_its_own_qdrant_prefix_on_the_shared_cluster() -> None:
+    # Staging uses the unprefixed namespace of the shared cluster (user decision 2026-10-19), so a
+    # production deployment without a prefix would read and write staging's collections.
+    for service in ("api", "worker"):
+        production = valid_env(service, "production")
+        assert production["QDRANT_COLLECTION_PREFIX"] == "prod_"
+        del production["QDRANT_COLLECTION_PREFIX"]
+        errors = check_env.run_checks(MANIFEST, "production", {service: production}).errors
+        assert errors == [f"{service} QDRANT_COLLECTION_PREFIX: missing (required in production)"]
+        production["QDRANT_COLLECTION_PREFIX"] = ""
+        errors = check_env.run_checks(MANIFEST, "production", {service: production}).errors
+        assert errors == [f"{service} QDRANT_COLLECTION_PREFIX: missing (required in production)"]
+
+        staging = valid_env(service, "staging")
+        assert "QDRANT_COLLECTION_PREFIX" not in staging
+        assert check_env.run_checks(MANIFEST, "staging", {service: staging}).errors == []
+
+
+def test_production_env_matches_the_deploy_decisions() -> None:
+    api = valid_env("api", "production")
+    assert api["APP_ENV"] == "production"
+    api["APP_ENV"] = "preview"
+    errors = check_env.run_checks(MANIFEST, "production", {"api": api}).errors
+    assert errors == ["api APP_ENV: must be production in production"]
+    deploy = {v.name for v in MANIFEST.for_service("deploy") if "production" in v.required}
+    assert "PRODUCTION_DEPLOY_ENABLED" in deploy
+    # Production smoke is @readonly: no smoke account is required there.
+    smoke = {v.name for v in MANIFEST.for_service("smoke") if "production" in v.required}
+    assert not {n for n in smoke if n.startswith("SMOKE_USER_")}
 
 
 def test_keys_are_not_swapped() -> None:

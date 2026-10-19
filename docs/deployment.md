@@ -90,6 +90,7 @@ PR opened
 
 - 변경사항은 screen requirements + E2E tests **먼저 작성**되어야 merge 가능한 PR로 본다. 테스트는 최초 RED 실행의 실패 이유를 PR에 기록한다.
 - 스테이징·프로덕션 환경의 Auth redirect domain, JWKS issuer, CORS, secrets, SMTP, Storage 정책을 별도로 설정.
+- 배포 branch(사용자 결정 2026-10-19, M7.4p): **staging = `develop`**, **production = `main`**. `develop` push의 CI가 모두 GREEN이면 CI의 마지막 job이 `deploy.yml`을 호출해 staging에 자동 배포한다(수동 dispatch도 `develop`에서만). production은 `main`에서 수동 dispatch + GitHub Environment `production`(deployment branch `main`, required reviewers) 승인으로만 배포한다. 다른 branch·tag·PR ref는 preflight가 거부한다.
 - 배포 시 API/schema 호환 기간을 유지하고 worker는 idempotent job 및 task schema version을 사용한다.
 - SQL migration은 additive-first → 코드 deploy → cleanup 방식. 컬렉션 업그레이드는 `documents_v2`/`questions_v2` 구축 후 alias/active index 전환. 실패 시 rollback 경로 보존.
 
@@ -156,7 +157,8 @@ PR opened
 - **Cloudflare Workers AI(M7.4b)**: Workers **Free** plan(사용자 결정 2026-10-18) — 하루 10,000 neurons 무료, 초과 요청은 오류로 거부된다(과금 없음). `qwen3-embedding-0.6b`는 공개 가격 $0.0118 / 1M input tokens(≈ $0.011 / 1,000 neurons 환산 시 하루 약 900만 token; 정확한 neuron 환산은 Cloudflare dashboard에서 첫 staging 색인 후 확인). quota 초과·429·5xx는 worker에서 재시도 가능한 job 실패(backoff), API 검색에서는 BM25 저하(SEARCH-01-AC06)로 처리한다.
 - **Railway Hobby 업그레이드 보류**(2026-10-18): trial(서비스당 1 GB RAM)에서 시작한다. API는 hosted embedder를 써서 모델을 메모리에 올리지 않고, 남는 RAM 변수는 Docling worker다.
 - Vercel Hobby는 개인·비상업 목적 제한이 있다. 외부 사용자에게 상용 서비스를 제공한다면 적절한 유료 플랜을 선택해야 한다.
-- 월 비용은 서비스 조합, 사용량, 모델 배치에 따라 크게 달라지므로 고정 총액을 추정하지 않는다. 비용 게이트는 staging 7일 load test 후 확정한다.
+- 월 비용은 서비스 조합, 사용량, 모델 배치에 따라 크게 달라지므로 고정 총액을 추정하지 않는다. staging 7일 부하·비용 게이트는 사용자 결정(2026-10-19)으로 면제되어 production을 바로 배포한다; 비용은 운영 중 측정·예산 알림으로 관리한다.
+- Qdrant production(사용자 결정 2026-10-19): staging과 **같은 Free cluster**를 쓰고 `QDRANT_COLLECTION_PREFIX`로 분리한다(staging은 빈 prefix, production `prod_`; check-env가 production의 빈 prefix를 거부). Free tier 한계(위)는 production에도 그대로 적용된다.
 
 ## 9. 배포 수용 테스트 (DEP)
 
@@ -170,7 +172,7 @@ PR opened
 
 ### 실행 절차 (M7.4a)
 
-계정 생성·secret 생성 위치·첫 staging 배포 순서·롤백·smoke(DEP 자동/수동 구분)는 [runbook-deploy.md](runbook-deploy.md). 변수 목록의 기준은 `infra/deploy/env-manifest.toml`(검증: `make check-env`), 배포는 `.github/workflows/deploy.yml`(수동 실행, migration → API/Worker → Web → smoke). 2026-10-18 결정: 구성 A, staging 먼저(production은 7일 부하·비용 게이트 후), 환경별 Supabase project.
+계정 생성·secret 생성 위치·첫 staging 배포 순서·롤백·smoke(DEP 자동/수동 구분)는 [runbook-deploy.md](runbook-deploy.md). 변수 목록의 기준은 `infra/deploy/env-manifest.toml`(검증: `make check-env`), 배포는 `.github/workflows/deploy.yml`(migration → API/Worker → Web → smoke; staging은 `develop` push의 CI GREEN 후 자동 + `develop` 수동, production은 `main` 수동 + 승인). 2026-10-18 결정: 구성 A, 환경별 Supabase project. 2026-10-19 결정: staging은 `develop` 기준, 7일 게이트 면제 후 production 배포(web `https://quiz.red-10-proto.xyz`, 같은 Railway project의 `production` environment, Qdrant cluster 공유 + prefix, 새 Singapore Supabase project).
 
 ### 공식 참고
 

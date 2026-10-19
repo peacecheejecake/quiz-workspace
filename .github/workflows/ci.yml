@@ -8,6 +8,8 @@
 #   images (api · worker · web, no push)
 #   visual-ui (@quiz/ui Storybook baselines)
 #   models (schedule / manual only)
+#   checks + images + integration + visual-ui ──► deploy-staging (push to develop only;
+#     calls deploy.yml with environment=staging, M7.4p)
 #
 # Visual baselines are Linux renders of the pinned Playwright image (tests/e2e/README.md "Visual
 # baselines"): scripts/visual-run.sh starts `playwright run-server` in
@@ -39,9 +41,11 @@ on:
 permissions:
   contents: read
 
+# A push to develop also deploys staging (job `deploy-staging`), so a newer push must not cancel
+# a run that may be mid-deploy: those runs queue instead (GitHub keeps only the newest pending).
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
 
 env:
   E2E_PHASES: P0.10,A0,M3.0,M4.0,M5.0,M6.0,M7.0,S0
@@ -369,3 +373,19 @@ jobs:
           key: hf-${{ runner.os }}-${{ hashFiles('uv.lock', 'packages/core/src/book_core/embedding/qwen3.py', 'packages/core/src/book_core/reranker/qwen3.py') }}
       - name: Real-model tests
         run: make test-models
+
+  # Staging follows develop (user decision 2026-10-19): every push to develop deploys once all
+  # required jobs above are green. `models` is not required (schedule/manual only). These `needs`
+  # are the CI-green proof, so deploy.yml skips its own CI lookup on this path.
+  deploy-staging:
+    name: deploy · staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs: [checks, images, integration, visual-ui]
+    permissions:
+      contents: read
+      packages: write # push the api/worker images to GHCR
+      actions: read # the callee's job permissions (CI lookup on dispatch)
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+    secrets: inherit

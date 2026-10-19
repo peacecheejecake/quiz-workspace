@@ -164,10 +164,11 @@ provider = "Qdrant Cloud → cluster → API keys"
 name = "QDRANT_COLLECTION_PREFIX"
 services = ["api", "worker"]
 kind = "config"
+required = ["production"]
 check = "collection_prefix"
 same = true
-provider = "default"
-note = "empty; set (e.g. staging_) only if staging and production share a cluster"
+provider = "operator: staging empty (unprefixed namespace), production prod_"
+note = "staging and production share one Qdrant cluster (user decision 2026-10-19): production must use its own non-empty prefix"
 
 [[var]]
 name = "SUPABASE_JWT_ISSUER"
@@ -881,8 +882,8 @@ services = ["deploy"]
 kind = "config"
 required = ["production"]
 check = "bool"
-provider = "operator: repository variable, true only after the staging 7-day load/cost gate"
-note = "gates production deploys (user decision 2026-10-18: staging first)"
+provider = "operator: repository variable, true when production deploys should run"
+note = "production deploy switch; the staging 7-day cost gate was waived (user decision 2026-10-19)"
 
 [[var]]
 name = "RAILWAY_TOKEN"

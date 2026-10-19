@@ -156,6 +156,15 @@ def test_supabase_remotes_target_distinct_projects() -> None:
     assert remotes["staging"]["project_id"] != remotes["production"]["project_id"]
 
 
+def test_supabase_production_mirrors_staging_except_the_project() -> None:
+    # Production differs from staging only in the project it targets; per-environment values
+    # (site_url, redirect, SMTP, CAPTCHA secret) come from the operator's environment.
+    remotes = _remotes()
+    staging = {k: v for k, v in remotes["staging"].items() if k != "project_id"}
+    production = {k: v for k, v in remotes["production"].items() if k != "project_id"}
+    assert production == staging
+
+
 def test_supabase_local_auth_is_untouched() -> None:
     auth = tomllib.loads(SUPABASE.read_text(encoding="utf-8"))["auth"]
     # Local/test: Supabase never calls Cloudflare (the web widget is faked in E2E).
