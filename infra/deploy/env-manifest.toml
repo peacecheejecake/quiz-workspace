@@ -408,6 +408,14 @@ provider = "operator"
 note = "false until the HF_HOME volume is warm, then true"
 
 [[var]]
+name = "WORKER_WARM_PARSER"
+services = ["worker"]
+kind = "config"
+check = "bool"
+provider = "operator"
+note = "unset = on in staging/production: each worker child loads the Docling models at start (UX3-JOB); false defers that to the first document"
+
+[[var]]
 name = "SEARCH_RATE_LIMIT_PER_MINUTE"
 services = ["api"]
 kind = "config"

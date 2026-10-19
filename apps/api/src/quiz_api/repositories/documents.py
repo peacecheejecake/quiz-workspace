@@ -9,14 +9,17 @@ one's result instead of creating a second document.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
 from sqlalchemy import func, insert, select, update
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from quiz_api.repositories.jobs import progress_of
 from quiz_api.repositories.tables import (
     activity_events,
     async_jobs,
@@ -31,6 +34,7 @@ RevisionStatus = Literal["draft", "published"]
 
 PARSE_JOB_TYPE = "document.parse"
 PARSE_JOB_SCHEMA_VERSION = 1
+ACTIVE_JOB_STATUSES = ("queued", "running")
 
 
 @dataclass(frozen=True)
@@ -50,6 +54,18 @@ class UploadRecord:
     expires_at: datetime
     expired: bool
     completed_job_id: uuid.UUID | None
+
+
+@dataclass(frozen=True)
+class ProcessingJobRecord:
+    """A document's queued or running `document.parse` job, reduced to presentable fields."""
+
+    id: uuid.UUID
+    status: Literal["queued", "running"]
+    stage: str | None
+    progress: int | None
+    created_at: datetime
+    started_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -373,6 +389,45 @@ class DocumentRepository:
         if document_type is not None:
             stmt = stmt.where(documents.c.document_type == document_type)
         return [_document(row) for row in self._session.execute(stmt)]
+
+    def processing_jobs(
+        self, workspace_id: uuid.UUID, document_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, ProcessingJobRecord]:
+        """document id -> its newest queued or running `document.parse` job (UX3-JOB), read
+        inside the authorized workspace only."""
+        if not document_ids:
+            return {}
+        document_key = async_jobs.c.payload["document_id"].astext
+        rows = self._session.execute(
+            select(
+                document_key.label("document_id"),
+                async_jobs.c.id,
+                async_jobs.c.status,
+                async_jobs.c.result,
+                async_jobs.c.created_at,
+                async_jobs.c.started_at,
+            )
+            .where(
+                async_jobs.c.workspace_id == workspace_id,
+                async_jobs.c.job_type == PARSE_JOB_TYPE,
+                async_jobs.c.status.in_(ACTIVE_JOB_STATUSES),
+                document_key.in_([str(d) for d in document_ids]),
+            )
+            .order_by(document_key, async_jobs.c.created_at.desc(), async_jobs.c.id.desc())
+            .ext(distinct_on(document_key))
+        )
+        found: dict[uuid.UUID, ProcessingJobRecord] = {}
+        for row in rows:
+            progress, stage = progress_of(row.status, row.result)
+            found[uuid.UUID(row.document_id)] = ProcessingJobRecord(
+                id=row.id,
+                status=cast(Literal["queued", "running"], row.status),
+                stage=stage,
+                progress=progress,
+                created_at=row.created_at,
+                started_at=row.started_at,
+            )
+        return found
 
     def get_document(self, document_id: uuid.UUID) -> DocumentRecord:
         """A document the route already authorized (so it exists and is not deleted)."""

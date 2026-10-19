@@ -175,6 +175,10 @@ class WorkerSettings(BaseSettings):
         default=None, validation_alias="WORKER_MODELS_ARTIFACTS_PATH"
     )
     models_offline: bool = Field(default=False, validation_alias="WORKER_MODELS_OFFLINE")
+    # Load the Docling models in each prefork child right after it starts (background thread),
+    # so the first document does not wait for them (UX3-JOB). Unset: on in preview/production
+    # with the Docling parser, off elsewhere (tests and fake adapters never load models).
+    warm_parser: bool | None = Field(default=None, validation_alias="WORKER_WARM_PARSER")
     # Input limits checked before parsing (docs/deployment.md §2 step 4).
     pdf_max_bytes: int = Field(
         default=50 * 1024 * 1024, ge=1, validation_alias="WORKER_PDF_MAX_BYTES"
@@ -236,6 +240,13 @@ class WorkerSettings(BaseSettings):
     @property
     def is_test(self) -> bool:
         return self.app_env is Environment.TEST
+
+    @property
+    def warms_parser(self) -> bool:
+        if self.warm_parser is not None:
+            return self.warm_parser
+        deployed = self.app_env in {Environment.PREVIEW, Environment.PRODUCTION}
+        return deployed and self.parser is not ParserMode.FAKE
 
     @property
     def lease_seconds(self) -> int:

@@ -24,8 +24,10 @@ Heavy imports (Docling, torch) happen only when the adapter is first used.
 from __future__ import annotations
 
 import os
+import threading
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from book_core.contracts import ParsedDocument
 from book_core.embedding import (
@@ -44,6 +46,9 @@ from book_core.parser import FakeParser, ParserOptions, PdfParser, sha256_hex
 
 from quiz_worker.errors import JobError, NonRetryableJobError
 from quiz_worker.settings import ParserMode, WorkerSettings
+
+if TYPE_CHECKING:
+    from book_core.parser.docling_adapter import DoclingParser
 
 INDEX_FAILURE_MARKER = "E2E-FAIL-INDEXING"
 _REPO_FIXTURES = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "pdfs"
@@ -138,19 +143,40 @@ class FailureInjectingEmbedder:
         return self._inner.embed_query(text)
 
 
+@runtime_checkable
+class PreparableParser(Protocol):
+    """A parser whose models can be loaded ahead of the first `parse` (UX3-JOB): the job reports
+    a `preparing` stage while they load, and a worker child can warm them up at start."""
+
+    @property
+    def prepared(self) -> bool: ...
+
+    def prepare(self) -> None: ...
+
+
 class LazyDoclingParser:
-    """Builds `DoclingParser` (and loads its models) on first use."""
+    """Builds `DoclingParser` (and loads its models) on first use, or on `prepare`."""
 
     def __init__(self, options: ParserOptions) -> None:
         self._options = options
-        self._parser: PdfParser | None = None
+        self._parser: DoclingParser | None = None
+        self._lock = threading.Lock()
 
-    def _get(self) -> PdfParser:
-        if self._parser is None:
-            from book_core.parser.docling_adapter import DoclingParser
+    def _get(self) -> DoclingParser:
+        with self._lock:
+            if self._parser is None:
+                from book_core.parser.docling_adapter import DoclingParser
 
-            self._parser = DoclingParser(self._options)
-        return self._parser
+                self._parser = DoclingParser(self._options)
+            return self._parser
+
+    @property
+    def prepared(self) -> bool:
+        return self._parser is not None and self._parser.prepared
+
+    def prepare(self) -> None:
+        """Load the models now; a concurrent `parse` waits for it instead of loading twice."""
+        self._get().prepare()
 
     @property
     def parser_version(self) -> str:

@@ -21,6 +21,7 @@ import {
   test,
   type Member,
   type Problem,
+  uploadReadyBook,
 } from '../fixtures/test.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -190,6 +191,63 @@ test(
 
     await page.reload();
     await expect(docUi.item(page, BOOK_TITLE)).toHaveCount(1);
+  },
+);
+
+test(
+  'DOC-01-AC05 a document this tab does not follow shows its job stage from the list, then the elapsed time and a hint',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(2 * JOB_TIMEOUT_MS + 60_000);
+    const owner = await workspaceFactory.member('doc01-ac05');
+    const ws = await workspaceFactory.create(owner);
+    const target = await uploadReadyBook(owner, ws.id, 'book-ko');
+    await openLibrary(page, owner, ws.id);
+    const row = docUi.item(page, BOOK_TITLE);
+    await expect(docUi.ready(row)).toBeVisible();
+
+    // A cold worker (minutes of model loading) cannot be produced on demand with the fake
+    // adapters, and their jobs finish in seconds. So the library's own list request (BFF → API,
+    // real response) gets the target's job state replaced by what the API returns during a cold
+    // start: running, stage `preparing`, started 90 s ago. The API and worker side of that state
+    // are covered by tests/integration/workspaces/test_document_parse_job.py (UX3-JOB).
+    const listPath = `/api/workspaces/${ws.id}/documents`;
+    const startedAt = new Date(Date.now() - 90_000).toISOString();
+    await page.route(
+      (url) => url.pathname === listPath,
+      async (route) => {
+        if (route.request().method() !== 'GET') return route.fallback();
+        const response = await route.fetch();
+        const body = (await response.json()) as { items: Record<string, unknown>[] };
+        for (const item of body.items) {
+          if (item.id !== target) continue;
+          item.status = 'processing';
+          item.processing_job = {
+            id: crypto.randomUUID(),
+            status: 'running',
+            stage: 'preparing',
+            progress: 2,
+            created_at: startedAt,
+            started_at: startedAt,
+          };
+        }
+        await route.fulfill({ response, json: body });
+      },
+    );
+
+    // Another upload through the UI: once its job ends the library re-reads the list.
+    await chooseFile(page, book('book-en').path);
+    await expect(docUi.ready(docUi.item(page, /book-en/))).toBeVisible({ timeout: JOB_TIMEOUT_MS });
+
+    await expect(row.getByText(/처리 준비 중|preparing/i)).toBeVisible();
+    await expect(row.getByText(/\d+분 \d+초째 처리 중/)).toBeVisible();
+    await expect(row.getByText(/첫 처리나 큰 PDF는 몇 분 걸릴 수 있습니다/)).toBeVisible();
+    await expect(docUi.ready(row)).toHaveCount(0);
+
+    // Back to the real list (polled while the document is processing): READY again.
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await expect(docUi.ready(row)).toBeVisible();
+    await expect(row.getByText(/첫 처리나 큰 PDF/)).toHaveCount(0);
   },
 );
 

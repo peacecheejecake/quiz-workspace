@@ -30,6 +30,7 @@ from quiz_api.main import create_app
 from quiz_api.repositories.documents import (
     DocumentRecord,
     JobRow,
+    ProcessingJobRecord,
     RevisionRecord,
     UploadRecord,
     parse_job_key,
@@ -62,6 +63,9 @@ class World:
     deleted: set[uuid.UUID] = field(default_factory=set)
     jobs: dict[uuid.UUID, JobRow] = field(default_factory=dict)
     revisions: dict[uuid.UUID, tuple[uuid.UUID, RevisionRecord]] = field(default_factory=dict)
+    # document id -> its queued/running parse job, as `processing_jobs` reads it
+    processing: dict[uuid.UUID, ProcessingJobRecord] = field(default_factory=dict)
+    processing_reads: list[tuple[uuid.UUID, list[uuid.UUID]]] = field(default_factory=list)
     locks: list[LockMode] = field(default_factory=list)
     commits: int = 0
     rollbacks: int = 0
@@ -183,6 +187,16 @@ class World:
             and d.id not in self.deleted
             and document_type in (None, d.document_type)
         ]
+
+    def processing_jobs(
+        self, workspace_id: uuid.UUID, document_ids: Any
+    ) -> dict[uuid.UUID, ProcessingJobRecord]:
+        self.processing_reads.append((workspace_id, list(document_ids)))
+        return {
+            d: job
+            for d, job in self.processing.items()
+            if d in document_ids and self.documents[d].workspace_id == workspace_id
+        }
 
     def get_document(self, document_id: uuid.UUID) -> DocumentRecord:
         return self.documents[document_id]
@@ -722,6 +736,61 @@ def test_list_get_source_url_and_soft_delete(
     assert api.get(f"{API}/workspaces/{ws}/documents", headers=bearer(owner)).json() == {
         "items": []
     }
+
+
+def test_doc_01_ac05_list_and_detail_carry_the_processing_job(
+    api: TestClient, world: World, storage: FakeStorage, bearer: Bearer
+) -> None:
+    """UX3-JOB: a library that does not follow the job live still shows its status and stage
+    (a cold worker's `preparing`) and since when it runs, from the list alone."""
+    owner, viewer, stranger = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    ws = world.workspace(owner)
+    world.members[(ws, viewer)] = Role.VIEWER
+    intent = _intent(api, bearer, owner, ws)
+    upload = world.uploads[uuid.UUID(intent["upload_id"])]
+    storage.objects[(SOURCE_BUCKET, upload.object_key)] = PDF
+    done = _complete(api, bearer, owner, intent["upload_id"]).json()
+    doc_id, job_id = uuid.UUID(done["document_id"]), uuid.UUID(done["job_id"])
+
+    def listed_job() -> Any:
+        items = api.get(f"{API}/workspaces/{ws}/documents", headers=bearer(viewer)).json()["items"]
+        assert [d["id"] for d in items] == [str(doc_id)]
+        return items[0]["processing_job"]
+
+    assert listed_job() is None  # no queued/running job reported (yet)
+    world.processing[doc_id] = ProcessingJobRecord(
+        id=job_id, status="queued", stage=None, progress=None, created_at=T0, started_at=None
+    )
+    assert listed_job() == {
+        "id": str(job_id),
+        "status": "queued",
+        "stage": None,
+        "progress": None,
+        "created_at": "2026-10-01T00:00:00Z",
+        "started_at": None,
+    }
+    started = T0 + timedelta(seconds=5)
+    world.processing[doc_id] = ProcessingJobRecord(
+        id=job_id,
+        status="running",
+        stage="preparing",
+        progress=2,
+        created_at=T0,
+        started_at=started,
+    )
+    job = listed_job()
+    assert (job["status"], job["stage"], job["progress"]) == ("running", "preparing", 2)
+    assert job["started_at"] == "2026-10-01T00:00:05Z"
+    # Jobs are read inside the authorized workspace only, for the listed documents.
+    assert world.processing_reads[-1] == (ws, [doc_id])
+
+    detail = api.get(f"{API}/documents/{doc_id}", headers=bearer(viewer)).json()
+    assert detail["processing_job"]["stage"] == "preparing"
+    _problem(api.get(f"{API}/documents/{doc_id}", headers=bearer(stranger)), 404)
+    _problem(api.get(f"{API}/workspaces/{ws}/documents", headers=bearer(stranger)), 404)
+
+    del world.processing[doc_id]
+    assert listed_job() is None
 
 
 def test_openapi_documents_the_document_routes(api: TestClient) -> None:
