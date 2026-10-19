@@ -11,6 +11,9 @@ import { CloseIcon } from '../primitives/icons';
 
 type ContentProps = ComponentProps<typeof Dialog.Content>;
 
+/** Escape presses a non-modal panel declined because focus was outside it (see onKeyDown). */
+const declinedEscapes = new WeakSet<Event>();
+
 export interface FloatingSidePanelProps {
   open?: boolean;
   defaultOpen?: boolean;
@@ -152,10 +155,17 @@ export function FloatingSidePanel({
             if (!modal && contentRef.current) {
               handOffFocus(event, contentRef.current, returnFocusRef.current);
             }
+            // Radix lets only the most recently mounted non-modal panel handle Escape; when focus
+            // is in another one (e.g. raised over it), that panel's guard below declined, so the
+            // panel holding focus closes itself.
+            if (event.key === 'Escape' && !modal && declinedEscapes.has(event.nativeEvent)) {
+              handleOpenChange(false);
+            }
           }}
           onEscapeKeyDown={(event) => {
             if (!modal && !contentRef.current?.contains(document.activeElement)) {
               event.preventDefault();
+              declinedEscapes.add(event);
             }
           }}
         >
