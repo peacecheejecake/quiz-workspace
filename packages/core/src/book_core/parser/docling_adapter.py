@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import importlib.util
+import threading
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -117,6 +118,8 @@ class DoclingParser:
     """``PdfParser`` on Docling's standard PDF pipeline (layout + TableFormer, CPU).
 
     Converters (and their models) are created lazily and reused across ``parse`` calls.
+    ``prepare`` loads the default (non-OCR) pipeline's models ahead of the first ``parse`` (a
+    worker warm-up); it is serialized with ``parse``, so models are never loaded twice.
     """
 
     def __init__(self, options: ParserOptions | None = None) -> None:
@@ -126,6 +129,8 @@ class DoclingParser:
                 "OCR requested but RapidOCR is not installed (install book-core[ocr])"
             )
         self._converters: dict[bool, DocumentConverter] = {}
+        self._prepared: set[bool] = set()
+        self._lock = threading.Lock()
         self._version = docling_parser_version()
 
     @property
@@ -135,6 +140,23 @@ class DoclingParser:
     @property
     def options(self) -> ParserOptions:
         return self._options
+
+    @property
+    def prepared(self) -> bool:
+        """Whether the default pipeline's models are loaded (``parse`` starts converting)."""
+        return False in self._prepared
+
+    def prepare(self) -> None:
+        """Load the default pipeline's models (layout, TableFormer) without converting."""
+        self._pipeline(ocr=False)
+
+    def _pipeline(self, ocr: bool) -> DocumentConverter:
+        with self._lock:
+            converter = self._converter(ocr)
+            if ocr not in self._prepared:
+                converter.initialize_pipeline(InputFormat.PDF)
+                self._prepared.add(ocr)
+            return converter
 
     def parse(self, path: Path, *, source_path: str | None = None) -> ParsedDocument:
         data = path.read_bytes()
@@ -148,7 +170,7 @@ class DoclingParser:
         run_ocr = self._options.ocr and not all(text_layers)
 
         stream = DocumentStream(name=Path(source_path).name or "document.pdf", stream=BytesIO(data))
-        result = self._converter(run_ocr).convert(stream, raises_on_error=False)
+        result = self._pipeline(run_ocr).convert(stream, raises_on_error=False)
         if result.status is not ConversionStatus.SUCCESS:
             errors = "; ".join(e.error_message for e in result.errors)
             raise ParserError(f"docling conversion {result.status.value}: {errors}")
