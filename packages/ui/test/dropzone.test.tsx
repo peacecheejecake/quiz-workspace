@@ -96,7 +96,9 @@ describe('Dropzone', () => {
     expect(screen.getByRole('button', { name: '파일 선택' })).toBeDisabled();
     drag('dragEnter', el, [pdf()]);
     expect(el).not.toHaveAttribute('data-dragging');
-    drag('drop', el, [pdf()]);
+    // The native drag/drop is still cancelled, so the browser never opens the dropped file.
+    expect(drag('dragOver', el, [pdf()]).defaultPrevented).toBe(true);
+    expect(drag('drop', el, [pdf()]).defaultPrevented).toBe(true);
     expect(onFiles).not.toHaveBeenCalled();
   });
 });

@@ -104,10 +104,11 @@ export function Dropzone({
         setDragging(true);
       }}
       onDragOver={(event) => {
-        if (disabled || !hasFiles(event)) return;
-        // Required for the drop event to fire; show a copy cursor.
+        if (!hasFiles(event)) return;
+        // Required for the drop event to fire. Also cancelled while disabled, so a file dropped
+        // here never makes the browser open it and navigate away; the cursor says "no drop".
         event.preventDefault();
-        event.dataTransfer.dropEffect = 'copy';
+        event.dataTransfer.dropEffect = disabled ? 'none' : 'copy';
       }}
       onDragLeave={(event) => {
         if (disabled || !hasFiles(event)) return;
@@ -115,6 +116,8 @@ export function Dropzone({
         if (depth.current === 0) setDragging(false);
       }}
       onDrop={(event) => {
+        // Always cancel the native drop (the browser would open the file), even when disabled.
+        if (hasFiles(event)) event.preventDefault();
         if (disabled) return;
         event.preventDefault();
         reset();
