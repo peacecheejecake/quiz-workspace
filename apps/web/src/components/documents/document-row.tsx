@@ -2,8 +2,10 @@
 
 // One DOC-01 list row: title (link once ready), type badge, file meta, and the live status —
 // upload progress with cancel, parse/index progress, READY, or the failure reason with retry.
+// A long-running job also shows how long it has waited or run, with a hint (DOC-01-AC05).
 import { Badge, Button } from '@quiz/ui';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
 import { formatBytes } from '@/lib/documents/validation';
 import styles from './documents.module.css';
@@ -11,7 +13,9 @@ import {
   DOCUMENT_TYPE_LABELS,
   formatUpdatedAt,
   percent,
+  processingElapsed,
   processingLabel,
+  SLOW_PROCESSING_HINT,
   uploadPhaseLabel,
 } from './labels';
 
@@ -112,16 +116,7 @@ function RowStatus({ row }: { row: DocumentRow }) {
       </div>
     );
   }
-  if (row.status === 'processing') {
-    const progress = row.job?.progress ?? null;
-    return (
-      <div className={styles.status}>
-        <Badge tone="accent">{processingLabel(row)}</Badge>
-        <ProgressBar label="파싱·색인 진행률" value={progress ?? undefined} />
-        {progress !== null ? <span className={styles.statusText}>{progress}%</span> : null}
-      </div>
-    );
-  }
+  if (row.status === 'processing') return <ProcessingStatus row={row} />;
   if (row.status === 'ready') {
     return (
       <div className={styles.status}>
@@ -135,6 +130,35 @@ function RowStatus({ row }: { row: DocumentRow }) {
       {row.error ? <p className={styles.error}>{row.error}</p> : null}
     </div>
   );
+}
+
+function ProcessingStatus({ row }: { row: DocumentRow }) {
+  const now = useNow();
+  const progress = row.job?.progress ?? null;
+  const elapsed = now === null ? null : processingElapsed(row, now);
+  return (
+    <div className={styles.status}>
+      <Badge tone="accent">{processingLabel(row)}</Badge>
+      <ProgressBar label="파싱·색인 진행률" value={progress ?? undefined} />
+      {progress !== null ? <span className={styles.statusText}>{progress}%</span> : null}
+      {elapsed ? (
+        <p className={styles.hint}>
+          {elapsed} · {SLOW_PROCESSING_HINT}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** The current time, ticking every second while mounted (null until the first tick, so the
+ * server render and hydration never depend on the clock). */
+function useNow(intervalMs = 1000): number | null {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(timer);
+  }, [intervalMs]);
+  return now;
 }
 
 /** Accessible progress bar; `value` undefined = indeterminate (no aria-valuenow). */
