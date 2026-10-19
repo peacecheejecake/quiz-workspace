@@ -172,7 +172,7 @@ smoke 계정의 workspace는 API에서 soft-delete만 되므로 누적된다(합
 1. **Supabase production project**(Singapore):
    - Free plan은 활성 project가 2개까지다. 먼저 DEP-06 rehearsal용 임시 restore project(`zgzvapywhdvtlbnhbgij`, Mumbai)를 Dashboard → Project Settings → General → **Delete project**로 지운다(staging `jpyupavjpmlxtuolrvvs`는 유지).
    - New project: 지역 **Southeast Asia (Singapore)** `ap-southeast-1`, DB 비밀번호 `openssl rand -hex 32`(password manager). branching 미사용.
-   - ref를 `supabase/config.toml` `[remotes.production] project_id`(placeholder `replaceproductionref`)에 넣고 커밋한다(ref는 secret 아님; 오케스트레이터).
+   - ref를 `supabase/config.toml` `[remotes.production] project_id`에 넣고 커밋한다(production: `tvviozfacsxpxkmvbevu`, Singapore)(ref는 secret 아님; 오케스트레이터).
    - Dashboard: JWT signing key를 비대칭(ES256)으로 rotate, access token 만료 3600s. API Keys → publishable key(web·smoke)와 secret key(Railway api·worker만; CLI로 꺼낼 때는 가려진 값 말고 `--reveal`).
    - session pooler URL(IPv4) → GitHub `SUPABASE_DB_URL`(`postgres.<ref>`), `DATABASE_URL`(`quiz_api.<ref>`), `WORKER_DATABASE_URL`(`quiz_worker.<ref>`).
 2. **Railway environment `production`**(staging과 **같은 project**):

@@ -454,8 +454,7 @@ enabled = true
 # CLI targets the project whose ref equals its `project_id`
 # (`pnpm exec supabase config push --project-ref <ref>`); local `supabase start` never uses it.
 # Staging is the Singapore project (ap-southeast-1, user decision 2026-10-18). Production is a new,
-# separate Singapore project (user decision 2026-10-19); its ref stays a placeholder (the CLI
-# requires the 20-letter shape) until that project exists. Both blocks carry the same keys and
+# separate Singapore project (user decision 2026-10-19). Both blocks carry the same keys and
 # values except `project_id` (infra/deploy/test_platform_config.py). A ref is not a secret.
 # Values that differ per environment or are secret come from the shell environment of the
 # operator running `config push` (`env(...)`, names listed in infra/deploy/env-manifest.toml
@@ -503,7 +502,7 @@ admin_email = "env(SUPABASE_AUTH_SMTP_ADMIN_EMAIL)"
 sender_name = "Quiz Workspace"
 
 [remotes.production]
-project_id = "replaceproductionref"
+project_id = "tvviozfacsxpxkmvbevu"
 
 [remotes.production.db.seed]
 enabled = false
