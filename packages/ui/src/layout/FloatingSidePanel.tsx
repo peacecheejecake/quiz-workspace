@@ -48,6 +48,11 @@ export interface FloatingSidePanelProps {
   /** Defaults to focusing the panel itself so its title is announced first. */
   onOpenAutoFocus?: ContentProps['onOpenAutoFocus'];
   onCloseAutoFocus?: ContentProps['onCloseAutoFocus'];
+  /**
+   * Changing this while the panel is open brings it to the top of the open floating layers again
+   * (e.g. the button that opened it was pressed while another panel covered it).
+   */
+  raiseKey?: string | number;
   className?: string;
   children?: ReactNode;
 }
@@ -74,6 +79,7 @@ export function FloatingSidePanel({
   container,
   onOpenAutoFocus,
   onCloseAutoFocus,
+  raiseKey,
   className,
   children,
 }: FloatingSidePanelProps) {
@@ -89,7 +95,7 @@ export function FloatingSidePanel({
     if (open === undefined) setUncontrolledOpen(next);
     onOpenChange?.(next);
   };
-  const layer = useFloatingLayer(isOpen);
+  const layer = useFloatingLayer(isOpen, raiseKey);
 
   return (
     <Dialog.Root open={isOpen} onOpenChange={handleOpenChange} modal={modal}>

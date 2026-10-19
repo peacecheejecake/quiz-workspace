@@ -34,10 +34,15 @@ export {
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  ChevronUpIcon,
   CloseIcon,
+  HistoryIcon,
   MenuIcon,
   MinusIcon,
   MoreIcon,
+  SearchIcon,
+  ShareIcon,
+  TrashIcon,
   UploadIcon,
 } from './primitives/icons';
 export { Input } from './primitives/Input';
