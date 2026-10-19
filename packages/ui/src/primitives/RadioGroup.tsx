@@ -4,7 +4,8 @@ import { RadioGroup as RadixRadioGroup } from 'radix-ui';
 import { useId, type ReactNode } from 'react';
 import { cx } from '../internal/cx';
 import { AlertIcon } from './icons';
-import { TOOLTIP_DESCRIPTION_DELAY_MS, Tooltip } from './Tooltip';
+import { Tooltip } from './Tooltip';
+import { TOOLTIP_DESCRIPTION_DELAY_MS } from './tooltip-delay';
 
 export interface RadioOption {
   value: string;

@@ -3,14 +3,7 @@
 import { Tooltip as RadixTooltip } from 'radix-ui';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { useLayerStyle } from '../internal/layer';
-
-/** Hover delay (ms) before a tooltip opens; keyboard focus opens it immediately. */
-export const TOOLTIP_DELAY_MS = 300;
-/**
- * Longer hover delay (ms) for descriptions of choices (RadioGroup `optionDescriptions="tooltip"`):
- * moving the pointer across a list of options must not flash every description.
- */
-export const TOOLTIP_DESCRIPTION_DELAY_MS = 700;
+import { TOOLTIP_DELAY_MS } from './tooltip-delay';
 
 export interface TooltipProps extends Pick<
   ComponentProps<typeof RadixTooltip.Root>,

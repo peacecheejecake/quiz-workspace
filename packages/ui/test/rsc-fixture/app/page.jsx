@@ -14,7 +14,9 @@ import {
   DialogClose,
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   EmptyState,
@@ -56,6 +58,8 @@ import {
   Textarea,
   ThemeProvider,
   ToastProvider,
+  TOOLTIP_DELAY_MS,
+  TOOLTIP_DESCRIPTION_DELAY_MS,
   Tooltip,
   deriveDotStatus,
   focusRingClassName,
@@ -135,7 +139,7 @@ export default function Page() {
             <MoreIcon />
           </Surface>
           <GlassSurface>glass</GlassSurface>
-          <Tooltip content="설명">
+          <Tooltip content="설명" delayDuration={TOOLTIP_DELAY_MS + TOOLTIP_DESCRIPTION_DELAY_MS}>
             <Button>툴팁</Button>
           </Tooltip>
           <Popover>
@@ -163,7 +167,10 @@ export default function Page() {
           <DropdownMenu>
             <DropdownMenuTrigger>더보기</DropdownMenuTrigger>
             <DropdownMenuContent aria-label="작업">
-              <DropdownMenuItem>보관</DropdownMenuItem>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>작업</DropdownMenuLabel>
+                <DropdownMenuItem>보관</DropdownMenuItem>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem tone="danger">삭제</DropdownMenuItem>
             </DropdownMenuContent>

@@ -64,7 +64,8 @@ export type {
 } from './primitives/Tabs';
 export { Textarea } from './primitives/Textarea';
 export type { TextareaProps } from './primitives/Textarea';
-export { TOOLTIP_DELAY_MS, TOOLTIP_DESCRIPTION_DELAY_MS, Tooltip } from './primitives/Tooltip';
+export { Tooltip } from './primitives/Tooltip';
+export { TOOLTIP_DELAY_MS, TOOLTIP_DESCRIPTION_DELAY_MS } from './primitives/tooltip-delay';
 export type { TooltipProps } from './primitives/Tooltip';
 
 export { EmptyState } from './feedback/EmptyState';
