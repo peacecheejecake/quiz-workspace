@@ -298,6 +298,14 @@
   min-height: 40px;
 }
 
+/* Helper text outside a kit field (same look as a field description). */
+.fieldHint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-normal);
+}
+
 .fieldError {
   display: flex;
   align-items: flex-start;

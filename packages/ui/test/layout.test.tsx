@@ -110,7 +110,9 @@ describe('Toast', () => {
       </ToastProvider>,
     );
     await user.click(screen.getByRole('button', { name: '복사' }));
-    const title = await screen.findByText('링크를 복사했습니다', { selector: '.qz-toast__title' });
+    const title = await screen.findByText('링크를 복사했습니다', {
+      selector: '.qz-toast > .body > .title',
+    });
     const toast = title.closest('li');
     expect(toast).toHaveAttribute('data-tone', 'success');
     expect(screen.getByRole('region', { name: /알림/ })).toContainElement(toast);

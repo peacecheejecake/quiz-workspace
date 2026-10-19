@@ -46,7 +46,7 @@
   height: 32px;
 }
 
-.qz-icon-button__icon {
+.qz-icon-button > .icon {
   display: inline-flex;
 }
 
@@ -153,35 +153,38 @@
   display: grid;
   gap: var(--space-1);
   color: var(--color-text-primary);
+
+  > .label {
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-snug);
+  }
 }
 
-.qz-field__label {
-  font-size: var(--font-size-label);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-snug);
-}
-
-.qz-field__description {
+/* Helper text of a field and of a checkbox / switch / radio option. */
+:is(.qz-field, .qz-checkbox > .text, .qz-switch > .text, .qz-radio > .text) > .description {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-label);
   line-height: var(--line-height-normal);
 }
 
-.qz-field__error {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-1);
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-label);
-  line-height: var(--line-height-normal);
-}
+.qz-field {
+  > .error {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-1);
+    margin: 0;
+    color: var(--color-text-primary);
+    font-size: var(--font-size-label);
+    line-height: var(--line-height-normal);
+  }
 
-.qz-field__error svg {
-  flex: none;
-  margin-top: 1px;
-  color: var(--color-danger);
+  > .error > svg {
+    flex: none;
+    margin-top: 1px;
+    color: var(--color-danger);
+  }
 }
 
 .qz-control {
@@ -223,7 +226,7 @@
   cursor: not-allowed;
 }
 
-.qz-control--multiline {
+.qz-control[data-multiline] {
   min-height: 96px;
   resize: vertical;
 }
@@ -234,51 +237,54 @@
   align-items: flex-start;
   gap: var(--space-2);
   color: var(--color-text-primary);
+
+  > .box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin: 2px;
+    padding: 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-on-accent);
+    cursor: pointer;
+    transition:
+      background-color var(--qz-transition-fast),
+      border-color var(--qz-transition-fast);
+  }
+
+  > .box:is([data-state='checked'], [data-state='indeterminate']) {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+  }
+
+  > .box:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  > .box > .indicator {
+    display: inline-flex;
+  }
 }
 
-.qz-checkbox__box {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 20px;
-  height: 20px;
-  margin: 2px;
-  padding: 0;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-on-accent);
-  cursor: pointer;
-  transition:
-    background-color var(--qz-transition-fast),
-    border-color var(--qz-transition-fast);
-}
+/* Label column of a checkbox and of a radio option. */
+:is(.qz-checkbox, .qz-radio) {
+  > .text {
+    display: grid;
+    gap: 2px;
+  }
 
-.qz-checkbox__box:is([data-state='checked'], [data-state='indeterminate']) {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-}
-
-.qz-checkbox__box:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.qz-checkbox__indicator {
-  display: inline-flex;
-}
-
-.qz-checkbox__text {
-  display: grid;
-  gap: 2px;
-}
-
-.qz-checkbox__label {
-  font-size: var(--font-size-body);
-  /* Matches the 20px box + 2px margins so the first line centers on the box. */
-  line-height: 24px;
-  cursor: pointer;
+  > .text > .label {
+    font-size: var(--font-size-body);
+    /* Matches the 20px box + 2px margins so the first line centers on the box. */
+    line-height: 24px;
+    cursor: pointer;
+  }
 }
 
 /* Switch */
@@ -288,164 +294,167 @@
   justify-content: space-between;
   gap: var(--space-4);
   color: var(--color-text-primary);
-}
 
-.qz-switch__text {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
+  > .text {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
 
-.qz-switch__label {
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-semibold);
-  line-height: 24px;
-  cursor: pointer;
-}
+  > .text > .label {
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-semibold);
+    line-height: 24px;
+    cursor: pointer;
+  }
 
-.qz-switch__control {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 24px;
-}
+  > .control {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 24px;
+  }
 
-.qz-switch__state {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-label);
-}
+  > .control > .state {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-label);
+  }
 
-.qz-switch__track {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  flex: none;
-  width: 44px;
-  height: 24px;
-  padding: 2px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-muted);
-  cursor: pointer;
-  transition:
-    background-color var(--qz-transition-fast),
-    border-color var(--qz-transition-fast);
-}
+  > .control > .track {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    width: 44px;
+    height: 24px;
+    padding: 2px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-muted);
+    cursor: pointer;
+    transition:
+      background-color var(--qz-transition-fast),
+      border-color var(--qz-transition-fast);
+  }
 
-.qz-switch__track[data-state='checked'] {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-}
+  > .control > .track[data-state='checked'] {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+  }
 
-.qz-switch__track:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
+  > .control > .track:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
 
-.qz-switch__thumb {
-  display: block;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-pill);
-  box-sizing: border-box;
-  border: 1px solid var(--color-border-strong);
-  background: var(--color-surface);
-  transition: transform var(--qz-transition-fast);
-}
+  > .control > .track > .thumb {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border-radius: var(--radius-pill);
+    box-sizing: border-box;
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface);
+    transition: transform var(--qz-transition-fast);
+  }
 
-.qz-switch__thumb[data-state='checked'] {
-  transform: translateX(20px);
-  border-color: var(--color-surface);
+  > .control > .track > .thumb[data-state='checked'] {
+    transform: translateX(20px);
+    border-color: var(--color-surface);
+  }
 }
 
 /* Tabs */
-.qz-tabs__list {
-  display: flex;
-  gap: var(--space-1);
-  overflow-x: auto;
-  border-bottom: 1px solid var(--color-border);
-}
+.qz-tabs {
+  > .list {
+    display: flex;
+    gap: var(--space-1);
+    overflow-x: auto;
+    border-bottom: 1px solid var(--color-border);
+  }
 
-.qz-tabs__trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 40px;
-  margin-bottom: -1px;
-  padding: 0 var(--space-3);
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font: inherit;
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-semibold);
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background-color var(--qz-transition-fast),
-    border-color var(--qz-transition-fast),
-    color var(--qz-transition-fast);
-}
+  > .list > .trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 40px;
+    margin-bottom: -1px;
+    padding: 0 var(--space-3);
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font: inherit;
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-semibold);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color var(--qz-transition-fast),
+      border-color var(--qz-transition-fast),
+      color var(--qz-transition-fast);
+  }
 
-@media (hover: hover) {
-  .qz-tabs__trigger:hover:not(:disabled) {
-    background: var(--color-state-hover);
+  @media (hover: hover) {
+    > .list > .trigger:hover:not(:disabled) {
+      background: var(--color-state-hover);
+      color: var(--color-text-primary);
+    }
+  }
+
+  > .list > .trigger:active:not(:disabled) {
+    background: var(--color-state-pressed);
     color: var(--color-text-primary);
   }
-}
 
-.qz-tabs__trigger:active:not(:disabled) {
-  background: var(--color-state-pressed);
-  color: var(--color-text-primary);
-}
+  /* Selection is shown by text weight/color and a bar, and exposed as aria-selected. */
+  > .list > .trigger[data-state='active'] {
+    border-bottom-color: var(--color-accent);
+    color: var(--color-text-primary);
+  }
 
-/* Selection is shown by text weight/color and a bar, and exposed as aria-selected. */
-.qz-tabs__trigger[data-state='active'] {
-  border-bottom-color: var(--color-accent);
-  color: var(--color-text-primary);
-}
+  > .content {
+    padding-top: var(--space-4);
+  }
 
-.qz-tabs__content {
-  padding-top: var(--space-4);
-}
-
-@media (forced-colors: active) {
-  .qz-tabs__trigger[data-state='active'] {
-    border-bottom-color: Highlight;
+  @media (forced-colors: active) {
+    > .list > .trigger[data-state='active'] {
+      border-bottom-color: Highlight;
+    }
   }
 }
 
-/* Select */
-.qz-select__trigger {
+/* Select: the trigger (also a .qz-control) is the block; the portalled listbox is
+   .qz-select-content. */
+.qz-select {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
   text-align: start;
   cursor: pointer;
+
+  > .value {
+    overflow: hidden;
+    min-width: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &[data-placeholder] > .value {
+    color: var(--color-text-secondary);
+  }
+
+  > .icon {
+    display: inline-flex;
+    flex: none;
+    color: var(--color-text-secondary);
+  }
 }
 
-.qz-select__value {
-  overflow: hidden;
-  min-width: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.qz-select__trigger[data-placeholder] .qz-select__value {
-  color: var(--color-text-secondary);
-}
-
-.qz-select__icon {
-  display: inline-flex;
-  flex: none;
-  color: var(--color-text-secondary);
-}
-
-.qz-select__content {
+.qz-select-content {
   z-index: var(--z-popover);
   box-sizing: border-box;
   min-width: var(--radix-select-trigger-width);
@@ -456,51 +465,51 @@
   color: var(--color-text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-size-body);
-}
 
-.qz-select__viewport {
-  padding: var(--space-1);
-}
+  > .viewport {
+    padding: var(--space-1);
+  }
 
-.qz-select__item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  min-height: 40px;
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-sm);
-  outline: none;
-  cursor: pointer;
-  user-select: none;
-  transition: background-color var(--qz-transition-fast);
-}
+  > .viewport > .item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    min-height: 40px;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-sm);
+    outline: none;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color var(--qz-transition-fast);
+  }
 
-/* Pointer highlight is a background only; the ring marks keyboard focus (§4.1). */
-.qz-select__item[data-highlighted] {
-  background: var(--color-state-hover);
-}
+  /* Pointer highlight is a background only; the ring marks keyboard focus (§4.1). */
+  > .viewport > .item[data-highlighted] {
+    background: var(--color-state-hover);
+  }
 
-.qz-select__item:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
-}
-
-.qz-select__item[data-disabled] {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-/* The selected option shows a check mark and is exposed as aria-selected (not color alone). */
-.qz-select__indicator {
-  display: inline-flex;
-  flex: none;
-}
-
-@media (forced-colors: active) {
-  .qz-select__item:is([data-highlighted], :focus-visible) {
-    outline: 2px solid Highlight;
+  > .viewport > .item:focus-visible {
+    outline: 2px solid var(--color-focus);
     outline-offset: -2px;
+  }
+
+  > .viewport > .item[data-disabled] {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  /* The selected option shows a check mark and is exposed as aria-selected (not color alone). */
+  > .viewport > .item > .indicator {
+    display: inline-flex;
+    flex: none;
+  }
+
+  @media (forced-colors: active) {
+    > .viewport > .item:is([data-highlighted], :focus-visible) {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
   }
 }
 
@@ -509,76 +518,77 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+
+  &[data-orientation='horizontal'] {
+    flex-flow: row wrap;
+    column-gap: var(--space-4);
+  }
 }
 
-.qz-radio-group[data-orientation='horizontal'] {
-  flex-flow: row wrap;
-  column-gap: var(--space-4);
-}
-
+/* One option row of a RadioGroup. */
 .qz-radio {
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
-}
 
-.qz-radio__circle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 20px;
-  height: 20px;
-  margin: 2px;
-  padding: 0;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  cursor: pointer;
-  transition: border-color var(--qz-transition-fast);
-}
-
-/* Checked: accent ring + filled center dot (shape, not color alone). */
-.qz-radio__circle[data-state='checked'] {
-  border-color: var(--color-accent);
-}
-
-.qz-radio__circle:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.qz-radio__indicator {
-  display: block;
-  width: 10px;
-  height: 10px;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent);
-}
-
-/* Tooltip descriptions (RadioGroup optionDescriptions="tooltip"): read by screen readers via
-   aria-describedby; shown inline only where there is no hover (touch). */
-@media (hover: hover) {
-  .qz-radio__description {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
+  > .circle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin: 2px;
     padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: border-color var(--qz-transition-fast);
   }
-}
 
-.qz-radio[data-description='tooltip'] {
-  position: relative;
-}
+  /* Checked: accent ring + filled center dot (shape, not color alone). */
+  > .circle[data-state='checked'] {
+    border-color: var(--color-accent);
+  }
 
-@media (forced-colors: active) {
-  .qz-radio__indicator {
-    background: Highlight;
+  > .circle:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  > .circle > .indicator {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: var(--radius-pill);
+    background: var(--color-accent);
+  }
+
+  /* Tooltip descriptions (RadioGroup optionDescriptions="tooltip"): read by screen readers via
+     aria-describedby; shown inline only where there is no hover (touch). */
+  @media (hover: hover) {
+    &[data-description='tooltip'] > .text > .description {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+      border: 0;
+    }
+  }
+
+  &[data-description='tooltip'] {
+    position: relative;
+  }
+
+  @media (forced-colors: active) {
+    > .circle > .indicator {
+      background: Highlight;
+    }
   }
 }
 
@@ -587,7 +597,7 @@
  * checked steps the accent fill. A focused control keeps the focus-colored boundary below.
  */
 @media (hover: hover) {
-  :is(.qz-checkbox__box, .qz-radio__circle, .qz-switch__track):not(
+  :is(.qz-checkbox > .box, .qz-radio > .circle, .qz-switch > .control > .track):not(
       [data-state='checked'],
       [data-state='indeterminate'],
       :disabled
@@ -595,21 +605,21 @@
     border-color: var(--color-text-primary);
   }
 
-  :is(.qz-checkbox__box, .qz-switch__track):is(
+  :is(.qz-checkbox > .box, .qz-switch > .control > .track):is(
       [data-state='checked'],
       [data-state='indeterminate']
     ):not(:disabled):hover {
     background: var(--color-accent-hover);
   }
 
-  :is(.qz-checkbox__box, .qz-radio__circle, .qz-switch__track):is(
+  :is(.qz-checkbox > .box, .qz-radio > .circle, .qz-switch > .control > .track):is(
       [data-state='checked'],
       [data-state='indeterminate']
     ):not(:disabled, :focus-visible):hover {
     border-color: var(--color-accent-hover);
   }
 
-  .qz-radio__circle[data-state='checked']:not(:disabled):hover .qz-radio__indicator {
+  .qz-radio > .circle[data-state='checked']:not(:disabled):hover > .indicator {
     background: var(--color-accent-hover);
   }
 }
@@ -625,7 +635,7 @@
  */
 :is(
     .qz-control,
-    .qz-tabs__trigger,
+    .qz-tabs > .list > .trigger,
     :is(.qz-button, .qz-icon-button)[data-variant='secondary']:not(
         [aria-pressed],
         [data-state='on'],
@@ -636,19 +646,30 @@
   outline-offset: -2px;
 }
 
-:is(.qz-checkbox__box, .qz-radio__circle, .qz-switch__track).qz-focus-ring:focus-visible {
+:is(
+    .qz-checkbox > .box,
+    .qz-radio > .circle,
+    .qz-switch > .control > .track
+  ).qz-focus-ring:focus-visible {
   border-color: var(--color-focus);
   outline-offset: 0;
 }
 
 @media (forced-colors: active) {
+  /* :where() keeps this list at its button member's specificity, so the rule above still wins
+     for fields, tabs and secondary buttons. */
   :is(
       .qz-control,
-      .qz-tabs__trigger,
-      .qz-checkbox__box,
-      .qz-radio__circle,
-      .qz-switch__track,
+      :where(.qz-tabs > .list) > .trigger,
       :is(.qz-button, .qz-icon-button):not([aria-pressed='true'], [data-state='on'])
+    ).qz-focus-ring:focus-visible {
+    border-color: Highlight;
+  }
+
+  :is(
+      .qz-checkbox > .box,
+      .qz-radio > .circle,
+      .qz-switch > .control > .track
     ).qz-focus-ring:focus-visible {
     border-color: Highlight;
   }

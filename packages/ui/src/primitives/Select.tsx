@@ -84,12 +84,12 @@ export function Select({
           aria-describedby={ids.describedBy}
           aria-invalid={ids.hasError || undefined}
           aria-errormessage={ids.hasError ? ids.errorId : undefined}
-          className={cx('qz-control', 'qz-select__trigger', 'qz-focus-ring', className)}
+          className={cx('qz-control', 'qz-select', 'qz-focus-ring', className)}
         >
-          <span className="qz-select__value">
+          <span className="value">
             <RadixSelect.Value placeholder={placeholder} />
           </span>
-          <RadixSelect.Icon className="qz-select__icon">
+          <RadixSelect.Icon className="icon">
             <ChevronDownIcon width={18} height={18} />
           </RadixSelect.Icon>
         </RadixSelect.Trigger>
@@ -97,20 +97,20 @@ export function Select({
           <RadixSelect.Content
             position="popper"
             sideOffset={4}
-            className="qz-select__content glass-surface"
+            className="qz-select-content glass-surface"
             style={layerStyle}
           >
-            <RadixSelect.Viewport className="qz-select__viewport">
+            <RadixSelect.Viewport className="viewport">
               {options.map((option) => (
                 <RadixSelect.Item
                   key={option.value}
                   value={option.value}
-                  className="qz-select__item"
+                  className="item"
                   {...(option.disabled ? { disabled: true } : {})}
                   {...(option.textValue ? { textValue: option.textValue } : {})}
                 >
                   <RadixSelect.ItemText>{option.label}</RadixSelect.ItemText>
-                  <RadixSelect.ItemIndicator className="qz-select__indicator">
+                  <RadixSelect.ItemIndicator className="indicator">
                     <CheckIcon width={16} height={16} />
                   </RadixSelect.ItemIndicator>
                 </RadixSelect.Item>

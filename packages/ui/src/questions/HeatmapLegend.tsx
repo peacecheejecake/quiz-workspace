@@ -16,12 +16,12 @@ export function HeatmapLegend({ label = '상태 범례', className, ...rest }: H
   return (
     <ul aria-label={label} className={cx('qz-heatmap-legend', className)} {...rest}>
       {QUESTION_DOT_STATUSES.map((status) => (
-        <li key={status} className="qz-heatmap-legend__item">
+        <li key={status} className="item">
           <MarkerShape status={status} />
           <span>{questionStatusLabels[status]}</span>
         </li>
       ))}
-      <li className="qz-heatmap-legend__item">
+      <li className="item">
         <MarkerShape favorite />
         <span>즐겨찾기</span>
       </li>

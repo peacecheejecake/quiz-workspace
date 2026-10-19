@@ -169,17 +169,17 @@ export function QuestionHeatmap({
       {chapters.map((chapter) => {
         const headingId = `${baseId}-${chapter.id}`;
         return (
-          <section key={chapter.id} className="qz-heatmap__chapter" aria-labelledby={headingId}>
-            <div className="qz-heatmap__chapter-header">
-              <Heading id={headingId} className="qz-heatmap__title">
+          <section key={chapter.id} className="chapter" aria-labelledby={headingId}>
+            <div className="header">
+              <Heading id={headingId} className="title">
                 {chapter.title}
               </Heading>
-              <span className="qz-heatmap__count">{chapter.questions.length}문제</span>
+              <span className="count">{chapter.questions.length}문제</span>
             </div>
             {chapter.questions.length > 0 ? (
-              <ul className="qz-heatmap__grid">
+              <ul className="grid">
                 {chapter.questions.map((q) => (
-                  <li key={q.id} className="qz-heatmap__cell">
+                  <li key={q.id} className="cell">
                     <QuestionDot
                       questionId={q.id}
                       status={q.status}

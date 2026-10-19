@@ -397,9 +397,7 @@ function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: 
           </Button>
         </div>
         {documents.length === 0 ? (
-          <p className="qz-field__description">
-            준비 완료된 문서가 있으면 출처로 연결할 수 있습니다.
-          </p>
+          <p className={styles.fieldHint}>준비 완료된 문서가 있으면 출처로 연결할 수 있습니다.</p>
         ) : null}
       </fieldset>
 
