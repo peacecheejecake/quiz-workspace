@@ -10,9 +10,9 @@ export const ROLE_LABELS: Readonly<Record<WorkspaceRole, string>> = {
 
 /** First page of a workspace. */
 export function workspaceHref(id: string): string {
-  return `/workspaces/${id}/documents`;
+  return `/workspaces/${id}`;
 }
 
 export function sharingHref(id: string): string {
-  return `/workspaces/${id}/settings/sharing`;
+  return `/workspaces/${id}?panel=share`;
 }

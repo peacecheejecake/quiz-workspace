@@ -1,17 +1,4 @@
-/* WS-SHARE-01 sharing settings and WorkspaceSharingPanel. Semantic tokens only. */
-
-.screen {
-  display: grid;
-  gap: var(--space-4);
-  max-width: var(--content-max-width);
-}
-
-.lead {
-  margin: 0;
-  max-width: 60ch;
-  color: var(--color-text-secondary);
-  line-height: var(--line-height-relaxed);
-}
+/* WS-SHARE-01 WorkspaceSharingPanel ("링크 공유" dialog). Semantic tokens only. */
 
 .panelBody {
   display: grid;

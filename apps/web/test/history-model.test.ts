@@ -21,6 +21,11 @@ import {
   retryabilityLabel,
   revisionLabel,
   targetLabel,
+  ENTRY_KIND_LABELS,
+  hasMoreHistory,
+  mergeHistory,
+  type Activity,
+  type WorkspaceAttempt,
   type WorkspaceJob,
 } from '../src/lib/history/model';
 
@@ -175,5 +180,62 @@ describe('history client', () => {
     expect(HISTORY_QUERY.cursor?.test('WyIyMDI2Il0')).toBe(true);
     expect(HISTORY_QUERY.cursor?.test('a b')).toBe(false);
     expect(HISTORY_QUERY.limit?.test('1000')).toBe(false);
+  });
+});
+
+describe('HISTORY-01-AC04 one chronological list', () => {
+  const activity = (id: string, at: string) =>
+    ({
+      id,
+      created_at: at,
+      event_type: 'document.block_corrected',
+      actor: null,
+      revision: null,
+      target_id: null,
+      target_label: 'book',
+      target_type: 'document',
+    }) as Activity;
+  const attempt = (id: string, at: string) =>
+    ({ id, submitted_at: at }) as unknown as WorkspaceAttempt;
+
+  it('HISTORY-01-AC04 merges the three lists newest first with their kind', () => {
+    const merged = mergeHistory({
+      activities: {
+        items: [activity('a1', '2026-10-18T03:00:00Z'), activity('a2', '2026-10-18T01:00:00Z')],
+        nextCursor: null,
+      },
+      jobs: { items: [job({ id: 'j1', created_at: '2026-10-18T02:00:00Z' })], nextCursor: null },
+      attempts: { items: [attempt('t1', '2026-10-18T04:00:00Z')], nextCursor: null },
+    });
+    expect(merged.map((e) => `${e.kind}:${e.item.id}`)).toEqual([
+      'attempt:t1',
+      'activity:a1',
+      'job:j1',
+      'activity:a2',
+    ]);
+    expect(ENTRY_KIND_LABELS).toEqual({ activity: '변경', job: '작업', attempt: '풀이' });
+  });
+
+  it('HISTORY-01-AC04 holds back entries older than a list that has more pages', () => {
+    const pages = {
+      activities: {
+        items: [activity('a1', '2026-10-18T05:00:00Z'), activity('a2', '2026-10-18T03:00:00Z')],
+        nextCursor: 'more',
+      },
+      jobs: {
+        items: [
+          job({ id: 'j1', created_at: '2026-10-18T04:00:00Z' }),
+          job({ id: 'j2', created_at: '2026-10-18T01:00:00Z' }),
+        ],
+        nextCursor: null,
+      },
+      attempts: null,
+    };
+    // a3 (02:00) may still come on the next activities page, so j2 (01:00) waits.
+    expect(mergeHistory(pages).map((e) => e.item.id)).toEqual(['a1', 'j1', 'a2']);
+    expect(hasMoreHistory(pages)).toBe(true);
+    const done = { ...pages, activities: { ...pages.activities, nextCursor: null } };
+    expect(mergeHistory(done).map((e) => e.item.id)).toEqual(['a1', 'j1', 'a2', 'j2']);
+    expect(hasMoreHistory(done)).toBe(false);
   });
 });

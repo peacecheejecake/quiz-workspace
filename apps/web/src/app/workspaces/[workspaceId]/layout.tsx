@@ -1,9 +1,10 @@
 // Frame for every workspace route. Access is checked server-side with `GET /workspaces/{id}`
 // before anything renders: unknown, foreign and soft-deleted workspaces get the not-found page
 // with HTTP 404 (no Suspense boundary sits above this layout, so the status is not yet sent).
+// Since UX3c there is no workspace sidebar: the home (`/workspaces/:id`) is the single entry point
+// and its header holds the search and the document/history/sharing dialogs.
 import type { ReactNode } from 'react';
 import { AuthenticatedShell } from '@/components/app-shell/authenticated-shell';
-import { WorkspaceNav } from '@/components/workspaces/workspace-nav';
 import { WorkspaceSwitcher } from '@/components/workspaces/workspace-switcher';
 import styles from '@/components/workspaces/workspaces.module.css';
 import { loadSwitcherWorkspaces, requireWorkspace } from '@/lib/workspaces/data';
@@ -21,14 +22,12 @@ export default async function WorkspaceLayout({
 
   return (
     <AuthenticatedShell
-      navLabel="Workspace 메뉴"
       headerContent={
         <WorkspaceSwitcher
           current={current}
           workspaces={switchable.map(({ id, name }) => ({ id, name }))}
         />
       }
-      sidebar={<WorkspaceNav workspaceId={workspace.id} isOwner={workspace.role === 'owner'} />}
     >
       {workspace.status === 'archived' ? (
         <p role="note" className={styles.archivedBanner}>

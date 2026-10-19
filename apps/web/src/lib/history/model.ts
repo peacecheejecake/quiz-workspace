@@ -160,6 +160,76 @@ export function formatHistoryTime(iso: string): string {
   return Number.isNaN(date.getTime()) ? iso : DATE_TIME.format(date);
 }
 
+// --- one chronological list (UX3c, HISTORY-01-AC04) --------------------------------------------
+
+export type HistoryEntry =
+  | { readonly kind: 'activity'; readonly at: string; readonly item: Activity }
+  | { readonly kind: 'job'; readonly at: string; readonly item: WorkspaceJob }
+  | { readonly kind: 'attempt'; readonly at: string; readonly item: WorkspaceAttempt };
+
+export type HistoryEntryKind = HistoryEntry['kind'];
+
+export const ENTRY_KIND_LABELS: Readonly<Record<HistoryEntryKind, string>> = {
+  activity: '변경',
+  job: '작업',
+  attempt: '풀이',
+};
+
+/** The loaded pages of the three lists (null = not loaded / unavailable). */
+export interface HistoryPages {
+  readonly activities: HistoryPage<Activity> | null;
+  readonly jobs: HistoryPage<WorkspaceJob> | null;
+  readonly attempts: HistoryPage<WorkspaceAttempt> | null;
+}
+
+function time(iso: string): number {
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? 0 : t;
+}
+
+/**
+ * The loaded entries of every list, newest first. A list with more pages has not been read past
+ * its oldest loaded entry, so older entries of the other lists are held back until "더 보기"
+ * reads further — the merged order never has to change when more arrives.
+ */
+export function mergeHistory(pages: HistoryPages): HistoryEntry[] {
+  const entries: HistoryEntry[] = [
+    ...(pages.activities?.items ?? []).map((item): HistoryEntry => ({
+      kind: 'activity',
+      at: item.created_at,
+      item,
+    })),
+    ...(pages.jobs?.items ?? []).map((item): HistoryEntry => ({
+      kind: 'job',
+      at: item.created_at,
+      item,
+    })),
+    ...(pages.attempts?.items ?? []).map((item): HistoryEntry => ({
+      kind: 'attempt',
+      at: item.submitted_at,
+      item,
+    })),
+  ];
+  let boundary = -Infinity;
+  for (const page of [pages.activities, pages.jobs, pages.attempts]) {
+    if (!page?.nextCursor || page.items.length === 0) continue;
+    const oldest = Math.min(
+      ...page.items.map((item) =>
+        time('submitted_at' in item ? item.submitted_at : item.created_at),
+      ),
+    );
+    boundary = Math.max(boundary, oldest);
+  }
+  return entries
+    .filter((entry) => time(entry.at) >= boundary)
+    .sort((a, b) => time(b.at) - time(a.at) || a.kind.localeCompare(b.kind));
+}
+
+/** Whether any list has a further page. */
+export function hasMoreHistory(pages: HistoryPages): boolean {
+  return [pages.activities, pages.jobs, pages.attempts].some((page) => !!page?.nextCursor);
+}
+
 /** Appends a next page, dropping ids already listed (a page boundary can move under inserts). */
 export function appendPage<T extends { readonly id: string }>(
   current: HistoryPage<T>,

@@ -1,0 +1,130 @@
+/* Workspace home (QOV-01, UX3c): header with the unified search and actions, then the content
+   results and the 문제 영역. Semantic tokens only. */
+
+.home {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* Desktop: the open dialogs float on the right; keep the header (and its buttons, which open
+   further dialogs) and the heatmap beside them, not under them. */
+@media (width >= 1024px) {
+  .home[data-panel-open] {
+    padding-inline-end: calc(var(--floating-panel-width) + var(--space-4));
+  }
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.search {
+  display: grid;
+  flex: 1 1 22rem;
+  gap: var(--space-1);
+  max-width: 40rem;
+  min-width: 0;
+  justify-items: start;
+}
+
+.searchRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+}
+
+.searchField {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The small "검색 옵션" text button under the search box. */
+.optionsToggle {
+  padding: var(--space-1) var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-label);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.optionsToggle:hover {
+  color: var(--color-text-primary);
+}
+
+.optionsToggle[aria-expanded='true'] {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.options {
+  display: grid;
+  gap: var(--space-3);
+  width: min(30rem, calc(100vw - 2 * var(--space-4)));
+  max-height: min(36rem, calc(100dvh - 8rem));
+  overflow-y: auto;
+}
+
+.scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.scope > legend {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--space-1);
+  padding: 0;
+}
+
+.optionGroup {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.optionsTitle {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.optionRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-3);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 767px) {
+  .search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+}

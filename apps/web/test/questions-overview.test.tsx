@@ -48,7 +48,7 @@ const { QuestionsOverview } =
   await import('../src/components/questions/overview/questions-overview');
 
 const WS = '55555555-5555-4555-8555-555555555555';
-const PATH = `/workspaces/${WS}/questions`;
+const PATH = `/workspaces/${WS}`;
 const id = (n: number) => `44444444-4444-4444-8444-${String(n).padStart(12, '0')}`;
 
 const overview: QuestionOverview = {
@@ -125,8 +125,11 @@ function Screen({
           workspaceId={WS}
           readOnly={null}
           filters={data === overview ? EMPTY_OVERVIEW_FILTERS : FAVORITES}
+          view={data === overview ? EMPTY_OVERVIEW_FILTERS : FAVORITES}
+          navigating={false}
+          onFiltersChange={onFiltersChange}
+          onResetFilters={vi.fn()}
           overview={data}
-          chapterChoices={[{ value: 'none', title: '챕터 없음' }]}
           failure={null}
           requested={requested}
         />
@@ -135,6 +138,7 @@ function Screen({
   );
 }
 
+const onFiltersChange = vi.fn();
 const realPushState = window.history.pushState.bind(window.history);
 
 beforeEach(() => {
@@ -162,6 +166,32 @@ afterEach(() => {
 const heatmap = () => screen.getByRole('group', { name: '문제 heatmap' });
 const dot = (n: number) =>
   within(heatmap()).getByRole('button', { name: new RegExp(`(?<!\\d)${n}번 문제`) });
+
+describe('QOV-01-AC08 status filter', () => {
+  it('QOV-01-AC08 is collapsed by default, toggles with aria-expanded and has no legend or summary', async () => {
+    const user = userEvent.setup();
+    onFiltersChange.mockReset();
+    render(<Screen />);
+    const toggle = screen.getByRole('button', { name: '상태 필터' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const regionId = toggle.getAttribute('aria-controls') ?? '';
+    expect(document.getElementById(regionId)).not.toBeVisible();
+    expect(screen.queryByRole('group', { name: '상태 필터' })).toBeNull();
+    expect(screen.queryByText(/상태 범례|문제 상태 요약/)).toBeNull();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const group = screen.getByRole('group', { name: '상태 필터' });
+    expect(group.id).toBe(regionId);
+    // Each status carries its text next to the swatch, never colour alone.
+    await user.click(within(group).getByRole('button', { name: '다시 풀기' }));
+    expect(onFiltersChange).toHaveBeenCalledWith({ status: ['retry'] });
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('group', { name: '상태 필터' })).toBeNull();
+  });
+});
 
 describe('QuestionsOverview practice panel', () => {
   it('opens from a dot with ?question=, records the view and returns focus on Escape', async () => {
@@ -334,7 +364,7 @@ describe('QuestionsOverview review fixes', () => {
     expect(dot(3)).toHaveFocus();
   });
 
-  it('focus goes to the search box when the heatmap is empty after closing', async () => {
+  it('focus goes to the status filter toggle when the heatmap is empty after closing', async () => {
     const user = userEvent.setup();
     const { rerender } = render(<Screen />);
     await user.click(dot(1));
@@ -342,7 +372,7 @@ describe('QuestionsOverview review fixes', () => {
     rerender(<Screen data={only()} />);
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('searchbox', { name: '문제 검색' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: '상태 필터' })).toHaveFocus();
   });
 
   it('a rejected my-state request rolls the optimistic change back and reports it', async () => {

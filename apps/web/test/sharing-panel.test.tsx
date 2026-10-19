@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-// WS-SHARE-01 WorkspaceSharingPanel: the one-time URL lives only in component state, policy
-// controls save on change, revoke/rotate are confirmed and archived workspaces get no
-// create/rotate. Server actions are mocked; the API stays the authority in E2E.
+// WS-SHARE-01 WorkspaceSharingPanel (the home's "링크 공유" dialog, UX3c): it opens at once with a
+// skeleton while the links load, the one-time URL lives only in component state, policy controls
+// save on change, revoke/rotate are confirmed and archived workspaces get no create/rotate.
+// Server actions are mocked; the API stays the authority in E2E.
 import './dom-setup';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -16,19 +17,21 @@ vi.mock('next/navigation', () => ({
 }));
 
 const actions = {
+  list: vi.fn<(...args: unknown[]) => Promise<ShareActionResult>>(),
   create: vi.fn<(...args: unknown[]) => Promise<ShareActionResult>>(),
   update: vi.fn<(...args: unknown[]) => Promise<ShareActionResult>>(),
   revoke: vi.fn<(...args: unknown[]) => Promise<ShareActionResult>>(),
   rotate: vi.fn<(...args: unknown[]) => Promise<ShareActionResult>>(),
 };
 vi.mock('../src/lib/sharing/actions', () => ({
+  listShareLinksAction: (...args: unknown[]) => actions.list(...args),
   createShareLinkAction: (...args: unknown[]) => actions.create(...args),
   updateShareLinkAction: (...args: unknown[]) => actions.update(...args),
   revokeShareLinksAction: (...args: unknown[]) => actions.revoke(...args),
   rotateShareLinkAction: (...args: unknown[]) => actions.rotate(...args),
 }));
 
-const { SharingScreen } = await import('../src/components/sharing/sharing-screen');
+const { WorkspaceSharingPanel } = await import('../src/components/sharing/workspace-sharing-panel');
 
 const WS = '3f2b6f0e-8a4c-4d7e-9a51-1c2d3e4f5a6b';
 const L1 = '0b6a5c0e-1d2f-4a3b-8c4d-5e6f7a8b9c0d';
@@ -53,19 +56,29 @@ function link(id: string, overrides: Partial<ShareLink> = {}): ShareLink {
 }
 
 function renderScreen(links: ShareLink[], archived = false) {
+  actions.list.mockResolvedValue({ ok: true, links });
   return render(
     <ToastProvider>
       <main>
-        <SharingScreen
-          workspace={{ id: WS, name: '알고리즘', archived }}
-          load={{ status: 'ok', links }}
+        <WorkspaceSharingPanel
+          workspaceId={WS}
+          archived={archived}
+          open
+          onOpenChange={vi.fn()}
+          container={null}
+          screenId="WS-SHARE-01"
         />
       </main>
     </ToastProvider>,
   );
 }
 
-const main = () => screen.getByRole('main');
+/** The dialog once its links have loaded (it opens at once with a skeleton). */
+async function loadedPanel() {
+  const panel = await screen.findByRole('dialog', { name: '링크 공유' });
+  await within(panel).findByRole('switch', { name: 'Fork 허용' });
+  return panel;
+}
 
 beforeEach(() => {
   for (const fn of Object.values(actions)) fn.mockReset();
@@ -83,8 +96,8 @@ describe('WorkspaceSharingPanel', () => {
     });
     renderScreen([]);
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('공유 설정');
-    const panel = await within(main()).findByRole('dialog', { name: '링크 공유' });
+    const panel = await loadedPanel();
+    expect(actions.list).toHaveBeenCalledWith(WS);
     expect(within(panel).getByText('공유 꺼짐')).toBeVisible();
     expect(within(panel).getByText(/발행된 .*읽기 전용/)).toBeVisible();
     expect(within(panel).getByText(/저작권/)).toBeVisible();
@@ -120,7 +133,7 @@ describe('WorkspaceSharingPanel', () => {
       ],
     }));
     renderScreen([link(L1)]);
-    const panel = await within(main()).findByRole('dialog', { name: '링크 공유' });
+    const panel = await loadedPanel();
     // No URL after a reload: only the metadata is known.
     expect(within(panel).queryByRole('textbox', { name: '공유 링크' })).toBeNull();
 
@@ -132,6 +145,7 @@ describe('WorkspaceSharingPanel', () => {
     const expiry = within(panel).getByLabelText('만료일');
     const next = new Date(Date.now() + 30 * 86_400_000);
     const date = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+    await waitFor(() => expect(expiry).toBeEnabled());
     await user.clear(expiry);
     await user.type(expiry, date);
     expect(actions.update).toHaveBeenCalledTimes(1);
@@ -158,7 +172,7 @@ describe('WorkspaceSharingPanel', () => {
       links: [link(L2, { status: 'revoked', revoked_at: '2026-10-19T00:00:00Z' })],
     });
     renderScreen([link(L1), other]);
-    const panel = await within(main()).findByRole('dialog', { name: '링크 공유' });
+    const panel = await loadedPanel();
     expect(within(panel).getByText(/다른 링크 1개/)).toBeVisible();
 
     await user.click(within(panel).getByRole('button', { name: '링크 재발급' }));
@@ -179,7 +193,7 @@ describe('WorkspaceSharingPanel', () => {
 
   it('archived: no create or rotate, but policy edits and revoke stay available', async () => {
     renderScreen([link(L1)], true);
-    const panel = await within(main()).findByRole('dialog', { name: '링크 공유' });
+    const panel = await loadedPanel();
     expect(within(panel).queryByRole('button', { name: '링크 만들기' })).toBeNull();
     expect(within(panel).queryByRole('button', { name: '링크 재발급' })).toBeNull();
     expect(within(panel).getByRole('button', { name: '링크 철회' })).toBeEnabled();
@@ -194,7 +208,7 @@ describe('WorkspaceSharingPanel', () => {
       links: [link(L1, { expires_at: (policy as { expiresAt: string }).expiresAt })],
     }));
     renderScreen([link(L1, { status: 'expired', expires_at: past })], true);
-    const panel = await within(main()).findByRole('dialog', { name: '링크 공유' });
+    const panel = await loadedPanel();
     expect(within(panel).getByText('만료됨')).toBeVisible();
     expect(within(panel).queryByText('공유 중')).toBeNull();
     expect(within(panel).queryByRole('button', { name: '링크 재발급' })).toBeNull();
@@ -227,7 +241,7 @@ describe('WorkspaceSharingPanel', () => {
       link(L2, { status: 'expired', created_at: '2026-10-17T00:00:00Z' }),
       ...many,
     ]);
-    const panel = await within(main()).findByRole('dialog', { name: '링크 공유' });
+    const panel = await loadedPanel();
     await user.click(within(panel).getByRole('button', { name: '링크 철회' }));
     const dialog = await screen.findByRole('alertdialog', { name: '링크 철회' });
     await user.click(within(dialog).getByRole('button', { name: '철회' }));
@@ -239,7 +253,7 @@ describe('WorkspaceSharingPanel', () => {
 
   it('archived without a link: nothing to create, controls disabled', async () => {
     renderScreen([], true);
-    const panel = await within(main()).findByRole('dialog', { name: '링크 공유' });
+    const panel = await loadedPanel();
     expect(within(panel).queryByRole('button', { name: '링크 만들기' })).toBeNull();
     expect(within(panel).getByRole('switch', { name: 'Fork 허용' })).toBeDisabled();
   });
@@ -248,7 +262,7 @@ describe('WorkspaceSharingPanel', () => {
     const user = userEvent.setup();
     actions.create.mockResolvedValue({ ok: true, links: [link(L1)], secretAlreadyIssued: true });
     renderScreen([]);
-    const panel = await within(main()).findByRole('dialog', { name: '링크 공유' });
+    const panel = await loadedPanel();
     await user.click(within(panel).getByRole('button', { name: '링크 만들기' }));
     expect(await within(panel).findByText(/이미 표시되었습니다/)).toBeVisible();
     expect(within(panel).queryByRole('textbox', { name: '공유 링크' })).toBeNull();
@@ -263,8 +277,35 @@ describe('WorkspaceSharingPanel', () => {
       links: [],
     });
     renderScreen([]);
-    const panel = await within(main()).findByRole('dialog', { name: '링크 공유' });
+    const panel = await loadedPanel();
     await user.click(within(panel).getByRole('button', { name: '링크 만들기' }));
     expect(await within(panel).findByRole('alert')).toHaveTextContent(/보관된 Workspace/);
+  });
+});
+
+describe('WorkspaceSharingPanel loading (UX3c)', () => {
+  it('opens at once with a skeleton, then shows the links; a failed read offers a retry', async () => {
+    const user = userEvent.setup();
+    let resolve: (r: ShareActionResult) => void = () => undefined;
+    actions.list.mockImplementationOnce(() => new Promise((r) => (resolve = r)));
+    render(
+      <ToastProvider>
+        <WorkspaceSharingPanel
+          workspaceId={WS}
+          archived={false}
+          open
+          onOpenChange={vi.fn()}
+          container={null}
+        />
+      </ToastProvider>,
+    );
+    const panel = await screen.findByRole('dialog', { name: '링크 공유' });
+    expect(within(panel).getByRole('status')).toHaveTextContent('불러오는 중');
+    expect(within(panel).queryByRole('switch', { name: 'Fork 허용' })).toBeNull();
+    resolve({ ok: false, failure: 'unavailable', error: '연결할 수 없습니다.' });
+    const alert = await within(panel).findByRole('alert');
+    actions.list.mockResolvedValueOnce({ ok: true, links: [link(L1)] });
+    await user.click(within(alert).getByRole('button', { name: '다시 시도' }));
+    expect(await within(panel).findByText('공유 중')).toBeVisible();
   });
 });

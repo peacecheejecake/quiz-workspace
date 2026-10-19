@@ -1,28 +1,36 @@
-/* QOV-01 questions heatmap screen. Semantic tokens only. */
+/* QOV-01 문제 영역 of the workspace home. Semantic tokens only. */
 
 .screen {
   display: grid;
-  gap: var(--space-4);
-  min-width: 0;
-}
-
-.filters {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
-  align-items: end;
+  min-width: 0;
 }
 
-.searchForm {
+.toolbar {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
-  align-items: end;
   min-width: 0;
 }
 
-.searchForm > :first-child {
-  flex: 1;
+.toolbarStart {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
   min-width: 0;
+}
+
+.toolbarActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.stateFilters[hidden] {
+  display: none;
 }
 
 .stateFilters {
@@ -67,10 +75,6 @@
   font-size: var(--font-size-label);
 }
 
-.legend {
-  justify-self: start;
-}
-
 .heatmap[aria-busy='true'] {
   opacity: 0.6;
 }
@@ -85,18 +89,7 @@
   margin: 0;
 }
 
-.emptyActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  justify-content: center;
-}
-
 @media (max-width: 767px) {
-  .filters {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .stateFilters {
     flex-wrap: nowrap;
     overflow-x: auto;

@@ -61,7 +61,7 @@ function fromOutcome<T>(outcome: ApiOutcome<T>, values?: QuestionFormValues): Ac
 
 function refresh(workspaceId: string): void {
   // The bank and the overview (heatmap) both list questions.
-  revalidatePath(`/workspaces/${workspaceId}/questions`, 'layout');
+  revalidatePath(`/workspaces/${workspaceId}`, 'layout');
 }
 
 function validKey(key: unknown): string | undefined {
