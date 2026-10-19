@@ -121,7 +121,7 @@
 
 .viewSwitchButton {
   flex: 1;
-  min-height: 40px;
+  min-height: var(--control-height-md);
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -250,7 +250,7 @@ button.viewSwitchButton:focus-visible {
   display: flex;
   align-items: baseline;
   gap: var(--space-1);
-  min-height: 32px;
+  min-height: var(--control-height-sm);
   padding-block: var(--space-1);
   padding-inline-end: var(--space-2);
   border-radius: var(--radius-sm);
@@ -332,7 +332,7 @@ button.viewSwitchButton:focus-visible {
 
 .pageInput {
   width: 3.5rem;
-  min-height: 32px;
+  min-height: var(--control-height-sm);
   padding: 0 var(--space-2);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);

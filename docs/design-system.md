@@ -1,6 +1,6 @@
-# Design System v1.2 — Minimal Glass (Platform v1.2)
+# Design System v1.2.2 — Minimal Glass (Platform v1.2)
 
-**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19 · v1.2.1 버튼 hover 개정 2026-10-19  
+**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19 · v1.2.1 버튼 hover 개정 2026-10-19 · v1.2.2 밀도(compact)·스위치·메뉴·Dropzone·Breadcrumb·패널 쌓기 개정 2026-10-20  
 **적용:** 전역 Workspace UI, 문서 뷰어, 검색, Questions heatmap, floating side panels  
 **키워드:** minimalism, restrained glassmorphism, readability, focus, consistent semantics
 
@@ -204,7 +204,9 @@
   --glass-blur: 16px;
   --shadow-floating: 0 18px 56px rgba(30, 39, 59, .15);
 
-  --app-header-height: 64px;
+  --control-height-sm: 28px;
+  --control-height-md: 36px;
+  --app-header-height: 56px;
   --app-sidebar-width: 232px;
   --content-max-width: 1440px;
   --breakpoint-md: 768px;
@@ -246,9 +248,11 @@
 | Section title | 16–18px, 굵기 600 |
 | Typography token | label `--font-size-label-sm`(12)/`--font-size-label`(13), body `--font-size-body`(14)/`--font-size-body-lg`(16, 긴 본문은 `--line-height-relaxed` 1.6), section `--font-size-section-title`(18), page title `--font-size-page-title`(26)/`--line-height-tight`, 굵기 `--font-weight-semibold`(600) |
 | Breakpoint | mobile `< 768px`(`--breakpoint-md`), tablet 768–1023px, desktop `≥ 1024px`(`--breakpoint-lg`, sidebar 표시). CSS 변수는 media query 안에서 쓸 수 없으므로 media query는 같은 px 값을 range 문법(`(width >= 768px)`)으로 쓰고, `packages/ui` 테스트가 토큰 값과 일치하는지 검사한다. TS는 `@quiz/design-tokens`의 `breakpoints`/`mediaQueries`를 사용한다 |
-| Global header | 64px 높이 |
+| Global header | 56px 높이(`--app-header-height`, v1.2.2에서 64→56) |
+| Control height (v1.2.2) | md `--control-height-md` 36px(Button·IconButton·입력·Select trigger·tab·메뉴/Select 항목), sm `--control-height-sm` 28px(작은 버튼·IconButton, BackLink). 모두 WCAG 2.2 target size 24px 이상. heatmap 셀(28/32px)은 §6 규격 그대로 |
+| Density (v1.2.2) | 버튼 좌우 padding md 12px; 입력 세로 padding 4px; 여러 줄 입력 최소 80px; panel header 12/12/8/20px · body 16/20px · footer 8/20/12px; modal body 16/20px; popover 12px; 메뉴·Select 항목 36px; Surface padding sm 8 / md 12 / lg 20px; EmptyState 세로 24px; PageHeader 간격 12px·아래 20px; sidebar 12/8px; heatmap 챕터 간격 20px |
 | Left navigation | 232px 고정(데스크톱), 모바일 drawer |
-| Content area | max-width 1440px, padding 24px(데스크톱) / 16px(모바일) |
+| Content area | max-width 1440px, padding 20px(태블릿 이상, v1.2.2에서 24→20) / 16px(모바일) |
 | Border radius | 기본 10px, 떠 있는 패널 16–20px |
 | Layering | 기본 카드 0–1, popover 20, side panel 40, modal 60, toast 70 |
 | Animation | panel enter/exit 약 180–240ms, transform+opacity, reduced-motion 대응. 컴포넌트 상태 전환(hover·active·selected·focus 배경/색)은 `--duration-state`(120ms) `--easing-standard`로 전환하고, reduced-motion에서는 즉시 변경 |
