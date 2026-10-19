@@ -374,6 +374,7 @@ test(
     await expect(dialog.getByText(/문제 pdf를 여기에 끌어다 놓으세요|drop/i)).toBeVisible();
     await importButton(dialog).click();
     await expect(page).toHaveURL((url) => url.pathname === importPath(ws.id));
+    await expect(importUi.heading(page)).toHaveText(/문제 pdf 가져오기|import/i);
 
     // No question PDF yet: the empty text; a PDF picked in the Dropzone starts the import page.
     await page.goto(homePath(empty.id, 'panel=question-pdfs'));
