@@ -78,6 +78,13 @@ export type { EmptyStateProps } from './feedback/EmptyState';
 export { ToastProvider, useToast } from './feedback/Toast';
 export type { ToastOptions, ToastProviderProps, ToastTone } from './feedback/Toast';
 
+export { BackLink, Breadcrumb } from './layout/Breadcrumb';
+export type {
+  BackLinkProps,
+  BreadcrumbItem,
+  BreadcrumbProps,
+  LinkComponent,
+} from './layout/Breadcrumb';
 export { AppShell } from './layout/AppShell';
 export type { AppShellProps } from './layout/AppShell';
 export { ConfirmDialog } from './layout/ConfirmDialog';

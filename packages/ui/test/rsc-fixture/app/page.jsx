@@ -5,7 +5,9 @@ import {
   AlertIcon,
   ArrowLeftIcon,
   AppShell,
+  BackLink,
   Badge,
+  Breadcrumb,
   Button,
   CheckIcon,
   Checkbox,
@@ -111,7 +113,12 @@ export default function Page() {
     <ThemeProvider defaultTheme="light">
       <ToastProvider>
         <AppShell header={<span>RSC fixture</span>} sidebar={<a href="#main-content">본문</a>}>
-          <PageHeader title="RSC" description={`${hooks.length} hooks exported`} />
+          <PageHeader
+            title="RSC"
+            description={`${hooks.length} hooks exported`}
+            back={<BackLink href="/" label="처음으로" />}
+            breadcrumb={<Breadcrumb items={[{ label: '홈', href: '/' }, { label: 'RSC' }]} />}
+          />
           <Surface>
             <Badge tone="success">ok</Badge>
             <Button variant="primary">버튼</Button>
