@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 from book_core.contracts import (
@@ -561,6 +562,241 @@ def test_duplicate_numbers_number_gaps_and_no_answer_key() -> None:
     assert {"question_number_gap", "answer_key_missing"} <= _codes(result.warnings)
 
 
+def _question_bank() -> ParsedDocument:
+    """A question bank laid out like a real exam workbook, as Docling emits it: bare question
+    numbers (``01``, no period) on heading blocks, one block per option, an inline ``정답: ②``
+    line plus a printed explanation after every question, numbering restarting per chapter,
+    a stem wrapped over two heading blocks and options running onto the next page."""
+    return _doc(
+        [
+            "3 문제은행 및 해설 문제풀이",
+            "# ※ 다음을 읽고 알맞은 답을 고르시오(1~3번).",
+            "# 01 예금 거래에 관한 설명 중 틀린 것은? ( )",
+            "① 첫째 설명이다.",
+            "② 둘째 설명이다.",
+            "③ 셋째 설명이다.",
+            "④ 넷째 설명이다.",
+            "# 정답: ②",
+            "② 둘째 설명은 이렇게 고쳐야 함",
+            "# 02 이율 변경 시 처리로 맞는 것은? ( )",
+            "① 가를 안내하였다.",
+            "② 나를 안내하였다.",
+        ],
+        [
+            "③ 다를 안내하였다.",
+            "④ 라를 안내하였다.",
+            "# 정답: ③",
+            "해설 첫 줄",
+            "∙ 해설 둘째 줄",
+            "# 03 기업여신 관리점 일원화 원칙에도 불구하고 관리점을 달리 운영할 수 있는 경우에 "
+            "해당하지",
+            "# 않는 것은? ( )",
+            "① 갑",
+            "② 을",
+            "③ 병",
+            "④ 정",
+            "# 정답: ④.",
+        ],
+        [
+            "# ※ 다음을 읽고 알맞은 답을 고르시오(1~2번).",
+            "# 01 다음 중 틀린 것은? ( )",
+            "① 하나",
+            "② 둘",
+            "③ 셋",
+            "④ 넷",
+            "# 정답: ①",
+            "# 02 소득 증빙이 어려워 신고소득으로 연소득을 산정하려 한다.",
+            "다음 중 잘못된 업무처리 방법은? ( )",
+            "① 가",
+            "② 나",
+            "③ 다",
+            "④ 라",
+            "# 정답: ③",
+            "③ 잘못된 이유",
+        ],
+    )
+
+
+def test_question_bank_with_bare_numbers_and_inline_answers() -> None:
+    document = _question_bank()
+    result = QuestionExtractor().extract(document, document_id="d")
+    assert [q.number for q in result.questions] == [1, 2, 3, 1, 2]
+    assert [d.id for d in result.drafts] == [
+        "d-q001-1",
+        "d-q002-1",
+        "d-q003",
+        "d-q001-2",
+        "d-q002-2",
+    ]
+    q1, q2, q3, q4, q5 = result.drafts
+    assert q1.stem == "예금 거래에 관한 설명 중 틀린 것은? ( )"
+    assert [o.text for o in q1.options] == [
+        "첫째 설명이다.",
+        "둘째 설명이다.",
+        "셋째 설명이다.",
+        "넷째 설명이다.",
+    ]
+    assert q3.stem == (
+        "기업여신 관리점 일원화 원칙에도 불구하고 관리점을 달리 운영할 수 있는 경우에 "
+        "해당하지 않는 것은? ( )"
+    )
+    assert q5.stem == (
+        "소득 증빙이 어려워 신고소득으로 연소득을 산정하려 한다. "
+        "다음 중 잘못된 업무처리 방법은? ( )"
+    )
+    for draft in result.drafts:
+        assert draft.question_type is QuestionType.MCQ
+        assert [o.id for o in draft.options] == ["opt-1", "opt-2", "opt-3", "opt-4"]
+    # Answers come from each question's own printed 정답 line, even with repeated numbers.
+    assert [d.correct_option_ids for d in result.drafts] == [
+        ("opt-2",),
+        ("opt-3",),
+        ("opt-4",),
+        ("opt-1",),
+        ("opt-3",),
+    ]
+    # The printed explanation is kept as the draft's explanation, never as options.
+    assert q1.explanation == "② 둘째 설명은 이렇게 고쳐야 함"
+    assert q2.explanation == "해설 첫 줄\n∙ 해설 둘째 줄"
+    assert q3.explanation is None
+    assert q4.explanation is None
+    issues = {c for d in result.drafts for c in _codes(d.validations)}
+    assert not issues & {
+        "duplicate_question_number",
+        "duplicate_option_label",
+        "option_sequence_gap",
+        "answer_key_unmapped",
+    }
+    assert result.warnings == ()
+    assert all(d.review_status is ReviewStatus.PENDING for d in result.drafts)
+
+
+def test_question_bank_evidence_covers_stem_and_every_option_only() -> None:
+    document = _question_bank()
+    by_id = {b.id: b for b in document.blocks}
+    result = QuestionExtractor().extract(document, document_id="d")
+    q2 = result.drafts[1]
+    (evidence,) = q2.evidence
+    texts = [by_id[b].text for b in evidence.block_ids]
+    assert texts == [
+        "02 이율 변경 시 처리로 맞는 것은? ( )",
+        "① 가를 안내하였다.",
+        "② 나를 안내하였다.",
+        "③ 다를 안내하였다.",
+        "④ 라를 안내하였다.",
+    ]
+    # One region per page: the stem and options on page 1, the rest of the options on page 2.
+    assert [loc.page for loc in evidence.locations] == [1, 2]
+    first, second = evidence.locations
+    assert first.bbox is not None
+    assert second.bbox is not None
+    stem_box = by_id[evidence.block_ids[0]].locations[0].bbox
+    last_box = by_id[evidence.block_ids[-1]].locations[0].bbox
+    assert stem_box is not None
+    assert last_box is not None
+    assert first.bbox.y0 == stem_box.y0
+    assert second.bbox.y1 == last_box.y1
+
+
+def test_bare_numbered_lines_without_question_cues_are_not_questions() -> None:
+    result = _extract(
+        ["3 문제은행 및 해설 문제풀이", "2026 개정판", "# 1 서론", "본문 문장입니다."]
+    )
+    assert result.questions == ()
+
+
+def test_question_bank_llm_sees_only_its_own_answer_line_and_cannot_change_it() -> None:
+    document = _question_bank()
+    plain = QuestionExtractor().extract(document, document_id="d").drafts
+    requests = llm_requests(document)
+    assert [n for n, _ in requests] == [1, 2, 3, 1, 2]
+    keys = ["②", "③", "④", "①", "③"]
+    client = FakeLLMClient(model_name="fake-llm-1")
+    for i, ((_, request), draft) in enumerate(zip(requests, plain, strict=True)):
+        assert f"정답: {keys[i]}" in request.prompt
+        assert all(f"정답: {k}" not in request.prompt for k in set(keys) - {keys[i]})
+        assert "해설 첫 줄" not in request.prompt  # the explanation is not sent
+        wrong = i == 3
+        client.script(
+            request,
+            LLMQuestion(
+                question_type="MCQ",
+                multi_select=False,
+                stem=draft.stem,
+                options=[LLMOption(label=o.id[4:], text=o.text) for o in draft.options],
+                answer=LLMAnswer(option_labels=["②" if wrong else keys[i]], text_answers=None),
+            ),
+        )
+    refined = QuestionExtractor(client).extract(document, document_id="d")
+    assert all(q.refined_by_llm for q in refined.questions)
+    assert [d.correct_option_ids for d in refined.drafts] == [d.correct_option_ids for d in plain]
+    assert "llm_answer_rejected" in _codes(refined.drafts[3].validations)
+    assert refined.drafts[1].explanation == plain[1].explanation
+
+
+def test_option_grid_read_row_wise_is_put_back_in_label_order() -> None:
+    result = _extract(["# 01 옳은 것은? ( )", "① 가", "③ 다", "② 나", "④ 라", "# 정답: ③"])
+    (draft,) = result.drafts
+    assert [(o.id, o.text) for o in draft.options] == [
+        ("opt-1", "가"),
+        ("opt-2", "나"),
+        ("opt-3", "다"),
+        ("opt-4", "라"),
+    ]
+    assert draft.correct_option_ids == ("opt-3",)
+    assert "option_sequence_gap" not in _codes(draft.validations)
+
+
+def test_options_printed_as_table_rows() -> None:
+    page = PageInfo(page=1, width=595.0, height=842.0)
+
+    def block(i: int, text: str, **kw: object) -> Block:
+        y0 = 60.0 + 20 * i
+        return Block(
+            id=f"b{i}",
+            type=kw.pop("type", BlockType.TEXT),  # type: ignore[arg-type]
+            text=text,
+            locations=(SourceLocation(page=1, bbox=BBox(x0=60, y0=y0, x1=500, y1=y0 + 15)),),
+            **kw,  # type: ignore[arg-type]
+        )
+
+    rows = (
+        ("보기", "(가)", "(나)"),
+        ("①", "6개월", "1년"),
+        ("②", "1년", "1년"),
+        ("③", "6개월", "6개월"),
+    )
+    doc = ParsedDocument(
+        source_path="t.pdf",
+        source_sha256="1" * 64,
+        parser_version="test",
+        pages=(page,),
+        blocks=(
+            block(0, "05 (가)~(나)에 들어갈 기간이 맞는 것은? ( )", type=BlockType.HEADING),
+            block(1, "- 이직기간이 (가) 이상인 경우"),
+            block(
+                2,
+                "\n".join(" | ".join(r) for r in rows),
+                type=BlockType.TABLE,
+                table=TableContent(rows=rows, header_rows=1),
+            ),
+            block(3, "정답: ①", type=BlockType.HEADING),
+        ),
+    )
+    (draft,) = QuestionExtractor().extract(doc, document_id="t").drafts
+    assert draft.question_type is QuestionType.MCQ
+    assert draft.stem == (
+        "(가)~(나)에 들어갈 기간이 맞는 것은? ( ) - 이직기간이 (가) 이상인 경우 보기 | (가) | (나)"
+    )
+    assert [(o.id, o.text) for o in draft.options] == [
+        ("opt-1", "6개월 | 1년"),
+        ("opt-2", "1년 | 1년"),
+        ("opt-3", "6개월 | 6개월"),
+    ]
+    assert draft.correct_option_ids == ("opt-1",)
+    assert draft.evidence[0].block_ids == ("b0", "b1", "b2")
+
+
 def test_no_questions() -> None:
     result = _extract(["제목", "본문 문장입니다."])
     assert result.questions == ()
@@ -772,3 +1008,65 @@ def test_questions_ko_on_real_docling_output_matches_truth() -> None:
         for e in d.evidence
         for b in e.block_ids
     )
+
+
+_BANK_PAGES: tuple[tuple[tuple[str, float], ...], ...] = (
+    (
+        ("01 물의 순환에 관한 설명 중 옳은 것은? ( )", 13.0),
+        ("① 증발은 기체가 액체로 변하는 현상이다.", 11.0),
+        ("② 응결은 액체가 기체로 변하는 현상이다.", 11.0),
+        ("③ 강수는 구름에서 비나 눈이 내리는 현상이다.", 11.0),
+        ("④ 바다에는 물이 없다.", 11.0),
+        ("정답: ③", 13.0),
+        ("③ 강수는 구름에서 내리는 비와 눈이다.", 11.0),
+        ("02 다음 중 응결에 관한 설명으로 옳은 것은? ( )", 13.0),
+        ("① 기체가 액체로 변한다.", 11.0),
+        ("② 액체가 기체로 변한다.", 11.0),
+    ),
+    (
+        ("③ 고체가 기체로 변한다.", 11.0),
+        ("④ 기체가 고체로 변한다.", 11.0),
+        ("정답: ①", 13.0),
+        ("01 다음 중 강수에 해당하는 것은? ( )", 13.0),
+        ("① 비", 11.0),
+        ("② 구름", 11.0),
+        ("③ 바다", 11.0),
+        ("④ 증발", 11.0),
+        ("정답: ①", 13.0),
+    ),
+)
+
+
+@pytest.mark.models
+def test_question_bank_on_real_docling_output(tmp_path: Path) -> None:
+    """A synthetic question bank (bare ``01`` numbers, inline ``정답:`` lines, numbering that
+    restarts, options running onto the next page) through the real parser."""
+    from book_core.parser.docling_adapter import DoclingParser
+    from make_fixture_pdfs import REGULAR, _check_glyphs, _register_fonts
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen.canvas import Canvas
+
+    _register_fonts()
+    pdf = tmp_path / "bank.pdf"
+    canvas = Canvas(str(pdf), pagesize=A4, invariant=True)
+    for page in _BANK_PAGES:
+        y = A4[1] - 90
+        for text, size in page:
+            _check_glyphs(text, REGULAR)
+            canvas.setFont(REGULAR, size)
+            canvas.drawString(72 if text[0].isdigit() or text.startswith("정답") else 90, y, text)
+            y -= 26
+        canvas.showPage()
+    canvas.save()
+
+    document = DoclingParser().parse(pdf)
+    result = QuestionExtractor().extract(document, document_id="bank")
+    assert [q.number for q in result.questions] == [1, 2, 1]
+    assert [len(d.options) for d in result.drafts] == [4, 4, 4]
+    assert [d.correct_option_ids for d in result.drafts] == [("opt-3",), ("opt-1",), ("opt-1",)]
+    assert result.drafts[0].explanation == "③ 강수는 구름에서 내리는 비와 눈이다."
+    # Question 2 is highlighted on both pages: its stem and options, never its answer line.
+    by_id = {b.id: b for b in document.blocks}
+    (evidence,) = result.drafts[1].evidence
+    assert [loc.page for loc in evidence.locations] == [1, 2]
+    assert not any("정답" in by_id[b].text for b in evidence.block_ids)
