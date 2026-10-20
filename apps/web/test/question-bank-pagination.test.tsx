@@ -155,6 +155,7 @@ describe('QuestionBank pagination', () => {
       </main>,
     );
     await user.click(screen.getByRole('button', { name: '더 보기' }));
+    await user.click(screen.getByRole('button', { name: '검색·필터' })); // collapsed by default
     await user.click(screen.getByRole('combobox', { name: '유형' }));
     await user.click(await screen.findByRole('option', { name: '서술형' }));
     expect(replace).toHaveBeenCalledWith('/workspaces/ws/questions/bank?type=ESSAY', {

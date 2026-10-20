@@ -24,7 +24,6 @@
 import {
   Button,
   Checkbox,
-  ConfirmDialog,
   FloatingSidePanel,
   HistoryIcon,
   IconButton,
@@ -45,7 +44,10 @@ import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
 import { GenerationDialog } from '@/components/questions/generate/generation-dialog';
-import { QuestionPdfsLibrary } from '@/components/questions/import/question-pdfs';
+import {
+  DocumentLibraryFeedback,
+  QuestionPdfsDialog,
+} from '@/components/questions/import/question-pdfs';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
 import {
   ContentSearchOptions,
@@ -459,18 +461,15 @@ export function WorkspaceHome({
               />
             </div>
           </FloatingSidePanel>
-          <FloatingSidePanel
+          <QuestionPdfsDialog
             open={isOpen('question-pdfs')}
             onOpenChange={(open) => setPanel('question-pdfs', open)}
             raiseKey={raised['question-pdfs']}
-            modal={false}
             container={host}
-            title="문제 PDF 관리"
-            closeLabel="문제 PDF 관리 닫기"
-            mobileLayout="full"
-          >
-            <QuestionPdfsLibrary workspaceId={workspace.id} library={library} canEdit={canEdit} />
-          </FloatingSidePanel>
+            workspaceId={workspace.id}
+            library={library}
+            canEdit={canEdit}
+          />
           {canEdit ? (
             <FloatingSidePanel
               open={isOpen('generate')}
@@ -522,24 +521,7 @@ export function WorkspaceHome({
         </>
       ) : null}
 
-      <p role="status" className="qz-visually-hidden">
-        {library.announcement}
-      </p>
-      <ConfirmDialog
-        open={library.pendingDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) library.cancelDelete();
-        }}
-        title="문서를 삭제할까요?"
-        description={
-          library.pendingDelete
-            ? `‘${library.pendingDelete.title}’ 문서가 목록과 검색에서 사라집니다. 이 작업은 되돌릴 수 없습니다.`
-            : ''
-        }
-        confirmLabel="삭제"
-        loading={library.deleting}
-        onConfirm={() => void library.confirmDelete()}
-      />
+      <DocumentLibraryFeedback library={library} />
     </div>
   );
 }

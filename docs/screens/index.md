@@ -28,7 +28,7 @@
 
 ## 공통 규칙
 
-- 총 21개 화면, AC 108개(기존 70개, 공유·Fork 신규 17개, Auth CAPTCHA 신규 8개 — A4, 검색 저하 SEARCH-01-AC06 1개 — M7.4b, 처리 진행 표시 DOC-01-AC05 1개 — UX3-JOB, Workspace 홈 통합 10개 — UX3c: QOV-01-AC07~AC10, SEARCH-01-AC07, DOC-01-AC06, QIMPORT-01-AC05, QGEN-01-AC05, HISTORY-01-AC04, QBANK-01-AC05, 홈 `문제` 메뉴 1개 — UX4: QOV-01-AC11).
+- 총 21개 화면, AC 109개(기존 70개, 공유·Fork 신규 17개, Auth CAPTCHA 신규 8개 — A4, 검색 저하 SEARCH-01-AC06 1개 — M7.4b, 처리 진행 표시 DOC-01-AC05 1개 — UX3-JOB, Workspace 홈 통합 10개 — UX3c: QOV-01-AC07~AC10, SEARCH-01-AC07, DOC-01-AC06, QIMPORT-01-AC05, QGEN-01-AC05, HISTORY-01-AC04, QBANK-01-AC05, UX4 2개: 홈 `문제` 메뉴 QOV-01-AC11, 문제은행 검색·필터 접기·PDF dialog QBANK-01-AC06).
 - **Workspace 홈 통합(UX3c 2026-10-20):** Workspace 안에는 왼쪽 메뉴(문서/검색/문제/이력/공유 설정)가 없고 `/workspaces/:workspaceId` 하나가 홈이다(QOV-01). 홈 상단의 Workspace header가 통합 검색과 `문서 n`·`문제`(메뉴: PDF 관리·직접 추가·변형 출제, UX4)·`문제은행` 버튼 묶음, 오른쪽 정렬된 `이력`·`공유하기` 아이콘 버튼 묶음을 갖는다. 문서 관리·문제 PDF 관리·문제 생성·이력·링크 공유는 홈 위에 겹쳐 뜨는 non-modal Floating Dialog(`?panel=documents|question-pdfs|generate|history|share`)이며 나중에 연 dialog가 위에 온다. 통합 검색 상태는 홈 URL(`?q=&scope=…`)에 둔다. 이전 경로(`/documents`, `/search`, `/questions`, `/history`, `/settings/sharing`)는 같은 상태의 홈으로 redirect한다. 실제 페이지로 남는 하위 화면(DOC-02, QBANK-01, QIMPORT-01·QGEN-01의 검토 화면)은 뒤로가기와 breadcrumb을 둔다. 홈과 dialog에는 화면 제목·설명 header가 없다(접근성 `h1`은 시각적으로 숨겨 유지).
 - 버튼으로 화면이 바뀌면 UI가 먼저 바뀌고 데이터는 skeleton을 보이는 동안 불러온다(route `loading.tsx`, dialog는 즉시 열리고 내용 skeleton).
 

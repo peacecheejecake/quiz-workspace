@@ -347,7 +347,7 @@ test(
 );
 
 test(
-  'QIMPORT-01-AC05 문제 PDF 관리 lists question PDFs apart from books, links PDF 가져오기 and hands a dropped PDF to the import',
+  'QIMPORT-01-AC05 문제 › PDF 관리 lists question PDFs apart from books and hands a picked PDF to the import',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('qimport01-ac05');
@@ -359,9 +359,11 @@ test(
 
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
-    // The home has no other "PDF 가져오기" (the button sits in the dialog now).
+    // Neither the home nor the dialog has a "PDF 가져오기" button (UX4: the Dropzone's "PDF 선택").
     const importButton = (scope: Locator) =>
-      scope.getByRole('link', { name: /^pdf 가져오기$|^import pdf$/i });
+      scope
+        .getByRole('link', { name: /^pdf 가져오기$|^import pdf$/i })
+        .or(scope.getByRole('button', { name: /^pdf 가져오기$|^import pdf$/i }));
     await expect(importButton(main(page))).toHaveCount(0);
     await chooseQuestionMenu(page, 'pdfs');
     await expect(page).toHaveURL(/[?&]panel=question-pdfs(&|$)/);
@@ -373,9 +375,8 @@ test(
     await expect(list).not.toContainText(/book-ko|물의 순환과 정수 처리/);
     await expect(list.getByText(/^(책|문제지)$/)).toHaveCount(0);
     await expect(dialog.getByText(/문제 pdf를 여기에 끌어다 놓으세요|drop/i)).toBeVisible();
-    await importButton(dialog).click();
-    await expect(page).toHaveURL((url) => url.pathname === importPath(ws.id));
-    await expect(importUi.heading(page)).toHaveText(/문제 pdf 가져오기|import/i);
+    await expect(dialog.getByRole('button', { name: /pdf 선택|choose/i })).toBeVisible();
+    await expect(importButton(dialog)).toHaveCount(0);
 
     // No question PDF yet: the empty text; a PDF picked in the Dropzone starts the import page.
     await page.goto(homePath(empty.id, 'panel=question-pdfs'));

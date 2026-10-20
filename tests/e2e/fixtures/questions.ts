@@ -135,8 +135,11 @@
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
 //   QBANK-01  h1 "문제은행"; empty-state heading "등록된 문제가 없습니다" with a "문제 직접 등록" button
-//             and a "PDF 가져오기" link to /questions/import; header "문제 등록" button; searchbox
-//             "문제 검색"; comboboxes "유형" and "챕터"; one region per chapter named by the chapter
+//             and a "PDF 가져오기" button; header "PDF 가져오기"/"문제 등록" buttons only while the bank
+//             has questions (UX4); "PDF 가져오기" opens the non-modal dialog "문제 PDF 관리" (same as
+//             the home's); toggle button "검색·필터" (collapsed by default, UX4) controlling a group
+//             "검색·필터" with searchbox "문제 검색" and comboboxes "유형", "챕터", "상태"; `?create=1`
+//             opens the "문제 등록" editor once; one region per chapter named by the chapter
 //             title (questions without one under "챕터 없음"), one listitem per question with
 //             "편집" and a source link (pageLabel) into the document viewer. The editor is a
 //             dialog "문제 등록"/"문제 편집" with radiogroup "문제 유형" (객관식/단답형/서술형),
@@ -447,8 +450,15 @@ export const bankUi = {
     main(page).getByRole('heading', { name: /등록된 문제가 없|문제가 없|no questions/i }),
   createButton: (page: Page) =>
     button(main(page), /문제 (직접 )?(등록|추가)|새 문제|(add|new|create) question/i).first(),
-  importLink: (page: Page) =>
-    buttonOrLink(main(page), /pdf (가져오기|import)|문제 pdf|import (from )?pdf/i).first(),
+  importButtons: (page: Page) => buttonOrLink(main(page), /^(pdf 가져오기|import pdf)$/i),
+  importLink: (page: Page) => bankUi.importButtons(page).first(),
+  /** "검색·필터" toggle (UX4: collapsed by default) and the group it controls. */
+  filterToggle: (page: Page) =>
+    main(page).getByRole('button', { name: /^(검색·필터|search (and|&) filters?)$/i }),
+  filterGroup: (page: Page) =>
+    main(page).getByRole('group', { name: /^(검색·필터|search (and|&) filters?)$/i }),
+  pdfsDialog: (page: Page) =>
+    page.getByRole('dialog', { name: /^(문제 pdf 관리|question pdfs?)$/i }),
   search: (page: Page) => main(page).getByRole('searchbox', { name: /문제 검색|검색|search/i }),
   typeFilter: (page: Page) => main(page).getByRole('combobox', { name: /^(문제 )?(유형|type)/i }),
   chapterFilter: (page: Page) => main(page).getByRole('combobox', { name: /^(장|챕터|chapter)/i }),
@@ -467,6 +477,13 @@ export const bankUi = {
       .first(),
   alert: (page: Page) => main(page).getByRole('alert').or(page.getByRole('alert')).first(),
 };
+
+/** Opens the bank's "검색·필터" (no-op when it is open; UX4 collapses it by default). */
+export async function openBankFilters(page: Page): Promise<void> {
+  const toggle = bankUi.filterToggle(page);
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  await expect(bankUi.filterGroup(page)).toBeVisible();
+}
 
 export const questionFormUi = {
   form: (page: Page) =>
