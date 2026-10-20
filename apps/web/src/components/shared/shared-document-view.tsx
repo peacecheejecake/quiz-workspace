@@ -10,7 +10,13 @@ import { PdfViewer } from '@/components/documents/editor/pdf-viewer';
 import { TextBlockEditor } from '@/components/documents/editor/text-block-editor';
 import editorStyles from '@/components/documents/editor/editor.module.css';
 import { IDLE } from '@/lib/documents/block-edit';
-import { blockPage, locationsOn, sectionOf, targetBlockFor } from '@/lib/documents/outline';
+import {
+  blockPage,
+  sectionOf,
+  targetBlockFor,
+  viewerHighlights,
+  type OutlineJump,
+} from '@/lib/documents/outline';
 import type {
   ContentBlock,
   OutlineItem,
@@ -63,6 +69,7 @@ export function SharedDocumentView({
   const [page, setPage] = useState(linkedPage ?? 1);
   const [currentBlockId, setCurrentBlockId] = useState<string | null>(null);
   const [highlightKey, setHighlightKey] = useState(0);
+  const [outlineJump, setOutlineJump] = useState<OutlineJump | null>(null);
   const [mobileView, setMobileView] = useState<MobileView>('pdf');
   const [announcement, setAnnouncement] = useState('');
   /** The deep link (page/block) last applied to the loaded content. */
@@ -187,6 +194,7 @@ export function SharedDocumentView({
                   currentId={sectionOf(currentBlock, outline)}
                   onNavigate={(node) => {
                     const block = targetBlockFor(node, blocks);
+                    setOutlineJump(block ? { node, blockId: block.block_id } : null);
                     if (block) selectBlock(block);
                     else if (node.page != null) {
                       setCurrentBlockId(null);
@@ -207,7 +215,7 @@ export function SharedDocumentView({
                   setPage(next);
                   setAnnouncement(`${next}쪽`);
                 }}
-                highlights={locationsOn(currentBlock, page)}
+                highlights={viewerHighlights(currentBlock, outlineJump, blocks, page)}
                 highlightKey={`${currentBlockId ?? ''}:${highlightKey}`}
               />
             </section>

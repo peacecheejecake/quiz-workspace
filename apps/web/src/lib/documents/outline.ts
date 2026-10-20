@@ -96,6 +96,56 @@ export function locationsOn(
   return block ? block.locations.filter((l) => l.page === page && l.bbox !== null) : [];
 }
 
+/**
+ * What an outline entry highlights on `page`: one box around the section's own located blocks
+ * there (its heading and the body before its first subsection, e.g. a question's stem and every
+ * option), or nothing when it has none on that page. `targetBlockFor` only picks the block to
+ * select; highlighting that block alone would mark a question's first option only.
+ */
+export function sectionLocationsOn(
+  node: Pick<OutlineItem, 'id' | 'block_id'>,
+  blocks: readonly ContentBlock[],
+  page: number,
+): ContentBlock['locations'] {
+  let box: NonNullable<ContentBlock['locations'][number]['bbox']> | null = null;
+  for (const block of blocks) {
+    if (block.chapter_id !== node.id && block.block_id !== node.block_id) continue;
+    for (const { page: p, bbox } of block.locations) {
+      if (p !== page || !bbox) continue;
+      box = box
+        ? {
+            x0: Math.min(box.x0, bbox.x0),
+            y0: Math.min(box.y0, bbox.y0),
+            x1: Math.max(box.x1, bbox.x1),
+            y1: Math.max(box.y1, bbox.y1),
+          }
+        : { ...bbox };
+    }
+  }
+  return box ? [{ page, bbox: box }] : [];
+}
+
+/** An outline navigation: the entry and the block it selected. */
+export interface OutlineJump {
+  readonly node: Pick<OutlineItem, 'id' | 'block_id'>;
+  readonly blockId: string;
+}
+
+/**
+ * The PDF highlight on `page`: the whole section while the block an outline entry selected is
+ * still the selection, else the selected block's own boxes.
+ */
+export function viewerHighlights(
+  currentBlock: ContentBlock | undefined,
+  jump: OutlineJump | null,
+  blocks: readonly ContentBlock[],
+  page: number,
+): ContentBlock['locations'] {
+  return jump && currentBlock?.block_id === jump.blockId
+    ? sectionLocationsOn(jump.node, blocks, page)
+    : locationsOn(currentBlock, page);
+}
+
 /** Parses `?page=N` (1-based); null when missing or not a positive integer. */
 export function parsePageParam(value: string | string[] | undefined): number | null {
   const raw = Array.isArray(value) ? value[0] : value;

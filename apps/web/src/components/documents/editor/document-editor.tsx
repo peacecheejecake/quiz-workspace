@@ -25,10 +25,11 @@ import { JobGoneError, watchJob } from '@/lib/documents/job-events';
 import {
   applySavedBlock,
   blockPage,
-  locationsOn,
   sectionOf,
   targetBlockFor,
+  viewerHighlights,
   viewerSearch,
+  type OutlineJump,
 } from '@/lib/documents/outline';
 import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
 import {
@@ -122,6 +123,8 @@ export function DocumentEditor({
   /** The text shown may be behind the server after a save (refresh failed): offer a retry. */
   const [staleContent, setStaleContent] = useState(false);
   const [highlightKey, setHighlightKey] = useState(0);
+  /** The last outline navigation: its whole section stays highlighted while its block is selected. */
+  const [outlineJump, setOutlineJump] = useState<OutlineJump | null>(null);
   const [editState, dispatchEdit] = useReducer(blockEditReducer, IDLE);
   const [justSaved, setJustSaved] = useState(false);
   const [publish, setPublish] = useState<PublishState>(PUBLISH_IDLE);
@@ -286,6 +289,7 @@ export function DocumentEditor({
   const onOutlineNavigate = useCallback(
     (node: OutlineItem) => {
       const target = targetBlockFor(node, blocks);
+      setOutlineJump(target ? { node, blockId: target.block_id } : null);
       if (target) selectBlock(target, { view: 'pdf', scrollText: true });
       else if (node.page != null) {
         setPage(node.page);
@@ -571,7 +575,7 @@ export function DocumentEditor({
             publish,
           });
 
-  const highlights = locationsOn(currentBlock, page);
+  const highlights = viewerHighlights(currentBlock, outlineJump, blocks, page);
   const currentSection = sectionOf(currentBlock, outline);
 
   return (
