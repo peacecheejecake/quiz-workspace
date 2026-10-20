@@ -53,13 +53,22 @@ function chapters(sizes: number[]): HeatmapChapter[] {
   }));
 }
 
-/** Loads the real token + kit stylesheets into jsdom (for computed-style assertions). */
+/**
+ * Loads the real tokens and the kit's marker rules into jsdom (for computed-style assertions).
+ * jsdom's CSS parser does not support nesting, so only the flat top-level `.qz-question-marker`
+ * rules of questions.css are taken.
+ */
 function loadStyles() {
   const read = (path: string) => readFileSync(resolve(import.meta.dirname, path), 'utf8');
+  const markerRules = read('../src/styles/questions.css').match(
+    /^\.qz-question-marker[^{]*\{[^}]*\}/gm,
+  );
+  // Base box, outline and the five status colors.
+  expect(markerRules?.length).toBeGreaterThanOrEqual(7);
   const style = document.createElement('style');
   style.textContent = [
     read('../../design-tokens/generated/tokens.css'),
-    read('../src/styles/questions.css'),
+    ...(markerRules ?? []),
   ].join('\n');
   document.head.append(style);
   return () => style.remove();
@@ -249,7 +258,7 @@ function mockGridLayout(columns: number) {
     this: HTMLElement,
   ) {
     if (!this.matches('[data-question-id]')) return new DOMRect();
-    const lists = Array.from(document.querySelectorAll('.qz-heatmap__grid'));
+    const lists = Array.from(document.querySelectorAll('.qz-heatmap > .chapter > .grid'));
     let top = 0;
     for (const list of lists) {
       const dots = Array.from(list.querySelectorAll('[data-question-id]'));

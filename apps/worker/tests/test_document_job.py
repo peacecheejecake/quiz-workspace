@@ -611,3 +611,110 @@ def test_sync_of_a_superseded_revision_does_nothing(world: World) -> None:
     assert result.outcome is RunOutcome.SUCCEEDED
     assert result.record.result == {"skipped": "not_active"}
     assert {p["active"] for p in world.points(document)} == {False}
+
+
+class ColdParser(CountingParser):
+    """A parser whose models load on `prepare` (a cold Docling, UX3-JOB)."""
+
+    def __init__(self, *, fail_prepare: bool = False) -> None:
+        super().__init__()
+        self.prepared = False
+        self.prepare_calls = 0
+        self.fail_prepare = fail_prepare
+
+    def prepare(self) -> None:
+        self.prepare_calls += 1
+        if self.fail_prepare:
+            raise OSError("model weights not found")
+        self.prepared = True
+
+
+def test_doc_01_ac05_cold_parser_reports_the_preparing_stage_first(world: World) -> None:
+    parser = ColdParser()
+    world.deps.parser = parser
+    document, revision = world.upload()
+
+    result = world.run(world.submit(document, revision.id))
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    assert parser.prepare_calls == 1
+    stages = [stage for stage, _ in world.store.progress]
+    assert stages[:3] == ["preparing", "downloading", "parsing"]
+    percents = [p for _, p in world.store.progress]
+    assert percents == sorted(percents)
+
+    # A warm parser (warmed up at worker start or by this job) skips the stage.
+    world.store.progress.clear()
+    other, other_revision = world.upload(BOOK + b"\n%warm\n")
+    world.run(world.submit(other, other_revision.id))
+    assert "preparing" not in [stage for stage, _ in world.store.progress]
+    assert parser.prepare_calls == 1
+
+
+def test_doc_01_ac05_retry_from_stored_content_needs_no_parser(world: World) -> None:
+    """A draft that already has content is not parsed again, so no models are loaded."""
+    document, revision = world.upload()
+    envelope = world.submit(document, revision.id)
+    world.index.crash_after_index = True
+    assert world.run(envelope).outcome is RunOutcome.RETRY
+    parser = ColdParser()
+    world.deps.parser = parser
+    world.store.progress.clear()
+
+    assert world.run(envelope).outcome is RunOutcome.SUCCEEDED
+    assert parser.prepare_calls == 0
+    assert "preparing" not in [stage for stage, _ in world.store.progress]
+
+
+def test_doc_01_ac05_warm_up_prepares_the_shared_parser_and_never_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from quiz_worker import document_job
+
+    cold = ColdParser()
+    monkeypatch.setattr(document_job, "build_parser", lambda settings: cold)
+    deps = document_job.LazyDeps(_settings(APP_ENV="test"))
+    assert deps.warm_up() is True
+    assert (cold.prepared, cold.prepare_calls) == (True, 1)
+    assert deps.parser() is cold
+    assert deps.warm_up() is True
+    assert cold.prepare_calls == 1
+
+    broken = ColdParser(fail_prepare=True)
+    monkeypatch.setattr(document_job, "build_parser", lambda settings: broken)
+    assert document_job.LazyDeps(_settings(APP_ENV="test")).warm_up() is False
+
+
+@pytest.mark.parametrize(
+    ("env", "parser", "override", "expected"),
+    [
+        (Environment.TEST, ParserMode.AUTO, None, False),
+        (Environment.LOCAL, ParserMode.AUTO, None, False),
+        (Environment.PRODUCTION, ParserMode.AUTO, None, True),
+        (Environment.PREVIEW, ParserMode.DOCLING, None, True),
+        (Environment.PRODUCTION, ParserMode.AUTO, False, False),
+        (Environment.LOCAL, ParserMode.AUTO, True, True),
+    ],
+)
+def test_doc_01_ac05_parser_warm_up_is_opt_in_outside_deployments(
+    env: Environment, parser: ParserMode, override: bool | None, expected: bool
+) -> None:
+    from quiz_worker.celery_app import install_parser_warm_up
+    from quiz_worker.document_job import LazyDeps
+
+    values: dict[str, Any] = {"APP_ENV": env.value, "WORKER_PARSER": parser.value}
+    if override is not None:
+        values["WORKER_WARM_PARSER"] = override
+    settings = (
+        _settings(**values)
+        if env not in {Environment.PREVIEW, Environment.PRODUCTION}
+        else WorkerSettings.model_construct(app_env=env, parser=parser, warm_parser=override)
+    )
+    assert settings.warms_parser is expected
+    from celery import signals
+    from quiz_worker.celery_app import PARSER_WARM_UP_UID
+
+    try:
+        assert install_parser_warm_up(settings, LazyDeps(settings)) is expected
+    finally:
+        signals.worker_process_init.disconnect(dispatch_uid=PARSER_WARM_UP_UID)

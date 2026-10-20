@@ -39,7 +39,8 @@ export function Textarea({
         aria-describedby={ids.describedBy}
         aria-invalid={ids.hasError || undefined}
         aria-errormessage={ids.hasError ? ids.errorId : undefined}
-        className={cx('qz-control', 'qz-control--multiline', 'qz-focus-ring', className)}
+        data-multiline=""
+        className={cx('qz-control', 'qz-focus-ring', className)}
         {...rest}
       />
     </FieldFrame>

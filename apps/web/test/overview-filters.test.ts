@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EMPTY_OVERVIEW_FILTERS,
   isOverviewFiltered,
+  mergeOverviewFilters,
   openQuestionId,
   overviewApiQuery,
   overviewSearch,
@@ -117,5 +118,22 @@ describe('overviewApiQuery', () => {
       retry: false,
     });
     expect(overviewApiQuery(EMPTY_OVERVIEW_FILTERS)).toEqual({});
+  });
+});
+
+describe('mergeOverviewFilters', () => {
+  it('replaces only the heatmap filters and keeps q, dialogs and the open question', () => {
+    const merged = mergeOverviewFilters(
+      `?q=염소&panel=history&status=viewed&question=${QUESTION}&type=ESSAY`,
+      { ...EMPTY_OVERVIEW_FILTERS, q: 'ignored', status: ['retry'], favorite: true },
+    );
+    const params = new URLSearchParams(merged);
+    expect(params.get('q')).toBe('염소');
+    expect(params.get('panel')).toBe('history');
+    expect(params.get('question')).toBe(QUESTION);
+    expect(params.getAll('status')).toEqual(['retry']);
+    expect(params.get('favorite')).toBe('true');
+    expect(params.has('type')).toBe(false);
+    expect(mergeOverviewFilters('?status=retry', EMPTY_OVERVIEW_FILTERS)).toBe('');
   });
 });

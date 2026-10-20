@@ -43,12 +43,7 @@ export function PopoverContent({
         {children}
         {closeLabel ? (
           <RadixPopover.Close asChild>
-            <IconButton
-              label={closeLabel}
-              icon={<CloseIcon />}
-              size="sm"
-              className="qz-popover__close"
-            />
+            <IconButton label={closeLabel} icon={<CloseIcon />} size="sm" className="close" />
           </RadixPopover.Close>
         ) : null}
       </RadixPopover.Content>

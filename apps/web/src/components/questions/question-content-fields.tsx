@@ -169,7 +169,7 @@ export function QuestionContentFields({
           error={errors.rubric}
         />
       ) : null}
-      {answerHint ? <p className="qz-field__description">{answerHint}</p> : null}
+      {answerHint ? <p className={styles.fieldHint}>{answerHint}</p> : null}
 
       <Textarea
         label="해설"

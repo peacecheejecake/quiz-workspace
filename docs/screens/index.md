@@ -12,24 +12,25 @@
 | AUTH-06 | 새 비밀번호 설정 | `/reset-password` | [auth-reset.md](auth-reset.md) |
 | AUTH-07 | 인증 오류 안내 | `/auth/error` | [auth-error.md](auth-error.md) |
 | ACCOUNT-01 | 계정 보안 설정 | `/settings/security` | [account-security.md](account-security.md) |
-| WS-01 | Workspace 홈 | `/workspaces` | [workspaces.md](workspaces.md) |
-| DOC-01 | Documents 목록·업로드 | `/workspaces/:workspaceId/documents` | [documents-library.md](documents-library.md) |
+| WS-01 | Workspace 목록 | `/workspaces` | [workspaces.md](workspaces.md) |
+| DOC-01 | 문서 관리 Floating Dialog | `/workspaces/:workspaceId?panel=documents` | [documents-library.md](documents-library.md) |
 | DOC-02 | PDF 열람·원문 교정 | `/workspaces/:workspaceId/documents/:documentId` | [documents-editor.md](documents-editor.md) |
-| SEARCH-01 | 다국어 원문 검색 | `/workspaces/:workspaceId/search` | [search.md](search.md) |
-| QOV-01 | Questions Heatmap 홈 | `/workspaces/:workspaceId/questions` | [questions-overview.md](questions-overview.md) |
+| SEARCH-01 | 통합 검색 (문제·원문) | `/workspaces/:workspaceId?q=:query` | [search.md](search.md) |
+| QOV-01 | Workspace 홈 (문제 Heatmap) | `/workspaces/:workspaceId` | [questions-overview.md](questions-overview.md) |
 | QBANK-01 | 문제은행 목록·편집 | `/workspaces/:workspaceId/questions/bank` | [questions-bank.md](questions-bank.md) |
-| QPLAY-01 | 문제 풀이 Floating Side Panel | `/workspaces/:workspaceId/questions?question=:questionId` | [questions-practice.md](questions-practice.md) |
+| QPLAY-01 | 문제 풀이 Floating Side Panel | `/workspaces/:workspaceId?question=:questionId` | [questions-practice.md](questions-practice.md) |
 | QIMPORT-01 | 문제 PDF 가져오기 | `/workspaces/:workspaceId/questions/import` | [questions-import.md](questions-import.md) |
 | QGEN-01 | 문제 변형 출제 | `/workspaces/:workspaceId/questions/generate` | [questions-generation.md](questions-generation.md) |
-| HISTORY-01 | 작업·변경·풀이 이력 | `/workspaces/:workspaceId/history` | [history-jobs.md](history-jobs.md) |
-
-| WS-SHARE-01 | Workspace 공유 관리 (Owner) | `/workspaces/:workspaceId/settings/sharing` | [workspace-sharing.md](workspace-sharing.md) |
+| HISTORY-01 | 이력 Floating Dialog | `/workspaces/:workspaceId?panel=history` | [history-jobs.md](history-jobs.md) |
+| WS-SHARE-01 | Workspace 공유 관리 (Owner) | `/workspaces/:workspaceId?panel=share` | [workspace-sharing.md](workspace-sharing.md) |
 | WS-VIEW-01 | 공유 Workspace 조회 (Guest) | `/share/:shareId` | [workspace-shared-view.md](workspace-shared-view.md) |
 | WS-FORK-01 | 공유 Workspace Fork (Recipient) | `/share/:shareId?panel=fork` | [workspace-fork.md](workspace-fork.md) |
 
 ## 공통 규칙
 
-- 총 21개 화면, AC 96개(기존 70개, 공유·Fork 신규 17개, Auth CAPTCHA 신규 8개 — A4, 검색 저하 SEARCH-01-AC06 1개 — M7.4b).
+- 총 21개 화면, AC 107개(기존 70개, 공유·Fork 신규 17개, Auth CAPTCHA 신규 8개 — A4, 검색 저하 SEARCH-01-AC06 1개 — M7.4b, 처리 진행 표시 DOC-01-AC05 1개 — UX3-JOB, Workspace 홈 통합 10개 — UX3c: QOV-01-AC07~AC10, SEARCH-01-AC07, DOC-01-AC06, QIMPORT-01-AC05, QGEN-01-AC05, HISTORY-01-AC04, QBANK-01-AC05).
+- **Workspace 홈 통합(UX3c 2026-10-20):** Workspace 안에는 왼쪽 메뉴(문서/검색/문제/이력/공유 설정)가 없고 `/workspaces/:workspaceId` 하나가 홈이다(QOV-01). 홈 상단의 Workspace header가 통합 검색과 `문서 n`·`문제은행`·`이력`·`공유하기` 버튼을 갖는다. 문서 관리·문제 PDF 관리·문제 생성·이력·링크 공유는 홈 위에 겹쳐 뜨는 non-modal Floating Dialog(`?panel=documents|question-pdfs|generate|history|share`)이며 나중에 연 dialog가 위에 온다. 통합 검색 상태는 홈 URL(`?q=&scope=…`)에 둔다. 이전 경로(`/documents`, `/search`, `/questions`, `/history`, `/settings/sharing`)는 같은 상태의 홈으로 redirect한다. 실제 페이지로 남는 하위 화면(DOC-02, QBANK-01, QIMPORT-01·QGEN-01의 검토 화면)은 뒤로가기와 breadcrumb을 둔다. 홈과 dialog에는 화면 제목·설명 header가 없다(접근성 `h1`은 시각적으로 숨겨 유지).
+- 버튼으로 화면이 바뀌면 UI가 먼저 바뀌고 데이터는 skeleton을 보이는 동안 불러온다(route `loading.tsx`, dialog는 즉시 열리고 내용 skeleton).
 
 - 인증 없는 접근 / 권한 오류 / Workspace archive / deleted / 실패 / 빈 데이터 상태를 정의한다.
 - `/workspaces/:workspaceId` 내부에서는 `workspace_id` 권한을 서버에서 확인한다. 클라이언트 필터만으로 데이터 격리를 구현하지 않는다.

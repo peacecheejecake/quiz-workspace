@@ -23,6 +23,7 @@ import contextlib
 import logging
 import os
 import socket
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -263,7 +264,11 @@ def create_celery_app(
     store = job_store if job_store is not None else build_job_store(settings)
     app = QuizCelery(worker_settings=settings, job_store=store)
     app.conf.update(build_celery_config(settings))
-    for definition in definitions if definitions is not None else default_definitions(settings):
+    if definitions is None:
+        document_deps = LazyDeps(settings)
+        definitions = default_definitions(settings, document_deps)
+        install_parser_warm_up(settings, document_deps)
+    for definition in definitions:
         register_job(app, definition)
     register_reconciler(app)
     return app
@@ -452,11 +457,35 @@ def cleanup_policy_for(settings: WorkerSettings) -> CleanupPolicy:
     )
 
 
-def default_definitions(settings: WorkerSettings) -> list[JobDefinition[Any]]:
+PARSER_WARM_UP_UID = "quiz-worker-parser-warm-up"
+
+
+def install_parser_warm_up(settings: WorkerSettings, deps: LazyDeps) -> bool:
+    """Warm the PDF parser up in every prefork child once it starts (UX3-JOB): a background
+    thread loads the Docling models, so the first document skips that wait (the job reports the
+    `preparing` stage while it would still wait for them). Off unless `settings.warms_parser`.
+    The child process (not the parent) loads them, so nothing heavy is shared across fork, and
+    memory is what the first job would have used anyway."""
+    if not settings.warms_parser:
+        return False
+
+    def on_process_init(**_: Any) -> None:
+        # worker_process_init must return quickly (the pool waits for the child's UP message).
+        threading.Thread(target=deps.warm_up, name="parser-warm-up", daemon=True).start()
+
+    signals.worker_process_init.connect(
+        on_process_init, weak=False, dispatch_uid=PARSER_WARM_UP_UID
+    )
+    return True
+
+
+def default_definitions(
+    settings: WorkerSettings, deps: LazyDeps | None = None
+) -> list[JobDefinition[Any]]:
     """Every job type the worker runs. Dependencies of the document, import, generation and fork
     jobs (DB, Storage, Qdrant, models, LLM) are built on their first run, so a worker without that
     configuration still starts (those jobs then fail as `worker_not_configured`)."""
-    deps = LazyDeps(settings)
+    deps = deps if deps is not None else LazyDeps(settings)
     return [
         ECHO_JOB,
         document_parse_definition(deps),

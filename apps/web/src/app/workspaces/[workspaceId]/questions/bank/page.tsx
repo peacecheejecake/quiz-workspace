@@ -29,6 +29,7 @@ export default async function Page({
     <div data-screen-id="QBANK-01">
       <QuestionBank
         workspaceId={workspace.id}
+        workspaceName={workspace.name}
         readOnly={readOnly}
         filters={filters}
         items={bank.items}

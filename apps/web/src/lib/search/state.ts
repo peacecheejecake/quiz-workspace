@@ -1,6 +1,7 @@
-// SEARCH-01 address-bar state and Korean copy (pure, unit-tested). The submitted search lives in
-// the URL (`?q=&mode=&document=&chapter=&papers=1`) so returning from the PDF viewer with the
-// browser's back button restores the same results.
+// SEARCH-01 address-bar state and Korean copy (pure, unit-tested). The submitted content search
+// lives in the workspace home URL (`?q=&mode=&document=&section=&papers=1`, next to the home's
+// other keys) so returning from the PDF viewer with the browser's back button restores the same
+// results. `section` is the document chapter filter (the home's `chapter` is the heatmap's).
 import {
   DEFAULT_MODE,
   SEARCH_MODES,
@@ -27,7 +28,7 @@ export function parseSearchParams(params: RawParams): SearchQuery {
   const query = (first(params.q) ?? '').trim().slice(0, MAX_QUERY_CHARS);
   const mode = first(params.mode);
   const documentId = first(params.document);
-  const chapterId = first(params.chapter);
+  const chapterId = first(params.section);
   const validDocument = documentId && UUID.test(documentId) ? documentId : null;
   return {
     query,
@@ -39,15 +40,30 @@ export function parseSearchParams(params: RawParams): SearchQuery {
   };
 }
 
+/** URL keys of a content search. */
+export const CONTENT_SEARCH_KEYS = ['q', 'mode', 'document', 'section', 'papers'] as const;
+
 /** Query string (without `?`) for a submitted search. */
 export function searchParamsFor(q: SearchQuery): string {
   const out = new URLSearchParams();
   if (q.query) out.set('q', q.query.slice(0, MAX_QUERY_CHARS));
   if (q.mode !== DEFAULT_MODE) out.set('mode', q.mode);
   if (q.documentId) out.set('document', q.documentId);
-  if (q.documentId && q.chapterId) out.set('chapter', q.chapterId);
+  if (q.documentId && q.chapterId) out.set('section', q.chapterId);
   if (q.includeQuestionPapers) out.set('papers', '1');
   return out.toString();
+}
+
+/**
+ * `search` (an address-bar query) with its content-search keys replaced by `q`'s; every other key
+ * (heatmap filters, open dialogs, scope) is kept. Returns '' or a string starting with `?`.
+ */
+export function mergeContentSearch(search: string, q: SearchQuery): string {
+  const params = new URLSearchParams(search);
+  for (const key of CONTENT_SEARCH_KEYS) params.delete(key);
+  for (const [key, value] of new URLSearchParams(searchParamsFor(q))) params.set(key, value);
+  const query = params.toString();
+  return query ? `?${query}` : '';
 }
 
 /**

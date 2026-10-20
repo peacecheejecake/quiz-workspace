@@ -63,13 +63,11 @@ export function ModalDialog({
           }}
         >
           <LayerProvider value="var(--z-modal)">
-            <div className="qz-modal__header">
-              <div className="qz-panel__heading">
-                <Dialog.Title className="qz-modal__title">{title}</Dialog.Title>
+            <div className="header">
+              <div className="heading">
+                <Dialog.Title className="title">{title}</Dialog.Title>
                 {description ? (
-                  <Dialog.Description className="qz-panel__description">
-                    {description}
-                  </Dialog.Description>
+                  <Dialog.Description className="description">{description}</Dialog.Description>
                 ) : null}
               </div>
               {closeLabel ? (
@@ -78,8 +76,8 @@ export function ModalDialog({
                 </Dialog.Close>
               ) : null}
             </div>
-            <ScrollRegion className="qz-modal__body">{children}</ScrollRegion>
-            {footer ? <div className="qz-modal__footer">{footer}</div> : null}
+            <ScrollRegion className="body">{children}</ScrollRegion>
+            {footer ? <div className="footer">{footer}</div> : null}
           </LayerProvider>
         </Dialog.Content>
       </Dialog.Portal>

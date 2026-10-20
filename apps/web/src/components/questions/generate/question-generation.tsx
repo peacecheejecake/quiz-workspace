@@ -63,12 +63,15 @@ import { PracticePanel, type PracticeQuestion } from '../practice/practice-panel
 import { GenerationComparePanel } from './generation-compare-panel';
 import { QuestionGenerationForm } from './question-generation-form';
 import { VariationDiffViewer, type VariationOriginal } from './variation-diff-viewer';
+import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import styles from './question-generation.module.css';
 
 export type GenerationReadOnly = 'viewer' | 'archived' | null;
 
 export interface QuestionGenerationProps {
   readonly workspaceId: string;
+  /** Breadcrumb root; defaults to a generic label (unit tests). */
+  readonly workspaceName?: string;
   readonly readOnly: GenerationReadOnly;
   readonly source: QuestionDetail;
   /** Recent runs of the source, newest first. */
@@ -110,6 +113,7 @@ function failureOf(run: GenerationRun | null) {
 
 export function QuestionGeneration({
   workspaceId,
+  workspaceName = 'Workspace',
   readOnly,
   source,
   initialRuns,
@@ -620,6 +624,13 @@ export function QuestionGeneration({
   return (
     <div className={styles.screen}>
       <PageHeader
+        back={<WorkspaceBackLink workspaceId={workspaceId} />}
+        breadcrumb={
+          <WorkspaceBreadcrumb
+            workspace={{ id: workspaceId, name: workspaceName }}
+            trail={[{ label: '문제 변형 출제' }]}
+          />
+        }
         title="문제 변형 출제"
         description="확정된 문제를 골라 보기 섞기, 문구 변형, 정오 반전, 유사 개념 변형을 만듭니다. 만든 변형은 원본과 비교해 검토하고 승인한 초안만 새 문제로 등록됩니다."
         actions={

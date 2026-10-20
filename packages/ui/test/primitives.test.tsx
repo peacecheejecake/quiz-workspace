@@ -157,7 +157,7 @@ describe('Badge / Skeleton / FocusRing', () => {
     render(<Badge tone="danger">오답</Badge>);
     const badge = screen.getByText('오답');
     expect(badge).toHaveAttribute('data-tone', 'danger');
-    expect(badge.querySelector('.qz-badge__dot')).toHaveAttribute('aria-hidden', 'true');
+    expect(badge.querySelector(':scope > .dot')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('Skeleton is hidden from assistive technology', () => {

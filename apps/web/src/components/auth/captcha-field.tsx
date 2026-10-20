@@ -158,7 +158,13 @@ export function CaptchaField({ sitekey, action, reasonId, onToken, ref }: Captch
         보안 확인
       </p>
       <div ref={containerRef} className={styles.widget} />
-      <p id={statusId} role="status" className={styles.status}>
+      {/* Once verified the widget shows its own check mark: the line stays for screen readers
+          only (the polite announcement and the group's description). */}
+      <p
+        id={statusId}
+        role="status"
+        className={status === 'verified' ? 'qz-visually-hidden' : styles.status}
+      >
         {CAPTCHA_MESSAGES[status]}
       </p>
       {status === 'verified' ? null : (

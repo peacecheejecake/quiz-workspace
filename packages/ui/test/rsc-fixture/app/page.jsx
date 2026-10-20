@@ -3,18 +3,30 @@
 // this list in sync with src/index.ts.
 import {
   AlertIcon,
+  ArrowLeftIcon,
   AppShell,
+  BackLink,
   Badge,
+  Breadcrumb,
   Button,
   CheckIcon,
   Checkbox,
   ChevronDownIcon,
+  ChevronRightIcon,
+  ChevronUpIcon,
+  HistoryIcon,
+  SearchIcon,
+  ShareIcon,
+  TrashIcon,
   CloseIcon,
   ConfirmDialog,
   DialogClose,
+  Dropzone,
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   EmptyState,
@@ -54,8 +66,11 @@ import {
   TabsList,
   TabsTrigger,
   Textarea,
+  UploadIcon,
   ThemeProvider,
   ToastProvider,
+  TOOLTIP_DELAY_MS,
+  TOOLTIP_DESCRIPTION_DELAY_MS,
   Tooltip,
   deriveDotStatus,
   focusRingClassName,
@@ -69,7 +84,14 @@ import {
 
 const hooks = [useTheme, useToast];
 // Need function props (onOpen / onPressedChange), so a Client Component has to render them.
-const interactive = [QuestionDot, QuestionHeatmap, FavoriteToggle, RetryToggle, ConfirmDialog];
+const interactive = [
+  QuestionDot,
+  QuestionHeatmap,
+  FavoriteToggle,
+  RetryToggle,
+  ConfirmDialog,
+  Dropzone,
+];
 
 // The status helpers are plain functions and must be callable on the server.
 const questions = QUESTION_DOT_STATUSES.map((status, index) => ({
@@ -96,7 +118,12 @@ export default function Page() {
     <ThemeProvider defaultTheme="light">
       <ToastProvider>
         <AppShell header={<span>RSC fixture</span>} sidebar={<a href="#main-content">본문</a>}>
-          <PageHeader title="RSC" description={`${hooks.length} hooks exported`} />
+          <PageHeader
+            title="RSC"
+            description={`${hooks.length} hooks exported`}
+            back={<BackLink href="/" label="처음으로" />}
+            breadcrumb={<Breadcrumb items={[{ label: '홈', href: '/' }, { label: 'RSC' }]} />}
+          />
           <Surface>
             <Badge tone="success">ok</Badge>
             <Button variant="primary">버튼</Button>
@@ -133,9 +160,17 @@ export default function Page() {
             <MenuIcon />
             <MinusIcon />
             <MoreIcon />
+            <UploadIcon />
+            <ArrowLeftIcon />
+            <ChevronRightIcon />
+            <ChevronUpIcon />
+            <SearchIcon />
+            <TrashIcon />
+            <HistoryIcon />
+            <ShareIcon />
           </Surface>
           <GlassSurface>glass</GlassSurface>
-          <Tooltip content="설명">
+          <Tooltip content="설명" delayDuration={TOOLTIP_DELAY_MS + TOOLTIP_DESCRIPTION_DELAY_MS}>
             <Button>툴팁</Button>
           </Tooltip>
           <Popover>
@@ -163,7 +198,10 @@ export default function Page() {
           <DropdownMenu>
             <DropdownMenuTrigger>더보기</DropdownMenuTrigger>
             <DropdownMenuContent aria-label="작업">
-              <DropdownMenuItem>보관</DropdownMenuItem>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>작업</DropdownMenuLabel>
+                <DropdownMenuItem>보관</DropdownMenuItem>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem tone="danger">삭제</DropdownMenuItem>
             </DropdownMenuContent>

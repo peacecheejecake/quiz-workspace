@@ -35,6 +35,9 @@ export interface JobSnapshot {
   readonly stage: string | null;
   readonly progress: number | null;
   readonly errorCode: string | null;
+  /** When the job was queued / first started (ISO); the row shows how long it has waited. */
+  readonly queuedAt: string | null;
+  readonly startedAt: string | null;
 }
 
 export interface UploadFailure {
@@ -115,6 +118,22 @@ export function jobSnapshot(job: Job): JobSnapshot {
     stage: job.stage ?? null,
     progress: job.progress ?? null,
     errorCode: job.error_code ?? null,
+    queuedAt: job.created_at,
+    startedAt: job.started_at ?? null,
+  };
+}
+
+/** The list's queued/running parse job (UX3-JOB): rows this tab does not follow live. */
+export function processingJobSnapshot(doc: DocumentSummary): JobSnapshot | undefined {
+  const job = doc.processing_job;
+  if (!job) return undefined;
+  return {
+    status: job.status,
+    stage: job.stage ?? null,
+    progress: job.progress ?? null,
+    errorCode: null,
+    queuedAt: job.created_at,
+    startedAt: job.started_at ?? null,
   };
 }
 
@@ -436,7 +455,7 @@ function rowFromUpload(item: UploadItem, doc?: DocumentSummary): DocumentRow {
     upload: uploading
       ? { phase: item.failedIn ?? item.phase, loaded: item.loaded, total: item.size }
       : undefined,
-    job: item.job,
+    job: item.job ?? (doc ? processingJobSnapshot(doc) : undefined),
     error: item.failure?.message,
     retryable: item.failure?.retryable ?? false,
     cancellable: isCancellable(item),
@@ -453,6 +472,7 @@ function rowFromDocument(doc: DocumentSummary): DocumentRow {
     size: doc.size_bytes,
     updatedAt: doc.updated_at,
     status: doc.status,
+    job: doc.status === 'processing' ? processingJobSnapshot(doc) : undefined,
     error: doc.status === 'failed' ? jobFailureMessage(doc.last_error) : undefined,
     retryable: false,
     cancellable: false,

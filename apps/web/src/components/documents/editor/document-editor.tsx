@@ -41,6 +41,8 @@ import {
   revisionStatusText,
   type PublishState,
 } from '@/lib/documents/publish-state';
+import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
+import { workspaceHomePath } from '@/lib/workspaces/home';
 import styles from './editor.module.css';
 import { OutlineTree } from './outline-tree';
 import { PdfViewer } from './pdf-viewer';
@@ -49,6 +51,8 @@ import { TextBlockEditor } from './text-block-editor';
 
 export interface DocumentEditorProps {
   readonly workspaceId: string;
+  /** Breadcrumb root; defaults to a generic label (unit tests). */
+  readonly workspaceName?: string;
   readonly document: DocumentDetail;
   /** Editor+ in an active workspace (the API still decides every write). */
   readonly canEdit: boolean;
@@ -83,6 +87,7 @@ type ContentState =
 
 export function DocumentEditor({
   workspaceId,
+  workspaceName = 'Workspace',
   document: initialDocument,
   canEdit: initialCanEdit,
   readOnlyReason,
@@ -94,6 +99,7 @@ export function DocumentEditor({
   const router = useRouter();
   const documentId = initialDocument.id;
   const documentPath = `/workspaces/${workspaceId}/documents/${documentId}`;
+  const documentsDialogPath = workspaceHomePath(workspaceId, 'panel=documents');
   const pdfSource = useMemo(() => {
     const urls = new SignedUrlCache((signal) => client.getSourceUrl(documentId, signal));
     return (signal: AbortSignal) => loadPdfBytes(urls, { signal });
@@ -572,10 +578,12 @@ export function DocumentEditor({
     <div className={styles.screen}>
       <PageHeader
         title={document.title}
+        back={<WorkspaceBackLink workspaceId={workspaceId} />}
         breadcrumb={
-          <nav aria-label="위치">
-            <Link href={`/workspaces/${workspaceId}/documents`}>문서</Link>
-          </nav>
+          <WorkspaceBreadcrumb
+            workspace={{ id: workspaceId, name: workspaceName }}
+            trail={[{ label: '문서 관리', href: documentsDialogPath }, { label: document.title }]}
+          />
         }
         description={document.filename !== document.title ? document.filename : undefined}
       />
@@ -633,7 +641,7 @@ export function DocumentEditor({
           {document.status === 'failed'
             ? `문서 처리에 실패했습니다.${document.last_error ? ` (${document.last_error})` : ''} 문서 목록에서 다시 시도할 수 있습니다.`
             : '문서를 처리하는 중입니다. 처리가 끝나면 목차와 원문 텍스트가 표시됩니다.'}{' '}
-          <Link href={`/workspaces/${workspaceId}/documents`}>문서 목록으로</Link>
+          <Link href={documentsDialogPath}>문서 목록으로</Link>
         </p>
       ) : null}
 

@@ -175,23 +175,29 @@ export async function waitForJobStatus(
 // UI (HISTORY-01)
 // ---------------------------------------------------------------------------------------------
 
+/** The workspace home with the "이력" dialog open (UX3c; `/history` redirects here). */
 export function historyPath(workspaceId: string): string {
-  return `/workspaces/${workspaceId}/history`;
+  return `/workspaces/${workspaceId}?panel=history`;
 }
 
-const section = (page: Page, name: RegExp): Locator =>
-  main(page).getByRole('region', { name }).or(main(page).getByRole('tabpanel', { name }));
-
 export const historyUi = {
-  heading: (page: Page) => page.getByRole('heading', { level: 1 }),
-  /** Opens the tab named `name` if the screen uses tabs (sections need no click). */
-  open: async (page: Page, name: RegExp): Promise<void> => {
-    const tab = main(page).getByRole('tab', { name });
-    if (await tab.count()) await tab.click();
-  },
-  activities: (page: Page) => section(page, /^(변경 이력|활동|activity|changes)/i),
-  jobs: (page: Page) => section(page, /^(작업|작업 로그|jobs?)(?!\p{L})/iu),
-  attempts: (page: Page) => section(page, /^(풀이 이력|내 풀이|attempts|practice history)/i),
+  /** Header icon button (left of 공유하기) that opens the dialog. */
+  button: (page: Page) => main(page).getByRole('button', { name: /^(이력|history)$/i }),
+  dialog: (page: Page) => main(page).getByRole('dialog', { name: /^(이력|history)$/i }),
+  /** The one chronological list (변경·작업·풀이 merged, newest first). */
+  list: (page: Page) => historyUi.dialog(page).getByRole('list', { name: /^(이력|history)$/i }),
+  /** Rows of one kind, by their kind badge (변경 / 작업 / 풀이). */
+  ofKind: (page: Page, kind: 'activity' | 'job' | 'attempt') =>
+    historyUi
+      .list(page)
+      .getByRole('listitem')
+      .filter({
+        has: page.getByText(
+          { activity: /^(변경|change)$/i, job: /^(작업|job)$/i, attempt: /^(풀이|attempt)$/i }[
+            kind
+          ],
+        ),
+      }),
   items: (scope: Locator) => scope.getByRole('listitem'),
   time: (item: Locator) => item.locator('time[datetime]'),
   revision: (n: number) =>

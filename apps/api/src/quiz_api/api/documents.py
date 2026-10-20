@@ -5,8 +5,9 @@
     POST   /documents/complete-upload                the uploader; re-verify the stored object,
                                                      create document + draft revision + parse job;
                                                      202, idempotent per upload
-    GET    /workspaces/{id}/documents                any member; live documents, newest first
-    GET    /documents/{id}                           any member; status + active revision
+    GET    /workspaces/{id}/documents                any member; live documents, newest first,
+                                                     with their queued/running parse job
+    GET    /documents/{id}                           any member; status + active revision + job
     GET    /documents/{id}/source-url                any member; short-lived signed PDF read URL
     DELETE /documents/{id}                           editor+; soft delete, 204, then 404 everywhere
 
@@ -58,6 +59,7 @@ from quiz_api.repositories.documents import (
     DocumentStatus,
     DocumentType,
     JobRow,
+    ProcessingJobRecord,
     RevisionStatus,
     UploadRecord,
 )
@@ -148,6 +150,22 @@ class UploadCompleted(BaseModel):
     job_id: uuid.UUID = Field(description="The parse job; poll `GET /jobs/{id}`.")
 
 
+class DocumentProcessingJob(BaseModel):
+    """The document's queued or running parse job, so a list shows progress without following
+    the job (UX3-JOB, DOC-01-AC05)."""
+
+    id: uuid.UUID = Field(description="Poll `GET /jobs/{id}` or stream its events for more.")
+    status: Literal["queued", "running"]
+    stage: str | None = Field(
+        description="Current step while running: `preparing` (loading the parser's models), "
+        "`downloading`, `parsing`, `structuring`, `loading`, `chunking`, `indexing`, "
+        "`publishing`; null when not reported yet."
+    )
+    progress: int | None = Field(description="0-99 while running; null when unknown.")
+    created_at: datetime = Field(description="When the job was queued.")
+    started_at: datetime | None = Field(description="When a worker first started it.")
+
+
 class DocumentSummary(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
@@ -163,6 +181,9 @@ class DocumentSummary(BaseModel):
     last_error: str | None = Field(description="Why the last processing attempt failed.")
     created_at: datetime
     updated_at: datetime
+    processing_job: DocumentProcessingJob | None = Field(
+        default=None, description="The queued or running parse job; null when there is none."
+    )
 
 
 class DocumentList(BaseModel):
@@ -242,7 +263,7 @@ def _document(action: Action) -> Any:
 # --- helpers ------------------------------------------------------------------------------------
 
 
-def _summary(doc: DocumentRecord) -> DocumentSummary:
+def _summary(doc: DocumentRecord, job: ProcessingJobRecord | None = None) -> DocumentSummary:
     return DocumentSummary(
         id=doc.id,
         workspace_id=doc.workspace_id,
@@ -256,6 +277,7 @@ def _summary(doc: DocumentRecord) -> DocumentSummary:
         last_error=doc.last_error,
         created_at=doc.created_at,
         updated_at=doc.updated_at,
+        processing_job=DocumentProcessingJob(**vars(job)) if job is not None else None,
     )
 
 
@@ -480,10 +502,11 @@ def list_documents(
         DocumentType | None, Query(description="Only this document type.")
     ] = None,
 ) -> DocumentList:
-    """The workspace's documents (not soft-deleted), newest first."""
-    return DocumentList(
-        items=[_summary(d) for d in repo.list_documents(access.workspace_id, document_type)]
-    )
+    """The workspace's documents (not soft-deleted), newest first, each with its queued or
+    running parse job."""
+    docs = repo.list_documents(access.workspace_id, document_type)
+    jobs = repo.processing_jobs(access.workspace_id, [d.id for d in docs])
+    return DocumentList(items=[_summary(d, jobs.get(d.id)) for d in docs])
 
 
 def _revision(repo: DocumentRepository, revision_id: uuid.UUID | None) -> RevisionSummary | None:
@@ -497,8 +520,9 @@ def get_document(
 ) -> DocumentDetail:
     doc = repo.get_document(access.resource_id)
     latest = repo.latest_revision(doc.id)
+    job = repo.processing_jobs(doc.workspace_id, [doc.id]).get(doc.id)
     return DocumentDetail(
-        **_summary(doc).model_dump(),
+        **_summary(doc, job).model_dump(),
         active_revision=_revision(repo, doc.active_revision_id),
         latest_revision=RevisionSummary(**vars(latest)) if latest else None,
     )

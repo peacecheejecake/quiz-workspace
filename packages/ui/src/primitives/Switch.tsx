@@ -30,29 +30,29 @@ export function Switch({
   const on = rest.checked ?? false;
   return (
     <div className={cx('qz-switch', className)}>
-      <div className="qz-switch__text">
-        <label htmlFor={controlId} className="qz-switch__label">
+      <div className="text">
+        <label htmlFor={controlId} className="label">
           {label}
         </label>
         {description ? (
-          <p id={descriptionId} className="qz-field__description">
+          <p id={descriptionId} className="description">
             {description}
           </p>
         ) : null}
       </div>
-      <div className="qz-switch__control">
+      <div className="control">
         {rest.checked === undefined ? null : (
-          <span className="qz-switch__state" aria-hidden="true">
+          <span className="state" aria-hidden="true">
             {on ? stateLabels.on : stateLabels.off}
           </span>
         )}
         <RadixSwitch.Root
           id={controlId}
           aria-describedby={description ? descriptionId : undefined}
-          className="qz-switch__track qz-focus-ring"
+          className="track qz-focus-ring"
           {...rest}
         >
-          <RadixSwitch.Thumb className="qz-switch__thumb" />
+          <RadixSwitch.Thumb className="thumb" />
         </RadixSwitch.Root>
       </div>
     </div>

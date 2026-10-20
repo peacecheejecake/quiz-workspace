@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SCREENS, getScreen, isQueryStateActive } from '../src/screens';
@@ -29,11 +29,20 @@ function parseScreensIndex(markdown: string): DocScreen[] {
 
 const docScreens = parseScreensIndex(readFileSync(SCREENS_INDEX, 'utf8'));
 
-/** `page.tsx`, or `route.ts` for screens that are a Route Handler (AUTH-04 /auth/callback). */
+/**
+ * `page.tsx`, or `route.ts` for screens that are a Route Handler (AUTH-04 /auth/callback). A page
+ * may sit in a route group (`(home)/page.tsx` for `/workspaces/[workspaceId]`).
+ */
 function pageFile(path: string): string {
   const dir = join(APP_DIR, ...path.split('/').filter(Boolean));
   const route = join(dir, 'route.ts');
-  return existsSync(route) ? route : join(dir, 'page.tsx');
+  if (existsSync(route)) return route;
+  const page = join(dir, 'page.tsx');
+  if (existsSync(page) || !existsSync(dir)) return page;
+  const group = readdirSync(dir).find(
+    (name) => /^\(.+\)$/.test(name) && existsSync(join(dir, name, 'page.tsx')),
+  );
+  return group ? join(dir, group, 'page.tsx') : page;
 }
 
 describe('screen route table', () => {
@@ -66,7 +75,7 @@ describe('screen route table', () => {
     (id, screen) => {
       const file = pageFile(screen.path);
       expect(existsSync(file), `${file} missing`).toBe(true);
-      expect(readFileSync(file, 'utf8')).toContain(`"${id}"`);
+      expect(readFileSync(file, 'utf8')).toMatch(new RegExp(`['"]${id}['"]`));
     },
   );
 });

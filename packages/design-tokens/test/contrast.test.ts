@@ -59,6 +59,13 @@ const REQUIRED: Pair[] = [
   ['color-text-primary', 'color-glass-solid', TEXT_MIN],
   ['color-text-secondary', 'color-glass-solid', TEXT_MIN],
   ['color-focus', 'color-state-selected', NON_TEXT_MIN],
+  // Switch (v1.2.2): the unchecked fill is the control boundary on every surface it sits on;
+  // the thumb (on-accent) stands out from the fill in both states and on hover.
+  ...(['color-surface', 'color-canvas', 'color-surface-muted', 'color-glass-solid'] as const).map(
+    (bg): Pair => ['color-switch-track', bg, NON_TEXT_MIN],
+  ),
+  ['color-on-accent', 'color-switch-track', NON_TEXT_MIN],
+  ['color-on-accent', 'color-switch-track-hover', NON_TEXT_MIN],
   // Tooltip: inverted text.
   ['color-canvas', 'color-text-primary', TEXT_MIN],
   ...NON_TEXT_TOKENS.flatMap((fg) => BACKGROUNDS.map((bg): Pair => [fg, bg, NON_TEXT_MIN])),
@@ -110,6 +117,20 @@ describe.each(themeNames)('%s theme contrast', (theme) => {
       t['color-state-selected-hover'],
     ].map((v) => v.toLowerCase());
     expect(new Set(values).size).toBe(values.length);
+  });
+
+  // UX3b: the switch track border is a lighter rim than the fill it surrounds, unchecked
+  // (rest and hover) and checked (accent rest and hover).
+  it('switch track borders are lighter than the track fill in every state', () => {
+    const t = themedTokens[theme];
+    const lum = (name: ThemedTokenName) => luminance(t[name]);
+    expect(lum('color-switch-track-border')).toBeGreaterThan(lum('color-switch-track'));
+    expect(lum('color-switch-track-border')).toBeGreaterThan(lum('color-switch-track-hover'));
+    expect(lum('color-switch-track-checked-border')).toBeGreaterThan(lum('color-accent'));
+    expect(lum('color-switch-track-checked-border')).toBeGreaterThan(lum('color-accent-hover'));
+    expect(ratio(theme, 'color-switch-track-hover', 'color-switch-track')).toBeGreaterThanOrEqual(
+      1.08,
+    );
   });
 
   it('feedback colors are distinct from question status colors', () => {

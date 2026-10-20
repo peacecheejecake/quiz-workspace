@@ -91,12 +91,18 @@ class ProgressProbe:
         self.inner = inner
         self.reader: Any = None
         self.seen: list[tuple[str, int | None, str | None]] = []
+        # Also read the document list (`/workspaces/{id}/documents`) after each progress write.
+        self.list_path: str | None = None
+        self.listed: list[dict[str, Any] | None] = []
 
     def report_progress(self, job_id: uuid.UUID, attempt: int, stage: str, percent: int) -> None:
         self.inner.report_progress(job_id, attempt, stage, percent)
         if self.reader is not None:
             body = self.reader.ok("GET", f"/jobs/{job_id}")
             self.seen.append((body["status"], body["progress"], body["stage"]))
+        if self.reader is not None and self.list_path is not None:
+            items = self.reader.ok("GET", self.list_path)["items"]
+            self.listed.extend(item["processing_job"] for item in items)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.inner, name)
@@ -288,6 +294,62 @@ def test_m32b_upload_is_parsed_indexed_and_published(seed: Any, worker: Worker) 
     assert '"status":"succeeded"' in res.text
 
     worker.storage.delete(PARSED_BUCKET, key)
+
+
+class ColdParser:
+    """The test parser behind a model load (`prepare`), like a cold Docling (UX3-JOB)."""
+
+    def __init__(self, inner: CountingParser) -> None:
+        self.inner = inner
+        self.prepared = False
+
+    @property
+    def parser_version(self) -> str:
+        return self.inner.parser_version
+
+    def prepare(self) -> None:
+        self.prepared = True
+
+    def parse(self, path: Path, *, source_path: str | None = None) -> Any:
+        return self.inner.parse(path, source_path=source_path)
+
+
+def test_ux3_job_document_list_shows_the_running_job_and_its_stage(
+    seed: Any, worker: Worker
+) -> None:
+    """DOC-01-AC05 data: the library list carries the queued/running parse job (status, stage,
+    queued/started times) read in the caller's workspace, and drops it once the job is done."""
+    alice, ws, done = _upload(seed, "ux3-job-list")
+    doc_id, job_id = done["document_id"], done["job_id"]
+    list_path = f"/workspaces/{ws['id']}/documents"
+    queued = alice.ok("GET", list_path)["items"][0]
+    assert queued["id"] == doc_id
+    assert queued["processing_job"]["id"] == job_id
+    assert queued["processing_job"]["status"] == "queued"
+    assert queued["processing_job"]["created_at"]
+    assert queued["processing_job"]["started_at"] is None
+    assert alice.ok("GET", f"/documents/{doc_id}")["processing_job"]["id"] == job_id
+    # Another user's workspace list never shows it, and this one is not theirs to read.
+    mallory = seed.client("ux3-job-mallory")
+    other = mallory.create_workspace()
+    assert mallory.ok("GET", f"/workspaces/{other['id']}/documents")["items"] == []
+    seed.problem(mallory.call("GET", list_path), 404)
+
+    worker.deps.parser = ColdParser(worker.parser)
+    worker.documents.reader = alice
+    worker.documents.list_path = list_path
+    result = worker.run(job_id)
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    listed = worker.documents.listed
+    assert listed
+    assert all(job is not None and job["status"] == "running" for job in listed)
+    assert all(job is not None and job["started_at"] for job in listed)
+    stages = [job["stage"] for job in listed if job is not None]
+    assert stages[:3] == ["preparing", "downloading", "parsing"]
+    assert stages == [stage for _, _, stage in worker.documents.seen]
+    finished = alice.ok("GET", list_path)["items"][0]
+    assert (finished["status"], finished["processing_job"]) == ("ready", None)
 
 
 def test_m32b_retry_after_a_crash_does_not_duplicate(seed: Any, worker: Worker) -> None:

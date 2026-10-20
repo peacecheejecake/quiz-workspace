@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 const CSS = readFileSync(resolve(import.meta.dirname, '../src/styles/questions.css'), 'utf8');
 const OUTLINE =
-  /\.qz-question-marker__shape\s*\{[^}]*stroke:\s*color-mix\(in srgb, currentColor (\d+)%, var\(--(color-[a-z-]+)\)\)/;
+  /\.qz-question-marker > \.shape\s*\{[^}]*stroke:\s*color-mix\(in srgb, currentColor (\d+)%, var\(--(color-[a-z-]+)\)\)/;
 
 function channels(hex: string): number[] {
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);

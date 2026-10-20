@@ -44,7 +44,7 @@ const EMPTY: QuestionOverview = {
 };
 
 export function overviewPath(workspaceId: string): string {
-  return `/workspaces/${workspaceId}/questions`;
+  return `/workspaces/${workspaceId}`;
 }
 
 export function chapterChoices(chapters: readonly OverviewChapter[]): ChapterChoice[] {

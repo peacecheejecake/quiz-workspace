@@ -33,7 +33,7 @@ export function MarkerShape({
     >
       {favorite ? (
         <path
-          className="qz-question-marker__shape"
+          className="shape"
           d="M12 2.5 15.1 8.5 21.6 9.45 16.8 14.1 17.95 20.65 12 17.5 6.05 20.65 7.2 14.1 2.4 9.45 8.9 8.5Z"
           fill="currentColor"
           stroke="currentColor"
@@ -42,15 +42,7 @@ export function MarkerShape({
           strokeLinecap="round"
         />
       ) : (
-        <rect
-          className="qz-question-marker__shape"
-          x="3"
-          y="3"
-          width="18"
-          height="18"
-          rx="4.5"
-          fill="currentColor"
-        />
+        <rect className="shape" x="3" y="3" width="18" height="18" rx="4.5" fill="currentColor" />
       )}
     </svg>
   );

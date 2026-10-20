@@ -962,7 +962,8 @@ export type paths = {
     };
     /**
      * List Documents
-     * @description The workspace's documents (not soft-deleted), newest first.
+     * @description The workspace's documents (not soft-deleted), newest first, each with its queued or
+     *     running parse job.
      */
     get: operations['listDocuments'];
     put?: never;
@@ -1585,6 +1586,8 @@ export type components = {
       last_error: string | null;
       /** @description The newest revision (a draft while a parse or correction is pending). */
       latest_revision: components['schemas']['quiz_api__api__documents__RevisionSummary'] | null;
+      /** @description The queued or running parse job; null when there is none. */
+      processing_job?: components['schemas']['DocumentProcessingJob'] | null;
       /** Sha256 */
       sha256: string;
       /** Size Bytes */
@@ -1612,6 +1615,45 @@ export type components = {
     DocumentList: {
       /** Items */
       items: components['schemas']['DocumentSummary'][];
+    };
+    /**
+     * DocumentProcessingJob
+     * @description The document's queued or running parse job, so a list shows progress without following
+     *     the job (UX3-JOB, DOC-01-AC05).
+     */
+    DocumentProcessingJob: {
+      /**
+       * Created At
+       * Format: date-time
+       * @description When the job was queued.
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       * @description Poll `GET /jobs/{id}` or stream its events for more.
+       */
+      id: string;
+      /**
+       * Progress
+       * @description 0-99 while running; null when unknown.
+       */
+      progress: number | null;
+      /**
+       * Stage
+       * @description Current step while running: `preparing` (loading the parser's models), `downloading`, `parsing`, `structuring`, `loading`, `chunking`, `indexing`, `publishing`; null when not reported yet.
+       */
+      stage: string | null;
+      /**
+       * Started At
+       * @description When a worker first started it.
+       */
+      started_at: string | null;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'queued' | 'running';
     };
     /** DocumentSummary */
     DocumentSummary: {
@@ -1642,6 +1684,8 @@ export type components = {
        * @description Why the last processing attempt failed.
        */
       last_error: string | null;
+      /** @description The queued or running parse job; null when there is none. */
+      processing_job?: components['schemas']['DocumentProcessingJob'] | null;
       /** Sha256 */
       sha256: string;
       /** Size Bytes */

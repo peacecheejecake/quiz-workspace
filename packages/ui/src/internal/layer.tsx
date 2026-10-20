@@ -1,6 +1,14 @@
 'use client';
 
-import { createContext, useContext, type CSSProperties } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useSyncExternalStore,
+  type CSSProperties,
+} from 'react';
 
 /**
  * z-index expression of the floating layer (side panel, modal) that currently contains the
@@ -15,4 +23,76 @@ export const LayerProvider = LayerContext.Provider;
 export function useLayerStyle(): CSSProperties | undefined {
   const layer = useContext(LayerContext);
   return layer ? { zIndex: `calc(${layer} + 1)` } : undefined;
+}
+
+// --- Stacking of floating (non-centered-modal) layers --------------------------------------------
+//
+// Several floating panels/dialogs can be open at once. Portal DOM order is not a reliable stacking
+// order (a panel mounted earlier in the tree can portal later), so every open floating layer takes
+// a rank by the time it opened: the most recently opened one is on top, and re-opening an earlier
+// one moves it to the top. Rank r sits at `--z-side-panel + 2r` (its popovers at +1, see
+// useLayerStyle) and is capped below `--z-modal`, so centered modal dialogs stay above all panels.
+
+const order: string[] = [];
+const listeners = new Set<() => void>();
+
+function emit() {
+  for (const listener of listeners) listener();
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function bringToFront(id: string) {
+  const at = order.indexOf(id);
+  if (at === order.length - 1 && at !== -1) return;
+  if (at !== -1) order.splice(at, 1);
+  order.push(id);
+  emit();
+}
+
+function release(id: string) {
+  const at = order.indexOf(id);
+  if (at === -1) return;
+  order.splice(at, 1);
+  emit();
+}
+
+const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
+export interface FloatingLayer {
+  /** Position among the open floating layers (0 = bottom), or -1 while closed. */
+  rank: number;
+  /** z-index expression for the layer's content (and its backdrop). */
+  zIndex: string;
+}
+
+/**
+ * Registers a floating layer while `open` and returns its stacking z-index. Use it for every
+ * floating surface that can coexist with others (FloatingSidePanel today; floating dialogs that
+ * are not side panels should reuse it), and pass `zIndex` to `LayerProvider` so the layer's
+ * portalled popovers and tooltips sit just above it.
+ */
+export function useFloatingLayer(open: boolean, raiseKey?: unknown): FloatingLayer {
+  const id = useId();
+  // A new `raiseKey` while open re-registers the layer, which puts it on top again.
+  useIsomorphicLayoutEffect(() => {
+    if (!open) return undefined;
+    bringToFront(id);
+    return () => release(id);
+  }, [id, open, raiseKey]);
+  const rank = useSyncExternalStore(
+    subscribe,
+    () => order.indexOf(id),
+    () => -1,
+  );
+  const step = Math.max(rank, 0) * 2;
+  return {
+    rank,
+    zIndex: `min(calc(var(--z-side-panel) + ${step}), calc(var(--z-modal) - 2))`,
+  };
 }

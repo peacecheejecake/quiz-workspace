@@ -1,4 +1,5 @@
-// SEARCH-01 — 다국어 원문 검색 (`/workspaces/:workspaceId/search`), docs/screens/search.md;
+// SEARCH-01 — 통합 검색 (the workspace home header, `/workspaces/:workspaceId?q=`; most tests use the
+// content-only scope `?scope=content`, which the old `/search` route redirects to), docs/screens/search.md;
 // search flow docs/architecture.md §4 (keyword | semantic | hybrid, server-side workspace and
 // published-revision filters, SourceLocation = page + block + revision).
 //
@@ -10,14 +11,21 @@ import {
   block,
   book,
   chooseFilter,
+  createQuestion,
   editorUi,
   expect,
+  homePath,
+  homeUi,
   JOB_TIMEOUT_MS,
+  mcqInput,
   notFoundHeading,
+  openSearchOptions,
   outlineNodeId,
+  overviewUi,
   pageLabel,
   runSearch,
   search,
+  searchPath,
   searchUi,
   section,
   signInAs,
@@ -71,7 +79,7 @@ test(
     const documentId = await uploadReadyBook(owner, ws.id, 'book-en');
 
     await signInAs(page, owner.user);
-    await page.goto(`/workspaces/${ws.id}/search`);
+    await page.goto(searchPath(ws.id));
     await runSearch(page, KO_QUERY, 'semantic');
 
     const items = searchUi.resultItems(page);
@@ -145,7 +153,8 @@ test(
     }
 
     await signInAs(page, owner.user);
-    await page.goto(`/workspaces/${ws.id}/search`);
+    await page.goto(searchPath(ws.id));
+    await openSearchOptions(page);
     await chooseFilter(
       page,
       searchUi.documentFilter(page),
@@ -177,7 +186,7 @@ test(
     const documentId = await uploadReadyBook(owner, ws.id, 'book-en');
 
     await signInAs(page, owner.user);
-    await page.goto(`/workspaces/${ws.id}/search`);
+    await page.goto(searchPath(ws.id));
     await runSearch(page, 'chlorine', 'keyword');
     const hit = searchUi
       .resultItems(page)
@@ -216,7 +225,7 @@ test(
     expect(await search(owner, ws.id, { query: nonsense, mode: 'keyword' })).toEqual([]);
 
     await signInAs(page, owner.user);
-    await page.goto(`/workspaces/${ws.id}/search`);
+    await page.goto(searchPath(ws.id));
     await runSearch(page, nonsense, 'keyword');
     await expect(searchUi.emptyState(page)).toBeVisible();
     await expect(page.getByRole('main')).toContainText(
@@ -299,7 +308,7 @@ test(
     }
 
     await signInAs(page, owner.user);
-    await page.goto(`/workspaces/${ws.id}/search`);
+    await page.goto(searchPath(ws.id));
     await runSearch(page, failing, 'hybrid');
     const items = searchUi.resultItems(page);
     await expect(items.first()).toBeVisible();
@@ -325,10 +334,117 @@ test(
     expect(empty.degraded).toEqual(['dense_unavailable']);
     expect(empty.items).toEqual([]);
     // Fresh page: a mode switch re-runs the last search and Enter waits for it.
-    await page.goto(`/workspaces/${ws.id}/search`);
+    await page.goto(searchPath(ws.id));
     await runSearch(page, emptyFailing, 'hybrid');
     await expect(searchUi.emptyState(page)).toBeVisible();
     await expect(notice).toBeVisible();
+  },
+);
+
+test(
+  'SEARCH-01-AC07 the unified header search filters questions and/or finds source text by its scope checkboxes',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac07');
+    const ws = await workspaceFactory.create(owner);
+    await uploadReadyBook(owner, ws.id, 'book-en');
+    await createQuestion(
+      owner,
+      ws.id,
+      mcqInput('search01-ac07 chlorine 소독 문제', ['예', '아니오']),
+    );
+    await createQuestion(owner, ws.id, mcqInput('search01-ac07 다른 문제', ['예', '아니오']));
+
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    // Icon-only submit with an accessible name; a small "검색 옵션" toggle under the box.
+    await expect(searchUi.submit(page)).toHaveText('');
+    const toggle = homeUi.searchOptionsButton(page);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const options = await openSearchOptions(page);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(homeUi.scopeQuestions(page)).toBeChecked();
+    await expect(homeUi.scopeContent(page)).toBeChecked();
+    await expect(searchUi.modeGroup(page)).toBeVisible();
+    await expect(searchUi.documentFilter(page)).toBeVisible();
+    await expect(options.getByRole('combobox', { name: /^(챕터|chapter)$/i })).toBeVisible();
+    await expect(options.getByRole('combobox', { name: /^(유형|type)$/i })).toBeVisible();
+    await toggle.click();
+    await expect(options).toBeHidden();
+
+    // Both (default): the heatmap is filtered and the source text results appear.
+    await searchUi.box(page).fill('chlorine');
+    await searchUi.submit(page).click();
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(searchUi.resultsRegion(page)).toBeVisible();
+    await expect(
+      searchUi
+        .resultItems(page)
+        .filter({ hasText: /chlorine/i })
+        .first(),
+    ).toBeVisible();
+    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'chlorine');
+
+    // 문제 only: no source results; the last checked box cannot be turned off.
+    await openSearchOptions(page);
+    await homeUi.scopeContent(page).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get('scope') === 'questions');
+    await expect(searchUi.resultsRegion(page)).toHaveCount(0);
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(homeUi.scopeQuestions(page)).toBeDisabled();
+
+    // 내용 only: the heatmap is not filtered, the source results are back.
+    await homeUi.scopeContent(page).click();
+    await homeUi.scopeQuestions(page).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get('scope') === 'content');
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    await expect(searchUi.resultItems(page).first()).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // The state is in the URL: a reload shows the same search.
+    await page.reload();
+    await expect(searchUi.box(page)).toHaveValue('chlorine');
+    await expect(searchUi.resultItems(page).first()).toBeVisible();
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+
+    await searchUi.closeResults(page).click();
+    await expect(searchUi.resultsRegion(page)).toHaveCount(0);
+    await expect(page).toHaveURL((url) => !url.searchParams.has('q'));
+    await expect(searchUi.box(page)).toHaveValue('');
+  },
+);
+
+test(
+  'SEARCH-01-AC07 browser Back restores the earlier search in the box and the results',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac07-back');
+    const ws = await workspaceFactory.create(owner);
+    await uploadReadyBook(owner, ws.id, 'book-en');
+
+    await signInAs(page, owner.user);
+    await page.goto(searchPath(ws.id));
+    await runSearch(page, 'chlorine', 'keyword');
+    const items = searchUi.resultItems(page);
+    await expect(items.filter({ hasText: /chlorine/i }).first()).toBeVisible();
+    // A dialog opens on a new history entry; a second search replaces that entry's query.
+    await homeUi.documentsButton(page).click();
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
+    await searchUi.box(page).fill('evaporation');
+    await searchUi.box(page).press('Enter');
+    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'evaporation');
+    await expect(items.filter({ hasText: /evaporat/i }).first()).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get('q') === 'chlorine' && !url.searchParams.has('panel'),
+    );
+    await expect(homeUi.documentsDialog(page)).toHaveCount(0);
+    await expect(searchUi.box(page)).toHaveValue('chlorine');
+    // The restored search runs again: every listed hit is a chlorine hit once it settles.
+    await expect(items.filter({ hasNotText: /chlorine/i })).toHaveCount(0);
+    await expect(items.first()).toBeVisible();
   },
 );
 

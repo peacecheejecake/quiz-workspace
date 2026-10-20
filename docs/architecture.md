@@ -161,7 +161,7 @@ workspace
 - Documents: PDF viewer (PDF.js), 장·절 트리, canonical block editor, revision/publish, 업로드 진행.
 - Search: keyword/semantic/hybrid, 관련 문단·페이지·본문 강조, source excerpt, PDF jump.
 - Auth: 로그인·회원가입·이메일 확인·비밀번호 재설정·로그아웃·계정 보안.
-- Questions Home: 챕터별 문제 heatmap(확정 문제 하나=marker 하나), 상태별 색상, 즐겨찾기 시 **둥근 별 모양**, hover/focus 확대, 상태별 집계, 필터·정렬·범례, hover preview, 클릭 시 Floating Question Player.
+- Questions Home(= Workspace 홈, UX3c): 챕터별 문제 heatmap(확정 문제 하나=marker 하나), 상태별 색상, 즐겨찾기 시 **둥근 별 모양**, hover/focus 확대, 접을 수 있는 상태 필터·정렬, hover preview, 클릭 시 Floating Question Player. Workspace header의 통합 검색과 문서·이력·공유·문제 생성 floating dialog.
 - Questions Bank: 유형별 CRUD, 목록·검색·챕터 연결·출처 관리.
 - Questions Import: PDF 추출 검토, 미완성 초안 수정, 확인/등록.
 - Question Generation: 원본 선택, 변형 유형 지정, LLM 또는 deterministic 변형, diff/정답 검증, 승인.

@@ -61,15 +61,15 @@ export function ConfirmDialog({
           }}
         >
           <LayerProvider value="var(--z-modal)">
-            <div className="qz-modal__header">
-              <div className="qz-panel__heading">
-                <AlertDialog.Title className="qz-modal__title">{title}</AlertDialog.Title>
-                <AlertDialog.Description className="qz-panel__description">
+            <div className="header">
+              <div className="heading">
+                <AlertDialog.Title className="title">{title}</AlertDialog.Title>
+                <AlertDialog.Description className="description">
                   {description}
                 </AlertDialog.Description>
               </div>
             </div>
-            <div className="qz-modal__footer">
+            <div className="footer">
               <AlertDialog.Cancel asChild>
                 <Button disabled={loading}>{cancelLabel}</Button>
               </AlertDialog.Cancel>
