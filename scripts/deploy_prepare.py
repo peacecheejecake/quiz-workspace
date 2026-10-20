@@ -875,6 +875,11 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         parser.error(f"--only takes a subset of {','.join(IMAGE_SERVICES)}")
     if args.db_url_env and args.db_url_file:
         parser.error("pass one of --db-url-env / --db-url-file")
+    # Absolute now: check_env.py and git run with cwd = the temporary worktree.
+    for name in ("env_dir", "db_url_file", "work_dir"):
+        value = getattr(args, name)
+        if value is not None:
+            setattr(args, name, Path(value).expanduser().resolve())
     return args
 
 

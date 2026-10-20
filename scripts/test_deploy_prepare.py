@@ -496,6 +496,28 @@ def test_db_url_file_accepts_a_bare_url_or_a_dotenv_line(tmp_path: Path) -> None
         assert dp.read_db_url(args) == f"postgresql://u:{DB_PASSWORD}@h/db"
 
 
+def test_relative_path_flags_become_absolute(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    secrets = env_dir(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    args = dp.parse_args(
+        ["--ref", "x", "--env", "staging", "--env-dir", "secrets", "--db-url-file", "u.txt",
+         "--work-dir", "work"]
+    )  # fmt: skip
+    assert args.env_dir == secrets.resolve()
+    assert args.db_url_file == (tmp_path / "u.txt").resolve()
+    assert args.work_dir == (tmp_path / "work").resolve()
+    # the checker (cwd = temporary worktree) receives absolute file paths
+    (tmp_path / "work").mkdir()
+    runner = FakeRunner(default_responder())
+    args = dp.parse_args(["--ref", "develop", "--env", "staging", "--skip-images",
+                          "--env-dir", "secrets", "--work-dir", "work"])  # fmt: skip
+    dp.run(args, runner, lambda _text: None)
+    check = next(call.argv for call in runner.calls if call.argv[0] == sys.executable)
+    assert f"api={secrets.resolve() / 'api.env'}" in check
+
+
 def test_env_step_skips_without_the_directory(tmp_path: Path) -> None:
     code, out, runner = run_prepare(
         tmp_path,
