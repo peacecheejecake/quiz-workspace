@@ -43,7 +43,7 @@ from quiz_worker.recycle import (
     _RecyclingWorkerMixin,
 )
 from quiz_worker.settings import WorkerSettings, get_settings
-from quiz_worker.store import TERMINAL_STATUSES, InMemoryJobStore, JobRecord, JobStatus
+from quiz_worker.store import InMemoryJobStore, JobRecord, JobStatus
 
 from .conftest import EnvelopeFactory
 
@@ -209,22 +209,38 @@ def _prefork_app(redis_url: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 
 class _PoolWatch:
-    """Every pool child PID the worker has had (each child warms the parser up once)."""
+    """Every pool child PID the worker has had (each child warms the parser up once), and the
+    child each task ran in. Reads only the worker's in-memory state, never the job store: a
+    pool child forked while another thread of this process is inside a SQLite call inherits
+    SQLite's lock bookkeeping and can wait on that lock forever (Linux forks)."""
 
     def __init__(self, worker: Any) -> None:
         self._worker = worker
         self.pids: set[int] = set()
+        self.task_pids: dict[str, int] = {}
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
 
     def current(self) -> set[int]:
         info: Any = self._worker.pool.info  # a property at runtime
         # A child that is still starting has no PID yet.
-        return {int(pid) for pid in info["processes"] if pid is not None}
+        current = {int(pid) for pid in info["processes"] if pid is not None}
+        self.pids |= current
+        return current
+
+    def _sample_tasks(self) -> None:
+        try:
+            active = list(worker_state.active_requests)
+        except RuntimeError:  # changed size while the worker thread updates it
+            return
+        for request in active:
+            if request.worker_pid is not None:
+                self.task_pids.setdefault(request.id, int(request.worker_pid))
 
     def _run(self) -> None:
         while not self._stop.is_set():
-            self.pids |= self.current()
+            self.current()
+            self._sample_tasks()
             time.sleep(0.01)
 
     def __enter__(self) -> _PoolWatch:
@@ -234,6 +250,7 @@ class _PoolWatch:
     def __exit__(self, *_: object) -> None:
         self._stop.set()
         self._thread.join()
+        self.current()
 
 
 def _wait(predicate: Callable[[], bool], what: str, timeout: float = 60) -> None:
@@ -248,9 +265,8 @@ def _idle() -> bool:
     return not worker_state.active_requests and not worker_state.reserved_requests
 
 
-def _terminal(app: QuizCelery, job_ids: list[UUID]) -> list[JobRecord]:
-    records = [app.job_store.get(job_id) for job_id in job_ids]
-    return [r for r in records if r is not None and r.status in TERMINAL_STATUSES]
+def _records(app: QuizCelery, job_ids: list[UUID]) -> list[JobRecord | None]:
+    return [app.job_store.get(job_id) for job_id in job_ids]
 
 
 def _cleanup_redis(app: QuizCelery, job_ids: list[UUID]) -> None:
@@ -272,7 +288,7 @@ def test_maintenance_tasks_keep_the_child_and_job_tasks_replace_it(
     app = _prefork_app(redis_url, tmp_path, monkeypatch)
     pool_cls = app.conf.worker_pool
     reconciles = 12
-    # Each job runs long enough for its `locked_by` (the child's PID) to be read while it runs.
+    # Each job runs long enough for the watch to see which child runs it.
     payloads = [{"message": f"job {i}", "delay_seconds": 0.5} for i in range(3)]
     envelopes = [make_envelope(payload=payload) for payload in payloads]
     job_ids = [e.job_id for e in envelopes]
@@ -305,10 +321,18 @@ def test_maintenance_tasks_keep_the_child_and_job_tasks_replace_it(
 
             # Job tasks with WORKER_MAX_TASKS_PER_CHILD=1: a new child after each one. All are
             # queued at once, so a job written to a child that is about to exit is exercised too.
+            # The submits' store writes end long before the first job (0.5 s) ends and a child is
+            # forked; until the worker stops, this process reads no store (see _PoolWatch).
             for envelope in envelopes:
                 submit_job(app, envelope)
-            job_pids = _job_pids(app, job_ids)
-            _wait(_idle, "an idle worker")
+            _wait(
+                lambda: (
+                    worker_state.total_count.get(task_name("echo"), 0) - echo_before == len(job_ids)
+                    and _idle()
+                ),
+                "the jobs",
+            )
+            job_pids = [watch.task_pids[str(job_id)] for job_id in job_ids]
             # The last child exits once its job is stored; wait for its replacement.
             _wait(
                 lambda: len(watch.current()) == 1 and watch.current().isdisjoint(job_pids),
@@ -318,9 +342,9 @@ def test_maintenance_tasks_keep_the_child_and_job_tasks_replace_it(
     finally:
         _cleanup_redis(app, job_ids)
 
-    records = _terminal(app, job_ids)
+    records = _records(app, job_ids)
     # Each job ran once, in its own child, and succeeded: no WorkerLostError, no re-delivery.
-    assert [(r.status, r.attempts, r.last_error) for r in records] == [
+    assert [(r.status, r.attempts, r.last_error) if r else None for r in records] == [
         (JobStatus.SUCCEEDED, 1, None)
     ] * len(job_ids)
     assert len(set(job_pids)) == len(job_ids)
@@ -331,20 +355,3 @@ def test_maintenance_tasks_keep_the_child_and_job_tasks_replace_it(
     assert worker_state.total_count.get(task_name("echo"), 0) - echo_before == len(job_ids)
     problems = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
     assert not [m for m in problems if "WorkerLost" in m or "exited with" in m], problems
-
-
-def _job_pids(app: QuizCelery, job_ids: list[UUID], timeout: float = 60) -> list[int]:
-    """The pool child that ran each job's attempt, read from `locked_by` (host:pid) while the job
-    runs (a finished row no longer holds it); waits until every job is terminal."""
-    pids: dict[UUID, int] = {}
-    deadline = time.monotonic() + timeout
-    while len(_terminal(app, job_ids)) < len(job_ids):
-        if time.monotonic() >= deadline:
-            raise AssertionError(f"jobs did not finish within {timeout}s")
-        for job_id in job_ids:
-            record = app.job_store.get(job_id)
-            if record is not None and record.locked_by is not None:
-                pids.setdefault(job_id, int(record.locked_by.rsplit(":", 1)[1]))
-        time.sleep(0.01)
-    assert set(pids) == set(job_ids), "every job was seen running"
-    return [pids[job_id] for job_id in job_ids]
