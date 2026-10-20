@@ -32,9 +32,9 @@ summary of the rules for carrying out the implementation plan.
 - One subagent = one Task. The brief must include: Task ID, scope (directories it may touch),
   relevant spec sections and AC IDs, DoD from the plan, and the verification commands to run.
 - Tasks in the same wave run in parallel only when their file scopes do not overlap; parallel
-  subagents use isolated git worktrees merged into `develop` by the orchestrator. A worktree
-  subagent cannot write to the main checkout: review fixes go on a new branch in its worktree
-  created from current `develop`. Shared files (lockfiles, Makefile, root configs) are expected
+  subagents use isolated git worktrees on `task/*` branches that the orchestrator merges into
+  their `feature/*` branch (§3.1). A worktree subagent cannot write to the main checkout: review
+  fixes go on its own task branch (or a new one cut from the current feature branch). Shared files (lockfiles, Makefile, root configs) are expected
   to conflict; the orchestrator resolves them and regenerates lockfiles.
 - Reviews the subagent's report critically: re-runs the verification commands itself before
   accepting a Task.
@@ -79,9 +79,30 @@ summary of the rules for carrying out the implementation plan.
 6. Codex review gate (§4). Fix findings in follow-up commits.
 7. Orchestrator re-verifies and marks the Task `✅` in the progress table with commit and review refs.
 
-Branching: all Task commits land on `develop`. `main` is fast-forwarded only when every test that
-exists on `develop` is GREEN. Therefore a phase's RED task is written right before that phase
-starts — never in bulk ahead of time. Never push or force-push without explicit user approval.
+### 3.1 Branching
+
+| Branch | Cut from | Merges into | Purpose |
+|---|---|---|---|
+| `main` | — | — | Production. Deployed manually with approval. |
+| `develop` | — | `main` | Integration; every push deploys staging. |
+| `feature/<topic>` | `develop` | `develop` | One user-facing feature, plan phase or feedback batch (e.g. `feature/ux3-workspace-redesign`). |
+| `task/<Task ID>-<slug>` | its `feature/*` | that `feature/*` | Optional split of a large feature into plan-sized units, one subagent each (e.g. `task/UX3c-workspace-home`). |
+
+- Work only in git worktrees on a `feature/*` or `task/*` branch. The main checkout stays on a clean
+  `develop` that equals `origin/develop`; never commit to it directly.
+- Merges are one-way only: `task/*` → `feature/*` → `develop` → `main`. Never merge in the
+  reverse direction (no `develop` → `feature/*`, no `main` → `develop`), and never skip a level
+  (no `task/*` → `develop`, no `feature/*` → `main`).
+- `task/*` → `feature/*`: the orchestrator merges locally (`git merge --no-ff`) after the Task's
+  Codex review and its own re-verification.
+- `feature/*` → `develop` and `develop` → `main`: only through a GitHub pull request with green CI.
+  Never push to `develop` or `main` directly.
+- To pick up newer `develop` work, rebase a feature branch that has not been pushed yet, or finish
+  the current feature and cut a new branch. Once a branch is pushed, do not rewrite it.
+- `main` is updated only when every test that exists on `develop` is GREEN. Therefore a phase's RED
+  task is written right before that phase starts — never in bulk ahead of time.
+- Never push or force-push without explicit user approval; push a `feature/*` branch only to open a
+  PR the user asked for.
 
 ## 4. Codex review gate
 
