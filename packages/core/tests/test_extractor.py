@@ -789,6 +789,47 @@ def test_question_after_an_inline_answer_with_its_cue_on_a_later_line() -> None:
     assert q3.explanation == "1. 마지막 이유입니다."
 
 
+def test_numbered_explanation_line_then_a_section_heading_ends_the_explanation() -> None:
+    result = _extract(
+        [
+            "1. 다음 중 옳은 것은?",
+            "① 가",
+            "② 나",
+            "정답: ②",
+            "1. 첫 번째 이유입니다.",
+            "# 다음 단원",
+            "안내 문장입니다.",
+            "2. 다음 중 틀린 것은?",
+            "① 다",
+            "② 라",
+            "정답: ①",
+        ]
+    )
+    assert [q.number for q in result.questions] == [1, 2]
+    q1, q2 = result.drafts
+    assert q1.explanation == "1. 첫 번째 이유입니다."
+    assert q2.correct_option_ids == ("opt-1",)
+
+
+def test_caption_like_line_after_a_numbered_explanation_line_stays_in_the_explanation() -> None:
+    result = _extract(
+        [
+            "1. 다음 중 옳은 것은?",
+            "① 가",
+            "② 나",
+            "정답: ②",
+            "1. 첫 번째 이유입니다.",
+            "[그림 1] 설명 문장입니다.",
+            "2. 두 번째 이유입니다.",
+        ]
+    )
+    (draft,) = result.drafts
+    assert draft.explanation == (
+        "1. 첫 번째 이유입니다.\n[그림 1] 설명 문장입니다.\n2. 두 번째 이유입니다."
+    )
+    assert len(draft.evidence) == 1
+
+
 def test_option_grid_read_row_wise_is_put_back_in_label_order() -> None:
     result = _extract(["# 01 옳은 것은? ( )", "① 가", "③ 다", "② 나", "④ 라", "# 정답: ③"])
     (draft,) = result.drafts

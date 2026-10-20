@@ -369,6 +369,49 @@ def _inline_answer(text: str) -> str | None:
     return answer if answer and len(answer) <= _MAX_ANSWER_KEY_BODY else None
 
 
+@dataclass(frozen=True, slots=True)
+class _Event:
+    """A printed line (``text``) or a non-text block (``text is None``) in reading order."""
+
+    index: int
+    block: Block
+    text: str | None
+
+
+def _flatten(blocks: Sequence[Block]) -> list[_Event]:
+    events: list[_Event] = []
+    for index, block, lines in _lines(blocks):
+        if not lines:
+            events.append(_Event(index, block, None))
+        events += [_Event(index, block, text) for text in lines]
+    return events
+
+
+def _asks_something(body: str, events: Sequence[_Event], after: int) -> bool:
+    """Whether a numbered line inside an explanation opens a question: the lines it would own
+    (up to the next numbered line, heading or the end) hold a question cue, options or its own
+    inline answer. Decided before any line is classified, so a rejected start leaves every line
+    to the explanation exactly as printed and a heading still ends it."""
+    if _split_inline_options(body)[1]:
+        return True
+    for event in events[after:]:
+        if event.text is None:
+            if event.block.type is BlockType.TABLE and _table_options(event.block, event.index)[1]:
+                return True
+            continue
+        if _inline_answer(event.text) is not None:
+            return True
+        if (
+            event.block.type is BlockType.HEADING
+            or _ANSWER_KEY_HEADING.match(event.text)
+            or _question_start(event.text, event.block) is not None
+        ):
+            return False
+        if _QUESTION_CUE.search(event.text) or split_option_line(event.text) is not None:
+            return True
+    return False
+
+
 def segment(blocks: Sequence[Block]) -> Segmentation:
     questions: list[RawQuestion] = []
     answer_key: list[AnswerKeyEntry] = []
@@ -380,25 +423,11 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
     unparsed = 0
     ambiguous_tables = 0
     inline_answers = False
-    tentative: tuple[RawQuestion, RawQuestion | None] | None = None
-
-    def settle(current: RawQuestion | None) -> RawQuestion | None:
-        """Keep the tentative question if it turned out to ask something (a cue in its stem,
-        options or its own answer line); else its lines go back into the explanation it
-        interrupted, which becomes the current question again."""
-        nonlocal tentative
-        if tentative is None:
-            return current
-        question, explained = tentative
-        tentative = None
-        if question.options or question.answer or _QUESTION_CUE.search(question.stem):
-            return current
-        questions.remove(question)
-        if explained is not None and not explained.explanation_closed:
-            explained.explanation_lines += question.stem_lines
-        return explained if current is question else current
+    flat = _flatten(blocks)
+    position = 0
 
     for index, block, lines in _lines(blocks):
+        position += 0 if lines else 1
         if block.type is BlockType.IMAGE:
             figure = RawFigure(label=None, image=block, caption=None)
             if block.caption_block_id is not None:
@@ -432,9 +461,9 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
             continue
 
         for text in lines:
+            position += 1
             line = SourceLine(text=text, block=block, block_index=index)
             if _ANSWER_KEY_HEADING.match(text):
-                settle(current)
                 in_answer_key = True
                 current = None
                 continue
@@ -458,17 +487,19 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                 continue
 
             start = _question_start(text, block)
+            if (
+                start is not None
+                and current is not None
+                and current.answered
+                and block.type is not BlockType.HEADING
+                and not _QUESTION_CUE.search(start.group("body"))
+                and not _asks_something(start.group("body"), flat, position)
+            ):
+                # A numbered line inside a printed explanation (``1. 첫째 이유``) is part of it
+                # unless what it opens asks something; either way the lines then take the
+                # normal path (explanation, or a new question).
+                start = None
             if start is not None:
-                current = settle(current)
-                # Inside a printed explanation a numbered line (``1. 첫째 이유``) may be part of
-                # it: without a heading or a question cue on the line it opens a tentative
-                # question, settled at the next numbered line (or the end).
-                in_explanation = (
-                    current is not None
-                    and current.answered
-                    and block.type is not BlockType.HEADING
-                    and not _QUESTION_CUE.search(start.group("body"))
-                )
                 number = int(start.group("num"))
                 body = start.group("body")
                 if (
@@ -483,7 +514,6 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                     answer_key += _answer_entries(line)
                     continue
                 head, inline = _split_inline_options(body)
-                explained = current
                 current = RawQuestion(
                     number=number,
                     stem_lines=[line],
@@ -492,8 +522,6 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                 )
                 current.options += [RawOption(label=lb, text=t, lines=[line]) for lb, t in inline]
                 current.block_indices.append(index)
-                if in_explanation:
-                    tentative = (current, explained)
                 questions.append(current)
                 seen_numbers.add(number)
                 continue
@@ -553,7 +581,6 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                 current.stem_lines.append(line)
                 current.options += [RawOption(label=lb, text=t, lines=[line]) for lb, t in inline]
 
-    settle(current)
     return Segmentation(
         questions=[q for q in questions if q.is_question()],
         answer_key=answer_key,
