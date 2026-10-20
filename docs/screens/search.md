@@ -1,6 +1,6 @@
 # SEARCH-01 — 통합 검색 (문제·다국어 원문)
 
-**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (Workspace header 통합 검색)
+**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (Workspace header 통합 검색) · UX4 개정 2026-10-21 (검색 옵션 단일 목록)
 **Route:** `/workspaces/:workspaceId?q=:query` (Workspace 홈 header; 이전 `/workspaces/:workspaceId/search?…`는 `scope=content`로 redirect)
 **테스트:** `tests/e2e/search/search.spec.ts`
 **연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
@@ -17,11 +17,11 @@
 - 문제 검색과 원문(내용) 검색을 하나로 합친 검색창이 Workspace 홈 header 맨 위에 있다. 입력란(접근성 이름 "검색어") + 검색 아이콘 버튼(접근성 이름 "검색", 글자 없음). Enter도 검색한다.
 - 검색창 아래 작은 글씨 "검색 옵션" 버튼이 tooltip처럼 붙어 뜨는 검색 옵션 popover를 토글한다(`aria-expanded`; Escape·바깥 클릭으로 닫힘, focus는 버튼으로 복귀). Popover 내용:
   - **검색 대상** 체크박스 `문제`·`내용`(기본 둘 다 = 모두). 최소 하나는 켜져 있어야 하며 마지막 하나는 끌 수 없다.
-  - **내용 검색**: 검색 방식(키워드/의미/하이브리드, 설명 tooltip), 문서·장 필터, "문제지 PDF도 검색".
-  - **문제 필터**: 챕터, 유형.
+  - 그 아래 세부 옵션은 '문제 필터'/'내용 검색' 같은 구역 제목 없이 **한 목록**이다(UX4 2026-10-21): `문제` 대상의 챕터·유형, `내용` 대상의 검색 방식(키워드/의미/하이브리드, 설명 tooltip)·문서·장. 선택하지 않은 대상에만 해당하는 옵션은 목록에서 숨는다(부드럽게 접히며 reduced-motion에서는 즉시; 숨은 옵션은 접근성 트리와 Tab 순서에서도 빠진다).
+  - 문제지 PDF 검색은 별도 토글이 없다: 검색 대상에 `문제`가 있으면 원문 검색이 문제지 PDF도 함께 검색하고(`papers=1`), `내용`만이면 책 문서만 검색한다(문서 필터에도 문제지가 나오지 않는다).
   - 옵션을 바꾸면 마지막 검색에 바로 적용된다.
 - 검색 대상 `문제`: 홈의 문제 Heatmap을 검색어로 거른다(기존 QOV-01 검색). `내용`: header 아래 "원문 검색 결과" 영역에 결과 목록과 발췌 panel(AC01~AC06)이 나타나고, "검색 결과 닫기"로 검색어를 지우고 문제 화면으로 돌아간다. 모두: 둘 다.
-- 상태는 URL에 둔다: `q`, `scope`(`questions`|`content`, 생략 = 모두), 원문 검색 `mode`·`document`·`section`(장)·`papers=1`, 문제 필터 `chapter`·`type`·`status`·`favorite`·`retry`. 새로 고침·뒤로가기·공유 링크로 같은 검색을 다시 연다. 이전 `/search?q=&mode=&document=&chapter=&papers=1`은 `scope=content`와 `section=`(← `chapter`)으로 옮겨 redirect한다.
+- 상태는 URL에 둔다: `q`, `scope`(`questions`|`content`, 생략 = 모두), 원문 검색 `mode`·`document`·`section`(장)·`papers=1`(검색 대상에서 정해지는 값, UX4), 문제 필터 `chapter`·`type`·`status`·`favorite`·`retry`. 새로 고침·뒤로가기·공유 링크로 같은 검색을 다시 연다. 이전 `/search?q=&mode=&document=&chapter=&papers=1`은 `scope=content`와 `section=`(← `chapter`)으로 옮겨 redirect한다.
 
 ## 수용 기준
 
@@ -59,7 +59,7 @@
 
 - **Given:** 확정 문제와 발행된 문서가 있는 Workspace 홈
 - **When:** header의 통합 검색창에 검색어를 입력하고 검색 아이콘 버튼(또는 Enter)으로 검색하고, "검색 옵션"으로 검색 대상 체크박스를 바꿈
-- **Then:** 검색 버튼은 아이콘만 보이고 접근성 이름은 "검색"이다. "검색 옵션" 버튼은 검색 대상(문제·내용 체크박스, 최소 하나), 검색 방식, 문서·장 필터와 문제 챕터·유형 필터를 담은 popover를 열고 닫는다(`aria-expanded`). 대상이 모두면 Heatmap이 검색어로 걸러지고 원문 검색 결과 영역도 나타난다. `문제`만이면 원문 결과 영역이 없고, `내용`만이면 Heatmap은 거르지 않은 채 원문 결과만 나타난다. 검색 상태(`q`, `scope`, 옵션)는 URL에 남아 새로 고침해도 같은 결과를 보이며, "검색 결과 닫기"는 검색어와 원문 결과를 지운다(UX3c).
+- **Then:** 검색 버튼은 아이콘만 보이고 접근성 이름은 "검색"이다. "검색 옵션" 버튼은 검색 대상(문제·내용 체크박스, 최소 하나), 검색 방식, 문서·장 필터와 문제 챕터·유형 필터를 구역 제목 없는 한 목록으로 담은 popover를 열고 닫는다(`aria-expanded`). 세부 옵션은 검색 대상을 따른다: `문제`만이면 검색 방식·문서·장이 숨고, `내용`만이면 챕터·유형이 숨는다. "문제지 PDF도 검색" 토글은 없고, 대상에 `문제`가 있으면 원문 검색이 문제지 PDF도 검색한다(UX4). 대상이 모두면 Heatmap이 검색어로 걸러지고 원문 검색 결과 영역도 나타난다. `문제`만이면 원문 결과 영역이 없고, `내용`만이면 Heatmap은 거르지 않은 채 원문 결과만 나타난다. 검색 상태(`q`, `scope`, 옵션)는 URL에 남아 새로 고침해도 같은 결과를 보이며, "검색 결과 닫기"는 검색어와 원문 결과를 지운다(UX3c).
 
 ### SEARCH-01-AC06
 

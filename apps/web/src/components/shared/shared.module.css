@@ -221,8 +221,8 @@
   transition: background-color var(--qz-transition-fast);
 }
 
-/* Hover is the neutral state background; the current question adds the strong border and the
-   accent bar (design-system.md §4.1). */
+/* Hover is the neutral state background; the current question has the strong border, the muted
+   surface and aria-current (no accent bar since UX4, design-system.md §4.1). */
 @media (hover: hover) {
   .questionButton:hover {
     background: var(--color-state-hover);
@@ -232,10 +232,6 @@
 .questionButton[aria-current='true'] {
   border-color: var(--color-border-strong);
   background: var(--color-surface-muted);
-}
-
-.questionButton[aria-current='true'] {
-  box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
 /* Single focus boundary: the ring covers the recolored border (design-system.md §4.1). */

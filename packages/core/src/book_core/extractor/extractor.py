@@ -5,7 +5,10 @@ page/bbox provenance) -> optional LLM refinement per question (``questions.extra
 structured output, own source text only) -> structural validation -> drafts with
 ``review_status=pending``, ``origin=pdf_import`` and validation issues.
 
-Answers come only from the printed answer key. An LLM answer is accepted only when the answer key
+Answers come only from the printed answer key: a separate key section matched by question number,
+or the inline ``정답: ②`` line printed right after the question (which answers that question only,
+so numbering that restarts per chapter keeps its answers). The printed explanation after an inline
+answer becomes the draft's ``explanation``. An LLM answer is accepted only when the answer key
 line for that question states the same thing; otherwise it is rejected with a warning and the
 answer stays as the key gives it (``None`` when the key has no line for the question).
 LLM failures (provider errors, schema-invalid output) never fail the run: the question keeps
@@ -114,6 +117,7 @@ class _Candidate:
     options: list[tuple[str, str]]  # (canonical key, text)
     correct_option_ids: tuple[str, ...] | None = None
     accepted_answers: tuple[str, ...] | None = None
+    explanation: str | None = None
     issues: list[ValidationIssue] = field(default_factory=list)
     generator: GeneratorInfo | None = None
 
@@ -137,7 +141,10 @@ class QuestionExtractor:
         blocks = document.blocks
         seg = segment(blocks)
         warnings = _document_warnings(
-            seg.questions, seg.answer_key, seg.unparsed_answer_lines, seg.ambiguous_answer_tables
+            seg.questions,
+            [*seg.answer_key, *(e for q in seg.questions for e in q.answer)],
+            seg.unparsed_answer_lines,
+            seg.ambiguous_answer_tables,
         )
 
         questions: list[ExtractedQuestion] = []
@@ -145,7 +152,7 @@ class QuestionExtractor:
         for ctx in _contexts(seg, blocks):
             raw = ctx.raw
             candidate = _pre_extract(raw, ctx.entries, ctx.next_block, ctx.figures)
-            if ctx.occurrence:
+            if ctx.occurrence and not raw.answer:
                 candidate.issues.append(
                     issue(
                         "duplicate_question_number",
@@ -244,7 +251,11 @@ def _contexts(seg: Segmentation, blocks: Sequence[Block]) -> list[_Context]:
         contexts.append(
             _Context(
                 raw=raw,
-                entries=[] if duplicate else key_by_number.get(raw.number, []),
+                entries=raw.answer
+                if raw.answer
+                else []
+                if duplicate
+                else key_by_number.get(raw.number, []),
                 figures=_figures(raw, labelled),
                 next_block=blocks[last + 1] if last + 1 < len(blocks) else None,
                 occurrence=seen[raw.number] if duplicate else 0,
@@ -284,6 +295,14 @@ def _options(raw: RawQuestion) -> tuple[list[tuple[str, str]], list[ValidationIs
             key = f"{key}-{seen[key]}"
         options.append((key, option.text))
     keys = [k for k, _ in options]
+    if keys and len(set(keys)) == len(keys) and not _is_sequence(keys):
+        # Options printed as a grid (① ② over ③ ④) are read row-wise or column-wise: a
+        # complete label sequence in another order is the same options, put back in order.
+        ordered = sorted(
+            options, key=lambda o: (0, int(o[0]), "") if o[0].isdecimal() else (1, 0, o[0])
+        )
+        if _is_sequence([k for k, _ in ordered]):
+            options, keys = ordered, [k for k, _ in ordered]
     if keys and not _is_sequence(keys):
         issues.append(
             issue(
@@ -399,6 +418,7 @@ def _pre_extract(
         options=options,
         correct_option_ids=correct,
         accepted_answers=accepted,
+        explanation=raw.explanation,
         issues=issues + answer_issues,
     )
 
@@ -694,6 +714,7 @@ def _build_draft(
         options=options,
         correct_option_ids=correct,
         accepted_answers=candidate.accepted_answers,
+        explanation=candidate.explanation,
         evidence=evidence,
         generator=candidate.generator,
         validations=tuple(_dedupe(issues)),

@@ -65,3 +65,14 @@ export function isFiltered(filters: BankFilters): boolean {
 export function statusQuery(status: StatusFilter): PublicationStatus[] {
   return status === 'ALL' ? ['CONFIRMED', 'DRAFT', 'ARCHIVED'] : [status];
 }
+
+/** `?create=1`: the bank opens the 문제 등록 editor on arrival (the home's 문제 › 직접 추가, UX4). */
+export const CREATE_PARAM = 'create';
+
+export function bankCreatePath(workspaceId: string): string {
+  return `/workspaces/${encodeURIComponent(workspaceId)}/questions/bank?${CREATE_PARAM}=1`;
+}
+
+export function wantsCreate(params: Params): boolean {
+  return first(params, CREATE_PARAM) === '1';
+}
