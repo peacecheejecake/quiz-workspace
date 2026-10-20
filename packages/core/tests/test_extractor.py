@@ -734,6 +734,30 @@ def test_question_bank_llm_sees_only_its_own_answer_line_and_cannot_change_it() 
     assert refined.drafts[1].explanation == plain[1].explanation
 
 
+def test_numbered_explanation_after_an_inline_answer_is_not_a_question() -> None:
+    result = _extract(
+        [
+            "1. 다음 중 옳은 것은?",
+            "① 가",
+            "② 나",
+            "정답: ②",
+            "1. 첫 번째 이유입니다.",
+            "2. 두 번째 이유입니다.",
+            "2. 다음 중 틀린 것은?",
+            "① 다",
+            "② 라",
+            "정답: ①",
+            "1. 셋째 이유입니다.",
+            "2. 넷째 이유입니다.",
+        ]
+    )
+    assert [q.number for q in result.questions] == [1, 2]
+    q1, q2 = result.drafts
+    assert q1.explanation == "1. 첫 번째 이유입니다.\n2. 두 번째 이유입니다."
+    assert q2.explanation == "1. 셋째 이유입니다.\n2. 넷째 이유입니다."
+    assert [d.correct_option_ids for d in result.drafts] == [("opt-2",), ("opt-1",)]
+
+
 def test_option_grid_read_row_wise_is_put_back_in_label_order() -> None:
     result = _extract(["# 01 옳은 것은? ( )", "① 가", "③ 다", "② 나", "④ 라", "# 정답: ③"])
     (draft,) = result.drafts

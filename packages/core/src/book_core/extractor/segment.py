@@ -433,6 +433,16 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                 continue
 
             start = _question_start(text, block)
+            if (
+                start is not None
+                and current is not None
+                and current.answered
+                and block.type is not BlockType.HEADING
+                and not _QUESTION_CUE.search(start.group("body"))
+            ):
+                # Inside a printed explanation a numbered line (``1. 첫째 이유``) is part of it;
+                # the next question opens on a heading or asks something.
+                start = None
             if start is not None:
                 number = int(start.group("num"))
                 body = start.group("body")
