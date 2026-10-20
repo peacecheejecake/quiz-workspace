@@ -7,13 +7,17 @@ import {
   ConfirmDialog,
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from '../src';
+import { axeViolations } from './axe';
 
 describe('Tabs', () => {
   it('exposes tabs/tabpanel roles and moves selection with the arrow keys', async () => {
@@ -63,6 +67,39 @@ describe('DropdownMenu', () => {
     await user.click(within(menu).getByRole('menuitem', { name: '보관' }));
     expect(onArchive).toHaveBeenCalledOnce();
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+  });
+
+  it('names a group by its label and skips the label and separator with the arrow keys', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button>전환</Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuGroup aria-labelledby="ws-label">
+            <DropdownMenuLabel id="ws-label">내 Workspace</DropdownMenuLabel>
+            <DropdownMenuItem asChild>
+              <a href="#a">가</a>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <a href="#all">모두 보기</a>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    screen.getByRole('button', { name: '전환' }).focus();
+    await user.keyboard('{Enter}');
+    const menu = await screen.findByRole('menu');
+    const group = within(menu).getByRole('group', { name: '내 Workspace' });
+    expect(within(group).getByRole('menuitem', { name: '가' })).toHaveClass('item');
+    expect(within(menu).getByText('내 Workspace')).toHaveClass('label');
+    await waitFor(() => expect(within(menu).getByRole('menuitem', { name: '가' })).toHaveFocus());
+    await user.keyboard('{ArrowDown}');
+    expect(within(menu).getByRole('menuitem', { name: '모두 보기' })).toHaveFocus();
+    expect(await axeViolations()).toEqual([]);
   });
 });
 

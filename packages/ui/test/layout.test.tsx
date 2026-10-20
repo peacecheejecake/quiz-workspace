@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
 import {
   AppShell,
@@ -110,7 +111,9 @@ describe('Toast', () => {
       </ToastProvider>,
     );
     await user.click(screen.getByRole('button', { name: '복사' }));
-    const title = await screen.findByText('링크를 복사했습니다', { selector: '.qz-toast__title' });
+    const title = await screen.findByText('링크를 복사했습니다', {
+      selector: '.qz-toast > .body > .title',
+    });
     const toast = title.closest('li');
     expect(toast).toHaveAttribute('data-tone', 'success');
     expect(screen.getByRole('region', { name: /알림/ })).toContainElement(toast);
@@ -132,6 +135,162 @@ describe('layering', () => {
     // Radix renders the styled content next to a visually hidden role="tooltip" copy.
     const content = document.querySelector('.qz-tooltip');
     expect(tooltip).toBeInTheDocument();
-    expect(content).toHaveStyle({ zIndex: 'calc(var(--z-side-panel) + 1)' });
+    const panel = screen.getByRole('dialog', { name: '발췌' });
+    expect(panel.style.zIndex).toContain('var(--z-side-panel)');
+    expect(content).toHaveStyle({ zIndex: `calc(${panel.style.zIndex} + 1)` });
+  });
+
+  // UX3b: the most recently opened floating panel is on top, whatever the portal DOM order.
+  describe('stacking of several open side panels', () => {
+    function Panels() {
+      const [a, setA] = useState(false);
+      const [b, setB] = useState(false);
+      return (
+        <>
+          <Button onClick={() => setA(true)}>A 열기</Button>
+          <Button onClick={() => setB(true)}>B 열기</Button>
+          <Button onClick={() => setA(false)}>A 닫기</Button>
+          {/* B is declared first, so DOM order alone would put A on top. */}
+          <FloatingSidePanel open={b} onOpenChange={setB} modal={false} title="B 패널">
+            <Tooltip content="B 도움말" open>
+              <Button>B 도움</Button>
+            </Tooltip>
+          </FloatingSidePanel>
+          <FloatingSidePanel open={a} onOpenChange={setA} modal={false} title="A 패널">
+            A 본문
+          </FloatingSidePanel>
+        </>
+      );
+    }
+
+    /** The integer step the panel adds to --z-side-panel. */
+    const step = (panel: string | HTMLElement) => {
+      const el = typeof panel === 'string' ? screen.getByRole('dialog', { name: panel }) : panel;
+      const z = el.style.zIndex;
+      const m = /var\(--z-side-panel\) \+ (\d+)\)/.exec(z);
+      expect(m, z).not.toBeNull();
+      expect(z).toContain('calc(var(--z-modal) - 2)');
+      return Number(m?.[1]);
+    };
+
+    it('puts the later-opened panel above, and re-opening an earlier one brings it to the top', async () => {
+      const user = userEvent.setup();
+      render(<Panels />);
+      await user.click(screen.getByRole('button', { name: 'A 열기' }));
+      await screen.findByRole('dialog', { name: 'A 패널' });
+      await user.click(screen.getByRole('button', { name: 'B 열기' }));
+      await screen.findByRole('dialog', { name: 'B 패널' });
+      expect(step('B 패널')).toBeGreaterThan(step('A 패널'));
+      // Popovers inside B sit right above B, so above A as well.
+      const tip = document.querySelector('.qz-tooltip') as HTMLElement;
+      expect(tip.style.zIndex).toBe(
+        `calc(${screen.getByRole('dialog', { name: 'B 패널' }).style.zIndex} + 1)`,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'A 닫기' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'A 패널' })).toBeNull());
+      await user.click(screen.getByRole('button', { name: 'A 열기' }));
+      await screen.findByRole('dialog', { name: 'A 패널' });
+      expect(step('A 패널')).toBeGreaterThan(step('B 패널'));
+    });
+
+    it('a new raiseKey brings an open panel back to the top (UX3c)', async () => {
+      const user = userEvent.setup();
+      function Raised() {
+        const [raise, setRaise] = useState(0);
+        return (
+          <>
+            <Button onClick={() => setRaise((n) => n + 1)}>A 올리기</Button>
+            <FloatingSidePanel open modal={false} title="A 패널" raiseKey={raise}>
+              A
+            </FloatingSidePanel>
+            <FloatingSidePanel open modal={false} title="B 패널">
+              B
+            </FloatingSidePanel>
+          </>
+        );
+      }
+      render(<Raised />);
+      await screen.findByRole('dialog', { name: 'B 패널' });
+      expect(step('B 패널')).toBeGreaterThan(step('A 패널'));
+      await user.click(screen.getByRole('button', { name: 'A 올리기' }));
+      await waitFor(() => expect(step('A 패널')).toBeGreaterThan(step('B 패널')));
+    });
+
+    it('Escape closes the raised panel holding focus, not the later-mounted one (UX3c)', async () => {
+      const user = userEvent.setup();
+      function Raised() {
+        const [a, setA] = useState(true);
+        const [b, setB] = useState(true);
+        const [raise, setRaise] = useState(0);
+        return (
+          <>
+            <Button onClick={() => setRaise((n) => n + 1)}>A 올리기</Button>
+            <FloatingSidePanel
+              open={a}
+              onOpenChange={setA}
+              modal={false}
+              title="A 패널"
+              raiseKey={raise}
+            >
+              <Button>A 안</Button>
+            </FloatingSidePanel>
+            <FloatingSidePanel open={b} onOpenChange={setB} modal={false} title="B 패널">
+              <Button>B 안</Button>
+            </FloatingSidePanel>
+          </>
+        );
+      }
+      render(<Raised />);
+      await screen.findByRole('dialog', { name: 'B 패널' });
+      await user.click(screen.getByRole('button', { name: 'A 올리기' }));
+      await waitFor(() => expect(step('A 패널')).toBeGreaterThan(step('B 패널')));
+      screen.getByRole('button', { name: 'A 안' }).focus();
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'A 패널' })).toBeNull());
+      expect(screen.getByRole('dialog', { name: 'B 패널' })).toBeInTheDocument();
+      // Then B, with focus inside it, closes on Escape as before.
+      screen.getByRole('button', { name: 'B 안' }).focus();
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'B 패널' })).toBeNull());
+    });
+
+    it('stacks uncontrolled panels by opening order too', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <FloatingSidePanel modal={false} title="둘째" trigger={<Button>둘째 열기</Button>}>
+            둘째
+          </FloatingSidePanel>
+          <FloatingSidePanel modal={false} title="첫째" trigger={<Button>첫째 열기</Button>}>
+            첫째
+          </FloatingSidePanel>
+        </>,
+      );
+      await user.click(screen.getByRole('button', { name: '첫째 열기' }));
+      await screen.findByRole('dialog', { name: '첫째' });
+      await user.click(screen.getByRole('button', { name: '둘째 열기' }));
+      await screen.findByRole('dialog', { name: '둘째' });
+      expect(step('둘째')).toBeGreaterThan(step('첫째'));
+    });
+
+    it('keeps modal dialogs above every panel', async () => {
+      render(
+        <>
+          <FloatingSidePanel defaultOpen modal={false} title="패널">
+            패널
+          </FloatingSidePanel>
+          <ModalDialog defaultOpen title="확인">
+            확인
+          </ModalDialog>
+        </>,
+      );
+      await screen.findByRole('dialog', { name: '확인' });
+      // Panels are capped at --z-modal - 2 (their popovers at - 1); the modal uses --z-modal.
+      expect(step(document.querySelector<HTMLElement>('.qz-panel') as HTMLElement)).toBe(0);
+      expect(document.querySelector('.qz-modal')?.getAttribute('style') ?? '').not.toContain(
+        'z-index',
+      );
+    });
   });
 });

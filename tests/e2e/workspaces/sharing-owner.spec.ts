@@ -9,6 +9,8 @@
 // label assumptions: fixtures/sharing.ts header (S1–S9 + UI contract + artifact hygiene).
 import type { Locator } from '@playwright/test';
 import {
+  homePath,
+  homeUi,
   notFoundHeading,
   PROBLEM_TYPES,
   seedMembership,
@@ -79,8 +81,11 @@ test(
     expect(await listShareLinks(owner, ws.id), 'no link before the owner creates one').toEqual([]);
 
     await signInAs(page, owner.user);
-    await page.goto(sharingSettingsPath(ws.id));
-    await expect(sharingUi.heading(page)).toHaveText(/공유|sharing/i);
+    // UX3c: the owner opens it with the workspace header's 공유하기 button.
+    await page.goto(homePath(ws.id));
+    await homeUi.shareButton(page).click();
+    await expect(sharingUi.dialog(page)).toBeVisible();
+    await expect(page).toHaveURL(/[?&]panel=share(&|$)/);
     await expect(sharingUi.offStatus(page)).toBeVisible();
     await expect(sharingUi.scopeNotice(page)).toBeVisible();
     await expect(sharingUi.copyrightNotice(page)).toBeVisible();

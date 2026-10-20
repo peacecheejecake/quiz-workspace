@@ -9,12 +9,13 @@ Pipeline (docs/architecture.md §4 indexing flow), serialised per document by an
 1. load the document + draft revision (`quiz_worker` role); a deleted document fails the job, and
    so does a workspace that is archived/deleted or that the job's user can no longer edit
    (`workspace_unavailable`, re-checked under a lock in step 4);
-2. if the draft has no content yet: download the original from the private `source-pdfs`
-   bucket, check it (stored size + SHA-256, PDF signature, page limit), parse it (Docling, CPU,
-   with a conversion timeout), store `parsed_document.json` in `parsed-artifacts`, build the
-   canonical revision (`build_revision`) and write chapters + blocks + content hash in one
-   transaction; a draft that already has content (retry, or a corrected draft) is read back from
-   the DB instead;
+2. if the draft has no content yet: load the parser's models unless they are loaded (stage
+   `preparing`; a worker child warms them up at start, `LazyDeps.warm_up`), download the
+   original from the private `source-pdfs` bucket, check it (stored size + SHA-256, PDF
+   signature, page limit), parse it (Docling, CPU, with a conversion timeout), store
+   `parsed_document.json` in `parsed-artifacts`, build the canonical revision
+   (`build_revision`) and write chapters + blocks + content hash in one transaction; a draft
+   that already has content (retry, or a corrected draft) is read back from the DB instead;
 3. chunk (`chunk_revision`) and index into Qdrant as an *inactive* revision (payload carries
    workspace / document / revision ids and `document_type`);
 4. in one DB transaction: re-check workspace access (rows locked FOR SHARE), publish the
@@ -55,6 +56,7 @@ from book_core.structure import build_revision
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from quiz_worker.adapters import (
+    PreparableParser,
     WorkerNotConfiguredError,
     build_index_store,
     build_parser,
@@ -229,6 +231,7 @@ def _pipeline(
 
     deps.documents.mark_processing(document.id)
     if revision.content_hash is None:
+        _prepare_parser(deps.parser, progress)
         content = _parse_and_store(deps, ctx, document, revision, progress)
     else:
         progress("loading", 40)
@@ -260,6 +263,16 @@ def _pipeline(
     # by the obligation (retried with backoff, published by the reconciler).
     synced = sync_index(deps, document, revision)
     return _result(document, revision, chunks=len(chunks), synced=synced)
+
+
+def _prepare_parser(parser: PdfParser, progress: Callable[[str, int], None]) -> None:
+    """Load the parser's models before the PDF is touched, reported as the `preparing` stage
+    (UX3-JOB): the first document of a cold worker otherwise sits at `parsing` for minutes.
+    A warm parser (warmed up at worker start, or by an earlier job) skips the stage."""
+    if not isinstance(parser, PreparableParser) or parser.prepared:
+        return
+    progress("preparing", 2)
+    parser.prepare()
 
 
 def _parse_and_store(
@@ -458,7 +471,9 @@ def document_parse_definition(provider: DepsProvider) -> JobDefinition[DocumentP
     )
 
 
-def deps_from_settings(settings: WorkerSettings) -> DocumentJobDeps:
+def deps_from_settings(
+    settings: WorkerSettings, parser: PdfParser | None = None
+) -> DocumentJobDeps:
     if settings.worker_database_url is None:
         raise WorkerNotConfiguredError("WORKER_DATABASE_URL is not set")
     secret = settings.supabase_secret_key
@@ -479,7 +494,7 @@ def deps_from_settings(settings: WorkerSettings) -> DocumentJobDeps:
             timeout=settings.storage_timeout_seconds,
         ),
         index=build_index_store(settings),
-        parser=build_parser(settings),
+        parser=parser if parser is not None else build_parser(settings),
         limits=Limits(
             max_bytes=settings.pdf_max_bytes,
             max_pages=settings.pdf_max_pages,
@@ -490,15 +505,41 @@ def deps_from_settings(settings: WorkerSettings) -> DocumentJobDeps:
 
 class LazyDeps:
     """Builds the dependencies once per process, on the first job (prefork children build
-    their own; models load on first use)."""
+    their own; models load on first use, or earlier through `warm_up`)."""
 
     def __init__(self, settings: WorkerSettings) -> None:
         self._settings = settings
         self._deps: DocumentJobDeps | None = None
+        self._parser: PdfParser | None = None
         self._lock = threading.Lock()
+
+    def parser(self) -> PdfParser:
+        """The process's parser, shared by the jobs and the warm-up."""
+        with self._lock:
+            return self._parser_locked()
+
+    def _parser_locked(self) -> PdfParser:
+        if self._parser is None:
+            self._parser = build_parser(self._settings)
+        return self._parser
 
     def __call__(self) -> DocumentJobDeps:
         with self._lock:
             if self._deps is None:
-                self._deps = deps_from_settings(self._settings)
+                self._deps = deps_from_settings(self._settings, self._parser_locked())
             return self._deps
+
+    def warm_up(self) -> bool:
+        """Load the parser's models now (a worker child's warm-up thread). Never raises: a
+        failure is logged and left to the first job, which loads them itself. Returns whether
+        the parser is ready."""
+        try:
+            parser = self.parser()
+            if isinstance(parser, PreparableParser) and not parser.prepared:
+                logger.info("warming up the PDF parser")
+                parser.prepare()
+                logger.info("PDF parser ready")
+            return True
+        except Exception as exc:
+            logger.warning("PDF parser warm-up failed: %s", type(exc).__name__)
+            return False

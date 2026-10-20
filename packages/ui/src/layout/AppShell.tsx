@@ -54,30 +54,26 @@ export function AppShell({
 
   return (
     <div className={cx('qz-app-shell', className)} data-has-sidebar={sidebar ? true : undefined}>
-      <a href={`#${mainId}`} className="qz-skip-link qz-focus-ring">
+      <a href={`#${mainId}`} className="skip-link qz-focus-ring">
         {skipLinkLabel}
       </a>
-      <header className="qz-app-shell__header glass-surface">
+      <header className="header glass-surface">
         {sidebar ? (
           <Dialog.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
             <Dialog.Trigger asChild>
-              <IconButton
-                label={menuLabel}
-                icon={<MenuIcon />}
-                className="qz-app-shell__menu-button"
-              />
+              <IconButton label={menuLabel} icon={<MenuIcon />} className="menu-button" />
             </Dialog.Trigger>
             <Dialog.Portal>
               <Dialog.Overlay className="qz-backdrop" data-layer="drawer" />
               <Dialog.Content className="qz-drawer" aria-describedby={undefined}>
                 <LayerProvider value="var(--z-modal)">
-                  <div className="qz-drawer__header">
-                    <Dialog.Title className="qz-drawer__title">{navLabel}</Dialog.Title>
+                  <div className="header">
+                    <Dialog.Title className="title">{navLabel}</Dialog.Title>
                     <Dialog.Close asChild>
                       <IconButton label={closeMenuLabel} icon={<CloseIcon />} />
                     </Dialog.Close>
                   </div>
-                  <nav aria-label={navLabel} className="qz-drawer__nav">
+                  <nav aria-label={navLabel} className="nav">
                     {sidebar}
                   </nav>
                 </LayerProvider>
@@ -85,16 +81,16 @@ export function AppShell({
             </Dialog.Portal>
           </Dialog.Root>
         ) : null}
-        <div className="qz-app-shell__header-content">{header}</div>
+        <div className="content">{header}</div>
       </header>
-      <div className="qz-app-shell__body">
+      <div className="body">
         {sidebar ? (
-          <nav aria-label={navLabel} className="qz-app-shell__sidebar">
+          <nav aria-label={navLabel} className="sidebar">
             {sidebar}
           </nav>
         ) : null}
-        <main id={mainId} tabIndex={-1} className="qz-app-shell__main">
-          <div className="qz-app-shell__content">{children}</div>
+        <main id={mainId} tabIndex={-1} className="main">
+          <div className="content">{children}</div>
         </main>
       </div>
     </div>

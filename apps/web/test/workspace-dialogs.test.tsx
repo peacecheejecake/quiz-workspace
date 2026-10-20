@@ -242,7 +242,9 @@ describe('responses for an earlier dialog session (dialog reopened before they a
       await act(async () => {
         first.resolve(result);
       });
-      expect(await screen.findByText(toast, { selector: '.qz-toast__title' })).toBeInTheDocument();
+      expect(
+        await screen.findByText(toast, { selector: '.qz-toast > .body > .title' }),
+      ).toBeInTheDocument();
       expect(screen.getByRole('dialog', { name: 'Workspace 만들기' })).toBe(dialog);
       expect(input).toHaveValue('두 번째');
       expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
@@ -307,7 +309,9 @@ describe('responses for an earlier dialog session (dialog reopened before they a
       await act(async () => {
         first.resolve(result);
       });
-      expect(await screen.findByText(toast, { selector: '.qz-toast__title' })).toBeInTheDocument();
+      expect(
+        await screen.findByText(toast, { selector: '.qz-toast > .body > .title' }),
+      ).toBeInTheDocument();
       expect(screen.getByRole('dialog', { name: 'Workspace 이름 변경' })).toBe(dialog);
       expect(input).toHaveValue('둘째 이름');
       expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();

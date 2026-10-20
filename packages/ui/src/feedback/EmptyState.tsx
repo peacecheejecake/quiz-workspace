@@ -26,13 +26,13 @@ export function EmptyState({
   return (
     <section className={cx('qz-empty-state', className)} {...rest}>
       {icon ? (
-        <div className="qz-empty-state__icon" aria-hidden="true">
+        <div className="icon" aria-hidden="true">
           {icon}
         </div>
       ) : null}
-      <Heading className="qz-empty-state__title">{title}</Heading>
-      {description ? <p className="qz-empty-state__description">{description}</p> : null}
-      {action ? <div className="qz-empty-state__action">{action}</div> : null}
+      <Heading className="title">{title}</Heading>
+      {description ? <p className="description">{description}</p> : null}
+      {action ? <div className="action">{action}</div> : null}
     </section>
   );
 }

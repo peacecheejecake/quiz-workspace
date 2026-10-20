@@ -107,6 +107,7 @@ export interface DocumentSummary {
   readonly title?: string;
   readonly filename?: string;
   readonly status?: string;
+  readonly document_type?: string;
 }
 
 export interface Job {

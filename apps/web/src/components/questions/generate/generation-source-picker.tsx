@@ -4,10 +4,12 @@ import { Badge, Button, EmptyState, PageHeader } from '@quiz/ui';
 import Link from 'next/link';
 import { QUESTION_TYPE_LABELS, type Question } from '@/lib/questions/form';
 import { generatePath } from '@/lib/questions/generation-client';
+import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import styles from './question-generation.module.css';
 
 export interface GenerationSourcePickerProps {
   readonly workspaceId: string;
+  readonly workspaceName: string;
   readonly candidates: readonly Question[];
   readonly sourceMissing: boolean;
   readonly loadFailed: boolean;
@@ -17,6 +19,7 @@ export interface GenerationSourcePickerProps {
 
 export function GenerationSourcePicker({
   workspaceId,
+  workspaceName,
   candidates,
   sourceMissing,
   loadFailed,
@@ -26,6 +29,13 @@ export function GenerationSourcePicker({
   return (
     <div className={styles.screen}>
       <PageHeader
+        back={<WorkspaceBackLink workspaceId={workspaceId} />}
+        breadcrumb={
+          <WorkspaceBreadcrumb
+            workspace={{ id: workspaceId, name: workspaceName }}
+            trail={[{ label: '문제 변형 출제' }]}
+          />
+        }
         title="문제 변형 출제"
         description="변형할 확정 문제를 고르세요. 문제은행의 문제 상세에서 '변형 출제'를 눌러도 됩니다."
         actions={

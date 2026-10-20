@@ -63,18 +63,18 @@ export function FieldFrame({
       <label
         id={labelId}
         htmlFor={ids.id}
-        className={cx('qz-field__label', hideLabel && 'qz-visually-hidden')}
+        className={cx('label', hideLabel && 'qz-visually-hidden')}
       >
         {label}
       </label>
       {children}
       {description ? (
-        <p id={ids.descriptionId} className="qz-field__description">
+        <p id={ids.descriptionId} className="description">
           {description}
         </p>
       ) : null}
       {ids.hasError ? (
-        <p id={ids.errorId} className="qz-field__error">
+        <p id={ids.errorId} className="error">
           <AlertIcon width={16} height={16} />
           <span>{error}</span>
         </p>

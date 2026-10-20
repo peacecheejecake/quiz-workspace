@@ -17,6 +17,7 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useLayoutEffect, useMemo, useRef, useState, useTransition, type FormEvent } from 'react';
+import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import {
   deleteQuestionAction,
   listQuestionsAction,
@@ -49,6 +50,8 @@ export type ReadOnlyReason = 'viewer' | 'archived' | null;
 
 export interface QuestionBankProps {
   readonly workspaceId: string;
+  /** Breadcrumb root; defaults to a generic label (unit tests). */
+  readonly workspaceName?: string;
   readonly readOnly: ReadOnlyReason;
   readonly filters: BankFilters;
   readonly items: readonly Question[];
@@ -112,6 +115,7 @@ function withChapters(
 
 export function QuestionBank({
   workspaceId,
+  workspaceName = 'Workspace',
   readOnly,
   filters,
   items: initialItems,
@@ -278,6 +282,13 @@ export function QuestionBank({
   return (
     <div className={styles.screen}>
       <PageHeader
+        back={<WorkspaceBackLink workspaceId={workspaceId} />}
+        breadcrumb={
+          <WorkspaceBreadcrumb
+            workspace={{ id: workspaceId, name: workspaceName }}
+            trail={[{ label: '문제은행' }]}
+          />
+        }
         title="문제은행"
         description="확정된 문제를 챕터별로 관리합니다. 문제를 직접 등록하거나 PDF에서 가져올 수 있습니다."
         actions={

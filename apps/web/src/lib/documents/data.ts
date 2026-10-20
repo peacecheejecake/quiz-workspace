@@ -14,7 +14,7 @@ export class DocumentsLoadError extends Error {
 }
 
 export async function loadDocuments(workspaceId: string): Promise<DocumentSummary[]> {
-  const returnTo = `/workspaces/${workspaceId}/documents`;
+  const returnTo = `/workspaces/${workspaceId}`;
   let api;
   try {
     api = await createServerApiClient();

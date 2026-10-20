@@ -15,13 +15,14 @@ const PUBLIC_SCREEN_ROUTES = [
 ] as const;
 
 // `:ws` is replaced by a workspace the signed-in user owns: since M3.1b workspace routes check
-// access server-side and answer 404 for unknown ids. Implemented screens (ACCOUNT-01, WS-01,
-// DOC-01) and the remaining stubs alike.
+// access server-side and answer 404 for unknown ids.
 const PROTECTED_SCREEN_ROUTES = [
   { path: '/settings/security', id: 'ACCOUNT-01' },
   { path: '/workspaces', id: 'WS-01' },
-  { path: '/workspaces/:ws/documents', id: 'DOC-01' },
-  { path: '/workspaces/:ws/history', id: 'HISTORY-01' },
+  // UX3c: the workspace home (QOV-01) and its dialogs, by URL state.
+  { path: '/workspaces/:ws', id: 'QOV-01' },
+  { path: '/workspaces/:ws?panel=documents', id: 'DOC-01' },
+  { path: '/workspaces/:ws?panel=history', id: 'HISTORY-01' },
 ] as const;
 const PLACEHOLDER_WS = '00000000-0000-4000-8000-000000000000';
 /** DOC-02 is a real viewer since M3.5: a document that does not exist is the 404 page. */

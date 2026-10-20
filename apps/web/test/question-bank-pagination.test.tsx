@@ -83,7 +83,11 @@ function Bank(props: { filters: BankFilters; items: Question[]; nextCursor: stri
   );
 }
 
-const stems = () => within(screen.getByRole('main')).queryAllByRole('listitem');
+// Question rows only (the breadcrumb is a list too).
+const stems = () =>
+  within(screen.getByRole('main'))
+    .queryAllByRole('listitem')
+    .filter((li) => !li.closest('nav'));
 
 beforeEach(() => {
   listQuestionsAction.mockReset();

@@ -476,7 +476,14 @@ describe('buildRows', () => {
       documentId: 'd2',
       jobId: 'j',
       stored: true,
-      job: { status: 'running', stage: 'indexing', progress: 60, errorCode: null },
+      job: {
+        status: 'running',
+        stage: 'indexing',
+        progress: 60,
+        errorCode: null,
+        queuedAt: null,
+        startedAt: null,
+      },
     };
     let rows = buildRows([doc('d2', 'processing')], [processing]);
     expect(rows).toHaveLength(1);

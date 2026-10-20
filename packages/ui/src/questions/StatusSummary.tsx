@@ -29,22 +29,22 @@ export function StatusSummary({
       className={cx('qz-status-summary', className)}
       {...rest}
     >
-      <ul className="qz-status-summary__list">
-        <li className="qz-status-summary__chip">
+      <ul className="list">
+        <li className="chip">
           <span>전체</span>
-          <span className="qz-status-summary__count">{counts.total}</span>
+          <span className="count">{counts.total}</span>
         </li>
         {QUESTION_DOT_STATUSES.map((status) => (
-          <li key={status} className="qz-status-summary__chip" data-status={status}>
+          <li key={status} className="chip" data-status={status}>
             <MarkerShape status={status} />
             <span>{questionStatusLabels[status]}</span>
-            <span className="qz-status-summary__count">{counts[status]}</span>
+            <span className="count">{counts[status]}</span>
           </li>
         ))}
-        <li className="qz-status-summary__chip" data-status="favorite">
+        <li className="chip" data-status="favorite">
           <MarkerShape favorite />
           <span>즐겨찾기</span>
-          <span className="qz-status-summary__count">{counts.favorite}</span>
+          <span className="count">{counts.favorite}</span>
         </li>
       </ul>
     </section>

@@ -64,23 +64,23 @@ export function QuestionPreviewPopover({
             // stem) into its visually hidden role="tooltip" element, so the tooltip that
             // assistive technology (and getByRole('tooltip')) sees is the one on screen.
           >
-            <p className="qz-question-preview__meta">
+            <p className="meta">
               <span>{type}</span>
               <span aria-hidden="true"> · </span>
               <span>{title}</span>
             </p>
             {question.chapterNumber !== undefined && question.chapterNumber !== '' ? (
-              <p className="qz-question-preview__chapter">{question.chapterTitle}</p>
+              <p className="chapter">{question.chapterTitle}</p>
             ) : null}
-            <p className="qz-question-preview__status">
+            <p className="status">
               <MarkerShape
                 status={question.status}
                 favorite={question.isFavorite}
-                className="qz-question-preview__marker"
+                className="marker"
               />
               <span>{phrases.join(' · ')}</span>
             </p>
-            <p className="qz-question-preview__stem">{preview}</p>
+            <p className="stem">{preview}</p>
           </RadixTooltip.Content>
         </RadixTooltip.Portal>
       </RadixTooltip.Root>

@@ -14,9 +14,13 @@ import {
   createNumberedQuestions,
   createQuestion,
   docUi,
+  documentsPath,
   editorUi,
   expect,
   formAlert,
+  homePath,
+  homeUi,
+  openSearchOptions,
   generatePath,
   generateUi,
   generationSourceInput,
@@ -31,6 +35,7 @@ import {
   panelUi,
   questionFormUi,
   runSearch,
+  searchPath,
   searchUi,
   setMyState,
   signInAs,
@@ -157,10 +162,18 @@ test(
     await expect(page.locator('[aria-invalid="true"]').first()).toBeVisible();
     await expectAccessible(page, 'account security with field errors');
 
-    // Archived workspace: every screen is read-only (WS-01, QBANK-01 read-only notice).
-    for (const path of ['documents', 'questions', 'questions/bank', 'search', 'history']) {
-      await page.goto(`/workspaces/${other.id}/${path}`);
-      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    // Archived workspace: every screen is read-only (WS-01, QBANK-01 read-only notice). Since UX3c
+    // the sections are the home and its dialogs.
+    for (const path of [
+      homePath(other.id),
+      documentsPath(other.id),
+      homePath(other.id, 'panel=question-pdfs'),
+      homePath(other.id, 'panel=history'),
+      homePath(other.id, 'panel=share'),
+      bankPath(other.id),
+    ]) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
       await settle(page);
       await expectAccessible(page, `archived workspace ${path}`);
     }
@@ -180,15 +193,19 @@ test(
     const ws = await workspaceFactory.create(owner);
     await signInAs(page, owner.user);
 
-    await page.goto(`/workspaces/${ws.id}/documents`);
+    await page.goto(documentsPath(ws.id));
     await expect(docUi.emptyState(page)).toBeVisible();
     await expectAccessible(page, 'documents empty');
-    await page.goto(`/workspaces/${ws.id}/search`);
+    await page.goto(searchPath(ws.id));
     await expect(searchUi.box(page)).toBeVisible();
     await expectAccessible(page, 'search without documents');
+    // The unified search's options popover (scope checkboxes, mode tooltips, filters).
+    await openSearchOptions(page);
+    await expectAccessible(page, 'search options popover');
+    await page.keyboard.press('Escape');
 
     const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
-    await page.goto(`/workspaces/${ws.id}/documents`);
+    await page.goto(documentsPath(ws.id));
     await expect(docUi.ready(docUi.item(page, /book-ko|물의 순환과 정수 처리/))).toBeVisible();
     await expectAccessible(page, 'documents populated');
     // Client-side rejection of an unsupported file (error state).
@@ -211,21 +228,21 @@ test(
     await expect(editorUi.blockTextbox(page)).toBeVisible();
     await expectAccessible(page, 'document editor editing a block');
 
-    await page.goto(`/workspaces/${ws.id}/search`);
+    await page.goto(searchPath(ws.id));
     await runSearch(page, snippet(target.text, 10), 'keyword');
     await expect(searchUi.resultItems(page).first()).toBeVisible();
     await expectAccessible(page, 'search results');
     await searchUi.resultItems(page).first().getByRole('button').first().click();
     await expect(searchUi.excerptPanel(page)).toBeVisible();
     await expectAccessible(page, 'search excerpt panel');
-    await page.goto(`/workspaces/${ws.id}/search`);
+    await page.goto(searchPath(ws.id));
     await runSearch(page, 'zqxjv-없는-검색어-0000', 'keyword');
     await expect(searchUi.emptyState(page)).toBeVisible();
     await expectAccessible(page, 'search no results');
     // SEARCH-01-AC06 degraded state: keyword results + the "dense unavailable" status notice
     // (APP_ENV=test query-embedding failure marker). Fresh page: a mode switch re-runs the last
     // search, and Enter does not submit while that request keeps the submit button busy.
-    await page.goto(`/workspaces/${ws.id}/search`);
+    await page.goto(searchPath(ws.id));
     await runSearch(page, `${snippet(target.text, 10)} E2E-FAIL-EMBEDDING`, 'hybrid');
     await expect(searchUi.resultItems(page).first()).toBeVisible();
     await expect(
@@ -359,9 +376,11 @@ test(
     const ws = await workspaceFactory.create(owner);
     await signInAs(page, owner.user);
     await page.goto(historyPath(ws.id));
-    await expect(historyUi.heading(page)).toBeVisible();
+    await expect(historyUi.dialog(page)).toBeVisible();
+    // A fresh workspace: only its creation is listed.
+    await expect(historyUi.ofKind(page, 'activity')).toHaveCount(1);
     await settle(page);
-    await expectAccessible(page, 'history empty');
+    await expectAccessible(page, 'history of a new workspace');
 
     const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
     const target = block(BOOK, 'ch1-s2-p1');
@@ -377,16 +396,18 @@ test(
     await settle(page);
     await expectAccessible(page, 'document editor after a failed reindex');
 
-    for (const tab of [
-      /^(변경 이력|활동|activity|changes)/i,
-      /^(작업|작업 로그|jobs?)(?!\p{L})/iu,
-      /^(풀이 이력|내 풀이|attempts|practice history)/i,
-    ]) {
-      await page.goto(historyPath(ws.id));
-      await historyUi.open(page, tab);
-      await settle(page);
-      await expectAccessible(page, `history ${tab.source}`);
+    // One chronological list (UX3c) holding all three kinds.
+    await page.goto(historyPath(ws.id));
+    for (const kind of ['activity', 'job', 'attempt'] as const) {
+      await expect(historyUi.ofKind(page, kind).first()).toBeVisible();
     }
+    await settle(page);
+    await expectAccessible(page, 'history list');
+    // A second dialog stacked on top of it (QOV-01-AC10).
+    await homeUi.documentsButton(page).click();
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
+    await settle(page);
+    await expectAccessible(page, 'history and documents dialogs');
   },
 );
 

@@ -23,6 +23,7 @@ export default async function Page({
       <QuestionImport
         key={workspace.id}
         workspaceId={workspace.id}
+        workspaceName={workspace.name}
         readOnly={readOnly}
         initialRun={data.run}
         initialDrafts={data.drafts}

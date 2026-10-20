@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { RadioGroup, Select } from '../src';
+import { RadioGroup, Select, TOOLTIP_DELAY_MS, TOOLTIP_DESCRIPTION_DELAY_MS } from '../src';
 import { axeViolations } from './axe';
 
 const TYPES = [
@@ -86,7 +86,9 @@ describe('RadioGroup', () => {
     const keyword = screen.getByRole('radio', { name: '키워드' });
     // The description stays the radio's accessible description whether or not a tooltip shows.
     expect(keyword).toHaveAccessibleDescription('단어가 그대로 들어 있는 문단');
-    expect(document.querySelectorAll('.qz-radio__description')).toHaveLength(2);
+    expect(
+      document.querySelectorAll(".qz-radio[data-description='tooltip'] > .text > .description"),
+    ).toHaveLength(2);
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 
     await user.tab();
@@ -95,6 +97,29 @@ describe('RadioGroup', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     expect(await axeViolations()).toEqual([]);
+  });
+
+  it('waits the longer description delay before a hover opens the tooltip (UX3b)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(
+        <RadioGroup
+          label="검색 방식"
+          options={[{ value: 'keyword', label: '키워드', description: '단어가 그대로' }]}
+          defaultValue="keyword"
+          optionDescriptions="tooltip"
+        />,
+      );
+      expect(TOOLTIP_DESCRIPTION_DELAY_MS).toBeGreaterThan(TOOLTIP_DELAY_MS);
+      await user.hover(screen.getByText('키워드'));
+      act(() => vi.advanceTimersByTime(TOOLTIP_DELAY_MS + 50));
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(TOOLTIP_DESCRIPTION_DELAY_MS - TOOLTIP_DELAY_MS));
+      expect(screen.getByRole('tooltip')).toHaveTextContent('단어가 그대로');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps option descriptions as inline text by default', () => {
@@ -106,7 +131,7 @@ describe('RadioGroup', () => {
       />,
     );
     expect(screen.getByRole('radio', { name: '가' })).toHaveAccessibleDescription('정답');
-    expect(document.querySelector('.qz-radio__description')).toBeNull();
+    expect(document.querySelector(".qz-radio[data-description='tooltip']")).toBeNull();
   });
 
   it('disables every radio when the group is disabled', () => {

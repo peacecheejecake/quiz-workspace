@@ -92,10 +92,10 @@ export function ToastProvider({
               if (!open) dismiss(item.id);
             }}
           >
-            <div className="qz-toast__body">
-              <RadixToast.Title className="qz-toast__title">{item.title}</RadixToast.Title>
+            <div className="body">
+              <RadixToast.Title className="title">{item.title}</RadixToast.Title>
               {item.description ? (
-                <RadixToast.Description className="qz-toast__description">
+                <RadixToast.Description className="description">
                   {item.description}
                 </RadixToast.Description>
               ) : null}

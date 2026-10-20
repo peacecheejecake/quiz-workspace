@@ -41,7 +41,7 @@ export function IconButton({
       className={cx('qz-icon-button', 'qz-focus-ring', className)}
       {...rest}
     >
-      <span className="qz-icon-button__icon" aria-hidden="true">
+      <span className="icon" aria-hidden="true">
         {icon}
       </span>
     </button>

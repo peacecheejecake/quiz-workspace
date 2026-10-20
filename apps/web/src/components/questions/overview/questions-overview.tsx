@@ -1,46 +1,41 @@
 'use client';
 
-// QOV-01 Questions Heatmap 홈 (docs/screens/questions-overview.md, questions.md §1–§3, §7): one dot
-// per CONFIRMED question grouped by chapter, the always-visible legend, status counts, filters
-// mirrored in the URL with the overview API's parameter names, and the practice panel opened from
-// a dot (`?question=<id>`, deep link + back/forward). Hover/focus previews never record a view:
-// only opening the panel (a practice session) does. Viewers practise their own state; archived
-// workspaces are read-only.
+// QOV-01 문제 영역 of the workspace home (docs/screens/questions-overview.md, questions.md §1–§3,
+// §7): one dot per CONFIRMED question grouped by chapter, a collapsible status filter (collapsed by
+// default; no legend or status summary since UX3c — state is in each dot's label, its preview and
+// the filter's text), filters mirrored in the URL with the overview API's parameter names, and the
+// practice panel opened from a dot (`?question=<id>`, deep link + back/forward). The home owns the
+// filter state (search box and chapter/type live in its header). Hover/focus previews never record
+// a view: only opening the panel (a practice session) does. Viewers practise their own state;
+// archived workspaces are read-only.
 import {
   Button,
+  ChevronDownIcon,
+  ChevronUpIcon,
   EmptyState,
-  HeatmapLegend,
-  Input,
-  PageHeader,
   QuestionHeatmap,
   QUESTION_DOT_STATUSES,
   questionStatusLabels,
-  questionTypeLabels,
-  Select,
-  StatusSummary,
   useToast,
   type QuestionDotStatus,
-  type QuestionType,
 } from '@quiz/ui';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   useTransition,
-  type FormEvent,
+  type ReactNode,
 } from 'react';
-import type { ChapterChoice, OverviewItem, QuestionOverview } from '@/lib/questions/overview-data';
+import type { OverviewItem, QuestionOverview } from '@/lib/questions/overview-data';
 import {
-  EMPTY_OVERVIEW_FILTERS,
   isOverviewFiltered,
   openQuestionId,
-  OVERVIEW_SEARCH_MAX,
-  overviewSearch,
   QUESTION_PARAM,
   type OverviewFilters,
 } from '@/lib/questions/overview-filters';
@@ -69,18 +64,24 @@ export interface QuestionsOverviewProps {
   readonly workspaceId: string;
   /** `viewer`: no import/generate links, practice allowed. `archived`: read-only panel. */
   readonly readOnly: OverviewReadOnly;
+  /** The filters the server rendered `overview` with. */
   readonly filters: OverviewFilters;
+  /** The filters as last chosen (ahead of the URL while a navigation is pending). */
+  readonly view: OverviewFilters;
+  /** A filter navigation is in flight. */
+  readonly navigating: boolean;
+  readonly onFiltersChange: (patch: Partial<OverviewFilters>) => void;
+  /** Clears every filter, the search text included. */
+  readonly onResetFilters: () => void;
   readonly overview: QuestionOverview;
-  readonly chapterChoices: readonly ChapterChoice[];
   readonly failure: QuestionFailureKind | null;
+  /** Toolbar actions on the right (문제 PDF 관리, 문제 생성). */
+  readonly actions?: ReactNode;
   /** Screen id of the practice panel (`data-screen-id`, docs/screens/index.md). */
   readonly panelScreenId?: string;
   /** `?question=` resolved outside the current filters by the server render (deep link). */
   readonly requested?: PlacedQuestion | null;
 }
-
-const ALL = '__all__';
-const TYPES: readonly QuestionType[] = ['MCQ', 'SHORT_ANSWER', 'ESSAY'];
 
 /**
  * Whether a failed deep-link lookup may succeed when retried. `notFound`, `forbidden`,
@@ -139,9 +140,13 @@ export function QuestionsOverview({
   workspaceId,
   readOnly,
   filters,
+  view,
+  navigating,
+  onFiltersChange,
+  onResetFilters,
   overview,
-  chapterChoices,
   failure,
+  actions,
   panelScreenId,
   requested = null,
 }: QuestionsOverviewProps) {
@@ -149,20 +154,11 @@ export function QuestionsOverview({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const [navigating, startNavigation] = useTransition();
+  const [reloading, startReload] = useTransition();
   const canAuthor = readOnly === null;
-
-  // Filters as last chosen: quick successive changes build on each other before the URL (and the
-  // server render) catch up; a new server render with other filters resets them.
-  const filtersKey = overviewSearch(filters);
-  const [rendered, setRendered] = useState({ filtersKey, q: filters.q });
-  const [view, setView] = useState(filters);
-  const [search, setSearch] = useState(filters.q);
-  if (rendered.filtersKey !== filtersKey) {
-    setRendered({ filtersKey, q: filters.q });
-    setView(filters);
-    if (rendered.q !== filters.q) setSearch(filters.q);
-  }
+  // QOV-01-AC08: the status filter is collapsed until asked for.
+  const [statusOpen, setStatusOpen] = useState(false);
+  const statusRegionId = useId();
 
   // Optimistic study-state changes until the revalidated overview arrives.
   const [overrides, setOverrides] = useState<ReadonlyMap<string, StudyOverride>>(new Map());
@@ -290,7 +286,7 @@ export function QuestionsOverview({
     [placed, openedId],
   );
 
-  const screenRef = useRef<HTMLDivElement>(null);
+  const screenRef = useRef<HTMLElement>(null);
 
   function setQuestionParam(questionId: string | null) {
     const params = new URLSearchParams(window.location.search);
@@ -302,24 +298,11 @@ export function QuestionsOverview({
     window.history.pushState(null, '', `${pathname}${query ? `?${query}` : ''}`);
   }
 
-  function navigate(patch: Partial<OverviewFilters>) {
-    const next = { ...view, ...patch };
-    setView(next);
-    startNavigation(() => {
-      router.replace(`${pathname}${overviewSearch(next)}`, { scroll: false });
-    });
-  }
-
-  function onSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    navigate({ q: search.trim().slice(0, OVERVIEW_SEARCH_MAX) });
-  }
-
   function toggleStatus(status: QuestionDotStatus) {
     const wanted = new Set(view.status);
     if (wanted.has(status)) wanted.delete(status);
     else wanted.add(status);
-    navigate({ status: QUESTION_DOT_STATUSES.filter((s) => wanted.has(s)) });
+    onFiltersChange({ status: QUESTION_DOT_STATUSES.filter((s) => wanted.has(s)) });
   }
 
   const putOverride = useCallback(
@@ -452,68 +435,47 @@ export function QuestionsOverview({
   }, [openId, router]);
 
   const filtered = isOverviewFiltered(filters);
-  const chapterOptions = [
-    { value: ALL, label: '전체 챕터' },
-    ...chapterChoices.map((c) => ({ value: c.value, label: c.title })),
-  ];
+  const stateFiltered = view.status.length > 0 || view.favorite !== null || view.retry !== null;
+  const busy = navigating || reloading;
 
   return (
-    <div ref={screenRef} className={styles.screen}>
-      <PageHeader
-        title="문제 Heatmap"
-        description="문제 하나가 점 하나입니다. 점을 눌러 바로 풀어 보세요."
-        actions={
-          <>
-            <Button asChild>
-              <Link href={`/workspaces/${workspaceId}/questions/bank`}>문제은행</Link>
-            </Button>
-            {canAuthor ? (
-              <>
-                <Button asChild>
-                  <Link href={`/workspaces/${workspaceId}/questions/import`}>PDF 가져오기</Link>
-                </Button>
-                <Button asChild variant="primary">
-                  <Link href={`/workspaces/${workspaceId}/questions/generate`}>문제 생성</Link>
-                </Button>
-              </>
-            ) : null}
-          </>
-        }
-      />
-
-      <div className={styles.filters}>
-        <form role="search" className={styles.searchForm} onSubmit={onSearch}>
-          <Input
-            type="search"
-            label="문제 검색"
-            placeholder="문제 내용으로 검색"
-            value={search}
-            maxLength={OVERVIEW_SEARCH_MAX}
-            onChange={(e) => setSearch(e.target.value)}
-            autoComplete="off"
-          />
-          <Button type="submit">검색</Button>
-        </form>
-        <Select
-          label="챕터"
-          options={chapterOptions}
-          value={view.chapter ?? ALL}
-          onValueChange={(value) => navigate({ chapter: value === ALL ? null : value })}
-        />
-        <Select
-          label="유형"
-          options={[
-            { value: ALL, label: '전체 유형' },
-            ...TYPES.map((type) => ({ value: type, label: questionTypeLabels[type] })),
-          ]}
-          value={view.type ?? ALL}
-          onValueChange={(value) =>
-            navigate({ type: value === ALL ? null : (value as QuestionType) })
-          }
-        />
+    <section ref={screenRef} className={styles.screen} aria-labelledby={`${statusRegionId}-title`}>
+      <h2 id={`${statusRegionId}-title`} className="qz-visually-hidden">
+        문제
+      </h2>
+      <div className={styles.toolbar}>
+        <div className={styles.toolbarStart}>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-expanded={statusOpen}
+            aria-controls={statusRegionId}
+            data-filtered={stateFiltered || undefined}
+            onClick={() => setStatusOpen((open) => !open)}
+          >
+            상태 필터
+            {statusOpen ? (
+              <ChevronUpIcon width={16} height={16} aria-hidden="true" />
+            ) : (
+              <ChevronDownIcon width={16} height={16} aria-hidden="true" />
+            )}
+          </Button>
+          <p className={styles.inFilter} role="status">
+            {busy
+              ? '문제를 불러오는 중입니다.'
+              : `${stateFiltered && !statusOpen ? '상태 필터 적용 중 · ' : ''}현재 필터의 문제 ${items.length}개`}
+          </p>
+        </div>
+        {actions ? <div className={styles.toolbarActions}>{actions}</div> : null}
       </div>
 
-      <div className={styles.stateFilters} role="group" aria-label="상태 필터">
+      <div
+        id={statusRegionId}
+        className={styles.stateFilters}
+        role="group"
+        aria-label="상태 필터"
+        hidden={!statusOpen}
+      >
         {QUESTION_DOT_STATUSES.map((status) => (
           <Button
             key={status}
@@ -529,57 +491,35 @@ export function QuestionsOverview({
         <Button
           size="sm"
           aria-pressed={view.favorite === true}
-          onClick={() => navigate({ favorite: view.favorite === true ? null : true })}
+          onClick={() => onFiltersChange({ favorite: view.favorite === true ? null : true })}
         >
           즐겨찾기만
         </Button>
         <Button
           size="sm"
           aria-pressed={view.retry === true}
-          onClick={() => navigate({ retry: view.retry === true ? null : true })}
+          onClick={() => onFiltersChange({ retry: view.retry === true ? null : true })}
         >
           다시 풀기만
         </Button>
         {filtered ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setSearch('');
-              navigate(EMPTY_OVERVIEW_FILTERS);
-            }}
-          >
+          <Button size="sm" variant="ghost" onClick={onResetFilters}>
             필터 초기화
           </Button>
         ) : null}
       </div>
 
-      <StatusSummary counts={overview.counts} />
-      <p className={styles.inFilter} role="status">
-        {navigating ? '문제를 불러오는 중입니다.' : `현재 필터의 문제 ${items.length}개`}
-      </p>
-      <HeatmapLegend className={styles.legend} />
-
       {failure ? (
         <div role="alert" className={styles.loadError}>
           <p>문제 Heatmap을 불러오지 못했습니다. {QUESTION_FAILURE_MESSAGES[failure]}</p>
-          <Button onClick={() => startNavigation(() => router.refresh())}>다시 시도</Button>
+          <Button onClick={() => startReload(() => router.refresh())}>다시 시도</Button>
         </div>
       ) : items.length === 0 ? (
         filtered ? (
           <EmptyState
             title="조건에 맞는 문제가 없습니다"
             description="검색어나 필터를 바꿔 보세요."
-            action={
-              <Button
-                onClick={() => {
-                  setSearch('');
-                  navigate(EMPTY_OVERVIEW_FILTERS);
-                }}
-              >
-                필터 초기화
-              </Button>
-            }
+            action={<Button onClick={onResetFilters}>필터 초기화</Button>}
           />
         ) : (
           <EmptyState
@@ -591,24 +531,19 @@ export function QuestionsOverview({
             }
             action={
               canAuthor ? (
-                <div className={styles.emptyActions}>
-                  <Button asChild variant="primary">
-                    <Link href={`/workspaces/${workspaceId}/questions/bank`}>문제 등록</Link>
-                  </Button>
-                  <Button asChild>
-                    <Link href={`/workspaces/${workspaceId}/questions/import`}>PDF 가져오기</Link>
-                  </Button>
-                </div>
+                <Button asChild variant="primary">
+                  <Link href={`/workspaces/${workspaceId}/questions/bank`}>문제 등록</Link>
+                </Button>
               ) : null
             }
           />
         )
       ) : (
-        <div className={styles.heatmap} aria-busy={navigating || undefined}>
+        <div className={styles.heatmap} aria-busy={busy || undefined}>
           <QuestionHeatmap
             chapters={chapters}
             selectedQuestionId={openPlaced?.item.question_id ?? null}
-            headingLevel={2}
+            headingLevel={3}
             onOpen={(questionId) => setQuestionParam(questionId)}
           />
         </div>
@@ -628,12 +563,13 @@ export function QuestionsOverview({
         onCloseAutoFocus={(event) => {
           const root = screenRef.current;
           if (!root) return;
-          const search = root.querySelector<HTMLElement>('input[type="search"]');
-          if (focusAfterPanel(root, lastOpened.current, openOrder.current, search)) {
+          // An empty heatmap falls back to the status filter toggle (a stable control).
+          const toggle = root.querySelector<HTMLElement>('button[aria-controls]');
+          if (focusAfterPanel(root, lastOpened.current, openOrder.current, toggle)) {
             event.preventDefault();
           }
         }}
       />
-    </div>
+    </section>
   );
 }

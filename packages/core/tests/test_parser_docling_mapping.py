@@ -10,7 +10,7 @@ import importlib.util
 import re
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from book_core.contracts import BBox, BlockType, ParsedDocument
@@ -257,6 +257,11 @@ class _FakeResult:
 
 
 class _FakeConverter:
+    initialized: ClassVar[list[object]] = []
+
+    def initialize_pipeline(self, format: object) -> None:
+        _FakeConverter.initialized.append(format)
+
     def convert(self, source: object, raises_on_error: bool = True) -> _FakeResult:
         return _FakeResult(_docling_document())
 
@@ -265,6 +270,7 @@ class _FakeConverter:
 def requested_ocr(monkeypatch: pytest.MonkeyPatch) -> list[bool]:
     """Replace the model-backed converter; record whether OCR was requested."""
     requested: list[bool] = []
+    monkeypatch.setattr(_FakeConverter, "initialized", [])
 
     def converter(self: DoclingParser, ocr: bool) -> _FakeConverter:
         requested.append(ocr)
@@ -347,6 +353,24 @@ def test_ocr_runs_only_when_enabled_needed_and_available(
     assert ocr.parse(scan).ocr_applied
     assert not ocr.parse(text).ocr_applied
     assert requested_ocr == [False, True, False]
+
+
+def test_prepare_loads_the_default_pipeline_once_before_parse(
+    tmp_path: Path, requested_ocr: list[bool]
+) -> None:
+    """UX3-JOB worker warm-up: `prepare` initializes the non-OCR PDF pipeline (model load)
+    without converting; a later `parse` reuses it instead of initializing again."""
+    from docling.datamodel.base_models import InputFormat
+
+    parser = DoclingParser()
+    assert not parser.prepared
+    parser.prepare()
+    assert parser.prepared
+    assert _FakeConverter.initialized == [InputFormat.PDF]
+    parser.prepare()
+    parser.parse(_pdf(tmp_path / "text.pdf", image_only_second_page=False))
+    assert _FakeConverter.initialized == [InputFormat.PDF]
+    assert requested_ocr == [False, False, False]
 
 
 def test_ocr_pipeline_uses_rapidocr_explicitly() -> None:

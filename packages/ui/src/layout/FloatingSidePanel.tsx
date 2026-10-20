@@ -1,15 +1,18 @@
 'use client';
 
 import { Dialog } from 'radix-ui';
-import { useRef, type ComponentProps, type ReactElement, type ReactNode } from 'react';
+import { useRef, useState, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 import { cx } from '../internal/cx';
-import { LayerProvider } from '../internal/layer';
+import { LayerProvider, useFloatingLayer } from '../internal/layer';
 import { ScrollRegion } from '../internal/scroll-region';
 import { handOffFocus } from '../internal/tabbable';
 import { IconButton } from '../primitives/IconButton';
 import { CloseIcon } from '../primitives/icons';
 
 type ContentProps = ComponentProps<typeof Dialog.Content>;
+
+/** Escape presses a non-modal panel declined because focus was outside it (see onKeyDown). */
+const declinedEscapes = new WeakSet<Event>();
 
 export interface FloatingSidePanelProps {
   open?: boolean;
@@ -48,6 +51,11 @@ export interface FloatingSidePanelProps {
   /** Defaults to focusing the panel itself so its title is announced first. */
   onOpenAutoFocus?: ContentProps['onOpenAutoFocus'];
   onCloseAutoFocus?: ContentProps['onCloseAutoFocus'];
+  /**
+   * Changing this while the panel is open brings it to the top of the open floating layers again
+   * (e.g. the button that opened it was pressed while another panel covered it).
+   */
+  raiseKey?: string | number;
   className?: string;
   children?: ReactNode;
 }
@@ -74,6 +82,7 @@ export function FloatingSidePanel({
   container,
   onOpenAutoFocus,
   onCloseAutoFocus,
+  raiseKey,
   className,
   children,
 }: FloatingSidePanelProps) {
@@ -81,12 +90,27 @@ export function FloatingSidePanel({
   // Element focused when the panel opened. Panels are often opened from controls that are not
   // a Radix trigger (heatmap dots, search results); focus must still return there on close.
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  // Track the open state even when uncontrolled so the panel can take its stacking rank: the
+  // most recently opened floating layer is on top (internal/layer.tsx).
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen ?? false);
+  const isOpen = open ?? uncontrolledOpen;
+  const handleOpenChange = (next: boolean) => {
+    if (open === undefined) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
+  const layer = useFloatingLayer(isOpen, raiseKey);
 
   return (
-    <Dialog.Root open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange} modal={modal}>
+    <Dialog.Root open={isOpen} onOpenChange={handleOpenChange} modal={modal}>
       {trigger ? <Dialog.Trigger asChild>{trigger}</Dialog.Trigger> : null}
       <Dialog.Portal container={container}>
-        {modal ? <Dialog.Overlay className="qz-backdrop" data-layer="panel" /> : null}
+        {modal ? (
+          <Dialog.Overlay
+            className="qz-backdrop"
+            data-layer="panel"
+            style={{ zIndex: layer.zIndex }}
+          />
+        ) : null}
         <Dialog.Content
           ref={contentRef}
           // Radix hides the background from assistive technology but does not set aria-modal.
@@ -95,6 +119,8 @@ export function FloatingSidePanel({
           data-size={size}
           data-mobile-layout={mobileLayout}
           className={cx('qz-panel', 'glass-surface', className)}
+          data-layer-rank={layer.rank}
+          style={{ zIndex: layer.zIndex }}
           {...(description ? {} : { 'aria-describedby': undefined })}
           onOpenAutoFocus={(event) => {
             returnFocusRef.current =
@@ -129,30 +155,35 @@ export function FloatingSidePanel({
             if (!modal && contentRef.current) {
               handOffFocus(event, contentRef.current, returnFocusRef.current);
             }
+            // Radix lets only the most recently mounted non-modal panel handle Escape; when focus
+            // is in another one (e.g. raised over it), that panel's guard below declined, so the
+            // panel holding focus closes itself.
+            if (event.key === 'Escape' && !modal && declinedEscapes.has(event.nativeEvent)) {
+              handleOpenChange(false);
+            }
           }}
           onEscapeKeyDown={(event) => {
             if (!modal && !contentRef.current?.contains(document.activeElement)) {
               event.preventDefault();
+              declinedEscapes.add(event);
             }
           }}
         >
-          <LayerProvider value="var(--z-side-panel)">
-            <div className="qz-panel__header">
-              <div className="qz-panel__heading">
-                <Dialog.Title className="qz-panel__title">{title}</Dialog.Title>
+          <LayerProvider value={layer.zIndex}>
+            <div className="header">
+              <div className="heading">
+                <Dialog.Title className="title">{title}</Dialog.Title>
                 {description ? (
-                  <Dialog.Description className="qz-panel__description">
-                    {description}
-                  </Dialog.Description>
+                  <Dialog.Description className="description">{description}</Dialog.Description>
                 ) : null}
               </div>
-              {headerActions ? <div className="qz-panel__actions">{headerActions}</div> : null}
+              {headerActions ? <div className="actions">{headerActions}</div> : null}
               <Dialog.Close asChild>
                 <IconButton label={closeLabel} icon={<CloseIcon />} />
               </Dialog.Close>
             </div>
-            <ScrollRegion className="qz-panel__body">{children}</ScrollRegion>
-            {footer ? <div className="qz-panel__footer">{footer}</div> : null}
+            <ScrollRegion className="body">{children}</ScrollRegion>
+            {footer ? <div className="footer">{footer}</div> : null}
           </LayerProvider>
         </Dialog.Content>
       </Dialog.Portal>
