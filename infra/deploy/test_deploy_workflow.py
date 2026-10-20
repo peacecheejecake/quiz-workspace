@@ -3,6 +3,7 @@ actionlint checks the syntax)."""
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -308,11 +309,134 @@ def test_ci_deploys_staging_only_on_develop_pushes() -> None:
     assert job["secrets"] == "inherit"
 
 
-def test_ci_deploy_needs_every_required_ci_job() -> None:
+PR_ONLY_SKIP = "github.event_name != 'pull_request' || "
+PATH_FILTERED = {"checks", "images", "integration", "visual-ui"}
+
+
+def _ci_jobs() -> dict[str, dict[str, Any]]:
     jobs = _load(CI)["jobs"]
-    required = {name for name, job in jobs.items() if "if" not in job}
-    assert required == {"checks", "images", "integration", "visual-ui"}
+    assert isinstance(jobs, dict)
+    return jobs
+
+
+def test_ci_deploy_needs_every_required_ci_job() -> None:
+    # Required = every job a push run always runs: the PR path filter never applies to a push.
+    required = {
+        name for name, job in _ci_jobs().items() if str(job.get("if", "")).startswith(PR_ONLY_SKIP)
+    }
+    assert required == PATH_FILTERED
     assert set(_ci_deploy_job()["needs"]) == required
+    assert _ci_deploy_job()["needs"] == ["checks", "images", "integration", "visual-ui"]
+
+
+def test_ci_jobs_are_exactly_the_known_set() -> None:
+    # A new job must be classified here (path-filtered, nightly, aggregate or deploy).
+    assert set(_ci_jobs()) == PATH_FILTERED | {"changes", "models", "ci-ok", "deploy-staging"}
+
+
+def test_ci_path_filter_skips_only_pull_requests() -> None:
+    jobs = _ci_jobs()
+    outputs = {"checks": "checks", "integration": "integration", "visual-ui": "visual_ui"}
+    for name, output in outputs.items():
+        assert jobs[name]["if"] == f"{PR_ONLY_SKIP}needs.changes.outputs.{output} == 'true'"
+    assert jobs["images"]["if"] == f"{PR_ONLY_SKIP}needs.changes.outputs.images != '[]'"
+    for name in PATH_FILTERED:
+        needs = jobs[name]["needs"]
+        assert "changes" in ([needs] if isinstance(needs, str) else needs), name
+    # `changes` itself and the aggregate run on every event.
+    assert "if" not in jobs["changes"]
+    assert jobs["ci-ok"]["if"] == "always()"
+    # Unchanged: nightly/manual only (so never on a PR) and develop pushes only.
+    assert jobs["models"]["if"] == (
+        "github.event_name == 'schedule'"
+        " || (github.event_name == 'workflow_dispatch' && inputs.models)"
+    )
+    assert "pull_request" not in str(jobs["deploy-staging"]["if"])
+
+
+def test_ci_image_steps_skip_only_on_pull_requests() -> None:
+    job = _ci_jobs()["images"]
+    # Fixed matrix: the job display names deploy.yml's REQUIRED_CI_JOBS lists stay the same.
+    assert job["strategy"]["matrix"] == {"image": ["api", "worker", "web"]}
+    first, *rest = job["steps"]
+    assert first["id"] == "want"
+    assert first["env"]["BUILD"] == (
+        "${{ " + PR_ONLY_SKIP + "contains(fromJSON(needs.changes.outputs.images), matrix.image) }}"
+    )
+    assert rest
+    for step in rest:
+        assert step["if"] == "steps.want.outputs.build == 'true'", step
+
+
+def test_ci_changes_outputs_everything_outside_pull_requests() -> None:
+    job = _ci_jobs()["changes"]
+    steps = job["steps"]
+    everything = steps[0]
+    assert everything["id"] == "all"
+    assert everything["if"] == "github.event_name != 'pull_request'"
+    assert set(job["outputs"]) == {"checks", "images", "integration", "visual_ui"}
+    for key, value in job["outputs"].items():
+        assert value == f"${{{{ steps.filter.outputs.{key} || steps.all.outputs.{key} }}}}"
+    lines = [line.strip() for line in str(everything["run"]).splitlines()]
+    assert {
+        "echo checks=true",
+        """echo 'images=["api","worker","web"]'""",
+        "echo integration=true",
+        "echo visual_ui=true",
+    } <= set(lines)
+    # The diff and the classifier run on pull requests only, without credentials or secrets.
+    for step in steps[1:]:
+        assert step["if"] == "github.event_name == 'pull_request'", step
+    checkout = steps[1]
+    assert checkout["with"] == {"fetch-depth": 2, "persist-credentials": False}
+    assert "scripts/ci_changes.py" in str(steps[2]["run"])
+    assert "secrets." not in str(job)
+    assert "permissions" not in job  # workflow default: contents: read
+    assert _load(CI)["permissions"] == {"contents": "read"}
+
+
+def test_ci_ok_aggregates_every_job_but_the_deploy() -> None:
+    job = _ci_jobs()["ci-ok"]
+    assert set(job["needs"]) == set(_ci_jobs()) - {"ci-ok", "deploy-staging"}
+
+
+@pytest.mark.parametrize(
+    ("results", "ok"),
+    [
+        ({"checks": "success", "images": "skipped", "models": "skipped"}, True),
+        ({"checks": "success", "integration": "failure"}, False),
+        ({"checks": "success", "visual-ui": "cancelled"}, False),
+        ({"changes": "failure", "checks": "skipped"}, False),
+    ],
+)
+def test_ci_ok_fails_on_failed_or_cancelled_jobs(
+    tmp_path: Path, results: dict[str, str], ok: bool
+) -> None:
+    assert BASH, "bash is required"
+    assert shutil.which("jq"), "jq is required (preinstalled on the ubuntu runner)"
+    step = _ci_jobs()["ci-ok"]["steps"][0]
+    script = tmp_path / "ci-ok.sh"
+    script.write_text(str(step["run"]), encoding="utf-8")
+    needs = {name: {"result": result, "outputs": {}} for name, result in results.items()}
+    result = subprocess.run(  # noqa: S603 - a test-local script
+        [BASH, "-e", str(script)],
+        env={"PATH": os.environ["PATH"], "NEEDS": json.dumps(needs)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert (result.returncode == 0) is ok, result.stdout + result.stderr
+
+
+def test_ci_actions_are_pinned_by_sha() -> None:
+    for name, job in _ci_jobs().items():
+        if name == "deploy-staging":
+            assert job["uses"] == "./.github/workflows/deploy.yml"
+            continue
+        for step in job["steps"]:
+            uses = step.get("uses")
+            if uses:
+                assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", uses), uses
 
 
 def test_ci_grants_the_callee_permissions() -> None:

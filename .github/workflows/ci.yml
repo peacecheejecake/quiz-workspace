@@ -10,6 +10,14 @@
 #   models (schedule / manual only)
 #   checks + images + integration + visual-ui ──► deploy-staging (push to develop only;
 #     calls deploy.yml with environment=staging, M7.4p)
+#   all of the above (but deploy-staging) ──► ci-ok (aggregate status for pull requests)
+#
+# Pull requests only (CI-SKIP, docs/deployment.md §5): `changes` maps the PR diff to path groups
+# (scripts/ci_changes.py) and each job runs only when a group it depends on changed; CI files,
+# the Makefile, scripts/, lockfiles, root configs and unknown paths run everything. A skipped job
+# counts as passed in `ci-ok`. push, schedule and workflow_dispatch always run every job: every
+# job condition starts with `github.event_name != 'pull_request' ||`, and deploy-staging /
+# deploy.yml's REQUIRED_CI_JOBS still see the same job names succeed on the push run.
 #
 # Visual baselines are Linux renders of the pinned Playwright image (tests/e2e/README.md "Visual
 # baselines"): scripts/visual-run.sh starts `playwright run-server` in
@@ -52,8 +60,44 @@ env:
   FORCE_COLOR: '1'
 
 jobs:
+  changes:
+    name: changes (PR path filter)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      checks: ${{ steps.filter.outputs.checks || steps.all.outputs.checks }}
+      images: ${{ steps.filter.outputs.images || steps.all.outputs.images }}
+      integration: ${{ steps.filter.outputs.integration || steps.all.outputs.integration }}
+      visual_ui: ${{ steps.filter.outputs.visual_ui || steps.all.outputs.visual_ui }}
+    steps:
+      - name: Not a pull request (run everything)
+        id: all
+        if: github.event_name != 'pull_request'
+        run: |
+          {
+            echo checks=true
+            echo 'images=["api","worker","web"]'
+            echo integration=true
+            echo visual_ui=true
+          } >> "$GITHUB_OUTPUT"
+      # The PR merge commit and its first parent (the base branch tip): their diff is the PR.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Path groups
+        id: filter
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          git diff --name-only --no-renames HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+          python3 -I scripts/ci_changes.py < "$RUNNER_TEMP/changed.txt" | tee -a "$GITHUB_OUTPUT"
+
   checks:
     name: lint · typecheck · unit · contracts
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.checks == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -83,6 +127,8 @@ jobs:
 
   images:
     name: image · ${{ matrix.image }}
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.images != '[]'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -90,13 +136,23 @@ jobs:
       matrix:
         image: [api, worker, web]
     steps:
+      # The matrix (and so the job names) stays fixed; on a PR an entry whose image did not
+      # change passes without building (a job-level `if` cannot read `matrix`).
+      - name: Path filter
+        id: want
+        env:
+          BUILD: ${{ github.event_name != 'pull_request' || contains(fromJSON(needs.changes.outputs.images), matrix.image) }}
+        run: echo "build=$BUILD" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        if: steps.want.outputs.build == 'true'
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        if: steps.want.outputs.build == 'true'
       # Built and loaded locally only (no registry push until M7.4). Public placeholder values for
       # the web image's build-time NEXT_PUBLIC_* (docs/deployment.md §6): never secrets.
       - name: Build
+        if: steps.want.outputs.build == 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -112,6 +168,7 @@ jobs:
           cache-from: type=gha,scope=image-${{ matrix.image }}
           cache-to: type=gha,scope=image-${{ matrix.image }},mode=max
       - name: Smoke (boots, non-root, healthcheck command)
+        if: steps.want.outputs.build == 'true'
         env:
           IMAGE: quiz-${{ matrix.image }}:ci
           KIND: ${{ matrix.image }}
@@ -144,7 +201,8 @@ jobs:
 
   integration:
     name: db · infra · e2e · restore
-    needs: checks
+    needs: [changes, checks]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.integration == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
@@ -323,6 +381,8 @@ jobs:
 
   visual-ui:
     name: visual · @quiz/ui Storybook
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.visual_ui == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -373,6 +433,27 @@ jobs:
           key: hf-${{ runner.os }}-${{ hashFiles('uv.lock', 'packages/core/src/book_core/embedding/qwen3.py', 'packages/core/src/book_core/reranker/qwen3.py') }}
       - name: Real-model tests
         run: make test-models
+
+  # One status for branch protection / merge decisions: skipped (PR path filter, or `models`
+  # outside the nightly) is fine; any failed or cancelled job fails it.
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [changes, checks, images, integration, visual-ui, models]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
+          bad="$(jq -r '[to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key] | join(" ")' <<<"$NEEDS")"
+          if [[ -n $bad ]]; then
+            echo "::error::not green: $bad"
+            exit 1
+          fi
 
   # Staging follows develop (user decision 2026-10-19): every push to develop deploys once all
   # required jobs above are green. `models` is not required (schedule/manual only). These `needs`
