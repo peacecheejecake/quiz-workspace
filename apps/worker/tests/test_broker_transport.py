@@ -211,7 +211,7 @@ def test_hard_time_limit_never_leaves_a_job_running(
     envelope = make_envelope(payload={"message": "slow", "delay_seconds": 30})
 
     with start_worker(
-        app, pool="prefork", concurrency=1, perform_ping_check=False, shutdown_timeout=10
+        app, pool=app.conf.worker_pool, concurrency=1, perform_ping_check=False, shutdown_timeout=10
     ):
         submit_job(app, envelope)
         # Every last_error the row shows on its way (each stays until the next transition).
@@ -264,7 +264,7 @@ def test_killed_worker_process_is_retried_without_waiting_for_the_lease(
     envelope = make_envelope(payload={"message": "oom", "delay_seconds": 3})
 
     with start_worker(
-        app, pool="prefork", concurrency=1, perform_ping_check=False, shutdown_timeout=10
+        app, pool=app.conf.worker_pool, concurrency=1, perform_ping_check=False, shutdown_timeout=10
     ) as worker:
         submit_job(app, envelope)
         running = _wait_for(store, envelope.job_id, lambda r: r.status is JobStatus.RUNNING)

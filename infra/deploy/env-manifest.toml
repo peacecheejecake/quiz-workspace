@@ -520,7 +520,7 @@ services = ["worker"]
 kind = "config"
 check = "number"
 provider = "default"
-note = "0 (never); 1 replaces the pool process after every task so model memory is returned between jobs"
+note = "0 (never); N replaces the pool process after N job tasks (quiz.jobs.*) so model memory is returned between jobs; maintenance tasks (reconcile, every minute) never count"
 
 [[var]]
 name = "WORKER_MAX_MEMORY_PER_CHILD_MB"
