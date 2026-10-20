@@ -821,6 +821,52 @@ def test_options_printed_as_table_rows() -> None:
     assert draft.evidence[0].block_ids == ("b0", "b1", "b2")
 
 
+def test_option_table_continued_on_the_next_page_keeps_every_option() -> None:
+    pages = (
+        PageInfo(page=1, width=595.0, height=842.0),
+        PageInfo(page=2, width=595.0, height=842.0),
+    )
+
+    def block(i: int, page: int, text: str, **kw: object) -> Block:
+        y0 = 60.0 + 20 * i
+        return Block(
+            id=f"b{i}",
+            type=kw.pop("type", BlockType.TEXT),  # type: ignore[arg-type]
+            text=text,
+            locations=(SourceLocation(page=page, bbox=BBox(x0=60, y0=y0, x1=500, y1=y0 + 15)),),
+            **kw,  # type: ignore[arg-type]
+        )
+
+    def table(i: int, page: int, rows: tuple[tuple[str, ...], ...]) -> Block:
+        text = "\n".join(" | ".join(r) for r in rows)
+        return block(i, page, text, type=BlockType.TABLE, table=TableContent(rows=rows))
+
+    doc = ParsedDocument(
+        source_path="t.pdf",
+        source_sha256="1" * 64,
+        parser_version="test",
+        pages=pages,
+        blocks=(
+            block(0, 1, "07 (가)에 들어갈 기간이 맞는 것은? ( )", type=BlockType.HEADING),
+            table(1, 1, (("보기", "(가)"), ("①", "1개월"), ("②", "2개월"))),
+            table(2, 2, (("③", "3개월"), ("④", "4개월"))),
+            block(3, 2, "정답: ④", type=BlockType.HEADING),
+        ),
+    )
+    (draft,) = QuestionExtractor().extract(doc, document_id="t").drafts
+    assert [(o.id, o.text) for o in draft.options] == [
+        ("opt-1", "1개월"),
+        ("opt-2", "2개월"),
+        ("opt-3", "3개월"),
+        ("opt-4", "4개월"),
+    ]
+    assert draft.correct_option_ids == ("opt-4",)
+    assert draft.evidence[0].block_ids == ("b0", "b1", "b2")
+    assert [loc.page for loc in draft.evidence[0].locations] == [1, 2]
+    ((_, request),) = llm_requests(doc)
+    assert "③ | 3개월" in request.prompt  # the continuation table is refined with the rest
+
+
 def test_no_questions() -> None:
     result = _extract(["제목", "본문 문장입니다."])
     assert result.questions == ()

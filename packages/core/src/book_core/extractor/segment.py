@@ -316,14 +316,17 @@ def _table_answer_entries(block: Block, index: int) -> tuple[list[AnswerKeyEntry
     return entries, orientation == "ambiguous"
 
 
-def _table_options(block: Block, index: int) -> tuple[list[str], list[RawOption]]:
+def _table_options(
+    block: Block, index: int, *, min_rows: int = 2
+) -> tuple[list[str], list[RawOption]]:
     """``(header parts, options)`` of a table whose rows start with circled option labels (at
-    least two); ``([], [])`` for any other table. Cells are joined as printed (`` | ``)."""
+    least ``min_rows``); ``([], [])`` for any other table. Cells are joined as printed
+    (`` | ``)."""
     if block.table is None:
         return [], []
     rows = [[cell.strip() for cell in row] for row in block.table.rows]
     labelled = [i for i, row in enumerate(rows) if len(row[0]) == 1 and row[0] in CIRCLED_DIGITS]
-    if len(labelled) < 2:
+    if len(labelled) < min_rows:
         return [], []
     line = SourceLine(text=block.text, block=block, block_index=index)
     header = [" | ".join(c for c in row if c) for row in rows[: labelled[0]]]
@@ -399,12 +402,16 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                     unparsed += 1
             elif current is not None and not current.answered:
                 current.block_indices.append(index)
-                if not current.options:
-                    header, table_options = _table_options(block, index)
-                    if table_options:
+                # An option table split across pages comes as several tables: a later one
+                # (even a single row) continues the options; only the first one's header rows
+                # belong to the stem.
+                continues = bool(current.options)
+                header, table_options = _table_options(block, index, min_rows=1 if continues else 2)
+                if table_options:
+                    if not continues:
                         current.stem_parts += header
                         current.stem_lines += [table_options[0].lines[0]] if header else []
-                        current.options += table_options
+                    current.options += table_options
             continue
 
         for text in lines:
