@@ -23,8 +23,11 @@
     color var(--qz-transition-fast);
 }
 
+/* Labels never wrap (UX4): a row of buttons wraps or scrolls as whole buttons instead. */
 .qz-button {
+  flex-shrink: 0;
   padding: 0 var(--space-3);
+  white-space: nowrap;
 }
 
 .qz-button[data-size='sm'] {
@@ -453,6 +456,7 @@
     display: flex;
     gap: var(--space-1);
     overflow-x: auto;
+    padding-bottom: var(--space-1);
     border-bottom: 1px solid var(--color-border);
   }
 
@@ -461,11 +465,9 @@
     align-items: center;
     gap: var(--space-2);
     min-height: var(--control-height-md);
-    margin-bottom: -1px;
     padding: 0 var(--space-3);
     border: 0;
-    border-bottom: 2px solid transparent;
-    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    border-radius: var(--radius-md);
     background: transparent;
     color: var(--color-text-secondary);
     font: inherit;
@@ -491,10 +493,17 @@
     color: var(--color-text-primary);
   }
 
-  /* Selection is shown by text weight/color and a bar, and exposed as aria-selected. */
+  /* Selection is the selected fill + primary text (no underline bar since UX4), exposed as
+     aria-selected; the hover above does not apply to it. */
   > .list > .trigger[data-state='active'] {
-    border-bottom-color: var(--color-accent);
+    background: var(--color-state-selected);
     color: var(--color-text-primary);
+  }
+
+  @media (hover: hover) {
+    > .list > .trigger[data-state='active']:hover:not(:disabled) {
+      background: var(--color-state-selected-hover);
+    }
   }
 
   > .content {
@@ -503,7 +512,8 @@
 
   @media (forced-colors: active) {
     > .list > .trigger[data-state='active'] {
-      border-bottom-color: Highlight;
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
     }
   }
 }

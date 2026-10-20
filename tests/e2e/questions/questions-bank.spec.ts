@@ -25,16 +25,20 @@ import {
   main,
   mcqInput,
   notFoundHeading,
+  openBankFilters,
   outlineNodeId,
   pageLabel,
   PROBLEM_TYPES,
   questionFormUi,
+  questionPaper,
   section,
   seedGradedAttempt,
   seedMembership,
   signInAs,
   test,
+  uploadPdf,
   uploadReadyBook,
+  waitForJob,
   type ApiResponse,
   type Member,
   type Problem,
@@ -82,8 +86,10 @@ test(
     await page.keyboard.press('Escape');
     await expect(questionFormUi.form(page)).toBeHidden();
 
+    // UX4: PDF import opens the 문제 PDF 관리 dialog on the bank, not another page.
     await bankUi.importLink(page).click();
-    await expect(page).toHaveURL(new RegExp(`/workspaces/${ws.id}/questions/import$`));
+    await expect(bankUi.pdfsDialog(page)).toBeVisible();
+    await expect(page).toHaveURL((url) => url.pathname === bankPath(ws.id));
   },
 );
 
@@ -190,7 +196,9 @@ test(
       new RegExp(`/workspaces/${ws.id}/documents/${documentId}`),
     );
 
-    // Search, type filter and chapter filter narrow the list (and agree with the API).
+    // Search, type filter and chapter filter narrow the list (and agree with the API). They sit
+    // behind the collapsed "검색·필터" toggle (UX4).
+    await openBankFilters(page);
     await bankUi.search(page).fill('자갈');
     await bankUi.search(page).press('Enter');
     await expect(bankUi.items(page)).toHaveCount(1);
@@ -410,5 +418,82 @@ test(
     await expectSubPageNav(/^(문제 변형 출제|generate)/i);
     await page.goto(`${home}/documents/${documentId}`);
     await expectSubPageNav(/물의 순환과 정수 처리|book-ko/i, /^(문서 관리|documents)$/i);
+  },
+);
+
+test(
+  'QBANK-01-AC06 search and filters collapse, an empty bank keeps its actions in the empty state, PDF 가져오기 opens the 문제 PDF 관리 dialog',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('qbank01-ac06');
+    const empty = await workspaceFactory.create(owner);
+    const ws = await workspaceFactory.create(owner);
+    await createQuestion(owner, ws.id, mcqInput(stem('UX4 문제은행 문제'), ['예', '아니오'], 0));
+    await uploadReadyBook(owner, ws.id, 'book-ko');
+    const paper = questionPaper();
+    const uploaded = await uploadPdf(owner, ws.id, paper, 'question_paper');
+    await waitForJob(owner, uploaded.jobId);
+
+    // Empty bank: no header actions, only the empty state's pair.
+    await openBank(page, owner, empty.id);
+    await expect(bankUi.emptyState(page)).toBeVisible();
+    await expect(bankUi.importButtons(page)).toHaveCount(1);
+    await expect(
+      main(page).getByRole('button', { name: /^(문제 등록|add question)$/i }),
+    ).toHaveCount(0);
+    await expect(main(page).getByRole('button', { name: /문제 직접 등록/i })).toBeVisible();
+
+    // With questions: both header actions; the filters are collapsed behind their toggle.
+    await page.goto(bankPath(ws.id));
+    await expect(bankUi.items(page)).toHaveCount(1);
+    await expect(
+      main(page).getByRole('button', { name: /^(문제 등록|add question)$/i }),
+    ).toBeVisible();
+    const toggle = bankUi.filterToggle(page);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(toggle.locator('svg')).toHaveCount(1);
+    await expect(bankUi.search(page)).toBeHidden();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(bankUi.filterGroup(page)).toHaveAttribute(
+      'id',
+      (await toggle.getAttribute('aria-controls')) ?? '',
+    );
+    await expect(bankUi.search(page)).toBeVisible();
+    await toggle.click();
+    await expect(bankUi.search(page)).toBeHidden();
+
+    // PDF 가져오기: the home's 문제 PDF 관리 dialog, here, listing question PDFs only.
+    await bankUi.importLink(page).click();
+    const dialog = bankUi.pdfsDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(dialog).not.toHaveAttribute('aria-modal', 'true');
+    await expect(page).toHaveURL((url) => url.pathname === bankPath(ws.id));
+    const list = dialog.getByRole('list', { name: /문제 pdf 목록|question pdfs/i });
+    await expect(list.getByRole('listitem')).toHaveCount(1);
+    await expect(list).not.toContainText(/book-ko|물의 순환과 정수 처리/);
+    await expect(dialog.getByRole('button', { name: /pdf 선택|choose/i })).toBeVisible();
+    await expect(
+      dialog
+        .getByRole('button', { name: /^pdf 가져오기$/i })
+        .or(dialog.getByRole('link', { name: /^pdf 가져오기$/i })),
+    ).toHaveCount(0);
+    await dialog.getByRole('button', { name: /문제 pdf 관리 닫기|close/i }).click();
+    await expect(dialog).toBeHidden();
+
+    // 375px: labels stay on one line and the page never scrolls sideways.
+    await page.setViewportSize({ width: 375, height: 800 });
+    const named = main(page).getByRole('button', {
+      name: /^(pdf 가져오기|문제 등록|검색·필터|편집)$/i,
+    });
+    await expect(named).toHaveCount(4);
+    for (const button of await named.all()) {
+      const box = await button.boundingBox();
+      expect(await button.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+      expect(box?.height ?? 0).toBeLessThan(48); // one line of text
+    }
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
   },
 );

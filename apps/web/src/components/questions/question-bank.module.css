@@ -15,7 +15,25 @@
   font-size: var(--font-size-body);
 }
 
-/* Filters */
+/* Filters: behind the "검색·필터" toggle (collapsed by default, UX4). */
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.filterNote {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.filters[hidden] {
+  display: none;
+}
+
 .filters {
   display: grid;
   grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));

@@ -131,10 +131,11 @@
   background: var(--color-surface);
 }
 
-/* Selected hit: thicker accent border plus the bar, not colour alone. */
+/* Selected hit: accent border on the muted surface; its title button carries aria-current (no
+   accent bar since UX4). */
 .hit[data-selected] {
   border-color: var(--color-accent);
-  box-shadow: inset 4px 0 0 var(--color-accent);
+  background: var(--color-surface-muted);
 }
 
 .hitHeader {
