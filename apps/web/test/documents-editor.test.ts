@@ -25,8 +25,10 @@ import {
   parsePageParam,
   parseRevisionParam,
   pinnedRevisionFor,
+  sectionLocationsOn,
   sectionOf,
   targetBlockFor,
+  viewerHighlights,
   viewerSearch,
   visibleOutlineRows,
 } from '../src/lib/documents/outline';
@@ -329,6 +331,85 @@ describe('outline helpers', () => {
     expect(locationsOn(crossPage, 5)).toHaveLength(0);
     expect(sectionOf(crossPage, outline)).toBe('ch1-s2');
     expect(ancestorsOf('ch1-s2', outline)).toEqual(['ch1']);
+  });
+
+  it('highlights a whole question (stem and every option) from the outline, per page', () => {
+    // A question-bank PDF: "01 ..." heading, four options, then the "정답" subsection (its own
+    // outline entry) and the next question; options 3-4 run onto the next page.
+    const box = (y0: number, y1: number, x0 = 100, x1 = 450) => ({ x0, y0, x1, y1 });
+    const q1 = { id: 'q1', block_id: 'q1-h', page: 8 };
+    const question = [
+      block({
+        block_id: 'q1-h',
+        chapter_id: 'q1',
+        type: 'heading',
+        page: 8,
+        locations: [{ page: 8, bbox: box(700, 710, 77, 300) }],
+      }),
+      block({
+        block_id: 'q1-o1',
+        chapter_id: 'q1',
+        page: 8,
+        locations: [{ page: 8, bbox: box(720, 742) }],
+      }),
+      block({
+        block_id: 'q1-o2',
+        chapter_id: 'q1',
+        page: 8,
+        locations: [{ page: 8, bbox: box(746, 770, 101, 457) }],
+      }),
+      block({
+        block_id: 'q1-o3',
+        chapter_id: 'q1',
+        page: 9,
+        locations: [{ page: 9, bbox: box(40, 50) }],
+      }),
+      block({
+        block_id: 'q1-o4',
+        chapter_id: 'q1',
+        page: 9,
+        locations: [{ page: 9, bbox: box(54, 64, 101, 315) }],
+      }),
+      block({
+        block_id: 'q1-key',
+        chapter_id: 'q1-key',
+        type: 'heading',
+        page: 9,
+        locations: [{ page: 9, bbox: box(80, 90, 96, 127) }],
+      }),
+      block({
+        block_id: 'q1-why',
+        chapter_id: 'q1-key',
+        page: 9,
+        locations: [{ page: 9, bbox: box(96, 106, 96, 315) }],
+      }),
+    ];
+    // Navigation still selects the first option (the text pane follows it) ...
+    expect(targetBlockFor(q1, question)?.block_id).toBe('q1-o1');
+    // ... but the highlight is the question: heading through the last option on each page,
+    // never the answer line or the explanation.
+    expect(sectionLocationsOn(q1, question, 8)).toEqual([
+      { page: 8, bbox: box(700, 770, 77, 457) },
+    ]);
+    expect(sectionLocationsOn(q1, question, 9)).toEqual([{ page: 9, bbox: box(40, 64, 100, 450) }]);
+    expect(sectionLocationsOn(q1, question, 10)).toEqual([]);
+    // Blocks without a box on the page are skipped; a section with none highlights nothing.
+    expect(sectionLocationsOn(at(at(outline, 0).children, 1), blocks, 3)).toEqual([
+      { page: 3, bbox: { x0: 0, y0: 0, x1: 1, y1: 1 } },
+    ]);
+    expect(sectionLocationsOn(at(outline, 1), blocks, 4)).toEqual([]);
+  });
+
+  it('keeps the section highlight only while the outline-selected block is selected', () => {
+    const jump = { node: at(outline, 0), blockId: 'ch1-p1' };
+    const p1 = blocks.find((b) => b.block_id === 'ch1-p1');
+    const s1 = blocks.find((b) => b.block_id === 'ch1-s1-h');
+    // ch1's own heading and paragraph (both at y 20-40 on page 2), not its subsection 1.1.
+    const union = [{ page: 2, bbox: { x0: 10, y0: 20, x1: 100, y1: 40 } }];
+    expect(viewerHighlights(p1, jump, blocks, 2)).toEqual(union);
+    expect(viewerHighlights(s1, jump, blocks, 2)).toEqual(locationsOn(s1, 2));
+    expect(viewerHighlights(p1, null, blocks, 2)).toEqual(locationsOn(p1, 2));
+    expect(viewerHighlights(undefined, jump, blocks, 2)).toEqual([]);
   });
 
   it('writes page and the selected block into the query, dropping a stale block', () => {
