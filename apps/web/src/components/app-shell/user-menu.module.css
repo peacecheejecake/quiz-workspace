@@ -1,5 +1,7 @@
-/* min-width: 0 lets a long email shrink and truncate instead of widening the header. */
+/* min-width: 0 and flex-shrink: 1 (Button is flex-shrink: 0 since UX4) let a long email shrink
+   and truncate instead of widening the header. */
 .trigger {
+  flex-shrink: 1;
   min-width: 0;
   max-width: min(280px, 40vw);
   margin-left: auto;
