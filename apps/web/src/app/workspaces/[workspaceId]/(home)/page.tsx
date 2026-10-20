@@ -6,9 +6,8 @@
 // verified user. Everything else — dialogs (`?panel=`), the content search (`q`, `scope`, options)
 // and the practice panel (`?question=`, QPLAY-01) — is client state on top of it.
 import type { Metadata } from 'next';
-import { unstable_rethrow } from 'next/navigation';
 import { WorkspaceHome } from '@/components/workspaces/workspace-home';
-import { loadDocuments, type DocumentSummary } from '@/lib/documents/data';
+import { loadDocumentsOrFailure } from '@/lib/documents/data';
 import { loadOverview } from '@/lib/questions/overview-data';
 import { openQuestionId, parseOverviewFilters } from '@/lib/questions/overview-filters';
 import { parseSearchParams } from '@/lib/search/state';
@@ -17,15 +16,6 @@ import { requireWorkspace } from '@/lib/workspaces/data';
 import { parseScope, scopeIncludesQuestions } from '@/lib/workspaces/home';
 
 export const metadata: Metadata = { title: 'Workspace 홈' };
-
-async function documentsOrFailure(workspaceId: string) {
-  try {
-    return { documents: await loadDocuments(workspaceId), failed: false };
-  } catch (error) {
-    unstable_rethrow(error);
-    return { documents: [] as DocumentSummary[], failed: true };
-  }
-}
 
 export default async function Page({
   params,
@@ -40,7 +30,7 @@ export default async function Page({
   const [workspace, data, docs, user] = await Promise.all([
     requireWorkspace(workspaceId),
     loadOverview(workspaceId, filters, openQuestionId(query)),
-    documentsOrFailure(workspaceId),
+    loadDocumentsOrFailure(workspaceId),
     getVerifiedUser(),
   ]);
 

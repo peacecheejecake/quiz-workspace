@@ -45,13 +45,18 @@ from quiz_worker.errors import JobOutcomeError, JobRetryError, sanitize_error
 from quiz_worker.fork_job import LazyForkDeps, workspace_fork_definition
 from quiz_worker.jobs import ECHO_JOB
 from quiz_worker.logging_config import configure_logging, job_id_var
-from quiz_worker.pg_store import PostgresJobStore, create_job_store_engine
+from quiz_worker.pg_store import (
+    PostgresJobStore,
+    create_job_store_engine,
+    dispose_inherited_engines,
+)
 from quiz_worker.question_generation_job import (
     LazyGenerationDeps,
     question_generate_definition,
 )
 from quiz_worker.question_import_job import LazyImportDeps, question_import_definition
 from quiz_worker.reconcile import ReconcileReport, reconcile_jobs
+from quiz_worker.recycle import POOL_CLS, job_task_finished
 from quiz_worker.retry import RetryPolicy
 from quiz_worker.runner import (
     CleanupPolicy,
@@ -201,16 +206,21 @@ class IdempotentJobTask(_TaskBase):
         app = self.app
         if not isinstance(app, QuizCelery):
             raise TypeError("job tasks must be registered on a QuizCelery app")
-        runner = JobRunner(
-            app.job_store,
-            worker_id=self._worker_id(),
-            lease_seconds=job_time_limits(
-                app.worker_settings, self.job_definition.job_type
-            ).lease_seconds,
-            cleanup_policy=cleanup_policy_for(app.worker_settings),
-        )
-        result = runner.run(self.job_definition, raw_envelope)
-        return self._to_celery(result)
+        try:
+            runner = JobRunner(
+                app.job_store,
+                worker_id=self._worker_id(),
+                lease_seconds=job_time_limits(
+                    app.worker_settings, self.job_definition.job_type
+                ).lease_seconds,
+                cleanup_policy=cleanup_policy_for(app.worker_settings),
+            )
+            result = runner.run(self.job_definition, raw_envelope)
+            return self._to_celery(result)
+        finally:
+            if not self.request.is_eager:
+                # Only job tasks count toward WORKER_MAX_TASKS_PER_CHILD (quiz_worker.recycle).
+                job_task_finished(app.worker_settings.max_tasks_per_child)
 
     def _to_celery(self, result: RunResult) -> dict[str, Any]:
         job_id = str(result.job_id) if result.job_id else None
@@ -264,6 +274,7 @@ def create_celery_app(
     store = job_store if job_store is not None else build_job_store(settings)
     app = QuizCelery(worker_settings=settings, job_store=store)
     app.conf.update(build_celery_config(settings))
+    install_fork_safety()
     if definitions is None:
         document_deps = LazyDeps(settings)
         definitions = default_definitions(settings, document_deps)
@@ -304,7 +315,11 @@ def build_celery_config(settings: WorkerSettings) -> dict[str, Any]:
         "task_acks_on_failure_or_timeout": False,
         "worker_prefetch_multiplier": 1,
         "worker_concurrency": settings.concurrency,
-        "worker_max_tasks_per_child": settings.max_tasks_per_child or None,
+        # Prefork pool that replaces a child after WORKER_MAX_TASKS_PER_CHILD *job* tasks;
+        # Celery's own per-child task limit stays off because it also counts the beat-scheduled
+        # maintenance tasks (WRK-RECYCLE).
+        "worker_pool": POOL_CLS,
+        "worker_max_tasks_per_child": None,
         # Celery takes KiB.
         "worker_max_memory_per_child": (settings.max_memory_per_child_mb * 1024) or None,
         "worker_cancel_long_running_tasks_on_connection_loss": True,
@@ -455,6 +470,22 @@ def cleanup_policy_for(settings: WorkerSettings) -> CleanupPolicy:
         # A cleanup try runs inside a task, so the longest hard time limit bounds it.
         lease_seconds=settings.max_lease_seconds,
     )
+
+
+FORK_SAFETY_UID = "quiz-worker-fork-safety"
+
+
+def install_fork_safety() -> None:
+    """Every prefork child starts with empty DB pools (WRK-FORKDB, see
+    `dispose_inherited_engines`). Linux forks the children, after the main process may have used
+    the job store engine; spawned children (macOS) have nothing to drop. Idempotent."""
+    signals.worker_process_init.connect(
+        _on_process_init_dispose_engines, weak=False, dispatch_uid=FORK_SAFETY_UID
+    )
+
+
+def _on_process_init_dispose_engines(**_: Any) -> None:
+    dispose_inherited_engines()
 
 
 PARSER_WARM_UP_UID = "quiz-worker-parser-warm-up"

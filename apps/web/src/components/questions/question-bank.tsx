@@ -1,12 +1,17 @@
 'use client';
 
 // QBANK-01 문제은행 (docs/screens/questions-bank.md): confirmed questions grouped by chapter
-// ("챕터 없음" last), search + type/chapter/status filters in the URL, cursor pagination ("더 보기"),
-// the empty state with direct-create and PDF-import actions, the detail panel and the editor.
+// ("챕터 없음" last), search + type/chapter/status filters in the URL behind a collapsible "검색·필터"
+// toggle (collapsed by default, UX4), cursor pagination ("더 보기"), the empty state with
+// direct-create and PDF-import actions (the header has neither while the bank is empty, UX4), the
+// detail panel and the editor. "PDF 가져오기" opens the same "문제 PDF 관리" dialog as the home
+// (QBANK-01-AC06).
 // Viewers and archived workspaces get a read-only bank; the API enforces it regardless.
 import {
   Badge,
   Button,
+  ChevronDownIcon,
+  ChevronUpIcon,
   ConfirmDialog,
   EmptyState,
   Input,
@@ -16,14 +21,30 @@ import {
 } from '@quiz/ui';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useLayoutEffect, useMemo, useRef, useState, useTransition, type FormEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+} from 'react';
+import { useDocumentLibrary } from '@/components/documents/use-document-library';
+import {
+  DocumentLibraryFeedback,
+  QuestionPdfsDialog,
+} from '@/components/questions/import/question-pdfs';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
+import type { DocumentSummary } from '@/lib/documents/data';
 import {
   deleteQuestionAction,
   listQuestionsAction,
   setQuestionStatusAction,
 } from '@/lib/questions/actions';
 import {
+  CREATE_PARAM,
   DEFAULT_FILTERS,
   isFiltered,
   SEARCH_MAX,
@@ -59,9 +80,17 @@ export interface QuestionBankProps {
   readonly failure: QuestionFailureKind | null;
   readonly chapters: readonly ChapterOption[];
   readonly documents: readonly DocumentOption[];
+  /** `?create=1` (the home's 문제 › 직접 추가): open the 문제 등록 editor on arrival. */
+  readonly openCreate?: boolean;
+  /** The workspace's documents for the "문제 PDF 관리" dialog ("PDF 가져오기"). */
+  readonly questionPdfs?: {
+    readonly documents: readonly DocumentSummary[];
+    readonly failed: boolean;
+  };
 }
 
 const ALL = '__all__';
+const NO_DOCUMENTS: readonly DocumentSummary[] = [];
 
 const READ_ONLY_TEXT: Readonly<Record<Exclude<ReadOnlyReason, null>, string>> = {
   viewer: '읽기 전용: 보기 권한으로는 문제를 등록하거나 수정할 수 없습니다.',
@@ -123,6 +152,8 @@ export function QuestionBank({
   failure,
   chapters,
   documents,
+  openCreate = false,
+  questionPdfs,
 }: QuestionBankProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -159,14 +190,33 @@ export function QuestionBank({
     if (rendered.q !== filters.q) setSearch(filters.q);
   }
 
-  const [editor, setEditor] = useState<{ target: EditorTarget | null; session: number }>({
-    target: null,
-    session: 0,
-  });
+  const createOnArrival = openCreate && canEdit;
+  const [editor, setEditor] = useState<{ target: EditorTarget | null; session: number }>(() =>
+    createOnArrival ? { target: { mode: 'create' }, session: 1 } : { target: null, session: 0 },
+  );
+  // The request is one-shot: a reload or Back must not reopen the editor.
+  useEffect(() => {
+    if (!openCreate) return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(CREATE_PARAM)) return;
+    url.searchParams.delete(CREATE_PARAM);
+    window.history.replaceState(window.history.state, '', url);
+  }, [openCreate]);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Question | null>(null);
   const [deleting, setDeleting] = useState(false);
   const returnFocus = useRef<HTMLElement | null>(null);
+
+  // UX4: the search and filters are collapsed until asked for (like the home's status filter).
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersRegionId = useId();
+  const [pdfsOpen, setPdfsOpen] = useState(false);
+  const library = useDocumentLibrary({
+    workspaceId,
+    initialDocuments: questionPdfs?.documents ?? NO_DOCUMENTS,
+    canEdit,
+    loadFailed: questionPdfs?.failed ?? false,
+  });
 
   const detail = items.find((q) => q.id === detailId) ?? null;
   const groups = useMemo(() => groupByChapter(items), [items]);
@@ -273,11 +323,14 @@ export function QuestionBank({
     ];
   }, [chapters, knownChapters, view.chapter, multiDocs]);
 
-  const createButton = canEdit ? (
-    <Button variant="primary" aria-haspopup="dialog" onClick={() => openEditor({ mode: 'create' })}>
-      문제 등록
+  const importButton = (
+    <Button aria-haspopup="dialog" onClick={() => setPdfsOpen(true)}>
+      PDF 가져오기
     </Button>
-  ) : null;
+  );
+  // An empty bank keeps its actions in the empty state only (UX4).
+  const emptyBank = !failure && items.length === 0 && !isFiltered(filters);
+  const filtered = isFiltered(view);
 
   return (
     <div className={styles.screen}>
@@ -292,12 +345,16 @@ export function QuestionBank({
         title="문제은행"
         description="확정된 문제를 챕터별로 관리합니다. 문제를 직접 등록하거나 PDF에서 가져올 수 있습니다."
         actions={
-          canEdit ? (
+          canEdit && !emptyBank ? (
             <>
-              <Button asChild>
-                <Link href={`/workspaces/${workspaceId}/questions/import`}>PDF 가져오기</Link>
+              {importButton}
+              <Button
+                variant="primary"
+                aria-haspopup="dialog"
+                onClick={() => openEditor({ mode: 'create' })}
+              >
+                문제 등록
               </Button>
-              {createButton}
             </>
           ) : null
         }
@@ -305,7 +362,33 @@ export function QuestionBank({
 
       {readOnly ? <p className={styles.readOnly}>{READ_ONLY_TEXT[readOnly]}</p> : null}
 
-      <div className={styles.filters}>
+      <div className={styles.filterBar}>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-expanded={filtersOpen}
+          aria-controls={filtersRegionId}
+          onClick={() => setFiltersOpen((open) => !open)}
+        >
+          검색·필터
+          {filtersOpen ? (
+            <ChevronUpIcon width={16} height={16} aria-hidden="true" />
+          ) : (
+            <ChevronDownIcon width={16} height={16} aria-hidden="true" />
+          )}
+        </Button>
+        <p className={styles.filterNote} role="status">
+          {filtered && !filtersOpen ? '검색·필터 적용 중' : ''}
+        </p>
+      </div>
+
+      <div
+        id={filtersRegionId}
+        role="group"
+        aria-label="검색·필터"
+        className={styles.filters}
+        hidden={!filtersOpen}
+      >
         <form role="search" className={styles.searchForm} onSubmit={onSearch}>
           <Input
             type="search"
@@ -382,9 +465,7 @@ export function QuestionBank({
                   >
                     문제 직접 등록
                   </Button>
-                  <Button asChild>
-                    <Link href={`/workspaces/${workspaceId}/questions/import`}>PDF 가져오기</Link>
-                  </Button>
+                  {importButton}
                 </div>
               ) : null
             }
@@ -459,6 +540,15 @@ export function QuestionBank({
           }}
         />
       ) : null}
+
+      <QuestionPdfsDialog
+        open={pdfsOpen}
+        onOpenChange={setPdfsOpen}
+        workspaceId={workspaceId}
+        library={library}
+        canEdit={canEdit}
+      />
+      <DocumentLibraryFeedback library={library} />
 
       <ConfirmDialog
         open={confirmDelete !== null}

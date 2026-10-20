@@ -83,10 +83,10 @@ class WorkerSettings(BaseSettings):
     lease_grace_seconds: int = Field(
         default=120, ge=1, validation_alias="WORKER_LEASE_GRACE_SECONDS"
     )
-    # Replace a pool process after this many tasks (0 = never) or once its resident memory
+    # Replace a pool process after this many job tasks (0 = never) or once its resident memory
     # passes this many MB after a task (0 = off). Models (Docling, a local embedder) live in the
-    # pool process, so recycling returns their memory between jobs (M7.4c). Reconcile runs
-    # count as tasks too.
+    # pool process, so recycling returns their memory between jobs (M7.4c). Maintenance tasks
+    # (reconcile runs) do not count (WRK-RECYCLE, quiz_worker.recycle).
     max_tasks_per_child: int = Field(default=0, ge=0, validation_alias="WORKER_MAX_TASKS_PER_CHILD")
     max_memory_per_child_mb: int = Field(
         default=0, ge=0, validation_alias="WORKER_MAX_MEMORY_PER_CHILD_MB"

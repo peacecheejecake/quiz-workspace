@@ -135,8 +135,11 @@
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
 //   QBANK-01  h1 "문제은행"; empty-state heading "등록된 문제가 없습니다" with a "문제 직접 등록" button
-//             and a "PDF 가져오기" link to /questions/import; header "문제 등록" button; searchbox
-//             "문제 검색"; comboboxes "유형" and "챕터"; one region per chapter named by the chapter
+//             and a "PDF 가져오기" button; header "PDF 가져오기"/"문제 등록" buttons only while the bank
+//             has questions (UX4); "PDF 가져오기" opens the non-modal dialog "문제 PDF 관리" (same as
+//             the home's); toggle button "검색·필터" (collapsed by default, UX4) controlling a group
+//             "검색·필터" with searchbox "문제 검색" and comboboxes "유형", "챕터", "상태"; `?create=1`
+//             opens the "문제 등록" editor once; one region per chapter named by the chapter
 //             title (questions without one under "챕터 없음"), one listitem per question with
 //             "편집" and a source link (pageLabel) into the document viewer. The editor is a
 //             dialog "문제 등록"/"문제 편집" with radiogroup "문제 유형" (객관식/단답형/서술형),
@@ -153,9 +156,9 @@
 //   QOV-01    route /workspaces/{id} (the workspace home, UX3c); role=group "문제 heatmap" holding one button per
 //             CONFIRMED question, named by questionDotLabel and carrying data-status; inside it the
 //             marker svg data-testid="question-marker" with data-shape square|star (design-system
-//             §6.1, packages/ui/src/questions); preview role=tooltip; status line "현재 필터의 문제 n개";
-//             collapsible group "상태 필터" (toggle button "상태 필터", collapsed by default); no
-//             status summary or legend since UX3c.
+//             §6.1, packages/ui/src/questions); preview role=tooltip; collapsible group "상태 필터"
+//             (toggle button "상태 필터", collapsed by default); no status summary or legend since
+//             UX3c and no question count line since UX4.
 //   QPLAY-01  modal dialog named by the question title (`… 12번 문제`) with "패널 닫기",
 //             toggles "즐겨찾기 추가"/"즐겨찾기 해제" and "다시 풀기 표시"/"다시 풀기 해제" (M5.3
 //             StudyToggles); MCQ options as radios (single) or checkboxes (multi) named by the
@@ -447,8 +450,15 @@ export const bankUi = {
     main(page).getByRole('heading', { name: /등록된 문제가 없|문제가 없|no questions/i }),
   createButton: (page: Page) =>
     button(main(page), /문제 (직접 )?(등록|추가)|새 문제|(add|new|create) question/i).first(),
-  importLink: (page: Page) =>
-    buttonOrLink(main(page), /pdf (가져오기|import)|문제 pdf|import (from )?pdf/i).first(),
+  importButtons: (page: Page) => buttonOrLink(main(page), /^(pdf 가져오기|import pdf)$/i),
+  importLink: (page: Page) => bankUi.importButtons(page).first(),
+  /** "검색·필터" toggle (UX4: collapsed by default) and the group it controls. */
+  filterToggle: (page: Page) =>
+    main(page).getByRole('button', { name: /^(검색·필터|search (and|&) filters?)$/i }),
+  filterGroup: (page: Page) =>
+    main(page).getByRole('group', { name: /^(검색·필터|search (and|&) filters?)$/i }),
+  pdfsDialog: (page: Page) =>
+    page.getByRole('dialog', { name: /^(문제 pdf 관리|question pdfs?)$/i }),
   search: (page: Page) => main(page).getByRole('searchbox', { name: /문제 검색|검색|search/i }),
   typeFilter: (page: Page) => main(page).getByRole('combobox', { name: /^(문제 )?(유형|type)/i }),
   chapterFilter: (page: Page) => main(page).getByRole('combobox', { name: /^(장|챕터|chapter)/i }),
@@ -467,6 +477,13 @@ export const bankUi = {
       .first(),
   alert: (page: Page) => main(page).getByRole('alert').or(page.getByRole('alert')).first(),
 };
+
+/** Opens the bank's "검색·필터" (no-op when it is open; UX4 collapses it by default). */
+export async function openBankFilters(page: Page): Promise<void> {
+  const toggle = bankUi.filterToggle(page);
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  await expect(bankUi.filterGroup(page)).toBeVisible();
+}
 
 export const questionFormUi = {
   form: (page: Page) =>
@@ -799,7 +816,7 @@ export const overviewUi = {
   markers: (page: Page) => overviewUi.heatmap(page).getByTestId('question-marker'),
   marker: (dot: Locator) => dot.getByTestId('question-marker'),
   tooltip: (page: Page) => page.getByRole('tooltip'),
-  /** "현재 필터의 문제 n개" (the status summary and legend are gone since UX3c). */
+  /** The removed count line "현재 필터의 문제 n개" (UX4): must not come back. */
   inFilter: (page: Page) =>
     main(page).getByText(/현재 필터의 문제 \d+개|\d+ questions in (the )?filter/i),
 };

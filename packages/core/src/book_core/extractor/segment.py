@@ -3,10 +3,17 @@
 Walks the parsed blocks in reading order, split into lines (Docling emits one block per printed
 line, the ideal fixture documents one block per question), and segments:
 
-- questions by numbering (``1.``, ``1번``, ``문 1.``, ``Q1.``);
-- options (``①``-``⑩``, ``A.``/``A)``, ``(1)``/``(A)``, ``1)``, ``a)``), continuation lines;
+- questions by numbering (``1.``, ``1번``, ``문 1.``, ``Q1.``), or a bare number (``01 ...``) on a
+  heading line or a line with a question cue (``?``, ``시오``, an answer blank ``( )``); a bare
+  number that ends up with neither options, a cue nor an answer is a section heading, not a
+  question;
+- options (``①``-``⑩``, ``A.``/``A)``, ``(1)``/``(A)``, ``1)``, ``a)``), continuation lines, and
+  options printed as table rows (``① | 6개월 | 1년``; header rows above them belong to the stem);
 - figures: image blocks inside a question's span plus their caption (``[그림 1]``, ``Figure 1``),
   or a labelled figure elsewhere that the stem refers to;
+- an inline answer printed right after a question (``정답: ②``, ``[정답] ②``, ``Answer: B``): it
+  answers that question only (repeated numbers per chapter are fine), and the printed text after
+  it up to the next question or heading is the question's explanation (해설), never options;
 - the answer key: lines after an answer-key heading (``정답``, ``Answer key``), or a run of
   numbered lines that repeat earlier question numbers with short bodies (``1. ②``), including
   ``N. answer`` entries packed on one line and two-column / two-row tables.
@@ -25,7 +32,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from book_core.contracts import BBox, Block, BlockType, QuestionType, SourceLocation
-from book_core.question.labels import split_option_line
+from book_core.question.labels import CIRCLED_DIGITS, split_option_line
 
 _QUESTION_START = re.compile(
     r"^\s*(?:문(?:제)?\s*|Q\s*)?(?P<num>\d{1,3})\s*(?:\.|번[.)]?)(?!\d)\s*(?P<body>\S.*)$"
@@ -55,7 +62,15 @@ _ESSAY_CUES = re.compile(
     r"\b(?:explain|describe|discuss|justify)\b",
     re.IGNORECASE,
 )
-_QUESTION_END_CUES = re.compile(r"[?\uff1f]\s*$|시오\.?\s*$|하라\.?\s*$|\b(?:is|are|which)\b.*$")
+_BARE_QUESTION_START = re.compile(r"^\s*(?P<num>\d{1,3})\s+(?P<body>\S.*)$")
+_QUESTION_CUE = re.compile(r"[?\uff1f]|시오|하라|\(\s*\)\s*$")
+_INLINE_ANSWER = re.compile(
+    r"^\s*(?:[\[<(]\s*정답\s*[\]>)]\s*[:\uff1a]?|정답\s*[:\uff1a]|answer\s*[:\uff1a])\s*(?P<ans>\S.*)$",
+    re.IGNORECASE,
+)
+_QUESTION_END_CUES = re.compile(
+    r"[?\uff1f]\s*(?:\(\s*\)\s*)?$|시오\.?\s*$|하라\.?\s*$|\b(?:is|are|which)\b.*$"
+)
 _INLINE_CIRCLED = re.compile(r"(?<=\s)①")
 _MAX_ANSWER_KEY_BODY = 40
 _ANSWER_AREA_MIN_GAP = 60.0
@@ -95,6 +110,12 @@ class RawQuestion:
     figures: list[RawFigure] = field(default_factory=list)
     trailing: list[SourceLine] = field(default_factory=list)
     block_indices: list[int] = field(default_factory=list)
+    bare_number: bool = False
+    """Numbered without a period (``01 ...``): kept only if it turns out to be a question."""
+    answer: list[AnswerKeyEntry] = field(default_factory=list)
+    """The inline answer line printed right after this question (``정답: ②``)."""
+    explanation_lines: list[SourceLine] = field(default_factory=list)
+    explanation_closed: bool = False
 
     @property
     def stem(self) -> str:
@@ -103,6 +124,21 @@ class RawQuestion:
     @property
     def figure_labels(self) -> list[str]:
         return sorted({_norm_label(m.group("label")) for m in _FIGURE_REF.finditer(self.stem)})
+
+    @property
+    def answered(self) -> bool:
+        """The inline answer was read: what follows is explanation, not the question."""
+        return bool(self.answer)
+
+    @property
+    def explanation(self) -> str | None:
+        text = "\n".join(line.text for line in self.explanation_lines).strip()
+        return text or None
+
+    def is_question(self) -> bool:
+        return not self.bare_number or bool(
+            self.options or self.answer or _QUESTION_CUE.search(self.stem)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,6 +316,27 @@ def _table_answer_entries(block: Block, index: int) -> tuple[list[AnswerKeyEntry
     return entries, orientation == "ambiguous"
 
 
+def _table_options(
+    block: Block, index: int, *, min_rows: int = 2
+) -> tuple[list[str], list[RawOption]]:
+    """``(header parts, options)`` of a table whose rows start with circled option labels (at
+    least ``min_rows``); ``([], [])`` for any other table. Cells are joined as printed
+    (`` | ``)."""
+    if block.table is None:
+        return [], []
+    rows = [[cell.strip() for cell in row] for row in block.table.rows]
+    labelled = [i for i, row in enumerate(rows) if len(row[0]) == 1 and row[0] in CIRCLED_DIGITS]
+    if len(labelled) < min_rows:
+        return [], []
+    line = SourceLine(text=block.text, block=block, block_index=index)
+    header = [" | ".join(c for c in row if c) for row in rows[: labelled[0]]]
+    options = [
+        RawOption(label=rows[i][0], text=" | ".join(c for c in rows[i][1:] if c), lines=[line])
+        for i in labelled
+    ]
+    return [h for h in header if h], options
+
+
 def _split_inline_options(text: str) -> tuple[str, list[tuple[str, str]]]:
     """A stem line that continues with circled options (``...는? ① 응결 ② 증발``), as a parser
     may merge a question into one paragraph: ``(stem part, options)``."""
@@ -288,6 +345,86 @@ def _split_inline_options(text: str) -> tuple[str, list[tuple[str, str]]]:
         return text, []
     options = split_option_line(text[match.start() :].strip()) or []
     return text[: match.start()].strip(), options
+
+
+def _question_start(text: str, block: Block) -> re.Match[str] | None:
+    """``1.``-style numbering anywhere; a bare ``01 ...`` number on a heading line or a line
+    with a question cue (a numbered sentence in running text is not a question)."""
+    start = _QUESTION_START.match(text)
+    if start is not None:
+        return start
+    bare = _BARE_QUESTION_START.match(text)
+    if bare is not None and (
+        block.type is BlockType.HEADING or _QUESTION_CUE.search(bare.group("body"))
+    ):
+        return bare
+    return None
+
+
+def _inline_answer(text: str) -> str | None:
+    match = _INLINE_ANSWER.match(text)
+    if match is None:
+        return None
+    answer = match.group("ans").strip().rstrip(".").strip()
+    return answer if answer and len(answer) <= _MAX_ANSWER_KEY_BODY else None
+
+
+@dataclass(frozen=True, slots=True)
+class _Event:
+    """A printed line (``text``) or a non-text block (``text is None``) in reading order."""
+
+    index: int
+    block: Block
+    text: str | None
+
+
+def _flatten(blocks: Sequence[Block]) -> list[_Event]:
+    events: list[_Event] = []
+    for index, block, lines in _lines(blocks):
+        if not lines:
+            events.append(_Event(index, block, None))
+        events += [_Event(index, block, text) for text in lines]
+    return events
+
+
+def _span_blocks(events: Sequence[_Event], start: int) -> list[Block]:
+    """The blocks a numbered line at ``events[start]`` would own, trimmed to the lines in that
+    span: up to the next numbered line, the answer-key heading, a heading that is not an
+    inline answer line (a section title ends an explanation), or the end."""
+    span: list[_Event] = [events[start]]
+    for event in events[start + 1 :]:
+        text = event.text
+        if text is not None and (
+            _ANSWER_KEY_HEADING.match(text)
+            or _question_start(text, event.block) is not None
+            or (event.block.type is BlockType.HEADING and _inline_answer(text) is None)
+        ):
+            break
+        span.append(event)
+    order: list[tuple[int, Block]] = []
+    lines: dict[int, list[str]] = {}
+    for event in span:
+        if event.text is None:
+            order.append((event.index, event.block))
+            continue
+        if event.index not in lines:
+            lines[event.index] = []
+            order.append((event.index, event.block))
+        lines[event.index].append(event.text)
+    return [
+        block.model_copy(update={"text": "\n".join(lines[index])}) if index in lines else block
+        for index, block in order
+    ]
+
+
+def _asks_something(events: Sequence[_Event], start: int) -> bool:
+    """Whether a numbered line inside an explanation opens a question. Decided by a dry run of
+    ``segment`` itself over the span the line would own (so every option layout the normal path
+    reads counts the same): a question with options, an inline answer or a question cue."""
+    found = segment(_span_blocks(events, start)).questions
+    return bool(found) and bool(
+        found[0].options or found[0].answer or _QUESTION_CUE.search(found[0].stem)
+    )
 
 
 def segment(blocks: Sequence[Block]) -> Segmentation:
@@ -300,13 +437,17 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
     seen_numbers: set[int] = set()
     unparsed = 0
     ambiguous_tables = 0
+    inline_answers = False
+    flat = _flatten(blocks)
+    position = 0
 
     for index, block, lines in _lines(blocks):
+        position += 0 if lines else 1
         if block.type is BlockType.IMAGE:
             figure = RawFigure(label=None, image=block, caption=None)
             if block.caption_block_id is not None:
                 caption_owner[block.caption_block_id] = figure
-            if current is not None and not in_answer_key:
+            if current is not None and not in_answer_key and not current.answered:
                 current.figures.append(figure)
                 current.block_indices.append(index)
             else:
@@ -320,11 +461,22 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                     ambiguous_tables += 1
                 elif not found:
                     unparsed += 1
-            elif current is not None:
+            elif current is not None and not current.answered:
                 current.block_indices.append(index)
+                # An option table split across pages comes as several tables: a later one
+                # (even a single row) continues the options; only the first one's header rows
+                # belong to the stem.
+                continues = bool(current.options)
+                header, table_options = _table_options(block, index, min_rows=1 if continues else 2)
+                if table_options:
+                    if not continues:
+                        current.stem_parts += header
+                        current.stem_lines += [table_options[0].lines[0]] if header else []
+                    current.options += table_options
             continue
 
         for text in lines:
+            position += 1
             line = SourceLine(text=text, block=block, block_index=index)
             if _ANSWER_KEY_HEADING.match(text):
                 in_answer_key = True
@@ -341,16 +493,33 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
             if owner is not None and owner.caption is None:
                 owner.caption = line
                 owner.label = _norm_label(caption.group("label")) if caption else None
-                if current is not None and index not in current.block_indices:
+                if (
+                    current is not None
+                    and not current.answered
+                    and index not in current.block_indices
+                ):
                     current.block_indices.append(index)
                 continue
 
-            start = _QUESTION_START.match(text)
+            start = _question_start(text, block)
+            if (
+                start is not None
+                and current is not None
+                and current.answered
+                and block.type is not BlockType.HEADING
+                and not _QUESTION_CUE.search(start.group("body"))
+                and not _asks_something(flat, position - 1)
+            ):
+                # A numbered line inside a printed explanation (``1. 첫째 이유``) is part of it
+                # unless what it opens asks something; either way the lines then take the
+                # normal path (explanation, or a new question).
+                start = None
             if start is not None:
                 number = int(start.group("num"))
                 body = start.group("body")
                 if (
                     questions
+                    and not inline_answers
                     and number in seen_numbers
                     and number <= max(seen_numbers)
                     and _looks_like_answer(body)
@@ -360,7 +529,12 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                     answer_key += _answer_entries(line)
                     continue
                 head, inline = _split_inline_options(body)
-                current = RawQuestion(number=number, stem_lines=[line], stem_parts=[head])
+                current = RawQuestion(
+                    number=number,
+                    stem_lines=[line],
+                    stem_parts=[head],
+                    bare_number=start.re is _BARE_QUESTION_START,
+                )
                 current.options += [RawOption(label=lb, text=t, lines=[line]) for lb, t in inline]
                 current.block_indices.append(index)
                 questions.append(current)
@@ -378,6 +552,20 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                     else:
                         loose_figures.append(RawFigure(label=label, image=None, caption=line))
                 continue  # title, instructions, running text before the first question
+
+            if current.answered:
+                # The explanation runs to the next question; a heading (a chapter title, the
+                # next set's instructions) ends it.
+                if block.type is BlockType.HEADING:
+                    current.explanation_closed = True
+                if not current.explanation_closed:
+                    current.explanation_lines.append(line)
+                continue
+            answer = _inline_answer(text)
+            if answer is not None:
+                current.answer.append(AnswerKeyEntry(number=current.number, text=answer, line=line))
+                inline_answers = True
+                continue
 
             if index not in current.block_indices:
                 current.block_indices.append(index)
@@ -409,7 +597,7 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                 current.options += [RawOption(label=lb, text=t, lines=[line]) for lb, t in inline]
 
     return Segmentation(
-        questions=questions,
+        questions=[q for q in questions if q.is_question()],
         answer_key=answer_key,
         loose_figures=loose_figures,
         unparsed_answer_lines=unparsed,

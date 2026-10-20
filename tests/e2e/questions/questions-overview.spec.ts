@@ -11,6 +11,7 @@
 import type { Locator, Page } from '@playwright/test';
 import {
   answerCorrectly,
+  chooseQuestionMenu,
   createNumberedQuestions,
   draftFor,
   expect,
@@ -25,6 +26,7 @@ import {
   overviewUi,
   panelUi,
   publishDrafts,
+  questionFormUi,
   questionPaper,
   scaleOf,
   searchUi,
@@ -111,7 +113,7 @@ test(
     await openOverview(page, s);
     await expect(overviewUi.markers(page)).toHaveCount(100);
     await expect(overviewUi.dots(page)).toHaveCount(100);
-    await expect(overviewUi.inFilter(page)).toHaveText(/문제 100개|100 questions/i);
+    await expect(overviewUi.inFilter(page)).toHaveCount(0); // no count line since UX4
 
     // Option shuffles (practice sessions, questions.md §5 OPTION_SHUFFLE) never create a dot.
     for (let i = 0; i < 5; i += 1) await startPractice(s.owner, q(s, 1).id);
@@ -379,7 +381,8 @@ test(
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(main(page).getByText(/문제 하나가 점 하나입니다/)).toHaveCount(0);
 
-    // Header: unified search with an icon-only submit, then 문서 n · 문제은행 · 이력 · 공유하기.
+    // Header: unified search with an icon-only submit, then 문서 n · 문제 · 문제은행 and the
+    // icon buttons 이력 · 공유하기 (UX4).
     await expect(homeUi.header(page)).toBeVisible();
     await expect(searchUi.box(page)).toBeVisible();
     await expect(searchUi.submit(page)).toHaveText('');
@@ -387,17 +390,26 @@ test(
     await expect(homeUi.bankLink(page)).toBeVisible();
     await expect(homeUi.historyButton(page)).toBeVisible();
     await expect(homeUi.shareButton(page)).toBeVisible();
+    await expect(homeUi.shareButton(page)).toHaveText(''); // icon only, named "공유하기"
+    await expect(homeUi.historyButton(page)).toHaveText('');
+    await expect(homeUi.questionMenuButton(page)).toHaveAttribute('aria-haspopup', 'menu');
     const order = await Promise.all(
       [
         homeUi.documentsButton(page),
+        homeUi.questionMenuButton(page),
         homeUi.bankLink(page),
         homeUi.historyButton(page),
         homeUi.shareButton(page),
       ].map(async (l) => (await l.boundingBox())?.x ?? 0),
     );
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    // The heatmap sits right under the header; no other "PDF 가져오기" on the home.
+    // The heatmap sits right under the header; no other "PDF 가져오기", no 문제 PDF 관리 /
+    // 문제 생성 buttons and no count line (UX4).
     await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expect(
+      main(page).getByRole('button', { name: /^(문제 pdf 관리|문제 생성)$/i }),
+    ).toHaveCount(0);
+    await expect(overviewUi.inFilter(page)).toHaveCount(0);
     await expect(
       main(page)
         .getByRole('link', { name: /pdf 가져오기/i })
@@ -439,7 +451,10 @@ test(
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await expect(homeUi.shareButton(page)).toHaveCount(0);
     await expect(homeUi.shareDialog(page)).toHaveCount(0);
-    await expect(homeUi.generateButton(page)).toHaveCount(0);
+    await homeUi.questionMenuButton(page).click();
+    await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveCount(1);
+    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeVisible();
+    await page.keyboard.press('Escape');
     const denied = await viewer.api.request('GET', `/workspaces/${s.workspaceId}/share-links`);
     expect(denied.status).toBe(403);
   },
@@ -478,12 +493,29 @@ test(
     await expect(page).toHaveURL(/[?&]status=retry(&|$)/);
     await expect(overviewUi.dots(page)).toHaveCount(1);
 
-    // Collapsing keeps the filter applied.
+    // Collapsing keeps the filter applied (and says so in text).
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await expect(homeUi.statusFilters(page)).toHaveCount(0);
     await expect(overviewUi.dots(page)).toHaveCount(1);
     await expect(page).toHaveURL(/[?&]status=retry(&|$)/);
+    await expect(main(page).getByText(/상태 필터 적용 중|status filter on/i)).toBeVisible();
+
+    // UX4: at 375px the chips wrap as whole chips; none is squeezed or wraps its label, and the
+    // page never scrolls sideways.
+    await page.setViewportSize({ width: 375, height: 800 });
+    await toggle.click();
+    const chips = homeUi.statusFilters(page).getByRole('button');
+    const heights = new Set<number>();
+    for (const chip of await chips.all()) {
+      const fits = await chip.evaluate((el) => el.scrollWidth <= el.clientWidth);
+      expect(fits).toBe(true);
+      heights.add(Math.round((await chip.boundingBox())?.height ?? 0));
+    }
+    expect(heights.size).toBe(1); // one line each: same height
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
   },
 );
 
@@ -572,5 +604,54 @@ test(
     await page.keyboard.press('Escape');
     await expect(history).toBeHidden();
     await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
+  },
+);
+
+test(
+  'QOV-01-AC11 the header 문제 menu opens PDF 관리, 직접 추가 and 변형 출제 by mouse and keyboard',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seed(workspaceFactory, 'qov01-ac11', 1);
+    await openOverview(page, s);
+
+    // Keyboard: Enter opens the menu on its first item; Escape closes it back to the button.
+    const button = homeUi.questionMenuButton(page);
+    await button.focus();
+    await page.keyboard.press('Enter');
+    await expect(homeUi.questionMenu(page)).toBeVisible();
+    await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
+      /^(pdf 관리|manage pdfs?)$/i,
+      /^(직접 추가|add question)$/i,
+      /^(변형 출제|generate variants?)$/i,
+    ]);
+    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(homeUi.questionMenu(page)).toBeHidden();
+    await expect(button).toBeFocused();
+
+    // PDF 관리 (Enter on the first item) → the 문제 PDF 관리 dialog.
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    await expect(homeUi.questionPdfsDialog(page)).toBeVisible();
+    await expect(page).toHaveURL((url) =>
+      url.searchParams.getAll('panel').includes('question-pdfs'),
+    );
+
+    // 변형 출제 → the 문제 생성 dialog, on top.
+    await chooseQuestionMenu(page, 'generate');
+    await expect(homeUi.generateDialog(page)).toBeVisible();
+    await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').includes('generate'));
+
+    // 직접 추가 → the bank with its 문제 등록 editor open; a reload does not reopen it.
+    await page.goto(overviewPath(s.workspaceId));
+    await chooseQuestionMenu(page, 'create');
+    await expect(page).toHaveURL(new RegExp(`/workspaces/${s.workspaceId}/questions/bank`));
+    await expect(questionFormUi.form(page)).toBeVisible();
+    await expect(page).toHaveURL((url) => !url.searchParams.has('create'));
+    await page.reload();
+    await expect(
+      page.getByRole('heading', { level: 1, name: /문제은행|question bank/i }),
+    ).toBeVisible();
+    await expect(questionFormUi.form(page)).toHaveCount(0);
   },
 );

@@ -4,10 +4,14 @@
 // 레이아웃", UX3c): the single page of a workspace, without a sidebar.
 //
 //   Workspace header  unified search (SEARCH-01-AC07: one box, icon submit, "검색 옵션" popover
-//                     with the scope checkboxes, the content-search options and the heatmap's
-//                     chapter/type filters) · `문서 n` · `문제은행` · `이력` · `공유하기` (owner)
+//                     with the scope checkboxes and one list of options that follows them: the
+//                     heatmap's chapter/type filters for 문제, the content-search options for 내용;
+//                     question papers are searched whenever 문제 is a target, UX4), then two
+//                     button groups: `문서 n` · `문제` (menu: PDF 관리 / 직접 추가 / 변형 출제, UX4)
+//                     · `문제은행`, and, aligned right, `이력` · `공유하기` (icon buttons; share
+//                     for the owner only)
 //   content results   the 원문 search results when the scope includes 내용
-//   문제 영역         the heatmap (QuestionsOverview) with `문제 PDF 관리` / `문제 생성`
+//   문제 영역         the heatmap (QuestionsOverview)
 //   floating dialogs  문서 관리 · 문제 PDF 관리 · 문제 생성 · 이력 · 링크 공유: non-modal
 //                     FloatingSidePanels portalled into this page (inside <main>), opened at once
 //                     and listed in the URL (`?panel=`, repeatable); the most recently opened is
@@ -20,7 +24,6 @@
 import {
   Button,
   Checkbox,
-  ConfirmDialog,
   FloatingSidePanel,
   HistoryIcon,
   IconButton,
@@ -31,23 +34,29 @@ import {
   questionTypeLabels,
   SearchIcon,
   Select,
+  ShareIcon,
   type QuestionType,
 } from '@quiz/ui';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
+import { useEffect, useRef, useState, useTransition, type FormEvent, type ReactNode } from 'react';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
 import { GenerationDialog } from '@/components/questions/generate/generation-dialog';
-import { QuestionPdfsLibrary } from '@/components/questions/import/question-pdfs';
+import {
+  DocumentLibraryFeedback,
+  QuestionPdfsDialog,
+} from '@/components/questions/import/question-pdfs';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
 import {
   ContentSearchOptions,
   ContentSearchResults,
+  dropsSelectedPaper,
   useContentSearch,
 } from '@/components/search/content-search';
 import { WorkspaceSharingPanel } from '@/components/sharing/workspace-sharing-panel';
+import { QuestionMenu } from './question-menu';
 import type { DocumentSummary } from '@/lib/documents/client-api';
 import type { ChapterChoice, QuestionOverview } from '@/lib/questions/overview-data';
 import {
@@ -59,6 +68,7 @@ import {
 } from '@/lib/questions/overview-filters';
 import type { PlacedQuestion } from '@/lib/questions/overview-placement';
 import type { QuestionFailureKind } from '@/lib/questions/problems';
+import { bankCreatePath } from '@/lib/questions/filters';
 import type { SearchQuery } from '@/lib/search/client';
 import { MAX_QUERY_CHARS, parseSearchParams, searchParamsFor } from '@/lib/search/state';
 import {
@@ -189,7 +199,8 @@ export function WorkspaceHome({
   const [optionsOpen, setOptionsOpen] = useState(false);
   const content = useContentSearch({
     workspaceId: workspace.id,
-    initial: initialSearch,
+    // UX4: question papers are searched exactly when 문제 is a target.
+    initial: { ...initialSearch, includeQuestionPapers: scopeIncludesQuestions(scope) },
     runInitial: scopeIncludesContent(scope),
   });
 
@@ -220,8 +231,16 @@ export function WorkspaceHome({
   /** Runs `query` under `nextScope`: content results, heatmap filter and the URL. */
   function applySearch(query: string, nextScope: SearchScope) {
     const q = query.trim().slice(0, MAX_QUERY_CHARS);
-    if (q && scopeIncludesContent(nextScope)) content.search(q);
-    else content.clear();
+    const papers = scopeIncludesQuestions(nextScope);
+    // Without 문제 only books are searched: a selected question paper (and its chapter) must go,
+    // or the API would keep searching that explicit document.
+    const clearDocument = dropsSelectedPaper(content.documentId, searchDocuments, papers);
+    if (q && scopeIncludesContent(nextScope)) {
+      content.search(q, { includeQuestionPapers: papers, clearDocument });
+    } else {
+      content.clear();
+      if (clearDocument) content.clearDocumentFilter();
+    }
     const target = `${pathname}${patchSearch(window.location.search, {
       q: q || null,
       scope: nextScope === 'all' ? null : nextScope,
@@ -326,14 +345,9 @@ export function WorkspaceHome({
                   onCheckedChange={(checked) => changeScope(withQuestions, checked === true)}
                 />
               </fieldset>
-              <div
-                role="group"
-                aria-labelledby="search-options-questions"
-                className={styles.optionGroup}
-              >
-                <p id="search-options-questions" className={styles.optionsTitle}>
-                  문제 필터
-                </p>
+              {/* One list that follows the targets (UX4): options of an unselected target
+                  collapse away. */}
+              <OptionSlot shown={withQuestions}>
                 <div className={styles.optionRow}>
                   <Select
                     label="챕터"
@@ -356,43 +370,53 @@ export function WorkspaceHome({
                     }
                   />
                 </div>
-              </div>
-              <div
-                role="group"
-                aria-labelledby="search-options-content"
-                className={styles.optionGroup}
-              >
-                <p id="search-options-content" className={styles.optionsTitle}>
-                  내용 검색
-                </p>
+              </OptionSlot>
+              <OptionSlot shown={withContent}>
                 <ContentSearchOptions
                   search={content}
-                  documents={searchDocuments}
+                  documents={
+                    withQuestions
+                      ? searchDocuments
+                      : searchDocuments.filter((d) => !d.isQuestionPaper)
+                  }
                   documentsLoadFailed={library.listFailed}
                 />
-              </div>
+              </OptionSlot>
             </PopoverContent>
           </Popover>
         </form>
 
         <div className={styles.actions}>
-          <Button onClick={() => setPanel('documents', true)}>
-            문서 <span className={styles.count}>{bookCount}</span>
-          </Button>
-          <Button asChild>
-            <Link href={`/workspaces/${workspace.id}/questions/bank`}>문제은행</Link>
-          </Button>
-          <IconButton
-            label="이력"
-            icon={<HistoryIcon />}
-            variant="secondary"
-            onClick={() => setPanel('history', true)}
-          />
-          {isOwner ? (
-            <Button variant="primary" onClick={() => setPanel('share', true)}>
-              공유하기
+          <div className={styles.actionGroup}>
+            <Button onClick={() => setPanel('documents', true)}>
+              문서 <span className={styles.count}>{bookCount}</span>
             </Button>
-          ) : null}
+            <QuestionMenu
+              canEdit={canEdit}
+              onPdfs={() => setPanel('question-pdfs', true)}
+              onCreate={() => router.push(bankCreatePath(workspace.id))}
+              onGenerate={() => setPanel('generate', true)}
+            />
+            <Button asChild>
+              <Link href={`/workspaces/${workspace.id}/questions/bank`}>문제은행</Link>
+            </Button>
+          </div>
+          <div className={styles.actionGroup} data-align="end">
+            <IconButton
+              label="이력"
+              icon={<HistoryIcon />}
+              variant="secondary"
+              onClick={() => setPanel('history', true)}
+            />
+            {isOwner ? (
+              <IconButton
+                label="공유하기"
+                icon={<ShareIcon />}
+                variant="secondary"
+                onClick={() => setPanel('share', true)}
+              />
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -416,18 +440,6 @@ export function WorkspaceHome({
         failure={failure}
         requested={requested}
         panelScreenId={screenIds.practice}
-        actions={
-          <>
-            <Button size="sm" onClick={() => setPanel('question-pdfs', true)}>
-              문제 PDF 관리
-            </Button>
-            {canEdit ? (
-              <Button size="sm" variant="primary" onClick={() => setPanel('generate', true)}>
-                문제 생성
-              </Button>
-            ) : null}
-          </>
-        }
       />
 
       {/* Dialogs are portalled here so they stay inside the main landmark. */}
@@ -457,18 +469,15 @@ export function WorkspaceHome({
               />
             </div>
           </FloatingSidePanel>
-          <FloatingSidePanel
+          <QuestionPdfsDialog
             open={isOpen('question-pdfs')}
             onOpenChange={(open) => setPanel('question-pdfs', open)}
             raiseKey={raised['question-pdfs']}
-            modal={false}
             container={host}
-            title="문제 PDF 관리"
-            closeLabel="문제 PDF 관리 닫기"
-            mobileLayout="full"
-          >
-            <QuestionPdfsLibrary workspaceId={workspace.id} library={library} canEdit={canEdit} />
-          </FloatingSidePanel>
+            workspaceId={workspace.id}
+            library={library}
+            canEdit={canEdit}
+          />
           {canEdit ? (
             <FloatingSidePanel
               open={isOpen('generate')}
@@ -520,24 +529,25 @@ export function WorkspaceHome({
         </>
       ) : null}
 
-      <p role="status" className="qz-visually-hidden">
-        {library.announcement}
-      </p>
-      <ConfirmDialog
-        open={library.pendingDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) library.cancelDelete();
-        }}
-        title="문서를 삭제할까요?"
-        description={
-          library.pendingDelete
-            ? `‘${library.pendingDelete.title}’ 문서가 목록과 검색에서 사라집니다. 이 작업은 되돌릴 수 없습니다.`
-            : ''
-        }
-        confirmLabel="삭제"
-        loading={library.deleting}
-        onConfirm={() => void library.confirmDelete()}
-      />
+      <DocumentLibraryFeedback library={library} />
+    </div>
+  );
+}
+
+/**
+ * One option of the "검색 옵션" list. Hidden options collapse smoothly (no motion under
+ * reduced-motion) and leave the accessibility tree and the tab order (`inert`, `visibility`).
+ */
+function OptionSlot({
+  shown,
+  children,
+}: {
+  readonly shown: boolean;
+  readonly children: ReactNode;
+}) {
+  return (
+    <div className={styles.optionSlot} data-hidden={!shown || undefined} inert={!shown}>
+      <div className={styles.optionBody}>{children}</div>
     </div>
   );
 }

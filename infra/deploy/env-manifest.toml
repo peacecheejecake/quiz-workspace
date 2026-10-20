@@ -405,7 +405,7 @@ services = ["api", "worker"]
 kind = "config"
 check = "bool"
 provider = "operator"
-note = "false until the HF_HOME volume is warm, then true"
+note = "true with WORKER_EMBEDDER=workers_ai (Docling models are baked into the worker image, nothing else loads from the Hub); a local Qwen3 embedder: false until its HF_HOME volume is warm, then true"
 
 [[var]]
 name = "WORKER_WARM_PARSER"
@@ -459,8 +459,8 @@ note = "2"
 name = "HF_HOME"
 services = ["api", "worker"]
 kind = "config"
-provider = "image default /var/cache/huggingface (= Railway volume mount)"
-note = "leave unset"
+provider = "image default /var/cache/huggingface (= Railway volume mount, if any)"
+note = "leave unset; holds only lazy Qwen3 weights (local embedder), so no volume is needed with workers_ai"
 
 # ------------------------------------------------------------------------------------------------
 # Worker (Celery on Railway) — apps/worker/src/quiz_worker/settings.py, book_core.llm.config
@@ -520,7 +520,7 @@ services = ["worker"]
 kind = "config"
 check = "number"
 provider = "default"
-note = "0 (never); 1 replaces the pool process after every task so model memory is returned between jobs"
+note = "0 (never); N replaces the pool process after N job tasks (quiz.jobs.*) so model memory is returned between jobs; maintenance tasks (reconcile, every minute) never count"
 
 [[var]]
 name = "WORKER_MAX_MEMORY_PER_CHILD_MB"
@@ -638,8 +638,8 @@ note = "auto (Docling)"
 name = "WORKER_MODELS_ARTIFACTS_PATH"
 services = ["worker"]
 kind = "config"
-provider = "default"
-note = "unset (weights load into HF_HOME)"
+provider = "image default /opt/docling-models (Docling layout + TableFormer baked at build, WRK-BAKE)"
+note = "leave unset; overriding it makes Docling download into HF_HOME again"
 
 [[var]]
 name = "WORKER_PDF_MAX_BYTES"

@@ -12,9 +12,12 @@
 # - Railway health checks are HTTP: the API gates each rollout on /health/ready (DB, Redis,
 #   Qdrant); the worker has no HTTP port, so it relies on the restart policy (its Docker
 #   HEALTHCHECK is for other runtimes).
-# - HF_HOME volume (implementation-plan §7, M7.3): created once per service in the Railway
-#   dashboard at `volume_mount_path`. The images run as uid 10001; never set RAILWAY_RUN_UID=0
-#   to work around volume ownership (env manifest forbids it).
+# - HF_HOME volume (implementation-plan §7, M7.3): optional. The worker image bakes the Docling
+#   parser models (/opt/docling-models, WRK-BAKE), and with WORKER_EMBEDDER=workers_ai nothing
+#   else downloads weights, so no volume is needed. Only a local Qwen3 embedder/reranker loads
+#   into HF_HOME; then create a volume per service at `volume_mount_path`. The images run as
+#   uid 10001; never set RAILWAY_RUN_UID=0 to work around volume ownership (env manifest forbids
+#   it).
 # - Worker concurrency starts at 1, one replica (docs/deployment.md §7).
 
 [registry]

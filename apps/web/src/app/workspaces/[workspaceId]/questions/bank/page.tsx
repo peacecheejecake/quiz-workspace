@@ -3,8 +3,9 @@
 // server-side Bearer helper and hands it to the client screen.
 import type { Metadata } from 'next';
 import { QuestionBank } from '@/components/questions/question-bank';
+import { loadDocumentsOrFailure } from '@/lib/documents/data';
 import { loadBank } from '@/lib/questions/data';
-import { parseBankFilters } from '@/lib/questions/filters';
+import { parseBankFilters, wantsCreate } from '@/lib/questions/filters';
 import { requireWorkspace } from '@/lib/workspaces/data';
 
 export const metadata: Metadata = { title: '문제은행' };
@@ -18,9 +19,11 @@ export default async function Page({
 }>) {
   const [{ workspaceId }, query] = await Promise.all([params, searchParams]);
   const filters = parseBankFilters(query);
-  const [workspace, bank] = await Promise.all([
+  // The documents feed the 문제 PDF 관리 dialog behind "PDF 가져오기" (QBANK-01-AC06).
+  const [workspace, bank, docs] = await Promise.all([
     requireWorkspace(workspaceId),
     loadBank(workspaceId, filters),
+    loadDocumentsOrFailure(workspaceId),
   ]);
   const readOnly =
     workspace.status === 'archived' ? 'archived' : workspace.role === 'viewer' ? 'viewer' : null;
@@ -37,6 +40,8 @@ export default async function Page({
         failure={bank.failure}
         chapters={bank.chapters}
         documents={bank.documents}
+        openCreate={wantsCreate(query)}
+        questionPdfs={docs}
       />
     </div>
   );
