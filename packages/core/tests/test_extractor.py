@@ -830,6 +830,90 @@ def test_caption_like_line_after_a_numbered_explanation_line_stays_in_the_explan
     assert len(draft.evidence) == 1
 
 
+def test_question_after_an_explanation_with_inline_options_on_a_continuation_line() -> None:
+    result = _extract(
+        [
+            "1. 다음 중 옳은 것은?",
+            "① 가",
+            "② 나",
+            "정답: ②",
+            "1. 첫 번째 이유입니다.",
+            "2. 다음 빈칸에 들어갈",
+            "알맞은 말: ① 응결 ② 증발",
+        ]
+    )
+    assert [q.number for q in result.questions] == [1, 2]
+    q1, q2 = result.drafts
+    assert q1.explanation == "1. 첫 번째 이유입니다."
+    assert [(o.id, o.text) for o in q2.options] == [("opt-1", "응결"), ("opt-2", "증발")]
+    assert q2.correct_option_ids is None  # no printed answer: stays a draft without one
+
+
+_LayoutBlock = tuple[str, str] | tuple[str, tuple[tuple[str, ...], ...]]
+
+# The same question 2 in every option layout the segmenter reads; it has no question cue and no
+# printed answer, so each must be recognised by its options alone.
+_OPTION_LAYOUTS: dict[str, list[_LayoutBlock]] = {
+    "inline": [("text", "2. 알맞은 말 ① 응결 ② 증발")],
+    "inline_continuation": [("text", "2. 빈칸에 들어갈"), ("text", "알맞은 말 ① 응결 ② 증발")],
+    "line_by_line": [("text", "2. 알맞은 말"), ("text", "① 응결"), ("text", "② 증발")],
+    "table": [("text", "2. 알맞은 말"), ("table", (("①", "응결"), ("②", "증발")))],
+    "continuation_table": [
+        ("text", "2. 알맞은 말"),
+        ("table", (("①", "응결"), ("②", "증발"))),
+        ("table", (("③", "강수"),)),
+    ],
+    "grid": [("text", "2. 알맞은 말"), ("text", "① 응결 ③ 강수"), ("text", "② 증발 ④ 바람")],
+}
+
+
+@pytest.mark.parametrize("layout", sorted(_OPTION_LAYOUTS))
+def test_every_option_layout_is_a_question_after_an_inline_answer_explanation(
+    layout: str,
+) -> None:
+    page = PageInfo(page=1, width=595.0, height=842.0)
+    specs: list[_LayoutBlock] = [
+        ("text", "1. 다음 중 옳은 것은?"),
+        ("text", "① 가"),
+        ("text", "② 나"),
+        ("heading", "정답: ②"),
+        ("text", "1. 첫 번째 이유입니다."),
+        *_OPTION_LAYOUTS[layout],
+    ]
+    blocks = []
+    for i, (kind, content) in enumerate(specs):
+        loc = (SourceLocation(page=1, bbox=BBox(x0=60, y0=40 + 20 * i, x1=500, y1=55 + 20 * i)),)
+        if kind == "table":
+            rows = content
+            assert isinstance(rows, tuple)
+            blocks.append(
+                Block(
+                    id=f"b{i}",
+                    type=BlockType.TABLE,
+                    text="\n".join(" | ".join(r) for r in rows),
+                    locations=loc,
+                    table=TableContent(rows=rows),
+                )
+            )
+        else:
+            assert isinstance(content, str)
+            block_type = BlockType.HEADING if kind == "heading" else BlockType.TEXT
+            blocks.append(Block(id=f"b{i}", type=block_type, text=content, locations=loc))
+    doc = ParsedDocument(
+        source_path="l.pdf",
+        source_sha256="3" * 64,
+        parser_version="test",
+        pages=(page,),
+        blocks=tuple(blocks),
+    )
+    result = QuestionExtractor().extract(doc, document_id="l")
+    assert [q.number for q in result.questions] == [1, 2]
+    q1, q2 = result.drafts
+    assert q1.explanation == "1. 첫 번째 이유입니다."
+    assert len(q2.options) >= 2
+    assert q2.correct_option_ids is None
+
+
 def test_option_grid_read_row_wise_is_put_back_in_label_order() -> None:
     result = _extract(["# 01 옳은 것은? ( )", "① 가", "③ 다", "② 나", "④ 라", "# 정답: ③"])
     (draft,) = result.drafts

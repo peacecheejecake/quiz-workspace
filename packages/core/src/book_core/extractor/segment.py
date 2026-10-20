@@ -387,29 +387,44 @@ def _flatten(blocks: Sequence[Block]) -> list[_Event]:
     return events
 
 
-def _asks_something(body: str, events: Sequence[_Event], after: int) -> bool:
-    """Whether a numbered line inside an explanation opens a question: the lines it would own
-    (up to the next numbered line, heading or the end) hold a question cue, options or its own
-    inline answer. Decided before any line is classified, so a rejected start leaves every line
-    to the explanation exactly as printed and a heading still ends it."""
-    if _split_inline_options(body)[1]:
-        return True
-    for event in events[after:]:
-        if event.text is None:
-            if event.block.type is BlockType.TABLE and _table_options(event.block, event.index)[1]:
-                return True
-            continue
-        if _inline_answer(event.text) is not None:
-            return True
-        if (
-            event.block.type is BlockType.HEADING
-            or _ANSWER_KEY_HEADING.match(event.text)
-            or _question_start(event.text, event.block) is not None
+def _span_blocks(events: Sequence[_Event], start: int) -> list[Block]:
+    """The blocks a numbered line at ``events[start]`` would own, trimmed to the lines in that
+    span: up to the next numbered line, the answer-key heading, a heading that is not an
+    inline answer line (a section title ends an explanation), or the end."""
+    span: list[_Event] = [events[start]]
+    for event in events[start + 1 :]:
+        text = event.text
+        if text is not None and (
+            _ANSWER_KEY_HEADING.match(text)
+            or _question_start(text, event.block) is not None
+            or (event.block.type is BlockType.HEADING and _inline_answer(text) is None)
         ):
-            return False
-        if _QUESTION_CUE.search(event.text) or split_option_line(event.text) is not None:
-            return True
-    return False
+            break
+        span.append(event)
+    order: list[tuple[int, Block]] = []
+    lines: dict[int, list[str]] = {}
+    for event in span:
+        if event.text is None:
+            order.append((event.index, event.block))
+            continue
+        if event.index not in lines:
+            lines[event.index] = []
+            order.append((event.index, event.block))
+        lines[event.index].append(event.text)
+    return [
+        block.model_copy(update={"text": "\n".join(lines[index])}) if index in lines else block
+        for index, block in order
+    ]
+
+
+def _asks_something(events: Sequence[_Event], start: int) -> bool:
+    """Whether a numbered line inside an explanation opens a question. Decided by a dry run of
+    ``segment`` itself over the span the line would own (so every option layout the normal path
+    reads counts the same): a question with options, an inline answer or a question cue."""
+    found = segment(_span_blocks(events, start)).questions
+    return bool(found) and bool(
+        found[0].options or found[0].answer or _QUESTION_CUE.search(found[0].stem)
+    )
 
 
 def segment(blocks: Sequence[Block]) -> Segmentation:
@@ -493,7 +508,7 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                 and current.answered
                 and block.type is not BlockType.HEADING
                 and not _QUESTION_CUE.search(start.group("body"))
-                and not _asks_something(start.group("body"), flat, position)
+                and not _asks_something(flat, position - 1)
             ):
                 # A numbered line inside a printed explanation (``1. 첫째 이유``) is part of it
                 # unless what it opens asks something; either way the lines then take the
