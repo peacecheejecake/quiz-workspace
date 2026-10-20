@@ -25,6 +25,7 @@ flowchart TD
 ```
 
 - Embedding(M7.4b, 사용자 결정 2026-10-18): staging/production은 `WORKER_EMBEDDER=workers_ai` — worker는 문서 chunk, API는 검색어만 Cloudflare Workers AI REST(`POST https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/qwen/qwen3-embedding-0.6b`, `Authorization: Bearer $CLOUDFLARE_API_TOKEN`)로 embedding한다. 그래서 API 이미지는 기본 빌드에서 torch/transformers를 넣지 않는다(`API_EXTRAS` 빈 값; 로컬 모델 이미지는 `--build-arg API_EXTRAS=models`). worker는 Docling 때문에 계속 torch를 가진다. Reranker는 꺼진 채 유지(Workers AI에 다국어 reranker 없음). 로컬 Qwen3와 Workers AI vector는 같은 collection에 섞지 않는다(`model_name`이 달라 물리 collection 분리, 전환은 reindex + alias).
+- Docling parser model(WRK-BAKE, 사용자 결정 2026-10-21; M7.3의 "weight는 image에 굽지 않음"을 이 model에 한해 변경): worker image가 build 시 Docling layout(`docling-project/docling-layout-heron`, commit 고정)과 TableFormer(`docling-project/docling-models` `v2.3.0`, accurate만)를 `/opt/docling-models`(root 소유, 읽기 전용)에 받아 두고 `WORKER_MODELS_ARTIFACTS_PATH`가 그 경로를 가리킨다. 그래서 배포·재시작·crash 뒤에도 Hugging Face에서 다시 받지 않는다(image 약 +385 MB). revision은 lock된 Docling이 요청하는 값이며 Docling을 올리면 build가 실패해 다시 고정하게 한다. OCR(RapidOCR)은 worker image에 없다. Qwen3 embedding/reranker weight는 계속 `HF_HOME`에 lazy 적재되며 `WORKER_EMBEDDER=workers_ai`에서는 쓰지 않으므로 HF_HOME volume이 필요 없다.
 
 - Frontend: Vercel의 Next.js 웹 호스팅(비상용·개인 프로젝트 여부에 따라 플랜 확인). API는 인증 외 비즈니스 데이터 요청을 FastAPI로 전달한다.
 - Supabase: 사용자·메일 인증, Postgres metadata + canonical text/revisions, 비공개 `source-pdfs`와 `parsed-artifacts` 버킷을 제공한다.
@@ -145,7 +146,7 @@ PR opened
 - 매일 DB 백업(사용 플랜 지원/외부 `pg_dump` 점검), Supabase Storage 객체 version/별도 백업, 주요 workspace의 export 정기 검증.
 - Qdrant는 파생 인덱스이므로 재색인 스크립트 제공. 대량 재생성 시간은 recovery 시간에 포함.
 - Worker job은 at-least-once 실행될 수 있으므로 checksum/idempotency/dedup 적용. stuck/failed job 재시도·격리 큐 모니터링.
-- Worker 자원 한도(M7.4c): Docling in-flight page 수 제한(`WORKER_PARSE_QUEUE_MAX_SIZE`, 기본 8), `document.parse` 전용 시간 한도(기본 soft 6900 s / hard 7200 s, lease = hard + grace), pool process가 죽으면(OOM 등 SIGKILL) 해당 attempt를 즉시 재큐/실패 처리(hard time limit은 child가 아직 살아 있을 수 있어 lease 만료 경로 유지), model thread 수는 container CPU quota 기준(`WORKER_NUM_THREADS`). 값과 설명은 `infra/deploy/env-manifest.toml`.
+- Worker 자원 한도(M7.4c): Docling in-flight page 수 제한(`WORKER_PARSE_QUEUE_MAX_SIZE`, 기본 8), `document.parse` 전용 시간 한도(기본 soft 6900 s / hard 7200 s, lease = hard + grace), pool process가 죽으면(OOM 등 SIGKILL) 해당 attempt를 즉시 재큐/실패 처리(hard time limit은 child가 아직 살아 있을 수 있어 lease 만료 경로 유지), model thread 수는 container CPU quota 기준(`WORKER_NUM_THREADS`), `WORKER_MAX_TASKS_PER_CHILD=N`이면 job task N개 뒤 pool process 교체(beat가 보내는 maintenance task는 세지 않음, WRK-RECYCLE). 값과 설명은 `infra/deploy/env-manifest.toml`.
 - API `/health/live`, `/health/ready`(DB, Redis, Qdrant 등 필수 의존성), readiness timeout, 일별 검색 smoke query.
 - metrics: 인증 오류, PDF 성공률/시간, 검색 p50/p95, reranker latency, worker queue age, LLM 사용량, DB pool, storage·Qdrant 용량.
 - 비용 알림: managed project당 예산 경고, Worker 최대 동시성 1부터 시작, 모델 지연/메모리 측정 후 scale.

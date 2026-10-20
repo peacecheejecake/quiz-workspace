@@ -435,6 +435,8 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-10-20 | **사용자 결정(UX3c)**: 문서·문제 PDF·이력·공유·문제 생성은 floating dialog(공통 `FloatingSidePanel`, **non-modal** — 여러 개를 동시에 열고 나중에 연 것이 위, UX3b stacking). URL `?panel=`(여러 개면 반복, 연 순서)로 딥링크. dialog는 Workspace 홈 `<main>` 안에 portal(landmark 유지). 문제 PDF는 책과 다른 목록: 문서 관리 dialog = `book`만(배지 없음), 문제 PDF 관리 dialog = `question_paper`만 + `PDF 가져오기` + Dropzone(빈 목록 문구 "등록된 문제 pdf가 없습니다."). 문서 종류는 기존 `document_type`으로 client에서 나눈다(API 변경 없음). | DOC-01-AC06, QIMPORT-01-AC05 |
 | 2026-10-20 | UX3c 해석: 문제 PDF의 추출 검토(초안 편집·원본 비교 drawer·승인)와 변형 출제 검토(diff·검증·등록·비교 drawer)는 dialog 안에 다시 dialog를 겹쳐야 해서 페이지로 남긴다. 문제 생성 dialog = 원본 문제 선택 + 생성 form → run 시작 후 검토 페이지(`?source=&run=`)로 이동; 보기 섞기는 홈의 풀이 panel. 문제 PDF 관리 Dropzone에 놓은 파일은 client 메모리로 가져오기 페이지에 넘겨 바로 업로드를 시작한다(파일을 URL·storage에 두지 않음). | QGEN-01-AC05, QIMPORT-01-AC05 |
 | 2026-10-20 | UX3c 해석: 이력 dialog는 변경·작업·풀이 세 API를 따로 페이지로 읽어 하나의 최신순 목록으로 병합(종류 badge). 순서가 어긋나지 않도록 아직 다음 페이지가 남은 목록의 가장 오래된 항목보다 새 항목만 보이고 "더 보기"가 남은 목록을 더 읽는다. API 변경 없음. 화면 전환 즉시 반응: route `loading.tsx`(홈은 route group `(home)` 안에 두어 DOC-02 404 status에 Suspense 경계가 걸리지 않게), dialog는 즉시 열고 client fetch 동안 skeleton. WS-01 탭은 이미 서버 왕복 없이 바뀐다(변경 없음). | QOV-01-AC09, HISTORY-01-AC04 |
+| 2026-10-21 | **사용자 결정(WRK-BAKE)**: production worker에 HF_HOME volume이 없어(M7.4a, uid 10001) 배포·재시작마다 Docling 모델을 다시 받던 cold start를 없애려고 Docling parser 모델(layout-heron 고정 commit, TableFormer accurate v2.3.0)만 worker image `/opt/docling-models`에 굽는다(M7.3의 "weight는 image에 굽지 않음"을 이 모델에 한해 변경, image +384 MB). Qwen3 embedding/reranker는 계속 HF_HOME lazy. `WORKER_EMBEDDER=workers_ai`에서는 volume 불필요, `WORKER_MODELS_OFFLINE=true` 권장. Docling upgrade 시 build-time assert가 재고정을 강제. | deployment.md |
+| 2026-10-21 | WRK-RECYCLE: `WORKER_MAX_TASKS_PER_CHILD`는 job task(`quiz.jobs.*`)만 센다. Celery 기본 max-tasks는 매분 beat의 `reconcile_jobs`까지 세어 production에서 pool process와 parser warm-up이 매분 반복됐다(로그 40분에 38회). 자체 prefork pool(`quiz_worker.recycle:TaskPool`)이 N개 job 뒤 billiard와 같은 지점·exit code로 교체. | deployment.md §7 |
 
 ## 8. 진행 현황
 
@@ -526,5 +528,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | M4.3 LLM·extractor | ✅ | d104c02 · 9b335a6 · a6cb4a2 | P1(보기 swap)·P2(세로 정답표) → 반영 → P1(원문자 숫자 crash 회귀) → decimal-only + never-raise property test(600 seed) → 지적 없음 |
 | (통합) worktree 제외 설정 | ✅ | 6704d1c | 사소한 설정 수정, 리뷰 생략 |
 | A4 Auth CAPTCHA(Turnstile) | ✅ | 6967985 · a9f80b1 · ed21a68 · 7282f2e · 1847000 · a98109d | Codex 리뷰 지적 없음(2026-10-18), merge 892a613. staging은 테스트 키 쌍, production은 실제 widget(`quiz.red-10-proto.xyz`)으로 배포(M7.4). 신규 8 AC + HARNESS-16 GREEN(chromium·webkit), auth·harness·a11y·smoke 130/130(log-audit 0), VISUAL-01 baseline 갱신. CAPTCHA를 켠 별도 Supabase 스택(테스트 secret)에서 토큰 없는 signup/password/recover/resend → `captcha_failed`, auth 폼 E2E 19/19 통과, 항상 실패 secret에서는 모두 거부 확인. merge 후: `.env`에 `NEXT_PUBLIC_TURNSTILE_SITE_KEY` 추가(재사용하는 웹 서버 재build) |
+| WRK-RECYCLE maintenance가 pool 교체 안 함 | ✅ | 3f162d9 | Codex 리뷰 지적 없음(2026-10-21), merge 3a02572. fakeredis prefork test GREEN, 실제 Redis infra 변형은 Docker 장애 전 4회 GREEN(최종 commit은 재실행 필요) |
+| WRK-BAKE Docling 모델 image 내장 | ✅ | 1c496bb | Codex 리뷰 지적 없음(2026-10-21), merge 40cc191. `--network none` 컨테이너에서 warm-up·fixture 4종 파싱 성공, HF 접속 0 |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.

@@ -46,7 +46,7 @@
    - API token: My Profile → API Tokens → Create Token → **Custom token**, 권한은 **Workers AI만**(Cloudflare 문서의 "Workers AI" template = Account · Workers AI · Read + Edit; 다른 권한·zone 권한은 넣지 않는다. Read만으로 `ai/run`이 되는지는 첫 parity 실행에서 확인하고 되면 Edit를 뺀다), Account Resources는 이 account 하나, 만료일 지정, client IP 제한 없음(Railway egress IP가 고정이 아님) → `CLOUDFLARE_API_TOKEN`.
    - 보관: 두 값을 `~/.secrets/quiz-workspace/staging/cloudflare.env`(`chmod 600`, 저장소 밖)에 `CLOUDFLARE_ACCOUNT_ID=…`, `CLOUDFLARE_API_TOKEN=…`로 저장하고 Railway `api`·`worker` 변수에 넣는다(Vercel 금지). 채팅·이슈에 붙이지 않는다.
    - `WORKER_EMBEDDER=workers_ai`를 Railway `api`·`worker` 양쪽에 같은 값으로 둔다(check-env `same`).
-   - 이 모드에서 API는 모델을 읽지 않으므로 `api`의 `/var/cache/huggingface` volume은 필요 없다(worker는 Docling 모델 때문에 유지).
+   - 이 모드에서 API는 모델을 읽지 않고, worker의 Docling 모델은 image에 들어 있으므로(WRK-BAKE, `/opt/docling-models`) `api`·`worker` 모두 `/var/cache/huggingface` volume이 필요 없다.
 
 ## 2. Secret 생성
 
@@ -90,8 +90,8 @@ make check-env ENV=staging ARGS="--check api=$HOME/secure/quiz/api.staging.env \
 - `SUPABASE_JWT_ISSUER=https://<ref>.supabase.co/auth/v1`, `SUPABASE_JWKS_URL=…/auth/v1/.well-known/jwks.json`, `SUPABASE_URL=https://<ref>.supabase.co`.
 - `DATABASE_URL`/`WORKER_DATABASE_URL`: Supabase **session pooler**(IPv4) URL, 사용자 이름은 `quiz_api.<ref>` / `quiz_worker.<ref>`.
 - `RELAY_CLIENT_IP_HEADER=x-real-ip`(Vercel이 client 주소로 덮어씀).
-- `WORKER_MODELS_OFFLINE=false`로 시작, HF_HOME volume에 모델이 받아진 뒤 `true`.
-- Worker 메모리·시간(M7.4c, 기본값 그대로 두면 됨): Docling 동시 처리 page 수 `WORKER_PARSE_QUEUE_MAX_SIZE=8`·`WORKER_PARSE_PAGE_BATCH_SIZE=4`(300쪽 기준 Docling 약 2.6 GB, Docling 기본 100이면 약 4.5 GB), `document.parse`만 별도 시간 한도 `WORKER_DOCUMENT_TASK_SOFT/TIME_LIMIT_SECONDS=6900/7200`(lease·broker visibility는 가장 긴 한도 + grace를 따름), `WORKER_PARSE_TIMEOUT_SECONDS=3600`(document soft 한도보다 작아야 함). thread 수는 `WORKER_NUM_THREADS` 미설정 시 container CPU quota에서 정하므로 `OMP_NUM_THREADS`는 넣지 않는다. Railway처럼 상주 메모리가 과금되는 곳은 `WORKER_MAX_TASKS_PER_CHILD=1`(job마다 pool process 교체 → 모델 메모리 반환)을 검토한다. pool process가 OOM 등으로 죽으면 그 attempt는 즉시 `worker_lost: worker process killed (out of memory?)`로 재큐(마지막 attempt면 failed)되므로 job이 lease 만료까지 `running`으로 남지 않는다. trial(1 GB/service)에서는 Docling 모델만으로 빠듯하므로 소형 PDF만 기대한다.
+- `WORKER_MODELS_OFFLINE=true`(`WORKER_EMBEDDER=workers_ai`): Docling 모델은 worker image에 구워져 있고(`WORKER_MODELS_ARTIFACTS_PATH=/opt/docling-models`가 image 기본값, 변수로 넣지 않는다) 그 밖에 Hub에서 받는 모델이 없다. 로컬 Qwen3 embedder를 쓰는 경우에만 `false`로 시작해 HF_HOME volume이 채워진 뒤 `true`.
+- Worker 메모리·시간(M7.4c, 기본값 그대로 두면 됨): Docling 동시 처리 page 수 `WORKER_PARSE_QUEUE_MAX_SIZE=8`·`WORKER_PARSE_PAGE_BATCH_SIZE=4`(300쪽 기준 Docling 약 2.6 GB, Docling 기본 100이면 약 4.5 GB), `document.parse`만 별도 시간 한도 `WORKER_DOCUMENT_TASK_SOFT/TIME_LIMIT_SECONDS=6900/7200`(lease·broker visibility는 가장 긴 한도 + grace를 따름), `WORKER_PARSE_TIMEOUT_SECONDS=3600`(document soft 한도보다 작아야 함). thread 수는 `WORKER_NUM_THREADS` 미설정 시 container CPU quota에서 정하므로 `OMP_NUM_THREADS`는 넣지 않는다. Railway처럼 상주 메모리가 과금되는 곳은 `WORKER_MAX_TASKS_PER_CHILD=1`(job마다 pool process 교체 → 모델 메모리 반환)을 검토한다. 이 값은 job task(`quiz.jobs.*`)만 센다: 매분 도는 `quiz.maintenance.reconcile_jobs` 같은 maintenance task로는 pool process가 교체되지 않으므로 PDF parser warm-up도 job 뒤에만 다시 일어난다(WRK-RECYCLE). pool process가 OOM 등으로 죽으면 그 attempt는 즉시 `worker_lost: worker process killed (out of memory?)`로 재큐(마지막 attempt면 failed)되므로 job이 lease 만료까지 `running`으로 남지 않는다. trial(1 GB/service)에서는 Docling 모델만으로 빠듯하므로 소형 PDF만 기대한다.
 
 ## 3. 첫 staging 배포 순서
 
@@ -117,7 +117,7 @@ make check-env ENV=staging ARGS="--check api=$HOME/secure/quiz/api.staging.env \
 5. **첫 workflow 실행(bootstrap)**: smoke 계정은 staging 화면에서 가입해야 하므로 첫 실행만 Actions → Deploy → `environment=staging`, **`bootstrap=true`**(ref `develop`). preflight가 `SMOKE_USER_*`를 요구하지 않고, smoke는 `@readonly` 점검만 실행하며 run에 BOOTSTRAP 경고가 남는다. 이 run은 배포 완료로 보지 않는다. 누락 이름이 출력되면 채우고 다시 실행. `bootstrap`은 staging에서만 허용된다.
 6. **Smoke 계정 → 정식 실행**: staging 화면에서 실제 메일함으로 두 번 가입·메일 확인(SMTP와 DEP-01 가입 흐름 확인) → GitHub secrets `SMOKE_USER_{A,B}_*`에 넣고 **`bootstrap` 없이** workflow를 다시 실행(전체 smoke: DEP-01 로그인, DEP-02 업로드 객체, DEP-05). 이후 배포는 항상 bootstrap 없이 실행한다. 2026-10-19부터 staging 배포는 `develop` push마다 CI GREEN 후 자동으로 돈다(CI run의 마지막 job `deploy · staging`; 이 경로는 bootstrap·skip_migrations 없이 실행). 자동 배포가 진행 중일 때 새 push가 오면 CI·배포는 대기열에 들어가고(진행 중인 배포를 취소하지 않음), 대기 중인 run이 여럿이면 GitHub이 가장 최신 것만 남긴다. (Supabase Admin으로 계정을 미리 만드는 방법은 secret key를 운영자 셸에 꺼내야 하고 실제 메일 흐름을 건너뛰므로 쓰지 않는다.)
 7. **수동 DEP 점검**(4장).
-8. **HF_HOME volume**: 첫 검색·파싱 후 모델이 volume에 남는지 확인하고 `WORKER_MODELS_OFFLINE=true`. 비root(uid 10001)가 volume에 쓰지 못하면 `RAILWAY_RUN_UID=0`을 쓰지 말고 volume 없이(재시작마다 다운로드) 운영하면서 기록한다.
+8. **Docling 모델(WRK-BAKE)**: worker 로그에서 `PDF parser ready`가 Hugging Face 다운로드 로그 없이 몇 초 안에 찍히는지 확인한다(모델은 image의 `/opt/docling-models`). `WORKER_EMBEDDER=workers_ai`에서는 HF_HOME volume을 만들지 않는다. 로컬 Qwen3 embedder를 쓸 때만 volume을 만들고, 첫 검색 후 모델이 남으면 `WORKER_MODELS_OFFLINE=true`; 비root(uid 10001)가 volume에 쓰지 못하면 `RAILWAY_RUN_UID=0`을 쓰지 말고 volume 없이 운영하면서 기록한다.
 9. **Workers AI parity·eval(첫 staging 배포 때 1회, M7.4b)**: 운영자 셸에서만 실행한다(합성 KO/EN 텍스트만 전송, 책 원문 없음).
    ```bash
    set -a; . ~/.secrets/quiz-workspace/staging/cloudflare.env; set +a
@@ -258,7 +258,7 @@ make deploy-prepare REF=main ENV=production ARGS="--db-url-env SUPABASE_DB_URL -
 - Workers AI `@cf/qwen/qwen3-embedding-0.6b` 입력 형식(`documents` 배열, query는 `queries` + `instruction`)과 출력(`result.data`, 1024차원)이 adapter 가정과 같은지(3장 9단계 parity), 한 요청 batch 상한(기본 `CLOUDFLARE_AI_BATCH_SIZE=16`), Free plan quota 초과 응답의 status/code(adapter는 429와 quota 관련 오류 code를 `embedding_quota_exceeded`로 분류).
 
 - Railway GraphQL(`serviceInstanceUpdate`, `serviceInstanceDeployV2`, `deployment`)과 `Project-Access-Token` header — 실패 시 `railway_deploy.py`가 단계 이름과 Railway 메시지를 출력한다.
-- Railway volume이 uid 10001에 쓰기 가능한지(3장 8단계).
+- Railway volume이 uid 10001에 쓰기 가능한지(로컬 Qwen3 embedder로 volume을 쓸 때만, 3장 8단계).
 - Vercel이 `x-real-ip`를 client 주소로 덮어쓰는지(공유 링크 rate limit의 client 구분).
 - Supabase session pooler로 `quiz_api.<ref>`/`quiz_worker.<ref>` 로그인, GitHub runner(IPv4)에서 `db push`.
 - `supabase config push`가 `[remotes.staging]`을 적용하는지(`--project-ref`가 `project_id`와 같아야 함). `[remotes.staging.auth.captcha]`(Turnstile)가 Dashboard Attack Protection에 반영되는지.

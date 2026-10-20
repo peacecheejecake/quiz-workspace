@@ -52,6 +52,7 @@ from quiz_worker.question_generation_job import (
 )
 from quiz_worker.question_import_job import LazyImportDeps, question_import_definition
 from quiz_worker.reconcile import ReconcileReport, reconcile_jobs
+from quiz_worker.recycle import POOL_CLS, job_task_finished
 from quiz_worker.retry import RetryPolicy
 from quiz_worker.runner import (
     CleanupPolicy,
@@ -201,16 +202,21 @@ class IdempotentJobTask(_TaskBase):
         app = self.app
         if not isinstance(app, QuizCelery):
             raise TypeError("job tasks must be registered on a QuizCelery app")
-        runner = JobRunner(
-            app.job_store,
-            worker_id=self._worker_id(),
-            lease_seconds=job_time_limits(
-                app.worker_settings, self.job_definition.job_type
-            ).lease_seconds,
-            cleanup_policy=cleanup_policy_for(app.worker_settings),
-        )
-        result = runner.run(self.job_definition, raw_envelope)
-        return self._to_celery(result)
+        try:
+            runner = JobRunner(
+                app.job_store,
+                worker_id=self._worker_id(),
+                lease_seconds=job_time_limits(
+                    app.worker_settings, self.job_definition.job_type
+                ).lease_seconds,
+                cleanup_policy=cleanup_policy_for(app.worker_settings),
+            )
+            result = runner.run(self.job_definition, raw_envelope)
+            return self._to_celery(result)
+        finally:
+            if not self.request.is_eager:
+                # Only job tasks count toward WORKER_MAX_TASKS_PER_CHILD (quiz_worker.recycle).
+                job_task_finished(app.worker_settings.max_tasks_per_child)
 
     def _to_celery(self, result: RunResult) -> dict[str, Any]:
         job_id = str(result.job_id) if result.job_id else None
@@ -304,7 +310,11 @@ def build_celery_config(settings: WorkerSettings) -> dict[str, Any]:
         "task_acks_on_failure_or_timeout": False,
         "worker_prefetch_multiplier": 1,
         "worker_concurrency": settings.concurrency,
-        "worker_max_tasks_per_child": settings.max_tasks_per_child or None,
+        # Prefork pool that replaces a child after WORKER_MAX_TASKS_PER_CHILD *job* tasks;
+        # Celery's own per-child task limit stays off because it also counts the beat-scheduled
+        # maintenance tasks (WRK-RECYCLE).
+        "worker_pool": POOL_CLS,
+        "worker_max_tasks_per_child": None,
         # Celery takes KiB.
         "worker_max_memory_per_child": (settings.max_memory_per_child_mb * 1024) or None,
         "worker_cancel_long_running_tasks_on_connection_loss": True,

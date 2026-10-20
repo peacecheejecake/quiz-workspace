@@ -181,7 +181,10 @@ def test_pool_process_recycling_is_configurable() -> None:
         )
     )
 
-    assert conf["worker_max_tasks_per_child"] == 1
+    # WORKER_MAX_TASKS_PER_CHILD is enforced by the job-task pool (quiz_worker.recycle), not by
+    # Celery's limit, which would count maintenance tasks too (WRK-RECYCLE).
+    assert conf["worker_pool"] == "quiz_worker.recycle:TaskPool"
+    assert conf["worker_max_tasks_per_child"] is None
     assert conf["worker_max_memory_per_child"] == 1500 * 1024
 
 
