@@ -12,6 +12,7 @@
 import type { Locator, Page } from '@playwright/test';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 import {
+  chooseQuestionMenu,
   createQuestion,
   expect,
   GENERATE_TASK,
@@ -219,7 +220,7 @@ test(
 );
 
 test(
-  'QGEN-01-AC05 문제 생성 opens a dialog to pick the source and submit the form, then the review page follows the run',
+  'QGEN-01-AC05 문제 › 변형 출제 opens a dialog to pick the source and submit the form, then the review page follows the run',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seedSource(workspaceFactory, 'qgen01-ac05', 'disinfection');
@@ -227,7 +228,7 @@ test(
 
     await signInAs(page, s.owner.user);
     await page.goto(homePath(s.workspaceId));
-    await homeUi.generateButton(page).click();
+    await chooseQuestionMenu(page, 'generate');
     await expect(page).toHaveURL(/[?&]panel=generate(&|$)/);
     const dialog = homeUi.generateDialog(page);
     await expect(dialog).toBeVisible();

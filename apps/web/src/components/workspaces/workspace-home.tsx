@@ -6,10 +6,12 @@
 //   Workspace header  unified search (SEARCH-01-AC07: one box, icon submit, "검색 옵션" popover
 //                     with the scope checkboxes and one list of options that follows them: the
 //                     heatmap's chapter/type filters for 문제, the content-search options for 내용;
-//                     question papers are searched whenever 문제 is a target, UX4) · `문서 n` ·
-//                     `문제은행` · `이력` · `공유하기` (owner)
+//                     question papers are searched whenever 문제 is a target, UX4), then two
+//                     button groups: `문서 n` · `문제` (menu: PDF 관리 / 직접 추가 / 변형 출제, UX4)
+//                     · `문제은행`, and, aligned right, `이력` · `공유하기` (icon buttons; share
+//                     for the owner only)
 //   content results   the 원문 search results when the scope includes 내용
-//   문제 영역         the heatmap (QuestionsOverview) with `문제 PDF 관리` / `문제 생성`
+//   문제 영역         the heatmap (QuestionsOverview)
 //   floating dialogs  문서 관리 · 문제 PDF 관리 · 문제 생성 · 이력 · 링크 공유: non-modal
 //                     FloatingSidePanels portalled into this page (inside <main>), opened at once
 //                     and listed in the URL (`?panel=`, repeatable); the most recently opened is
@@ -33,6 +35,7 @@ import {
   questionTypeLabels,
   SearchIcon,
   Select,
+  ShareIcon,
   type QuestionType,
 } from '@quiz/ui';
 import Link from 'next/link';
@@ -50,6 +53,7 @@ import {
   useContentSearch,
 } from '@/components/search/content-search';
 import { WorkspaceSharingPanel } from '@/components/sharing/workspace-sharing-panel';
+import { QuestionMenu } from './question-menu';
 import type { DocumentSummary } from '@/lib/documents/client-api';
 import type { ChapterChoice, QuestionOverview } from '@/lib/questions/overview-data';
 import {
@@ -61,6 +65,7 @@ import {
 } from '@/lib/questions/overview-filters';
 import type { PlacedQuestion } from '@/lib/questions/overview-placement';
 import type { QuestionFailureKind } from '@/lib/questions/problems';
+import { bankCreatePath } from '@/lib/questions/filters';
 import type { SearchQuery } from '@/lib/search/client';
 import { MAX_QUERY_CHARS, parseSearchParams, searchParamsFor } from '@/lib/search/state';
 import {
@@ -372,23 +377,36 @@ export function WorkspaceHome({
         </form>
 
         <div className={styles.actions}>
-          <Button onClick={() => setPanel('documents', true)}>
-            문서 <span className={styles.count}>{bookCount}</span>
-          </Button>
-          <Button asChild>
-            <Link href={`/workspaces/${workspace.id}/questions/bank`}>문제은행</Link>
-          </Button>
-          <IconButton
-            label="이력"
-            icon={<HistoryIcon />}
-            variant="secondary"
-            onClick={() => setPanel('history', true)}
-          />
-          {isOwner ? (
-            <Button variant="primary" onClick={() => setPanel('share', true)}>
-              공유하기
+          <div className={styles.actionGroup}>
+            <Button onClick={() => setPanel('documents', true)}>
+              문서 <span className={styles.count}>{bookCount}</span>
             </Button>
-          ) : null}
+            <QuestionMenu
+              canEdit={canEdit}
+              onPdfs={() => setPanel('question-pdfs', true)}
+              onCreate={() => router.push(bankCreatePath(workspace.id))}
+              onGenerate={() => setPanel('generate', true)}
+            />
+            <Button asChild>
+              <Link href={`/workspaces/${workspace.id}/questions/bank`}>문제은행</Link>
+            </Button>
+          </div>
+          <div className={styles.actionGroup} data-align="end">
+            <IconButton
+              label="이력"
+              icon={<HistoryIcon />}
+              variant="secondary"
+              onClick={() => setPanel('history', true)}
+            />
+            {isOwner ? (
+              <IconButton
+                label="공유하기"
+                icon={<ShareIcon />}
+                variant="secondary"
+                onClick={() => setPanel('share', true)}
+              />
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -412,18 +430,6 @@ export function WorkspaceHome({
         failure={failure}
         requested={requested}
         panelScreenId={screenIds.practice}
-        actions={
-          <>
-            <Button size="sm" onClick={() => setPanel('question-pdfs', true)}>
-              문제 PDF 관리
-            </Button>
-            {canEdit ? (
-              <Button size="sm" variant="primary" onClick={() => setPanel('generate', true)}>
-                문제 생성
-              </Button>
-            ) : null}
-          </>
-        }
       />
 
       {/* Dialogs are portalled here so they stay inside the main landmark. */}

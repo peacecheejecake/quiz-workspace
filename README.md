@@ -3,7 +3,7 @@
 PDF 책을 올려 원문을 다국어로 검색하고, 그 책을 바탕으로 문제를 모으고·만들고·풀어 보는 Workspace 플랫폼입니다. 범용 RAG 챗봇이 아니라 **근거 원문을 찾아 주는 검색**과 **사람이 검토·승인한 문제은행**에 집중합니다.
 
 - Production: <https://quiz.red-10-proto.xyz> (staging은 `develop`, production은 `main`에서 배포)
-- 설계 버전: v1.3 · 화면 21개 · Acceptance Criteria 107개 ([화면 명세 목록](docs/screens/index.md))
+- 설계 버전: v1.3 · 화면 21개 · Acceptance Criteria 108개 ([화면 명세 목록](docs/screens/index.md))
 
 ## 주요 기능
 

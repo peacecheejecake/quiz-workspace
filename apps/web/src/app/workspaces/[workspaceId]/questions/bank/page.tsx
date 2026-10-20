@@ -4,7 +4,7 @@
 import type { Metadata } from 'next';
 import { QuestionBank } from '@/components/questions/question-bank';
 import { loadBank } from '@/lib/questions/data';
-import { parseBankFilters } from '@/lib/questions/filters';
+import { parseBankFilters, wantsCreate } from '@/lib/questions/filters';
 import { requireWorkspace } from '@/lib/workspaces/data';
 
 export const metadata: Metadata = { title: '문제은행' };
@@ -37,6 +37,7 @@ export default async function Page({
         failure={bank.failure}
         chapters={bank.chapters}
         documents={bank.documents}
+        openCreate={wantsCreate(query)}
       />
     </div>
   );

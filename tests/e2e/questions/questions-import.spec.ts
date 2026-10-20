@@ -17,6 +17,7 @@ import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 import {
   bankPath,
   bankUi,
+  chooseQuestionMenu,
   draftFor,
   expect,
   failingOnceCopy,
@@ -362,7 +363,7 @@ test(
     const importButton = (scope: Locator) =>
       scope.getByRole('link', { name: /^pdf 가져오기$|^import pdf$/i });
     await expect(importButton(main(page))).toHaveCount(0);
-    await homeUi.questionPdfsButton(page).click();
+    await chooseQuestionMenu(page, 'pdfs');
     await expect(page).toHaveURL(/[?&]panel=question-pdfs(&|$)/);
     const dialog = homeUi.questionPdfsDialog(page);
     await expect(dialog).toBeVisible();

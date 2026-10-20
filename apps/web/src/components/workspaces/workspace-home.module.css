@@ -132,11 +132,28 @@
   gap: var(--space-3);
 }
 
+/* Two button groups (UX4): 문서 · 문제 · 문제은행, then 이력 · 공유하기 aligned right. Groups and
+   buttons wrap as whole buttons on narrow screens; labels never wrap. */
 .actions {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
+}
+
+.actionGroup {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
+}
+
+.actionGroup[data-align='end'] {
+  margin-inline-start: auto;
 }
 
 .count {
@@ -147,5 +164,9 @@
   .search {
     flex-basis: 100%;
     max-width: none;
+  }
+
+  .actions {
+    justify-content: flex-start;
   }
 }

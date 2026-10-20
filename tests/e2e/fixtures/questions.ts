@@ -153,9 +153,9 @@
 //   QOV-01    route /workspaces/{id} (the workspace home, UX3c); role=group "문제 heatmap" holding one button per
 //             CONFIRMED question, named by questionDotLabel and carrying data-status; inside it the
 //             marker svg data-testid="question-marker" with data-shape square|star (design-system
-//             §6.1, packages/ui/src/questions); preview role=tooltip; status line "현재 필터의 문제 n개";
-//             collapsible group "상태 필터" (toggle button "상태 필터", collapsed by default); no
-//             status summary or legend since UX3c.
+//             §6.1, packages/ui/src/questions); preview role=tooltip; collapsible group "상태 필터"
+//             (toggle button "상태 필터", collapsed by default); no status summary or legend since
+//             UX3c and no question count line since UX4.
 //   QPLAY-01  modal dialog named by the question title (`… 12번 문제`) with "패널 닫기",
 //             toggles "즐겨찾기 추가"/"즐겨찾기 해제" and "다시 풀기 표시"/"다시 풀기 해제" (M5.3
 //             StudyToggles); MCQ options as radios (single) or checkboxes (multi) named by the
@@ -799,7 +799,7 @@ export const overviewUi = {
   markers: (page: Page) => overviewUi.heatmap(page).getByTestId('question-marker'),
   marker: (dot: Locator) => dot.getByTestId('question-marker'),
   tooltip: (page: Page) => page.getByRole('tooltip'),
-  /** "현재 필터의 문제 n개" (the status summary and legend are gone since UX3c). */
+  /** The removed count line "현재 필터의 문제 n개" (UX4): must not come back. */
   inFilter: (page: Page) =>
     main(page).getByText(/현재 필터의 문제 \d+개|\d+ questions in (the )?filter/i),
 };

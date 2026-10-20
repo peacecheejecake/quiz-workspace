@@ -16,7 +16,15 @@ import {
 } from '@quiz/ui';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useLayoutEffect, useMemo, useRef, useState, useTransition, type FormEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+} from 'react';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import {
   deleteQuestionAction,
@@ -24,6 +32,7 @@ import {
   setQuestionStatusAction,
 } from '@/lib/questions/actions';
 import {
+  CREATE_PARAM,
   DEFAULT_FILTERS,
   isFiltered,
   SEARCH_MAX,
@@ -59,6 +68,8 @@ export interface QuestionBankProps {
   readonly failure: QuestionFailureKind | null;
   readonly chapters: readonly ChapterOption[];
   readonly documents: readonly DocumentOption[];
+  /** `?create=1` (the home's 문제 › 직접 추가): open the 문제 등록 editor on arrival. */
+  readonly openCreate?: boolean;
 }
 
 const ALL = '__all__';
@@ -123,6 +134,7 @@ export function QuestionBank({
   failure,
   chapters,
   documents,
+  openCreate = false,
 }: QuestionBankProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -159,10 +171,18 @@ export function QuestionBank({
     if (rendered.q !== filters.q) setSearch(filters.q);
   }
 
-  const [editor, setEditor] = useState<{ target: EditorTarget | null; session: number }>({
-    target: null,
-    session: 0,
-  });
+  const createOnArrival = openCreate && canEdit;
+  const [editor, setEditor] = useState<{ target: EditorTarget | null; session: number }>(() =>
+    createOnArrival ? { target: { mode: 'create' }, session: 1 } : { target: null, session: 0 },
+  );
+  // The request is one-shot: a reload or Back must not reopen the editor.
+  useEffect(() => {
+    if (!openCreate) return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(CREATE_PARAM)) return;
+    url.searchParams.delete(CREATE_PARAM);
+    window.history.replaceState(window.history.state, '', url);
+  }, [openCreate]);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Question | null>(null);
   const [deleting, setDeleting] = useState(false);

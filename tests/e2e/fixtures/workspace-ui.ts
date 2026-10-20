@@ -10,8 +10,10 @@
 //              app's not-found page with HTTP 404.
 //   Home       (UX3c) `/workspaces/:id`: hidden h1 (workspace name), header with the unified
 //              search (searchbox "검색어", icon button "검색", text button "검색 옵션" →
-//              popover with checkboxes "문제"/"내용" and the options), buttons "문서 n",
-//              "문제은행" (link), "이력" (icon), "공유하기" (owner); dialogs are non-modal
+//              popover with checkboxes "문제"/"내용" and one list of options that follows
+//              them), buttons "문서 n", "문제" (menu button, UX4: menuitems "PDF 관리",
+//              "직접 추가", "변형 출제"; the last two for editors), "문제은행" (link), then
+//              icon buttons "이력" and "공유하기" (owner); dialogs are non-modal
 //              FloatingSidePanels inside <main> named "문서 관리", "문제 PDF 관리", "문제 생성",
 //              "이력", "링크 공유" (`?panel=documents|question-pdfs|generate|history|share`).
 //   DOC-01     "문서 관리" dialog: dashed Dropzone whose "PDF 업로드" button opens a file
@@ -66,10 +68,12 @@ export const homeUi = {
   bankLink: (page: Page) => main(page).getByRole('link', { name: /^(문제은행|question bank)$/i }),
   historyButton: (page: Page) => main(page).getByRole('button', { name: /^(이력|history)$/i }),
   shareButton: (page: Page) => main(page).getByRole('button', { name: /^(공유하기|share)$/i }),
-  questionPdfsButton: (page: Page) =>
-    main(page).getByRole('button', { name: /^(문제 pdf 관리|question pdfs?)$/i }),
-  generateButton: (page: Page) =>
-    main(page).getByRole('button', { name: /^(문제 생성|generate questions?)$/i }),
+  /** The header's `문제` menu button (UX4). Its menu is portalled to <body>. */
+  questionMenuButton: (page: Page) =>
+    main(page).getByRole('button', { name: /^(문제|questions)$/i }),
+  questionMenu: (page: Page) => page.getByRole('menu', { name: /^(문제|questions)$/i }),
+  questionMenuItem: (page: Page, item: QuestionMenuItem) =>
+    homeUi.questionMenu(page).getByRole('menuitem', { name: QUESTION_MENU_ITEMS[item] }),
   dialog: (page: Page, name: RegExp) => main(page).getByRole('dialog', { name }),
   documentsDialog: (page: Page) => homeUi.dialog(page, /^(문서 관리|documents)$/i),
   questionPdfsDialog: (page: Page) => homeUi.dialog(page, /^(문제 pdf 관리|question pdfs?)$/i),
@@ -88,6 +92,19 @@ export const homeUi = {
   statusFilters: (page: Page) =>
     main(page).getByRole('group', { name: /^(상태 필터|status filter)$/i }),
 };
+
+type QuestionMenuItem = 'pdfs' | 'create' | 'generate';
+const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
+  pdfs: /^(pdf 관리|manage pdfs?)$/i,
+  create: /^(직접 추가|add question)$/i,
+  generate: /^(변형 출제|generate variants?)$/i,
+};
+
+/** Opens the header's `문제` menu and chooses `item` (UX4). */
+export async function chooseQuestionMenu(page: Page, item: QuestionMenuItem): Promise<void> {
+  await homeUi.questionMenuButton(page).click();
+  await homeUi.questionMenuItem(page, item).click();
+}
 
 /** Opens the "검색 옵션" popover (no-op when it is open). */
 export async function openSearchOptions(page: Page): Promise<Locator> {
