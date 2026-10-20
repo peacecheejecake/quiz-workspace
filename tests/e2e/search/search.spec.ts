@@ -370,6 +370,11 @@ test(
     await expect(searchUi.documentFilter(page)).toBeVisible();
     await expect(options.getByRole('combobox', { name: /^(챕터|chapter)$/i })).toBeVisible();
     await expect(options.getByRole('combobox', { name: /^(유형|type)$/i })).toBeVisible();
+    // UX4: one list without section headings, and no question-paper toggle.
+    await expect(options.getByText(/^(문제 필터|내용 검색)$/)).toHaveCount(0);
+    await expect(options.getByRole('checkbox', { name: /문제지|question papers?/i })).toHaveCount(
+      0,
+    );
     await toggle.click();
     await expect(options).toBeHidden();
 
@@ -384,7 +389,9 @@ test(
         .filter({ hasText: /chlorine/i })
         .first(),
     ).toBeVisible();
-    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'chlorine');
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get('q') === 'chlorine' && url.searchParams.get('papers') === '1',
+    );
 
     // 문제 only: no source results; the last checked box cannot be turned off.
     await openSearchOptions(page);
@@ -393,11 +400,20 @@ test(
     await expect(searchUi.resultsRegion(page)).toHaveCount(0);
     await expect(overviewUi.dots(page)).toHaveCount(1);
     await expect(homeUi.scopeQuestions(page)).toBeDisabled();
+    // The options follow the targets: the content-only ones are hidden.
+    await expect(searchUi.modeGroup(page)).toBeHidden();
+    await expect(searchUi.documentFilter(page)).toBeHidden();
+    await expect(options.getByRole('combobox', { name: /^(챕터|chapter)$/i })).toBeVisible();
 
     // 내용 only: the heatmap is not filtered, the source results are back.
     await homeUi.scopeContent(page).click();
     await homeUi.scopeQuestions(page).click();
     await expect(page).toHaveURL((url) => url.searchParams.get('scope') === 'content');
+    await expect(searchUi.modeGroup(page)).toBeVisible();
+    await expect(options.getByRole('combobox', { name: /^(챕터|chapter)$/i })).toBeHidden();
+    await expect(options.getByRole('combobox', { name: /^(유형|type)$/i })).toBeHidden();
+    // Question papers are searched only while 문제 is a target.
+    await expect(page).toHaveURL((url) => !url.searchParams.has('papers'));
     await expect(overviewUi.dots(page)).toHaveCount(2);
     await expect(searchUi.resultItems(page).first()).toBeVisible();
     await page.keyboard.press('Escape');

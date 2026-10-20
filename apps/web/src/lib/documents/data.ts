@@ -1,6 +1,6 @@
 // Server-side reads for the DOC-01/DOC-02 first render (the Bearer token stays server-side).
 import type { Schemas } from '@quiz/api-client';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
 import { loginRedirectPath } from '@/lib/auth/routes';
 
@@ -28,6 +28,21 @@ export async function loadDocuments(workspaceId: string): Promise<DocumentSummar
   if (data) return data.items;
   if (response.status === 401) redirect(loginRedirectPath(returnTo));
   throw new DocumentsLoadError(response.status);
+}
+
+/**
+ * `loadDocuments` for a page that still renders without its documents (the home's 문서 n and
+ * dialogs, the bank's 문제 PDF 관리): a failure becomes `failed: true`; redirects still apply.
+ */
+export async function loadDocumentsOrFailure(
+  workspaceId: string,
+): Promise<{ readonly documents: DocumentSummary[]; readonly failed: boolean }> {
+  try {
+    return { documents: await loadDocuments(workspaceId), failed: false };
+  } catch (error) {
+    unstable_rethrow(error);
+    return { documents: [], failed: true };
+  }
 }
 
 export type DocumentDetail = Schemas['DocumentDetail'];

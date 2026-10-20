@@ -30,7 +30,6 @@ import {
   useRef,
   useState,
   useTransition,
-  type ReactNode,
 } from 'react';
 import type { OverviewItem, QuestionOverview } from '@/lib/questions/overview-data';
 import {
@@ -75,8 +74,6 @@ export interface QuestionsOverviewProps {
   readonly onResetFilters: () => void;
   readonly overview: QuestionOverview;
   readonly failure: QuestionFailureKind | null;
-  /** Toolbar actions on the right (문제 PDF 관리, 문제 생성). */
-  readonly actions?: ReactNode;
   /** Screen id of the practice panel (`data-screen-id`, docs/screens/index.md). */
   readonly panelScreenId?: string;
   /** `?question=` resolved outside the current filters by the server render (deep link). */
@@ -146,7 +143,6 @@ export function QuestionsOverview({
   onResetFilters,
   overview,
   failure,
-  actions,
   panelScreenId,
   requested = null,
 }: QuestionsOverviewProps) {
@@ -460,13 +456,15 @@ export function QuestionsOverview({
               <ChevronDownIcon width={16} height={16} aria-hidden="true" />
             )}
           </Button>
+          {/* No question count since UX4; a collapsed filter still says it applies. */}
           <p className={styles.inFilter} role="status">
             {busy
               ? '문제를 불러오는 중입니다.'
-              : `${stateFiltered && !statusOpen ? '상태 필터 적용 중 · ' : ''}현재 필터의 문제 ${items.length}개`}
+              : stateFiltered && !statusOpen
+                ? '상태 필터 적용 중'
+                : ''}
           </p>
         </div>
-        {actions ? <div className={styles.toolbarActions}>{actions}</div> : null}
       </div>
 
       <div
