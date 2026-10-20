@@ -45,7 +45,11 @@ from quiz_worker.errors import JobOutcomeError, JobRetryError, sanitize_error
 from quiz_worker.fork_job import LazyForkDeps, workspace_fork_definition
 from quiz_worker.jobs import ECHO_JOB
 from quiz_worker.logging_config import configure_logging, job_id_var
-from quiz_worker.pg_store import PostgresJobStore, create_job_store_engine
+from quiz_worker.pg_store import (
+    PostgresJobStore,
+    create_job_store_engine,
+    dispose_inherited_engines,
+)
 from quiz_worker.question_generation_job import (
     LazyGenerationDeps,
     question_generate_definition,
@@ -270,6 +274,7 @@ def create_celery_app(
     store = job_store if job_store is not None else build_job_store(settings)
     app = QuizCelery(worker_settings=settings, job_store=store)
     app.conf.update(build_celery_config(settings))
+    install_fork_safety()
     if definitions is None:
         document_deps = LazyDeps(settings)
         definitions = default_definitions(settings, document_deps)
@@ -465,6 +470,22 @@ def cleanup_policy_for(settings: WorkerSettings) -> CleanupPolicy:
         # A cleanup try runs inside a task, so the longest hard time limit bounds it.
         lease_seconds=settings.max_lease_seconds,
     )
+
+
+FORK_SAFETY_UID = "quiz-worker-fork-safety"
+
+
+def install_fork_safety() -> None:
+    """Every prefork child starts with empty DB pools (WRK-FORKDB, see
+    `dispose_inherited_engines`). Linux forks the children, after the main process may have used
+    the job store engine; spawned children (macOS) have nothing to drop. Idempotent."""
+    signals.worker_process_init.connect(
+        _on_process_init_dispose_engines, weak=False, dispatch_uid=FORK_SAFETY_UID
+    )
+
+
+def _on_process_init_dispose_engines(**_: Any) -> None:
+    dispose_inherited_engines()
 
 
 PARSER_WARM_UP_UID = "quiz-worker-parser-warm-up"
