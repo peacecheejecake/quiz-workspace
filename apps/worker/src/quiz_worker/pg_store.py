@@ -18,6 +18,7 @@ trigger keeps that value: the persisted row is exactly the record the store retu
 from __future__ import annotations
 
 import os
+import weakref
 from collections.abc import Callable, Collection, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -120,6 +121,9 @@ _TERMINAL_WITH_CLEANUP = (JobStatus.FAILED.value, JobStatus.CANCELLED.value)
 # Read by the async_jobs updated_at trigger (supabase/migrations/20261017170000).
 EXPLICIT_UPDATED_AT_SETTING = "quiz.explicit_updated_at"
 
+# Every engine `create_job_store_engine` built in this process (weakly: a dropped engine goes).
+_ENGINES: weakref.WeakSet[Engine] = weakref.WeakSet()
+
 
 def create_job_store_engine(
     url: SecretStr | str, *, pool_size: int = 5, connect_timeout_seconds: float = 5
@@ -130,7 +134,7 @@ def create_job_store_engine(
     if sa_url.drivername in {"postgres", "postgresql"}:
         # Plain `postgresql://` URLs (Supabase style) use psycopg 3, as in apps/api.
         sa_url = sa_url.set(drivername="postgresql+psycopg")
-    return create_engine(
+    engine = create_engine(
         sa_url,
         pool_size=pool_size,
         pool_pre_ping=True,
@@ -142,6 +146,25 @@ def create_job_store_engine(
             "prepare_threshold": None,
         },
     )
+    _ENGINES.add(engine)
+    return engine
+
+
+def dispose_inherited_engines() -> int:
+    """In a freshly forked process: give every engine a new, empty pool (WRK-FORKDB).
+
+    A forked child inherits the parent's pooled connections, i.e. the same server sockets; the
+    worker's main process uses the job store (`release_lost`) before the pool forks the
+    replacement child. `dispose(close=False)` drops those connections in the child without
+    closing them (closing would send a Terminate on the parent's socket), so the parent keeps
+    using them and the child opens its own ("Using Connection Pools with Multiprocessing",
+    SQLAlchemy docs). psycopg never finishes a connection from a process other than the one that
+    opened it, so the dropped objects are safe to garbage collect. Returns the engine count.
+    """
+    engines = list(_ENGINES)
+    for engine in engines:
+        engine.dispose(close=False)
+    return len(engines)
 
 
 def _utc(value: datetime | None) -> datetime | None:
