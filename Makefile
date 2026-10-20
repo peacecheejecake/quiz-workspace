@@ -28,7 +28,7 @@ SIGNING_KEYS := supabase/signing_keys.json
 	test test-ts test-py test-infra test-models test-llm test-workers-ai eval eval-models eval-workers-ai auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
 	e2e e2e-browsers e2e-trace test-red images image-api image-api-models image-worker image-web reindex backup restore \
-	check-env smoke-local smoke-staging
+	check-env deploy-prepare smoke-local smoke-staging
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -235,6 +235,12 @@ restore: ## Restore DIR into an EMPTY target at the same migration version (REST
 check-env: ## Validate deployment env files against the manifest, ENV=staging|production ARGS="--check api=<file>"
 	@test -n "$(ENV)$(findstring --list,$(ARGS))" || { echo 'usage: make check-env ENV=staging|production ARGS="--check <service>=<file>"'; exit 2; }
 	uv run python scripts/check_env.py $(if $(ENV),--env $(ENV)) $(ARGS)
+
+# Deploy preparation (DEP-PREP): checks + local builds for one ref, never deploys or changes
+# anything remote. Ref rule and REQUIRED_CI_JOBS come from deploy.yml; prints the dispatch command.
+deploy-prepare: ## Check + build a ref for deploy (no deploy), REF=<ref> ENV=staging|production ARGS="--skip-images"
+	@test -n "$(REF)" -a -n "$(ENV)" || { echo 'usage: make deploy-prepare REF=<branch|tag|sha> ENV=staging|production [ARGS="--skip-images --env-dir <dir>"]'; exit 2; }
+	uv run python scripts/deploy_prepare.py --ref "$(REF)" --env "$(ENV)" $(ARGS)
 
 # Deployment smoke DEP-01..07 (M7.4a; tests/smoke, docs/runbook-deploy.md "Staging smoke").
 # smoke-local: against the local stack (needs infra-up); e2e:log-audit starts web/API/worker on
