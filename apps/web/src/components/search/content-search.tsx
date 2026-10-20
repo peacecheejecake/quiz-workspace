@@ -45,6 +45,20 @@ export interface SearchDocumentOption {
   readonly isQuestionPaper: boolean;
 }
 
+/**
+ * Whether the selected document filter must be dropped: a question paper while question papers
+ * are not searched (내용 only). The API searches an explicit document regardless of
+ * `include_question_papers`, so the filter itself has to go.
+ */
+export function dropsSelectedPaper(
+  documentId: string | null,
+  documents: readonly SearchDocumentOption[],
+  includeQuestionPapers: boolean,
+): boolean {
+  if (includeQuestionPapers || documentId === null) return false;
+  return documents.some((d) => d.id === documentId && d.isQuestionPaper);
+}
+
 const ALL = '__all__';
 
 type Results =
@@ -96,8 +110,15 @@ export interface ContentSearch {
   /**
    * Runs `query` with the current options; `includeQuestionPapers`, when given, replaces the
    * current choice (it follows the unified search's targets) for this and later searches.
+   * `clearDocument` drops the document and chapter filters first (a question paper selected
+   * while papers are no longer searched: the API would still search an explicit document).
    */
-  readonly search: (query: string, options?: { readonly includeQuestionPapers?: boolean }) => void;
+  readonly search: (
+    query: string,
+    options?: { readonly includeQuestionPapers?: boolean; readonly clearDocument?: boolean },
+  ) => void;
+  /** Drops the document and chapter filters without searching (and from the address bar). */
+  readonly clearDocumentFilter: () => void;
   /** Re-runs the last search (after a failure). */
   readonly retry: () => void;
   /** Forgets the results (the home's "검색 결과 닫기"). */
@@ -298,10 +319,30 @@ export function useContentSearch({
       pendingInitialRef.current = null;
       const papers = overrides?.includeQuestionPapers;
       if (papers !== undefined) setPapers(papers);
+      const clearDocument = overrides?.clearDocument === true;
+      if (clearDocument) {
+        setDocumentId(null);
+        chapterIdRef.current = null;
+        setChapterId(null);
+        setChapterNotice(null);
+      }
       void run({
-        ...options(papers === undefined ? {} : { includeQuestionPapers: papers }),
+        ...options({
+          ...(papers === undefined ? {} : { includeQuestionPapers: papers }),
+          ...(clearDocument ? { documentId: null, chapterId: null } : {}),
+        }),
         query: query.trim().slice(0, MAX_QUERY_CHARS),
       });
+    },
+    clearDocumentFilter: () => {
+      setDocumentId(null);
+      chapterIdRef.current = null;
+      setChapterId(null);
+      setChapterNotice(null);
+      const url = new URL(window.location.href);
+      url.searchParams.delete('document');
+      url.searchParams.delete('section');
+      window.history.replaceState(window.history.state, '', url);
     },
     retry: () => {
       if (submitted) void run(submitted);

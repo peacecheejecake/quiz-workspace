@@ -52,6 +52,7 @@ import { QuestionsOverview } from '@/components/questions/overview/questions-ove
 import {
   ContentSearchOptions,
   ContentSearchResults,
+  dropsSelectedPaper,
   useContentSearch,
 } from '@/components/search/content-search';
 import { WorkspaceSharingPanel } from '@/components/sharing/workspace-sharing-panel';
@@ -230,9 +231,16 @@ export function WorkspaceHome({
   /** Runs `query` under `nextScope`: content results, heatmap filter and the URL. */
   function applySearch(query: string, nextScope: SearchScope) {
     const q = query.trim().slice(0, MAX_QUERY_CHARS);
+    const papers = scopeIncludesQuestions(nextScope);
+    // Without 문제 only books are searched: a selected question paper (and its chapter) must go,
+    // or the API would keep searching that explicit document.
+    const clearDocument = dropsSelectedPaper(content.documentId, searchDocuments, papers);
     if (q && scopeIncludesContent(nextScope)) {
-      content.search(q, { includeQuestionPapers: scopeIncludesQuestions(nextScope) });
-    } else content.clear();
+      content.search(q, { includeQuestionPapers: papers, clearDocument });
+    } else {
+      content.clear();
+      if (clearDocument) content.clearDocumentFilter();
+    }
     const target = `${pathname}${patchSearch(window.location.search, {
       q: q || null,
       scope: nextScope === 'all' ? null : nextScope,
