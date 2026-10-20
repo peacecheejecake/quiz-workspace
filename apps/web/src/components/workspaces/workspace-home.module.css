@@ -71,7 +71,7 @@
 
 .options {
   display: grid;
-  gap: var(--space-3);
+  gap: 0;
   width: min(30rem, calc(100vw - 2 * var(--space-4)));
   max-height: min(36rem, calc(100dvh - 8rem));
   overflow-y: auto;
@@ -93,9 +93,30 @@
   padding: 0;
 }
 
-.optionGroup {
+/* One option of the list: collapses to nothing when its target is not selected (UX4). The body
+   carries the spacing so a hidden option leaves no gap; its 2px padding keeps focus rings
+   unclipped. */
+.optionSlot {
   display: grid;
-  gap: var(--space-2);
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows var(--duration-panel-enter) var(--easing-standard),
+    opacity var(--duration-panel-enter) var(--easing-standard),
+    visibility var(--duration-panel-enter);
+}
+
+.optionSlot[data-hidden] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.optionSlot > .optionBody {
+  min-height: 0;
+  overflow: hidden;
+  margin: 0 -2px;
+  padding: var(--space-3) 2px 2px;
 }
 
 .optionsTitle {

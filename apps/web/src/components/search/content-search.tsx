@@ -6,8 +6,10 @@
 // published-revision scope — and mirrors the submitted search into the home URL next to its other
 // keys, so the back button from the PDF viewer restores it. A newer request always wins: older
 // ones are aborted and their late answers ignored. `ContentSearchOptions` renders the options
-// inside the "검색 옵션" popover; `ContentSearchResults` the results under the home header.
-import { Badge, Button, Checkbox, EmptyState, RadioGroup, Select } from '@quiz/ui';
+// inside the "검색 옵션" popover; `ContentSearchResults` the results under the home header. Question
+// papers are searched exactly when the unified search's targets include 문제 (UX4): the home passes
+// that with each search, there is no separate toggle.
+import { Badge, Button, EmptyState, RadioGroup, Select } from '@quiz/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loginRedirectPath } from '@/lib/auth/routes';
@@ -91,8 +93,11 @@ export interface ContentSearch {
   readonly now: number;
   readonly selected: SearchItem | null;
   readonly panelOpen: boolean;
-  /** Runs `query` with the current options. */
-  readonly search: (query: string) => void;
+  /**
+   * Runs `query` with the current options; `includeQuestionPapers`, when given, replaces the
+   * current choice (it follows the unified search's targets) for this and later searches.
+   */
+  readonly search: (query: string, options?: { readonly includeQuestionPapers?: boolean }) => void;
   /** Re-runs the last search (after a failure). */
   readonly retry: () => void;
   /** Forgets the results (the home's "검색 결과 닫기"). */
@@ -105,7 +110,6 @@ export interface ContentSearch {
   readonly setMode: (value: string) => void;
   readonly setDocument: (value: string) => void;
   readonly setChapter: (value: string) => void;
-  readonly setIncludeQuestionPapers: (checked: boolean) => void;
   readonly openHit: (item: SearchItem) => void;
   readonly closeHit: () => void;
 }
@@ -290,9 +294,14 @@ export function useContentSearch({
     now,
     selected,
     panelOpen,
-    search: (query) => {
+    search: (query, overrides) => {
       pendingInitialRef.current = null;
-      void run({ ...options(), query: query.trim().slice(0, MAX_QUERY_CHARS) });
+      const papers = overrides?.includeQuestionPapers;
+      if (papers !== undefined) setPapers(papers);
+      void run({
+        ...options(papers === undefined ? {} : { includeQuestionPapers: papers }),
+        query: query.trim().slice(0, MAX_QUERY_CHARS),
+      });
     },
     retry: () => {
       if (submitted) void run(submitted);
@@ -347,10 +356,6 @@ export function useContentSearch({
       setChapterId(next);
       setChapterNotice(null);
       rerun({ chapterId: next });
-    },
-    setIncludeQuestionPapers: (checked) => {
-      setPapers(checked);
-      rerun({ includeQuestionPapers: checked });
     },
     openHit: (item) => {
       setSelected(item);
@@ -435,11 +440,6 @@ export function ContentSearchOptions({
           onValueChange={search.setChapter}
         />
       </div>
-      <Checkbox
-        label="문제지 PDF도 검색"
-        checked={search.includeQuestionPapers}
-        onCheckedChange={(checked) => search.setIncludeQuestionPapers(checked === true)}
-      />
       {search.chapterNotice ? (
         <p role="status" className={styles.hint}>
           {search.chapterNotice}

@@ -262,6 +262,8 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 ### 4.1 상호작용 상태·경계 (v1.2, UX1 · v1.2.1, UX2)
 
 - **Hover와 선택은 다른 배경:** hover `--color-state-hover`(중립 회색), 누르는 동안 `--color-state-pressed`, 선택·켜짐(`aria-pressed="true"`, `data-state="on"`) `--color-state-selected`(accent tint) + 굵기·아이콘 변화. 선택 상태에만 생기는 테두리는 쓰지 않는다.
+- **선택 표시 bar 없음 (UX4, 2026-10-21):** 버튼·tab·목록 항목 버튼의 선택/현재 상태를 왼쪽이나 아래쪽 accent 테두리(bar, `border-bottom`, inset `box-shadow`)로 그리지 않는다. 선택은 `aria-pressed`/`aria-selected`/`aria-current`와 배경(selected 채움 또는 muted 표면)·굵기로 전달한다.
+- **버튼 문구는 줄바꿈하지 않는다 (UX4):** `Button`은 `white-space: nowrap`이고 줄어들지 않는다(`flex-shrink: 0`). 좁은 화면(375px)에서는 버튼 묶음이 버튼 단위로 다음 줄로 넘어가거나(flex-wrap) 묶음 안에서 가로 스크롤되며, 페이지 전체 가로 스크롤은 생기지 않게 한다.
 - **Toggle 버튼:** 꺼진 상태에 테두리·배경이 없다(ghost). 켜짐은 배경 채움 + `aria-pressed`(또는 바뀌는 label) + 굵기/아이콘으로 전달하며 색만으로 구분하지 않는다. `Button`/`IconButton` primitive가 `aria-pressed`/`data-state`를 보고 처리하므로 기능 코드는 테두리·배경을 따로 지정하지 않는다.
 - **테두리 최소화:** Badge·tab 수 표시에는 테두리·원형 배경을 두지 않는다. 구분선은 1px `--color-border`. 2px는 오류 입력(`aria-invalid`)과 focus ring에만 쓴다. 입력 필드·체크박스·라디오의 평소 경계는 `--color-border-strong`이고 스위치 track은 `--color-switch-track` 채움이 경계를 맡으며(테두리는 채움보다 연함, v1.2.2), focus 중에는 아래 규칙대로 focus 색으로 바뀐다.
 - **Focus:** `:focus-visible` ring은 2px `--color-focus`(forced-colors에서는 `Highlight`)이며, 메뉴·Select 항목의 ring도 키보드 focus(`:focus-visible`)에서만 그린다(pointer hover는 배경만).
@@ -279,10 +281,10 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
   | ghost(`IconButton` 기본 포함) | 투명 | `--color-state-hover` | `--color-state-pressed` | — |
   | toggle 꺼짐(`aria-pressed="false"`, `data-state="off"`) | 투명, 테두리 없음 | `--color-state-hover` | `--color-state-pressed` | — |
   | toggle 켜짐(`aria-pressed="true"`, `data-state="on"`) | `--color-state-selected` + 굵기/아이콘 | `--color-state-selected-hover` | `--color-state-pressed` | 기본이 곧 켜짐 |
-  | tab trigger | 투명 | `--color-state-hover` + text-primary | `--color-state-pressed` | 하단 accent bar + text-primary |
+  | tab trigger | 투명 | `--color-state-hover` + text-primary | `--color-state-pressed` | `--color-state-selected` 배경 + text-primary + `aria-selected` (하단 bar 없음, UX4) |
   | 체크박스·라디오 | `--color-border-strong` 경계 | 꺼짐: 경계 `--color-text-primary`, 켜짐: 채움·경계 `--color-accent-hover` | — | accent 채움 |
   | 스위치 | `--color-switch-track` 채움 + 더 연한 `--color-switch-track-border` | 꺼짐: 채움 `--color-switch-track-hover`, 켜짐: 채움 `--color-accent-hover` | — | accent 채움 + `--color-switch-track-checked-border` |
-  | 기능 CSS의 버튼(segmented view switch, 목록 항목 버튼, outline tree 항목) | 각자 | `--color-state-hover`(view switch 꺼진 칸은 text-primary도) | view switch: `--color-state-pressed` | 기존 선택 표시(표면·bar·굵기) 유지 |
+  | 기능 CSS의 버튼(segmented view switch, 목록 항목 버튼, outline tree 항목) | 각자 | `--color-state-hover`(view switch 꺼진 칸은 text-primary도) | view switch: `--color-state-pressed` | 표면·배경·굵기 + `aria-pressed`/`aria-current` (왼쪽/아래 accent bar 없음, UX4) |
   | 텍스트 버튼(`linkButton`)·링크 | 밑줄 | 밑줄이 굵어지거나(텍스트 버튼) 밑줄 표시(링크) | — | — |
 
   hover는 `@media (hover: hover)` 안에서만 적용해 터치 후 hover가 남지 않게 하고, 비활성(`:disabled`)에는 적용하지 않는다. pressed는 모든 입력에 적용한다. focus 중인 테두리 컨트롤은 hover 중에도 focus 경계 하나를 유지한다(아래 "Focus 경계는 하나"). 기능 코드는 kit `Button`/`IconButton`을 쓰고, 부득이한 버튼형 클래스도 위 토큰만 쓴다.

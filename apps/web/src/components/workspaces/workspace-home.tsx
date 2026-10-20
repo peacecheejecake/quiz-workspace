@@ -4,8 +4,10 @@
 // 레이아웃", UX3c): the single page of a workspace, without a sidebar.
 //
 //   Workspace header  unified search (SEARCH-01-AC07: one box, icon submit, "검색 옵션" popover
-//                     with the scope checkboxes, the content-search options and the heatmap's
-//                     chapter/type filters) · `문서 n` · `문제은행` · `이력` · `공유하기` (owner)
+//                     with the scope checkboxes and one list of options that follows them: the
+//                     heatmap's chapter/type filters for 문제, the content-search options for 내용;
+//                     question papers are searched whenever 문제 is a target, UX4) · `문서 n` ·
+//                     `문제은행` · `이력` · `공유하기` (owner)
 //   content results   the 원문 search results when the scope includes 내용
 //   문제 영역         the heatmap (QuestionsOverview) with `문제 PDF 관리` / `문제 생성`
 //   floating dialogs  문서 관리 · 문제 PDF 관리 · 문제 생성 · 이력 · 링크 공유: non-modal
@@ -35,7 +37,7 @@ import {
 } from '@quiz/ui';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
+import { useEffect, useRef, useState, useTransition, type FormEvent, type ReactNode } from 'react';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
@@ -189,7 +191,8 @@ export function WorkspaceHome({
   const [optionsOpen, setOptionsOpen] = useState(false);
   const content = useContentSearch({
     workspaceId: workspace.id,
-    initial: initialSearch,
+    // UX4: question papers are searched exactly when 문제 is a target.
+    initial: { ...initialSearch, includeQuestionPapers: scopeIncludesQuestions(scope) },
     runInitial: scopeIncludesContent(scope),
   });
 
@@ -220,8 +223,9 @@ export function WorkspaceHome({
   /** Runs `query` under `nextScope`: content results, heatmap filter and the URL. */
   function applySearch(query: string, nextScope: SearchScope) {
     const q = query.trim().slice(0, MAX_QUERY_CHARS);
-    if (q && scopeIncludesContent(nextScope)) content.search(q);
-    else content.clear();
+    if (q && scopeIncludesContent(nextScope)) {
+      content.search(q, { includeQuestionPapers: scopeIncludesQuestions(nextScope) });
+    } else content.clear();
     const target = `${pathname}${patchSearch(window.location.search, {
       q: q || null,
       scope: nextScope === 'all' ? null : nextScope,
@@ -326,14 +330,9 @@ export function WorkspaceHome({
                   onCheckedChange={(checked) => changeScope(withQuestions, checked === true)}
                 />
               </fieldset>
-              <div
-                role="group"
-                aria-labelledby="search-options-questions"
-                className={styles.optionGroup}
-              >
-                <p id="search-options-questions" className={styles.optionsTitle}>
-                  문제 필터
-                </p>
+              {/* One list that follows the targets (UX4): options of an unselected target
+                  collapse away. */}
+              <OptionSlot shown={withQuestions}>
                 <div className={styles.optionRow}>
                   <Select
                     label="챕터"
@@ -356,21 +355,18 @@ export function WorkspaceHome({
                     }
                   />
                 </div>
-              </div>
-              <div
-                role="group"
-                aria-labelledby="search-options-content"
-                className={styles.optionGroup}
-              >
-                <p id="search-options-content" className={styles.optionsTitle}>
-                  내용 검색
-                </p>
+              </OptionSlot>
+              <OptionSlot shown={withContent}>
                 <ContentSearchOptions
                   search={content}
-                  documents={searchDocuments}
+                  documents={
+                    withQuestions
+                      ? searchDocuments
+                      : searchDocuments.filter((d) => !d.isQuestionPaper)
+                  }
                   documentsLoadFailed={library.listFailed}
                 />
-              </div>
+              </OptionSlot>
             </PopoverContent>
           </Popover>
         </form>
@@ -538,6 +534,24 @@ export function WorkspaceHome({
         loading={library.deleting}
         onConfirm={() => void library.confirmDelete()}
       />
+    </div>
+  );
+}
+
+/**
+ * One option of the "검색 옵션" list. Hidden options collapse smoothly (no motion under
+ * reduced-motion) and leave the accessibility tree and the tab order (`inert`, `visibility`).
+ */
+function OptionSlot({
+  shown,
+  children,
+}: {
+  readonly shown: boolean;
+  readonly children: ReactNode;
+}) {
+  return (
+    <div className={styles.optionSlot} data-hidden={!shown || undefined} inert={!shown}>
+      <div className={styles.optionBody}>{children}</div>
     </div>
   );
 }

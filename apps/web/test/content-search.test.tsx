@@ -48,6 +48,7 @@ function SearchScreen({
   initial,
   client,
   syncTo,
+  papers,
 }: {
   workspaceId: string;
   documents: readonly SearchDocumentOption[];
@@ -55,6 +56,8 @@ function SearchScreen({
   client: SearchClient;
   /** What the home hands to `sync` when the address bar changes (Back/Forward). */
   syncTo?: SearchQuery | null;
+  /** What the home passes with each search: whether 문제 is a target (UX4). */
+  papers?: boolean;
 }) {
   const search = useContentSearch({ workspaceId, initial, runInitial: true, client });
   const [draft, setDraft] = useState(initial.query);
@@ -64,7 +67,10 @@ function SearchScreen({
         role="search"
         onSubmit={(event) => {
           event.preventDefault();
-          search.search(draft);
+          search.search(
+            draft,
+            papers === undefined ? undefined : { includeQuestionPapers: papers },
+          );
         }}
       >
         <input
@@ -207,6 +213,42 @@ describe('content search (unified search, scope 내용)', () => {
       );
     expect(notice).toBeDefined();
     expect(notice).toBeVisible();
+  });
+
+  it('searches question papers when the home says 문제 is a target, without a toggle (UX4)', async () => {
+    const user = userEvent.setup();
+    const client = makeClient(async () => response([]));
+    const { unmount } = render(
+      <SearchScreen workspaceId={WS} documents={[]} initial={INITIAL} client={client} papers />,
+    );
+    expect(screen.queryByRole('checkbox', { name: /문제지/ })).toBeNull();
+
+    await submit(user, 'water');
+    expect(client.search.mock.calls[0]?.[1]).toMatchObject({
+      query: 'water',
+      includeQuestionPapers: true,
+    });
+    expect(new URLSearchParams(window.location.search).get('papers')).toBe('1');
+    // An option change re-runs the search with the same choice.
+    await user.click(screen.getByRole('radio', { name: '의미' }));
+    expect(client.search.mock.calls[1]?.[1]).toMatchObject({
+      mode: 'semantic',
+      includeQuestionPapers: true,
+    });
+    unmount();
+
+    render(
+      <SearchScreen
+        workspaceId={WS}
+        documents={[]}
+        initial={{ ...INITIAL, includeQuestionPapers: true }}
+        client={client}
+        papers={false}
+      />,
+    );
+    await submit(user, 'water');
+    expect(client.search.mock.calls[2]?.[1]).toMatchObject({ includeQuestionPapers: false });
+    expect(new URLSearchParams(window.location.search).get('papers')).toBeNull();
   });
 
   it('re-runs the submitted query when the mode changes and ignores an overtaken answer', async () => {
