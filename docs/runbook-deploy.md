@@ -15,6 +15,7 @@
 | `infra/deploy/env-manifest.toml` | 서비스·환경별 변수 전체 목록(공개/비밀, 필수/선택/금지, 제공자) |
 | `scripts/check_env.py` (`make check-env`) | env 파일 검증(값은 출력하지 않음), `--template`으로 빈 양식 생성 |
 | `.github/workflows/deploy.yml` | 배포(staging: `develop` CI 후 자동·수동, production: `main` 수동): preflight → 이미지(digest) → migration → Railway → Vercel → smoke |
+| `scripts/deploy_prepare.py` (`make deploy-prepare`) | 한 ref의 배포 준비 점검 + 로컬 이미지 빌드(배포·원격 변경 없음, 4장 "배포 준비 점검") |
 | `scripts/deploy/railway_deploy.py` | Railway 서비스를 이미지 digest로 갱신·배포·SUCCESS 대기 |
 | `tests/smoke/` (`make smoke-local`, `make smoke-staging`) | DEP-01~07 자동 점검 |
 
@@ -157,6 +158,29 @@ SMOKE_DEP03_PHASE=verify make smoke-staging ARGS="--grep DEP-03"   # 확인 후 
 ```
 
 smoke 계정의 workspace는 API에서 soft-delete만 되므로 누적된다(합성 데이터). 필요하면 staging DB에서 smoke 계정 소유 workspace만 정리한다.
+
+### 배포 준비 점검 (`make deploy-prepare`, DEP-PREP)
+
+배포 전에 한 ref를 **배포하지 않고** 점검·빌드한다. 원격에는 읽기만 한다(`git fetch`, `gh run`/`gh api` GET, read-only DB 트랜잭션). push·workflow dispatch·배포 API 호출은 스크립트가 명령 단위로 막는다.
+
+```bash
+make deploy-prepare REF=origin/develop ENV=staging ARGS="--skip-images"
+make deploy-prepare REF=main ENV=production                       # 이미지까지 빌드(디스크 8 GiB 이상 필요)
+make deploy-prepare REF=main ENV=production ARGS="--db-url-env SUPABASE_DB_URL --only api,worker"
+```
+
+| 단계 | 내용 |
+|---|---|
+| ref | `git fetch` 후 ref → 전체 SHA(브랜치 이름은 `origin/<branch>`의 tip), commit 표시 |
+| ref rule | `deploy.yml` preflight의 `case "$TARGET/$REF"` 허용 목록을 **그 SHA의 workflow에서 읽어** 적용(staging ← `develop`, production ← `main`). SHA를 주면 그 브랜치의 현재 tip이어야 한다(dispatch는 tip을 배포). `--allow-any-ref`는 경고로 낮추고 로컬 빌드만 한다 |
+| ci | 그 SHA의 최신 CI push run에서 `deploy.yml`의 `REQUIRED_CI_JOBS`가 모두 success인지(진행 중·실패·누락을 구분해 출력). `--skip-ci`. production은 `PRODUCTION_DEPLOY_ENABLED`도 확인(경고) |
+| worktree | 임시 디렉터리에 그 SHA의 깨끗한 `git worktree`(사용 중인 checkout은 건드리지 않음). 끝나면 삭제, `--keep`이면 유지 |
+| env | 그 SHA의 `scripts/check_env.py`로 `--env-dir`(기본 `~/.secrets/quiz-workspace/<env>/`)의 `web`·`api`·`worker` 파일 검증(`<svc>.check.env`가 있으면 우선). 이름만 출력하고 값은 출력하지 않는다. `supabase-config`·`smoke` 파일은 `env ops`로 참고 검사(배포에는 쓰이지 않아 경고만). 디렉터리가 없으면 "not checked"로 건너뛴다 |
+| migrations | 그 SHA의 `supabase/migrations` 중 대상이 아직 적용하지 않은 것. `--db-url-env NAME`/`--db-url-file FILE`이 있으면 `supabase_migrations.schema_migrations`를 read-only로 조회(URL·비밀번호는 argv·출력에 나오지 않음), 없으면 `--since <ref>` 또는 GitHub Environment의 마지막 성공 배포 SHA와 파일 diff. DROP TABLE/COLUMN, `ALTER … DROP`, TRUNCATE, RENAME, DELETE는 경고, DROP POLICY/TRIGGER/CONSTRAINT 등은 note. DB가 이 commit에 없는 migration을 이미 갖고 있으면(구 commit 배포) `skip_migrations`를 안내 |
+| images | 여유 공간(`--min-free-gb`, 기본 8) 확인 후 worktree에서 `make image-{api,worker,web}`, 태그 `quiz-<svc>:<sha 12자>`. web은 env 파일의 `NEXT_PUBLIC_*` 공개 값만 build arg로 쓰거나 `--web-args`. `--skip-images`, `--only api,worker` |
+| summary | 단계별 ✓/✗/!/- 표와, 배포할 때 쓸 `gh workflow run deploy.yml --ref <branch> -f environment=<env>` 명령(**출력만**, 실행하지 않음) |
+
+종료 코드: 0 = 필수 점검 통과(경고 허용), 1 = 필수 점검 실패, 2 = 사용법 오류. 로컬 이미지는 호스트 아키텍처(arm64일 수 있음)로 빌드되고 push하지 않는다. 실제 배포 이미지는 workflow가 linux/amd64로 다시 빌드한다.
 
 ## 5. 롤백
 
