@@ -25,6 +25,7 @@ flowchart TD
 ```
 
 - Embedding(M7.4b, 사용자 결정 2026-10-18): staging/production은 `WORKER_EMBEDDER=workers_ai` — worker는 문서 chunk, API는 검색어만 Cloudflare Workers AI REST(`POST https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/qwen/qwen3-embedding-0.6b`, `Authorization: Bearer $CLOUDFLARE_API_TOKEN`)로 embedding한다. 그래서 API 이미지는 기본 빌드에서 torch/transformers를 넣지 않는다(`API_EXTRAS` 빈 값; 로컬 모델 이미지는 `--build-arg API_EXTRAS=models`). worker는 Docling 때문에 계속 torch를 가진다. Reranker는 꺼진 채 유지(Workers AI에 다국어 reranker 없음). 로컬 Qwen3와 Workers AI vector는 같은 collection에 섞지 않는다(`model_name`이 달라 물리 collection 분리, 전환은 reindex + alias).
+- Docling parser model(WRK-BAKE, 사용자 결정 2026-10-21; M7.3의 "weight는 image에 굽지 않음"을 이 model에 한해 변경): worker image가 build 시 Docling layout(`docling-project/docling-layout-heron`, commit 고정)과 TableFormer(`docling-project/docling-models` `v2.3.0`, accurate만)를 `/opt/docling-models`(root 소유, 읽기 전용)에 받아 두고 `WORKER_MODELS_ARTIFACTS_PATH`가 그 경로를 가리킨다. 그래서 배포·재시작·crash 뒤에도 Hugging Face에서 다시 받지 않는다(image 약 +385 MB). revision은 lock된 Docling이 요청하는 값이며 Docling을 올리면 build가 실패해 다시 고정하게 한다. OCR(RapidOCR)은 worker image에 없다. Qwen3 embedding/reranker weight는 계속 `HF_HOME`에 lazy 적재되며 `WORKER_EMBEDDER=workers_ai`에서는 쓰지 않으므로 HF_HOME volume이 필요 없다.
 
 - Frontend: Vercel의 Next.js 웹 호스팅(비상용·개인 프로젝트 여부에 따라 플랜 확인). API는 인증 외 비즈니스 데이터 요청을 FastAPI로 전달한다.
 - Supabase: 사용자·메일 인증, Postgres metadata + canonical text/revisions, 비공개 `source-pdfs`와 `parsed-artifacts` 버킷을 제공한다.

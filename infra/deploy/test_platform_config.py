@@ -6,6 +6,7 @@ No platform offers an offline validator for these files, so this test pins what 
 
 from __future__ import annotations
 
+import itertools
 import json
 import re
 import tomllib
@@ -62,6 +63,49 @@ def test_hf_home_volume_matches_the_image(service: str) -> None:
     stage = _final_stage(ROOT / spec["dockerfile"])
     assert re.search(rf"\bHF_HOME={re.escape(spec['volume_mount_path'])}\b", "\n".join(stage))
     assert f'VOLUME ["{spec["volume_mount_path"]}"]' in stage
+
+
+def _stage(dockerfile: Path, name: str) -> list[str]:
+    lines = dockerfile.read_text(encoding="utf-8").splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith("FROM ")] + [len(lines)]
+    for begin, end in itertools.pairwise(starts):
+        if lines[begin].endswith(f" AS {name}"):
+            return lines[begin:end]
+    raise AssertionError(f"{dockerfile} has no stage {name!r}")
+
+
+def _locked_version(package: str) -> str:
+    lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    versions = {p["version"] for p in lock["package"] if p["name"] == package}
+    assert len(versions) == 1, versions
+    return str(versions.pop())
+
+
+def test_worker_image_bakes_the_docling_parser_models() -> None:
+    # WRK-BAKE (user decision 2026-10-21): restarts never re-download the parser models.
+    dockerfile = ROOT / _railway()["services"]["worker"]["dockerfile"]
+    models = _stage(dockerfile, "models")
+    args = dict(arg.split("=", 1) for arg in _instruction(models, "ARG"))
+    # The build fails when Docling asks for other models; the pin follows the lockfile.
+    assert args["DOCLING_VERSION"] == _locked_version("docling-slim")
+    assert args["DOCLING_LAYOUT_REPO"] == "docling-project/docling-layout-heron"
+    assert re.fullmatch(r"[0-9a-f]{40}", args["DOCLING_LAYOUT_REVISION"])
+    assert args["DOCLING_TABLEFORMER_REPO"] == "docling-project/docling-models"
+    assert args["DOCLING_TABLEFORMER_REVISION"] == "v2.3.0"
+
+    stage = _final_stage(dockerfile)
+    copies = _instruction(stage, "COPY")
+    assert "--from=models /opt/docling-models /opt/docling-models" in copies
+    # Root-owned: the uid 10001 app user can read the models but never replace them.
+    assert not [c for c in copies if "docling-models" in c and "--chown" in c]
+    assert re.search(r"\bWORKER_MODELS_ARTIFACTS_PATH=/opt/docling-models\b", "\n".join(stage))
+
+
+def test_env_manifest_leaves_the_baked_models_path_to_the_image() -> None:
+    manifest = tomllib.loads((ROOT / "infra/deploy/env-manifest.toml").read_text("utf-8"))
+    var = next(v for v in manifest["var"] if v["name"] == "WORKER_MODELS_ARTIFACTS_PATH")
+    assert not var.get("required")
+    assert "/opt/docling-models" in var["provider"]
 
 
 def test_api_healthcheck_paths_exist_in_the_app() -> None:
