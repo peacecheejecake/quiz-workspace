@@ -758,6 +758,37 @@ def test_numbered_explanation_after_an_inline_answer_is_not_a_question() -> None
     assert [d.correct_option_ids for d in result.drafts] == [("opt-2",), ("opt-1",)]
 
 
+def test_question_after_an_inline_answer_with_its_cue_on_a_later_line() -> None:
+    result = _extract(
+        [
+            "1. 다음 중 옳은 것은?",
+            "① 가",
+            "② 나",
+            "정답: ②",
+            "1. 첫 번째 이유입니다.",
+            "2. 다음 글을 읽고",
+            "물음에 답하시오.",
+            "① 다",
+            "② 라",
+            "③ 마",
+            "④ 바",
+            "정답: ③",
+            "3. 다음 중 틀린 것은?",
+            "① 사",
+            "② 아",
+            "정답: ①",
+            "1. 마지막 이유입니다.",
+        ]
+    )
+    assert [q.number for q in result.questions] == [1, 2, 3]
+    q1, q2, q3 = result.drafts
+    assert q1.explanation == "1. 첫 번째 이유입니다."
+    assert q2.stem == "다음 글을 읽고 물음에 답하시오."
+    assert len(q2.options) == 4
+    assert [d.correct_option_ids for d in result.drafts] == [("opt-2",), ("opt-3",), ("opt-1",)]
+    assert q3.explanation == "1. 마지막 이유입니다."
+
+
 def test_option_grid_read_row_wise_is_put_back_in_label_order() -> None:
     result = _extract(["# 01 옳은 것은? ( )", "① 가", "③ 다", "② 나", "④ 라", "# 정답: ③"])
     (draft,) = result.drafts

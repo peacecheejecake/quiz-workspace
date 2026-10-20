@@ -380,6 +380,23 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
     unparsed = 0
     ambiguous_tables = 0
     inline_answers = False
+    tentative: tuple[RawQuestion, RawQuestion | None] | None = None
+
+    def settle(current: RawQuestion | None) -> RawQuestion | None:
+        """Keep the tentative question if it turned out to ask something (a cue in its stem,
+        options or its own answer line); else its lines go back into the explanation it
+        interrupted, which becomes the current question again."""
+        nonlocal tentative
+        if tentative is None:
+            return current
+        question, explained = tentative
+        tentative = None
+        if question.options or question.answer or _QUESTION_CUE.search(question.stem):
+            return current
+        questions.remove(question)
+        if explained is not None and not explained.explanation_closed:
+            explained.explanation_lines += question.stem_lines
+        return explained if current is question else current
 
     for index, block, lines in _lines(blocks):
         if block.type is BlockType.IMAGE:
@@ -417,6 +434,7 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
         for text in lines:
             line = SourceLine(text=text, block=block, block_index=index)
             if _ANSWER_KEY_HEADING.match(text):
+                settle(current)
                 in_answer_key = True
                 current = None
                 continue
@@ -440,17 +458,17 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                 continue
 
             start = _question_start(text, block)
-            if (
-                start is not None
-                and current is not None
-                and current.answered
-                and block.type is not BlockType.HEADING
-                and not _QUESTION_CUE.search(start.group("body"))
-            ):
-                # Inside a printed explanation a numbered line (``1. 첫째 이유``) is part of it;
-                # the next question opens on a heading or asks something.
-                start = None
             if start is not None:
+                current = settle(current)
+                # Inside a printed explanation a numbered line (``1. 첫째 이유``) may be part of
+                # it: without a heading or a question cue on the line it opens a tentative
+                # question, settled at the next numbered line (or the end).
+                in_explanation = (
+                    current is not None
+                    and current.answered
+                    and block.type is not BlockType.HEADING
+                    and not _QUESTION_CUE.search(start.group("body"))
+                )
                 number = int(start.group("num"))
                 body = start.group("body")
                 if (
@@ -465,6 +483,7 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                     answer_key += _answer_entries(line)
                     continue
                 head, inline = _split_inline_options(body)
+                explained = current
                 current = RawQuestion(
                     number=number,
                     stem_lines=[line],
@@ -473,6 +492,8 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                 )
                 current.options += [RawOption(label=lb, text=t, lines=[line]) for lb, t in inline]
                 current.block_indices.append(index)
+                if in_explanation:
+                    tentative = (current, explained)
                 questions.append(current)
                 seen_numbers.add(number)
                 continue
@@ -532,6 +553,7 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
                 current.stem_lines.append(line)
                 current.options += [RawOption(label=lb, text=t, lines=[line]) for lb, t in inline]
 
+    settle(current)
     return Segmentation(
         questions=[q for q in questions if q.is_question()],
         answer_key=answer_key,
