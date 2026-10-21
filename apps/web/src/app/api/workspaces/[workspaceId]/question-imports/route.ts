@@ -1,5 +1,5 @@
-// QIMPORT-01 relay: list the workspace's import runs (newest first) / start an import of a
-// processed question paper. A start carries the browser's Idempotency-Key, so a retried request
+// QIMPORT-01 relay: list the workspace's import runs (newest first; `document_id` narrows them to
+// one question paper) / start (or attach to, QIMPORT-01-AC06) the import of a processed paper. A start carries the browser's Idempotency-Key, so a retried request
 // after a lost response yields the same run.
 import { forwardQuery, isUuid, notFound, problemResponse, relayToApi } from '@/lib/documents/bff';
 
@@ -11,7 +11,10 @@ export async function GET(
 ) {
   const { workspaceId } = await ctx.params;
   if (!isUuid(workspaceId)) return notFound();
-  const query = forwardQuery(request, { limit: /^\d{1,3}$/ });
+  const query = forwardQuery(request, {
+    limit: /^\d{1,3}$/,
+    document_id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  });
   if (query === null) return problemResponse(400, 'Bad Request', 'Malformed query.');
   return relayToApi(`/workspaces/${workspaceId}/question-imports${query}`, { method: 'GET' });
 }

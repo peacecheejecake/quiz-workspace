@@ -80,14 +80,16 @@ class Setup:
             result = conn.execute(text(sql), params)
             return list(result) if result.returns_rows else []
 
-    def upload(self) -> tuple[uuid.UUID, uuid.UUID, JobEnvelope]:
+    def upload(self, document_type: str = "book") -> tuple[uuid.UUID, uuid.UUID, JobEnvelope]:
         ws = self.tenancy.workspace_id
         doc, rev = uuid.uuid4(), uuid.uuid4()
         key = f"workspaces/{ws}/documents/{doc}/revisions/{rev}/source.pdf"
         self.admin(
             "insert into public.documents (id, workspace_id, title, filename, size_bytes, sha256, "
-            "source_object_key, created_by) values (:d, :w, 'Book', 'book.pdf', :n, :h, :k, :u)",
+            "source_object_key, created_by, document_type) "
+            "values (:d, :w, 'Book', 'book.pdf', :n, :h, :k, :u, :t)",
             d=doc,
+            t=document_type,
             w=ws,
             n=len(BOOK),
             h=hashlib.sha256(BOOK).hexdigest(),
@@ -350,3 +352,140 @@ def test_worker_death_right_after_commit_is_recovered_by_the_reconciler(setup: S
     assert synced.outcome is RunOutcome.SUCCEEDED, synced.error
     assert setup.document(doc).active_revision_id == rev
     assert {p["active"] for p in setup.points(doc)} == {True}
+
+
+# -- QIMP-AUTO: the publish of a question paper starts its import (20261021120000) ---------------
+
+
+def _import_runs(setup: Setup, doc: uuid.UUID) -> list[Any]:
+    return setup.admin(
+        "select r.id, r.workspace_id, r.created_by, r.source_document_revision_id, r.status, "
+        "r.started_by, j.id as job_id, j.job_type, j.created_by as job_created_by, "
+        "j.idempotency_key, j.payload, j.status as job_status, j.published_at "
+        "from public.question_import_runs r join public.async_jobs j on j.id = r.async_job_id "
+        "where r.source_document_id = :d",
+        d=doc,
+    )
+
+
+def test_qimport_01_ac06_a_processed_question_paper_starts_exactly_one_import(
+    setup: Setup,
+) -> None:
+    doc, rev, envelope = setup.upload("question_paper")
+
+    result = setup.run(envelope)
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    [run] = _import_runs(setup, doc)
+    assert (run.workspace_id, run.created_by, run.job_created_by) == (
+        setup.tenancy.workspace_id,
+        setup.tenancy.user_id,
+        setup.tenancy.user_id,
+    )
+    assert (run.source_document_revision_id, run.status, run.started_by) == (
+        rev,
+        "queued",
+        "system",
+    )
+    assert (run.job_type, run.idempotency_key, run.payload) == (
+        "question.import",
+        f"question_import:{run.id}:1",
+        {"import_id": str(run.id)},
+    )
+    # Unpublished: the Celery task hands it to the broker once the parse job is done.
+    assert (run.job_status, run.published_at) == ("queued", None)
+    assert result.record is not None
+    assert result.record.result is not None
+    assert result.record.result["question_import_id"] == str(run.id)
+    assert result.record.result["question_import_job_id"] == str(run.job_id)
+    [event] = setup.admin(
+        "select actor_id, metadata from public.activity_events "
+        "where target_id = :r and event_type = 'question_import.started'",
+        r=run.id,
+    )
+    assert event == (setup.tenancy.user_id, {"started_by": "system"})
+
+
+def test_qimport_01_ac06_reruns_and_redeliveries_start_no_second_import(setup: Setup) -> None:
+    doc, rev, envelope = setup.upload("question_paper")
+    assert setup.run(envelope).outcome is RunOutcome.SUCCEEDED
+    [run] = _import_runs(setup, doc)
+
+    assert setup.run(envelope).outcome is RunOutcome.DUPLICATE_FINISHED
+    rerun = JobEnvelope(
+        job_id=uuid.uuid4(),
+        job_type=JOB_TYPE,
+        schema_version=1,
+        idempotency_key=f"upload:{uuid.uuid4()}",
+        workspace_id=setup.tenancy.workspace_id,
+        created_by=setup.tenancy.user_id,
+        payload={"document_id": str(doc), "revision_id": str(rev)},
+    )
+    setup.jobs.create(rerun, max_attempts=3)
+    assert setup.run(rerun).outcome is RunOutcome.SUCCEEDED
+
+    assert [r.id for r in _import_runs(setup, doc)] == [run.id]
+
+
+def test_qimport_01_ac06_worker_death_after_the_publish_leaves_one_import_for_the_reconciler(
+    setup: Setup,
+) -> None:
+    """The worker dies right after the publish committed: the import it started exists exactly
+    once, unpublished, and is a reconciler candidate; a later attempt starts nothing more."""
+    doc, rev, envelope = setup.upload("question_paper")
+    setup.index.fail_activate = WorkerKilled()
+    with pytest.raises(WorkerKilled):
+        setup.run(envelope)
+    setup.index.fail_activate = None
+
+    [run] = _import_runs(setup, doc)
+    candidates = setup.jobs.find_republish_candidates(
+        unpublished_grace_seconds=0, stale_after_seconds=3600, limit=50
+    )
+    assert run.job_id in {c.job_id for c in candidates}
+    again = JobEnvelope(
+        job_id=uuid.uuid4(),
+        job_type=JOB_TYPE,
+        schema_version=1,
+        idempotency_key=f"upload:{uuid.uuid4()}",
+        workspace_id=setup.tenancy.workspace_id,
+        created_by=setup.tenancy.user_id,
+        payload={"document_id": str(doc), "revision_id": str(rev)},
+    )
+    setup.jobs.create(again, max_attempts=3)
+    assert setup.run(again).outcome is RunOutcome.SUCCEEDED
+    assert [r.id for r in _import_runs(setup, doc)] == [run.id]
+
+
+def test_qimport_01_ac06_books_start_no_import(setup: Setup) -> None:
+    doc, _, envelope = setup.upload()
+
+    assert setup.run(envelope).outcome is RunOutcome.SUCCEEDED
+    assert _import_runs(setup, doc) == []
+
+
+def test_qimport_01_ac06_failed_or_archived_question_papers_start_no_import(setup: Setup) -> None:
+    doc, _, envelope = setup.upload("question_paper")
+    setup.admin(
+        "update public.workspaces set status = 'archived', archived_at = now() where id = :w",
+        w=setup.tenancy.workspace_id,
+    )
+
+    result = setup.run(envelope)
+
+    assert result.outcome is RunOutcome.FAILED
+    assert _import_runs(setup, doc) == []
+
+
+def test_qimport_01_ac06_an_archive_during_indexing_starts_no_import(setup: Setup) -> None:
+    doc, _, envelope = setup.upload("question_paper")
+    setup.index.after_index = lambda: setup.admin(
+        "update public.workspaces set status = 'archived', archived_at = now() where id = :w",
+        w=setup.tenancy.workspace_id,
+    )
+
+    result = setup.run(envelope)
+
+    assert result.outcome is RunOutcome.FAILED
+    assert (result.error or "").startswith("workspace_unavailable")
+    assert _import_runs(setup, doc) == []

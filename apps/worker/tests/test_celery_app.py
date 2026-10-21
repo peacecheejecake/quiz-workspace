@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 from pydantic import BaseModel, SecretStr
+from quiz_worker import celery_app
 from quiz_worker.celery_app import (
     IdempotentJobTask,
     QuizCelery,
@@ -272,3 +273,73 @@ def test_duplicate_while_running_is_deferred_past_the_lease(app: QuizCelery) -> 
 def test_job_types_cannot_be_registered_twice(app: QuizCelery) -> None:
     with pytest.raises(ValueError, match="already registered"):
         register_job(app, ECHO_JOB)
+
+
+class ParentPayload(BaseModel):
+    message: str
+
+
+def test_follow_up_jobs_of_a_succeeded_job_are_published_once_it_is_done(
+    eager_settings: WorkerSettings, store: InMemoryJobStore, make_envelope: EnvelopeFactory
+) -> None:
+    """QIMP-AUTO: `document.parse` starts a question import inside its own transaction; the task
+    hands that unpublished job to the broker after the parse job succeeded."""
+    child = make_envelope(payload={"message": "abc"})
+    missing = make_envelope().job_id
+
+    def handler(ctx: JobContext, payload: ParentPayload) -> JobResult:
+        store.create(child, max_attempts=3)
+        return {"child": str(child.job_id)}
+
+    parent: JobDefinition[ParentPayload] = JobDefinition(
+        job_type="test.parent",
+        payload_models={1: ParentPayload},
+        handler=handler,
+        follow_ups=lambda result: [child.job_id, missing],
+    )
+    app = create_celery_app(eager_settings, job_store=store, definitions=[ECHO_JOB, parent])
+
+    record = submit_job(app, make_envelope("test.parent", {"message": "x"}))
+
+    assert record.status is JobStatus.SUCCEEDED
+    done = store.get(child.job_id)
+    assert done is not None
+    # Eager mode ran it inline (a real broker would have it published and queued).
+    assert (done.status, done.result) == (JobStatus.SUCCEEDED, {"length": 3})
+
+
+def test_follow_up_publish_failures_never_fail_the_job(
+    eager_settings: WorkerSettings,
+    store: InMemoryJobStore,
+    make_envelope: EnvelopeFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    child = make_envelope(payload={"message": "abc"})
+
+    def handler(ctx: JobContext, payload: ParentPayload) -> JobResult:
+        store.create(child, max_attempts=3)
+        return None
+
+    parent: JobDefinition[ParentPayload] = JobDefinition(
+        job_type="test.parent",
+        payload_models={1: ParentPayload},
+        handler=handler,
+        follow_ups=lambda result: [child.job_id],
+    )
+    app = create_celery_app(eager_settings, job_store=store, definitions=[ECHO_JOB, parent])
+
+    real = celery_app.publish_record
+
+    def broken(app: QuizCelery, record: Any) -> None:
+        if record.job_id == child.job_id:
+            raise ConnectionError("broker down")
+        real(app, record)
+
+    monkeypatch.setattr(celery_app, "publish_record", broken)
+    record = submit_job(app, make_envelope("test.parent", {"message": "x"}))
+
+    assert record.status is JobStatus.SUCCEEDED
+    left = store.get(child.job_id)
+    assert left is not None
+    # Left queued and unpublished: the reconciler publishes it after its grace period.
+    assert (left.status, left.published_at) == (JobStatus.QUEUED, None)

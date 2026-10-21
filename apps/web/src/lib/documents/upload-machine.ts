@@ -423,6 +423,8 @@ export interface DocumentRow {
   readonly error?: string;
   readonly retryable: boolean;
   readonly cancellable: boolean;
+  /** Question papers: the newest import run (from the server's document list). */
+  readonly latestImportId?: string | null;
 }
 
 function uploadStatus(item: UploadItem): RowStatus {
@@ -459,6 +461,7 @@ function rowFromUpload(item: UploadItem, doc?: DocumentSummary): DocumentRow {
     error: item.failure?.message,
     retryable: item.failure?.retryable ?? false,
     cancellable: isCancellable(item),
+    latestImportId: doc ? (doc.latest_import_id ?? null) : undefined,
   };
 }
 
@@ -476,6 +479,7 @@ function rowFromDocument(doc: DocumentSummary): DocumentRow {
     error: doc.status === 'failed' ? jobFailureMessage(doc.last_error) : undefined,
     retryable: false,
     cancellable: false,
+    latestImportId: doc.latest_import_id ?? null,
   };
 }
 

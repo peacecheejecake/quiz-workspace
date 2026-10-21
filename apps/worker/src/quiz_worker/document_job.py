@@ -22,6 +22,9 @@ Pipeline (docs/architecture.md §4 indexing flow), serialised per document by an
    revision, make it the document's active revision, set the document `ready` and enqueue a
    `document.index_sync` obligation — the DB is the authority search filters on, so once this
    commits the job succeeds;
+   For a `question_paper` the same transaction starts its question import once (run + first
+   `question.import` job, QIMP-AUTO / QIMPORT-01-AC06); the job's result names it and the task
+   publishes that job when the parse job is done (`follow_ups`);
 5. mirror the switch in Qdrant (`activate_revision`) and garbage-collect older revisions except the
    newest other published one (kept for a quick rollback), then resolve the obligation. If this
    fails (or the worker dies right after step 4) the job still succeeds (`index_sync: pending`)
@@ -86,6 +89,9 @@ from quiz_worker.storage import PARSED_BUCKET, SOURCE_BUCKET, ObjectStorage, Sup
 logger = logging.getLogger(__name__)
 
 JOB_TYPE = "document.parse"
+# Result keys (ids only) of the question import a question paper's publish started.
+IMPORT_RUN_KEY = "question_import_id"
+IMPORT_JOB_KEY = "question_import_job_id"
 PDF_MAGIC = b"%PDF-"
 CANCELLED_ERROR = "cancelled"
 
@@ -251,7 +257,7 @@ def _pipeline(
     assert content.content_hash is not None  # noqa: S101 - build_revision / DB always set it
     # The authoritative switch (search filters on DB-published revisions). It re-checks workspace
     # access under a lock and enqueues the durable `document.index_sync` obligation.
-    deps.documents.publish(
+    outcome = deps.documents.publish(
         ctx.workspace_id,
         ctx.created_by,
         document.id,
@@ -262,7 +268,11 @@ def _pipeline(
     # From here on the job cannot fail: the Qdrant mirror is synced inline when possible, else
     # by the obligation (retried with backoff, published by the reconciler).
     synced = sync_index(deps, document, revision)
-    return _result(document, revision, chunks=len(chunks), synced=synced)
+    result = _result(document, revision, chunks=len(chunks), synced=synced)
+    if outcome.import_run_id is not None and outcome.import_job_id is not None:
+        result[IMPORT_RUN_KEY] = str(outcome.import_run_id)
+        result[IMPORT_JOB_KEY] = str(outcome.import_job_id)
+    return result
 
 
 def _prepare_parser(parser: PdfParser, progress: Callable[[str, int], None]) -> None:
@@ -381,9 +391,22 @@ def mirror_active_revision(
     )
 
 
+def started_import_jobs(result: JobResult) -> list[uuid.UUID]:
+    """`follow_ups` of `document.parse`: the question import job its publish started."""
+    if not result:
+        return []
+    value = result.get(IMPORT_JOB_KEY)
+    if not isinstance(value, str):
+        return []
+    try:
+        return [uuid.UUID(value)]
+    except ValueError:
+        return []
+
+
 def _result(
     document: DocumentRow, revision: RevisionRow, *, chunks: int | None, synced: bool = True
-) -> JobResult:
+) -> dict[str, Any]:
     result: dict[str, Any] = {"document_id": str(document.id), "revision_id": str(revision.id)}
     if chunks is not None:
         result["chunks"] = chunks
@@ -468,6 +491,7 @@ def document_parse_definition(provider: DepsProvider) -> JobDefinition[DocumentP
         # Matches async_jobs.max_attempts (default 3) the API inserts.
         retry_policy=RetryPolicy(max_attempts=3, base_delay_seconds=10, max_delay_seconds=300),
         cleanup=lambda ctx, reason: cleanup_document_parse(provider(), ctx, reason),
+        follow_ups=started_import_jobs,
     )
 
 

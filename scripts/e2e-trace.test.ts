@@ -284,13 +284,13 @@ describe('analyze + strict', () => {
 });
 
 describe('repository docs', () => {
-  it('declares 109 screen ACs (95 + M7.4b SEARCH-01-AC06 + UX3-JOB DOC-01-AC05 + 10 UX3c + 2 UX4), 21 screens with a spec path, and 3 API ACs', () => {
+  it('declares 109 screen ACs (95 + M7.4b SEARCH-01-AC06 + UX3-JOB DOC-01-AC05 + 10 UX3c + 2 UX4 + QIMP-AUTO QIMPORT-01-AC06), 21 screens with a spec path, and 3 API ACs', () => {
     const report = loadReport(join(import.meta.dirname, '..'));
     const screens = report.screens.filter((s) => s.id !== 'AUTH-API');
     assert.equal(screens.length, 21);
     assert.equal(
       screens.reduce((n, s) => n + s.acs.length, 0),
-      109,
+      110,
     );
     assert.ok(screens.every((s) => s.testPath?.startsWith('tests/e2e/')));
     assert.deepEqual(report.screens.find((s) => s.id === 'AUTH-API')?.acs, [

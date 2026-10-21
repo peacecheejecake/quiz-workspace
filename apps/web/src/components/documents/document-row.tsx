@@ -8,7 +8,7 @@
 // alone (the badge text carries it).
 import { Badge, Button, IconButton, Tooltip, TrashIcon, type BadgeTone } from '@quiz/ui';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
 import { formatBytes } from '@/lib/documents/validation';
 import styles from './documents.module.css';
@@ -28,6 +28,8 @@ export interface DocumentRowProps {
   readonly onCancel: (localId: string) => void;
   readonly onRetry: (localId: string) => void;
   readonly onDelete: (row: DocumentRow) => void;
+  /** Extra actions before the row's own (e.g. 문제 추출 in the question-PDF list). */
+  readonly actions?: ReactNode;
 }
 
 export function DocumentRowItem({
@@ -37,6 +39,7 @@ export function DocumentRowItem({
   onCancel,
   onRetry,
   onDelete,
+  actions,
 }: DocumentRowProps) {
   const { localId } = row;
   const href =
@@ -70,6 +73,7 @@ export function DocumentRowItem({
         <RowDetail row={row} />
       </div>
       <div className={styles.actions}>
+        {actions}
         {row.retryable && localId ? (
           <Button size="sm" variant="primary" onClick={() => onRetry(localId)}>
             다시 시도

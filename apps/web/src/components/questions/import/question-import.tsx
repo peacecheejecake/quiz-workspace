@@ -6,6 +6,10 @@
 //   (POST /question-imports, Idempotency-Key) → 문제 추출 job → drafts → review (편집 / 원본 비교 /
 //   승인) → "승인한 문제 등록" publishes exactly the approved drafts at their approved versions.
 //
+// The server starts the import itself once the PDF is processed (QIMPORT-01-AC06), so after the
+// upload the page may be left: the POST then attaches to that run, and a later visit (or
+// `?document=<id>` from 문제 PDF 관리) shows the run's progress and drafts.
+//
 // Nothing reaches the bank before a human approves it; a failed extraction keeps the drafts it
 // already persisted and "다시 시도" retries the same run (the API reconciles, no duplicates);
 // a publish whose response was lost is retried with the same drafts (idempotent per draft).
@@ -62,6 +66,8 @@ export interface QuestionImportProps {
   readonly readOnly: ImportReadOnly;
   readonly initialRun: ImportRun | null;
   readonly initialDrafts: readonly ImportDraft[];
+  /** The question paper the page was opened for (`?document=`), if any. */
+  readonly documentId?: string;
   readonly loadFailed: boolean;
 }
 
@@ -113,6 +119,7 @@ export function QuestionImport({
   readOnly,
   initialRun,
   initialDrafts,
+  documentId,
   loadFailed,
 }: QuestionImportProps) {
   const router = useRouter();
@@ -159,12 +166,12 @@ export function QuestionImport({
   const onUnauthenticated = useCallback(
     (error: unknown) => {
       if (error instanceof ImportApiError && error.kind === 'unauthenticated') {
-        router.replace(loginRedirectPath(importPath(workspaceId)));
+        router.replace(loginRedirectPath(importPath(workspaceId, documentId)));
         return true;
       }
       return false;
     },
-    [router, workspaceId],
+    [documentId, router, workspaceId],
   );
 
   const refreshDrafts = useCallback(
@@ -524,7 +531,7 @@ export function QuestionImport({
       let latest = run;
       if (!latest) {
         try {
-          latest = await client.latestRun(workspaceId);
+          latest = await client.latestRun(workspaceId, undefined, documentId);
         } catch (error) {
           onUnauthenticated(error);
           return;

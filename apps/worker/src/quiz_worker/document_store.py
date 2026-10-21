@@ -25,6 +25,12 @@ The publish transaction also inserts a `document.index_sync` job (unpublished; t
 it to the broker after its grace period) as the durable obligation to mirror the switch into
 Qdrant. The publishing job resolves it itself (`resolve_index_sync`) when its inline sync works.
 
+For a `question_paper` it also starts the paper's question import (QIMP-AUTO, QIMPORT-01-AC06):
+`public.worker_start_question_import` (20261021120000) creates the run and its first
+`question.import` job, unpublished, for the job's user, once per document (a retried publish, a
+redelivery or a later revision starts nothing). So extraction no longer depends on the import
+page staying open; the parse job hands the import job to the broker when it finishes.
+
 Job progress is stored in the running job's `async_jobs.result` as
 `{"progress": {"stage", "percent"}}` (fenced on the attempt); the terminal transition replaces
 it with the job's result (or NULL), so it is only ever read while the job runs.
@@ -92,6 +98,7 @@ class WorkspaceUnavailableError(NonRetryableJobError):
 
 
 INDEX_SYNC_JOB_TYPE = "document.index_sync"
+QUESTION_PAPER = "question_paper"
 INDEX_SYNC_MAX_ATTEMPTS = 8
 
 
@@ -102,10 +109,14 @@ def index_sync_key(revision_id: uuid.UUID) -> str:
 @dataclass(frozen=True)
 class PublishOutcome:
     """`previous`: the revision that was active before; `sync_job_id`: the durable
-    `document.index_sync` obligation created with the publish (None if it was already live)."""
+    `document.index_sync` obligation created with the publish (None if it was already live);
+    `import_run_id` / `import_job_id`: the question import this publish started (question papers
+    without an import run only)."""
 
     previous: uuid.UUID | None
     sync_job_id: uuid.UUID | None
+    import_run_id: uuid.UUID | None = None
+    import_job_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -184,8 +195,9 @@ class DocumentStore(Protocol):
         before_commit: Callable[[], None],
     ) -> PublishOutcome:
         """In one transaction: re-check (and lock) workspace access, publish the draft, make it
-        the document's active revision (status `ready`) and enqueue the `document.index_sync`
-        obligation that mirrors the switch into Qdrant."""
+        the document's active revision (status `ready`), enqueue the `document.index_sync`
+        obligation that mirrors the switch into Qdrant and, for a question paper without an
+        import, start its question import."""
         ...
 
     def previous_published(self, document_id: uuid.UUID, exclude: uuid.UUID) -> uuid.UUID | None:
@@ -622,7 +634,8 @@ class PostgresDocumentStore:
             document = (
                 conn.execute(
                     text(
-                        "select active_revision_id, deleted_at is not null as deleted "
+                        "select active_revision_id, document_type, "
+                        "deleted_at is not null as deleted "
                         "from public.documents where id = :d for update"
                     ),
                     {"d": document_id},
@@ -666,8 +679,26 @@ class PostgresDocumentStore:
             sync_job_id = self._enqueue_index_sync(
                 conn, workspace_id, user_id, document_id, revision_id
             )
+            started = None
+            if document["document_type"] == QUESTION_PAPER:
+                started = (
+                    conn.execute(
+                        text(
+                            "select run_id, job_id "
+                            "from public.worker_start_question_import(:d, :r, :u)"
+                        ),
+                        {"d": document_id, "r": revision_id, "u": user_id},
+                    )
+                    .mappings()
+                    .first()
+                )
             before_commit()
-        return PublishOutcome(previous=previous, sync_job_id=sync_job_id)
+        return PublishOutcome(
+            previous=previous,
+            sync_job_id=sync_job_id,
+            import_run_id=started["run_id"] if started else None,
+            import_job_id=started["job_id"] if started else None,
+        )
 
     @staticmethod
     def _enqueue_index_sync(

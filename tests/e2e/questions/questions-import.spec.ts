@@ -21,12 +21,14 @@ import {
   draftFor,
   expect,
   failingOnceCopy,
+  forgetImportRuns,
   homePath,
   homeUi,
   importPath,
   importUi,
   JOB_TIMEOUT_MS,
   waitForImportStatus,
+  listDocuments,
   listDrafts,
   listImports,
   listQuestions,
@@ -390,5 +392,96 @@ test(
       timeout: JOB_TIMEOUT_MS,
     });
     expect((await listImports(owner, empty.id)).length).toBe(1);
+  },
+);
+
+test(
+  'QIMPORT-01-AC06 extraction runs on the server: leaving the import page during processing still yields the drafts',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('qimport01-ac06-leave');
+    const ws = await workspaceFactory.create(owner);
+    await signInAs(page, owner.user);
+    await page.goto(importPath(ws.id));
+    // The browser never gets to start the extraction itself: every start request it sends fails.
+    let browserStarts = 0;
+    await page.route('**/api/workspaces/*/question-imports', async (route: Route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      browserStarts += 1;
+      await route.abort('internetdisconnected');
+    });
+    await uploadQuestionPaper(page, PAPER);
+    // The upload is complete (the server has the document and its processing job): leave.
+    await expect
+      .poll(async () => (await listDocuments(owner, ws.id)).length, {
+        message: 'the uploaded question PDF exists',
+        timeout: JOB_TIMEOUT_MS,
+      })
+      .toBe(1);
+    await page.goto(homePath(ws.id));
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+    // The server started exactly one import for the uploader and it finishes without the page.
+    const run = await waitForLatestImport(owner, ws.id);
+    const [document] = await listDocuments(owner, ws.id);
+    expect(run.source_document_id).toBe(document?.id);
+    expect(await listImports(owner, ws.id)).toHaveLength(1);
+    expect(await waitForImportStatus(owner, run.id, 'succeeded')).toMatchObject({
+      draft_count: PAPER.questions.length,
+    });
+    expect(browserStarts).toBeLessThanOrEqual(1);
+
+    // Coming back shows the extracted drafts for review.
+    await page.goto(importPath(ws.id));
+    await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length);
+    await expect(importUi.draft(page, Q(1).stem)).toHaveCount(1);
+    expect((await listImports(owner, ws.id)).map((r) => r.id)).toEqual([run.id]);
+  },
+);
+
+test(
+  'QIMPORT-01-AC06 a processed question PDF without an extraction offers 문제 추출 in 문제 PDF 관리',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('qimport01-ac06-extract');
+    const ws = await workspaceFactory.create(owner);
+    const uploaded = await uploadPdf(owner, ws.id, PAPER, 'question_paper');
+    await waitForJob(owner, uploaded.jobId);
+    // A paper processed before the server started extractions: no import run.
+    await waitForLatestImport(owner, ws.id);
+    forgetImportRuns(ws.id, uploaded.documentId);
+    expect(await listImports(owner, ws.id)).toEqual([]);
+
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id, 'panel=question-pdfs'));
+    const dialog = homeUi.questionPdfsDialog(page);
+    const list = dialog.getByRole('list', { name: /문제 pdf 목록|question pdfs/i });
+    const row = list.getByRole('listitem').filter({ hasText: PAPER.file.replace(/\.pdf$/, '') });
+    const extract = row.getByRole('button', { name: /문제 추출|extract questions/i });
+    await expect(extract).toBeVisible();
+    await expect(row.getByRole('link', { name: /문제 검토|review questions/i })).toHaveCount(0);
+
+    await extract.click();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === importPath(ws.id) &&
+        url.searchParams.get('document') === uploaded.documentId,
+    );
+    await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length, {
+      timeout: JOB_TIMEOUT_MS,
+    });
+    const runs = await listImports(owner, ws.id);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.source_document_id).toBe(uploaded.documentId);
+
+    // With its extraction in place the row links to the review instead.
+    await page.goto(homePath(ws.id, 'panel=question-pdfs'));
+    const review = row.getByRole('link', { name: /문제 검토|review questions/i });
+    await expect(review).toBeVisible();
+    await expect(row.getByRole('button', { name: /문제 추출|extract questions/i })).toHaveCount(0);
+    await review.click();
+    await expect(page).toHaveURL((url) => url.searchParams.get('document') === uploaded.documentId);
+    await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length);
+    expect(await listImports(owner, ws.id)).toHaveLength(1);
   },
 );

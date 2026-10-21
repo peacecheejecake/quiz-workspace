@@ -7,6 +7,7 @@ import {
   IMPORT_BFF_PATHS,
   IMPORT_PROBLEMS,
   ImportApiError,
+  importPath,
 } from '../src/lib/questions/import-client';
 
 const WS = '55555555-5555-4555-8555-555555555555';
@@ -129,5 +130,22 @@ describe('createImportClient', () => {
     await expect(client.getRun(RUN, controller.signal)).rejects.toMatchObject({
       name: 'AbortError',
     });
+  });
+});
+
+describe('QIMPORT-01-AC06 attaching to the server-started import', () => {
+  const DOC = '33333333-3333-4333-8333-333333333333';
+
+  it('opens the import page of one question paper', () => {
+    expect(importPath(WS)).toBe(`/workspaces/${WS}/questions/import`);
+    expect(importPath(WS, DOC)).toBe(`/workspaces/${WS}/questions/import?document=${DOC}`);
+  });
+
+  it('reads the newest run of one paper through the relay', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => json(200, { items: [{ id: RUN }] }));
+    expect(await createImportClient(fetchImpl).latestRun(WS, undefined, DOC)).toEqual({ id: RUN });
+    expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual([
+      `${IMPORT_BFF_PATHS.imports(WS)}?limit=1&document_id=${DOC}`,
+    ]);
   });
 });

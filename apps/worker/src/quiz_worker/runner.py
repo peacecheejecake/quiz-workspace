@@ -8,7 +8,7 @@ the state machine here makes the idempotency rules testable without a broker.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -89,6 +89,10 @@ class JobDefinition[P: BaseModel]:
     final attempt, and the reconciler's recovery. It must be idempotent and tolerate finding
     nothing to clean. It does not run between retries: handlers must be idempotent so a retry
     can resume or redo partial work.
+
+    `follow_ups` names the jobs a succeeded run created (unpublished, in its own transaction),
+    read from the stored result; the Celery task hands them to the broker once the job is done
+    (best effort: the reconciler publishes any it misses after its grace period).
     """
 
     job_type: str
@@ -96,6 +100,7 @@ class JobDefinition[P: BaseModel]:
     handler: Callable[[JobContext, P], JobResult]
     retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
     cleanup: Cleanup | None = None
+    follow_ups: Callable[[JobResult], Sequence[UUID]] | None = None
 
     def __post_init__(self) -> None:
         if not self.payload_models or min(self.payload_models) < 1:
