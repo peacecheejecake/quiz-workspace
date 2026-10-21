@@ -155,6 +155,8 @@ Confirmed question
 
 원본에 존재하지 않는 정답 생성 금지; 정답지가 없으면 null. 페이지/영역 provenance 유지.
 
+추출 시작은 서버가 맡는다(QIMP-AUTO 2026-10-21, QIMPORT-01-AC06): `question_paper` 문서의 `document.parse` job이 revision을 활성화하는 트랜잭션에서 `public.worker_start_question_import`가 import run(`started_by = 'system'`)과 첫 `question.import` job을 만든다. 귀속은 parse job의 사용자(업로더)와 문서의 Workspace이며 client가 보낸 id는 쓰지 않는다. 문서마다 한 번만(이미 run이 있으면 시작하지 않음, 부분 unique index), Workspace가 활성이고 사용자가 여전히 owner/editor일 때만 시작한다. job은 parse job이 끝난 뒤 worker가 broker에 넘기고, 놓치면 reconciler가 grace 이후 넘긴다. `POST /workspaces/{id}/question-imports`는 문서의 활성 revision에 run이 있으면 그 run을 돌려주고(attach), 없을 때(QIMP-AUTO 이전에 처리된 PDF)만 새 run을 만든다. 같은 문서에 대한 시작은 문서 행 잠금(FOR UPDATE)으로 직렬화된다.
+
 정답 출처는 인쇄된 정답지뿐이다: 별도 정답 섹션(문제 번호로 매칭) 또는 문제 바로 뒤에 인쇄된 `정답: ②` 줄(그 문제에만 적용되므로 장마다 번호가 1부터 다시 시작해도 된다). `정답:` 줄 뒤의 인쇄된 해설은 초안의 해설(explanation)로 보존하고 선택지로 읽지 않는다. 마침표 없는 번호(`01 …`)는 heading 줄이거나 질문 단서(`?`, `시오`, 답란 `( )`)가 있을 때만 문제로 읽는다. 문제의 출처 영역(provenance)은 발문과 모든 선택지(표로 인쇄된 선택지 포함)를 쪽마다 하나로 묶은 영역이며, 정답 줄과 해설은 포함하지 않는다. PDF import draft는 생성 draft와 공통 review 컴포넌트를 사용하되 source type을 별도로 보존한다.
 
 ## 7. 홈 집계와 필터
