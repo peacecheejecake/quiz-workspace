@@ -14,11 +14,10 @@
 import { Button, ConfirmDialog, Dropzone, FloatingSidePanel } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { DocumentRows, PDF_ACCEPT } from '@/components/documents/documents-library';
 import docStyles from '@/components/documents/documents.module.css';
 import type { DocumentLibrary } from '@/components/documents/use-document-library';
-import type { ImportRun } from '@/lib/questions/drafts';
 import { createImportClient, ImportApiError, importPath } from '@/lib/questions/import-client';
 import { setPendingImportFile } from '@/lib/questions/import-handoff';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
@@ -35,49 +34,10 @@ export interface QuestionPdfsLibraryProps {
   readonly canEdit: boolean;
 }
 
-/** The newest import run per question paper (the list API returns runs newest first). */
-export function runsByDocument(runs: readonly ImportRun[]): Map<string, ImportRun> {
-  const out = new Map<string, ImportRun>();
-  for (const run of runs) {
-    if (run.source_document_id && !out.has(run.source_document_id)) {
-      out.set(run.source_document_id, run);
-    }
-  }
-  return out;
-}
-
-/** The workspace's import runs by question paper, reloaded whenever a paper becomes ready
- * (its server-started import exists from that moment). null until loaded or after a failure. */
-function useImportRuns(
-  workspaceId: string,
-  readyIds: string,
-): [Map<string, ImportRun> | null, () => void] {
-  const client = useMemo(() => createImportClient(), []);
-  const [runs, setRuns] = useState<Map<string, ImportRun> | null>(null);
-  const [generation, setGeneration] = useState(0);
-  useEffect(() => {
-    if (!readyIds) return;
-    const controller = new AbortController();
-    client
-      .listRuns(workspaceId, controller.signal)
-      .then((items) => setRuns(runsByDocument(items)))
-      .catch(() => {
-        if (!controller.signal.aborted) setRuns(null);
-      });
-    return () => controller.abort();
-  }, [client, workspaceId, readyIds, generation]);
-  return [runs, useCallback(() => setGeneration((g) => g + 1), [])];
-}
-
 export function QuestionPdfsLibrary({ workspaceId, library, canEdit }: QuestionPdfsLibraryProps) {
   const router = useRouter();
   const client = useMemo(() => createImportClient(), []);
   const rows = questionPaperRows(library.rows);
-  const readyIds = rows
-    .filter((row) => row.status === 'ready' && row.documentId)
-    .map((row) => row.documentId)
-    .join(',');
-  const [runs, reloadRuns] = useImportRuns(workspaceId, readyIds);
   const [starting, setStarting] = useState<string | null>(null);
   const [startFailure, setStartFailure] = useState<string | null>(null);
 
@@ -92,16 +52,60 @@ export function QuestionPdfsLibrary({ workspaceId, library, canEdit }: QuestionP
     } catch (error) {
       const message = error instanceof ImportApiError ? error.message : String(error);
       setStartFailure(`‘${row.title}’ 문제 추출을 시작하지 못했습니다. ${message}`);
-      reloadRuns();
+      void library.refresh();
     } finally {
       setStarting(null);
     }
   }
 
+  return (
+    <QuestionPdfsView
+      workspaceId={workspaceId}
+      library={library}
+      canEdit={canEdit}
+      rows={rows}
+      starting={starting}
+      startFailure={startFailure}
+      onExtract={(row) => void extract(row)}
+      onFiles={(file) => {
+        setPendingImportFile(workspaceId, file);
+        router.push(importPath(workspaceId));
+      }}
+    />
+  );
+}
+
+/** 문제 검토 when the paper has an import (the document list's `latest_import_id`, read for
+ * every listed paper), else 문제 추출 for editors; nothing while it is not ready. */
+export function questionPdfAction(row: DocumentRow, canEdit: boolean): 'review' | 'extract' | null {
+  if (!row.documentId || row.status !== 'ready' || row.latestImportId === undefined) return null;
+  if (row.latestImportId) return 'review';
+  return canEdit ? 'extract' : null;
+}
+
+interface QuestionPdfsViewProps extends QuestionPdfsLibraryProps {
+  readonly rows: readonly DocumentRow[];
+  readonly starting: string | null;
+  readonly startFailure: string | null;
+  readonly onExtract: (row: DocumentRow) => void;
+  readonly onFiles: (file: File) => void;
+}
+
+function QuestionPdfsView({
+  workspaceId,
+  library,
+  canEdit,
+  rows,
+  starting,
+  startFailure,
+  onExtract,
+  onFiles,
+}: QuestionPdfsViewProps) {
   function rowActions(row: DocumentRow) {
     const documentId = row.documentId;
-    if (!documentId || row.status !== 'ready' || runs === null) return null;
-    if (runs.has(documentId)) {
+    const action = questionPdfAction(row, canEdit);
+    if (!documentId || action === null) return null;
+    if (action === 'review') {
       return (
         <Button size="sm" asChild>
           <Link href={importPath(workspaceId, documentId)} aria-label={`${row.title} 문제 검토`}>
@@ -110,7 +114,6 @@ export function QuestionPdfsLibrary({ workspaceId, library, canEdit }: QuestionP
         </Button>
       );
     }
-    if (!canEdit) return null;
     return (
       <Button
         size="sm"
@@ -118,7 +121,7 @@ export function QuestionPdfsLibrary({ workspaceId, library, canEdit }: QuestionP
         aria-label={`${row.title} 문제 추출`}
         loading={starting === documentId}
         disabled={starting !== null && starting !== documentId}
-        onClick={() => void extract(row)}
+        onClick={() => onExtract(row)}
       >
         문제 추출
       </Button>
@@ -135,9 +138,7 @@ export function QuestionPdfsLibrary({ workspaceId, library, canEdit }: QuestionP
           accept={PDF_ACCEPT}
           onFiles={(files) => {
             const [file] = files;
-            if (!file) return;
-            setPendingImportFile(workspaceId, file);
-            router.push(importPath(workspaceId));
+            if (file) onFiles(file);
           }}
           onReject={library.rejectFiles}
         />

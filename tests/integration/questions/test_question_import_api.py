@@ -341,3 +341,33 @@ def test_the_worker_role_cannot_touch_reviewed_drafts(seed: Any) -> None:
                 "values (%s, 'import', %s, 99, 'ESSAY', '{}'::jsonb, 'approved', now())",
                 (ws["id"], run["id"]),
             )
+
+
+def test_qimport_01_ac06_documents_carry_their_latest_import_beyond_the_run_window(
+    seed: Any,
+) -> None:
+    """Codex P2: 문제 PDF 관리 must not infer "no import" from a truncated run list. A paper
+    whose run is older than the newest 200 runs of the workspace still reports it."""
+    alice = seed.client("qauto-window")
+    viewer = seed.client("qauto-window-viewer")
+    ws = alice.create_workspace()
+    seed.membership(ws["id"], viewer.user, "viewer")
+    old, busy = (alice.upload_question_paper(ws["id"]) for _ in range(2))
+    [old_run] = _runs_of(alice, ws["id"], old)
+    with psycopg.connect(seed.DB_ADMIN_URL, autocommit=True) as conn:
+        conn.execute(
+            "insert into public.question_import_runs (workspace_id, created_by, "
+            "source_document_id, created_at) "
+            "select %s, %s, %s, now() + make_interval(secs => g) "
+            "from generate_series(1, 205) g",
+            (ws["id"], alice.user.id, busy),
+        )
+    newest = alice.ok("GET", f"/workspaces/{ws['id']}/question-imports?limit=200")["items"]
+    assert old_run["id"] not in {r["id"] for r in newest}
+
+    docs = viewer.ok("GET", f"/workspaces/{ws['id']}/documents")["items"]
+    latest = {d["id"]: d["latest_import_id"] for d in docs}
+    assert latest[old] == old_run["id"]
+    assert latest[busy] == newest[0]["id"]
+    detail = viewer.ok("GET", f"/documents/{old}")
+    assert detail["latest_import_id"] == old_run["id"]

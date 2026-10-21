@@ -9,8 +9,6 @@ import {
   ImportApiError,
   importPath,
 } from '../src/lib/questions/import-client';
-import { runsByDocument } from '../src/components/questions/import/question-pdfs';
-import type { ImportRun } from '../src/lib/questions/drafts';
 
 const WS = '55555555-5555-4555-8555-555555555555';
 const RUN = '22222222-2222-4222-8222-222222222222';
@@ -143,21 +141,11 @@ describe('QIMPORT-01-AC06 attaching to the server-started import', () => {
     expect(importPath(WS, DOC)).toBe(`/workspaces/${WS}/questions/import?document=${DOC}`);
   });
 
-  it('reads the newest run of a paper and the workspace runs through the relay', async () => {
+  it('reads the newest run of one paper through the relay', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => json(200, { items: [{ id: RUN }] }));
-    const client = createImportClient(fetchImpl);
-    expect(await client.latestRun(WS, undefined, DOC)).toEqual({ id: RUN });
-    expect(await client.listRuns(WS)).toEqual([{ id: RUN }]);
+    expect(await createImportClient(fetchImpl).latestRun(WS, undefined, DOC)).toEqual({ id: RUN });
     expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual([
       `${IMPORT_BFF_PATHS.imports(WS)}?limit=1&document_id=${DOC}`,
-      `${IMPORT_BFF_PATHS.imports(WS)}?limit=200`,
     ]);
-  });
-
-  it('keeps the newest run per question paper', () => {
-    const run = (id: string, doc: string | null) =>
-      ({ id, source_document_id: doc }) as unknown as ImportRun;
-    const byDoc = runsByDocument([run('new', DOC), run('old', DOC), run('x', null)]);
-    expect([...byDoc.entries()].map(([d, r]) => [d, r.id])).toEqual([[DOC, 'new']]);
   });
 });

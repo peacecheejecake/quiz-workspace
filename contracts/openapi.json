@@ -699,6 +699,19 @@
             "description": "Why the last processing attempt failed.",
             "title": "Last Error"
           },
+          "latest_import_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Question papers: the newest question import run of the document (the one the server starts once it is processed, QIMPORT-01-AC06); null when it has none.",
+            "title": "Latest Import Id"
+          },
           "latest_revision": {
             "anyOf": [
               {
@@ -910,6 +923,19 @@
             ],
             "description": "Why the last processing attempt failed.",
             "title": "Last Error"
+          },
+          "latest_import_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Question papers: the newest question import run of the document (the one the server starts once it is processed, QIMPORT-01-AC06); null when it has none.",
+            "title": "Latest Import Id"
           },
           "processing_job": {
             "anyOf": [

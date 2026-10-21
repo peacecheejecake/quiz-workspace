@@ -26,6 +26,7 @@ from quiz_api.repositories.tables import (
     document_revisions,
     document_uploads,
     documents,
+    question_import_runs,
 )
 
 DocumentType = Literal["book", "question_paper"]
@@ -389,6 +390,28 @@ class DocumentRepository:
         if document_type is not None:
             stmt = stmt.where(documents.c.document_type == document_type)
         return [_document(row) for row in self._session.execute(stmt)]
+
+    def latest_imports(
+        self, workspace_id: uuid.UUID, document_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, uuid.UUID]:
+        """document id -> its newest question import run (QIMPORT-01-AC06), read inside the
+        authorized workspace only. One query for the whole list, never a truncated window."""
+        if not document_ids:
+            return {}
+        rows = self._session.execute(
+            select(question_import_runs.c.source_document_id, question_import_runs.c.id)
+            .where(
+                question_import_runs.c.workspace_id == workspace_id,
+                question_import_runs.c.source_document_id.in_(list(document_ids)),
+            )
+            .order_by(
+                question_import_runs.c.source_document_id,
+                question_import_runs.c.created_at.desc(),
+                question_import_runs.c.id.desc(),
+            )
+            .ext(distinct_on(question_import_runs.c.source_document_id))
+        )
+        return {row.source_document_id: row.id for row in rows}
 
     def processing_jobs(
         self, workspace_id: uuid.UUID, document_ids: Sequence[uuid.UUID]

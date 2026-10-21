@@ -109,8 +109,6 @@ export interface ImportClient {
     signal?: AbortSignal,
     documentId?: string,
   ): Promise<ImportRun | null>;
-  /** The workspace's runs, newest first (at most 200). */
-  listRuns(workspaceId: string, signal?: AbortSignal): Promise<ImportRun[]>;
   getRun(importId: string, signal?: AbortSignal): Promise<ImportRun>;
   listDrafts(importId: string, signal?: AbortSignal): Promise<ImportDraft[]>;
   retryImport(importId: string, idempotencyKey: string): Promise<ImportRun>;
@@ -169,12 +167,6 @@ export function createImportClient(fetchImpl: FetchLike = (...a) => fetch(...a))
           { signal },
         )
       ).items[0] ?? null,
-    listRuns: async (workspaceId, signal) =>
-      (
-        await call<{ items: ImportRun[] }>(`${IMPORT_BFF_PATHS.imports(workspaceId)}?limit=200`, {
-          signal,
-        })
-      ).items,
     startImport: (workspaceId, documentId, idempotencyKey) =>
       call(IMPORT_BFF_PATHS.imports(workspaceId), {
         method: 'POST',

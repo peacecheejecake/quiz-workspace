@@ -1589,6 +1589,11 @@ export type components = {
        * @description Why the last processing attempt failed.
        */
       last_error: string | null;
+      /**
+       * Latest Import Id
+       * @description Question papers: the newest question import run of the document (the one the server starts once it is processed, QIMPORT-01-AC06); null when it has none.
+       */
+      latest_import_id?: string | null;
       /** @description The newest revision (a draft while a parse or correction is pending). */
       latest_revision: components['schemas']['quiz_api__api__documents__RevisionSummary'] | null;
       /** @description The queued or running parse job; null when there is none. */
@@ -1689,6 +1694,11 @@ export type components = {
        * @description Why the last processing attempt failed.
        */
       last_error: string | null;
+      /**
+       * Latest Import Id
+       * @description Question papers: the newest question import run of the document (the one the server starts once it is processed, QIMPORT-01-AC06); null when it has none.
+       */
+      latest_import_id?: string | null;
       /** @description The queued or running parse job; null when there is none. */
       processing_job?: components['schemas']['DocumentProcessingJob'] | null;
       /** Sha256 */
