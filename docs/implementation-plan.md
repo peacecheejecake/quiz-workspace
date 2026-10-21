@@ -536,6 +536,6 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | UX4 홈·검색 옵션·문제 PDF dialog·문제은행 다듬기 | ✅ | 3c1d0fe · a192926 · 9f008a9 · f0252c3 | Codex P2(문제 해제 시 문제지 필터 잔존) → 반영 → 지적 없음. E2E questions·documents·search·workspaces·a11y 177/177(log-audit 0), visual baseline 갱신. AC 107 → 109 |
 | QIMP-FIX 문제은행형 PDF 추출·문항 전체 highlight | ✅ | ebca1c2 · 14c98b6 · d530870 · 150b42a · f437ddf · 98aec6f · b7fe272 | Codex P2×2(번호 해설·분할 표) → P2(줄바꿈 stem) → P2×2(heading·caption) → P2(continuation inline 보기) → segmenter dry-run으로 일원화 → 지적 없음. 사용자 PDF 0 → 750문항(정답 749) |
 | WRK-FORKDB fork된 pool child가 부모 DB 연결 공유 안 함 | ✅ | 117a09e | Codex 리뷰 지적 없음(2026-10-21). fork 강제 infra test: hook 있으면 child backend PID가 다르고 부모 연결 유지, 없으면 같음(대조군). Linux container 확인 |
-| QIMP-AUTO 서버 측 문제 추출 시작·문제 추출/검토 행 동작 | 리뷰 대기 | 8a0fffa · 34d5bb8 · 75f9bb7 · e524290 | 2026-10-21. migration 20261021120000(공유 DB 적용됨), pgTAP 14 16/16. infra pytest 578 GREEN, E2E questions·workspaces·smoke·a11y 146/146(log-audit 0), visual 10/10(baseline 변경 없음). AC 109 → 110 |
+| QIMP-AUTO 서버 측 문제 추출 시작·문제 추출/검토 행 동작 | ✅ | 8a0fffa · 34d5bb8 · 75f9bb7 · e524290 · 05e8155 | 2026-10-21. migration 20261021120000(공유 DB 적용됨), pgTAP 14 16/16. infra pytest 578 GREEN, E2E questions·workspaces·smoke·a11y 146/146(log-audit 0), visual 10/10(baseline 변경 없음). AC 109 → 110. Codex: P2(행 동작이 최근 200 run 목록으로 추출 여부 판단) → 05e8155 문서별 `latest_import_id`로 수정, 재리뷰 지적 없음 |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.
