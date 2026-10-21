@@ -1055,6 +1055,11 @@ export type paths = {
      * Create Question Import
      * @description Start extracting draft questions from a question paper (QIMPORT-01-AC01). 409
      *     `document-not-ready` while the paper is still processing (or failed).
+     *
+     *     The server already starts the import of a question paper when its processing succeeds
+     *     (QIMPORT-01-AC06), so this usually attaches: if the paper's active revision already has a
+     *     run (started by the server or by anyone), that run is returned and nothing new is created.
+     *     It creates a run for papers that have none (e.g. processed before QIMP-AUTO).
      */
     post: operations['createQuestionImport'];
     delete?: never;
@@ -8052,6 +8057,8 @@ export interface operations {
   listQuestionImports: {
     parameters: {
       query?: {
+        /** @description Only the runs of this question paper (e.g. the server-started one). */
+        document_id?: string | null;
         limit?: number;
       };
       header?: never;

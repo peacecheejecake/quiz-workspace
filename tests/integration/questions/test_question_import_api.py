@@ -89,8 +89,59 @@ def test_an_idempotency_key_cannot_be_reused_for_another_paper(seed: Any) -> Non
     key = f"k-{seed.new_id()}"
     run = alice.ok_response(alice.start_import(ws["id"], first, key), "POST", "i", (202,))
     seed.problem(alice.start_import(ws["id"], second, key), 409, KEY_REUSED)
+    # Each paper has only the run the server started when it was processed (QIMP-AUTO).
     runs = alice.ok("GET", f"/workspaces/{ws['id']}/question-imports")["items"]
-    assert [r["id"] for r in runs] == [run["id"]]
+    assert sorted(r["source_document_id"] for r in runs) == sorted([first, second])
+    assert run["id"] in {r["id"] for r in runs}
+
+
+def _runs_of(client: Any, workspace_id: str, document_id: str) -> list[dict[str, Any]]:
+    path = f"/workspaces/{workspace_id}/question-imports?document_id={document_id}"
+    items: list[dict[str, Any]] = client.ok("GET", path)["items"]
+    return items
+
+
+def test_qimport_01_ac06_a_processed_paper_already_has_its_import_and_post_attaches(
+    seed: Any,
+) -> None:
+    """The server starts the import when the paper is processed; POST returns that run."""
+    alice = seed.client("qauto-attach")
+    ws = alice.create_workspace()
+    paper = alice.upload_question_paper(ws["id"])
+    other = alice.upload_question_paper(ws["id"])
+
+    [auto] = _runs_of(alice, ws["id"], paper)
+    assert auto["status"] == "queued"
+    assert auto["source_document_id"] == paper
+    started = alice.ok_response(alice.start_import(ws["id"], paper), "POST", "i", (202,))
+    again = alice.ok_response(alice.start_import(ws["id"], paper), "POST", "i", (202,))
+    assert started["id"] == again["id"] == auto["id"]
+    assert started["job_id"] == auto["job_id"]
+    assert [r["id"] for r in _runs_of(alice, ws["id"], paper)] == [auto["id"]]
+    assert [r["source_document_id"] for r in _runs_of(alice, ws["id"], other)] == [other]
+
+    alice.wait_for_job(str(auto["job_id"]))
+    assert len(alice.drafts(auto["id"])) == len(seed.QUESTION_TRUTH["questions"])
+
+
+def test_qimport_01_ac06_a_processed_paper_without_an_import_gets_one_from_post(
+    seed: Any,
+) -> None:
+    """Papers processed before QIMP-AUTO have no run: POST creates exactly one."""
+    alice = seed.client("qauto-legacy")
+    ws = alice.create_workspace()
+    paper = alice.upload_question_paper(ws["id"])
+    with psycopg.connect(seed.DB_ADMIN_URL, autocommit=True) as conn:
+        conn.execute(
+            "delete from public.question_import_runs where source_document_id = %s", (paper,)
+        )
+    assert _runs_of(alice, ws["id"], paper) == []
+
+    first = alice.ok_response(alice.start_import(ws["id"], paper), "POST", "i", (202,))
+    second = alice.ok_response(alice.start_import(ws["id"], paper), "POST", "i", (202,))
+
+    assert first["id"] == second["id"]
+    assert [r["id"] for r in _runs_of(alice, ws["id"], paper)] == [first["id"]]
 
 
 def test_review_edits_answers_approves_and_freezes_published_drafts(seed: Any) -> None:

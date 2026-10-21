@@ -2,8 +2,12 @@
 
     POST  /workspaces/{id}/question-imports      editor+; {document_id} of a ready
                                                  `question_paper` document -> 202 ImportRun with
-                                                 its `question.import` job; `Idempotency-Key`
-    GET   /workspaces/{id}/question-imports      any member; runs, newest first
+                                                 its `question.import` job; returns the existing
+                                                 run of the paper's active revision (usually the
+                                                 one the server started, QIMP-AUTO) instead of a
+                                                 second one; `Idempotency-Key`
+    GET   /workspaces/{id}/question-imports      any member; runs, newest first (`document_id`
+                                                 filter)
     GET   /question-imports/{id}                 any member
     POST  /question-imports/{id}/retry           editor+; a failed/cancelled run gets a new job
                                                  (same run) -> 202; `Idempotency-Key`
@@ -542,7 +546,12 @@ def create_question_import(
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
     """Start extracting draft questions from a question paper (QIMPORT-01-AC01). 409
-    `document-not-ready` while the paper is still processing (or failed)."""
+    `document-not-ready` while the paper is still processing (or failed).
+
+    The server already starts the import of a question paper when its processing succeeds
+    (QIMPORT-01-AC06), so this usually attaches: if the paper's active revision already has a
+    run (started by the server or by anyone), that run is returned and nothing new is created.
+    It creates a run for papers that have none (e.g. processed before QIMP-AUTO)."""
     scope = f"POST /workspaces/{access.workspace_id}/question-imports"
     body_hash = request_hash(body.model_dump(mode="json"))
     if idempotency_key is not None:
@@ -580,13 +589,17 @@ def create_question_import(
             detail="The question paper has not finished processing.",
         )
 
-    run_id = repo.create_run(
-        workspace_id=access.workspace_id,
-        actor_id=access.user_id,
-        document_id=paper.id,
-        revision_id=paper.active_revision_id,
-    )
-    run = _load_run(repo, run_id)
+    existing = repo.run_for_revision(access.workspace_id, paper.id, paper.active_revision_id)
+    if existing is not None:
+        run = existing
+    else:
+        run_id = repo.create_run(
+            workspace_id=access.workspace_id,
+            actor_id=access.user_id,
+            document_id=paper.id,
+            revision_id=paper.active_revision_id,
+        )
+        run = _load_run(repo, run_id)
     result = _run_out(run)
     if idempotency_key is not None:
         idempotency.save(
@@ -607,11 +620,14 @@ def list_question_imports(
     access: ReadWorkspace,
     repo: ImportRepo,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    document_id: Annotated[
+        uuid.UUID | None,
+        Query(description="Only the runs of this question paper (e.g. the server-started one)."),
+    ] = None,
 ) -> ImportRunList:
     """The workspace's import runs, newest first."""
-    return ImportRunList(
-        items=[_run_out(r) for r in repo.list_runs(access.workspace_id, limit=limit)]
-    )
+    runs = repo.list_runs(access.workspace_id, limit=limit, document_id=document_id)
+    return ImportRunList(items=[_run_out(r) for r in runs])
 
 
 @router.get("/question-imports/{import_id}", operation_id="getQuestionImport")

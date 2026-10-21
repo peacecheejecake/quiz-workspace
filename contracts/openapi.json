@@ -12367,6 +12367,25 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "description": "Only the runs of this question paper (e.g. the server-started one).",
+            "in": "query",
+            "name": "document_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the runs of this question paper (e.g. the server-started one).",
+              "title": "Document Id"
+            }
           }
         ],
         "responses": {
@@ -12442,7 +12461,7 @@
         ]
       },
       "post": {
-        "description": "Start extracting draft questions from a question paper (QIMPORT-01-AC01). 409\n`document-not-ready` while the paper is still processing (or failed).",
+        "description": "Start extracting draft questions from a question paper (QIMPORT-01-AC01). 409\n`document-not-ready` while the paper is still processing (or failed).\n\nThe server already starts the import of a question paper when its processing succeeds\n(QIMPORT-01-AC06), so this usually attaches: if the paper's active revision already has a\nrun (started by the server or by anyone), that run is returned and nothing new is created.\nIt creates a run for papers that have none (e.g. processed before QIMP-AUTO).",
         "operationId": "createQuestionImport",
         "parameters": [
           {
