@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import signal
+import threading
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -9,6 +11,8 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from billiard import process as billiard_process
+from celery.worker import state as worker_state
 from quiz_worker.envelope import JobEnvelope
 from quiz_worker.pg_store import PostgresJobStore, create_job_store_engine
 from quiz_worker.settings import WorkerSettings
@@ -29,6 +33,51 @@ ADMIN_DATABASE_URL = os.environ.get(
 
 EnvelopeFactory = Callable[..., JobEnvelope]
 JobStoreUnderTest = TransactionalJobStore
+
+
+# -- Real workers in this process: fork safety and leak-proof teardown ---------------------------
+
+# `start_worker` runs the worker in a thread of the test process, and on Linux that thread forks
+# the prefork pool's children (also replacements, after a child died). A child forked while
+# another thread is inside SQLite inherits SQLite's process-wide mutexes in the state that thread
+# left them: py-spy showed a replacement child blocked forever in `pthread_mutex_lock` under
+# `sqlite3Malloc` (`sqlite3.connect`, claiming the job's next attempt) while the test thread
+# polled the job store. Store reads that may overlap a fork therefore hold this lock, and every
+# fork in this process waits for it. macOS spawns the children, so this never showed there.
+_FORK_GUARD = threading.Lock()
+os.register_at_fork(
+    before=_FORK_GUARD.acquire,
+    after_in_parent=_FORK_GUARD.release,
+    after_in_child=_FORK_GUARD.release,
+)
+
+
+def read_between_forks[T](read: Callable[[], T]) -> T:
+    """Run a SQLite read from the test thread while a worker thread may fork pool children."""
+    with _FORK_GUARD:
+        return read()
+
+
+@pytest.fixture(autouse=True)
+def _reap_stuck_test_worker() -> Iterator[None]:
+    """A `start_worker` whose worker thread outlives `shutdown_timeout` raises, but leaves the
+    pool children that blocked its shutdown running and Celery's global `should_terminate` set:
+    every later worker then stops before it is ready and the next `start_worker` waits forever
+    (CI hung ~20 min after one failed prefork test). Kill such leftovers so one failing test
+    stays one failure."""
+    yield
+    if worker_state.should_terminate is None:
+        return
+    for child in billiard_process.active_children():
+        if child.pid is not None:
+            os.kill(child.pid, signal.SIGKILL)
+        child.join(5)
+    # The stuck worker threads finish their shutdown once their children are gone.
+    for thread in threading.enumerate():
+        if thread.name.endswith("(start)") and thread is not threading.current_thread():
+            thread.join(15)
+    worker_state.reset_state()
+    worker_state.should_terminate = None
 
 
 class FakeClock:

@@ -45,7 +45,7 @@ from quiz_worker.store import (
     TransactionalJobStore,
 )
 
-from .conftest import BOOK_TEXT, EnvelopeFactory
+from .conftest import BOOK_TEXT, EnvelopeFactory, read_between_forks
 
 
 @pytest.fixture
@@ -81,11 +81,12 @@ def _wait_for_terminal(
 ) -> JobRecord:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        record = store.get(job_id)
+        record = read_between_forks(lambda: store.get(job_id))
         if record is not None and record.status in TERMINAL_STATUSES:
             return record
         time.sleep(0.05)
-    raise AssertionError(f"job did not finish within {timeout}s: {store.get(job_id)}")
+    last = read_between_forks(lambda: store.get(job_id))
+    raise AssertionError(f"job did not finish within {timeout}s: {last}")
 
 
 def _wait_for_idle_worker(timeout: float = 15) -> None:
@@ -290,8 +291,9 @@ def _wait_for(
 ) -> JobRecord:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        record = store.get(job_id)
+        record = read_between_forks(lambda: store.get(job_id))
         if record is not None and predicate(record):
             return record
         time.sleep(0.02)
-    raise AssertionError(f"job did not reach the state within {timeout}s: {store.get(job_id)}")
+    last = read_between_forks(lambda: store.get(job_id))
+    raise AssertionError(f"job did not reach the state within {timeout}s: {last}")
