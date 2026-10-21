@@ -6,12 +6,20 @@
 // stays a page). No separate "PDF 가져오기" button since UX4. Editors only for the Dropzone;
 // everyone sees the list. The same dialog opens from the home's 문제 › PDF 관리 and from the
 // question bank's "PDF 가져오기" (QBANK-01-AC06), each with its own document library state.
-import { ConfirmDialog, Dropzone, FloatingSidePanel } from '@quiz/ui';
+//
+// QIMPORT-01-AC06: the server extracts a question PDF's questions once it is processed. A
+// processed PDF whose import already exists offers "문제 검토" (its import page); one without an
+// import (processed before the server started them) offers editors "문제 추출", which starts it
+// and opens the import page for review.
+import { Button, ConfirmDialog, Dropzone, FloatingSidePanel } from '@quiz/ui';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DocumentRows, PDF_ACCEPT } from '@/components/documents/documents-library';
 import docStyles from '@/components/documents/documents.module.css';
 import type { DocumentLibrary } from '@/components/documents/use-document-library';
-import { importPath } from '@/lib/questions/import-client';
+import type { ImportRun } from '@/lib/questions/drafts';
+import { createImportClient, ImportApiError, importPath } from '@/lib/questions/import-client';
 import { setPendingImportFile } from '@/lib/questions/import-handoff';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
 
@@ -27,9 +35,96 @@ export interface QuestionPdfsLibraryProps {
   readonly canEdit: boolean;
 }
 
+/** The newest import run per question paper (the list API returns runs newest first). */
+export function runsByDocument(runs: readonly ImportRun[]): Map<string, ImportRun> {
+  const out = new Map<string, ImportRun>();
+  for (const run of runs) {
+    if (run.source_document_id && !out.has(run.source_document_id)) {
+      out.set(run.source_document_id, run);
+    }
+  }
+  return out;
+}
+
+/** The workspace's import runs by question paper, reloaded whenever a paper becomes ready
+ * (its server-started import exists from that moment). null until loaded or after a failure. */
+function useImportRuns(
+  workspaceId: string,
+  readyIds: string,
+): [Map<string, ImportRun> | null, () => void] {
+  const client = useMemo(() => createImportClient(), []);
+  const [runs, setRuns] = useState<Map<string, ImportRun> | null>(null);
+  const [generation, setGeneration] = useState(0);
+  useEffect(() => {
+    if (!readyIds) return;
+    const controller = new AbortController();
+    client
+      .listRuns(workspaceId, controller.signal)
+      .then((items) => setRuns(runsByDocument(items)))
+      .catch(() => {
+        if (!controller.signal.aborted) setRuns(null);
+      });
+    return () => controller.abort();
+  }, [client, workspaceId, readyIds, generation]);
+  return [runs, useCallback(() => setGeneration((g) => g + 1), [])];
+}
+
 export function QuestionPdfsLibrary({ workspaceId, library, canEdit }: QuestionPdfsLibraryProps) {
   const router = useRouter();
+  const client = useMemo(() => createImportClient(), []);
   const rows = questionPaperRows(library.rows);
+  const readyIds = rows
+    .filter((row) => row.status === 'ready' && row.documentId)
+    .map((row) => row.documentId)
+    .join(',');
+  const [runs, reloadRuns] = useImportRuns(workspaceId, readyIds);
+  const [starting, setStarting] = useState<string | null>(null);
+  const [startFailure, setStartFailure] = useState<string | null>(null);
+
+  async function extract(row: DocumentRow) {
+    const documentId = row.documentId;
+    if (!documentId || starting) return;
+    setStarting(documentId);
+    setStartFailure(null);
+    try {
+      await client.startImport(workspaceId, documentId, crypto.randomUUID());
+      router.push(importPath(workspaceId, documentId));
+    } catch (error) {
+      const message = error instanceof ImportApiError ? error.message : String(error);
+      setStartFailure(`‘${row.title}’ 문제 추출을 시작하지 못했습니다. ${message}`);
+      reloadRuns();
+    } finally {
+      setStarting(null);
+    }
+  }
+
+  function rowActions(row: DocumentRow) {
+    const documentId = row.documentId;
+    if (!documentId || row.status !== 'ready' || runs === null) return null;
+    if (runs.has(documentId)) {
+      return (
+        <Button size="sm" asChild>
+          <Link href={importPath(workspaceId, documentId)} aria-label={`${row.title} 문제 검토`}>
+            문제 검토
+          </Link>
+        </Button>
+      );
+    }
+    if (!canEdit) return null;
+    return (
+      <Button
+        size="sm"
+        variant="primary"
+        aria-label={`${row.title} 문제 추출`}
+        loading={starting === documentId}
+        disabled={starting !== null && starting !== documentId}
+        onClick={() => void extract(row)}
+      >
+        문제 추출
+      </Button>
+    );
+  }
+
   return (
     <div className={docStyles.library}>
       {canEdit ? (
@@ -52,6 +147,11 @@ export function QuestionPdfsLibrary({ workspaceId, library, canEdit }: QuestionP
           {library.alert}
         </p>
       ) : null}
+      {startFailure ? (
+        <p role="alert" className={docStyles.alert}>
+          {startFailure}
+        </p>
+      ) : null}
       <DocumentRows
         label="문제 PDF 목록"
         rows={rows}
@@ -59,6 +159,7 @@ export function QuestionPdfsLibrary({ workspaceId, library, canEdit }: QuestionP
         library={library}
         canEdit={canEdit}
         emptyText={NO_QUESTION_PDFS}
+        rowActions={rowActions}
       />
     </div>
   );

@@ -12,6 +12,11 @@ export const IMPORT_STEP_LABELS: Readonly<Record<ImportStep, string>> = {
   extracting: '문제 추출 중',
 };
 
+/** Once the PDF is uploaded the server finishes processing and extraction on its own
+ * (QIMPORT-01-AC06): only the upload itself needs the page. */
+export const IMPORT_BACKGROUND_HINT =
+  '이 페이지를 떠나도 PDF 분석과 문제 추출은 서버에서 계속됩니다. 다시 열면 결과를 이어서 볼 수 있습니다.';
+
 export interface ImportJobProgressProps {
   readonly step: ImportStep;
   /** 0-100; undefined = indeterminate. */
@@ -44,6 +49,9 @@ export function ImportJobProgress({ step, value, filename }: ImportJobProgressPr
           style={indeterminate ? undefined : { width: `${value}%` }}
         />
       </div>
+      {step === 'uploading' ? null : (
+        <p className={styles.progressHint}>{IMPORT_BACKGROUND_HINT}</p>
+      )}
     </div>
   );
 }

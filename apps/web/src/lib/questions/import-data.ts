@@ -1,5 +1,6 @@
-// QIMPORT-01 first render (Server Component): the workspace's newest import run and its drafts,
-// so a reload shows the same import with its review and registration state. Unknown/foreign
+// QIMPORT-01 first render (Server Component): the workspace's newest import run (or, with
+// `?document=`, the newest run of that question paper, QIMPORT-01-AC06) and its drafts, so a
+// reload shows the same import with its review and registration state. Unknown/foreign
 // workspaces never get here (the workspace layout already answered 404).
 import { notFound, redirect } from 'next/navigation';
 import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
@@ -14,25 +15,32 @@ export interface ImportScreenData {
   readonly loadFailed: boolean;
 }
 
-export async function loadLatestImport(workspaceId: string): Promise<ImportScreenData> {
+export async function loadLatestImport(
+  workspaceId: string,
+  documentId?: string,
+): Promise<ImportScreenData> {
   let api;
   try {
     api = await createServerApiClient();
   } catch (error) {
     if (error instanceof NotAuthenticatedError) {
-      redirect(loginRedirectPath(importPath(workspaceId)));
+      redirect(loginRedirectPath(importPath(workspaceId, documentId)));
     }
     throw error;
   }
   const outcome = (status: number, body: unknown, { workspace = false } = {}) => {
     const kind = classifyImportFailure(status, body);
-    if (kind === 'unauthenticated') redirect(loginRedirectPath(importPath(workspaceId)));
+    if (kind === 'unauthenticated')
+      redirect(loginRedirectPath(importPath(workspaceId, documentId)));
     if (kind === 'notFound' && workspace) notFound();
   };
 
   const runs = await api
     .GET('/api/v1/workspaces/{workspace_id}/question-imports', {
-      params: { path: { workspace_id: workspaceId }, query: { limit: 1 } },
+      params: {
+        path: { workspace_id: workspaceId },
+        query: documentId ? { limit: 1, document_id: documentId } : { limit: 1 },
+      },
     })
     .catch(() => null);
   if (!runs) return { run: null, drafts: [], loadFailed: true };

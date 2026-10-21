@@ -73,6 +73,12 @@
   color: var(--color-text-secondary);
 }
 
+.progressHint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
 .progress {
   position: relative;
   max-width: 32rem;
