@@ -36,6 +36,7 @@ from quiz_worker.document_job import (
     document_parse_definition,
     index_sync_definition,
     parsed_object_key,
+    started_import_jobs,
 )
 from quiz_worker.document_store import (
     INDEX_SYNC_JOB_TYPE,
@@ -718,3 +719,89 @@ def test_doc_01_ac05_parser_warm_up_is_opt_in_outside_deployments(
         assert install_parser_warm_up(settings, LazyDeps(settings)) is expected
     finally:
         signals.worker_process_init.disconnect(dispatch_uid=PARSER_WARM_UP_UID)
+
+
+# -- QIMP-AUTO: a processed question paper starts its own import (QIMPORT-01-AC06) ---------------
+
+
+def test_qimport_01_ac06_a_processed_question_paper_starts_one_import_for_its_uploader(
+    world: World,
+) -> None:
+    document, revision = world.upload(document_type="question_paper")
+    envelope = world.submit(document, revision.id)
+
+    result = world.run(envelope)
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    run_id, job_id, user_id = world.store.import_starts[document.id]
+    assert user_id == envelope.created_by
+    assert result.record.result["question_import_id"] == str(run_id)
+    assert started_import_jobs(result.record.result) == [job_id]
+    assert world.definition.follow_ups is started_import_jobs
+
+
+def test_qimport_01_ac06_books_start_no_import(world: World) -> None:
+    document, revision = world.upload()
+
+    result = world.run(world.submit(document, revision.id))
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    assert world.store.import_starts == {}
+    assert "question_import_id" not in (result.record.result or {})
+    assert started_import_jobs(result.record.result) == []
+
+
+def test_qimport_01_ac06_redelivery_and_reruns_start_no_second_import(world: World) -> None:
+    document, revision = world.upload(document_type="question_paper")
+    envelope = world.submit(document, revision.id)
+    world.run(envelope)
+    started = dict(world.store.import_starts)
+
+    assert world.run(envelope).outcome is RunOutcome.DUPLICATE_FINISHED
+    rerun = world.run(world.submit(document, revision.id))
+
+    assert rerun.outcome is RunOutcome.SUCCEEDED
+    assert started_import_jobs(rerun.record.result) == []
+    assert world.store.import_starts == started
+
+
+def test_qimport_01_ac06_a_retried_parse_starts_the_import_once(world: World) -> None:
+    document, revision = world.upload(document_type="question_paper")
+    envelope = world.submit(document, revision.id)
+    world.index.crash_after_index = True
+
+    assert world.run(envelope).outcome is RunOutcome.RETRY
+    assert world.store.import_starts == {}
+    second = world.run(envelope)
+
+    assert second.outcome is RunOutcome.SUCCEEDED, second.error
+    assert len(world.store.import_starts) == 1
+    assert len(started_import_jobs(second.record.result)) == 1
+
+
+def test_qimport_01_ac06_a_failed_parse_starts_no_import(world: World) -> None:
+    world.parser.fail = True
+    document, revision = world.upload(document_type="question_paper")
+
+    result = world.run(world.submit(document, revision.id))
+
+    assert result.outcome is RunOutcome.FAILED
+    assert world.store.import_starts == {}
+
+
+def test_qimport_01_ac06_an_archived_workspace_starts_no_import(world: World) -> None:
+    world.store.writable = lambda _w, _u: False
+    document, revision = world.upload(document_type="question_paper")
+
+    result = world.run(world.submit(document, revision.id))
+
+    assert result.outcome is RunOutcome.FAILED
+    assert (result.error or "").startswith("workspace_unavailable")
+    assert world.store.import_starts == {}
+
+
+@pytest.mark.parametrize(
+    "result", [None, {}, {"question_import_job_id": 3}, {"question_import_job_id": "nope"}]
+)
+def test_started_import_jobs_ignores_results_without_a_job(result: Any) -> None:
+    assert started_import_jobs(result) == []
