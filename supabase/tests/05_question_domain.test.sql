@@ -44,7 +44,9 @@ select columns_are('public', 'question_generation_runs',
 select columns_are('public', 'question_import_runs',
   array['id', 'workspace_id', 'created_by', 'source_document_id', 'source_document_revision_id',
         'target_chapter_id', 'async_job_id', 'status', 'llm_model', 'prompt_version', 'params',
-        'finished_at', 'created_at', 'updated_at']);
+        'finished_at', 'created_at', 'updated_at',
+        -- QIMP-AUTO (20261021120000)
+        'started_by']);
 select columns_are('public', 'question_drafts',
   array['id', 'workspace_id', 'source_type', 'generation_run_id', 'import_run_id', 'position',
         'question_type', 'payload', 'validations', 'review_status', 'reviewed_by', 'reviewed_at',
