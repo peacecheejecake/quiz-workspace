@@ -6,6 +6,16 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyPublished,
   approvalBlocker,
+  approvePublishInBatches,
+  approvePublishSelection,
+  initialSelection,
+  pruneSelection,
+  refusedMessage,
+  selectAllScope,
+  selectAllState,
+  selectionBlocker,
+  toggleAll,
+  toggleOne,
   draftUpdateBody,
   formFromDraft,
   issueMessage,
@@ -300,5 +310,89 @@ describe('publish batches (API MAX_PUBLISH = 200)', () => {
     await publishInBatches(rest, send, onBatch);
     expect(send.mock.calls.slice(2).map(([b]) => b.length)).toEqual([200, 50]);
     expect(done.size).toBe(450);
+  });
+});
+
+describe('selection (QIMP-BULK)', () => {
+  function rd(id: string, position: number, overrides: Partial<ReviewDraft> = {}): ReviewDraft {
+    return {
+      ...reviewDraftFromImport(importDraft({ id, position, question_number: position + 1 })),
+      version: `v-${id}`,
+      publishable: true,
+      correctOptionIds: ['o1'],
+      answerMissing: false,
+      ...overrides,
+    };
+  }
+  const drafts: ReviewDraft[] = [
+    rd('a', 0),
+    rd('b', 1, { reviewStatus: 'approved' }),
+    rd('c', 2, { publishable: false, correctOptionIds: null, answerMissing: true }),
+    rd('d', 3, { publishedQuestionId: 'q-d', reviewStatus: 'approved' }),
+    rd('e', 4, { reviewStatus: 'rejected' }),
+    rd('f', 5, { type: 'SHORT_ANSWER', answerMissing: true, correctOptionIds: null }),
+    rd('g', 6, { issues: [{ code: 'provenance_missing', severity: 'warning' }] }),
+  ];
+  const ids = (set: ReadonlySet<string>) => [...set].sort();
+
+  it('"전체 선택" covers unregistered, confirmable drafts with nothing to check', () => {
+    expect(selectAllScope(drafts).map((d) => d.id)).toEqual(['a', 'b']);
+    expect(selectionBlocker(at(drafts, 2))).toContain('정답 보기를 지정해야');
+    expect(selectionBlocker(at(drafts, 0))).toBeNull();
+    expect(selectionBlocker(at(drafts, 3))).toBeNull();
+  });
+
+  it('select all / none / indeterminate', () => {
+    const none = new Set<string>();
+    expect(selectAllState(drafts, none)).toBe(false);
+    const all = toggleAll(drafts, none, true);
+    expect(ids(all)).toEqual(['a', 'b']);
+    expect(selectAllState(drafts, all)).toBe(true);
+    const partial = toggleOne(all, 'a', false);
+    expect(selectAllState(drafts, partial)).toBe('indeterminate');
+    expect(ids(toggleAll(drafts, partial, false))).toEqual([]);
+    // An individually selected rejected draft is kept by "select all" and counts as partial alone.
+    const rejected = toggleOne(none, 'e', true);
+    expect(selectAllState(drafts, rejected)).toBe('indeterminate');
+    expect(ids(toggleAll(drafts, rejected, true))).toEqual(['a', 'b', 'e']);
+    // Drafts without an answer or with a note are selectable one by one only.
+    expect(ids(toggleOne(toggleOne(none, 'f', true), 'g', true))).toEqual(['f', 'g']);
+    expect(selectAllState(drafts, toggleAll(drafts, rejected, true))).toBe(true);
+  });
+
+  it('registered, blocked or unknown ids are never selected or sent', () => {
+    const raw = new Set(['a', 'c', 'd', 'zzz']);
+    expect(ids(pruneSelection(drafts, raw))).toEqual(['a']);
+    expect(selectAllState(drafts, new Set(['c', 'd']))).toBe(false);
+    expect(approvePublishSelection(drafts, new Set(['e', 'a', 'd']))).toEqual([
+      { draft_id: 'a', version: 'v-a' },
+      { draft_id: 'e', version: 'v-e' },
+    ]);
+    expect(ids(initialSelection(drafts))).toEqual(['b']);
+  });
+
+  it('approves and registers in batches, collecting refusals instead of throwing', async () => {
+    const refs = Array.from({ length: 401 }, (_, i) => ({ draft_id: `d${i}`, version: 'v' }));
+    const send = vi.fn(async (batch: readonly { draft_id: string }[]) => ({
+      items: batch.slice(1).map((r) => ({ draft_id: r.draft_id, question_id: `q-${r.draft_id}` })),
+      refused: [{ draft_id: at(batch, 0).draft_id, reason: 'stale-draft' as const }],
+    }));
+    const progress: number[] = [];
+    const out = await approvePublishInBatches(refs, send, (_, done) => progress.push(done));
+    expect(send.mock.calls.map(([batch]) => batch.length)).toEqual([200, 200, 1]);
+    expect(progress).toEqual([200, 400, 401]);
+    expect(out.items).toHaveLength(398);
+    expect(out.refused.map((r) => r.draft_id)).toEqual(['d0', 'd200', 'd400']);
+  });
+
+  it('names refused drafts by number and reason', () => {
+    expect(
+      refusedMessage(drafts, [
+        { draft_id: 'a', reason: 'stale-draft' },
+        { draft_id: 'c', reason: 'not-publishable' },
+      ]),
+    ).toBe(
+      '2개는 등록하지 못했습니다: 1번(다른 곳에서 바뀜), 3번(승인 불가 항목 있음). 선택은 그대로 두었으니 확인한 뒤 다시 등록해 주세요.',
+    );
   });
 });

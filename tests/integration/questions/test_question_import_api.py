@@ -24,6 +24,7 @@ STALE_DRAFT = "urn:quiz-workspace:problem:stale-draft"
 DRAFT_PUBLISHED = "urn:quiz-workspace:problem:draft-published"
 KEY_REUSED = "urn:quiz-workspace:problem:idempotency-key-reused"
 NOT_APPROVED = "urn:quiz-workspace:problem:draft-not-approved"
+DB_ADMIN_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 PAPER = Path(__file__).resolve().parents[2] / "fixtures" / "pdfs" / "questions-ko.pdf"
 
 
@@ -282,6 +283,119 @@ def test_publish_registers_only_the_reviewed_version_of_approved_drafts(seed: An
     replay = alice.publish_reviewed(run["id"], [{"draft_id": again["id"], "version": "0"}])
     assert alice.ok_response(replay, "POST", "publish", (200,)) == first
     assert len(alice.list_questions(ws["id"])) == 1
+
+
+def _review_of(draft_id: str) -> tuple[str, str | None, Any]:
+    with psycopg.connect(DB_ADMIN_URL, autocommit=True) as conn:
+        row = conn.execute(
+            "select review_status, reviewed_by::text, reviewed_at from public.question_drafts "
+            "where id = %s",
+            (draft_id,),
+        ).fetchone()
+    assert row is not None
+    return row[0], row[1], row[2]
+
+
+def test_qimport_01_ac03_approve_publish_registers_exactly_the_selection(seed: Any) -> None:
+    """QIMP-BULK: `approve: true` approves and registers the selected drafts in one request; a
+    draft that cannot be confirmed is refused and left as it was, the rest is registered."""
+    alice = seed.client("qbulk-select")
+    ws = alice.create_workspace()
+    run, drafts = alice.import_paper(ws["id"])
+    q1, q2, q3, q5 = (seed.draft_for(drafts, n) for n in (1, 2, 3, 5))
+    assert q3["publishable"] is False  # MCQ without an answer in the key
+    selection = [_item(q1), _item(q2), _item(q3), _item(q5)]
+
+    res = alice.approve_and_publish(run["id"], selection)
+    first = alice.ok_response(res, "POST", "approve-publish", (200,))
+    assert [i["draft_id"] for i in first["items"]] == [q1["id"], q2["id"], q5["id"]]
+    assert first["refused"] == [{"draft_id": q3["id"], "reason": "not-publishable"}]
+
+    bank = alice.list_questions(ws["id"])
+    assert {q["id"] for q in bank} == {i["question_id"] for i in first["items"]}
+    assert all(q["publication_status"] == "CONFIRMED" for q in bank)
+    after = {d["id"]: d for d in alice.drafts(run["id"])}
+    for draft in (q1, q2, q5):
+        status, reviewer, reviewed_at = _review_of(draft["id"])
+        assert (status, reviewer) == ("approved", alice.user.id)
+        assert reviewed_at is not None
+        assert after[draft["id"]]["published_question_id"] is not None
+    # The refused draft and the drafts nobody selected are untouched.
+    for draft in drafts:
+        if draft["id"] in {q1["id"], q2["id"], q5["id"]}:
+            continue
+        assert _review_of(draft["id"]) == ("pending", None, None)
+        assert after[draft["id"]]["published_question_id"] is None
+        assert after[draft["id"]]["version"] == draft["version"]
+    run_after = alice.ok("GET", f"/question-imports/{run['id']}")
+    assert run_after["published_count"] == 3
+
+    # A retry of the same request (lost response) registers nothing twice.
+    replay = alice.approve_and_publish(run["id"], selection)
+    assert alice.ok_response(replay, "POST", "replay", (200,)) == first
+    assert len(alice.list_questions(ws["id"])) == 3
+    assert alice.ok("GET", f"/question-imports/{run['id']}")["published_count"] == 3
+
+
+def test_approve_publish_refuses_drafts_changed_since_they_were_selected(seed: Any) -> None:
+    """QIMP-BULK: the selection approves only the version on screen. A draft another editor
+    changed is refused (`stale-draft`) and stays pending; the edited draft registers at its
+    latest version once selected again. A rejected draft that is selected is approved."""
+    alice = seed.client("qbulk-stale")
+    bob = seed.client("qbulk-stale-bob")
+    ws = alice.create_workspace()
+    run, drafts = alice.import_paper(ws["id"])
+    seed.membership(ws["id"], bob.user, "editor")
+    q1, q2, q4 = (seed.draft_for(drafts, n) for n in (1, 2, 4))
+    stem = "바뀐 문제: 물이 기체로 변하는 과정은?"
+    edited = bob.ok_response(_patch(bob, q1, stem=stem), "PATCH", "edit", (200,))
+    rejected = bob.ok_response(_patch(bob, q4, review_status="rejected"), "PATCH", "r", (200,))
+
+    res = alice.approve_and_publish(run["id"], [_item(q1), _item(q2), _item(q4)])
+    out = alice.ok_response(res, "POST", "approve-publish", (200,))
+    assert [i["draft_id"] for i in out["items"]] == [q2["id"]]
+    assert out["refused"] == [
+        {"draft_id": q1["id"], "reason": "stale-draft"},
+        {"draft_id": q4["id"], "reason": "stale-draft"},
+    ]
+    assert _review_of(q1["id"])[:2] == ("pending", None)
+    assert _review_of(q4["id"])[:2] == ("rejected", bob.user.id)
+
+    again = alice.approve_and_publish(run["id"], [_item(edited), _item(rejected)])
+    out = alice.ok_response(again, "POST", "approve-publish", (200,))
+    assert [i["draft_id"] for i in out["items"]] == [q1["id"], q4["id"]]
+    assert out["refused"] == []
+    assert _review_of(q4["id"])[:2] == ("approved", alice.user.id)
+    question = alice.get_question(out["items"][0]["question_id"])
+    assert question["revision"]["stem"] == stem
+    assert len(alice.list_questions(ws["id"])) == 3
+
+
+def test_approve_publish_keeps_the_authorization_boundary(seed: Any) -> None:
+    """QIMP-BULK: the same boundary as publish: other users 404, viewers 403, archived 403, and a
+    draft of another import refuses the whole request (nothing approved or registered)."""
+    owner = seed.client("qbulk-authz")
+    viewer = seed.client("qbulk-authz-viewer")
+    mallory = seed.client("qbulk-authz-mallory")
+    ws = owner.create_workspace()
+    run, drafts = owner.import_paper(ws["id"])
+    other_run, other_drafts = owner.import_paper(ws["id"])
+    seed.membership(ws["id"], viewer.user, "viewer")
+    q1 = seed.draft_for(drafts, 1)
+    selection = [_item(q1)]
+
+    seed.problem(mallory.approve_and_publish(run["id"], selection), 404)
+    seed.problem(viewer.approve_and_publish(run["id"], selection), 403, seed.INSUFFICIENT_ROLE)
+    foreign = seed.draft_for(other_drafts, 1)
+    seed.problem(owner.approve_and_publish(run["id"], [_item(q1), _item(foreign)]), 404)
+    assert other_run["id"] != run["id"]
+    assert _review_of(q1["id"]) == ("pending", None, None)
+    assert _review_of(foreign["id"]) == ("pending", None, None)
+
+    owner.ok("POST", f"/workspaces/{ws['id']}/archive")
+    seed.problem(owner.approve_and_publish(run["id"], selection), 403, seed.ARCHIVED)
+    assert _review_of(q1["id"]) == ("pending", None, None)
+    assert owner.list_questions(ws["id"]) == []
 
 
 def test_rejecting_needs_no_publishable_content_and_essays_keep_a_model_answer(seed: Any) -> None:

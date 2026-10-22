@@ -17,18 +17,23 @@
                                                  generation drafts (M6.2, question_generations)
     POST  /question-imports/{id}/publish         editor+; {drafts: [{draft_id, version}]} of
                                                  APPROVED drafts at the reviewed version -> the
-                                                 CONFIRMED questions, idempotent per draft
+                                                 CONFIRMED questions, idempotent per draft;
+                                                 `approve: true` approves the selected drafts in
+                                                 the same transaction and lists the refused ones
 
 Isolation (AGENTS.md §5 Data): drafts live in `question_drafts` and are never questions: the bank,
 the overview and `GET /questions/{id}` never see them. Human approval is the gate: a draft is
 approved through PATCH (only when it can be confirmed), any later change returns it to pending,
 and `publish` registers only approved drafts whose current version is the one the client
-reviewed (409 `stale-draft` / `draft-not-approved` otherwise). Publishing creates CONFIRMED
-questions (origin `import`, revision 1 from the draft, one source row pointing at the import's
-document revision and pages, no lineage) atomically: if any draft is refused nothing is
-registered. Each draft is published at most once (`published_question_id`, unique): a repeated
-publish returns the same mapping. Answers are never filled in: an MCQ draft without an answer
-cannot be approved until a reviewer enters one (QIMPORT-01-AC02).
+reviewed (409 `stale-draft` / `draft-not-approved` otherwise). The import screen selects drafts
+and sends them with `approve: true`: the selection is the approval, of exactly the version on
+screen, recorded with the caller as the reviewer; refused drafts stay as they were. Publishing
+creates CONFIRMED questions (origin `import`, revision 1 from the draft, one source row pointing
+at the import's document revision and pages, no lineage) in one transaction: without `approve`,
+if any draft is refused nothing is registered. Each draft is published at most once
+(`published_question_id`, unique): a repeated publish returns the same mapping. Answers are
+never filled in: an MCQ draft without an answer cannot be approved until a reviewer enters one
+(QIMPORT-01-AC02).
 
 Authorization as everywhere (A1.3): runs and drafts resolve their workspace from the DB; unknown,
 foreign and invisible ids answer the same 404; viewers read but cannot import, edit or publish
@@ -311,6 +316,17 @@ class ImportPublishRequest(BaseModel):
     drafts: list[ReviewedDraft] = Field(min_length=1, max_length=MAX_PUBLISH)
 
 
+class ImportPublishBody(ImportPublishRequest):
+    approve: bool = Field(
+        default=False,
+        description="Approve and register the listed drafts in one step (QIMPORT-01-AC03, "
+        '"선택한 문제 승인 및 등록"): every listed draft at the sent `version` is approved by '
+        "the caller and registered in the same transaction; drafts that changed since or cannot "
+        "be confirmed are returned in `refused`, untouched, and the others are registered. "
+        "Without it only drafts approved beforehand are registered, all or nothing.",
+    )
+
+
 class ImportPublishedDraft(BaseModel):
     draft_id: uuid.UUID
     question_id: uuid.UUID
@@ -318,6 +334,24 @@ class ImportPublishedDraft(BaseModel):
 
 class ImportPublishResult(BaseModel):
     items: list[ImportPublishedDraft] = Field(description="In request order.")
+
+
+RefusalReason = Literal["stale-draft", "not-publishable"]
+
+
+class ImportRefusedDraft(BaseModel):
+    draft_id: uuid.UUID
+    reason: RefusalReason = Field(
+        description="`stale-draft`: changed since the sent version (review it again); "
+        "`not-publishable`: cannot be confirmed as it is (see the draft's `publish_errors`)."
+    )
+
+
+class ImportPublishOutcome(ImportPublishResult):
+    refused: list[ImportRefusedDraft] = Field(
+        description="`approve` requests only (else empty): listed drafts left as they were, "
+        "in request order."
+    )
 
 
 # --- dependencies -------------------------------------------------------------------------------
@@ -835,17 +869,26 @@ def update_question_draft(
 )
 def publish_question_import_drafts(
     access: EditImport,
-    body: ImportPublishRequest,
+    body: ImportPublishBody,
     repo: ImportRepo,
     questions: QuestionRepo,
-) -> ImportPublishResult:
-    """Register exactly these approved drafts as CONFIRMED questions (QIMPORT-01-AC03).
+) -> ImportPublishOutcome:
+    """Register exactly these drafts as CONFIRMED questions (QIMPORT-01-AC03).
 
-    Each item names the draft and the `version` that was reviewed. All or nothing: an id that
-    is not a draft of this import is 404; a draft that changed since (another editor's edit,
-    approval or rejection) is 409 `stale-draft`; a draft that is not approved (pending or
-    rejected) is 409 `draft-not-approved`; a draft that cannot be confirmed is 422. Already
-    published drafts return their question whatever version is sent (idempotent replay)."""
+    Each item names the draft and the `version` the reviewer saw. An id that is not a draft of
+    this import is 404 (nothing changes). Already published drafts return their question whatever
+    version is sent (idempotent replay).
+
+    Without `approve` (drafts approved beforehand through PATCH) it is all or nothing: a draft
+    that changed since (another editor's edit, approval or rejection) is 409 `stale-draft`; a
+    draft that is not approved is 409 `draft-not-approved`; a draft that cannot be confirmed is
+    422.
+
+    With `approve` the request is the human selection itself ("선택한 문제 승인 및 등록"): each
+    listed draft still at the sent version that can be confirmed is approved by the caller
+    (`reviewed_by`/`reviewed_at`; a draft approved earlier keeps its approval) and registered,
+    in one transaction. A draft that changed since or cannot be confirmed (e.g. an MCQ without
+    an answer) is left untouched and listed in `refused`; it is never registered silently."""
     run = _load_run(repo, access.resource_id)
     user_id = access.workspace.user_id
     versions: dict[uuid.UUID, str] = {}
@@ -857,32 +900,54 @@ def publish_question_import_drafts(
         raise HTTPException(status_code=404, detail="Draft not found.")
 
     pending = [drafts[d] for d in requested if drafts[d].published_question_id is None]
-    if any(versions[r.id] != draft_version(r.updated_at) for r in pending):
-        raise ProblemException(
-            409,
-            ProblemType.STALE_DRAFT,
-            detail="A draft changed since it was reviewed. Reload the drafts and review again.",
-        )
-    if any(r.review_status != "approved" for r in pending):
-        raise ProblemException(
-            409,
-            ProblemType.DRAFT_NOT_APPROVED,
-            detail="Only approved drafts can be registered. Approve them first.",
-        )
-
-    issues = Issues()
     plans: list[tuple[DraftRecord, QuestionDraft, QuestionContent]] = []
-    for index, record in enumerate(pending):
-        draft = parse_payload(record.payload)
-        content = _content(record, draft)
-        blockers = publish_issues(content, record.validations, prefix=("body", "drafts", index))
-        issues.items.extend(blockers.items)
-        plans.append((record, draft, content))
-    issues.raise_if_any()
+    refused: list[ImportRefusedDraft] = []
+    if body.approve:
+        for record in pending:
+            if versions[record.id] != draft_version(record.updated_at):
+                refused.append(ImportRefusedDraft(draft_id=record.id, reason="stale-draft"))
+                continue
+            draft = parse_payload(record.payload)
+            content = _content(record, draft)
+            if publish_issues(content, record.validations).items:
+                refused.append(ImportRefusedDraft(draft_id=record.id, reason="not-publishable"))
+                continue
+            plans.append((record, draft, content))
+    else:
+        if any(versions[r.id] != draft_version(r.updated_at) for r in pending):
+            raise ProblemException(
+                409,
+                ProblemType.STALE_DRAFT,
+                detail="A draft changed since it was reviewed. Reload the drafts and review again.",
+            )
+        if any(r.review_status != "approved" for r in pending):
+            raise ProblemException(
+                409,
+                ProblemType.DRAFT_NOT_APPROVED,
+                detail="Only approved drafts can be registered. Approve them first.",
+            )
+        issues = Issues()
+        for index, record in enumerate(pending):
+            draft = parse_payload(record.payload)
+            content = _content(record, draft)
+            blockers = publish_issues(content, record.validations, prefix=("body", "drafts", index))
+            issues.items.extend(blockers.items)
+            plans.append((record, draft, content))
+        issues.raise_if_any()
 
     mapping = {d.id: d.published_question_id for d in drafts.values()}
     try:
         for record, draft, content in plans:
+            if record.review_status != "approved":
+                # The selection is the approval of exactly the content at the sent version.
+                repo.mark_draft_reviewed(
+                    record.id,
+                    actor_id=user_id,
+                    review_status="approved",
+                    payload=with_review(draft, content, draft.validations, "approved").model_dump(
+                        mode="json"
+                    ),
+                )
             question_id = questions.create(
                 workspace_id=run.workspace_id,
                 actor_id=user_id,
@@ -914,10 +979,17 @@ def publish_question_import_drafts(
         repo.commit()
     except (IntegrityError, DataError):
         raise _constraint_violation(repo) from None
-    return ImportPublishResult(
+    except ValidationError:
+        # A stored payload that no longer validates; never the validation text (it quotes it).
+        repo.rollback()
+        raise RequestValidationError(
+            [{"loc": ("body",), "msg": "A draft is not valid.", "type": "value_error"}]
+        ) from None
+    return ImportPublishOutcome(
         items=[
             ImportPublishedDraft(draft_id=d, question_id=q)
             for d in requested
             if (q := mapping[d]) is not None
-        ]
+        ],
+        refused=refused,
     )

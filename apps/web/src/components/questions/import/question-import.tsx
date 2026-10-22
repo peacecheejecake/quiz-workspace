@@ -4,7 +4,9 @@
 //
 //   PDF 업로드 (document_type question_paper, the DOC-01 upload flow) → PDF 분석 job → import run
 //   (POST /question-imports, Idempotency-Key) → 문제 추출 job → drafts → review (편집 / 원본 비교 /
-//   승인) → "승인한 문제 등록" publishes exactly the approved drafts at their approved versions.
+//   선택) → "선택한 문제 승인 및 등록" approves and registers exactly the selected drafts at the
+//   versions on screen (publish with `approve: true`, QIMP-BULK). Checking a draft or "전체 선택"
+//   is screen state only; nothing is sent until the button.
 //
 // The server starts the import itself once the PDF is processed (QIMPORT-01-AC06), so after the
 // upload the page may be left: the POST then attaches to that run, and a later visit (or
@@ -13,7 +15,8 @@
 // Nothing reaches the bank before a human approves it; a failed extraction keeps the drafts it
 // already persisted and "다시 시도" retries the same run (the API reconciles, no duplicates);
 // a publish whose response was lost is retried with the same drafts (idempotent per draft).
-import { Button, EmptyState, PageHeader } from '@quiz/ui';
+// Drafts the server refuses (changed since, or not confirmable) stay selected and are named.
+import { Button, Checkbox, EmptyState, PageHeader } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -35,16 +38,24 @@ import {
 import { defaultTitle, PDF_CONTENT_TYPE, validatePdfFile } from '@/lib/documents/validation';
 import {
   applyPublished,
+  approvePublishInBatches,
+  approvePublishSelection,
   draftUpdateBody,
+  initialSelection,
+  pruneSelection,
   publishedMessage,
-  publishInBatches,
-  publishSelection,
+  refusalText,
+  refusedMessage,
   replaceDraft,
-  reviewBody,
   reviewDraftFromImport,
+  selectAllScope,
+  selectAllState,
   sortDrafts,
+  toggleAll,
+  toggleOne,
   type ImportDraft,
   type ImportRun,
+  type RefusedDraft,
   type ReviewDraft,
 } from '@/lib/questions/drafts';
 import type { QuestionFormValues } from '@/lib/questions/form';
@@ -131,6 +142,10 @@ export function QuestionImport({
   const [drafts, setDrafts] = useState<ReviewDraft[]>(() =>
     sortDrafts(initialDrafts.map(reviewDraftFromImport)),
   );
+  /** Drafts checked for "선택한 문제 승인 및 등록" (screen state only). */
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() =>
+    initialSelection(sortDrafts(initialDrafts.map(reviewDraftFromImport))),
+  );
   const [listFailed, setListFailed] = useState(loadFailed);
   const [activity, setActivity] = useState<Activity | null>(() =>
     initialRun && isWorking(initialRun) ? { step: 'extracting' } : null,
@@ -143,6 +158,9 @@ export function QuestionImport({
   const [fileAlert, setFileAlert] = useState<string | null>(null);
   const [states, setStates] = useState<Record<string, DraftReviewState>>({});
   const [publishing, setPublishing] = useState(false);
+  const [publishProgress, setPublishProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  );
   const [publishFailure, setPublishFailure] = useState<string | null>(null);
   const [status, setStatus] = useState<{ text: string; bank: boolean } | null>(null);
   const [editing, setEditing] = useState<ReviewDraft | null>(null);
@@ -226,7 +244,7 @@ export function QuestionImport({
         });
       } else if (latest.status === 'succeeded') {
         setStatus({
-          text: `문제 ${latest.draft_count}개를 초안으로 가져왔습니다. 검토하고 승인한 문제만 문제은행에 등록됩니다.`,
+          text: `문제 ${latest.draft_count}개를 초안으로 가져왔습니다. 검토해 선택한 문제만 승인과 함께 문제은행에 등록됩니다.`,
           bank: false,
         });
       } else {
@@ -277,6 +295,7 @@ export function QuestionImport({
       setDrafts([]);
       publishRound.current.clear();
       setStates({});
+      setSelected(new Set());
       await followRun(started, signal);
     },
     [client, followRun, onUnauthenticated, workspaceId],
@@ -456,29 +475,6 @@ export function QuestionImport({
 
   // --- review -------------------------------------------------------------------------------
 
-  async function changeApproval(draft: ReviewDraft, approved: boolean) {
-    setStates((s) => ({ ...s, [draft.id]: { approving: approved } }));
-    setStatus(null);
-    try {
-      const updated = await client.updateDraft(draft.id, reviewBody(draft, approved));
-      setDrafts((list) => replaceDraft(list, reviewDraftFromImport(updated)));
-      setStates((s) => {
-        const { [draft.id]: _done, ...rest } = s;
-        return rest;
-      });
-    } catch (error) {
-      if (onUnauthenticated(error)) return;
-      const message =
-        error instanceof ImportApiError
-          ? error.message
-          : '승인 상태를 바꾸지 못했습니다. 다시 시도해 주세요.';
-      setStates((s) => ({ ...s, [draft.id]: { error: message } }));
-      if (run && error instanceof ImportApiError && error.kind !== 'network') {
-        void refreshDrafts(run.id);
-      }
-    }
-  }
-
   async function saveDraft(
     values: QuestionFormValues,
     baseVersion: string,
@@ -493,10 +489,7 @@ export function QuestionImport({
         return rest;
       });
       setStatus({
-        text:
-          updated.review_status === 'approved'
-            ? `${updated.question_number ?? updated.position + 1}번 초안을 저장했습니다.`
-            : `${updated.question_number ?? updated.position + 1}번 초안을 저장했습니다. 등록하려면 승인해 주세요.`,
+        text: `${updated.question_number ?? updated.position + 1}번 초안을 저장했습니다. 선택한 문제는 '선택한 문제 승인 및 등록'으로 저장한 내용 그대로 등록됩니다.`,
         bank: false,
       });
       return { ok: true };
@@ -562,8 +555,19 @@ export function QuestionImport({
 
   // --- publish ------------------------------------------------------------------------------
 
-  const selection = publishSelection(drafts);
-  const approving = Object.values(states).some((s) => s.approving !== undefined);
+  // The selection on screen: ids that are gone, registered or blocked are not counted or sent.
+  const chosen = pruneSelection(drafts, selected);
+  const selection = approvePublishSelection(drafts, chosen);
+  const allState = selectAllState(drafts, chosen);
+  const scopeCount = selectAllScope(drafts).length;
+
+  function markRefused(refused: readonly RefusedDraft[]) {
+    setStates((s) => {
+      const next = { ...s };
+      for (const r of refused) next[r.draft_id] = { error: refusalText(r.reason) };
+      return next;
+    });
+  }
 
   async function publish() {
     if (!run || publishing || selection.length === 0) return;
@@ -571,18 +575,29 @@ export function QuestionImport({
     setPublishFailure(null);
     setStatus(null);
     const importId = run.id;
+    const sent = selection;
+    const sentIds = new Set(sent.map((ref) => ref.draft_id));
+    setStates((s) => Object.fromEntries(Object.entries(s).filter(([id]) => !sentIds.has(id))));
+    setPublishProgress({ done: 0, total: sent.length });
     // Drafts registered in this round (across retries of failed batches), counted once each.
     const round = publishRound.current;
+    const refused: RefusedDraft[] = [];
     try {
-      await publishInBatches(
-        selection,
-        (batch) => client.publish(importId, batch),
-        (items) => {
-          for (const item of items) round.add(item.draft_id);
-          setDrafts((list) => applyPublished(list, items));
+      await approvePublishInBatches(
+        sent,
+        (batch) => client.approveAndPublish(importId, batch),
+        (result, done) => {
+          for (const item of result.items) round.add(item.draft_id);
+          refused.push(...result.refused);
+          setDrafts((list) => applyPublished(list, result.items));
+          markRefused(result.refused);
+          setPublishProgress({ done, total: sent.length });
         },
       );
-      setStatus({ text: publishedMessage(round.size), bank: true });
+      if (round.size > 0 || refused.length === 0) {
+        setStatus({ text: publishedMessage(round.size), bank: true });
+      }
+      if (refused.length > 0) setPublishFailure(refusedMessage(drafts, refused));
       round.clear();
       void refreshDrafts(importId);
     } catch (error) {
@@ -591,10 +606,11 @@ export function QuestionImport({
       const message =
         error instanceof ImportApiError ? error.message : '문제를 등록하지 못했습니다.';
       const partial = round.size > 0 ? ` 지금까지 ${round.size}개를 등록했습니다.` : '';
-      setPublishFailure(`승인한 문제를 모두 등록하지 못했습니다.${partial} ${message}`);
+      setPublishFailure(`선택한 문제를 모두 등록하지 못했습니다.${partial} ${message}`);
       if (kind !== 'network' && kind !== 'unavailable') void refreshDrafts(importId);
     } finally {
       setPublishing(false);
+      setPublishProgress(null);
     }
   }
 
@@ -602,7 +618,7 @@ export function QuestionImport({
 
   const busy = activity !== null;
   const registered = drafts.filter((d) => d.publishedQuestionId !== null).length;
-  const approvedCount = selection.length;
+  const selectedCount = selection.length;
   const sourceDocumentId = run?.source_document_id ?? null;
 
   const uploadButton = canEdit ? (
@@ -726,25 +742,38 @@ export function QuestionImport({
                 가져온 초안 <span className={styles.count}>{drafts.length}개</span>
               </h2>
               <p className={styles.meta}>
-                {run.document_title ? `${run.document_title} · ` : ''}승인 대기{' '}
-                {
-                  drafts.filter((d) => d.reviewStatus !== 'approved' && !d.publishedQuestionId)
-                    .length
-                }
-                개 · 등록 {registered}개
+                {run.document_title ? `${run.document_title} · ` : ''}미등록{' '}
+                {drafts.length - registered}개 · 등록 {registered}개
               </p>
             </div>
             {canEdit ? (
               <Button
                 variant="primary"
                 onClick={() => void publish()}
-                disabled={approvedCount === 0 || approving || busy}
+                disabled={selectedCount === 0 || busy}
                 loading={publishing}
               >
-                승인한 문제 등록 ({approvedCount})
+                선택한 문제 승인 및 등록 ({selectedCount})
               </Button>
             ) : null}
           </div>
+          {canEdit && drafts.length > 0 ? (
+            <div className={styles.selectionBar}>
+              <Checkbox
+                label={`전체 선택 (${scopeCount}개)`}
+                checked={allState}
+                disabled={scopeCount === 0 || publishing}
+                onCheckedChange={(checked) =>
+                  setSelected((current) =>
+                    toggleAll(drafts, pruneSelection(drafts, current), checked === true),
+                  )
+                }
+                description="등록되지 않았고 정답이 있으며 확인할 항목이 없는 초안을 모두 고릅니다. 정답이 없거나 확인 항목이 있는 초안은 직접 골라 주세요. 고른 초안은 버튼을 눌러야 승인·등록됩니다."
+              />
+              <p className={styles.meta}>선택 {selectedCount}개</p>
+            </div>
+          ) : null}
+          {publishProgress ? <PublishProgress {...publishProgress} /> : null}
           {drafts.length === 0 && !busy ? (
             <p className={styles.meta}>아직 추출된 초안이 없습니다.</p>
           ) : null}
@@ -753,7 +782,11 @@ export function QuestionImport({
             drafts={drafts}
             states={states}
             readOnly={!canEdit}
-            onApproveChange={(draft, approved) => void changeApproval(draft, approved)}
+            selected={chosen}
+            selectionDisabled={publishing}
+            onSelectChange={(draft, on) =>
+              setSelected((current) => toggleOne(pruneSelection(drafts, current), draft.id, on))
+            }
             onEdit={(draft) => {
               setEditorSession((n) => n + 1);
               setEditing(draft);
@@ -776,6 +809,28 @@ export function QuestionImport({
         reload={reloadDraft}
       />
       <SourceComparePanel draft={comparing} onClose={() => setComparing(null)} />
+    </div>
+  );
+}
+
+/** Progress of "선택한 문제 승인 및 등록" (batches of up to 200 drafts). */
+function PublishProgress({ done, total }: { readonly done: number; readonly total: number }) {
+  const value = total > 0 ? Math.round((done / total) * 100) : 0;
+  const text = `승인·등록 중 · ${total}개 중 ${done}개 처리`;
+  return (
+    <div className={styles.progressBox}>
+      <p className={styles.progressText}>{text}</p>
+      <div
+        role="progressbar"
+        aria-label="등록 진행률"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={value}
+        aria-valuetext={text}
+        className={styles.progress}
+      >
+        <div className={styles.progressFill} style={{ width: `${value}%` }} />
+      </div>
     </div>
   );
 }

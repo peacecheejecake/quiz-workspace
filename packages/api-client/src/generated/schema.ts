@@ -492,13 +492,22 @@ export type paths = {
     put?: never;
     /**
      * Publish Question Import Drafts
-     * @description Register exactly these approved drafts as CONFIRMED questions (QIMPORT-01-AC03).
+     * @description Register exactly these drafts as CONFIRMED questions (QIMPORT-01-AC03).
      *
-     *     Each item names the draft and the `version` that was reviewed. All or nothing: an id that
-     *     is not a draft of this import is 404; a draft that changed since (another editor's edit,
-     *     approval or rejection) is 409 `stale-draft`; a draft that is not approved (pending or
-     *     rejected) is 409 `draft-not-approved`; a draft that cannot be confirmed is 422. Already
-     *     published drafts return their question whatever version is sent (idempotent replay).
+     *     Each item names the draft and the `version` the reviewer saw. An id that is not a draft of
+     *     this import is 404 (nothing changes). Already published drafts return their question whatever
+     *     version is sent (idempotent replay).
+     *
+     *     Without `approve` (drafts approved beforehand through PATCH) it is all or nothing: a draft
+     *     that changed since (another editor's edit, approval or rejection) is 409 `stale-draft`; a
+     *     draft that is not approved is 409 `draft-not-approved`; a draft that cannot be confirmed is
+     *     422.
+     *
+     *     With `approve` the request is the human selection itself ("선택한 문제 승인 및 등록"): each
+     *     listed draft still at the sent version that can be confirmed is approved by the caller
+     *     (`reviewed_by`/`reviewed_at`; a draft approved earlier keeps its approval) and registered,
+     *     in one transaction. A draft that changed since or cannot be confirmed (e.g. an MCQ without
+     *     an answer) is left untouched and listed in `refused`; it is never registered silently.
      */
     post: operations['publishQuestionImportDrafts'];
     delete?: never;
@@ -2162,6 +2171,17 @@ export type components = {
       /** Items */
       items: components['schemas']['ImportDraft'][];
     };
+    /** ImportPublishBody */
+    ImportPublishBody: {
+      /**
+       * Approve
+       * @description Approve and register the listed drafts in one step (QIMPORT-01-AC03, "선택한 문제 승인 및 등록"): every listed draft at the sent `version` is approved by the caller and registered in the same transaction; drafts that changed since or cannot be confirmed are returned in `refused`, untouched, and the others are registered. Without it only drafts approved beforehand are registered, all or nothing.
+       * @default false
+       */
+      approve?: boolean;
+      /** Drafts */
+      drafts: components['schemas']['ReviewedDraft'][];
+    };
     /** ImportPublishedDraft */
     ImportPublishedDraft: {
       /**
@@ -2175,6 +2195,19 @@ export type components = {
        */
       question_id: string;
     };
+    /** ImportPublishOutcome */
+    ImportPublishOutcome: {
+      /**
+       * Items
+       * @description In request order.
+       */
+      items: components['schemas']['ImportPublishedDraft'][];
+      /**
+       * Refused
+       * @description `approve` requests only (else empty): listed drafts left as they were, in request order.
+       */
+      refused: components['schemas']['ImportRefusedDraft'][];
+    };
     /** ImportPublishRequest */
     ImportPublishRequest: {
       /** Drafts */
@@ -2187,6 +2220,20 @@ export type components = {
        * @description In request order.
        */
       items: components['schemas']['ImportPublishedDraft'][];
+    };
+    /** ImportRefusedDraft */
+    ImportRefusedDraft: {
+      /**
+       * Draft Id
+       * Format: uuid
+       */
+      draft_id: string;
+      /**
+       * Reason
+       * @description `stale-draft`: changed since the sent version (review it again); `not-publishable`: cannot be confirmed as it is (see the draft's `publish_errors`).
+       * @enum {string}
+       */
+      reason: 'stale-draft' | 'not-publishable';
     };
     /** ImportRun */
     ImportRun: {
@@ -5877,7 +5924,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['ImportPublishRequest'];
+        'application/json': components['schemas']['ImportPublishBody'];
       };
     };
     responses: {
@@ -5887,7 +5934,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ImportPublishResult'];
+          'application/json': components['schemas']['ImportPublishOutcome'];
         };
       };
       /** @description Unauthorized */

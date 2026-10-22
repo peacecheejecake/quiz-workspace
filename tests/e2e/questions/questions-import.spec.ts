@@ -169,16 +169,23 @@ test(
 );
 
 test(
-  'QIMPORT-01-AC03 only reviewed and approved drafts are registered in the bank, one marker each',
+  'QIMPORT-01-AC03 only reviewed and selected drafts are approved and registered in the bank, one marker each',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const { owner, workspaceId, run } = await importPaper(page, workspaceFactory, 'qimport01-ac03');
     expect(await listQuestions(owner, workspaceId)).toEqual([]);
 
-    // Approve 1 and 2 as extracted; complete 3 (no answer in the key) by hand, then approve it.
-    await importUi.approve(importUi.draft(page, Q(1).stem)).check();
-    await importUi.approve(importUi.draft(page, Q(2).stem)).check();
+    // Select 1 and 2 as extracted; 3 (no answer in the key) cannot be selected until completed by
+    // hand. Selecting sends nothing (QIMP-BULK): approval happens with the registration.
+    const writes: string[] = [];
+    page.on('request', (r) => {
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(r.method())) writes.push(new URL(r.url()).pathname);
+    });
+    await importUi.select(importUi.draft(page, Q(1).stem)).check();
+    await importUi.select(importUi.draft(page, Q(2).stem)).check();
     const q3 = importUi.draft(page, Q(3).stem);
+    await expect(importUi.select(q3)).toBeDisabled();
+    expect(writes).toEqual([]);
     await importUi.edit(q3).click();
     const form = questionFormUi.form(page);
     const evaporation = Q(3).options.findIndex((o) => o.text === '증발') + 1;
@@ -186,8 +193,14 @@ test(
     await questionFormUi.save(form).click();
     await expect(form).toBeHidden();
     await expect(importUi.noAnswer(q3)).toHaveCount(0);
-    await importUi.approve(q3).check();
+    await importUi.select(q3).check();
+    expect(writes.filter((w) => w.endsWith('/publish'))).toEqual([]);
+    for (const t of PAPER.questions) {
+      const draft = draftFor(await listDrafts(owner, run.id), t);
+      expect(draft.review_status, `question ${t.number} before registering`).toBe('pending');
+    }
 
+    await expect(importUi.publish(page)).toContainText(/\(3\)/);
     await importUi.publish(page).click();
     await expect(importUi.alert(page).or(page.getByRole('status')).first()).toContainText(
       /3\s*(개|문제).*(등록|확정)|registered 3|3 (questions )?(registered|published)/i,
@@ -223,6 +236,69 @@ test(
     for (const t of PAPER.questions.filter((x) => !approved.includes(x))) {
       await expect(bankUi.item(page, t.stem), `question ${t.number}`).toHaveCount(0);
     }
+  },
+);
+
+test(
+  'QIMPORT-01-AC03 전체 선택 selects every registrable draft and 선택한 문제 승인 및 등록 registers them in one action',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const { owner, workspaceId, run } = await importPaper(page, workspaceFactory, 'qimport01-bulk');
+    // Drafts without an answer in the key (3, 6, 7) are left out: 3 (MCQ) cannot be confirmed,
+    // 6 and 7 (short answer, essay) only by an explicit, individual choice.
+    const registrable = PAPER.questions.filter((q) => q.answer !== null);
+    const all = importUi.selectAll(page);
+    await expect(all).toHaveAccessibleName(new RegExp(`\\(${registrable.length}개\\)`));
+    await expect(all).not.toBeChecked();
+
+    await all.check();
+    await expect(all).toBeChecked();
+    for (const t of registrable)
+      await expect(importUi.select(importUi.draft(page, t.stem))).toBeChecked();
+    for (const t of UNANSWERED) {
+      await expect(importUi.select(importUi.draft(page, t.stem))).not.toBeChecked();
+    }
+    await expect(importUi.select(importUi.draft(page, Q(3).stem))).toBeDisabled();
+    // Partly selected: the select-all box shows the mixed state.
+    const first = importUi.select(importUi.draft(page, Q(1).stem));
+    await first.uncheck();
+    await expect(all).toHaveAttribute('aria-checked', 'mixed');
+    await first.check();
+    await expect(all).toBeChecked();
+    // Nothing was approved by checking.
+    expect((await listDrafts(owner, run.id)).every((d) => d.review_status === 'pending')).toBe(
+      true,
+    );
+
+    await expect(importUi.publish(page)).toContainText(new RegExp(`\\(${registrable.length}\\)`));
+    await importUi.publish(page).click();
+    await expect(importUi.alert(page).or(page.getByRole('status')).first()).toContainText(
+      new RegExp(`${registrable.length}\\s*개.*등록`),
+    );
+
+    const bank = await listQuestions(owner, workspaceId);
+    expect(bank).toHaveLength(registrable.length);
+    const drafts = await listDrafts(owner, run.id);
+    for (const t of PAPER.questions) {
+      const draft = draftFor(drafts, t);
+      if (registrable.includes(t)) {
+        expect(draft.review_status, `question ${t.number}`).toBe('approved');
+        expect(bank.map((q) => q.id)).toContain(draft.published_question_id);
+      } else {
+        expect(draft.review_status, `question ${t.number}`).toBe('pending');
+        expect(draft.published_question_id, `question ${t.number}`).toBeNull();
+      }
+    }
+    // Registered drafts leave the selection; nothing is left for "전체 선택".
+    await expect(importUi.selectAll(page)).toHaveAccessibleName(/\(0개\)/);
+    await expect(importUi.selectAll(page)).toBeDisabled();
+    await expect(importUi.publish(page)).toContainText(/\(0\)/);
+    for (const t of registrable) {
+      await expect(importUi.draft(page, t.stem)).toContainText(/등록됨|registered/i);
+    }
+
+    await page.goto(bankPath(workspaceId));
+    await expect(bankUi.items(page)).toHaveCount(registrable.length);
   },
 );
 
@@ -277,7 +353,7 @@ test(
     }
 
     const approved = [Q(1), Q(2)];
-    for (const t of approved) await importUi.approve(importUi.draft(page, t.stem)).check();
+    for (const t of approved) await importUi.select(importUi.draft(page, t.stem)).check();
     await importUi.publish(page).click();
     await expect(importUi.alert(page).or(page.getByRole('status')).first()).toContainText(
       /2\s*(개|문제).*(등록|확정)|registered 2|2 (questions )?(registered|published)/i,
@@ -298,9 +374,9 @@ test(
     const { owner, workspaceId, run } = await importPaper(page, workspaceFactory, 'qimport01-ac04');
     const approved = [Q(1), Q(5)];
     for (const t of approved) {
-      const approve = importUi.approve(importUi.draft(page, t.stem));
-      await approve.check();
-      await expect(approve).toBeChecked();
+      const select = importUi.select(importUi.draft(page, t.stem));
+      await select.check();
+      await expect(select).toBeChecked();
     }
 
     // The first write after this point reaches the server, but its response never arrives.

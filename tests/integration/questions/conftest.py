@@ -327,8 +327,15 @@ class QuestionClient(_m3.Client):
         """POST publish with explicit `{draft_id, version}` items (A4)."""
         return self.call("POST", f"/question-imports/{import_id}/publish", {"drafts": items})
 
+    def approve_and_publish(self, import_id: str, items: list[dict[str, str]]) -> httpx.Response:
+        """POST publish with `approve: true` (QIMP-BULK): the selection is the approval."""
+        return self.call(
+            "POST", f"/question-imports/{import_id}/publish", {"drafts": items, "approve": True}
+        )
+
     def publish(self, import_id: str, draft_ids: list[str]) -> httpx.Response:
-        """Review, then register, as the import screen does (A4): approve each listed draft that
+        """Review, then register, as the import screen did before QIMP-BULK (A4; the screen now
+        uses `approve_and_publish`): approve each listed draft that
         is neither approved nor published at its current version, then publish them at the
         approved versions. Returns the first refused approval (e.g. 422 for an MCQ without an
         answer, nothing published) or the publish response. Ids that are not drafts of the

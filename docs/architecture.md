@@ -148,7 +148,7 @@ workspace
 | POST | `/api/v1/question-generations/{id}/publish` | 승인한 문제만 등록 |
 | POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기 |
 | GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토 |
-| POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록 |
+| POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록(`approve: true`면 선택한 초안을 승인과 함께 등록, 거절 목록 반환) |
 | GET | `/api/v1/jobs/{id}` | 비동기 작업 상태 |
 | GET | `/api/v1/jobs/{id}/events` | SSE 진행 상황 |
 | GET | `/api/v1/workspaces/{id}/activities` | 변경 이력 |

@@ -4,7 +4,9 @@
 // QIMPORT-01 (PDF import drafts) and QGEN-01 (generation drafts, M6.3). Presentational: it shows
 // each draft with its number, type, stem, options and answer, source pages, validation notes and
 // review state, and reports the reviewer's actions (approve, edit, compare with the source) to the
-// screen, which owns the API calls. Approval is per draft and never implies registration.
+// screen, which owns the API calls. Two review modes: per-draft approval (`onApproveChange`, QGEN-01;
+// approval never implies registration) or a plain selection checkbox (`onSelectChange`, QIMPORT-01
+// QIMP-BULK; the screen approves and registers the selection in one action).
 //
 // Accessibility: one list item per draft (nothing inside is a list item, so the list reads as
 // "N drafts"); state is text + icon, never color alone (정답 보기 is
@@ -15,6 +17,7 @@ import Link from 'next/link';
 import { type ReactNode } from 'react';
 import {
   approvalBlocker,
+  selectionBlocker,
   draftNumber,
   DRAFT_ORIGIN_LABELS,
   issueMessage,
@@ -40,6 +43,11 @@ export interface QuestionDraftReviewProps {
   /** No approve/edit controls (viewer, archived workspace). */
   readonly readOnly?: boolean;
   readonly onApproveChange?: (draft: ReviewDraft, approved: boolean) => void;
+  /** Selection mode (replaces the approve control): ids of the selected drafts. */
+  readonly selected?: ReadonlySet<string>;
+  /** Selection checkboxes are shown but cannot change (e.g. while registering). */
+  readonly selectionDisabled?: boolean;
+  readonly onSelectChange?: (draft: ReviewDraft, selected: boolean) => void;
   readonly onEdit?: (draft: ReviewDraft) => void;
   /** Opens the source comparison for the draft (e.g. the PDF page next to it). */
   readonly onCompare?: (draft: ReviewDraft) => void;
@@ -55,6 +63,9 @@ export function QuestionDraftReview({
   states = {},
   readOnly = false,
   onApproveChange,
+  selected,
+  selectionDisabled = false,
+  onSelectChange,
   onEdit,
   onCompare,
   pageHref,
@@ -69,6 +80,9 @@ export function QuestionDraftReview({
           state={states[draft.id] ?? {}}
           readOnly={readOnly}
           onApproveChange={onApproveChange}
+          isSelected={selected?.has(draft.id) ?? false}
+          selectionDisabled={selectionDisabled}
+          onSelectChange={onSelectChange}
           onEdit={onEdit}
           onCompare={onCompare}
           pageHref={pageHref}
@@ -84,6 +98,9 @@ interface DraftItemProps {
   readonly state: DraftReviewState;
   readonly readOnly: boolean;
   readonly onApproveChange?: QuestionDraftReviewProps['onApproveChange'];
+  readonly isSelected: boolean;
+  readonly selectionDisabled: boolean;
+  readonly onSelectChange?: QuestionDraftReviewProps['onSelectChange'];
   readonly onEdit?: QuestionDraftReviewProps['onEdit'];
   readonly onCompare?: QuestionDraftReviewProps['onCompare'];
   readonly pageHref?: QuestionDraftReviewProps['pageHref'];
@@ -95,6 +112,9 @@ function DraftItem({
   state,
   readOnly,
   onApproveChange,
+  isSelected,
+  selectionDisabled,
+  onSelectChange,
   onEdit,
   onCompare,
   pageHref,
@@ -105,6 +125,7 @@ function DraftItem({
   const pending = state.approving !== undefined;
   const approved = state.approving ?? draft.reviewStatus === 'approved';
   const blocker = approved ? null : approvalBlocker(draft);
+  const selectBlocker = selectionBlocker(draft);
   const status = published ? 'published' : draft.reviewStatus;
   const headingId = `draft-${draft.id}-title`;
 
@@ -208,7 +229,18 @@ function DraftItem({
               편집
             </Button>
           ) : null}
-          {!readOnly && !published && onApproveChange ? (
+          {!readOnly && !published && onSelectChange ? (
+            <Checkbox
+              className={styles.approve}
+              label="선택"
+              aria-label={`${n}번 문제 선택`}
+              checked={isSelected && selectBlocker === null}
+              disabled={selectionDisabled || selectBlocker !== null}
+              onCheckedChange={(checked) => onSelectChange(draft, checked === true)}
+              {...(selectBlocker ? { description: selectBlocker } : {})}
+            />
+          ) : null}
+          {!readOnly && !published && onApproveChange && !onSelectChange ? (
             <Checkbox
               className={styles.approve}
               label="승인"
