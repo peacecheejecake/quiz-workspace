@@ -2,7 +2,13 @@
 // (src/app/api, `lib/documents/bff.ts`), which attach the session's access token server-side, so
 // browser code never holds a JWT. FastAPI stays the authority on every decision.
 import type { Problem } from '@quiz/api-client';
-import type { DraftUpdateBody, ImportDraft, ImportRun, ReviewedDraftRef } from './drafts';
+import type {
+  ApprovePublishResult,
+  DraftUpdateBody,
+  ImportDraft,
+  ImportRun,
+  ReviewedDraftRef,
+} from './drafts';
 
 export const IMPORT_PROBLEMS = {
   workspaceArchived: 'urn:quiz-workspace:problem:workspace-archived',
@@ -117,6 +123,11 @@ export interface ImportClient {
     importId: string,
     drafts: readonly ReviewedDraftRef[],
   ): Promise<{ draft_id: string; question_id: string }[]>;
+  /** Approves and registers the selected drafts at these versions (`approve: true`, QIMP-BULK). */
+  approveAndPublish(
+    importId: string,
+    drafts: readonly ReviewedDraftRef[],
+  ): Promise<ApprovePublishResult>;
 }
 
 type FetchLike = typeof fetch;
@@ -187,5 +198,10 @@ export function createImportClient(fetchImpl: FetchLike = (...a) => fetch(...a))
           { method: 'POST', body: JSON.stringify({ drafts }) },
         )
       ).items,
+    approveAndPublish: (importId, drafts) =>
+      call<ApprovePublishResult>(IMPORT_BFF_PATHS.publish(importId), {
+        method: 'POST',
+        body: JSON.stringify({ drafts, approve: true }),
+      }),
   };
 }

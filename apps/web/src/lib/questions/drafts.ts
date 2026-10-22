@@ -371,6 +371,156 @@ export async function publishInBatches(
   return all;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Selection (QIMPORT-01, QIMP-BULK): checking a draft is screen state only; "선택한 문제 승인 및
+// 등록" approves and registers the selection in one go (publish with `approve: true`).
+// ---------------------------------------------------------------------------------------------
+
+export type RefusalReason = Schemas['ImportRefusedDraft']['reason'];
+
+export interface RefusedDraft {
+  readonly draft_id: string;
+  readonly reason: RefusalReason;
+}
+
+export interface ApprovePublishResult {
+  readonly items: readonly PublishedItem[];
+  readonly refused: readonly RefusedDraft[];
+}
+
+/** Why the draft cannot be selected (null = it can): registered, or blocked by a validation. */
+export function selectionBlocker(draft: ReviewDraft): string | null {
+  if (draft.publishedQuestionId !== null || draft.publishable) return null;
+  return approvalBlocker({ ...draft, reviewStatus: 'pending' });
+}
+
+export function isSelectable(draft: ReviewDraft): boolean {
+  return draft.publishedQuestionId === null && draft.publishable;
+}
+
+/**
+ * What "전체 선택" covers: selectable drafts with nothing to check — not excluded (rejected), an
+ * answer present and no validation notes. A draft without an answer (short answer / essay may be
+ * confirmed without one) or with a note is selected one by one, never silently in bulk.
+ */
+export function selectAllScope(drafts: readonly ReviewDraft[]): ReviewDraft[] {
+  return drafts.filter(
+    (d) =>
+      isSelectable(d) && d.reviewStatus !== 'rejected' && !d.answerMissing && d.issues.length === 0,
+  );
+}
+
+/** Initial selection: drafts already approved (e.g. before QIMP-BULK) but not registered. */
+export function initialSelection(drafts: readonly ReviewDraft[]): Set<string> {
+  return new Set(
+    drafts.filter((d) => isSelectable(d) && d.reviewStatus === 'approved').map((d) => d.id),
+  );
+}
+
+/** Drops ids that are gone, registered or no longer selectable (e.g. after an edit or reload). */
+export function pruneSelection(
+  drafts: readonly ReviewDraft[],
+  selected: ReadonlySet<string>,
+): Set<string> {
+  return new Set(drafts.filter((d) => selected.has(d.id) && isSelectable(d)).map((d) => d.id));
+}
+
+export type SelectAllState = boolean | 'indeterminate';
+
+/** The "전체 선택" checkbox: checked when its whole scope is selected, indeterminate if partly. */
+export function selectAllState(
+  drafts: readonly ReviewDraft[],
+  selected: ReadonlySet<string>,
+): SelectAllState {
+  const scope = selectAllScope(drafts);
+  const count = drafts.filter((d) => selected.has(d.id) && isSelectable(d)).length;
+  if (count === 0) return false;
+  return scope.length > 0 && scope.every((d) => selected.has(d.id)) ? true : 'indeterminate';
+}
+
+/** Toggling "전체 선택": on selects the whole scope (keeps other picks), off clears everything. */
+export function toggleAll(
+  drafts: readonly ReviewDraft[],
+  selected: ReadonlySet<string>,
+  on: boolean,
+): Set<string> {
+  if (!on) return new Set();
+  return new Set([...pruneSelection(drafts, selected), ...selectAllScope(drafts).map((d) => d.id)]);
+}
+
+export function toggleOne(
+  selected: ReadonlySet<string>,
+  draftId: string,
+  on: boolean,
+): Set<string> {
+  const next = new Set(selected);
+  if (on) next.add(draftId);
+  else next.delete(draftId);
+  return next;
+}
+
+/** The selected drafts in list order, each at the version on screen (the version approved). */
+export function approvePublishSelection(
+  drafts: readonly ReviewDraft[],
+  selected: ReadonlySet<string>,
+): ReviewedDraftRef[] {
+  return drafts
+    .filter((d) => selected.has(d.id) && isSelectable(d))
+    .map((d) => ({ draft_id: d.id, version: d.version }));
+}
+
+const REFUSAL_LABELS: Readonly<Record<RefusalReason, string>> = {
+  'stale-draft': '다른 곳에서 바뀜',
+  'not-publishable': '승인 불가 항목 있음',
+};
+
+/** Inline message on a refused draft. */
+export function refusalText(reason: RefusalReason): string {
+  return reason === 'stale-draft'
+    ? '선택한 뒤 다른 곳에서 바뀌어 등록하지 않았습니다. 바뀐 내용을 확인한 뒤 다시 등록해 주세요.'
+    : '승인할 수 없는 항목이 있어 등록하지 않았습니다. 편집에서 표시된 항목을 고쳐 주세요.';
+}
+
+/** Summary of the drafts the server refused ("3번(다른 곳에서 바뀜), 5번(…)"). */
+export function refusedMessage(
+  drafts: readonly ReviewDraft[],
+  refused: readonly RefusedDraft[],
+): string {
+  const byId = new Map(drafts.map((d) => [d.id, d]));
+  const list = refused
+    .map((r) => {
+      const d = byId.get(r.draft_id);
+      return `${d ? `${draftNumber(d)}번` : '초안'}(${REFUSAL_LABELS[r.reason]})`;
+    })
+    .join(', ');
+  return `${refused.length}개는 등록하지 못했습니다: ${list}. 선택은 그대로 두었으니 확인한 뒤 다시 등록해 주세요.`;
+}
+
+/**
+ * Approves and registers `selection` in sequential batches of at most `size` (publish with
+ * `approve: true`). Each batch is one transaction and idempotent per draft on the server; drafts
+ * it refuses are collected, not thrown. Rejects with the first failed request after reporting the
+ * batches that succeeded (`onBatch`), so a retry sends only what is still unregistered.
+ */
+export async function approvePublishInBatches(
+  selection: readonly ReviewedDraftRef[],
+  send: (batch: readonly ReviewedDraftRef[]) => Promise<ApprovePublishResult>,
+  onBatch: (result: ApprovePublishResult, done: number) => void,
+  size = PUBLISH_BATCH_SIZE,
+): Promise<ApprovePublishResult> {
+  const items: PublishedItem[] = [];
+  const refused: RefusedDraft[] = [];
+  let done = 0;
+  for (const batch of publishBatches(selection, size)) {
+    const result = await send(batch);
+    items.push(...result.items);
+    refused.push(...result.refused);
+    done += batch.length;
+    onBatch(result, done);
+  }
+  return { items, refused };
+}
+
 /** Replaces one draft (after an edit or a review change) and keeps the order. */
 export function replaceDraft(drafts: readonly ReviewDraft[], next: ReviewDraft): ReviewDraft[] {
   return drafts.map((d) => (d.id === next.id ? next : d));
