@@ -159,6 +159,8 @@ Confirmed question
 
 정답 출처는 인쇄된 정답지뿐이다: 별도 정답 섹션(문제 번호로 매칭) 또는 문제 바로 뒤에 인쇄된 `정답: ②` 줄(그 문제에만 적용되므로 장마다 번호가 1부터 다시 시작해도 된다). `정답:` 줄 뒤의 인쇄된 해설은 초안의 해설(explanation)로 보존하고 선택지로 읽지 않는다. 마침표 없는 번호(`01 …`)는 heading 줄이거나 질문 단서(`?`, `시오`, 답란 `( )`)가 있을 때만 문제로 읽는다. 문제의 출처 영역(provenance)은 발문과 모든 선택지(표로 인쇄된 선택지 포함)를 쪽마다 하나로 묶은 영역이며, 정답 줄과 해설은 포함하지 않는다. PDF import draft는 생성 draft와 공통 review 컴포넌트를 사용하되 source type을 별도로 보존한다.
 
+승인과 등록(QIMP-BULK 2026-10-22, QIMPORT-01-AC03): import 검토 화면은 초안을 하나씩 승인하지 않고 사람이 고른 초안 목록을 `POST /question-imports/{id}/publish`(`approve: true`, `{draft_id, version}` 최대 200개)로 보낸다. 선택이 곧 승인이다: 보낸 version과 현재 version이 같고 확정 가능한(승인 불가 error 검증·정답 없음이 없는) 초안만 같은 트랜잭션에서 `approved`(reviewed_by = 호출자, reviewed_at = 지금; 이미 승인된 초안은 기존 승인 유지)로 바꾸고 CONFIRMED 문제로 등록한다. 바뀐 초안(`stale-draft`)과 확정할 수 없는 초안(`not-publishable`)은 그대로 두고 `refused`로 돌려준다 — 조용히 등록하지도, 요청 전체를 실패시키지도 않는다. 다른 import의 id는 요청 전체를 404로 거절한다. 이미 등록된 초안은 같은 문제를 돌려준다(초안별 멱등). `approve` 없는 요청은 기존대로 미리 승인된 초안만 all-or-nothing으로 등록한다(변형 출제 publish와 같은 계약).
+
 ## 7. 홈 집계와 필터
 
 - 상단 수치: 전체 문제, 미열람, 열람만, 정답, 오답, 다시 풀기, 즐겨찾기.
