@@ -458,9 +458,13 @@ function AnswerField({
         onValueChange={(id) =>
           onChange({ ...answer, selected: toggleOption(session, answer.selected, id, true) })
         }
-        options={session.options.map((o) => {
+        options={session.options.map((o, index) => {
           const description = mark(o.id);
-          return { value: o.id, label: o.text, ...(description ? { description } : {}) };
+          return {
+            value: o.id,
+            label: <OptionLabel index={index} text={o.text} />,
+            ...(description ? { description } : {}),
+          };
         })}
       />
     );
@@ -468,10 +472,10 @@ function AnswerField({
   return (
     <fieldset className={styles.choices}>
       <legend className={styles.legend}>보기 (정답을 모두 고르세요)</legend>
-      {session.options.map((o) => (
+      {session.options.map((o, index) => (
         <Checkbox
           key={o.id}
-          label={o.text}
+          label={<OptionLabel index={index} text={o.text} />}
           description={mark(o.id)}
           disabled={disabled}
           checked={answer.selected.includes(o.id)}
@@ -484,6 +488,22 @@ function AnswerField({
         />
       ))}
     </fieldset>
+  );
+}
+
+/**
+ * An option's display number (`1.`, by displayed position, so a shuffled session numbers its own
+ * order) and text. The number is decorative: grading uses the option ID, and the radio/checkbox
+ * keeps the option text as its name while its position is announced by the group.
+ */
+function OptionLabel({ index, text }: { readonly index: number; readonly text: string }) {
+  return (
+    <>
+      <span className={styles.optionNumber} aria-hidden="true">
+        {index + 1}.
+      </span>{' '}
+      {text}
+    </>
   );
 }
 
