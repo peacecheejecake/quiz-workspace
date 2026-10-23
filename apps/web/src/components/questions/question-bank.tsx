@@ -192,7 +192,7 @@ export function QuestionBank({
   }, [listGeneration]);
   const [loadingMore, setLoadingMore] = useState(false);
   // QGEN-MULTI selection (question ids in selection order); a new list starts empty.
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selectedIds, setSelected] = useState<string[]>([]);
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchProblem, setBatchProblem] = useState<string | null>(null);
   const batch = useBatchStart(workspaceId, pathname);
@@ -237,6 +237,14 @@ export function QuestionBank({
   });
 
   const detail = items.find((q) => q.id === detailId) ?? null;
+  // Only questions still listed and CONFIRMED stay selected: a deleted or archived question (or
+  // one gone from a refreshed list) loses its checkbox, so it must not linger in the batch.
+  const selected = useMemo(() => {
+    const confirmed = new Set(
+      items.filter((q) => q.publication_status === 'CONFIRMED').map((q) => q.id),
+    );
+    return selectedIds.filter((id) => confirmed.has(id));
+  }, [items, selectedIds]);
   const selectionFull = selected.length >= MAX_BATCH_SOURCES;
 
   function generateBatch(body: GenerationCreate) {
@@ -548,8 +556,7 @@ export function QuestionBank({
                         ? {
                             checked: selected.includes(question.id),
                             disabled: selectionFull && !selected.includes(question.id),
-                            onChange: (on) =>
-                              setSelected((list) => toggleSource(list, question.id, on)),
+                            onChange: (on) => setSelected(toggleSource(selected, question.id, on)),
                           }
                         : null
                     }

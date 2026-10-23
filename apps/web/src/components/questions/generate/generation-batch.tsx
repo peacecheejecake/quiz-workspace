@@ -46,7 +46,29 @@ export function GenerationBatchView({
   const client = useMemo(() => createGenerationClient(), []);
   const [batch, setBatch] = useState<GenerationBatch | null>(initialBatch);
   const [failed, setFailed] = useState(loadFailed);
+  const [missing, setMissing] = useState(!initialBatch && !loadFailed);
+  const [reloading, setReloading] = useState(false);
   const working = batch?.status === 'working';
+
+  /** "다시 불러오기": read the batch here and show what came back (server props stay as rendered). */
+  async function reload() {
+    setReloading(true);
+    try {
+      setBatch(await client.getBatch(workspaceId, batchId));
+      setFailed(false);
+      setMissing(false);
+    } catch (error) {
+      if (error instanceof GenerationApiError && error.kind === 'unauthenticated') {
+        router.replace(loginRedirectPath(batchPath(workspaceId, batchId)));
+        return;
+      }
+      const notFound = error instanceof GenerationApiError && error.kind === 'notFound';
+      setMissing(notFound);
+      setFailed(!notFound);
+    } finally {
+      setReloading(false);
+    }
+  }
 
   // Re-read a working batch every BATCH_POLL_MS (each new batch schedules the next read); a
   // failed read stops until the reviewer asks again.
@@ -94,15 +116,15 @@ export function GenerationBatchView({
         {header}
         <div role="alert" className={styles.failure}>
           <p>
-            {loadFailed
-              ? '묶음 결과를 불러오지 못했습니다.'
-              : '묶음 변형 출제를 찾을 수 없습니다. 이 Workspace의 묶음이 아니거나 접근 권한이 없습니다.'}
+            {missing
+              ? '묶음 변형 출제를 찾을 수 없습니다. 이 Workspace의 묶음이 아니거나 접근 권한이 없습니다.'
+              : '묶음 결과를 불러오지 못했습니다.'}
           </p>
-          {loadFailed ? (
-            <Button size="sm" onClick={() => router.refresh()}>
+          {missing ? null : (
+            <Button size="sm" loading={reloading} onClick={() => void reload()}>
               다시 불러오기
             </Button>
-          ) : null}
+          )}
         </div>
       </div>
     );
@@ -141,7 +163,7 @@ export function GenerationBatchView({
       {failed ? (
         <div role="alert" className={styles.failure}>
           <p>진행 상태를 새로 불러오지 못했습니다.</p>
-          <Button size="sm" onClick={() => setFailed(false)}>
+          <Button size="sm" loading={reloading} onClick={() => void reload()}>
             다시 불러오기
           </Button>
         </div>

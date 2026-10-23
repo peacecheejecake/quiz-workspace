@@ -41,6 +41,7 @@ vi.mock('../src/lib/questions/actions', () => ({
   getQuestionRevisionAction: vi.fn(),
 }));
 
+const actions = await import('../src/lib/questions/actions');
 const { QuestionBank } = await import('../src/components/questions/question-bank');
 const { GenerationBatchView } =
   await import('../src/components/questions/generate/generation-batch');
@@ -195,7 +196,8 @@ describe('batch model', () => {
   });
 });
 
-describe('QuestionBank batch selection', () => {
+// Several dialogs and panels per test: slower than the 5 s default on a loaded machine.
+describe('QuestionBank batch selection', { timeout: 20_000 }, () => {
   const fetchMock = vi.fn<typeof fetch>();
   beforeEach(() => {
     push.mockReset();
@@ -254,6 +256,53 @@ describe('QuestionBank batch selection', () => {
     expect(new Headers(init?.headers).get('idempotency-key')).toBeTruthy();
   });
 
+  it('drops a deleted or archived question from the selection', async () => {
+    const user = userEvent.setup();
+    vi.mocked(actions.getQuestionAction).mockResolvedValue({ ok: false } as never);
+    vi.mocked(actions.deleteQuestionAction).mockResolvedValue({
+      ok: true,
+      data: undefined,
+    } as never);
+    vi.mocked(actions.setQuestionStatusAction).mockResolvedValue({
+      ok: true,
+      data: { ...q(2), publication_status: 'ARCHIVED' },
+    } as never);
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify(batch([run(1)])), {
+        status: 202,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    render(<Bank items={[q(1), q(2), q(3)]} />);
+    for (const n of [1, 2, 3]) {
+      await user.click(screen.getByRole('checkbox', { name: `${n}번 문제 선택` }));
+    }
+    const bar = () => screen.getByRole('region', { name: '선택한 문제' });
+    expect(bar()).toHaveTextContent('3개 선택됨');
+
+    await user.click(screen.getByRole('button', { name: '문제 3' }));
+    await user.click(await screen.findByRole('button', { name: '삭제' }));
+    const confirm = await screen.findByRole('alertdialog');
+    await user.click(within(confirm).getByRole('button', { name: '삭제' }));
+    await waitFor(() => expect(bar()).toHaveTextContent('2개 선택됨'));
+
+    await user.click(screen.getByRole('button', { name: '문제 2' }));
+    await user.click(await screen.findByRole('button', { name: '보관' }));
+    await screen.findByRole('button', { name: '보관 해제' });
+    // Close the detail panel (a modal: it hides the page while open).
+    await user.click(screen.getByRole('button', { name: '패널 닫기' }));
+    await waitFor(() => expect(bar()).toHaveTextContent('1개 선택됨'));
+    expect(screen.queryByRole('checkbox', { name: '2번 문제 선택' })).toBeNull();
+
+    await user.click(within(bar()).getByRole('button', { name: '선택한 문제 변형 출제 (1)' }));
+    const dialog = await screen.findByRole('dialog', { name: '선택한 문제 변형 출제 (1)' });
+    await user.click(within(dialog).getByRole('checkbox', { name: /문구 변형/ }));
+    await user.click(within(dialog).getByRole('button', { name: '생성' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    expect(JSON.parse(String(init?.body)).selection.question_ids).toEqual([q(1).id]);
+  });
+
   it('caps the selection at 20 and has no selection for viewers', async () => {
     const user = userEvent.setup();
     const items = Array.from({ length: 21 }, (_, i) => q(i + 1));
@@ -301,6 +350,28 @@ describe('GenerationBatchView', () => {
       generatePath(WS, run(1).source_question_id, run(1).id, BATCH),
     );
     expect(second).toHaveTextContent('생성 모델에 연결하지 못했습니다');
+  });
+
+  it('retrying a failed first load shows the batch it fetched', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify(batch([run(1)])), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<GenerationBatchView workspaceId={WS} batchId={BATCH} initialBatch={null} loadFailed />);
+    expect(screen.getByRole('alert')).toHaveTextContent('묶음 결과를 불러오지 못했습니다');
+    await user.click(screen.getByRole('button', { name: '다시 불러오기' }));
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('list', { name: '원본별 변형 결과' })).getAllByRole('listitem'),
+      ).toHaveLength(1),
+    );
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `/api/workspaces/${WS}/question-generation-batches/${BATCH}`,
+    );
   });
 
   it('says when the batch is not found here', () => {
