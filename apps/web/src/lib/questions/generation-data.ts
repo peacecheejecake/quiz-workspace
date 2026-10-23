@@ -84,9 +84,21 @@ export async function loadGenerationScreen(
 
   if (!sourceId) return pick(false);
 
-  const question = await api
-    .GET('/api/v1/questions/{question_id}', { params: { path: { question_id: sourceId } } })
-    .catch(() => null);
+  // The run history is keyed by the requested id, so it loads alongside the question; it is only
+  // used once the question turned out to be a question of this workspace.
+  const [question, runs] = await Promise.all([
+    api
+      .GET('/api/v1/questions/{question_id}', { params: { path: { question_id: sourceId } } })
+      .catch(() => null),
+    api
+      .GET('/api/v1/workspaces/{workspace_id}/question-generations', {
+        params: {
+          path: { workspace_id: workspaceId },
+          query: { source_question_id: sourceId, limit: RUN_HISTORY_LIMIT },
+        },
+      })
+      .catch(() => null),
+  ]);
   if (!question?.data) {
     const kind = question ? kindOf(question.response.status, question.error) : 'unavailable';
     if (kind !== 'notFound') {
@@ -106,14 +118,6 @@ export async function loadGenerationScreen(
     runRevision: null,
     drafts: [],
   } as const;
-  const runs = await api
-    .GET('/api/v1/workspaces/{workspace_id}/question-generations', {
-      params: {
-        path: { workspace_id: workspaceId },
-        query: { source_question_id: source.id, limit: RUN_HISTORY_LIMIT },
-      },
-    })
-    .catch(() => null);
   if (!runs?.data) {
     if (runs) kindOf(runs.response.status, runs.error, { workspace: true });
     return { ...empty, loadFailed: true };

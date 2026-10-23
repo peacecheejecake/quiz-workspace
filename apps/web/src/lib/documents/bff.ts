@@ -7,7 +7,7 @@
 // fetch streaming, implementation-plan §7) and passes FastAPI's answer through unchanged —
 // FastAPI stays the authorization boundary. No token ever reaches the browser, a URL or a log.
 // Cross-site writes are rejected before they get here (src/proxy.ts).
-import { getPublicEnv } from '@/env';
+import { getServerApiBaseUrl } from '@/lib/api/base-url';
 import { bearerHeaders, verifiedAccessToken } from '@/lib/api/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -80,7 +80,7 @@ export async function relayToApi(path: string, options: RelayOptions): Promise<R
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${getPublicEnv().apiBaseUrl}/api/v1${path}`, {
+    upstream = await fetch(`${getServerApiBaseUrl()}/api/v1${path}`, {
       method: options.method,
       headers: {
         ...bearerHeaders(token),

@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { DocumentEditor } from '@/components/documents/editor/document-editor';
 import { loadDocument } from '@/lib/documents/data';
 import { parsePageParam, parseRevisionParam, pinnedRevisionFor } from '@/lib/documents/outline';
-import { requireWorkspace } from '@/lib/workspaces/data';
+import { requireWorkspace, workspaceRouteId } from '@/lib/workspaces/data';
 
 export const metadata: Metadata = { title: '문서 보기' };
 
@@ -20,8 +20,12 @@ export default async function Page({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
   const [{ workspaceId, documentId }, query] = await Promise.all([params, searchParams]);
-  const workspace = await requireWorkspace(workspaceId);
-  const document = await loadDocument(workspace.id, documentId);
+  // In parallel: the layout already resolved access; both reads answer 404 for a foreign workspace.
+  const id = workspaceRouteId(workspaceId);
+  const [workspace, document] = await Promise.all([
+    requireWorkspace(id),
+    loadDocument(id, documentId),
+  ]);
   if (!document || document.workspace_id !== workspace.id) notFound();
 
   const archived = workspace.status === 'archived';

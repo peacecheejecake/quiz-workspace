@@ -10,7 +10,7 @@
 // SHA-256 of the address leaves this server. Without the secret or the header no identity is
 // sent and FastAPI keys on the socket peer (local development: one client anyway).
 import { createHash, createHmac } from 'node:crypto';
-import { getPublicEnv } from '@/env';
+import { getServerApiBaseUrl } from '@/lib/api/base-url';
 import { isHttpsRequest } from '@/lib/http/security-headers';
 import type { RelayContext } from './bff';
 
@@ -47,7 +47,7 @@ export function clientHeadersFor(
 
 export function relayContext(request: Request): RelayContext {
   return {
-    apiBaseUrl: getPublicEnv().apiBaseUrl,
+    apiBaseUrl: getServerApiBaseUrl(),
     secure: isHttpsRequest(request.headers, new URL(request.url)),
     clientHeaders: clientHeadersFor(request.headers),
   };

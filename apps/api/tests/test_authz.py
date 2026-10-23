@@ -24,7 +24,7 @@ from quiz_api.authz import (
     require_workspace_access,
 )
 from quiz_api.authz.permissions import ActionPolicy
-from quiz_api.authz.repository import RESOURCES
+from quiz_api.authz.repository import RESOURCES, TwoStepResourceMembership
 from quiz_api.errors import ProblemType
 from quiz_api.main import create_app
 from quiz_api.repositories.me import MembershipRole
@@ -124,7 +124,7 @@ def test_decide_without_membership_is_404() -> None:
 
 
 # --- Dependencies on a minimal app ------------------------------------------------------------
-class FakeAccessRepository:
+class FakeAccessRepository(TwoStepResourceMembership):
     """In-memory workspaces/memberships/jobs; soft-deleted workspaces behave like the SQL query."""
 
     def __init__(self) -> None:

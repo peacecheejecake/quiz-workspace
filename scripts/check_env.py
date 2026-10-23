@@ -50,6 +50,16 @@ def _https_url(value: str) -> str | None:
     return None
 
 
+def _http_url(value: str) -> str | None:
+    """A server-to-server base URL (http allowed: private network), never with credentials."""
+    parts = urlsplit(value.strip())
+    if parts.scheme not in {"http", "https"} or not parts.hostname:
+        return "must be an http(s):// URL"
+    if parts.username or parts.password or parts.query or parts.fragment:
+        return "must be a plain base URL (no credentials, query or fragment)"
+    return None
+
+
 def _https_origin(value: str) -> str | None:
     raw = value.strip()
     problem = _https_url(raw)
@@ -155,6 +165,7 @@ CHECKS: dict[str, Rule] = {
     "https_url": _https_url,
     "https_origin": _https_origin,
     "origin_list": _origin_list,
+    "http_url": _http_url,
     "postgres_url": _scheme_url("postgresql", "postgres"),
     "redis_url": _scheme_url("redis", "rediss"),
     "min12": _min_chars(12),

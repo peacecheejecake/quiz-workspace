@@ -22,6 +22,7 @@ from quiz_api.api.share_links import (
     get_share_link_repository,
 )
 from quiz_api.authz import LockMode, MembershipRecord, ResourceType, Role, get_access_repository
+from quiz_api.authz.repository import TwoStepResourceMembership
 from quiz_api.errors import ProblemType
 from quiz_api.main import create_app
 from quiz_api.repositories.idempotency import StoredResponse
@@ -97,7 +98,7 @@ def test_deployed_share_origin_must_be_https() -> None:
 
 
 @dataclass
-class World:
+class World(TwoStepResourceMembership):
     """Fake AccessRepository + ShareLinkRepository."""
 
     status: dict[uuid.UUID, str] = field(default_factory=dict)
