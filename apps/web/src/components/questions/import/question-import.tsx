@@ -16,7 +16,7 @@
 // already persisted and "다시 시도" retries the same run (the API reconciles, no duplicates);
 // a publish whose response was lost is retried with the same drafts (idempotent per draft).
 // Drafts the server refuses (changed since, or not confirmable) stay selected and are named.
-import { Button, Checkbox, EmptyState, PageHeader } from '@quiz/ui';
+import { Button, Checkbox, EmptyState, PageHeader, ProgressBar } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -820,17 +820,7 @@ function PublishProgress({ done, total }: { readonly done: number; readonly tota
   return (
     <div className={styles.progressBox}>
       <p className={styles.progressText}>{text}</p>
-      <div
-        role="progressbar"
-        aria-label="등록 진행률"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={value}
-        aria-valuetext={text}
-        className={styles.progress}
-      >
-        <div className={styles.progressFill} style={{ width: `${value}%` }} />
-      </div>
+      <ProgressBar className={styles.progress} label="등록 진행률" value={value} valueText={text} />
     </div>
   );
 }

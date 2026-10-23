@@ -80,6 +80,8 @@ export type { TooltipProps } from './primitives/Tooltip';
 
 export { EmptyState } from './feedback/EmptyState';
 export type { EmptyStateProps } from './feedback/EmptyState';
+export { ProgressBar } from './feedback/ProgressBar';
+export type { ProgressBarProps } from './feedback/ProgressBar';
 export { ToastProvider, useToast } from './feedback/Toast';
 export type { ToastOptions, ToastProviderProps, ToastTone } from './feedback/Toast';
 

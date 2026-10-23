@@ -27,6 +27,11 @@
   border: 0;
 }
 
+.optionNumber {
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
 .legend {
   margin-block-end: var(--space-2);
   padding: 0;

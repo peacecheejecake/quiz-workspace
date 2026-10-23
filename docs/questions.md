@@ -96,8 +96,8 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 - **점 1개 = `CONFIRMED` 문제 1개**. `DRAFT`, 삭제됨, 숨김 처리한 문제는 점이 없다.
 - 기본 정렬: 챕터의 `sort_order`, 문제 번호/등록 순서. 필터를 바꿔도 같은 문제의 기본 위치를 불필요하게 흔들지 않는다.
 - 챕터별 제목과 문제 수를 표시하고, 각 챕터를 독립된 정사각형 그리드로 묶는다. GitHub 잔디 형태와 유사하지만 **날짜 축이 아니라 문제 순서 기반**이다.
-- 기본 marker는 둥근 모서리 정사각형 `16x16px`, radius `4~5px`. 즐겨찾기는 **모서리가 부드러운 5각 star silhouette(SVG `stroke-linejoin=round`)**로 교체한다. favorite도 기본 visual bounding box는 `16x16px`; 두 모양 모두 상태 색상을 적용한다.
-- 각 marker를 중심 정렬한 클릭 영역 `28x28px`, 그리드 셀 간격 `4px`(mobile touch는 최소 32px 셀). **hover/focus-visible** 시 marker만 `scale(1.18)`(토큰으로 관리), 정렬·셀 크기는 그대로 두어 레이아웃이 움직이지 않는다. `prefers-reduced-motion`에서는 애니메이션을 비활성화한다.
+- 기본 marker는 둥근 모서리 정사각형(데스크톱 `18x18px`, touch `24x24px`; viewBox 24 중 18), radius는 viewBox `4.5`. 즐겨찾기는 **모서리가 부드러운 5각 star silhouette(SVG `stroke-linejoin=round`)**로 교체한다. favorite도 같은 SVG box(셀 크기)를 쓴다; 두 모양 모두 상태 색상을 적용한다.
+- 각 marker를 중심 정렬한 클릭 영역 `24x24px`, 그리드 셀 간격 `0`(mobile touch는 최소 32px 셀). 이웃 marker 사이 보이는 간격은 marker 폭의 1/3 이하(`6px`/touch `8px`, UX5-UI 2026-10-23). **hover/focus-visible** 시 marker만 `scale(1.18)`(토큰으로 관리), 정렬·셀 크기는 그대로 두어 레이아웃이 움직이지 않는다. `prefers-reduced-motion`에서는 애니메이션을 비활성화한다.
 - viewport 폭에 따라 열 수 자동 변경. 챕터별 줄바꿈; 매우 많은 문제(예: 2,000개 이상)에서는 windowing/virtualization 검토.
 - 현재 필터에 포함된 문제 수, 상태 필터(색 견본 + 텍스트, 기본 접힘), 즐겨찾기·다시 풀기 필터 제공. 상태 범례와 상태별 집계는 UX3c(2026-10-20, 사용자 결정)로 삭제했다 — 펼친 상태 필터가 범례 역할을 한다.
 

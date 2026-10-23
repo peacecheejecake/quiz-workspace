@@ -206,6 +206,13 @@ test(
     expect(after.next).toEqual(before.next);
     expect(after.marker.width).toBeCloseTo(before.marker.width, 1);
     expect(after.marker.height).toBeCloseTo(before.marker.height, 1);
+    // Dense grid (UX5-UI): the drawn shapes are at most 1/3 of their width apart.
+    const [a, b] = await Promise.all(
+      [1, 2].map((n) =>
+        overviewUi.marker(overviewUi.dot(page, n)).locator('rect, path').boundingBox(),
+      ),
+    );
+    expect(a && b && b.x - (a.x + a.width) <= a.width / 3).toBe(true);
 
     const item = await overviewItem(s.owner, s.workspaceId, q(s, 2).id);
     expect(item).toMatchObject({ is_favorite: true, status: 'correct' });

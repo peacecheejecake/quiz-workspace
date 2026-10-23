@@ -71,6 +71,16 @@
   }
 }
 
+/*
+ * Heatmap dots draw the marker at the cell size: the square fills 18/24 of the viewBox, so the
+ * visible gap between neighbours (cell − square, grid gap 0) is 1/3 of the square's width on every
+ * breakpoint (24px cell → 18px square, 6px gap; 32px touch cell → 24px square, 8px gap).
+ */
+.qz-question-dot > .qz-question-marker {
+  width: var(--qz-heatmap-cell);
+  height: var(--qz-heatmap-cell);
+}
+
 /* Dot: fixed cell, centered marker; only the marker scales (no layout shift). */
 .qz-question-dot {
   position: relative;
@@ -81,7 +91,7 @@
   height: var(--qz-heatmap-cell);
   margin: 0;
   padding: 0;
-  border: 2px solid transparent;
+  border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   cursor: pointer;
@@ -92,20 +102,23 @@
   outline: none;
 }
 
-/* The ring sits on the 2px cell border (inset), so a focused selected dot has one boundary. */
+/*
+ * Selection and focus rings are one 2px outline just outside the cell: it lies in the
+ * neighbours' transparent margin (their square starts 1/8 of the cell in), so the dense grid keeps
+ * the ring clear of this marker, even scaled, and of the neighbours'. A focused selected dot has
+ * one boundary, in the focus color.
+ */
 .qz-question-dot:focus-visible {
   z-index: var(--z-raised);
   outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
+  outline-offset: 0;
 }
 
 /* Selected (open in the panel): ring only, the status color never changes. */
-.qz-question-dot[data-selected] {
-  border-color: var(--color-accent);
-}
-
-.qz-question-dot[data-selected]:focus-visible {
-  border-color: var(--color-focus);
+.qz-question-dot[data-selected]:not(:focus-visible) {
+  z-index: var(--z-raised);
+  outline: 2px solid var(--color-accent);
+  outline-offset: 0;
 }
 
 .qz-question-dot:focus-visible > .qz-question-marker {
@@ -128,8 +141,8 @@
     outline-color: Highlight;
   }
 
-  .qz-question-dot[data-selected] {
-    border-color: Highlight;
+  .qz-question-dot[data-selected]:not(:focus-visible) {
+    outline-color: Highlight;
   }
 }
 

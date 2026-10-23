@@ -1,7 +1,15 @@
 'use client';
 
 import { Dialog } from 'radix-ui';
-import { useRef, useState, type ComponentProps, type ReactElement, type ReactNode } from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
+import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
 import { LayerProvider, useFloatingLayer } from '../internal/layer';
 import { ScrollRegion } from '../internal/scroll-region';
@@ -87,6 +95,20 @@ export function FloatingSidePanel({
   children,
 }: FloatingSidePanelProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const animateHeight = useAnimatedHeight<HTMLDivElement>();
+  // Stable, so the height observer is set up once per mounted panel (not on every render).
+  const setContent = useCallback(
+    (node: HTMLDivElement | null) => {
+      contentRef.current = node;
+      const cleanup = animateHeight(node);
+      // A returned cleanup replaces React's call with null, so clear the ref here too.
+      return () => {
+        cleanup?.();
+        contentRef.current = null;
+      };
+    },
+    [animateHeight],
+  );
   // Element focused when the panel opened. Panels are often opened from controls that are not
   // a Radix trigger (heatmap dots, search results); focus must still return there on close.
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -112,7 +134,7 @@ export function FloatingSidePanel({
           />
         ) : null}
         <Dialog.Content
-          ref={contentRef}
+          ref={setContent}
           // Radix hides the background from assistive technology but does not set aria-modal.
           aria-modal={modal || undefined}
           data-modal={modal}

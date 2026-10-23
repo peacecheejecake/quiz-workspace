@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useState } from 'react';
 import { ToastProvider, useToast } from '../feedback/Toast';
 import { DialogClose, ModalDialog } from '../layout/ModalDialog';
 import { Button } from './Button';
@@ -120,6 +121,35 @@ export const Modal: Story = {
       언제든지 보관 해제할 수 있습니다.
     </ModalDialog>
   ),
+};
+
+/** Content that grows and shrinks (an alert appears): the dialog height glides (UX5-UI). */
+export const ModalGrowing: Story = {
+  name: 'ModalDialog (content changes height)',
+  render: function Render() {
+    const [details, setDetails] = useState(false);
+    return (
+      <ModalDialog
+        defaultOpen
+        trigger={<Button>Fork</Button>}
+        title="Workspace 복제"
+        footer={
+          <Button onClick={() => setDetails((d) => !d)}>
+            {details ? '안내 접기' : '안내 펼치기'}
+          </Button>
+        }
+      >
+        <p style={{ margin: 0 }}>복제본은 내 Workspace 목록에 나타납니다.</p>
+        {details ? (
+          <div role="alert" style={{ display: 'grid', gap: 'var(--space-2)' }}>
+            <p style={{ margin: 0 }}>복제는 서버에서 계속됩니다.</p>
+            <p style={{ margin: 0 }}>창을 닫아도 진행 상황은 유지됩니다.</p>
+            <p style={{ margin: 0 }}>완료되면 알림으로 알려 드립니다.</p>
+          </div>
+        ) : null}
+      </ModalDialog>
+    );
+  },
 };
 
 export const ModalForcedChoice: Story = {

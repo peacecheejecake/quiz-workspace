@@ -387,6 +387,14 @@ test(
       );
       if (middle) await expect(nav.getByRole('link', { name: middle })).toBeVisible();
       await expect(nav.locator('[aria-current="page"]')).toHaveText(current);
+      // The location row keeps 12px of space above the page title (UX5-UI).
+      const [navBox, titleBox] = await Promise.all([
+        nav.boundingBox(),
+        main(page).getByRole('heading', { level: 1 }).boundingBox(),
+      ]);
+      expect(navBox && titleBox && titleBox.y - (navBox.y + navBox.height)).toBeGreaterThanOrEqual(
+        12,
+      );
       await expect(main(page).getByRole('link', { name: /workspace 홈|back/i })).toHaveAttribute(
         'href',
         home,

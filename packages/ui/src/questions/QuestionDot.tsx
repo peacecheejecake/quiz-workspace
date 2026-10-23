@@ -42,7 +42,7 @@ export interface QuestionDotProps extends Omit<
 }
 
 /**
- * One CONFIRMED question in the heatmap: a fixed-size `<button>` cell centering a 16px marker.
+ * One CONFIRMED question in the heatmap: a fixed-size `<button>` cell centering a marker drawn at the cell size.
  * Only the marker scales on hover / `:focus-visible`, so the grid never shifts.
  */
 export function QuestionDot({
