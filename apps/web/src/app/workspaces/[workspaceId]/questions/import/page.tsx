@@ -5,7 +5,7 @@
 import type { Metadata } from 'next';
 import { QuestionImport } from '@/components/questions/import/question-import';
 import { loadLatestImport } from '@/lib/questions/import-data';
-import { requireWorkspace } from '@/lib/workspaces/data';
+import { requireWorkspace, workspaceRouteId } from '@/lib/workspaces/data';
 
 export const metadata: Metadata = { title: '문제 PDF 가져오기' };
 
@@ -19,11 +19,14 @@ export default async function Page({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
   const [{ workspaceId }, query] = await Promise.all([params, searchParams]);
-  const workspace = await requireWorkspace(workspaceId);
+  const id = workspaceRouteId(workspaceId);
   // A malformed id is ignored (the newest run of the workspace is shown instead).
   const documentId =
     typeof query.document === 'string' && UUID.test(query.document) ? query.document : undefined;
-  const data = await loadLatestImport(workspace.id, documentId);
+  const [workspace, data] = await Promise.all([
+    requireWorkspace(id),
+    loadLatestImport(id, documentId),
+  ]);
   const readOnly =
     workspace.status === 'archived' ? 'archived' : workspace.role === 'viewer' ? 'viewer' : null;
 

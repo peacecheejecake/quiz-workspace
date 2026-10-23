@@ -50,6 +50,15 @@ export async function loadWorkspaceLists(): Promise<WorkspaceLists> {
 }
 
 /**
+ * The canonical (lower-case) workspace id of a route, or the not-found page for a malformed one.
+ * Lets a page start its own reads in parallel with `requireWorkspace` instead of after it.
+ */
+export function workspaceRouteId(workspaceId: string): string {
+  if (!isWorkspaceId(workspaceId)) notFound();
+  return workspaceId.toLowerCase();
+}
+
+/**
  * The workspace behind a `/workspaces/[workspaceId]/**` route. Unknown, foreign and soft-deleted
  * ids all render the not-found page (HTTP 404) — the API answers them with the same 404.
  */

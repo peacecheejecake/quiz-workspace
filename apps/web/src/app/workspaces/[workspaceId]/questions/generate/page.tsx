@@ -12,7 +12,7 @@ import {
   SOURCE_PICKER_LIMIT,
   idParam,
 } from '@/lib/questions/generation-data';
-import { requireWorkspace } from '@/lib/workspaces/data';
+import { requireWorkspace, workspaceRouteId } from '@/lib/workspaces/data';
 
 export const metadata: Metadata = { title: '문제 변형 출제' };
 
@@ -24,8 +24,11 @@ export default async function Page({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
   const [{ workspaceId }, query] = await Promise.all([params, searchParams]);
-  const workspace = await requireWorkspace(workspaceId);
-  const data = await loadGenerationScreen(workspace.id, idParam(query.source), idParam(query.run));
+  const id = workspaceRouteId(workspaceId);
+  const [workspace, data] = await Promise.all([
+    requireWorkspace(id),
+    loadGenerationScreen(id, idParam(query.source), idParam(query.run)),
+  ]);
   const readOnly =
     workspace.status === 'archived' ? 'archived' : workspace.role === 'viewer' ? 'viewer' : null;
 
