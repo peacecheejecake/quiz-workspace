@@ -134,6 +134,7 @@ PR opened
 - CSRF: Server Action은 Next 자체의 `Origin` ↔ host 검사로 보호되고(`serverActions.allowedOrigins` 미설정 유지), 추가로 proxy가 GET/HEAD/OPTIONS 외 요청 중 `Origin`이 자기 host(`x-forwarded-host` 우선)와 다르거나 `Origin` 없이 `Sec-Fetch-Site: cross-site`인 요청을 `403`으로 거부한다(route handler 포함).
 - Supabase session cookie: 서버가 쓰는 모든 `sb-…-auth-token*` cookie는 `HttpOnly; SameSite=Lax; Path=/`, HTTPS에서 `Secure`. 브라우저 client는 session을 읽지 않는 호출(signUp/resend/resetPasswordForEmail)만 한다.
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_API_BASE_URL`은 production에서 `https://`여야 한다(CSP `connect-src`와 mixed content).
+- `API_INTERNAL_BASE_URL`(선택, server-only, PERF-1): Next.js 서버 자신의 FastAPI 호출(Server Component·Server Action·BFF relay)이 쓰는 주소. web과 api가 같은 사설 네트워크에 있을 때만 설정한다(예: 같은 Docker network의 `http://api:8000`) — 공개 edge(Tailscale Funnel 등)를 왕복하지 않는다. 미설정이면 `NEXT_PUBLIC_API_BASE_URL`. 브라우저용 origin(CSP)은 바뀌지 않는다. 사설 네트워크 밖의 주소에는 `https://`만 쓴다(Bearer token이 실린다).
 
 **Supabase Auth / 메일 (M7.4에서 적용).** `site_url` = 웹 production origin(HTTPS), `additional_redirect_urls` = `https://<web>/auth/callback`(및 고정 preview alias)만, wildcard 금지. 외부 SMTP(발신 도메인 SPF/DKIM), Auth rate limit, CAPTCHA(`[remotes.*.auth.captcha] enabled = true`, `provider = "turnstile"`, `secret = env(SUPABASE_AUTH_CAPTCHA_SECRET)`; web의 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`와 짝: 한쪽만 켜면 가입·로그인 불가. production은 Cloudflare 테스트 키 금지, staging 기본은 항상 통과 테스트 키 쌍 — auth.md §5.1, runbook-deploy.md §2), JWT signing key는 비대칭(ES256/RS256), access token 만료 ≤ 1h. `AUTH_RECOVERY_MARKER_SECRET`(32 byte random)은 환경별로 다르게.
 

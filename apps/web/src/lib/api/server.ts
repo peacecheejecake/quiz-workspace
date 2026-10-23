@@ -3,9 +3,9 @@
 // headers only — never in URLs, logs or props passed to client components.
 import { createApiClient, type ApiClient } from '@quiz/api-client';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getPublicEnv } from '@/env';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { readVerifiedClaims } from '@/lib/supabase/session-guard';
+import { getServerApiBaseUrl } from './base-url';
 
 export class NotAuthenticatedError extends Error {
   constructor() {
@@ -43,7 +43,7 @@ export async function createServerApiClient(): Promise<ApiClient> {
   const token = await verifiedAccessToken(supabase);
   if (!token) throw new NotAuthenticatedError();
   return createApiClient({
-    baseUrl: getPublicEnv().apiBaseUrl,
+    baseUrl: getServerApiBaseUrl(),
     headers: bearerHeaders(token),
   });
 }
