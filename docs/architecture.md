@@ -73,7 +73,7 @@ CLI: `core parse`, `core chunk`, `core index`, `core search`, `core excerpt`, `c
 ### 색인 흐름
 1. 원본 PDF 업로드(원본 immutable, sha256 저장).
 2. Docling 파싱 → `parsed_document.json` 생성 및 저장.
-3. 장·절 계층 복원, 사용자가 수정할 canonical text blocks 생성.
+3. 장·절 계층 복원, 사용자가 수정할 canonical text blocks 생성. 장·절은 heading 번호 체계(`제1장`·`제1절`·`1.`·`1-1.`·`가.` …)로 복원하고, 인쇄된 목차는 front matter로 빼서 교차 확인에만 쓴다. 장 표지가 본문 text나 그림 영역으로 인식돼도 `제N장` label은 장 heading으로 살리고, 같은 번호의 반복(thumb index·running header)은 무시한다(CHAPTER-FIX).
 4. 장·절 중심 청킹, block/page provenance 연결.
 5. dense + sparse 인덱스 작성, Qdrant에 workspace/document/revision payload 부여.
 6. 색인 완료 시 active revision 전환. 실패 시 이전 정상 인덱스 유지.

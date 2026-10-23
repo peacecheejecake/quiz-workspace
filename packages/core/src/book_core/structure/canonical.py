@@ -8,9 +8,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from book_core.contracts import Block, BlockType, SourceLocation
+from book_core.structure.numbering import NumberingKind, parse_numbering
 
 _HSPACE = re.compile(r"[^\S\n]+")
 _SOFT_HYPHEN = "­"
+# Some PDFs map the printed hyphen of ``1-1.`` style numbers to U+00AD; between digits it is a
+# visible hyphen, never an invisible hyphenation point.
+_DIGIT_SOFT_HYPHEN = re.compile(r"(?<=\d)\u00ad(?=\d)")
 # A word broken at a line end: ``infil- tration``. Suspended compounds (``pre- and post-war``)
 # keep their hyphen.
 _LINE_HYPHEN = re.compile(r"(?<=[a-z]{2})- (?=([a-z]{2,}))")
@@ -44,10 +48,11 @@ def _dehyphenate(text: str) -> str:
 
 
 def normalize_block_text(text: str, block_type: BlockType, *, dehyphenate: bool = True) -> str:
-    """NFC, no soft hyphens, horizontal whitespace collapsed; line breaks are kept only in tables
-    (row separators). With ``dehyphenate``, EN words broken at a line end are rejoined in text
-    blocks. Wording is never changed."""
-    text = unicodedata.normalize("NFC", text).replace(_SOFT_HYPHEN, "")
+    """NFC, no soft hyphens (one between digits is a printed hyphen: ``-``), horizontal whitespace
+    collapsed; line breaks are kept only in tables (row separators). With ``dehyphenate``, EN
+    words broken at a line end are rejoined in text blocks. Wording is never changed."""
+    text = unicodedata.normalize("NFC", text)
+    text = _DIGIT_SOFT_HYPHEN.sub("-", text).replace(_SOFT_HYPHEN, "")
     if block_type is BlockType.TABLE:
         lines = (_HSPACE.sub(" ", line).strip() for line in text.split("\n"))
         return "\n".join(line for line in lines if line)
@@ -68,6 +73,9 @@ def _continues(prev: str, nxt: str) -> bool:
     """Whether ``nxt`` reads as the continuation of the unfinished sentence ending ``prev``."""
     if not prev or not nxt or ends_sentence(prev) or _ITEM_START.match(nxt):
         return False
+    label = parse_numbering(nxt)
+    if label is not None and label.kind <= NumberingKind.KO_SECTION:
+        return False  # a Part/Chapter/제N절 label (chapter opener) starts a new block
     last, first = prev.rstrip()[-1], nxt[0]
     if first.isascii() and first.isalpha():
         return first.islower() or last in ",-\u2013"
