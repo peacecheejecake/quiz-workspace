@@ -2,6 +2,7 @@
 
 import { Dialog } from 'radix-ui';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
+import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
 import { LayerProvider } from '../internal/layer';
 import { ScrollRegion } from '../internal/scroll-region';
@@ -47,12 +48,14 @@ export function ModalDialog({
   className,
   children,
 }: ModalDialogProps) {
+  const animateHeight = useAnimatedHeight<HTMLDivElement>();
   return (
     <Dialog.Root open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
       {trigger ? <Dialog.Trigger asChild>{trigger}</Dialog.Trigger> : null}
       <Dialog.Portal>
         <Dialog.Overlay className="qz-backdrop" data-layer="modal" />
         <Dialog.Content
+          ref={animateHeight}
           data-size={size}
           className={cx('qz-modal', className)}
           {...(description ? {} : { 'aria-describedby': undefined })}

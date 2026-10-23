@@ -204,3 +204,37 @@ test('UX5-UI the progress fill glides to a new value, and jumps under reduced mo
   await expect(bar).toHaveAttribute('aria-valuenow', '60');
   expect(instant.filter((f) => f > 0.41 && f < 0.59)).toEqual([]);
 });
+
+test('UX5-UI a dialog glides to its new content height, and jumps under reduced motion', async ({
+  page,
+}) => {
+  await openStory(page, 'foundation-tooltip--modal-growing');
+  const dialog = page.getByRole('dialog', { name: 'Workspace 복제' });
+  await expect(dialog).toBeVisible();
+  const toggle = dialog.getByRole('button', { name: /안내 (펼치기|접기)/ });
+  const inline = () => dialog.evaluate((el) => (el as HTMLElement).style.height);
+  await expect(dialog).toHaveCSS('opacity', '1'); // open animation done
+  const small = await dialog.evaluate((el) => (el as HTMLElement).offsetHeight);
+
+  await toggle.focus();
+  const growing = await framesAfterClick(page, toggle, 'dialog');
+  await expect(dialog.getByRole('alert')).toBeVisible();
+  // Settled: the inline height is gone, CSS (max-height) is in charge again.
+  await expect.poll(inline).toBe('');
+  const large = await dialog.evaluate((el) => (el as HTMLElement).offsetHeight);
+  expect(large).toBeGreaterThan(small + 40);
+  expect(growing.filter((h) => h > small + 2 && h < large - 2).length).toBeGreaterThanOrEqual(3);
+  expect(growing.at(-1)).toBe(large);
+  // Focus stays on the control that changed the content (the resize never moves it).
+  await expect(dialog.getByRole('button', { name: '안내 접기' })).toBeFocused();
+
+  const shrinking = await framesAfterClick(page, toggle, 'dialog');
+  expect(shrinking.filter((h) => h > small + 2 && h < large - 2).length).toBeGreaterThanOrEqual(3);
+  expect(shrinking.at(-1)).toBe(small);
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const instant = await framesAfterClick(page, toggle, 'dialog', 200);
+  expect(instant.filter((h) => h > small + 2 && h < large - 2)).toEqual([]);
+  expect(instant.at(-1)).toBe(large);
+  expect(await inline()).toBe('');
+});
