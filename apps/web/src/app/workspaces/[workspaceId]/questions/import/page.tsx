@@ -39,6 +39,7 @@ export default async function Page({
         readOnly={readOnly}
         initialRun={data.run}
         initialDrafts={data.drafts}
+        initialChapters={data.chapters}
         documentId={documentId}
         loadFailed={data.loadFailed}
       />

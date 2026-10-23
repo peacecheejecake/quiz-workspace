@@ -39,6 +39,8 @@ import {
 import { defaultTitle, PDF_CONTENT_TYPE, validatePdfFile } from '@/lib/documents/validation';
 import {
   approvePublishSelection,
+  chapterBody,
+  draftNumber,
   draftUpdateBody,
   initialSelection,
   isRegistrationActive,
@@ -56,6 +58,7 @@ import {
   sortDrafts,
   toggleAll,
   toggleOne,
+  type BookChapterOption,
   type ImportDraft,
   type ImportRegistration,
   type ImportRun,
@@ -70,6 +73,7 @@ import { clearPendingImportFile, peekPendingImportFile } from '@/lib/questions/i
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import { DraftEditor, type DraftSaveResult } from '../drafts/draft-editor';
 import { QuestionDraftReview, type DraftReviewState } from '../drafts/question-draft-review';
+import { DraftChapterField } from './draft-chapter-field';
 import { ImportJobProgress, type ImportStep } from './import-job-progress';
 import { SourceComparePanel } from './source-compare-panel';
 import styles from './question-import.module.css';
@@ -83,6 +87,8 @@ export interface QuestionImportProps {
   readonly readOnly: ImportReadOnly;
   readonly initialRun: ImportRun | null;
   readonly initialDrafts: readonly ImportDraft[];
+  /** The workspace's book chapters (draft chapter picker, CHAPTER-MAP). */
+  readonly initialChapters?: readonly BookChapterOption[];
   /** The question paper the page was opened for (`?document=`), if any. */
   readonly documentId?: string;
   readonly loadFailed: boolean;
@@ -138,6 +144,7 @@ export function QuestionImport({
   readOnly,
   initialRun,
   initialDrafts,
+  initialChapters = [],
   documentId,
   loadFailed,
   registrationPollMs = 1000,
@@ -155,6 +162,10 @@ export function QuestionImport({
   const [selected, setSelected] = useState<ReadonlySet<string>>(() =>
     initialSelection(sortDrafts(initialDrafts.map(reviewDraftFromImport))),
   );
+  const [chapterOptions, setChapterOptions] =
+    useState<readonly BookChapterOption[]>(initialChapters);
+  /** Drafts whose chapter change is being saved. */
+  const [savingChapter, setSavingChapter] = useState<ReadonlySet<string>>(new Set());
   const [listFailed, setListFailed] = useState(loadFailed);
   const [activity, setActivity] = useState<Activity | null>(() =>
     initialRun && isWorking(initialRun) ? { step: 'extracting' } : null,
@@ -204,8 +215,9 @@ export function QuestionImport({
   const refreshDrafts = useCallback(
     async (importId: string, signal?: AbortSignal) => {
       try {
-        const items = await client.listDrafts(importId, signal);
+        const { items, chapters } = await client.draftList(importId, signal);
         setDrafts(sortDrafts(items.map(reviewDraftFromImport)));
+        setChapterOptions(chapters);
         setListFailed(false);
         return true;
       } catch (error) {
@@ -507,6 +519,29 @@ export function QuestionImport({
         return { ok: false, message: error.message, stale: error.kind === 'staleDraft' };
       }
       return { ok: false, message: '초안을 저장하지 못했습니다. 다시 시도해 주세요.' };
+    }
+  }
+
+  /** Saves the chapter a draft is registered under (CHAPTER-MAP); not content, keeps approval. */
+  async function changeChapter(target: ReviewDraft, chapterId: string | null) {
+    setSavingChapter((s) => new Set(s).add(target.id));
+    setStates(({ [target.id]: _old, ...rest }) => rest);
+    try {
+      const updated = await client.updateDraft(target.id, chapterBody(target, chapterId));
+      setDrafts((list) => replaceDraft(list, reviewDraftFromImport(updated)));
+    } catch (error) {
+      if (onUnauthenticated(error)) return;
+      const message = error instanceof ImportApiError ? error.message : '챕터를 바꾸지 못했습니다.';
+      setStates((s) => ({ ...s, [target.id]: { error: message } }));
+      if (error instanceof ImportApiError && error.kind === 'staleDraft' && run) {
+        void refreshDrafts(run.id);
+      }
+    } finally {
+      setSavingChapter((s) => {
+        const next = new Set(s);
+        next.delete(target.id);
+        return next;
+      });
     }
   }
 
@@ -870,6 +905,18 @@ export function QuestionImport({
               setEditing(draft);
             }}
             onCompare={setComparing}
+            renderExtra={(draft) =>
+              draft.chapter ? (
+                <DraftChapterField
+                  number={draftNumber(draft)}
+                  info={draft.chapter}
+                  options={chapterOptions}
+                  readOnly={!canEdit || draft.publishedQuestionId !== null}
+                  disabled={publishing || savingChapter.has(draft.id)}
+                  onChange={(chapterId) => void changeChapter(draft, chapterId)}
+                />
+              ) : null
+            }
             pageHref={(draft, page) =>
               (draft.sourceDocumentId ?? sourceDocumentId)
                 ? `/workspaces/${workspaceId}/documents/${draft.sourceDocumentId ?? sourceDocumentId}?page=${page}`

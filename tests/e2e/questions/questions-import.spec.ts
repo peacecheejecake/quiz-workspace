@@ -53,6 +53,8 @@ test.describe.configure({ timeout: 2 * JOB_TIMEOUT_MS + 60_000 });
 
 const PAPER = questionPaper();
 const Q = (n: number): TruthQuestion => truthQuestion(PAPER, n);
+/** The paper's only outline node (its title heading, questions-ko.truth.json `title`). */
+const PAPER_CHAPTER = '제1회 합성 확인 평가 — 물의 순환과 정수 처리';
 const UNANSWERED = PAPER.questions.filter((q) => q.answer === null); // 3 (MCQ), 6, 7
 
 /** Owner + workspace, questions-ko.pdf imported through the UI, drafts listed by the API. */
@@ -609,5 +611,69 @@ test(
     await expect(page.getByRole('progressbar', { name: /등록 진행률/ })).toHaveCount(0);
     // Nothing was registered twice.
     expect(await listQuestions(owner, workspaceId)).toHaveLength(registrable.length);
+  },
+);
+
+test(
+  'QIMPORT-01-AC08 each draft shows the book chapter matched from the question PDF, can be changed, and registers under it',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('qimport01-ac08');
+    const ws = await workspaceFactory.create(owner);
+    // book-ko: "1장 물의 순환" / "2장 정수 처리"; the paper uploaded as a book has a chapter with
+    // exactly the paper's own chapter title (its title heading), so that one is the suggestion.
+    await uploadReadyBook(owner, ws.id, 'book-ko');
+    const titled = await uploadPdf(owner, ws.id, PAPER, 'book');
+    await waitForJob(owner, titled.jobId);
+
+    await signInAs(page, owner.user);
+    await page.goto(importPath(ws.id));
+    await uploadQuestionPaper(page, PAPER);
+    await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length, {
+      timeout: JOB_TIMEOUT_MS,
+    });
+    const run = await waitForLatestImport(owner, ws.id);
+
+    const q1 = importUi.draft(page, Q(1).stem);
+    const q2 = importUi.draft(page, Q(2).stem);
+    const picker = (item: Locator) => item.getByRole('combobox', { name: /챕터|chapter/i });
+    await expect(picker(q1)).toContainText(PAPER_CHAPTER);
+    await expect(q1.getByText(/자동으로 골랐습니다|suggested/i)).toBeVisible();
+    await expect(picker(q2)).toContainText(PAPER_CHAPTER);
+
+    // Move question 1 to another book chapter (saved at once, keyboard-free path: click).
+    await picker(q1).click();
+    await page.getByRole('option', { name: /^1장 물의 순환/ }).click();
+    await expect(picker(q1)).toContainText('1장 물의 순환');
+    await expect(q1.getByText(/직접 고른 챕터|chosen/i)).toBeVisible();
+    await expect
+      .poll(async () => draftFor(await listDrafts(owner, run.id), Q(1)).chapter_choice)
+      .toBe('manual');
+
+    await importUi.select(q1).check();
+    await importUi.select(q2).check();
+    await importUi.publish(page).click();
+    await expect(page.getByRole('status')).toContainText(/2\s*개 문제를 문제은행에 등록/, {
+      timeout: JOB_TIMEOUT_MS,
+    });
+
+    const drafts = await listDrafts(owner, run.id);
+    const bank = await listQuestions(owner, ws.id);
+    const chapterOf = (t: TruthQuestion) =>
+      bank.find((q) => q.id === draftFor(drafts, t).published_question_id)?.chapter_id;
+    const moved = draftFor(drafts, Q(1)).chapter;
+    const suggested = draftFor(drafts, Q(2)).chapter;
+    expect(moved?.title).toBe('1장 물의 순환');
+    expect(suggested?.title).toBe(PAPER_CHAPTER);
+    expect(chapterOf(Q(1))).toBe(moved?.id);
+    expect(chapterOf(Q(2))).toBe(suggested?.id);
+
+    // The bank lists each under its chapter.
+    await page.goto(`${bankPath(ws.id)}?chapter=${suggested?.id}`);
+    await expect(bankUi.items(page)).toHaveCount(1);
+    await expect(bankUi.item(page, Q(2).stem)).toHaveCount(1);
+    await page.goto(`${bankPath(ws.id)}?chapter=${moved?.id}`);
+    await expect(bankUi.items(page)).toHaveCount(1);
+    await expect(bankUi.item(page, Q(1).stem)).toHaveCount(1);
   },
 );

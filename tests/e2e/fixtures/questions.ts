@@ -311,6 +311,9 @@ export interface Draft {
   readonly payload: DraftPayload;
   /** Optimistic-concurrency token: `base_version` when editing, `version` when publishing. */
   readonly version: string;
+  /** CHAPTER-MAP: the book chapter the draft is registered under (suggested or chosen). */
+  readonly chapter?: { readonly id: string; readonly title: string } | null;
+  readonly chapter_choice?: 'auto' | 'manual';
 }
 
 /** Four-option MCQ with client-chosen option ids (A2); option `answer` (0-based) is correct. */

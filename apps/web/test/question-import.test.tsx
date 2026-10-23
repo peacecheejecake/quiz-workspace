@@ -347,4 +347,77 @@ describe('QuestionImport', () => {
     await user.click(publishButton());
     expect(bodies[1]).toEqual({ drafts: [{ draft_id: 'd-1', version: 'v-1b' }] });
   });
+
+  it('CHAPTER-MAP: shows the suggested chapter with why, and saves another choice at once', async () => {
+    const CH1 = '66666666-6666-4666-8666-666666666661';
+    const CH2 = '66666666-6666-4666-8666-666666666662';
+    const BOOK = '77777777-7777-4777-8777-777777777777';
+    const chapters = [
+      { id: CH1, title: '1장 수신제도', level: 1, document_id: BOOK, document_title: '교재' },
+      { id: CH2, title: '2장 여신제도', level: 1, document_id: BOOK, document_title: '교재' },
+    ];
+    const suggested: ImportDraft = {
+      ...draft(0),
+      chapter: { id: CH1, title: '1장 수신제도', document_id: BOOK, document_title: '교재' },
+      chapter_choice: 'auto',
+      chapter_match: 'matched',
+      source_chapter_title: '제1장 수신제도',
+    };
+    const patches: unknown[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/question-drafts/') && init?.method === 'PATCH') {
+        patches.push(JSON.parse(String(init.body)));
+        return json(200, {
+          ...suggested,
+          version: 'v-0b',
+          chapter: { id: CH2, title: '2장 여신제도', document_id: BOOK, document_title: '교재' },
+          chapter_choice: 'manual',
+          chapter_match: null,
+          source_chapter_title: null,
+        });
+      }
+      return json(404, {});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <QuestionImport
+        workspaceId={WS}
+        readOnly={null}
+        initialRun={RUN}
+        initialDrafts={[suggested]}
+        initialChapters={chapters}
+        loadFailed={false}
+      />,
+    );
+    const user = userEvent.setup();
+    const picker = screen.getByRole('combobox', { name: '1번 문제 챕터' });
+    expect(picker.textContent).toContain('1장 수신제도');
+    expect(screen.getByText(/문제 PDF의 ‘제1장 수신제도’에 맞춰 자동으로 골랐습니다/)).toBeTruthy();
+
+    await user.click(picker);
+    await user.click(await screen.findByRole('option', { name: '2장 여신제도' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: '1번 문제 챕터' }).textContent).toContain(
+        '2장 여신제도',
+      ),
+    );
+    expect(patches).toEqual([{ base_version: 'v-0', chapter_id: CH2 }]);
+    expect(screen.getByText('직접 고른 챕터로 등록합니다.')).toBeTruthy();
+  });
+
+  it('CHAPTER-MAP: viewers see the chapter as text', () => {
+    render(
+      <QuestionImport
+        workspaceId={WS}
+        readOnly="viewer"
+        initialRun={RUN}
+        initialDrafts={[{ ...draft(0), chapter_match: 'no_match', source_chapter_title: '제9장' }]}
+        loadFailed={false}
+      />,
+    );
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.getByText(/챕터 없음/)).toBeTruthy();
+  });
 });

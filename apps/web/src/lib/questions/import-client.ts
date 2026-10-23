@@ -3,6 +3,7 @@
 // browser code never holds a JWT. FastAPI stays the authority on every decision.
 import type { Problem } from '@quiz/api-client';
 import type {
+  BookChapterOption,
   DraftUpdateBody,
   ImportDraft,
   ImportRegistration,
@@ -126,6 +127,11 @@ export interface ImportClient {
   ): Promise<ImportRun | null>;
   getRun(importId: string, signal?: AbortSignal): Promise<ImportRun>;
   listDrafts(importId: string, signal?: AbortSignal): Promise<ImportDraft[]>;
+  /** The drafts and the workspace's book chapters (the chapter picker, CHAPTER-MAP). */
+  draftList(
+    importId: string,
+    signal?: AbortSignal,
+  ): Promise<{ items: ImportDraft[]; chapters: BookChapterOption[] }>;
   retryImport(importId: string, idempotencyKey: string): Promise<ImportRun>;
   updateDraft(draftId: string, body: DraftUpdateBody): Promise<ImportDraft>;
   publish(
@@ -202,6 +208,13 @@ export function createImportClient(fetchImpl: FetchLike = (...a) => fetch(...a))
     getRun: (importId, signal) => call(IMPORT_BFF_PATHS.run(importId), { signal }),
     listDrafts: async (importId, signal) =>
       (await call<{ items: ImportDraft[] }>(IMPORT_BFF_PATHS.drafts(importId), { signal })).items,
+    draftList: async (importId, signal) => {
+      const body = await call<{ items: ImportDraft[]; chapters?: BookChapterOption[] }>(
+        IMPORT_BFF_PATHS.drafts(importId),
+        { signal },
+      );
+      return { items: body.items, chapters: body.chapters ?? [] };
+    },
     retryImport: (importId, idempotencyKey) =>
       call(IMPORT_BFF_PATHS.retry(importId), { method: 'POST', idempotencyKey }),
     updateDraft: (draftId, body) =>

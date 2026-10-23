@@ -21,6 +21,18 @@ import {
 export type ImportDraft = Schemas['ImportDraft'];
 export type ImportRun = Schemas['ImportRun'];
 export type ImportRegistration = Schemas['ImportRegistration'];
+export type BookChapterOption = Schemas['BookChapterOption'];
+export type ChapterMatch = NonNullable<ImportDraft['chapter_match']>;
+
+/** The book chapter an import draft is registered under (CHAPTER-MAP) and why. */
+export interface DraftChapterInfo {
+  readonly chapter: Schemas['DraftChapterRef'] | null;
+  /** `auto`: the server's suggestion; `manual`: chosen in review. */
+  readonly choice: ImportDraft['chapter_choice'];
+  readonly match: ChapterMatch | null;
+  /** The question PDF chapter the suggestion was made from. */
+  readonly sourceTitle: string | null;
+}
 export type DraftUpdateBody = Schemas['QuestionDraftUpdate'];
 export type ReviewedDraftRef = Schemas['ReviewedDraft'];
 export type ReviewStatus = ImportDraft['review_status'];
@@ -90,6 +102,8 @@ export interface ReviewDraft {
   readonly locations: readonly DraftLocation[];
   /** Generation drafts only (QGEN-01); absent for PDF import drafts. */
   readonly generation?: GenerationDraftInfo;
+  /** PDF import drafts only (CHAPTER-MAP). */
+  readonly chapter?: DraftChapterInfo;
 }
 
 function generationInfo(draft: ImportDraft): GenerationDraftInfo {
@@ -143,7 +157,16 @@ export function reviewDraftFromImport(draft: ImportDraft): ReviewDraft {
     sourceDocumentId: evidence?.document_id ?? null,
     pages,
     locations,
-    ...(p.origin === 'generation' ? { generation: generationInfo(draft) } : {}),
+    ...(p.origin === 'generation'
+      ? { generation: generationInfo(draft) }
+      : {
+          chapter: {
+            chapter: draft.chapter ?? null,
+            choice: draft.chapter_choice ?? 'auto',
+            match: draft.chapter_match ?? null,
+            sourceTitle: draft.source_chapter_title ?? null,
+          },
+        }),
   };
 }
 
@@ -475,6 +498,43 @@ export function refusalText(reason: RefusalReason): string {
   return reason === 'stale-draft'
     ? '선택한 뒤 다른 곳에서 바뀌어 등록하지 않았습니다. 바뀐 내용을 확인한 뒤 다시 등록해 주세요.'
     : '승인할 수 없는 항목이 있어 등록하지 않았습니다. 편집에서 표시된 항목을 고쳐 주세요.';
+}
+
+// ---------------------------------------------------------------------------------------------
+// Chapter (CHAPTER-MAP): the suggestion from the question PDF's chapter, or the reviewer's choice
+// ---------------------------------------------------------------------------------------------
+
+/** Picker value of "챕터 없음". */
+export const NO_DRAFT_CHAPTER = '__none__';
+
+/** Why the draft has the chapter it has (null = nothing to explain). */
+export function chapterHint(info: DraftChapterInfo, optionCount: number): string | null {
+  const source = info.sourceTitle ? `‘${info.sourceTitle}’` : '문제의 챕터';
+  if (info.choice === 'manual') {
+    return info.chapter ? '직접 고른 챕터로 등록합니다.' : '챕터 없이 등록합니다(직접 선택).';
+  }
+  switch (info.match) {
+    case 'matched':
+      return `문제 PDF의 ${source}에 맞춰 자동으로 골랐습니다.`;
+    case 'ambiguous':
+      return `${source}와 이름이 같은 교재 챕터가 여러 개라 자동으로 고르지 않았습니다. 직접 골라 주세요.`;
+    case 'no_source_chapter':
+      return '문제 PDF에서 이 문제의 챕터를 찾지 못해 챕터 없이 등록됩니다.';
+    case 'no_match':
+      return optionCount === 0
+        ? '목차가 있는 교재가 없어 챕터 없이 등록됩니다.'
+        : `문제 PDF의 ${source}와 같은 교재 챕터가 없어 챕터 없이 등록됩니다.`;
+    default:
+      return null;
+  }
+}
+
+/** PATCH body that sets the draft's chapter (null = 챕터 없음) at the version on screen. */
+export function chapterBody(
+  draft: Pick<ReviewDraft, 'version'>,
+  chapterId: string | null,
+): DraftUpdateBody {
+  return { base_version: draft.version, chapter_id: chapterId };
 }
 
 // ---------------------------------------------------------------------------------------------

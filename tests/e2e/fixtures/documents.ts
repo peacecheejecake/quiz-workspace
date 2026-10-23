@@ -158,7 +158,7 @@ export async function uploadPdf(
   owner: Member,
   workspaceId: string,
   fixture: PdfFile,
-  type?: 'question_paper',
+  type?: 'question_paper' | 'book',
 ): Promise<UploadedDocument> {
   const bytes = readFileSync(fixture.path);
   const intent = await owner.api.ok<{
