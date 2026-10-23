@@ -24,6 +24,7 @@ from quiz_api.api.documents import (
     get_storage,
 )
 from quiz_api.authz import LockMode, MembershipRecord, ResourceType, Role, get_access_repository
+from quiz_api.authz.repository import TwoStepResourceMembership
 from quiz_api.errors import ProblemType
 from quiz_api.jobs import JobMessage
 from quiz_api.main import create_app
@@ -53,7 +54,7 @@ SECRET_TOKEN = "signed-upload-token-SECRET"  # noqa: S105 - fake
 
 
 @dataclass
-class World:
+class World(TwoStepResourceMembership):
     """Fake AccessRepository + DocumentRepository over shared in-memory state."""
 
     members: dict[tuple[uuid.UUID, uuid.UUID], Role] = field(default_factory=dict)

@@ -298,9 +298,12 @@ class QuestionRepository:
             )
         return out
 
-    def get(self, question_id: uuid.UUID, *, lock: bool = False) -> QuestionRecord | None:
+    def get(
+        self, question_id: uuid.UUID, *, lock: bool = False, with_sources: bool = True
+    ) -> QuestionRecord | None:
         """A live (not soft-deleted) question with its active revision; `lock` = FOR UPDATE of
-        the question row (the edit path)."""
+        the question row (the edit path). `with_sources=False` skips the sources query (callers
+        that never read them, e.g. opening a practice session): `sources` is then empty."""
         if lock:
             locked = self._session.execute(
                 select(questions.c.id)
@@ -314,7 +317,7 @@ class QuestionRepository:
         ).one_or_none()
         if row is None:
             return None
-        return _question(row, self._sources([question_id])[question_id])
+        return _question(row, self._sources([question_id])[question_id] if with_sources else [])
 
     def list_page(
         self,

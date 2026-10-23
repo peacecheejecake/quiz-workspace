@@ -114,7 +114,7 @@ def get_job_poller(request: Request) -> JobPoller:
         raise HTTPException(status_code=503, detail="Database is not configured.")
 
     def poll(user_id: uuid.UUID, job_id: uuid.UUID) -> JobView | None:
-        with database.sessionmaker() as session:
+        with database.read_sessionmaker() as session:  # read-only poll: autocommit
             try:
                 authorize_resource(
                     SqlAccessRepository(session), user_id, ResourceType.JOB, job_id, Action.READ

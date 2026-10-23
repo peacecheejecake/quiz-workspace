@@ -13,6 +13,10 @@ the caller's `user_id` (the verified JWT `sub`); nothing here reads another user
   * `last_graded_result`/`last_graded_attempt_id` change only for a graded (correct/incorrect)
     attempt; a pending submission leaves them as they were.
   * `is_favorite`/`needs_retry` change only through my-state; grading never clears `needs_retry`.
+
+Round trips (PERF-1): opening a session and submitting an answer each write several rows; every
+group of writes that belongs together is one statement (data-modifying CTEs), so the request
+costs one database round trip per step instead of one per row.
 """
 
 from __future__ import annotations
@@ -22,10 +26,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import and_, func, insert, select, tuple_, update
+from sqlalchemy import and_, func, insert, literal, select, true, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from quiz_api.authz.permissions import LockMode
+from quiz_api.authz.repository import MembershipRecord, membership_record, membership_select
 from quiz_api.practice_grading import AttemptResult, GradedResult
 from quiz_api.question_rules import QuestionType
 from quiz_api.question_status import LastGradedResult
@@ -37,6 +43,7 @@ from quiz_api.repositories.tables import (
     question_revisions,
     question_user_states,
     questions,
+    workspaces,
 )
 
 SessionState = str  # open | pending_grade | graded
@@ -59,6 +66,21 @@ class SessionRecord:
     submitted_at: datetime | None
     graded_at: datetime | None
     revision: RevisionRecord
+
+
+@dataclass(frozen=True)
+class OpenedSession:
+    id: uuid.UUID
+    state: SessionState
+    opened_at: datetime
+
+
+@dataclass(frozen=True)
+class SubmittedSession:
+    attempt_id: uuid.UUID
+    state: SessionState
+    submitted_at: datetime | None
+    graded_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -191,17 +213,18 @@ class PracticeRepository:
 
     # --- sessions --------------------------------------------------------------------------------
 
-    def session_owner_workspace(
-        self, session_id: uuid.UUID, user_id: uuid.UUID
-    ) -> uuid.UUID | None:
-        """The workspace of the caller's own session; `None` for unknown and foreign sessions
-        alike (the route answers both with the same 404)."""
-        workspace_id: uuid.UUID | None = self._session.execute(
-            select(practice_sessions.c.workspace_id).where(
-                practice_sessions.c.id == session_id, practice_sessions.c.user_id == user_id
-            )
-        ).scalar_one_or_none()
-        return workspace_id
+    def session_membership(
+        self, session_id: uuid.UUID, user_id: uuid.UUID, lock: LockMode
+    ) -> MembershipRecord | None:
+        """The caller's membership in the workspace of the caller's own session, in one query
+        (ownership and membership, with the membership lock of the action); `None` for unknown
+        and foreign sessions and for non-members alike (the route answers all with one 404)."""
+        stmt = (
+            membership_select(user_id, lock)
+            .join(practice_sessions, practice_sessions.c.workspace_id == workspaces.c.id)
+            .where(practice_sessions.c.id == session_id, practice_sessions.c.user_id == user_id)
+        )
+        return membership_record(self._session, stmt, user_id)
 
     def get_session(
         self, session_id: uuid.UUID, user_id: uuid.UUID, *, lock: bool = False
@@ -242,8 +265,9 @@ class PracticeRepository:
         user_id: uuid.UUID,
         displayed_option_ids: list[str],
         shuffle_seed: int | None,
-    ) -> uuid.UUID:
-        session_id: uuid.UUID = self._session.execute(
+    ) -> OpenedSession:
+        """Insert the session and record the caller's view (`record_view`) in one statement."""
+        opened = (
             insert(practice_sessions)
             .values(
                 workspace_id=workspace_id,
@@ -254,21 +278,94 @@ class PracticeRepository:
                 shuffle_seed=shuffle_seed,
                 state="open",
             )
-            .returning(practice_sessions.c.id)
-        ).scalar_one()
-        return session_id
+            .returning(
+                practice_sessions.c.id, practice_sessions.c.state, practice_sessions.c.opened_at
+            )
+            .cte("opened")
+        )
+        viewed = self._view_upsert(workspace_id, question_id, user_id).cte("viewed")
+        row = self._session.execute(
+            select(opened.c.id, opened.c.state, opened.c.opened_at).add_cte(viewed)
+        ).one()
+        return OpenedSession(row.id, row.state, row.opened_at)
 
-    def finish_session(self, session_id: uuid.UUID, *, graded: bool) -> None:
-        """open -> graded (auto-graded) or open -> pending_grade (awaits a self-grade)."""
-        self._session.execute(
+    def submit(
+        self,
+        session: SessionRecord,
+        *,
+        submitted_answer: dict[str, Any],
+        result: AttemptResult,
+    ) -> SubmittedSession:
+        """One statement: append the attempt, move the (locked, open) session to graded or
+        pending_grade, and for a graded result record it in the caller's study state
+        (`record_graded`)."""
+        graded = result != "pending"
+        attempt = (
+            insert(question_attempts)
+            .values(
+                workspace_id=session.workspace_id,
+                question_id=session.question_id,
+                question_revision_id=session.revision.id,
+                practice_session_id=session.id,
+                user_id=session.user_id,
+                displayed_option_ids=session.displayed_option_ids,
+                submitted_answer=submitted_answer,
+                result=result,
+                grading_method="auto" if graded else None,
+                graded_at=func.now() if graded else None,
+            )
+            .returning(question_attempts.c.id)
+            .cte("attempt")
+        )
+        finished = (
             update(practice_sessions)
-            .where(practice_sessions.c.id == session_id, practice_sessions.c.state == "open")
+            .where(practice_sessions.c.id == session.id, practice_sessions.c.state == "open")
             .values(
                 state="graded" if graded else "pending_grade",
                 submitted_at=func.now(),
                 graded_at=func.now() if graded else None,
             )
+            .returning(
+                practice_sessions.c.state,
+                practice_sessions.c.submitted_at,
+                practice_sessions.c.graded_at,
+            )
+            .cte("finished")
         )
+        stmt = select(
+            attempt.c.id, finished.c.state, finished.c.submitted_at, finished.c.graded_at
+        ).select_from(attempt.join(finished, true()))
+        if graded:
+            state = pg_insert(question_user_states).from_select(
+                [
+                    "user_id",
+                    "question_id",
+                    "workspace_id",
+                    "last_graded_result",
+                    "last_graded_attempt_id",
+                ],
+                select(
+                    literal(session.user_id, question_user_states.c.user_id.type),
+                    literal(session.question_id, question_user_states.c.question_id.type),
+                    literal(session.workspace_id, question_user_states.c.workspace_id.type),
+                    literal(result, question_user_states.c.last_graded_result.type),
+                    attempt.c.id,
+                ),
+            )
+            stmt = stmt.add_cte(
+                state.on_conflict_do_update(
+                    index_elements=[
+                        question_user_states.c.user_id,
+                        question_user_states.c.question_id,
+                    ],
+                    set_={
+                        "last_graded_result": state.excluded.last_graded_result,
+                        "last_graded_attempt_id": state.excluded.last_graded_attempt_id,
+                    },
+                ).cte("graded")
+            )
+        row = self._session.execute(stmt).one()
+        return SubmittedSession(row.id, row.state, row.submitted_at, row.graded_at)
 
     def grade_session(self, session_id: uuid.UUID) -> None:
         """pending_grade -> graded."""
@@ -295,32 +392,6 @@ class PracticeRepository:
             self._attempt_select().where(question_attempts.c.id == attempt_id)
         ).one()
         return _attempt(row)
-
-    def add_attempt(
-        self,
-        session: SessionRecord,
-        *,
-        submitted_answer: dict[str, Any],
-        result: AttemptResult,
-    ) -> uuid.UUID:
-        graded = result != "pending"
-        attempt_id: uuid.UUID = self._session.execute(
-            insert(question_attempts)
-            .values(
-                workspace_id=session.workspace_id,
-                question_id=session.question_id,
-                question_revision_id=session.revision.id,
-                practice_session_id=session.id,
-                user_id=session.user_id,
-                displayed_option_ids=session.displayed_option_ids,
-                submitted_answer=submitted_answer,
-                result=result,
-                grading_method="auto" if graded else None,
-                graded_at=func.now() if graded else None,
-            )
-            .returning(question_attempts.c.id)
-        ).scalar_one()
-        return attempt_id
 
     def pending_attempt(self, session_id: uuid.UUID, user_id: uuid.UUID) -> AttemptRecord | None:
         """The session's ungraded submission (at most one: a session is submitted once)."""
@@ -407,6 +478,22 @@ class PracticeRepository:
 
     # --- study state -----------------------------------------------------------------------------
 
+    @staticmethod
+    def _upsert(
+        workspace_id: uuid.UUID,
+        question_id: uuid.UUID,
+        user_id: uuid.UUID,
+        insert_values: dict[str, Any],
+        update_values: dict[str, Any],
+    ) -> Any:
+        stmt = pg_insert(question_user_states).values(
+            user_id=user_id, question_id=question_id, workspace_id=workspace_id, **insert_values
+        )
+        return stmt.on_conflict_do_update(
+            index_elements=[question_user_states.c.user_id, question_user_states.c.question_id],
+            set_=update_values,
+        )
+
     def _upsert_state(
         self,
         workspace_id: uuid.UUID,
@@ -415,22 +502,16 @@ class PracticeRepository:
         insert_values: dict[str, Any],
         update_values: dict[str, Any],
     ) -> None:
-        stmt = pg_insert(question_user_states).values(
-            user_id=user_id, question_id=question_id, workspace_id=workspace_id, **insert_values
-        )
         self._session.execute(
-            stmt.on_conflict_do_update(
-                index_elements=[question_user_states.c.user_id, question_user_states.c.question_id],
-                set_=update_values,
-            )
+            self._upsert(workspace_id, question_id, user_id, insert_values, update_values)
         )
 
-    def record_view(
+    def _view_upsert(
         self, workspace_id: uuid.UUID, question_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
+    ) -> Any:
         """Opening a practice session is the only study view (questions.md §2.1)."""
         first = func.coalesce(question_user_states.c.first_viewed_at, func.now())
-        self._upsert_state(
+        return self._upsert(
             workspace_id,
             question_id,
             user_id,
@@ -465,7 +546,7 @@ class PracticeRepository:
         transaction ends, so read-compare-write callers (my-state) serialize even on the very
         first update: a concurrent creator waits on the speculative insert, then the SELECT
         (a new READ COMMITTED snapshot) sees and locks the committed row. The single-statement
-        upserts (`record_view`, `record_graded`) compute their values in SQL and need no lock."""
+        upserts (session open, `record_graded`) compute their values in SQL and need no lock."""
         self._session.execute(
             pg_insert(question_user_states)
             .values(user_id=user_id, question_id=question_id, workspace_id=workspace_id)

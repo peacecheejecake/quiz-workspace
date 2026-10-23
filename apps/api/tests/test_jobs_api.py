@@ -24,6 +24,7 @@ from quiz_api.api.jobs import (
     get_session_release,
 )
 from quiz_api.authz import LockMode, MembershipRecord, ResourceType, Role, get_access_repository
+from quiz_api.authz.repository import TwoStepResourceMembership
 from quiz_api.main import create_app
 from quiz_api.repositories.jobs import JobView, error_code, progress_of
 from quiz_api.settings import Settings
@@ -53,7 +54,7 @@ def _view(job_id: uuid.UUID, status: str = "queued", **kw: Any) -> JobView:
 
 
 @dataclass
-class World:
+class World(TwoStepResourceMembership):
     members: dict[tuple[uuid.UUID, uuid.UUID], Role] = field(default_factory=dict)
     jobs: dict[uuid.UUID, tuple[uuid.UUID, JobView]] = field(default_factory=dict)
     # Successive views the poller returns for a job (the last one repeats).
