@@ -13,7 +13,12 @@ Rules (deterministic, see ``restore_hierarchy``):
    body sit one level below the current chapter, except back matter (``References``,
    ``Appendix``, ``부록`` ...) which is top level. A body without numbering uses the parser's
    heading levels if they vary, else single-line heading heights (font size), else stays flat.
-4. Numbering gaps and parent/child mismatches (``2.1`` under ``1장``) are reported as warnings;
+4. Labels (``label_headings``, before 1-3): a chapter label the parser read as plain text
+   (``제1 장`` on a chapter opener page) is a heading, except repeats of the current label (thumb
+   index, running header); a bare label and its title line on the same page (``제1절`` +
+   ``수신 총칙``) are one heading. Unnumbered headings in a numbered body (box titles) never
+   parent a heading and never close the numbered sections around them.
+5. Numbering gaps and parent/child mismatches (``2.1`` under ``1장``) are reported as warnings;
    the tree follows the heading order regardless.
 """
 
@@ -31,14 +36,22 @@ from book_core.structure.numbering import (
     NumberingKind,
     disambiguate_letters,
     is_back_matter,
+    is_bare_label,
     is_toc_title,
     parse_numbering,
 )
 
-_LEADERS = re.compile(r"(?:\.\s?){4,}|…{2,}|(?:·\s?){4,}|(?:_\s?){4,}")
+# Dot leaders: ``....``, ``……``, ``····``, ``____`` and the katakana/halfwidth middle dots and
+# bullet operators Korean publishers often use (``・・・・``).
+_LEADERS = re.compile(
+    r"(?:\.\s?){4,}|…{2,}|(?:·\s?){4,}|(?:_\s?){4,}|(?:[\u30fb\uff65\u2219\u2027]\s?){4,}"
+)
 _TOC_LEADER_MIN = 3
 _TITLE_PAGE_MAX_TEXT = 200
 _MAX_FONT_LEVELS = 3
+_LABEL_MAX = 40
+"""Longest text block read as a printed chapter label (``제1 장``, ``Chapter 3 Methods``)."""
+_OUTER_KINDS = frozenset({NumberingKind.PART, NumberingKind.CHAPTER})
 _LOOSE_DROP = re.compile("[\\s|.·…_:\\-\u2013\u2014]+")
 
 
@@ -153,6 +166,79 @@ def _rank_unnumbered(
     return dict.fromkeys(heads, 0.0), ""
 
 
+def _joined(head: CanonicalDraft, title: CanonicalDraft) -> CanonicalDraft:
+    return CanonicalDraft(
+        BlockType.HEADING,
+        f"{head.text} {title.text}",
+        [*head.sources, *title.sources],
+        [*head.locations, *title.locations],
+    )
+
+
+def _label_title(label: CanonicalDraft, nxt: CanonicalDraft, *, allow_text: bool) -> bool:
+    """``nxt`` is the title line printed right after a bare label (``제1절`` / ``수신 총칙``)."""
+    allowed = (BlockType.HEADING, BlockType.TEXT) if allow_text else (BlockType.HEADING,)
+    return (
+        nxt.type in allowed
+        and _page(nxt) == _page(label)
+        and 0 < len(nxt.text) <= _LABEL_MAX
+        and parse_numbering(nxt.text) is None
+        and not is_toc_title(nxt.text)
+        and not is_back_matter(nxt.text)
+        and _leaders(nxt) == 0
+    )
+
+
+def label_headings(drafts: Sequence[CanonicalDraft], page_count: int) -> list[CanonicalDraft]:
+    """Headings the parser split or missed, restored before ``restore_hierarchy``.
+
+    1. Printed chapter labels: after the TOC, a short text block that is a Part/Chapter label
+       (``제1 장``, ``Chapter 3 Methods``) becomes a heading, since books set chapter openers as
+       display text the layout model labels as plain text (or as a picture, see the Docling
+       adapter). A label repeating the current Part/Chapter number (a thumb index or running
+       header on every page, or the text copy of a parser heading) stays text, so only the
+       first occurrence of each number opens a chapter.
+    2. A bare label and its title line on the same page (``제1절`` + ``수신 총칙``,
+       ``제1 장`` + ``수신제도``) become one heading; a parser heading only joins a heading.
+    """
+    toc_pages = _toc_pages(drafts, page_count)
+    after_toc = max((i + 1 for i, d in enumerate(drafts) if _page(d) in toc_pages), default=0)
+    result = list(drafts[:after_toc])
+    current: dict[NumberingKind, tuple[int, ...]] = {}
+    i = after_toc
+    while i < len(drafts):
+        draft = drafts[i]
+        i += 1
+        numbering = (
+            parse_numbering(draft.text)
+            if draft.type in (BlockType.HEADING, BlockType.TEXT)
+            else None
+        )
+        promoted = False
+        if numbering is not None and numbering.kind in _OUTER_KINDS:
+            if draft.type is BlockType.TEXT:
+                if len(draft.text) > _LABEL_MAX or current.get(numbering.kind) == numbering.numbers:
+                    result.append(draft)
+                    continue
+                draft = CanonicalDraft(
+                    BlockType.HEADING, draft.text, list(draft.sources), list(draft.locations)
+                )
+                promoted = True
+            current[numbering.kind] = numbering.numbers
+            if numbering.kind is NumberingKind.PART:
+                current.pop(NumberingKind.CHAPTER, None)
+        if (
+            draft.type is BlockType.HEADING
+            and is_bare_label(draft.text)
+            and i < len(drafts)
+            and _label_title(draft, drafts[i], allow_text=promoted)
+        ):
+            draft = _joined(draft, drafts[i])
+            i += 1
+        result.append(draft)
+    return result
+
+
 def restore_hierarchy(drafts: Sequence[CanonicalDraft], page_count: int) -> Hierarchy:
     result = Hierarchy(block_sections=[None] * len(drafts))
     warn = result.warnings
@@ -235,6 +321,14 @@ def restore_hierarchy(drafts: Sequence[CanonicalDraft], page_count: int) -> Hier
                 )
             )
 
+    # Interim headings: unnumbered headings in a numbered body (a box title, "학습 목표"). They
+    # sit one level below the current chapter but never parent a heading and never close the
+    # numbered sections around them, so ``가.`` after a box title stays under its ``1-3.``.
+    interims = (
+        {i for i in heads if numbering[i] is None and not is_back_matter(drafts[i].text)}
+        if body_kinds
+        else set()
+    )
     stack: list[tuple[float, int]] = []  # (rank, section index)
     last_sibling: dict[tuple[int | None, NumberingKind], int] = {}
     current: int | None = None
@@ -244,14 +338,19 @@ def restore_hierarchy(drafts: Sequence[CanonicalDraft], page_count: int) -> Hier
             continue
         if i in head_set:
             rank = ranks[i]
-            while stack and stack[-1][0] >= rank:
-                stack.pop()
-            parent = stack[-1][1] if stack else None
-            level = result.sections[parent].level + 1 if parent is not None else 1
             n = numbering[i]
+            if i in interims:
+                # Below the current chapter, leaving the numbered stack as it is.
+                parent = next((sec for r, sec in reversed(stack) if r < rank), None)
+            else:
+                while stack and stack[-1][0] >= rank:
+                    stack.pop()
+                parent = stack[-1][1] if stack else None
+            level = result.sections[parent].level + 1 if parent is not None else 1
             result.sections.append(SectionDraft(i, drafts[i].text, level, parent, n))
             current = len(result.sections) - 1
-            stack.append((rank, current))
+            if i not in interims:
+                stack.append((rank, current))
             if n is not None:
                 _check_numbering(result, current, n, last_sibling, drafts)
         result.block_sections[i] = current

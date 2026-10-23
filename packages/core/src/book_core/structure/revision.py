@@ -17,7 +17,7 @@ from book_core.contracts import (
     revision_content_hash,
 )
 from book_core.structure.canonical import canonical_drafts, normalize_block_text
-from book_core.structure.hierarchy import StructureWarning, restore_hierarchy
+from book_core.structure.hierarchy import StructureWarning, label_headings, restore_hierarchy
 
 CANONICAL_PREFIX = "cb-"
 SECTION_PREFIX = "sec-"
@@ -60,7 +60,7 @@ def build_revision(
 
     Sections the parser may have filled in are ignored; the tree is rebuilt from headings.
     """
-    drafts = canonical_drafts(parsed.blocks)
+    drafts = label_headings(canonical_drafts(parsed.blocks), len(parsed.pages))
     hierarchy = restore_hierarchy(drafts, len(parsed.pages))
 
     ids = [canonical_block_id(d.first.id) for d in drafts]

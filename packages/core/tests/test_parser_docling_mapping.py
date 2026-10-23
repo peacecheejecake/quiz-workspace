@@ -226,6 +226,36 @@ def test_block_ids_are_stable_and_content_addressed(parsed: ParsedDocument) -> N
     assert differing[0][0].startswith("p1-b003-")
 
 
+def test_picture_text_keeps_only_chapter_labels() -> None:
+    """A chapter opener page Docling reads as one picture: its label and title survive as text
+    after the image; other text inside pictures (figure labels) stays dropped."""
+    doc = DoclingDocument(name="opener")
+    doc.add_page(page_no=1, size=Size(width=WIDTH, height=HEIGHT))
+    opener = doc.add_picture(prov=_prov(1, 0, 790, 600, 400))
+    for text, top in (("제 2 장", 600), ("응용", 560), ("Publisher", 450)):
+        doc.add_text(
+            label=DocItemLabel.TEXT,
+            text=text,
+            parent=opener,
+            prov=_prov(1, 200, top, 400, top - 20),
+        )
+    figure = doc.add_picture(prov=_prov(1, 50, 380, 550, 100))
+    for text, top in (("Axis 10", 300), ("Chapter 7 is summarised in this figure legend", 200)):
+        doc.add_text(
+            label=DocItemLabel.TEXT, text=text, parent=figure, prov=_prov(1, 60, top, 300, top - 10)
+        )
+    blocks = _convert(doc, [True]).blocks
+    assert [(b.type, b.text) for b in blocks] == [
+        (BlockType.IMAGE, ""),
+        (BlockType.TEXT, "제 2 장"),
+        (BlockType.TEXT, "응용"),
+        (BlockType.IMAGE, ""),
+    ]
+    label = blocks[1]
+    assert label.locations[0].page == 1
+    assert label.locations[0].bbox == BBox(x0=200, y0=200, x1=400, y1=220)
+
+
 def test_page_count_mismatch_is_an_error() -> None:
     with pytest.raises(ParserError, match="pages"):
         _convert(_docling_document(), layers=[True])
