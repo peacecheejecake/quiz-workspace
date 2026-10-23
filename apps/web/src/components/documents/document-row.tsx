@@ -6,7 +6,15 @@
 // the failure reason with retry — and a trash icon button to delete. A long-running job also shows
 // how long it has waited or run, with a hint (DOC-01-AC05). State is always text, never colour
 // alone (the badge text carries it).
-import { Badge, Button, IconButton, Tooltip, TrashIcon, type BadgeTone } from '@quiz/ui';
+import {
+  Badge,
+  Button,
+  IconButton,
+  ProgressBar,
+  Tooltip,
+  TrashIcon,
+  type BadgeTone,
+} from '@quiz/ui';
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
@@ -119,6 +127,7 @@ function RowDetail({ row }: { row: DocumentRow }) {
     return (
       <div className={styles.status}>
         <ProgressBar
+          className={styles.progress}
           label="업로드 진행률"
           value={sending || phase === 'completing' ? value : undefined}
         />
@@ -137,7 +146,11 @@ function ProcessingDetail({ row }: { row: DocumentRow }) {
   const elapsed = now === null ? null : processingElapsed(row, now);
   return (
     <div className={styles.status}>
-      <ProgressBar label="파싱·색인 진행률" value={progress ?? undefined} />
+      <ProgressBar
+        className={styles.progress}
+        label="파싱·색인 진행률"
+        value={progress ?? undefined}
+      />
       {progress !== null ? <span className={styles.statusText}>{progress}%</span> : null}
       {elapsed ? (
         <p className={styles.hint}>
@@ -157,26 +170,4 @@ function useNow(intervalMs = 1000): number | null {
     return () => clearInterval(timer);
   }, [intervalMs]);
   return now;
-}
-
-/** Accessible progress bar; `value` undefined = indeterminate (no aria-valuenow). */
-function ProgressBar({ label, value }: { label: string; value?: number }) {
-  const indeterminate = value === undefined;
-  return (
-    <div
-      role="progressbar"
-      aria-label={label}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={indeterminate ? undefined : value}
-      aria-valuetext={indeterminate ? '진행 중' : `${value}%`}
-      className={styles.progress}
-      data-indeterminate={indeterminate || undefined}
-    >
-      <div
-        className={styles.progressFill}
-        style={indeterminate ? undefined : { width: `${value}%` }}
-      />
-    </div>
-  );
 }

@@ -56,6 +56,7 @@ import {
   RetryIcon,
   RetryToggle,
   Select,
+  ProgressBar,
   Skeleton,
   StarIcon,
   StatusSummary,
@@ -154,6 +155,7 @@ export default function Page() {
               ]}
             />
             <Skeleton width="4rem" />
+            <ProgressBar label="진행률" value={40} />
             <AlertIcon />
             <CheckIcon />
             <ChevronDownIcon />

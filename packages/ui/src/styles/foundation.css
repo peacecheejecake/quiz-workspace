@@ -165,6 +165,46 @@
   }
 }
 
+/*
+ * ProgressBar: the fill glides between reported values (--duration-progress) instead of jumping
+ * on coarse server steps. Indeterminate = a static 30% fill (no aria-valuenow).
+ */
+.qz-progress {
+  position: relative;
+  box-sizing: border-box;
+  height: var(--space-2);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+
+  > .fill {
+    width: 0;
+    height: 100%;
+    border-radius: var(--radius-pill);
+    background: var(--color-accent);
+    transition: width var(--duration-progress) var(--easing-standard);
+  }
+
+  &[data-indeterminate] > .fill {
+    width: 30%;
+    opacity: 0.6;
+  }
+}
+
+@media (forced-colors: active) {
+  .qz-progress > .fill {
+    background: Highlight;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* !important beats the global 0.01ms reset: the fill jumps straight to the new value. */
+  .qz-progress > .fill {
+    transition: none !important;
+  }
+}
+
 /* EmptyState */
 .qz-empty-state {
   display: flex;

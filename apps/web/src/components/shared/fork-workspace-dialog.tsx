@@ -11,7 +11,7 @@
 // retry) or CANCELLED (e.g. the link was revoked mid-copy). The fork state lives in this
 // component, outside the dialog content, so closing the dialog while a copy runs does not lose it.
 // The API stays the authorization boundary: hiding this dialog is never the only check.
-import { Button, DialogClose, Input, ModalDialog } from '@quiz/ui';
+import { Button, DialogClose, Input, ModalDialog, ProgressBar } from '@quiz/ui';
 import Link from 'next/link';
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { workspaceHref } from '@/components/workspaces/labels';
@@ -291,21 +291,11 @@ function ForkProgress({
       <p className={styles.note} role="status">
         {pending ? `${label}…` : `${label} (${fork.progress}%)`}
       </p>
-      <div
-        role="progressbar"
-        aria-label="Fork 진행률"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={pending ? undefined : fork.progress}
-        aria-valuetext={pending ? label : `${label} ${fork.progress}%`}
-        className={styles.progress}
-        data-indeterminate={pending || undefined}
-      >
-        <div
-          className={styles.progressFill}
-          style={pending ? undefined : { width: `${fork.progress}%` }}
-        />
-      </div>
+      <ProgressBar
+        label="Fork 진행률"
+        value={pending ? undefined : fork.progress}
+        valueText={pending ? label : `${label} ${fork.progress}%`}
+      />
       <p className={styles.note}>
         창을 닫아도 복제는 계속됩니다. 완료되면 내 Workspace 목록에 나타납니다.
       </p>

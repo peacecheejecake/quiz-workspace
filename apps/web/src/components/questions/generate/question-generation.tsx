@@ -10,7 +10,7 @@
 //                cited pages, validation state) → review (편집 / 원본 비교 / 승인) → "승인한 문제
 //                등록" registers exactly the approved versions as new CONFIRMED questions with
 //                lineage (the API decides; the LLM's declared answer is never trusted).
-import { Badge, Button, CheckIcon, PageHeader, Select, useToast } from '@quiz/ui';
+import { Badge, Button, CheckIcon, PageHeader, ProgressBar, Select, useToast } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -723,23 +723,14 @@ export function QuestionGeneration({
             {working === 'starting' ? '변형 생성 준비 중' : '변형 초안 생성 중'}
             {progress !== undefined ? <span> · {progress}%</span> : null}
           </p>
-          <div
-            role="progressbar"
-            aria-label="생성 진행률"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={progress}
-            aria-valuetext={
+          <ProgressBar
+            className={styles.progress}
+            label="생성 진행률"
+            value={progress}
+            valueText={
               progress === undefined ? '변형 초안 생성 중' : `변형 초안 생성 중 ${progress}%`
             }
-            className={styles.progress}
-            data-indeterminate={progress === undefined || undefined}
-          >
-            <div
-              className={styles.progressFill}
-              style={progress === undefined ? undefined : { width: `${progress}%` }}
-            />
-          </div>
+          />
         </div>
       ) : null}
 

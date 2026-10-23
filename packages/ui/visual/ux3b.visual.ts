@@ -141,3 +141,60 @@ test('the most recently opened side panel is on top; re-opening brings one back 
   await expect(first).toBeVisible();
   await expect.poll(topmostTitle).toBe('검색 발췌');
 });
+
+/**
+ * Clicks `button` and samples, on every animation frame for `ms`, the share of the progress bar
+ * the fill covers or the dialog's height: the values a viewer actually sees between two states.
+ */
+async function framesAfterClick(
+  page: Page,
+  button: Locator,
+  measure: 'fill' | 'dialog',
+  ms = 800,
+): Promise<number[]> {
+  const handle = await button.elementHandle();
+  return page.evaluate(
+    ([el, what, duration]) =>
+      new Promise<number[]>((done) => {
+        const read = () => {
+          if (what === 'dialog') {
+            return document.querySelector<HTMLElement>('[role=dialog]')?.offsetHeight ?? 0;
+          }
+          const bar = document.querySelector('[role=progressbar]');
+          const fill = bar?.firstElementChild;
+          return bar && fill ? fill.getBoundingClientRect().width / bar.clientWidth : 0;
+        };
+        const samples: number[] = [];
+        const start = performance.now();
+        (el as HTMLElement).click();
+        const tick = () => {
+          samples.push(read());
+          if (performance.now() - start < duration) requestAnimationFrame(tick);
+          else done(samples);
+        };
+        requestAnimationFrame(tick);
+      }),
+    [handle, measure, ms] as const,
+  );
+}
+
+test('UX5-UI the progress fill glides to a new value, and jumps under reduced motion', async ({
+  page,
+}) => {
+  await openStory(page, 'feedback-progressbar--steps');
+  const bar = page.getByRole('progressbar', { name: '업로드 진행률' });
+  const next = page.getByRole('button', { name: '다음 단계' });
+  await expect(bar).toHaveAttribute('aria-valuenow', '2');
+
+  const frames = await framesAfterClick(page, next, 'fill');
+  await expect(bar).toHaveAttribute('aria-valuenow', '40');
+  // Several frames strictly between 2% and 40%, never going backwards, ending on 40%.
+  expect(frames.filter((f) => f > 0.03 && f < 0.39).length).toBeGreaterThanOrEqual(3);
+  expect(frames.every((f, i) => i === 0 || f >= (frames[i - 1] ?? 0) - 0.001)).toBe(true);
+  expect(frames.at(-1)).toBeCloseTo(0.4, 2);
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const instant = await framesAfterClick(page, next, 'fill', 200);
+  await expect(bar).toHaveAttribute('aria-valuenow', '60');
+  expect(instant.filter((f) => f > 0.41 && f < 0.59)).toEqual([]);
+});
