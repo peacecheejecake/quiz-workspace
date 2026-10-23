@@ -278,9 +278,30 @@ question_import_runs = Table(
     Column("llm_model", Text),
     Column("prompt_version", Text),
     Column("params", JSONB, nullable=False),
+    # QIMP-JOB (20261023120000_question_import_registration.sql).
+    Column("registration_job_id", Uuid),
     _ts("finished_at"),
     _ts("created_at", nullable=False),
     _ts("updated_at", nullable=False),
+)
+
+# QIMP-JOB (20261023120000_question_import_registration.sql): one row per draft of a submitted
+# registration; moved only by the worker's `worker_register_import_drafts`.
+question_import_registration_items = Table(
+    "question_import_registration_items",
+    metadata,
+    Column("workspace_id", Uuid, nullable=False),
+    Column("job_id", Uuid, primary_key=True),
+    Column("import_run_id", Uuid, nullable=False),
+    Column("draft_id", Uuid, primary_key=True),
+    Column("ordinal", Integer, nullable=False),
+    Column("version", Text, nullable=False),
+    Column("chapter_id", Uuid),
+    Column("state", Text, nullable=False),
+    Column("reason", Text),
+    Column("question_id", Uuid),
+    _ts("processed_at"),
+    _ts("created_at", nullable=False),
 )
 
 question_drafts = Table(

@@ -82,6 +82,8 @@ class ProblemType(StrEnum):
     # 409: a generated draft duplicates a question already in the workspace (or another draft of
     # the same publish request); edit or reject it.
     DUPLICATE_QUESTION = "urn:quiz-workspace:problem:duplicate-question"
+    # 409: the import's previous registration (QIMP-JOB) is still queued or running; follow it.
+    IMPORT_REGISTRATION_RUNNING = "urn:quiz-workspace:problem:import-registration-running"
 
 
 class ProblemException(StarletteHTTPException):

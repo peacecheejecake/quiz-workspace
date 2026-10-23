@@ -2196,6 +2196,169 @@
         "title": "ImportRefusedDraft",
         "type": "object"
       },
+      "ImportRegistration": {
+        "description": "A submitted selection being approved and registered on the server (QIMP-JOB).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the job stopped, e.g. `workspace_unavailable` (archived workspace or lost editor role); drafts not processed by then stay unregistered.",
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "import_id": {
+            "format": "uuid",
+            "title": "Import Id",
+            "type": "string"
+          },
+          "job_id": {
+            "description": "The `question.import_register` job (`GET /jobs/{id}`).",
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "processed": {
+            "description": "Drafts done (registered, already registered or refused).",
+            "title": "Processed",
+            "type": "integer"
+          },
+          "refused": {
+            "description": "Drafts left as they were, in submitted order.",
+            "items": {
+              "$ref": "#/components/schemas/ImportRegistrationRefusal"
+            },
+            "title": "Refused",
+            "type": "array"
+          },
+          "registered": {
+            "description": "Drafts this registration registered.",
+            "title": "Registered",
+            "type": "integer"
+          },
+          "skipped": {
+            "description": "Drafts that were registered already (nothing new).",
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "status": {
+            "description": "queued | running | succeeded | failed | cancelled",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "total": {
+            "description": "Distinct drafts submitted.",
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "job_id",
+          "import_id",
+          "status",
+          "error_code",
+          "total",
+          "processed",
+          "registered",
+          "skipped",
+          "refused",
+          "created_at",
+          "finished_at"
+        ],
+        "title": "ImportRegistration",
+        "type": "object"
+      },
+      "ImportRegistrationRefusal": {
+        "properties": {
+          "draft_id": {
+            "format": "uuid",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "position": {
+            "description": "0-based order in the source.",
+            "title": "Position",
+            "type": "integer"
+          },
+          "question_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Number printed in the source.",
+            "title": "Question Number"
+          },
+          "reason": {
+            "description": "`stale-draft`: changed since the sent version; `not-publishable`: cannot be confirmed as it is.",
+            "enum": [
+              "stale-draft",
+              "not-publishable"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "reason",
+          "question_number",
+          "position"
+        ],
+        "title": "ImportRegistrationRefusal",
+        "type": "object"
+      },
+      "ImportRegistrationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "drafts": {
+            "description": "The whole selection, each draft at the version on screen (the version the selection approves).",
+            "items": {
+              "$ref": "#/components/schemas/ReviewedDraft"
+            },
+            "maxItems": 5000,
+            "minItems": 1,
+            "title": "Drafts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "drafts"
+        ],
+        "title": "ImportRegistrationRequest",
+        "type": "object"
+      },
       "ImportRun": {
         "properties": {
           "created_at": {
@@ -2264,6 +2427,19 @@
             "title": "Published Count",
             "type": "integer"
           },
+          "registration_job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest registration (QIMP-JOB) of this run, if any: read its progress at `GET /question-imports/{id}/registrations/{job_id}`.",
+            "title": "Registration Job Id"
+          },
           "source_document_id": {
             "anyOf": [
               {
@@ -2323,6 +2499,7 @@
           "document_title",
           "draft_count",
           "published_count",
+          "registration_job_id",
           "created_at",
           "updated_at",
           "finished_at"
@@ -9262,6 +9439,233 @@
           }
         ],
         "summary": "Publish Question Import Drafts",
+        "tags": [
+          "question-imports"
+        ]
+      }
+    },
+    "/api/v1/question-imports/{import_id}/registrations": {
+      "post": {
+        "description": "Approve and register the whole selection on the server (QIMPORT-01-AC07, \"선택한 문제 승인\n및 등록\"): the request records every listed draft with the version on screen and starts a\n`question.import_register` job, which registers them in batches whether or not the page stays\nopen. Same rules as `publish` with `approve: true`: the job's user (the caller) approves each\ndraft still at the sent version that can be confirmed; drafts changed since (`stale-draft`) or\nnot confirmable (`not-publishable`) are refused and left as they were; drafts registered\nalready are skipped. Idempotent per draft (a re-delivered job never registers twice).\n\nAn id that is not a draft of this import is 404 (nothing recorded). 409\n`import-registration-running` while the previous registration of this import is still queued\nor running (follow `registration_job_id`). The job re-checks the workspace on every batch: an\narchived workspace or a lost editor role stops it (`workspace_unavailable`).",
+        "operationId": "registerQuestionImportDrafts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Import Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRegistrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportRegistration"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Register Question Import Drafts",
+        "tags": [
+          "question-imports"
+        ]
+      }
+    },
+    "/api/v1/question-imports/{import_id}/registrations/{job_id}": {
+      "get": {
+        "description": "Progress of a registration of this import: processed/total and the refused drafts.",
+        "operationId": "getQuestionImportRegistration",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Import Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportRegistration"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Question Import Registration",
         "tags": [
           "question-imports"
         ]

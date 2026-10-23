@@ -31,12 +31,16 @@ from quiz_api.repositories.tables import (
     async_jobs,
     documents,
     question_drafts,
+    question_import_registration_items,
     question_import_runs,
     question_sources,
 )
 
 IMPORT_JOB_TYPE = "question.import"
 IMPORT_JOB_SCHEMA_VERSION = 1
+# QIMP-JOB: approves and registers a submitted selection (quiz_worker.question_register_job).
+REGISTER_JOB_TYPE = "question.import_register"
+REGISTER_JOB_SCHEMA_VERSION = 1
 
 RunStatus = Literal["queued", "running", "succeeded", "failed", "cancelled"]
 ReviewStatus = Literal["pending", "approved", "rejected"]
@@ -45,6 +49,14 @@ TERMINAL: frozenset[str] = frozenset({"succeeded", "failed", "cancelled"})
 
 def import_job_key(run_id: uuid.UUID, attempt: int) -> str:
     return f"question_import:{run_id}:{attempt}"
+
+
+def register_job_key(run_id: uuid.UUID, number: int) -> str:
+    return f"question_import_register:{run_id}:{number}"
+
+
+RegistrationState = Literal["pending", "registered", "skipped", "refused"]
+JobStatus = Literal["queued", "running", "succeeded", "failed", "cancelled"]
 
 
 @dataclass(frozen=True)
@@ -62,6 +74,43 @@ class RunRecord:
     created_by: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
+    finished_at: datetime | None
+    # QIMP-JOB: the run's newest registration job (None = never submitted).
+    registration_job_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True)
+class RegistrationItem:
+    """One draft of a submitted selection, as the API records it (QIMP-JOB)."""
+
+    draft_id: uuid.UUID
+    version: str
+    state: RegistrationState
+    reason: str | None = None
+    question_id: uuid.UUID | None = None
+    chapter_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True)
+class RefusedItem:
+    draft_id: uuid.UUID
+    reason: str
+    question_number: int | None
+    position: int
+
+
+@dataclass(frozen=True)
+class RegistrationRecord:
+    job_id: uuid.UUID
+    import_run_id: uuid.UUID
+    status: JobStatus
+    error_code: str | None
+    total: int
+    pending: int
+    registered: int
+    skipped: int
+    refused: list[RefusedItem]
+    created_at: datetime
     finished_at: datetime | None
 
 
@@ -141,6 +190,7 @@ def _run_select() -> Any:
         question_import_runs.c.created_at,
         question_import_runs.c.updated_at,
         question_import_runs.c.finished_at,
+        question_import_runs.c.registration_job_id,
         async_jobs.c.status.label("job_status"),
         async_jobs.c.last_error.label("job_error"),
         documents.c.title.label("document_title"),
@@ -183,6 +233,7 @@ def _run(row: Any) -> RunRecord:
         created_at=row.created_at,
         updated_at=row.updated_at,
         finished_at=row.finished_at,
+        registration_job_id=row.registration_job_id,
     )
 
 
@@ -540,4 +591,122 @@ class QuestionImportRepository:
     ) -> None:
         self._activity(
             workspace_id, actor_id, "question_import.published", run_id, {"count": count}
+        )
+
+    # --- registration (QIMP-JOB) ----------------------------------------------------------------
+
+    def create_registration(
+        self, run: RunRecord, actor_id: uuid.UUID, items: Sequence[RegistrationItem]
+    ) -> uuid.UUID:
+        """The `question.import_register` job (unpublished), its items in request order, the run's
+        pointer to it and the activity. The caller holds the run row FOR UPDATE."""
+        number = self._session.execute(
+            select(func.count()).where(
+                async_jobs.c.workspace_id == run.workspace_id,
+                async_jobs.c.job_type == REGISTER_JOB_TYPE,
+                async_jobs.c.payload["import_id"].astext == str(run.id),
+            )
+        ).scalar_one()
+        job_id = uuid.uuid4()
+        self._session.execute(
+            insert(async_jobs).values(
+                id=job_id,
+                workspace_id=run.workspace_id,
+                created_by=actor_id,
+                job_type=REGISTER_JOB_TYPE,
+                schema_version=REGISTER_JOB_SCHEMA_VERSION,
+                idempotency_key=register_job_key(run.id, int(number) + 1),
+                payload={"import_id": str(run.id)},
+            )
+        )
+        if items:
+            self._session.execute(
+                insert(question_import_registration_items),
+                [
+                    {
+                        "workspace_id": run.workspace_id,
+                        "job_id": job_id,
+                        "import_run_id": run.id,
+                        "draft_id": item.draft_id,
+                        "ordinal": ordinal,
+                        "version": item.version,
+                        "chapter_id": item.chapter_id,
+                        "state": item.state,
+                        "reason": item.reason,
+                        "question_id": item.question_id,
+                        "processed_at": None if item.state == "pending" else func.now(),
+                    }
+                    for ordinal, item in enumerate(items)
+                ],
+            )
+        self._session.execute(
+            update(question_import_runs)
+            .where(question_import_runs.c.id == run.id)
+            .values(registration_job_id=job_id)
+        )
+        self._activity(
+            run.workspace_id,
+            actor_id,
+            "question_import.registration_requested",
+            run.id,
+            {"count": len(items), "job_id": str(job_id)},
+        )
+        return job_id
+
+    def registration(self, run_id: uuid.UUID, job_id: uuid.UUID) -> RegistrationRecord | None:
+        """A registration job of this run with its progress (None: not one of the run's)."""
+        job = self._session.execute(
+            select(
+                async_jobs.c.id,
+                async_jobs.c.status,
+                async_jobs.c.last_error,
+                async_jobs.c.created_at,
+                async_jobs.c.finished_at,
+            ).where(
+                async_jobs.c.id == job_id,
+                async_jobs.c.job_type == REGISTER_JOB_TYPE,
+                async_jobs.c.payload["import_id"].astext == str(run_id),
+            )
+        ).one_or_none()
+        if job is None:
+            return None
+        items = question_import_registration_items
+        counts: dict[str, int] = dict(
+            self._session.execute(
+                select(items.c.state, func.count())
+                .where(items.c.job_id == job_id, items.c.import_run_id == run_id)
+                .group_by(items.c.state)
+            ).tuples()
+        )
+        refused = self._session.execute(
+            select(
+                items.c.draft_id,
+                items.c.reason,
+                question_drafts.c.question_number,
+                question_drafts.c.position,
+            )
+            .select_from(items.join(question_drafts, question_drafts.c.id == items.c.draft_id))
+            .where(
+                items.c.job_id == job_id,
+                items.c.import_run_id == run_id,
+                items.c.state == "refused",
+            )
+            .order_by(items.c.ordinal)
+        ).all()
+        status = cast(JobStatus, job.status)
+        return RegistrationRecord(
+            job_id=job.id,
+            import_run_id=run_id,
+            status=status,
+            error_code=error_code(status, job.last_error),
+            total=sum(int(v) for v in counts.values()),
+            pending=int(counts.get("pending", 0)),
+            registered=int(counts.get("registered", 0)),
+            skipped=int(counts.get("skipped", 0)),
+            refused=[
+                RefusedItem(r.draft_id, str(r.reason), r.question_number, r.position)
+                for r in refused
+            ],
+            created_at=job.created_at,
+            finished_at=job.finished_at,
         )

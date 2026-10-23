@@ -20,6 +20,14 @@
                                                  CONFIRMED questions, idempotent per draft;
                                                  `approve: true` approves the selected drafts in
                                                  the same transaction and lists the refused ones
+    POST  /question-imports/{id}/registrations   editor+; the whole selection {drafts: [{draft_id,
+                                                 version}]} -> 202 registration whose
+                                                 `question.import_register` job approves and
+                                                 registers it on the server (QIMP-JOB); the page
+                                                 may be left; `Idempotency-Key`
+    GET   /question-imports/{id}/registrations/{job_id}
+                                                 any member; progress (processed/total) and the
+                                                 refused drafts of a registration
 
 Isolation (AGENTS.md §5 Data): drafts live in `question_drafts` and are never questions: the bank,
 the overview and `GET /questions/{id}` never see them. Human approval is the gate: a draft is
@@ -97,7 +105,10 @@ from quiz_api.question_rules import (
 from quiz_api.repositories.idempotency import IdempotencyStore
 from quiz_api.repositories.question_imports import (
     DraftRecord,
+    JobStatus,
     QuestionImportRepository,
+    RegistrationItem,
+    RegistrationRecord,
     ReviewStatus,
     RunRecord,
     RunStatus,
@@ -110,6 +121,9 @@ router = APIRouter(tags=["question-imports"], responses=problem_responses(503))
 
 NOT_FOUND = "Not found."
 MAX_PUBLISH = 200
+# One registration request carries the whole selection (QIMP-JOB): far more than one real paper
+# (316 pages -> 750 drafts) while keeping the request body bounded (~100 bytes per item).
+MAX_REGISTRATION = 5000
 DraftVariation = Literal["PARAPHRASE", "INVERT_POLARITY", "ANALOGOUS_CONCEPT"]
 INT4_MAX = 2147483647
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
@@ -139,6 +153,10 @@ class ImportRun(BaseModel):
     document_title: str | None
     draft_count: int
     published_count: int
+    registration_job_id: uuid.UUID | None = Field(
+        description="The newest registration (QIMP-JOB) of this run, if any: read its progress "
+        "at `GET /question-imports/{id}/registrations/{job_id}`."
+    )
     created_at: datetime
     updated_at: datetime
     finished_at: datetime | None
@@ -347,6 +365,48 @@ class ImportRefusedDraft(BaseModel):
     )
 
 
+class ImportRegistrationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    drafts: list[ReviewedDraft] = Field(
+        min_length=1,
+        max_length=MAX_REGISTRATION,
+        description="The whole selection, each draft at the version on screen (the version the "
+        "selection approves).",
+    )
+
+
+class ImportRegistrationRefusal(BaseModel):
+    draft_id: uuid.UUID
+    reason: RefusalReason = Field(
+        description="`stale-draft`: changed since the sent version; `not-publishable`: cannot "
+        "be confirmed as it is."
+    )
+    question_number: int | None = Field(description="Number printed in the source.")
+    position: int = Field(description="0-based order in the source.")
+
+
+class ImportRegistration(BaseModel):
+    """A submitted selection being approved and registered on the server (QIMP-JOB)."""
+
+    job_id: uuid.UUID = Field(description="The `question.import_register` job (`GET /jobs/{id}`).")
+    import_id: uuid.UUID
+    status: JobStatus = Field(description="queued | running | succeeded | failed | cancelled")
+    error_code: str | None = Field(
+        description="Why the job stopped, e.g. `workspace_unavailable` (archived workspace or "
+        "lost editor role); drafts not processed by then stay unregistered."
+    )
+    total: int = Field(description="Distinct drafts submitted.")
+    processed: int = Field(description="Drafts done (registered, already registered or refused).")
+    registered: int = Field(description="Drafts this registration registered.")
+    skipped: int = Field(description="Drafts that were registered already (nothing new).")
+    refused: list[ImportRegistrationRefusal] = Field(
+        description="Drafts left as they were, in submitted order."
+    )
+    created_at: datetime
+    finished_at: datetime | None
+
+
 class ImportPublishOutcome(ImportPublishResult):
     refused: list[ImportRefusedDraft] = Field(
         description="`approve` requests only (else empty): listed drafts left as they were, "
@@ -441,9 +501,35 @@ def _run_out(run: RunRecord) -> ImportRun:
         document_title=run.document_title,
         draft_count=run.draft_count,
         published_count=run.published_count,
+        registration_job_id=run.registration_job_id,
         created_at=run.created_at,
         updated_at=run.updated_at,
         finished_at=run.finished_at,
+    )
+
+
+def _registration_out(record: RegistrationRecord) -> ImportRegistration:
+    refused = [
+        ImportRegistrationRefusal(
+            draft_id=r.draft_id,
+            reason=cast(RefusalReason, r.reason),
+            question_number=r.question_number,
+            position=r.position,
+        )
+        for r in record.refused
+    ]
+    return ImportRegistration(
+        job_id=record.job_id,
+        import_id=record.import_run_id,
+        status=record.status,
+        error_code=record.error_code,
+        total=record.total,
+        processed=record.total - record.pending,
+        registered=record.registered,
+        skipped=record.skipped,
+        refused=refused,
+        created_at=record.created_at,
+        finished_at=record.finished_at,
     )
 
 
@@ -993,3 +1079,118 @@ def publish_question_import_drafts(
         ],
         refused=refused,
     )
+
+
+# --- routes: server-side registration (QIMP-JOB) --------------------------------------------------
+
+
+def _registration_item(record: DraftRecord, version: str) -> RegistrationItem:
+    """What the submitted draft is: already registered, changed since it was selected, not
+    confirmable, or to be registered by the job."""
+    if record.published_question_id is not None:
+        return RegistrationItem(
+            record.id, version, "skipped", question_id=record.published_question_id
+        )
+    if version != draft_version(record.updated_at):
+        return RegistrationItem(record.id, version, "refused", reason="stale-draft")
+    try:
+        content = _content(record, parse_payload(record.payload))
+    except ValidationError:
+        return RegistrationItem(record.id, version, "refused", reason="not-publishable")
+    if publish_issues(content, record.validations).items:
+        return RegistrationItem(record.id, version, "refused", reason="not-publishable")
+    return RegistrationItem(record.id, version, "pending")
+
+
+@router.post(
+    "/question-imports/{import_id}/registrations",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=ImportRegistration,
+    operation_id="registerQuestionImportDrafts",
+    responses=problem_responses(409),
+)
+def register_question_import_drafts(
+    access: EditImport,
+    body: ImportRegistrationRequest,
+    repo: ImportRepo,
+    idempotency: IdempotencyStoreDep,
+    publisher: PublisherDep,
+    idempotency_key: IdempotencyKey = None,
+) -> Any:
+    """Approve and register the whole selection on the server (QIMPORT-01-AC07, "선택한 문제 승인
+    및 등록"): the request records every listed draft with the version on screen and starts a
+    `question.import_register` job, which registers them in batches whether or not the page stays
+    open. Same rules as `publish` with `approve: true`: the job's user (the caller) approves each
+    draft still at the sent version that can be confirmed; drafts changed since (`stale-draft`) or
+    not confirmable (`not-publishable`) are refused and left as they were; drafts registered
+    already are skipped. Idempotent per draft (a re-delivered job never registers twice).
+
+    An id that is not a draft of this import is 404 (nothing recorded). 409
+    `import-registration-running` while the previous registration of this import is still queued
+    or running (follow `registration_job_id`). The job re-checks the workspace on every batch: an
+    archived workspace or a lost editor role stops it (`workspace_unavailable`)."""
+    user_id = access.workspace.user_id
+    scope = f"POST /question-imports/{access.resource_id}/registrations"
+    body_hash = request_hash(body.model_dump(mode="json"))
+    if idempotency_key is not None:
+        idempotency.lock(user_id, scope, idempotency_key)
+        stored = idempotency.find(user_id, scope, idempotency_key)
+        if stored is not None:
+            response = replay(stored, body_hash)
+            job_id = stored.body.get("job_id") if isinstance(stored.body, dict) else None
+            repo.rollback()
+            if job_id:
+                _publish_job(repo, publisher, uuid.UUID(str(job_id)))
+            return response
+
+    run = _load_run(repo, access.resource_id, lock=True)
+    if run.registration_job_id is not None:
+        previous = repo.get_job(run.registration_job_id)
+        if previous is not None and previous.status in {"queued", "running"}:
+            raise ProblemException(
+                409,
+                ProblemType.IMPORT_REGISTRATION_RUNNING,
+                detail="The previous registration of this import is still running.",
+            )
+    versions: dict[uuid.UUID, str] = {}
+    for item in body.drafts:
+        versions.setdefault(item.draft_id, item.version)
+    requested = list(versions)
+    drafts = {d.id: d for d in repo.lock_drafts(run.id, requested)}
+    if len(drafts) != len(requested):
+        raise HTTPException(status_code=404, detail="Draft not found.")
+
+    items = [_registration_item(drafts[d], versions[d]) for d in requested]
+    try:
+        job_id = repo.create_registration(run, user_id, items)
+        record = repo.registration(run.id, job_id)
+    except (IntegrityError, DataError):
+        raise _constraint_violation(repo) from None
+    assert record is not None  # noqa: S101 - inserted above
+    result = _registration_out(record)
+    if idempotency_key is not None:
+        idempotency.save(
+            user_id,
+            scope,
+            idempotency_key,
+            body_hash,
+            status.HTTP_202_ACCEPTED,
+            result.model_dump(mode="json"),
+        )
+    repo.commit()
+    _publish_job(repo, publisher, job_id)
+    return JSONResponse(result.model_dump(mode="json"), status_code=status.HTTP_202_ACCEPTED)
+
+
+@router.get(
+    "/question-imports/{import_id}/registrations/{job_id}",
+    operation_id="getQuestionImportRegistration",
+)
+def get_question_import_registration(
+    access: ReadImport, job_id: Annotated[uuid.UUID, Path()], repo: ImportRepo
+) -> ImportRegistration:
+    """Progress of a registration of this import: processed/total and the refused drafts."""
+    record = repo.registration(access.resource_id, job_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=NOT_FOUND)
+    return _registration_out(record)
