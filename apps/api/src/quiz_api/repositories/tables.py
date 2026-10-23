@@ -327,6 +327,9 @@ question_drafts = Table(
     Column("reviewed_by", Uuid),
     _ts("reviewed_at"),
     Column("published_question_id", Uuid),
+    # CHAPTER-MAP (20261023130000_question_draft_chapters.sql).
+    Column("chapter_id", Uuid),
+    Column("chapter_manual", Boolean, nullable=False),
     _ts("created_at", nullable=False),
     _ts("updated_at", nullable=False),
 )

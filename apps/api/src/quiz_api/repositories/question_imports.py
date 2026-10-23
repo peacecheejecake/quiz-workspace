@@ -135,6 +135,9 @@ class DraftRecord:
     updated_at: datetime
     # Generation drafts: blocking validations the reviewer confirmed (M6.2).
     acknowledged_codes: tuple[str, ...] = ()
+    # CHAPTER-MAP: the reviewer's chapter choice (chapter_manual; chapter_id null = none).
+    chapter_id: uuid.UUID | None = None
+    chapter_manual: bool = False
 
 
 @dataclass(frozen=True)
@@ -256,6 +259,8 @@ _DRAFT_COLUMNS = (
     question_drafts.c.created_at,
     question_drafts.c.updated_at,
     question_drafts.c.acknowledged_codes,
+    question_drafts.c.chapter_id,
+    question_drafts.c.chapter_manual,
 )
 
 
@@ -279,6 +284,8 @@ def _draft(row: Any) -> DraftRecord:
         created_at=row.created_at,
         updated_at=row.updated_at,
         acknowledged_codes=tuple(row.acknowledged_codes or ()),
+        chapter_id=row.chapter_id,
+        chapter_manual=bool(row.chapter_manual),
     )
 
 

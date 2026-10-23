@@ -11,7 +11,10 @@
     GET   /question-imports/{id}                 any member
     POST  /question-imports/{id}/retry           editor+; a failed/cancelled run gets a new job
                                                  (same run) -> 202; `Idempotency-Key`
-    GET   /question-imports/{id}/drafts          any member; drafts in position order
+    GET   /question-imports/{id}/drafts          any member; drafts in position order, each with
+                                                 the book chapter it is registered under
+                                                 (suggested or chosen, CHAPTER-MAP), plus the
+                                                 workspace's book chapters (picker)
     PATCH /question-drafts/{id}                  editor+; edit / approve / reject a draft
                                                  (`base_version` optimistic concurrency); also
                                                  generation drafts (M6.2, question_generations)
@@ -52,6 +55,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, cast
 
@@ -76,7 +80,9 @@ from quiz_api.authz import (
     authorize_workspace,
     get_access_repository,
 )
+from quiz_api.chapter_matching import BookChapter, ChapterMatch
 from quiz_api.db import get_db_session
+from quiz_api.draft_chapters import ChapterChoice, DraftChapter, draft_chapters
 from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.idempotency import IdempotencyKey, replay, request_hash
 from quiz_api.jobs import JobMessage, JobPublisher
@@ -102,6 +108,7 @@ from quiz_api.question_rules import (
     content_issues,
     unstorable_strings,
 )
+from quiz_api.repositories.draft_chapters import DraftChapterRepository
 from quiz_api.repositories.idempotency import IdempotencyStore
 from quiz_api.repositories.question_imports import (
     DraftRecord,
@@ -242,6 +249,17 @@ class DraftPublishError(BaseModel):
     message: str
 
 
+class DraftChapterRef(BaseModel):
+    id: uuid.UUID
+    title: str
+    document_id: uuid.UUID
+    document_title: str
+
+
+class BookChapterOption(DraftChapterRef):
+    level: int = Field(description="1 = chapter, 2+ = nested section.")
+
+
 class ImportDraft(BaseModel):
     """A question draft under review: an import draft or a generation draft (M6.2)."""
 
@@ -283,10 +301,32 @@ class ImportDraft(BaseModel):
     reviewed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    chapter: DraftChapterRef | None = Field(
+        default=None,
+        description="Import drafts (CHAPTER-MAP): the book chapter the draft is registered under "
+        "(the suggestion, or the reviewer's choice), in its book's current revision; null = none.",
+    )
+    chapter_choice: ChapterChoice = Field(
+        default="auto", description="`auto`: the server's suggestion; `manual`: chosen in review."
+    )
+    chapter_match: ChapterMatch | None = Field(
+        default=None,
+        description="Why the suggestion is what it is (auto only): `matched` (exactly one book "
+        "chapter with the question's chapter title), `no_match`, `ambiguous` (several), "
+        "`no_source_chapter` (the question PDF has no chapter there).",
+    )
+    source_chapter_title: str | None = Field(
+        default=None, description="The question PDF chapter the suggestion was made from."
+    )
 
 
 class ImportDraftList(BaseModel):
     items: list[ImportDraft]
+    chapters: list[BookChapterOption] = Field(
+        default_factory=list,
+        description="Import runs: the workspace's book chapters (current revisions), the "
+        "choices for `chapter_id`.",
+    )
 
 
 class QuestionDraftUpdate(BaseModel):
@@ -311,6 +351,12 @@ class QuestionDraftUpdate(BaseModel):
         default=None,
         description="approve (needs a publishable draft) / reject / back to pending. Any other "
         "change without `approved` returns an approved draft to pending (it must be re-approved).",
+    )
+    chapter_id: uuid.UUID | None = Field(
+        default=None,
+        description="Import drafts (CHAPTER-MAP): the book chapter to register the draft under "
+        "(a chapter of a book's current revision here; `null` = no chapter). Sending it replaces "
+        "the suggestion with this choice; it is not content and keeps an approval.",
     )
 
     @field_validator("question_type", "stem", "options", "is_multi_answer", "review_status")
@@ -547,7 +593,26 @@ def _content(record: DraftRecord, draft: QuestionDraft) -> QuestionContent:
     return content_of(draft, is_multi_answer=record.is_multi_answer, rubric=record.rubric)
 
 
-def _draft_out(record: DraftRecord) -> ImportDraft:
+def _chapter_ref(chapter: BookChapter | None) -> DraftChapterRef | None:
+    if chapter is None:
+        return None
+    return DraftChapterRef(
+        id=chapter.id,
+        title=chapter.title,
+        document_id=chapter.document_id,
+        document_title=chapter.document_title,
+    )
+
+
+def _chapters_of(
+    session: Session, run: RunRecord, drafts: list[DraftRecord]
+) -> dict[uuid.UUID, DraftChapter]:
+    return draft_chapters(
+        DraftChapterRepository(session), run.workspace_id, run.source_document_revision_id, drafts
+    )
+
+
+def _draft_out(record: DraftRecord, chapter: DraftChapter | None = None) -> ImportDraft:
     draft = parse_payload(record.payload)
     content = _content(record, draft)
     blockers = publish_issues(content, record.validations, prefix=())
@@ -582,6 +647,10 @@ def _draft_out(record: DraftRecord) -> ImportDraft:
         reviewed_at=record.reviewed_at,
         created_at=record.created_at,
         updated_at=record.updated_at,
+        chapter=_chapter_ref(chapter.chapter) if chapter else None,
+        chapter_choice=chapter.choice if chapter else "auto",
+        chapter_match=chapter.match if chapter else None,
+        source_chapter_title=chapter.source_title if chapter else None,
     )
 
 
@@ -820,8 +889,23 @@ def retry_question_import(
 def list_question_import_drafts(access: ReadImport, repo: ImportRepo) -> ImportDraftList:
     """The run's drafts in source order, with validations, provenance pages and answer flags.
     Drafts a failed job persisted are listed too (they are kept for the retry)."""
-    _load_run(repo, access.resource_id)
-    return ImportDraftList(items=[_draft_out(d) for d in repo.list_drafts(access.resource_id)])
+    run = _load_run(repo, access.resource_id)
+    drafts = repo.list_drafts(access.resource_id)
+    chapters = _chapters_of(repo.session, run, drafts)
+    options = DraftChapterRepository(repo.session).book_chapters(run.workspace_id)
+    return ImportDraftList(
+        items=[_draft_out(d, chapters.get(d.id)) for d in drafts],
+        chapters=[
+            BookChapterOption(
+                id=c.id,
+                title=c.title,
+                document_id=c.document_id,
+                document_title=c.document_title,
+                level=c.level,
+            )
+            for c in options
+        ],
+    )
 
 
 @router.patch(
@@ -932,6 +1016,34 @@ def update_question_draft(
     }
     if "question_number" in sent:
         values["question_number"] = body.question_number
+    if "chapter_id" in sent:
+        if record.source_type != "import":
+            raise RequestValidationError(
+                [
+                    {
+                        "loc": ("body", "chapter_id"),
+                        "msg": "Only import drafts have a chapter.",
+                        "type": "value_error",
+                    }
+                ]
+            )
+        if body.chapter_id is not None:
+            chapters_repo = DraftChapterRepository(repo.session)
+            chapters_repo.lock_documents_of(record.workspace_id, [body.chapter_id])
+            current = chapters_repo.current_book_chapters(record.workspace_id, [body.chapter_id])
+            found = current.get(body.chapter_id)
+            if found is None or found.id != body.chapter_id:
+                raise RequestValidationError(
+                    [
+                        {
+                            "loc": ("body", "chapter_id"),
+                            "msg": "Unknown chapter: use a chapter of a book's current revision.",
+                            "type": "value_error",
+                        }
+                    ]
+                )
+        values["chapter_id"] = body.chapter_id
+        values["chapter_manual"] = True
     try:
         repo.update_draft(record.id, **values)
         repo.mark_draft_reviewed(
@@ -942,10 +1054,14 @@ def update_question_draft(
         )
         updated = repo.get_draft(record.id)
         assert updated is not None  # noqa: S101 - locked above
+        chapter: DraftChapter | None = None
+        if updated.import_run_id is not None:
+            run = _load_run(repo, updated.import_run_id)
+            chapter = _chapters_of(repo.session, run, [updated]).get(updated.id)
         repo.commit()
     except (IntegrityError, DataError):
         raise _constraint_violation(repo) from None
-    return _draft_out(updated)
+    return _draft_out(updated, chapter)
 
 
 @router.post(
@@ -1022,6 +1138,24 @@ def publish_question_import_drafts(
         issues.raise_if_any()
 
     mapping = {d.id: d.published_question_id for d in drafts.values()}
+    # CHAPTER-MAP: the chapter on screen. The books are locked FOR SHARE first (question lock
+    # order), so the chapter read here is the current one until this transaction ends.
+    chapter_repo = DraftChapterRepository(repo.session)
+    shown = _chapters_of(repo.session, run, [r for r, _, _ in plans])
+    chapter_repo.lock_documents_of(
+        run.workspace_id, [c.chapter.id for c in shown.values() if c.chapter is not None]
+    )
+    current = chapter_repo.current_book_chapters(
+        run.workspace_id, [c.chapter.id for c in shown.values() if c.chapter is not None]
+    )
+
+    def chapter_for(record: DraftRecord) -> uuid.UUID | None:
+        found = shown.get(record.id)
+        if found is None or found.chapter is None:
+            return None
+        resolved = current.get(found.chapter.id)
+        return resolved.id if resolved is not None else None
+
     try:
         for record, draft, content in plans:
             if record.review_status != "approved":
@@ -1039,7 +1173,7 @@ def publish_question_import_drafts(
                 actor_id=user_id,
                 content=content,
                 status="CONFIRMED",
-                chapter_id=None,
+                chapter_id=chapter_for(record),
                 question_number=record.question_number,
                 sources=[],
                 source_revisions={},
@@ -1161,6 +1295,17 @@ def register_question_import_drafts(
         raise HTTPException(status_code=404, detail="Draft not found.")
 
     items = [_registration_item(drafts[d], versions[d]) for d in requested]
+    # CHAPTER-MAP: register each draft under the chapter on screen (the job resolves it to the
+    # book's then-current revision).
+    shown = _chapters_of(
+        repo.session, run, [drafts[i.draft_id] for i in items if i.state == "pending"]
+    )
+    items = [
+        replace(i, chapter_id=c.chapter.id)
+        if (c := shown.get(i.draft_id)) is not None and c.chapter is not None
+        else i
+        for i in items
+    ]
     try:
         job_id = repo.create_registration(run, user_id, items)
         record = repo.registration(run.id, job_id)

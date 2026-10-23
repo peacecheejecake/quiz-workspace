@@ -431,6 +431,42 @@
         "title": "BlockLocation",
         "type": "object"
       },
+      "BookChapterOption": {
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "level": {
+            "description": "1 = chapter, 2+ = nested section.",
+            "title": "Level",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "document_id",
+          "document_title",
+          "level"
+        ],
+        "title": "BookChapterOption",
+        "type": "object"
+      },
       "BoundingBox": {
         "properties": {
           "x0": {
@@ -1025,6 +1061,36 @@
           "y1"
         ],
         "title": "DraftBBox",
+        "type": "object"
+      },
+      "DraftChapterRef": {
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "document_id",
+          "document_title"
+        ],
+        "title": "DraftChapterRef",
         "type": "object"
       },
       "DraftEvidence": {
@@ -1855,6 +1921,45 @@
             "title": "Answer Missing",
             "type": "boolean"
           },
+          "chapter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DraftChapterRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Import drafts (CHAPTER-MAP): the book chapter the draft is registered under (the suggestion, or the reviewer's choice), in its book's current revision; null = none."
+          },
+          "chapter_choice": {
+            "default": "auto",
+            "description": "`auto`: the server's suggestion; `manual`: chosen in review.",
+            "enum": [
+              "auto",
+              "manual"
+            ],
+            "title": "Chapter Choice",
+            "type": "string"
+          },
+          "chapter_match": {
+            "anyOf": [
+              {
+                "enum": [
+                  "matched",
+                  "no_match",
+                  "ambiguous",
+                  "no_source_chapter"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the suggestion is what it is (auto only): `matched` (exactly one book chapter with the question's chapter title), `no_match`, `ambiguous` (several), `no_source_chapter` (the question PDF has no chapter there).",
+            "title": "Chapter Match"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -1990,6 +2095,18 @@
             "description": "The generation run (generation drafts).",
             "title": "Run Id"
           },
+          "source_chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The question PDF chapter the suggestion was made from.",
+            "title": "Source Chapter Title"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -2051,6 +2168,14 @@
       },
       "ImportDraftList": {
         "properties": {
+          "chapters": {
+            "description": "Import runs: the workspace's book chapters (current revisions), the choices for `chapter_id`.",
+            "items": {
+              "$ref": "#/components/schemas/BookChapterOption"
+            },
+            "title": "Chapters",
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/ImportDraft"
@@ -4112,6 +4237,19 @@
             "maxLength": 64,
             "title": "Base Version",
             "type": "string"
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Import drafts (CHAPTER-MAP): the book chapter to register the draft under (a chapter of a book's current revision here; `null` = no chapter). Sending it replaces the suggestion with this choice; it is not content and keeps an approval.",
+            "title": "Chapter Id"
           },
           "correct_option_ids": {
             "anyOf": [

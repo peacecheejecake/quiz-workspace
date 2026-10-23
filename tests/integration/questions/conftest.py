@@ -254,10 +254,17 @@ class QuestionClient(_m3.Client):
             headers={"Authorization": f"Bearer {self.user.token}", **headers},
         )
 
-    def upload_question_paper(self, workspace_id: str, filename: str = QUESTION_PAPER.name) -> str:
+    def upload_question_paper(
+        self,
+        workspace_id: str,
+        filename: str = QUESTION_PAPER.name,
+        document_type: str = "question_paper",
+    ) -> str:
         """Upload flow for questions-ko.pdf as a `question_paper` document (A4); returns its id.
 
         `filename` may carry IMPORT_FAILURE_MARKER (A7); the bytes are always questions-ko.pdf.
+        `document_type="book"` uploads the same PDF as a book (CHAPTER-MAP: a book whose chapter
+        title equals the paper's).
         """
         pdf = QUESTION_PAPER.read_bytes()
         sha256 = hashlib.sha256(pdf).hexdigest()
@@ -269,7 +276,7 @@ class QuestionClient(_m3.Client):
                 "size_bytes": len(pdf),
                 "content_type": "application/pdf",
                 "sha256": sha256,
-                "document_type": "question_paper",
+                "document_type": document_type,
             },
             (200, 201),
         )

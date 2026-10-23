@@ -1524,6 +1524,28 @@ export type components = {
       /** Page */
       page: number;
     };
+    /** BookChapterOption */
+    BookChapterOption: {
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Document Title */
+      document_title: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Level
+       * @description 1 = chapter, 2+ = nested section.
+       */
+      level: number;
+      /** Title */
+      title: string;
+    };
     /** BoundingBox */
     BoundingBox: {
       /** X0 */
@@ -1794,6 +1816,23 @@ export type components = {
       y0: number;
       /** Y1 */
       y1: number;
+    };
+    /** DraftChapterRef */
+    DraftChapterRef: {
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Document Title */
+      document_title: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Title */
+      title: string;
     };
     /** DraftEvidence */
     DraftEvidence: {
@@ -2132,6 +2171,20 @@ export type components = {
        * @description No option answers, no accepted answers and (essay) no model answer.
        */
       answer_missing: boolean;
+      /** @description Import drafts (CHAPTER-MAP): the book chapter the draft is registered under (the suggestion, or the reviewer's choice), in its book's current revision; null = none. */
+      chapter?: components['schemas']['DraftChapterRef'] | null;
+      /**
+       * Chapter Choice
+       * @description `auto`: the server's suggestion; `manual`: chosen in review.
+       * @default auto
+       * @enum {string}
+       */
+      chapter_choice?: 'auto' | 'manual';
+      /**
+       * Chapter Match
+       * @description Why the suggestion is what it is (auto only): `matched` (exactly one book chapter with the question's chapter title), `no_match`, `ambiguous` (several), `no_source_chapter` (the question PDF has no chapter there).
+       */
+      chapter_match?: ('matched' | 'no_match' | 'ambiguous' | 'no_source_chapter') | null;
       /**
        * Created At
        * Format: date-time
@@ -2200,6 +2253,11 @@ export type components = {
        */
       run_id?: string | null;
       /**
+       * Source Chapter Title
+       * @description The question PDF chapter the suggestion was made from.
+       */
+      source_chapter_title?: string | null;
+      /**
        * Updated At
        * Format: date-time
        */
@@ -2219,6 +2277,11 @@ export type components = {
     };
     /** ImportDraftList */
     ImportDraftList: {
+      /**
+       * Chapters
+       * @description Import runs: the workspace's book chapters (current revisions), the choices for `chapter_id`.
+       */
+      chapters?: components['schemas']['BookChapterOption'][];
       /** Items */
       items: components['schemas']['ImportDraft'][];
     };
@@ -3152,6 +3215,11 @@ export type components = {
        * @description `version` of the draft being edited.
        */
       base_version: string;
+      /**
+       * Chapter Id
+       * @description Import drafts (CHAPTER-MAP): the book chapter to register the draft under (a chapter of a book's current revision here; `null` = no chapter). Sending it replaces the suggestion with this choice; it is not content and keeps an approval.
+       */
+      chapter_id?: string | null;
       /** Correct Option Ids */
       correct_option_ids?: string[] | null;
       /** Explanation */
