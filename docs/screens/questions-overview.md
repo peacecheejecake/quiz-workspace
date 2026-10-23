@@ -8,6 +8,7 @@
 ## 레이아웃 및 컴포넌트
 - 상태 토큰: unseen=lightgray, viewed=gray, incorrect=red, correct=green, retry=yellow(최상위 우선순위).
 - 일반 마커 rounded square, 즐겨찾기 rounded star(크기 동일). Hover/focus scale=1.18, 고정 Grid 셀, 키보드/스크린리더 대응.
+- 마커 사이 보이는 간격은 마커 폭의 1/3 이하(UX5-UI 2026-10-23): 셀 24px(touch 32px)·grid gap 0, 마커 18px(touch 24px). 크기 규격은 [디자인 시스템](../design-system.md) §6.
 - API와 화면은 owner / viewer / 로그인 상태에 따라 기능과 데이터 표시 범위를 구분한다.
 - 모든 편집·상태 변경은 서버 측 인가·revision 일관성을 검증한다.
 

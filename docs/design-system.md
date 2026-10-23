@@ -212,9 +212,10 @@
   --breakpoint-md: 768px;
   --breakpoint-lg: 1024px;
   --floating-panel-width: 500px;
-  --heatmap-cell: 28px;
-  --heatmap-gap: 4px;
-  --heatmap-dot: 16px;
+  --heatmap-cell: 24px;        /* v1.2.3 (UX5-UI): 28px → 24px */
+  --heatmap-cell-touch: 32px;
+  --heatmap-gap: 0px;          /* v1.2.3 (UX5-UI): 4px → 0 */
+  --heatmap-dot: 16px;         /* 장식용 marker(legend·요약·preview). heatmap 점은 셀 크기로 그린다 */
   --heatmap-marker-hover-scale: 1.18;
 }
 
@@ -249,7 +250,7 @@
 | Typography token | label `--font-size-label-sm`(12)/`--font-size-label`(13), body `--font-size-body`(14)/`--font-size-body-lg`(16, 긴 본문은 `--line-height-relaxed` 1.6), section `--font-size-section-title`(18), page title `--font-size-page-title`(26)/`--line-height-tight`, 굵기 `--font-weight-semibold`(600) |
 | Breakpoint | mobile `< 768px`(`--breakpoint-md`), tablet 768–1023px, desktop `≥ 1024px`(`--breakpoint-lg`, sidebar 표시). CSS 변수는 media query 안에서 쓸 수 없으므로 media query는 같은 px 값을 range 문법(`(width >= 768px)`)으로 쓰고, `packages/ui` 테스트가 토큰 값과 일치하는지 검사한다. TS는 `@quiz/design-tokens`의 `breakpoints`/`mediaQueries`를 사용한다 |
 | Global header | 56px 높이(`--app-header-height`, v1.2.2에서 64→56) |
-| Control height (v1.2.2) | md `--control-height-md` 36px(Button·IconButton·입력·Select trigger·tab·메뉴/Select 항목), sm `--control-height-sm` 28px(작은 버튼·IconButton, BackLink). 모두 WCAG 2.2 target size 24px 이상. heatmap 셀(28/32px)은 §6 규격 그대로 |
+| Control height (v1.2.2) | md `--control-height-md` 36px(Button·IconButton·입력·Select trigger·tab·메뉴/Select 항목), sm `--control-height-sm` 28px(작은 버튼·IconButton, BackLink). 모두 WCAG 2.2 target size 24px 이상. heatmap 셀(24/32px)은 §6 규격 그대로 |
 | Density (v1.2.2) | 버튼 좌우 padding md 12px; 입력 세로 padding 4px; 여러 줄 입력 최소 80px; panel header 12/12/8/20px · body 16/20px · footer 8/20/12px; modal body 16/20px; popover 12px; 메뉴·Select 항목 36px; Surface padding sm 8 / md 12 / lg 20px; EmptyState 세로 24px; PageHeader 간격 12px·아래 20px; sidebar 12/8px; heatmap 챕터 간격 20px |
 | Left navigation | 232px 고정(데스크톱), 모바일 drawer |
 | Content area | max-width 1440px, padding 20px(태블릿 이상, v1.2.2에서 24→20) / 16px(모바일) |
@@ -327,7 +328,7 @@ type QuestionDotProps = {
 ```
 
 - 기본 marker는 **rounded square**, 즐겨찾기는 **rounded five-point star SVG**(부드러운 꼭짓점: `stroke-linejoin="round"`, 넉넉한 stroke width 또는 rounded SVG path); 두 모양 모두 semantic status color를 채우고 subtle stroke를 적용한다.
-- 셀 `28×28px`, 기본·favorite marker visual bound `16×16px`. 셀 간 gap `4px`; 모바일 최소 `32px`. favorite는 **크기 확대가 아니라 사각형→별 모양 전환**이다. hover 및 `:focus-visible` 시 marker만 `scale(var(--heatmap-marker-hover-scale))`; transition은 transform 150ms, reduced-motion시 즉시 변경한다.
+- 셀 `24×24px`(mobile·coarse pointer `32×32px`), 셀 간 grid gap `0`. heatmap 점의 marker SVG box는 셀과 같은 크기라 그려진 사각형은 viewBox 18/24 = `18px`(touch `24px`)이고, 이웃 marker 사이 보이는 간격은 `6px`(touch `8px`) = **marker 폭의 1/3 이하**(v1.2.3, UX5-UI 사용자 요청 "점 사이 간격을 점 width의 1/3 이하로"). 장식용 marker(legend·상태 요약·preview)는 `--heatmap-dot` 16px box. favorite는 **크기 확대가 아니라 사각형→별 모양 전환**이다. hover 및 `:focus-visible` 시 marker만 `scale(var(--heatmap-marker-hover-scale))`; transition은 transform 150ms, reduced-motion시 즉시 변경한다.
 - favorite는 별 silhouette로 표시하며 상세 텍스트에서도 별 아이콘을 제공. hover/focus scale을 적용해도 고정 셀과 grid 위치는 바꾸지 않는다.
 - 선택된 dot는 focus ring/outline으로 강조하고 상태 색은 그대로 유지.
 - 점은 `<button>`으로 구현하고 label에 챕터·번호·유형·상태·favorite·retry를 포함.
@@ -359,7 +360,7 @@ function Marker({ favorite }: { favorite: boolean }) {
 
 ```css
 .question-cell { width: var(--heatmap-cell); height: var(--heatmap-cell); display: grid; place-items: center; }
-.question-marker { width: var(--heatmap-dot); height: var(--heatmap-dot); transition: transform 150ms ease-out; transform-origin: center; }
+.question-marker { width: var(--heatmap-cell); height: var(--heatmap-cell); transition: transform 150ms ease-out; transform-origin: center; }
 .question-cell:is(:hover, :focus-visible) .question-marker {
   transform: scale(var(--heatmap-marker-hover-scale));
 }
