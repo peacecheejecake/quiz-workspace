@@ -748,3 +748,35 @@ def test_chapter_headings_from_the_parser_are_not_duplicated_by_text_labels() ->
         "Chapter 1 Introduction",
         "Chapter 2 Methods",
     ]
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Chapter 2 describes the methods.",
+        "Chapter 2 covers the methods",
+        "제2장 에서 자세히 설명한다.",
+        "제2장 내용을 정리한다",
+    ],
+)
+def test_sentences_starting_with_a_chapter_label_do_not_open_chapters(sentence: str) -> None:
+    result = _manual(
+        [
+            B(BlockType.TEXT, "Chapter 1", 1),
+            B(BlockType.TEXT, "Introduction", 1),
+            B(BlockType.TEXT, LONG_EN, 2),
+            B(BlockType.TEXT, sentence, 2),
+            B(BlockType.TEXT, LONG_EN, 2),
+            B(BlockType.TEXT, "Chapter 2", 3),
+            B(BlockType.TEXT, "Methods", 3),
+            B(BlockType.TEXT, LONG_EN, 3),
+        ]
+    )
+    assert [(title, level) for title, level, _ in _tree(result)] == [
+        ("Chapter 1 Introduction", 1),
+        ("Chapter 2 Methods", 1),
+    ]
+    sections = {s.id: s.title for s in result.revision.sections}
+    block = next(b for b in result.revision.blocks if b.text == sentence)
+    assert block.type is BlockType.TEXT
+    assert sections[block.section_id or ""] == "Chapter 1 Introduction"

@@ -30,7 +30,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from book_core.contracts import BlockType
-from book_core.structure.canonical import CanonicalDraft
+from book_core.structure.canonical import CanonicalDraft, ends_sentence
 from book_core.structure.numbering import (
     Numbering,
     NumberingKind,
@@ -52,6 +52,39 @@ _MAX_FONT_LEVELS = 3
 _LABEL_MAX = 40
 """Longest text block read as a printed chapter label (``제1 장``, ``Chapter 3 Methods``)."""
 _OUTER_KINDS = frozenset({NumberingKind.PART, NumberingKind.CHAPTER})
+_OUTER_LABEL = re.compile(
+    r"^(?:제\s*\d{1,4}\s*[부편장]|\d{1,4}\s*[부장]"
+    r"|(?:part|chapter|ch\.)\s*(?:\d{1,4}|[ivxlcdm]{1,8}))[.:]?\s*",
+    re.IGNORECASE,
+)
+# Korean predicate endings (``설명한다``, ``이다``, ``됩니다``): a sentence, not a chapter title.
+_PREDICATE_END = re.compile(r"(?:[한된있없였같않이]다|니다|어요|해요)$")
+# A particle right after the label (``제2장 에서 …``, ``제3장 의 내용``) continues a sentence.
+_PARTICLES = frozenset(
+    {
+        "에서",
+        "에서는",
+        "에",
+        "을",
+        "를",
+        "은",
+        "는",
+        "이",
+        "가",
+        "의",
+        "과",
+        "와",
+        "으로",
+        "로",
+        "까지",
+        "부터",
+        "도",
+        "만",
+        "에는",
+        "참조",
+        "참고",
+    }
+)
 _LOOSE_DROP = re.compile("[\\s|.·…_:\\-\u2013\u2014]+")
 
 
@@ -189,6 +222,27 @@ def _label_title(label: CanonicalDraft, nxt: CanonicalDraft, *, allow_text: bool
     )
 
 
+def _opener_text(text: str) -> bool:
+    """A Part/Chapter label printed as an opener, not a sentence that starts with one: the bare
+    label, or the label and a short title (no sentence end, no predicate ending, no particle or
+    lowercase word right after the label)."""
+    normalized = unicodedata.normalize("NFKC", text).strip()
+    if is_bare_label(normalized):
+        return True
+    match = _OUTER_LABEL.match(normalized)
+    if match is None:
+        return False
+    title = normalized[match.end() :]
+    first = title.split(maxsplit=1)[0] if title else ""
+    return not (
+        not title
+        or ends_sentence(title)
+        or _PREDICATE_END.search(title) is not None
+        or first in _PARTICLES
+        or (first[:1].isascii() and first[:1].islower())
+    )
+
+
 def label_headings(drafts: Sequence[CanonicalDraft], page_count: int) -> list[CanonicalDraft]:
     """Headings the parser split or missed, restored before ``restore_hierarchy``.
 
@@ -197,7 +251,8 @@ def label_headings(drafts: Sequence[CanonicalDraft], page_count: int) -> list[Ca
        display text the layout model labels as plain text (or as a picture, see the Docling
        adapter). A label repeating the current Part/Chapter number (a thumb index or running
        header on every page, or the text copy of a parser heading) stays text, so only the
-       first occurrence of each number opens a chapter.
+       first occurrence of each number opens a chapter. A sentence that starts with a label
+       (``Chapter 2 describes …``, ``제2장 에서 설명한다.``) stays text and does not count.
     2. A bare label and its title line on the same page (``제1절`` + ``수신 총칙``,
        ``제1 장`` + ``수신제도``) become one heading; a parser heading only joins a heading.
     """
@@ -217,7 +272,11 @@ def label_headings(drafts: Sequence[CanonicalDraft], page_count: int) -> list[Ca
         promoted = False
         if numbering is not None and numbering.kind in _OUTER_KINDS:
             if draft.type is BlockType.TEXT:
-                if len(draft.text) > _LABEL_MAX or current.get(numbering.kind) == numbering.numbers:
+                if (
+                    len(draft.text) > _LABEL_MAX
+                    or not _opener_text(draft.text)
+                    or current.get(numbering.kind) == numbering.numbers
+                ):
                     result.append(draft)
                     continue
                 draft = CanonicalDraft(
