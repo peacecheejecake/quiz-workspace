@@ -10,6 +10,10 @@ export type GenerationCreate = Schemas['GenerationCreate'];
 export type VariationType = GenerationCreate['variation_types'][number];
 export type LlmVariationType = Exclude<VariationType, 'OPTION_SHUFFLE'>;
 export type GenerationDifficulty = NonNullable<GenerationCreate['difficulty']>;
+export type GenerationBatch = Schemas['GenerationBatch'];
+export type GenerationBatchItem = Schemas['GenerationBatchItem'];
+export type GenerationBatchCreate = Schemas['GenerationBatchCreate'];
+export type RandomSelection = Schemas['RandomSources'];
 
 export const GENERATION_PROBLEMS = {
   workspaceArchived: 'urn:quiz-workspace:problem:workspace-archived',
@@ -19,6 +23,8 @@ export const GENERATION_PROBLEMS = {
   draftPublished: 'urn:quiz-workspace:problem:draft-published',
   draftNotApproved: 'urn:quiz-workspace:problem:draft-not-approved',
   duplicateQuestion: 'urn:quiz-workspace:problem:duplicate-question',
+  generationBusy: 'urn:quiz-workspace:problem:generation-busy',
+  noMatchingQuestions: 'urn:quiz-workspace:problem:no-matching-questions',
 } as const;
 
 export type GenerationFailureKind =
@@ -33,6 +39,9 @@ export type GenerationFailureKind =
   | 'draftNotApproved'
   | 'duplicateQuestion'
   | 'idempotencyKeyReused'
+  | 'generationBusy'
+  | 'noMatchingQuestions'
+  | 'rateLimited'
   | 'invalid'
   | 'unavailable';
 
@@ -51,6 +60,10 @@ export const GENERATION_FAILURE_MESSAGES: Readonly<Record<GenerationFailureKind,
   duplicateQuestion:
     '문제은행에 이미 같은 문제가 있거나 같은 내용의 초안을 함께 등록하려 해서 등록하지 못했습니다. 초안을 새로 불러왔으니 "이미 같은 문제가 있습니다" 표시를 확인해 주세요.',
   idempotencyKeyReused: '요청이 겹쳐 처리하지 못했습니다. 다시 시도해 주세요.',
+  generationBusy:
+    '이 Workspace에서 진행 중인 변형 생성이 많습니다. 진행 중인 생성이 끝난 뒤 다시 시도해 주세요.',
+  noMatchingQuestions: '조건에 맞는 확정 문제가 없습니다. 필터를 바꿔 다시 시도해 주세요.',
+  rateLimited: '변형 생성을 너무 자주 시작했습니다. 잠시 후 다시 시도해 주세요.',
   invalid:
     '요청을 처리할 수 없습니다. 변형 유형과 원본 문제의 출처를 확인하고, 초안은 검증 항목을 고친 뒤 승인해 주세요.',
   unavailable: '일시적인 오류로 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.',
@@ -88,11 +101,16 @@ export function classifyGenerationFailure(status: number, body: unknown): Genera
         return 'duplicateQuestion';
       case GENERATION_PROBLEMS.idempotencyKeyReused:
         return 'idempotencyKeyReused';
+      case GENERATION_PROBLEMS.generationBusy:
+        return 'generationBusy';
+      case GENERATION_PROBLEMS.noMatchingQuestions:
+        return 'noMatchingQuestions';
       default:
         return 'unavailable';
     }
   }
   if (status === 422) return 'invalid';
+  if (status === 429) return 'rateLimited';
   return 'unavailable';
 }
 
@@ -125,10 +143,18 @@ export function generatePath(
   workspaceId: string,
   sourceQuestionId?: string | null,
   runId?: string | null,
+  batchId?: string | null,
 ): string {
   const base = `/workspaces/${workspaceId}/questions/generate`;
   if (!sourceQuestionId) return base;
-  return `${base}?source=${enc(sourceQuestionId)}${runId ? `&run=${enc(runId)}` : ''}`;
+  return `${base}?source=${enc(sourceQuestionId)}${runId ? `&run=${enc(runId)}` : ''}${
+    batchId ? `&batch=${enc(batchId)}` : ''
+  }`;
+}
+
+/** The batch results page (QGEN-MULTI): one group per source of the batch. */
+export function batchPath(workspaceId: string, batchId: string): string {
+  return `/workspaces/${workspaceId}/questions/generate?batch=${enc(batchId)}`;
 }
 
 export const GENERATION_BFF_PATHS = {
@@ -139,6 +165,10 @@ export const GENERATION_BFF_PATHS = {
   drafts: (runId: string) => `/api/question-generations/${enc(runId)}/drafts`,
   publish: (runId: string) => `/api/question-generations/${enc(runId)}/publish`,
   draft: (draftId: string) => `/api/question-drafts/${enc(draftId)}`,
+  batches: (workspaceId: string) =>
+    `/api/workspaces/${enc(workspaceId)}/question-generation-batches`,
+  batch: (workspaceId: string, batchId: string) =>
+    `/api/workspaces/${enc(workspaceId)}/question-generation-batches/${enc(batchId)}`,
 } as const;
 
 export interface GenerationClient {
@@ -161,6 +191,12 @@ export interface GenerationClient {
     runId: string,
     drafts: readonly ReviewedDraftRef[],
   ): Promise<{ draft_id: string; question_id: string }[]>;
+  startBatch(
+    workspaceId: string,
+    body: GenerationBatchCreate,
+    idempotencyKey: string,
+  ): Promise<GenerationBatch>;
+  getBatch(workspaceId: string, batchId: string, signal?: AbortSignal): Promise<GenerationBatch>;
 }
 
 type FetchLike = typeof fetch;
@@ -231,5 +267,13 @@ export function createGenerationClient(
           { method: 'POST', body: JSON.stringify({ drafts }) },
         )
       ).items,
+    startBatch: (workspaceId, body, idempotencyKey) =>
+      call(GENERATION_BFF_PATHS.batches(workspaceId), {
+        method: 'POST',
+        body: JSON.stringify(body),
+        idempotencyKey,
+      }),
+    getBatch: (workspaceId, batchId, signal) =>
+      call(GENERATION_BFF_PATHS.batch(workspaceId, batchId), { signal }),
   };
 }

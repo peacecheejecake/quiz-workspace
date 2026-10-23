@@ -6,10 +6,13 @@
 // exclusive with the LLM variations in the form.
 import type { QuestionType } from './form';
 import type {
+  GenerationBatch,
+  GenerationBatchCreate,
   GenerationCreate,
   GenerationDifficulty,
   GenerationRun,
   LlmVariationType,
+  RandomSelection,
   VariationType,
 } from './generation-client';
 
@@ -161,4 +164,113 @@ export function runLabel(run: GenerationRun, formatTime: (iso: string) => string
   const tail =
     run.status === 'succeeded' ? (left > 0 ? ` · 미등록 초안 ${left}개` : ' · 모두 등록') : '';
   return `${formatTime(run.created_at)} · ${types} · ${RUN_STATUS_LABELS[run.status]}${tail}`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Batches (QGEN-MULTI, docs/questions.md §5 "묶음 변형 출제"): several selected or randomly
+// picked sources, one run each; review and registration stay per run.
+// ---------------------------------------------------------------------------------------------
+
+/** Most sources one batch may have (the API refuses more). */
+export const MAX_BATCH_SOURCES = 20;
+/** Sources × variation types × candidates per batch (the API's cost guard). */
+export const MAX_BATCH_CANDIDATES = 60;
+
+export type StudyStatus = NonNullable<RandomSelection['statuses']>[number];
+
+export const STUDY_STATUS_ORDER: readonly StudyStatus[] = [
+  'unseen',
+  'viewed',
+  'incorrect',
+  'correct',
+  'retry',
+];
+
+export const STUDY_STATUS_LABELS: Readonly<Record<StudyStatus, string>> = {
+  unseen: '안 푼 문제',
+  viewed: '본 문제',
+  incorrect: '틀린 문제',
+  correct: '맞힌 문제',
+  retry: '다시 풀기',
+};
+
+/** Adds or removes `id`, keeping the selection order; never more than MAX_BATCH_SOURCES. */
+export function toggleSource(selected: readonly string[], id: string, on: boolean): string[] {
+  const rest = selected.filter((s) => s !== id);
+  if (!on) return rest;
+  return rest.length >= MAX_BATCH_SOURCES ? [...selected] : [...rest, id];
+}
+
+/** Why the batch would exceed the cost guard (null = it does not). */
+export function batchCostProblem(sources: number, body: GenerationCreate): string | null {
+  const total = sources * body.variation_types.length * (body.candidate_count ?? 1);
+  if (total <= MAX_BATCH_CANDIDATES) return null;
+  return `한 번에 만들 수 있는 후보는 ${MAX_BATCH_CANDIDATES}개까지입니다(원본 ${sources}개 × 변형 유형 ${body.variation_types.length}개 × 후보 ${body.candidate_count ?? 1}개 = ${total}개). 원본이나 후보 수를 줄여 주세요.`;
+}
+
+export interface RandomPickFilters {
+  readonly count: string;
+  readonly chapter: string | null;
+  readonly questionType: QuestionType | null;
+  readonly statuses: readonly StudyStatus[];
+  readonly favoriteOnly: boolean;
+}
+
+export const DEFAULT_RANDOM_FILTERS: RandomPickFilters = {
+  count: '5',
+  chapter: null,
+  questionType: null,
+  statuses: [],
+  favoriteOnly: false,
+};
+
+export function parseSourceCount(text: string): number | null {
+  if (!/^\d{1,2}$/.test(text.trim())) return null;
+  const n = Number(text.trim());
+  return n >= 1 && n <= MAX_BATCH_SOURCES ? n : null;
+}
+
+/** The random selection of a batch request (null: the count is not a number in range). */
+export function randomSelection(filters: RandomPickFilters): RandomSelection | null {
+  const count = parseSourceCount(filters.count);
+  if (count === null) return null;
+  return {
+    mode: 'random',
+    count,
+    ...(filters.chapter ? { chapter: filters.chapter } : {}),
+    ...(filters.questionType ? { question_type: filters.questionType } : {}),
+    ...(filters.statuses.length > 0
+      ? { statuses: STUDY_STATUS_ORDER.filter((s) => filters.statuses.includes(s)) }
+      : {}),
+    ...(filters.favoriteOnly ? { favorite: true } : {}),
+  };
+}
+
+/** Stable JSON of a batch request: a retry with the same body reuses its Idempotency-Key. */
+export function batchKey(body: GenerationBatchCreate): string {
+  return JSON.stringify(body);
+}
+
+/** Whole-batch progress in percent: finished sources out of all (running jobs count as 0). */
+export function batchProgress(
+  batch: Pick<GenerationBatch, 'run_count' | 'finished_run_count'>,
+): number {
+  if (batch.run_count === 0) return 100;
+  return Math.round((batch.finished_run_count / batch.run_count) * 100);
+}
+
+/** One source group's state line on the batch page. */
+export function batchItemStatus(run: GenerationRun): string {
+  switch (run.status) {
+    case 'queued':
+      return '대기 중';
+    case 'running':
+      return '생성 중';
+    case 'succeeded':
+      return run.published_count > 0
+        ? `초안 ${run.draft_count}개 · 등록 ${run.published_count}개`
+        : `초안 ${run.draft_count}개`;
+    default:
+      return RUN_STATUS_LABELS[run.status];
+  }
 }

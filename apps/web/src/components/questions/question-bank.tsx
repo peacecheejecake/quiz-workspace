@@ -7,14 +7,18 @@
 // detail panel and the editor. "PDF 가져오기" opens the same "문제 PDF 관리" dialog as the home
 // (QBANK-01-AC06).
 // Viewers and archived workspaces get a read-only bank; the API enforces it regardless.
+// QGEN-MULTI: editors check CONFIRMED questions (≤ 20) and "선택한 문제 변형 출제 (n)" opens the
+// generation form over the page; "생성" starts one batch and goes to its results page.
 import {
   Badge,
   Button,
+  Checkbox,
   ChevronDownIcon,
   ChevronUpIcon,
   ConfirmDialog,
   EmptyState,
   Input,
+  ModalDialog,
   PageHeader,
   Select,
   useToast,
@@ -36,6 +40,8 @@ import {
   DocumentLibraryFeedback,
   QuestionPdfsDialog,
 } from '@/components/questions/import/question-pdfs';
+import { QuestionGenerationForm } from '@/components/questions/generate/question-generation-form';
+import { useBatchStart } from '@/components/questions/generate/use-batch-start';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import type { DocumentSummary } from '@/lib/documents/data';
 import {
@@ -60,6 +66,12 @@ import {
   type Question,
   type QuestionType,
 } from '@/lib/questions/form';
+import type { GenerationCreate } from '@/lib/questions/generation-client';
+import {
+  batchCostProblem,
+  MAX_BATCH_SOURCES,
+  toggleSource,
+} from '@/lib/questions/generation-model';
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from '@/lib/questions/problems';
 import type { ChapterOption, DocumentOption } from '@/lib/questions/server';
 import { chapterLabel, documentTitle, NO_CHAPTER_TITLE, pageText, sourceHref } from './labels';
@@ -179,7 +191,13 @@ export function QuestionBank({
     generation.current = Math.max(generation.current, listGeneration);
   }, [listGeneration]);
   const [loadingMore, setLoadingMore] = useState(false);
+  // QGEN-MULTI selection (question ids in selection order); a new list starts empty.
+  const [selected, setSelected] = useState<string[]>([]);
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchProblem, setBatchProblem] = useState<string | null>(null);
+  const batch = useBatchStart(workspaceId, pathname);
   if (rendered.items !== initialItems || rendered.filtersKey !== filtersKey) {
+    if (rendered.filtersKey !== filtersKey) setSelected([]);
     setListGeneration((g) => Math.max(g, generation.current) + 1);
     setRendered({ items: initialItems, filtersKey, q: filters.q });
     setItems(initialItems);
@@ -219,6 +237,14 @@ export function QuestionBank({
   });
 
   const detail = items.find((q) => q.id === detailId) ?? null;
+  const selectionFull = selected.length >= MAX_BATCH_SOURCES;
+
+  function generateBatch(body: GenerationCreate) {
+    const cost = batchCostProblem(selected.length, body);
+    setBatchProblem(cost);
+    if (cost || selected.length === 0) return;
+    void batch.start({ ...body, selection: { mode: 'selected', question_ids: selected } });
+  }
   const groups = useMemo(() => groupByChapter(items), [items]);
 
   function navigate(patch: Partial<BankFilters>) {
@@ -476,6 +502,29 @@ export function QuestionBank({
           <p className="qz-visually-hidden" role="status">
             {navigating ? '문제 목록을 불러오는 중입니다.' : `문제 ${items.length}개`}
           </p>
+          {canEdit && selected.length > 0 ? (
+            <div role="region" aria-label="선택한 문제" className={styles.selectionBar}>
+              <p className={styles.selectionCount} role="status">
+                {selected.length}개 선택됨
+                {selectionFull ? ` · 최대 ${MAX_BATCH_SOURCES}개까지 고를 수 있습니다` : ''}
+              </p>
+              <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
+                선택 해제
+              </Button>
+              <Button
+                size="sm"
+                variant="primary"
+                aria-haspopup="dialog"
+                onClick={() => {
+                  setBatchProblem(null);
+                  batch.clearError();
+                  setBatchOpen(true);
+                }}
+              >
+                선택한 문제 변형 출제 ({selected.length})
+              </Button>
+            </div>
+          ) : null}
           {groups.map((group) => (
             <section
               key={group.key}
@@ -494,6 +543,16 @@ export function QuestionBank({
                     question={question}
                     documents={documents}
                     canEdit={canEdit}
+                    selection={
+                      canEdit
+                        ? {
+                            checked: selected.includes(question.id),
+                            disabled: selectionFull && !selected.includes(question.id),
+                            onChange: (on) =>
+                              setSelected((list) => toggleSource(list, question.id, on)),
+                          }
+                        : null
+                    }
                     onOpen={(trigger) => {
                       returnFocus.current = trigger;
                       setDetailId(question.id);
@@ -541,6 +600,34 @@ export function QuestionBank({
         />
       ) : null}
 
+      {canEdit ? (
+        <ModalDialog
+          open={batchOpen}
+          onOpenChange={(open) => {
+            if (!batch.starting) setBatchOpen(open);
+          }}
+          title={`선택한 문제 변형 출제 (${selected.length})`}
+          description="고른 문제마다 같은 설정으로 변형 초안을 만듭니다. 원본별로 검토해 승인한 초안만 문제은행에 등록됩니다."
+        >
+          <div className={styles.batchForm}>
+            <QuestionGenerationForm
+              source={{ questionType: 'MCQ', confirmed: true }}
+              canGenerate
+              canShuffle={false}
+              allowShuffle={false}
+              busy={batch.starting}
+              onShuffle={() => undefined}
+              onGenerate={generateBatch}
+            />
+            {(batchProblem ?? batch.error) ? (
+              <p role="alert" className={styles.loadError}>
+                {batchProblem ?? batch.error}
+              </p>
+            ) : null}
+          </div>
+        </ModalDialog>
+      ) : null}
+
       <QuestionPdfsDialog
         open={pdfsOpen}
         onOpenChange={setPdfsOpen}
@@ -571,6 +658,7 @@ function QuestionItem({
   question,
   documents,
   canEdit,
+  selection,
   onOpen,
   onEdit,
 }: {
@@ -578,6 +666,12 @@ function QuestionItem({
   question: Question;
   documents: readonly DocumentOption[];
   canEdit: boolean;
+  /** QGEN-MULTI batch selection (editors only; null = no selection column). */
+  selection: {
+    checked: boolean;
+    disabled: boolean;
+    onChange: (on: boolean) => void;
+  } | null;
   onOpen: (trigger: HTMLElement) => void;
   onEdit: () => void;
 }) {
@@ -591,7 +685,23 @@ function QuestionItem({
           : '직접 채점'
         : '서술형 채점';
   return (
-    <li className={styles.item} data-status={question.publication_status}>
+    <li
+      className={styles.item}
+      data-status={question.publication_status}
+      data-selectable={selection ? 'true' : undefined}
+    >
+      {selection ? (
+        <div className={styles.itemSelect}>
+          {question.publication_status === 'CONFIRMED' ? (
+            <Checkbox
+              checked={selection.checked}
+              disabled={selection.disabled}
+              onCheckedChange={(on) => selection.onChange(on === true)}
+              label={<span className="qz-visually-hidden">{selectLabel(question)}</span>}
+            />
+          ) : null}
+        </div>
+      ) : null}
       <div className={styles.itemMain}>
         <div className={styles.itemMeta}>
           {question.question_number ? <span>{question.question_number}번</span> : null}
@@ -637,4 +747,11 @@ function QuestionItem({
       ) : null}
     </li>
   );
+}
+
+/** Accessible name of a question's batch selection checkbox. */
+export function selectLabel(question: Question): string {
+  if (question.question_number) return `${question.question_number}번 문제 선택`;
+  const stem = question.revision.stem.replace(/\s+/g, ' ').trim();
+  return `"${stem.length > 30 ? `${stem.slice(0, 30)}…` : stem}" 문제 선택`;
 }

@@ -21,6 +21,8 @@
 //      (` [E2E-LLM-OK]`), so the worker's prompt must contain the source stem. Scenarios:
 //        E2E-LLM-OK            schema-valid PARAPHRASE + ANALOGOUS_CONCEPT candidates (source
 //                              `disinfection`)
+//        E2E-LLM-BATCH         schema-valid PARAPHRASE for a second source of a batch (source
+//                              `flocculation`, QGEN-MULTI)
 //        E2E-LLM-INVERT-MULTI  INVERT_POLARITY that keeps the 4 options of a '옳지 않은 것' MCQ:
 //                              3 statements become correct while the model declares 1 (source
 //                              `not-correct`)
@@ -101,7 +103,8 @@ const SCENARIO_FILE = join(REPO_ROOT, 'tests/fixtures/llm/generation-scenarios.j
 
 export type VariationType =
   'OPTION_SHUFFLE' | 'PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT';
-export type SourceName = 'disinfection' | 'not-correct' | 'malformed' | 'schema-invalid';
+export type SourceName =
+  'disinfection' | 'flocculation' | 'not-correct' | 'malformed' | 'schema-invalid';
 
 interface ScenarioSource {
   readonly marker: string;
@@ -185,6 +188,9 @@ export interface GenerationRun {
   readonly source_question_revision_id: string;
   readonly variation_types: readonly VariationType[];
   readonly error_code?: string | null;
+  readonly batch_id?: string | null;
+  readonly draft_count?: number;
+  readonly published_count?: number;
 }
 
 export interface GenerationDraft extends Draft {
@@ -325,4 +331,94 @@ export const generateUi = {
       name: /(승인|선택)한? (초안|문제|항목)?\s*등록|publish|register approved/i,
     }),
   alert: (page: Page) => main(page).getByRole('alert').first(),
+};
+
+// ---------------------------------------------------------------------------------------------
+// Batches (QGEN-MULTI, docs/questions.md §5 "묶음 변형 출제")
+//   POST /workspaces/{id}/question-generation-batches {selection: {mode: selected, question_ids}
+//        | {mode: random, count, chapter?, question_type?, statuses?, favorite?, seed?},
+//        variation_types, candidate_count?} → 202 Batch; GET …/{batch_id} → 200 Batch
+//   Batch = {id, mode, seed, requested_count, status: working|finished, run_count,
+//            finished_run_count, draft_count, published_count, items: [{position, source:
+//            {question_id, question_number, preview}, run: Run}]}
+//   UI: the batch results page `/questions/generate?batch=<id>`: progressbar "묶음 생성 진행률",
+//       list "원본별 변형 결과" (one listitem per source with its state and link "초안 검토").
+// ---------------------------------------------------------------------------------------------
+
+export interface GenerationBatch {
+  readonly id: string;
+  readonly mode: 'selected' | 'random';
+  readonly seed: number | null;
+  readonly requested_count: number;
+  readonly status: 'working' | 'finished';
+  readonly run_count: number;
+  readonly finished_run_count: number;
+  readonly draft_count: number;
+  readonly published_count: number;
+  readonly items: readonly {
+    readonly position: number;
+    readonly source: {
+      readonly question_id: string;
+      readonly question_number: number | null;
+      readonly preview: string;
+    };
+    readonly run: GenerationRun;
+  }[];
+}
+
+export async function getGenerationBatch(
+  member: Member,
+  workspaceId: string,
+  batchId: string,
+): Promise<GenerationBatch> {
+  return member.api.ok<GenerationBatch>(
+    'GET',
+    `/workspaces/${workspaceId}/question-generation-batches/${batchId}`,
+    undefined,
+    [200],
+  );
+}
+
+/** Polls (no sleeps) until every run of the batch is terminal; returns the batch. */
+export async function waitForBatch(
+  member: Member,
+  workspaceId: string,
+  batchId: string,
+): Promise<GenerationBatch> {
+  let batch: GenerationBatch | undefined;
+  await expect
+    .poll(
+      async () => {
+        batch = await getGenerationBatch(member, workspaceId, batchId);
+        return batch.status;
+      },
+      { message: 'a generation batch finishes', timeout: JOB_TIMEOUT_MS },
+    )
+    .toBe('finished');
+  if (!batch) throw new Error('no generation batch');
+  return batch;
+}
+
+export function batchIdFromUrl(url: string): string {
+  const id = new URL(url).searchParams.get('batch');
+  if (!id) throw new Error(`no batch in ${url}`);
+  return id;
+}
+
+export const batchUi = {
+  progress: (page: Page) =>
+    main(page).getByRole('progressbar', { name: /묶음 (생성 )?진행률|batch progress/i }),
+  groups: (page: Page) =>
+    main(page)
+      .getByRole('list', { name: /원본별 (변형 )?결과|results by source/i })
+      .getByRole('listitem'),
+  group: (page: Page, text: string) => batchUi.groups(page).filter({ hasText: text }),
+  review: (group: Locator) => group.getByRole('link', { name: /초안 검토|review drafts?/i }),
+  backToBatch: (page: Page) => main(page).getByRole('link', { name: /묶음 결과로|back to batch/i }),
+  /** The "변형 유형" checkbox of a generation form inside `scope` (dialogs live outside main). */
+  variation: (scope: Locator, type: VariationType) =>
+    scope
+      .getByRole('group', { name: /변형 (유형|방식)|variation/i })
+      .getByRole('checkbox', { name: VARIATION_NAME[type] }),
+  generate: (scope: Locator) => scope.getByRole('button', { name: /^(생성|generate)$/i }),
 };
