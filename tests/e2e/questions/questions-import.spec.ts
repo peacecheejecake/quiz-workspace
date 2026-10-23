@@ -561,3 +561,53 @@ test(
     expect(await listImports(owner, ws.id)).toHaveLength(1);
   },
 );
+
+test(
+  'QIMPORT-01-AC07 the server registers every selected draft after the page is left, and the page shows them registered on return',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const { owner, workspaceId, run } = await importPaper(page, workspaceFactory, 'qimport01-ac07');
+    const registrable = PAPER.questions.filter((q) => q.answer !== null);
+    await importUi.selectAll(page).check();
+    await expect(importUi.publish(page)).toContainText(new RegExp(`\\(${registrable.length}\\)`));
+
+    // The page cannot follow the registration at all: only the server can finish it (QIMP-JOB).
+    await page.route('**/api/question-imports/*/registrations/*', (route) => route.abort());
+    const submitted = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && r.url().endsWith('/registrations'),
+    );
+    await importUi.publish(page).click();
+    expect((await submitted).status()).toBe(202);
+    await page.goto(homePath(workspaceId));
+
+    await expect
+      .poll(async () => (await listQuestions(owner, workspaceId)).length, {
+        timeout: JOB_TIMEOUT_MS,
+      })
+      .toBe(registrable.length);
+    const bank = await listQuestions(owner, workspaceId);
+    expect(bank.every((q) => q.publication_status === 'CONFIRMED')).toBe(true);
+    const drafts = await listDrafts(owner, run.id);
+    for (const t of PAPER.questions) {
+      const draft = draftFor(drafts, t);
+      if (registrable.includes(t)) {
+        expect(draft.review_status, `question ${t.number}`).toBe('approved');
+        expect(bank.map((q) => q.id)).toContain(draft.published_question_id);
+      } else {
+        expect(draft.published_question_id, `question ${t.number}`).toBeNull();
+      }
+    }
+
+    await page.unroute('**/api/question-imports/*/registrations/*');
+    await page.goto(importPath(workspaceId));
+    await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length);
+    for (const t of registrable) {
+      const item = importUi.draft(page, t.stem);
+      await expect(item.getByText(/등록됨|registered/i), `question ${t.number}`).toBeVisible();
+      await expect(importUi.select(item), `question ${t.number}`).toHaveCount(0);
+    }
+    await expect(page.getByRole('progressbar', { name: /등록 진행률/ })).toHaveCount(0);
+    // Nothing was registered twice.
+    expect(await listQuestions(owner, workspaceId)).toHaveLength(registrable.length);
+  },
+);
