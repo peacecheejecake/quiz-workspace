@@ -41,6 +41,7 @@ SECRET_MARK = "s3cr3t-value-that-must-never-be-printed-0123456789"  # noqa: S105
 SAMPLES = {
     "https_url": "https://abcdefghijklmnopqrst.supabase.co",
     "https_origin": "https://quiz.example",
+    "http_url": "http://api:8000",
     "origin_list": "https://quiz.example",
     "postgres_url": "postgresql://quiz_api.ref:pw@aws-0-x.pooler.supabase.com:5432/postgres",
     "redis_url": "redis://default:pw@redis.railway.internal:6379",
@@ -509,3 +510,28 @@ def test_embedder_mode_values_are_checked() -> None:
     env["WORKER_EMBEDDER"] = "workers-ai"
     errors = check_env.run_checks(MANIFEST, "production", {"api": env}).errors
     assert "api WORKER_EMBEDDER: must be auto, qwen3 or workers_ai" in errors
+
+
+def test_internal_api_url_is_optional_and_checked_without_echoing_values() -> None:
+    """PERF-1: API_INTERNAL_BASE_URL (web, server-only) may be http on a private network."""
+    var = next(v for v in MANIFEST.vars if v.name == "API_INTERNAL_BASE_URL")
+    assert list(var.services) == ["web"]
+    assert var.kind == "config"
+    assert not var.name.startswith("NEXT_PUBLIC_")
+    env = valid_env("web", "staging")
+    env.pop("API_INTERNAL_BASE_URL", None)
+    assert check_env.run_checks(MANIFEST, "staging", {"web": env}).errors == []
+    for good in ("http://api:8000", "https://api.internal.example/base"):
+        env["API_INTERNAL_BASE_URL"] = good
+        assert check_env.run_checks(MANIFEST, "staging", {"web": env}).errors == []
+    for bad in (
+        "api:8000",
+        "ftp://api.example",
+        f"http://user:{SECRET_MARK}@api:8000",
+        f"http://api:8000/?k={SECRET_MARK}",
+    ):
+        env["API_INTERNAL_BASE_URL"] = bad
+        errors = check_env.run_checks(MANIFEST, "staging", {"web": env}).errors
+        assert errors, bad
+        assert all("API_INTERNAL_BASE_URL" in e for e in errors)
+        assert not any(SECRET_MARK in e for e in errors)
