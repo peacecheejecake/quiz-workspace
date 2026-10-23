@@ -146,6 +146,8 @@ workspace
 | POST | `/api/v1/questions/{id}/generations` | 변형 문제 생성 작업 |
 | GET | `/api/v1/question-generations/{id}/drafts` | 생성 문제 검토 |
 | POST | `/api/v1/question-generations/{id}/publish` | 승인한 문제만 등록 |
+| POST | `/api/v1/workspaces/{id}/question-generation-batches` | 여러 문제·임의 선택 묶음 변형 출제(원본마다 `question.generate` run; QGEN-MULTI) |
+| GET | `/api/v1/workspaces/{id}/question-generation-batches/{batch_id}` | 묶음의 원본별 run·진행 상태 |
 | POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기 |
 | GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토 |
 | POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록(`approve: true`면 선택한 초안을 승인과 함께 등록, 거절 목록 반환) |
@@ -164,7 +166,7 @@ workspace
 - Questions Home(= Workspace 홈, UX3c): 챕터별 문제 heatmap(확정 문제 하나=marker 하나), 상태별 색상, 즐겨찾기 시 **둥근 별 모양**, hover/focus 확대, 접을 수 있는 상태 필터·정렬, hover preview, 클릭 시 Floating Question Player. Workspace header의 통합 검색과 문서·이력·공유·문제 생성 floating dialog.
 - Questions Bank: 유형별 CRUD, 목록·검색·챕터 연결·출처 관리.
 - Questions Import: PDF 추출 검토, 미완성 초안 수정, 확인/등록.
-- Question Generation: 원본 선택, 변형 유형 지정, LLM 또는 deterministic 변형, diff/정답 검증, 승인.
+- Question Generation: 원본 선택(한 문제·여러 문제·서버 임의 선택 묶음), 변형 유형 지정, LLM 또는 deterministic 변형, diff/정답 검증, 승인.
 - History: 수정·생성·풀이 이력, Job 로그.
 - Design system 기반 일관된 modal/non-modal floating side panel 제공.
 
