@@ -9,6 +9,10 @@ This is the only module in ``book_core`` that imports Docling. Mapping to the co
   their printed marker, e.g. ``1.`` or ``A.``); ``formula`` -> ``formula``; ``table`` and
   ``document_index`` (a printed TOC) -> ``table`` with cells; ``picture`` -> ``image`` with empty
   text. Other items (forms, key-value regions) are skipped.
+- Text Docling nests inside a picture is figure content and dropped, except a Part/Chapter
+  label (``제1장`` / ``Chapter 3``) and the title line right after a bare label: designed chapter
+  opener pages are often one picture region, and the label is the only chapter signal. They
+  follow the image as ``text`` blocks; the structure step decides whether they open a chapter.
 - Captions are separate ``text`` blocks linked via ``caption_block_id``; a caption printed above
   its table/figure is placed before it in reading order.
 - OCR fallback: only RapidOCR, configured explicitly (Docling's auto engine selection silently
@@ -62,12 +66,15 @@ from book_core.parser._blocks import (
     table_text,
 )
 from book_core.parser.base import ParserError, ParserOptions, sha256_hex
+from book_core.structure.numbering import NumberingKind, is_bare_label, parse_numbering
 
-ADAPTER_VERSION = 1
+ADAPTER_VERSION = 2
 """Bump when the Docling -> contract mapping changes output for the same Docling version."""
 
 _DROPPED_TEXT_LABELS = frozenset({DocItemLabel.PAGE_HEADER, DocItemLabel.PAGE_FOOTER})
 _CAPTION_TOLERANCE = 1.0
+_PICTURE_LABEL_MAX = 40
+_PICTURE_LABEL_KINDS = frozenset({NumberingKind.PART, NumberingKind.CHAPTER})
 
 
 def _dist_version(*names: str) -> str:
@@ -357,6 +364,44 @@ def _draft(
     return DraftBlock(type=BlockType.TEXT, text=text, locations=locs)
 
 
+def _picture_labels(
+    picture: PictureItem, doc: DoclingDocument, pages: dict[int, PageInfo]
+) -> list[tuple[str, DraftBlock]]:
+    """Part/Chapter labels among the picture's text children, each with the title line that
+    follows a bare label (see the module docstring); everything else in the picture is dropped."""
+    texts: list[tuple[str, str, list[SourceLocation]]] = []
+    for child_ref in picture.children:
+        child = child_ref.resolve(doc)
+        if not isinstance(child, TextItem) or child.label in _DROPPED_TEXT_LABELS:
+            continue
+        located = _page_locations(child, doc, pages)
+        text = normalize_text(child.text)
+        if located and text:
+            texts.append((child.self_ref, text, [loc for loc, _ in located]))
+    out: list[tuple[str, DraftBlock]] = []
+    for index, (ref, text, locations) in enumerate(texts):
+        numbering = parse_numbering(text)
+        if (
+            numbering is None
+            or numbering.kind not in _PICTURE_LABEL_KINDS
+            or len(text) > _PICTURE_LABEL_MAX
+        ):
+            continue
+        out.append((ref, DraftBlock(type=BlockType.TEXT, text=text, locations=tuple(locations))))
+        if is_bare_label(text) and index + 1 < len(texts):
+            title_ref, title, title_locations = texts[index + 1]
+            if len(title) <= _PICTURE_LABEL_MAX and parse_numbering(title) is None:
+                out.append(
+                    (
+                        title_ref,
+                        DraftBlock(
+                            type=BlockType.TEXT, text=title, locations=tuple(title_locations)
+                        ),
+                    )
+                )
+    return out
+
+
 def _is_above(caption: DraftBlock, parent: DraftBlock) -> bool:
     cap, par = caption.locations[0], parent.locations[0]
     if cap.page != par.page or cap.bbox is None or par.bbox is None:
@@ -397,6 +442,8 @@ def _drafts(doc: DoclingDocument, pages: dict[int, PageInfo]) -> list[DraftBlock
             [ref.cref for ref in item.captions] if isinstance(item, TableItem | PictureItem) else []
         )
         entries.append((item.self_ref, draft, captions))
+        if isinstance(item, PictureItem):
+            entries.extend((ref, label, []) for ref, label in _picture_labels(item, doc, pages))
 
     by_ref = {ref: draft for ref, draft, _ in entries}
     owned = {cref for _, _, captions in entries for cref in captions if cref in by_ref}

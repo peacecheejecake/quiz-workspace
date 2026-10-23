@@ -39,6 +39,8 @@ class Numbering:
     """The printed label, e.g. ``1.2``, ``IV`` or ``가``."""
 
 
+_ENCLOSED_FIRST, _ENCLOSED_LAST = "\u2460", "\u24ff"
+"""Enclosed alphanumerics (``①``-``⑳``, ``⑴``, ``⒈``, ``ⓐ`` ...)."""
 _HANGUL_ORDER = "가나다라마바사아자차카타파하"
 _ROMAN = {"i": 1, "v": 5, "x": 10, "l": 50, "c": 100, "d": 500, "m": 1000}
 _NUM = r"(\d{1,4})"
@@ -58,6 +60,9 @@ _PATTERNS: tuple[tuple[NumberingKind, re.Pattern[str]], ...] = (
     (NumberingKind.KO_SECTION, re.compile(rf"^제\s*{_NUM}\s*절{_END}")),
     (NumberingKind.KO_SECTION, re.compile(rf"^{_NUM}\s*절(?=[\s.:]|$)")),
     (NumberingKind.NUM1, re.compile(r"^(\d{1,4}(?:\.\d{1,4})+)\.?(?=\s|$)")),
+    # ``1-1.`` / ``2-3-1.`` (Korean textbooks); the trailing dot is required so dates, ranges
+    # and phone numbers (``2025-2026 전망``) are not read as numbering.
+    (NumberingKind.NUM1, re.compile(r"^(\d{1,3}(?:-\d{1,3})+)\.(?=\s|$)")),
     (NumberingKind.NUM1, re.compile(rf"^{_NUM}\.?\s+(?=\S)")),
     (NumberingKind.ROMAN, re.compile(r"^([IVX]{1,6})\.\s+(?=\S)")),
     (NumberingKind.UPPER_ALPHA, re.compile(r"^([A-Z])\.\s+(?=\S)")),
@@ -110,14 +115,20 @@ def _value(raw: str, kind: NumberingKind) -> int:
 
 def parse_numbering(title: str) -> Numbering | None:
     """The numbering style of a heading, or ``None`` for an unnumbered heading."""
-    text = unicodedata.normalize("NFKC", title).strip()
+    stripped = title.strip()
+    # A circled or parenthesized digit (``① 장 단위로 ...``) is a list item; NFKC would turn it
+    # into a plain number that reads as ``1장``.
+    enclosed = bool(stripped) and _ENCLOSED_FIRST <= stripped[0] <= _ENCLOSED_LAST
+    text = unicodedata.normalize("NFKC", stripped)
     for kind, pattern in _PATTERNS:
+        if enclosed and kind < NumberingKind.ROMAN:
+            continue
         match = pattern.match(text)
         if match is None:
             continue
         raw = next(group for group in match.groups() if group is not None)
-        if "." in raw:
-            numbers = tuple(int(part) for part in raw.split("."))
+        if "." in raw or "-" in raw:
+            numbers = tuple(int(part) for part in re.split(r"[.\-]", raw))
             depth = min(len(numbers), 5)
             return Numbering(NumberingKind(NumberingKind.NUM1 + depth - 1), numbers, raw)
         return Numbering(kind, (_value(raw, kind),), raw)
@@ -257,6 +268,19 @@ def disambiguate_letters(numberings: Sequence[Numbering | None]) -> list[Numberi
                     out[i] = flipped[i]
                 bit += 1
     return out
+
+
+_BARE_LABEL = re.compile(
+    rf"^(?:제\s*{_NUM}\s*[부편장절]|{_NUM}\s*[부장절]|(?:part|chapter|ch\.)\s*(?:{_NUM}|{_ROMAN_RE}))"
+    r"[.:]?$",
+    re.IGNORECASE,
+)
+
+
+def is_bare_label(title: str) -> bool:
+    """A Part/Chapter/제N절 label without a title (``제1 장``, ``Chapter 3``), as printed when the
+    title is set as a separate line."""
+    return _BARE_LABEL.match(unicodedata.normalize("NFKC", title).strip()) is not None
 
 
 def _key(title: str) -> str:
