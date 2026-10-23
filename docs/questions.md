@@ -149,6 +149,15 @@ Confirmed question
 - 문제 생성에 검색된 책 원문을 근거로 제공할 수 있지만, 범용 RAG 챗봇이나 자동 답변 기능은 범위 밖이다.
 - 원본 문제나 출처 문서를 변경해도 파생 문제는 자동 덮어쓰지 않는다. 출처 revision과의 차이·검토 필요 상태를 노출한다.
 
+### 묶음 변형 출제 (QGEN-MULTI 2026-10-23)
+
+원본 여러 개를 한 번에 변형한다: `POST /workspaces/{id}/question-generation-batches` (편집 권한, 보관 Workspace는 403, `Idempotency-Key`).
+
+- **묶음 = run 묶음.** 새 테이블 없이 원본마다 보통의 generation run(원본 revision 고정, `question.generate` job 하나)을 같은 트랜잭션에서 만든다. run의 `params`에 `batch_id`·`batch_mode`·`batch_position`(·임의 선택이면 `batch_seed`)를 기록하고 `GET /workspaces/{id}/question-generation-batches/{batch_id}`가 그 run들을 순서대로 돌려준다(원본 번호·문제 앞부분 포함, 정답 없음). worker·초안·검증·승인·등록·lineage는 단일 run과 같다 — 사람이 승인한 초안만 원본별 run의 publish로 등록된다.
+- **원본 고르기.** `selection.mode = "selected"`: `question_ids` 1~20개(중복 불가). 모두 이 Workspace의 살아 있는 확정 문제여야 한다 — 다른 Workspace·삭제·없는 id는 단일 run과 같은 404, 초안·보관 문제는 409 `question-not-confirmed`(요청 전체 거절, run 없음). `selection.mode = "random"`: `count` 1~20, 선택 필터 `chapter`(id 또는 `none`), `question_type`, `statuses`(Heatmap 판정 `unseen|viewed|incorrect|correct|retry`, 요청한 사용자의 풀이 상태 기준), `favorite`(true = 즐겨찾기만), `seed`(0~2^31-1). 서버가 Workspace의 확정 문제 중 필터에 맞는 후보를 Heatmap 순서로 만든 뒤 `random.Random(seed).sample`로 `min(count, 후보 수)`개를 고른다(같은 seed·같은 후보 → 같은 선택). seed가 없으면 서버가 정해 응답과 run에 남긴다. 후보가 없으면 409 `no-matching-questions`, run 없음.
+- **한도(비용 보호).** 원본 ≤ 20, 원본 수 × 변형 유형 수 × `candidate_count` ≤ 60(초과 422). 묶음 시작은 Workspace 단위 advisory lock으로 직렬화하고, 그 Workspace에서 진행 중(대기·생성 중, job이 실패·취소되지 않은) run과 새 원본 수의 합이 40을 넘으면 409 `generation-busy`. 사용자별 묶음 시작 `QUESTION_GENERATION_BATCH_RATE_LIMIT_PER_MINUTE`(기본 6, in-process token bucket) 초과는 429 + Retry-After. 같은 `Idempotency-Key`의 재시도는 rate limit·한도 검사 전에 저장된 묶음을 돌려주고 대기 중 job을 다시 broker에 넘긴다.
+- 보기 섞기(`OPTION_SHUFFLE`)는 묶음에서도 422(생성이 아님).
+
 ## 6. 문제 PDF import
 
 `PDF → parser/OCR → 번호/선택지/그림 범위 추출 → LLM structured extraction → schema 검증 → DRAFT 비교 화면 → Confirm`.

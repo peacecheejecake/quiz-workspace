@@ -37,6 +37,7 @@ import {
   type QuestionFormValues,
 } from '@/lib/questions/form';
 import {
+  batchPath,
   createGenerationClient,
   GenerationApiError,
   generatePath,
@@ -81,6 +82,8 @@ export interface QuestionGenerationProps {
   readonly initialRunRevision: SourceRevision | null;
   readonly initialDrafts: readonly ImportDraft[];
   readonly loadFailed: boolean;
+  /** Reached from a batch results page (QGEN-MULTI): offer the way back to it. */
+  readonly batchId?: string | null;
 }
 
 const READ_ONLY_TEXT: Readonly<Record<Exclude<GenerationReadOnly, null>, string>> = {
@@ -121,6 +124,7 @@ export function QuestionGeneration({
   initialRunRevision,
   initialDrafts,
   loadFailed,
+  batchId = null,
 }: QuestionGenerationProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -628,13 +632,25 @@ export function QuestionGeneration({
         breadcrumb={
           <WorkspaceBreadcrumb
             workspace={{ id: workspaceId, name: workspaceName }}
-            trail={[{ label: '문제 변형 출제' }]}
+            trail={
+              batchId
+                ? [
+                    { label: '묶음 변형 출제', href: batchPath(workspaceId, batchId) },
+                    { label: '문제 변형 출제' },
+                  ]
+                : [{ label: '문제 변형 출제' }]
+            }
           />
         }
         title="문제 변형 출제"
         description="확정된 문제를 골라 보기 섞기, 문구 변형, 정오 반전, 유사 개념 변형을 만듭니다. 만든 변형은 원본과 비교해 검토하고 승인한 초안만 새 문제로 등록됩니다."
         actions={
           <>
+            {batchId ? (
+              <Button asChild>
+                <Link href={batchPath(workspaceId, batchId)}>묶음 결과로</Link>
+              </Button>
+            ) : null}
             <Button asChild>
               <Link href={generatePath(workspaceId)}>다른 문제 선택</Link>
             </Button>

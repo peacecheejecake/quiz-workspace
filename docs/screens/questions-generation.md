@@ -1,7 +1,7 @@
 # QGEN-01 — 문제 변형 출제
 
 **상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (문제 생성 dialog) · UX4 개정 2026-10-21 (`문제` 메뉴의 변형 출제)
-**Route:** 검토 페이지 `/workspaces/:workspaceId/questions/generate?source=&run=` (뒤로가기·breadcrumb `Workspace 이름 › 문제 변형 출제`) · 문제 생성 dialog `/workspaces/:workspaceId?panel=generate`
+**Route:** 검토 페이지 `/workspaces/:workspaceId/questions/generate?source=&run=` (뒤로가기·breadcrumb `Workspace 이름 › 문제 변형 출제`) · 묶음 결과 페이지 `/workspaces/:workspaceId/questions/generate?batch=` · 문제 생성 dialog `/workspaces/:workspaceId?panel=generate`
 **테스트:** `tests/e2e/questions/questions-generation.spec.ts`
 **연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
 
@@ -10,6 +10,11 @@
 - API와 화면은 owner / viewer / 로그인 상태에 따라 기능과 데이터 표시 범위를 구분한다.
 - 모든 편집·상태 변경은 서버 측 인가·revision 일관성을 검증한다.
 - **문제 생성 dialog (UX3c 2026-10-20):** Workspace 홈 header의 `문제` 메뉴 › `변형 출제`(UX4 2026-10-21; 이전 `문제 생성` 버튼)는 non-modal floating dialog "문제 생성"을 바로 열고(목록을 불러오는 동안 skeleton) 변형할 확정 문제를 고른 뒤 같은 dialog에서 생성 form(변형 유형·후보 수·난이도)을 제출한다. 생성을 시작하면 검토 페이지(`?source=&run=`)로 이동해 진행률, 원본 diff·근거·검증 상태, 승인·등록을 이어간다 — 초안 비교 drawer와 편집기를 겹쳐 쓰는 검토는 dialog보다 페이지가 맞아서 남긴다. 보기 섞기는 run 없이 홈에서 원본의 풀이 panel(`?question=`)을 연다. 문제은행 상세의 '변형 출제'는 검토 페이지를 바로 연다.
+- **묶음 변형 출제 (QGEN-MULTI 2026-10-23):** 원본 여러 개를 한 번에 변형한다. 묶음(batch)은 원본마다 하나씩 만든 보통의 generation run 묶음이고(같은 변형 유형·후보 수·난이도), 초안 검토·승인·등록은 원본별 run의 기존 검토 페이지에서 그대로 한다 — 승인 전에는 아무것도 문제은행·Heatmap에 등록되지 않는다.
+  - 원본 고르기 두 가지: **여러 문제 선택**(사람이 고른 확정 문제, 최대 20개)과 **임의 선택**(개수 1~20개 + 선택 필터: 챕터, 풀이 상태 `안 푼 문제`·`본 문제`·`틀린 문제`·`맞힌 문제`·`다시 풀기`, `즐겨찾기만`, 유형). 임의 선택은 서버가 이 Workspace의 확정 문제 중 필터에 맞는 문제(풀이 상태·즐겨찾기는 요청한 사용자 기준, 홈 Heatmap과 같은 판정)에서 개수만큼 고른다. 맞는 문제가 개수보다 적으면 맞는 문제 전부를, 하나도 없으면 run을 만들지 않고 "조건에 맞는 확정 문제가 없습니다"를 알린다. 고른 결과는 seed로 재현할 수 있다(seed를 보내지 않으면 서버가 정해 묶음에 기록).
+  - 진입점: 문제은행 목록의 문제마다 있는 선택 checkbox(확정 문제만; 편집 권한·보관되지 않은 Workspace에서만 보임)와 선택 막대의 `선택한 문제 변형 출제 (n)`(같은 화면 위에 생성 form dialog를 연다), 그리고 홈 `문제` 메뉴 › `변형 출제` dialog 위쪽의 tab `한 문제`·`여러 문제`·`임의 선택`(기본 `한 문제` = 기존 흐름). 묶음에는 보기 섞기가 없다(풀이 순서일 뿐 생성이 아니므로).
+  - 한도(비용 보호): 원본 ≤ 20개, 원본 수 × 변형 유형 수 × 후보 수 ≤ 60, Workspace에서 진행 중(대기·생성 중) run이 40개를 넘으면 새 묶음을 거절하고, 사용자별 묶음 시작은 분당 횟수 제한(초과 시 429 + Retry-After)을 둔다. `Idempotency-Key`로 같은 요청을 재시도하면 같은 묶음을 돌려준다.
+  - 묶음 결과 페이지(`?batch=`): 전체 진행률(`@quiz/ui` ProgressBar, 끝난 원본 수 / 전체)과 원본별 그룹(원본 번호·문제 앞부분, 상태 `대기 중`·`생성 중`·`초안 n개`·실패 이유, 등록된 수, `초안 검토` 링크)을 보인다. `초안 검토`는 그 원본의 검토 페이지(`?source=&run=&batch=`)를 열고, 그 페이지에는 `묶음 결과로` 링크가 있다.
 
 ## 수용 기준
 
@@ -42,6 +47,24 @@
 - **Given:** 확정 문제가 있는 Workspace 홈(편집 권한)
 - **When:** header의 `문제` 메뉴에서 `변형 출제`를 고르고(UX4) 원본 문제를 고른 뒤 변형 유형을 골라 "생성"
 - **Then:** "문제 생성" floating dialog(`?panel=generate`)가 즉시 열려 확정 문제 목록을 보이고, 고른 문제의 생성 form을 같은 dialog에서 보인다. "생성"하면 run을 시작하고 검토 페이지(`/questions/generate?source=<id>&run=<id>`)로 이동해 그 run의 진행·초안을 보인다. 보기 섞기를 고르면 run 없이 홈에서 원본 문제의 풀이 panel이 열린다. 보기 권한(viewer)에게는 `변형 출제` 메뉴 항목이 없다(UX3c, UX4).
+
+### QGEN-01-AC06
+
+- **Given:** 확정 문제가 둘 이상 있는 문제은행(편집 권한)
+- **When:** 문제 두 개의 선택 checkbox를 고르고 선택 막대의 `선택한 문제 변형 출제 (2)` → 변형 유형 → "생성"
+- **Then:** 한 번의 요청으로 고른 원본마다 run을 하나씩 가진 묶음을 만들고 묶음 결과 페이지(`/questions/generate?batch=<id>`)로 이동해 전체 진행률과 원본별 그룹(원본 문제 앞부분, 초안 수)을 보인다. 초안은 승인 전이라 문제 수와 Heatmap 점 수가 그대로다. 확정이 아닌 문제에는 선택 checkbox가 없고, 보기 권한(viewer)과 보관된 Workspace에는 선택 checkbox와 선택 막대가 없다(QGEN-MULTI).
+
+### QGEN-01-AC07
+
+- **Given:** 확정 문제 여러 개(일부는 즐겨찾기)가 있는 Workspace 홈(편집 권한)
+- **When:** `문제` 메뉴 › `변형 출제` dialog의 `임의 선택` tab에서 개수와 필터(`즐겨찾기만` 등)를 정하고 "생성"
+- **Then:** 서버가 필터에 맞는 이 Workspace의 확정 문제 중에서 개수만큼 임의로 고른 원본으로 묶음을 만들고 묶음 결과 페이지로 이동한다(필터 밖 문제나 다른 Workspace의 문제는 고르지 않는다). 맞는 문제가 없으면 run을 만들지 않고 dialog에 "조건에 맞는 확정 문제가 없습니다"를 알린다. `여러 문제` tab은 확정 문제 목록에서 여러 개를 골라 같은 묶음을 시작한다(QGEN-MULTI).
+
+### QGEN-01-AC08
+
+- **Given:** 두 원본의 초안이 만들어진 묶음 결과 페이지
+- **When:** 한 원본 그룹의 `초안 검토`로 검토 페이지를 열어 초안을 승인하고 "승인한 문제 등록"
+- **Then:** 검토 페이지는 그 원본과 그 원본의 run 초안만 보이고 `묶음 결과로` 링크로 돌아갈 수 있다. 등록하면 그 원본을 부모(lineage)로 하는 새 확정 문제가 하나 생기고, 묶음 결과 페이지는 그 그룹의 등록 수를 보이며 다른 원본의 초안은 초안으로 남는다(QGEN-MULTI).
 
 ## Test-first 규칙
 - 위 AC ID를 Playwright test title에 포함하고 RED를 확인한 다음 API/UI를 구현한다.

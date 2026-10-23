@@ -12,6 +12,9 @@
 import type { Locator, Page } from '@playwright/test';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 import {
+  bankPath,
+  batchIdFromUrl,
+  batchUi,
   chooseQuestionMenu,
   createQuestion,
   expect,
@@ -33,11 +36,16 @@ import {
   panelUi,
   RESULT_TEXT,
   scenarioCandidate,
+  seedMembership,
+  setMyState,
   signInAs,
   test,
   uploadReadyBook,
+  waitForBatch,
   waitForLatestGeneration,
+  type GenerationBatch,
   type Question,
+  type QuestionInput,
   type SourceName,
 } from '../fixtures/test.ts';
 
@@ -272,5 +280,213 @@ test(
     await expect(panelUi.panel(page)).toBeVisible();
     await expect(homeUi.generateDialog(page)).toHaveCount(0);
     expect(await listGenerations(s.owner, s.workspaceId)).toHaveLength(1);
+  },
+);
+
+// --- QGEN-MULTI: batches (several selected or randomly picked sources, one run each) -----------
+
+/** `seedSource` plus the `flocculation` scenario source (number 2, cites p.4). */
+async function seedTwoSources(workspaceFactory: WorkspaceFactory, label: string) {
+  const s = await seedSource(workspaceFactory, label, 'disinfection');
+  const second = await createQuestion(
+    s.owner,
+    s.workspaceId,
+    generationSourceInput('flocculation', s.documentId, 2),
+  );
+  return { ...s, second };
+}
+
+function batchSources(batch: GenerationBatch): string[] {
+  return batch.items.map((i) => i.source.question_id);
+}
+
+test(
+  'QGEN-01-AC06 selecting several confirmed questions in the bank starts one batch whose results page groups the drafts by source',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedTwoSources(workspaceFactory, 'qgen01-ac06');
+    await createQuestion(s.owner, s.workspaceId, {
+      ...numberedMcq('qgen01-ac06', 3, 0),
+      publication_status: 'DRAFT',
+    } as QuestionInput);
+
+    await signInAs(page, s.owner.user);
+    await page.goto(bankPath(s.workspaceId));
+    const select = (n: number) =>
+      page.getByRole('main').getByRole('checkbox', { name: new RegExp(`^${n}번 문제 선택`) });
+    await expect(select(1)).toBeVisible();
+    await expect(select(3)).toHaveCount(0); // a draft is no source
+    await select(1).check();
+    await select(2).check();
+    const bar = page.getByRole('region', { name: /선택한 문제|selected questions/i });
+    await expect(bar).toContainText(/2개 선택됨|2 selected/i);
+    await bar.getByRole('button', { name: /선택한 문제 변형 출제 \(2\)/ }).click();
+    const dialog = page.getByRole('dialog', { name: /선택한 문제 변형 출제/ });
+    await expect(batchUi.variation(dialog, 'OPTION_SHUFFLE')).toHaveCount(0);
+    await batchUi.variation(dialog, 'PARAPHRASE').check();
+    await batchUi.generate(dialog).click();
+
+    // The batch results page: whole-batch progress and one group per source.
+    await expect(page).toHaveURL(
+      (url) => url.pathname === generatePath(s.workspaceId) && url.searchParams.has('batch'),
+    );
+    const batchId = batchIdFromUrl(page.url());
+    await expect(generateUi.heading(page)).toHaveText(/변형 출제|generate/i);
+    await expect(batchUi.progress(page)).toBeVisible();
+    await expect(batchUi.groups(page)).toHaveCount(2);
+    for (const source of [s.source, s.second]) {
+      await expect(batchUi.group(page, source.revision.stem.slice(0, 20))).toContainText(
+        /초안 1개|1 drafts?/,
+        { timeout: JOB_TIMEOUT_MS },
+      );
+    }
+    await expect(batchUi.progress(page)).toHaveAttribute('aria-valuenow', '100');
+
+    const batch = await waitForBatch(s.owner, s.workspaceId, batchId);
+    expect(batch).toMatchObject({ mode: 'selected', run_count: 2, draft_count: 2 });
+    expect(batchSources(batch)).toEqual([s.source.id, s.second.id]);
+    const runs = await listGenerations(s.owner, s.workspaceId);
+    expect(runs.map((r) => r.batch_id)).toEqual([batchId, batchId]);
+    // Drafts only: no new bank question, no new dot.
+    expect(await listQuestions(s.owner, s.workspaceId)).toHaveLength(2);
+    expect((await getOverview(s.owner, s.workspaceId)).counts.total).toBe(2);
+
+    // Viewers and archived workspaces get no selection.
+    const viewer = await workspaceFactory.member('qgen01-ac06-viewer');
+    seedMembership(s.workspaceId, viewer.user.id, 'viewer');
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(bankPath(s.workspaceId));
+    await expect(page.getByRole('main').getByText(s.source.revision.stem)).toBeVisible();
+    await expect(select(1)).toHaveCount(0);
+    await workspaceFactory.archive(s.owner, s.workspaceId);
+    await page.context().clearCookies();
+    await signInAs(page, s.owner.user);
+    await page.goto(bankPath(s.workspaceId));
+    await expect(page.getByRole('main').getByText(s.source.revision.stem)).toBeVisible();
+    await expect(select(1)).toHaveCount(0);
+  },
+);
+
+test(
+  'QGEN-01-AC07 the 변형 출제 dialog picks random sources on the server by filters, refuses an empty pick and starts a multi-select batch',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedTwoSources(workspaceFactory, 'qgen01-ac07');
+    await setMyState(s.owner, s.second.id, { is_favorite: true });
+    // Another workspace's favorite is never a candidate.
+    const other = await workspaceFactory.create(s.owner);
+    const foreign = await createQuestion(s.owner, other.id, numberedMcq('qgen01-ac07-x', 1));
+    await setMyState(s.owner, foreign.id, { is_favorite: true });
+
+    await signInAs(page, s.owner.user);
+    await page.goto(homePath(s.workspaceId));
+    await chooseQuestionMenu(page, 'generate');
+    let dialog = homeUi.generateDialog(page);
+    await dialog.getByRole('tab', { name: /임의 선택|random/i }).click();
+    await expect(dialog.getByRole('spinbutton', { name: /문제 수|count/i })).toHaveValue('5');
+    await dialog.getByRole('checkbox', { name: /즐겨찾기만|favorites only/i }).check();
+    await batchUi.variation(dialog, 'PARAPHRASE').check();
+    await batchUi.generate(dialog).click();
+
+    await expect(page).toHaveURL((url) => url.searchParams.has('batch'));
+    const batch = await waitForBatch(s.owner, s.workspaceId, batchIdFromUrl(page.url()));
+    expect(batch).toMatchObject({ mode: 'random', requested_count: 5, run_count: 1 });
+    expect(batchSources(batch)).toEqual([s.second.id]);
+    expect(typeof batch.seed).toBe('number');
+    await expect(batchUi.groups(page)).toHaveCount(1);
+    await expect(batchUi.group(page, s.second.revision.stem.slice(0, 20))).toBeVisible();
+    await expect(page.getByRole('main')).toContainText(/1개뿐이라|only 1/);
+
+    // Nothing matches: the dialog says so and no run is made.
+    await page.goto(homePath(s.workspaceId, 'panel=generate'));
+    dialog = homeUi.generateDialog(page);
+    await dialog.getByRole('tab', { name: /임의 선택|random/i }).click();
+    await dialog.getByRole('checkbox', { name: /^(틀린 문제|incorrect)$/i }).check();
+    await batchUi.variation(dialog, 'PARAPHRASE').check();
+    await batchUi.generate(dialog).click();
+    await expect(dialog.getByRole('alert')).toContainText(
+      /조건에 맞는 확정 문제가 없습니다|no matching/i,
+    );
+    expect(await listGenerations(s.owner, s.workspaceId)).toHaveLength(1);
+
+    // 여러 문제: check both sources, one batch with a run per source.
+    await dialog.getByRole('tab', { name: /여러 문제|several/i }).click();
+    const list = dialog.getByRole('list', { name: /변형할 문제 선택|select questions/i });
+    await list
+      .getByRole('checkbox', { name: new RegExp(s.source.revision.stem.slice(0, 20)) })
+      .check();
+    await list
+      .getByRole('checkbox', { name: new RegExp(s.second.revision.stem.slice(0, 20)) })
+      .check();
+    await expect(dialog.getByRole('status').filter({ hasText: /2개 선택됨/ })).toBeVisible();
+    await batchUi.variation(dialog, 'PARAPHRASE').check();
+    await batchUi.generate(dialog).click();
+    await expect(page).toHaveURL((url) => url.searchParams.has('batch'));
+    const many = await waitForBatch(s.owner, s.workspaceId, batchIdFromUrl(page.url()));
+    expect(many).toMatchObject({ mode: 'selected', run_count: 2 });
+    expect(new Set(batchSources(many))).toEqual(new Set([s.source.id, s.second.id]));
+    expect(await listQuestions(s.owner, s.workspaceId)).toHaveLength(2);
+  },
+);
+
+test(
+  'QGEN-01-AC08 a batch group opens its source review page, where approving registers only that source variant',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedTwoSources(workspaceFactory, 'qgen01-ac08');
+    const started = await s.owner.api.ok<GenerationBatch>(
+      'POST',
+      `/workspaces/${s.workspaceId}/question-generation-batches`,
+      {
+        selection: { mode: 'selected', question_ids: [s.source.id, s.second.id] },
+        variation_types: ['PARAPHRASE'],
+      },
+      [202],
+    );
+    const batch = await waitForBatch(s.owner, s.workspaceId, started.id);
+    const [firstRun, secondRun] = batch.items.map((i) => i.run);
+    const candidate = scenarioCandidate('E2E-LLM-BATCH', GENERATE_TASK.PARAPHRASE);
+
+    await signInAs(page, s.owner.user);
+    await page.goto(`${generatePath(s.workspaceId)}?batch=${batch.id}`);
+    const group = batchUi.group(page, s.second.revision.stem.slice(0, 20));
+    await batchUi.review(group).click();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.get('source') === s.second.id &&
+        url.searchParams.get('run') === secondRun?.id &&
+        url.searchParams.get('batch') === batch.id,
+    );
+    await expect(generateUi.source(page)).toContainText(s.second.revision.stem);
+    await expect(generateUi.draftItems(page)).toHaveCount(1);
+    const draft = generateUi.draftItems(page).first();
+    await expect(draft).toContainText(candidate.stem.slice(0, 20));
+    await generateUi.approve(draft).check();
+    await generateUi.publish(page).click();
+    await expect(generateUi.published(draft)).toBeVisible();
+
+    await batchUi.backToBatch(page).click();
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get('batch') === batch.id && !url.searchParams.has('source'),
+    );
+    await expect(batchUi.group(page, s.second.revision.stem.slice(0, 20))).toContainText(
+      /등록 1개|1 registered/,
+    );
+    await expect(batchUi.group(page, s.source.revision.stem.slice(0, 20))).not.toContainText(
+      /등록/,
+    );
+
+    // Exactly one new question, a child of its own source; the other source's draft stays one.
+    const [registered] = await listGenerationDrafts(s.owner, secondRun?.id ?? '');
+    const created = await getGeneratedQuestion(s.owner, registered?.published_question_id ?? '');
+    expect(created).toMatchObject({
+      publication_status: 'CONFIRMED',
+      lineage: { parent_question_id: s.second.id, generation_run_id: secondRun?.id },
+    });
+    const [untouched] = await listGenerationDrafts(s.owner, firstRun?.id ?? '');
+    expect(untouched).toMatchObject({ review_status: 'pending', published_question_id: null });
+    expect(await listQuestions(s.owner, s.workspaceId)).toHaveLength(3);
+    expect((await getOverview(s.owner, s.workspaceId)).counts.total).toBe(3);
   },
 );
