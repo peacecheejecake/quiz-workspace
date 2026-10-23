@@ -82,6 +82,10 @@ class ProblemType(StrEnum):
     # 409: a generated draft duplicates a question already in the workspace (or another draft of
     # the same publish request); edit or reject it.
     DUPLICATE_QUESTION = "urn:quiz-workspace:problem:duplicate-question"
+    # 409: too many generation runs of the workspace are still queued or running; wait for them.
+    GENERATION_BUSY = "urn:quiz-workspace:problem:generation-busy"
+    # 409: a random-pick batch found no CONFIRMED question matching its filters (no run made).
+    NO_MATCHING_QUESTIONS = "urn:quiz-workspace:problem:no-matching-questions"
 
 
 class ProblemException(StarletteHTTPException):
