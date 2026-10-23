@@ -147,7 +147,7 @@ workspace
 | GET | `/api/v1/question-generations/{id}/drafts` | 생성 문제 검토 |
 | POST | `/api/v1/question-generations/{id}/publish` | 승인한 문제만 등록 |
 | POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기 |
-| GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토 |
+| GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토(초안별 등록 챕터 추천·선택, 교재 챕터 목록 — CHAPTER-MAP) |
 | POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록(`approve: true`면 선택한 초안을 승인과 함께 등록, 거절 목록 반환) |
 | POST | `/api/v1/question-imports/{id}/registrations` | 선택한 초안 전체를 서버에서 승인·등록(`question.import_register` job, QIMP-JOB) |
 | GET | `/api/v1/question-imports/{id}/registrations/{job_id}` | 서버 측 등록 진행(처리/전체)·거절 목록 |
