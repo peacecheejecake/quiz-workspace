@@ -123,13 +123,15 @@
     min-width: 0;
   }
 
-  /* Back link and breadcrumb row above the title. */
+  /* Back link and breadcrumb row above the title; space-2 below it (+ the space-1 row gap = 12px)
+     sets the location trail apart from the title (UX5-UI). */
   > .text > .nav {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-1) var(--space-3);
     min-width: 0;
+    margin-bottom: var(--space-2);
   }
 
   > .text > .nav > .breadcrumb {

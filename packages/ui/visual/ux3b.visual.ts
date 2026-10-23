@@ -111,6 +111,12 @@ test('PageHeader with BackLink and Breadcrumb', async ({ page }) => {
     expect((await link.boundingBox())?.height).toBeGreaterThanOrEqual(24);
   }
   expect((await page.getByRole('link', { name: '문서 목록' }).boundingBox())?.height).toBe(28);
+  // UX5-UI: 12px (space-1 row gap + space-2 margin) between the location row and the title.
+  const [navBox, titleBox] = await Promise.all([
+    nav.boundingBox(),
+    page.getByRole('heading', { level: 1 }).boundingBox(),
+  ]);
+  expect(navBox && titleBox && titleBox.y - (navBox.y + navBox.height)).toBeGreaterThanOrEqual(12);
   await expect(page.locator('.qz-page-header')).toHaveScreenshot('page-header-navigation.png');
 });
 

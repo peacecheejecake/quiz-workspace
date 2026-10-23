@@ -48,7 +48,7 @@
 
 - **Given:** Workspace 홈
 - **When:** header의 `문제은행` 버튼으로 문제은행 페이지에 들어감
-- **Then:** 문제은행 페이지 위쪽에 뒤로가기 링크(Workspace 홈으로)와 breadcrumb(`Workspace 이름` 링크 › `문제은행` 현재 페이지)이 있고, 뒤로가기나 breadcrumb의 Workspace 이름을 누르면 Workspace 홈으로 돌아간다. 문제 PDF 가져오기·문제 변형 출제 검토·PDF 열람 페이지도 같은 뒤로가기와 breadcrumb을 가진다(UX3c).
+- **Then:** 문제은행 페이지 위쪽에 뒤로가기 링크(Workspace 홈으로)와 breadcrumb(`Workspace 이름` 링크 › `문제은행` 현재 페이지)이 있고, 뒤로가기나 breadcrumb의 Workspace 이름을 누르면 Workspace 홈으로 돌아간다. 문제 PDF 가져오기·문제 변형 출제 검토·PDF 열람 페이지도 같은 뒤로가기와 breadcrumb을 가진다(UX3c). breadcrumb 줄 아래에는 제목과 12px 여백을 둔다(UX5-UI 2026-10-23).
 
 ### QBANK-01-AC06
 

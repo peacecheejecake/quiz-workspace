@@ -251,7 +251,7 @@
 | Breakpoint | mobile `< 768px`(`--breakpoint-md`), tablet 768–1023px, desktop `≥ 1024px`(`--breakpoint-lg`, sidebar 표시). CSS 변수는 media query 안에서 쓸 수 없으므로 media query는 같은 px 값을 range 문법(`(width >= 768px)`)으로 쓰고, `packages/ui` 테스트가 토큰 값과 일치하는지 검사한다. TS는 `@quiz/design-tokens`의 `breakpoints`/`mediaQueries`를 사용한다 |
 | Global header | 56px 높이(`--app-header-height`, v1.2.2에서 64→56) |
 | Control height (v1.2.2) | md `--control-height-md` 36px(Button·IconButton·입력·Select trigger·tab·메뉴/Select 항목), sm `--control-height-sm` 28px(작은 버튼·IconButton, BackLink). 모두 WCAG 2.2 target size 24px 이상. heatmap 셀(24/32px)은 §6 규격 그대로 |
-| Density (v1.2.2) | 버튼 좌우 padding md 12px; 입력 세로 padding 4px; 여러 줄 입력 최소 80px; panel header 12/12/8/20px · body 16/20px · footer 8/20/12px; modal body 16/20px; popover 12px; 메뉴·Select 항목 36px; Surface padding sm 8 / md 12 / lg 20px; EmptyState 세로 24px; PageHeader 간격 12px·아래 20px; sidebar 12/8px; heatmap 챕터 간격 20px |
+| Density (v1.2.2) | 버튼 좌우 padding md 12px; 입력 세로 padding 4px; 여러 줄 입력 최소 80px; panel header 12/12/8/20px · body 16/20px · footer 8/20/12px; modal body 16/20px; popover 12px; 메뉴·Select 항목 36px; Surface padding sm 8 / md 12 / lg 20px; EmptyState 세로 24px; PageHeader 간격 12px·아래 20px·뒤로가기/breadcrumb 줄과 제목 사이 12px(UX5-UI); sidebar 12/8px; heatmap 챕터 간격 20px |
 | Left navigation | 232px 고정(데스크톱), 모바일 drawer |
 | Content area | max-width 1440px, padding 20px(태블릿 이상, v1.2.2에서 24→20) / 16px(모바일) |
 | Border radius | 기본 10px, 떠 있는 패널 16–20px |
@@ -388,7 +388,7 @@ function Marker({ favorite }: { favorite: boolean }) {
 
 Workspace 홈(UX3c, 2026-10-20): Workspace 안에는 sidebar가 없다. 홈의 Workspace header(통합 검색 + `문서 n`·`문제`(DropdownMenu: PDF 관리·직접 추가·변형 출제)·`문제은행` 묶음과 오른쪽 정렬된 `이력`·`공유하기` secondary `IconButton` 묶음, UX4)가 진입점이며, 문서 관리·문제 PDF 관리·문제 생성·이력·링크 공유는 모두 non-modal `FloatingSidePanel`(§5.1 stacking: 나중에 연 것이 위, 열린 dialog의 버튼을 다시 누르면 `raiseKey`로 다시 위로)로 홈의 `<main>` 안에 portal하고, 데스크톱에서는 dialog가 열린 동안 홈 내용이 dialog 폭만큼 비켜선다. 홈과 dialog에는 `PageHeader` 제목·설명이 없고 `h1`은 시각적으로 숨긴다. 통합 검색 옵션은 "검색 옵션" 텍스트 버튼이 여는 `Popover`다. 새 icon: `SearchIcon`, `TrashIcon`, `HistoryIcon`, `ChevronUpIcon`, `ShareIcon`.
 
-`Breadcrumb`·`BackLink` (v1.2.2, UX3b): 버튼으로 이동한 페이지는 `PageHeader`의 `back` 슬롯에 뒤로가기(`BackLink`: 화살표 + label, `href`가 있으면 링크, 없으면 `onClick`으로 되돌아가는 버튼, `hideLabel`이면 label은 접근 가능한 이름으로만 남음), `breadcrumb` 슬롯에 위치(`Breadcrumb`: `<nav aria-label="위치">` + `<ol>`, 장식용 chevron 구분자, 마지막 항목은 현재 페이지로 링크가 아니며 `aria-current="page"` + 굵기)를 둔다. Next.js에서는 `linkComponent={Link}`를 넘긴다. 링크 hit 영역은 24px 이상이다.
+`Breadcrumb`·`BackLink` (v1.2.2, UX3b): 버튼으로 이동한 페이지는 `PageHeader`의 `back` 슬롯에 뒤로가기(`BackLink`: 화살표 + label, `href`가 있으면 링크, 없으면 `onClick`으로 되돌아가는 버튼, `hideLabel`이면 label은 접근 가능한 이름으로만 남음), `breadcrumb` 슬롯에 위치(`Breadcrumb`: `<nav aria-label="위치">` + `<ol>`, 장식용 chevron 구분자, 마지막 항목은 현재 페이지로 링크가 아니며 `aria-current="page"` + 굵기)를 둔다. Next.js에서는 `linkComponent={Link}`를 넘긴다. 링크 hit 영역은 24px 이상이다. 뒤로가기·breadcrumb 줄 아래는 제목과 12px 띄운다(줄 간격 `--space-1` + 아래 여백 `--space-2`, v1.2.3 UX5-UI).
 
 ### Domain components
 
