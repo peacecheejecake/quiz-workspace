@@ -29,6 +29,7 @@ export type { FocusRingProps } from './primitives/FocusRing';
 export { IconButton } from './primitives/IconButton';
 export type { IconButtonProps } from './primitives/IconButton';
 export {
+  AccountIcon,
   AlertIcon,
   ArrowLeftIcon,
   CheckIcon,
