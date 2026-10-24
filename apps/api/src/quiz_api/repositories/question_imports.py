@@ -18,7 +18,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
 from sqlalchemy import and_, func, insert, select, update
@@ -627,6 +627,7 @@ class QuestionImportRepository:
             )
         )
         if items:
+            now = datetime.now(UTC)
             self._session.execute(
                 insert(question_import_registration_items),
                 [
@@ -641,7 +642,7 @@ class QuestionImportRepository:
                         "state": item.state,
                         "reason": item.reason,
                         "question_id": item.question_id,
-                        "processed_at": None if item.state == "pending" else func.now(),
+                        "processed_at": None if item.state == "pending" else now,
                     }
                     for ordinal, item in enumerate(items)
                 ],
@@ -678,13 +679,14 @@ class QuestionImportRepository:
         if job is None:
             return None
         items = question_import_registration_items
-        counts: dict[str, int] = dict(
-            self._session.execute(
-                select(items.c.state, func.count())
+        counts: dict[str, int] = {
+            str(row.state): int(row.n)
+            for row in self._session.execute(
+                select(items.c.state, func.count().label("n"))
                 .where(items.c.job_id == job_id, items.c.import_run_id == run_id)
                 .group_by(items.c.state)
-            ).tuples()
-        )
+            ).all()
+        }
         refused = self._session.execute(
             select(
                 items.c.draft_id,

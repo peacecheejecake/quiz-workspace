@@ -28,7 +28,7 @@
                                                  `question.import_register` job approves and
                                                  registers it on the server (QIMP-JOB); the page
                                                  may be left; `Idempotency-Key`
-    GET   /question-imports/{id}/registrations/{job_id}
+    GET   /question-imports/{id}/registrations/{registration_id}
                                                  any member; progress (processed/total) and the
                                                  refused drafts of a registration
 
@@ -162,7 +162,7 @@ class ImportRun(BaseModel):
     published_count: int
     registration_job_id: uuid.UUID | None = Field(
         description="The newest registration (QIMP-JOB) of this run, if any: read its progress "
-        "at `GET /question-imports/{id}/registrations/{job_id}`."
+        "at `GET /question-imports/{id}/registrations/{registration_id}`."
     )
     created_at: datetime
     updated_at: datetime
@@ -1328,14 +1328,15 @@ def register_question_import_drafts(
 
 
 @router.get(
-    "/question-imports/{import_id}/registrations/{job_id}",
+    "/question-imports/{import_id}/registrations/{registration_id}",
     operation_id="getQuestionImportRegistration",
 )
 def get_question_import_registration(
-    access: ReadImport, job_id: Annotated[uuid.UUID, Path()], repo: ImportRepo
+    access: ReadImport, registration_id: Annotated[uuid.UUID, Path()], repo: ImportRepo
 ) -> ImportRegistration:
-    """Progress of a registration of this import: processed/total and the refused drafts."""
-    record = repo.registration(access.resource_id, job_id)
+    """Progress of a registration of this import (`registration_id` = its `job_id`):
+    processed/total and the refused drafts."""
+    record = repo.registration(access.resource_id, registration_id)
     if record is None:
         raise HTTPException(status_code=404, detail=NOT_FOUND)
     return _registration_out(record)

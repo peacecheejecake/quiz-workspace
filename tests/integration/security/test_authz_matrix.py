@@ -95,6 +95,8 @@ RULES: dict[str, Rule | str] = {
     "listQuestionImportDrafts": READ,
     "publishQuestionImportDrafts": EDIT,
     "retryQuestionImport": EDIT,
+    "registerQuestionImportDrafts": EDIT,
+    "getQuestionImportRegistration": READ,
     "deleteQuestion": EDIT,
     "getQuestion": READ,
     "updateQuestion": EDIT,
@@ -171,6 +173,7 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "updateQuestionDraft": {"base_version": ids["draft_version"], "stem": "S4 초안 변경"},
         "publishQuestionGenerationDrafts": reviewed,
         "publishQuestionImportDrafts": reviewed,
+        "registerQuestionImportDrafts": reviewed,
         "updateQuestion": {"base_revision_id": ids["question_revision"], "stem": "S4 변경"},
         "createQuestionGeneration": {"variation_types": ["PARAPHRASE"]},
         "createQuestionGenerationBatch": {

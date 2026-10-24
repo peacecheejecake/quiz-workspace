@@ -547,7 +547,7 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/question-imports/{import_id}/registrations/{job_id}': {
+  '/api/v1/question-imports/{import_id}/registrations/{registration_id}': {
     parameters: {
       query?: never;
       header?: never;
@@ -556,7 +556,8 @@ export type paths = {
     };
     /**
      * Get Question Import Registration
-     * @description Progress of a registration of this import: processed/total and the refused drafts.
+     * @description Progress of a registration of this import (`registration_id` = its `job_id`):
+     *     processed/total and the refused drafts.
      */
     get: operations['getQuestionImportRegistration'];
     put?: never;
@@ -2613,7 +2614,7 @@ export type components = {
       published_count: number;
       /**
        * Registration Job Id
-       * @description The newest registration (QIMP-JOB) of this run, if any: read its progress at `GET /question-imports/{id}/registrations/{job_id}`.
+       * @description The newest registration (QIMP-JOB) of this run, if any: read its progress at `GET /question-imports/{id}/registrations/{registration_id}`.
        */
       registration_job_id: string | null;
       /** Source Document Id */
@@ -6486,7 +6487,7 @@ export interface operations {
       header?: never;
       path: {
         import_id: string;
-        job_id: string;
+        registration_id: string;
       };
       cookie?: never;
     };

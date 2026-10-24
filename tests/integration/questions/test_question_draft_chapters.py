@@ -65,7 +65,9 @@ def test_qimport_01_ac08_a_unique_match_is_suggested_changed_and_registered(seed
 
     q1, q2, q4 = (seed.draft_for(drafts, n) for n in (1, 2, 4))
     # A viewer cannot choose; an unknown or non-book chapter is refused.
-    seed.problem(_set_chapter(viewer, q1, chapters["1장 물의 순환"]["id"]), 403)
+    seed.problem(
+        _set_chapter(viewer, q1, chapters["1장 물의 순환"]["id"]), 403, seed.INSUFFICIENT_ROLE
+    )
     seed.problem(_set_chapter(alice, q1, seed.new_id()), 422)
     # The reviewer picks another chapter for q1 and "챕터 없음" for q2.
     moved = alice.ok_response(

@@ -2790,7 +2790,7 @@
                 "type": "null"
               }
             ],
-            "description": "The newest registration (QIMP-JOB) of this run, if any: read its progress at `GET /question-imports/{id}/registrations/{job_id}`.",
+            "description": "The newest registration (QIMP-JOB) of this run, if any: read its progress at `GET /question-imports/{id}/registrations/{registration_id}`.",
             "title": "Registration Job Id"
           },
           "source_document_id": {
@@ -10059,18 +10059,18 @@
         ]
       }
     },
-    "/api/v1/question-imports/{import_id}/registrations/{job_id}": {
+    "/api/v1/question-imports/{import_id}/registrations/{registration_id}": {
       "get": {
-        "description": "Progress of a registration of this import: processed/total and the refused drafts.",
+        "description": "Progress of a registration of this import (`registration_id` = its `job_id`):\nprocessed/total and the refused drafts.",
         "operationId": "getQuestionImportRegistration",
         "parameters": [
           {
             "in": "path",
-            "name": "job_id",
+            "name": "registration_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Job Id",
+              "title": "Registration Id",
               "type": "string"
             }
           },
