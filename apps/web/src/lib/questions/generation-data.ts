@@ -8,7 +8,13 @@ import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import type { ImportDraft } from './drafts';
 import type { Question, QuestionDetail } from './form';
-import { classifyGenerationFailure, generatePath, type GenerationRun } from './generation-client';
+import {
+  batchPath,
+  classifyGenerationFailure,
+  generatePath,
+  type GenerationBatch,
+  type GenerationRun,
+} from './generation-client';
 import { RUN_HISTORY_LIMIT } from './generation-model';
 
 export type SourceRevision = QuestionDetail['revision'];
@@ -149,4 +155,33 @@ export async function loadGenerationScreen(
     return { ...base, drafts: [], loadFailed: true };
   }
   return { ...base, drafts: drafts.data.items, loadFailed: false };
+}
+
+export interface GenerationBatchScreenData {
+  readonly batch: GenerationBatch | null;
+  readonly loadFailed: boolean;
+}
+
+/** QGEN-MULTI `?batch=`: the batch with its runs, one per source (null: not a batch here). */
+export async function loadGenerationBatch(
+  workspaceId: string,
+  batchId: string,
+): Promise<GenerationBatchScreenData> {
+  const returnTo = batchPath(workspaceId, batchId);
+  let api;
+  try {
+    api = await createServerApiClient();
+  } catch (error) {
+    if (error instanceof NotAuthenticatedError) redirect(loginRedirectPath(returnTo));
+    throw error;
+  }
+  const res = await api
+    .GET('/api/v1/workspaces/{workspace_id}/question-generation-batches/{batch_id}', {
+      params: { path: { workspace_id: workspaceId, batch_id: batchId } },
+    })
+    .catch(() => null);
+  if (res?.data) return { batch: res.data, loadFailed: false };
+  const kind = res ? classifyGenerationFailure(res.response.status, res.error) : 'unavailable';
+  if (kind === 'unauthenticated') redirect(loginRedirectPath(returnTo));
+  return { batch: null, loadFailed: kind !== 'notFound' };
 }

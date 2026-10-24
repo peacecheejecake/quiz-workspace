@@ -37,6 +37,8 @@ export interface QuestionGenerationFormProps {
   readonly busy: boolean;
   readonly onShuffle: () => void;
   readonly onGenerate: (body: GenerationCreate) => void;
+  /** Batches (QGEN-MULTI) have no 보기 섞기: it is a practice order, not a generation. */
+  readonly allowShuffle?: boolean;
 }
 
 const SAME_DIFFICULTY = 'none';
@@ -48,7 +50,11 @@ export function QuestionGenerationForm({
   busy,
   onShuffle,
   onGenerate,
+  allowShuffle = true,
 }: QuestionGenerationFormProps) {
+  const variations = allowShuffle
+    ? VARIATION_ORDER
+    : VARIATION_ORDER.filter((t) => t !== 'OPTION_SHUFFLE');
   const [selected, setSelected] = useState<VariationType[]>([]);
   const [count, setCount] = useState('1');
   const [difficulty, setDifficulty] = useState<GenerationDifficulty | null>(null);
@@ -78,7 +84,7 @@ export function QuestionGenerationForm({
     else onGenerate(request.body);
   }
 
-  const anyAvailable = VARIATION_ORDER.some((t) => blocker(t) === null);
+  const anyAvailable = variations.some((t) => blocker(t) === null);
 
   return (
     <form className={styles.form} onSubmit={submit} noValidate>
@@ -87,7 +93,7 @@ export function QuestionGenerationForm({
         aria-describedby={error?.field === 'variations' ? errorId : undefined}
       >
         <legend className={styles.legendTitle}>변형 유형</legend>
-        {VARIATION_ORDER.map((type) => {
+        {variations.map((type) => {
           const reason = blocker(type);
           return (
             <Checkbox

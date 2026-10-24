@@ -309,6 +309,14 @@ provider = "default"
 note = "5"
 
 [[var]]
+name = "QUESTION_GENERATION_BATCH_RATE_LIMIT_PER_MINUTE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "6"
+
+[[var]]
 name = "SUPABASE_URL"
 services = ["api", "worker"]
 kind = "config"

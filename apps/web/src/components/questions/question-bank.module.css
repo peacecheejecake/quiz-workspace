@@ -403,3 +403,41 @@
     border-color: Highlight;
   }
 }
+
+/* QGEN-MULTI: select confirmed questions for one batch variant generation */
+.item[data-selectable='true'] {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.itemSelect {
+  display: flex;
+  align-items: flex-start;
+  min-width: var(--space-5);
+}
+
+.selectionBar {
+  position: sticky;
+  top: var(--space-2);
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.selectionCount {
+  margin: 0;
+  margin-inline-end: auto;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.batchForm {
+  display: grid;
+  gap: var(--space-3);
+}

@@ -105,6 +105,7 @@ def random_ids() -> dict[str, str]:
         "session_id",
         "draft_id",
         "generation_id",
+        "batch_id",
         "import_id",
         "question_id",
         "link_id",
@@ -186,6 +187,15 @@ def build_world(seed: Any, label: str) -> World:
     generation = owner.ok(
         "POST", f"/questions/{qid}/generations", {"variation_types": ["PARAPHRASE"]}, (202,)
     )
+    batch = owner.ok(
+        "POST",
+        f"/workspaces/{wid}/question-generation-batches",
+        {
+            "selection": {"mode": "selected", "question_ids": [qid]},
+            "variation_types": ["PARAPHRASE"],
+        },
+        (202,),
+    )
     unpublished = seed.unpublished_questions(owner, wid)
     draft_id = unpublished["importDraft"]
     rows = seed._admin(
@@ -219,6 +229,15 @@ def build_world(seed: Any, label: str) -> World:
     twin_doc = str(twin_done["document_id"])
     twin_question = owner.create_question(tid, f"S4 {label} twin 문제")
     twin_link = owner.create_link(tid)
+    twin_batch = owner.ok(
+        "POST",
+        f"/workspaces/{tid}/question-generation-batches",
+        {
+            "selection": {"mode": "selected", "question_ids": [str(twin_question["id"])]},
+            "variation_types": ["PARAPHRASE"],
+        },
+        (202,),
+    )
 
     ids = {
         "workspace_id": wid,
@@ -230,6 +249,7 @@ def build_world(seed: Any, label: str) -> World:
         "session_id": str(session["id"]),
         "draft_id": draft_id,
         "generation_id": str(generation["id"]),
+        "batch_id": str(batch["id"]),
         "import_id": import_id,
         "question_id": qid,
         "revision_id@questions": str(question["revision"]["id"]),
@@ -250,6 +270,7 @@ def build_world(seed: Any, label: str) -> World:
         "revision_id@questions": str(twin_question["revision"]["id"]),
         "link_id": str(twin_link["id"]),
         "share_id": str(twin_link["id"]),
+        "batch_id": str(twin_batch["id"]),
     }
     return World(owner, editor, viewer, outsider, forker, ids, twin_ids, str(link["secret"]))
 

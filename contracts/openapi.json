@@ -1505,6 +1505,221 @@
         "title": "ForkCreate",
         "type": "object"
       },
+      "GenerationBatch": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "draft_count": {
+            "title": "Draft Count",
+            "type": "integer"
+          },
+          "finished_run_count": {
+            "title": "Finished Run Count",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "description": "One per source, in batch order.",
+            "items": {
+              "$ref": "#/components/schemas/GenerationBatchItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "selected",
+              "random"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "published_count": {
+            "title": "Published Count",
+            "type": "integer"
+          },
+          "requested_count": {
+            "description": "Sources asked for (a random pick may find fewer).",
+            "title": "Requested Count",
+            "type": "integer"
+          },
+          "run_count": {
+            "title": "Run Count",
+            "type": "integer"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The random pick's seed (null for `selected`).",
+            "title": "Seed"
+          },
+          "status": {
+            "description": "`working` while any run is queued or running.",
+            "enum": [
+              "working",
+              "finished"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "mode",
+          "seed",
+          "requested_count",
+          "status",
+          "run_count",
+          "finished_run_count",
+          "draft_count",
+          "published_count",
+          "created_at",
+          "items"
+        ],
+        "title": "GenerationBatch",
+        "type": "object"
+      },
+      "GenerationBatchCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_count": {
+            "default": 1,
+            "description": "Candidates per variation and source; sources x variations x candidates <= 60.",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "easier",
+                  "same",
+                  "harder"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty"
+          },
+          "selection": {
+            "discriminator": {
+              "mapping": {
+                "random": "#/components/schemas/RandomSources",
+                "selected": "#/components/schemas/SelectedSources"
+              },
+              "propertyName": "mode"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SelectedSources"
+              },
+              {
+                "$ref": "#/components/schemas/RandomSources"
+              }
+            ],
+            "title": "Selection"
+          },
+          "variation_types": {
+            "description": "Distinct variations for every source. OPTION_SHUFFLE is refused (422).",
+            "items": {
+              "enum": [
+                "OPTION_SHUFFLE",
+                "PARAPHRASE",
+                "INVERT_POLARITY",
+                "ANALOGOUS_CONCEPT"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Variation Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "selection",
+          "variation_types"
+        ],
+        "title": "GenerationBatchCreate",
+        "type": "object"
+      },
+      "GenerationBatchItem": {
+        "properties": {
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "run": {
+            "$ref": "#/components/schemas/GenerationRun"
+          },
+          "source": {
+            "$ref": "#/components/schemas/GenerationBatchSource"
+          }
+        },
+        "required": [
+          "position",
+          "source",
+          "run"
+        ],
+        "title": "GenerationBatchItem",
+        "type": "object"
+      },
+      "GenerationBatchSource": {
+        "properties": {
+          "preview": {
+            "description": "First lines of the pinned source stem; never the answer.",
+            "title": "Preview",
+            "type": "string"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "question_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Number"
+          }
+        },
+        "required": [
+          "question_id",
+          "question_number",
+          "preview"
+        ],
+        "title": "GenerationBatchSource",
+        "type": "object"
+      },
       "GenerationCreate": {
         "additionalProperties": false,
         "properties": {
@@ -1575,6 +1790,19 @@
       },
       "GenerationRun": {
         "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The batch the run belongs to (POST /workspaces/{id}/question-generation-batches), or null.",
+            "title": "Batch Id"
+          },
           "candidate_count": {
             "title": "Candidate Count",
             "type": "integer"
@@ -4571,6 +4799,100 @@
         "title": "QuestionUpdate",
         "type": "object"
       },
+      "RandomSources": {
+        "additionalProperties": false,
+        "properties": {
+          "chapter": {
+            "anyOf": [
+              {
+                "pattern": "^(none|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A chapter id, or `none` for the questions without a chapter.",
+            "title": "Chapter"
+          },
+          "count": {
+            "description": "How many sources to pick.",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "favorite": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "true: the caller's favorites only; false: no favorites.",
+            "title": "Favorite"
+          },
+          "mode": {
+            "const": "random",
+            "title": "Mode",
+            "type": "string"
+          },
+          "question_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "MCQ",
+                  "SHORT_ANSWER",
+                  "ESSAY"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Type"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Same seed and same candidates -> same pick. Omitted: the server draws one.",
+            "title": "Seed"
+          },
+          "statuses": {
+            "description": "Heatmap statuses of the caller's study state (any of them); empty = all.",
+            "items": {
+              "enum": [
+                "unseen",
+                "viewed",
+                "incorrect",
+                "correct",
+                "retry"
+              ],
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Statuses",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "count"
+        ],
+        "title": "RandomSources",
+        "type": "object"
+      },
       "ReadinessReport": {
         "properties": {
           "checks": {
@@ -5208,6 +5530,33 @@
           "items"
         ],
         "title": "SearchResponse",
+        "type": "object"
+      },
+      "SelectedSources": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "const": "selected",
+            "title": "Mode",
+            "type": "string"
+          },
+          "question_ids": {
+            "description": "Distinct CONFIRMED questions of this workspace, in the batch's order.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Question Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "question_ids"
+        ],
+        "title": "SelectedSources",
         "type": "object"
       },
       "SelfGradeBody": {
@@ -12321,6 +12670,243 @@
         "summary": "List Jobs",
         "tags": [
           "history"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/question-generation-batches": {
+      "post": {
+        "description": "Start variant generation for several CONFIRMED questions at once (QGEN-01-AC06/AC07):\none run per source, reviewed and registered per run like a single generation.",
+        "operationId": "createQuestionGenerationBatch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerationBatchCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationBatch"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Question Generation Batch",
+        "tags": [
+          "question-generations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/question-generation-batches/{batch_id}": {
+      "get": {
+        "description": "The batch's runs, one per source in batch order, with their progress and draft counts.",
+        "operationId": "getQuestionGenerationBatch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Batch Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationBatch"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Question Generation Batch",
+        "tags": [
+          "question-generations"
         ]
       }
     },

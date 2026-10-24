@@ -1027,6 +1027,47 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspace_id}/question-generation-batches': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Question Generation Batch
+     * @description Start variant generation for several CONFIRMED questions at once (QGEN-01-AC06/AC07):
+     *     one run per source, reviewed and registered per run like a single generation.
+     */
+    post: operations['createQuestionGenerationBatch'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/question-generation-batches/{batch_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Question Generation Batch
+     * @description The batch's runs, one per source in batch order, with their progress and draft counts.
+     */
+    get: operations['getQuestionGenerationBatch'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspace_id}/question-generations': {
     parameters: {
       query?: never;
@@ -1931,6 +1972,100 @@ export type components = {
        */
       name: string;
     };
+    /** GenerationBatch */
+    GenerationBatch: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Draft Count */
+      draft_count: number;
+      /** Finished Run Count */
+      finished_run_count: number;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Items
+       * @description One per source, in batch order.
+       */
+      items: components['schemas']['GenerationBatchItem'][];
+      /**
+       * Mode
+       * @enum {string}
+       */
+      mode: 'selected' | 'random';
+      /** Published Count */
+      published_count: number;
+      /**
+       * Requested Count
+       * @description Sources asked for (a random pick may find fewer).
+       */
+      requested_count: number;
+      /** Run Count */
+      run_count: number;
+      /**
+       * Seed
+       * @description The random pick's seed (null for `selected`).
+       */
+      seed: number | null;
+      /**
+       * Status
+       * @description `working` while any run is queued or running.
+       * @enum {string}
+       */
+      status: 'working' | 'finished';
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /** GenerationBatchCreate */
+    GenerationBatchCreate: {
+      /**
+       * Candidate Count
+       * @description Candidates per variation and source; sources x variations x candidates <= 60.
+       * @default 1
+       */
+      candidate_count?: number;
+      /** Difficulty */
+      difficulty?: ('easier' | 'same' | 'harder') | null;
+      /** Selection */
+      selection: components['schemas']['SelectedSources'] | components['schemas']['RandomSources'];
+      /**
+       * Variation Types
+       * @description Distinct variations for every source. OPTION_SHUFFLE is refused (422).
+       */
+      variation_types: (
+        'OPTION_SHUFFLE' | 'PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT'
+      )[];
+    };
+    /** GenerationBatchItem */
+    GenerationBatchItem: {
+      /** Position */
+      position: number;
+      run: components['schemas']['GenerationRun'];
+      source: components['schemas']['GenerationBatchSource'];
+    };
+    /** GenerationBatchSource */
+    GenerationBatchSource: {
+      /**
+       * Preview
+       * @description First lines of the pinned source stem; never the answer.
+       */
+      preview: string;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /** Question Number */
+      question_number: number | null;
+    };
     /** GenerationCreate */
     GenerationCreate: {
       /**
@@ -1962,6 +2097,11 @@ export type components = {
     };
     /** GenerationRun */
     GenerationRun: {
+      /**
+       * Batch Id
+       * @description The batch the run belongs to (POST /workspaces/{id}/question-generation-batches), or null.
+       */
+      batch_id?: string | null;
       /** Candidate Count */
       candidate_count: number;
       /**
@@ -3218,6 +3358,41 @@ export type components = {
       /** Version */
       version: number;
     };
+    /** RandomSources */
+    RandomSources: {
+      /**
+       * Chapter
+       * @description A chapter id, or `none` for the questions without a chapter.
+       */
+      chapter?: string | null;
+      /**
+       * Count
+       * @description How many sources to pick.
+       */
+      count: number;
+      /**
+       * Favorite
+       * @description true: the caller's favorites only; false: no favorites.
+       */
+      favorite?: boolean | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      mode: 'random';
+      /** Question Type */
+      question_type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      /**
+       * Seed
+       * @description Same seed and same candidates -> same pick. Omitted: the server draws one.
+       */
+      seed?: number | null;
+      /**
+       * Statuses
+       * @description Heatmap statuses of the caller's study state (any of them); empty = all.
+       */
+      statuses?: ('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry')[];
+    };
     /** ReadinessReport */
     ReadinessReport: {
       /** Checks */
@@ -3528,6 +3703,19 @@ export type components = {
       truncated: boolean;
       /** Warnings */
       warnings: string[];
+    };
+    /** SelectedSources */
+    SelectedSources: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      mode: 'selected';
+      /**
+       * Question Ids
+       * @description Distinct CONFIRMED questions of this workspace, in the batch's order.
+       */
+      question_ids: string[];
     };
     /** SelfGradeBody */
     SelfGradeBody: {
@@ -8032,6 +8220,166 @@ export interface operations {
       };
       /** @description Unprocessable Content */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createQuestionGenerationBatch: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GenerationBatchCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GenerationBatch'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getQuestionGenerationBatch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GenerationBatch'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
         headers: {
           [name: string]: unknown;
         };

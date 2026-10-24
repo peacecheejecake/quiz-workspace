@@ -182,6 +182,11 @@ class Settings(BaseSettings):
     share_fork_rate_per_minute: int = Field(
         default=5, ge=0, le=600, validation_alias="SHARE_FORK_RATE_LIMIT_PER_MINUTE"
     )
+    # Batch variant generation starts per minute per user (QGEN-MULTI; in-process token bucket,
+    # burst = rate); above it 429 + Retry-After. 0 disables it.
+    question_generation_batch_rate_per_minute: int = Field(
+        default=6, ge=0, le=600, validation_alias="QUESTION_GENERATION_BATCH_RATE_LIMIT_PER_MINUTE"
+    )
     # Supabase Storage (M3.2a; docs/deployment.md §2, auth.md §4). The API talks to Storage with
     # the server-only secret key; browsers only ever get short-lived signed URLs. Unset key ->
     # document upload/read routes answer 503.

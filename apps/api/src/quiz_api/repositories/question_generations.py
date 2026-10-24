@@ -10,6 +10,10 @@ Job idempotency: the run's job has the key `question_generation:<run id>:1` in t
 `(workspace_id, created_by, job_type, idempotency_key)` scope.
 
 Run status as presented: like imports (quiz_api.repositories.question_imports.present_status).
+
+Batches (QGEN-MULTI, docs/questions.md §5): a batch has no table of its own. Its runs are ordinary
+runs created in one transaction whose `params` carry `batch_id`, `batch_mode`, `batch_position`
+(and `batch_seed` for a random pick); `list_batch_runs` reads them back in position order.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, func, insert, select
+from sqlalchemy import Integer, and_, func, insert, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -100,6 +104,17 @@ class SourceRevisionRecord:
     explanation: str | None
     chapter_id: uuid.UUID | None
     deleted: bool
+
+
+@dataclass(frozen=True)
+class LiveQuestionRecord:
+    """A live (not deleted) question of the workspace: what a batch needs to pin its source."""
+
+    id: uuid.UUID
+    publication_status: str
+    active_revision_id: uuid.UUID
+    question_number: int | None
+    stem: str
 
 
 @dataclass(frozen=True)
@@ -214,6 +229,124 @@ class QuestionGenerationRepository:
         )
         return [_run(r) for r in rows]
 
+    def list_batch_runs(
+        self, workspace_id: uuid.UUID, batch_id: uuid.UUID
+    ) -> list[GenerationRunRecord]:
+        """The runs of one batch of this workspace in batch order (empty: no such batch here)."""
+        runs = question_generation_runs
+        rows = self._session.execute(
+            _run_select()
+            .where(
+                runs.c.workspace_id == workspace_id,
+                runs.c.params["batch_id"].astext == str(batch_id),
+            )
+            .order_by(runs.c.params["batch_position"].astext.cast(Integer), runs.c.id)
+        )
+        return [_run(r) for r in rows]
+
+    def lock_batches(self, workspace_id: uuid.UUID) -> None:
+        """Serialise batch starts of one workspace until the transaction ends, so the in-flight
+        run count and the runs it admits are consistent."""
+        self._session.execute(
+            select(
+                func.pg_advisory_xact_lock(
+                    func.hashtextextended(f"quiz.generation_batch:{workspace_id}", 0)
+                )
+            )
+        )
+
+    def active_run_count(self, workspace_id: uuid.UUID) -> int:
+        """Runs of the workspace still queued or running (a failed/cancelled job ends its run,
+        as `present_status` shows it)."""
+        runs = question_generation_runs
+        count: int = self._session.execute(
+            select(func.count())
+            .select_from(
+                runs.outerjoin(
+                    async_jobs,
+                    and_(
+                        async_jobs.c.id == runs.c.async_job_id,
+                        async_jobs.c.workspace_id == runs.c.workspace_id,
+                    ),
+                )
+            )
+            .where(
+                runs.c.workspace_id == workspace_id,
+                runs.c.status.in_(("queued", "running")),
+                or_(
+                    async_jobs.c.status.is_(None),
+                    async_jobs.c.status.not_in(("failed", "cancelled")),
+                ),
+            )
+        ).scalar_one()
+        return count
+
+    def live_questions(
+        self, workspace_id: uuid.UUID, question_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, LiveQuestionRecord]:
+        """The live questions of this workspace among `question_ids` (others are left out)."""
+        ids = list(set(question_ids))
+        if not ids:
+            return {}
+        rows = self._session.execute(
+            select(
+                questions.c.id,
+                questions.c.publication_status,
+                questions.c.active_revision_id,
+                questions.c.question_number,
+                question_revisions.c.stem,
+            )
+            .select_from(
+                questions.join(
+                    question_revisions,
+                    and_(
+                        question_revisions.c.id == questions.c.active_revision_id,
+                        question_revisions.c.question_id == questions.c.id,
+                    ),
+                )
+            )
+            .where(
+                questions.c.workspace_id == workspace_id,
+                questions.c.id.in_(ids),
+                questions.c.deleted_at.is_(None),
+            )
+        )
+        return {
+            r.id: LiveQuestionRecord(
+                r.id, r.publication_status, r.active_revision_id, r.question_number, r.stem
+            )
+            for r in rows
+        }
+
+    def source_stems(
+        self, workspace_id: uuid.UUID, revision_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, tuple[int | None, str]]:
+        """revision id -> (question number, stem) of the pinned source revisions of runs."""
+        ids = list(set(revision_ids))
+        if not ids:
+            return {}
+        rows = self._session.execute(
+            select(
+                question_revisions.c.id,
+                questions.c.question_number,
+                question_revisions.c.stem,
+            )
+            .select_from(
+                question_revisions.join(
+                    questions,
+                    and_(
+                        questions.c.id == question_revisions.c.question_id,
+                        questions.c.workspace_id == question_revisions.c.workspace_id,
+                    ),
+                )
+            )
+            .where(
+                question_revisions.c.workspace_id == workspace_id,
+                question_revisions.c.id.in_(ids),
+            )
+        )
+        return {r.id: (r.question_number, r.stem) for r in rows}
+
     def passages(self, run_id: uuid.UUID) -> list[dict[str, Any]]:
         found = self._session.execute(
             select(question_generation_runs.c.passages).where(
@@ -297,7 +430,11 @@ class QuestionGenerationRepository:
             actor_id,
             "question_generation.started",
             run_id,
-            {"variation_types": list(variation_types), "candidate_count": candidate_count},
+            {
+                "variation_types": list(variation_types),
+                "candidate_count": candidate_count,
+                **({"batch_id": params["batch_id"]} if "batch_id" in params else {}),
+            },
         )
         return run_id
 

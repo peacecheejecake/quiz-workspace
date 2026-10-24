@@ -99,6 +99,8 @@ RULES: dict[str, Rule | str] = {
     "getQuestion": READ,
     "updateQuestion": EDIT,
     "createQuestionGeneration": EDIT,
+    "createQuestionGenerationBatch": EDIT,
+    "getQuestionGenerationBatch": READ,
     "getQuestionRevision": READ,
     "listQuestionGenerations": READ,
     "listQuestionImports": READ,
@@ -171,6 +173,10 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "publishQuestionImportDrafts": reviewed,
         "updateQuestion": {"base_revision_id": ids["question_revision"], "stem": "S4 변경"},
         "createQuestionGeneration": {"variation_types": ["PARAPHRASE"]},
+        "createQuestionGenerationBatch": {
+            "selection": {"mode": "selected", "question_ids": [ids["question_id"]]},
+            "variation_types": ["PARAPHRASE"],
+        },
         "updateMyQuestionState": {"is_favorite": True},
         "startWorkspaceFork": {"name": "S4 fork"},
         "searchSharedWorkspace": {"query": "S4"},
@@ -356,6 +362,19 @@ def test_body_ids_of_another_workspace_answer_like_unknown_ids(
         ("POST", f"/workspaces/{wid}/question-imports", lambda d: {"document_id": d}),
         ("POST", f"/workspaces/{wid}/search", lambda d: {"query": "S4", "document_ids": [d]}),
     ]
+    foreign_question = world.twin_ids["question_id"]
+    batch_path = f"/workspaces/{wid}/question-generation-batches"
+
+    def batch_body(q: str) -> dict[str, Any]:
+        return {
+            "selection": {"mode": "selected", "question_ids": [q]},
+            "variation_types": ["PARAPHRASE"],
+        }
+
+    foreign_batch = owner.call("POST", batch_path, batch_body(foreign_question))
+    unknown_batch = owner.call("POST", batch_path, batch_body(str(uuid.uuid4())))
+    assert foreign_batch.status_code == 404, f"batch accepted a foreign question: {foreign_batch}"
+    assert s4.problem_key(foreign_batch) == s4.problem_key(unknown_batch), "batch: oracle"
     for method, path, body in cases:
         foreign = owner.call(method, path, body(foreign_doc))
         unknown = owner.call(method, path, body(unknown_doc))
