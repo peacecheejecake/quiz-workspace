@@ -35,6 +35,8 @@ export interface DraftChapterInfo {
 }
 export type DraftUpdateBody = Schemas['QuestionDraftUpdate'];
 export type ReviewedDraftRef = Schemas['ReviewedDraft'];
+/** An import draft selected for registration, with the chapter shown for it (CHAPTER-MAP). */
+export type SelectedImportDraft = Schemas['ReviewedImportDraft'];
 export type ReviewStatus = ImportDraft['review_status'];
 export type DraftOrigin = ImportDraft['payload']['origin'];
 export type GeneratedVariationType = NonNullable<ImportDraft['variation_type']>;
@@ -478,14 +480,21 @@ export function toggleOne(
   return next;
 }
 
-/** The selected drafts in list order, each at the version on screen (the version approved). */
+/**
+ * The selected drafts in list order, each at the version on screen (the version approved) and,
+ * for import drafts, with the chapter shown (the server refuses if it changed meanwhile).
+ */
 export function approvePublishSelection(
   drafts: readonly ReviewDraft[],
   selected: ReadonlySet<string>,
-): ReviewedDraftRef[] {
+): SelectedImportDraft[] {
   return drafts
     .filter((d) => selected.has(d.id) && isSelectable(d))
-    .map((d) => ({ draft_id: d.id, version: d.version }));
+    .map((d) => ({
+      draft_id: d.id,
+      version: d.version,
+      ...(d.chapter ? { chapter_id: d.chapter.chapter?.id ?? null } : {}),
+    }));
 }
 
 const REFUSAL_LABELS: Readonly<Record<RefusalReason, string>> = {

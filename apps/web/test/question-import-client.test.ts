@@ -40,6 +40,7 @@ describe('classifyImportFailure', () => {
     [409, { type: IMPORT_PROBLEMS.documentNotReady }, 'documentNotReady'],
     [409, { type: IMPORT_PROBLEMS.idempotencyKeyReused }, 'idempotencyKeyReused'],
     [409, { type: IMPORT_PROBLEMS.registrationRunning }, 'registrationRunning'],
+    [409, { type: IMPORT_PROBLEMS.chapterChanged }, 'chapterChanged'],
     [409, { type: 'urn:other' }, 'unavailable'],
     [422, { errors: [] }, 'invalid'],
     [503, undefined, 'unavailable'],

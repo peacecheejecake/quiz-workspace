@@ -367,10 +367,29 @@ describe('selection (QIMP-BULK)', () => {
     expect(ids(pruneSelection(drafts, raw))).toEqual(['a']);
     expect(selectAllState(drafts, new Set(['c', 'd']))).toBe(false);
     expect(approvePublishSelection(drafts, new Set(['e', 'a', 'd']))).toEqual([
-      { draft_id: 'a', version: 'v-a' },
-      { draft_id: 'e', version: 'v-e' },
+      { draft_id: 'a', version: 'v-a', chapter_id: null },
+      { draft_id: 'e', version: 'v-e', chapter_id: null },
     ]);
     expect(ids(initialSelection(drafts))).toEqual(['b']);
+  });
+
+  it('CHAPTER-MAP: sends the chapter shown with each selected import draft', () => {
+    const shown = drafts.map((d) =>
+      d.id === 'a'
+        ? {
+            ...d,
+            chapter: {
+              chapter: { id: 'ch-1', title: '1장', document_id: 'b', document_title: '교재' },
+              choice: 'auto' as const,
+              match: 'matched' as const,
+              sourceTitle: '제1장',
+            },
+          }
+        : d,
+    );
+    expect(approvePublishSelection(shown, new Set(['a']))).toEqual([
+      { draft_id: 'a', version: 'v-a', chapter_id: 'ch-1' },
+    ]);
   });
 
   it('names refused drafts by number and reason', () => {

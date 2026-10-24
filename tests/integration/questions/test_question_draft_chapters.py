@@ -115,3 +115,39 @@ def test_qimport_01_ac08_several_book_chapters_with_the_title_are_ambiguous(seed
     _, drafts = alice.import_paper(ws["id"])
 
     assert {(d["chapter"] is None, d["chapter_match"]) for d in drafts} == {(True, "ambiguous")}
+
+
+CHAPTER_CHANGED = "urn:quiz-workspace:problem:chapter-changed"
+
+
+def test_qimport_01_ac08_a_suggestion_that_changed_after_review_refuses_registration(
+    seed: Any,
+) -> None:
+    """Codex P2: a suggestion can change without a new draft version (a book added). A
+    selection sent with the chapter it showed is refused instead of registering elsewhere."""
+    alice = seed.client("cmap-changed")
+    ws = alice.create_workspace()
+    run, drafts = alice.import_paper(ws["id"])
+    q1 = seed.draft_for(drafts, 1)
+    assert q1["chapter"] is None  # no book yet: shown as 챕터 없음
+    shown = [{"draft_id": q1["id"], "version": q1["version"], "chapter_id": None}]
+
+    alice.upload_question_paper(ws["id"], "chapter-book.pdf", document_type="book")
+    after = seed.draft_for(alice.drafts(run["id"]), 1)
+    assert after["version"] == q1["version"]
+    assert after["chapter"] is not None
+
+    seed.problem(alice.register(run["id"], shown), 409, CHAPTER_CHANGED)
+    seed.problem(alice.approve_and_publish(run["id"], shown), 409, CHAPTER_CHANGED)
+    assert alice.ok("GET", f"/question-imports/{run['id']}")["registration_job_id"] is None
+    assert alice.list_questions(ws["id"]) == []
+
+    # Reviewed again with the chapter now shown, it registers under that chapter.
+    current = [
+        {"draft_id": q1["id"], "version": q1["version"], "chapter_id": after["chapter"]["id"]}
+    ]
+    out = alice.ok_response(
+        alice.approve_and_publish(run["id"], current), "POST", "publish", (200,)
+    )
+    question = alice.get_question(out["items"][0]["question_id"])
+    assert question["chapter_id"] == after["chapter"]["id"]

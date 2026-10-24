@@ -380,7 +380,20 @@ class ImportPublishRequest(BaseModel):
     drafts: list[ReviewedDraft] = Field(min_length=1, max_length=MAX_PUBLISH)
 
 
+class ReviewedImportDraft(ReviewedDraft):
+    chapter_id: uuid.UUID | None = Field(
+        default=None,
+        description="CHAPTER-MAP: the chapter shown for the draft (`null` = 챕터 없음). When sent, "
+        "the request is refused with 409 `chapter-changed` if the draft's chapter is no longer "
+        "that one (e.g. a book was added and the suggestion changed): reload and review again. "
+        "Omitted = not checked.",
+    )
+
+
 class ImportPublishBody(ImportPublishRequest):
+    drafts: list[ReviewedImportDraft] = Field(  # type: ignore[assignment]
+        min_length=1, max_length=MAX_PUBLISH
+    )
     approve: bool = Field(
         default=False,
         description="Approve and register the listed drafts in one step (QIMPORT-01-AC03, "
@@ -414,7 +427,7 @@ class ImportRefusedDraft(BaseModel):
 class ImportRegistrationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    drafts: list[ReviewedDraft] = Field(
+    drafts: list[ReviewedImportDraft] = Field(
         min_length=1,
         max_length=MAX_REGISTRATION,
         description="The whole selection, each draft at the version on screen (the version the "
@@ -602,6 +615,36 @@ def _chapter_ref(chapter: BookChapter | None) -> DraftChapterRef | None:
         document_id=chapter.document_id,
         document_title=chapter.document_title,
     )
+
+
+def _displayed_chapters(
+    items: list[ReviewedImportDraft],
+) -> dict[uuid.UUID, uuid.UUID | None]:
+    """The chapter the client showed per draft (first occurrence; only where it was sent)."""
+    shown: dict[uuid.UUID, uuid.UUID | None] = {}
+    for item in items:
+        if "chapter_id" in item.model_fields_set:
+            shown.setdefault(item.draft_id, item.chapter_id)
+    return shown
+
+
+def _refuse_changed_chapters(
+    displayed: dict[uuid.UUID, uuid.UUID | None], current: dict[uuid.UUID, DraftChapter]
+) -> None:
+    """CHAPTER-MAP: never register under another chapter than the one on screen. A suggestion
+    can change without a new draft version (a book added or corrected), so the client's view is
+    compared here and the whole request is refused when it is outdated."""
+    for draft_id, chapter in current.items():
+        if draft_id not in displayed:
+            continue
+        now = chapter.chapter.id if chapter.chapter is not None else None
+        if displayed[draft_id] != now:
+            raise ProblemException(
+                409,
+                ProblemType.CHAPTER_CHANGED,
+                detail="The chapter of a draft changed since it was shown. Reload the drafts, "
+                "check their chapters and register again.",
+            )
 
 
 def _chapters_of(
@@ -1142,6 +1185,7 @@ def publish_question_import_drafts(
     # order), so the chapter read here is the current one until this transaction ends.
     chapter_repo = DraftChapterRepository(repo.session)
     shown = _chapters_of(repo.session, run, [r for r, _, _ in plans])
+    _refuse_changed_chapters(_displayed_chapters(body.drafts), shown)
     chapter_repo.lock_documents_of(
         run.workspace_id, [c.chapter.id for c in shown.values() if c.chapter is not None]
     )
@@ -1300,6 +1344,7 @@ def register_question_import_drafts(
     shown = _chapters_of(
         repo.session, run, [drafts[i.draft_id] for i in items if i.state == "pending"]
     )
+    _refuse_changed_chapters(_displayed_chapters(body.drafts), shown)
     items = [
         replace(i, chapter_id=c.chapter.id)
         if (c := shown.get(i.draft_id)) is not None and c.chapter is not None

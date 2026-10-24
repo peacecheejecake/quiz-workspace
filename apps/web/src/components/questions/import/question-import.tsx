@@ -63,7 +63,7 @@ import {
   type ImportRegistration,
   type ImportRun,
   type RefusedDraft,
-  type ReviewedDraftRef,
+  type SelectedImportDraft,
   type ReviewDraft,
 } from '@/lib/questions/drafts';
 import { abortableSleep } from '@/lib/documents/job-events';
@@ -94,6 +94,11 @@ export interface QuestionImportProps {
   readonly loadFailed: boolean;
   /** How often a running registration is re-read (ms); tests shorten it. */
   readonly registrationPollMs?: number;
+  /**
+   * When the server read the run and drafts (ISO). A registration that ended after it ended
+   * while the page was on its way: its result is not in `initialDrafts` yet and is reported.
+   */
+  readonly loadedAt?: string;
 }
 
 const READ_ONLY_TEXT: Readonly<Record<Exclude<ImportReadOnly, null>, string>> = {
@@ -148,6 +153,7 @@ export function QuestionImport({
   documentId,
   loadFailed,
   registrationPollMs = 1000,
+  loadedAt,
 }: QuestionImportProps) {
   const router = useRouter();
   const client = useMemo(() => createImportClient(), []);
@@ -661,13 +667,19 @@ export function QuestionImport({
     if (refused.length > 0) setPublishFailure(registrationRefusedMessage(current.refused));
   }
 
-  /** The run's registration that was still running when the page (re)opened, if any. */
-  async function reattachRegistration(current: ImportRun) {
+  /**
+   * The run's registration when the page (re)opens: one still running is followed; one that
+   * ended after the server read the drafts (the list on screen predates its result) is reported
+   * like a registration that ends while followed (drafts reloaded, outcome and refusals shown).
+   */
+  async function reattachRegistration(current: ImportRun, since?: string) {
     const jobId = current.registration_job_id;
     if (!jobId) return;
     try {
       const found = await client.getRegistration(current.id, jobId);
-      if (isRegistrationActive(found)) await followRegistration(current.id, found);
+      if (isRegistrationActive(found) || endedAfter(found, since)) {
+        await followRegistration(current.id, found);
+      }
     } catch (error) {
       onUnauthenticated(error);
     }
@@ -679,7 +691,7 @@ export function QuestionImport({
     setPublishFailure(null);
     setStatus(null);
     const importId = run.id;
-    const sent: ReviewedDraftRef[] = selection;
+    const sent: SelectedImportDraft[] = selection;
     const sentIds = new Set(sent.map((ref) => ref.draft_id));
     setStates((s) => Object.fromEntries(Object.entries(s).filter(([id]) => !sentIds.has(id))));
     // A retry of a request whose outcome is unknown reuses its key (the server replays it).
@@ -720,7 +732,7 @@ export function QuestionImport({
   // Reattach to a registration that was still running when the page loaded (QIMP-JOB).
   useEffect(() => {
     if (initialRun?.registration_job_id) {
-      void Promise.resolve().then(() => reattachRegistration(initialRun));
+      void Promise.resolve().then(() => reattachRegistration(initialRun, loadedAt));
     }
     return () => registrationController.current?.abort();
     // Only once for the server-rendered run.
@@ -936,6 +948,16 @@ export function QuestionImport({
       <SourceComparePanel draft={comparing} onClose={() => setComparing(null)} />
     </div>
   );
+}
+
+/** Tolerance between the web server's clock (page render) and the database's (job end). */
+const CLOCK_SKEW_MS = 5000;
+
+function endedAfter(registration: ImportRegistration, since: string | undefined): boolean {
+  if (!since || !registration.finished_at) return false;
+  const ended = Date.parse(registration.finished_at);
+  const loaded = Date.parse(since);
+  return Number.isFinite(ended) && Number.isFinite(loaded) && ended >= loaded - CLOCK_SKEW_MS;
 }
 
 /** Progress of "선택한 문제 승인 및 등록" on the server (QIMP-JOB). */

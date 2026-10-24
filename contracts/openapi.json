@@ -2429,7 +2429,7 @@
           },
           "drafts": {
             "items": {
-              "$ref": "#/components/schemas/ReviewedDraft"
+              "$ref": "#/components/schemas/ReviewedImportDraft"
             },
             "maxItems": 200,
             "minItems": 1,
@@ -2698,7 +2698,7 @@
           "drafts": {
             "description": "The whole selection, each draft at the version on screen (the version the selection approves).",
             "items": {
-              "$ref": "#/components/schemas/ReviewedDraft"
+              "$ref": "#/components/schemas/ReviewedImportDraft"
             },
             "maxItems": 5000,
             "minItems": 1,
@@ -5305,6 +5305,41 @@
           "version"
         ],
         "title": "ReviewedDraft",
+        "type": "object"
+      },
+      "ReviewedImportDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CHAPTER-MAP: the chapter shown for the draft (`null` = 챕터 없음). When sent, the request is refused with 409 `chapter-changed` if the draft's chapter is no longer that one (e.g. a book was added and the suggestion changed): reload and review again. Omitted = not checked.",
+            "title": "Chapter Id"
+          },
+          "draft_id": {
+            "format": "uuid",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "version": {
+            "description": "The `version` of the draft that was approved.",
+            "maxLength": 64,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "version"
+        ],
+        "title": "ReviewedImportDraft",
         "type": "object"
       },
       "RevisionHistory": {

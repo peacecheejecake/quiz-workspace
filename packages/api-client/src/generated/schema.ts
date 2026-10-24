@@ -2435,7 +2435,7 @@ export type components = {
        */
       approve?: boolean;
       /** Drafts */
-      drafts: components['schemas']['ReviewedDraft'][];
+      drafts: components['schemas']['ReviewedImportDraft'][];
     };
     /** ImportPublishedDraft */
     ImportPublishedDraft: {
@@ -2580,7 +2580,7 @@ export type components = {
        * Drafts
        * @description The whole selection, each draft at the version on screen (the version the selection approves).
        */
-      drafts: components['schemas']['ReviewedDraft'][];
+      drafts: components['schemas']['ReviewedImportDraft'][];
     };
     /** ImportRun */
     ImportRun: {
@@ -3659,6 +3659,24 @@ export type components = {
     };
     /** ReviewedDraft */
     ReviewedDraft: {
+      /**
+       * Draft Id
+       * Format: uuid
+       */
+      draft_id: string;
+      /**
+       * Version
+       * @description The `version` of the draft that was approved.
+       */
+      version: string;
+    };
+    /** ReviewedImportDraft */
+    ReviewedImportDraft: {
+      /**
+       * Chapter Id
+       * @description CHAPTER-MAP: the chapter shown for the draft (`null` = 챕터 없음). When sent, the request is refused with 409 `chapter-changed` if the draft's chapter is no longer that one (e.g. a book was added and the suggestion changed): reload and review again. Omitted = not checked.
+       */
+      chapter_id?: string | null;
       /**
        * Draft Id
        * Format: uuid
