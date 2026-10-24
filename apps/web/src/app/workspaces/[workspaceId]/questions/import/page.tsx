@@ -40,6 +40,7 @@ export default async function Page({
         initialRun={data.run}
         initialDrafts={data.drafts}
         initialChapters={data.chapters}
+        loadedAt={data.loadedAt}
         documentId={documentId}
         loadFailed={data.loadFailed}
       />

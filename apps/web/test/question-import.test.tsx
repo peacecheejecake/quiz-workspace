@@ -260,7 +260,9 @@ describe('QuestionImport', () => {
       published_question_id: 'q-done',
     };
     const initial = [draft(0), draft(1), blocked, published];
-    const bodies: { drafts: { draft_id: string; version: string }[] }[] = [];
+    const bodies: {
+      drafts: { draft_id: string; version: string; chapter_id?: string | null }[];
+    }[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/registrations')) {
@@ -325,8 +327,8 @@ describe('QuestionImport', () => {
     expect(bodies).toEqual([
       {
         drafts: [
-          { draft_id: 'd-0', version: 'v-0' },
-          { draft_id: 'd-1', version: 'v-1' },
+          { draft_id: 'd-0', version: 'v-0', chapter_id: null },
+          { draft_id: 'd-1', version: 'v-1', chapter_id: null },
         ],
       },
     ]);
@@ -345,7 +347,7 @@ describe('QuestionImport', () => {
     expect(screen.getByRole('checkbox', { name: /전체 선택 \(1개\)/ })).toBeTruthy();
 
     await user.click(publishButton());
-    expect(bodies[1]).toEqual({ drafts: [{ draft_id: 'd-1', version: 'v-1b' }] });
+    expect(bodies[1]).toEqual({ drafts: [{ draft_id: 'd-1', version: 'v-1b', chapter_id: null }] });
   });
 
   it('CHAPTER-MAP: shows the suggested chapter with why, and saves another choice at once', async () => {
@@ -419,5 +421,73 @@ describe('QuestionImport', () => {
     );
     expect(screen.queryByRole('combobox')).toBeNull();
     expect(screen.getByText(/챕터 없음/)).toBeTruthy();
+  });
+
+  it('Codex P2: a registration that ended after the server render is reported on arrival', async () => {
+    const drafts = [draft(0, 'approved'), draft(1, 'approved')];
+    let draftLoads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith(`/registrations/${JOB}`)) {
+        return json(200, {
+          ...registration('succeeded', 2, 2),
+          registered: 1,
+          finished_at: '2026-10-18T00:01:02Z',
+          refused: [{ draft_id: 'd-1', reason: 'stale-draft', question_number: 2, position: 1 }],
+        });
+      }
+      if (url.endsWith('/drafts')) {
+        draftLoads += 1;
+        return json(200, {
+          items: [
+            { ...drafts[0], published_question_id: 'q-0' },
+            { ...draft(1), version: 'v-1b' },
+          ],
+        });
+      }
+      return json(404, {});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <QuestionImport
+        workspaceId={WS}
+        readOnly={null}
+        initialRun={{ ...RUN, draft_count: 2, registration_job_id: JOB }}
+        initialDrafts={drafts}
+        loadFailed={false}
+        loadedAt="2026-10-18T00:01:00Z"
+        registrationPollMs={5}
+      />,
+    );
+    expect(await screen.findByText(/2번\(다른 곳에서 바뀜\)/)).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('1개 문제를 문제은행에 등록했습니다.');
+    expect(draftLoads).toBe(1);
+    await waitFor(() =>
+      expect(screen.queryByRole('checkbox', { name: '1번 문제 선택' })).toBeNull(),
+    );
+  });
+
+  it('a registration that ended before the server render is not reported again', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith(`/registrations/${JOB}`)) {
+        return json(200, { ...registration('failed', 2, 0), finished_at: '2026-10-18T00:00:30Z' });
+      }
+      return json(404, {});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <QuestionImport
+        workspaceId={WS}
+        readOnly={null}
+        initialRun={{ ...RUN, registration_job_id: JOB }}
+        initialDrafts={[draft(0)]}
+        loadFailed={false}
+        loadedAt="2026-10-18T00:01:00Z"
+      />,
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith('/drafts'))).toBe(false);
   });
 });

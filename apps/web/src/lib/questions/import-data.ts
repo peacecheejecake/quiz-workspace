@@ -13,6 +13,8 @@ export interface ImportScreenData {
   readonly drafts: readonly ImportDraft[];
   /** The workspace's book chapters: the draft chapter picker (CHAPTER-MAP). */
   readonly chapters: readonly BookChapterOption[];
+  /** When the run was read (ISO): a registration that ends later is reported on arrival. */
+  readonly loadedAt: string;
   /** The newest run or its drafts could not be loaded (the screen offers a reload). */
   readonly loadFailed: boolean;
 }
@@ -37,6 +39,7 @@ export async function loadLatestImport(
     if (kind === 'notFound' && workspace) notFound();
   };
 
+  const loadedAt = new Date().toISOString();
   const runs = await api
     .GET('/api/v1/workspaces/{workspace_id}/question-imports', {
       params: {
@@ -45,13 +48,13 @@ export async function loadLatestImport(
       },
     })
     .catch(() => null);
-  if (!runs) return { run: null, drafts: [], chapters: [], loadFailed: true };
+  if (!runs) return { run: null, drafts: [], chapters: [], loadedAt, loadFailed: true };
   if (!runs.data) {
     outcome(runs.response.status, runs.error, { workspace: true });
-    return { run: null, drafts: [], chapters: [], loadFailed: true };
+    return { run: null, drafts: [], chapters: [], loadedAt, loadFailed: true };
   }
   const run = runs.data.items[0] ?? null;
-  if (!run) return { run: null, drafts: [], chapters: [], loadFailed: false };
+  if (!run) return { run: null, drafts: [], chapters: [], loadedAt, loadFailed: false };
 
   const drafts = await api
     .GET('/api/v1/question-imports/{import_id}/drafts', {
@@ -60,12 +63,13 @@ export async function loadLatestImport(
     .catch(() => null);
   if (!drafts?.data) {
     if (drafts) outcome(drafts.response.status, drafts.error);
-    return { run, drafts: [], chapters: [], loadFailed: true };
+    return { run, drafts: [], chapters: [], loadedAt, loadFailed: true };
   }
   return {
     run,
     drafts: drafts.data.items,
     chapters: drafts.data.chapters ?? [],
+    loadedAt,
     loadFailed: false,
   };
 }
