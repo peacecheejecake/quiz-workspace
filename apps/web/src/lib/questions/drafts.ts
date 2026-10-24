@@ -20,6 +20,19 @@ import {
 
 export type ImportDraft = Schemas['ImportDraft'];
 export type ImportRun = Schemas['ImportRun'];
+export type ImportRegistration = Schemas['ImportRegistration'];
+export type BookChapterOption = Schemas['BookChapterOption'];
+export type ChapterMatch = NonNullable<ImportDraft['chapter_match']>;
+
+/** The book chapter an import draft is registered under (CHAPTER-MAP) and why. */
+export interface DraftChapterInfo {
+  readonly chapter: Schemas['DraftChapterRef'] | null;
+  /** `auto`: the server's suggestion; `manual`: chosen in review. */
+  readonly choice: ImportDraft['chapter_choice'];
+  readonly match: ChapterMatch | null;
+  /** The question PDF chapter the suggestion was made from. */
+  readonly sourceTitle: string | null;
+}
 export type DraftUpdateBody = Schemas['QuestionDraftUpdate'];
 export type ReviewedDraftRef = Schemas['ReviewedDraft'];
 export type ReviewStatus = ImportDraft['review_status'];
@@ -89,6 +102,8 @@ export interface ReviewDraft {
   readonly locations: readonly DraftLocation[];
   /** Generation drafts only (QGEN-01); absent for PDF import drafts. */
   readonly generation?: GenerationDraftInfo;
+  /** PDF import drafts only (CHAPTER-MAP). */
+  readonly chapter?: DraftChapterInfo;
 }
 
 function generationInfo(draft: ImportDraft): GenerationDraftInfo {
@@ -142,7 +157,16 @@ export function reviewDraftFromImport(draft: ImportDraft): ReviewDraft {
     sourceDocumentId: evidence?.document_id ?? null,
     pages,
     locations,
-    ...(p.origin === 'generation' ? { generation: generationInfo(draft) } : {}),
+    ...(p.origin === 'generation'
+      ? { generation: generationInfo(draft) }
+      : {
+          chapter: {
+            chapter: draft.chapter ?? null,
+            choice: draft.chapter_choice ?? 'auto',
+            match: draft.chapter_match ?? null,
+            sourceTitle: draft.source_chapter_title ?? null,
+          },
+        }),
   };
 }
 
@@ -373,7 +397,7 @@ export async function publishInBatches(
 
 // ---------------------------------------------------------------------------------------------
 // Selection (QIMPORT-01, QIMP-BULK): checking a draft is screen state only; "선택한 문제 승인 및
-// 등록" approves and registers the selection in one go (publish with `approve: true`).
+// 등록" hands the selection to the server, which approves and registers it (QIMP-JOB).
 // ---------------------------------------------------------------------------------------------
 
 export type RefusalReason = Schemas['ImportRefusedDraft']['reason'];
@@ -381,11 +405,6 @@ export type RefusalReason = Schemas['ImportRefusedDraft']['reason'];
 export interface RefusedDraft {
   readonly draft_id: string;
   readonly reason: RefusalReason;
-}
-
-export interface ApprovePublishResult {
-  readonly items: readonly PublishedItem[];
-  readonly refused: readonly RefusedDraft[];
 }
 
 /** Why the draft cannot be selected (null = it can): registered, or blocked by a validation. */
@@ -481,44 +500,91 @@ export function refusalText(reason: RefusalReason): string {
     : '승인할 수 없는 항목이 있어 등록하지 않았습니다. 편집에서 표시된 항목을 고쳐 주세요.';
 }
 
-/** Summary of the drafts the server refused ("3번(다른 곳에서 바뀜), 5번(…)"). */
-export function refusedMessage(
-  drafts: readonly ReviewDraft[],
-  refused: readonly RefusedDraft[],
-): string {
-  const byId = new Map(drafts.map((d) => [d.id, d]));
-  const list = refused
-    .map((r) => {
-      const d = byId.get(r.draft_id);
-      return `${d ? `${draftNumber(d)}번` : '초안'}(${REFUSAL_LABELS[r.reason]})`;
-    })
-    .join(', ');
-  return `${refused.length}개는 등록하지 못했습니다: ${list}. 선택은 그대로 두었으니 확인한 뒤 다시 등록해 주세요.`;
+// ---------------------------------------------------------------------------------------------
+// Chapter (CHAPTER-MAP): the suggestion from the question PDF's chapter, or the reviewer's choice
+// ---------------------------------------------------------------------------------------------
+
+/** Picker value of "챕터 없음". */
+export const NO_DRAFT_CHAPTER = '__none__';
+
+/** Why the draft has the chapter it has (null = nothing to explain). */
+export function chapterHint(info: DraftChapterInfo, optionCount: number): string | null {
+  const source = info.sourceTitle ? `‘${info.sourceTitle}’` : '문제의 챕터';
+  if (info.choice === 'manual') {
+    return info.chapter ? '직접 고른 챕터로 등록합니다.' : '챕터 없이 등록합니다(직접 선택).';
+  }
+  switch (info.match) {
+    case 'matched':
+      return `문제 PDF의 ${source}에 맞춰 자동으로 골랐습니다.`;
+    case 'ambiguous':
+      return `${source}와 이름이 같은 교재 챕터가 여러 개라 자동으로 고르지 않았습니다. 직접 골라 주세요.`;
+    case 'no_source_chapter':
+      return '문제 PDF에서 이 문제의 챕터를 찾지 못해 챕터 없이 등록됩니다.';
+    case 'no_match':
+      return optionCount === 0
+        ? '목차가 있는 교재가 없어 챕터 없이 등록됩니다.'
+        : `문제 PDF의 ${source}와 같은 교재 챕터가 없어 챕터 없이 등록됩니다.`;
+    default:
+      return null;
+  }
 }
 
-/**
- * Approves and registers `selection` in sequential batches of at most `size` (publish with
- * `approve: true`). Each batch is one transaction and idempotent per draft on the server; drafts
- * it refuses are collected, not thrown. Rejects with the first failed request after reporting the
- * batches that succeeded (`onBatch`), so a retry sends only what is still unregistered.
- */
-export async function approvePublishInBatches(
-  selection: readonly ReviewedDraftRef[],
-  send: (batch: readonly ReviewedDraftRef[]) => Promise<ApprovePublishResult>,
-  onBatch: (result: ApprovePublishResult, done: number) => void,
-  size = PUBLISH_BATCH_SIZE,
-): Promise<ApprovePublishResult> {
-  const items: PublishedItem[] = [];
-  const refused: RefusedDraft[] = [];
-  let done = 0;
-  for (const batch of publishBatches(selection, size)) {
-    const result = await send(batch);
-    items.push(...result.items);
-    refused.push(...result.refused);
-    done += batch.length;
-    onBatch(result, done);
-  }
-  return { items, refused };
+/** PATCH body that sets the draft's chapter (null = 챕터 없음) at the version on screen. */
+export function chapterBody(
+  draft: Pick<ReviewDraft, 'version'>,
+  chapterId: string | null,
+): DraftUpdateBody {
+  return { base_version: draft.version, chapter_id: chapterId };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Server-side registration (QIMP-JOB): the selection is submitted once and a server job approves
+// and registers it; the screen only follows its progress (and reattaches after a reload).
+// ---------------------------------------------------------------------------------------------
+
+export function isRegistrationActive(registration: Pick<ImportRegistration, 'status'>): boolean {
+  return registration.status === 'queued' || registration.status === 'running';
+}
+
+/** "승인·등록 중 · k개 중 n개 처리" and the bar value (0-100). */
+export function registrationProgress(
+  registration: Pick<ImportRegistration, 'processed' | 'total'>,
+): { readonly text: string; readonly value: number } {
+  const { processed, total } = registration;
+  return {
+    text: `승인·등록 중 · ${total}개 중 ${processed}개 처리`,
+    value: total > 0 ? Math.round((processed / total) * 100) : 0,
+  };
+}
+
+/** Shown under the registration progress: nothing about it needs the page. */
+export const REGISTRATION_BACKGROUND_HINT =
+  '이 페이지를 떠나도 선택한 문제의 승인·등록은 서버에서 계속됩니다. 다시 열면 진행 상황을 이어서 볼 수 있습니다.';
+
+const REGISTRATION_FAILURES: Readonly<Record<string, string>> = {
+  workspace_unavailable:
+    'Workspace가 보관되었거나 편집 권한이 없어 나머지 초안을 등록하지 못했습니다.',
+  cancelled: '등록 작업이 취소되었습니다.',
+};
+
+/** Why a registration stopped before every draft was processed. */
+export function registrationFailureMessage(
+  registration: Pick<ImportRegistration, 'error_code' | 'registered'>,
+): string {
+  const reason =
+    (registration.error_code && REGISTRATION_FAILURES[registration.error_code]) ||
+    '일시적인 오류로 나머지 초안을 등록하지 못했습니다.';
+  const partial =
+    registration.registered > 0 ? ` 지금까지 ${registration.registered}개를 등록했습니다.` : '';
+  return `선택한 문제를 모두 등록하지 못했습니다.${partial} ${reason}`;
+}
+
+/** Summary of the drafts a registration refused, by their printed number. */
+export function registrationRefusedMessage(refused: ImportRegistration['refused']): string {
+  const list = refused
+    .map((r) => `${r.question_number ?? r.position + 1}번(${REFUSAL_LABELS[r.reason]})`)
+    .join(', ');
+  return `${refused.length}개는 등록하지 못했습니다: ${list}. 선택은 그대로 두었으니 확인한 뒤 다시 등록해 주세요.`;
 }
 
 /** Replaces one draft (after an edit or a review change) and keeps the order. */

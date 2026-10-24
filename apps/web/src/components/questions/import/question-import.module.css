@@ -166,3 +166,22 @@
 .compareViewer {
   min-height: 24rem;
 }
+
+/* CHAPTER-MAP: the chapter a draft is registered under. */
+.chapterField {
+  max-width: 28rem;
+}
+
+.chapterText {
+  margin: 0;
+  font-size: var(--font-size-body);
+}
+
+.chapterLabel {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.chapterHint {
+  color: var(--color-text-secondary);
+}

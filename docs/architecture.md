@@ -114,7 +114,7 @@ workspace
 - `question_user_states(user_id, question_id, first_viewed_at, last_viewed_at, last_graded_result, last_graded_attempt_id, is_favorite, needs_retry, updated_at)` with `(user_id, question_id)` unique.
 - `question_attempts(id, question_id, question_revision_id, user_id, displayed_option_ids, submitted_answer, result, grading_method, submitted_at, graded_at)`.
 - `question_lineage(parent_question_id, child_question_id, variation_type, source_revision_id)`.
-- `question_generation_runs` / `question_import_runs`; `question_drafts` (approval 전 격리).
+- `question_generation_runs` / `question_import_runs`; `question_drafts` (approval 전 격리); `question_import_registration_items` (서버 측 등록 job의 항목·진행, QIMP-JOB).
 - `activity_events` (변경 감사), `async_jobs` (재시도/상태).
 
 문제 상태는 독립 필드를 합성해 계산한다. 색상 규칙·열람 판정·변형 정책은 `docs/questions.md`가 단일 기준이다.
@@ -149,8 +149,10 @@ workspace
 | POST | `/api/v1/workspaces/{id}/question-generation-batches` | 여러 문제·임의 선택 묶음 변형 출제(원본마다 `question.generate` run; QGEN-MULTI) |
 | GET | `/api/v1/workspaces/{id}/question-generation-batches/{batch_id}` | 묶음의 원본별 run·진행 상태 |
 | POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기 |
-| GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토 |
+| GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토(초안별 등록 챕터 추천·선택, 교재 챕터 목록 — CHAPTER-MAP) |
 | POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록(`approve: true`면 선택한 초안을 승인과 함께 등록, 거절 목록 반환) |
+| POST | `/api/v1/question-imports/{id}/registrations` | 선택한 초안 전체를 서버에서 승인·등록(`question.import_register` job, QIMP-JOB) |
+| GET | `/api/v1/question-imports/{id}/registrations/{job_id}` | 서버 측 등록 진행(처리/전체)·거절 목록 |
 | GET | `/api/v1/jobs/{id}` | 비동기 작업 상태 |
 | GET | `/api/v1/jobs/{id}/events` | SSE 진행 상황 |
 | GET | `/api/v1/workspaces/{id}/activities` | 변경 이력 |

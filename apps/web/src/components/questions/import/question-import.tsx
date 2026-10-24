@@ -4,9 +4,10 @@
 //
 //   PDF 업로드 (document_type question_paper, the DOC-01 upload flow) → PDF 분석 job → import run
 //   (POST /question-imports, Idempotency-Key) → 문제 추출 job → drafts → review (편집 / 원본 비교 /
-//   선택) → "선택한 문제 승인 및 등록" approves and registers exactly the selected drafts at the
-//   versions on screen (publish with `approve: true`, QIMP-BULK). Checking a draft or "전체 선택"
-//   is screen state only; nothing is sent until the button.
+//   선택) → "선택한 문제 승인 및 등록" hands exactly the selected drafts at the versions on screen
+//   to the server (POST /registrations, QIMP-JOB), whose job approves and registers them even if
+//   the page is left; the screen follows its progress and reattaches on return. Checking a draft
+//   or "전체 선택" is screen state only; nothing is sent until the button.
 //
 // The server starts the import itself once the PDF is processed (QIMPORT-01-AC06), so after the
 // upload the page may be left: the POST then attaches to that run, and a later visit (or
@@ -14,7 +15,7 @@
 //
 // Nothing reaches the bank before a human approves it; a failed extraction keeps the drafts it
 // already persisted and "다시 시도" retries the same run (the API reconciles, no duplicates);
-// a publish whose response was lost is retried with the same drafts (idempotent per draft).
+// a registration whose response was lost is retried with the same Idempotency-Key.
 // Drafts the server refuses (changed since, or not confirmable) stay selected and are named.
 import { Button, Checkbox, EmptyState, PageHeader, ProgressBar } from '@quiz/ui';
 import Link from 'next/link';
@@ -37,15 +38,19 @@ import {
 } from '@/lib/documents/upload-machine';
 import { defaultTitle, PDF_CONTENT_TYPE, validatePdfFile } from '@/lib/documents/validation';
 import {
-  applyPublished,
-  approvePublishInBatches,
   approvePublishSelection,
+  chapterBody,
+  draftNumber,
   draftUpdateBody,
   initialSelection,
+  isRegistrationActive,
   pruneSelection,
   publishedMessage,
   refusalText,
-  refusedMessage,
+  REGISTRATION_BACKGROUND_HINT,
+  registrationRefusedMessage,
+  registrationFailureMessage,
+  registrationProgress,
   replaceDraft,
   reviewDraftFromImport,
   selectAllScope,
@@ -53,17 +58,22 @@ import {
   sortDrafts,
   toggleAll,
   toggleOne,
+  type BookChapterOption,
   type ImportDraft,
+  type ImportRegistration,
   type ImportRun,
   type RefusedDraft,
+  type ReviewedDraftRef,
   type ReviewDraft,
 } from '@/lib/questions/drafts';
+import { abortableSleep } from '@/lib/documents/job-events';
 import type { QuestionFormValues } from '@/lib/questions/form';
 import { createImportClient, ImportApiError, importPath } from '@/lib/questions/import-client';
 import { clearPendingImportFile, peekPendingImportFile } from '@/lib/questions/import-handoff';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import { DraftEditor, type DraftSaveResult } from '../drafts/draft-editor';
 import { QuestionDraftReview, type DraftReviewState } from '../drafts/question-draft-review';
+import { DraftChapterField } from './draft-chapter-field';
 import { ImportJobProgress, type ImportStep } from './import-job-progress';
 import { SourceComparePanel } from './source-compare-panel';
 import styles from './question-import.module.css';
@@ -77,9 +87,13 @@ export interface QuestionImportProps {
   readonly readOnly: ImportReadOnly;
   readonly initialRun: ImportRun | null;
   readonly initialDrafts: readonly ImportDraft[];
+  /** The workspace's book chapters (draft chapter picker, CHAPTER-MAP). */
+  readonly initialChapters?: readonly BookChapterOption[];
   /** The question paper the page was opened for (`?document=`), if any. */
   readonly documentId?: string;
   readonly loadFailed: boolean;
+  /** How often a running registration is re-read (ms); tests shorten it. */
+  readonly registrationPollMs?: number;
 }
 
 const READ_ONLY_TEXT: Readonly<Record<Exclude<ImportReadOnly, null>, string>> = {
@@ -130,8 +144,10 @@ export function QuestionImport({
   readOnly,
   initialRun,
   initialDrafts,
+  initialChapters = [],
   documentId,
   loadFailed,
+  registrationPollMs = 1000,
 }: QuestionImportProps) {
   const router = useRouter();
   const client = useMemo(() => createImportClient(), []);
@@ -146,6 +162,10 @@ export function QuestionImport({
   const [selected, setSelected] = useState<ReadonlySet<string>>(() =>
     initialSelection(sortDrafts(initialDrafts.map(reviewDraftFromImport))),
   );
+  const [chapterOptions, setChapterOptions] =
+    useState<readonly BookChapterOption[]>(initialChapters);
+  /** Drafts whose chapter change is being saved. */
+  const [savingChapter, setSavingChapter] = useState<ReadonlySet<string>>(new Set());
   const [listFailed, setListFailed] = useState(loadFailed);
   const [activity, setActivity] = useState<Activity | null>(() =>
     initialRun && isWorking(initialRun) ? { step: 'extracting' } : null,
@@ -157,10 +177,9 @@ export function QuestionImport({
   );
   const [fileAlert, setFileAlert] = useState<string | null>(null);
   const [states, setStates] = useState<Record<string, DraftReviewState>>({});
+  /** Submitting the selection, or following its server-side registration. */
   const [publishing, setPublishing] = useState(false);
-  const [publishProgress, setPublishProgress] = useState<{ done: number; total: number } | null>(
-    null,
-  );
+  const [registration, setRegistration] = useState<ImportRegistration | null>(null);
   const [publishFailure, setPublishFailure] = useState<string | null>(null);
   const [status, setStatus] = useState<{ text: string; bank: boolean } | null>(null);
   const [editing, setEditing] = useState<ReviewDraft | null>(null);
@@ -177,8 +196,9 @@ export function QuestionImport({
   const startKeys = useRef(new Map<string, string>());
   /** Idempotency-Key of the retry of a failed run, per failed job. */
   const retryKeys = useRef(new Map<string, string>());
-  /** Drafts registered by the current publish round (kept across retries of failed batches). */
-  const publishRound = useRef(new Set<string>());
+  /** Idempotency-Key of the last registration request whose outcome is unknown (network). */
+  const registerKey = useRef<{ readonly body: string; readonly key: string } | null>(null);
+  const registrationController = useRef<AbortController | null>(null);
   const [reloadingList, setReloadingList] = useState(false);
 
   const onUnauthenticated = useCallback(
@@ -195,8 +215,9 @@ export function QuestionImport({
   const refreshDrafts = useCallback(
     async (importId: string, signal?: AbortSignal) => {
       try {
-        const items = await client.listDrafts(importId, signal);
+        const { items, chapters } = await client.draftList(importId, signal);
         setDrafts(sortDrafts(items.map(reviewDraftFromImport)));
+        setChapterOptions(chapters);
         setListFailed(false);
         return true;
       } catch (error) {
@@ -293,7 +314,6 @@ export function QuestionImport({
         return;
       }
       setDrafts([]);
-      publishRound.current.clear();
       setStates({});
       setSelected(new Set());
       await followRun(started, signal);
@@ -502,6 +522,29 @@ export function QuestionImport({
     }
   }
 
+  /** Saves the chapter a draft is registered under (CHAPTER-MAP); not content, keeps approval. */
+  async function changeChapter(target: ReviewDraft, chapterId: string | null) {
+    setSavingChapter((s) => new Set(s).add(target.id));
+    setStates(({ [target.id]: _old, ...rest }) => rest);
+    try {
+      const updated = await client.updateDraft(target.id, chapterBody(target, chapterId));
+      setDrafts((list) => replaceDraft(list, reviewDraftFromImport(updated)));
+    } catch (error) {
+      if (onUnauthenticated(error)) return;
+      const message = error instanceof ImportApiError ? error.message : '챕터를 바꾸지 못했습니다.';
+      setStates((s) => ({ ...s, [target.id]: { error: message } }));
+      if (error instanceof ImportApiError && error.kind === 'staleDraft' && run) {
+        void refreshDrafts(run.id);
+      }
+    } finally {
+      setSavingChapter((s) => {
+        const next = new Set(s);
+        next.delete(target.id);
+        return next;
+      });
+    }
+  }
+
   async function reloadDraft(draftId: string): Promise<ReviewDraft | null> {
     if (!run) return null;
     try {
@@ -569,50 +612,120 @@ export function QuestionImport({
     });
   }
 
+  /**
+   * Follows a server-side registration until it ends (it continues without the page: leaving
+   * only stops this polling), then reloads the drafts and reports what was registered/refused.
+   */
+  async function followRegistration(importId: string, first: ImportRegistration) {
+    registrationController.current?.abort();
+    const controller = new AbortController();
+    registrationController.current = controller;
+    const { signal } = controller;
+    setPublishing(true);
+    let current = first;
+    setRegistration(current);
+    let misses = 0;
+    while (isRegistrationActive(current)) {
+      try {
+        await abortableSleep(registrationPollMs, signal);
+        current = await client.getRegistration(importId, current.job_id, signal);
+        misses = 0;
+        setRegistration(current);
+      } catch (error) {
+        if (isAbort(error, signal)) return;
+        if (onUnauthenticated(error)) return;
+        misses += 1;
+        if (misses >= 5) {
+          setPublishing(false);
+          setRegistration(null);
+          setPublishFailure(
+            '등록 진행 상황을 확인하지 못했습니다. 등록은 서버에서 계속되니 잠시 후 페이지를 새로 열어 확인해 주세요.',
+          );
+          return;
+        }
+      }
+    }
+    await refreshDrafts(importId, signal);
+    if (signal.aborted) return;
+    setPublishing(false);
+    setRegistration(null);
+    const refused = current.refused.map((r) => ({ draft_id: r.draft_id, reason: r.reason }));
+    markRefused(refused);
+    if (current.status !== 'succeeded') {
+      setPublishFailure(registrationFailureMessage(current));
+      return;
+    }
+    if (current.registered > 0 || refused.length === 0) {
+      setStatus({ text: publishedMessage(current.registered), bank: true });
+    }
+    if (refused.length > 0) setPublishFailure(registrationRefusedMessage(current.refused));
+  }
+
+  /** The run's registration that was still running when the page (re)opened, if any. */
+  async function reattachRegistration(current: ImportRun) {
+    const jobId = current.registration_job_id;
+    if (!jobId) return;
+    try {
+      const found = await client.getRegistration(current.id, jobId);
+      if (isRegistrationActive(found)) await followRegistration(current.id, found);
+    } catch (error) {
+      onUnauthenticated(error);
+    }
+  }
+
   async function publish() {
     if (!run || publishing || selection.length === 0) return;
     setPublishing(true);
     setPublishFailure(null);
     setStatus(null);
     const importId = run.id;
-    const sent = selection;
+    const sent: ReviewedDraftRef[] = selection;
     const sentIds = new Set(sent.map((ref) => ref.draft_id));
     setStates((s) => Object.fromEntries(Object.entries(s).filter(([id]) => !sentIds.has(id))));
-    setPublishProgress({ done: 0, total: sent.length });
-    // Drafts registered in this round (across retries of failed batches), counted once each.
-    const round = publishRound.current;
-    const refused: RefusedDraft[] = [];
+    // A retry of a request whose outcome is unknown reuses its key (the server replays it).
+    const body = JSON.stringify(sent);
+    const key = registerKey.current?.body === body ? registerKey.current.key : crypto.randomUUID();
+    registerKey.current = { body, key };
+    let submitted: ImportRegistration;
     try {
-      await approvePublishInBatches(
-        sent,
-        (batch) => client.approveAndPublish(importId, batch),
-        (result, done) => {
-          for (const item of result.items) round.add(item.draft_id);
-          refused.push(...result.refused);
-          setDrafts((list) => applyPublished(list, result.items));
-          markRefused(result.refused);
-          setPublishProgress({ done, total: sent.length });
-        },
-      );
-      if (round.size > 0 || refused.length === 0) {
-        setStatus({ text: publishedMessage(round.size), bank: true });
-      }
-      if (refused.length > 0) setPublishFailure(refusedMessage(drafts, refused));
-      round.clear();
-      void refreshDrafts(importId);
+      submitted = await client.register(importId, sent, key);
     } catch (error) {
       if (onUnauthenticated(error)) return;
       const kind = error instanceof ImportApiError ? error.kind : 'unavailable';
+      if (kind !== 'network') registerKey.current = null;
+      if (kind === 'registrationRunning') {
+        // Another tab (or an earlier visit) is registering: follow that one.
+        try {
+          const latest = await client.getRun(importId);
+          setRun(latest);
+          setPublishing(false);
+          await reattachRegistration(latest);
+          return;
+        } catch {
+          // Fall through to the failure below.
+        }
+      }
+      setPublishing(false);
       const message =
         error instanceof ImportApiError ? error.message : '문제를 등록하지 못했습니다.';
-      const partial = round.size > 0 ? ` 지금까지 ${round.size}개를 등록했습니다.` : '';
-      setPublishFailure(`선택한 문제를 모두 등록하지 못했습니다.${partial} ${message}`);
+      setPublishFailure(`선택한 문제를 등록하지 못했습니다. ${message}`);
       if (kind !== 'network' && kind !== 'unavailable') void refreshDrafts(importId);
-    } finally {
-      setPublishing(false);
-      setPublishProgress(null);
+      return;
     }
+    registerKey.current = null;
+    setRun((r) => (r && r.id === importId ? { ...r, registration_job_id: submitted.job_id } : r));
+    await followRegistration(importId, submitted);
   }
+
+  // Reattach to a registration that was still running when the page loaded (QIMP-JOB).
+  useEffect(() => {
+    if (initialRun?.registration_job_id) {
+      void Promise.resolve().then(() => reattachRegistration(initialRun));
+    }
+    return () => registrationController.current?.abort();
+    // Only once for the server-rendered run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- render -------------------------------------------------------------------------------
 
@@ -773,7 +886,7 @@ export function QuestionImport({
               <p className={styles.meta}>선택 {selectedCount}개</p>
             </div>
           ) : null}
-          {publishProgress ? <PublishProgress {...publishProgress} /> : null}
+          {registration ? <RegistrationProgress registration={registration} /> : null}
           {drafts.length === 0 && !busy ? (
             <p className={styles.meta}>아직 추출된 초안이 없습니다.</p>
           ) : null}
@@ -792,6 +905,18 @@ export function QuestionImport({
               setEditing(draft);
             }}
             onCompare={setComparing}
+            renderExtra={(draft) =>
+              draft.chapter ? (
+                <DraftChapterField
+                  number={draftNumber(draft)}
+                  info={draft.chapter}
+                  options={chapterOptions}
+                  readOnly={!canEdit || draft.publishedQuestionId !== null}
+                  disabled={publishing || savingChapter.has(draft.id)}
+                  onChange={(chapterId) => void changeChapter(draft, chapterId)}
+                />
+              ) : null
+            }
             pageHref={(draft, page) =>
               (draft.sourceDocumentId ?? sourceDocumentId)
                 ? `/workspaces/${workspaceId}/documents/${draft.sourceDocumentId ?? sourceDocumentId}?page=${page}`
@@ -813,14 +938,14 @@ export function QuestionImport({
   );
 }
 
-/** Progress of "선택한 문제 승인 및 등록" (batches of up to 200 drafts). */
-function PublishProgress({ done, total }: { readonly done: number; readonly total: number }) {
-  const value = total > 0 ? Math.round((done / total) * 100) : 0;
-  const text = `승인·등록 중 · ${total}개 중 ${done}개 처리`;
+/** Progress of "선택한 문제 승인 및 등록" on the server (QIMP-JOB). */
+function RegistrationProgress({ registration }: { readonly registration: ImportRegistration }) {
+  const { text, value } = registrationProgress(registration);
   return (
     <div className={styles.progressBox}>
       <p className={styles.progressText}>{text}</p>
       <ProgressBar className={styles.progress} label="등록 진행률" value={value} valueText={text} />
+      <p className={styles.progressHint}>{REGISTRATION_BACKGROUND_HINT}</p>
     </div>
   );
 }

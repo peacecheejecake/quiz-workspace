@@ -48,6 +48,10 @@ PARSE_JOB_TYPE = "document.parse"
 INDEX_SYNC_JOB_TYPE = "document.index_sync"
 DOCUMENT_JOB_TYPES = frozenset({PARSE_JOB_TYPE, INDEX_SYNC_JOB_TYPE})
 IMPORT_JOB_TYPE = "question.import"
+# QIMP-JOB: registers a submitted selection; it works on its import run (no retry from History:
+# the import page submits what is still unregistered again).
+REGISTER_JOB_TYPE = "question.import_register"
+IMPORT_JOB_TYPES = frozenset({IMPORT_JOB_TYPE, REGISTER_JOB_TYPE})
 RETRYABLE_STATUSES: frozenset[str] = frozenset({"failed", "cancelled"})
 
 
@@ -552,10 +556,10 @@ class _JobTargets:
             if r.job_type in DOCUMENT_JOB_TYPES
         )
         import_ids = _ids(
-            as_uuid(_payload(r).get("import_id")) for r in rows if r.job_type == IMPORT_JOB_TYPE
+            as_uuid(_payload(r).get("import_id")) for r in rows if r.job_type in IMPORT_JOB_TYPES
         )
         other_job_ids = {
-            r.id for r in rows if r.job_type not in DOCUMENT_JOB_TYPES | {IMPORT_JOB_TYPE}
+            r.id for r in rows if r.job_type not in DOCUMENT_JOB_TYPES | IMPORT_JOB_TYPES
         }
         if doc_ids:
             self._documents = _document_states(session, workspace_id, doc_ids)
@@ -595,11 +599,13 @@ class _JobTargets:
             return JobTarget(
                 "document", doc_id, doc.title, retryable=retryable, target_revision_id=revision_id
             )
-        if row.job_type == IMPORT_JOB_TYPE:
+        if row.job_type in IMPORT_JOB_TYPES:
             run_id = as_uuid(payload.get("import_id"))
             run = self._imports.get(run_id) if run_id is not None else None
             if run_id is None or run is None:
                 return JobTarget("question_import", None, None, retryable=False)
+            if row.job_type == REGISTER_JOB_TYPE:
+                return JobTarget("question_import", run_id, run.title, retryable=False)
             # Retry = POST /question-imports/{id}/retry: only the run's current job, while the
             # run is failed/cancelled and its question paper still exists (QIMPORT-01-AC04).
             retryable = (

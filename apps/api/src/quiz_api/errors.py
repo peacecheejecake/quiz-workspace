@@ -86,6 +86,8 @@ class ProblemType(StrEnum):
     GENERATION_BUSY = "urn:quiz-workspace:problem:generation-busy"
     # 409: a random-pick batch found no CONFIRMED question matching its filters (no run made).
     NO_MATCHING_QUESTIONS = "urn:quiz-workspace:problem:no-matching-questions"
+    # 409: the import's previous registration (QIMP-JOB) is still queued or running; follow it.
+    IMPORT_REGISTRATION_RUNNING = "urn:quiz-workspace:problem:import-registration-running"
 
 
 class ProblemException(StarletteHTTPException):

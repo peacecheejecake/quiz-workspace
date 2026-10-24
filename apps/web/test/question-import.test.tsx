@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 // QIMPORT-01 screen behaviour the E2E specs cannot reach: recovering from a failed first load with
-// "목록 새로고침" (no full page reload), registering more selected drafts than the API accepts per
-// request (MAX_PUBLISH = 200) in batches, retrying only what is left after a failed batch, and the
-// selection (QIMP-BULK): checks send nothing, "전체 선택" scope and states, refused drafts stay
-// selected.
+// "목록 새로고침" (no full page reload), the server-side registration (QIMP-JOB: one request with the
+// whole selection, progress while the job runs, a retry after a lost response reuses its
+// Idempotency-Key, reattaching to a running registration on load) and the selection (QIMP-BULK):
+// checks send nothing, "전체 선택" scope and states, refused drafts stay selected.
 import './dom-setup';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -22,6 +22,7 @@ const { QuestionImport } = await import('../src/components/questions/import/ques
 const WS = '55555555-5555-4555-8555-555555555555';
 const RUN_ID = '22222222-2222-4222-8222-222222222222';
 const DOC = '33333333-3333-4333-8333-333333333333';
+const JOB = '44444444-4444-4444-8444-444444444444';
 
 const RUN: ImportRun = {
   id: RUN_ID,
@@ -34,6 +35,7 @@ const RUN: ImportRun = {
   document_title: '문제지',
   draft_count: 1,
   published_count: 0,
+  registration_job_id: null,
   created_at: '2026-10-18T00:00:00Z',
   updated_at: '2026-10-18T00:00:00Z',
   finished_at: '2026-10-18T00:00:00Z',
@@ -72,6 +74,26 @@ function draft(i: number, review: ImportDraft['review_status'] = 'pending'): Imp
       validations: [],
       review_status: review,
     },
+  };
+}
+
+function registration(
+  status: 'queued' | 'running' | 'succeeded' | 'failed',
+  total: number,
+  processed: number,
+) {
+  return {
+    job_id: JOB,
+    import_id: RUN_ID,
+    status,
+    error_code: null,
+    total,
+    processed,
+    registered: processed,
+    skipped: 0,
+    refused: [],
+    created_at: '2026-10-18T00:00:00Z',
+    finished_at: status === 'succeeded' ? '2026-10-18T00:01:00Z' : null,
   };
 }
 
@@ -116,29 +138,30 @@ describe('QuestionImport', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
 
-  it('registers more than 200 selected drafts in batches and retries only the rest', async () => {
+  it('QIMP-JOB: submits the whole selection once, follows the job and retries with the same key', async () => {
     const drafts = Array.from({ length: 450 }, (_, i) => draft(i, 'approved'));
-    const sent: number[] = [];
-    let publishCalls = 0;
+    const bodies: { drafts: { draft_id: string }[] }[] = [];
+    const keys: (string | undefined)[] = [];
+    let polls = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.endsWith('/publish')) {
-        publishCalls += 1;
-        const body = JSON.parse(String(init?.body)) as {
-          drafts: { draft_id: string }[];
-          approve?: boolean;
-        };
-        expect(body.approve).toBe(true);
-        sent.push(body.drafts.length);
-        if (publishCalls === 2) throw new TypeError('Failed to fetch');
-        return json(200, {
-          items: body.drafts.map((d) => ({ draft_id: d.draft_id, question_id: `q-${d.draft_id}` })),
-          refused: [],
-        });
+      if (url.endsWith('/registrations')) {
+        bodies.push(JSON.parse(String(init?.body)) as (typeof bodies)[number]);
+        keys.push((init?.headers as Record<string, string>)['idempotency-key']);
+        if (bodies.length === 1) throw new TypeError('Failed to fetch');
+        return json(202, registration('queued', 0, 0));
+      }
+      if (url.endsWith(`/registrations/${JOB}`)) {
+        polls += 1;
+        return json(
+          200,
+          polls < 2 ? registration('running', 200, 200) : registration('succeeded', 450, 450),
+        );
       }
       if (url.endsWith('/drafts')) {
-        // Keep the screen's own view (the server state is not modelled here).
-        return json(503, {});
+        return json(200, {
+          items: drafts.map((d) => ({ ...d, published_question_id: `q-${d.id}` })),
+        });
       }
       return json(404, {});
     });
@@ -150,15 +173,13 @@ describe('QuestionImport', () => {
         initialRun={{ ...RUN, draft_count: 450 }}
         initialDrafts={drafts}
         loadFailed={false}
+        registrationPollMs={5}
       />,
     );
     const user = userEvent.setup();
     // Drafts approved before QIMP-BULK start selected.
     await user.click(screen.getByRole('button', { name: /선택한 문제 승인 및 등록 \(450\)/ }));
-
-    const failure = await screen.findByText(/지금까지 200개를 등록했습니다/);
-    expect(failure).toBeTruthy();
-    expect(sent).toEqual([200, 200]);
+    expect(await screen.findByText(/선택한 문제를 등록하지 못했습니다/)).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: '다시 시도' }));
     await waitFor(() =>
@@ -166,9 +187,66 @@ describe('QuestionImport', () => {
         '450개 문제를 문제은행에 등록했습니다.',
       ),
     );
-    // The retry resends the lost batch (idempotent) and the remainder, never the first batch.
-    expect(sent).toEqual([200, 200, 200, 50]);
+    // One request with every selected draft; the retry of the lost one reuses its key.
+    expect(bodies.map((b) => b.drafts.length)).toEqual([450, 450]);
+    expect(keys[0]).toBeTruthy();
+    expect(keys[1]).toBe(keys[0]);
+    expect(polls).toBe(2);
+    expect(screen.queryByRole('progressbar', { name: '등록 진행률' })).toBeNull();
   }, 30_000);
+
+  it('QIMP-JOB: reattaches to a registration that is still running when the page opens', async () => {
+    const drafts = [draft(0, 'approved'), draft(1, 'approved')];
+    let polls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith(`/registrations/${JOB}`)) {
+        polls += 1;
+        if (polls === 1) return json(200, registration('running', 2, 1));
+        if (polls === 2) return json(200, registration('running', 2, 1));
+        return json(200, {
+          ...registration('succeeded', 2, 2),
+          registered: 1,
+          refused: [{ draft_id: 'd-1', reason: 'stale-draft', question_number: 2, position: 1 }],
+        });
+      }
+      if (url.endsWith('/drafts')) {
+        return json(200, {
+          items: [
+            { ...drafts[0], published_question_id: 'q-0' },
+            { ...draft(1), version: 'v-1b' },
+          ],
+        });
+      }
+      return json(404, {});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <QuestionImport
+        workspaceId={WS}
+        readOnly={null}
+        initialRun={{ ...RUN, draft_count: 2, registration_job_id: JOB }}
+        initialDrafts={drafts}
+        loadFailed={false}
+        registrationPollMs={20}
+      />,
+    );
+    const bar = await screen.findByRole('progressbar', { name: '등록 진행률' });
+    expect(bar.getAttribute('aria-valuenow')).toBe('50');
+    expect(screen.getByText(/승인·등록 중 · 2개 중 1개 처리/)).toBeTruthy();
+    expect(
+      screen.getByText(/이 페이지를 떠나도 선택한 문제의 승인·등록은 서버에서 계속됩니다/),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /선택한 문제 승인 및 등록/ }).hasAttribute('disabled'),
+    ).toBe(true);
+
+    expect(await screen.findByText(/2번\(다른 곳에서 바뀜\)/)).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('1개 문제를 문제은행에 등록했습니다.');
+    expect(screen.queryByRole('progressbar', { name: '등록 진행률' })).toBeNull();
+    const draft2 = screen.getByRole('listitem', { name: '2번 문제' });
+    expect(within(draft2).getByRole('alert').textContent).toContain('다른 곳에서 바뀌어');
+  });
 
   it('checks send nothing; "전체 선택" covers what can be registered; refused drafts stay selected', async () => {
     const blocked: ImportDraft = {
@@ -182,15 +260,16 @@ describe('QuestionImport', () => {
       published_question_id: 'q-done',
     };
     const initial = [draft(0), draft(1), blocked, published];
-    const bodies: { drafts: { draft_id: string; version: string }[]; approve?: boolean }[] = [];
+    const bodies: { drafts: { draft_id: string; version: string }[] }[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.endsWith('/publish')) {
+      if (url.endsWith('/registrations')) {
         const body = JSON.parse(String(init?.body)) as (typeof bodies)[number];
         bodies.push(body);
-        return json(200, {
-          items: [{ draft_id: 'd-0', question_id: 'q-0' }],
-          refused: [{ draft_id: 'd-1', reason: 'stale-draft' }],
+        return json(202, {
+          ...registration('succeeded', 2, 2),
+          registered: 1,
+          refused: [{ draft_id: 'd-1', reason: 'stale-draft', question_number: 2, position: 1 }],
         });
       }
       if (url.endsWith('/drafts')) {
@@ -213,6 +292,7 @@ describe('QuestionImport', () => {
         initialRun={{ ...RUN, draft_count: 4, published_count: 1 }}
         initialDrafts={initial}
         loadFailed={false}
+        registrationPollMs={5}
       />,
     );
     const user = userEvent.setup();
@@ -248,7 +328,6 @@ describe('QuestionImport', () => {
           { draft_id: 'd-0', version: 'v-0' },
           { draft_id: 'd-1', version: 'v-1' },
         ],
-        approve: true,
       },
     ]);
     expect(await screen.findByText(/2번\(다른 곳에서 바뀜\)/)).toBeTruthy();
@@ -266,6 +345,79 @@ describe('QuestionImport', () => {
     expect(screen.getByRole('checkbox', { name: /전체 선택 \(1개\)/ })).toBeTruthy();
 
     await user.click(publishButton());
-    expect(bodies[1]).toEqual({ drafts: [{ draft_id: 'd-1', version: 'v-1b' }], approve: true });
+    expect(bodies[1]).toEqual({ drafts: [{ draft_id: 'd-1', version: 'v-1b' }] });
+  });
+
+  it('CHAPTER-MAP: shows the suggested chapter with why, and saves another choice at once', async () => {
+    const CH1 = '66666666-6666-4666-8666-666666666661';
+    const CH2 = '66666666-6666-4666-8666-666666666662';
+    const BOOK = '77777777-7777-4777-8777-777777777777';
+    const chapters = [
+      { id: CH1, title: '1장 수신제도', level: 1, document_id: BOOK, document_title: '교재' },
+      { id: CH2, title: '2장 여신제도', level: 1, document_id: BOOK, document_title: '교재' },
+    ];
+    const suggested: ImportDraft = {
+      ...draft(0),
+      chapter: { id: CH1, title: '1장 수신제도', document_id: BOOK, document_title: '교재' },
+      chapter_choice: 'auto',
+      chapter_match: 'matched',
+      source_chapter_title: '제1장 수신제도',
+    };
+    const patches: unknown[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/question-drafts/') && init?.method === 'PATCH') {
+        patches.push(JSON.parse(String(init.body)));
+        return json(200, {
+          ...suggested,
+          version: 'v-0b',
+          chapter: { id: CH2, title: '2장 여신제도', document_id: BOOK, document_title: '교재' },
+          chapter_choice: 'manual',
+          chapter_match: null,
+          source_chapter_title: null,
+        });
+      }
+      return json(404, {});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <QuestionImport
+        workspaceId={WS}
+        readOnly={null}
+        initialRun={RUN}
+        initialDrafts={[suggested]}
+        initialChapters={chapters}
+        loadFailed={false}
+      />,
+    );
+    const user = userEvent.setup();
+    const picker = screen.getByRole('combobox', { name: '1번 문제 챕터' });
+    expect(picker.textContent).toContain('1장 수신제도');
+    expect(screen.getByText(/문제 PDF의 ‘제1장 수신제도’에 맞춰 자동으로 골랐습니다/)).toBeTruthy();
+
+    await user.click(picker);
+    await user.click(await screen.findByRole('option', { name: '2장 여신제도' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: '1번 문제 챕터' }).textContent).toContain(
+        '2장 여신제도',
+      ),
+    );
+    expect(patches).toEqual([{ base_version: 'v-0', chapter_id: CH2 }]);
+    expect(screen.getByText('직접 고른 챕터로 등록합니다.')).toBeTruthy();
+  });
+
+  it('CHAPTER-MAP: viewers see the chapter as text', () => {
+    render(
+      <QuestionImport
+        workspaceId={WS}
+        readOnly="viewer"
+        initialRun={RUN}
+        initialDrafts={[{ ...draft(0), chapter_match: 'no_match', source_chapter_title: '제9장' }]}
+        loadFailed={false}
+      />,
+    );
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.getByText(/챕터 없음/)).toBeTruthy();
   });
 });
