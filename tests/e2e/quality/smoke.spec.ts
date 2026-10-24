@@ -119,6 +119,14 @@ test(
     const switcher = await page.getByRole('button', { name: /workspace 전환/i }).boundingBox();
     const account = await authUi.accountButton(page).boundingBox();
     expect(switcher && account && switcher.x + switcher.width <= account.x).toBe(true);
+    // Phones get a square account icon button (ACCOUNT-01-AC01); from 768px the email is shown.
+    const accountButton = authUi.accountButton(page);
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    await expect(accountButton.locator('svg')).toBeVisible({ visible: phone });
+    await expect(accountButton.getByText(owner.user.email, { exact: true })).toBeVisible({
+      visible: !phone,
+    });
+    if (phone) expect(account && Math.abs(account.width - account.height) <= 1).toBe(true);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);

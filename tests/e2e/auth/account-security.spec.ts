@@ -1,22 +1,27 @@
 // ACCOUNT-01 — 계정 보안 설정 (`/settings/security`), docs/screens/account-security.md +
 // docs/auth.md §2 (email, password change, sign-out) and §7 AUTH-API-AC03 (no refresh reuse).
 //
-// Authenticated project. AC01 only reads, so it uses the shared `setup` session. AC02/AC03 change
-// the password or end the session, so each signs in its own userFactory user through /login in a
-// cookie-less context instead of touching the shared user.
+// Authenticated project. AC01's security page check only reads, so it uses the shared `setup`
+// session; its header check needs its own workspaces, so it signs in a workspaceFactory member
+// (viewport resized per breakpoint). AC02/AC03 change the password or end the session, so each
+// signs in its own userFactory user through /login in a cookie-less context instead of touching
+// the shared user.
 import { readFileSync } from 'node:fs';
 import {
   authUi,
   canSignIn,
   expect,
   formAlert,
+  homePath,
   LOGIN_SCREEN,
   newCredentials,
   refreshStatus,
   sessionRefreshToken,
+  signInAs,
   submitLogin,
   test,
 } from '../fixtures/test.ts';
+import type { Locator, Page } from '@playwright/test';
 import { AUTH_META_PATH } from '../setup/paths.ts';
 
 const SECURITY_PATH = '/settings/security';
@@ -50,6 +55,66 @@ test(
 
 test.describe('own session', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
+
+  test(
+    'ACCOUNT-01-AC01 header account button shows the whole email from 768px, an account icon below, and truncates only without room',
+    { tag: '@infra' },
+    async ({ page, workspaceFactory }) => {
+      const owner = await workspaceFactory.member('ac01');
+      const { email } = owner.user;
+      const short = await workspaceFactory.create(owner, '알고리즘 스터디');
+      const crowded = await workspaceFactory.create(
+        owner,
+        `${'아주 긴 Workspace 이름 '.repeat(8)}끝`,
+      );
+      await signInAs(page, owner.user);
+      const account = authUi.accountButton(page);
+      const label = account.getByText(email, { exact: true });
+      const icon = account.locator('svg');
+      const switcher = page.getByRole('button', { name: /workspace 전환/i });
+
+      // Wide (desktop, iPad portrait): the full email is visible, untruncated, wider than the old
+      // 280px cap; no icon.
+      for (const width of [1280, 834]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(homePath(short.id));
+        await expect(label).toBeVisible();
+        await expect(icon).toBeHidden();
+        expect(await isTruncated(label), `email truncated at ${width}px`).toBe(false);
+        expect((await account.boundingBox())?.width ?? 0).toBeGreaterThan(280);
+        await expectHeaderFits(page, switcher, account);
+      }
+
+      // Narrow (phone): a square account icon button; the email stays in the name and title, and
+      // the switcher keeps room for a short workspace name.
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(homePath(short.id));
+      await expect(icon).toBeVisible();
+      await expect(label).toBeHidden();
+      await expect(account).toHaveAccessibleName(new RegExp(escapeRegExp(email)));
+      await expect(account).toHaveAttribute('title', email);
+      const box = await account.boundingBox();
+      expect(
+        box && Math.abs(box.width - box.height) <= 1 && box.width >= 24 && box.width <= 36,
+      ).toBe(true);
+      expect(await isTruncated(switcher.getByText('알고리즘 스터디', { exact: true }))).toBe(false);
+      await expectHeaderFits(page, switcher, account);
+      await account.click();
+      const menu = page.getByRole('dialog', { name: '계정 메뉴' });
+      await expect(menu.getByText(email, { exact: true })).toBeVisible();
+      expect(await isTruncated(menu.getByText(email, { exact: true }))).toBe(false);
+      await page.keyboard.press('Escape');
+
+      // Just above the breakpoint with a very long workspace name and a long email the header
+      // genuinely lacks room: the email falls back to an ellipsis and the page never overflows.
+      await page.setViewportSize({ width: 780, height: 900 });
+      await page.goto(homePath(crowded.id));
+      await expect(label).toBeVisible();
+      expect(await isTruncated(label)).toBe(true);
+      expect(await label.evaluate((el) => getComputedStyle(el).textOverflow)).toBe('ellipsis');
+      await expectHeaderFits(page, switcher, account);
+    },
+  );
 
   test(
     'ACCOUNT-01-AC02 password change shows success and never echoes or logs the password',
@@ -112,3 +177,21 @@ test.describe('own session', () => {
     },
   );
 });
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** True when the element's text is clipped (ellipsis) rather than fully shown. */
+async function isTruncated(locator: Locator): Promise<boolean> {
+  return locator.evaluate((el) => el.scrollWidth > el.clientWidth);
+}
+
+/** SMOKE-02's header constraints: the switcher ends left of the account button, no page overflow. */
+async function expectHeaderFits(page: Page, switcher: Locator, account: Locator): Promise<void> {
+  const [s, a] = await Promise.all([switcher.boundingBox(), account.boundingBox()]);
+  expect(s && a && s.x + s.width <= a.x).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+}
