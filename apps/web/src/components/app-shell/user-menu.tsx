@@ -2,7 +2,7 @@
 
 // Account menu in the app shell header: the trigger is the signed-in email; link to the security settings and the
 // sign-out action (server-side signOut; the refresh token is revoked at the Auth server).
-import { Button, Popover, PopoverContent, PopoverTrigger } from '@quiz/ui';
+import { AccountIcon, Button, Popover, PopoverContent, PopoverTrigger } from '@quiz/ui';
 import Link from 'next/link';
 import { useFormStatus } from 'react-dom';
 import { signOutAction } from '@/lib/auth/actions';
@@ -29,8 +29,9 @@ function SignOutSubmit({ variant }: { variant: 'primary' | 'secondary' | 'ghost'
   );
 }
 
-// The trigger shows the signed-in email (truncated with an ellipsis when long); the full value is
-// in the accessible name ("계정 <email>", which contains the visible text) and the title.
+// The trigger shows the signed-in email in full where the header has room; below 768px it is a
+// compact account icon button (the email stays in its accessible name "계정 <email>" and title).
+// The menu always shows the full email, wrapped instead of truncated.
 export function UserMenu({ email }: { email: string | undefined }) {
   return (
     <Popover>
@@ -39,8 +40,12 @@ export function UserMenu({ email }: { email: string | undefined }) {
           variant="ghost"
           size="sm"
           className={styles.trigger}
-          {...(email ? { 'aria-label': `계정 ${email}`, title: email } : {})}
+          aria-label={email ? `계정 ${email}` : '계정'}
+          {...(email ? { title: email } : {})}
         >
+          <span className={styles.triggerIcon} aria-hidden="true">
+            <AccountIcon />
+          </span>
           <span className={styles.triggerLabel}>{email ?? '계정'}</span>
         </Button>
       </PopoverTrigger>

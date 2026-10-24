@@ -1,10 +1,14 @@
-/* min-width: 0 and flex-shrink: 1 (Button is flex-shrink: 0 since UX4) let a long email shrink
-   and truncate instead of widening the header. */
+/* Wide headers show the whole email (no width cap). min-width: 0 and flex-shrink: 1 (Button is
+   flex-shrink: 0 since UX4) only let an email too long for the header shrink to an ellipsis
+   instead of widening it; the menu shows it in full. */
 .trigger {
   flex-shrink: 1;
   min-width: 0;
-  max-width: min(280px, 40vw);
   margin-left: auto;
+}
+
+.triggerIcon {
+  display: none;
 }
 
 .triggerLabel {
@@ -12,6 +16,26 @@
   min-width: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Narrow headers: a square account icon button, so the workspace switcher keeps the room and the
+   email is never shown as an unreadable "pe…". The label stays in the DOM (not rendered); the
+   accessible name and title carry the full email. */
+@media (width < 768px) {
+  .trigger {
+    flex-shrink: 0;
+    width: var(--control-height-sm);
+    padding: 0;
+    justify-content: center;
+  }
+
+  .triggerIcon {
+    display: inline-flex;
+  }
+
+  .triggerLabel {
+    display: none;
+  }
 }
 
 .content {

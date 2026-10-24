@@ -53,7 +53,10 @@ export const authUi = {
   resendButton: (page: Page) =>
     page.getByRole('button', { name: /(메일|이메일).*(다시 보내기|재전송)|resend/i }),
   signOutButton: (page: Page) => page.getByRole('button', { name: /로그아웃|log ?out|sign ?out/i }),
-  /** App-shell account menu trigger: shows the signed-in email, named "계정 <email>". */
+  /**
+   * App-shell account menu trigger: shows the signed-in email (an account icon below 768px),
+   * named "계정 <email>".
+   */
   accountButton: (page: Page) =>
     page
       .getByRole('banner')
