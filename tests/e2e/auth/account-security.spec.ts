@@ -73,15 +73,25 @@ test.describe('own session', () => {
       const icon = account.locator('svg');
       const switcher = page.getByRole('button', { name: /workspace 전환/i });
 
-      // Wide (desktop, iPad portrait): the full email is visible, untruncated, wider than the old
-      // 280px cap; no icon.
+      // Wide (desktop, iPad portrait): the email is shown as text, no icon, and it is never cut
+      // while the header still has free space (the old 280px cap left space and still cut it).
+      // At 1280px the long test email fits on every platform, so it must be whole and wider
+      // than the old cap; at 834px it may legitimately not fit (font metrics differ per OS).
       for (const width of [1280, 834]) {
         await page.setViewportSize({ width, height: 900 });
         await page.goto(homePath(short.id));
         await expect(label).toBeVisible();
         await expect(icon).toBeHidden();
-        expect(await isTruncated(label), `email truncated at ${width}px`).toBe(false);
-        expect((await account.boundingBox())?.width ?? 0).toBeGreaterThan(280);
+        if (await isTruncated(label)) {
+          expect(
+            await headerFreeSpace(account),
+            `email truncated at ${width}px although the header has room`,
+          ).toBeLessThanOrEqual(1);
+        }
+        if (width === 1280) {
+          expect(await isTruncated(label), 'email truncated at 1280px').toBe(false);
+          expect((await account.boundingBox())?.width ?? 0).toBeGreaterThan(280);
+        }
         await expectHeaderFits(page, switcher, account);
       }
 
@@ -112,6 +122,7 @@ test.describe('own session', () => {
       await expect(label).toBeVisible();
       expect(await isTruncated(label)).toBe(true);
       expect(await label.evaluate((el) => getComputedStyle(el).textOverflow)).toBe('ellipsis');
+      expect(await headerFreeSpace(account)).toBeLessThanOrEqual(1);
       await expectHeaderFits(page, switcher, account);
     },
   );
@@ -185,6 +196,24 @@ function escapeRegExp(value: string): string {
 /** True when the element's text is clipped (ellipsis) rather than fully shown. */
 async function isTruncated(locator: Locator): Promise<boolean> {
   return locator.evaluate((el) => el.scrollWidth > el.clientWidth);
+}
+
+/**
+ * Unused horizontal space in the app-shell header row (the account button's flex container):
+ * content width minus every item's width and the gaps between them.
+ */
+async function headerFreeSpace(account: Locator): Promise<number> {
+  return account.evaluate((button) => {
+    const header = button.parentElement;
+    if (!header) return Number.POSITIVE_INFINITY;
+    const style = getComputedStyle(header);
+    const items = [...header.children].filter((el) => getComputedStyle(el).display !== 'none');
+    const inner =
+      header.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const gap = parseFloat(style.columnGap) || 0;
+    const used = items.reduce((sum, el) => sum + el.getBoundingClientRect().width, 0);
+    return inner - used - gap * Math.max(items.length - 1, 0);
+  });
 }
 
 /** SMOKE-02's header constraints: the switcher ends left of the account button, no page overflow. */
