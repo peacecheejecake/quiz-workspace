@@ -19,7 +19,9 @@ select tables_are(
         -- S1a share links
         'workspace_share_links',
         -- S3a forks
-        'workspace_forks'],
+        'workspace_forks',
+        -- QIMP-JOB server-side registration items
+        'question_import_registration_items'],
   'public schema contains exactly the expected tables'
 );
 

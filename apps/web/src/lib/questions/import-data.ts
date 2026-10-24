@@ -5,12 +5,16 @@
 import { notFound, redirect } from 'next/navigation';
 import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
 import { loginRedirectPath } from '@/lib/auth/routes';
-import type { ImportDraft, ImportRun } from './drafts';
+import type { BookChapterOption, ImportDraft, ImportRun } from './drafts';
 import { classifyImportFailure, importPath } from './import-client';
 
 export interface ImportScreenData {
   readonly run: ImportRun | null;
   readonly drafts: readonly ImportDraft[];
+  /** The workspace's book chapters: the draft chapter picker (CHAPTER-MAP). */
+  readonly chapters: readonly BookChapterOption[];
+  /** When the run was read (ISO): a registration that ends later is reported on arrival. */
+  readonly loadedAt: string;
   /** The newest run or its drafts could not be loaded (the screen offers a reload). */
   readonly loadFailed: boolean;
 }
@@ -35,6 +39,7 @@ export async function loadLatestImport(
     if (kind === 'notFound' && workspace) notFound();
   };
 
+  const loadedAt = new Date().toISOString();
   const runs = await api
     .GET('/api/v1/workspaces/{workspace_id}/question-imports', {
       params: {
@@ -43,13 +48,13 @@ export async function loadLatestImport(
       },
     })
     .catch(() => null);
-  if (!runs) return { run: null, drafts: [], loadFailed: true };
+  if (!runs) return { run: null, drafts: [], chapters: [], loadedAt, loadFailed: true };
   if (!runs.data) {
     outcome(runs.response.status, runs.error, { workspace: true });
-    return { run: null, drafts: [], loadFailed: true };
+    return { run: null, drafts: [], chapters: [], loadedAt, loadFailed: true };
   }
   const run = runs.data.items[0] ?? null;
-  if (!run) return { run: null, drafts: [], loadFailed: false };
+  if (!run) return { run: null, drafts: [], chapters: [], loadedAt, loadFailed: false };
 
   const drafts = await api
     .GET('/api/v1/question-imports/{import_id}/drafts', {
@@ -58,7 +63,13 @@ export async function loadLatestImport(
     .catch(() => null);
   if (!drafts?.data) {
     if (drafts) outcome(drafts.response.status, drafts.error);
-    return { run, drafts: [], loadFailed: true };
+    return { run, drafts: [], chapters: [], loadedAt, loadFailed: true };
   }
-  return { run, drafts: drafts.data.items, loadFailed: false };
+  return {
+    run,
+    drafts: drafts.data.items,
+    chapters: drafts.data.chapters ?? [],
+    loadedAt,
+    loadFailed: false,
+  };
 }

@@ -11,7 +11,10 @@
     GET   /question-imports/{id}                 any member
     POST  /question-imports/{id}/retry           editor+; a failed/cancelled run gets a new job
                                                  (same run) -> 202; `Idempotency-Key`
-    GET   /question-imports/{id}/drafts          any member; drafts in position order
+    GET   /question-imports/{id}/drafts          any member; drafts in position order, each with
+                                                 the book chapter it is registered under
+                                                 (suggested or chosen, CHAPTER-MAP), plus the
+                                                 workspace's book chapters (picker)
     PATCH /question-drafts/{id}                  editor+; edit / approve / reject a draft
                                                  (`base_version` optimistic concurrency); also
                                                  generation drafts (M6.2, question_generations)
@@ -20,6 +23,14 @@
                                                  CONFIRMED questions, idempotent per draft;
                                                  `approve: true` approves the selected drafts in
                                                  the same transaction and lists the refused ones
+    POST  /question-imports/{id}/registrations   editor+; the whole selection {drafts: [{draft_id,
+                                                 version}]} -> 202 registration whose
+                                                 `question.import_register` job approves and
+                                                 registers it on the server (QIMP-JOB); the page
+                                                 may be left; `Idempotency-Key`
+    GET   /question-imports/{id}/registrations/{registration_id}
+                                                 any member; progress (processed/total) and the
+                                                 refused drafts of a registration
 
 Isolation (AGENTS.md §5 Data): drafts live in `question_drafts` and are never questions: the bank,
 the overview and `GET /questions/{id}` never see them. Human approval is the gate: a draft is
@@ -44,6 +55,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, cast
 
@@ -68,7 +80,9 @@ from quiz_api.authz import (
     authorize_workspace,
     get_access_repository,
 )
+from quiz_api.chapter_matching import BookChapter, ChapterMatch
 from quiz_api.db import get_db_session
+from quiz_api.draft_chapters import ChapterChoice, DraftChapter, draft_chapters
 from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.idempotency import IdempotencyKey, replay, request_hash
 from quiz_api.jobs import JobMessage, JobPublisher
@@ -94,10 +108,14 @@ from quiz_api.question_rules import (
     content_issues,
     unstorable_strings,
 )
+from quiz_api.repositories.draft_chapters import DraftChapterRepository
 from quiz_api.repositories.idempotency import IdempotencyStore
 from quiz_api.repositories.question_imports import (
     DraftRecord,
+    JobStatus,
     QuestionImportRepository,
+    RegistrationItem,
+    RegistrationRecord,
     ReviewStatus,
     RunRecord,
     RunStatus,
@@ -110,6 +128,9 @@ router = APIRouter(tags=["question-imports"], responses=problem_responses(503))
 
 NOT_FOUND = "Not found."
 MAX_PUBLISH = 200
+# One registration request carries the whole selection (QIMP-JOB): far more than one real paper
+# (316 pages -> 750 drafts) while keeping the request body bounded (~100 bytes per item).
+MAX_REGISTRATION = 5000
 DraftVariation = Literal["PARAPHRASE", "INVERT_POLARITY", "ANALOGOUS_CONCEPT"]
 INT4_MAX = 2147483647
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
@@ -139,6 +160,10 @@ class ImportRun(BaseModel):
     document_title: str | None
     draft_count: int
     published_count: int
+    registration_job_id: uuid.UUID | None = Field(
+        description="The newest registration (QIMP-JOB) of this run, if any: read its progress "
+        "at `GET /question-imports/{id}/registrations/{registration_id}`."
+    )
     created_at: datetime
     updated_at: datetime
     finished_at: datetime | None
@@ -224,6 +249,17 @@ class DraftPublishError(BaseModel):
     message: str
 
 
+class DraftChapterRef(BaseModel):
+    id: uuid.UUID
+    title: str
+    document_id: uuid.UUID
+    document_title: str
+
+
+class BookChapterOption(DraftChapterRef):
+    level: int = Field(description="1 = chapter, 2+ = nested section.")
+
+
 class ImportDraft(BaseModel):
     """A question draft under review: an import draft or a generation draft (M6.2)."""
 
@@ -265,10 +301,32 @@ class ImportDraft(BaseModel):
     reviewed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    chapter: DraftChapterRef | None = Field(
+        default=None,
+        description="Import drafts (CHAPTER-MAP): the book chapter the draft is registered under "
+        "(the suggestion, or the reviewer's choice), in its book's current revision; null = none.",
+    )
+    chapter_choice: ChapterChoice = Field(
+        default="auto", description="`auto`: the server's suggestion; `manual`: chosen in review."
+    )
+    chapter_match: ChapterMatch | None = Field(
+        default=None,
+        description="Why the suggestion is what it is (auto only): `matched` (exactly one book "
+        "chapter with the question's chapter title), `no_match`, `ambiguous` (several), "
+        "`no_source_chapter` (the question PDF has no chapter there).",
+    )
+    source_chapter_title: str | None = Field(
+        default=None, description="The question PDF chapter the suggestion was made from."
+    )
 
 
 class ImportDraftList(BaseModel):
     items: list[ImportDraft]
+    chapters: list[BookChapterOption] = Field(
+        default_factory=list,
+        description="Import runs: the workspace's book chapters (current revisions), the "
+        "choices for `chapter_id`.",
+    )
 
 
 class QuestionDraftUpdate(BaseModel):
@@ -294,6 +352,12 @@ class QuestionDraftUpdate(BaseModel):
         description="approve (needs a publishable draft) / reject / back to pending. Any other "
         "change without `approved` returns an approved draft to pending (it must be re-approved).",
     )
+    chapter_id: uuid.UUID | None = Field(
+        default=None,
+        description="Import drafts (CHAPTER-MAP): the book chapter to register the draft under "
+        "(a chapter of a book's current revision here; `null` = no chapter). Sending it replaces "
+        "the suggestion with this choice; it is not content and keeps an approval.",
+    )
 
     @field_validator("question_type", "stem", "options", "is_multi_answer", "review_status")
     @classmethod
@@ -316,7 +380,20 @@ class ImportPublishRequest(BaseModel):
     drafts: list[ReviewedDraft] = Field(min_length=1, max_length=MAX_PUBLISH)
 
 
+class ReviewedImportDraft(ReviewedDraft):
+    chapter_id: uuid.UUID | None = Field(
+        default=None,
+        description="CHAPTER-MAP: the chapter shown for the draft (`null` = 챕터 없음). When sent, "
+        "the request is refused with 409 `chapter-changed` if the draft's chapter is no longer "
+        "that one (e.g. a book was added and the suggestion changed): reload and review again. "
+        "Omitted = not checked.",
+    )
+
+
 class ImportPublishBody(ImportPublishRequest):
+    drafts: list[ReviewedImportDraft] = Field(  # type: ignore[assignment]
+        min_length=1, max_length=MAX_PUBLISH
+    )
     approve: bool = Field(
         default=False,
         description="Approve and register the listed drafts in one step (QIMPORT-01-AC03, "
@@ -345,6 +422,48 @@ class ImportRefusedDraft(BaseModel):
         description="`stale-draft`: changed since the sent version (review it again); "
         "`not-publishable`: cannot be confirmed as it is (see the draft's `publish_errors`)."
     )
+
+
+class ImportRegistrationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    drafts: list[ReviewedImportDraft] = Field(
+        min_length=1,
+        max_length=MAX_REGISTRATION,
+        description="The whole selection, each draft at the version on screen (the version the "
+        "selection approves).",
+    )
+
+
+class ImportRegistrationRefusal(BaseModel):
+    draft_id: uuid.UUID
+    reason: RefusalReason = Field(
+        description="`stale-draft`: changed since the sent version; `not-publishable`: cannot "
+        "be confirmed as it is."
+    )
+    question_number: int | None = Field(description="Number printed in the source.")
+    position: int = Field(description="0-based order in the source.")
+
+
+class ImportRegistration(BaseModel):
+    """A submitted selection being approved and registered on the server (QIMP-JOB)."""
+
+    job_id: uuid.UUID = Field(description="The `question.import_register` job (`GET /jobs/{id}`).")
+    import_id: uuid.UUID
+    status: JobStatus = Field(description="queued | running | succeeded | failed | cancelled")
+    error_code: str | None = Field(
+        description="Why the job stopped, e.g. `workspace_unavailable` (archived workspace or "
+        "lost editor role); drafts not processed by then stay unregistered."
+    )
+    total: int = Field(description="Distinct drafts submitted.")
+    processed: int = Field(description="Drafts done (registered, already registered or refused).")
+    registered: int = Field(description="Drafts this registration registered.")
+    skipped: int = Field(description="Drafts that were registered already (nothing new).")
+    refused: list[ImportRegistrationRefusal] = Field(
+        description="Drafts left as they were, in submitted order."
+    )
+    created_at: datetime
+    finished_at: datetime | None
 
 
 class ImportPublishOutcome(ImportPublishResult):
@@ -441,9 +560,35 @@ def _run_out(run: RunRecord) -> ImportRun:
         document_title=run.document_title,
         draft_count=run.draft_count,
         published_count=run.published_count,
+        registration_job_id=run.registration_job_id,
         created_at=run.created_at,
         updated_at=run.updated_at,
         finished_at=run.finished_at,
+    )
+
+
+def _registration_out(record: RegistrationRecord) -> ImportRegistration:
+    refused = [
+        ImportRegistrationRefusal(
+            draft_id=r.draft_id,
+            reason=cast(RefusalReason, r.reason),
+            question_number=r.question_number,
+            position=r.position,
+        )
+        for r in record.refused
+    ]
+    return ImportRegistration(
+        job_id=record.job_id,
+        import_id=record.import_run_id,
+        status=record.status,
+        error_code=record.error_code,
+        total=record.total,
+        processed=record.total - record.pending,
+        registered=record.registered,
+        skipped=record.skipped,
+        refused=refused,
+        created_at=record.created_at,
+        finished_at=record.finished_at,
     )
 
 
@@ -461,7 +606,56 @@ def _content(record: DraftRecord, draft: QuestionDraft) -> QuestionContent:
     return content_of(draft, is_multi_answer=record.is_multi_answer, rubric=record.rubric)
 
 
-def _draft_out(record: DraftRecord) -> ImportDraft:
+def _chapter_ref(chapter: BookChapter | None) -> DraftChapterRef | None:
+    if chapter is None:
+        return None
+    return DraftChapterRef(
+        id=chapter.id,
+        title=chapter.title,
+        document_id=chapter.document_id,
+        document_title=chapter.document_title,
+    )
+
+
+def _displayed_chapters(
+    items: list[ReviewedImportDraft],
+) -> dict[uuid.UUID, uuid.UUID | None]:
+    """The chapter the client showed per draft (first occurrence; only where it was sent)."""
+    shown: dict[uuid.UUID, uuid.UUID | None] = {}
+    for item in items:
+        if "chapter_id" in item.model_fields_set:
+            shown.setdefault(item.draft_id, item.chapter_id)
+    return shown
+
+
+def _refuse_changed_chapters(
+    displayed: dict[uuid.UUID, uuid.UUID | None], current: dict[uuid.UUID, DraftChapter]
+) -> None:
+    """CHAPTER-MAP: never register under another chapter than the one on screen. A suggestion
+    can change without a new draft version (a book added or corrected), so the client's view is
+    compared here and the whole request is refused when it is outdated."""
+    for draft_id, chapter in current.items():
+        if draft_id not in displayed:
+            continue
+        now = chapter.chapter.id if chapter.chapter is not None else None
+        if displayed[draft_id] != now:
+            raise ProblemException(
+                409,
+                ProblemType.CHAPTER_CHANGED,
+                detail="The chapter of a draft changed since it was shown. Reload the drafts, "
+                "check their chapters and register again.",
+            )
+
+
+def _chapters_of(
+    session: Session, run: RunRecord, drafts: list[DraftRecord]
+) -> dict[uuid.UUID, DraftChapter]:
+    return draft_chapters(
+        DraftChapterRepository(session), run.workspace_id, run.source_document_revision_id, drafts
+    )
+
+
+def _draft_out(record: DraftRecord, chapter: DraftChapter | None = None) -> ImportDraft:
     draft = parse_payload(record.payload)
     content = _content(record, draft)
     blockers = publish_issues(content, record.validations, prefix=())
@@ -496,6 +690,10 @@ def _draft_out(record: DraftRecord) -> ImportDraft:
         reviewed_at=record.reviewed_at,
         created_at=record.created_at,
         updated_at=record.updated_at,
+        chapter=_chapter_ref(chapter.chapter) if chapter else None,
+        chapter_choice=chapter.choice if chapter else "auto",
+        chapter_match=chapter.match if chapter else None,
+        source_chapter_title=chapter.source_title if chapter else None,
     )
 
 
@@ -734,8 +932,23 @@ def retry_question_import(
 def list_question_import_drafts(access: ReadImport, repo: ImportRepo) -> ImportDraftList:
     """The run's drafts in source order, with validations, provenance pages and answer flags.
     Drafts a failed job persisted are listed too (they are kept for the retry)."""
-    _load_run(repo, access.resource_id)
-    return ImportDraftList(items=[_draft_out(d) for d in repo.list_drafts(access.resource_id)])
+    run = _load_run(repo, access.resource_id)
+    drafts = repo.list_drafts(access.resource_id)
+    chapters = _chapters_of(repo.session, run, drafts)
+    options = DraftChapterRepository(repo.session).book_chapters(run.workspace_id)
+    return ImportDraftList(
+        items=[_draft_out(d, chapters.get(d.id)) for d in drafts],
+        chapters=[
+            BookChapterOption(
+                id=c.id,
+                title=c.title,
+                document_id=c.document_id,
+                document_title=c.document_title,
+                level=c.level,
+            )
+            for c in options
+        ],
+    )
 
 
 @router.patch(
@@ -846,6 +1059,34 @@ def update_question_draft(
     }
     if "question_number" in sent:
         values["question_number"] = body.question_number
+    if "chapter_id" in sent:
+        if record.source_type != "import":
+            raise RequestValidationError(
+                [
+                    {
+                        "loc": ("body", "chapter_id"),
+                        "msg": "Only import drafts have a chapter.",
+                        "type": "value_error",
+                    }
+                ]
+            )
+        if body.chapter_id is not None:
+            chapters_repo = DraftChapterRepository(repo.session)
+            chapters_repo.lock_documents_of(record.workspace_id, [body.chapter_id])
+            current = chapters_repo.current_book_chapters(record.workspace_id, [body.chapter_id])
+            found = current.get(body.chapter_id)
+            if found is None or found.id != body.chapter_id:
+                raise RequestValidationError(
+                    [
+                        {
+                            "loc": ("body", "chapter_id"),
+                            "msg": "Unknown chapter: use a chapter of a book's current revision.",
+                            "type": "value_error",
+                        }
+                    ]
+                )
+        values["chapter_id"] = body.chapter_id
+        values["chapter_manual"] = True
     try:
         repo.update_draft(record.id, **values)
         repo.mark_draft_reviewed(
@@ -856,10 +1097,14 @@ def update_question_draft(
         )
         updated = repo.get_draft(record.id)
         assert updated is not None  # noqa: S101 - locked above
+        chapter: DraftChapter | None = None
+        if updated.import_run_id is not None:
+            run = _load_run(repo, updated.import_run_id)
+            chapter = _chapters_of(repo.session, run, [updated]).get(updated.id)
         repo.commit()
     except (IntegrityError, DataError):
         raise _constraint_violation(repo) from None
-    return _draft_out(updated)
+    return _draft_out(updated, chapter)
 
 
 @router.post(
@@ -936,6 +1181,25 @@ def publish_question_import_drafts(
         issues.raise_if_any()
 
     mapping = {d.id: d.published_question_id for d in drafts.values()}
+    # CHAPTER-MAP: the chapter on screen. The books are locked FOR SHARE first (question lock
+    # order), so the chapter read here is the current one until this transaction ends.
+    chapter_repo = DraftChapterRepository(repo.session)
+    shown = _chapters_of(repo.session, run, [r for r, _, _ in plans])
+    _refuse_changed_chapters(_displayed_chapters(body.drafts), shown)
+    chapter_repo.lock_documents_of(
+        run.workspace_id, [c.chapter.id for c in shown.values() if c.chapter is not None]
+    )
+    current = chapter_repo.current_book_chapters(
+        run.workspace_id, [c.chapter.id for c in shown.values() if c.chapter is not None]
+    )
+
+    def chapter_for(record: DraftRecord) -> uuid.UUID | None:
+        found = shown.get(record.id)
+        if found is None or found.chapter is None:
+            return None
+        resolved = current.get(found.chapter.id)
+        return resolved.id if resolved is not None else None
+
     try:
         for record, draft, content in plans:
             if record.review_status != "approved":
@@ -953,7 +1217,7 @@ def publish_question_import_drafts(
                 actor_id=user_id,
                 content=content,
                 status="CONFIRMED",
-                chapter_id=None,
+                chapter_id=chapter_for(record),
                 question_number=record.question_number,
                 sources=[],
                 source_revisions={},
@@ -993,3 +1257,131 @@ def publish_question_import_drafts(
         ],
         refused=refused,
     )
+
+
+# --- routes: server-side registration (QIMP-JOB) --------------------------------------------------
+
+
+def _registration_item(record: DraftRecord, version: str) -> RegistrationItem:
+    """What the submitted draft is: already registered, changed since it was selected, not
+    confirmable, or to be registered by the job."""
+    if record.published_question_id is not None:
+        return RegistrationItem(
+            record.id, version, "skipped", question_id=record.published_question_id
+        )
+    if version != draft_version(record.updated_at):
+        return RegistrationItem(record.id, version, "refused", reason="stale-draft")
+    try:
+        content = _content(record, parse_payload(record.payload))
+    except ValidationError:
+        return RegistrationItem(record.id, version, "refused", reason="not-publishable")
+    if publish_issues(content, record.validations).items:
+        return RegistrationItem(record.id, version, "refused", reason="not-publishable")
+    return RegistrationItem(record.id, version, "pending")
+
+
+@router.post(
+    "/question-imports/{import_id}/registrations",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=ImportRegistration,
+    operation_id="registerQuestionImportDrafts",
+    responses=problem_responses(409),
+)
+def register_question_import_drafts(
+    access: EditImport,
+    body: ImportRegistrationRequest,
+    repo: ImportRepo,
+    idempotency: IdempotencyStoreDep,
+    publisher: PublisherDep,
+    idempotency_key: IdempotencyKey = None,
+) -> Any:
+    """Approve and register the whole selection on the server (QIMPORT-01-AC07, "선택한 문제 승인
+    및 등록"): the request records every listed draft with the version on screen and starts a
+    `question.import_register` job, which registers them in batches whether or not the page stays
+    open. Same rules as `publish` with `approve: true`: the job's user (the caller) approves each
+    draft still at the sent version that can be confirmed; drafts changed since (`stale-draft`) or
+    not confirmable (`not-publishable`) are refused and left as they were; drafts registered
+    already are skipped. Idempotent per draft (a re-delivered job never registers twice).
+
+    An id that is not a draft of this import is 404 (nothing recorded). 409
+    `import-registration-running` while the previous registration of this import is still queued
+    or running (follow `registration_job_id`). The job re-checks the workspace on every batch: an
+    archived workspace or a lost editor role stops it (`workspace_unavailable`)."""
+    user_id = access.workspace.user_id
+    scope = f"POST /question-imports/{access.resource_id}/registrations"
+    body_hash = request_hash(body.model_dump(mode="json"))
+    if idempotency_key is not None:
+        idempotency.lock(user_id, scope, idempotency_key)
+        stored = idempotency.find(user_id, scope, idempotency_key)
+        if stored is not None:
+            response = replay(stored, body_hash)
+            job_id = stored.body.get("job_id") if isinstance(stored.body, dict) else None
+            repo.rollback()
+            if job_id:
+                _publish_job(repo, publisher, uuid.UUID(str(job_id)))
+            return response
+
+    run = _load_run(repo, access.resource_id, lock=True)
+    if run.registration_job_id is not None:
+        previous = repo.get_job(run.registration_job_id)
+        if previous is not None and previous.status in {"queued", "running"}:
+            raise ProblemException(
+                409,
+                ProblemType.IMPORT_REGISTRATION_RUNNING,
+                detail="The previous registration of this import is still running.",
+            )
+    versions: dict[uuid.UUID, str] = {}
+    for item in body.drafts:
+        versions.setdefault(item.draft_id, item.version)
+    requested = list(versions)
+    drafts = {d.id: d for d in repo.lock_drafts(run.id, requested)}
+    if len(drafts) != len(requested):
+        raise HTTPException(status_code=404, detail="Draft not found.")
+
+    items = [_registration_item(drafts[d], versions[d]) for d in requested]
+    # CHAPTER-MAP: register each draft under the chapter on screen (the job resolves it to the
+    # book's then-current revision).
+    shown = _chapters_of(
+        repo.session, run, [drafts[i.draft_id] for i in items if i.state == "pending"]
+    )
+    _refuse_changed_chapters(_displayed_chapters(body.drafts), shown)
+    items = [
+        replace(i, chapter_id=c.chapter.id)
+        if (c := shown.get(i.draft_id)) is not None and c.chapter is not None
+        else i
+        for i in items
+    ]
+    try:
+        job_id = repo.create_registration(run, user_id, items)
+        record = repo.registration(run.id, job_id)
+    except (IntegrityError, DataError):
+        raise _constraint_violation(repo) from None
+    assert record is not None  # noqa: S101 - inserted above
+    result = _registration_out(record)
+    if idempotency_key is not None:
+        idempotency.save(
+            user_id,
+            scope,
+            idempotency_key,
+            body_hash,
+            status.HTTP_202_ACCEPTED,
+            result.model_dump(mode="json"),
+        )
+    repo.commit()
+    _publish_job(repo, publisher, job_id)
+    return JSONResponse(result.model_dump(mode="json"), status_code=status.HTTP_202_ACCEPTED)
+
+
+@router.get(
+    "/question-imports/{import_id}/registrations/{registration_id}",
+    operation_id="getQuestionImportRegistration",
+)
+def get_question_import_registration(
+    access: ReadImport, registration_id: Annotated[uuid.UUID, Path()], repo: ImportRepo
+) -> ImportRegistration:
+    """Progress of a registration of this import (`registration_id` = its `job_id`):
+    processed/total and the refused drafts."""
+    record = repo.registration(access.resource_id, registration_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=NOT_FOUND)
+    return _registration_out(record)
