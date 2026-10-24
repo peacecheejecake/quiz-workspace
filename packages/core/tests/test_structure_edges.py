@@ -119,6 +119,9 @@ def _codes(result: StructureResult) -> list[str]:
         ("B. Appendix tables", NumberingKind.UPPER_ALPHA, (2,)),
         ("나. 세부 내용", NumberingKind.HANGUL, (2,)),
         ("(3) 예시", NumberingKind.PAREN, (3,)),
+        ("1-1. 예금계약의 성질", NumberingKind.NUM2, (1, 1)),
+        ("2-3-1. 세부", NumberingKind.NUM3, (2, 3, 1)),
+        ("제1 장", NumberingKind.CHAPTER, (1,)),
     ],
 )
 def test_parse_numbering(title: str, kind: NumberingKind, numbers: tuple[int, ...]) -> None:
@@ -127,7 +130,10 @@ def test_parse_numbering(title: str, kind: NumberingKind, numbers: tuple[int, ..
     assert (numbering.kind, numbering.numbers) == (kind, numbers)
 
 
-@pytest.mark.parametrize("title", ["Introduction", "물의 순환", "2024", "Chapters of life"])
+@pytest.mark.parametrize(
+    "title",
+    ["Introduction", "물의 순환", "2024", "Chapters of life", "2025-2026 전망", "1-1 범위"],
+)
 def test_unnumbered_titles(title: str) -> None:
     assert parse_numbering(title) is None
 
@@ -284,6 +290,8 @@ def test_cross_page_merge_ko_and_en_with_hyphenation() -> None:
         ("결과는 다음과 같다:", "다음 페이지 내용"),  # colon ends the sentence
         ("문단이 끝난다.", "새 문단이 시작된다."),
         ("이어지는 문장", "① 첫째 항목"),
+        ("상환 신청 시 해외수입상으", "제 1 장"),  # chapter label (thumb index)
+        ("설명이 이어지는 중", "제2절 외화송금"),
     ],
 )
 def test_no_merge_without_continuation(first: str, second: str) -> None:
@@ -342,6 +350,7 @@ def test_merge_across_columns_on_same_page() -> None:
             "infiltration and pre- and post-war",
         ),
         ("soft­hyphen", BlockType.TEXT, "softhyphen"),
+        ("1­1. 예금계약의 성질", BlockType.HEADING, "1-1. 예금계약의 성질"),
         ("Title- Case", BlockType.TEXT, "Title- Case"),
         ("a  |  b\n\n c | d ", BlockType.TABLE, "a | b\nc | d"),
         ("é", BlockType.HEADING, "é"),
@@ -657,3 +666,117 @@ def test_disambiguation_is_linear_in_headings() -> None:
     assert elapsed < 0.5, f"{elapsed:.3f}s"
     kinds = [n.kind for n in resolved if n is not None]
     assert kinds == [NumberingKind.CHAPTER, *[NumberingKind.UPPER_ALPHA] * 26] * 100
+
+
+def test_circled_digit_is_not_a_chapter_or_section() -> None:
+    # NFKC turns ``①`` into ``1``; ``① 장 단위로`` must not read as ``1장``.
+    for title in ("① 장 단위로 산출하되 권 미만은 절상한다.", "② 절 단위로 나눈다"):
+        numbering = parse_numbering(title)
+        assert numbering is None or numbering.kind > NumberingKind.KO_SECTION
+
+
+def _leader_toc(*entries: str) -> TableContent:
+    return TableContent(rows=tuple((f"{e}{'\u30fb' * 12}", "3") for e in entries))
+
+
+def test_chapter_openers_printed_as_text_open_chapters() -> None:
+    """Chapter openers the layout model reads as text, a TOC with katakana-dot leaders spread
+    over pages without a TOC title, split ``제1절`` headings and a thumb index repeating the
+    chapter label on body pages."""
+    toc_one = _leader_toc("1. 정의", "2. 범위", "3. 목적")
+    toc_two = _leader_toc("1. 사례", "2. 응용 범위", "3. 정리")
+    result = _manual(
+        [
+            B(BlockType.HEADING, "교재 제목", 1, heading_level=1),
+            B(BlockType.HEADING, "Contents", 2, heading_level=1),
+            B(BlockType.TABLE, table_text_of(toc_one), 2, table=toc_one),
+            B(BlockType.HEADING, "제1장 개요", 2, heading_level=1),
+            B(BlockType.TABLE, table_text_of(toc_two), 3, table=toc_two),
+            B(BlockType.HEADING, "제2장 응용", 3, heading_level=1),
+            B(BlockType.TEXT, "제1 장", 4),
+            B(BlockType.TEXT, "개요", 4),
+            B(BlockType.TEXT, "제1절 개요의 범위", 4),
+            B(BlockType.HEADING, "제1절", 5, heading_level=1),
+            B(BlockType.HEADING, "개요의 범위", 5, heading_level=1),
+            B(BlockType.HEADING, "1. 정의", 5, heading_level=1),
+            B(BlockType.HEADING, "1\u00ad1. 세부 정의", 5, heading_level=1),
+            B(BlockType.TEXT, LONG_KO, 5),
+            B(BlockType.TEXT, "제1장", 5, bbox=(504, 340, 526, 348)),
+            B(BlockType.HEADING, "참고 상자", 6, heading_level=1),
+            B(BlockType.TEXT, LONG_KO, 6),
+            B(BlockType.HEADING, "1\u00ad2. 다음 정의", 6, heading_level=1),
+            B(BlockType.TEXT, LONG_KO, 6),
+            B(BlockType.TEXT, "제2 장", 7),
+            B(BlockType.TEXT, "응용", 7),
+            B(BlockType.HEADING, "제1절 사례", 8, heading_level=1),
+            B(BlockType.TEXT, LONG_KO, 8),
+            B(BlockType.TEXT, "제2장", 8, bbox=(504, 340, 526, 348)),
+        ]
+    )
+    assert _tree(result) == [
+        ("제1 장 개요", 1, None),
+        ("제1절 개요의 범위", 2, "제1 장 개요"),
+        ("1. 정의", 3, "제1절 개요의 범위"),
+        ("1-1. 세부 정의", 4, "1. 정의"),
+        ("참고 상자", 2, "제1 장 개요"),
+        ("1-2. 다음 정의", 4, "1. 정의"),
+        ("제2 장 응용", 1, None),
+        ("제1절 사례", 2, "제2 장 응용"),
+    ]
+    by_id = {b.id: b for b in result.revision.blocks}
+    toc_pages = {by_id[i].locations[0].page for i in result.toc_block_ids}
+    assert toc_pages == {2, 3}
+    # Thumb index labels stay body text of their chapter.
+    thumbs = [b for b in result.revision.blocks if b.text in ("제1장", "제2장")]
+    assert [b.type for b in thumbs] == [BlockType.TEXT, BlockType.TEXT]
+    assert all(b.section_id is not None for b in thumbs)
+
+
+def test_chapter_headings_from_the_parser_are_not_duplicated_by_text_labels() -> None:
+    result = _manual(
+        [
+            B(BlockType.HEADING, "Chapter 1 Introduction", 1, heading_level=1),
+            B(BlockType.TEXT, LONG_EN, 1),
+            B(BlockType.TEXT, "Chapter 1", 2),
+            B(BlockType.TEXT, LONG_EN, 2),
+            B(BlockType.HEADING, "Chapter 2 Methods", 3, heading_level=1),
+            B(BlockType.TEXT, "Chapter 2", 4),
+            B(BlockType.TEXT, LONG_EN, 4),
+        ]
+    )
+    assert [title for title, _, _ in _tree(result)] == [
+        "Chapter 1 Introduction",
+        "Chapter 2 Methods",
+    ]
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Chapter 2 describes the methods.",
+        "Chapter 2 covers the methods",
+        "제2장 에서 자세히 설명한다.",
+        "제2장 내용을 정리한다",
+    ],
+)
+def test_sentences_starting_with_a_chapter_label_do_not_open_chapters(sentence: str) -> None:
+    result = _manual(
+        [
+            B(BlockType.TEXT, "Chapter 1", 1),
+            B(BlockType.TEXT, "Introduction", 1),
+            B(BlockType.TEXT, LONG_EN, 2),
+            B(BlockType.TEXT, sentence, 2),
+            B(BlockType.TEXT, LONG_EN, 2),
+            B(BlockType.TEXT, "Chapter 2", 3),
+            B(BlockType.TEXT, "Methods", 3),
+            B(BlockType.TEXT, LONG_EN, 3),
+        ]
+    )
+    assert [(title, level) for title, level, _ in _tree(result)] == [
+        ("Chapter 1 Introduction", 1),
+        ("Chapter 2 Methods", 1),
+    ]
+    sections = {s.id: s.title for s in result.revision.sections}
+    block = next(b for b in result.revision.blocks if b.text == sentence)
+    assert block.type is BlockType.TEXT
+    assert sections[block.section_id or ""] == "Chapter 1 Introduction"

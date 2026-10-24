@@ -18,6 +18,8 @@
   - 버튼 문구는 줄바꿈하지 않는다(design-system.md §4.1).
   - `?create=1`(홈 `문제` 메뉴의 `직접 추가`)로 들어오면 "문제 등록" dialog를 바로 연다. 한 번만 적용되며 URL에서 빠진다(편집 권한이 없으면 무시).
 
+- **여러 문제 선택 변형 출제 (QGEN-MULTI 2026-10-23):** 편집 권한이고 Workspace가 보관되지 않았으면 확정 문제마다 선택 checkbox(`<번호>번 문제 선택`, 번호가 없으면 문제 앞부분)를 둔다. 하나 이상 고르면 목록 위에 선택 막대(`n개 선택됨`, `선택 해제`, `선택한 문제 변형 출제 (n)`)가 나타난다. 최대 20개까지 고를 수 있고, 그 뒤의 checkbox는 비활성이며 이유를 텍스트로 보인다. 선택은 필터를 바꾸거나 다른 페이지로 가면 비워진다. `선택한 문제 변형 출제 (n)`은 같은 페이지 위에 변형 유형·후보 수·난이도 form dialog를 열고 "생성"하면 묶음 변형 출제를 시작해 묶음 결과 페이지로 이동한다(QGEN-01-AC06, [questions-generation.md](questions-generation.md)).
+
 ## 수용 기준
 
 ### QBANK-01-AC01
@@ -48,7 +50,7 @@
 
 - **Given:** Workspace 홈
 - **When:** header의 `문제은행` 버튼으로 문제은행 페이지에 들어감
-- **Then:** 문제은행 페이지 위쪽에 뒤로가기 링크(Workspace 홈으로)와 breadcrumb(`Workspace 이름` 링크 › `문제은행` 현재 페이지)이 있고, 뒤로가기나 breadcrumb의 Workspace 이름을 누르면 Workspace 홈으로 돌아간다. 문제 PDF 가져오기·문제 변형 출제 검토·PDF 열람 페이지도 같은 뒤로가기와 breadcrumb을 가진다(UX3c).
+- **Then:** 문제은행 페이지 위쪽에 뒤로가기 링크(Workspace 홈으로)와 breadcrumb(`Workspace 이름` 링크 › `문제은행` 현재 페이지)이 있고, 뒤로가기나 breadcrumb의 Workspace 이름을 누르면 Workspace 홈으로 돌아간다. 문제 PDF 가져오기·문제 변형 출제 검토·PDF 열람 페이지도 같은 뒤로가기와 breadcrumb을 가진다(UX3c). breadcrumb 줄 아래에는 제목과 12px 여백을 둔다(UX5-UI 2026-10-23).
 
 ### QBANK-01-AC06
 

@@ -24,6 +24,7 @@ from quiz_api.api.documents import (
     get_storage,
 )
 from quiz_api.authz import LockMode, MembershipRecord, ResourceType, Role, get_access_repository
+from quiz_api.authz.repository import TwoStepResourceMembership
 from quiz_api.errors import ProblemType
 from quiz_api.jobs import JobMessage
 from quiz_api.main import create_app
@@ -53,7 +54,7 @@ SECRET_TOKEN = "signed-upload-token-SECRET"  # noqa: S105 - fake
 
 
 @dataclass
-class World:
+class World(TwoStepResourceMembership):
     """Fake AccessRepository + DocumentRepository over shared in-memory state."""
 
     members: dict[tuple[uuid.UUID, uuid.UUID], Role] = field(default_factory=dict)
@@ -66,6 +67,9 @@ class World:
     # document id -> its queued/running parse job, as `processing_jobs` reads it
     processing: dict[uuid.UUID, ProcessingJobRecord] = field(default_factory=dict)
     processing_reads: list[tuple[uuid.UUID, list[uuid.UUID]]] = field(default_factory=list)
+    # document id -> its newest question import run, as `latest_imports` reads it
+    imports: dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
+    import_reads: list[tuple[uuid.UUID, list[uuid.UUID]]] = field(default_factory=list)
     locks: list[LockMode] = field(default_factory=list)
     commits: int = 0
     rollbacks: int = 0
@@ -187,6 +191,16 @@ class World:
             and d.id not in self.deleted
             and document_type in (None, d.document_type)
         ]
+
+    def latest_imports(
+        self, workspace_id: uuid.UUID, document_ids: Any
+    ) -> dict[uuid.UUID, uuid.UUID]:
+        self.import_reads.append((workspace_id, list(document_ids)))
+        return {
+            d: run
+            for d, run in self.imports.items()
+            if d in document_ids and self.documents[d].workspace_id == workspace_id
+        }
 
     def processing_jobs(
         self, workspace_id: uuid.UUID, document_ids: Any
@@ -328,9 +342,13 @@ def _intent_body(**overrides: Any) -> dict[str, Any]:
 Bearer = Callable[[uuid.UUID], dict[str, str]]
 
 
-def _intent(api: TestClient, bearer: Bearer, user: uuid.UUID, ws: uuid.UUID) -> dict[str, Any]:
+def _intent(
+    api: TestClient, bearer: Bearer, user: uuid.UUID, ws: uuid.UUID, **overrides: Any
+) -> dict[str, Any]:
     res = api.post(
-        f"{API}/workspaces/{ws}/documents/upload-intent", json=_intent_body(), headers=bearer(user)
+        f"{API}/workspaces/{ws}/documents/upload-intent",
+        json=_intent_body(**overrides),
+        headers=bearer(user),
     )
     assert res.status_code == 201, res.text
     body: dict[str, Any] = res.json()
@@ -791,6 +809,39 @@ def test_doc_01_ac05_list_and_detail_carry_the_processing_job(
 
     del world.processing[doc_id]
     assert listed_job() is None
+
+
+def test_qimport_01_ac06_question_papers_carry_their_latest_import(
+    api: TestClient, world: World, storage: FakeStorage, bearer: Bearer
+) -> None:
+    """The 문제 PDF 관리 rows decide 문제 추출 / 문제 검토 from this field: it is read for every
+    listed question paper (inside the authorized workspace), never from a truncated run list."""
+    owner, viewer = uuid.uuid4(), uuid.uuid4()
+    ws = world.workspace(owner)
+    world.members[(ws, viewer)] = Role.VIEWER
+    papers = []
+    for _ in range(2):
+        intent = _intent(api, bearer, owner, ws, document_type="question_paper")
+        upload = world.uploads[uuid.UUID(intent["upload_id"])]
+        storage.objects[(SOURCE_BUCKET, upload.object_key)] = PDF
+        papers.append(
+            uuid.UUID(_complete(api, bearer, owner, intent["upload_id"]).json()["document_id"])
+        )
+    book_intent = _intent(api, bearer, owner, ws)
+    upload = world.uploads[uuid.UUID(book_intent["upload_id"])]
+    storage.objects[(SOURCE_BUCKET, upload.object_key)] = PDF
+    book = uuid.UUID(_complete(api, bearer, owner, book_intent["upload_id"]).json()["document_id"])
+    run = uuid.uuid4()
+    world.imports[papers[0]] = run
+
+    items = api.get(f"{API}/workspaces/{ws}/documents", headers=bearer(viewer)).json()["items"]
+    latest = {d["id"]: d["latest_import_id"] for d in items}
+    assert latest == {str(papers[0]): str(run), str(papers[1]): None, str(book): None}
+    # Only question papers are looked up, all of them, in the authorized workspace.
+    assert world.import_reads[-1][0] == ws
+    assert sorted(world.import_reads[-1][1]) == sorted(papers)
+    detail = api.get(f"{API}/documents/{papers[0]}", headers=bearer(viewer)).json()
+    assert detail["latest_import_id"] == str(run)
 
 
 def test_openapi_documents_the_document_routes(api: TestClient) -> None:

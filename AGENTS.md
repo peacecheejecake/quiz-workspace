@@ -10,7 +10,7 @@ summary of the rules for carrying out the implementation plan.
 |---|---|
 | Task hierarchy, dependency graph, waves, progress | `docs/implementation-plan.md` |
 | System architecture, DB model, API list, milestones | `docs/architecture.md` |
-| Screen behaviour and acceptance criteria (109 ACs) | `docs/screens/*.md` (index: `docs/screens/index.md`) |
+| Screen behaviour and acceptance criteria (113 ACs) | `docs/screens/*.md` (index: `docs/screens/index.md`) |
 | Auth / authorization | `docs/auth.md` |
 | Sharing and fork | `docs/workspace-sharing.md` |
 | Question state, heatmap, variants | `docs/questions.md` |

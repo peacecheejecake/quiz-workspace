@@ -96,8 +96,8 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 - **점 1개 = `CONFIRMED` 문제 1개**. `DRAFT`, 삭제됨, 숨김 처리한 문제는 점이 없다.
 - 기본 정렬: 챕터의 `sort_order`, 문제 번호/등록 순서. 필터를 바꿔도 같은 문제의 기본 위치를 불필요하게 흔들지 않는다.
 - 챕터별 제목과 문제 수를 표시하고, 각 챕터를 독립된 정사각형 그리드로 묶는다. GitHub 잔디 형태와 유사하지만 **날짜 축이 아니라 문제 순서 기반**이다.
-- 기본 marker는 둥근 모서리 정사각형 `16x16px`, radius `4~5px`. 즐겨찾기는 **모서리가 부드러운 5각 star silhouette(SVG `stroke-linejoin=round`)**로 교체한다. favorite도 기본 visual bounding box는 `16x16px`; 두 모양 모두 상태 색상을 적용한다.
-- 각 marker를 중심 정렬한 클릭 영역 `28x28px`, 그리드 셀 간격 `4px`(mobile touch는 최소 32px 셀). **hover/focus-visible** 시 marker만 `scale(1.18)`(토큰으로 관리), 정렬·셀 크기는 그대로 두어 레이아웃이 움직이지 않는다. `prefers-reduced-motion`에서는 애니메이션을 비활성화한다.
+- 기본 marker는 둥근 모서리 정사각형(데스크톱 `18x18px`, touch `24x24px`; viewBox 24 중 18), radius는 viewBox `4.5`. 즐겨찾기는 **모서리가 부드러운 5각 star silhouette(SVG `stroke-linejoin=round`)**로 교체한다. favorite도 같은 SVG box(셀 크기)를 쓴다; 두 모양 모두 상태 색상을 적용한다.
+- 각 marker를 중심 정렬한 클릭 영역 `24x24px`, 그리드 셀 간격 `0`(mobile touch는 최소 32px 셀). 이웃 marker 사이 보이는 간격은 marker 폭의 1/3 이하(`6px`/touch `8px`, UX5-UI 2026-10-23). **hover/focus-visible** 시 marker만 `scale(1.18)`(토큰으로 관리), 정렬·셀 크기는 그대로 두어 레이아웃이 움직이지 않는다. `prefers-reduced-motion`에서는 애니메이션을 비활성화한다.
 - viewport 폭에 따라 열 수 자동 변경. 챕터별 줄바꿈; 매우 많은 문제(예: 2,000개 이상)에서는 windowing/virtualization 검토.
 - 현재 필터에 포함된 문제 수, 상태 필터(색 견본 + 텍스트, 기본 접힘), 즐겨찾기·다시 풀기 필터 제공. 상태 범례와 상태별 집계는 UX3c(2026-10-20, 사용자 결정)로 삭제했다 — 펼친 상태 필터가 범례 역할을 한다.
 
@@ -149,13 +149,26 @@ Confirmed question
 - 문제 생성에 검색된 책 원문을 근거로 제공할 수 있지만, 범용 RAG 챗봇이나 자동 답변 기능은 범위 밖이다.
 - 원본 문제나 출처 문서를 변경해도 파생 문제는 자동 덮어쓰지 않는다. 출처 revision과의 차이·검토 필요 상태를 노출한다.
 
+### 묶음 변형 출제 (QGEN-MULTI 2026-10-23)
+
+원본 여러 개를 한 번에 변형한다: `POST /workspaces/{id}/question-generation-batches` (편집 권한, 보관 Workspace는 403, `Idempotency-Key`).
+
+- **묶음 = run 묶음.** 새 테이블 없이 원본마다 보통의 generation run(원본 revision 고정, `question.generate` job 하나)을 같은 트랜잭션에서 만든다. run의 `params`에 `batch_id`·`batch_mode`·`batch_position`(·임의 선택이면 `batch_seed`)를 기록하고 `GET /workspaces/{id}/question-generation-batches/{batch_id}`가 그 run들을 순서대로 돌려준다(원본 번호·문제 앞부분 포함, 정답 없음). worker·초안·검증·승인·등록·lineage는 단일 run과 같다 — 사람이 승인한 초안만 원본별 run의 publish로 등록된다.
+- **원본 고르기.** `selection.mode = "selected"`: `question_ids` 1~20개(중복 불가). 모두 이 Workspace의 살아 있는 확정 문제여야 한다 — 다른 Workspace·삭제·없는 id는 단일 run과 같은 404, 초안·보관 문제는 409 `question-not-confirmed`(요청 전체 거절, run 없음). `selection.mode = "random"`: `count` 1~20, 선택 필터 `chapter`(id 또는 `none`), `question_type`, `statuses`(Heatmap 판정 `unseen|viewed|incorrect|correct|retry`, 요청한 사용자의 풀이 상태 기준), `favorite`(true = 즐겨찾기만), `seed`(0~2^31-1). 서버가 Workspace의 확정 문제 중 필터에 맞는 후보를 Heatmap 순서로 만든 뒤 `random.Random(seed).sample`로 `min(count, 후보 수)`개를 고른다(같은 seed·같은 후보 → 같은 선택). seed가 없으면 서버가 정해 응답과 run에 남긴다. 후보가 없으면 409 `no-matching-questions`, run 없음.
+- **한도(비용 보호).** 원본 ≤ 20, 원본 수 × 변형 유형 수 × `candidate_count` ≤ 60(초과 422). 묶음 시작은 Workspace 단위 advisory lock으로 직렬화하고, 그 Workspace에서 진행 중(대기·생성 중, job이 실패·취소되지 않은) run과 새 원본 수의 합이 40을 넘으면 409 `generation-busy`. 사용자별 묶음 시작 `QUESTION_GENERATION_BATCH_RATE_LIMIT_PER_MINUTE`(기본 6, in-process token bucket) 초과는 429 + Retry-After. 같은 `Idempotency-Key`의 재시도는 rate limit·한도 검사 전에 저장된 묶음을 돌려주고 대기 중 job을 다시 broker에 넘긴다.
+- 보기 섞기(`OPTION_SHUFFLE`)는 묶음에서도 422(생성이 아님).
+
 ## 6. 문제 PDF import
 
 `PDF → parser/OCR → 번호/선택지/그림 범위 추출 → LLM structured extraction → schema 검증 → DRAFT 비교 화면 → Confirm`.
 
 원본에 존재하지 않는 정답 생성 금지; 정답지가 없으면 null. 페이지/영역 provenance 유지.
 
+추출 시작은 서버가 맡는다(QIMP-AUTO 2026-10-21, QIMPORT-01-AC06): `question_paper` 문서의 `document.parse` job이 revision을 활성화하는 트랜잭션에서 `public.worker_start_question_import`가 import run(`started_by = 'system'`)과 첫 `question.import` job을 만든다. 귀속은 parse job의 사용자(업로더)와 문서의 Workspace이며 client가 보낸 id는 쓰지 않는다. 문서마다 한 번만(이미 run이 있으면 시작하지 않음, 부분 unique index), Workspace가 활성이고 사용자가 여전히 owner/editor일 때만 시작한다. job은 parse job이 끝난 뒤 worker가 broker에 넘기고, 놓치면 reconciler가 grace 이후 넘긴다. `POST /workspaces/{id}/question-imports`는 문서의 활성 revision에 run이 있으면 그 run을 돌려주고(attach), 없을 때(QIMP-AUTO 이전에 처리된 PDF)만 새 run을 만든다. 같은 문서에 대한 시작은 문서 행 잠금(FOR UPDATE)으로 직렬화된다.
+
 정답 출처는 인쇄된 정답지뿐이다: 별도 정답 섹션(문제 번호로 매칭) 또는 문제 바로 뒤에 인쇄된 `정답: ②` 줄(그 문제에만 적용되므로 장마다 번호가 1부터 다시 시작해도 된다). `정답:` 줄 뒤의 인쇄된 해설은 초안의 해설(explanation)로 보존하고 선택지로 읽지 않는다. 마침표 없는 번호(`01 …`)는 heading 줄이거나 질문 단서(`?`, `시오`, 답란 `( )`)가 있을 때만 문제로 읽는다. 문제의 출처 영역(provenance)은 발문과 모든 선택지(표로 인쇄된 선택지 포함)를 쪽마다 하나로 묶은 영역이며, 정답 줄과 해설은 포함하지 않는다. PDF import draft는 생성 draft와 공통 review 컴포넌트를 사용하되 source type을 별도로 보존한다.
+
+승인과 등록(QIMP-BULK 2026-10-22, QIMPORT-01-AC03): import 검토 화면은 초안을 하나씩 승인하지 않고 사람이 고른 초안 목록을 `POST /question-imports/{id}/publish`(`approve: true`, `{draft_id, version}` 최대 200개)로 보낸다. 선택이 곧 승인이다: 보낸 version과 현재 version이 같고 확정 가능한(승인 불가 error 검증·정답 없음이 없는) 초안만 같은 트랜잭션에서 `approved`(reviewed_by = 호출자, reviewed_at = 지금; 이미 승인된 초안은 기존 승인 유지)로 바꾸고 CONFIRMED 문제로 등록한다. 바뀐 초안(`stale-draft`)과 확정할 수 없는 초안(`not-publishable`)은 그대로 두고 `refused`로 돌려준다 — 조용히 등록하지도, 요청 전체를 실패시키지도 않는다. 다른 import의 id는 요청 전체를 404로 거절한다. 이미 등록된 초안은 같은 문제를 돌려준다(초안별 멱등). `approve` 없는 요청은 기존대로 미리 승인된 초안만 all-or-nothing으로 등록한다(변형 출제 publish와 같은 계약).
 
 ## 7. 홈 집계와 필터
 

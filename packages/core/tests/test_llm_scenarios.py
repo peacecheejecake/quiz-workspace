@@ -65,6 +65,7 @@ def test_every_evidence_quote_occurs_verbatim_in_the_source_page() -> None:
         ("E2E-LLM-OK", "questions.generate.paraphrase"),
         ("E2E-LLM-OK", "questions.generate.analogous_concept"),
         ("E2E-LLM-INVERT-MULTI", "questions.generate.invert_polarity"),
+        ("E2E-LLM-BATCH", "questions.generate.paraphrase"),
     ]
     for marker, task in scripted:
         output = client.generate(_request(task, marker), _Output)

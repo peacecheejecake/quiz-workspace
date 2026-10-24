@@ -146,12 +146,12 @@ def authorize_resource(
     same body as an invisible workspace.
     """
     detail = f"{resource_type.value.capitalize()} not found."
-    workspace_id = repo.resolve_workspace_id(resource_type, resource_id)
-    if workspace_id is None:
-        raise not_found(detail)
-    if claimed_workspace_id is not None and claimed_workspace_id != workspace_id:
-        raise not_found(detail)
-    access = authorize_workspace(repo, user_id, workspace_id, action, lock, not_found_detail=detail)
+    mode = policy_for(action).lock if lock is None else lock
+    # One query: the resource's real workspace and the caller's membership in it (PERF-1).
+    record = repo.load_resource_membership(resource_type, resource_id, user_id, mode)
+    if record is not None and claimed_workspace_id not in (None, record.workspace_id):
+        record = None
+    access = decide(record, action, not_found_detail=detail)
     return ResourceAccess(resource_type=resource_type, resource_id=resource_id, workspace=access)
 
 

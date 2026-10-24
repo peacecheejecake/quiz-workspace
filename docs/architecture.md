@@ -73,7 +73,7 @@ CLI: `core parse`, `core chunk`, `core index`, `core search`, `core excerpt`, `c
 ### 색인 흐름
 1. 원본 PDF 업로드(원본 immutable, sha256 저장).
 2. Docling 파싱 → `parsed_document.json` 생성 및 저장.
-3. 장·절 계층 복원, 사용자가 수정할 canonical text blocks 생성.
+3. 장·절 계층 복원, 사용자가 수정할 canonical text blocks 생성. 장·절은 heading 번호 체계(`제1장`·`제1절`·`1.`·`1-1.`·`가.` …)로 복원하고, 인쇄된 목차는 front matter로 빼서 교차 확인에만 쓴다. 장 표지가 본문 text나 그림 영역으로 인식돼도 `제N장` label은 장 heading으로 살리고, 같은 번호의 반복(thumb index·running header)은 무시한다(CHAPTER-FIX).
 4. 장·절 중심 청킹, block/page provenance 연결.
 5. dense + sparse 인덱스 작성, Qdrant에 workspace/document/revision payload 부여.
 6. 색인 완료 시 active revision 전환. 실패 시 이전 정상 인덱스 유지.
@@ -146,9 +146,11 @@ workspace
 | POST | `/api/v1/questions/{id}/generations` | 변형 문제 생성 작업 |
 | GET | `/api/v1/question-generations/{id}/drafts` | 생성 문제 검토 |
 | POST | `/api/v1/question-generations/{id}/publish` | 승인한 문제만 등록 |
+| POST | `/api/v1/workspaces/{id}/question-generation-batches` | 여러 문제·임의 선택 묶음 변형 출제(원본마다 `question.generate` run; QGEN-MULTI) |
+| GET | `/api/v1/workspaces/{id}/question-generation-batches/{batch_id}` | 묶음의 원본별 run·진행 상태 |
 | POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기 |
 | GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토 |
-| POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록 |
+| POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록(`approve: true`면 선택한 초안을 승인과 함께 등록, 거절 목록 반환) |
 | GET | `/api/v1/jobs/{id}` | 비동기 작업 상태 |
 | GET | `/api/v1/jobs/{id}/events` | SSE 진행 상황 |
 | GET | `/api/v1/workspaces/{id}/activities` | 변경 이력 |
@@ -164,7 +166,7 @@ workspace
 - Questions Home(= Workspace 홈, UX3c): 챕터별 문제 heatmap(확정 문제 하나=marker 하나), 상태별 색상, 즐겨찾기 시 **둥근 별 모양**, hover/focus 확대, 접을 수 있는 상태 필터·정렬, hover preview, 클릭 시 Floating Question Player. Workspace header의 통합 검색과 문서·이력·공유·문제 생성 floating dialog.
 - Questions Bank: 유형별 CRUD, 목록·검색·챕터 연결·출처 관리.
 - Questions Import: PDF 추출 검토, 미완성 초안 수정, 확인/등록.
-- Question Generation: 원본 선택, 변형 유형 지정, LLM 또는 deterministic 변형, diff/정답 검증, 승인.
+- Question Generation: 원본 선택(한 문제·여러 문제·서버 임의 선택 묶음), 변형 유형 지정, LLM 또는 deterministic 변형, diff/정답 검증, 승인.
 - History: 수정·생성·풀이 이력, Job 로그.
 - Design system 기반 일관된 modal/non-modal floating side panel 제공.
 

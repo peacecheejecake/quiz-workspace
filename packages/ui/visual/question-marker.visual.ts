@@ -33,7 +33,7 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
-test('favorite keeps the status color and the 16px box of every status', async ({ page }) => {
+test('favorite keeps the status color and the cell-sized box of every status', async ({ page }) => {
   await openStory(page, 'questions-questiondot--state-matrix');
   for (const status of STATUSES) {
     const square = page.getByTestId(`dot-${status}-square-default`);
@@ -50,10 +50,10 @@ test('favorite keeps the status color and the 16px box of every status', async (
     const [sq, st, sqDot, stDot] = await Promise.all(
       [squareMarker, starMarker, square, star].map((l) => l.boundingBox()),
     );
-    expect(sq).toMatchObject({ width: 16, height: 16 });
-    expect(st).toMatchObject({ width: 16, height: 16 });
-    expect(sqDot).toMatchObject({ width: 28, height: 28 });
-    expect(stDot).toMatchObject({ width: 28, height: 28 });
+    expect(sq).toMatchObject({ width: 24, height: 24 });
+    expect(st).toMatchObject({ width: 24, height: 24 });
+    expect(sqDot).toMatchObject({ width: 24, height: 24 });
+    expect(stDot).toMatchObject({ width: 24, height: 24 });
   }
 });
 
@@ -90,6 +90,28 @@ test('hover and keyboard focus scale only the marker; the grid does not move', a
   await expect(page.locator('[data-question-id="q-2-6"]')).toBeFocused();
 });
 
+/** Drawn-shape gap between two horizontally adjacent dots, and the drawn width. */
+async function drawnGap(page: Page, left: string, right: string) {
+  const shape = (id: string) => page.locator(`[data-question-id="${id}"] .shape`).boundingBox();
+  const [a, b] = await Promise.all([shape(left), shape(right)]);
+  if (!a || !b) throw new Error('marker shape not rendered');
+  expect(Math.abs(a.y - b.y)).toBeLessThan(1);
+  return { gap: b.x - (a.x + a.width), width: a.width };
+}
+
+test('UX5-UI the gap between heatmap markers is at most 1/3 of the marker width', async ({
+  page,
+}) => {
+  await openStory(page, 'questions-questionheatmap--full');
+  const desktop = await drawnGap(page, 'q-1-1', 'q-1-2');
+  expect(desktop.width).toBeGreaterThanOrEqual(18);
+  expect(desktop.gap).toBeLessThanOrEqual(desktop.width / 3);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(async () => (await drawnGap(page, 'q-1-1', 'q-1-2')).width).toBeGreaterThan(23);
+  const mobile = await drawnGap(page, 'q-1-1', 'q-1-2');
+  expect(mobile.gap).toBeLessThanOrEqual(mobile.width / 3);
+});
+
 test('mobile uses 32px cells', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openStory(page, 'questions-questionheatmap--full');
@@ -97,15 +119,16 @@ test('mobile uses 32px cells', async ({ page }) => {
   expect(box).toMatchObject({ width: 32, height: 32 });
 });
 
-test('a standalone dot (no heatmap ancestor) is 28px on desktop and 32px on mobile', async ({
+test('a standalone dot (no heatmap ancestor) is 24px on desktop and 32px on mobile', async ({
   page,
 }) => {
   await openStory(page, 'questions-questiondot--default');
   const dot = page.locator('[data-question-id]');
-  expect(await dot.boundingBox()).toMatchObject({ width: 28, height: 28 });
+  expect(await dot.boundingBox()).toMatchObject({ width: 24, height: 24 });
+  await expect(dot.getByTestId('question-marker')).toHaveCSS('width', '24px');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => dot.boundingBox()).toMatchObject({ width: 32, height: 32 });
-  await expect(dot.getByTestId('question-marker')).toHaveCSS('width', '16px');
+  await expect(dot.getByTestId('question-marker')).toHaveCSS('width', '32px');
 });
 
 test('a standalone dot is 32px for a coarse pointer at desktop width', async ({ browser }) => {

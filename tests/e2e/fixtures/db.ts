@@ -8,6 +8,8 @@
 //      says why.
 //   3. Seeding/reading history the AC is about whose public API arrives in a later phase: a
 //      graded attempt on a question revision (practice API is M5) for QBANK-01-AC03.
+//   4. Recreating legacy state no current code path produces: a processed question PDF without
+//      an import run (papers processed before QIMP-AUTO) for QIMPORT-01-AC06.
 // The URL is loopback-checked; ids are validated before they are inlined into SQL.
 import { execFileSync } from 'node:child_process';
 import { localDbAdminUrl } from './local-env.ts';
@@ -86,4 +88,17 @@ export function attemptRevision(attemptId: string): AttemptRevision {
       `on r.id = a.question_revision_id where a.id = ${uuidList([attemptId])}`,
   );
   return JSON.parse(out) as AttemptRevision;
+}
+
+/**
+ * Removes the import runs (and their drafts) of one question PDF, so it looks like a paper
+ * processed before the server started imports itself (use 4 in the file comment). Call it only
+ * after the server-started run's job has finished.
+ */
+export function forgetImportRuns(workspaceId: string, documentId: string): void {
+  const [ws, doc] = [uuidList([workspaceId]), uuidList([documentId])];
+  psql(
+    `delete from public.question_import_runs ` +
+      `where workspace_id = ${ws} and source_document_id = ${doc}`,
+  );
 }

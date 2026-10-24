@@ -26,6 +26,7 @@ from fastapi.testclient import TestClient
 from qdrant_client import QdrantClient
 from quiz_api.api.search import get_search_repository, subtree_keys
 from quiz_api.authz import LockMode, MembershipRecord, ResourceType, Role, get_access_repository
+from quiz_api.authz.repository import TwoStepResourceMembership
 from quiz_api.document_content import block_attributes
 from quiz_api.main import create_app
 from quiz_api.rate_limit import TokenBucketLimiter
@@ -105,7 +106,7 @@ def _rows(
 
 
 @dataclass
-class World:
+class World(TwoStepResourceMembership):
     """Fake AccessRepository + SearchRepository over the indexed documents."""
 
     store: QdrantIndexStore

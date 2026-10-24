@@ -59,6 +59,25 @@
   }
 }
 
+/*
+ * Content-driven height changes (ModalDialog, ConfirmDialog, mobile sheet) glide instead of
+ * jumping: internal/animated-height.ts pins the old and new height inline and sets
+ * data-resizing for the duration. The body does not show a scrollbar mid-transition.
+ */
+:is(.qz-panel, .qz-modal)[data-resizing] {
+  transition: height var(--duration-panel-enter) var(--easing-standard);
+
+  > .body {
+    overflow-y: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.qz-panel, .qz-modal)[data-resizing] {
+    transition: none !important;
+  }
+}
+
 /* Header shared by FloatingSidePanel and ModalDialog / ConfirmDialog. */
 :is(.qz-panel, .qz-modal) {
   > .header {

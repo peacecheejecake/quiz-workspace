@@ -6,6 +6,7 @@
 // the home (useDocumentLibrary) so closing the dialog never aborts an upload. Question PDFs are
 // listed by QuestionPdfsLibrary instead.
 import { Button, Dropzone, EmptyState } from '@quiz/ui';
+import type { ReactNode } from 'react';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
 import { PDF_CONTENT_TYPE } from '@/lib/documents/validation';
 import { DocumentRowItem } from './document-row';
@@ -77,6 +78,7 @@ export function DocumentRows({
   library,
   canEdit,
   emptyText,
+  rowActions,
 }: {
   readonly label: string;
   readonly rows: readonly DocumentRow[];
@@ -84,6 +86,8 @@ export function DocumentRows({
   readonly library: DocumentLibrary;
   readonly canEdit: boolean;
   readonly emptyText: string;
+  /** Extra per-row actions (the question-PDF list's 문제 추출 / 문제 검토). */
+  readonly rowActions?: (row: DocumentRow) => ReactNode;
 }) {
   return (
     <>
@@ -108,6 +112,7 @@ export function DocumentRows({
               onCancel={library.cancel}
               onRetry={library.retry}
               onDelete={library.requestDelete}
+              actions={rowActions?.(row)}
             />
           ))}
         </ul>

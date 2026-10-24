@@ -62,6 +62,10 @@ class FakeDocumentStore:
     sync_jobs: dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
     sync_status: dict[uuid.UUID, str] = field(default_factory=dict)
     on_sync_enqueued: Callable[..., None] | None = None
+    # Question imports started by a publish (QIMP-AUTO): document -> (run id, job id, user).
+    import_starts: dict[uuid.UUID, tuple[uuid.UUID, uuid.UUID, uuid.UUID | None]] = field(
+        default_factory=dict
+    )
     writes: int = 0
     busy: bool = False
     locked: set[uuid.UUID] = field(default_factory=set)
@@ -204,6 +208,13 @@ class FakeDocumentStore:
         self.sync_status[sync_id] = "queued"
         if self.on_sync_enqueued is not None:
             self.on_sync_enqueued(workspace_id, user_id, document_id, revision_id, sync_id)
+        # worker_start_question_import: once per question paper, for the job's user.
+        if document.document_type == "question_paper" and document_id not in self.import_starts:
+            self.import_starts[document_id] = (uuid.uuid4(), uuid.uuid4(), user_id)
+            run_id, job_id, _ = self.import_starts[document_id]
+            return PublishOutcome(
+                previous=previous, sync_job_id=sync_id, import_run_id=run_id, import_job_id=job_id
+            )
         return PublishOutcome(previous=previous, sync_job_id=sync_id)
 
     def previous_published(self, document_id: uuid.UUID, exclude: uuid.UUID) -> uuid.UUID | None:

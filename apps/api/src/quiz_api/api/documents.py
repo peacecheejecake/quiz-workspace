@@ -184,6 +184,11 @@ class DocumentSummary(BaseModel):
     processing_job: DocumentProcessingJob | None = Field(
         default=None, description="The queued or running parse job; null when there is none."
     )
+    latest_import_id: uuid.UUID | None = Field(
+        default=None,
+        description="Question papers: the newest question import run of the document (the one "
+        "the server starts once it is processed, QIMPORT-01-AC06); null when it has none.",
+    )
 
 
 class DocumentList(BaseModel):
@@ -263,7 +268,11 @@ def _document(action: Action) -> Any:
 # --- helpers ------------------------------------------------------------------------------------
 
 
-def _summary(doc: DocumentRecord, job: ProcessingJobRecord | None = None) -> DocumentSummary:
+def _summary(
+    doc: DocumentRecord,
+    job: ProcessingJobRecord | None = None,
+    latest_import: uuid.UUID | None = None,
+) -> DocumentSummary:
     return DocumentSummary(
         id=doc.id,
         workspace_id=doc.workspace_id,
@@ -278,6 +287,7 @@ def _summary(doc: DocumentRecord, job: ProcessingJobRecord | None = None) -> Doc
         created_at=doc.created_at,
         updated_at=doc.updated_at,
         processing_job=DocumentProcessingJob(**vars(job)) if job is not None else None,
+        latest_import_id=latest_import,
     )
 
 
@@ -506,7 +516,9 @@ def list_documents(
     running parse job."""
     docs = repo.list_documents(access.workspace_id, document_type)
     jobs = repo.processing_jobs(access.workspace_id, [d.id for d in docs])
-    return DocumentList(items=[_summary(d, jobs.get(d.id)) for d in docs])
+    papers = [d.id for d in docs if d.document_type == "question_paper"]
+    imports = repo.latest_imports(access.workspace_id, papers)
+    return DocumentList(items=[_summary(d, jobs.get(d.id), imports.get(d.id)) for d in docs])
 
 
 def _revision(repo: DocumentRepository, revision_id: uuid.UUID | None) -> RevisionSummary | None:
@@ -521,8 +533,13 @@ def get_document(
     doc = repo.get_document(access.resource_id)
     latest = repo.latest_revision(doc.id)
     job = repo.processing_jobs(doc.workspace_id, [doc.id]).get(doc.id)
+    imports = (
+        repo.latest_imports(doc.workspace_id, [doc.id])
+        if doc.document_type == "question_paper"
+        else {}
+    )
     return DocumentDetail(
-        **_summary(doc, job).model_dump(),
+        **_summary(doc, job, imports.get(doc.id)).model_dump(),
         active_revision=_revision(repo, doc.active_revision_id),
         latest_revision=RevisionSummary(**vars(latest)) if latest else None,
     )

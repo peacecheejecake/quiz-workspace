@@ -102,11 +102,13 @@ export async function loadChapterContext(
   workspaceId: string,
 ): Promise<{ chapters: ChapterOption[]; documents: DocumentOption[] }> {
   try {
+    // The unfiltered list, as the page's own document read requests it: Next memoizes identical
+    // GETs within a render, so the bank costs one documents call instead of two (PERF-1).
     const { data } = await api.GET('/api/v1/workspaces/{workspace_id}/documents', {
-      params: { path: { workspace_id: workspaceId }, query: { document_type: 'book' } },
+      params: { path: { workspace_id: workspaceId } },
     });
     const documents = (data?.items ?? [])
-      .filter((d) => d.status === 'ready')
+      .filter((d) => d.document_type === 'book' && d.status === 'ready')
       .map((d) => ({ id: d.id, title: d.title || d.filename }));
     const get = api.GET as unknown as UntypedGet;
     const outlines = await Promise.all(

@@ -88,7 +88,7 @@ describe('spec extraction (guards against a vacuous comparison)', () => {
     expect(Object.keys(docDark)).toHaveLength(32);
     // 32 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 12 typography
     // + 2 breakpoints + color-scheme.
-    expect(Object.keys(docRoot)).toHaveLength(72);
+    expect(Object.keys(docRoot)).toHaveLength(73);
   });
 });
 
@@ -198,10 +198,20 @@ describe('density (design-system.md §4, v1.2.2)', () => {
   });
 
   it('heatmap cells keep their spec sizes (not part of the density change)', () => {
-    expect(staticTokens['heatmap-cell']).toBe('28px');
+    expect(staticTokens['heatmap-cell']).toBe('24px');
     expect(staticTokens['heatmap-cell-touch']).toBe('32px');
     expect(staticTokens['heatmap-dot']).toBe('16px');
-    expect(staticTokens['heatmap-gap']).toBe('4px');
+    expect(staticTokens['heatmap-gap']).toBe('0px');
+  });
+
+  it('heatmap markers sit at most 1/3 of their drawn width apart (UX5-UI)', () => {
+    // A heatmap marker's SVG box is the cell; the drawn square is 18/24 of the viewBox.
+    const drawn = (cell: number) => (cell * 18) / 24;
+    for (const cell of [px('heatmap-cell'), px('heatmap-cell-touch')]) {
+      const pitch = cell + px('heatmap-gap');
+      expect(pitch - drawn(cell)).toBeLessThanOrEqual(drawn(cell) / 3);
+      expect(cell).toBeGreaterThanOrEqual(24);
+    }
   });
 });
 

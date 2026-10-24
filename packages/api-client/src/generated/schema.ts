@@ -492,13 +492,22 @@ export type paths = {
     put?: never;
     /**
      * Publish Question Import Drafts
-     * @description Register exactly these approved drafts as CONFIRMED questions (QIMPORT-01-AC03).
+     * @description Register exactly these drafts as CONFIRMED questions (QIMPORT-01-AC03).
      *
-     *     Each item names the draft and the `version` that was reviewed. All or nothing: an id that
-     *     is not a draft of this import is 404; a draft that changed since (another editor's edit,
-     *     approval or rejection) is 409 `stale-draft`; a draft that is not approved (pending or
-     *     rejected) is 409 `draft-not-approved`; a draft that cannot be confirmed is 422. Already
-     *     published drafts return their question whatever version is sent (idempotent replay).
+     *     Each item names the draft and the `version` the reviewer saw. An id that is not a draft of
+     *     this import is 404 (nothing changes). Already published drafts return their question whatever
+     *     version is sent (idempotent replay).
+     *
+     *     Without `approve` (drafts approved beforehand through PATCH) it is all or nothing: a draft
+     *     that changed since (another editor's edit, approval or rejection) is 409 `stale-draft`; a
+     *     draft that is not approved is 409 `draft-not-approved`; a draft that cannot be confirmed is
+     *     422.
+     *
+     *     With `approve` the request is the human selection itself ("선택한 문제 승인 및 등록"): each
+     *     listed draft still at the sent version that can be confirmed is approved by the caller
+     *     (`reviewed_by`/`reviewed_at`; a draft approved earlier keeps its approval) and registered,
+     *     in one transaction. A draft that changed since or cannot be confirmed (e.g. an MCQ without
+     *     an answer) is left untouched and listed in `refused`; it is never registered silently.
      */
     post: operations['publishQuestionImportDrafts'];
     delete?: never;
@@ -1018,6 +1027,47 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspace_id}/question-generation-batches': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Question Generation Batch
+     * @description Start variant generation for several CONFIRMED questions at once (QGEN-01-AC06/AC07):
+     *     one run per source, reviewed and registered per run like a single generation.
+     */
+    post: operations['createQuestionGenerationBatch'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/question-generation-batches/{batch_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Question Generation Batch
+     * @description The batch's runs, one per source in batch order, with their progress and draft counts.
+     */
+    get: operations['getQuestionGenerationBatch'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspace_id}/question-generations': {
     parameters: {
       query?: never;
@@ -1055,6 +1105,11 @@ export type paths = {
      * Create Question Import
      * @description Start extracting draft questions from a question paper (QIMPORT-01-AC01). 409
      *     `document-not-ready` while the paper is still processing (or failed).
+     *
+     *     The server already starts the import of a question paper when its processing succeeds
+     *     (QIMPORT-01-AC06), so this usually attaches: if the paper's active revision already has a
+     *     run (started by the server or by anyone), that run is returned and nothing new is created.
+     *     It creates a run for papers that have none (e.g. processed before QIMP-AUTO).
      */
     post: operations['createQuestionImport'];
     delete?: never;
@@ -1584,6 +1639,11 @@ export type components = {
        * @description Why the last processing attempt failed.
        */
       last_error: string | null;
+      /**
+       * Latest Import Id
+       * @description Question papers: the newest question import run of the document (the one the server starts once it is processed, QIMPORT-01-AC06); null when it has none.
+       */
+      latest_import_id?: string | null;
       /** @description The newest revision (a draft while a parse or correction is pending). */
       latest_revision: components['schemas']['quiz_api__api__documents__RevisionSummary'] | null;
       /** @description The queued or running parse job; null when there is none. */
@@ -1684,6 +1744,11 @@ export type components = {
        * @description Why the last processing attempt failed.
        */
       last_error: string | null;
+      /**
+       * Latest Import Id
+       * @description Question papers: the newest question import run of the document (the one the server starts once it is processed, QIMPORT-01-AC06); null when it has none.
+       */
+      latest_import_id?: string | null;
       /** @description The queued or running parse job; null when there is none. */
       processing_job?: components['schemas']['DocumentProcessingJob'] | null;
       /** Sha256 */
@@ -1907,6 +1972,100 @@ export type components = {
        */
       name: string;
     };
+    /** GenerationBatch */
+    GenerationBatch: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Draft Count */
+      draft_count: number;
+      /** Finished Run Count */
+      finished_run_count: number;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Items
+       * @description One per source, in batch order.
+       */
+      items: components['schemas']['GenerationBatchItem'][];
+      /**
+       * Mode
+       * @enum {string}
+       */
+      mode: 'selected' | 'random';
+      /** Published Count */
+      published_count: number;
+      /**
+       * Requested Count
+       * @description Sources asked for (a random pick may find fewer).
+       */
+      requested_count: number;
+      /** Run Count */
+      run_count: number;
+      /**
+       * Seed
+       * @description The random pick's seed (null for `selected`).
+       */
+      seed: number | null;
+      /**
+       * Status
+       * @description `working` while any run is queued or running.
+       * @enum {string}
+       */
+      status: 'working' | 'finished';
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /** GenerationBatchCreate */
+    GenerationBatchCreate: {
+      /**
+       * Candidate Count
+       * @description Candidates per variation and source; sources x variations x candidates <= 60.
+       * @default 1
+       */
+      candidate_count?: number;
+      /** Difficulty */
+      difficulty?: ('easier' | 'same' | 'harder') | null;
+      /** Selection */
+      selection: components['schemas']['SelectedSources'] | components['schemas']['RandomSources'];
+      /**
+       * Variation Types
+       * @description Distinct variations for every source. OPTION_SHUFFLE is refused (422).
+       */
+      variation_types: (
+        'OPTION_SHUFFLE' | 'PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT'
+      )[];
+    };
+    /** GenerationBatchItem */
+    GenerationBatchItem: {
+      /** Position */
+      position: number;
+      run: components['schemas']['GenerationRun'];
+      source: components['schemas']['GenerationBatchSource'];
+    };
+    /** GenerationBatchSource */
+    GenerationBatchSource: {
+      /**
+       * Preview
+       * @description First lines of the pinned source stem; never the answer.
+       */
+      preview: string;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /** Question Number */
+      question_number: number | null;
+    };
     /** GenerationCreate */
     GenerationCreate: {
       /**
@@ -1938,6 +2097,11 @@ export type components = {
     };
     /** GenerationRun */
     GenerationRun: {
+      /**
+       * Batch Id
+       * @description The batch the run belongs to (POST /workspaces/{id}/question-generation-batches), or null.
+       */
+      batch_id?: string | null;
       /** Candidate Count */
       candidate_count: number;
       /**
@@ -2147,6 +2311,17 @@ export type components = {
       /** Items */
       items: components['schemas']['ImportDraft'][];
     };
+    /** ImportPublishBody */
+    ImportPublishBody: {
+      /**
+       * Approve
+       * @description Approve and register the listed drafts in one step (QIMPORT-01-AC03, "선택한 문제 승인 및 등록"): every listed draft at the sent `version` is approved by the caller and registered in the same transaction; drafts that changed since or cannot be confirmed are returned in `refused`, untouched, and the others are registered. Without it only drafts approved beforehand are registered, all or nothing.
+       * @default false
+       */
+      approve?: boolean;
+      /** Drafts */
+      drafts: components['schemas']['ReviewedDraft'][];
+    };
     /** ImportPublishedDraft */
     ImportPublishedDraft: {
       /**
@@ -2160,6 +2335,19 @@ export type components = {
        */
       question_id: string;
     };
+    /** ImportPublishOutcome */
+    ImportPublishOutcome: {
+      /**
+       * Items
+       * @description In request order.
+       */
+      items: components['schemas']['ImportPublishedDraft'][];
+      /**
+       * Refused
+       * @description `approve` requests only (else empty): listed drafts left as they were, in request order.
+       */
+      refused: components['schemas']['ImportRefusedDraft'][];
+    };
     /** ImportPublishRequest */
     ImportPublishRequest: {
       /** Drafts */
@@ -2172,6 +2360,20 @@ export type components = {
        * @description In request order.
        */
       items: components['schemas']['ImportPublishedDraft'][];
+    };
+    /** ImportRefusedDraft */
+    ImportRefusedDraft: {
+      /**
+       * Draft Id
+       * Format: uuid
+       */
+      draft_id: string;
+      /**
+       * Reason
+       * @description `stale-draft`: changed since the sent version (review it again); `not-publishable`: cannot be confirmed as it is (see the draft's `publish_errors`).
+       * @enum {string}
+       */
+      reason: 'stale-draft' | 'not-publishable';
     };
     /** ImportRun */
     ImportRun: {
@@ -3156,6 +3358,41 @@ export type components = {
       /** Version */
       version: number;
     };
+    /** RandomSources */
+    RandomSources: {
+      /**
+       * Chapter
+       * @description A chapter id, or `none` for the questions without a chapter.
+       */
+      chapter?: string | null;
+      /**
+       * Count
+       * @description How many sources to pick.
+       */
+      count: number;
+      /**
+       * Favorite
+       * @description true: the caller's favorites only; false: no favorites.
+       */
+      favorite?: boolean | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      mode: 'random';
+      /** Question Type */
+      question_type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      /**
+       * Seed
+       * @description Same seed and same candidates -> same pick. Omitted: the server draws one.
+       */
+      seed?: number | null;
+      /**
+       * Statuses
+       * @description Heatmap statuses of the caller's study state (any of them); empty = all.
+       */
+      statuses?: ('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry')[];
+    };
     /** ReadinessReport */
     ReadinessReport: {
       /** Checks */
@@ -3466,6 +3703,19 @@ export type components = {
       truncated: boolean;
       /** Warnings */
       warnings: string[];
+    };
+    /** SelectedSources */
+    SelectedSources: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      mode: 'selected';
+      /**
+       * Question Ids
+       * @description Distinct CONFIRMED questions of this workspace, in the batch's order.
+       */
+      question_ids: string[];
     };
     /** SelfGradeBody */
     SelfGradeBody: {
@@ -5862,7 +6112,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['ImportPublishRequest'];
+        'application/json': components['schemas']['ImportPublishBody'];
       };
     };
     responses: {
@@ -5872,7 +6122,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ImportPublishResult'];
+          'application/json': components['schemas']['ImportPublishOutcome'];
         };
       };
       /** @description Unauthorized */
@@ -7979,6 +8229,166 @@ export interface operations {
       };
     };
   };
+  createQuestionGenerationBatch: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GenerationBatchCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GenerationBatch'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getQuestionGenerationBatch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GenerationBatch'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   listQuestionGenerations: {
     parameters: {
       query?: {
@@ -8052,6 +8462,8 @@ export interface operations {
   listQuestionImports: {
     parameters: {
       query?: {
+        /** @description Only the runs of this question paper (e.g. the server-started one). */
+        document_id?: string | null;
         limit?: number;
       };
       header?: never;

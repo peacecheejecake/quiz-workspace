@@ -8,7 +8,13 @@ import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import type { ImportDraft } from './drafts';
 import type { Question, QuestionDetail } from './form';
-import { classifyGenerationFailure, generatePath, type GenerationRun } from './generation-client';
+import {
+  batchPath,
+  classifyGenerationFailure,
+  generatePath,
+  type GenerationBatch,
+  type GenerationRun,
+} from './generation-client';
 import { RUN_HISTORY_LIMIT } from './generation-model';
 
 export type SourceRevision = QuestionDetail['revision'];
@@ -84,9 +90,21 @@ export async function loadGenerationScreen(
 
   if (!sourceId) return pick(false);
 
-  const question = await api
-    .GET('/api/v1/questions/{question_id}', { params: { path: { question_id: sourceId } } })
-    .catch(() => null);
+  // The run history is keyed by the requested id, so it loads alongside the question; it is only
+  // used once the question turned out to be a question of this workspace.
+  const [question, runs] = await Promise.all([
+    api
+      .GET('/api/v1/questions/{question_id}', { params: { path: { question_id: sourceId } } })
+      .catch(() => null),
+    api
+      .GET('/api/v1/workspaces/{workspace_id}/question-generations', {
+        params: {
+          path: { workspace_id: workspaceId },
+          query: { source_question_id: sourceId, limit: RUN_HISTORY_LIMIT },
+        },
+      })
+      .catch(() => null),
+  ]);
   if (!question?.data) {
     const kind = question ? kindOf(question.response.status, question.error) : 'unavailable';
     if (kind !== 'notFound') {
@@ -106,14 +124,6 @@ export async function loadGenerationScreen(
     runRevision: null,
     drafts: [],
   } as const;
-  const runs = await api
-    .GET('/api/v1/workspaces/{workspace_id}/question-generations', {
-      params: {
-        path: { workspace_id: workspaceId },
-        query: { source_question_id: source.id, limit: RUN_HISTORY_LIMIT },
-      },
-    })
-    .catch(() => null);
   if (!runs?.data) {
     if (runs) kindOf(runs.response.status, runs.error, { workspace: true });
     return { ...empty, loadFailed: true };
@@ -145,4 +155,33 @@ export async function loadGenerationScreen(
     return { ...base, drafts: [], loadFailed: true };
   }
   return { ...base, drafts: drafts.data.items, loadFailed: false };
+}
+
+export interface GenerationBatchScreenData {
+  readonly batch: GenerationBatch | null;
+  readonly loadFailed: boolean;
+}
+
+/** QGEN-MULTI `?batch=`: the batch with its runs, one per source (null: not a batch here). */
+export async function loadGenerationBatch(
+  workspaceId: string,
+  batchId: string,
+): Promise<GenerationBatchScreenData> {
+  const returnTo = batchPath(workspaceId, batchId);
+  let api;
+  try {
+    api = await createServerApiClient();
+  } catch (error) {
+    if (error instanceof NotAuthenticatedError) redirect(loginRedirectPath(returnTo));
+    throw error;
+  }
+  const res = await api
+    .GET('/api/v1/workspaces/{workspace_id}/question-generation-batches/{batch_id}', {
+      params: { path: { workspace_id: workspaceId, batch_id: batchId } },
+    })
+    .catch(() => null);
+  if (res?.data) return { batch: res.data, loadFailed: false };
+  const kind = res ? classifyGenerationFailure(res.response.status, res.error) : 'unavailable';
+  if (kind === 'unauthenticated') redirect(loginRedirectPath(returnTo));
+  return { batch: null, loadFailed: kind !== 'notFound' };
 }

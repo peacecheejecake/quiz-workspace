@@ -2,6 +2,7 @@
 // component is rendered here with serializable props only. test/client-boundary.test.ts keeps
 // this list in sync with src/index.ts.
 import {
+  AccountIcon,
   AlertIcon,
   ArrowLeftIcon,
   AppShell,
@@ -56,6 +57,7 @@ import {
   RetryIcon,
   RetryToggle,
   Select,
+  ProgressBar,
   Skeleton,
   StarIcon,
   StatusSummary,
@@ -154,6 +156,7 @@ export default function Page() {
               ]}
             />
             <Skeleton width="4rem" />
+            <ProgressBar label="진행률" value={40} />
             <AlertIcon />
             <CheckIcon />
             <ChevronDownIcon />
@@ -168,6 +171,7 @@ export default function Page() {
             <TrashIcon />
             <HistoryIcon />
             <ShareIcon />
+            <AccountIcon />
           </Surface>
           <GlassSurface>glass</GlassSurface>
           <Tooltip content="설명" delayDuration={TOOLTIP_DELAY_MS + TOOLTIP_DESCRIPTION_DELAY_MS}>

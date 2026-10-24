@@ -2,6 +2,7 @@
 
 import { AlertDialog } from 'radix-ui';
 import type { ReactNode, RefObject } from 'react';
+import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
 import { LayerProvider } from '../internal/layer';
 import { Button } from '../primitives/Button';
@@ -41,6 +42,7 @@ export function ConfirmDialog({
   returnFocusRef,
   className,
 }: ConfirmDialogProps) {
+  const animateHeight = useAnimatedHeight<HTMLDivElement>();
   return (
     <AlertDialog.Root
       open={open}
@@ -51,6 +53,7 @@ export function ConfirmDialog({
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="qz-backdrop" data-layer="modal" />
         <AlertDialog.Content
+          ref={animateHeight}
           data-size="sm"
           className={cx('qz-modal', className)}
           onCloseAutoFocus={(event) => {

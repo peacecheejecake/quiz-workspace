@@ -24,6 +24,7 @@ STALE_DRAFT = "urn:quiz-workspace:problem:stale-draft"
 DRAFT_PUBLISHED = "urn:quiz-workspace:problem:draft-published"
 KEY_REUSED = "urn:quiz-workspace:problem:idempotency-key-reused"
 NOT_APPROVED = "urn:quiz-workspace:problem:draft-not-approved"
+DB_ADMIN_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 PAPER = Path(__file__).resolve().parents[2] / "fixtures" / "pdfs" / "questions-ko.pdf"
 
 
@@ -89,8 +90,59 @@ def test_an_idempotency_key_cannot_be_reused_for_another_paper(seed: Any) -> Non
     key = f"k-{seed.new_id()}"
     run = alice.ok_response(alice.start_import(ws["id"], first, key), "POST", "i", (202,))
     seed.problem(alice.start_import(ws["id"], second, key), 409, KEY_REUSED)
+    # Each paper has only the run the server started when it was processed (QIMP-AUTO).
     runs = alice.ok("GET", f"/workspaces/{ws['id']}/question-imports")["items"]
-    assert [r["id"] for r in runs] == [run["id"]]
+    assert sorted(r["source_document_id"] for r in runs) == sorted([first, second])
+    assert run["id"] in {r["id"] for r in runs}
+
+
+def _runs_of(client: Any, workspace_id: str, document_id: str) -> list[dict[str, Any]]:
+    path = f"/workspaces/{workspace_id}/question-imports?document_id={document_id}"
+    items: list[dict[str, Any]] = client.ok("GET", path)["items"]
+    return items
+
+
+def test_qimport_01_ac06_a_processed_paper_already_has_its_import_and_post_attaches(
+    seed: Any,
+) -> None:
+    """The server starts the import when the paper is processed; POST returns that run."""
+    alice = seed.client("qauto-attach")
+    ws = alice.create_workspace()
+    paper = alice.upload_question_paper(ws["id"])
+    other = alice.upload_question_paper(ws["id"])
+
+    [auto] = _runs_of(alice, ws["id"], paper)
+    assert auto["status"] == "queued"
+    assert auto["source_document_id"] == paper
+    started = alice.ok_response(alice.start_import(ws["id"], paper), "POST", "i", (202,))
+    again = alice.ok_response(alice.start_import(ws["id"], paper), "POST", "i", (202,))
+    assert started["id"] == again["id"] == auto["id"]
+    assert started["job_id"] == auto["job_id"]
+    assert [r["id"] for r in _runs_of(alice, ws["id"], paper)] == [auto["id"]]
+    assert [r["source_document_id"] for r in _runs_of(alice, ws["id"], other)] == [other]
+
+    alice.wait_for_job(str(auto["job_id"]))
+    assert len(alice.drafts(auto["id"])) == len(seed.QUESTION_TRUTH["questions"])
+
+
+def test_qimport_01_ac06_a_processed_paper_without_an_import_gets_one_from_post(
+    seed: Any,
+) -> None:
+    """Papers processed before QIMP-AUTO have no run: POST creates exactly one."""
+    alice = seed.client("qauto-legacy")
+    ws = alice.create_workspace()
+    paper = alice.upload_question_paper(ws["id"])
+    with psycopg.connect(seed.DB_ADMIN_URL, autocommit=True) as conn:
+        conn.execute(
+            "delete from public.question_import_runs where source_document_id = %s", (paper,)
+        )
+    assert _runs_of(alice, ws["id"], paper) == []
+
+    first = alice.ok_response(alice.start_import(ws["id"], paper), "POST", "i", (202,))
+    second = alice.ok_response(alice.start_import(ws["id"], paper), "POST", "i", (202,))
+
+    assert first["id"] == second["id"]
+    assert [r["id"] for r in _runs_of(alice, ws["id"], paper)] == [first["id"]]
 
 
 def test_review_edits_answers_approves_and_freezes_published_drafts(seed: Any) -> None:
@@ -233,6 +285,119 @@ def test_publish_registers_only_the_reviewed_version_of_approved_drafts(seed: An
     assert len(alice.list_questions(ws["id"])) == 1
 
 
+def _review_of(draft_id: str) -> tuple[str, str | None, Any]:
+    with psycopg.connect(DB_ADMIN_URL, autocommit=True) as conn:
+        row = conn.execute(
+            "select review_status, reviewed_by::text, reviewed_at from public.question_drafts "
+            "where id = %s",
+            (draft_id,),
+        ).fetchone()
+    assert row is not None
+    return row[0], row[1], row[2]
+
+
+def test_qimport_01_ac03_approve_publish_registers_exactly_the_selection(seed: Any) -> None:
+    """QIMP-BULK: `approve: true` approves and registers the selected drafts in one request; a
+    draft that cannot be confirmed is refused and left as it was, the rest is registered."""
+    alice = seed.client("qbulk-select")
+    ws = alice.create_workspace()
+    run, drafts = alice.import_paper(ws["id"])
+    q1, q2, q3, q5 = (seed.draft_for(drafts, n) for n in (1, 2, 3, 5))
+    assert q3["publishable"] is False  # MCQ without an answer in the key
+    selection = [_item(q1), _item(q2), _item(q3), _item(q5)]
+
+    res = alice.approve_and_publish(run["id"], selection)
+    first = alice.ok_response(res, "POST", "approve-publish", (200,))
+    assert [i["draft_id"] for i in first["items"]] == [q1["id"], q2["id"], q5["id"]]
+    assert first["refused"] == [{"draft_id": q3["id"], "reason": "not-publishable"}]
+
+    bank = alice.list_questions(ws["id"])
+    assert {q["id"] for q in bank} == {i["question_id"] for i in first["items"]}
+    assert all(q["publication_status"] == "CONFIRMED" for q in bank)
+    after = {d["id"]: d for d in alice.drafts(run["id"])}
+    for draft in (q1, q2, q5):
+        status, reviewer, reviewed_at = _review_of(draft["id"])
+        assert (status, reviewer) == ("approved", alice.user.id)
+        assert reviewed_at is not None
+        assert after[draft["id"]]["published_question_id"] is not None
+    # The refused draft and the drafts nobody selected are untouched.
+    for draft in drafts:
+        if draft["id"] in {q1["id"], q2["id"], q5["id"]}:
+            continue
+        assert _review_of(draft["id"]) == ("pending", None, None)
+        assert after[draft["id"]]["published_question_id"] is None
+        assert after[draft["id"]]["version"] == draft["version"]
+    run_after = alice.ok("GET", f"/question-imports/{run['id']}")
+    assert run_after["published_count"] == 3
+
+    # A retry of the same request (lost response) registers nothing twice.
+    replay = alice.approve_and_publish(run["id"], selection)
+    assert alice.ok_response(replay, "POST", "replay", (200,)) == first
+    assert len(alice.list_questions(ws["id"])) == 3
+    assert alice.ok("GET", f"/question-imports/{run['id']}")["published_count"] == 3
+
+
+def test_approve_publish_refuses_drafts_changed_since_they_were_selected(seed: Any) -> None:
+    """QIMP-BULK: the selection approves only the version on screen. A draft another editor
+    changed is refused (`stale-draft`) and stays pending; the edited draft registers at its
+    latest version once selected again. A rejected draft that is selected is approved."""
+    alice = seed.client("qbulk-stale")
+    bob = seed.client("qbulk-stale-bob")
+    ws = alice.create_workspace()
+    run, drafts = alice.import_paper(ws["id"])
+    seed.membership(ws["id"], bob.user, "editor")
+    q1, q2, q4 = (seed.draft_for(drafts, n) for n in (1, 2, 4))
+    stem = "바뀐 문제: 물이 기체로 변하는 과정은?"
+    edited = bob.ok_response(_patch(bob, q1, stem=stem), "PATCH", "edit", (200,))
+    rejected = bob.ok_response(_patch(bob, q4, review_status="rejected"), "PATCH", "r", (200,))
+
+    res = alice.approve_and_publish(run["id"], [_item(q1), _item(q2), _item(q4)])
+    out = alice.ok_response(res, "POST", "approve-publish", (200,))
+    assert [i["draft_id"] for i in out["items"]] == [q2["id"]]
+    assert out["refused"] == [
+        {"draft_id": q1["id"], "reason": "stale-draft"},
+        {"draft_id": q4["id"], "reason": "stale-draft"},
+    ]
+    assert _review_of(q1["id"])[:2] == ("pending", None)
+    assert _review_of(q4["id"])[:2] == ("rejected", bob.user.id)
+
+    again = alice.approve_and_publish(run["id"], [_item(edited), _item(rejected)])
+    out = alice.ok_response(again, "POST", "approve-publish", (200,))
+    assert [i["draft_id"] for i in out["items"]] == [q1["id"], q4["id"]]
+    assert out["refused"] == []
+    assert _review_of(q4["id"])[:2] == ("approved", alice.user.id)
+    question = alice.get_question(out["items"][0]["question_id"])
+    assert question["revision"]["stem"] == stem
+    assert len(alice.list_questions(ws["id"])) == 3
+
+
+def test_approve_publish_keeps_the_authorization_boundary(seed: Any) -> None:
+    """QIMP-BULK: the same boundary as publish: other users 404, viewers 403, archived 403, and a
+    draft of another import refuses the whole request (nothing approved or registered)."""
+    owner = seed.client("qbulk-authz")
+    viewer = seed.client("qbulk-authz-viewer")
+    mallory = seed.client("qbulk-authz-mallory")
+    ws = owner.create_workspace()
+    run, drafts = owner.import_paper(ws["id"])
+    other_run, other_drafts = owner.import_paper(ws["id"])
+    seed.membership(ws["id"], viewer.user, "viewer")
+    q1 = seed.draft_for(drafts, 1)
+    selection = [_item(q1)]
+
+    seed.problem(mallory.approve_and_publish(run["id"], selection), 404)
+    seed.problem(viewer.approve_and_publish(run["id"], selection), 403, seed.INSUFFICIENT_ROLE)
+    foreign = seed.draft_for(other_drafts, 1)
+    seed.problem(owner.approve_and_publish(run["id"], [_item(q1), _item(foreign)]), 404)
+    assert other_run["id"] != run["id"]
+    assert _review_of(q1["id"]) == ("pending", None, None)
+    assert _review_of(foreign["id"]) == ("pending", None, None)
+
+    owner.ok("POST", f"/workspaces/{ws['id']}/archive")
+    seed.problem(owner.approve_and_publish(run["id"], selection), 403, seed.ARCHIVED)
+    assert _review_of(q1["id"]) == ("pending", None, None)
+    assert owner.list_questions(ws["id"]) == []
+
+
 def test_rejecting_needs_no_publishable_content_and_essays_keep_a_model_answer(seed: Any) -> None:
     alice = seed.client("m44a-essay")
     ws = alice.create_workspace()
@@ -290,3 +455,33 @@ def test_the_worker_role_cannot_touch_reviewed_drafts(seed: Any) -> None:
                 "values (%s, 'import', %s, 99, 'ESSAY', '{}'::jsonb, 'approved', now())",
                 (ws["id"], run["id"]),
             )
+
+
+def test_qimport_01_ac06_documents_carry_their_latest_import_beyond_the_run_window(
+    seed: Any,
+) -> None:
+    """Codex P2: 문제 PDF 관리 must not infer "no import" from a truncated run list. A paper
+    whose run is older than the newest 200 runs of the workspace still reports it."""
+    alice = seed.client("qauto-window")
+    viewer = seed.client("qauto-window-viewer")
+    ws = alice.create_workspace()
+    seed.membership(ws["id"], viewer.user, "viewer")
+    old, busy = (alice.upload_question_paper(ws["id"]) for _ in range(2))
+    [old_run] = _runs_of(alice, ws["id"], old)
+    with psycopg.connect(seed.DB_ADMIN_URL, autocommit=True) as conn:
+        conn.execute(
+            "insert into public.question_import_runs (workspace_id, created_by, "
+            "source_document_id, created_at) "
+            "select %s, %s, %s, now() + make_interval(secs => g) "
+            "from generate_series(1, 205) g",
+            (ws["id"], alice.user.id, busy),
+        )
+    newest = alice.ok("GET", f"/workspaces/{ws['id']}/question-imports?limit=200")["items"]
+    assert old_run["id"] not in {r["id"] for r in newest}
+
+    docs = viewer.ok("GET", f"/workspaces/{ws['id']}/documents")["items"]
+    latest = {d["id"]: d["latest_import_id"] for d in docs}
+    assert latest[old] == old_run["id"]
+    assert latest[busy] == newest[0]["id"]
+    detail = viewer.ok("GET", f"/documents/{old}")
+    assert detail["latest_import_id"] == old_run["id"]

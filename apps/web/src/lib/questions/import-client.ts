@@ -2,7 +2,13 @@
 // (src/app/api, `lib/documents/bff.ts`), which attach the session's access token server-side, so
 // browser code never holds a JWT. FastAPI stays the authority on every decision.
 import type { Problem } from '@quiz/api-client';
-import type { DraftUpdateBody, ImportDraft, ImportRun, ReviewedDraftRef } from './drafts';
+import type {
+  ApprovePublishResult,
+  DraftUpdateBody,
+  ImportDraft,
+  ImportRun,
+  ReviewedDraftRef,
+} from './drafts';
 
 export const IMPORT_PROBLEMS = {
   workspaceArchived: 'urn:quiz-workspace:problem:workspace-archived',
@@ -86,8 +92,10 @@ export function classifyImportFailure(status: number, body: unknown): ImportFail
 
 const enc = encodeURIComponent;
 
-export function importPath(workspaceId: string): string {
-  return `/workspaces/${workspaceId}/questions/import`;
+/** The import page; with `documentId` it opens that question paper's import (QIMPORT-01-AC06). */
+export function importPath(workspaceId: string, documentId?: string): string {
+  const path = `/workspaces/${workspaceId}/questions/import`;
+  return documentId ? `${path}?document=${enc(documentId)}` : path;
 }
 
 export const IMPORT_BFF_PATHS = {
@@ -101,8 +109,12 @@ export const IMPORT_BFF_PATHS = {
 
 export interface ImportClient {
   startImport(workspaceId: string, documentId: string, idempotencyKey: string): Promise<ImportRun>;
-  /** The workspace's newest run, or null when it has none. */
-  latestRun(workspaceId: string, signal?: AbortSignal): Promise<ImportRun | null>;
+  /** The workspace's newest run (of `documentId`, when given), or null when it has none. */
+  latestRun(
+    workspaceId: string,
+    signal?: AbortSignal,
+    documentId?: string,
+  ): Promise<ImportRun | null>;
   getRun(importId: string, signal?: AbortSignal): Promise<ImportRun>;
   listDrafts(importId: string, signal?: AbortSignal): Promise<ImportDraft[]>;
   retryImport(importId: string, idempotencyKey: string): Promise<ImportRun>;
@@ -111,6 +123,11 @@ export interface ImportClient {
     importId: string,
     drafts: readonly ReviewedDraftRef[],
   ): Promise<{ draft_id: string; question_id: string }[]>;
+  /** Approves and registers the selected drafts at these versions (`approve: true`, QIMP-BULK). */
+  approveAndPublish(
+    importId: string,
+    drafts: readonly ReviewedDraftRef[],
+  ): Promise<ApprovePublishResult>;
 }
 
 type FetchLike = typeof fetch;
@@ -152,11 +169,14 @@ export function createImportClient(fetchImpl: FetchLike = (...a) => fetch(...a))
   }
 
   return {
-    latestRun: async (workspaceId, signal) =>
+    latestRun: async (workspaceId, signal, documentId) =>
       (
-        await call<{ items: ImportRun[] }>(`${IMPORT_BFF_PATHS.imports(workspaceId)}?limit=1`, {
-          signal,
-        })
+        await call<{ items: ImportRun[] }>(
+          `${IMPORT_BFF_PATHS.imports(workspaceId)}?limit=1${
+            documentId ? `&document_id=${enc(documentId)}` : ''
+          }`,
+          { signal },
+        )
       ).items[0] ?? null,
     startImport: (workspaceId, documentId, idempotencyKey) =>
       call(IMPORT_BFF_PATHS.imports(workspaceId), {
@@ -178,5 +198,10 @@ export function createImportClient(fetchImpl: FetchLike = (...a) => fetch(...a))
           { method: 'POST', body: JSON.stringify({ drafts }) },
         )
       ).items,
+    approveAndPublish: (importId, drafts) =>
+      call<ApprovePublishResult>(IMPORT_BFF_PATHS.publish(importId), {
+        method: 'POST',
+        body: JSON.stringify({ drafts, approve: true }),
+      }),
   };
 }

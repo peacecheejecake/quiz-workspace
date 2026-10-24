@@ -153,4 +153,47 @@ describe('QuestionDraftReview', () => {
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
     expect(screen.queryByRole('button', { name: /편집/ })).toBeNull();
   });
+
+  it('selection mode: a plain checkbox per draft, blocked drafts disabled with the reason', async () => {
+    const onSelectChange = vi.fn();
+    const onApproveChange = vi.fn();
+    render(
+      <QuestionDraftReview
+        label="가져온 초안"
+        drafts={DRAFTS}
+        selected={new Set(['d1'])}
+        onSelectChange={onSelectChange}
+        onApproveChange={onApproveChange}
+      />,
+    );
+    // No approve control in selection mode.
+    expect(screen.queryByRole('checkbox', { name: /승인/ })).toBeNull();
+    const first = screen.getByRole('checkbox', { name: '1번 문제 선택' });
+    expect(first.getAttribute('aria-checked')).toBe('true');
+    const blocked = screen.getByRole('checkbox', { name: '3번 문제 선택' });
+    expect(blocked.hasAttribute('disabled')).toBe(true);
+    const reason = document.getElementById(blocked.getAttribute('aria-describedby') ?? '');
+    expect(reason?.textContent).toContain('정답 보기를 지정해야');
+    // Registered drafts cannot be selected again.
+    expect(screen.queryByRole('checkbox', { name: '5번 문제 선택' })).toBeNull();
+
+    await userEvent.setup().click(first);
+    expect(onSelectChange).toHaveBeenCalledWith(DRAFTS[0], false);
+    expect(onApproveChange).not.toHaveBeenCalled();
+  });
+
+  it('selection mode: the checkboxes cannot change while disabled', () => {
+    render(
+      <QuestionDraftReview
+        label="가져온 초안"
+        drafts={DRAFTS}
+        selected={new Set()}
+        selectionDisabled
+        onSelectChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('checkbox', { name: '1번 문제 선택' }).hasAttribute('disabled')).toBe(
+      true,
+    );
+  });
 });

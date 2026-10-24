@@ -142,6 +142,11 @@ class GenerationRun(BaseModel):
     published_count: int
     llm_model: str | None = Field(description="Set when the run succeeded.")
     prompt_version: str | None = Field(description="Set when the run succeeded.")
+    batch_id: uuid.UUID | None = Field(
+        default=None,
+        description="The batch the run belongs to (POST /workspaces/{id}/"
+        "question-generation-batches), or null.",
+    )
     created_at: datetime
     updated_at: datetime
     finished_at: datetime | None
@@ -258,6 +263,7 @@ def _run_out(run: GenerationRunRecord) -> GenerationRun:
         published_count=run.published_count,
         llm_model=run.llm_model,
         prompt_version=run.prompt_version,
+        batch_id=_uuid(str(run.params.get("batch_id") or "")),
         created_at=run.created_at,
         updated_at=run.updated_at,
         finished_at=run.finished_at,

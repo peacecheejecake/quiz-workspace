@@ -492,6 +492,7 @@ export function WorkspaceHome({
               <GenerationDialog
                 workspaceId={workspace.id}
                 archived={workspace.archived}
+                chapters={chapterChoices}
                 onShuffle={(questionId) => {
                   const search = patchSearch(withPanel(window.location.search, 'generate', false), {
                     question: questionId,

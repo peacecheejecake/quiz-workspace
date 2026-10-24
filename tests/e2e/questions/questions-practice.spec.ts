@@ -219,6 +219,19 @@ test(
     const panel = await openPanel(page, 1);
     await expect(panel.getByRole('radio')).toHaveCount(4);
     const order = await displayedOrder(panel, texts);
+    // Every option shows its display number (1. 2. 3. 4. top to bottom, UX5-UI) on its own row;
+    // the radio stays named by the option text, and grading below still goes by option id.
+    for (const [i, text] of order.entries()) {
+      const number = panel.getByText(`${i + 1}.`, { exact: true });
+      await expect(number).toBeVisible();
+      const [numberBox, optionBox] = await Promise.all([
+        number.boundingBox(),
+        panelUi.option(panel, text).boundingBox(),
+      ]);
+      expect(numberBox && optionBox && Math.abs(numberBox.y - optionBox.y) < optionBox.height).toBe(
+        true,
+      );
+    }
 
     // Pick the correct option by its text, wherever the shuffle put it.
     await panelUi.option(panel, correctText).check();

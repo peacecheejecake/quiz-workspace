@@ -532,10 +532,16 @@ export const importUi = {
     page
       .getByRole('region', { name: /^(원본|원문|source)/i })
       .or(page.getByRole('dialog', { name: /^(원본|원문|source)/i })),
-  approve: (draft: Locator) => draft.getByRole('checkbox', { name: /승인|approve/i }),
+  /** QIMP-BULK: a plain selection checkbox per draft ("N번 문제 선택"); nothing is sent on toggle. */
+  select: (draft: Locator) => draft.getByRole('checkbox', { name: /선택|select/i }),
+  /** "전체 선택 (n개)": every registrable draft of the run. */
+  selectAll: (page: Page) => main(page).getByRole('checkbox', { name: /전체 선택|select all/i }),
   edit: (draft: Locator) => draft.getByRole('button', { name: /^(편집|수정|edit)/i }),
   publish: (page: Page) =>
-    button(main(page), /(승인|선택)한? (초안|문제|항목)?\s*등록|publish|register approved/i),
+    button(
+      main(page),
+      /선택한 (초안|문제|항목)?\s*승인 및 등록|(승인|선택)한? (초안|문제|항목)?\s*등록|approve and register|publish/i,
+    ),
   retry: (page: Page) => button(main(page), /다시 시도|재시도|retry/i),
   alert: (page: Page) => main(page).getByRole('alert').first(),
 };

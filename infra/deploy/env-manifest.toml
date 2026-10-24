@@ -82,7 +82,15 @@ kind = "public"
 required = true
 check = "https_url"
 provider = "Railway api public domain (or custom domain)"
-note = "the Next.js server calls FastAPI here; CSP connect-src"
+note = "browser-facing API origin (CSP connect-src); server-side calls too unless API_INTERNAL_BASE_URL"
+
+[[var]]
+name = "API_INTERNAL_BASE_URL"
+services = ["web"]
+kind = "config"
+check = "http_url"
+provider = "operator: private-network address of the same API, only when web and api share one (e.g. http://api:8000 on a Docker network)"
+note = "server-only (PERF-1): Server Components / Actions / BFF relays call FastAPI here instead of the public URL; unset = NEXT_PUBLIC_API_BASE_URL"
 
 [[var]]
 name = "NEXT_PUBLIC_TURNSTILE_SITE_KEY"
@@ -299,6 +307,14 @@ kind = "config"
 check = "number"
 provider = "default"
 note = "5"
+
+[[var]]
+name = "QUESTION_GENERATION_BATCH_RATE_LIMIT_PER_MINUTE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "6"
 
 [[var]]
 name = "SUPABASE_URL"

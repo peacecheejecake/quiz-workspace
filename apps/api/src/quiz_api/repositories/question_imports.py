@@ -261,8 +261,10 @@ class QuestionImportRepository:
     # --- documents ------------------------------------------------------------------------------
 
     def paper(self, workspace_id: uuid.UUID, document_id: uuid.UUID) -> PaperRecord | None:
-        """A live document of this workspace (FOR SHARE: it cannot be deleted or re-pointed while
-        the run that pins its active revision is created)."""
+        """A live document of this workspace, locked FOR UPDATE: it cannot be deleted or
+        re-pointed while the run that pins its active revision is created, and concurrent starts
+        of the same paper (another POST, or the worker's automatic start in the publish
+        transaction, QIMP-AUTO) are serialised, so a start sees any run created before it."""
         row = self._session.execute(
             select(
                 documents.c.id,
@@ -275,7 +277,7 @@ class QuestionImportRepository:
                 documents.c.id == document_id,
                 documents.c.deleted_at.is_(None),
             )
-            .with_for_update(read=True)
+            .with_for_update()
         ).one_or_none()
         if row is None:
             return None
@@ -295,12 +297,32 @@ class QuestionImportRepository:
         ).one_or_none()
         return _run(row) if row is not None else None
 
-    def list_runs(self, workspace_id: uuid.UUID, *, limit: int) -> list[RunRecord]:
-        rows = self._session.execute(
+    def run_for_revision(
+        self, workspace_id: uuid.UUID, document_id: uuid.UUID, revision_id: uuid.UUID
+    ) -> RunRecord | None:
+        """The newest run of the paper's revision (started by a user or by the server)."""
+        row = self._session.execute(
             _run_select()
-            .where(question_import_runs.c.workspace_id == workspace_id)
+            .where(
+                question_import_runs.c.workspace_id == workspace_id,
+                question_import_runs.c.source_document_id == document_id,
+                question_import_runs.c.source_document_revision_id == revision_id,
+            )
             .order_by(question_import_runs.c.created_at.desc(), question_import_runs.c.id.desc())
-            .limit(limit)
+            .limit(1)
+        ).one_or_none()
+        return _run(row) if row is not None else None
+
+    def list_runs(
+        self, workspace_id: uuid.UUID, *, limit: int, document_id: uuid.UUID | None = None
+    ) -> list[RunRecord]:
+        stmt = _run_select().where(question_import_runs.c.workspace_id == workspace_id)
+        if document_id is not None:
+            stmt = stmt.where(question_import_runs.c.source_document_id == document_id)
+        rows = self._session.execute(
+            stmt.order_by(
+                question_import_runs.c.created_at.desc(), question_import_runs.c.id.desc()
+            ).limit(limit)
         )
         return [_run(r) for r in rows]
 

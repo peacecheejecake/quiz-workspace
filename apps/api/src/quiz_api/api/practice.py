@@ -40,6 +40,7 @@ import base64
 import binascii
 import json
 import uuid
+from dataclasses import replace
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
@@ -66,9 +67,10 @@ from quiz_api.authz import (
     ResourceType,
     WorkspaceAccess,
     authorize_resource,
-    authorize_workspace,
+    decide,
     get_access_repository,
 )
+from quiz_api.authz.permissions import policy_for
 from quiz_api.db import get_db_session
 from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.idempotency import IdempotencyKey, replay, request_hash
@@ -289,19 +291,15 @@ ReadQuestion = Annotated[ResourceAccess, _question(Action.READ)]
 def _own_session(
     session_id: uuid.UUID,
     user_id: uuid.UUID,
-    access_repo: AccessRepository,
     practice: PracticeRepository,
     action: Action,
 ) -> tuple[WorkspaceAccess, SessionRecord]:
     """The caller's session, authorized for `action` in its workspace. Ownership is checked
-    before membership, so a foreign session is indistinguishable from an unknown id (404, same
-    body) whatever the caller's role or the workspace's state. Writes lock the session row."""
-    workspace_id = practice.session_owner_workspace(session_id, user_id)
-    if workspace_id is None:
-        raise _not_found()
-    access = authorize_workspace(
-        access_repo, user_id, workspace_id, action, not_found_detail=NOT_FOUND
-    )
+    together with membership (one query), so a foreign session is indistinguishable from an
+    unknown id (404, same body) whatever the caller's role or the workspace's state. Writes lock
+    the session row."""
+    record = practice.session_membership(session_id, user_id, policy_for(action).lock)
+    access = decide(record, action, not_found_detail=NOT_FOUND)
     found = practice.get_session(session_id, user_id, lock=action is Action.PRACTICE)
     if found is None:  # the question was soft-deleted
         raise _not_found()
@@ -475,7 +473,7 @@ def start_practice_session(
         if stored is not None:
             return replay(stored, body_hash)
 
-    question = questions.get(access.resource_id)
+    question = questions.get(access.resource_id, with_sources=False)
     if question is None:  # soft-deleted after the authorization lookup
         raise _not_found()
     if question.publication_status != "CONFIRMED":
@@ -490,7 +488,7 @@ def start_practice_session(
         seed = new_shuffle_seed()
         displayed = shuffled_option_ids([o["id"] for o in question.revision.options], seed)
 
-    session_id = practice.open_session(
+    opened = practice.open_session(
         workspace_id=question.workspace_id,
         question_id=question.id,
         revision_id=question.revision.id,
@@ -498,10 +496,24 @@ def start_practice_session(
         displayed_option_ids=displayed,
         shuffle_seed=seed,
     )
-    practice.record_view(question.workspace_id, question.id, user.id)
-    opened = practice.get_session(session_id, user.id)
-    assert opened is not None  # noqa: S101 - inserted above in this transaction
-    result = _session_out(opened)
+    # The session pins the revision just read in this transaction: no re-read needed.
+    result = _session_out(
+        SessionRecord(
+            id=opened.id,
+            workspace_id=question.workspace_id,
+            question_id=question.id,
+            user_id=user.id,
+            question_type=question.question_type,
+            chapter_id=question.chapter_id,
+            question_number=question.question_number,
+            displayed_option_ids=displayed,
+            state=opened.state,
+            opened_at=opened.opened_at,
+            submitted_at=None,
+            graded_at=None,
+            revision=question.revision,
+        )
+    )
     if idempotency_key is not None:
         idempotency.save(
             user.id,
@@ -519,11 +531,10 @@ def start_practice_session(
 def get_practice_session(
     session_id: Annotated[uuid.UUID, Path()],
     user: CurrentUser,
-    access_repo: AccessRepo,
     practice: PracticeRepo,
 ) -> PracticeSessionDetail:
     """Resume one of the caller's sessions. `outcome` (with answers) only once submitted."""
-    _, found = _own_session(session_id, user.id, access_repo, practice, Action.READ)
+    _, found = _own_session(session_id, user.id, practice, Action.READ)
     outcome: SubmitResult | None = None
     if found.state != "open":
         latest = practice.latest_attempt(found.id, user.id)
@@ -546,12 +557,11 @@ def submit_practice_session(
     session_id: Annotated[uuid.UUID, Path()],
     body: SubmitBody,
     user: CurrentUser,
-    access_repo: AccessRepo,
     practice: PracticeRepo,
 ) -> SubmitResult:
     """Grade the answer on the server against the session's revision (option ids, never
     positions); append the attempt; reveal answers and explanation. Once per session."""
-    access, found = _own_session(session_id, user.id, access_repo, practice, Action.PRACTICE)
+    _, found = _own_session(session_id, user.id, practice, Action.PRACTICE)
     if found.state != "open":
         raise ProblemException(
             409,
@@ -560,15 +570,14 @@ def submit_practice_session(
         )
     answer, result = _answer(found, body)
     try:
-        attempt_id = practice.add_attempt(found, submitted_answer=answer, result=result)
-        practice.finish_session(found.id, graded=result != "pending")
-        if result != "pending":
-            practice.record_graded(
-                access.workspace_id, found.question_id, user.id, attempt_id, result
-            )
-        updated = practice.get_session(found.id, user.id)
-        assert updated is not None  # noqa: S101 - locked above in this transaction
-        out = _result_out(updated, attempt_id, result)
+        submitted = practice.submit(found, submitted_answer=answer, result=result)
+        updated = replace(
+            found,
+            state=submitted.state,
+            submitted_at=submitted.submitted_at,
+            graded_at=submitted.graded_at,
+        )
+        out = _result_out(updated, submitted.attempt_id, result)
         practice.commit()
     except (IntegrityError, DataError):
         practice.rollback()
@@ -585,12 +594,11 @@ def self_grade_practice_session(
     session_id: Annotated[uuid.UUID, Path()],
     body: SelfGradeBody,
     user: CurrentUser,
-    access_repo: AccessRepo,
     practice: PracticeRepo,
 ) -> SelfGradeResult:
     """The user's own grade of a pending (essay / ungradable short answer) submission. Appends
     a grade attempt referencing the pending one; the session becomes graded. Once."""
-    access, found = _own_session(session_id, user.id, access_repo, practice, Action.PRACTICE)
+    access, found = _own_session(session_id, user.id, practice, Action.PRACTICE)
     pending = (
         practice.pending_attempt(found.id, user.id) if found.state == "pending_grade" else None
     )
@@ -636,7 +644,8 @@ def update_my_state(
         practice.record_activity(
             ws.workspace_id, ws.user_id, access.resource_id, {"changed": changed}
         )
-    after = practice.get_state(access.resource_id, ws.user_id)
+    # `before` is locked FOR UPDATE: the new state is the old one with the flags just written.
+    after = replace(before, **changed)
     practice.commit()
     return _my_state(access.resource_id, after)
 

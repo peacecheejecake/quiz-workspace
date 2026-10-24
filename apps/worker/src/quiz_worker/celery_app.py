@@ -216,6 +216,8 @@ class IdempotentJobTask(_TaskBase):
                 cleanup_policy=cleanup_policy_for(app.worker_settings),
             )
             result = runner.run(self.job_definition, raw_envelope)
+            if result.outcome is RunOutcome.SUCCEEDED and result.record is not None:
+                publish_follow_ups(app, self.job_definition, result.record)
             return self._to_celery(result)
         finally:
             if not self.request.is_eager:
@@ -416,6 +418,29 @@ def publish_record(app: QuizCelery, record: JobRecord) -> None:
         args=(record.to_envelope().to_message(),),
         task_id=str(record.job_id),
     )
+
+
+def publish_follow_ups(app: QuizCelery, definition: JobDefinition[Any], done: JobRecord) -> None:
+    """Hand the jobs a succeeded job created (`JobDefinition.follow_ups`) to the broker. Never
+    raises: a job left unpublished is published by the reconciler after its grace period."""
+    if definition.follow_ups is None:
+        return
+    for job_id in definition.follow_ups(done.result):
+        try:
+            record = app.job_store.get(job_id)
+            if (
+                record is None
+                or record.status is not JobStatus.QUEUED
+                or record.published_at is not None
+                or record.job_type not in app.job_definitions
+            ):
+                continue
+            publish_record(app, record)
+            app.job_store.mark_published(record.job_id)
+        except Exception as exc:
+            logger.warning(
+                "follow-up job publish failed (reconciler will retry): %s", type(exc).__name__
+            )
 
 
 def submit_job(app: QuizCelery, envelope: JobEnvelope) -> JobRecord:

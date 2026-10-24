@@ -29,6 +29,7 @@ export type { FocusRingProps } from './primitives/FocusRing';
 export { IconButton } from './primitives/IconButton';
 export type { IconButtonProps } from './primitives/IconButton';
 export {
+  AccountIcon,
   AlertIcon,
   ArrowLeftIcon,
   CheckIcon,
@@ -80,6 +81,8 @@ export type { TooltipProps } from './primitives/Tooltip';
 
 export { EmptyState } from './feedback/EmptyState';
 export type { EmptyStateProps } from './feedback/EmptyState';
+export { ProgressBar } from './feedback/ProgressBar';
+export type { ProgressBarProps } from './feedback/ProgressBar';
 export { ToastProvider, useToast } from './feedback/Toast';
 export type { ToastOptions, ToastProviderProps, ToastTone } from './feedback/Toast';
 

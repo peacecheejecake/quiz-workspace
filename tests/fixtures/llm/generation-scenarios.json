@@ -83,6 +83,49 @@
       }
     },
     {
+      "marker": "E2E-LLM-BATCH",
+      "description": "A schema-valid PARAPHRASE candidate for the `flocculation` source: the second source of a batch (QGEN-MULTI), so two sources of one batch get different drafts. Its quote occurs verbatim on page 4 of book-ko.pdf.",
+      "responses": {
+        "questions.generate.paraphrase": {
+          "candidates": [
+            {
+              "question_type": "MCQ",
+              "multi_select": false,
+              "stem": "응집 단계에서 작은 입자들이 서로 달라붙어 만들어진 덩어리의 이름은 무엇인가?",
+              "options": [
+                {
+                  "label": "1",
+                  "text": "플록"
+                },
+                {
+                  "label": "2",
+                  "text": "여과층"
+                },
+                {
+                  "label": "3",
+                  "text": "침전물"
+                },
+                {
+                  "label": "4",
+                  "text": "수증기"
+                }
+              ],
+              "correct_option_labels": ["1"],
+              "accepted_answers": null,
+              "explanation": "응집 단계에서 작은 입자들이 달라붙어 생긴 덩어리를 플록이라고 부른다.",
+              "justification": "문구만 바꾸었고 묻는 개념(응집으로 생기는 덩어리)과 정답(플록)은 원본과 같다.",
+              "citations": [
+                {
+                  "passage_id": "P2",
+                  "quote": "이 덩어리를 플록이라고 부르며, 이 단계를 응집이라고 한다."
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
       "marker": "E2E-LLM-INVERT-MULTI",
       "description": "INVERT_POLARITY of the `not-correct` source ('옳지 않은 것' -> '옳은 것') that keeps the four options: three statements become correct, yet the model still declares a single answer. The validator must not trust the declared answer (questions.md §5) and must block approval (QGEN-01-AC03).",
       "responses": {
@@ -194,6 +237,33 @@
       "correct_option_ids": ["opt-1"],
       "is_multi_answer": false,
       "explanation": "마지막 소독 단계에서 염소와 같은 소독제를 넣는다.",
+      "source_page": 4
+    },
+    "flocculation": {
+      "marker": "E2E-LLM-BATCH",
+      "question_type": "MCQ",
+      "stem": "원수에 응집제를 넣고 저을 때 작은 입자들이 달라붙어 생기는 덩어리를 부르는 이름은?",
+      "options": [
+        {
+          "id": "opt-1",
+          "text": "플록"
+        },
+        {
+          "id": "opt-2",
+          "text": "여과층"
+        },
+        {
+          "id": "opt-3",
+          "text": "침전물"
+        },
+        {
+          "id": "opt-4",
+          "text": "수증기"
+        }
+      ],
+      "correct_option_ids": ["opt-1"],
+      "is_multi_answer": false,
+      "explanation": "응집 단계에서 생긴 덩어리를 플록이라고 한다.",
       "source_page": 4
     },
     "not-correct": {

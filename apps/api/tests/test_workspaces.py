@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from quiz_api.api.workspaces import get_idempotency_store, get_workspace_repository
 from quiz_api.authz import LockMode, MembershipRecord, Role, get_access_repository
+from quiz_api.authz.repository import TwoStepResourceMembership
 from quiz_api.errors import ProblemType
 from quiz_api.idempotency import request_hash
 from quiz_api.main import create_app
@@ -39,7 +40,7 @@ class FakeSession:
 
 
 @dataclass
-class World:
+class World(TwoStepResourceMembership):
     """Fake AccessRepository + WorkspaceRepository over shared in-memory state."""
 
     workspaces: dict[uuid.UUID, WorkspaceRecord] = field(default_factory=dict)
