@@ -46,7 +46,9 @@ select columns_are('public', 'question_import_runs',
         'target_chapter_id', 'async_job_id', 'status', 'llm_model', 'prompt_version', 'params',
         'finished_at', 'created_at', 'updated_at',
         -- QIMP-AUTO (20261021120000)
-        'started_by']);
+        'started_by',
+        -- QIMP-JOB (20261023120000)
+        'registration_job_id']);
 select columns_are('public', 'question_drafts',
   array['id', 'workspace_id', 'source_type', 'generation_run_id', 'import_run_id', 'position',
         'question_type', 'payload', 'validations', 'review_status', 'reviewed_by', 'reviewed_at',
@@ -56,7 +58,9 @@ select columns_are('public', 'question_drafts',
         -- M4.4a review fix (20261018120000)
         'rubric',
         -- M6.2 (20261018150000)
-        'acknowledged_codes']);
+        'acknowledged_codes',
+        -- CHAPTER-MAP (20261023130000)
+        'chapter_id', 'chapter_manual']);
 
 select col_is_pk('public', 'question_user_states', array['user_id', 'question_id'],
   'question_user_states PK is (user_id, question_id)');
