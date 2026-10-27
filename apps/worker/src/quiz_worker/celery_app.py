@@ -55,6 +55,7 @@ from quiz_worker.question_generation_job import (
     question_generate_definition,
 )
 from quiz_worker.question_import_job import LazyImportDeps, question_import_definition
+from quiz_worker.question_register_job import LazyRegisterDeps, question_register_definition
 from quiz_worker.reconcile import ReconcileReport, reconcile_jobs
 from quiz_worker.recycle import POOL_CLS, job_task_finished
 from quiz_worker.retry import RetryPolicy
@@ -547,6 +548,7 @@ def default_definitions(
         document_parse_definition(deps),
         index_sync_definition(deps),
         question_import_definition(LazyImportDeps(settings)),
+        question_register_definition(LazyRegisterDeps(settings)),
         question_generate_definition(LazyGenerationDeps(settings)),
         workspace_fork_definition(LazyForkDeps(settings)),
     ]

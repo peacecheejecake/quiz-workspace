@@ -6,11 +6,13 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyPublished,
   approvalBlocker,
-  approvePublishInBatches,
   approvePublishSelection,
   initialSelection,
   pruneSelection,
-  refusedMessage,
+  registrationFailureMessage,
+  registrationProgress,
+  registrationRefusedMessage,
+  isRegistrationActive,
   selectAllScope,
   selectAllState,
   selectionBlocker,
@@ -365,34 +367,67 @@ describe('selection (QIMP-BULK)', () => {
     expect(ids(pruneSelection(drafts, raw))).toEqual(['a']);
     expect(selectAllState(drafts, new Set(['c', 'd']))).toBe(false);
     expect(approvePublishSelection(drafts, new Set(['e', 'a', 'd']))).toEqual([
-      { draft_id: 'a', version: 'v-a' },
-      { draft_id: 'e', version: 'v-e' },
+      { draft_id: 'a', version: 'v-a', chapter_id: null },
+      { draft_id: 'e', version: 'v-e', chapter_id: null },
     ]);
     expect(ids(initialSelection(drafts))).toEqual(['b']);
   });
 
-  it('approves and registers in batches, collecting refusals instead of throwing', async () => {
-    const refs = Array.from({ length: 401 }, (_, i) => ({ draft_id: `d${i}`, version: 'v' }));
-    const send = vi.fn(async (batch: readonly { draft_id: string }[]) => ({
-      items: batch.slice(1).map((r) => ({ draft_id: r.draft_id, question_id: `q-${r.draft_id}` })),
-      refused: [{ draft_id: at(batch, 0).draft_id, reason: 'stale-draft' as const }],
-    }));
-    const progress: number[] = [];
-    const out = await approvePublishInBatches(refs, send, (_, done) => progress.push(done));
-    expect(send.mock.calls.map(([batch]) => batch.length)).toEqual([200, 200, 1]);
-    expect(progress).toEqual([200, 400, 401]);
-    expect(out.items).toHaveLength(398);
-    expect(out.refused.map((r) => r.draft_id)).toEqual(['d0', 'd200', 'd400']);
+  it('CHAPTER-MAP: sends the chapter shown with each selected import draft', () => {
+    const shown = drafts.map((d) =>
+      d.id === 'a'
+        ? {
+            ...d,
+            chapter: {
+              chapter: { id: 'ch-1', title: '1장', document_id: 'b', document_title: '교재' },
+              choice: 'auto' as const,
+              match: 'matched' as const,
+              sourceTitle: '제1장',
+            },
+          }
+        : d,
+    );
+    expect(approvePublishSelection(shown, new Set(['a']))).toEqual([
+      { draft_id: 'a', version: 'v-a', chapter_id: 'ch-1' },
+    ]);
   });
 
   it('names refused drafts by number and reason', () => {
     expect(
-      refusedMessage(drafts, [
-        { draft_id: 'a', reason: 'stale-draft' },
-        { draft_id: 'c', reason: 'not-publishable' },
+      registrationRefusedMessage([
+        { draft_id: 'a', reason: 'stale-draft', question_number: 1, position: 0 },
+        { draft_id: 'c', reason: 'not-publishable', question_number: null, position: 2 },
       ]),
     ).toBe(
       '2개는 등록하지 못했습니다: 1번(다른 곳에서 바뀜), 3번(승인 불가 항목 있음). 선택은 그대로 두었으니 확인한 뒤 다시 등록해 주세요.',
+    );
+  });
+});
+
+describe('server-side registration (QIMP-JOB)', () => {
+  it('is active while queued or running', () => {
+    expect(isRegistrationActive({ status: 'queued' })).toBe(true);
+    expect(isRegistrationActive({ status: 'running' })).toBe(true);
+    expect(isRegistrationActive({ status: 'succeeded' })).toBe(false);
+    expect(isRegistrationActive({ status: 'failed' })).toBe(false);
+  });
+
+  it('reports processed of total', () => {
+    expect(registrationProgress({ processed: 300, total: 750 })).toEqual({
+      text: '승인·등록 중 · 750개 중 300개 처리',
+      value: 40,
+    });
+    expect(registrationProgress({ processed: 0, total: 0 }).value).toBe(0);
+  });
+
+  it('explains a stopped registration in Korean, with what was registered', () => {
+    expect(
+      registrationFailureMessage({ error_code: 'workspace_unavailable', registered: 200 }),
+    ).toBe(
+      '선택한 문제를 모두 등록하지 못했습니다. 지금까지 200개를 등록했습니다. Workspace가 보관되었거나 편집 권한이 없어 나머지 초안을 등록하지 못했습니다.',
+    );
+    expect(registrationFailureMessage({ error_code: 'db_error', registered: 0 })).toMatch(
+      /^선택한 문제를 모두 등록하지 못했습니다\. 일시적인 오류/,
     );
   });
 });

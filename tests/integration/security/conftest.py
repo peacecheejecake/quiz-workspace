@@ -107,6 +107,7 @@ def random_ids() -> dict[str, str]:
         "generation_id",
         "batch_id",
         "import_id",
+        "registration_id",
         "question_id",
         "link_id",
         "share_id",
@@ -211,6 +212,18 @@ def build_world(seed: Any, label: str) -> World:
         "update public.question_drafts set payload = %s::jsonb where id = %s",
         (json.dumps(payload), draft_id),
     )
+    # QIMP-JOB: a registration of the import (its job stays queued: nothing drains it here).
+    seeded = next(
+        d
+        for d in owner.ok("GET", f"/question-imports/{import_id}/drafts")["items"]
+        if d["id"] == draft_id
+    )
+    registration = owner.ok(
+        "POST",
+        f"/question-imports/{import_id}/registrations",
+        {"drafts": [{"draft_id": draft_id, "version": seeded["version"]}]},
+        (202,),
+    )
     session = owner.ok("POST", f"/questions/{qid}/practice-sessions", None, (200, 201))
     link = owner.create_link(wid, allow_fork=True)
     intent = owner.upload_intent(wid)
@@ -251,6 +264,7 @@ def build_world(seed: Any, label: str) -> World:
         "generation_id": str(generation["id"]),
         "batch_id": str(batch["id"]),
         "import_id": import_id,
+        "registration_id": str(registration["job_id"]),
         "question_id": qid,
         "revision_id@questions": str(question["revision"]["id"]),
         "link_id": str(link["id"]),
@@ -266,6 +280,8 @@ def build_world(seed: Any, label: str) -> World:
             owner.ok("GET", f"/documents/{twin_doc}/revisions")["items"][0]["id"]
         ),
         "job_id": str(twin_done["job_id"]),
+        # A real job of the other workspace stands in for its registration (child id).
+        "registration_id": str(twin_done["job_id"]),
         "question_id": str(twin_question["id"]),
         "revision_id@questions": str(twin_question["revision"]["id"]),
         "link_id": str(twin_link["id"]),

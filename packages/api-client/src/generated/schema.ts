@@ -516,6 +516,58 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/question-imports/{import_id}/registrations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Register Question Import Drafts
+     * @description Approve and register the whole selection on the server (QIMPORT-01-AC07, "선택한 문제 승인
+     *     및 등록"): the request records every listed draft with the version on screen and starts a
+     *     `question.import_register` job, which registers them in batches whether or not the page stays
+     *     open. Same rules as `publish` with `approve: true`: the job's user (the caller) approves each
+     *     draft still at the sent version that can be confirmed; drafts changed since (`stale-draft`) or
+     *     not confirmable (`not-publishable`) are refused and left as they were; drafts registered
+     *     already are skipped. Idempotent per draft (a re-delivered job never registers twice).
+     *
+     *     An id that is not a draft of this import is 404 (nothing recorded). 409
+     *     `import-registration-running` while the previous registration of this import is still queued
+     *     or running (follow `registration_job_id`). The job re-checks the workspace on every batch: an
+     *     archived workspace or a lost editor role stops it (`workspace_unavailable`).
+     */
+    post: operations['registerQuestionImportDrafts'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/question-imports/{import_id}/registrations/{registration_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Question Import Registration
+     * @description Progress of a registration of this import (`registration_id` = its `job_id`):
+     *     processed/total and the refused drafts.
+     */
+    get: operations['getQuestionImportRegistration'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/question-imports/{import_id}/retry': {
     parameters: {
       query?: never;
@@ -1514,6 +1566,28 @@ export type components = {
       /** Page */
       page: number;
     };
+    /** BookChapterOption */
+    BookChapterOption: {
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Document Title */
+      document_title: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Level
+       * @description 1 = chapter, 2+ = nested section.
+       */
+      level: number;
+      /** Title */
+      title: string;
+    };
     /** BoundingBox */
     BoundingBox: {
       /** X0 */
@@ -1784,6 +1858,23 @@ export type components = {
       y0: number;
       /** Y1 */
       y1: number;
+    };
+    /** DraftChapterRef */
+    DraftChapterRef: {
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Document Title */
+      document_title: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Title */
+      title: string;
     };
     /** DraftEvidence */
     DraftEvidence: {
@@ -2221,6 +2312,20 @@ export type components = {
        * @description No option answers, no accepted answers and (essay) no model answer.
        */
       answer_missing: boolean;
+      /** @description Import drafts (CHAPTER-MAP): the book chapter the draft is registered under (the suggestion, or the reviewer's choice), in its book's current revision; null = none. */
+      chapter?: components['schemas']['DraftChapterRef'] | null;
+      /**
+       * Chapter Choice
+       * @description `auto`: the server's suggestion; `manual`: chosen in review.
+       * @default auto
+       * @enum {string}
+       */
+      chapter_choice?: 'auto' | 'manual';
+      /**
+       * Chapter Match
+       * @description Why the suggestion is what it is (auto only): `matched` (exactly one book chapter with the question's chapter title), `no_match`, `ambiguous` (several), `no_source_chapter` (the question PDF has no chapter there).
+       */
+      chapter_match?: ('matched' | 'no_match' | 'ambiguous' | 'no_source_chapter') | null;
       /**
        * Created At
        * Format: date-time
@@ -2289,6 +2394,11 @@ export type components = {
        */
       run_id?: string | null;
       /**
+       * Source Chapter Title
+       * @description The question PDF chapter the suggestion was made from.
+       */
+      source_chapter_title?: string | null;
+      /**
        * Updated At
        * Format: date-time
        */
@@ -2308,6 +2418,11 @@ export type components = {
     };
     /** ImportDraftList */
     ImportDraftList: {
+      /**
+       * Chapters
+       * @description Import runs: the workspace's book chapters (current revisions), the choices for `chapter_id`.
+       */
+      chapters?: components['schemas']['BookChapterOption'][];
       /** Items */
       items: components['schemas']['ImportDraft'][];
     };
@@ -2320,7 +2435,7 @@ export type components = {
        */
       approve?: boolean;
       /** Drafts */
-      drafts: components['schemas']['ReviewedDraft'][];
+      drafts: components['schemas']['ReviewedImportDraft'][];
     };
     /** ImportPublishedDraft */
     ImportPublishedDraft: {
@@ -2375,6 +2490,98 @@ export type components = {
        */
       reason: 'stale-draft' | 'not-publishable';
     };
+    /**
+     * ImportRegistration
+     * @description A submitted selection being approved and registered on the server (QIMP-JOB).
+     */
+    ImportRegistration: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Error Code
+       * @description Why the job stopped, e.g. `workspace_unavailable` (archived workspace or lost editor role); drafts not processed by then stay unregistered.
+       */
+      error_code: string | null;
+      /** Finished At */
+      finished_at: string | null;
+      /**
+       * Import Id
+       * Format: uuid
+       */
+      import_id: string;
+      /**
+       * Job Id
+       * Format: uuid
+       * @description The `question.import_register` job (`GET /jobs/{id}`).
+       */
+      job_id: string;
+      /**
+       * Processed
+       * @description Drafts done (registered, already registered or refused).
+       */
+      processed: number;
+      /**
+       * Refused
+       * @description Drafts left as they were, in submitted order.
+       */
+      refused: components['schemas']['ImportRegistrationRefusal'][];
+      /**
+       * Registered
+       * @description Drafts this registration registered.
+       */
+      registered: number;
+      /**
+       * Skipped
+       * @description Drafts that were registered already (nothing new).
+       */
+      skipped: number;
+      /**
+       * Status
+       * @description queued | running | succeeded | failed | cancelled
+       * @enum {string}
+       */
+      status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+      /**
+       * Total
+       * @description Distinct drafts submitted.
+       */
+      total: number;
+    };
+    /** ImportRegistrationRefusal */
+    ImportRegistrationRefusal: {
+      /**
+       * Draft Id
+       * Format: uuid
+       */
+      draft_id: string;
+      /**
+       * Position
+       * @description 0-based order in the source.
+       */
+      position: number;
+      /**
+       * Question Number
+       * @description Number printed in the source.
+       */
+      question_number: number | null;
+      /**
+       * Reason
+       * @description `stale-draft`: changed since the sent version; `not-publishable`: cannot be confirmed as it is.
+       * @enum {string}
+       */
+      reason: 'stale-draft' | 'not-publishable';
+    };
+    /** ImportRegistrationRequest */
+    ImportRegistrationRequest: {
+      /**
+       * Drafts
+       * @description The whole selection, each draft at the version on screen (the version the selection approves).
+       */
+      drafts: components['schemas']['ReviewedImportDraft'][];
+    };
     /** ImportRun */
     ImportRun: {
       /**
@@ -2405,6 +2612,11 @@ export type components = {
       job_id: string | null;
       /** Published Count */
       published_count: number;
+      /**
+       * Registration Job Id
+       * @description The newest registration (QIMP-JOB) of this run, if any: read its progress at `GET /question-imports/{id}/registrations/{registration_id}`.
+       */
+      registration_job_id: string | null;
       /** Source Document Id */
       source_document_id: string | null;
       /**
@@ -3144,6 +3356,11 @@ export type components = {
        * @description `version` of the draft being edited.
        */
       base_version: string;
+      /**
+       * Chapter Id
+       * @description Import drafts (CHAPTER-MAP): the book chapter to register the draft under (a chapter of a book's current revision here; `null` = no chapter). Sending it replaces the suggestion with this choice; it is not content and keeps an approval.
+       */
+      chapter_id?: string | null;
       /** Correct Option Ids */
       correct_option_ids?: string[] | null;
       /** Explanation */
@@ -3442,6 +3659,24 @@ export type components = {
     };
     /** ReviewedDraft */
     ReviewedDraft: {
+      /**
+       * Draft Id
+       * Format: uuid
+       */
+      draft_id: string;
+      /**
+       * Version
+       * @description The `version` of the draft that was approved.
+       */
+      version: string;
+    };
+    /** ReviewedImportDraft */
+    ReviewedImportDraft: {
+      /**
+       * Chapter Id
+       * @description CHAPTER-MAP: the chapter shown for the draft (`null` = 챕터 없음). When sent, the request is refused with 409 `chapter-changed` if the draft's chapter is no longer that one (e.g. a book was added and the suggestion changed): reload and review again. Omitted = not checked.
+       */
+      chapter_id?: string | null;
       /**
        * Draft Id
        * Format: uuid
@@ -6154,6 +6389,157 @@ export interface operations {
       };
       /** @description Conflict */
       409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  registerQuestionImportDrafts: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        import_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ImportRegistrationRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportRegistration'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getQuestionImportRegistration: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        import_id: string;
+        registration_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportRegistration'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

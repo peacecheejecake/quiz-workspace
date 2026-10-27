@@ -3,11 +3,13 @@
 // browser code never holds a JWT. FastAPI stays the authority on every decision.
 import type { Problem } from '@quiz/api-client';
 import type {
-  ApprovePublishResult,
+  BookChapterOption,
   DraftUpdateBody,
   ImportDraft,
+  ImportRegistration,
   ImportRun,
   ReviewedDraftRef,
+  SelectedImportDraft,
 } from './drafts';
 
 export const IMPORT_PROBLEMS = {
@@ -18,6 +20,8 @@ export const IMPORT_PROBLEMS = {
   staleDraft: 'urn:quiz-workspace:problem:stale-draft',
   draftPublished: 'urn:quiz-workspace:problem:draft-published',
   draftNotApproved: 'urn:quiz-workspace:problem:draft-not-approved',
+  registrationRunning: 'urn:quiz-workspace:problem:import-registration-running',
+  chapterChanged: 'urn:quiz-workspace:problem:chapter-changed',
 } as const;
 
 export type ImportFailureKind =
@@ -31,6 +35,8 @@ export type ImportFailureKind =
   | 'staleDraft'
   | 'draftPublished'
   | 'draftNotApproved'
+  | 'registrationRunning'
+  | 'chapterChanged'
   | 'idempotencyKeyReused'
   | 'invalid'
   | 'unavailable';
@@ -47,6 +53,10 @@ export const IMPORT_FAILURE_MESSAGES: Readonly<Record<ImportFailureKind, string>
     '다른 곳에서 초안이 먼저 바뀌었습니다. 최신 초안을 불러왔으니 내용을 확인한 뒤 다시 승인해 주세요.',
   draftPublished: '이미 문제은행에 등록된 초안입니다. 문제은행에서 수정해 주세요.',
   draftNotApproved: '승인되지 않은 초안이 있어 등록하지 못했습니다. 승인 상태를 확인해 주세요.',
+  chapterChanged:
+    '보여 드린 뒤 교재 챕터가 바뀐 초안이 있어 등록하지 않았습니다. 최신 초안을 불러왔으니 챕터를 확인한 뒤 다시 등록해 주세요.',
+  registrationRunning:
+    '이미 진행 중인 등록이 있습니다. 그 등록의 진행 상황을 이어서 보여 드립니다.',
   idempotencyKeyReused: '요청이 겹쳐 처리하지 못했습니다. 다시 시도해 주세요.',
   invalid: '초안 내용을 확인해 주세요. 승인하려면 정답과 보기가 올바르게 입력되어야 합니다.',
   unavailable: '일시적인 오류로 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.',
@@ -80,6 +90,10 @@ export function classifyImportFailure(status: number, body: unknown): ImportFail
         return 'draftPublished';
       case IMPORT_PROBLEMS.draftNotApproved:
         return 'draftNotApproved';
+      case IMPORT_PROBLEMS.registrationRunning:
+        return 'registrationRunning';
+      case IMPORT_PROBLEMS.chapterChanged:
+        return 'chapterChanged';
       case IMPORT_PROBLEMS.idempotencyKeyReused:
         return 'idempotencyKeyReused';
       default:
@@ -104,6 +118,9 @@ export const IMPORT_BFF_PATHS = {
   drafts: (importId: string) => `/api/question-imports/${enc(importId)}/drafts`,
   publish: (importId: string) => `/api/question-imports/${enc(importId)}/publish`,
   retry: (importId: string) => `/api/question-imports/${enc(importId)}/retry`,
+  registrations: (importId: string) => `/api/question-imports/${enc(importId)}/registrations`,
+  registration: (importId: string, jobId: string) =>
+    `/api/question-imports/${enc(importId)}/registrations/${enc(jobId)}`,
   draft: (draftId: string) => `/api/question-drafts/${enc(draftId)}`,
 } as const;
 
@@ -117,17 +134,28 @@ export interface ImportClient {
   ): Promise<ImportRun | null>;
   getRun(importId: string, signal?: AbortSignal): Promise<ImportRun>;
   listDrafts(importId: string, signal?: AbortSignal): Promise<ImportDraft[]>;
+  /** The drafts and the workspace's book chapters (the chapter picker, CHAPTER-MAP). */
+  draftList(
+    importId: string,
+    signal?: AbortSignal,
+  ): Promise<{ items: ImportDraft[]; chapters: BookChapterOption[] }>;
   retryImport(importId: string, idempotencyKey: string): Promise<ImportRun>;
   updateDraft(draftId: string, body: DraftUpdateBody): Promise<ImportDraft>;
   publish(
     importId: string,
     drafts: readonly ReviewedDraftRef[],
   ): Promise<{ draft_id: string; question_id: string }[]>;
-  /** Approves and registers the selected drafts at these versions (`approve: true`, QIMP-BULK). */
-  approveAndPublish(
+  /** Hands the whole selection to the server, which approves and registers it (QIMP-JOB). */
+  register(
     importId: string,
-    drafts: readonly ReviewedDraftRef[],
-  ): Promise<ApprovePublishResult>;
+    drafts: readonly SelectedImportDraft[],
+    idempotencyKey: string,
+  ): Promise<ImportRegistration>;
+  getRegistration(
+    importId: string,
+    jobId: string,
+    signal?: AbortSignal,
+  ): Promise<ImportRegistration>;
 }
 
 type FetchLike = typeof fetch;
@@ -187,6 +215,13 @@ export function createImportClient(fetchImpl: FetchLike = (...a) => fetch(...a))
     getRun: (importId, signal) => call(IMPORT_BFF_PATHS.run(importId), { signal }),
     listDrafts: async (importId, signal) =>
       (await call<{ items: ImportDraft[] }>(IMPORT_BFF_PATHS.drafts(importId), { signal })).items,
+    draftList: async (importId, signal) => {
+      const body = await call<{ items: ImportDraft[]; chapters?: BookChapterOption[] }>(
+        IMPORT_BFF_PATHS.drafts(importId),
+        { signal },
+      );
+      return { items: body.items, chapters: body.chapters ?? [] };
+    },
     retryImport: (importId, idempotencyKey) =>
       call(IMPORT_BFF_PATHS.retry(importId), { method: 'POST', idempotencyKey }),
     updateDraft: (draftId, body) =>
@@ -198,10 +233,13 @@ export function createImportClient(fetchImpl: FetchLike = (...a) => fetch(...a))
           { method: 'POST', body: JSON.stringify({ drafts }) },
         )
       ).items,
-    approveAndPublish: (importId, drafts) =>
-      call<ApprovePublishResult>(IMPORT_BFF_PATHS.publish(importId), {
+    register: (importId, drafts, idempotencyKey) =>
+      call<ImportRegistration>(IMPORT_BFF_PATHS.registrations(importId), {
         method: 'POST',
-        body: JSON.stringify({ drafts, approve: true }),
+        body: JSON.stringify({ drafts }),
+        idempotencyKey,
       }),
+    getRegistration: (importId, jobId, signal) =>
+      call<ImportRegistration>(IMPORT_BFF_PATHS.registration(importId, jobId), { signal }),
   };
 }
