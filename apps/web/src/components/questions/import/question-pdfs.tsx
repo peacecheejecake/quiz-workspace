@@ -1,156 +1,63 @@
 'use client';
 
-// QIMPORT-01-AC05 "문제 PDF 관리" dialog (UX3c, UX4): the workspace's question PDFs only (book
-// documents live in 문서 관리) and a dashed Dropzone whose "PDF 선택" button (or a dropped PDF)
-// hands the file to the import page, which starts uploading it on arrival (the extraction review
-// stays a page). No separate "PDF 가져오기" button since UX4. Editors only for the Dropzone;
-// everyone sees the list. The same dialog opens from the home's 문제 › PDF 관리 and from the
-// question bank's "PDF 가져오기" (QBANK-01-AC06), each with its own document library state.
+// QIMPORT-01-AC05 "문제 PDF 관리" dialog (UX3c, UX4, UX6-UPLOAD): the workspace's PDFs with
+// questions — a 문제지 or 교재+문제, or any PDF with an extraction — with their kind badge (a plain
+// 교재 lives in 문서 관리 only). Nothing is uploaded here since UX6-UPLOAD: 문서 관리 is the one
+// upload place (the server classifies each PDF and extracts the ones with questions), so instead of
+// a Dropzone the dialog says so and offers editors "문서 관리 열기". The same dialog opens from the
+// home's 문제 › PDF 관리 and from the question bank's "PDF 가져오기" (QBANK-01-AC06).
 //
-// QIMPORT-01-AC06: the server extracts a question PDF's questions once it is processed. A
-// processed PDF whose import already exists offers "문제 검토" (its import page); one without an
-// import (processed before the server started them) offers editors "문제 추출", which starts it
-// and opens the import page for review.
-import { Button, ConfirmDialog, Dropzone, FloatingSidePanel } from '@quiz/ui';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
-import { DocumentRows, PDF_ACCEPT } from '@/components/documents/documents-library';
+// QIMPORT-01-AC06: a processed PDF with an extraction offers "문제 검토" (its import page); one
+// without (processed before the server started them, or a low-confidence 교재+문제) offers editors
+// "문제 추출", which starts it and opens the import page for review.
+import { Button, ConfirmDialog, FloatingSidePanel } from '@quiz/ui';
+import { DocumentRows } from '@/components/documents/documents-library';
 import docStyles from '@/components/documents/documents.module.css';
+import { hasQuestions } from '@/components/documents/labels';
 import type { DocumentLibrary } from '@/components/documents/use-document-library';
-import { createImportClient, ImportApiError, importPath } from '@/lib/questions/import-client';
-import { setPendingImportFile } from '@/lib/questions/import-handoff';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
+import { useQuestionRowActions } from './question-row-actions';
+
+export { questionPdfAction } from './question-row-actions';
 
 export const NO_QUESTION_PDFS = '등록된 문제 pdf가 없습니다.';
+export const UPLOAD_IN_DOCUMENTS =
+  'PDF는 문서 관리에서 올립니다. 문제가 있는 PDF는 자동으로 추출됩니다.';
 
-export function questionPaperRows(rows: readonly DocumentRow[]): DocumentRow[] {
-  return rows.filter((row) => row.documentType === 'question_paper');
+/** The rows of PDFs with questions (UX6-UPLOAD): 문제지, 교재+문제, or extracted. */
+export function questionPdfRows(rows: readonly DocumentRow[]): DocumentRow[] {
+  return rows.filter(hasQuestions);
 }
 
 export interface QuestionPdfsLibraryProps {
   readonly workspaceId: string;
   readonly library: DocumentLibrary;
   readonly canEdit: boolean;
+  /** Opens the "문서 관리" dialog (the home) or goes to it (the bank). */
+  readonly onOpenDocuments: () => void;
 }
 
-export function QuestionPdfsLibrary({ workspaceId, library, canEdit }: QuestionPdfsLibraryProps) {
-  const router = useRouter();
-  const client = useMemo(() => createImportClient(), []);
-  const rows = questionPaperRows(library.rows);
-  const [starting, setStarting] = useState<string | null>(null);
-  const [startFailure, setStartFailure] = useState<string | null>(null);
-
-  async function extract(row: DocumentRow) {
-    const documentId = row.documentId;
-    if (!documentId || starting) return;
-    setStarting(documentId);
-    setStartFailure(null);
-    try {
-      await client.startImport(workspaceId, documentId, crypto.randomUUID());
-      router.push(importPath(workspaceId, documentId));
-    } catch (error) {
-      const message = error instanceof ImportApiError ? error.message : String(error);
-      setStartFailure(`‘${row.title}’ 문제 추출을 시작하지 못했습니다. ${message}`);
-      void library.refresh();
-    } finally {
-      setStarting(null);
-    }
-  }
-
-  return (
-    <QuestionPdfsView
-      workspaceId={workspaceId}
-      library={library}
-      canEdit={canEdit}
-      rows={rows}
-      starting={starting}
-      startFailure={startFailure}
-      onExtract={(row) => void extract(row)}
-      onFiles={(file) => {
-        setPendingImportFile(workspaceId, file);
-        router.push(importPath(workspaceId));
-      }}
-    />
-  );
-}
-
-/** 문제 검토 when the paper has an import (the document list's `latest_import_id`, read for
- * every listed paper), else 문제 추출 for editors; nothing while it is not ready. */
-export function questionPdfAction(row: DocumentRow, canEdit: boolean): 'review' | 'extract' | null {
-  if (!row.documentId || row.status !== 'ready' || row.latestImportId === undefined) return null;
-  if (row.latestImportId) return 'review';
-  return canEdit ? 'extract' : null;
-}
-
-interface QuestionPdfsViewProps extends QuestionPdfsLibraryProps {
-  readonly rows: readonly DocumentRow[];
-  readonly starting: string | null;
-  readonly startFailure: string | null;
-  readonly onExtract: (row: DocumentRow) => void;
-  readonly onFiles: (file: File) => void;
-}
-
-function QuestionPdfsView({
+export function QuestionPdfsLibrary({
   workspaceId,
   library,
   canEdit,
-  rows,
-  starting,
-  startFailure,
-  onExtract,
-  onFiles,
-}: QuestionPdfsViewProps) {
-  function rowActions(row: DocumentRow) {
-    const documentId = row.documentId;
-    const action = questionPdfAction(row, canEdit);
-    if (!documentId || action === null) return null;
-    if (action === 'review') {
-      return (
-        <Button size="sm" asChild>
-          <Link href={importPath(workspaceId, documentId)} aria-label={`${row.title} 문제 검토`}>
-            문제 검토
-          </Link>
-        </Button>
-      );
-    }
-    return (
-      <Button
-        size="sm"
-        variant="primary"
-        aria-label={`${row.title} 문제 추출`}
-        loading={starting === documentId}
-        disabled={starting !== null && starting !== documentId}
-        onClick={() => onExtract(row)}
-      >
-        문제 추출
-      </Button>
-    );
-  }
-
+  onOpenDocuments,
+}: QuestionPdfsLibraryProps) {
+  const rows = questionPdfRows(library.rows);
+  const questions = useQuestionRowActions(workspaceId, library, canEdit);
   return (
     <div className={docStyles.library}>
       {canEdit ? (
-        <Dropzone
-          title="문제 PDF를 여기에 끌어다 놓으세요"
-          description="놓은 PDF로 문제 가져오기를 시작합니다. 최대 50MB."
-          buttonLabel="PDF 선택"
-          accept={PDF_ACCEPT}
-          onFiles={(files) => {
-            const [file] = files;
-            if (file) onFiles(file);
-          }}
-          onReject={library.rejectFiles}
-        />
+        <div className={docStyles.uploadNote}>
+          <p className={docStyles.note}>{UPLOAD_IN_DOCUMENTS}</p>
+          <Button size="sm" onClick={onOpenDocuments}>
+            문서 관리 열기
+          </Button>
+        </div>
       ) : null}
-      {library.alert ? (
+      {questions.startFailure ? (
         <p role="alert" className={docStyles.alert}>
-          {library.alert}
-        </p>
-      ) : null}
-      {startFailure ? (
-        <p role="alert" className={docStyles.alert}>
-          {startFailure}
+          {questions.startFailure}
         </p>
       ) : null}
       <DocumentRows
@@ -160,7 +67,7 @@ function QuestionPdfsView({
         library={library}
         canEdit={canEdit}
         emptyText={NO_QUESTION_PDFS}
-        rowActions={rowActions}
+        rowActions={questions.rowActions}
       />
     </div>
   );

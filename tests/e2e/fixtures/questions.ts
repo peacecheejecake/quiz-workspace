@@ -147,8 +147,9 @@
 //             "보기 N 정답", textbox "허용 답안" (short), "채점 기준" (essay), combobox "챕터",
 //             button "저장"; errors in role=alert. Viewer / archived: no create/edit controls and
 //             a "읽기 전용" notice.
-//   QIMPORT-01 h1 "문제 PDF 가져오기"; "PDF 업로드" button (file chooser); progressbar "가져오기"
-//             while the job runs; list "가져온 초안" with one listitem per draft showing "N번",
+//   QIMPORT-01 h1 "문제 PDF 가져오기"; no upload since UX6-UPLOAD (PDFs are uploaded in 문서 관리;
+//             combobox "검토할 PDF" with two or more extracted PDFs; "문서 관리 열기" when none);
+//             progressbar "가져오기" while the job runs; list "가져온 초안" with one listitem per draft showing "N번",
 //             the stem, a page link (pageLabel) and "원본 비교" (opens a region/dialog "원본"
 //             showing that page); "정답 없음" when the key has no answer; checkbox "승인"; "편집"
 //             opens the same question editor; button "승인한 문제 등록" publishes; a failed

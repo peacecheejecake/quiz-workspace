@@ -8,6 +8,8 @@ export const DOCUMENT_PROBLEMS = {
   uploadMismatch: 'urn:quiz-workspace:problem:upload-mismatch',
   workspaceArchived: 'urn:quiz-workspace:problem:workspace-archived',
   insufficientRole: 'urn:quiz-workspace:problem:insufficient-role',
+  documentInUse: 'urn:quiz-workspace:problem:document-in-use',
+  documentNotReady: 'urn:quiz-workspace:problem:document-not-ready',
 } as const;
 
 export type DocumentFailureKind =
@@ -22,6 +24,8 @@ export type DocumentFailureKind =
   | 'archived'
   | 'forbidden'
   | 'notFound'
+  | 'inUse'
+  | 'notReady'
   | 'unavailable';
 
 export const DOCUMENT_FAILURE_MESSAGES: Readonly<Record<DocumentFailureKind, string>> = {
@@ -36,6 +40,8 @@ export const DOCUMENT_FAILURE_MESSAGES: Readonly<Record<DocumentFailureKind, str
   archived: '보관된 Workspace에는 업로드하거나 문서를 삭제할 수 없습니다.',
   forbidden: '이 Workspace에서 문서를 업로드하거나 삭제할 권한이 없습니다.',
   notFound: '문서를 찾을 수 없습니다. 이미 삭제되었을 수 있습니다.',
+  inUse: '이 교재의 챕터나 출처를 쓰는 문제가 있어 문제지로 바꿀 수 없습니다.',
+  notReady: '처리가 끝난 PDF만 종류를 바꿀 수 있습니다.',
   unavailable: '일시적인 오류로 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.',
 };
 
@@ -74,6 +80,8 @@ export function classifyDocumentFailure(status: number, body: unknown): Document
   if (status === 404) return 'notFound';
   if (status === 409 && type === DOCUMENT_PROBLEMS.uploadIncomplete) return 'incomplete';
   if (status === 409 && type === DOCUMENT_PROBLEMS.uploadExpired) return 'expired';
+  if (status === 409 && type === DOCUMENT_PROBLEMS.documentInUse) return 'inUse';
+  if (status === 409 && type === DOCUMENT_PROBLEMS.documentNotReady) return 'notReady';
   if (type === DOCUMENT_PROBLEMS.uploadMismatch) return 'mismatch';
   if (status === 413) return 'tooLarge';
   if (status === 415 || status === 422) return 'rejected';

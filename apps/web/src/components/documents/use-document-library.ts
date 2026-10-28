@@ -2,14 +2,21 @@
 
 // DOC-01 document state for the workspace home (UX3c): the workspace's documents with live status,
 // PDF uploads (client-side checks, direct Storage upload with progress / cancel / retry, then
-// parse/index progress from the job event stream), the polling fallback and deletion. It lives in
-// the always-mounted home, not in the "문서 관리" dialog, so closing the dialog never aborts an
-// upload and the header's `문서 n` stays current.
+// parse/index progress from the job event stream), the polling fallback, `종류 변경` and deletion.
+// It lives in the always-mounted home, not in the "문서 관리" dialog, so closing the dialog never
+// aborts an upload and the header's `문서 n` stays current. Every PDF is uploaded as `auto`
+// (UX6-UPLOAD): the server classifies it, each file in its own row.
 import { useToast } from '@quiz/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { loginRedirectPath } from '@/lib/auth/routes';
-import { createDocumentsClient, type DocumentSummary, type Job } from '@/lib/documents/client-api';
+import {
+  createDocumentsClient,
+  type DocumentDetail,
+  type DocumentKind,
+  type DocumentSummary,
+  type Job,
+} from '@/lib/documents/client-api';
 import { DocumentApiError } from '@/lib/documents/errors';
 import { watchJob } from '@/lib/documents/job-events';
 import { hashFile } from '@/lib/documents/sha256';
@@ -51,6 +58,12 @@ export interface DocumentLibrary {
   readonly rejectFiles: (files: readonly File[]) => void;
   readonly cancel: (localId: string) => void;
   readonly retry: (localId: string) => void;
+  /** `종류 변경` (DOC-01-AC08): saved at once; a refusal is kept per document. */
+  readonly changeKind: (row: DocumentRow, kind: DocumentKind) => Promise<void>;
+  /** Why the last kind change of a document was refused, by document id. */
+  readonly kindFailures: Readonly<Record<string, string>>;
+  /** The document whose kind is being saved, if any. */
+  readonly changingKind: string | null;
   /** Asks to delete `row` (the home shows the confirmation). */
   readonly requestDelete: (row: DocumentRow) => void;
   readonly pendingDelete: DocumentRow | null;
@@ -75,6 +88,8 @@ export function useDocumentLibrary({
   const [announcement, setAnnouncement] = useState('');
   const [pendingDelete, setPendingDelete] = useState<DocumentRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [kindFailures, setKindFailures] = useState<Readonly<Record<string, string>>>({});
+  const [changingKind, setChangingKind] = useState<string | null>(null);
   const files = useRef(new Map<string, File>());
   const contexts = useRef(new Map<string, UploadContext>());
   const controllers = useRef(new Map<string, AbortController>());
@@ -216,6 +231,35 @@ export function useDocumentLibrary({
     }
   }, [client, pendingDelete, refresh, toast]);
 
+  const changeKind = useCallback(
+    async (row: DocumentRow, kind: DocumentKind) => {
+      const documentId = row.documentId;
+      if (!canEdit || !documentId || row.status !== 'ready') return;
+      setKindFailures(({ [documentId]: _old, ...rest }) => rest);
+      if (row.kind === kind) return;
+      setChangingKind(documentId);
+      try {
+        const updated = await client.updateDocumentKind(documentId, kind);
+        setDocuments((docs) => docs.map((d) => (d.id === documentId ? summaryOf(updated, d) : d)));
+        setAnnouncement(`${row.title}: 종류를 바꿨습니다.`);
+        // Chapter choices and search scopes rendered by the server follow the new kind.
+        router.refresh();
+      } catch (error) {
+        if (error instanceof DocumentApiError && error.kind === 'unauthenticated') {
+          router.replace(loginRedirectPath(workspaceHomePath(workspaceId, 'panel=documents')));
+          return;
+        }
+        const message =
+          error instanceof DocumentApiError ? error.message : '종류를 바꾸지 못했습니다.';
+        setKindFailures((failures) => ({ ...failures, [documentId]: message }));
+        void refresh();
+      } finally {
+        setChangingKind(null);
+      }
+    },
+    [canEdit, client, refresh, router, workspaceId],
+  );
+
   // Abort everything in flight when the home goes away.
   useEffect(() => {
     const live = controllers.current;
@@ -262,10 +306,19 @@ export function useDocumentLibrary({
     rejectFiles,
     cancel,
     retry,
+    changeKind,
+    kindFailures,
+    changingKind,
     requestDelete: setPendingDelete,
     pendingDelete,
     deleting,
     confirmDelete,
     cancelDelete: () => setPendingDelete(null),
   };
+}
+
+/** The list entry after `종류 변경`: the detail's summary fields over the listed ones. */
+function summaryOf(detail: DocumentDetail, listed: DocumentSummary): DocumentSummary {
+  const { active_revision: _active, latest_revision: _latest, ...summary } = detail;
+  return { ...listed, ...summary };
 }

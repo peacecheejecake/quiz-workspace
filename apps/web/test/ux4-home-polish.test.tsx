@@ -241,7 +241,7 @@ describe('QBANK-01-AC06 bank polish', () => {
     expect(screen.getByRole('button', { name: '문제 직접 등록' })).toBeInTheDocument();
   });
 
-  it('opens the 문제 PDF 관리 dialog with the question papers only', async () => {
+  it('opens the 문제 PDF 관리 dialog with the PDFs with questions only, pointing at 문서 관리', async () => {
     const user = userEvent.setup();
     bank([question]);
     expect(screen.getByRole('button', { name: '문제 등록' })).toBeInTheDocument();
@@ -251,8 +251,10 @@ describe('QBANK-01-AC06 bank polish', () => {
     const list = within(dialog).getByRole('list', { name: '문제 PDF 목록' });
     expect(within(list).getByText('모의고사 1회')).toBeInTheDocument();
     expect(within(list).queryByText('교과서')).toBeNull();
-    // UX4: the Dropzone's "PDF 선택" is the only way in; no separate "PDF 가져오기" in the dialog.
-    expect(within(dialog).getByRole('button', { name: 'PDF 선택' })).toBeInTheDocument();
+    expect(within(list).getByText('문제지')).toBeInTheDocument(); // the kind badge (UX6-UPLOAD)
+    // UX6-UPLOAD: no upload here; 문서 관리 is the one upload place.
+    expect(within(dialog).queryByRole('button', { name: 'PDF 선택' })).toBeNull();
+    expect(within(dialog).getByRole('button', { name: '문서 관리 열기' })).toBeInTheDocument();
     expect(within(dialog).queryByRole('link', { name: 'PDF 가져오기' })).toBeNull();
     expect(within(dialog).queryByRole('button', { name: 'PDF 가져오기' })).toBeNull();
   });

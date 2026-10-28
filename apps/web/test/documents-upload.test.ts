@@ -209,6 +209,9 @@ function harness(transferBehaviour: ('ok' | 'network' | 'hang')[]): Harness {
     completeUpload: vi.fn(async () => ({ document_id: 'doc-1', job_id: 'job-1' })),
     listDocuments: vi.fn(async () => []),
     deleteDocument: vi.fn(async () => undefined),
+    updateDocumentKind: vi.fn(async () => {
+      throw new Error('not used by uploads');
+    }),
     getJob: vi.fn(async () => job('succeeded')),
   };
   const transfers: Transfer[] = [];
@@ -279,7 +282,7 @@ function only(state: readonly UploadItem[]): UploadItem {
 describe('upload state machine', () => {
   const fresh = () => newUploadItem('local-1', { name: 'book-ko.pdf', size: 10 }, 'book-ko');
 
-  it('runs hash → intent → upload → complete → job to READY (DOC-01-AC02)', async () => {
+  it('runs hash → intent (`auto`, UX6-UPLOAD) → upload → complete → job to READY (DOC-01-AC02)', async () => {
     const h = harness(['ok']);
     const item = fresh();
     const state = await drive(h, item, {}, [item]);
@@ -298,7 +301,7 @@ describe('upload state machine', () => {
         size_bytes: 10,
         sha256: SHA,
         content_type: PDF,
-        document_type: 'book',
+        document_type: 'auto',
       }),
       expect.any(AbortSignal),
     );
@@ -501,5 +504,18 @@ describe('buildRows', () => {
     const rows = buildRows([doc('d3', 'failed', { last_error: 'parse_failed' })], []);
     expect(rows[0]).toMatchObject({ status: 'failed', retryable: false });
     expect(rows[0]?.error).toContain('parse_failed');
+  });
+
+  it('carries the kind: unknown for an auto upload until the server classified it (UX6-UPLOAD)', () => {
+    const uploading = { ...base, phase: 'uploading' as const };
+    expect(buildRows([], [uploading])[0]?.kind).toBeNull();
+    const chosen = newUploadItem('l2', { name: 'q.pdf', size: 10 }, 'q', 'question_paper');
+    expect(buildRows([], [chosen])[0]?.kind).toBe('question_paper');
+    const listed = (kind: DocumentSummary['kind']) =>
+      buildRows([doc('d4', 'ready', { kind, document_type: 'book' })], [])[0]?.kind;
+    expect(listed('mixed')).toBe('mixed');
+    expect(listed(null)).toBeNull();
+    // A document from before UX6-UPLOAD-B (no `kind` in the list) shows its type.
+    expect(listed(undefined)).toBe('book');
   });
 });
