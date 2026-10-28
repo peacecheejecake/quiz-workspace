@@ -128,10 +128,10 @@ a.title:hover {
   font-size: var(--font-size-label);
 }
 
-/* Sizing only: the bar itself is @quiz/ui ProgressBar. */
-.progress {
-  flex: 1 1 8rem;
-  max-width: 16rem;
+/* Sizing only: the steps and bar are @quiz/ui StepProgress (UX6-PROGRESS). */
+.steps {
+  flex: 1 1 12rem;
+  max-width: 20rem;
 }
 
 .actions {
@@ -139,4 +139,44 @@ a.title:hover {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
+}
+
+/* `종류 변경` (UX6-UPLOAD): the check mark keeps its space so the labels line up. */
+.kindItem {
+  gap: var(--space-2);
+}
+
+.kindCheck {
+  flex: none;
+  visibility: hidden;
+}
+
+.kindCheck[data-checked] {
+  visibility: visible;
+}
+
+.rowAlert {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-label);
+}
+
+/* 문제 PDF 관리: where PDFs are uploaded instead (UX6-UPLOAD). */
+.uploadNote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* While a 종류 변경 is saved: looks and acts disabled but keeps focus (aria-disabled). */
+.kindTrigger[data-busy] {
+  cursor: progress;
+  opacity: 0.55;
+}
+
+.kindSaving {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
 }

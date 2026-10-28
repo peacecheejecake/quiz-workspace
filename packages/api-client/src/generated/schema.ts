@@ -22,7 +22,19 @@ export type paths = {
     delete: operations['deleteDocument'];
     options?: never;
     head?: never;
-    patch?: never;
+    /**
+     * Update Document Kind
+     * @description Change a PDF's kind (`종류 변경`, DOC-01-AC08; editor+, archived workspaces read-only).
+     *
+     *     The chosen kind is pinned (`kind_source: user`): the parse job never reclassifies it. 409
+     *     `document-not-ready` unless the document finished processing; 409 `document-in-use` when a
+     *     book would become a question paper (it would leave search, generation sources and chapter
+     *     matching) while questions or import drafts are registered under its chapters or cite it.
+     *     Nothing is deleted: drafts, runs and questions stay whatever the kind. With `extract` (the
+     *     default), a `question_paper` / `mixed` kind starts the question import when the document has
+     *     none yet. Repeating the same change changes nothing.
+     */
+    patch: operations['updateDocumentKind'];
     trace?: never;
   };
   '/api/v1/documents/{document_id}/blocks': {
@@ -1155,8 +1167,9 @@ export type paths = {
     put?: never;
     /**
      * Create Question Import
-     * @description Start extracting draft questions from a question paper (QIMPORT-01-AC01). 409
-     *     `document-not-ready` while the paper is still processing (or failed).
+     * @description Start extracting draft questions from a PDF (QIMPORT-01-AC01): a question paper, a book
+     *     with questions, or any ready document (UX6-UPLOAD-B). 409 `document-not-ready` while it is
+     *     still processing (or failed).
      *
      *     The server already starts the import of a question paper when its processing succeeds
      *     (QIMPORT-01-AC06), so this usually attaches: if the paper's active revision already has a
@@ -1698,6 +1711,7 @@ export type components = {
       created_at: string;
       /**
        * Document Type
+       * @description Body text or not: `book` (also for a `mixed` kind) or `question_paper`. Search, generation sources and chapter matching use books only.
        * @enum {string}
        */
       document_type: 'book' | 'question_paper';
@@ -1709,19 +1723,37 @@ export type components = {
        */
       id: string;
       /**
+       * Kind
+       * @description `book` (교재), `question_paper` (문제지) or `mixed` (교재+문제: a book that also prints questions). Null while an automatically classified upload is not classified yet (`분석 중`), or when it failed before that.
+       */
+      kind?: ('book' | 'question_paper' | 'mixed') | null;
+      /**
+       * Kind Source
+       * @description `auto` = classified by the server; `user` = chosen by a person (at upload or with `PATCH /documents/{id}`), never reclassified.
+       * @default user
+       * @enum {string}
+       */
+      kind_source?: 'user' | 'auto';
+      /**
        * Last Error
        * @description Why the last processing attempt failed.
        */
       last_error: string | null;
       /**
        * Latest Import Id
-       * @description Question papers: the newest question import run of the document (the one the server starts once it is processed, QIMPORT-01-AC06); null when it has none.
+       * @description The newest question import run of the document, whatever its kind (the server starts one for a question paper or a confident `mixed` PDF once it is processed, QIMPORT-01-AC06); null when it has none.
        */
       latest_import_id?: string | null;
       /** @description The newest revision (a draft while a parse or correction is pending). */
       latest_revision: components['schemas']['quiz_api__api__documents__RevisionSummary'] | null;
       /** @description The queued or running parse job; null when there is none. */
       processing_job?: components['schemas']['DocumentProcessingJob'] | null;
+      /**
+       * Question Count
+       * @description Live questions registered from this PDF's question imports.
+       * @default 0
+       */
+      question_count?: number;
       /** Sha256 */
       sha256: string;
       /** Size Bytes */
@@ -1744,6 +1776,24 @@ export type components = {
        * Format: uuid
        */
       workspace_id: string;
+    };
+    /**
+     * DocumentKindChange
+     * @description `종류 변경` (DOC-01-AC08).
+     */
+    DocumentKindChange: {
+      /**
+       * Extract
+       * @description For `question_paper` / `mixed`: start the question import when the document has none yet (an existing run, its drafts and questions are kept either way).
+       * @default true
+       */
+      extract?: boolean;
+      /**
+       * Kind
+       * @description `book` (교재), `question_paper` (문제지) or `mixed` (교재+문제).
+       * @enum {string}
+       */
+      kind: 'book' | 'question_paper' | 'mixed';
     };
     /** DocumentList */
     DocumentList: {
@@ -1803,6 +1853,7 @@ export type components = {
       created_at: string;
       /**
        * Document Type
+       * @description Body text or not: `book` (also for a `mixed` kind) or `question_paper`. Search, generation sources and chapter matching use books only.
        * @enum {string}
        */
       document_type: 'book' | 'question_paper';
@@ -1814,17 +1865,35 @@ export type components = {
        */
       id: string;
       /**
+       * Kind
+       * @description `book` (교재), `question_paper` (문제지) or `mixed` (교재+문제: a book that also prints questions). Null while an automatically classified upload is not classified yet (`분석 중`), or when it failed before that.
+       */
+      kind?: ('book' | 'question_paper' | 'mixed') | null;
+      /**
+       * Kind Source
+       * @description `auto` = classified by the server; `user` = chosen by a person (at upload or with `PATCH /documents/{id}`), never reclassified.
+       * @default user
+       * @enum {string}
+       */
+      kind_source?: 'user' | 'auto';
+      /**
        * Last Error
        * @description Why the last processing attempt failed.
        */
       last_error: string | null;
       /**
        * Latest Import Id
-       * @description Question papers: the newest question import run of the document (the one the server starts once it is processed, QIMPORT-01-AC06); null when it has none.
+       * @description The newest question import run of the document, whatever its kind (the server starts one for a question paper or a confident `mixed` PDF once it is processed, QIMPORT-01-AC06); null when it has none.
        */
       latest_import_id?: string | null;
       /** @description The queued or running parse job; null when there is none. */
       processing_job?: components['schemas']['DocumentProcessingJob'] | null;
+      /**
+       * Question Count
+       * @description Live questions registered from this PDF's question imports.
+       * @default 0
+       */
+      question_count?: number;
       /** Sha256 */
       sha256: string;
       /** Size Bytes */
@@ -2293,7 +2362,7 @@ export type components = {
       /**
        * Document Id
        * Format: uuid
-       * @description A `question_paper` document of this workspace whose processing finished.
+       * @description A document of this workspace whose processing finished: usually a `question_paper` or a `mixed` PDF, but any kind may be imported (UX6-UPLOAD-B).
        */
       document_id: string;
     };
@@ -4370,11 +4439,11 @@ export type components = {
       content_type: string;
       /**
        * Document Type
-       * @description `question_paper` for question PDFs to import.
+       * @description `auto`: the server tells body text and question papers apart (UX6-UPLOAD-B; the document starts as a `book`). `book` / `question_paper`: a kind chosen by the uploader (never reclassified).
        * @default book
        * @enum {string}
        */
-      document_type?: 'book' | 'question_paper';
+      document_type?: 'book' | 'question_paper' | 'auto';
       /**
        * Filename
        * @description Original file name; must end in `.pdf`.
@@ -4722,6 +4791,86 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  updateDocumentKind: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DocumentKindChange'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DocumentDetail'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };

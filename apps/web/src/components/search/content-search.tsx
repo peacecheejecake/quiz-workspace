@@ -1,14 +1,14 @@
 'use client';
 
-// SEARCH-01 content (원문) search of the workspace home's unified search (docs/screens/search.md,
+// SEARCH-01 content (본문) search of the workspace home's unified search (docs/screens/search.md,
 // UX3c). `useContentSearch` holds the options (mode, document/chapter filters, question papers),
 // runs the query through the same-origin relay — FastAPI enforces the workspace and the
 // published-revision scope — and mirrors the submitted search into the home URL next to its other
 // keys, so the back button from the PDF viewer restores it. A newer request always wins: older
 // ones are aborted and their late answers ignored. `ContentSearchOptions` renders the options
-// inside the "검색 옵션" popover; `ContentSearchResults` the results under the home header. Question
-// papers are searched exactly when the unified search's targets include 문제 (UX4): the home passes
-// that with each search, there is no separate toggle.
+// inside the "본문 설정" popover (UX6); `ContentSearchResults` the results under the home header.
+// Question papers are searched exactly when the unified search's scopes include 문제 (UX4): the
+// home passes that with each search, there is no separate toggle.
 import { Badge, Button, EmptyState, RadioGroup, Select } from '@quiz/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -416,7 +416,7 @@ function sameSearch(a: SearchQuery, b: SearchQuery): boolean {
   );
 }
 
-/** The content-search options of the "검색 옵션" popover. */
+/** The content-search options of the "본문 설정" popover (UX6). */
 export function ContentSearchOptions({
   search,
   documents,
@@ -490,7 +490,7 @@ export function ContentSearchOptions({
   );
 }
 
-/** "원문 검색 결과" under the home header, with the excerpt panel; hidden without a search. */
+/** "본문 검색 결과" under the home header, with the excerpt panel; hidden without a search. */
 export function ContentSearchResults({
   workspaceId,
   search,
@@ -522,7 +522,7 @@ export function ContentSearchResults({
         >
           <div className={styles.resultsHeader}>
             <h2 id="search-results-heading" className={styles.resultsTitle}>
-              원문 검색 결과
+              본문 검색 결과
             </h2>
             <p role="status" className={styles.status}>
               {loading
@@ -565,7 +565,7 @@ export function ContentSearchResults({
             <EmptyState
               headingLevel={3}
               title="검색 결과가 없습니다"
-              description="다른 검색어를 입력하거나 필터를 줄여 보세요. 정확한 단어가 기억나지 않으면 '검색 옵션'에서 의미 검색으로 바꿔 보세요."
+              description="다른 검색어를 입력하거나 필터를 줄여 보세요. 정확한 단어가 기억나지 않으면 '본문 설정'에서 의미 검색으로 바꿔 보세요."
               action={
                 guidance.length > 0 ? (
                   <ul className={styles.guidance}>

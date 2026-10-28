@@ -388,13 +388,18 @@ test(
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(main(page).getByText(/문제 하나가 점 하나입니다/)).toHaveCount(0);
 
-    // Header: unified search with an icon-only submit, then 문서 n · 문제 · 문제은행 and the
-    // icon buttons 이력 · 공유하기 (UX4).
+    // Header: unified search with an icon-only submit, then 문서 n · 문제 and the icon buttons
+    // 이력 · 공유하기 (UX4). No 문제은행 button: the bank is the 문제 menu's 전체 문제 (UX6-PROGRESS).
     await expect(homeUi.header(page)).toBeVisible();
     await expect(searchUi.box(page)).toBeVisible();
     await expect(searchUi.submit(page)).toHaveText('');
     await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*1$/); // the book; not the paper
-    await expect(homeUi.bankLink(page)).toBeVisible();
+    await expect(main(page).getByRole('link', { name: /^(문제은행|question bank)$/i })).toHaveCount(
+      0,
+    );
+    await expect(
+      main(page).getByRole('button', { name: /^(문제은행|question bank)$/i }),
+    ).toHaveCount(0);
     await expect(homeUi.historyButton(page)).toBeVisible();
     await expect(homeUi.shareButton(page)).toBeVisible();
     await expect(homeUi.shareButton(page)).toHaveText(''); // icon only, named "공유하기"
@@ -404,7 +409,6 @@ test(
       [
         homeUi.documentsButton(page),
         homeUi.questionMenuButton(page),
-        homeUi.bankLink(page),
         homeUi.historyButton(page),
         homeUi.shareButton(page),
       ].map(async (l) => (await l.boundingBox())?.x ?? 0),
@@ -459,9 +463,16 @@ test(
     await expect(homeUi.shareButton(page)).toHaveCount(0);
     await expect(homeUi.shareDialog(page)).toHaveCount(0);
     await homeUi.questionMenuButton(page).click();
-    await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveCount(1);
+    await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveCount(2);
+    await expect(homeUi.questionMenuItem(page, 'bank')).toBeVisible();
     await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeVisible();
-    await page.keyboard.press('Escape');
+    // A viewer reaches the bank through 전체 문제 too (UX6-PROGRESS).
+    await homeUi.questionMenuItem(page, 'bank').click();
+    await expect(page).toHaveURL((url) => url.pathname === `${home}/questions/bank`);
+    await expect(
+      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
+    ).toBeVisible();
+    await page.goto(home);
     const denied = await viewer.api.request('GET', `/workspaces/${s.workspaceId}/share-links`);
     expect(denied.status).toBe(403);
   },
@@ -553,7 +564,7 @@ test(
     await expect(dialog.locator('[aria-busy="true"]')).toHaveCount(0);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
 
-    // 문제은행: the route skeleton shows while the page's server render is held back.
+    // 전체 문제 (the bank): the route skeleton shows while the page's server render is held back.
     let releasePage!: () => void;
     const pageGate = new Promise<void>((resolve) => (releasePage = resolve));
     await page.route(
@@ -564,15 +575,15 @@ test(
         await route.fallback();
       },
     );
-    await homeUi.bankLink(page).click();
+    await chooseQuestionMenu(page, 'bank');
     await expect(
       main(page)
         .getByRole('status')
-        .filter({ hasText: /문제은행을 불러오는 중/ }),
+        .filter({ hasText: /전체 문제를 불러오는 중|loading all questions/i }),
     ).toBeVisible();
     releasePage();
     await expect(
-      page.getByRole('heading', { level: 1, name: /문제은행|question bank/i }),
+      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
     ).toBeVisible();
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   },
@@ -615,7 +626,7 @@ test(
 );
 
 test(
-  'QOV-01-AC11 the header 문제 menu opens PDF 관리, 직접 추가 and 변형 출제 by mouse and keyboard',
+  'QOV-01-AC11 the header 문제 menu opens 전체 문제, PDF 관리, 직접 추가 and 변형 출제 by mouse and keyboard',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac11', 1);
@@ -627,17 +638,21 @@ test(
     await page.keyboard.press('Enter');
     await expect(homeUi.questionMenu(page)).toBeVisible();
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
+      /^(전체 문제|all questions)$/i,
       /^(pdf 관리|manage pdfs?)$/i,
       /^(직접 추가|add question)$/i,
       /^(변형 출제|generate variants?)$/i,
     ]);
-    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeFocused();
+    await expect(homeUi.questionMenuItem(page, 'bank')).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(homeUi.questionMenu(page)).toBeHidden();
     await expect(button).toBeFocused();
 
-    // PDF 관리 (Enter on the first item) → the 문제 PDF 관리 dialog.
+    // PDF 관리 (Enter, then ArrowDown to the second item) → the 문제 PDF 관리 dialog.
     await page.keyboard.press('Enter');
+    await expect(homeUi.questionMenuItem(page, 'bank')).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(homeUi.questionPdfsDialog(page)).toBeVisible();
     await expect(page).toHaveURL((url) =>
@@ -657,8 +672,18 @@ test(
     await expect(page).toHaveURL((url) => !url.searchParams.has('create'));
     await page.reload();
     await expect(
-      page.getByRole('heading', { level: 1, name: /문제은행|question bank/i }),
+      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
     ).toBeVisible();
     await expect(questionFormUi.form(page)).toHaveCount(0);
+
+    // 전체 문제 → the bank page, titled 전체 문제 too (UX6-PROGRESS, UX6-BANK).
+    await page.goto(overviewPath(s.workspaceId));
+    await chooseQuestionMenu(page, 'bank');
+    await expect(page).toHaveURL(
+      (url) => url.pathname === `/workspaces/${s.workspaceId}/questions/bank` && url.search === '',
+    );
+    await expect(
+      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
+    ).toBeVisible();
   },
 );

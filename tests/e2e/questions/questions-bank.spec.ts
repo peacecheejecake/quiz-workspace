@@ -1,4 +1,4 @@
-// QBANK-01 — 문제은행 목록·편집 (`/workspaces/:workspaceId/questions/bank`),
+// QBANK-01 — 전체 문제 목록·편집 (the question bank, `/workspaces/:workspaceId/questions/bank`),
 // docs/screens/questions-bank.md; domain rules docs/questions.md §1, §2, §4.
 //
 // Each test signs in its own owner and works in its own workspace (public API). Questions are
@@ -15,11 +15,13 @@ import {
   bankUi,
   book,
   chooseFilter,
+  chooseQuestionMenu,
   createQuestion,
   expect,
   fillMcq,
   getQuestion,
   homeUi,
+  importUi,
   JOB_TIMEOUT_MS,
   listQuestions,
   main,
@@ -75,7 +77,7 @@ test(
     expect(await listQuestions(owner, ws.id)).toEqual([]);
 
     await openBank(page, owner, ws.id);
-    await expect(bankUi.heading(page)).toHaveText(/문제\s?은행|question bank/i);
+    await expect(bankUi.heading(page)).toHaveText(/^(전체 문제|all questions)$/i);
     await expect(bankUi.emptyState(page)).toBeVisible();
     await expect(bankUi.items(page)).toHaveCount(0);
     await expect(bankUi.createButton(page)).toBeEnabled();
@@ -403,15 +405,15 @@ test(
 
     await signInAs(page, owner.user);
     await page.goto(home);
-    await homeUi.bankLink(page).click();
+    await chooseQuestionMenu(page, 'bank');
     await expect(page).toHaveURL((url) => url.pathname === bankPath(ws.id));
-    await expect(bankUi.heading(page)).toHaveText(/문제은행|question bank/i);
-    await expectSubPageNav(/^(문제은행|question bank)$/i);
+    await expect(bankUi.heading(page)).toHaveText(/^(전체 문제|all questions)$/i);
+    await expectSubPageNav(/^(전체 문제|all questions)$/i);
     // The breadcrumb's workspace link and the back link both return home.
     await trail(/./).nav.getByRole('link', { name: ws.name, exact: true }).click();
     await expect(page).toHaveURL((url) => url.pathname === home);
     await expect(homeUi.header(page)).toBeVisible();
-    await homeUi.bankLink(page).click();
+    await chooseQuestionMenu(page, 'bank');
     await expect(page).toHaveURL((url) => url.pathname === bankPath(ws.id));
     await main(page)
       .getByRole('link', { name: /workspace 홈|back/i })
@@ -420,10 +422,14 @@ test(
     await expect(homeUi.header(page)).toBeVisible();
 
     // The other sub-pages carry the same navigation.
+    // Their link to the bank names it like the bank's own title (UX6-BANK).
+    const bankLink = () => main(page).getByRole('link', { name: /^(전체 문제|all questions)$/i });
     await page.goto(`${home}/questions/import`);
     await expectSubPageNav(/^(문제 pdf 가져오기|import)/i);
+    await expect(bankLink()).toHaveAttribute('href', bankPath(ws.id));
     await page.goto(`${home}/questions/generate`);
     await expectSubPageNav(/^(문제 변형 출제|generate)/i);
+    await expect(bankLink()).toHaveAttribute('href', bankPath(ws.id));
     await page.goto(`${home}/documents/${documentId}`);
     await expectSubPageNav(/물의 순환과 정수 처리|book-ko/i, /^(문서 관리|documents)$/i);
   },
@@ -480,7 +486,11 @@ test(
     const list = dialog.getByRole('list', { name: /문제 pdf 목록|question pdfs/i });
     await expect(list.getByRole('listitem')).toHaveCount(1);
     await expect(list).not.toContainText(/book-ko|물의 순환과 정수 처리/);
-    await expect(dialog.getByRole('button', { name: /pdf 선택|choose/i })).toBeVisible();
+    // UX6-UPLOAD: no upload here; the dialog points at 문서 관리, the one upload place.
+    await expect(
+      dialog.getByRole('button', { name: /pdf (선택|업로드)|choose|upload/i }),
+    ).toHaveCount(0);
+    await expect(importUi.openDocuments(dialog)).toBeVisible();
     await expect(
       dialog
         .getByRole('button', { name: /^pdf 가져오기$/i })

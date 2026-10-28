@@ -107,7 +107,7 @@ workspace
 정규화된 구조 및 핵심 제약:
 - `profiles(user_id FK auth.users, display_name, created_at)`, `workspace_memberships(workspace_id, user_id, role, created_at)`; MVP는 owner 1인이고 다인 공유는 후속이지만 권한 모델은 미리 정의한다.
 - `workspaces(id, name, owner_id, status, archived_at, deleted_at)`.
-- `documents(id, workspace_id, type, storage_key, checksum)`; `document_revisions`; `chapters(parent_id)`; `content_blocks(source_location)`.
+- `documents(id, workspace_id, type, storage_key, checksum)` — `document_type`(`book` | `question_paper`: 본문 여부), `type_source`(`user` | `auto`), `content_kind`(`book` | `question_paper` | `mixed`, 자동 분류 또는 사람이 고른 종류; null = 미분류), `detection`(분류 수치, UX6-UPLOAD); `document_uploads.auto_classify`; `document_revisions`; `chapters(parent_id)`; `content_blocks(source_location)`.
 - `questions(id, workspace_id, chapter_id, question_type, active_revision_id, publication_status)`.
 - `question_revisions(id, question_id, version, stem, options, correct_answer, explanation, rubric)`.
 - `question_sources(question_id, document_id, document_revision_id, page_range, block_ids)`.
@@ -131,6 +131,9 @@ workspace
 | POST | `/api/v1/workspaces/{id}/archive` | 보관 |
 | POST | `/api/v1/workspaces/{id}/restore` | 복원 |
 | POST | `/api/v1/workspaces/{id}/documents` | PDF 업로드/파싱 작업 |
+| POST | `/api/v1/workspaces/{id}/documents/upload-intent` | 업로드 의도(PDF마다 하나; `document_type = auto`면 서버가 교재·문제지·교재+문제로 자동 분류, UX6-UPLOAD) |
+| GET | `/api/v1/workspaces/{id}/documents` | 모든 PDF 목록(`kind`·`kind_source`·`question_count`·`latest_import_id`·처리 작업) |
+| PATCH | `/api/v1/documents/{id}` | `종류 변경`(`kind`, 사람이 고른 종류는 재분류 안 함; 쓰이는 교재 → 문제지는 409 `document-in-use`; 문제 있는 종류면 추출 시작, UX6-UPLOAD) |
 | GET | `/api/v1/documents/{id}/outline` | 장·절 트리 |
 | GET/PATCH | `/api/v1/documents/{id}/blocks/{blockId}` | 블록 읽기·교정 |
 | POST | `/api/v1/documents/{id}/publish` | 교정본 발행·색인 |
@@ -148,7 +151,7 @@ workspace
 | POST | `/api/v1/question-generations/{id}/publish` | 승인한 문제만 등록 |
 | POST | `/api/v1/workspaces/{id}/question-generation-batches` | 여러 문제·임의 선택 묶음 변형 출제(원본마다 `question.generate` run; QGEN-MULTI) |
 | GET | `/api/v1/workspaces/{id}/question-generation-batches/{batch_id}` | 묶음의 원본별 run·진행 상태 |
-| POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기 |
+| POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기(준비 완료된 모든 PDF, UX6-UPLOAD) |
 | GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토(초안별 등록 챕터 추천·선택, 교재 챕터 목록 — CHAPTER-MAP) |
 | POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록(`approve: true`면 선택한 초안을 승인과 함께 등록, 거절 목록 반환) |
 | POST | `/api/v1/question-imports/{id}/registrations` | 선택한 초안 전체를 서버에서 승인·등록(`question.import_register` job, QIMP-JOB) |

@@ -52,10 +52,10 @@ export const GENERATION_FAILURE_MESSAGES: Readonly<Record<GenerationFailureKind,
   forbidden: '이 Workspace에서 변형 문제를 만들거나 등록할 권한이 없습니다.',
   notFound: '원본 문제나 생성 작업을 찾을 수 없습니다. 삭제되었거나 접근 권한이 없습니다.',
   notConfirmed:
-    '확정된 문제만 변형할 수 있습니다. 문제은행에서 문제를 확정한 뒤 다시 시도해 주세요.',
+    '확정된 문제만 변형할 수 있습니다. 전체 문제에서 문제를 확정한 뒤 다시 시도해 주세요.',
   staleDraft:
     '다른 곳에서 초안이 먼저 바뀌었습니다. 최신 초안을 불러왔으니 내용을 확인한 뒤 다시 승인해 주세요.',
-  draftPublished: '이미 문제은행에 등록된 초안입니다. 문제은행에서 수정해 주세요.',
+  draftPublished: '이미 문제은행에 등록된 초안입니다. 전체 문제에서 수정해 주세요.',
   draftNotApproved: '승인되지 않은 초안이 있어 등록하지 못했습니다. 승인 상태를 확인해 주세요.',
   duplicateQuestion:
     '문제은행에 이미 같은 문제가 있거나 같은 내용의 초안을 함께 등록하려 해서 등록하지 못했습니다. 초안을 새로 불러왔으니 "이미 같은 문제가 있습니다" 표시를 확인해 주세요.',

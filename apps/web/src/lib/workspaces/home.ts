@@ -3,7 +3,8 @@
 // open question (`?question=`):
 //   ?panel=documents|question-pdfs|generate|history|share   open floating dialogs (repeatable, in
 //                                                            the order they were opened)
-//   ?q=<text>&scope=questions|content                         unified search (no scope = both)
+//   ?q=<text>&scope=questions|content|none                    unified search (no scope = both;
+//                                                            none = both boxes off, UX6)
 //   ?mode=&document=&section=&papers=1                        content-search options (state.ts)
 // Pure helpers, plus the redirects of the pre-UX3c routes onto the home.
 
@@ -11,7 +12,7 @@ export const HOME_PANELS = ['documents', 'question-pdfs', 'generate', 'history',
 export type HomePanel = (typeof HOME_PANELS)[number];
 export const PANEL_PARAM = 'panel';
 
-export type SearchScope = 'all' | 'questions' | 'content';
+export type SearchScope = 'all' | 'questions' | 'content' | 'none';
 export const SCOPE_PARAM = 'scope';
 
 type RawParams = Readonly<Record<string, string | string[] | undefined>>;
@@ -50,22 +51,23 @@ export function withPanel(search: string, panel: HomePanel, open: boolean): stri
 
 export function parseScope(params: Params): SearchScope {
   const value = all(params, SCOPE_PARAM)[0];
-  return value === 'questions' || value === 'content' ? value : 'all';
+  return value === 'questions' || value === 'content' || value === 'none' ? value : 'all';
 }
 
 export function scopeIncludesQuestions(scope: SearchScope): boolean {
-  return scope !== 'content';
+  return scope === 'all' || scope === 'questions';
 }
 
 export function scopeIncludesContent(scope: SearchScope): boolean {
-  return scope !== 'questions';
+  return scope === 'all' || scope === 'content';
 }
 
-/** The scope for a pair of "문제"/"내용" checkboxes (at least one is always on). */
+/** The scope for the "문제"/"본문" checkboxes (both may be off, UX6). */
 export function scopeOf(questions: boolean, content: boolean): SearchScope {
-  if (questions && !content) return 'questions';
-  if (content && !questions) return 'content';
-  return 'all';
+  if (questions && content) return 'all';
+  if (questions) return 'questions';
+  if (content) return 'content';
+  return 'none';
 }
 
 /**

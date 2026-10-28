@@ -50,6 +50,7 @@ export default async function Page({
         chapterChoices={data.chapterChoices}
         failure={data.failure}
         requested={data.requested}
+        hasQuestions={data.hasQuestions}
         documents={docs.documents}
         documentsLoadFailed={docs.failed}
         initialSearch={parseSearchParams(query)}

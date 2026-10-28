@@ -1,5 +1,14 @@
-"""Question PDF extraction into ``QuestionDraft`` without inventing answers: Task M4.3."""
+"""Question PDF extraction into ``QuestionDraft`` without inventing answers: Task M4.3.
 
+``classify_content`` (UX6-UPLOAD-B) tells a book, a question paper and a book with questions
+apart with the same segmentation."""
+
+from book_core.extractor.classify import (
+    CLASSIFIER_VERSION,
+    ContentDetection,
+    ContentKind,
+    classify_content,
+)
 from book_core.extractor.extractor import (
     EXTRACTOR_VERSION,
     ExtractedQuestion,
@@ -17,9 +26,12 @@ from book_core.extractor.llm_refine import (
 )
 
 __all__ = [
+    "CLASSIFIER_VERSION",
     "EXTRACTOR_VERSION",
     "EXTRACT_PROMPT_VERSION",
     "EXTRACT_TASK",
+    "ContentDetection",
+    "ContentKind",
     "ExtractedQuestion",
     "LLMAnswer",
     "LLMOption",
@@ -27,5 +39,6 @@ __all__ = [
     "QuestionExtraction",
     "QuestionExtractor",
     "build_request",
+    "classify_content",
     "llm_requests",
 ]

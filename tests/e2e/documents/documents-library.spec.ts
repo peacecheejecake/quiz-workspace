@@ -13,15 +13,25 @@ import { sha256 } from '../fixtures/documents.ts';
 import { localEndpoints } from '../fixtures/local-env.ts';
 import {
   book,
+  createQuestion,
   docUi,
   documentsPath,
+  expectProgressSteps,
   expect,
   homeUi,
   JOB_TIMEOUT_MS,
+  importPath,
+  importUi,
   listDocuments,
+  listImports,
   main,
+  mcqInput,
+  outlineNodeId,
   MAX_UPLOAD_BYTES,
   questionPaper,
+  section,
+  seedMembership,
+  setDocumentKind,
   signInAs,
   test,
   type Member,
@@ -29,6 +39,7 @@ import {
   uploadPdf,
   uploadReadyBook,
   waitForJob,
+  waitForLatestImport,
 } from '../fixtures/test.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -110,6 +121,12 @@ test(
     await chooseFile(page, BOOK.path);
     const row = docUi.item(page, BOOK_TITLE);
     await expect(docUi.uploadProgress(row)).toBeVisible();
+    // UX6-PROGRESS: the steps 업로드 → 분석 → 색인, the upload in progress.
+    await expectProgressSteps(row, [
+      [/업로드|upload/i, 'current'],
+      [/분석|parsing/i, 'pending'],
+      [/색인|indexing/i, 'pending'],
+    ]);
     release();
 
     await expect(docUi.processing(row).first()).toBeVisible();
@@ -249,6 +266,12 @@ test(
     await expect(docUi.ready(docUi.item(page, /book-en/))).toBeVisible({ timeout: JOB_TIMEOUT_MS });
 
     await expect(row.getByText(/처리 준비 중|preparing/i)).toBeVisible();
+    // UX6-PROGRESS: the uploaded file's 업로드 step is done, 분석 is running, 색인 waits.
+    await expectProgressSteps(row, [
+      [/업로드|upload/i, 'done'],
+      [/분석|parsing/i, 'current'],
+      [/색인|indexing/i, 'pending'],
+    ]);
     await expect(row.getByText(/\d+분 \d+초째 처리 중/)).toBeVisible();
     await expect(row.getByText(/첫 처리나 큰 PDF는 몇 분 걸릴 수 있습니다/)).toBeVisible();
     await expect(docUi.ready(row)).toHaveCount(0);
@@ -287,40 +310,50 @@ test(
 );
 
 test(
-  'DOC-01-AC06 the 문서 n button opens 문서 관리 with book documents only: status next to the title, date · size, trash delete',
+  'DOC-01-AC06 the 문서 n button opens 문서 관리 with every PDF and its kind badge; n counts PDFs with body text',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
-    test.setTimeout(2 * JOB_TIMEOUT_MS + 60_000);
+    test.setTimeout(3 * JOB_TIMEOUT_MS + 60_000);
     const owner = await workspaceFactory.member('doc01-ac06');
     const ws = await workspaceFactory.create(owner);
     await uploadReadyBook(owner, ws.id, 'book-ko');
     const paper = questionPaper();
     const uploaded = await uploadPdf(owner, ws.id, paper, 'question_paper');
     await waitForJob(owner, uploaded.jobId);
+    const mixed = await uploadReadyBook(owner, ws.id, 'book-en');
+    await setDocumentKind(owner, mixed, 'mixed', false);
 
     await signInAs(page, owner.user);
     await page.goto(`/workspaces/${ws.id}`);
     const button = homeUi.documentsButton(page);
-    await expect(button).toHaveText(/문서\s*1$/); // the question paper is not counted
+    await expect(button).toHaveText(/문서\s*2$/); // 교재 + 교재+문제; not the 문제지
     await button.click();
     await expect(page).toHaveURL(/[?&]panel=documents(&|$)/);
     const dialog = homeUi.documentsDialog(page);
     await expect(dialog).toBeVisible();
     await expect(dialog).not.toHaveAttribute('aria-modal', 'true');
 
+    // UX6-UPLOAD: every PDF, each with its kind as text.
     const rows = dialog.getByRole('list', { name: /문서 목록|documents/i }).getByRole('listitem');
-    await expect(rows).toHaveCount(1);
-    await expect(dialog).not.toContainText(paper.file.replace(/\.pdf$/, ''));
-    const row = rows.first();
-    await expect(row.getByText(/^(책|문제지)$/)).toHaveCount(0); // no type badges
-    // The status badge sits right after the title, on the same line.
-    const title = row.getByRole('link', { name: BOOK_TITLE });
+    const row = rows.filter({ hasText: /book-ko/ });
+    await expect(rows.filter({ hasText: /book-ko|book-en|questions-ko/ })).toHaveCount(3);
+    await expect(docUi.kindBadge(row, '교재')).toBeVisible();
+    await expect(docUi.kindBadge(rows.filter({ hasText: /questions-ko/ }), '문제지')).toBeVisible();
+    await expect(docUi.kindBadge(rows.filter({ hasText: /book-en/ }), '교재+문제')).toBeVisible();
+    // Title, then the kind badge, then the status badge, on one line.
+    const title = row.getByRole('link', { name: /book-ko/ });
+    const kind = docUi.kindBadge(row, '교재');
     const status = docUi.ready(row);
-    const [t, s] = await Promise.all([title.boundingBox(), status.boundingBox()]);
-    expect(
-      Math.abs((t?.y ?? 0) + (t?.height ?? 0) / 2 - ((s?.y ?? 0) + (s?.height ?? 0) / 2)),
-    ).toBeLessThan(12);
-    expect((s?.x ?? 0) > (t?.x ?? 0) + (t?.width ?? 0) - 1).toBe(true);
+    const [t, k, s] = await Promise.all([
+      title.boundingBox(),
+      kind.boundingBox(),
+      status.boundingBox(),
+    ]);
+    const middle = (b: typeof t) => (b?.y ?? 0) + (b?.height ?? 0) / 2;
+    expect(Math.abs(middle(t) - middle(s))).toBeLessThan(12);
+    expect(Math.abs(middle(t) - middle(k))).toBeLessThan(12);
+    expect((k?.x ?? 0) > (t?.x ?? 0) + (t?.width ?? 0) - 1).toBe(true);
+    expect((s?.x ?? 0) > (k?.x ?? 0) + (k?.width ?? 0) - 1).toBe(true);
     // Meta line: "<date time> · <size>", without "수정" or the file name.
     const meta = row.locator('time').locator('xpath=..');
     await expect(meta).toHaveText(
@@ -332,17 +365,176 @@ test(
     await title.hover();
     await expect(page.getByRole('tooltip')).toHaveText(BOOK.file);
 
-    // Delete is a trash icon button with an accessible name; the count follows.
+    // Delete is a trash icon button with an accessible name; the count follows for a 교재.
     const remove = row.getByRole('button', { name: /삭제|delete/i });
     await expect(remove).toHaveText('');
     await expect(remove).toHaveAttribute('title', /삭제|delete/i);
     await remove.click();
     const confirm = page.getByRole('alertdialog', { name: /삭제|delete/i });
     await confirm.getByRole('button', { name: /^(삭제|delete)$/i }).click();
-    await expect(rows).toHaveCount(0);
-    await expect(button).toHaveText(/문서\s*0$/);
+    await expect(rows).toHaveCount(2);
+    await expect(button).toHaveText(/문서\s*1$/);
     await expect
-      .poll(async () => (await listDocuments(owner, ws.id)).map((d) => d.document_type))
-      .toEqual(['question_paper']);
+      .poll(async () => (await listDocuments(owner, ws.id)).map((d) => d.kind).sort())
+      .toEqual(['mixed', 'question_paper']);
+  },
+);
+
+test(
+  'DOC-01-AC07 several PDFs dropped at once upload as separate rows, are classified, and only the 문제지 extracts by itself',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(2 * JOB_TIMEOUT_MS + 60_000);
+    const owner = await workspaceFactory.member('doc01-ac07');
+    const ws = await workspaceFactory.create(owner);
+    const paper = questionPaper();
+    await signInAs(page, owner.user);
+    await page.goto(`/workspaces/${ws.id}`);
+    await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*0$/);
+    await homeUi.documentsButton(page).click();
+    const dialog = homeUi.documentsDialog(page);
+    await expect(dialog).toBeVisible();
+
+    // No type choice: every upload intent asks the server to classify (`auto`).
+    const types: unknown[] = [];
+    page.on('request', (req) => {
+      if (/\/documents\/upload-intent\b/.test(new URL(req.url()).pathname)) {
+        types.push((req.postDataJSON() as { document_type?: unknown }).document_type);
+      }
+    });
+    // Hold the Storage uploads so both rows are seen before their kind is known.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    await page.route(`${localEndpoints().supabaseUrl}/storage/v1/**`, async (route) => {
+      if (!isStorageUpload(route)) return route.fallback();
+      await gate;
+      await route.continue();
+    });
+    const chooser = page.waitForEvent('filechooser');
+    await docUi.uploadButton(page).click();
+    await (await chooser).setFiles([BOOK.path, paper.path]);
+
+    const bookRow = docUi.item(page, /book-ko/);
+    const paperRow = docUi.item(page, /questions-ko/);
+    await expect(bookRow).toHaveCount(1);
+    await expect(paperRow).toHaveCount(1);
+    for (const row of [bookRow, paperRow]) {
+      await expect(docUi.uploadProgress(row)).toBeVisible();
+      await expect(docUi.kindBadge(row, '분석 중')).toBeVisible();
+    }
+    release();
+
+    await expect(docUi.kindBadge(bookRow, '교재')).toBeVisible({ timeout: JOB_TIMEOUT_MS });
+    await expect(docUi.kindBadge(paperRow, '문제지')).toBeVisible({ timeout: JOB_TIMEOUT_MS });
+    await expect(docUi.ready(bookRow)).toBeVisible();
+    await expect(docUi.ready(paperRow)).toBeVisible();
+    expect(types).toEqual(['auto', 'auto']);
+    // The 문제지 extracts without anyone asking; the 교재 does not.
+    await expect(docUi.reviewLink(paperRow)).toBeVisible({ timeout: JOB_TIMEOUT_MS });
+    await expect(docUi.reviewLink(bookRow)).toHaveCount(0);
+    await expect(docUi.extractButton(bookRow)).toHaveCount(0);
+    await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*1$/);
+
+    const docs = await listDocuments(owner, ws.id);
+    expect(docs).toHaveLength(2);
+    const paperDoc = docs.find((d) => d.kind === 'question_paper');
+    expect(docs.find((d) => d.kind === 'book')?.latest_import_id ?? null).toBeNull();
+    const runs = await listImports(owner, ws.id);
+    expect(runs.map((r) => r.source_document_id)).toEqual([paperDoc?.id]);
+
+    await docUi.reviewLink(paperRow).click();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === importPath(ws.id) && url.searchParams.get('document') === paperDoc?.id,
+    );
+    await expect(importUi.draftItems(page)).toHaveCount(paper.questions.length, {
+      timeout: JOB_TIMEOUT_MS,
+    });
+    expect(await listImports(owner, ws.id)).toHaveLength(1);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  },
+);
+
+test(
+  'DOC-01-AC08 종류 변경 by keyboard and pointer: the badge and 문서 n follow, a used 교재 cannot become a 문제지, viewers get no menu',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(3 * JOB_TIMEOUT_MS + 60_000);
+    const owner = await workspaceFactory.member('doc01-ac08');
+    const viewer = await workspaceFactory.member('doc01-ac08-viewer');
+    const ws = await workspaceFactory.create(owner);
+    seedMembership(ws.id, viewer.user.id, 'viewer');
+    // Classified by the server: a 문제지 with its extraction, a 교재 with a question in a chapter.
+    const paper = await uploadPdf(owner, ws.id, questionPaper(), 'auto');
+    await waitForJob(owner, paper.jobId);
+    const run = await waitForLatestImport(owner, ws.id);
+    const book = await uploadPdf(owner, ws.id, BOOK, 'auto');
+    await waitForJob(owner, book.jobId);
+    const chapter = await outlineNodeId(owner, book.documentId, section(BOOK, 'ch1').title);
+    await createQuestion(owner, ws.id, {
+      ...mcqInput('DOC-01-AC08 교재 챕터의 문제', ['예', '아니오'], 0),
+      chapter_id: chapter,
+    });
+    const kinds = async () =>
+      Object.fromEntries((await listDocuments(owner, ws.id)).map((d) => [d.id, d.kind]));
+    expect(await kinds()).toEqual({
+      [paper.documentId]: 'question_paper',
+      [book.documentId]: 'book',
+    });
+
+    await signInAs(page, owner.user);
+    await page.goto(`/workspaces/${ws.id}`);
+    const button = homeUi.documentsButton(page);
+    await expect(button).toHaveText(/문서\s*1$/);
+    await button.click();
+    const paperRow = docUi.item(page, /questions-ko/);
+    const bookRow = docUi.item(page, /book-ko/);
+    await expect(docUi.kindBadge(paperRow, '문제지')).toBeVisible();
+    await expect(docUi.reviewLink(paperRow)).toBeVisible();
+
+    // Keyboard: open the 문제지's menu, the current kind is checked; pick 교재+문제.
+    const paperMenu = docUi.kindMenuButton(paperRow);
+    await expect(paperMenu).toHaveAccessibleName(/questions-ko 종류 변경/);
+    await paperMenu.focus();
+    await page.keyboard.press('Enter');
+    await expect(docUi.kindMenu(page)).toBeVisible();
+    await expect(docUi.kindOption(page, '문제지')).toHaveAttribute('aria-checked', 'true');
+    await expect(docUi.kindOption(page, '교재')).toHaveAttribute('aria-checked', 'false');
+    await expect(docUi.kindOption(page, '교재+문제')).toHaveAttribute('aria-checked', 'false');
+    await docUi.kindOption(page, '교재+문제').focus();
+    await page.keyboard.press('Enter');
+    await expect(docUi.kindMenu(page)).toBeHidden();
+    await expect(docUi.kindBadge(paperRow, '교재+문제')).toBeVisible();
+    await expect(button).toHaveText(/문서\s*2$/);
+    await expect(docUi.reviewLink(paperRow)).toBeVisible();
+    // Same run, same drafts: nothing was deleted or started again.
+    expect((await listImports(owner, ws.id)).map((r) => r.id)).toEqual([run.id]);
+
+    // Pointer: the 교재 is used by a question, so it cannot become a 문제지.
+    await docUi.kindMenuButton(bookRow).click();
+    await docUi.kindOption(page, '문제지').click();
+    await expect(bookRow.getByRole('alert')).toHaveText(
+      '이 교재의 챕터나 출처를 쓰는 문제가 있어 문제지로 바꿀 수 없습니다.',
+    );
+    await expect(docUi.kindBadge(bookRow, '교재')).toBeVisible();
+    await expect(button).toHaveText(/문서\s*2$/);
+
+    // The chosen kind is kept on reload; the server does not classify it again.
+    await page.reload();
+    await expect(docUi.kindBadge(docUi.item(page, /questions-ko/), '교재+문제')).toBeVisible();
+    expect(await kinds()).toEqual({ [paper.documentId]: 'mixed', [book.documentId]: 'book' });
+    expect(
+      (await listDocuments(owner, ws.id)).find((d) => d.id === paper.documentId)?.kind_source,
+    ).toBe('user');
+
+    // A viewer sees the kinds but has no 종류 변경 menu.
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(documentsPath(ws.id));
+    await expect(docUi.kindBadge(docUi.item(page, /questions-ko/), '교재+문제')).toBeVisible();
+    await expect(docUi.kindBadge(docUi.item(page, /book-ko/), '교재')).toBeVisible();
+    await expect(
+      homeUi.documentsDialog(page).getByRole('button', { name: /종류 변경|change kind/i }),
+    ).toHaveCount(0);
   },
 );

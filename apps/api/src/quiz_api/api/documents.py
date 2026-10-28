@@ -9,7 +9,14 @@
                                                      with their queued/running parse job
     GET    /documents/{id}                           any member; status + active revision + job
     GET    /documents/{id}/source-url                any member; short-lived signed PDF read URL
+    PATCH  /documents/{id}                           editor+; `종류 변경` (UX6-UPLOAD-B): the kind a
+                                                     person chose, pinned; may start an import
     DELETE /documents/{id}                           editor+; soft delete, 204, then 404 everywhere
+
+Kinds (UX6-UPLOAD-B, DOC-01-AC07/AC08): an upload intent with `document_type: auto` creates a
+`book` that the parse job classifies before its first revision is published (`book`,
+`question_paper`, or `mixed` = a book that also prints questions); `kind` in the responses is
+null until then. The classifier never overrides a kind a person chose.
 
 Upload flow: the browser PUTs the bytes (or uploads them with TUS) straight into the private
 `source-pdfs` bucket with the signed URL; Storage itself enforces the bucket's 50 MiB / PDF-only
@@ -54,6 +61,7 @@ from quiz_api.db import get_db_session
 from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.jobs import JobMessage, JobPublisher, build_job_publisher
 from quiz_api.repositories.documents import (
+    ContentKind,
     DocumentRecord,
     DocumentRepository,
     DocumentStatus,
@@ -61,7 +69,10 @@ from quiz_api.repositories.documents import (
     JobRow,
     ProcessingJobRecord,
     RevisionStatus,
+    TypeSource,
+    UploadDocumentType,
     UploadRecord,
+    document_type_of,
 )
 from quiz_api.settings import Settings
 from quiz_api.storage import (
@@ -115,8 +126,11 @@ class UploadIntentCreate(BaseModel):
     )
     sha256: Sha256 = Field(description="Hex SHA-256 of the file; re-verified on completion.")
     title: Title | None = Field(default=None, description="Defaults to the file name stem.")
-    document_type: DocumentType = Field(
-        default="book", description="`question_paper` for question PDFs to import."
+    document_type: UploadDocumentType = Field(
+        default="book",
+        description="`auto`: the server tells body text and question papers apart (UX6-UPLOAD-B; "
+        "the document starts as a `book`). `book` / `question_paper`: a kind chosen by the "
+        "uploader (never reclassified).",
     )
 
 
@@ -169,7 +183,24 @@ class DocumentProcessingJob(BaseModel):
 class DocumentSummary(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
-    document_type: DocumentType
+    document_type: DocumentType = Field(
+        description="Body text or not: `book` (also for a `mixed` kind) or `question_paper`. "
+        "Search, generation sources and chapter matching use books only."
+    )
+    kind: ContentKind | None = Field(
+        default=None,
+        description="`book` (교재), `question_paper` (문제지) or `mixed` (교재+문제: a book that "
+        "also prints questions). Null while an automatically classified upload is not "
+        "classified yet (`분석 중`), or when it failed before that.",
+    )
+    kind_source: TypeSource = Field(
+        default="user",
+        description="`auto` = classified by the server; `user` = chosen by a person (at upload "
+        "or with `PATCH /documents/{id}`), never reclassified.",
+    )
+    question_count: int = Field(
+        default=0, description="Live questions registered from this PDF's question imports."
+    )
     title: str
     filename: str
     size_bytes: int
@@ -186,8 +217,9 @@ class DocumentSummary(BaseModel):
     )
     latest_import_id: uuid.UUID | None = Field(
         default=None,
-        description="Question papers: the newest question import run of the document (the one "
-        "the server starts once it is processed, QIMPORT-01-AC06); null when it has none.",
+        description="The newest question import run of the document, whatever its kind (the "
+        "server starts one for a question paper or a confident `mixed` PDF once it is processed, "
+        "QIMPORT-01-AC06); null when it has none.",
     )
 
 
@@ -206,6 +238,21 @@ class DocumentDetail(DocumentSummary):
     active_revision: RevisionSummary | None
     latest_revision: RevisionSummary | None = Field(
         description="The newest revision (a draft while a parse or correction is pending)."
+    )
+
+
+class DocumentKindChange(BaseModel):
+    """`종류 변경` (DOC-01-AC08)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: ContentKind = Field(
+        description="`book` (교재), `question_paper` (문제지) or `mixed` (교재+문제)."
+    )
+    extract: bool = Field(
+        default=True,
+        description="For `question_paper` / `mixed`: start the question import when the "
+        "document has none yet (an existing run, its drafts and questions are kept either way).",
     )
 
 
@@ -272,11 +319,15 @@ def _summary(
     doc: DocumentRecord,
     job: ProcessingJobRecord | None = None,
     latest_import: uuid.UUID | None = None,
+    question_count: int = 0,
 ) -> DocumentSummary:
     return DocumentSummary(
         id=doc.id,
         workspace_id=doc.workspace_id,
         document_type=doc.document_type,
+        kind=doc.kind,
+        kind_source=doc.type_source,
+        question_count=question_count,
         title=doc.title,
         filename=doc.filename,
         size_bytes=doc.size_bytes,
@@ -515,10 +566,13 @@ def list_documents(
     """The workspace's documents (not soft-deleted), newest first, each with its queued or
     running parse job."""
     docs = repo.list_documents(access.workspace_id, document_type)
-    jobs = repo.processing_jobs(access.workspace_id, [d.id for d in docs])
-    papers = [d.id for d in docs if d.document_type == "question_paper"]
-    imports = repo.latest_imports(access.workspace_id, papers)
-    return DocumentList(items=[_summary(d, jobs.get(d.id), imports.get(d.id)) for d in docs])
+    ids = [d.id for d in docs]
+    jobs = repo.processing_jobs(access.workspace_id, ids)
+    imports = repo.latest_imports(access.workspace_id, ids)
+    counts = repo.question_counts(access.workspace_id, ids)
+    return DocumentList(
+        items=[_summary(d, jobs.get(d.id), imports.get(d.id), counts.get(d.id, 0)) for d in docs]
+    )
 
 
 def _revision(repo: DocumentRepository, revision_id: uuid.UUID | None) -> RevisionSummary | None:
@@ -530,19 +584,68 @@ def _revision(repo: DocumentRepository, revision_id: uuid.UUID | None) -> Revisi
 def get_document(
     access: Annotated[ResourceAccess, _document(Action.READ)], repo: DocumentRepo
 ) -> DocumentDetail:
-    doc = repo.get_document(access.resource_id)
+    return _detail(repo, repo.get_document(access.resource_id))
+
+
+def _detail(repo: DocumentRepository, doc: DocumentRecord) -> DocumentDetail:
     latest = repo.latest_revision(doc.id)
     job = repo.processing_jobs(doc.workspace_id, [doc.id]).get(doc.id)
-    imports = (
-        repo.latest_imports(doc.workspace_id, [doc.id])
-        if doc.document_type == "question_paper"
-        else {}
-    )
+    imports = repo.latest_imports(doc.workspace_id, [doc.id])
+    counts = repo.question_counts(doc.workspace_id, [doc.id])
     return DocumentDetail(
-        **_summary(doc, job, imports.get(doc.id)).model_dump(),
+        **_summary(doc, job, imports.get(doc.id), counts.get(doc.id, 0)).model_dump(),
         active_revision=_revision(repo, doc.active_revision_id),
         latest_revision=RevisionSummary(**vars(latest)) if latest else None,
     )
+
+
+@router.patch(
+    "/documents/{document_id}",
+    operation_id="updateDocumentKind",
+    responses=problem_responses(409),
+)
+def update_document_kind(
+    access: Annotated[ResourceAccess, _document(Action.DOCUMENT_EDIT)],
+    body: DocumentKindChange,
+    repo: DocumentRepo,
+    publisher: PublisherDep,
+) -> DocumentDetail:
+    """Change a PDF's kind (`종류 변경`, DOC-01-AC08; editor+, archived workspaces read-only).
+
+    The chosen kind is pinned (`kind_source: user`): the parse job never reclassifies it. 409
+    `document-not-ready` unless the document finished processing; 409 `document-in-use` when a
+    book would become a question paper (it would leave search, generation sources and chapter
+    matching) while questions or import drafts are registered under its chapters or cite it.
+    Nothing is deleted: drafts, runs and questions stay whatever the kind. With `extract` (the
+    default), a `question_paper` / `mixed` kind starts the question import when the document has
+    none yet. Repeating the same change changes nothing."""
+    doc = repo.lock_document(access.resource_id)
+    if doc.status != "ready" or doc.active_revision_id is None:
+        raise ProblemException(
+            409,
+            ProblemType.DOCUMENT_NOT_READY,
+            detail="The document has not finished processing.",
+        )
+    leaves_books = doc.document_type == "book" and document_type_of(body.kind) != "book"
+    if leaves_books and repo.in_use_as_book(doc.workspace_id, doc.id):
+        raise ProblemException(
+            409,
+            ProblemType.DOCUMENT_IN_USE,
+            detail="Questions use this book's chapters or cite it; it cannot become a question "
+            "paper.",
+        )
+    actor = access.workspace.user_id
+    if doc.kind != body.kind or doc.type_source != "user":
+        repo.change_kind(doc, body.kind, actor)
+    job: JobRow | None = None
+    if body.extract and body.kind != "book" and not repo.has_import_run(doc.workspace_id, doc.id):
+        job = repo.get_job(
+            repo.start_import(doc.workspace_id, actor, doc.id, doc.active_revision_id)
+        )
+    repo.commit()
+    if job is not None:
+        publish_job(repo, publisher, job)
+    return _detail(repo, repo.get_document(doc.id))
 
 
 @router.get("/documents/{document_id}/source-url", operation_id="getDocumentSourceUrl")

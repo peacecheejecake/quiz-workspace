@@ -167,7 +167,9 @@
 
 /*
  * ProgressBar: the fill glides between reported values (--duration-progress) instead of jumping
- * on coarse server steps. Indeterminate = a static 30% fill (no aria-valuenow).
+ * on coarse server steps. Indeterminate (no aria-valuenow) = a translucent band sweeping through
+ * the track while the fill stays at 0, so the first reported value only moves forwards
+ * (UX6-PROGRESS). Under reduced motion the band stands still.
  */
 .qz-progress {
   position: relative;
@@ -185,16 +187,130 @@
     background: var(--color-accent);
     transition: width var(--duration-progress) var(--easing-standard);
   }
+}
 
-  &[data-indeterminate] > .fill {
-    width: 30%;
-    opacity: 0.6;
+/* Indeterminate cue shared by ProgressBar and the current StepProgress segment. */
+:is(.qz-progress[data-indeterminate], .qz-step-progress .segment[data-indeterminate])::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  opacity: 0.45;
+  animation: qz-progress-sweep 1.6s var(--easing-standard) infinite;
+}
+
+@keyframes qz-progress-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+/*
+ * StepProgress (UX6-PROGRESS): the step list over one bar split into a segment per step; done
+ * segments are full, the current one fills with its step's progress (transform: scaleX), pending
+ * ones are empty. State is never colour alone: done = check icon, current = bold + aria-current,
+ * and each step says its state in visually hidden text.
+ */
+.qz-step-progress {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+
+  > .steps,
+  > .track {
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    gap: var(--space-1);
+  }
+
+  > .steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-label-sm);
+    line-height: var(--line-height-snug);
+  }
+
+  .step {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+
+    > .marker {
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: var(--space-4);
+      height: var(--space-4);
+      box-sizing: border-box;
+      border: 1px solid var(--color-border-strong);
+      border-radius: var(--radius-pill);
+      font-variant-numeric: tabular-nums;
+    }
+
+    > .label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    &[data-state='done'] {
+      color: var(--color-text-primary);
+
+      > .marker {
+        border-color: var(--color-accent);
+        background: var(--color-accent);
+        color: var(--color-on-accent);
+      }
+    }
+
+    &[data-state='current'] {
+      color: var(--color-text-primary);
+      font-weight: var(--font-weight-semibold);
+
+      > .marker {
+        border-color: var(--color-accent);
+        color: var(--color-accent);
+      }
+    }
+  }
+
+  .segment {
+    position: relative;
+    box-sizing: border-box;
+    height: var(--space-2);
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-muted);
+
+    > .fill {
+      width: 100%;
+      height: 100%;
+      transform-origin: left center;
+      background: var(--color-accent);
+      transition: transform var(--duration-progress) var(--easing-standard);
+    }
   }
 }
 
 @media (forced-colors: active) {
-  .qz-progress > .fill {
+  :is(.qz-progress > .fill, .qz-step-progress .segment > .fill),
+  :is(.qz-progress[data-indeterminate], .qz-step-progress .segment[data-indeterminate])::after {
     background: Highlight;
+  }
+
+  .qz-step-progress .step[data-state='done'] > .marker {
+    background: Highlight;
+    color: HighlightText;
   }
 }
 
@@ -202,6 +318,18 @@
   /* !important beats the global 0.01ms reset: the fill jumps straight to the new value. */
   .qz-progress > .fill {
     transition: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qz-step-progress .segment > .fill {
+    transition: none !important;
+  }
+
+  /* A still band in the middle of the track instead of the sweep. */
+  :is(.qz-progress[data-indeterminate], .qz-step-progress .segment[data-indeterminate])::after {
+    left: 30%;
+    animation: none !important;
   }
 }
 

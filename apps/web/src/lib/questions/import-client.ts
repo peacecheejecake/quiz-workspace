@@ -51,7 +51,7 @@ export const IMPORT_FAILURE_MESSAGES: Readonly<Record<ImportFailureKind, string>
   notRetryable: '이 가져오기 작업은 다시 시도할 수 없는 상태입니다. 목록을 새로 불러왔습니다.',
   staleDraft:
     '다른 곳에서 초안이 먼저 바뀌었습니다. 최신 초안을 불러왔으니 내용을 확인한 뒤 다시 승인해 주세요.',
-  draftPublished: '이미 문제은행에 등록된 초안입니다. 문제은행에서 수정해 주세요.',
+  draftPublished: '이미 문제은행에 등록된 초안입니다. 전체 문제에서 수정해 주세요.',
   draftNotApproved: '승인되지 않은 초안이 있어 등록하지 못했습니다. 승인 상태를 확인해 주세요.',
   chapterChanged:
     '보여 드린 뒤 교재 챕터가 바뀐 초안이 있어 등록하지 않았습니다. 최신 초안을 불러왔으니 챕터를 확인한 뒤 다시 등록해 주세요.',

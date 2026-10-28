@@ -13,7 +13,8 @@ export interface ProgressBarProps extends Omit<HTMLAttributes<HTMLDivElement>, '
 /**
  * Accessible progress bar (docs/design-system.md §7). The fill animates between reported values
  * over `--duration-progress`, so coarse server steps (2 → 40 → 60 %) glide instead of jumping;
- * it never invents progress. No transition under `prefers-reduced-motion`.
+ * it never invents progress. Indeterminate keeps the fill at 0 % and shows a sweeping band, so the
+ * first reported value only moves forwards (UX6-PROGRESS). No motion under `prefers-reduced-motion`.
  */
 export function ProgressBar({ label, value, valueText, className, ...rest }: ProgressBarProps) {
   const indeterminate = value === undefined;
@@ -30,7 +31,7 @@ export function ProgressBar({ label, value, valueText, className, ...rest }: Pro
       data-indeterminate={indeterminate ? '' : undefined}
       {...rest}
     >
-      <div className="fill" style={indeterminate ? undefined : { width: `${clamped}%` }} />
+      <div className="fill" style={{ width: `${clamped ?? 0}%` }} />
     </div>
   );
 }

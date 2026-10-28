@@ -12,9 +12,22 @@
 // "N drafts"); state is text + icon, never color alone (정답 보기 is
 // marked "정답", a missing answer reads "정답 없음"); every control has a name that includes the
 // draft number so screen-reader users can tell them apart.
+//
+// Performance (UX6-SELECT): real imports have hundreds of drafts. Rows are memoized and each row's
+// checkbox subscribes to its own draft's selection (a small store), so checking a draft re-renders
+// one checkbox and "전체 선택" only the checkboxes that change — never the drafts' content (stem,
+// options, chapter picker). The screen keeps its callbacks and `renderExtra` stable for this.
 import { AlertIcon, Badge, Button, CheckIcon, Checkbox } from '@quiz/ui';
 import Link from 'next/link';
-import { type ReactNode } from 'react';
+import {
+  createContext,
+  memo,
+  useContext,
+  useLayoutEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import {
   approvalBlocker,
   selectionBlocker,
@@ -57,10 +70,33 @@ export interface QuestionDraftReviewProps {
   readonly renderExtra?: (draft: ReviewDraft) => ReactNode;
 }
 
+const NO_STATES: Readonly<Record<string, DraftReviewState>> = {};
+const NO_STATE: DraftReviewState = {};
+
+/** The selected ids for the checkboxes: each one re-renders only when its own draft changes. */
+class SelectionStore {
+  private readonly listeners = new Set<() => void>();
+  constructor(private selected: ReadonlySet<string> | undefined) {}
+  has(id: string): boolean {
+    return this.selected?.has(id) ?? false;
+  }
+  set(next: ReadonlySet<string> | undefined): void {
+    if (next === this.selected) return;
+    this.selected = next;
+    for (const listener of this.listeners) listener();
+  }
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+}
+
+const SelectionContext = createContext<SelectionStore | null>(null);
+
 export function QuestionDraftReview({
   label,
   drafts,
-  states = {},
+  states = NO_STATES,
   readOnly = false,
   onApproveChange,
   selected,
@@ -71,25 +107,28 @@ export function QuestionDraftReview({
   pageHref,
   renderExtra,
 }: QuestionDraftReviewProps) {
+  const [store] = useState(() => new SelectionStore(selected));
+  useLayoutEffect(() => store.set(selected), [store, selected]);
   return (
-    <ul aria-label={label} className={styles.list}>
-      {drafts.map((draft) => (
-        <DraftItem
-          key={draft.id}
-          draft={draft}
-          state={states[draft.id] ?? {}}
-          readOnly={readOnly}
-          onApproveChange={onApproveChange}
-          isSelected={selected?.has(draft.id) ?? false}
-          selectionDisabled={selectionDisabled}
-          onSelectChange={onSelectChange}
-          onEdit={onEdit}
-          onCompare={onCompare}
-          pageHref={pageHref}
-          extra={renderExtra?.(draft)}
-        />
-      ))}
-    </ul>
+    <SelectionContext.Provider value={store}>
+      <ul aria-label={label} className={styles.list}>
+        {drafts.map((draft) => (
+          <DraftItem
+            key={draft.id}
+            draft={draft}
+            state={states[draft.id] ?? NO_STATE}
+            readOnly={readOnly}
+            onApproveChange={onApproveChange}
+            selectionDisabled={selectionDisabled}
+            onSelectChange={onSelectChange}
+            onEdit={onEdit}
+            onCompare={onCompare}
+            pageHref={pageHref}
+            renderExtra={renderExtra}
+          />
+        ))}
+      </ul>
+    </SelectionContext.Provider>
   );
 }
 
@@ -98,34 +137,31 @@ interface DraftItemProps {
   readonly state: DraftReviewState;
   readonly readOnly: boolean;
   readonly onApproveChange?: QuestionDraftReviewProps['onApproveChange'];
-  readonly isSelected: boolean;
   readonly selectionDisabled: boolean;
   readonly onSelectChange?: QuestionDraftReviewProps['onSelectChange'];
   readonly onEdit?: QuestionDraftReviewProps['onEdit'];
   readonly onCompare?: QuestionDraftReviewProps['onCompare'];
   readonly pageHref?: QuestionDraftReviewProps['pageHref'];
-  readonly extra?: ReactNode;
+  readonly renderExtra?: QuestionDraftReviewProps['renderExtra'];
 }
 
-function DraftItem({
+const DraftItem = memo(function DraftItem({
   draft,
   state,
   readOnly,
   onApproveChange,
-  isSelected,
   selectionDisabled,
   onSelectChange,
   onEdit,
   onCompare,
   pageHref,
-  extra,
+  renderExtra,
 }: DraftItemProps) {
   const n = draftNumber(draft);
   const published = draft.publishedQuestionId !== null;
   const pending = state.approving !== undefined;
   const approved = state.approving ?? draft.reviewStatus === 'approved';
   const blocker = approved ? null : approvalBlocker(draft);
-  const selectBlocker = selectionBlocker(draft);
   const status = published ? 'published' : draft.reviewStatus;
   const headingId = `draft-${draft.id}-title`;
 
@@ -190,7 +226,7 @@ function DraftItem({
         </div>
       ) : null}
 
-      {extra}
+      {renderExtra?.(draft)}
 
       <div className={styles.footer}>
         {draft.pages.length > 0 ? (
@@ -230,14 +266,10 @@ function DraftItem({
             </Button>
           ) : null}
           {!readOnly && !published && onSelectChange ? (
-            <Checkbox
-              className={styles.approve}
-              label="선택"
-              aria-label={`${n}번 문제 선택`}
-              checked={isSelected && selectBlocker === null}
-              disabled={selectionDisabled || selectBlocker !== null}
-              onCheckedChange={(checked) => onSelectChange(draft, checked === true)}
-              {...(selectBlocker ? { description: selectBlocker } : {})}
+            <DraftSelectBox
+              draft={draft}
+              disabled={selectionDisabled}
+              onSelectChange={onSelectChange}
             />
           ) : null}
           {!readOnly && !published && onApproveChange && !onSelectChange ? (
@@ -262,6 +294,38 @@ function DraftItem({
       ) : null}
     </li>
   );
+});
+
+/** The draft's "선택" checkbox: the only part of a row that follows the selection. */
+function DraftSelectBox({
+  draft,
+  disabled,
+  onSelectChange,
+}: {
+  readonly draft: ReviewDraft;
+  readonly disabled: boolean;
+  readonly onSelectChange: NonNullable<QuestionDraftReviewProps['onSelectChange']>;
+}) {
+  const store = useContext(SelectionContext);
+  const read = () => store?.has(draft.id) ?? false;
+  const selected = useSyncExternalStore(store?.subscribe ?? noSubscribe, read, read);
+  const blocker = selectionBlocker(draft);
+  return (
+    <Checkbox
+      className={styles.approve}
+      label="선택"
+      aria-label={`${draftNumber(draft)}번 문제 선택`}
+      checked={selected && blocker === null}
+      disabled={disabled || blocker !== null}
+      onCheckedChange={(checked) => onSelectChange(draft, checked === true)}
+      {...(blocker ? { description: blocker } : {})}
+    />
+  );
+}
+
+const noUnsubscribe = (): void => undefined;
+function noSubscribe(): () => void {
+  return noUnsubscribe;
 }
 
 function AnswerSummary({ draft }: { draft: ReviewDraft }) {

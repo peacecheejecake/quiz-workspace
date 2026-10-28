@@ -7,6 +7,7 @@ tests/integration/questions/test_question_import_contract.py.
 
 from __future__ import annotations
 
+import hashlib
 import threading
 import uuid
 from collections.abc import Callable, Iterator, Sequence
@@ -16,7 +17,7 @@ from typing import Any
 
 import pytest
 from book_core.contracts import ParsedDocument
-from book_core.parser import FakeParser
+from book_core.parser import FakeParser, document_from_pages
 from quiz_worker.celery_app import default_definitions
 from quiz_worker.document_job import (
     DocumentJobDeps,
@@ -441,3 +442,72 @@ def test_a_printed_essay_answer_becomes_the_rubric_not_an_accepted_answer(world:
     assert essay.rubric == model
     assert essay.payload["accepted_answers"] is None
     assert "answer_missing" not in {v["code"] for v in essay.validations}
+
+
+# -- UX6-UPLOAD-B: a mixed book whose import starts by itself yields every chapter's questions --
+
+
+def _chapter_keys_book() -> ParsedDocument:
+    """Three chapters, each with numbered headings, three exercises and its own answer key."""
+    prose = "물은 증발과 응결을 거치며 지구 표면과 대기 사이를 끊임없이 순환한다. " * 3
+    pages: list[list[str]] = []
+    for chapter in range(1, 4):
+        pages.append([f"# 제{chapter}장 물의 순환", "1. 개요", prose, prose, "2. 증발", prose])
+        exercises = ["# 확인 문제"]
+        for n in range(1, 4):
+            exercises += [f"{n}. 제{chapter}장 {n}번: 다음 중 옳은 것은?", "① 가", "② 나", "③ 다"]
+        pages.append([*exercises, "정답", "1. ③ 2. ① 3. ②"])
+    data = b"%PDF-1.4 synthetic book with chapter keys"
+    return document_from_pages(
+        pages, source_path="book.pdf", source_sha256=hashlib.sha256(data).hexdigest()
+    )
+
+
+def test_ux6_auto_mixed_book_imports_the_questions_of_every_chapter(world: World) -> None:
+    data = b"%PDF-1.4 synthetic book with chapter keys"
+    parser = FakeParser.from_truth_files(TRUTH)
+    parser.register(_chapter_keys_book())
+    index, _ = memory_index("ux6_")
+    parse = document_parse_definition(
+        lambda: DocumentJobDeps(
+            documents=world.documents,
+            storage=world.storage,
+            index=index,
+            parser=parser,
+            limits=Limits(lock_wait_seconds=0),
+            page_counter=lambda _path: None,
+        )
+    )
+    document, revision = world.documents.add_document(data, title="교재", type_source="auto")
+    world.storage.put_source(document, data)
+    envelope = JobEnvelope(
+        job_id=uuid.uuid4(),
+        job_type="document.parse",
+        schema_version=1,
+        idempotency_key=f"upload:{uuid.uuid4()}",
+        workspace_id=document.workspace_id,
+        created_by=world.user,
+        payload={"document_id": str(document.id), "revision_id": str(revision.id)},
+    )
+    world.jobs.create(envelope, max_attempts=3)
+    parsed = world.runner.run(parse, envelope.to_message())
+    assert parsed.outcome is RunOutcome.SUCCEEDED, parsed.error
+    stored = world.documents.documents[document.id]
+    assert (stored.document_type, stored.content_kind) == ("book", "mixed")
+    assert document.id in world.documents.import_starts  # started by the publish
+
+    run = world.start(stored, filename="book.pdf")
+    result = world.run(world.submit(run))
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    exercises = [
+        d for d in world.imports.run_drafts(run.id) if "다음 중 옳은 것은" in d.payload["stem"]
+    ]
+    assert [d.payload["stem"] for d in exercises] == [
+        f"제{c}장 {n}번: 다음 중 옳은 것은?" for c in range(1, 4) for n in range(1, 4)
+    ]
+    assert [d.payload["correct_option_ids"] for d in exercises] == [
+        ["opt-3"],
+        ["opt-1"],
+        ["opt-2"],
+    ] * 3

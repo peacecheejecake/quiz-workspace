@@ -1,4 +1,4 @@
-// UX3c: a workspace sub-page reached by a button (문제은행, 문제 PDF 가져오기, 문제 변형 출제,
+// UX3c: a workspace sub-page reached by a button (전체 문제, 문제 PDF 가져오기, 문제 변형 출제,
 // PDF 열람) shows a back link to the workspace home and a breadcrumb
 // `Workspace 이름 › … › 현재 페이지` in its PageHeader `back`/`breadcrumb` slots.
 import { BackLink, Breadcrumb, type BreadcrumbItem } from '@quiz/ui';

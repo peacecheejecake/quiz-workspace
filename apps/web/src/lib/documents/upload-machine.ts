@@ -8,10 +8,11 @@
 // and stored bytes are reused while valid (complete-upload is idempotent per intent), so a retry
 // never creates a second document. An expired intent restarts from a new one.
 import type {
+  DocumentKind,
   DocumentsClient,
   DocumentSummary,
-  DocumentType,
   Job,
+  UploadDocumentType,
   UploadIntent,
 } from './client-api';
 import { DOCUMENT_FAILURE_MESSAGES, DocumentApiError, type DocumentFailureKind } from './errors';
@@ -51,7 +52,8 @@ export interface UploadItem {
   readonly filename: string;
   readonly title: string;
   readonly size: number;
-  readonly documentType: DocumentType;
+  /** Sent with the upload intent: `auto` (the server classifies it, UX6-UPLOAD) by default. */
+  readonly documentType: UploadDocumentType;
   readonly phase: UploadPhase;
   /** Bytes sent to Storage in the current attempt. */
   readonly loaded: number;
@@ -98,7 +100,7 @@ export function newUploadItem(
   localId: string,
   file: { readonly name: string; readonly size: number },
   title: string,
-  documentType: DocumentType = 'book',
+  documentType: UploadDocumentType = 'auto',
 ): UploadItem {
   return {
     localId,
@@ -409,7 +411,8 @@ export interface DocumentRow {
   readonly documentId?: string;
   readonly title: string;
   readonly filename: string;
-  readonly documentType: DocumentType;
+  /** 교재 / 문제지 / 교재+문제; null until the server classified it (UX6-UPLOAD "분석 중"). */
+  readonly kind: DocumentKind | null;
   readonly size: number;
   readonly updatedAt?: string;
   readonly status: RowStatus;
@@ -423,8 +426,19 @@ export interface DocumentRow {
   readonly error?: string;
   readonly retryable: boolean;
   readonly cancellable: boolean;
-  /** Question papers: the newest import run (from the server's document list). */
+  /** The newest import run of the PDF, whatever its kind (from the server's document list);
+   * undefined while the row is not in that list yet. */
   readonly latestImportId?: string | null;
+}
+
+/** The listed kind (the API leaves it out only for documents from before UX6-UPLOAD-B). */
+export function documentKind(doc: DocumentSummary): DocumentKind | null {
+  return doc.kind === undefined ? doc.document_type : doc.kind;
+}
+
+/** A kind chosen at upload is known at once; an `auto` upload waits for the server. */
+function uploadKind(item: UploadItem): DocumentKind | null {
+  return item.documentType === 'auto' ? null : item.documentType;
 }
 
 function uploadStatus(item: UploadItem): RowStatus {
@@ -450,7 +464,7 @@ function rowFromUpload(item: UploadItem, doc?: DocumentSummary): DocumentRow {
     documentId: item.documentId,
     title: doc?.title ?? item.title,
     filename: doc?.filename ?? item.filename,
-    documentType: doc?.document_type ?? item.documentType,
+    kind: doc ? documentKind(doc) : uploadKind(item),
     size: doc?.size_bytes ?? item.size,
     updatedAt: doc?.updated_at,
     status,
@@ -471,7 +485,7 @@ function rowFromDocument(doc: DocumentSummary): DocumentRow {
     documentId: doc.id,
     title: doc.title,
     filename: doc.filename,
-    documentType: doc.document_type,
+    kind: documentKind(doc),
     size: doc.size_bytes,
     updatedAt: doc.updated_at,
     status: doc.status,

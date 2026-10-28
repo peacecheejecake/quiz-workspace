@@ -1,28 +1,34 @@
 'use client';
 
 // One document row (DOC-01 문서 관리 and the question-PDF list, UX3c): the title (a DOC-02 link once
-// ready; the file name in its tooltip) with the status badge right next to it, a meta line
+// ready; the file name in its tooltip) with the kind badge (교재 / 문제지 / 교재+문제, "분석 중"
+// until classified, UX6-UPLOAD) and the status badge right next to it, a meta line
 // "<date time> · <size>", the live progress — upload progress with cancel, parse/index progress,
-// the failure reason with retry — and a trash icon button to delete. A long-running job also shows
-// how long it has waited or run, with a hint (DOC-01-AC05). State is always text, never colour
+// the failure reason with retry — and a trash icon button to delete. Upload and processing are one
+// step progress 업로드 → 분석 → 색인 (UX6-PROGRESS) whose bar never drops back between steps. A
+// long-running job also shows how long it has waited or run, with a hint (DOC-01-AC05). State is always text, never colour
 // alone (the badge text carries it).
 import {
   Badge,
   Button,
   IconButton,
-  ProgressBar,
+  StepProgress,
   Tooltip,
   TrashIcon,
   type BadgeTone,
 } from '@quiz/ui';
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
+import type { DocumentKind } from '@/lib/documents/client-api';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
 import { formatBytes } from '@/lib/documents/validation';
+import { DocumentKindMenu } from './document-kind-menu';
 import styles from './documents.module.css';
 import {
+  DOCUMENT_STEPS,
+  documentProgress,
   formatUpdatedAt,
-  percent,
+  kindBadgeLabel,
   processingElapsed,
   processingLabel,
   SLOW_PROCESSING_HINT,
@@ -36,8 +42,15 @@ export interface DocumentRowProps {
   readonly onCancel: (localId: string) => void;
   readonly onRetry: (localId: string) => void;
   readonly onDelete: (row: DocumentRow) => void;
-  /** Extra actions before the row's own (e.g. 문제 추출 in the question-PDF list). */
+  /** Extra actions before the row's own (e.g. 문제 추출 / 문제 검토). */
   readonly actions?: ReactNode;
+  /** `종류 변경` for editors on a ready row (문서 관리, DOC-01-AC08); absent = no menu. */
+  readonly kindChange?: {
+    readonly onChange: (row: DocumentRow, kind: DocumentKind) => void;
+    readonly busy: boolean;
+    /** Why the last change was refused (shown as an alert in the row). */
+    readonly failure?: string;
+  };
 }
 
 export function DocumentRowItem({
@@ -48,6 +61,7 @@ export function DocumentRowItem({
   onRetry,
   onDelete,
   actions,
+  kindChange,
 }: DocumentRowProps) {
   const { localId } = row;
   const href =
@@ -55,6 +69,7 @@ export function DocumentRowItem({
       ? `/workspaces/${workspaceId}/documents/${row.documentId}`
       : undefined;
   const badge = statusBadge(row);
+  const kind = kindBadgeLabel(row);
   const title = href ? (
     <Link href={href} className={styles.title}>
       {row.title}
@@ -67,6 +82,7 @@ export function DocumentRowItem({
       <div className={styles.rowMain}>
         <div className={styles.titleLine}>
           <Tooltip content={row.filename}>{title}</Tooltip>
+          {kind ? <Badge tone="neutral">{kind}</Badge> : null}
           <Badge tone={badge.tone}>{badge.label}</Badge>
         </div>
         <p className={styles.meta}>
@@ -79,9 +95,22 @@ export function DocumentRowItem({
           <span>{formatBytes(row.size)}</span>
         </p>
         <RowDetail row={row} />
+        {kindChange?.failure ? (
+          <p role="alert" className={styles.rowAlert}>
+            {kindChange.failure}
+          </p>
+        ) : null}
       </div>
       <div className={styles.actions}>
         {actions}
+        {kindChange && row.documentId && row.status === 'ready' ? (
+          <DocumentKindMenu
+            title={row.title}
+            kind={row.kind}
+            busy={kindChange.busy}
+            onChange={(next) => kindChange.onChange(row, next)}
+          />
+        ) : null}
         {row.retryable && localId ? (
           <Button size="sm" variant="primary" onClick={() => onRetry(localId)}>
             다시 시도
@@ -118,40 +147,31 @@ export function statusBadge(row: DocumentRow): { label: string; tone: BadgeTone 
 }
 
 function RowDetail({ row }: { row: DocumentRow }) {
-  if (row.status === 'uploading') {
-    if (row.error) return <p className={styles.error}>{row.error}</p>;
-    const upload = row.upload;
-    const phase = upload?.phase ?? 'uploading';
-    const value = upload ? percent(upload.loaded, upload.total) : 0;
-    const sending = phase === 'uploading';
-    return (
-      <div className={styles.status}>
-        <ProgressBar
-          className={styles.progress}
-          label="업로드 진행률"
-          value={sending || phase === 'completing' ? value : undefined}
-        />
-        {sending ? <span className={styles.statusText}>{value}%</span> : null}
-      </div>
-    );
+  if (row.error && row.status !== 'processing' && row.status !== 'ready') {
+    return <p className={styles.error}>{row.error}</p>;
   }
-  if (row.status === 'processing') return <ProcessingDetail row={row} />;
-  if (row.status === 'failed' && row.error) return <p className={styles.error}>{row.error}</p>;
+  // Uploading and processing share one element tree, so the bar glides across the steps.
+  if (row.status === 'uploading' || row.status === 'processing') return <RowProgress row={row} />;
   return null;
 }
 
-function ProcessingDetail({ row }: { row: DocumentRow }) {
+function RowProgress({ row }: { row: DocumentRow }) {
   const now = useNow();
-  const progress = row.job?.progress ?? null;
+  const progress = documentProgress(row);
   const elapsed = now === null ? null : processingElapsed(row, now);
+  if (!progress) return null;
+  const { current, value, text, label } = progress;
   return (
     <div className={styles.status}>
-      <ProgressBar
-        className={styles.progress}
-        label="파싱·색인 진행률"
-        value={progress ?? undefined}
+      <StepProgress
+        className={styles.steps}
+        label={label}
+        steps={DOCUMENT_STEPS}
+        current={current}
+        value={value}
+        currentText={text}
       />
-      {progress !== null ? <span className={styles.statusText}>{progress}%</span> : null}
+      {value !== undefined ? <span className={styles.statusText}>{value}%</span> : null}
       {elapsed ? (
         <p className={styles.hint}>
           {elapsed} · {SLOW_PROCESSING_HINT}

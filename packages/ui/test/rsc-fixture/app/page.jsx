@@ -58,6 +58,7 @@ import {
   RetryToggle,
   Select,
   ProgressBar,
+  StepProgress,
   Skeleton,
   StarIcon,
   StatusSummary,
@@ -157,6 +158,15 @@ export default function Page() {
             />
             <Skeleton width="4rem" />
             <ProgressBar label="진행률" value={40} />
+            <StepProgress
+              label="가져오기 진행률"
+              steps={[
+                { id: 'a', label: '업로드' },
+                { id: 'b', label: '분석' },
+              ]}
+              current={1}
+              value={30}
+            />
             <AlertIcon />
             <CheckIcon />
             <ChevronDownIcon />

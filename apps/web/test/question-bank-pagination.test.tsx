@@ -29,6 +29,8 @@ vi.mock('../src/lib/questions/actions', () => ({
 }));
 
 const { QuestionBank } = await import('../src/components/questions/question-bank');
+const { default: BankLoading } =
+  await import('../src/app/workspaces/[workspaceId]/questions/bank/loading');
 
 const WS = '55555555-5555-4555-8555-555555555555';
 
@@ -92,6 +94,26 @@ const stems = () =>
 beforeEach(() => {
   listQuestionsAction.mockReset();
   replace.mockReset();
+});
+
+describe('QuestionBank title (UX6-BANK)', () => {
+  it('QBANK-01-AC05 names the page 전체 문제 in the heading and the breadcrumb', () => {
+    render(
+      <main>
+        <Bank filters={DEFAULT_FILTERS} items={[q(1, '첫 문제')]} nextCursor={null} />
+      </main>,
+    );
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('전체 문제');
+    const crumbs = screen.getByRole('navigation', { name: /위치|breadcrumb/i });
+    const current = within(crumbs).getByText('전체 문제');
+    expect(current.closest('[aria-current="page"]')).not.toBeNull();
+    expect(screen.queryByText(/문제은행$/)).toBeNull();
+  });
+
+  it('QBANK-01-AC05 labels the loading skeleton 전체 문제', () => {
+    render(<BankLoading />);
+    expect(screen.getByText(/전체 문제를 불러오는 중/)).toBeInTheDocument();
+  });
 });
 
 describe('QuestionBank pagination', () => {

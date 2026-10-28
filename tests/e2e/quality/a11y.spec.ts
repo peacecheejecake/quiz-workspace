@@ -21,6 +21,7 @@ import {
   homePath,
   homeUi,
   openSearchOptions,
+  closeSearchOptions,
   generatePath,
   generateUi,
   generationSourceInput,
@@ -199,10 +200,14 @@ test(
     await page.goto(searchPath(ws.id));
     await expect(searchUi.box(page)).toBeVisible();
     await expectAccessible(page, 'search without documents');
-    // The unified search's options popover (scope checkboxes, mode tooltips, filters).
-    await openSearchOptions(page);
-    await expectAccessible(page, 'search options popover');
-    await page.keyboard.press('Escape');
+    // The unified search's scope settings popovers (UX6): 문제 (filters), 본문 (mode tooltips,
+    // filters).
+    await openSearchOptions(page, 'questions');
+    await expectAccessible(page, 'question search settings popover');
+    await closeSearchOptions(page, 'questions');
+    await openSearchOptions(page, 'body');
+    await expectAccessible(page, 'body search settings popover');
+    await closeSearchOptions(page, 'body');
 
     const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
     await page.goto(documentsPath(ws.id));
@@ -321,7 +326,7 @@ test(
     await signInAs(page, owner.user);
 
     await page.goto(importPath(ws.id));
-    await expect(importUi.uploadButton(page)).toBeVisible();
+    await expect(importUi.openDocuments(main(page))).toBeVisible();
     await expectAccessible(page, 'import empty');
     await importPaperDrafts(owner, ws.id);
     await page.reload();
@@ -358,8 +363,11 @@ test(
     // Error state: the first import job of a marked paper fails (fake extractor, QIMPORT A7).
     const failingWs = await workspaceFactory.create(owner);
     mkdirSync(test.info().outputDir, { recursive: true });
-    await page.goto(importPath(failingWs.id));
-    await uploadQuestionPaper(page, failingOnceCopy(questionPaper(), test.info().outputDir));
+    await uploadQuestionPaper(
+      page,
+      failingWs.id,
+      failingOnceCopy(questionPaper(), test.info().outputDir),
+    );
     await expect(importUi.alert(page)).toContainText(/실패|오류|failed|error/i, {
       timeout: JOB_TIMEOUT_MS,
     });

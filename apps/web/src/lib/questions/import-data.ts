@@ -7,6 +7,7 @@ import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import type { BookChapterOption, ImportDraft, ImportRun } from './drafts';
 import { classifyImportFailure, importPath } from './import-client';
+import { reviewPdfs, type ReviewPdf } from './review-pdfs';
 
 export interface ImportScreenData {
   readonly run: ImportRun | null;
@@ -72,4 +73,35 @@ export async function loadLatestImport(
     loadedAt,
     loadFailed: false,
   };
+}
+
+/** How many runs order `검토할 PDF` (the API's maximum page; older PDFs follow, UX6-UPLOAD). */
+const REVIEW_RUNS = 200;
+
+/**
+ * The PDFs with an extraction for `검토할 PDF` (UX6-UPLOAD), newest extraction first. Best
+ * effort: the switcher is left out (empty list) when the documents cannot be read.
+ */
+export async function loadReviewPdfs(workspaceId: string): Promise<readonly ReviewPdf[]> {
+  let api;
+  try {
+    api = await createServerApiClient();
+  } catch {
+    return [];
+  }
+  const [runs, documents] = await Promise.all([
+    api
+      .GET('/api/v1/workspaces/{workspace_id}/question-imports', {
+        params: { path: { workspace_id: workspaceId }, query: { limit: REVIEW_RUNS } },
+      })
+      .catch(() => null),
+    api
+      .GET('/api/v1/workspaces/{workspace_id}/documents', {
+        params: { path: { workspace_id: workspaceId } },
+      })
+      .catch(() => null),
+  ]);
+  if (!documents?.data) return [];
+  // The runs only order the list; without them every extracted PDF is still offered.
+  return reviewPdfs(runs?.data?.items ?? [], documents.data.items);
 }

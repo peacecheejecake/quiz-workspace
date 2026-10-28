@@ -356,6 +356,10 @@ documents = Table(
     _ts("created_at", nullable=False),
     _ts("updated_at", nullable=False),
     _ts("deleted_at"),
+    # UX6-UPLOAD-B (20261028120000_document_auto_classification.sql).
+    Column("type_source", Text, nullable=False),
+    Column("content_kind", Text),
+    Column("detection", JSONB),
 )
 
 document_revisions = Table(
@@ -436,6 +440,8 @@ document_uploads = Table(
     Column("completed_job_id", Uuid),
     _ts("created_at", nullable=False),
     _ts("updated_at", nullable=False),
+    # UX6-UPLOAD-B (20261028120000_document_auto_classification.sql).
+    Column("auto_classify", Boolean, nullable=False),
 )
 
 

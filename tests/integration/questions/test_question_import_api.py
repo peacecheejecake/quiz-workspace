@@ -63,7 +63,7 @@ def _unparsed_paper(client: Any, workspace_id: str) -> str:
     return str(done["document_id"])
 
 
-def test_an_import_starts_only_from_a_ready_question_paper_of_the_workspace(seed: Any) -> None:
+def test_an_import_starts_only_from_a_ready_document_of_the_workspace(seed: Any) -> None:
     alice = seed.client("m44a-start")
     ws = alice.create_workspace()
     other = alice.create_workspace()
@@ -75,12 +75,17 @@ def test_an_import_starts_only_from_a_ready_question_paper_of_the_workspace(seed
     seed.problem(alice.start_import(ws["id"], seed.new_id()), 422)
     # Still processing.
     seed.problem(alice.start_import(ws["id"], _unparsed_paper(alice, ws["id"])), 409, NOT_READY)
-    # A book is not a question paper.
+    assert alice.ok("GET", f"/workspaces/{ws['id']}/question-imports")["items"] == []
+    # Any ready document can be imported since UX6-UPLOAD-B (e.g. a book that prints questions).
     _, _, book = alice.upload_book(ws["id"])
     alice.wait_for_job(str(book["job_id"]))
-    seed.problem(alice.start_import(ws["id"], str(book["document_id"])), 422)
-
-    assert alice.ok("GET", f"/workspaces/{ws['id']}/question-imports")["items"] == []
+    run = alice.ok_response(
+        alice.start_import(ws["id"], str(book["document_id"])), "POST", "i", (202,)
+    )
+    runs = alice.ok("GET", f"/workspaces/{ws['id']}/question-imports")["items"]
+    assert [(r["id"], r["source_document_id"]) for r in runs] == [
+        (run["id"], str(book["document_id"]))
+    ]
 
 
 def test_an_idempotency_key_cannot_be_reused_for_another_paper(seed: Any) -> None:

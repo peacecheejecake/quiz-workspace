@@ -1,10 +1,26 @@
 // ImportJobProgress (docs/design-system.md component list): the step and progress of a question
-// PDF import — upload, PDF processing, question extraction. The step is text; the bar is an
-// accessible progressbar named "가져오기 진행률" (indeterminate when the job reports no progress).
-import { ProgressBar } from '@quiz/ui';
+// PDF import — upload, PDF processing, question extraction. The step is text and a step list
+// 업로드 → PDF 분석 → 문제 추출 (UX6-PROGRESS StepProgress) over one bar named "가져오기 진행률"
+// whose segment per step fills in turn, so it never drops back when the next step starts at 0 %
+// (indeterminate while the current step reports no progress).
+import { StepProgress } from '@quiz/ui';
 import styles from './question-import.module.css';
 
 export type ImportStep = 'uploading' | 'processing' | 'starting' | 'extracting';
+
+/** The visible steps; `starting` (the extraction being started) belongs to 문제 추출. */
+export const IMPORT_STEPS = [
+  { id: 'upload', label: '업로드' },
+  { id: 'process', label: 'PDF 분석' },
+  { id: 'extract', label: '문제 추출' },
+] as const;
+
+const STEP_INDEX: Readonly<Record<ImportStep, number>> = {
+  uploading: 0,
+  processing: 1,
+  starting: 2,
+  extracting: 2,
+};
 
 export const IMPORT_STEP_LABELS: Readonly<Record<ImportStep, string>> = {
   uploading: 'PDF 업로드 중',
@@ -35,11 +51,13 @@ export function ImportJobProgress({ step, value, filename }: ImportJobProgressPr
         {filename ? <span className={styles.progressFile}> · {filename}</span> : null}
         {indeterminate ? null : <span> · {value}%</span>}
       </p>
-      <ProgressBar
+      <StepProgress
         className={styles.progress}
         label="가져오기 진행률"
+        steps={IMPORT_STEPS}
+        current={STEP_INDEX[step]}
         value={value}
-        valueText={indeterminate ? label : `${label} ${value}%`}
+        currentText={label}
       />
       {step === 'uploading' ? null : (
         <p className={styles.progressHint}>{IMPORT_BACKGROUND_HINT}</p>

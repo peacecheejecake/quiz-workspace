@@ -159,10 +159,10 @@ function SourceList({
       <EmptyState
         headingLevel={3}
         title="변형할 확정 문제가 없습니다"
-        description="문제은행에서 문제를 등록하고 확정하면 여기에서 변형할 수 있습니다."
+        description="전체 문제에서 문제를 등록하고 확정하면 여기에서 변형할 수 있습니다."
         action={
           <Button asChild variant="primary">
-            <Link href={bank}>문제은행으로 이동</Link>
+            <Link href={bank}>전체 문제로 이동</Link>
           </Button>
         }
       />
@@ -174,7 +174,7 @@ function SourceList({
       {children(candidates.items)}
       {candidates.more ? (
         <p className={styles.muted}>
-          최근 문제만 보여 줍니다. 다른 문제는 <Link href={bank}>문제은행</Link>에서 찾아
+          최근 문제만 보여 줍니다. 다른 문제는 <Link href={bank}>전체 문제</Link>에서 찾아
           &lsquo;변형 출제&rsquo;를 누르거나 여러 문제를 골라 변형해 주세요.
         </p>
       ) : null}
