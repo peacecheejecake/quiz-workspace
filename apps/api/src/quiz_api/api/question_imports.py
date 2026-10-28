@@ -1,7 +1,9 @@
 """Question PDF import API (M4.4a, QIMPORT-01; docs/questions.md §6, architecture.md §6).
 
-    POST  /workspaces/{id}/question-imports      editor+; {document_id} of a ready
-                                                 `question_paper` document -> 202 ImportRun with
+    POST  /workspaces/{id}/question-imports      editor+; {document_id} of a ready document
+                                                 (any kind since UX6-UPLOAD-B: a question paper,
+                                                 a book with questions, or a book the user
+                                                 wants questions from) -> 202 ImportRun with
                                                  its `question.import` job; returns the existing
                                                  run of the paper's active revision (usually the
                                                  one the server started, QIMP-AUTO) instead of a
@@ -143,7 +145,8 @@ class ImportCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     document_id: uuid.UUID = Field(
-        description="A `question_paper` document of this workspace whose processing finished."
+        description="A document of this workspace whose processing finished: usually a "
+        "`question_paper` or a `mixed` PDF, but any kind may be imported (UX6-UPLOAD-B)."
     )
 
 
@@ -777,8 +780,9 @@ def create_question_import(
     publisher: PublisherDep,
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
-    """Start extracting draft questions from a question paper (QIMPORT-01-AC01). 409
-    `document-not-ready` while the paper is still processing (or failed).
+    """Start extracting draft questions from a PDF (QIMPORT-01-AC01): a question paper, a book
+    with questions, or any ready document (UX6-UPLOAD-B). 409 `document-not-ready` while it is
+    still processing (or failed).
 
     The server already starts the import of a question paper when its processing succeeds
     (QIMPORT-01-AC06), so this usually attaches: if the paper's active revision already has a
@@ -803,16 +807,6 @@ def create_question_import(
         # Same answer for a foreign and a missing document: no existence probing.
         raise RequestValidationError(
             [{"loc": ("body", "document_id"), "msg": "Unknown document.", "type": "value_error"}]
-        )
-    if paper.document_type != "question_paper":
-        raise RequestValidationError(
-            [
-                {
-                    "loc": ("body", "document_id"),
-                    "msg": "Only question paper documents can be imported.",
-                    "type": "value_error",
-                }
-            ]
         )
     if paper.status != "ready" or paper.active_revision_id is None:
         raise ProblemException(

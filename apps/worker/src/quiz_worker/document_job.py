@@ -25,6 +25,10 @@ Pipeline (docs/architecture.md §4 indexing flow), serialised per document by an
    For a `question_paper` the same transaction starts its question import once (run + first
    `question.import` job, QIMP-AUTO / QIMPORT-01-AC06); the job's result names it and the task
    publishes that job when the parse job is done (`follow_ups`);
+   An auto-classified upload (UX6-UPLOAD-B) is classified right after step 2 (before indexing,
+   so the Qdrant payload carries the decided `document_type`) and the classification is stored
+   in this transaction - once, for the first revision, never over a kind a person chose; a
+   `mixed` book also starts its import when the classifier was confident;
 5. mirror the switch in Qdrant (`activate_revision`) and garbage-collect older revisions except the
    newest other published one (kept for a quick rollback), then resolve the obligation. If this
    fails (or the worker dies right after step 4) the job still succeeds (`index_sync: pending`)
@@ -53,6 +57,7 @@ from typing import Any, Protocol
 
 from book_core.chunker import chunk_revision
 from book_core.contracts import DocumentRevision, SearchChunk
+from book_core.extractor import classify_content
 from book_core.indexing import IndexReport
 from book_core.parser import ParserError, PdfParser
 from book_core.structure import build_revision
@@ -68,6 +73,9 @@ from quiz_worker.adapters import (
 from quiz_worker.document_store import (
     INDEX_SYNC_JOB_TYPE,
     INDEX_SYNC_MAX_ATTEMPTS,
+    MIXED,
+    QUESTION_PAPER,
+    Classification,
     DocumentDeletedError,
     DocumentRow,
     DocumentStore,
@@ -92,6 +100,8 @@ JOB_TYPE = "document.parse"
 # Result keys (ids only) of the question import a question paper's publish started.
 IMPORT_RUN_KEY = "question_import_id"
 IMPORT_JOB_KEY = "question_import_job_id"
+# Result key of the kind an auto document was classified as (UX6-UPLOAD-B; no document text).
+KIND_KEY = "classified_kind"
 PDF_MAGIC = b"%PDF-"
 CANCELLED_ERROR = "cancelled"
 
@@ -244,13 +254,18 @@ def _pipeline(
         content = deps.documents.load_content(document, revision)
     ctx.check_cancelled()
 
+    classification = classify(content) if document.needs_classification(revision) else None
+    document_type = (
+        classification.document_type if classification is not None else document.document_type
+    )
+
     progress("chunking", 50)
     chunks = list(chunk_revision(content, document_title=document.title).chunks)
     if not any(c.level.value == "child" for c in chunks):
         raise NoIndexableTextError("the document has no text to index")
 
     progress("indexing", 60)
-    deps.index.index_revision(ws, doc_id, rev_id, chunks, document_type=document.document_type)
+    deps.index.index_revision(ws, doc_id, rev_id, chunks, document_type=document_type)
     ctx.check_cancelled()
 
     progress("publishing", 90)
@@ -264,15 +279,30 @@ def _pipeline(
         revision.id,
         content.content_hash,
         before_commit=ctx.check_cancelled,
+        classification=classification,
     )
     # From here on the job cannot fail: the Qdrant mirror is synced inline when possible, else
     # by the obligation (retried with backoff, published by the reconciler).
     synced = sync_index(deps, document, revision)
     result = _result(document, revision, chunks=len(chunks), synced=synced)
+    if classification is not None:
+        result[KIND_KEY] = classification.kind
     if outcome.import_run_id is not None and outcome.import_job_id is not None:
         result[IMPORT_RUN_KEY] = str(outcome.import_run_id)
         result[IMPORT_JOB_KEY] = str(outcome.import_job_id)
     return result
+
+
+def classify(content: DocumentRevision) -> Classification:
+    """The classifier's decision for an auto document (book_core `classify_content`): a question
+    paper always gets its import; a mixed book only when the classifier is confident."""
+    detection = classify_content(content.blocks)
+    return Classification(
+        kind=detection.kind,
+        detection=detection.model_dump(mode="json"),
+        auto_import=detection.kind == QUESTION_PAPER
+        or (detection.kind == MIXED and detection.confidence == "high"),
+    )
 
 
 def _prepare_parser(parser: PdfParser, progress: Callable[[str, int], None]) -> None:

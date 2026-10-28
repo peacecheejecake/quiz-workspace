@@ -23,6 +23,9 @@ from qdrant_client import QdrantClient
 from qdrant_client import models as qm
 from quiz_worker.adapters import FailureInjectingEmbedder
 from quiz_worker.document_store import (
+    MIXED,
+    QUESTION_PAPER,
+    Classification,
     ContentChangedError,
     DocumentBusyError,
     DocumentDeletedError,
@@ -66,6 +69,8 @@ class FakeDocumentStore:
     import_starts: dict[uuid.UUID, tuple[uuid.UUID, uuid.UUID, uuid.UUID | None]] = field(
         default_factory=dict
     )
+    # Classifications stored by a publish (UX6-UPLOAD-B): document -> detection numbers.
+    detections: dict[uuid.UUID, dict[str, Any]] = field(default_factory=dict)
     writes: int = 0
     busy: bool = False
     locked: set[uuid.UUID] = field(default_factory=set)
@@ -75,7 +80,12 @@ class FakeDocumentStore:
 
     # -- seeding -----------------------------------------------------------------------------
     def add_document(
-        self, data: bytes, *, document_type: str = "book", title: str = "Book"
+        self,
+        data: bytes,
+        *,
+        document_type: str = "book",
+        title: str = "Book",
+        type_source: str = "user",
     ) -> tuple[DocumentRow, RevisionRow]:
         workspace_id, document_id, revision_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
         key = (
@@ -92,6 +102,8 @@ class FakeDocumentStore:
             status="processing",
             active_revision_id=None,
             deleted=False,
+            type_source=type_source,
+            content_kind=None if type_source == "auto" else document_type,
         )
         revision = RevisionRow(revision_id, document_id, 1, None, "draft", None, None)
         self.documents[document_id] = document
@@ -188,6 +200,7 @@ class FakeDocumentStore:
         content_hash: str,
         *,
         before_commit: Callable[[], None],
+        classification: Classification | None = None,
     ) -> PublishOutcome:
         if not self.workspace_writable(workspace_id, user_id):
             raise WorkspaceUnavailableError("the workspace is no longer writable")
@@ -200,6 +213,21 @@ class FakeDocumentStore:
         before_commit()
         previous = document.active_revision_id
         self.revisions[revision_id] = replace(revision, status="published")
+        auto_import = False
+        # worker_classify_document: once, for a never-classified auto document's first revision.
+        if (
+            classification is not None
+            and document.type_source == "auto"
+            and document.content_kind is None
+            and revision.parent_revision_id is None
+        ):
+            document = replace(
+                document,
+                document_type=classification.document_type,
+                content_kind=classification.kind,
+            )
+            self.detections[document_id] = dict(classification.detection)
+            auto_import = classification.kind == MIXED and classification.auto_import
         self.documents[document_id] = replace(
             document, status="ready", active_revision_id=revision_id
         )
@@ -208,8 +236,10 @@ class FakeDocumentStore:
         self.sync_status[sync_id] = "queued"
         if self.on_sync_enqueued is not None:
             self.on_sync_enqueued(workspace_id, user_id, document_id, revision_id, sync_id)
-        # worker_start_question_import: once per question paper, for the job's user.
-        if document.document_type == "question_paper" and document_id not in self.import_starts:
+        # worker_start_question_import: once per question paper (or confident mixed book), for
+        # the job's user.
+        starts = document.document_type == QUESTION_PAPER or auto_import
+        if starts and document_id not in self.import_starts:
             self.import_starts[document_id] = (uuid.uuid4(), uuid.uuid4(), user_id)
             run_id, job_id, _ = self.import_starts[document_id]
             return PublishOutcome(
