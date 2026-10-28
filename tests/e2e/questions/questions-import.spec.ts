@@ -807,32 +807,60 @@ test(
 );
 
 /**
- * Clicks a checkbox in the page and returns how long until it shows `expected` (ms): the click's
- * synchronous handling plus the render it triggers, i.e. how long the screen does not respond.
+ * Clicks a checkbox in the page and returns how long until React commits `expected` (ms): the
+ * click's synchronous handling plus the render it triggers, i.e. how long the main thread is busy.
+ * A MutationObserver sees the commit itself, so the value is not rounded up to animation frames
+ * (headless WebKit on a loaded CI runner delivers requestAnimationFrame late). The page first
+ * settles for a frame so the previous click's layout and paint are not counted.
  */
 async function clickLatency(box: Locator, expected: 'true' | 'false'): Promise<number> {
   return box.evaluate(async (el, want) => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    let end = 0;
+    const committed = new Promise<void>((resolve) => {
+      const done = () => {
+        if (el.getAttribute('aria-checked') !== want) return false;
+        end ||= performance.now();
+        observer.disconnect();
+        resolve();
+        return true;
+      };
+      const observer = new MutationObserver(done);
+      observer.observe(el, { attributes: true, attributeFilter: ['aria-checked'] });
+      // Fallback if the element were replaced instead of updated.
+      const poll = () => done() || requestAnimationFrame(poll);
+      requestAnimationFrame(poll);
+    });
     const start = performance.now();
     (el as HTMLElement).click();
-    await new Promise<void>((resolve) => {
-      const tick = () =>
-        el.getAttribute('aria-checked') === want ? resolve() : requestAnimationFrame(tick);
-      tick();
-    });
-    return performance.now() - start;
+    await committed;
+    return end - start;
   }, expected);
 }
 
+const median = (xs: readonly number[]): number => {
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = s.length >> 1;
+  return s.length % 2 ? (s[mid] ?? NaN) : ((s[mid - 1] ?? NaN) + (s[mid] ?? NaN)) / 2;
+};
+
 /**
- * Click-to-checked budgets (QIMPORT-01-AC09). Re-rendering every draft on each click took ~200 ms
- * for one checkbox and for "전체 선택" alike at 512 drafts (local Chromium, UX6-SELECT); now one
- * checkbox is a few ms and "전체 선택" (320 checkboxes change) ~60 ms in Chromium, up to ~150 ms
- * in WebKit on a loaded machine. One checkbox must not depend on the list size; "전체 선택" must
- * not freeze the screen. The margins are for CI (one checkbox measured 56–66 ms in CI WebKit, where
- * the requestAnimationFrame wait alone is coarse).
+ * Click-to-commit checks (QIMPORT-01-AC09). Before UX6-SELECT every click re-rendered every
+ * draft, so at 512 drafts one checkbox cost as much as "전체 선택" (~170–200 ms each, local
+ * Chromium). Now one checkbox re-renders one row and "전체 선택" only the 320 checkboxes that
+ * change. Single wall-clock samples are noisy on shared CI runners, so each check uses the median
+ * of several toggles, and the regression itself — one checkbox costing like the whole list — is
+ * checked relative to "전체 선택" on the same page, which a slow or loaded machine scales alike.
+ * The absolute budgets only catch a frozen screen: locally one checkbox is ~3–5 ms and "전체 선택"
+ * ~40–60 ms in Chromium and WebKit, also with 6 parallel workers.
  */
-const ONE_BUDGET_MS = 100;
+const ONE_BUDGET_MS = 80;
 const ALL_BUDGET_MS = 400;
+/** One checkbox must cost at most this share of "전체 선택" (before the fix: ~1). */
+const ONE_TO_ALL_MAX_RATIO = 0.25;
+/** Below this, one checkbox is fast regardless of the ratio (both are then just noise). */
+const ONE_NOISE_FLOOR_MS = 8;
+const TOGGLES = 5;
 /** Copies of the paper's 8 drafts: 8 × 64 = 512 drafts, 5 × 64 = 320 in "전체 선택". */
 const COPIES = 63;
 
@@ -862,31 +890,48 @@ test(
     };
     page.on('request', onRequest);
 
-    const selectAllMs = await clickLatency(all, 'true');
+    const allMs = [await clickLatency(all, 'true')];
     await expect(importUi.publish(page)).toContainText(`(${registrable})`);
     await expect(
       importUi.drafts(page).getByRole('checkbox', { name: /번 문제 선택/, checked: true }),
     ).toHaveCount(registrable);
     const q1 = importUi.select(importUi.draft(page, Q(1).stem).first());
-    const oneOffMs = await clickLatency(q1, 'false');
-    await expect(all).toHaveAttribute('aria-checked', 'mixed');
-    await expect(importUi.publish(page)).toContainText(`(${registrable - 1})`);
-    const oneOnMs = await clickLatency(q1, 'true');
-    const clearMs = await clickLatency(all, 'false');
-    await expect(importUi.publish(page)).toContainText('(0)');
-    const againMs = await clickLatency(all, 'true');
+    const oneMs: number[] = [];
+    for (let i = 0; i < TOGGLES; i++) {
+      oneMs.push(await clickLatency(q1, 'false'));
+      if (i === 0) {
+        await expect(all).toHaveAttribute('aria-checked', 'mixed');
+        await expect(importUi.publish(page)).toContainText(`(${registrable - 1})`);
+      }
+      oneMs.push(await clickLatency(q1, 'true'));
+    }
+    await expect(importUi.publish(page)).toContainText(`(${registrable})`);
+    for (let i = 0; i < TOGGLES - 1; i++) {
+      allMs.push(await clickLatency(all, 'false'));
+      if (i === 0) await expect(importUi.publish(page)).toContainText('(0)');
+      allMs.push(await clickLatency(all, 'true'));
+    }
     await expect(importUi.publish(page)).toContainText(`(${registrable})`);
 
+    const one = median(oneMs);
+    const allMedian = median(allMs);
     test.info().annotations.push({
       type: 'selection latency (ms)',
-      description: JSON.stringify({ selectAllMs, oneOffMs, oneOnMs, clearMs, againMs }),
+      description: JSON.stringify({ one, all: allMedian, oneMs, allMs }),
     });
-    for (const [what, ms] of Object.entries({ oneOffMs, oneOnMs })) {
-      expect(ms, `${what} responds within ${ONE_BUDGET_MS} ms`).toBeLessThan(ONE_BUDGET_MS);
-    }
-    for (const [what, ms] of Object.entries({ selectAllMs, clearMs, againMs })) {
-      expect(ms, `${what} responds within ${ALL_BUDGET_MS} ms`).toBeLessThan(ALL_BUDGET_MS);
-    }
+    expect
+      .soft(one, `one checkbox (median) within ${ONE_BUDGET_MS} ms`)
+      .toBeLessThan(ONE_BUDGET_MS);
+    expect
+      .soft(allMedian, `전체 선택 (median) within ${ALL_BUDGET_MS} ms`)
+      .toBeLessThan(ALL_BUDGET_MS);
+    // Pre-fix, one checkbox cost about as much as 전체 선택 (it re-rendered every row).
+    expect
+      .soft(
+        one <= ONE_NOISE_FLOOR_MS || one < allMedian * ONE_TO_ALL_MAX_RATIO,
+        `one checkbox (median ${one} ms) must not re-render the list like 전체 선택 (median ${allMedian} ms)`,
+      )
+      .toBe(true);
     page.off('request', onRequest);
     expect(sent, 'no request while selecting').toEqual([]);
     expect((await listDrafts(owner, run.id)).every((d) => d.review_status === 'pending')).toBe(
