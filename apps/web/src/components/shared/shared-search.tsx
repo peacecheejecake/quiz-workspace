@@ -1,6 +1,6 @@
 'use client';
 
-// WS-VIEW-01 source search: the member SEARCH-01 result list and excerpt panel over the shared
+// WS-VIEW-01 본문 (source) search: the member SEARCH-01 result list and excerpt panel over the shared
 // workspace's published documents (the API scopes the search to this link's workspace). The
 // excerpt's "PDF에서 보기" opens the hit inside the share view at its page and block.
 import { Button, Input } from '@quiz/ui';
@@ -75,7 +75,7 @@ export function SharedSearch({ shareId, client, onUnavailable }: SharedSearchPro
   return (
     <section className={styles.card} aria-labelledby="shared-search-title">
       <h2 id="shared-search-title" className={styles.cardTitle}>
-        원문 검색
+        본문 검색
       </h2>
       <form role="search" className={styles.searchForm} onSubmit={(e) => void onSubmit(e)}>
         <Input

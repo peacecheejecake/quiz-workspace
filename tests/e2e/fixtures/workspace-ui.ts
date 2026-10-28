@@ -64,7 +64,7 @@ export function documentsPath(workspaceId: string): string {
   return homePath(workspaceId, 'panel=documents');
 }
 
-/** The home with the unified search limited to 원문 (`/search` redirects here). */
+/** The home with the unified search limited to 본문 (`/search` redirects here). */
 export function searchPath(workspaceId: string): string {
   return homePath(workspaceId, 'scope=content');
 }

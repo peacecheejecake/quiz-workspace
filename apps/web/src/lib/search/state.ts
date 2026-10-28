@@ -104,7 +104,7 @@ export const pageLabel = (page: number) => `${page}쪽`;
 
 export const MODE_LABELS: Readonly<Record<SearchMode, { label: string; description: string }>> = {
   keyword: { label: '키워드', description: '입력한 단어가 그대로 들어 있는 문단 (BM25)' },
-  semantic: { label: '의미', description: '뜻이 비슷한 문단, 다른 언어로 쓴 원문 포함' },
+  semantic: { label: '의미', description: '뜻이 비슷한 문단, 다른 언어로 쓴 본문 포함' },
   hybrid: { label: '하이브리드', description: '키워드와 의미 검색을 함께 사용 (RRF)' },
 };
 
@@ -118,7 +118,7 @@ const WARNING_MESSAGES: readonly [RegExp, string][] = [
     /^some selected chapters no longer exist/i,
     '선택한 장 중 일부가 현재 발행본에 없습니다. 장 필터를 다시 선택해 주세요.',
   ],
-  [/^filters exclude every chunk/i, '필터 조건에 맞는 원문이 없습니다. 필터를 줄여 보세요.'],
+  [/^filters exclude every chunk/i, '필터 조건에 맞는 본문이 없습니다. 필터를 줄여 보세요.'],
   [
     /^no keyword matches/i,
     '입력한 단어가 그대로 들어 있는 문단이 없습니다. 의미 검색이나 하이브리드 검색으로 바꿔 보세요.',

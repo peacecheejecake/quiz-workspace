@@ -15,7 +15,7 @@
 | WS-01 | Workspace 목록 | `/workspaces` | [workspaces.md](workspaces.md) |
 | DOC-01 | 문서 관리 Floating Dialog | `/workspaces/:workspaceId?panel=documents` | [documents-library.md](documents-library.md) |
 | DOC-02 | PDF 열람·원문 교정 | `/workspaces/:workspaceId/documents/:documentId` | [documents-editor.md](documents-editor.md) |
-| SEARCH-01 | 통합 검색 (문제·원문) | `/workspaces/:workspaceId?q=:query` | [search.md](search.md) |
+| SEARCH-01 | 통합 검색 (문제·본문) | `/workspaces/:workspaceId?q=:query` | [search.md](search.md) |
 | QOV-01 | Workspace 홈 (문제 Heatmap) | `/workspaces/:workspaceId` | [questions-overview.md](questions-overview.md) |
 | QBANK-01 | 전체 문제 목록·편집 | `/workspaces/:workspaceId/questions/bank` | [questions-bank.md](questions-bank.md) |
 | QPLAY-01 | 문제 풀이 Floating Side Panel | `/workspaces/:workspaceId?question=:questionId` | [questions-practice.md](questions-practice.md) |

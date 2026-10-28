@@ -36,7 +36,7 @@ export const SCREENS = [
   },
   {
     id: 'SEARCH-01',
-    name: '통합 검색 (문제·원문)',
+    name: '통합 검색 (문제·본문)',
     path: '/workspaces/[workspaceId]',
     query: { param: 'q' },
   },

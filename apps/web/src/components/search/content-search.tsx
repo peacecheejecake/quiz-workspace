@@ -1,6 +1,6 @@
 'use client';
 
-// SEARCH-01 content (원문) search of the workspace home's unified search (docs/screens/search.md,
+// SEARCH-01 content (본문) search of the workspace home's unified search (docs/screens/search.md,
 // UX3c). `useContentSearch` holds the options (mode, document/chapter filters, question papers),
 // runs the query through the same-origin relay — FastAPI enforces the workspace and the
 // published-revision scope — and mirrors the submitted search into the home URL next to its other

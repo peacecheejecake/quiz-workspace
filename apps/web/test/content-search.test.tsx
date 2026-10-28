@@ -398,7 +398,7 @@ describe('content search (unified search, scope 내용)', () => {
     expect(item).toHaveTextContent('4쪽');
     await user.click(within(item).getByRole('button', { name: 'Water Book' }));
 
-    const panel = await screen.findByRole('dialog', { name: '원문 발췌' });
+    const panel = await screen.findByRole('dialog', { name: '본문 발췌' });
     expect(panel).not.toHaveAttribute('aria-modal');
     const link = within(panel).getByRole('link', { name: 'PDF에서 보기' });
     await waitFor(() =>
@@ -412,7 +412,7 @@ describe('content search (unified search, scope 내용)', () => {
 
     // The background stays usable: focusing the search box keeps the panel open.
     await user.click(screen.getByRole('searchbox', { name: /검색/ }));
-    expect(screen.getByRole('dialog', { name: '원문 발췌' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: '본문 발췌' })).toBeVisible();
   });
 
   it('clears a bookmarked chapter of an older revision before searching, in the URL too', async () => {
