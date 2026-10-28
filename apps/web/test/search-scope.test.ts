@@ -1,7 +1,9 @@
 // SEARCH-01-AC07 (UX6): the 문제/본문 scope checkboxes, whether each side has content, and when the
 // search button is disabled (with which message) or searches one side only.
 import { describe, expect, it } from 'vitest';
+import { parseSearchParams, searchParamsFor } from '../src/lib/search/state';
 import {
+  addressBarContentKey,
   hasSearchableBody,
   SEARCH_BLOCK_MESSAGES,
   SEARCH_NOTICE_MESSAGES,
@@ -93,5 +95,20 @@ describe('hasSearchableBody', () => {
 
   it('never blocks on a list that failed to load', () => {
     expect(hasSearchableBody([], false, true)).toBe(true);
+  });
+});
+
+describe('addressBarContentKey', () => {
+  it('searches question papers exactly when 문제 is checked, whatever the URL says', () => {
+    // Both checked, the first search suppressed (no body yet): `papers=1` was never written.
+    const url = { q: 'chlorine', scope: undefined };
+    // The pre-fix key read the stale flag and dropped question papers.
+    expect(searchParamsFor(parseSearchParams(url))).toBe('q=chlorine');
+    expect(addressBarContentKey(url, true)).toBe('q=chlorine&papers=1');
+    expect(addressBarContentKey({ q: 'chlorine', papers: '1' }, false)).toBe('q=chlorine');
+  });
+
+  it('is empty without a query', () => {
+    expect(addressBarContentKey({ papers: '1' }, true)).toBe('');
   });
 });

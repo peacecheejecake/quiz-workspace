@@ -2,6 +2,7 @@
 // checkboxes 문제 (the heatmap) and 본문 (the content search API), whether each has anything to
 // search in this workspace, and what the search button does about it. Pure, so the rules are
 // unit-tested without the page.
+import { parseSearchParams, searchParamsFor } from './state';
 
 export interface ScopeFlags {
   readonly questions: boolean;
@@ -78,4 +79,19 @@ export function hasSearchableBody(
       d.active_revision_id != null &&
       (d.document_type !== 'question_paper' || includeQuestionPapers),
   );
+}
+
+/**
+ * The address bar's content search as a stable key ('' = none), with question papers following
+ * the current 문제 checkbox (UX4) rather than the URL's `papers` flag: that flag is only written
+ * when a body search runs, so a search first suppressed for lack of body (UX6) and later run
+ * because a document got published must not inherit a stale or missing value.
+ */
+export function addressBarContentKey(
+  params: Readonly<Record<string, string | string[] | undefined>>,
+  questionsChecked: boolean,
+): string {
+  const q = parseSearchParams(params);
+  if (!q.query) return '';
+  return searchParamsFor({ ...q, includeQuestionPapers: questionsChecked });
 }

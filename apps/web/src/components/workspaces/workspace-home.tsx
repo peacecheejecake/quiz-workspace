@@ -66,8 +66,8 @@ import type { PlacedQuestion } from '@/lib/questions/overview-placement';
 import type { QuestionFailureKind } from '@/lib/questions/problems';
 import { bankCreatePath } from '@/lib/questions/filters';
 import type { SearchQuery } from '@/lib/search/client';
-import { hasSearchableBody, searchReadiness } from '@/lib/search/scope';
-import { MAX_QUERY_CHARS, parseSearchParams, searchParamsFor } from '@/lib/search/state';
+import { addressBarContentKey, hasSearchableBody, searchReadiness } from '@/lib/search/scope';
+import { MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
 import {
   parsePanels,
   parseScope,
@@ -222,10 +222,11 @@ export function WorkspaceHome({
     setSeenQ(urlQ);
     setDraft(urlQ);
   }
-  const contentKey =
-    urlQ && readiness.effective.body
-      ? searchParamsFor(parseSearchParams(Object.fromEntries(searchParams)))
-      : '';
+  // Question papers follow the 문제 checkbox, not the URL's `papers` flag (unwritten while a
+  // search had no body to run on, UX6).
+  const contentKey = readiness.effective.body
+    ? addressBarContentKey(Object.fromEntries(searchParams), scopeIncludesQuestions(scope))
+    : '';
   const syncedContentKey = useRef(contentKey);
   const syncContent = content.sync;
   useEffect(() => {
