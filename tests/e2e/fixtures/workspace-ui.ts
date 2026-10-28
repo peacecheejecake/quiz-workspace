@@ -9,9 +9,9 @@
 //              confirmation in an alertdialog. Unknown/deleted/foreign workspace routes render the
 //              app's not-found page with HTTP 404.
 //   Home       (UX3c) `/workspaces/:id`: hidden h1 (workspace name), header with the unified
-//              search (searchbox "검색어", icon button "검색", text button "검색 옵션" →
-//              popover with checkboxes "문제"/"내용" and one list of options that follows
-//              them), buttons "문서 n", "문제" (menu button, UX4: menuitems "전체 문제" (a link
+//              search (searchbox "검색어", icon button "검색", under it checkboxes "문제"/"본문"
+//              each followed by a "설정" text button named "문제 설정"/"본문 설정" → popover
+//              "문제 검색 설정"/"본문 검색 설정", and a status message, UX6), buttons "문서 n", "문제" (menu button, UX4: menuitems "전체 문제" (a link
 //              to the bank that replaced the "문제은행" button, UX6-PROGRESS), "PDF 관리",
 //              "직접 추가", "변형 출제"; the last two for editors), then
 //              icon buttons "이력" and "공유하기" (owner); dialogs are non-modal
@@ -26,9 +26,9 @@
 //   DOC-02     outline tree "목차" (treeitems), PDF viewer region with a "현재 페이지" field and a
 //              labelled source highlight, text editor region "원문" whose current block carries
 //              aria-current="true"; block "편집"/"저장", revision status "초안"/"발행됨", "발행".
-//   SEARCH-01  the home's unified search: searchbox "검색어"; in the "검색 옵션" popover (portalled
-//              to <body>) radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes "문서"/"장";
-//              region "원문 검색 결과" with list "검색 결과" whose items quote the source text in a
+//   SEARCH-01  the home's unified search: searchbox "검색어"; in the "본문 검색 설정" popover
+//              (portalled to <body>) radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes
+//              "문서"/"장"; in "문제 검색 설정" comboboxes "챕터"/"유형"; region "본문 검색 결과" with list "검색 결과" whose items quote the source text in a
 //              <blockquote>; excerpt in a non-modal FloatingSidePanel (role=dialog without
 //              aria-modal) with "PDF에서 보기".
 import { expect, type Locator, type Page } from '@playwright/test';
@@ -81,18 +81,32 @@ export const homeUi = {
   questionPdfsDialog: (page: Page) => homeUi.dialog(page, /^(문제 pdf 관리|question pdfs?)$/i),
   generateDialog: (page: Page) => homeUi.dialog(page, /^(문제 생성|generate questions?)$/i),
   shareDialog: (page: Page) => homeUi.dialog(page, /^(링크 공유|share link)$/i),
-  searchOptionsButton: (page: Page) =>
-    main(page).getByRole('button', { name: /^(검색 옵션|search options)$/i }),
-  searchOptions: (page: Page) =>
-    page.getByRole('dialog', { name: /^(검색 옵션|search options)$/i }),
+  /** The unified search's scope checkboxes, right under the search box (UX6). */
   scopeQuestions: (page: Page) =>
-    homeUi.searchOptions(page).getByRole('checkbox', { name: /^(문제|questions)$/i }),
+    homeUi.header(page).getByRole('checkbox', { name: /^(문제|questions)$/i }),
   scopeContent: (page: Page) =>
-    homeUi.searchOptions(page).getByRole('checkbox', { name: /^(내용|content)$/i }),
+    homeUi.header(page).getByRole('checkbox', { name: /^(본문|body|content)$/i }),
+  /** The "설정" text button next to a scope checkbox; it opens that scope's settings popover. */
+  scopeSettingsButton: (page: Page, scope: SearchScopeName) =>
+    homeUi.header(page).getByRole('button', { name: SCOPE_SETTINGS_BUTTONS[scope] }),
+  scopeSettings: (page: Page, scope: SearchScopeName) =>
+    page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
+  /** The status message under the scope checkboxes (why the search button is disabled). */
+  searchMessage: (page: Page) => homeUi.header(page).getByRole('status'),
   statusFilterToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(상태 필터|status filter)$/i }),
   statusFilters: (page: Page) =>
     main(page).getByRole('group', { name: /^(상태 필터|status filter)$/i }),
+};
+
+export type SearchScopeName = 'questions' | 'body';
+const SCOPE_SETTINGS_BUTTONS: Readonly<Record<SearchScopeName, RegExp>> = {
+  questions: /^(문제 설정|question settings)$/i,
+  body: /^(본문 설정|body settings|content settings)$/i,
+};
+const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
+  questions: /^(문제 검색 설정|question search settings)$/i,
+  body: /^(본문 검색 설정|body search settings|content search settings)$/i,
 };
 
 type QuestionMenuItem = 'bank' | 'pdfs' | 'create' | 'generate';
@@ -109,20 +123,32 @@ export async function chooseQuestionMenu(page: Page, item: QuestionMenuItem): Pr
   await homeUi.questionMenuItem(page, item).click();
 }
 
-/** Opens the "검색 옵션" popover (no-op when it is open). */
-export async function openSearchOptions(page: Page): Promise<Locator> {
-  const button = homeUi.searchOptionsButton(page);
+/** Opens a scope's settings popover ("본문 설정" by default; no-op when it is open). */
+export async function openSearchOptions(
+  page: Page,
+  scope: SearchScopeName = 'body',
+): Promise<Locator> {
+  const button = homeUi.scopeSettingsButton(page, scope);
   if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click();
-  const popover = homeUi.searchOptions(page);
+  const popover = homeUi.scopeSettings(page, scope);
   await expect(popover).toBeVisible();
   return popover;
 }
 
-/** Closes the "검색 옵션" popover when it is open. */
-export async function closeSearchOptions(page: Page): Promise<void> {
-  if ((await homeUi.searchOptionsButton(page).getAttribute('aria-expanded')) !== 'true') return;
-  await page.keyboard.press('Escape');
-  await expect(homeUi.searchOptions(page)).toBeHidden();
+/** Closes a scope's settings popover when it is open. */
+export async function closeSearchOptions(
+  page: Page,
+  scope: SearchScopeName = 'body',
+): Promise<void> {
+  const button = homeUi.scopeSettingsButton(page, scope);
+  if ((await button.getAttribute('aria-expanded')) !== 'true') return;
+  const popover = homeUi.scopeSettings(page, scope);
+  // Escape closes the innermost layer first: a search-mode description tooltip (shown on hover or
+  // keyboard focus) takes one press before the popover does.
+  await expect(async () => {
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeHidden({ timeout: 1_000 });
+  }).toPass();
 }
 
 export const wsUi = {
@@ -220,7 +246,7 @@ export const INDEX_FAILED = /색인.*실패|indexing failed|reindex(ing)? failed
 export const searchUi = {
   box: (page: Page) => main(page).getByRole('searchbox', { name: /검색|search/i }),
   submit: (page: Page) => main(page).getByRole('button', { name: /^(검색|search)$/i }),
-  /** Inside the "검색 옵션" popover (open it first: openSearchOptions). */
+  /** Inside the "본문 검색 설정" popover (open it first: openSearchOptions). */
   modeGroup: (page: Page) =>
     page.getByRole('radiogroup', { name: /검색 (방식|모드)|search mode/i }),
   mode: (page: Page, mode: 'keyword' | 'semantic' | 'hybrid') =>
@@ -235,7 +261,7 @@ export const searchUi = {
   /** The document-section filter (the heatmap's question filter is "챕터"). */
   chapterFilter: (page: Page) => page.getByRole('combobox', { name: /^(장|section)$/i }),
   resultsRegion: (page: Page) =>
-    main(page).getByRole('region', { name: /원문 검색 결과|content results/i }),
+    main(page).getByRole('region', { name: /본문 검색 결과|content results/i }),
   closeResults: (page: Page) =>
     main(page).getByRole('button', { name: /검색 결과 닫기|close results/i }),
   results: (page: Page) => main(page).getByRole('list', { name: /검색 결과|search results/i }),
@@ -260,7 +286,7 @@ export function pageLabel(n: number): RegExp {
   );
 }
 
-/** Runs a search through the UI: mode first (search options), then query + Enter. */
+/** Runs a search through the UI: mode first ("본문 설정"), then query + Enter. */
 export async function runSearch(
   page: Page,
   query: string,

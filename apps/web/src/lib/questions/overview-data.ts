@@ -35,6 +35,11 @@ export interface OverviewData {
    * heatmap) when the filtered list does not contain it, so the panel opens on reload/share.
    */
   readonly requested: PlacedQuestion | null;
+  /**
+   * Whether the unfiltered heatmap has any question (the unified search's 문제 scope has
+   * something to search, SEARCH-01 UX6); null when that is unknown (a read failed).
+   */
+  readonly hasQuestions: boolean | null;
 }
 
 const EMPTY: QuestionOverview = {
@@ -101,5 +106,7 @@ export async function loadOverview(
     const all = filtered ? unfiltered?.data : null;
     requested = all ? findPlaced(all, questionId) : null;
   }
-  return { overview, chapterChoices: choices, failure, requested };
+  const unfilteredOverview = filtered ? unfiltered?.data : result?.data;
+  const hasQuestions = unfilteredOverview ? unfilteredOverview.counts.total > 0 : null;
+  return { overview, chapterChoices: choices, failure, requested, hasQuestions };
 }

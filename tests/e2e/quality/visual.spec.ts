@@ -136,8 +136,8 @@ test(
     await expect(overviewUi.dots(page)).toHaveCount(24);
     await page.mouse.move(0, 0);
     await snap(page, 'questions-overview');
-    // UX3c: the unified search's options popover over the home.
-    await openSearchOptions(page);
+    // UX6: the unified search's 본문 settings popover over the home.
+    await openSearchOptions(page, 'body');
     await page.mouse.move(0, 0);
     await snap(page, 'search-options');
     await page.keyboard.press('Escape');

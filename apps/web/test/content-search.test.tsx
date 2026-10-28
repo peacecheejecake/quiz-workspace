@@ -201,7 +201,7 @@ describe('content search (unified search, scope 내용)', () => {
     expect(await screen.findByRole('heading', { name: '검색 결과가 없습니다' })).toBeVisible();
     expect(screen.getByText(/의미 검색이나 하이브리드/)).toBeVisible();
     expect(screen.queryByRole('list', { name: '검색 결과' })).toBeNull();
-    expect(screen.getByRole('heading', { name: '원문 검색 결과' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: '본문 검색 결과' })).toBeVisible();
     // Merged into the home URL: the open dialog stays.
     expect(window.location.search).toBe('?panel=history&q=zzz&mode=keyword');
   });
@@ -560,7 +560,7 @@ describe('closing the content results', () => {
     await submit(user, 'water');
     expect(await screen.findByRole('list', { name: '검색 결과' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: '검색 결과 닫기' }));
-    expect(screen.queryByRole('heading', { name: '원문 검색 결과' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: '본문 검색 결과' })).toBeNull();
     expect(screen.queryByRole('list', { name: '검색 결과' })).toBeNull();
   });
 });
@@ -605,7 +605,7 @@ describe('following the address bar (browser Back/Forward)', () => {
     );
     await user.click(screen.getByRole('button', { name: '주소 따라가기' }));
     await waitFor(() =>
-      expect(screen.queryByRole('heading', { name: '원문 검색 결과' })).toBeNull(),
+      expect(screen.queryByRole('heading', { name: '본문 검색 결과' })).toBeNull(),
     );
   });
 });
