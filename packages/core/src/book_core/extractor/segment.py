@@ -697,14 +697,10 @@ def segment_chapters(blocks: Sequence[Block]) -> Segmentation:
     for chapter, (start, end) in enumerate(zip(starts, [*starts[1:], len(blocks)], strict=True)):
         part = blocks[start:end]
         seg = segment(part)
-        if in_key and not _has_own_questions(seg, part):
+        if in_key and _continues_key(seg, part):
             # An answer section with chapter subheadings (``정답``, ``제1장``, ``1. ③`` ...)
-            # goes on through the split. A chapter that asks anything itself, or prints its own
-            # answer-key heading, is never swallowed (a lost question cannot be recovered in
-            # review, a missing answer can); nor is one whose lines are not mostly answers.
-            as_key = segment(part, in_answer_key=True)
-            if _reads_as_key(as_key):
-                seg = as_key
+            # goes on through the split (``_continues_key``).
+            seg = segment(part, in_answer_key=True)
         in_key = seg.ended_in_answer_key
         numbering = _chapter_numbering(part[0])
         if numbering is not None:
@@ -727,26 +723,50 @@ def segment_chapters(blocks: Sequence[Block]) -> Segmentation:
 _BLANK = re.compile(r"_{3,}|\(\s*\)")
 
 
-def _has_own_questions(seg: Segmentation, blocks: Sequence[Block]) -> bool:
-    """Read on its own, the chapter has a question that asks something (two or more options, a
-    question cue, an answer blank ``( )`` / ``____``) or prints its own answer-key heading. A
-    packed key line read as a question (``1. ③ 2. ① 3. ②`` -> stem ``③ 2.``, options ``①``
-    ``②``) is an answer line (``is_answer_line``), never a question."""
-    if any(
-        not is_answer_line(q.stem_lines[0].text)
-        and (len(q.options) >= 2 or _QUESTION_CUE.search(q.stem) or _BLANK.search(q.stem))
-        for q in seg.questions
-    ):
-        return True
-    return any(_ANSWER_KEY_HEADING.match(line) for _, _, lines in _lines(blocks) for line in lines)
+def _only_answer_lines(blocks: Sequence[Block]) -> bool:
+    """Every printed line is an answer line (``is_answer_line``) or a heading that does not open
+    a question (``제1장``, ``Chapter 2``); every table reads as answer entries; nothing else
+    (images, body text, options, stems)."""
+    for index, block in enumerate(blocks):
+        if block.type is BlockType.TABLE:
+            if not _table_answer_entries(block, index)[0]:
+                return False
+            continue
+        if block.type not in (BlockType.TEXT, BlockType.HEADING, BlockType.FORMULA):
+            return False
+        for line in (ln.strip() for ln in block.text.split("\n")):
+            if not line or is_answer_line(line):
+                continue
+            if block.type is BlockType.HEADING and _question_start(line, block) is None:
+                continue
+            return False
+    return True
 
 
-def _reads_as_key(seg: Segmentation) -> bool:
-    """Whether blocks read as answer-key lines are mostly answers (``1. ③``), not body text,
-    options or questions."""
-    answers = [e for e in seg.answer_key if _looks_like_answer(e.text)]
-    other = seg.unparsed_answer_lines + len(seg.answer_key) - len(answers)
-    return bool(answers) and len(answers) >= other
+def _asks_on_its_own(question: RawQuestion) -> bool:
+    """Independent evidence of a question anywhere in its span: two or more options, a question
+    cue (``?``, ``시오``), an answer blank, unless every line it owns is an answer line (a packed
+    key line read as a stem with inline options)."""
+    lines = [*question.stem_lines, *(ln for o in question.options for ln in o.lines)]
+    if all(is_answer_line(line.text) for line in lines):
+        return False
+    return (
+        len(question.options) >= 2
+        or _QUESTION_CUE.search(question.stem) is not None
+        or _BLANK.search(question.stem) is not None
+    )
+
+
+def _continues_key(seg: Segmentation, blocks: Sequence[Block]) -> bool:
+    """A chapter after an answer key is more of that key only when it is made of answer lines and
+    headings alone and, read on its own, holds no question with independent evidence and no
+    answer-key heading of its own. Anything else keeps its own reading: a lost question cannot be
+    recovered in review, a missing answer can."""
+    if any(_asks_on_its_own(q) for q in seg.questions):
+        return False
+    if any(_ANSWER_KEY_HEADING.match(line) for _, _, lines in _lines(blocks) for line in lines):
+        return False
+    return _only_answer_lines(blocks)
 
 
 def _asks(question: RawQuestion) -> bool:

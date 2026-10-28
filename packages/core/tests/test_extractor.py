@@ -1441,7 +1441,7 @@ def _answer(draft: QuestionDraft) -> tuple[str, ...] | None:
 
 
 _CHAPTER_MATRIX: list[
-    tuple[str, list[list[str]], str | None, list[tuple[str, tuple[str, ...]]], int]
+    tuple[str, list[list[str]], str | None, list[tuple[str, tuple[str, ...] | None]], int]
 ]
 _CHAPTER_MATRIX = [
     (
@@ -1527,7 +1527,7 @@ def _mcqs(count: int) -> list[str]:
     return lines
 
 
-def _answered(count: int, answers: str) -> list[tuple[str, tuple[str, ...]]]:
+def _answered(count: int, answers: str) -> list[tuple[str, tuple[str, ...] | None]]:
     return [
         (f"{n}번 문제: 옳은 것은?", (f"opt-{a}",))
         for n, a in zip(range(1, count + 1), answers, strict=True)
@@ -1569,6 +1569,36 @@ _CHAPTER_MATRIX += [
 ]
 
 
+_CHAPTER_MATRIX += [
+    (
+        "i: a question whose first line is only a label, numbered options, after a chapter key",
+        [
+            ["# 제1장 덧셈", "1. 1 + 1 = ( )", "정답", "1. 2"],
+            [
+                "# 제2장 설명",
+                "1. (가)",
+                "에 대한 설명으로 옳은 것은?",
+                "1) 첫 설명",
+                "2) 둘째 설명",
+            ],
+        ],
+        None,
+        [("1 + 1 = ( )", ("2",)), ("(가) 에 대한 설명으로 옳은 것은?", None)],
+        0,
+    ),
+    (
+        "j: the same with circled options",
+        [
+            ["# 제1장 덧셈", "1. 1 + 1 = ( )", "정답", "1. 2"],
+            ["# 제2장 설명", "1. (가)", "에 대한 설명으로 옳은 것은?", "① 첫 설명", "② 둘째 설명"],
+        ],
+        None,
+        [("1 + 1 = ( )", ("2",)), ("(가) 에 대한 설명으로 옳은 것은?", None)],
+        0,
+    ),
+]
+
+
 @pytest.mark.parametrize(
     ("pages", "keep", "expected", "unparsed"),
     [pytest.param(p, k, e, u, id=name) for name, p, k, e, u in _CHAPTER_MATRIX],
@@ -1576,7 +1606,7 @@ _CHAPTER_MATRIX += [
 def test_chapter_segmentation_matrix(
     pages: list[list[str]],
     keep: str | None,
-    expected: list[tuple[str, tuple[str, ...]]],
+    expected: list[tuple[str, tuple[str, ...] | None]],
     unparsed: int,
 ) -> None:
     result = _extract(*pages)
