@@ -15,6 +15,7 @@ import {
   bankUi,
   book,
   chooseFilter,
+  chooseQuestionMenu,
   createQuestion,
   expect,
   fillMcq,
@@ -403,7 +404,7 @@ test(
 
     await signInAs(page, owner.user);
     await page.goto(home);
-    await homeUi.bankLink(page).click();
+    await chooseQuestionMenu(page, 'bank');
     await expect(page).toHaveURL((url) => url.pathname === bankPath(ws.id));
     await expect(bankUi.heading(page)).toHaveText(/문제은행|question bank/i);
     await expectSubPageNav(/^(문제은행|question bank)$/i);
@@ -411,7 +412,7 @@ test(
     await trail(/./).nav.getByRole('link', { name: ws.name, exact: true }).click();
     await expect(page).toHaveURL((url) => url.pathname === home);
     await expect(homeUi.header(page)).toBeVisible();
-    await homeUi.bankLink(page).click();
+    await chooseQuestionMenu(page, 'bank');
     await expect(page).toHaveURL((url) => url.pathname === bankPath(ws.id));
     await main(page)
       .getByRole('link', { name: /workspace 홈|back/i })

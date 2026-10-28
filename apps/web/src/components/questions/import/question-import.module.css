@@ -79,7 +79,7 @@
   font-size: var(--font-size-label);
 }
 
-/* Sizing only: the bar itself is @quiz/ui ProgressBar. */
+/* Sizing only: the bars are @quiz/ui ProgressBar / StepProgress (UX6-PROGRESS). */
 .progress {
   max-width: 32rem;
 }

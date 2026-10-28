@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-// UX4 (2026-10-21): the home header's `문제` menu (PDF 관리 / 직접 추가 / 변형 출제, keyboard
-// reachable, authoring items for editors only), the bank's one-shot `?create=1` that opens the
+// UX4 (2026-10-21): the home header's `문제` menu (전체 문제 — UX6-PROGRESS, the bank link that
+// replaced the 문제은행 button — / PDF 관리 / 직접 추가 / 변형 출제, keyboard reachable, authoring
+// items for editors only), the bank's one-shot `?create=1` that opens the
 // 문제 등록 editor (the menu's 직접 추가), and QBANK-01-AC06: the bank's collapsed search/filters,
 // its empty-state-only actions and "PDF 가져오기" opening the shared 문제 PDF 관리 dialog.
 import './dom-setup';
@@ -19,7 +20,7 @@ import type { Question } from '../src/lib/questions/form';
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/workspaces/ws/questions/bank',
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
 }));
 
 vi.mock('../src/lib/questions/actions', () => ({
@@ -39,12 +40,14 @@ const WS = '55555555-5555-4555-8555-555555555555';
 
 function menu(canEdit: boolean) {
   const handlers = { onPdfs: vi.fn(), onCreate: vi.fn(), onGenerate: vi.fn() };
-  render(<QuestionMenu canEdit={canEdit} {...handlers} />);
+  render(
+    <QuestionMenu canEdit={canEdit} bankHref={`/workspaces/${WS}/questions/bank`} {...handlers} />,
+  );
   return handlers;
 }
 
 describe('home `문제` menu', () => {
-  it('offers PDF 관리, 직접 추가 and 변형 출제 to editors and opens each', async () => {
+  it('QOV-01-AC11 offers 전체 문제, PDF 관리, 직접 추가 and 변형 출제 to editors and opens each', async () => {
     const user = userEvent.setup();
     const handlers = menu(true);
     const trigger = screen.getByRole('button', { name: '문제' });
@@ -52,7 +55,7 @@ describe('home `문제` menu', () => {
 
     await user.click(trigger);
     const items = screen.getAllByRole('menuitem').map((item) => item.textContent);
-    expect(items).toEqual(['PDF 관리', '직접 추가', '변형 출제']);
+    expect(items).toEqual(['전체 문제', 'PDF 관리', '직접 추가', '변형 출제']);
     await user.click(screen.getByRole('menuitem', { name: '직접 추가' }));
     expect(handlers.onCreate).toHaveBeenCalledTimes(1);
 
@@ -60,7 +63,7 @@ describe('home `문제` menu', () => {
     trigger.focus();
     await user.keyboard('{Enter}');
     await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{Enter}');
     await waitFor(() => expect(handlers.onGenerate).toHaveBeenCalledTimes(1));
     // The dialog opens after the menu returned focus to its trigger.
     expect(trigger).toHaveFocus();
@@ -70,11 +73,23 @@ describe('home `문제` menu', () => {
     await waitFor(() => expect(handlers.onPdfs).toHaveBeenCalledTimes(1));
   });
 
-  it('shows viewers only PDF 관리', async () => {
+  it('QOV-01-AC11 shows viewers 전체 문제 and PDF 관리', async () => {
     const user = userEvent.setup();
     menu(false);
     await user.click(screen.getByRole('button', { name: '문제' }));
-    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['PDF 관리']);
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      '전체 문제',
+      'PDF 관리',
+    ]);
+  });
+
+  it('QOV-01-AC11 전체 문제 is a link to the bank (UX6-PROGRESS)', async () => {
+    const user = userEvent.setup();
+    menu(false);
+    await user.click(screen.getByRole('button', { name: '문제' }));
+    const bank = screen.getByRole('menuitem', { name: '전체 문제' });
+    expect(bank.tagName).toBe('A');
+    expect(bank).toHaveAttribute('href', `/workspaces/${WS}/questions/bank`);
   });
 });
 

@@ -39,6 +39,68 @@ export function processingLabel(row: DocumentRow): string {
   return stage && stage !== '처리 중' ? `처리 중 · ${stage}` : '처리 중';
 }
 
+/** The DOC-01 step list (UX6-PROGRESS): 업로드 → 분석 → 색인. */
+export const DOCUMENT_STEPS = [
+  { id: 'upload', label: '업로드' },
+  { id: 'parse', label: '분석' },
+  { id: 'index', label: '색인' },
+] as const;
+
+const PARSE_STAGES = new Set(['preparing', 'loading', 'downloading', 'parsing', 'structuring']);
+const INDEX_STAGES = new Set(['chunking', 'indexing', 'publishing']);
+/** The document job's percent where 분석 ends and 색인 begins (worker document_job.py). */
+const INDEX_FROM = 50;
+
+export interface DocumentProgress {
+  /** Index into DOCUMENT_STEPS. */
+  readonly current: number;
+  /** 0–100 within the current step; undefined = unknown (indeterminate). */
+  readonly value?: number;
+  /** The current step as text, e.g. "파싱 중". */
+  readonly text: string;
+  /** Accessible name of the progress bar. */
+  readonly label: string;
+}
+
+/**
+ * Where an uploading or processing row is in 업로드 → 분석 → 색인 and how far the current step is.
+ * The job reports one percent for the whole parse/index run; 0–50 % is 분석 and 50–100 % is 색인
+ * (the stage decides the step, the percent only the fill). Null for ready/failed rows and for an
+ * interrupted upload.
+ */
+export function documentProgress(row: DocumentRow): DocumentProgress | null {
+  if (row.status === 'uploading') {
+    if (row.error) return null;
+    const upload = row.upload;
+    const phase = upload?.phase ?? 'uploading';
+    const value =
+      phase === 'uploading'
+        ? upload
+          ? percent(upload.loaded, upload.total)
+          : 0
+        : phase === 'completing'
+          ? 100
+          : undefined;
+    return { current: 0, value, text: uploadPhaseLabel(phase), label: '업로드 진행률' };
+  }
+  if (row.status !== 'processing') return null;
+  const label = '파싱·색인 진행률';
+  const job = row.job;
+  if (!job || job.status === 'queued') return { current: 1, text: '처리 대기 중', label };
+  const progress = job.progress;
+  const stage = job.stage ?? '';
+  const indexing =
+    INDEX_STAGES.has(stage) || (!PARSE_STAGES.has(stage) && (progress ?? 0) >= INDEX_FROM);
+  const text = stage === 'preparing' ? '처리 준비 중' : (STAGE_LABELS[stage] ?? '처리 중');
+  if (progress === null) return { current: indexing ? 2 : 1, text, label };
+  const value = indexing
+    ? Math.round(
+        ((Math.min(100, Math.max(INDEX_FROM, progress)) - INDEX_FROM) / (100 - INDEX_FROM)) * 100,
+      )
+    : Math.round((Math.min(INDEX_FROM, Math.max(0, progress)) / INDEX_FROM) * 100);
+  return { current: indexing ? 2 : 1, value, text, label };
+}
+
 /** After this long without finishing, a processing row shows its elapsed time and a hint. */
 export const SLOW_PROCESSING_MS = 30_000;
 export const SLOW_PROCESSING_HINT = '첫 처리나 큰 PDF는 몇 분 걸릴 수 있습니다.';

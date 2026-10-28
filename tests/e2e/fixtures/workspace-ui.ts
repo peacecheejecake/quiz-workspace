@@ -11,14 +11,17 @@
 //   Home       (UX3c) `/workspaces/:id`: hidden h1 (workspace name), header with the unified
 //              search (searchbox "검색어", icon button "검색", text button "검색 옵션" →
 //              popover with checkboxes "문제"/"내용" and one list of options that follows
-//              them), buttons "문서 n", "문제" (menu button, UX4: menuitems "PDF 관리",
-//              "직접 추가", "변형 출제"; the last two for editors), "문제은행" (link), then
+//              them), buttons "문서 n", "문제" (menu button, UX4: menuitems "전체 문제" (a link
+//              to the bank that replaced the "문제은행" button, UX6-PROGRESS), "PDF 관리",
+//              "직접 추가", "변형 출제"; the last two for editors), then
 //              icon buttons "이력" and "공유하기" (owner); dialogs are non-modal
 //              FloatingSidePanels inside <main> named "문서 관리", "문제 PDF 관리", "문제 생성",
 //              "이력", "링크 공유" (`?panel=documents|question-pdfs|generate|history|share`).
 //   DOC-01     "문서 관리" dialog: dashed Dropzone whose "PDF 업로드" button opens a file
 //              chooser (the only upload button); one list item per book document with an
 //              upload progressbar, processing status, "준비 완료"/"Ready"; "취소"/"다시 시도";
+//              while uploading/processing an ordered list "진행 단계" 업로드 → 분석 → 색인 whose
+//              items say 완료 / 진행 중 (aria-current="step") / 대기 (UX6-PROGRESS);
 //              trash icon button "<title> 삭제".
 //   DOC-02     outline tree "목차" (treeitems), PDF viewer region with a "현재 페이지" field and a
 //              labelled source highlight, text editor region "원문" whose current block carries
@@ -65,7 +68,6 @@ export const homeUi = {
   header: (page: Page) => main(page).getByRole('search', { name: /통합 검색|search/i }),
   documentsButton: (page: Page) =>
     main(page).getByRole('button', { name: /^(문서|documents)\s*\d+$/i }),
-  bankLink: (page: Page) => main(page).getByRole('link', { name: /^(문제은행|question bank)$/i }),
   historyButton: (page: Page) => main(page).getByRole('button', { name: /^(이력|history)$/i }),
   shareButton: (page: Page) => main(page).getByRole('button', { name: /^(공유하기|share)$/i }),
   /** The header's `문제` menu button (UX4). Its menu is portalled to <body>. */
@@ -93,8 +95,9 @@ export const homeUi = {
     main(page).getByRole('group', { name: /^(상태 필터|status filter)$/i }),
 };
 
-type QuestionMenuItem = 'pdfs' | 'create' | 'generate';
+type QuestionMenuItem = 'bank' | 'pdfs' | 'create' | 'generate';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
+  bank: /^(전체 문제|all questions)$/i,
   pdfs: /^(pdf 관리|manage pdfs?)$/i,
   create: /^(직접 추가|add question)$/i,
   generate: /^(변형 출제|generate variants?)$/i,
@@ -274,4 +277,34 @@ export async function runSearch(
 export async function chooseFilter(page: Page, combobox: Locator, option: RegExp): Promise<void> {
   await combobox.click();
   await page.getByRole('option', { name: option }).click();
+}
+
+/**
+ * The step list of a multi-step job (UX6-PROGRESS `StepProgress`): ordered list "진행 단계" with
+ * one item per step. A step's state is text, not colour: 완료 / 진행 중 (aria-current="step") / 대기.
+ */
+export const progressStepsUi = {
+  list: (scope: Locator) => scope.getByRole('list', { name: /^(진행 단계|progress steps)$/i }),
+  step: (scope: Locator, name: RegExp) =>
+    progressStepsUi.list(scope).getByRole('listitem').filter({ hasText: name }),
+};
+
+/** Asserts each step's state in order: `done`, `current` or `pending`. */
+export async function expectProgressSteps(
+  scope: Locator,
+  steps: readonly (readonly [RegExp, 'done' | 'current' | 'pending'])[],
+): Promise<void> {
+  const items = progressStepsUi.list(scope).getByRole('listitem');
+  await expect(items).toHaveCount(steps.length);
+  for (const [index, [name, state]] of steps.entries()) {
+    const item = items.nth(index);
+    await expect(item).toContainText(name);
+    if (state === 'current') {
+      await expect(item).toHaveAttribute('aria-current', 'step');
+      await expect(item).toContainText(/진행 중|in progress/i);
+    } else {
+      await expect(item).not.toHaveAttribute('aria-current', /.+/);
+      await expect(item).toContainText(state === 'done' ? /완료|done/i : /대기|pending/i);
+    }
+  }
 }
