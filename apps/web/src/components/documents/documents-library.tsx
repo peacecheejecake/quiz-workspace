@@ -125,7 +125,7 @@ export function DocumentRows({
                 kindMenu && canEdit && row.documentId
                   ? {
                       onChange: (target, kind) => void library.changeKind(target, kind),
-                      busy: library.changingKind === row.documentId,
+                      busy: library.changingKinds.has(row.documentId),
                       failure: library.kindFailures[row.documentId],
                     }
                   : undefined

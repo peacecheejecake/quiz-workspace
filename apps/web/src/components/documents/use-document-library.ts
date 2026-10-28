@@ -62,8 +62,8 @@ export interface DocumentLibrary {
   readonly changeKind: (row: DocumentRow, kind: DocumentKind) => Promise<void>;
   /** Why the last kind change of a document was refused, by document id. */
   readonly kindFailures: Readonly<Record<string, string>>;
-  /** The document whose kind is being saved, if any. */
-  readonly changingKind: string | null;
+  /** The documents whose kind is being saved (each row stays busy until its own save ends). */
+  readonly changingKinds: ReadonlySet<string>;
   /** Asks to delete `row` (the home shows the confirmation). */
   readonly requestDelete: (row: DocumentRow) => void;
   readonly pendingDelete: DocumentRow | null;
@@ -89,7 +89,7 @@ export function useDocumentLibrary({
   const [pendingDelete, setPendingDelete] = useState<DocumentRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [kindFailures, setKindFailures] = useState<Readonly<Record<string, string>>>({});
-  const [changingKind, setChangingKind] = useState<string | null>(null);
+  const [changingKinds, setChangingKinds] = useState<ReadonlySet<string>>(new Set());
   const files = useRef(new Map<string, File>());
   const contexts = useRef(new Map<string, UploadContext>());
   const controllers = useRef(new Map<string, AbortController>());
@@ -243,7 +243,7 @@ export function useDocumentLibrary({
       setKindFailures(({ [documentId]: _old, ...rest }) => rest);
       if (row.kind === kind) return;
       savingKind.current.add(documentId);
-      setChangingKind(documentId);
+      setChangingKinds((ids) => new Set(ids).add(documentId));
       try {
         const updated = await client.updateDocumentKind(documentId, kind);
         setDocuments((docs) => docs.map((d) => (d.id === documentId ? summaryOf(updated, d) : d)));
@@ -260,7 +260,11 @@ export function useDocumentLibrary({
         setKindFailures((failures) => ({ ...failures, [documentId]: kindFailureMessage(error) }));
       } finally {
         savingKind.current.delete(documentId);
-        setChangingKind(null);
+        setChangingKinds((ids) => {
+          const next = new Set(ids);
+          next.delete(documentId);
+          return next;
+        });
       }
     },
     [canEdit, client, refresh, router, workspaceId],
@@ -314,7 +318,7 @@ export function useDocumentLibrary({
     retry,
     changeKind,
     kindFailures,
-    changingKind,
+    changingKinds,
     requestDelete: setPendingDelete,
     pendingDelete,
     deleting,

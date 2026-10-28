@@ -76,6 +76,18 @@ async function pickByKeyboard(trigger: HTMLElement, downs: number) {
   return user;
 }
 
+const DOC_B: DocumentSummary = { ...DOC, id: 'd2', title: '과학 책', filename: 'b.pdf' };
+const TWO_DOCS = [DOC, DOC_B];
+
+function TwoLibrary() {
+  const library = useDocumentLibrary({
+    workspaceId: 'ws',
+    initialDocuments: TWO_DOCS,
+    canEdit: true,
+  });
+  return <DocumentsLibrary workspaceId="ws" library={library} canEdit />;
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('종류 변경 saving', () => {
@@ -107,6 +119,42 @@ describe('종류 변경 saving', () => {
     await waitFor(() => expect(within(list).getByText('교재+문제')).toBeInTheDocument());
     expect(trigger).not.toHaveAttribute('aria-disabled');
     expect(within(list).queryByText('저장 중')).toBeNull();
+  });
+
+  it('tracks the saving state per row: overlapping saves end independently (Codex P2)', async () => {
+    const releases = new Map<string, () => void>();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: string, init?: RequestInit) => {
+        if (init?.method !== 'PATCH') return Response.json({ items: TWO_DOCS });
+        const { kind } = JSON.parse(String(init.body)) as { kind: string };
+        const id = path.endsWith('/d1') ? 'd1' : 'd2';
+        await new Promise<void>((resolve) => releases.set(id, resolve));
+        const base = id === 'd1' ? DOC : DOC_B;
+        return Response.json({ ...base, kind, kind_source: 'user' });
+      }),
+    );
+    render(
+      <ToastProvider>
+        <TwoLibrary />
+      </ToastProvider>,
+    );
+    const list = screen.getByRole('list', { name: '문서 목록' });
+    const a = within(list).getByRole('button', { name: '수학 책 종류 변경' });
+    const b = within(list).getByRole('button', { name: '과학 책 종류 변경' });
+    await pickByKeyboard(a, 2);
+    await waitFor(() => expect(a).toHaveAttribute('aria-disabled', 'true'));
+    await pickByKeyboard(b, 2);
+    await waitFor(() => expect(b).toHaveAttribute('aria-disabled', 'true'));
+    expect(a).toHaveAttribute('aria-disabled', 'true'); // starting B leaves A busy
+
+    releases.get('d1')?.();
+    await waitFor(() => expect(a).not.toHaveAttribute('aria-disabled'));
+    expect(b).toHaveAttribute('aria-disabled', 'true'); // B still waits for its own answer
+
+    releases.get('d2')?.();
+    await waitFor(() => expect(b).not.toHaveAttribute('aria-disabled'));
+    expect(within(list).getAllByText('교재+문제')).toHaveLength(2);
   });
 
   it('a network error re-reads the row (the server kind) and shows the generic reason', async () => {
