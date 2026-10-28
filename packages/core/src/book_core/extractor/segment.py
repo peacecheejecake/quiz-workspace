@@ -160,6 +160,10 @@ class Segmentation:
     loose_figures: list[RawFigure]
     unparsed_answer_lines: int = 0
     ambiguous_answer_tables: int = 0
+    ended_in_answer_key: bool = False
+    """The last line read was inside the answer key (``segment_chapters`` carries it on)."""
+    chapter_numbering: dict[int, tuple[int, tuple[int, ...]]] = field(default_factory=dict)
+    """Chapter index -> (numbering kind, numbers) of the heading that opened it."""
 
 
 def _norm_label(label: str) -> str:
@@ -432,12 +436,12 @@ def _asks_something(events: Sequence[_Event], start: int) -> bool:
     )
 
 
-def segment(blocks: Sequence[Block]) -> Segmentation:
+def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmentation:
+    """``in_answer_key``: the blocks continue an answer key printed before them."""
     questions: list[RawQuestion] = []
     answer_key: list[AnswerKeyEntry] = []
     loose_figures: list[RawFigure] = []
     caption_owner: dict[str, RawFigure] = {}
-    in_answer_key = False
     current: RawQuestion | None = None
     seen_numbers: set[int] = set()
     unparsed = 0
@@ -607,10 +611,20 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
         loose_figures=loose_figures,
         unparsed_answer_lines=unparsed,
         ambiguous_answer_tables=ambiguous_tables,
+        ended_in_answer_key=in_answer_key,
     )
 
 
 _CHAPTER_KINDS = (NumberingKind.PART, NumberingKind.CHAPTER)
+
+
+def _chapter_numbering(block: Block) -> tuple[int, tuple[int, ...]] | None:
+    if block.type is not BlockType.HEADING:
+        return None
+    numbering = parse_numbering(block.text.split("\n")[0])
+    if numbering is None or numbering.kind not in _CHAPTER_KINDS:
+        return None
+    return int(numbering.kind), numbering.numbers
 
 
 def chapter_starts(blocks: Sequence[Block]) -> list[int]:
@@ -619,14 +633,7 @@ def chapter_starts(blocks: Sequence[Block]) -> list[int]:
     Other headings never split: Docling prints question lines, inline answers and wrapped stems
     of exam workbooks as headings too, and cutting there would separate a question from its
     answer."""
-    return [0] + [
-        i
-        for i, b in enumerate(blocks)
-        if i
-        and b.type is BlockType.HEADING
-        and (numbering := parse_numbering(b.text.split("\n")[0])) is not None
-        and numbering.kind in _CHAPTER_KINDS
-    ]
+    return [0] + [i for i, b in enumerate(blocks) if i and _chapter_numbering(b) is not None]
 
 
 def _shift_line(line: SourceLine, offset: int) -> SourceLine:
@@ -635,6 +642,15 @@ def _shift_line(line: SourceLine, offset: int) -> SourceLine:
 
 def _shift_entry(entry: AnswerKeyEntry, offset: int, chapter: int) -> AnswerKeyEntry:
     return replace(entry, line=_shift_line(entry.line, offset), chapter=chapter)
+
+
+def _shift_figure(figure: RawFigure, offset: int, shifted: set[int]) -> None:
+    """A figure's caption line once (a figure can be both owned and loose)."""
+    if id(figure) in shifted:
+        return
+    shifted.add(id(figure))
+    if figure.caption is not None:
+        figure.caption = _shift_line(figure.caption, offset)
 
 
 def _shift_question(question: RawQuestion, offset: int, chapter: int) -> None:
@@ -661,16 +677,42 @@ def segment_chapters(blocks: Sequence[Block]) -> Segmentation:
     if len(starts) == 1:
         return segment(blocks)
     merged = Segmentation(questions=[], answer_key=[], loose_figures=[])
+    in_key = False
     for chapter, (start, end) in enumerate(zip(starts, [*starts[1:], len(blocks)], strict=True)):
-        seg = segment(blocks[start:end])
+        part = blocks[start:end]
+        seg = segment(part)
+        if in_key:
+            # An answer section with chapter subheadings (``정답``, ``제1장``, ``1. ③`` ...)
+            # goes on through the split; a chapter that is not read as key lines (body text,
+            # questions) after a chapter's own key starts afresh.
+            as_key = segment(part, in_answer_key=True)
+            if _reads_as_key(as_key):
+                seg = as_key
+        in_key = seg.ended_in_answer_key
+        numbering = _chapter_numbering(part[0])
+        if numbering is not None:
+            merged.chapter_numbering[chapter] = numbering
+        shifted: set[int] = set()
         for question in seg.questions:
             _shift_question(question, start, chapter)
+            for figure in question.figures:
+                _shift_figure(figure, start, shifted)
+        for figure in seg.loose_figures:
+            _shift_figure(figure, start, shifted)
         merged.questions += seg.questions
         merged.answer_key += [_shift_entry(e, start, chapter) for e in seg.answer_key]
         merged.loose_figures += seg.loose_figures
         merged.unparsed_answer_lines += seg.unparsed_answer_lines
         merged.ambiguous_answer_tables += seg.ambiguous_answer_tables
     return merged
+
+
+def _reads_as_key(seg: Segmentation) -> bool:
+    """Whether blocks read as answer-key lines are mostly answers (``1. ③``), not body text,
+    options or questions."""
+    answers = [e for e in seg.answer_key if _looks_like_answer(e.text)]
+    other = seg.unparsed_answer_lines + len(seg.answer_key) - len(answers)
+    return bool(answers) and len(answers) >= other
 
 
 def _asks(question: RawQuestion) -> bool:
@@ -684,7 +726,9 @@ def answer_entries(seg: Segmentation) -> dict[int, list[AnswerKeyEntry]]:
     wherever the key is printed (one key for the whole paper, or an answer chapter). A number
     repeated across chapters takes its own chapter's entries when it appears once in that chapter
     (numbering restarts per chapter, each with its own key), or when it is the only one of them
-    there that asks something (options or a question cue). Otherwise nothing: a wrong answer is
+    there that asks something (options or a question cue); the key then is its chapter's own,
+    or that of a question-less chapter numbered the same (a back-of-book key with ``제1장``
+    subheadings). Otherwise nothing: a wrong answer is
     worse than none. With a single chapter this is the document-wide match by unique number."""
     in_chapter = Counter((q.chapter, q.number) for q in seg.questions)
     # A numbered heading (``1. 개요``) is read as a question too; among a chapter's questions
@@ -696,6 +740,13 @@ def answer_entries(seg: Segmentation) -> dict[int, list[AnswerKeyEntry]]:
     for entry in seg.answer_key:
         own.setdefault((entry.chapter, entry.number), []).append(entry)
         every.setdefault(entry.number, []).append(entry)
+    # A back-of-book key with chapter subheadings (``제1장`` ... ``1. ③``): a chapter without
+    # questions keys the questions of the chapter numbered the same way.
+    with_questions = {q.chapter for q in seg.questions}
+    key_chapters: dict[tuple[int, tuple[int, ...]], list[int]] = {}
+    for chapter, numbering in seg.chapter_numbering.items():
+        if chapter not in with_questions:
+            key_chapters.setdefault(numbering, []).append(chapter)
     found: dict[int, list[AnswerKeyEntry]] = {}
     for question in seg.questions:
         entries: list[AnswerKeyEntry] = []
@@ -705,6 +756,13 @@ def answer_entries(seg: Segmentation) -> dict[int, list[AnswerKeyEntry]]:
             _asks(question) and asking[(question.chapter, question.number)] == 1
         ):
             entries = own.get((question.chapter, question.number), [])
+            label = seg.chapter_numbering.get(question.chapter)
+            if not entries and label is not None:
+                entries = [
+                    e
+                    for k in key_chapters.get(label, [])
+                    for e in own.get((k, question.number), [])
+                ]
         found[id(question)] = entries
     return found
 

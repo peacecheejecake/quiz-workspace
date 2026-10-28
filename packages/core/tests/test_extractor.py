@@ -1296,3 +1296,100 @@ def test_question_bank_on_real_docling_output(tmp_path: Path) -> None:
     (evidence,) = result.drafts[1].evidence
     assert [loc.page for loc in evidence.locations] == [1, 2]
     assert not any("정답" in by_id[b].text for b in evidence.block_ids)
+
+
+# ------------------------------------------------------------------------------------------
+# Chapter-aware segmentation (UX6-UPLOAD-B): chapter splits never change what a paper means
+
+
+def test_an_answer_appendix_with_chapter_headings_stays_an_answer_key() -> None:
+    """``정답`` then ``Chapter 1`` / ``1. ①`` / ``Chapter 2`` / ``2. ②``: the chapter headings
+    inside the answer section do not end it (Codex P2)."""
+    result = _extract(
+        [
+            "1. 다음 중 옳은 것은?",
+            "① 가",
+            "② 나",
+            "2. 다음 중 틀린 것은?",
+            "① 가",
+            "② 나",
+            "정답",
+            "# Chapter 1",
+            "1. ①",
+            "# Chapter 2",
+            "2. ②",
+        ]
+    )
+    assert [q.number for q in result.questions] == [1, 2]
+    assert [d.correct_option_ids for d in result.drafts] == [("opt-1",), ("opt-2",)]
+
+
+def test_a_back_of_book_key_with_chapter_subheadings_answers_each_chapter() -> None:
+    """Numbering restarts per chapter and the key at the back repeats the chapter headings
+    (``제1장`` ... ``1. ③``): each chapter's questions take their chapter's answers."""
+
+    def chapter(n: int) -> list[str]:
+        return [
+            f"# 제{n}장 수신 제도 {n}",
+            f"1. 제{n}장 첫 문제: 옳은 것은?",
+            "① 가",
+            "② 나",
+            "③ 다",
+            "④ 라",
+            f"2. 제{n}장 둘째 문제: 틀린 것은?",
+            "① 가",
+            "② 나",
+            "③ 다",
+            "④ 라",
+        ]
+
+    result = _extract(
+        chapter(1),
+        chapter(2),
+        [
+            "# 정답 및 해설",
+            "# 제1장 수신 제도 1",
+            "1. ③ 2. ①",
+            "# 제2장 수신 제도 2",
+            "1. ② 2. ④",
+        ],
+    )
+    assert [q.number for q in result.questions] == [1, 2, 1, 2]
+    assert [d.correct_option_ids for d in result.drafts] == [
+        ("opt-3",),
+        ("opt-1",),
+        ("opt-2",),
+        ("opt-4",),
+    ]
+
+
+def test_a_later_chapter_keeps_its_figure_captions_in_reading_order() -> None:
+    """Captions of chapters after the first get document-wide indices like the question lines,
+    so the LLM sees the question before its figure caption (Codex P2)."""
+    page = PageInfo(page=1, width=595.0, height=842.0)
+    loc = (SourceLocation(page=1, bbox=BBox(x0=60, y0=60, x1=300, y1=200)),)
+
+    def block(i: int, text: str, kind: BlockType = BlockType.TEXT, **kw: object) -> Block:
+        return Block(id=f"b{i}", type=kind, text=text, locations=loc, **kw)  # type: ignore[arg-type]
+
+    blocks = [
+        block(0, "제1장 물의 순환", BlockType.HEADING, heading_level=1),
+        *(block(i, f"본문 {i}번째 문단이다.") for i in range(1, 6)),
+        block(6, "1. 증발의 뜻을 쓰시오."),
+        block(7, "제2장 정수 처리", BlockType.HEADING, heading_level=1),
+        block(8, "1. 아래 그림의 A 단계를 쓰시오."),
+        block(9, "", BlockType.IMAGE, caption_block_id="b10"),
+        block(10, "[그림 1] 정수장 배치도"),
+    ]
+    doc = ParsedDocument(
+        source_path="f.pdf",
+        source_sha256="3" * 64,
+        parser_version="test",
+        pages=(page,),
+        blocks=tuple(blocks),
+    )
+    requests = dict(llm_requests(doc)[1:])
+    prompt = requests[1].prompt
+    assert prompt.index("1. 아래 그림의 A 단계를 쓰시오.") < prompt.index("[그림 1] 정수장 배치도")
+    (_, second) = QuestionExtractor().extract(doc, document_id="f").drafts
+    assert second.evidence[1].block_ids == ("b9", "b10")
