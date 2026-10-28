@@ -681,10 +681,11 @@ def segment_chapters(blocks: Sequence[Block]) -> Segmentation:
     for chapter, (start, end) in enumerate(zip(starts, [*starts[1:], len(blocks)], strict=True)):
         part = blocks[start:end]
         seg = segment(part)
-        if in_key:
+        if in_key and not _has_own_questions(seg, part):
             # An answer section with chapter subheadings (``정답``, ``제1장``, ``1. ③`` ...)
-            # goes on through the split; a chapter that is not read as key lines (body text,
-            # questions) after a chapter's own key starts afresh.
+            # goes on through the split. A chapter that asks anything itself, or prints its own
+            # answer-key heading, is never swallowed (a lost question cannot be recovered in
+            # review, a missing answer can); nor is one whose lines are not mostly answers.
             as_key = segment(part, in_answer_key=True)
             if _reads_as_key(as_key):
                 seg = as_key
@@ -705,6 +706,22 @@ def segment_chapters(blocks: Sequence[Block]) -> Segmentation:
         merged.unparsed_answer_lines += seg.unparsed_answer_lines
         merged.ambiguous_answer_tables += seg.ambiguous_answer_tables
     return merged
+
+
+_BLANK = re.compile(r"_{3,}|\(\s*\)")
+
+
+def _has_own_questions(seg: Segmentation, blocks: Sequence[Block]) -> bool:
+    """Read on its own, the chapter has a question that asks something (two or more options, a
+    question cue, an answer blank ``( )`` / ``____``) or prints its own answer-key heading. A
+    packed key line read as a question (``1. ③ 2. ①`` -> stem ``③ 2.``, option ``①``) does not
+    count."""
+    if any(
+        len(q.options) >= 2 or _QUESTION_CUE.search(q.stem) or _BLANK.search(q.stem)
+        for q in seg.questions
+    ):
+        return True
+    return any(_ANSWER_KEY_HEADING.match(line) for _, _, lines in _lines(blocks) for line in lines)
 
 
 def _reads_as_key(seg: Segmentation) -> bool:

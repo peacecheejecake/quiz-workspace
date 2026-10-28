@@ -1393,3 +1393,164 @@ def test_a_later_chapter_keeps_its_figure_captions_in_reading_order() -> None:
     assert prompt.index("1. 아래 그림의 A 단계를 쓰시오.") < prompt.index("[그림 1] 정수장 배치도")
     (_, second) = QuestionExtractor().extract(doc, document_id="f").drafts
     assert second.evidence[1].block_ids == ("b9", "b10")
+
+
+# Every case of the chapter-aware reading at once (UX6-UPLOAD-B, three Codex rounds): an
+# answer key may continue across chapter headings, but a chapter that asks something is never
+# swallowed by the previous chapter's key.
+
+_PROSE_LINE = "물은 증발과 응결을 거치며 지구 표면과 대기 사이를 끊임없이 순환한다."
+
+
+def _mixed_book_pages() -> list[list[str]]:
+    pages = []
+    for c in range(1, 4):
+        pages.append([f"# 제{c}장 물의 순환 {c}", "1. 개요", _PROSE_LINE, "2. 증발", _PROSE_LINE])
+        lines = ["# 확인 문제"]
+        for n in range(1, 4):
+            lines += [f"{n}. 제{c}장 {n}번: 다음 중 옳은 것은?", "① 가", "② 나", "③ 다", "④ 라"]
+        pages.append([*lines, "정답", "1. ③ 2. ① 3. ②"])
+    return pages
+
+
+def _back_of_book_pages() -> list[list[str]]:
+    def chapter(n: int) -> list[str]:
+        return [
+            f"# 제{n}장 수신 제도 {n}",
+            f"1. 제{n}장 첫 문제: 옳은 것은?",
+            "① 가",
+            "② 나",
+            "③ 다",
+            "④ 라",
+            f"2. 제{n}장 둘째 문제: 틀린 것은?",
+            "① 가",
+            "② 나",
+            "③ 다",
+            "④ 라",
+        ]
+
+    return [
+        chapter(1),
+        chapter(2),
+        ["# 정답 및 해설", "# 제1장 수신 제도 1", "1. ③ 2. ①", "# 제2장 수신 제도 2", "1. ② 2. ④"],
+    ]
+
+
+def _answer(draft: QuestionDraft) -> tuple[str, ...] | None:
+    return draft.correct_option_ids or draft.accepted_answers
+
+
+_CHAPTER_MATRIX: list[
+    tuple[str, list[list[str]], str | None, list[tuple[str, tuple[str, ...]]], int]
+]
+_CHAPTER_MATRIX = [
+    (
+        "a: answer appendix with chapter headings",
+        [
+            [
+                "1. 다음 중 옳은 것은?",
+                "① 가",
+                "② 나",
+                "2. 다음 중 틀린 것은?",
+                "① 가",
+                "② 나",
+                "정답",
+                "# Chapter 1",
+                "1. ①",
+                "# Chapter 2",
+                "2. ②",
+            ]
+        ],
+        None,
+        [("다음 중 옳은 것은?", ("opt-1",)), ("다음 중 틀린 것은?", ("opt-2",))],
+        2,
+    ),
+    (
+        "b: a chapter with its own blank question after a chapter key",
+        [
+            [
+                "# Chapter 1",
+                "1. 1 + 1 = ( )",
+                "정답",
+                "1. 2",
+                "# Chapter 2",
+                "1. 2 + 2 = ( )",
+                "정답",
+                "1. 4",
+            ]
+        ],
+        None,
+        [("1 + 1 = ( )", ("2",)), ("2 + 2 = ( )", ("4",))],
+        0,
+    ),
+    (
+        "c: mixed book, a key per chapter",
+        _mixed_book_pages(),
+        "다음 중 옳은 것은",
+        [
+            (f"제{c}장 {n}번: 다음 중 옳은 것은?", (f"opt-{a}",))
+            for c in range(1, 4)
+            for n, a in ((1, 3), (2, 1), (3, 2))
+        ],
+        0,
+    ),
+    (
+        "d: back-of-book key with 제N장 subheadings, numbering restarting",
+        _back_of_book_pages(),
+        None,
+        [
+            ("제1장 첫 문제: 옳은 것은?", ("opt-3",)),
+            ("제1장 둘째 문제: 틀린 것은?", ("opt-1",)),
+            ("제2장 첫 문제: 옳은 것은?", ("opt-2",)),
+            ("제2장 둘째 문제: 틀린 것은?", ("opt-4",)),
+        ],
+        2,
+    ),
+    (
+        "e: body text chapter after a key, then a chapter with questions",
+        [
+            ["# 제1장 덧셈", "1. 1 + 1 = ( )", "정답", "1. 2"],
+            ["# 제2장 읽을거리", _PROSE_LINE, _PROSE_LINE, _PROSE_LINE],
+            ["# 제3장 덧셈 2", "1. 2 + 3 = ( )", "정답", "1. 5"],
+        ],
+        None,
+        [("1 + 1 = ( )", ("2",)), ("2 + 3 = ( )", ("5",))],
+        0,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("pages", "keep", "expected", "unparsed"),
+    [pytest.param(p, k, e, u, id=name) for name, p, k, e, u in _CHAPTER_MATRIX],
+)
+def test_chapter_segmentation_matrix(
+    pages: list[list[str]],
+    keep: str | None,
+    expected: list[tuple[str, tuple[str, ...]]],
+    unparsed: int,
+) -> None:
+    result = _extract(*pages)
+    drafts = [d for d in result.drafts if keep is None or keep in d.stem]
+    assert [(d.stem, _answer(d)) for d in drafts] == expected
+    # Body text is never read as answer-key lines (case e): the only key lines that do not parse
+    # are the chapter headings inside an answer appendix (a, d), as with plain ``segment``.
+    from book_core.extractor.segment import segment_chapters
+
+    seg = segment_chapters(_doc(*pages).blocks)
+    assert seg.unparsed_answer_lines == unparsed
+
+
+def test_chapter_segmentation_matrix_single_chapter_documents_are_read_as_before() -> None:
+    """f: documents without part/chapter headings go through plain ``segment``."""
+    from book_core.extractor.segment import segment, segment_chapters
+
+    for document in (_document(), _question_bank()):
+        plain, chaptered = segment(document.blocks), segment_chapters(document.blocks)
+        assert [(q.number, q.stem) for q in chaptered.questions] == [
+            (q.number, q.stem) for q in plain.questions
+        ]
+        assert [(e.number, e.text) for e in chaptered.answer_key] == [
+            (e.number, e.text) for e in plain.answer_key
+        ]
+    assert len(QuestionExtractor().extract(_document(), document_id="q").drafts) == 8
