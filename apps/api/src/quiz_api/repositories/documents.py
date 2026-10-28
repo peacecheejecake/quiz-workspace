@@ -29,6 +29,7 @@ from quiz_api.repositories.tables import (
     document_uploads,
     documents,
     question_drafts,
+    question_import_registration_items,
     question_import_runs,
     question_sources,
     questions,
@@ -537,8 +538,12 @@ class DocumentRepository:
 
     def in_use_as_book(self, workspace_id: uuid.UUID, document_id: uuid.UUID) -> bool:
         """Whether people rely on the document being body text: a live question or an unpublished
-        import draft is registered under one of its chapters (any revision), or a live question
-        cites it as a source other than the import it came from."""
+        import draft is registered under one of its chapters (any revision), a submitted
+        registration (QIMP-JOB) still waits to file a draft under one of them (the chapter an
+        auto-matched draft was submitted with lives only in the item), or a live question cites it
+        as a source other than the import it came from. Chapter suggestions of drafts that were
+        not submitted are recomputed from books on every read and checked again at publish
+        (409 `chapter-changed`), so they need no check here."""
         doc_chapters = select(chapters.c.id).where(
             chapters.c.workspace_id == workspace_id, chapters.c.document_id == document_id
         )
@@ -561,6 +566,15 @@ class DocumentRepository:
             )
             .limit(1)
         )
+        pending_registration = (
+            select(question_import_registration_items.c.draft_id)
+            .where(
+                question_import_registration_items.c.workspace_id == workspace_id,
+                question_import_registration_items.c.state == "pending",
+                question_import_registration_items.c.chapter_id.in_(doc_chapters),
+            )
+            .limit(1)
+        )
         cited = (
             select(question_sources.c.id)
             .join(
@@ -580,7 +594,7 @@ class DocumentRepository:
         )
         return any(
             self._session.execute(stmt).first() is not None
-            for stmt in (under_chapter, draft_under_chapter, cited)
+            for stmt in (under_chapter, draft_under_chapter, pending_registration, cited)
         )
 
     def change_kind(self, document: DocumentRecord, kind: ContentKind, actor_id: uuid.UUID) -> None:

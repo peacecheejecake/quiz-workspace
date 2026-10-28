@@ -1141,3 +1141,40 @@ def test_ux6_kind_change_without_extract_or_to_book_starts_nothing(
     _make_ready(world, other, content_kind="book")
     res = api.patch(f"{API}/documents/{other}", json={"kind": "book"}, headers=bearer(owner))
     assert res.json()["kind_source"] == "user"
+
+
+def test_ux6_in_use_check_covers_chapters_drafts_pending_registrations_and_sources() -> None:
+    """The SQL of `in_use_as_book` (run against the stack in
+    tests/integration/questions/test_document_kinds.py): every kind of reliance on the book is
+    looked up inside the workspace, including a submitted registration whose chapter lives only in
+    its pending item (Codex P2)."""
+    from quiz_api.repositories.documents import DocumentRepository
+    from sqlalchemy.dialects import postgresql
+
+    class Recorder:
+        def __init__(self) -> None:
+            self.sql: list[str] = []
+
+        def execute(self, stmt: Any) -> Any:
+            self.sql.append(str(stmt.compile(dialect=postgresql.dialect())))  # type: ignore[no-untyped-call]
+
+            class _Result:
+                @staticmethod
+                def first() -> None:
+                    return None
+
+            return _Result()
+
+    session = Recorder()
+    repo = DocumentRepository(session)  # type: ignore[arg-type]
+    assert repo.in_use_as_book(uuid.uuid4(), uuid.uuid4()) is False
+    joined = "\n".join(session.sql)
+    assert len(session.sql) == 4
+    assert all("workspace_id" in sql for sql in session.sql)
+    assert "FROM public.questions" in joined
+    assert "FROM public.question_drafts" in joined
+    assert "public.question_drafts.published_question_id IS NULL" in joined
+    pending = next(s for s in session.sql if "question_import_registration_items" in s)
+    assert "public.question_import_registration_items.state =" in pending
+    assert "public.question_import_registration_items.chapter_id IN" in pending
+    assert "public.question_sources.import_run_id IS NULL" in joined

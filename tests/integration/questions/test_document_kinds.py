@@ -230,3 +230,30 @@ def test_ux6_a_book_in_use_cannot_become_a_question_paper(seed: Any) -> None:
     # Staying body text is fine.
     mixed = alice.ok_response(_patch(alice, book["id"], kind="mixed"), "PATCH", "k", (200,))
     assert mixed["kind"] == "mixed"
+
+
+def test_ux6_a_book_with_a_pending_registration_cannot_become_a_question_paper(
+    seed: Any,
+) -> None:
+    """Codex P2: an auto-matched draft submitted for registration keeps its chapter only in the
+    registration item (the draft's own chapter_id stays null) until the job runs."""
+    alice = seed.client("ux6-pending-reg")
+    ws = alice.create_workspace()
+    titled = alice.upload_question_paper(ws["id"], "chapter-book.pdf", document_type="book")
+    run, drafts = alice.import_paper(ws["id"])
+    q4 = seed.draft_for(drafts, 4)
+    assert q4["chapter"] is not None
+    assert q4["chapter_choice"] == "auto"
+    submitted = alice.ok_response(
+        alice.register(run["id"], [{"draft_id": q4["id"], "version": q4["version"]}]),
+        "POST",
+        "registrations",
+        (202,),
+    )
+
+    seed.problem(_patch(alice, titled, kind="question_paper"), 409, IN_USE)
+    alice.wait_for_job(submitted["job_id"])
+    [question] = alice.list_questions(ws["id"])
+    assert question["chapter_id"] == q4["chapter"]["id"]
+    # Registered under the book's chapter: still in use.
+    seed.problem(_patch(alice, titled, kind="question_paper"), 409, IN_USE)
