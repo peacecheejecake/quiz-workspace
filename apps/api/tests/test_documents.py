@@ -70,6 +70,12 @@ class World(TwoStepResourceMembership):
     # document id -> its newest question import run, as `latest_imports` reads it
     imports: dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
     import_reads: list[tuple[uuid.UUID, list[uuid.UUID]]] = field(default_factory=list)
+    # UX6-UPLOAD-B: document id -> imported question count; documents in use as books;
+    # started imports (document id, revision id, actor); kind changes (document id, kind)
+    question_count: dict[uuid.UUID, int] = field(default_factory=dict)
+    in_use: set[uuid.UUID] = field(default_factory=set)
+    started: list[tuple[uuid.UUID, uuid.UUID, uuid.UUID]] = field(default_factory=list)
+    kind_changes: list[tuple[uuid.UUID, str]] = field(default_factory=list)
     locks: list[LockMode] = field(default_factory=list)
     commits: int = 0
     rollbacks: int = 0
@@ -117,7 +123,8 @@ class World(TwoStepResourceMembership):
             user_id=kw["user_id"],
             document_id=kw["document_id"],
             revision_id=kw["revision_id"],
-            document_type=kw["document_type"],
+            document_type="book" if kw["document_type"] == "auto" else kw["document_type"],
+            auto_classify=kw["document_type"] == "auto",
             title=kw["title"],
             filename=kw["filename"],
             expected_size_bytes=kw["size_bytes"],
@@ -153,6 +160,8 @@ class World(TwoStepResourceMembership):
             last_error=None,
             created_at=T0,
             updated_at=T0,
+            type_source="auto" if upload.auto_classify else "user",
+            content_kind=None if upload.auto_classify else upload.document_type,
         )
         self.revisions[upload.revision_id] = (
             upload.document_id,
@@ -214,6 +223,55 @@ class World(TwoStepResourceMembership):
 
     def get_document(self, document_id: uuid.UUID) -> DocumentRecord:
         return self.documents[document_id]
+
+    def question_counts(self, workspace_id: uuid.UUID, document_ids: Any) -> dict[uuid.UUID, int]:
+        return {
+            d: n
+            for d, n in self.question_count.items()
+            if d in document_ids and self.documents[d].workspace_id == workspace_id
+        }
+
+    def lock_document(self, document_id: uuid.UUID) -> DocumentRecord:
+        self.calls.append("lock_document")
+        return self.documents[document_id]
+
+    def in_use_as_book(self, workspace_id: uuid.UUID, document_id: uuid.UUID) -> bool:
+        return document_id in self.in_use
+
+    def change_kind(self, document: DocumentRecord, kind: Any, actor_id: uuid.UUID) -> None:
+        self.kind_changes.append((document.id, kind))
+        self.documents[document.id] = replace(
+            document,
+            document_type="question_paper" if kind == "question_paper" else "book",
+            content_kind=kind,
+            type_source="user",
+        )
+
+    def has_import_run(self, workspace_id: uuid.UUID, document_id: uuid.UUID) -> bool:
+        return document_id in self.imports
+
+    def start_import(
+        self,
+        workspace_id: uuid.UUID,
+        actor_id: uuid.UUID,
+        document_id: uuid.UUID,
+        revision_id: uuid.UUID,
+    ) -> uuid.UUID:
+        self.started.append((document_id, revision_id, actor_id))
+        run_id, job_id = uuid.uuid4(), uuid.uuid4()
+        self.imports[document_id] = run_id
+        self.jobs[job_id] = JobRow(
+            id=job_id,
+            workspace_id=workspace_id,
+            created_by=actor_id,
+            job_type="question.import",
+            schema_version=1,
+            idempotency_key=f"question_import:{run_id}:1",
+            payload={"import_id": str(run_id)},
+            status="queued",
+            published_at=None,
+        )
+        return job_id
 
     def get_revision(self, revision_id: uuid.UUID) -> RevisionRecord | None:
         entry = self.revisions.get(revision_id)
@@ -376,6 +434,7 @@ def _complete(
         ("GET", "/workspaces/{id}/documents"),
         ("GET", "/documents/{id}"),
         ("GET", "/documents/{id}/source-url"),
+        ("PATCH", "/documents/{id}"),
         ("DELETE", "/documents/{id}"),
     ],
 )
@@ -831,15 +890,17 @@ def test_qimport_01_ac06_question_papers_carry_their_latest_import(
     upload = world.uploads[uuid.UUID(book_intent["upload_id"])]
     storage.objects[(SOURCE_BUCKET, upload.object_key)] = PDF
     book = uuid.UUID(_complete(api, bearer, owner, book_intent["upload_id"]).json()["document_id"])
-    run = uuid.uuid4()
+    run, book_run = uuid.uuid4(), uuid.uuid4()
     world.imports[papers[0]] = run
+    world.imports[book] = book_run
 
     items = api.get(f"{API}/workspaces/{ws}/documents", headers=bearer(viewer)).json()["items"]
     latest = {d["id"]: d["latest_import_id"] for d in items}
-    assert latest == {str(papers[0]): str(run), str(papers[1]): None, str(book): None}
-    # Only question papers are looked up, all of them, in the authorized workspace.
+    assert latest == {str(papers[0]): str(run), str(papers[1]): None, str(book): str(book_run)}
+    # Every listed document is looked up (UX6-UPLOAD-B: books can have imports too), all of them,
+    # in the authorized workspace.
     assert world.import_reads[-1][0] == ws
-    assert sorted(world.import_reads[-1][1]) == sorted(papers)
+    assert sorted(world.import_reads[-1][1]) == sorted([*papers, book])
     detail = api.get(f"{API}/documents/{papers[0]}", headers=bearer(viewer)).json()
     assert detail["latest_import_id"] == str(run)
 
@@ -861,6 +922,7 @@ def test_openapi_documents_the_document_routes(api: TestClient) -> None:
         ("get", "/api/v1/workspaces/{workspace_id}/documents"): "listDocuments",
         ("get", "/api/v1/documents/{document_id}"): "getDocument",
         ("get", "/api/v1/documents/{document_id}/source-url"): "getDocumentSourceUrl",
+        ("patch", "/api/v1/documents/{document_id}"): "updateDocumentKind",
         ("delete", "/api/v1/documents/{document_id}"): "deleteDocument",
         # M3.4 (quiz_api.api.document_revisions)
         ("get", "/api/v1/documents/{document_id}/outline"): "getDocumentOutline",
@@ -878,3 +940,204 @@ def test_openapi_documents_the_document_routes(api: TestClient) -> None:
     assert {"201", "403", "404", "413", "415", "422", "503"} <= set(intent["responses"])
     complete = spec["paths"]["/api/v1/documents/complete-upload"]["post"]
     assert {"202", "404", "409", "415", "422", "503"} <= set(complete["responses"])
+
+
+# --- UX6-UPLOAD-B: automatic kinds and 종류 변경 ---------------------------------------------
+
+
+def _uploaded(
+    api: TestClient,
+    world: World,
+    storage: FakeStorage,
+    bearer: Bearer,
+    user: uuid.UUID,
+    ws: uuid.UUID,
+    **overrides: Any,
+) -> uuid.UUID:
+    intent = _intent(api, bearer, user, ws, **overrides)
+    upload = world.uploads[uuid.UUID(intent["upload_id"])]
+    storage.objects[(SOURCE_BUCKET, upload.object_key)] = PDF
+    return uuid.UUID(_complete(api, bearer, user, intent["upload_id"]).json()["document_id"])
+
+
+def _make_ready(world: World, doc_id: uuid.UUID, **changes: Any) -> uuid.UUID:
+    revision = uuid.uuid4()
+    world.documents[doc_id] = replace(
+        world.documents[doc_id], status="ready", active_revision_id=revision, **changes
+    )
+    return revision
+
+
+def test_ux6_auto_upload_starts_as_an_unclassified_book(
+    api: TestClient, world: World, storage: FakeStorage, bearer: Bearer
+) -> None:
+    owner = uuid.uuid4()
+    ws = world.workspace(owner)
+    doc_id = _uploaded(api, world, storage, bearer, owner, ws, document_type="auto")
+    upload = next(iter(world.uploads.values()))
+    assert (upload.document_type, upload.auto_classify) == ("book", True)
+
+    detail = api.get(f"{API}/documents/{doc_id}", headers=bearer(owner)).json()
+    assert (detail["document_type"], detail["kind"], detail["kind_source"]) == (
+        "book",
+        None,
+        "auto",
+    )
+    assert detail["question_count"] == 0
+    # Explicit uploads keep their kind (the current web still sends them).
+    paper = _uploaded(api, world, storage, bearer, owner, ws, document_type="question_paper")
+    got = api.get(f"{API}/documents/{paper}", headers=bearer(owner)).json()
+    assert (got["document_type"], got["kind"], got["kind_source"]) == (
+        "question_paper",
+        "question_paper",
+        "user",
+    )
+    _problem(
+        api.post(
+            f"{API}/workspaces/{ws}/documents/upload-intent",
+            json=_intent_body(document_type="mixed"),
+            headers=bearer(owner),
+        ),
+        422,
+    )
+
+
+def test_ux6_list_carries_kinds_and_imported_question_counts(
+    api: TestClient, world: World, storage: FakeStorage, bearer: Bearer
+) -> None:
+    owner = uuid.uuid4()
+    ws = world.workspace(owner)
+    mixed = _uploaded(api, world, storage, bearer, owner, ws, document_type="auto")
+    _make_ready(world, mixed, content_kind="mixed")
+    world.question_count[mixed] = 7
+    items = api.get(f"{API}/workspaces/{ws}/documents", headers=bearer(owner)).json()["items"]
+    assert [(d["kind"], d["kind_source"], d["question_count"]) for d in items] == [
+        ("mixed", "auto", 7)
+    ]
+
+
+def test_ux6_kind_change_authorization(
+    api: TestClient, world: World, storage: FakeStorage, bearer: Bearer
+) -> None:
+    owner, viewer, stranger = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    ws = world.workspace(owner)
+    world.members[(ws, viewer)] = Role.VIEWER
+    doc_id = _uploaded(api, world, storage, bearer, owner, ws, document_type="auto")
+    _make_ready(world, doc_id, content_kind="book")
+    path = f"{API}/documents/{doc_id}"
+
+    _problem(api.patch(path, json={"kind": "mixed"}, headers=bearer(stranger)), 404)
+    _problem(
+        api.patch(path, json={"kind": "mixed"}, headers=bearer(viewer)),
+        403,
+        ProblemType.INSUFFICIENT_ROLE,
+    )
+    _problem(api.patch(path, json={"kind": "novel"}, headers=bearer(owner)), 422)
+    _problem(
+        api.patch(path, json={"kind": "mixed", "document_type": "book"}, headers=bearer(owner)),
+        422,
+    )
+    world.archived.add(ws)
+    _problem(
+        api.patch(path, json={"kind": "mixed"}, headers=bearer(owner)),
+        403,
+        ProblemType.WORKSPACE_ARCHIVED,
+    )
+    world.archived.discard(ws)
+    world.deleted.add(doc_id)
+    _problem(api.patch(path, json={"kind": "mixed"}, headers=bearer(owner)), 404)
+    assert world.kind_changes == []
+    assert world.started == []
+
+
+def test_ux6_kind_change_needs_a_ready_document(
+    api: TestClient, world: World, storage: FakeStorage, bearer: Bearer
+) -> None:
+    owner = uuid.uuid4()
+    ws = world.workspace(owner)
+    doc_id = _uploaded(api, world, storage, bearer, owner, ws, document_type="auto")
+    _problem(
+        api.patch(f"{API}/documents/{doc_id}", json={"kind": "book"}, headers=bearer(owner)),
+        409,
+        ProblemType.DOCUMENT_NOT_READY,
+    )
+    assert world.kind_changes == []
+
+
+def test_ux6_a_book_in_use_cannot_become_a_question_paper(
+    api: TestClient, world: World, storage: FakeStorage, bearer: Bearer
+) -> None:
+    owner = uuid.uuid4()
+    ws = world.workspace(owner)
+    doc_id = _uploaded(api, world, storage, bearer, owner, ws)
+    _make_ready(world, doc_id)
+    world.in_use.add(doc_id)
+    path = f"{API}/documents/{doc_id}"
+    _problem(
+        api.patch(path, json={"kind": "question_paper"}, headers=bearer(owner)),
+        409,
+        ProblemType.DOCUMENT_IN_USE,
+    )
+    assert world.kind_changes == []
+    assert world.started == []
+    # Staying body text is allowed (document_type does not change).
+    res = api.patch(path, json={"kind": "mixed", "extract": False}, headers=bearer(owner))
+    assert res.status_code == 200, res.text
+    assert (res.json()["kind"], res.json()["document_type"]) == ("mixed", "book")
+
+
+def test_ux6_kind_change_pins_the_kind_and_starts_one_import(
+    api: TestClient,
+    world: World,
+    storage: FakeStorage,
+    publisher: FakePublisher,
+    bearer: Bearer,
+) -> None:
+    owner = uuid.uuid4()
+    ws = world.workspace(owner)
+    doc_id = _uploaded(api, world, storage, bearer, owner, ws, document_type="auto")
+    revision = _make_ready(world, doc_id, content_kind="book")
+    path = f"{API}/documents/{doc_id}"
+    sent_before = len(publisher.sent)
+
+    res = api.patch(path, json={"kind": "question_paper"}, headers=bearer(owner))
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert (body["document_type"], body["kind"], body["kind_source"]) == (
+        "question_paper",
+        "question_paper",
+        "user",
+    )
+    assert world.started == [(doc_id, revision, owner)]
+    assert body["latest_import_id"] == str(world.imports[doc_id])
+    # The import job was handed to the broker after the commit.
+    assert [m.job_type for m in publisher.sent[sent_before:]] == ["question.import"]
+
+    # Repeating it, or moving to another kind with questions, starts nothing new.
+    for kind in ("question_paper", "mixed"):
+        again = api.patch(path, json={"kind": kind}, headers=bearer(owner))
+        assert again.status_code == 200, again.text
+    assert len(world.started) == 1
+    assert world.kind_changes == [(doc_id, "question_paper"), (doc_id, "mixed")]
+    # Back to a book: nothing is deleted, the run stays visible.
+    book = api.patch(path, json={"kind": "book"}, headers=bearer(owner)).json()
+    assert (book["kind"], book["latest_import_id"]) == ("book", str(world.imports[doc_id]))
+
+
+def test_ux6_kind_change_without_extract_or_to_book_starts_nothing(
+    api: TestClient, world: World, storage: FakeStorage, bearer: Bearer
+) -> None:
+    owner = uuid.uuid4()
+    ws = world.workspace(owner)
+    doc_id = _uploaded(api, world, storage, bearer, owner, ws, document_type="auto")
+    _make_ready(world, doc_id, content_kind="question_paper", document_type="question_paper")
+    path = f"{API}/documents/{doc_id}"
+    for body in ({"kind": "mixed", "extract": False}, {"kind": "book"}):
+        res = api.patch(path, json=body, headers=bearer(owner))
+        assert res.status_code == 200, res.text
+    assert world.started == []
+    # An auto kind confirmed as it is gets pinned (the worker never reclassifies a user kind).
+    other = _uploaded(api, world, storage, bearer, owner, ws, document_type="auto")
+    _make_ready(world, other, content_kind="book")
+    res = api.patch(f"{API}/documents/{other}", json={"kind": "book"}, headers=bearer(owner))
+    assert res.json()["kind_source"] == "user"

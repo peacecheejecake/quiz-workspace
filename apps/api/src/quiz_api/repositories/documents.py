@@ -14,22 +14,32 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import and_, func, insert, select, update
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from quiz_api.repositories.jobs import progress_of
+from quiz_api.repositories.question_imports import QuestionImportRepository
 from quiz_api.repositories.tables import (
     activity_events,
     async_jobs,
+    chapters,
     document_revisions,
     document_uploads,
     documents,
+    question_drafts,
     question_import_runs,
+    question_sources,
+    questions,
 )
 
 DocumentType = Literal["book", "question_paper"]
+# What an upload intent may ask for: `auto` = the server classifies (UX6-UPLOAD-B).
+UploadDocumentType = Literal["book", "question_paper", "auto"]
+# book | question_paper | mixed (a book that also prints questions; document_type book).
+ContentKind = Literal["book", "question_paper", "mixed"]
+TypeSource = Literal["user", "auto"]
 DocumentStatus = Literal["uploading", "processing", "ready", "failed"]
 RevisionStatus = Literal["draft", "published"]
 
@@ -46,6 +56,7 @@ class UploadRecord:
     document_id: uuid.UUID
     revision_id: uuid.UUID
     document_type: DocumentType
+    auto_classify: bool
     title: str
     filename: str
     expected_size_bytes: int
@@ -92,6 +103,21 @@ class DocumentRecord:
     last_error: str | None
     created_at: datetime
     updated_at: datetime
+    type_source: TypeSource = "user"
+    content_kind: ContentKind | None = None
+
+    @property
+    def kind(self) -> ContentKind | None:
+        """The kind shown to people: the classified or chosen one; for a document from before
+        UX6-UPLOAD-B its document_type; None while an auto document is not classified yet."""
+        if self.content_kind is not None:
+            return self.content_kind
+        return None if self.type_source == "auto" else self.document_type
+
+
+def document_type_of(kind: ContentKind) -> DocumentType:
+    """`document_type` is "is this body text?": a mixed document is a book."""
+    return "question_paper" if kind == "question_paper" else "book"
 
 
 @dataclass(frozen=True)
@@ -114,6 +140,7 @@ _UPLOAD_COLUMNS = (
     document_uploads.c.document_id,
     document_uploads.c.revision_id,
     document_uploads.c.document_type,
+    document_uploads.c.auto_classify,
     document_uploads.c.title,
     document_uploads.c.filename,
     document_uploads.c.expected_size_bytes,
@@ -139,6 +166,8 @@ _DOCUMENT_COLUMNS = (
     documents.c.last_error,
     documents.c.created_at,
     documents.c.updated_at,
+    documents.c.type_source,
+    documents.c.content_kind,
 )
 
 _JOB_COLUMNS = (
@@ -162,6 +191,7 @@ def _upload(row: Any) -> UploadRecord:
         document_id=row.document_id,
         revision_id=row.revision_id,
         document_type=cast(DocumentType, row.document_type),
+        auto_classify=bool(row.auto_classify),
         title=row.title,
         filename=row.filename,
         expected_size_bytes=row.expected_size_bytes,
@@ -189,6 +219,8 @@ def _document(row: Any) -> DocumentRecord:
         last_error=row.last_error,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        type_source=cast(TypeSource, row.type_source),
+        content_kind=cast(ContentKind | None, row.content_kind),
     )
 
 
@@ -232,7 +264,7 @@ class DocumentRepository:
         *,
         workspace_id: uuid.UUID,
         user_id: uuid.UUID,
-        document_type: DocumentType,
+        document_type: UploadDocumentType,
         title: str,
         filename: str,
         size_bytes: int,
@@ -250,7 +282,10 @@ class DocumentRepository:
                 user_id=user_id,
                 document_id=document_id,
                 revision_id=revision_id,
-                document_type=document_type,
+                # An auto-classified document starts as a book (body text) until the parse job
+                # classifies it.
+                document_type="book" if document_type == "auto" else document_type,
+                auto_classify=document_type == "auto",
                 title=title,
                 filename=filename,
                 content_type="application/pdf",
@@ -280,6 +315,8 @@ class DocumentRepository:
                 id=upload.document_id,
                 workspace_id=upload.workspace_id,
                 document_type=upload.document_type,
+                type_source="auto" if upload.auto_classify else "user",
+                content_kind=None if upload.auto_classify else upload.document_type,
                 title=upload.title,
                 filename=upload.filename,
                 content_type="application/pdf",
@@ -339,7 +376,7 @@ class DocumentRepository:
                 target_type="document",
                 target_id=upload.document_id,
                 metadata={
-                    "document_type": upload.document_type,
+                    "document_type": "auto" if upload.auto_classify else upload.document_type,
                     "size_bytes": upload.expected_size_bytes,
                 },
             )
@@ -394,8 +431,9 @@ class DocumentRepository:
     def latest_imports(
         self, workspace_id: uuid.UUID, document_ids: Sequence[uuid.UUID]
     ) -> dict[uuid.UUID, uuid.UUID]:
-        """document id -> its newest question import run (QIMPORT-01-AC06), read inside the
-        authorized workspace only. One query for the whole list, never a truncated window."""
+        """document id -> its newest question import run (QIMPORT-01-AC06; any kind of document
+        since UX6-UPLOAD-B), read inside the authorized workspace only. One query for the whole
+        list, never a truncated window."""
         if not document_ids:
             return {}
         rows = self._session.execute(
@@ -412,6 +450,35 @@ class DocumentRepository:
             .ext(distinct_on(question_import_runs.c.source_document_id))
         )
         return {row.source_document_id: row.id for row in rows}
+
+    def question_counts(
+        self, workspace_id: uuid.UUID, document_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, int]:
+        """document id -> live questions imported from it (a source row of one of its import
+        runs), inside the authorized workspace only."""
+        if not document_ids:
+            return {}
+        rows = self._session.execute(
+            select(
+                question_sources.c.document_id,
+                func.count(func.distinct(question_sources.c.question_id)).label("n"),
+            )
+            .join(
+                questions,
+                and_(
+                    questions.c.id == question_sources.c.question_id,
+                    questions.c.workspace_id == question_sources.c.workspace_id,
+                ),
+            )
+            .where(
+                question_sources.c.workspace_id == workspace_id,
+                question_sources.c.document_id.in_(list(document_ids)),
+                question_sources.c.import_run_id.is_not(None),
+                questions.c.deleted_at.is_(None),
+            )
+            .group_by(question_sources.c.document_id)
+        )
+        return {row.document_id: int(row.n) for row in rows}
 
     def processing_jobs(
         self, workspace_id: uuid.UUID, document_ids: Sequence[uuid.UUID]
@@ -458,6 +525,121 @@ class DocumentRepository:
             select(*_DOCUMENT_COLUMNS).where(documents.c.id == document_id)
         ).one()
         return _document(row)
+
+    def lock_document(self, document_id: uuid.UUID) -> DocumentRecord:
+        """A document the route already authorized, row locked FOR UPDATE: serialises a kind
+        change with the parse job's publish (which classifies and auto-starts an import under the
+        same lock) and with question import starts (QIMP-AUTO)."""
+        row = self._session.execute(
+            select(*_DOCUMENT_COLUMNS).where(documents.c.id == document_id).with_for_update()
+        ).one()
+        return _document(row)
+
+    def in_use_as_book(self, workspace_id: uuid.UUID, document_id: uuid.UUID) -> bool:
+        """Whether people rely on the document being body text: a live question or an unpublished
+        import draft is registered under one of its chapters (any revision), or a live question
+        cites it as a source other than the import it came from."""
+        doc_chapters = select(chapters.c.id).where(
+            chapters.c.workspace_id == workspace_id, chapters.c.document_id == document_id
+        )
+        under_chapter = (
+            select(questions.c.id)
+            .where(
+                questions.c.workspace_id == workspace_id,
+                questions.c.deleted_at.is_(None),
+                questions.c.chapter_id.in_(doc_chapters),
+            )
+            .limit(1)
+        )
+        draft_under_chapter = (
+            select(question_drafts.c.id)
+            .where(
+                question_drafts.c.workspace_id == workspace_id,
+                question_drafts.c.published_question_id.is_(None),
+                question_drafts.c.review_status != "rejected",
+                question_drafts.c.chapter_id.in_(doc_chapters),
+            )
+            .limit(1)
+        )
+        cited = (
+            select(question_sources.c.id)
+            .join(
+                questions,
+                and_(
+                    questions.c.id == question_sources.c.question_id,
+                    questions.c.workspace_id == question_sources.c.workspace_id,
+                ),
+            )
+            .where(
+                question_sources.c.workspace_id == workspace_id,
+                question_sources.c.document_id == document_id,
+                question_sources.c.import_run_id.is_(None),
+                questions.c.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        return any(
+            self._session.execute(stmt).first() is not None
+            for stmt in (under_chapter, draft_under_chapter, cited)
+        )
+
+    def change_kind(self, document: DocumentRecord, kind: ContentKind, actor_id: uuid.UUID) -> None:
+        """Set the kind a person chose (document_type with it) and pin it: the parse job never
+        reclassifies a `user` document. The classifier's `detection` stays for calibration."""
+        self._session.execute(
+            update(documents)
+            .where(documents.c.id == document.id)
+            .values(
+                document_type=document_type_of(kind),
+                content_kind=kind,
+                type_source="user",
+                updated_at=func.now(),
+            )
+        )
+        self._session.execute(
+            insert(activity_events).values(
+                workspace_id=document.workspace_id,
+                actor_id=actor_id,
+                event_type="document.kind_changed",
+                target_type="document",
+                target_id=document.id,
+                metadata={"from": document.kind, "to": kind},
+            )
+        )
+
+    def has_import_run(self, workspace_id: uuid.UUID, document_id: uuid.UUID) -> bool:
+        return (
+            self._session.execute(
+                select(question_import_runs.c.id)
+                .where(
+                    question_import_runs.c.workspace_id == workspace_id,
+                    question_import_runs.c.source_document_id == document_id,
+                )
+                .limit(1)
+            ).first()
+            is not None
+        )
+
+    def start_import(
+        self,
+        workspace_id: uuid.UUID,
+        actor_id: uuid.UUID,
+        document_id: uuid.UUID,
+        revision_id: uuid.UUID,
+    ) -> uuid.UUID:
+        """A user-started import run of the active revision + its first (unpublished) job, as
+        `POST /question-imports` creates it; returns the job id."""
+        imports = QuestionImportRepository(self._session)
+        run_id = imports.create_run(
+            workspace_id=workspace_id,
+            actor_id=actor_id,
+            document_id=document_id,
+            revision_id=revision_id,
+        )
+        job_id = self._session.execute(
+            select(question_import_runs.c.async_job_id).where(question_import_runs.c.id == run_id)
+        ).scalar_one()
+        return uuid.UUID(str(job_id))
 
     def get_revision(self, revision_id: uuid.UUID) -> RevisionRecord | None:
         row = self._session.execute(
