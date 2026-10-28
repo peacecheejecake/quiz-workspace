@@ -35,6 +35,7 @@ import {
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
+import { bodyDocumentCount } from '@/components/documents/labels';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
 import { GenerationDialog } from '@/components/questions/generate/generation-dialog';
@@ -162,7 +163,8 @@ export function WorkspaceHome({
     canEdit,
     loadFailed: documentsLoadFailed,
   });
-  const bookCount = library.documents.filter((d) => d.document_type === 'book').length;
+  // UX6-UPLOAD: `문서 n` counts the PDFs with body text (교재, 교재+문제).
+  const bookCount = bodyDocumentCount(library.documents);
   const searchDocuments = library.documents
     .filter((d) => d.active_revision_id !== null)
     .map((d) => ({
@@ -440,6 +442,7 @@ export function WorkspaceHome({
             workspaceId={workspace.id}
             library={library}
             canEdit={canEdit}
+            onOpenDocuments={() => setPanel('documents', true)}
           />
           {canEdit ? (
             <FloatingSidePanel

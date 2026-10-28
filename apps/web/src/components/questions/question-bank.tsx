@@ -43,6 +43,7 @@ import {
 import { QuestionGenerationForm } from '@/components/questions/generate/question-generation-form';
 import { useBatchStart } from '@/components/questions/generate/use-batch-start';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
+import { workspaceHomePath } from '@/lib/workspaces/home';
 import type { DocumentSummary } from '@/lib/documents/data';
 import {
   deleteQuestionAction,
@@ -641,6 +642,7 @@ export function QuestionBank({
         workspaceId={workspaceId}
         library={library}
         canEdit={canEdit}
+        onOpenDocuments={() => router.push(workspaceHomePath(workspaceId, 'panel=documents'))}
       />
       <DocumentLibraryFeedback library={library} />
 

@@ -4,8 +4,9 @@
 // provenance), AGENTS.md §5 (imported questions stay drafts until approved).
 //
 // Each test signs in its own owner, uploads the synthetic `questions-ko.pdf` (8 questions, answer
-// key for 1, 2, 4, 5, 8 only; tests/fixtures/pdfs/questions-ko.truth.json) through the import
-// screen and waits for the import job; E2E runs the worker with the deterministic fake LLM adapter
+// key for 1, 2, 4, 5, 8 only; tests/fixtures/pdfs/questions-ko.truth.json) through the home's
+// 문서 관리 dialog (UX6-UPLOAD: the one upload place; the server classifies it as 문제지 and starts
+// the extraction), follows its `문제 검토` link to the import page and waits for the import job; E2E runs the worker with the deterministic fake LLM adapter
 // (docs/e2e-strategy.md §3, §6). Draft/bank state is checked through the public API
 // (fixtures/questions.ts, whose header lists the endpoint/label assumptions, incl. A5: the AC's
 // "5 questions" becomes the paper's 8). Failures: a job failure comes from the APP_ENV=test fake
@@ -21,6 +22,7 @@ import {
   chooseQuestionMenu,
   draftFor,
   expect,
+  docUi,
   expectProgressSteps,
   failingOnceCopy,
   forgetImportRuns,
@@ -41,7 +43,9 @@ import {
   questionFormUi,
   questionPaper,
   seedImportDraftCopies,
+  setDocumentKind,
   signInAs,
+  startImport,
   test,
   truthQuestion,
   uploadPdf,
@@ -69,9 +73,8 @@ async function importPaper(page: Page, workspaceFactory: WorkspaceFactory, label
   expect(await listImports(owner, ws.id)).toEqual([]);
 
   await signInAs(page, owner.user);
-  await page.goto(importPath(ws.id));
+  await uploadQuestionPaper(page, ws.id, PAPER);
   await expect(importUi.heading(page)).toHaveText(/문제 pdf 가져오기|가져오기|import/i);
-  await uploadQuestionPaper(page, PAPER);
   await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length, {
     timeout: JOB_TIMEOUT_MS,
   });
@@ -139,16 +142,19 @@ test(
 );
 
 test(
-  'QIMPORT-01-AC01 the import shows its steps 업로드 → PDF 분석 → 문제 추출 as they pass',
+  'QIMPORT-01-AC01 the steps show as they pass: the upload in 문서 관리, then 업로드 → PDF 분석 → 문제 추출 on the import page',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     test.setTimeout(2 * JOB_TIMEOUT_MS + 60_000);
     const owner = await workspaceFactory.member('qimport01-ac01-steps');
     const ws = await workspaceFactory.create(owner);
+    mkdirSync(test.info().outputDir, { recursive: true });
+    // Its first extraction job fails (fake extractor, A7), so the page itself restarts one.
+    const failing = failingOnceCopy(PAPER, test.info().outputDir);
     await signInAs(page, owner.user);
-    await page.goto(importPath(ws.id));
+    await page.goto(homePath(ws.id, 'panel=documents'));
 
-    // Hold the Storage upload, then the job progress the page follows, so each step is observable.
+    // UX6-UPLOAD: uploads happen in 문서 관리. Hold the Storage upload to see its step.
     let releaseUpload!: () => void;
     const uploadGate = new Promise<void>((resolve) => (releaseUpload = resolve));
     await page.route(`${localEndpoints().supabaseUrl}/storage/v1/**`, async (route: Route) => {
@@ -156,30 +162,41 @@ test(
       await uploadGate;
       await route.fallback();
     });
+    const chooser = page.waitForEvent('filechooser');
+    await docUi.uploadButton(page).click();
+    await (await chooser).setFiles(failing.path);
+    const row = homeUi
+      .documentsDialog(page)
+      .getByRole('listitem')
+      .filter({ hasText: /questions-ko/ });
+    await expectProgressSteps(row, [
+      [/업로드|upload/i, 'current'],
+      [/분석|analy/i, 'pending'],
+      [/색인|index/i, 'pending'],
+    ]);
+    releaseUpload();
+    await docUi.reviewLink(row).click({ timeout: JOB_TIMEOUT_MS });
+    await expect(importUi.alert(page)).toContainText(/실패|오류|failed|error/i, {
+      timeout: JOB_TIMEOUT_MS,
+    });
+
+    // Hold the job progress the page follows, so the extraction step is observable.
     let releaseJobs!: () => void;
     const jobGate = new Promise<void>((resolve) => (releaseJobs = resolve));
     await page.route('**/api/jobs/**', async (route: Route) => {
       await jobGate;
       await route.fallback();
     });
-
-    await uploadQuestionPaper(page, PAPER);
+    await importUi.retry(page).click();
     const scope = main(page);
     await expect(importUi.progress(page)).toBeVisible();
     await expectProgressSteps(scope, [
-      [/업로드|upload/i, 'current'],
-      [/pdf 분석|analy/i, 'pending'],
-      [/문제 추출|extract/i, 'pending'],
-    ]);
-
-    releaseUpload();
-    await expectProgressSteps(scope, [
       [/업로드|upload/i, 'done'],
-      [/pdf 분석|analy/i, 'current'],
-      [/문제 추출|extract/i, 'pending'],
+      [/pdf 분석|analy/i, 'done'],
+      [/문제 추출|extract/i, 'current'],
     ]);
     // One bar split into the steps: it never drops back to an earlier step's level.
-    await expect(importUi.progress(page)).toHaveAttribute('aria-valuetext', /^2\/3단계/);
+    await expect(importUi.progress(page)).toHaveAttribute('aria-valuetext', /^3\/3단계/);
 
     releaseJobs();
     await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length, {
@@ -372,8 +389,7 @@ test(
     const failing = failingOnceCopy(PAPER, test.info().outputDir);
 
     await signInAs(page, owner.user);
-    await page.goto(importPath(ws.id));
-    await uploadQuestionPaper(page, failing);
+    await uploadQuestionPaper(page, ws.id, failing);
 
     // The first job fails after persisting part of the drafts (fake extractor, A7).
     await expect
@@ -484,19 +500,23 @@ test(
 );
 
 test(
-  'QIMPORT-01-AC05 문제 › PDF 관리 lists question PDFs apart from books and hands a picked PDF to the import',
+  'QIMPORT-01-AC05 문제 › PDF 관리 lists the PDFs with questions and sends uploads to 문서 관리; the import page has no upload',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
+    test.setTimeout(2 * JOB_TIMEOUT_MS + 60_000);
     const owner = await workspaceFactory.member('qimport01-ac05');
     const ws = await workspaceFactory.create(owner);
     await uploadReadyBook(owner, ws.id, 'book-ko');
     const uploaded = await uploadPdf(owner, ws.id, PAPER, 'question_paper');
     await waitForJob(owner, uploaded.jobId);
+    // A book with questions whose extraction waits for 문제 추출 (low-confidence 교재+문제).
+    const mixed = await uploadReadyBook(owner, ws.id, 'book-en');
+    await setDocumentKind(owner, mixed, 'mixed', false);
     const empty = await workspaceFactory.create(owner);
 
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
-    // Neither the home nor the dialog has a "PDF 가져오기" button (UX4: the Dropzone's "PDF 선택").
+    // Neither the home nor the dialog has a "PDF 가져오기" button (UX4).
     const importButton = (scope: Locator) =>
       scope
         .getByRole('link', { name: /^pdf 가져오기$|^import pdf$/i })
@@ -507,45 +527,90 @@ test(
     const dialog = homeUi.questionPdfsDialog(page);
     await expect(dialog).toBeVisible();
     const list = dialog.getByRole('list', { name: /문제 pdf 목록|question pdfs/i });
-    await expect(list.getByRole('listitem')).toHaveCount(1);
-    await expect(list).toContainText(PAPER.file.replace(/\.pdf$/, ''));
-    await expect(list).not.toContainText(/book-ko|물의 순환과 정수 처리/);
-    await expect(list.getByText(/^(책|문제지)$/)).toHaveCount(0);
-    await expect(dialog.getByText(/문제 pdf를 여기에 끌어다 놓으세요|drop/i)).toBeVisible();
-    await expect(dialog.getByRole('button', { name: /pdf 선택|choose/i })).toBeVisible();
+    // The PDFs with questions only, each with its kind badge; the plain book is not listed.
+    await expect(list.getByRole('listitem')).toHaveCount(2);
+    const paperRow = list.getByRole('listitem').filter({ hasText: /questions-ko/ });
+    const mixedRow = list.getByRole('listitem').filter({ hasText: /book-en/ });
+    await expect(docUi.kindBadge(paperRow, '문제지')).toBeVisible();
+    await expect(docUi.kindBadge(mixedRow, '교재+문제')).toBeVisible();
+    await expect(list).not.toContainText(/book-ko/);
+    await expect(docUi.reviewLink(paperRow)).toBeVisible();
+    await expect(docUi.extractButton(mixedRow)).toBeVisible();
+    // UX6-UPLOAD: no Dropzone or file input here; uploads go to 문서 관리.
+    await expect(dialog.getByText(/여기에 끌어다 놓으세요|drop/i)).toHaveCount(0);
+    await expect(
+      dialog.getByRole('button', { name: /pdf (선택|업로드)|choose|upload/i }),
+    ).toHaveCount(0);
+    await expect(dialog.locator('input[type="file"]')).toHaveCount(0);
+    await expect(
+      dialog.getByText('PDF는 문서 관리에서 올립니다. 문제가 있는 PDF는 자동으로 추출됩니다.'),
+    ).toBeVisible();
     await expect(importButton(dialog)).toHaveCount(0);
+    await importUi.openDocuments(dialog).click();
+    await expect(page).toHaveURL(/[?&]panel=documents(&|$)/);
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
 
-    // No question PDF yet: the empty text; a PDF picked in the Dropzone starts the import page.
+    // No PDF with questions yet: the empty text, still pointing at 문서 관리.
     await page.goto(homePath(empty.id, 'panel=question-pdfs'));
     const emptyDialog = homeUi.questionPdfsDialog(page);
     await expect(emptyDialog.getByText('등록된 문제 pdf가 없습니다.')).toBeVisible();
-    const chooser = page.waitForEvent('filechooser');
-    await emptyDialog.getByRole('button', { name: /pdf 선택|choose/i }).click();
-    await (await chooser).setFiles(PAPER.path);
-    await expect(page).toHaveURL((url) => url.pathname === importPath(empty.id));
-    await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length, {
-      timeout: JOB_TIMEOUT_MS,
-    });
-    expect((await listImports(owner, empty.id)).length).toBe(1);
+    await expect(importUi.openDocuments(emptyDialog)).toBeVisible();
+
+    // The import page uploads nothing; without an extraction it points at 문서 관리.
+    await page.goto(importPath(empty.id));
+    await expect(importUi.heading(page)).toBeVisible();
+    await expect(main(page).getByText(/추출된 문제가 없습니다/)).toBeVisible();
+    await expect(
+      main(page).getByRole('button', { name: /pdf (업로드|선택)|upload|choose/i }),
+    ).toHaveCount(0);
+    await expect(main(page).locator('input[type="file"]')).toHaveCount(0);
+    await importUi.openDocuments(main(page)).click();
+    await expect(page).toHaveURL(
+      (url) => url.pathname === homePath(empty.id) && url.searchParams.get('panel') === 'documents',
+    );
+
+    // Two extracted PDFs: `검토할 PDF` switches between their reviews (one per PDF).
+    const mixedRun = await startImport(owner, ws.id, mixed);
+    await waitForImportStatus(owner, mixedRun.id, 'succeeded');
+    await page.goto(importPath(ws.id));
+    const switcher = importUi.pdfSwitcher(page);
+    await expect(switcher).toContainText(/book-en/); // the newest extraction
+    await expect(
+      main(page).getByRole('button', { name: /pdf (업로드|선택)|upload|choose/i }),
+    ).toHaveCount(0);
+    await switcher.click();
+    const options = page.getByRole('option');
+    await expect(options).toHaveCount(2);
+    await expect(options.filter({ hasText: /book-en/ })).toContainText('교재+문제');
+    await options.filter({ hasText: /questions-ko/ }).click();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === importPath(ws.id) &&
+        url.searchParams.get('document') === uploaded.documentId,
+    );
+    await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length);
+    await expect(importUi.pdfSwitcher(page)).toContainText(/questions-ko/);
   },
 );
 
 test(
-  'QIMPORT-01-AC06 extraction runs on the server: leaving the import page during processing still yields the drafts',
+  'QIMPORT-01-AC06 extraction runs on the server: leaving 문서 관리 during processing still yields the drafts under 문제 검토',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('qimport01-ac06-leave');
     const ws = await workspaceFactory.create(owner);
     await signInAs(page, owner.user);
-    await page.goto(importPath(ws.id));
-    // The browser never gets to start the extraction itself: every start request it sends fails.
+    await page.goto(homePath(ws.id, 'panel=documents'));
+    // The browser never starts the extraction itself: any start request it sends fails.
     let browserStarts = 0;
     await page.route('**/api/workspaces/*/question-imports', async (route: Route) => {
       if (route.request().method() !== 'POST') return route.fallback();
       browserStarts += 1;
       await route.abort('internetdisconnected');
     });
-    await uploadQuestionPaper(page, PAPER);
+    const chooser = page.waitForEvent('filechooser');
+    await docUi.uploadButton(page).click();
+    await (await chooser).setFiles(PAPER.path);
     // The upload is complete (the server has the document and its processing job): leave.
     await expect
       .poll(async () => (await listDocuments(owner, ws.id)).length, {
@@ -560,14 +625,21 @@ test(
     const run = await waitForLatestImport(owner, ws.id);
     const [document] = await listDocuments(owner, ws.id);
     expect(run.source_document_id).toBe(document?.id);
+    expect(document?.kind).toBe('question_paper');
     expect(await listImports(owner, ws.id)).toHaveLength(1);
     expect(await waitForImportStatus(owner, run.id, 'succeeded')).toMatchObject({
       draft_count: PAPER.questions.length,
     });
-    expect(browserStarts).toBeLessThanOrEqual(1);
+    expect(browserStarts).toBe(0);
 
-    // Coming back shows the extracted drafts for review.
-    await page.goto(importPath(ws.id));
+    // Coming back: the PDF's 문제 검토 shows the extracted drafts for review.
+    await page.goto(homePath(ws.id, 'panel=question-pdfs'));
+    const row = homeUi
+      .questionPdfsDialog(page)
+      .getByRole('listitem')
+      .filter({ hasText: /questions-ko/ });
+    await docUi.reviewLink(row).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get('document') === document?.id);
     await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length);
     await expect(importUi.draft(page, Q(1).stem)).toHaveCount(1);
     expect((await listImports(owner, ws.id)).map((r) => r.id)).toEqual([run.id]);
@@ -684,8 +756,7 @@ test(
     await waitForJob(owner, titled.jobId);
 
     await signInAs(page, owner.user);
-    await page.goto(importPath(ws.id));
-    await uploadQuestionPaper(page, PAPER);
+    await uploadQuestionPaper(page, ws.id, PAPER);
     await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length, {
       timeout: JOB_TIMEOUT_MS,
     });

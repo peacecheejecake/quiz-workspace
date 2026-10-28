@@ -18,7 +18,7 @@
 
 1. **Workspace header**(홈 최상단, 화면 제목·설명 없음; 접근성 `h1`은 Workspace 이름을 시각적으로 숨겨 둔다)
    - 왼쪽: 통합 검색창(SEARCH-01-AC07). 입력란 + 검색 아이콘 버튼(접근성 이름 "검색"), 아래 검색 범위 체크박스 `문제`·`본문`과 각각의 "설정" popover 버튼(UX6, search.md).
-   - 오른쪽 버튼은 두 묶음이다(UX4 2026-10-21). 첫 묶음: `문서 n`(등록된 책 문서 수, 문서 관리 dialog) · `문제`(메뉴 버튼, 아래). 별도의 `문제은행` 버튼은 없다(UX6-PROGRESS 2026-10-28, 사용자 피드백 "문제은행 버튼은 '문제' dropdown menu 안으로 이동, 문구는 '전체 문제'로 변경"). 둘째 묶음(오른쪽 정렬): `이력`(아이콘 버튼, 이력 dialog) · `공유하기`(Owner만; `이력`과 같은 흰색(secondary) 아이콘 버튼, 접근성 이름·tooltip "공유하기", 링크 공유 dialog).
+   - 오른쪽 버튼은 두 묶음이다(UX4 2026-10-21). 첫 묶음: `문서 n`(등록된 책 문서 수 — UX6-UPLOAD부터 본문이 있는 PDF(`교재`·`교재+문제`) 수, 문서 관리 dialog) · `문제`(메뉴 버튼, 아래). 별도의 `문제은행` 버튼은 없다(UX6-PROGRESS 2026-10-28, 사용자 피드백 "문제은행 버튼은 '문제' dropdown menu 안으로 이동, 문구는 '전체 문제'로 변경"). 둘째 묶음(오른쪽 정렬): `이력`(아이콘 버튼, 이력 dialog) · `공유하기`(Owner만; `이력`과 같은 흰색(secondary) 아이콘 버튼, 접근성 이름·tooltip "공유하기", 링크 공유 dialog).
    - `문제` 메뉴(Radix DropdownMenu, `aria-haspopup="menu"`, 화살표·Enter·Escape 키보드 조작): `전체 문제`(QBANK-01 전체 문제 페이지 링크 `/questions/bank`, 모든 구성원 — 보기 권한도 들어갈 수 있다; 페이지의 제목·breadcrumb도 "전체 문제", UX6-BANK 2026-10-28 — UX6-PROGRESS에서는 "문제은행"으로 남겼었다) · `PDF 관리`(문제 PDF 관리 dialog `?panel=question-pdfs`, QIMPORT-01-AC05) · `직접 추가`(전체 문제 페이지의 문제 등록 editor를 연다: `/questions/bank?create=1`, QBANK-01) · `변형 출제`(문제 생성 dialog `?panel=generate`, QGEN-01-AC05). `직접 추가`·`변형 출제`는 편집 권한에만 보인다.
    - 버튼 문구는 줄바꿈하지 않는다. 좁은 화면(375px)에서는 묶음과 버튼이 버튼 단위로 다음 줄로 넘어가고 페이지 가로 스크롤은 없다.
 2. **통합 검색 결과**: 검색 범위에 "본문"이 포함된 검색을 실행하면 header 아래에 본문 검색 결과 영역이 나타나며 "검색 결과 닫기"로 지운다.
@@ -68,7 +68,7 @@
 
 - **Given:** 로그인 사용자가 접근할 수 있는 Workspace(Owner, 그리고 Owner가 아닌 멤버)
 - **When:** `/workspaces/:workspaceId`를 열거나 이전 경로(`/documents`, `/search?q=…`, `/questions?…`, `/history`, `/settings/sharing`)로 접근
-- **Then:** Workspace 왼쪽 메뉴 없이 Workspace header(통합 검색창, `문서 n`·`문제` 묶음 — 별도의 `문제은행` 버튼 없음(UX6-PROGRESS), 오른쪽 정렬된 `이력`·Owner에게만 `공유하기` 아이콘 버튼 묶음) 바로 아래에 문제 Heatmap이 보이고, 화면 제목·설명 header와 문제 수 문구는 없다. `공유하기`는 `이력`처럼 글자 없는 흰색(secondary) 아이콘 버튼이며 접근성 이름은 "공유하기"다(UX4). `문서 n`의 n은 등록된 책 문서 수(문제 PDF 제외)다. 이전 경로는 홈으로 redirect되며 해당 dialog(`?panel=documents|history|share`)나 검색 상태(`q`, `scope`, 필터)를 그대로 연다. Owner가 아닌 멤버가 `?panel=share`로 와도 공유 dialog는 열리지 않고 공유 API는 거부된다(UX3c).
+- **Then:** Workspace 왼쪽 메뉴 없이 Workspace header(통합 검색창, `문서 n`·`문제` 묶음 — 별도의 `문제은행` 버튼 없음(UX6-PROGRESS), 오른쪽 정렬된 `이력`·Owner에게만 `공유하기` 아이콘 버튼 묶음) 바로 아래에 문제 Heatmap이 보이고, 화면 제목·설명 header와 문제 수 문구는 없다. `공유하기`는 `이력`처럼 글자 없는 흰색(secondary) 아이콘 버튼이며 접근성 이름은 "공유하기"다(UX4). `문서 n`의 n은 등록된 책 문서 수(문제 PDF 제외; UX6-UPLOAD부터 `교재`·`교재+문제`, DOC-01-AC06)다. 이전 경로는 홈으로 redirect되며 해당 dialog(`?panel=documents|history|share`)나 검색 상태(`q`, `scope`, 필터)를 그대로 연다. Owner가 아닌 멤버가 `?panel=share`로 와도 공유 dialog는 열리지 않고 공유 API는 거부된다(UX3c).
 
 ### QOV-01-AC08
 

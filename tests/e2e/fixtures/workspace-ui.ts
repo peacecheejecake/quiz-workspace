@@ -22,7 +22,12 @@
 //              upload progressbar, processing status, "준비 완료"/"Ready"; "취소"/"다시 시도";
 //              while uploading/processing an ordered list "진행 단계" 업로드 → 분석 → 색인 whose
 //              items say 완료 / 진행 중 (aria-current="step") / 대기 (UX6-PROGRESS);
-//              trash icon button "<title> 삭제".
+//              trash icon button "<title> 삭제". UX6-UPLOAD: every PDF (one upload place,
+//              several files at once, no type choice); each row's kind badge text "교재" /
+//              "문제지" / "교재+문제" ("분석 중" until classified) before the status badge; editors
+//              get a "<title> 종류 변경" menu button (Radix menu, menuitemradio items, the
+//              current one aria-checked) on ready rows and a refusal as an alert in the row;
+//              question rows link "<title> 문제 검토" or offer the button "<title> 문제 추출".
 //   DOC-02     outline tree "목차" (treeitems), PDF viewer region with a "현재 페이지" field and a
 //              labelled source highlight, text editor region "원문" whose current block carries
 //              aria-current="true"; block "편집"/"저장", revision status "초안"/"발행됨", "발행".
@@ -213,6 +218,17 @@ export const docUi = {
   cancel: (scope: Locator) => scope.getByRole('button', { name: /^(업로드 )?(취소|cancel)/i }),
   retry: (scope: Locator) => scope.getByRole('button', { name: /다시 시도|재시도|retry/i }),
   alert: (page: Page) => main(page).getByRole('alert'),
+  /** UX6-UPLOAD: the row's kind badge, matched by its exact text. */
+  kindBadge: (row: Locator, label: '교재' | '문제지' | '교재+문제' | '분석 중') =>
+    row.getByText(label, { exact: true }),
+  kindMenuButton: (row: Locator) => row.getByRole('button', { name: /종류 변경|change kind/i }),
+  /** The open `종류 변경` menu (portalled to <body>). */
+  kindMenu: (page: Page) => page.getByRole('menu', { name: /종류 변경|change kind/i }),
+  kindOption: (page: Page, label: '교재' | '문제지' | '교재+문제') =>
+    docUi.kindMenu(page).getByRole('menuitemradio', { name: label, exact: true }),
+  reviewLink: (row: Locator) => row.getByRole('link', { name: /문제 검토|review questions/i }),
+  extractButton: (row: Locator) =>
+    row.getByRole('button', { name: /문제 추출|extract questions/i }),
 };
 
 export const editorUi = {

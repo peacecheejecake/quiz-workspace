@@ -2,8 +2,9 @@
 
 // QIMPORT-01 문제 PDF 가져오기 (docs/screens/questions-import.md, docs/questions.md §6).
 //
-//   PDF 업로드 (document_type question_paper, the DOC-01 upload flow) → PDF 분석 job → import run
-//   (POST /question-imports, Idempotency-Key) → 문제 추출 job → drafts → review (편집 / 원본 비교 /
+//   PDF 업로드 in 문서 관리 (UX6-UPLOAD: the one upload place; the server classifies the PDF) →
+//   PDF 분석 job → import run started by the server for a PDF with questions (or 문제 추출) →
+//   문제 추출 job → drafts → review on this page (편집 / 원본 비교 /
 //   선택) → "선택한 문제 승인 및 등록" hands exactly the selected drafts at the versions on screen
 //   to the server (POST /registrations, QIMP-JOB), whose job approves and registers them even if
 //   the page is left; the screen follows its progress and reattaches on return. Checking a draft
@@ -11,34 +12,22 @@
 //   it must stay instant (UX6-SELECT, QIMPORT-01-AC09): the list's callbacks are stable so a
 //   selection change re-renders only the checkboxes, not every draft.
 //
-// The server starts the import itself once the PDF is processed (QIMPORT-01-AC06), so after the
-// upload the page may be left: the POST then attaches to that run, and a later visit (or
-// `?document=<id>` from 문제 PDF 관리) shows the run's progress and drafts.
+// The server starts the import itself once the PDF is processed (QIMPORT-01-AC06): a visit (or
+// `?document=<id>` from a row's 문제 검토) shows the run's progress and drafts. One review per PDF
+// (its newest run); with two or more extracted PDFs `검토할 PDF` switches between them.
 //
 // Nothing reaches the bank before a human approves it; a failed extraction keeps the drafts it
 // already persisted and "다시 시도" retries the same run (the API reconciles, no duplicates);
 // a registration whose response was lost is retried with the same Idempotency-Key.
 // Drafts the server refuses (changed since, or not confirmable) stay selected and are named.
-import { Button, Checkbox, EmptyState, PageHeader, ProgressBar } from '@quiz/ui';
+import { Button, Checkbox, EmptyState, PageHeader, ProgressBar, Select } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loginRedirectPath } from '@/lib/auth/routes';
-import { createDocumentsClient, type Job } from '@/lib/documents/client-api';
+import { DOCUMENT_KIND_LABELS } from '@/components/documents/labels';
+import type { Job } from '@/lib/documents/client-api';
 import { watchJob } from '@/lib/documents/job-events';
-import { hashFile } from '@/lib/documents/sha256';
-import { createTransfer } from '@/lib/documents/transport';
-import {
-  jobFailureMessage,
-  newUploadItem,
-  runUpload,
-  uploadsReducer,
-  type UploadContext,
-  type UploadDeps,
-  type UploadFailure,
-  type UploadItem,
-} from '@/lib/documents/upload-machine';
-import { defaultTitle, PDF_CONTENT_TYPE, validatePdfFile } from '@/lib/documents/validation';
 import {
   approvePublishSelection,
   chapterBody,
@@ -71,7 +60,8 @@ import {
 import { abortableSleep } from '@/lib/documents/job-events';
 import type { QuestionFormValues } from '@/lib/questions/form';
 import { createImportClient, ImportApiError, importPath } from '@/lib/questions/import-client';
-import { clearPendingImportFile, peekPendingImportFile } from '@/lib/questions/import-handoff';
+import type { ReviewPdf } from '@/lib/questions/review-pdfs';
+import { workspaceHomePath } from '@/lib/workspaces/home';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import { DraftEditor, type DraftSaveResult } from '../drafts/draft-editor';
 import { QuestionDraftReview, type DraftReviewState } from '../drafts/question-draft-review';
@@ -91,8 +81,10 @@ export interface QuestionImportProps {
   readonly initialDrafts: readonly ImportDraft[];
   /** The workspace's book chapters (draft chapter picker, CHAPTER-MAP). */
   readonly initialChapters?: readonly BookChapterOption[];
-  /** The question paper the page was opened for (`?document=`), if any. */
+  /** The PDF the page was opened for (`?document=`), if any. */
   readonly documentId?: string;
+  /** The PDFs with an extraction, newest first (`검토할 PDF`, UX6-UPLOAD). */
+  readonly reviewPdfs?: readonly ReviewPdf[];
   readonly loadFailed: boolean;
   /** How often a running registration is re-read (ms); tests shorten it. */
   readonly registrationPollMs?: number;
@@ -116,15 +108,22 @@ const EXTRACT_FAILURES: Readonly<Record<string, string>> = {
 
 /** What the import is doing (null = nothing in progress). */
 type Activity =
-  | { readonly step: 'uploading' | 'processing'; readonly value?: number; readonly file: string }
-  | { readonly step: 'starting'; readonly file?: string }
-  | { readonly step: 'extracting'; readonly value?: number };
+  { readonly step: 'starting' } | { readonly step: 'extracting'; readonly value?: number };
 
-/** The failed step and whether "다시 시도" can resume it. */
+/** The failed extraction and whether "다시 시도" can resume it. */
 interface ImportFailure {
-  readonly step: 'upload' | 'start' | 'extract';
   readonly message: string;
   readonly retryable: boolean;
+}
+
+/** `검토할 PDF` option text: the PDF's title and kind. */
+export function reviewPdfLabel(pdf: ReviewPdf): string {
+  return pdf.kind ? `${pdf.title} · ${DOCUMENT_KIND_LABELS[pdf.kind]}` : pdf.title;
+}
+
+/** `검토할 PDF` is offered once two or more PDFs have an extraction. */
+export function showsPdfSwitcher(pdfs: readonly ReviewPdf[]): boolean {
+  return pdfs.length >= 2;
 }
 
 function extractFailureMessage(errorCode: string | null): string {
@@ -153,13 +152,13 @@ export function QuestionImport({
   initialDrafts,
   initialChapters = [],
   documentId,
+  reviewPdfs = [],
   loadFailed,
   registrationPollMs = 1000,
   loadedAt,
 }: QuestionImportProps) {
   const router = useRouter();
   const client = useMemo(() => createImportClient(), []);
-  const documents = useMemo(() => createDocumentsClient(), []);
   const canEdit = readOnly === null;
 
   const [run, setRun] = useState<ImportRun | null>(initialRun);
@@ -180,10 +179,9 @@ export function QuestionImport({
   );
   const [failure, setFailure] = useState<ImportFailure | null>(
     initialRun && (initialRun.status === 'failed' || initialRun.status === 'cancelled')
-      ? { step: 'extract', message: extractFailureMessage(initialRun.error_code), retryable: true }
+      ? { message: extractFailureMessage(initialRun.error_code), retryable: true }
       : null,
   );
-  const [fileAlert, setFileAlert] = useState<string | null>(null);
   const [states, setStates] = useState<Record<string, DraftReviewState>>({});
   /** Submitting the selection, or following its server-side registration. */
   const [publishing, setPublishing] = useState(false);
@@ -194,14 +192,7 @@ export function QuestionImport({
   const [editorSession, setEditorSession] = useState(0);
   const [comparing, setComparing] = useState<ReviewDraft | null>(null);
 
-  const [uploads, dispatchUpload] = useReducer(uploadsReducer, []);
-  const upload: UploadItem | undefined = uploads[0];
-  const inputRef = useRef<HTMLInputElement>(null);
-  const uploadFile = useRef<File | null>(null);
-  const uploadContext = useRef<UploadContext>({});
   const controller = useRef<AbortController | null>(null);
-  /** Idempotency-Key of the import start per source document (reused by retries). */
-  const startKeys = useRef(new Map<string, string>());
   /** Idempotency-Key of the retry of a failed run, per failed job. */
   const retryKeys = useRef(new Map<string, string>());
   /** Idempotency-Key of the last registration request whose outcome is unknown (network). */
@@ -266,11 +257,7 @@ export function QuestionImport({
       if (signal.aborted) return;
       setActivity(null);
       if (latest.status === 'failed' || latest.status === 'cancelled') {
-        setFailure({
-          step: 'extract',
-          message: extractFailureMessage(latest.error_code),
-          retryable: true,
-        });
+        setFailure({ message: extractFailureMessage(latest.error_code), retryable: true });
       } else if (latest.status === 'succeeded') {
         setStatus({
           text: `문제 ${latest.draft_count}개를 초안으로 가져왔습니다. 검토해 선택한 문제만 승인과 함께 문제은행에 등록됩니다.`,
@@ -278,7 +265,6 @@ export function QuestionImport({
         });
       } else {
         setFailure({
-          step: 'extract',
           message: '문제 추출 상태를 확인하지 못했습니다. 다시 시도해 주세요.',
           retryable: true,
         });
@@ -294,154 +280,8 @@ export function QuestionImport({
     return next;
   }, []);
 
-  /** Starts (or replays, same key) the import of a processed question paper. */
-  const startImport = useCallback(
-    async (documentId: string, file: string | undefined, signal: AbortSignal) => {
-      setActivity({ step: 'starting', file });
-      let key = startKeys.current.get(documentId);
-      if (!key) {
-        key = crypto.randomUUID();
-        startKeys.current.set(documentId, key);
-      }
-      let started: ImportRun;
-      try {
-        started = await client.startImport(workspaceId, documentId, key);
-      } catch (error) {
-        if (isAbort(error, signal)) return;
-        if (onUnauthenticated(error)) return;
-        if (error instanceof ImportApiError && error.kind === 'idempotencyKeyReused') {
-          startKeys.current.delete(documentId);
-        }
-        setActivity(null);
-        const message = error instanceof ImportApiError ? error.message : String(error);
-        setFailure({
-          step: 'start',
-          message: `문제 추출을 시작하지 못했습니다. ${message}`,
-          retryable: true,
-        });
-        return;
-      }
-      setDrafts([]);
-      setStates({});
-      setSelected(new Set());
-      await followRun(started, signal);
-    },
-    [client, followRun, onUnauthenticated, workspaceId],
-  );
-
-  const deps = useMemo<UploadDeps>(
-    () => ({
-      client: documents,
-      hash: (file, signal) => hashFile(file, signal),
-      createTransfer,
-      watchJob: (jobId, options) => watchJob(jobId, options),
-    }),
-    [documents],
-  );
-
-  /** Uploads (or resumes uploading) the paper, waits for its processing, then starts the import. */
-  const runPaper = useCallback(
-    async (item: UploadItem) => {
-      const file = uploadFile.current;
-      if (!file) return;
-      const { signal } = newController();
-      setFailure(null);
-      setActivity({ step: 'uploading', file: item.filename });
-      // Filled by the upload machine's actions (an object, so the closure writes stay typed).
-      const outcome: { documentId?: string; job: Job | null; failure: UploadFailure | null } = {
-        documentId: item.documentId,
-        job: null,
-        failure: null,
-      };
-      await runUpload({
-        workspaceId,
-        item,
-        file,
-        context: uploadContext.current,
-        deps,
-        signal,
-        dispatch: (action) => {
-          dispatchUpload(action);
-          if (action.type === 'progress') {
-            setActivity({
-              step: 'uploading',
-              file: item.filename,
-              value: item.size > 0 ? Math.round((action.loaded / item.size) * 100) : undefined,
-            });
-          } else if (action.type === 'completed') {
-            outcome.documentId = action.documentId;
-            setActivity({ step: 'processing', file: item.filename });
-          } else if (action.type === 'job') {
-            outcome.job = action.job;
-            setActivity({ step: 'processing', file: item.filename, value: jobPercent(action.job) });
-          } else if (action.type === 'failed') {
-            outcome.failure = action.failure;
-          }
-        },
-      });
-      if (signal.aborted) return;
-      const { documentId, job, failure: reason } = outcome;
-      if (reason || !documentId || job?.status !== 'succeeded') {
-        setActivity(null);
-        if (reason?.kind === 'unauthenticated') {
-          router.replace(loginRedirectPath(importPath(workspaceId)));
-          return;
-        }
-        setFailure({
-          step: 'upload',
-          message: reason
-            ? reason.message
-            : `${jobFailureMessage(job?.error_code)} 다른 PDF를 올려 주세요.`,
-          retryable: reason?.retryable ?? false,
-        });
-        return;
-      }
-      await startImport(documentId, item.filename, signal);
-    },
-    [deps, newController, router, startImport, workspaceId],
-  );
-
-  function chooseFile(list: FileList | readonly File[] | null) {
-    const file = list?.[0];
-    if (!file || !canEdit) return;
-    const check = validatePdfFile(file);
-    if (!check.ok) {
-      setFileAlert(`‘${file.name}’: ${check.message}`);
-      return;
-    }
-    setFileAlert(null);
-    setStatus(null);
-    setPublishFailure(null);
-    uploadFile.current = file;
-    uploadContext.current = {};
-    const item = newUploadItem(
-      crypto.randomUUID(),
-      file,
-      defaultTitle(file.name),
-      'question_paper',
-    );
-    dispatchUpload({ type: 'remove', localId: upload?.localId ?? '' });
-    dispatchUpload({ type: 'add', item });
-    void runPaper(item);
-  }
-
   async function retryImport() {
-    if (!failure?.retryable) return;
-    if (failure.step === 'upload') {
-      if (!upload) return;
-      dispatchUpload({ type: 'retry', localId: upload.localId });
-      void runPaper({ ...upload, failure: undefined, failedIn: undefined });
-      return;
-    }
-    if (failure.step === 'start') {
-      const documentId = upload?.documentId;
-      if (!documentId) return;
-      const { signal } = newController();
-      setFailure(null);
-      void startImport(documentId, upload.filename, signal);
-      return;
-    }
-    if (!run) return;
+    if (!failure?.retryable || !run) return;
     const { signal } = newController();
     const jobKey = run.job_id ?? run.id;
     let key = retryKeys.current.get(jobKey);
@@ -467,7 +307,6 @@ export function QuestionImport({
         }
       }
       setFailure({
-        step: 'extract',
         message: error instanceof ImportApiError ? error.message : '다시 시도하지 못했습니다.',
         retryable: true,
       });
@@ -483,21 +322,6 @@ export function QuestionImport({
     }
     return () => controller.current?.abort();
     // Only once for the server-rendered run.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // A PDF dropped on the home's "문제 PDF 관리" dialog (QIMPORT-01-AC05) starts uploading on
-  // arrival. Deferred a tick so a strict-mode remount (cleanup, then the effect again) starts it
-  // once; the hand-off is cleared only when the upload actually starts.
-  useEffect(() => {
-    const handed = canEdit ? peekPendingImportFile(workspaceId) : null;
-    if (!handed) return;
-    const timer = window.setTimeout(() => {
-      clearPendingImportFile();
-      chooseFile([handed]);
-    }, 0);
-    return () => window.clearTimeout(timer);
-    // Only on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -591,11 +415,7 @@ export function QuestionImport({
         }
         setRun(latest);
         if (latest.status === 'failed' || latest.status === 'cancelled') {
-          setFailure({
-            step: 'extract',
-            message: extractFailureMessage(latest.error_code),
-            retryable: true,
-          });
+          setFailure({ message: extractFailureMessage(latest.error_code), retryable: true });
         }
       }
       if (isWorking(latest)) {
@@ -785,12 +605,8 @@ export function QuestionImport({
   const registered = drafts.filter((d) => d.publishedQuestionId !== null).length;
   const selectedCount = selection.length;
 
-  const uploadButton = canEdit ? (
-    <Button variant="primary" onClick={() => inputRef.current?.click()} disabled={busy}>
-      PDF 업로드
-    </Button>
-  ) : null;
-
+  const documentsHref = workspaceHomePath(workspaceId, 'panel=documents');
+  const shownPdf = run?.source_document_id ?? documentId ?? null;
   const step: ImportStep | null = activity?.step ?? null;
 
   return (
@@ -804,44 +620,39 @@ export function QuestionImport({
           />
         }
         title="문제 PDF 가져오기"
-        description="문제지 PDF를 올리면 문제를 초안으로 추출합니다. 원본과 비교해 검토하고 승인한 문제만 문제은행에 등록됩니다. 정답지에 없는 정답은 만들지 않습니다."
+        description="문서 관리에서 올린 PDF에서 추출한 문제를 검토합니다. 원본과 비교해 승인한 문제만 문제은행에 등록됩니다. 정답지에 없는 정답은 만들지 않습니다."
         actions={
-          <>
-            <Button asChild>
-              <Link href={`/workspaces/${workspaceId}/questions/bank`}>전체 문제</Link>
-            </Button>
-            {uploadButton}
-          </>
+          <Button asChild>
+            <Link href={`/workspaces/${workspaceId}/questions/bank`}>전체 문제</Link>
+          </Button>
         }
       />
-      {canEdit ? (
-        <input
-          ref={inputRef}
-          type="file"
-          accept={`${PDF_CONTENT_TYPE},.pdf`}
-          hidden
-          aria-hidden="true"
-          tabIndex={-1}
-          onChange={(event) => {
-            chooseFile(event.target.files);
-            event.target.value = '';
-          }}
-        />
-      ) : null}
 
       {readOnly ? <p className={styles.readOnly}>{READ_ONLY_TEXT[readOnly]}</p> : null}
 
-      {fileAlert ? (
-        <p role="alert" className={styles.alert}>
-          {fileAlert}
-        </p>
+      {showsPdfSwitcher(reviewPdfs) ? (
+        <Select
+          fieldClassName={styles.pdfSwitcher}
+          label="검토할 PDF"
+          options={reviewPdfs.map((pdf) => ({
+            value: pdf.documentId,
+            label: reviewPdfLabel(pdf),
+          }))}
+          value={
+            shownPdf && reviewPdfs.some((pdf) => pdf.documentId === shownPdf) ? shownPdf : undefined
+          }
+          placeholder="PDF를 고르세요"
+          onValueChange={(next) => {
+            if (next && next !== shownPdf) router.push(importPath(workspaceId, next));
+          }}
+        />
       ) : null}
 
       {activity && step ? (
         <ImportJobProgress
           step={step}
           value={'value' in activity ? activity.value : undefined}
-          filename={'file' in activity ? activity.file : undefined}
+          filename={run?.document_title ?? undefined}
         />
       ) : null}
 
@@ -889,11 +700,18 @@ export function QuestionImport({
 
       {run === null && !busy ? (
         <EmptyState
-          title="가져온 문제가 없습니다"
+          title="추출된 문제가 없습니다"
           description={
             canEdit
-              ? '문제지 PDF(최대 50MB)를 올리면 문제마다 초안을 만들고 원본 페이지를 연결합니다.'
-              : '이 Workspace에서 가져온 문제 PDF가 아직 없습니다.'
+              ? '문서 관리에서 PDF를 올리면 문제가 있는 PDF는 자동으로 추출됩니다.'
+              : '이 Workspace에서 추출된 문제 PDF가 아직 없습니다.'
+          }
+          action={
+            canEdit ? (
+              <Button variant="primary" asChild>
+                <Link href={documentsHref}>문서 관리 열기</Link>
+              </Button>
+            ) : undefined
           }
         />
       ) : null}

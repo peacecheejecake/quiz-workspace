@@ -1,12 +1,43 @@
 // DOC-01 display labels (Korean first). Status text always accompanies color (Badge dot is
 // secondary), so state is never conveyed by color alone.
-import type { DocumentType } from '@/lib/documents/client-api';
-import type { DocumentRow, UploadPhase } from '@/lib/documents/upload-machine';
+import type { DocumentKind, DocumentSummary } from '@/lib/documents/client-api';
+import { documentKind, type DocumentRow, type UploadPhase } from '@/lib/documents/upload-machine';
 
-export const DOCUMENT_TYPE_LABELS: Readonly<Record<DocumentType, string>> = {
-  book: '책',
+/** The kind badge text (UX6-UPLOAD): what the PDF is, never conveyed by colour. */
+export const DOCUMENT_KIND_LABELS: Readonly<Record<DocumentKind, string>> = {
+  book: '교재',
   question_paper: '문제지',
+  mixed: '교재+문제',
 };
+
+/** The `종류 변경` menu's order. */
+export const DOCUMENT_KINDS: readonly DocumentKind[] = ['book', 'question_paper', 'mixed'];
+
+/** Shown instead of a kind while an upload waits for the server's classification. */
+export const KIND_PENDING_LABEL = '분석 중';
+
+/**
+ * The row's kind badge: its kind, "분석 중" while it is uploaded or processed without one, and
+ * nothing for a PDF that failed before it was classified.
+ */
+export function kindBadgeLabel(row: Pick<DocumentRow, 'kind' | 'status'>): string | null {
+  if (row.kind) return DOCUMENT_KIND_LABELS[row.kind];
+  return row.status === 'uploading' || row.status === 'processing' ? KIND_PENDING_LABEL : null;
+}
+
+/** PDFs with body text (교재, 교재+문제): what `문서 n` counts (UX6-UPLOAD). */
+export function hasBodyText(kind: DocumentKind | null): boolean {
+  return kind === 'book' || kind === 'mixed';
+}
+
+export function bodyDocumentCount(documents: readonly DocumentSummary[]): number {
+  return documents.filter((d) => hasBodyText(documentKind(d))).length;
+}
+
+/** PDFs with questions: a 문제지 / 교재+문제, or any PDF that has an extraction (UX6-UPLOAD). */
+export function hasQuestions(row: Pick<DocumentRow, 'kind' | 'latestImportId'>): boolean {
+  return row.kind === 'question_paper' || row.kind === 'mixed' || Boolean(row.latestImportId);
+}
 
 const UPLOAD_PHASE_LABELS: Partial<Record<UploadPhase, string>> = {
   hashing: '파일 확인 중',
