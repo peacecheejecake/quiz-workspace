@@ -1177,4 +1177,7 @@ def test_ux6_in_use_check_covers_chapters_drafts_pending_registrations_and_sourc
     pending = next(s for s in session.sql if "question_import_registration_items" in s)
     assert "public.question_import_registration_items.state =" in pending
     assert "public.question_import_registration_items.chapter_id IN" in pending
+    # ... of a job that can still run: a failed/cancelled job's leftovers never block (Codex P2).
+    assert "JOIN public.async_jobs ON public.async_jobs.id = " in pending
+    assert "public.async_jobs.status IN" in pending
     assert "public.question_sources.import_run_id IS NULL" in joined

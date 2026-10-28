@@ -539,7 +539,8 @@ class DocumentRepository:
     def in_use_as_book(self, workspace_id: uuid.UUID, document_id: uuid.UUID) -> bool:
         """Whether people rely on the document being body text: a live question or an unpublished
         import draft is registered under one of its chapters (any revision), a submitted
-        registration (QIMP-JOB) still waits to file a draft under one of them (the chapter an
+        registration (QIMP-JOB) whose job is queued or running still waits to file a draft under
+        one of them (the chapter an
         auto-matched draft was submitted with lives only in the item), or a live question cites it
         as a source other than the import it came from. Chapter suggestions of drafts that were
         not submitted are recomputed from books on every read and checked again at publish
@@ -566,12 +567,24 @@ class DocumentRepository:
             )
             .limit(1)
         )
+        # Only items a job can still register: a failed or cancelled registration job leaves
+        # its remaining items `pending` for good (QIMP-JOB: the reviewer submits again, as a new
+        # job), and those must not block the change forever.
+        items = question_import_registration_items
         pending_registration = (
-            select(question_import_registration_items.c.draft_id)
+            select(items.c.draft_id)
+            .join(
+                async_jobs,
+                and_(
+                    async_jobs.c.id == items.c.job_id,
+                    async_jobs.c.workspace_id == items.c.workspace_id,
+                ),
+            )
             .where(
-                question_import_registration_items.c.workspace_id == workspace_id,
-                question_import_registration_items.c.state == "pending",
-                question_import_registration_items.c.chapter_id.in_(doc_chapters),
+                items.c.workspace_id == workspace_id,
+                items.c.state == "pending",
+                items.c.chapter_id.in_(doc_chapters),
+                async_jobs.c.status.in_(ACTIVE_JOB_STATUSES),
             )
             .limit(1)
         )

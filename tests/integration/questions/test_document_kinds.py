@@ -77,6 +77,11 @@ def _db(sql: str, *params: Any) -> list[tuple[Any, ...]]:
         return conn.execute(sql, params).fetchall()
 
 
+def _db_exec(sql: str, *params: Any) -> None:
+    with psycopg.connect(DB_ADMIN_URL, autocommit=True) as conn:
+        conn.execute(sql, params)
+
+
 def _runs(document_id: str) -> list[tuple[str, str]]:
     return [
         (str(r[0]), r[1])
@@ -257,3 +262,35 @@ def test_ux6_a_book_with_a_pending_registration_cannot_become_a_question_paper(
     assert question["chapter_id"] == q4["chapter"]["id"]
     # Registered under the book's chapter: still in use.
     seed.problem(_patch(alice, titled, kind="question_paper"), 409, IN_USE)
+
+
+def test_ux6_a_failed_registration_does_not_block_the_kind_change(seed: Any) -> None:
+    """A registration job that failed (its submitter lost edit rights) leaves its remaining items
+    pending for good (QIMP-JOB); they no longer hold the book (Codex P2)."""
+    owner, bob = seed.client("ux6-failed-reg"), seed.client("ux6-failed-reg-bob")
+    ws = owner.create_workspace()
+    seed.membership(ws["id"], bob.user, "editor")
+    titled = owner.upload_question_paper(ws["id"], "chapter-book.pdf", document_type="book")
+    run, drafts = owner.import_paper(ws["id"])
+    q4 = seed.draft_for(drafts, 4)
+    submitted = bob.ok_response(
+        bob.register(run["id"], [{"draft_id": q4["id"], "version": q4["version"]}]),
+        "POST",
+        "registrations",
+        (202,),
+    )
+    _db_exec(
+        "update public.workspace_memberships set role = 'viewer' "
+        "where workspace_id = %s and user_id = %s",
+        ws["id"],
+        bob.user.id,
+    )
+    owner.wait_for_job(submitted["job_id"], expected="failed")
+    [(state,)] = _db(
+        "select state from public.question_import_registration_items where job_id = %s",
+        submitted["job_id"],
+    )
+    assert state == "pending"
+
+    changed = owner.ok_response(_patch(owner, titled, kind="question_paper"), "PATCH", "k", (200,))
+    assert changed["kind"] == "question_paper"
