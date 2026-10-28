@@ -21,6 +21,7 @@ import {
   homePath,
   homeUi,
   openSearchOptions,
+  closeSearchOptions,
   generatePath,
   generateUi,
   generationSourceInput,
@@ -199,10 +200,14 @@ test(
     await page.goto(searchPath(ws.id));
     await expect(searchUi.box(page)).toBeVisible();
     await expectAccessible(page, 'search without documents');
-    // The unified search's options popover (scope checkboxes, mode tooltips, filters).
-    await openSearchOptions(page);
-    await expectAccessible(page, 'search options popover');
-    await page.keyboard.press('Escape');
+    // The unified search's scope settings popovers (UX6): 문제 (filters), 본문 (mode tooltips,
+    // filters).
+    await openSearchOptions(page, 'questions');
+    await expectAccessible(page, 'question search settings popover');
+    await closeSearchOptions(page, 'questions');
+    await openSearchOptions(page, 'body');
+    await expectAccessible(page, 'body search settings popover');
+    await closeSearchOptions(page, 'body');
 
     const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
     await page.goto(documentsPath(ws.id));

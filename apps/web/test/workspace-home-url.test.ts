@@ -48,14 +48,16 @@ describe('unified search scope', () => {
     expect(parseScope({ scope: 'bogus' })).toBe('all');
     expect(parseScope({ scope: 'questions' })).toBe('questions');
     expect(parseScope(new URLSearchParams('scope=content'))).toBe('content');
+    expect(parseScope({ scope: 'none' })).toBe('none');
   });
 
   it('maps the two checkboxes onto a scope and back', () => {
     expect(scopeOf(true, true)).toBe('all');
     expect(scopeOf(true, false)).toBe('questions');
     expect(scopeOf(false, true)).toBe('content');
-    // Never "nothing": both off falls back to both.
-    expect(scopeOf(false, false)).toBe('all');
+    // UX6: both boxes can be off (the search button is then disabled).
+    expect(scopeOf(false, false)).toBe('none');
+    expect(scopeIncludesQuestions('none') || scopeIncludesContent('none')).toBe(false);
     expect(scopeIncludesQuestions('content')).toBe(false);
     expect(scopeIncludesContent('questions')).toBe(false);
     expect(scopeIncludesQuestions('all') && scopeIncludesContent('all')).toBe(true);

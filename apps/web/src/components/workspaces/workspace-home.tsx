@@ -3,14 +3,15 @@
 // Workspace home `/workspaces/:id` (QOV-01, docs/screens/questions-overview.md "Workspace 홈
 // 레이아웃", UX3c): the single page of a workspace, without a sidebar.
 //
-//   Workspace header  unified search (SEARCH-01-AC07: one box, icon submit, "검색 옵션" popover
-//                     with the scope checkboxes and one list of options that follows them: the
-//                     heatmap's chapter/type filters for 문제, the content-search options for 내용;
-//                     question papers are searched whenever 문제 is a target, UX4), then two
+//   Workspace header  unified search (SEARCH-01-AC07: one box, icon submit, the 문제 · 본문 scope
+//                     checkboxes under it, each with a "설정" popover: the heatmap's chapter/type
+//                     filters for 문제, the content-search options for 본문; question papers are
+//                     searched whenever 문제 is checked, UX4; no searchable scope disables the
+//                     submit with a status message, UX6), then two
 //                     button groups: `문서 n` · `문제` (menu: PDF 관리 / 직접 추가 / 변형 출제, UX4)
 //                     · `문제은행`, and, aligned right, `이력` · `공유하기` (icon buttons; share
 //                     for the owner only)
-//   content results   the 원문 search results when the scope includes 내용
+//   content results   the 본문 search results when the scope includes 본문
 //   문제 영역         the heatmap (QuestionsOverview)
 //   floating dialogs  문서 관리 · 문제 PDF 관리 · 문제 생성 · 이력 · 링크 공유: non-modal
 //                     FloatingSidePanels portalled into this page (inside <main>), opened at once
@@ -23,23 +24,17 @@
 // search changes that alter the heatmap use router.replace (the server re-reads the overview).
 import {
   Button,
-  Checkbox,
   FloatingSidePanel,
   HistoryIcon,
   IconButton,
-  Input,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
   questionTypeLabels,
-  SearchIcon,
   Select,
   ShareIcon,
   type QuestionType,
 } from '@quiz/ui';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState, useTransition, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
@@ -55,6 +50,7 @@ import {
   dropsSelectedPaper,
   useContentSearch,
 } from '@/components/search/content-search';
+import { UnifiedSearchForm } from '@/components/search/unified-search-form';
 import { WorkspaceSharingPanel } from '@/components/sharing/workspace-sharing-panel';
 import { QuestionMenu } from './question-menu';
 import type { DocumentSummary } from '@/lib/documents/client-api';
@@ -70,6 +66,7 @@ import type { PlacedQuestion } from '@/lib/questions/overview-placement';
 import type { QuestionFailureKind } from '@/lib/questions/problems';
 import { bankCreatePath } from '@/lib/questions/filters';
 import type { SearchQuery } from '@/lib/search/client';
+import { hasSearchableBody, searchReadiness } from '@/lib/search/scope';
 import { MAX_QUERY_CHARS, parseSearchParams, searchParamsFor } from '@/lib/search/state';
 import {
   parsePanels,
@@ -102,6 +99,8 @@ export interface WorkspaceHomeProps {
   readonly chapterChoices: readonly ChapterChoice[];
   readonly failure: QuestionFailureKind | null;
   readonly requested: PlacedQuestion | null;
+  /** Whether the workspace has any question to search (null = unknown, never blocks). */
+  readonly hasQuestions?: boolean | null;
   readonly documents: readonly DocumentSummary[];
   readonly documentsLoadFailed: boolean;
   /** The content search in the URL on arrival. */
@@ -124,6 +123,7 @@ export function WorkspaceHome({
   chapterChoices,
   failure,
   requested,
+  hasQuestions = null,
   documents,
   documentsLoadFailed,
   initialSearch,
@@ -196,12 +196,21 @@ export function WorkspaceHome({
   // --- unified search -----------------------------------------------------------------------
   const scope = parseScope(searchParams);
   const [draft, setDraft] = useState(searchParams.get('q') ?? '');
-  const [optionsOpen, setOptionsOpen] = useState(false);
+  /** What a search under `s` runs on, and whether it is blocked (UX6). */
+  const readinessFor = (s: SearchScope) =>
+    searchReadiness(
+      { questions: scopeIncludesQuestions(s), body: scopeIncludesContent(s) },
+      {
+        questions: hasQuestions ?? true,
+        body: hasSearchableBody(library.documents, scopeIncludesQuestions(s), library.listFailed),
+      },
+    );
+  const readiness = readinessFor(scope);
   const content = useContentSearch({
     workspaceId: workspace.id,
     // UX4: question papers are searched exactly when 문제 is a target.
     initial: { ...initialSearch, includeQuestionPapers: scopeIncludesQuestions(scope) },
-    runInitial: scopeIncludesContent(scope),
+    runInitial: readiness.effective.body,
   });
 
   // The address bar can change under us (browser Back/Forward restores an earlier search): the
@@ -214,7 +223,7 @@ export function WorkspaceHome({
     setDraft(urlQ);
   }
   const contentKey =
-    urlQ && scopeIncludesContent(scope)
+    urlQ && readiness.effective.body
       ? searchParamsFor(parseSearchParams(Object.fromEntries(searchParams)))
       : '';
   const syncedContentKey = useRef(contentKey);
@@ -235,7 +244,8 @@ export function WorkspaceHome({
     // Without 문제 only books are searched: a selected question paper (and its chapter) must go,
     // or the API would keep searching that explicit document.
     const clearDocument = dropsSelectedPaper(content.documentId, searchDocuments, papers);
-    if (q && scopeIncludesContent(nextScope)) {
+    // UX6: the 본문 side runs only when it has a published document to search.
+    if (q && readinessFor(nextScope).effective.body) {
       content.search(q, { includeQuestionPapers: papers, clearDocument });
     } else {
       content.clear();
@@ -254,14 +264,8 @@ export function WorkspaceHome({
     }
   }
 
-  function onSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    applySearch(draft, scope);
-  }
-
   function changeScope(questions: boolean, includeContent: boolean) {
-    // The last checked box cannot be turned off (at least one target).
-    if (!questions && !includeContent) return;
+    // Both boxes may be off (UX6): the search button is then disabled and nothing is searched.
     applySearch(
       content.submitted?.query ?? searchParams.get('q') ?? '',
       scopeOf(questions, includeContent),
@@ -297,94 +301,55 @@ export function WorkspaceHome({
       <h1 className="qz-visually-hidden">{workspace.name}</h1>
 
       <div className={styles.header}>
-        <form
-          role="search"
-          aria-label="통합 검색"
-          className={styles.search}
-          onSubmit={onSearch}
-          data-screen-id={screenIds.search}
-        >
-          <Popover open={optionsOpen} onOpenChange={setOptionsOpen}>
-            <div className={styles.searchRow}>
-              <Input
-                type="search"
-                label="검색어"
-                hideLabel
-                placeholder="문제와 원문 검색"
-                value={draft}
-                maxLength={MAX_QUERY_CHARS}
-                autoComplete="off"
-                fieldClassName={styles.searchField}
-                onChange={(event) => setDraft(event.target.value)}
-              />
-              <IconButton type="submit" variant="primary" label="검색" icon={<SearchIcon />} />
-            </div>
-            <PopoverTrigger asChild>
-              <button type="button" className={`${styles.optionsToggle} qz-focus-ring`}>
-                검색 옵션
-              </button>
-            </PopoverTrigger>
-            <PopoverContent
-              align="start"
-              aria-label="검색 옵션"
-              closeLabel="검색 옵션 닫기"
-              className={styles.options}
-            >
-              <fieldset className={styles.scope}>
-                <legend className={styles.optionsTitle}>검색 대상</legend>
-                <Checkbox
-                  label="문제"
-                  checked={withQuestions}
-                  disabled={withQuestions && !withContent}
-                  onCheckedChange={(checked) => changeScope(checked === true, withContent)}
-                />
-                <Checkbox
-                  label="내용"
-                  checked={withContent}
-                  disabled={withContent && !withQuestions}
-                  onCheckedChange={(checked) => changeScope(withQuestions, checked === true)}
-                />
-              </fieldset>
-              {/* One list that follows the targets (UX4): options of an unselected target
-                  collapse away. */}
-              <OptionSlot shown={withQuestions}>
-                <div className={styles.optionRow}>
-                  <Select
-                    label="챕터"
-                    options={chapterOptions}
-                    value={view.chapter ?? ALL}
-                    onValueChange={(value) =>
-                      value && changeFilters({ chapter: value === ALL ? null : value })
-                    }
-                  />
-                  <Select
-                    label="유형"
-                    options={[
-                      { value: ALL, label: '전체 유형' },
-                      ...TYPES.map((type) => ({ value: type, label: questionTypeLabels[type] })),
-                    ]}
-                    value={view.type ?? ALL}
-                    onValueChange={(value) =>
-                      value &&
-                      changeFilters({ type: value === ALL ? null : (value as QuestionType) })
-                    }
-                  />
-                </div>
-              </OptionSlot>
-              <OptionSlot shown={withContent}>
-                <ContentSearchOptions
-                  search={content}
-                  documents={
-                    withQuestions
-                      ? searchDocuments
-                      : searchDocuments.filter((d) => !d.isQuestionPaper)
+        <UnifiedSearchForm
+          screenId={screenIds.search}
+          draft={draft}
+          onDraftChange={setDraft}
+          onSearch={() => applySearch(draft, scope)}
+          readiness={readiness}
+          questions={{
+            checked: withQuestions,
+            onCheckedChange: (checked) => changeScope(checked, withContent),
+            settings: (
+              <div className={styles.optionRow}>
+                <Select
+                  label="챕터"
+                  options={chapterOptions}
+                  value={view.chapter ?? ALL}
+                  onValueChange={(value) =>
+                    value && changeFilters({ chapter: value === ALL ? null : value })
                   }
-                  documentsLoadFailed={library.listFailed}
                 />
-              </OptionSlot>
-            </PopoverContent>
-          </Popover>
-        </form>
+                <Select
+                  label="유형"
+                  options={[
+                    { value: ALL, label: '전체 유형' },
+                    ...TYPES.map((type) => ({ value: type, label: questionTypeLabels[type] })),
+                  ]}
+                  value={view.type ?? ALL}
+                  onValueChange={(value) =>
+                    value && changeFilters({ type: value === ALL ? null : (value as QuestionType) })
+                  }
+                />
+              </div>
+            ),
+          }}
+          body={{
+            checked: withContent,
+            onCheckedChange: (checked) => changeScope(withQuestions, checked),
+            settings: (
+              <ContentSearchOptions
+                search={content}
+                documents={
+                  withQuestions
+                    ? searchDocuments
+                    : searchDocuments.filter((d) => !d.isQuestionPaper)
+                }
+                documentsLoadFailed={library.listFailed}
+              />
+            ),
+          }}
+        />
 
         <div className={styles.actions}>
           <div className={styles.actionGroup}>
@@ -420,7 +385,7 @@ export function WorkspaceHome({
         </div>
       </div>
 
-      {withContent ? (
+      {readiness.effective.body ? (
         <ContentSearchResults
           workspaceId={workspace.id}
           search={content}
@@ -531,24 +496,6 @@ export function WorkspaceHome({
       ) : null}
 
       <DocumentLibraryFeedback library={library} />
-    </div>
-  );
-}
-
-/**
- * One option of the "검색 옵션" list. Hidden options collapse smoothly (no motion under
- * reduced-motion) and leave the accessibility tree and the tab order (`inert`, `visibility`).
- */
-function OptionSlot({
-  shown,
-  children,
-}: {
-  readonly shown: boolean;
-  readonly children: ReactNode;
-}) {
-  return (
-    <div className={styles.optionSlot} data-hidden={!shown || undefined} inert={!shown}>
-      <div className={styles.optionBody}>{children}</div>
     </div>
   );
 }

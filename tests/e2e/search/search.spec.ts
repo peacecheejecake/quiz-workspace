@@ -11,12 +11,14 @@ import {
   block,
   book,
   chooseFilter,
+  closeSearchOptions,
   createQuestion,
   editorUi,
   expect,
   homePath,
   homeUi,
   JOB_TIMEOUT_MS,
+  main,
   mcqInput,
   notFoundHeading,
   openSearchOptions,
@@ -342,7 +344,7 @@ test(
 );
 
 test(
-  'SEARCH-01-AC07 the unified header search filters questions and/or finds source text by its scope checkboxes',
+  'SEARCH-01-AC07 the unified header search filters questions and/or finds body text by its scope checkboxes',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('search01-ac07');
@@ -358,27 +360,54 @@ test(
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(2);
-    // Icon-only submit with an accessible name; a small "검색 옵션" toggle under the box.
+    // Icon-only submit with an accessible name.
     await expect(searchUi.submit(page)).toHaveText('');
-    const toggle = homeUi.searchOptionsButton(page);
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    const options = await openSearchOptions(page);
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(searchUi.submit(page)).toBeEnabled();
+    // UX6: no "검색 옵션" popover; the 문제 · 본문 checkboxes sit right under the box (both on).
+    await expect(
+      main(page).getByRole('button', { name: /^(검색 옵션|search options)$/i }),
+    ).toHaveCount(0);
     await expect(homeUi.scopeQuestions(page)).toBeChecked();
     await expect(homeUi.scopeContent(page)).toBeChecked();
-    await expect(searchUi.modeGroup(page)).toBeVisible();
-    await expect(searchUi.documentFilter(page)).toBeVisible();
-    await expect(options.getByRole('combobox', { name: /^(챕터|chapter)$/i })).toBeVisible();
-    await expect(options.getByRole('combobox', { name: /^(유형|type)$/i })).toBeVisible();
-    // UX4: one list without section headings, and no question-paper toggle.
-    await expect(options.getByText(/^(문제 필터|내용 검색)$/)).toHaveCount(0);
-    await expect(options.getByRole('checkbox', { name: /문제지|question papers?/i })).toHaveCount(
-      0,
-    );
-    await toggle.click();
-    await expect(options).toBeHidden();
+    const boxRect = await searchUi.box(page).boundingBox();
+    for (const checkbox of [homeUi.scopeQuestions(page), homeUi.scopeContent(page)]) {
+      const rect = await checkbox.boundingBox();
+      expect(rect && boxRect && rect.y >= boxRect.y + boxRect.height - 1).toBe(true);
+    }
 
-    // Both (default): the heatmap is filtered and the source text results appear.
+    // Each scope's "설정" opens its own settings popover: 문제 by click…
+    const questionSettings = homeUi.scopeSettingsButton(page, 'questions');
+    await expect(questionSettings).toHaveAttribute('aria-expanded', 'false');
+    await questionSettings.click();
+    const questionPopover = homeUi.scopeSettings(page, 'questions');
+    await expect(questionPopover).toBeVisible();
+    await expect(questionSettings).toHaveAttribute('aria-expanded', 'true');
+    await expect(
+      questionPopover.getByRole('combobox', { name: /^(챕터|chapter)$/i }),
+    ).toBeVisible();
+    await expect(questionPopover.getByRole('combobox', { name: /^(유형|type)$/i })).toBeVisible();
+    await expect(questionPopover.getByRole('radiogroup')).toHaveCount(0);
+    await closeSearchOptions(page, 'questions');
+    await expect(questionSettings).toBeFocused();
+
+    // …본문 by keyboard: search mode, document and section filters only.
+    const bodySettings = homeUi.scopeSettingsButton(page, 'body');
+    await bodySettings.focus();
+    await page.keyboard.press('Enter');
+    const bodyPopover = homeUi.scopeSettings(page, 'body');
+    await expect(bodyPopover).toBeVisible();
+    await expect(bodySettings).toHaveAttribute('aria-expanded', 'true');
+    await expect(
+      bodyPopover.getByRole('radiogroup', { name: /검색 방식|search mode/i }),
+    ).toBeVisible();
+    await expect(bodyPopover.getByRole('combobox', { name: /^(문서|document)$/i })).toBeVisible();
+    await expect(bodyPopover.getByRole('combobox', { name: /^(챕터|chapter)$/i })).toHaveCount(0);
+    // UX4: no question-paper toggle.
+    await expect(page.getByRole('checkbox', { name: /문제지|question papers?/i })).toHaveCount(0);
+    await closeSearchOptions(page, 'body');
+    await expect(bodySettings).toBeFocused();
+
+    // Both (default): the heatmap is filtered and the body results appear.
     await searchUi.box(page).fill('chlorine');
     await searchUi.submit(page).click();
     await expect(overviewUi.dots(page)).toHaveCount(1);
@@ -393,34 +422,27 @@ test(
       (url) => url.searchParams.get('q') === 'chlorine' && url.searchParams.get('papers') === '1',
     );
 
-    // 문제 only: no source results; the last checked box cannot be turned off.
-    await openSearchOptions(page);
+    // 문제 only: no body results.
     await homeUi.scopeContent(page).click();
     await expect(page).toHaveURL((url) => url.searchParams.get('scope') === 'questions');
     await expect(searchUi.resultsRegion(page)).toHaveCount(0);
     await expect(overviewUi.dots(page)).toHaveCount(1);
-    await expect(homeUi.scopeQuestions(page)).toBeDisabled();
-    // The options follow the targets: the content-only ones are hidden.
-    await expect(searchUi.modeGroup(page)).toBeHidden();
-    await expect(searchUi.documentFilter(page)).toBeHidden();
-    await expect(options.getByRole('combobox', { name: /^(챕터|chapter)$/i })).toBeVisible();
+    await expect(searchUi.submit(page)).toBeEnabled();
 
-    // 내용 only: the heatmap is not filtered, the source results are back.
+    // 본문 only: the heatmap is not filtered, the body results are back.
     await homeUi.scopeContent(page).click();
     await homeUi.scopeQuestions(page).click();
     await expect(page).toHaveURL((url) => url.searchParams.get('scope') === 'content');
-    await expect(searchUi.modeGroup(page)).toBeVisible();
-    await expect(options.getByRole('combobox', { name: /^(챕터|chapter)$/i })).toBeHidden();
-    await expect(options.getByRole('combobox', { name: /^(유형|type)$/i })).toBeHidden();
-    // Question papers are searched only while 문제 is a target.
+    // Question papers are searched only while 문제 is checked.
     await expect(page).toHaveURL((url) => !url.searchParams.has('papers'));
     await expect(overviewUi.dots(page)).toHaveCount(2);
     await expect(searchUi.resultItems(page).first()).toBeVisible();
-    await page.keyboard.press('Escape');
 
     // The state is in the URL: a reload shows the same search.
     await page.reload();
     await expect(searchUi.box(page)).toHaveValue('chlorine');
+    await expect(homeUi.scopeQuestions(page)).not.toBeChecked();
+    await expect(homeUi.scopeContent(page)).toBeChecked();
     await expect(searchUi.resultItems(page).first()).toBeVisible();
     await expect(overviewUi.dots(page)).toHaveCount(2);
 
@@ -428,6 +450,102 @@ test(
     await expect(searchUi.resultsRegion(page)).toHaveCount(0);
     await expect(page).toHaveURL((url) => !url.searchParams.has('q'));
     await expect(searchUi.box(page)).toHaveValue('');
+  },
+);
+
+const NOTHING_TO_SEARCH = /검색할 문제와 본문이 없|nothing to search/i;
+const NO_SCOPE = /검색 범위를 하나 이상|choose at least one/i;
+const NO_QUESTIONS = /검색할 문제가 없|no questions to search/i;
+const NO_BODY = /검색할 본문이 없|no (body|documents) to search/i;
+
+test(
+  'SEARCH-01-AC07 the search button is disabled with a stated reason when the checked scopes have nothing to search',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac07-disabled');
+    const ws = await workspaceFactory.create(owner);
+
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id));
+    const submit = searchUi.submit(page);
+    const message = homeUi.searchMessage(page);
+    // An empty workspace: both scopes stay checked (the default) but there is nothing to search.
+    await expect(homeUi.scopeQuestions(page)).toBeChecked();
+    await expect(homeUi.scopeContent(page)).toBeChecked();
+    await expect(submit).toBeDisabled();
+    await expect(message).toHaveText(NOTHING_TO_SEARCH);
+    await expect(submit).toHaveAccessibleDescription(NOTHING_TO_SEARCH);
+    // Enter does not search either.
+    await searchUi.box(page).fill('chlorine');
+    await searchUi.box(page).press('Enter');
+    await expect(page).toHaveURL((url) => !url.searchParams.has('q'));
+
+    // Questions but no published document: both checked searches the questions only.
+    await createQuestion(owner, ws.id, mcqInput('search01-ac07 chlorine 문제', ['예', '아니오']));
+    await createQuestion(owner, ws.id, mcqInput('search01-ac07 다른 문제', ['예', '아니오']));
+    await page.reload();
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    await expect(submit).toBeEnabled();
+    await expect(message).toHaveText(/본문이 없어 문제만 검색|questions only/i);
+
+    // 본문 only, without a document: disabled.
+    await homeUi.scopeQuestions(page).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get('scope') === 'content');
+    await expect(submit).toBeDisabled();
+    await expect(message).toHaveText(NO_BODY);
+    await expect(submit).toHaveAccessibleDescription(NO_BODY);
+
+    // Both off: disabled until a scope is chosen again.
+    await homeUi.scopeContent(page).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get('scope') === 'none');
+    await expect(homeUi.scopeContent(page)).not.toBeChecked();
+    await expect(submit).toBeDisabled();
+    await expect(message).toHaveText(NO_SCOPE);
+    await expect(submit).toHaveAccessibleDescription(NO_SCOPE);
+
+    // 문제 only, with questions: searches again, without a message.
+    await homeUi.scopeQuestions(page).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get('scope') === 'questions');
+    await expect(submit).toBeEnabled();
+    await expect(message).toHaveText('');
+    await searchUi.box(page).fill('chlorine');
+    await submit.click();
+    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'chlorine');
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+  },
+);
+
+test(
+  'SEARCH-01-AC07 a workspace with a document but no questions searches the body only and disables a 문제-only search',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac07-body');
+    const ws = await workspaceFactory.create(owner);
+    await uploadReadyBook(owner, ws.id, 'book-en');
+
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id, 'scope=questions'));
+    const submit = searchUi.submit(page);
+    const message = homeUi.searchMessage(page);
+    await expect(homeUi.scopeQuestions(page)).toBeChecked();
+    await expect(homeUi.scopeContent(page)).not.toBeChecked();
+    await expect(submit).toBeDisabled();
+    await expect(message).toHaveText(NO_QUESTIONS);
+    await expect(submit).toHaveAccessibleDescription(NO_QUESTIONS);
+
+    // Both checked: the body is searched alone, and the screen says so.
+    await homeUi.scopeContent(page).click();
+    await expect(page).toHaveURL((url) => !url.searchParams.has('scope'));
+    await expect(submit).toBeEnabled();
+    await expect(message).toHaveText(/문제가 없어 본문만 검색|body only/i);
+    await searchUi.box(page).fill('chlorine');
+    await searchUi.box(page).press('Enter');
+    await expect(
+      searchUi
+        .resultItems(page)
+        .filter({ hasText: /chlorine/i })
+        .first(),
+    ).toBeVisible();
   },
 );
 
