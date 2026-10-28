@@ -175,3 +175,64 @@ def test_empty_document_is_a_book_and_the_result_holds_no_text() -> None:
 def test_classification_is_deterministic() -> None:
     doc = _doc(_chapter(1), _exercises(1, 4, answers=True), _chapter(2))
     assert classify_content(doc.blocks) == classify_content(doc.blocks)
+
+
+def _textbook_with_chapter_keys() -> ParsedDocument:
+    """Three chapters, each with numbered headings, three exercises and its own answer key:
+    whole-document segmentation would stay in the first key and lose chapters 2 and 3."""
+    answers = {1: "③", 2: "①", 3: "②"}
+    pages = []
+    for chapter in range(1, 4):
+        body = [
+            f"# 제{chapter}장 물의 순환 {chapter}",
+            "1. 개요",
+            _PROSE,
+            _PROSE,
+            "2. 증발",
+            _PROSE,
+        ]
+        exercises = ["# 확인 문제"]
+        for n in range(1, 4):
+            exercises += [
+                f"{n}. 제{chapter}장 {n}번: 다음 중 옳은 것은?",
+                "① 가",
+                "② 나",
+                "③ 다",
+                "④ 라",
+            ]
+        key = ["정답", " ".join(f"{n}. {a}" for n, a in answers.items())]
+        pages += [body, exercises + key]
+    return _doc(*pages)
+
+
+def test_chapter_keys_classify_and_extract_every_chapter() -> None:
+    """The classifier and the import read the document the same way (``segment_chapters``):
+    a mixed book whose import starts automatically yields every chapter's questions."""
+    from book_core.extractor import QuestionExtractor
+
+    document = _textbook_with_chapter_keys()
+    detection = classify_content(document.blocks)
+    assert (detection.kind, detection.confidence, detection.strong_questions) == (
+        "mixed",
+        "high",
+        9,
+    )
+
+    result = QuestionExtractor().extract(document, document_id="d")
+    # Numbered headings (``1. 개요``) become drafts too (as before; the reviewer rejects them):
+    # the nine exercises are all there, each answered by its own chapter's key.
+    exercises = [d for d in result.drafts if "다음 중 옳은 것은" in d.stem]
+    assert [d.stem for d in exercises] == [
+        f"제{c}장 {n}번: 다음 중 옳은 것은?" for c in range(1, 4) for n in range(1, 4)
+    ]
+    assert [d.correct_option_ids for d in exercises] == [("opt-3",), ("opt-1",), ("opt-2",)] * 3
+
+
+def test_whole_document_segmentation_would_lose_later_chapters() -> None:
+    """The regression this guards: plain ``segment`` stays in the first chapter's key."""
+    from book_core.extractor.segment import segment, segment_chapters
+
+    blocks = _textbook_with_chapter_keys().blocks
+    asked = [q for q in segment(blocks).questions if q.options]
+    assert len(asked) == 3
+    assert len([q for q in segment_chapters(blocks).questions if q.options]) == 9

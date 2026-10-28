@@ -6,10 +6,9 @@ questions, e.g. chapter-end exercises). It reuses the question extractor's own s
 (``segment``), so a "question" here is exactly what an import would find; there is no second
 detector to drift from it. Deterministic, no LLM, no document text in the result.
 
-The document is segmented chapter by chapter (runs starting at each top-level heading):
-``segment`` reads a repeated number with a short body as the start of an answer key and stays in
-it, so a book whose numbered headings restart in every chapter would otherwise hide every later
-exercise. An answer section printed as its own chapter keys the questions of the others.
+The document is segmented chapter by chapter with ``segment_chapters`` and its key matched with
+``answer_entries`` - the same reading the import (``QuestionExtractor``) does, so a document
+classified as having questions yields them as drafts.
 
 Evidence:
 
@@ -46,8 +45,7 @@ extraction automatically only for a ``question_paper`` or a ``high`` ``mixed`` d
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import replace
+from collections.abc import Iterable, Sequence
 from itertools import pairwise
 from typing import Annotated, Literal
 
@@ -55,11 +53,11 @@ from pydantic import Field
 
 from book_core.contracts import Block, BlockType, CoreModel
 from book_core.extractor.segment import (
-    _QUESTION_START,
     AnswerKeyEntry,
     RawQuestion,
     SourceLine,
-    segment,
+    answer_entries,
+    segment_chapters,
 )
 from book_core.question import answer_option_keys, canonical_key
 
@@ -85,8 +83,6 @@ _CUE = re.compile(
     re.IGNORECASE,
 )
 _SEQUENCES = ("123456789", "ABCDE")
-
-Key = dict[int, list[str]]
 
 
 class ContentDetection(CoreModel):
@@ -116,16 +112,15 @@ def _sequential_options(question: RawQuestion) -> int:
     return 0
 
 
-def _is_strong(question: RawQuestion, key: Mapping[int, list[str]]) -> bool:
+def _is_strong(question: RawQuestion, entries: Sequence[AnswerKeyEntry]) -> bool:
     """Asks something *and* is answerable, or prints its answer (module docstring)."""
     if question.answer:
         return True
     options = _sequential_options(question) >= 2
     cue = _CUE.search(question.stem) is not None
-    entries = key.get(question.number, [])
     if options:
         # A key entry backs options only when it names option labels (``②``, ``A, C``).
-        return cue or any(answer_option_keys(text) is not None for text in entries)
+        return cue or any(answer_option_keys(e.text) is not None for e in entries)
     return cue and bool(entries)
 
 
@@ -162,72 +157,11 @@ def _gaps(numbers: Sequence[int]) -> int:
     return sum(1 for prev, nxt in pairwise(numbers) if nxt != prev + 1 and nxt != 1)
 
 
-def _groups(blocks: Sequence[Block]) -> list[tuple[int, Sequence[Block]]]:
-    """``(offset, blocks)`` runs that start at each top-level heading (that is not itself a
-    numbered question line). ``segment`` reads a repeated number with a short body as the start
-    of an answer key and stays in it, so a book whose numbered headings restart in every chapter
-    (``1. 개요``) would hide the exercises of all later chapters; numbering restarts per chapter,
-    so each chapter is segmented on its own."""
-    levels = [b.heading_level or 1 for b in blocks if b.type is BlockType.HEADING]
-    if not levels:
-        return [(0, blocks)]
-    top = min(levels)
-    starts = [0] + [
-        i
-        for i, b in enumerate(blocks)
-        if i
-        and b.type is BlockType.HEADING
-        and (b.heading_level or 1) == top
-        and _QUESTION_START.match(b.text) is None
-    ]
-    return [(a, blocks[a:b]) for a, b in zip(starts, [*starts[1:], len(blocks)], strict=True)]
-
-
-def _segment(blocks: Sequence[Block]) -> tuple[list[RawQuestion], list[AnswerKeyEntry], Key]:
-    """Questions and answer-key entries of every group, block indices made document-wide.
-
-    A question's key is its own group's answer key, else (an answer section printed as its own
-    chapter, ``정답 및 해설``) the entries of the groups that hold no question."""
-    found: list[tuple[list[RawQuestion], list[AnswerKeyEntry]]] = []
-    for offset, group in _groups(blocks):
-        seg = segment(group)
-        for question in seg.questions:
-            question.stem_lines = [_shift(line, offset) for line in question.stem_lines]
-            question.explanation_lines = [_shift(ln, offset) for ln in question.explanation_lines]
-            for option in question.options:
-                option.lines = [_shift(line, offset) for line in option.lines]
-            question.answer = [_shift_entry(e, offset) for e in question.answer]
-        found.append((seg.questions, [_shift_entry(e, offset) for e in seg.answer_key]))
-    shared: Key = {}
-    for questions, entries in found:
-        if not questions:
-            for entry in entries:
-                shared.setdefault(entry.number, []).append(entry.text)
-    all_questions: list[RawQuestion] = []
-    all_entries: list[AnswerKeyEntry] = []
-    keys: Key = {}
-    for questions, entries in found:
-        own: Key = {}
-        for entry in entries:
-            own.setdefault(entry.number, []).append(entry.text)
-        for question in questions:
-            keys[id(question)] = own.get(question.number) or shared.get(question.number, [])
-        all_questions += questions
-        all_entries += entries
-    return all_questions, all_entries, keys
-
-
-def _shift(line: SourceLine, offset: int) -> SourceLine:
-    return replace(line, block_index=line.block_index + offset)
-
-
-def _shift_entry(entry: AnswerKeyEntry, offset: int) -> AnswerKeyEntry:
-    return replace(entry, line=_shift(entry.line, offset))
-
-
 def classify_content(blocks: Sequence[Block]) -> ContentDetection:
-    questions, entries, keys = _segment(blocks)
-    strong = [q for q in questions if _is_strong(q, {q.number: keys[id(q)]})]
+    seg = segment_chapters(blocks)
+    questions, entries = seg.questions, seg.answer_key
+    keys = answer_entries(seg)
+    strong = [q for q in questions if _is_strong(q, keys[id(q)])]
     strong_ids = {id(q) for q in strong}
     # Optionless questions that ask something (essays, short answers without a key) are not
     # evidence on their own, but they are question text once the strong ones decided that.

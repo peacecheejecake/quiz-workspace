@@ -48,8 +48,9 @@ from book_core.extractor.segment import (
     RawQuestion,
     Segmentation,
     SourceLine,
+    answer_entries,
     infer_type,
-    segment,
+    segment_chapters,
     union_locations,
 )
 from book_core.llm import (
@@ -139,7 +140,7 @@ class QuestionExtractor:
         revision_id: str | None = None,
     ) -> QuestionExtraction:
         blocks = document.blocks
-        seg = segment(blocks)
+        seg = segment_chapters(blocks)
         warnings = _document_warnings(
             seg.questions,
             [*seg.answer_key, *(e for q in seg.questions for e in q.answer)],
@@ -152,7 +153,7 @@ class QuestionExtractor:
         for ctx in _contexts(seg, blocks):
             raw = ctx.raw
             candidate = _pre_extract(raw, ctx.entries, ctx.next_block, ctx.figures)
-            if ctx.occurrence and not raw.answer:
+            if ctx.occurrence and not ctx.entries:
                 candidate.issues.append(
                     issue(
                         "duplicate_question_number",
@@ -213,7 +214,7 @@ def llm_requests(document: ParsedDocument | DocumentRevision) -> list[tuple[int,
     The requests are exactly those ``QuestionExtractor.extract`` sends, so tests (and cost
     estimates) can script or count them before a run.
     """
-    seg = segment(document.blocks)
+    seg = segment_chapters(document.blocks)
     return [
         (ctx.raw.number, build_request(*_request_lines(ctx)))
         for ctx in _contexts(seg, document.blocks)
@@ -233,9 +234,7 @@ class _Context:
 
 def _contexts(seg: Segmentation, blocks: Sequence[Block]) -> list[_Context]:
     counts = Counter(q.number for q in seg.questions)
-    key_by_number: dict[int, list[AnswerKeyEntry]] = {}
-    for entry in seg.answer_key:
-        key_by_number.setdefault(entry.number, []).append(entry)
+    keyed = answer_entries(seg)
     labelled = {f.label: f for f in seg.loose_figures if f.label is not None}
     for q in seg.questions:
         for f in q.figures:
@@ -251,11 +250,7 @@ def _contexts(seg: Segmentation, blocks: Sequence[Block]) -> list[_Context]:
         contexts.append(
             _Context(
                 raw=raw,
-                entries=raw.answer
-                if raw.answer
-                else []
-                if duplicate
-                else key_by_number.get(raw.number, []),
+                entries=raw.answer if raw.answer else keyed[id(raw)],
                 figures=_figures(raw, labelled),
                 next_block=blocks[last + 1] if last + 1 < len(blocks) else None,
                 occurrence=seen[raw.number] if duplicate else 0,

@@ -28,11 +28,13 @@ Nothing here invents content: every stem/option/answer string is copied from the
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from book_core.contracts import BBox, Block, BlockType, QuestionType, SourceLocation
 from book_core.question.labels import CIRCLED_DIGITS, split_option_line
+from book_core.structure.numbering import NumberingKind, parse_numbering
 
 _QUESTION_START = re.compile(
     r"^\s*(?:문(?:제)?\s*|Q\s*)?(?P<num>\d{1,3})\s*(?:\.|번[.)]?)(?!\d)\s*(?P<body>\S.*)$"
@@ -116,6 +118,8 @@ class RawQuestion:
     """The inline answer line printed right after this question (``정답: ②``)."""
     explanation_lines: list[SourceLine] = field(default_factory=list)
     explanation_closed: bool = False
+    chapter: int = 0
+    """Index of the top-level chapter it was segmented in (``segment_chapters``)."""
 
     @property
     def stem(self) -> str:
@@ -146,6 +150,7 @@ class AnswerKeyEntry:
     number: int
     text: str
     line: SourceLine
+    chapter: int = 0
 
 
 @dataclass(slots=True)
@@ -603,6 +608,105 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
         unparsed_answer_lines=unparsed,
         ambiguous_answer_tables=ambiguous_tables,
     )
+
+
+_CHAPTER_KINDS = (NumberingKind.PART, NumberingKind.CHAPTER)
+
+
+def chapter_starts(blocks: Sequence[Block]) -> list[int]:
+    """Block indices where a chapter starts: 0, then every heading numbered as a part or chapter
+    (``제1장``, ``2장``, ``Chapter 3``, ``제1편``, ``Part II``; the structure module's numbering).
+    Other headings never split: Docling prints question lines, inline answers and wrapped stems
+    of exam workbooks as headings too, and cutting there would separate a question from its
+    answer."""
+    return [0] + [
+        i
+        for i, b in enumerate(blocks)
+        if i
+        and b.type is BlockType.HEADING
+        and (numbering := parse_numbering(b.text.split("\n")[0])) is not None
+        and numbering.kind in _CHAPTER_KINDS
+    ]
+
+
+def _shift_line(line: SourceLine, offset: int) -> SourceLine:
+    return replace(line, block_index=line.block_index + offset)
+
+
+def _shift_entry(entry: AnswerKeyEntry, offset: int, chapter: int) -> AnswerKeyEntry:
+    return replace(entry, line=_shift_line(entry.line, offset), chapter=chapter)
+
+
+def _shift_question(question: RawQuestion, offset: int, chapter: int) -> None:
+    question.chapter = chapter
+    question.block_indices = [i + offset for i in question.block_indices]
+    question.stem_lines = [_shift_line(ln, offset) for ln in question.stem_lines]
+    question.trailing = [_shift_line(ln, offset) for ln in question.trailing]
+    question.explanation_lines = [_shift_line(ln, offset) for ln in question.explanation_lines]
+    for option in question.options:
+        option.lines = [_shift_line(ln, offset) for ln in option.lines]
+    question.answer = [_shift_entry(e, offset, chapter) for e in question.answer]
+
+
+def segment_chapters(blocks: Sequence[Block]) -> Segmentation:
+    """``segment`` run per chapter (``chapter_starts``), merged with document-wide
+    block indices and every question / key entry tagged with its ``chapter``.
+
+    ``segment`` reads a repeated number with a short body as the start of an answer key and stays
+    in it to the end; in a book whose chapters each restart their numbering (numbered headings,
+    exercises, a key per chapter) that would swallow every later chapter. Numbering restarts per
+    chapter, so each chapter is read on its own. A document with a single chapter is segmented
+    exactly as by ``segment``. Use ``answer_entries`` to match the key to the questions."""
+    starts = chapter_starts(blocks)
+    if len(starts) == 1:
+        return segment(blocks)
+    merged = Segmentation(questions=[], answer_key=[], loose_figures=[])
+    for chapter, (start, end) in enumerate(zip(starts, [*starts[1:], len(blocks)], strict=True)):
+        seg = segment(blocks[start:end])
+        for question in seg.questions:
+            _shift_question(question, start, chapter)
+        merged.questions += seg.questions
+        merged.answer_key += [_shift_entry(e, start, chapter) for e in seg.answer_key]
+        merged.loose_figures += seg.loose_figures
+        merged.unparsed_answer_lines += seg.unparsed_answer_lines
+        merged.ambiguous_answer_tables += seg.ambiguous_answer_tables
+    return merged
+
+
+def _asks(question: RawQuestion) -> bool:
+    return bool(question.options) or _QUESTION_CUE.search(question.stem) is not None
+
+
+def answer_entries(seg: Segmentation) -> dict[int, list[AnswerKeyEntry]]:
+    """``id(question)`` -> the answer-key entries for it (not its inline answer).
+
+    A question whose number appears once in the document takes every entry with that number,
+    wherever the key is printed (one key for the whole paper, or an answer chapter). A number
+    repeated across chapters takes its own chapter's entries when it appears once in that chapter
+    (numbering restarts per chapter, each with its own key), or when it is the only one of them
+    there that asks something (options or a question cue). Otherwise nothing: a wrong answer is
+    worse than none. With a single chapter this is the document-wide match by unique number."""
+    in_chapter = Counter((q.chapter, q.number) for q in seg.questions)
+    # A numbered heading (``1. 개요``) is read as a question too; among a chapter's questions
+    # with the same number, the one that asks something is the one its key answers.
+    asking = Counter((q.chapter, q.number) for q in seg.questions if _asks(q))
+    in_document = Counter(q.number for q in seg.questions)
+    own: dict[tuple[int, int], list[AnswerKeyEntry]] = {}
+    every: dict[int, list[AnswerKeyEntry]] = {}
+    for entry in seg.answer_key:
+        own.setdefault((entry.chapter, entry.number), []).append(entry)
+        every.setdefault(entry.number, []).append(entry)
+    found: dict[int, list[AnswerKeyEntry]] = {}
+    for question in seg.questions:
+        entries: list[AnswerKeyEntry] = []
+        if in_document[question.number] == 1:
+            entries = every.get(question.number, [])
+        elif in_chapter[(question.chapter, question.number)] == 1 or (
+            _asks(question) and asking[(question.chapter, question.number)] == 1
+        ):
+            entries = own.get((question.chapter, question.number), [])
+        found[id(question)] = entries
+    return found
 
 
 def infer_type(question: RawQuestion, next_block: Block | None) -> tuple[QuestionType, bool]:
