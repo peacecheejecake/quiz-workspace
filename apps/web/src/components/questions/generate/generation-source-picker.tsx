@@ -37,10 +37,10 @@ export function GenerationSourcePicker({
           />
         }
         title="문제 변형 출제"
-        description="변형할 확정 문제를 고르세요. 문제은행의 문제 상세에서 '변형 출제'를 눌러도 됩니다."
+        description="변형할 확정 문제를 고르세요. 전체 문제의 문제 상세에서 '변형 출제'를 눌러도 됩니다."
         actions={
           <Button asChild>
-            <Link href={bank}>문제은행</Link>
+            <Link href={bank}>전체 문제</Link>
           </Button>
         }
       />
@@ -59,10 +59,10 @@ export function GenerationSourcePicker({
       ) : candidates.length === 0 ? (
         <EmptyState
           title="변형할 확정 문제가 없습니다"
-          description="문제은행에서 문제를 등록하고 확정하면 여기에서 변형할 수 있습니다."
+          description="전체 문제에서 문제를 등록하고 확정하면 여기에서 변형할 수 있습니다."
           action={
             <Button asChild variant="primary">
-              <Link href={bank}>문제은행으로 이동</Link>
+              <Link href={bank}>전체 문제로 이동</Link>
             </Button>
           }
         />
@@ -87,7 +87,7 @@ export function GenerationSourcePicker({
           </ul>
           {candidates.length >= limit ? (
             <p className={styles.muted}>
-              최근 {limit}개만 보여 줍니다. 다른 문제는 문제은행에서 찾아 &lsquo;변형 출제&rsquo;를
+              최근 {limit}개만 보여 줍니다. 다른 문제는 전체 문제에서 찾아 &lsquo;변형 출제&rsquo;를
               눌러 주세요.
             </p>
           ) : null}

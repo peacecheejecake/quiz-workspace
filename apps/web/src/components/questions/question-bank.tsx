@@ -1,6 +1,6 @@
 'use client';
 
-// QBANK-01 문제은행 (docs/screens/questions-bank.md): confirmed questions grouped by chapter
+// QBANK-01 전체 문제, the question bank (docs/screens/questions-bank.md): confirmed questions grouped by chapter
 // ("챕터 없음" last), search + type/chapter/status filters in the URL behind a collapsible "검색·필터"
 // toggle (collapsed by default, UX4), cursor pagination ("더 보기"), the empty state with
 // direct-create and PDF-import actions (the header has neither while the bank is empty, UX4), the
@@ -373,10 +373,10 @@ export function QuestionBank({
         breadcrumb={
           <WorkspaceBreadcrumb
             workspace={{ id: workspaceId, name: workspaceName }}
-            trail={[{ label: '문제은행' }]}
+            trail={[{ label: '전체 문제' }]}
           />
         }
-        title="문제은행"
+        title="전체 문제"
         description="확정된 문제를 챕터별로 관리합니다. 문제를 직접 등록하거나 PDF에서 가져올 수 있습니다."
         actions={
           canEdit && !emptyBank ? (

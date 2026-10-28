@@ -134,7 +134,7 @@
 //      exactly +3 markers (questions.md §8: "그중 3개 승인하면 점 103개").
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
-//   QBANK-01  h1 "문제은행"; empty-state heading "등록된 문제가 없습니다" with a "문제 직접 등록" button
+//   QBANK-01  h1 "전체 문제" (UX6-BANK; was "문제은행"); empty-state heading "등록된 문제가 없습니다" with a "문제 직접 등록" button
 //             and a "PDF 가져오기" button; header "PDF 가져오기"/"문제 등록" buttons only while the bank
 //             has questions (UX4); "PDF 가져오기" opens the non-modal dialog "문제 PDF 관리" (same as
 //             the home's); toggle button "검색·필터" (collapsed by default, UX4) controlling a group

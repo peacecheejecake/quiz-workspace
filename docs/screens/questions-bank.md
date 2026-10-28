@@ -1,15 +1,16 @@
-# QBANK-01 — 문제은행 목록·편집
+# QBANK-01 — 전체 문제 목록·편집
 
-**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (하위 페이지 내비게이션) · UX4 개정 2026-10-21 (검색·필터 접기, PDF 가져오기 dialog)
+**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (하위 페이지 내비게이션) · UX4 개정 2026-10-21 (검색·필터 접기, PDF 가져오기 dialog) · UX6-BANK 개정 2026-10-28 (페이지 이름 `문제은행` → `전체 문제`)
 **Route:** `/workspaces/:workspaceId/questions/bank`
 **테스트:** `tests/e2e/questions/questions-bank.spec.ts`
+**페이지 이름 (UX6-BANK 2026-10-28):** 사용자 피드백 "문제은행 페이지 제목도 '전체 문제'로 변경"에 따라 이 화면의 이름은 `전체 문제`다 — 제목(h1), 문서 제목(`<title>`), breadcrumb 현재 항목, 로딩 skeleton 문구("전체 문제를 불러오는 중입니다."), 그리고 다른 화면에서 이 페이지로 가는 링크(문제 PDF 가져오기·문제 변형 출제·묶음 변형 출제 페이지 제목 줄의 `전체 문제`, 등록 뒤 `전체 문제에서 보기`, 빈 상태의 `전체 문제로 이동`). Route(`/questions/bank`)와 화면 ID QBANK-01은 그대로다. "승인한 초안만 문제은행에 등록됩니다"처럼 확정 문제 모음(개념)을 가리키는 문장은 `문제은행`을 유지한다.
 **연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
 
 ## 레이아웃 및 컴포넌트
 - 상태별 Empty/Loading/Failure/Success UI, 반응형 Layout과 Floating Side Panel, 접근성 지원.
 - API와 화면은 owner / viewer / 로그인 상태에 따라 기능과 데이터 표시 범위를 구분한다.
 - 모든 편집·상태 변경은 서버 측 인가·revision 일관성을 검증한다.
-- **하위 페이지 내비게이션 (UX3c 2026-10-20):** 버튼으로 들어오는 Workspace 하위 페이지(문제은행, 문제 PDF 가져오기, 문제 변형 출제 검토, PDF 열람·원문 교정)는 제목 위에 뒤로가기(`BackLink`, Workspace 홈으로)와 breadcrumb(`Workspace 이름 › … › 현재 페이지`, 현재 항목 `aria-current="page"`)을 둔다.
+- **하위 페이지 내비게이션 (UX3c 2026-10-20):** 버튼으로 들어오는 Workspace 하위 페이지(전체 문제(문제은행), 문제 PDF 가져오기, 문제 변형 출제 검토, PDF 열람·원문 교정)는 제목 위에 뒤로가기(`BackLink`, Workspace 홈으로)와 breadcrumb(`Workspace 이름 › … › 현재 페이지`, 현재 항목 `aria-current="page"`)을 둔다.
 
 - **UX4 (2026-10-21):**
   - 제목 줄의 `PDF 가져오기`는 홈과 같은 "문제 PDF 관리" non-modal dialog(QIMPORT-01-AC05와 같은 component: 문제 PDF 목록 + Dropzone)를 이 페이지 위에 연다. 다른 화면으로 이동하지 않는다. 빈 상태의 `PDF 가져오기`도 같다.
@@ -49,13 +50,13 @@
 ### QBANK-01-AC05
 
 - **Given:** Workspace 홈
-- **When:** header의 `문제` 메뉴 › `전체 문제`(UX6-PROGRESS 2026-10-28; 이전 `문제은행` 버튼)로 문제은행 페이지에 들어감
-- **Then:** 문제은행 페이지 위쪽에 뒤로가기 링크(Workspace 홈으로)와 breadcrumb(`Workspace 이름` 링크 › `문제은행` 현재 페이지)이 있고, 뒤로가기나 breadcrumb의 Workspace 이름을 누르면 Workspace 홈으로 돌아간다. 문제 PDF 가져오기·문제 변형 출제 검토·PDF 열람 페이지도 같은 뒤로가기와 breadcrumb을 가진다(UX3c). breadcrumb 줄 아래에는 제목과 12px 여백을 둔다(UX5-UI 2026-10-23).
+- **When:** header의 `문제` 메뉴 › `전체 문제`(UX6-PROGRESS 2026-10-28; 이전 `문제은행` 버튼)로 전체 문제 페이지에 들어감
+- **Then:** 제목이 `전체 문제`인 페이지(UX6-BANK 2026-10-28; 이전 제목 `문제은행`) 위쪽에 뒤로가기 링크(Workspace 홈으로)와 breadcrumb(`Workspace 이름` 링크 › `전체 문제` 현재 페이지)이 있고, 뒤로가기나 breadcrumb의 Workspace 이름을 누르면 Workspace 홈으로 돌아간다. 문제 PDF 가져오기·문제 변형 출제 검토·PDF 열람 페이지도 같은 뒤로가기와 breadcrumb을 가지며, 문제 PDF 가져오기·문제 변형 출제 페이지의 이 페이지로 가는 링크 이름도 `전체 문제`다(UX3c, UX6-BANK). breadcrumb 줄 아래에는 제목과 12px 여백을 둔다(UX5-UI 2026-10-23).
 
 ### QBANK-01-AC06
 
-- **Given:** 문제은행(편집 권한): 문제가 없는 Workspace와 문제·문제 PDF·책 문서가 있는 Workspace
-- **When:** 문제은행을 열고 "검색·필터" 버튼과 제목 줄의 `PDF 가져오기`를 누름
+- **Given:** 전체 문제 페이지(편집 권한): 문제가 없는 Workspace와 문제·문제 PDF·책 문서가 있는 Workspace
+- **When:** 전체 문제 페이지를 열고 "검색·필터" 버튼과 제목 줄의 `PDF 가져오기`를 누름
 - **Then:** 빈 문제은행의 제목 줄에는 `PDF 가져오기`·`문제 등록`이 없고 빈 상태에만 있다. 문제가 있으면 제목 줄에 둘 다 있다. 검색·필터는 기본으로 접혀 있고(문제 검색 입력이 보이지 않음) 화살표 아이콘 버튼 "검색·필터"(`aria-expanded`, `aria-controls`)로 펼치고 접는다. `PDF 가져오기`는 페이지를 떠나지 않고 홈과 같은 "문제 PDF 관리" non-modal dialog를 열어 문제 PDF만(책 문서 없이) 나열하고 Dropzone의 "PDF 선택"을 보인다. 375px 폭에서도 버튼 문구는 줄바꿈되지 않고 페이지 가로 스크롤이 없다(UX4).
 
 ## Test-first 규칙
