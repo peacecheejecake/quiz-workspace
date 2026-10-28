@@ -10,6 +10,8 @@
 //      graded attempt on a question revision (practice API is M5) for QBANK-01-AC03.
 //   4. Recreating legacy state no current code path produces: a processed question PDF without
 //      an import run (papers processed before QIMP-AUTO) for QIMPORT-01-AC06.
+//   5. Scaling up state the AC is about beyond what a synthetic fixture yields in E2E time: the
+//      hundreds of drafts of a real question PDF (copies of extracted drafts) for QIMPORT-01-AC09.
 // The URL is loopback-checked; ids are validated before they are inlined into SQL.
 import { execFileSync } from 'node:child_process';
 import { localDbAdminUrl } from './local-env.ts';
@@ -100,5 +102,31 @@ export function forgetImportRuns(workspaceId: string, documentId: string): void 
   psql(
     `delete from public.question_import_runs ` +
       `where workspace_id = ${ws} and source_document_id = ${doc}`,
+  );
+}
+
+/**
+ * Appends `copies` copies of every draft an import run already has (use 5 in the file comment):
+ * same type, payload and validations, each with its own id, position and question number, and
+ * a stem suffixed with ` #<copy>` so it stays unique. Returns the run's draft count.
+ */
+export function seedImportDraftCopies(importId: string, copies: number): number {
+  if (!Number.isInteger(copies) || copies < 1 || copies > 1000) {
+    throw new Error('db fixture: invalid copy count');
+  }
+  const run = uuidList([importId]);
+  psql(
+    `with base as (select count(*)::int as n from public.question_drafts where import_run_id = ${run}) ` +
+      `insert into public.question_drafts (workspace_id, source_type, import_run_id, position, ` +
+      `question_number, question_type, is_multi_answer, rubric, payload, validations) ` +
+      `select d.workspace_id, d.source_type, d.import_run_id, d.position + g * base.n, ` +
+      `d.position + g * base.n + 1, d.question_type, d.is_multi_answer, d.rubric, ` +
+      `jsonb_set(jsonb_set(d.payload, '{id}', to_jsonb((d.payload->>'id') || '-c' || g)), ` +
+      `'{stem}', to_jsonb((d.payload->>'stem') || ' #' || g)), d.validations ` +
+      `from public.question_drafts d, base, generate_series(1, ${copies}) g ` +
+      `where d.import_run_id = ${run}`,
+  );
+  return Number(
+    psql(`select count(*) from public.question_drafts where import_run_id = ${run}`).trim(),
   );
 }

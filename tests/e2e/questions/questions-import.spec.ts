@@ -24,6 +24,7 @@ import {
   forgetImportRuns,
   homePath,
   homeUi,
+  importPaperDrafts,
   importPath,
   importUi,
   JOB_TIMEOUT_MS,
@@ -36,6 +37,7 @@ import {
   pageLabel,
   questionFormUi,
   questionPaper,
+  seedImportDraftCopies,
   signInAs,
   test,
   truthQuestion,
@@ -675,5 +677,107 @@ test(
     await page.goto(`${bankPath(ws.id)}?chapter=${moved?.id}`);
     await expect(bankUi.items(page)).toHaveCount(1);
     await expect(bankUi.item(page, Q(1).stem)).toHaveCount(1);
+  },
+);
+
+/**
+ * Clicks a checkbox in the page and returns how long until it shows `expected` (ms): the click's
+ * synchronous handling plus the render it triggers, i.e. how long the screen does not respond.
+ */
+async function clickLatency(box: Locator, expected: 'true' | 'false'): Promise<number> {
+  return box.evaluate(async (el, want) => {
+    const start = performance.now();
+    (el as HTMLElement).click();
+    await new Promise<void>((resolve) => {
+      const tick = () =>
+        el.getAttribute('aria-checked') === want ? resolve() : requestAnimationFrame(tick);
+      tick();
+    });
+    return performance.now() - start;
+  }, expected);
+}
+
+/**
+ * Click-to-checked budgets (QIMPORT-01-AC09). Re-rendering every draft on each click took ~200 ms
+ * for one checkbox and for "전체 선택" alike at 512 drafts (local Chromium, UX6-SELECT); now one
+ * checkbox is a few ms and "전체 선택" (320 checkboxes change) ~60 ms in Chromium, up to ~150 ms
+ * in WebKit on a loaded machine. One checkbox must not depend on the list size; "전체 선택" must
+ * not freeze the screen. The margins are for CI.
+ */
+const ONE_BUDGET_MS = 50;
+const ALL_BUDGET_MS = 400;
+/** Copies of the paper's 8 drafts: 8 × 64 = 512 drafts, 5 × 64 = 320 in "전체 선택". */
+const COPIES = 63;
+
+test(
+  'QIMPORT-01-AC09 with hundreds of drafts, selecting and 전체 선택 respond at once without a request; 승인 및 등록 sends the selection',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('qimport01-ac09');
+    const ws = await workspaceFactory.create(owner);
+    // Book chapters, so every draft has a chapter picker like a real import.
+    await uploadReadyBook(owner, ws.id, 'book-ko');
+    const { run } = await importPaperDrafts(owner, ws.id);
+    const total = seedImportDraftCopies(run.id, COPIES);
+    expect(total).toBe(PAPER.questions.length * (COPIES + 1));
+    const registrable = PAPER.questions.filter((q) => q.answer !== null).length * (COPIES + 1);
+
+    await signInAs(page, owner.user);
+    await page.goto(importPath(ws.id));
+    await expect(importUi.draftItems(page)).toHaveCount(total, { timeout: 30_000 });
+    const all = importUi.selectAll(page);
+    await expect(all).toHaveAccessibleName(new RegExp(`\\(${registrable}개\\)`));
+
+    // Selecting is screen state only: no request of any kind while checking.
+    const sent: string[] = [];
+    const onRequest = (r: { method(): string; url(): string }) => {
+      if (new URL(r.url()).pathname.startsWith('/api/')) sent.push(`${r.method()} ${r.url()}`);
+    };
+    page.on('request', onRequest);
+
+    const selectAllMs = await clickLatency(all, 'true');
+    await expect(importUi.publish(page)).toContainText(`(${registrable})`);
+    await expect(
+      importUi.drafts(page).getByRole('checkbox', { name: /번 문제 선택/, checked: true }),
+    ).toHaveCount(registrable);
+    const q1 = importUi.select(importUi.draft(page, Q(1).stem).first());
+    const oneOffMs = await clickLatency(q1, 'false');
+    await expect(all).toHaveAttribute('aria-checked', 'mixed');
+    await expect(importUi.publish(page)).toContainText(`(${registrable - 1})`);
+    const oneOnMs = await clickLatency(q1, 'true');
+    const clearMs = await clickLatency(all, 'false');
+    await expect(importUi.publish(page)).toContainText('(0)');
+    const againMs = await clickLatency(all, 'true');
+    await expect(importUi.publish(page)).toContainText(`(${registrable})`);
+
+    test.info().annotations.push({
+      type: 'selection latency (ms)',
+      description: JSON.stringify({ selectAllMs, oneOffMs, oneOnMs, clearMs, againMs }),
+    });
+    for (const [what, ms] of Object.entries({ oneOffMs, oneOnMs })) {
+      expect(ms, `${what} responds within ${ONE_BUDGET_MS} ms`).toBeLessThan(ONE_BUDGET_MS);
+    }
+    for (const [what, ms] of Object.entries({ selectAllMs, clearMs, againMs })) {
+      expect(ms, `${what} responds within ${ALL_BUDGET_MS} ms`).toBeLessThan(ALL_BUDGET_MS);
+    }
+    page.off('request', onRequest);
+    expect(sent, 'no request while selecting').toEqual([]);
+    expect((await listDrafts(owner, run.id)).every((d) => d.review_status === 'pending')).toBe(
+      true,
+    );
+
+    // The button sends the whole selection in one request.
+    const submitted = page.waitForRequest(
+      (r) => r.method() === 'POST' && r.url().endsWith('/registrations'),
+    );
+    await importUi.publish(page).click();
+    const body = (await submitted).postDataJSON() as { drafts: { draft_id: string }[] };
+    expect(body.drafts).toHaveLength(registrable);
+    await expect(page.getByRole('status')).toContainText(
+      new RegExp(`${registrable}\\s*개 문제를 문제은행에 등록`),
+      { timeout: JOB_TIMEOUT_MS },
+    );
+    const registered = (await listDrafts(owner, run.id)).filter((d) => d.published_question_id);
+    expect(registered).toHaveLength(registrable);
   },
 );

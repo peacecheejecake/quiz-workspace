@@ -7,7 +7,9 @@
 //   선택) → "선택한 문제 승인 및 등록" hands exactly the selected drafts at the versions on screen
 //   to the server (POST /registrations, QIMP-JOB), whose job approves and registers them even if
 //   the page is left; the screen follows its progress and reattaches on return. Checking a draft
-//   or "전체 선택" is screen state only; nothing is sent until the button.
+//   or "전체 선택" is screen state only; nothing is sent until the button. With hundreds of drafts
+//   it must stay instant (UX6-SELECT, QIMPORT-01-AC09): the list's callbacks are stable so a
+//   selection change re-renders only the checkboxes, not every draft.
 //
 // The server starts the import itself once the PDF is processed (QIMPORT-01-AC06), so after the
 // upload the page may be left: the POST then attaches to that run, and a later visit (or
@@ -529,27 +531,32 @@ export function QuestionImport({
   }
 
   /** Saves the chapter a draft is registered under (CHAPTER-MAP); not content, keeps approval. */
-  async function changeChapter(target: ReviewDraft, chapterId: string | null) {
-    setSavingChapter((s) => new Set(s).add(target.id));
-    setStates(({ [target.id]: _old, ...rest }) => rest);
-    try {
-      const updated = await client.updateDraft(target.id, chapterBody(target, chapterId));
-      setDrafts((list) => replaceDraft(list, reviewDraftFromImport(updated)));
-    } catch (error) {
-      if (onUnauthenticated(error)) return;
-      const message = error instanceof ImportApiError ? error.message : '챕터를 바꾸지 못했습니다.';
-      setStates((s) => ({ ...s, [target.id]: { error: message } }));
-      if (error instanceof ImportApiError && error.kind === 'staleDraft' && run) {
-        void refreshDrafts(run.id);
+  const runId = run?.id ?? null;
+  const changeChapter = useCallback(
+    async (target: ReviewDraft, chapterId: string | null) => {
+      setSavingChapter((s) => new Set(s).add(target.id));
+      setStates(({ [target.id]: _old, ...rest }) => rest);
+      try {
+        const updated = await client.updateDraft(target.id, chapterBody(target, chapterId));
+        setDrafts((list) => replaceDraft(list, reviewDraftFromImport(updated)));
+      } catch (error) {
+        if (onUnauthenticated(error)) return;
+        const message =
+          error instanceof ImportApiError ? error.message : '챕터를 바꾸지 못했습니다.';
+        setStates((s) => ({ ...s, [target.id]: { error: message } }));
+        if (error instanceof ImportApiError && error.kind === 'staleDraft' && runId) {
+          void refreshDrafts(runId);
+        }
+      } finally {
+        setSavingChapter((s) => {
+          const next = new Set(s);
+          next.delete(target.id);
+          return next;
+        });
       }
-    } finally {
-      setSavingChapter((s) => {
-        const next = new Set(s);
-        next.delete(target.id);
-        return next;
-      });
-    }
-  }
+    },
+    [client, onUnauthenticated, refreshDrafts, runId],
+  );
 
   async function reloadDraft(draftId: string): Promise<ReviewDraft | null> {
     if (!run) return null;
@@ -605,10 +612,43 @@ export function QuestionImport({
   // --- publish ------------------------------------------------------------------------------
 
   // The selection on screen: ids that are gone, registered or blocked are not counted or sent.
-  const chosen = pruneSelection(drafts, selected);
-  const selection = approvePublishSelection(drafts, chosen);
-  const allState = selectAllState(drafts, chosen);
-  const scopeCount = selectAllScope(drafts).length;
+  const chosen = useMemo(() => pruneSelection(drafts, selected), [drafts, selected]);
+  const selection = useMemo(() => approvePublishSelection(drafts, chosen), [drafts, chosen]);
+  const allState = useMemo(() => selectAllState(drafts, chosen), [drafts, chosen]);
+  const scopeCount = useMemo(() => selectAllScope(drafts).length, [drafts]);
+
+  // Stable list callbacks: a selection change then re-renders only the checkboxes (UX6-SELECT).
+  const selectDraft = useCallback(
+    (draft: ReviewDraft, on: boolean) =>
+      setSelected((current) => toggleOne(pruneSelection(drafts, current), draft.id, on)),
+    [drafts],
+  );
+  const editDraft = useCallback((draft: ReviewDraft) => {
+    setEditorSession((n) => n + 1);
+    setEditing(draft);
+  }, []);
+  const sourceDocumentId = run?.source_document_id ?? null;
+  const draftPageHref = useCallback(
+    (draft: ReviewDraft, page: number) =>
+      (draft.sourceDocumentId ?? sourceDocumentId)
+        ? `/workspaces/${workspaceId}/documents/${draft.sourceDocumentId ?? sourceDocumentId}?page=${page}`
+        : null,
+    [sourceDocumentId, workspaceId],
+  );
+  const renderChapter = useCallback(
+    (draft: ReviewDraft) =>
+      draft.chapter ? (
+        <DraftChapterField
+          number={draftNumber(draft)}
+          info={draft.chapter}
+          options={chapterOptions}
+          readOnly={!canEdit || draft.publishedQuestionId !== null}
+          disabled={publishing || savingChapter.has(draft.id)}
+          onChange={(chapterId) => void changeChapter(draft, chapterId)}
+        />
+      ) : null,
+    [canEdit, changeChapter, chapterOptions, publishing, savingChapter],
+  );
 
   function markRefused(refused: readonly RefusedDraft[]) {
     setStates((s) => {
@@ -744,7 +784,6 @@ export function QuestionImport({
   const busy = activity !== null;
   const registered = drafts.filter((d) => d.publishedQuestionId !== null).length;
   const selectedCount = selection.length;
-  const sourceDocumentId = run?.source_document_id ?? null;
 
   const uploadButton = canEdit ? (
     <Button variant="primary" onClick={() => inputRef.current?.click()} disabled={busy}>
@@ -909,31 +948,11 @@ export function QuestionImport({
             readOnly={!canEdit}
             selected={chosen}
             selectionDisabled={publishing}
-            onSelectChange={(draft, on) =>
-              setSelected((current) => toggleOne(pruneSelection(drafts, current), draft.id, on))
-            }
-            onEdit={(draft) => {
-              setEditorSession((n) => n + 1);
-              setEditing(draft);
-            }}
+            onSelectChange={selectDraft}
+            onEdit={editDraft}
             onCompare={setComparing}
-            renderExtra={(draft) =>
-              draft.chapter ? (
-                <DraftChapterField
-                  number={draftNumber(draft)}
-                  info={draft.chapter}
-                  options={chapterOptions}
-                  readOnly={!canEdit || draft.publishedQuestionId !== null}
-                  disabled={publishing || savingChapter.has(draft.id)}
-                  onChange={(chapterId) => void changeChapter(draft, chapterId)}
-                />
-              ) : null
-            }
-            pageHref={(draft, page) =>
-              (draft.sourceDocumentId ?? sourceDocumentId)
-                ? `/workspaces/${workspaceId}/documents/${draft.sourceDocumentId ?? sourceDocumentId}?page=${page}`
-                : null
-            }
+            renderExtra={renderChapter}
+            pageHref={draftPageHref}
           />
         </section>
       ) : null}
