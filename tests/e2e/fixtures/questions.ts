@@ -170,7 +170,7 @@ import { copyFileSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { JOB_TIMEOUT_MS, PDF_DIR, uploadPdf, waitForJob, type PdfFile } from './documents.ts';
-import { main } from './workspace-ui.ts';
+import { docUi, homePath, homeUi, main } from './workspace-ui.ts';
 import type { Member } from './workspaces.ts';
 
 // ---------------------------------------------------------------------------------------------
@@ -519,10 +519,13 @@ export const questionFormUi = {
 
 export const importUi = {
   heading: (page: Page) => page.getByRole('heading', { level: 1 }),
-  uploadButton: (page: Page) =>
-    button(main(page), /pdf (업로드|선택)|파일 선택|업로드|upload|choose (a )?(pdf|file)/i).first(),
   progress: (page: Page) =>
     main(page).getByRole('progressbar', { name: /가져오기|추출|분석|import|extract/i }),
+  /** UX6-UPLOAD: `검토할 PDF` (one review per PDF; shown with two or more extracted PDFs). */
+  pdfSwitcher: (page: Page) =>
+    main(page).getByRole('combobox', { name: /검토할 pdf|pdf to review/i }),
+  /** UX6-UPLOAD: "문서 관리 열기" (empty import page and 문제 PDF 관리). */
+  openDocuments: (scope: Locator) => buttonOrLink(scope, /문서 관리 열기|open documents/i),
   drafts: (page: Page) =>
     main(page).getByRole('list', { name: /가져온 (초안|문제)|초안|drafts?|imported questions/i }),
   draftItems: (page: Page) => importUi.drafts(page).getByRole('listitem'),
@@ -569,11 +572,29 @@ export async function fillMcq(
   return form;
 }
 
-/** Uploads the question paper through the import screen's file chooser. */
-export async function uploadQuestionPaper(page: Page, paper: QuestionPaper): Promise<void> {
+/**
+ * Uploads the question paper the way a user does since UX6-UPLOAD: through the home's "문서 관리"
+ * dialog (one upload place, no type choice), then waits until the server classified it and started
+ * its extraction and follows the row's "문제 검토" link to the import page (`?document=<id>`).
+ */
+export async function uploadQuestionPaper(
+  page: Page,
+  workspaceId: string,
+  paper: QuestionPaper,
+): Promise<void> {
+  await page.goto(homePath(workspaceId, 'panel=documents'));
+  const dialog = homeUi.documentsDialog(page);
+  await expect(dialog).toBeVisible();
   const chooser = page.waitForEvent('filechooser');
-  await importUi.uploadButton(page).click();
+  await docUi.uploadButton(page).click();
   await (await chooser).setFiles(paper.path);
+  const row = dialog.getByRole('listitem').filter({ hasText: paper.file.replace(/\.pdf$/, '') });
+  const review = docUi.reviewLink(row);
+  await expect(review).toBeVisible({ timeout: JOB_TIMEOUT_MS });
+  await review.click();
+  await expect(page).toHaveURL(
+    (url) => url.pathname === importPath(workspaceId) && url.searchParams.has('document'),
+  );
 }
 
 // ---------------------------------------------------------------------------------------------

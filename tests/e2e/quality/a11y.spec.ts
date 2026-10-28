@@ -326,7 +326,7 @@ test(
     await signInAs(page, owner.user);
 
     await page.goto(importPath(ws.id));
-    await expect(importUi.uploadButton(page)).toBeVisible();
+    await expect(importUi.openDocuments(main(page))).toBeVisible();
     await expectAccessible(page, 'import empty');
     await importPaperDrafts(owner, ws.id);
     await page.reload();
@@ -363,8 +363,11 @@ test(
     // Error state: the first import job of a marked paper fails (fake extractor, QIMPORT A7).
     const failingWs = await workspaceFactory.create(owner);
     mkdirSync(test.info().outputDir, { recursive: true });
-    await page.goto(importPath(failingWs.id));
-    await uploadQuestionPaper(page, failingOnceCopy(questionPaper(), test.info().outputDir));
+    await uploadQuestionPaper(
+      page,
+      failingWs.id,
+      failingOnceCopy(questionPaper(), test.info().outputDir),
+    );
     await expect(importUi.alert(page)).toContainText(/실패|오류|failed|error/i, {
       timeout: JOB_TIMEOUT_MS,
     });

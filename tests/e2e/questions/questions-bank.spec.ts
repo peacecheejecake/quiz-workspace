@@ -21,6 +21,7 @@ import {
   fillMcq,
   getQuestion,
   homeUi,
+  importUi,
   JOB_TIMEOUT_MS,
   listQuestions,
   main,
@@ -485,7 +486,11 @@ test(
     const list = dialog.getByRole('list', { name: /문제 pdf 목록|question pdfs/i });
     await expect(list.getByRole('listitem')).toHaveCount(1);
     await expect(list).not.toContainText(/book-ko|물의 순환과 정수 처리/);
-    await expect(dialog.getByRole('button', { name: /pdf 선택|choose/i })).toBeVisible();
+    // UX6-UPLOAD: no upload here; the dialog points at 문서 관리, the one upload place.
+    await expect(
+      dialog.getByRole('button', { name: /pdf (선택|업로드)|choose|upload/i }),
+    ).toHaveCount(0);
+    await expect(importUi.openDocuments(dialog)).toBeVisible();
     await expect(
       dialog
         .getByRole('button', { name: /^pdf 가져오기$/i })
