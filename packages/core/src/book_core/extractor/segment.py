@@ -33,7 +33,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
 from book_core.contracts import BBox, Block, BlockType, QuestionType, SourceLocation
-from book_core.question.labels import CIRCLED_DIGITS, split_option_line
+from book_core.question.labels import CIRCLED_DIGITS, answer_option_keys, split_option_line
 from book_core.structure.numbering import NumberingKind, parse_numbering
 
 _QUESTION_START = re.compile(
@@ -44,8 +44,12 @@ _ANSWER_KEY_HEADING = re.compile(
     r"answer\s*key|answers)\s*[\]>)]?\s*:?\s*$",
     re.IGNORECASE,
 )
+_KEY_LABEL = "[①-⑩A-Ea-e가나다라마]"
+# One answer-key entry: ``1. ③``, ``1번 ③``, ``1) ③``, ``1-③`` (a dash only before an option
+# label, never before a digit: ``1-2. ③`` is entry 2), up to the next entry on the line.
 _ANSWER_ENTRY = re.compile(
-    r"(?P<num>\d{1,3})\s*(?:\.|번[.)]?|\))\s*(?P<ans>.+?)(?=\s+\d{1,3}\s*(?:\.|번[.)]?|\))\s|$)"
+    rf"(?P<num>\d{{1,3}})\s*(?:\.|번[.)]?|\)|-(?=\s*{_KEY_LABEL}))\s*(?P<ans>.+?)"
+    rf"(?=\s+\d{{1,3}}\s*(?:(?:\.|번[.)]?|\))\s|-\s*{_KEY_LABEL})|$)"
 )
 _CAPTION = re.compile(
     r"^\s*[\[<(]?\s*(?P<label>(?:그림|도표|표|Figure|Fig\.?|Table)\s*\d+)\s*[\]>)]?",
@@ -184,6 +188,18 @@ def _lines(blocks: Sequence[Block]) -> list[tuple[int, Block, list[str]]]:
 def _looks_like_answer(body: str) -> bool:
     body = body.strip()
     return len(body) <= _MAX_ANSWER_KEY_BODY and not _QUESTION_END_CUES.search(body)
+
+
+def is_answer_line(text: str) -> bool:
+    """A printed answer-key line: numbered entries only, each answering with option labels
+    (``1. ③``, ``1. ③ 2. ① 3. ②``, ``1) A  2) C``, ``1-② 2-④``, ``3번 ①``). The same entry
+    pattern the answer-key parser reads, so a packed key line is never mistaken for a question
+    with inline options."""
+    text = text.strip()
+    matches = list(_ANSWER_ENTRY.finditer(text))
+    if not matches or _ANSWER_ENTRY.sub("", text).strip():
+        return False
+    return all(answer_option_keys(m.group("ans").strip()) is not None for m in matches)
 
 
 def _answer_entries(line: SourceLine) -> list[AnswerKeyEntry]:
@@ -714,10 +730,11 @@ _BLANK = re.compile(r"_{3,}|\(\s*\)")
 def _has_own_questions(seg: Segmentation, blocks: Sequence[Block]) -> bool:
     """Read on its own, the chapter has a question that asks something (two or more options, a
     question cue, an answer blank ``( )`` / ``____``) or prints its own answer-key heading. A
-    packed key line read as a question (``1. ③ 2. ①`` -> stem ``③ 2.``, option ``①``) does not
-    count."""
+    packed key line read as a question (``1. ③ 2. ① 3. ②`` -> stem ``③ 2.``, options ``①``
+    ``②``) is an answer line (``is_answer_line``), never a question."""
     if any(
-        len(q.options) >= 2 or _QUESTION_CUE.search(q.stem) or _BLANK.search(q.stem)
+        not is_answer_line(q.stem_lines[0].text)
+        and (len(q.options) >= 2 or _QUESTION_CUE.search(q.stem) or _BLANK.search(q.stem))
         for q in seg.questions
     ):
         return True

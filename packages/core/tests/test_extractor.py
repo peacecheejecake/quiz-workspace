@@ -1520,6 +1520,55 @@ _CHAPTER_MATRIX = [
 ]
 
 
+def _mcqs(count: int) -> list[str]:
+    lines: list[str] = []
+    for n in range(1, count + 1):
+        lines += [f"{n}. {n}번 문제: 옳은 것은?", "① 가", "② 나", "③ 다", "④ 라", "⑤ 마"]
+    return lines
+
+
+def _answered(count: int, answers: str) -> list[tuple[str, tuple[str, ...]]]:
+    return [
+        (f"{n}번 문제: 옳은 것은?", (f"opt-{a}",))
+        for n, a in zip(range(1, count + 1), answers, strict=True)
+    ]
+
+
+_CHAPTER_MATRIX += [
+    (
+        "g1: three packed entries after a chapter heading in the key",
+        [[*_mcqs(3), "정답", "# Chapter 1", "1. ③ 2. ① 3. ②"]],
+        None,
+        _answered(3, "312"),
+        1,
+    ),
+    (
+        "g2: five packed entries after a 제N장 heading in the key",
+        [[*_mcqs(5), "정답", "# 제1장 수신", "1. ③ 2. ① 3. ② 4. ④ 5. ⑤"]],
+        None,
+        _answered(5, "31245"),
+        1,
+    ),
+    (
+        "g3: tab-separated and dashed packed entries",
+        [[*_mcqs(4), "정답", "# Chapter 1", "1.\t③\t2.\t①", "# Chapter 2", "3-② 4-④"]],
+        None,
+        _answered(4, "3124"),
+        2,
+    ),
+    (
+        "h: a question with its options on one line after a chapter key",
+        [
+            ["# 제1장 덧셈", "1. 1 + 1 = ( )", "정답", "1. 2"],
+            ["# 제2장 고르기", "1. 다음 중 옳은 것은? ① 가 ② 나 ③ 다", "정답", "1. ②"],
+        ],
+        None,
+        [("1 + 1 = ( )", ("2",)), ("다음 중 옳은 것은?", ("opt-2",))],
+        0,
+    ),
+]
+
+
 @pytest.mark.parametrize(
     ("pages", "keep", "expected", "unparsed"),
     [pytest.param(p, k, e, u, id=name) for name, p, k, e, u in _CHAPTER_MATRIX],
