@@ -1,6 +1,6 @@
 // QIMPORT-01 `검토할 PDF` (UX6-UPLOAD): one review per PDF — its newest extraction — so the import
 // page switches between the PDFs that have one, newest extraction first. Pure: the page's server
-// render reads the runs and the documents and hands the result over.
+// render reads the documents and the newest runs and hands the result over.
 import type { DocumentKind, DocumentSummary } from '@/lib/documents/client-api';
 import { documentKind } from '@/lib/documents/upload-machine';
 
@@ -11,22 +11,23 @@ export interface ReviewPdf {
 }
 
 /**
- * The listed PDFs with an extraction, in the order of their newest run (`runs` newest first, as
- * the API lists them). Runs of PDFs that are gone (deleted, or not listed) are skipped.
+ * The listed PDFs with an extraction. Membership comes from each document's `latest_import_id`
+ * (the document list reports it for every PDF), never from a page of runs, which can miss older
+ * ones (Codex P2). Order: by the newest run in `runs` (newest first, as the API lists them);
+ * PDFs whose runs are all older than that page follow, newest document first.
  */
 export function reviewPdfs(
   runs: readonly { readonly source_document_id: string | null }[],
   documents: readonly DocumentSummary[],
 ): ReviewPdf[] {
-  const byId = new Map(documents.map((d) => [d.id, d]));
-  const seen = new Set<string>();
-  const out: ReviewPdf[] = [];
-  for (const run of runs) {
+  const rank = new Map<string, number>();
+  for (const [index, run] of runs.entries()) {
     const id = run.source_document_id;
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    const doc = byId.get(id);
-    if (doc) out.push({ documentId: id, title: doc.title, kind: documentKind(doc) });
+    if (id && !rank.has(id)) rank.set(id, index);
   }
-  return out;
+  const extracted = documents.filter((d) => Boolean(d.latest_import_id));
+  const ranked = (d: DocumentSummary) => rank.get(d.id) ?? Number.POSITIVE_INFINITY;
+  return [...extracted]
+    .sort((a, b) => ranked(a) - ranked(b) || b.created_at.localeCompare(a.created_at))
+    .map((d) => ({ documentId: d.id, title: d.title, kind: documentKind(d) }));
 }

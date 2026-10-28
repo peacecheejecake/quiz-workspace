@@ -75,12 +75,12 @@ export async function loadLatestImport(
   };
 }
 
-/** How many runs `검토할 PDF` reads (the API's maximum page). */
+/** How many runs order `검토할 PDF` (the API's maximum page; older PDFs follow, UX6-UPLOAD). */
 const REVIEW_RUNS = 200;
 
 /**
  * The PDFs with an extraction for `검토할 PDF` (UX6-UPLOAD), newest extraction first. Best
- * effort: the switcher is left out (empty list) when either read fails.
+ * effort: the switcher is left out (empty list) when the documents cannot be read.
  */
 export async function loadReviewPdfs(workspaceId: string): Promise<readonly ReviewPdf[]> {
   let api;
@@ -101,6 +101,7 @@ export async function loadReviewPdfs(workspaceId: string): Promise<readonly Revi
       })
       .catch(() => null),
   ]);
-  if (!runs?.data || !documents?.data) return [];
-  return reviewPdfs(runs.data.items, documents.data.items);
+  if (!documents?.data) return [];
+  // The runs only order the list; without them every extracted PDF is still offered.
+  return reviewPdfs(runs?.data?.items ?? [], documents.data.items);
 }

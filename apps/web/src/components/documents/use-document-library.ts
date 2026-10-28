@@ -231,29 +231,53 @@ export function useDocumentLibrary({
     }
   }, [client, pendingDelete, refresh, toast]);
 
+  // `종류 변경` is serialised per document and the last choice wins (Codex P2): a pick made while
+  // an earlier one is still being saved is sent once that one has answered, compared with the kind
+  // the server reported then — not with the row's kind from before the first pick.
+  const wantedKind = useRef(new Map<string, DocumentKind>());
+  const savingKind = useRef(new Set<string>());
   const changeKind = useCallback(
     async (row: DocumentRow, kind: DocumentKind) => {
       const documentId = row.documentId;
       if (!canEdit || !documentId || row.status !== 'ready') return;
       setKindFailures(({ [documentId]: _old, ...rest }) => rest);
-      if (row.kind === kind) return;
+      wantedKind.current.set(documentId, kind);
+      if (savingKind.current.has(documentId)) return; // the running save sends it next
+      savingKind.current.add(documentId);
       setChangingKind(documentId);
+      let current = row.kind;
+      let changed = false;
       try {
-        const updated = await client.updateDocumentKind(documentId, kind);
-        setDocuments((docs) => docs.map((d) => (d.id === documentId ? summaryOf(updated, d) : d)));
-        setAnnouncement(`${row.title}: 종류를 바꿨습니다.`);
-        // Chapter choices and search scopes rendered by the server follow the new kind.
-        router.refresh();
-      } catch (error) {
-        if (error instanceof DocumentApiError && error.kind === 'unauthenticated') {
-          router.replace(loginRedirectPath(workspaceHomePath(workspaceId, 'panel=documents')));
-          return;
+        for (;;) {
+          const target = wantedKind.current.get(documentId);
+          if (target === undefined || target === current) break;
+          try {
+            const updated = await client.updateDocumentKind(documentId, target);
+            current = updated.kind ?? target;
+            changed = true;
+            setDocuments((docs) =>
+              docs.map((d) => (d.id === documentId ? summaryOf(updated, d) : d)),
+            );
+          } catch (error) {
+            if (error instanceof DocumentApiError && error.kind === 'unauthenticated') {
+              router.replace(loginRedirectPath(workspaceHomePath(workspaceId, 'panel=documents')));
+              return;
+            }
+            const message =
+              error instanceof DocumentApiError ? error.message : '종류를 바꾸지 못했습니다.';
+            setKindFailures((failures) => ({ ...failures, [documentId]: message }));
+            void refresh();
+            break;
+          }
         }
-        const message =
-          error instanceof DocumentApiError ? error.message : '종류를 바꾸지 못했습니다.';
-        setKindFailures((failures) => ({ ...failures, [documentId]: message }));
-        void refresh();
+        if (changed) {
+          setAnnouncement(`${row.title}: 종류를 바꿨습니다.`);
+          // Chapter choices and search scopes rendered by the server follow the new kind.
+          router.refresh();
+        }
       } finally {
+        wantedKind.current.delete(documentId);
+        savingKind.current.delete(documentId);
         setChangingKind(null);
       }
     },
