@@ -31,6 +31,13 @@ For a `question_paper` it also starts the paper's question import (QIMP-AUTO, QI
 redelivery or a later revision starts nothing). So extraction no longer depends on the import
 page staying open; the parse job hands the import job to the broker when it finishes.
 
+Automatic kinds (UX6-UPLOAD-B): for a document uploaded with `document_type: auto`
+(`type_source = auto`) the job classifies its first revision and the publish transaction stores
+the result through `public.worker_classify_document` (20261028120000), which applies it once,
+only to a never-classified auto document and only for a first revision; a user's kind is never
+touched. The import then starts for a classified question paper (as above) and for a `mixed`
+book when the classifier was confident (`Classification.auto_import`).
+
 Job progress is stored in the running job's `async_jobs.result` as
 `{"progress": {"stage", "percent"}}` (fenced on the attempt); the terminal transition replaces
 it with the job's result (or NULL), so it is only ever read while the job runs.
@@ -99,6 +106,7 @@ class WorkspaceUnavailableError(NonRetryableJobError):
 
 INDEX_SYNC_JOB_TYPE = "document.index_sync"
 QUESTION_PAPER = "question_paper"
+MIXED = "mixed"
 INDEX_SYNC_MAX_ATTEMPTS = 8
 
 
@@ -120,6 +128,21 @@ class PublishOutcome:
 
 
 @dataclass(frozen=True)
+class Classification:
+    """What the job found for an auto document (UX6-UPLOAD-B): `kind` (book | question_paper |
+    mixed), the classifier's numbers (`detection`, no text) and whether a `mixed` result is
+    confident enough to start its import without the user."""
+
+    kind: str
+    detection: Mapping[str, Any]
+    auto_import: bool
+
+    @property
+    def document_type(self) -> str:
+        return QUESTION_PAPER if self.kind == QUESTION_PAPER else "book"
+
+
+@dataclass(frozen=True)
 class DocumentRow:
     id: uuid.UUID
     workspace_id: uuid.UUID
@@ -131,6 +154,17 @@ class DocumentRow:
     status: str
     active_revision_id: uuid.UUID | None
     deleted: bool
+    # UX6-UPLOAD-B: `auto` documents are classified once (content_kind stays null until then).
+    type_source: str = "user"
+    content_kind: str | None = None
+
+    def needs_classification(self, revision: RevisionRow) -> bool:
+        """An auto document never classified, on its first revision (never a correction)."""
+        return (
+            self.type_source == "auto"
+            and self.content_kind is None
+            and revision.parent_revision_id is None
+        )
 
 
 @dataclass(frozen=True)
@@ -193,11 +227,13 @@ class DocumentStore(Protocol):
         content_hash: str,
         *,
         before_commit: Callable[[], None],
+        classification: Classification | None = None,
     ) -> PublishOutcome:
         """In one transaction: re-check (and lock) workspace access, publish the draft, make it
-        the document's active revision (status `ready`), enqueue the `document.index_sync`
-        obligation that mirrors the switch into Qdrant and, for a question paper without an
-        import, start its question import."""
+        the document's active revision (status `ready`), store an auto document's
+        `classification` (once), enqueue the `document.index_sync` obligation that mirrors the
+        switch into Qdrant and, for a question paper (or a confidently classified mixed book)
+        without an import, start its question import."""
         ...
 
     def previous_published(self, document_id: uuid.UUID, exclude: uuid.UUID) -> uuid.UUID | None:
@@ -362,6 +398,7 @@ _DOCUMENT = text(
     """
     select d.id, d.workspace_id, d.document_type, d.title, d.size_bytes, d.sha256,
            d.source_object_key, d.status, d.active_revision_id, d.deleted_at is not null as deleted,
+           d.type_source, d.content_kind,
            r.id as r_id, r.revision_number, r.parent_revision_id, r.status as r_status,
            r.content_hash, r.parsed_object_key
       from public.documents d
@@ -464,6 +501,8 @@ class PostgresDocumentStore:
                 status=row["status"],
                 active_revision_id=row["active_revision_id"],
                 deleted=row["deleted"],
+                type_source=row["type_source"],
+                content_kind=row["content_kind"],
             ),
             RevisionRow(
                 id=row["r_id"],
@@ -625,6 +664,7 @@ class PostgresDocumentStore:
         content_hash: str,
         *,
         before_commit: Callable[[], None],
+        classification: Classification | None = None,
     ) -> PublishOutcome:
         with self._engine.begin() as conn:
             # Workspace first (FOR SHARE): an archive/delete/membership change commits before
@@ -679,8 +719,25 @@ class PostgresDocumentStore:
             sync_job_id = self._enqueue_index_sync(
                 conn, workspace_id, user_id, document_id, revision_id
             )
+            document_type = document["document_type"]
+            auto_import = False
+            if classification is not None:
+                # Applied only to a never-classified auto document's first revision (row locked
+                # above); otherwise (a user re-typed it, a redelivery) nothing changes.
+                applied = conn.execute(
+                    text("select public.worker_classify_document(:d, :r, :k, cast(:j as jsonb))"),
+                    {
+                        "d": document_id,
+                        "r": revision_id,
+                        "k": classification.kind,
+                        "j": _json(dict(classification.detection)),
+                    },
+                ).scalar_one()
+                if applied is not None:
+                    document_type = applied
+                    auto_import = classification.kind == MIXED and classification.auto_import
             started = None
-            if document["document_type"] == QUESTION_PAPER:
+            if document_type == QUESTION_PAPER or auto_import:
                 started = (
                     conn.execute(
                         text(
