@@ -128,10 +128,10 @@ a.title:hover {
   font-size: var(--font-size-label);
 }
 
-/* Sizing only: the bar itself is @quiz/ui ProgressBar. */
-.progress {
-  flex: 1 1 8rem;
-  max-width: 16rem;
+/* Sizing only: the steps and bar are @quiz/ui StepProgress (UX6-PROGRESS). */
+.steps {
+  flex: 1 1 12rem;
+  max-width: 20rem;
 }
 
 .actions {

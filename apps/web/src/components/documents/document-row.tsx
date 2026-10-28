@@ -3,14 +3,15 @@
 // One document row (DOC-01 문서 관리 and the question-PDF list, UX3c): the title (a DOC-02 link once
 // ready; the file name in its tooltip) with the status badge right next to it, a meta line
 // "<date time> · <size>", the live progress — upload progress with cancel, parse/index progress,
-// the failure reason with retry — and a trash icon button to delete. A long-running job also shows
-// how long it has waited or run, with a hint (DOC-01-AC05). State is always text, never colour
+// the failure reason with retry — and a trash icon button to delete. Upload and processing are one
+// step progress 업로드 → 분석 → 색인 (UX6-PROGRESS) whose bar never drops back between steps. A
+// long-running job also shows how long it has waited or run, with a hint (DOC-01-AC05). State is always text, never colour
 // alone (the badge text carries it).
 import {
   Badge,
   Button,
   IconButton,
-  ProgressBar,
+  StepProgress,
   Tooltip,
   TrashIcon,
   type BadgeTone,
@@ -21,8 +22,9 @@ import type { DocumentRow } from '@/lib/documents/upload-machine';
 import { formatBytes } from '@/lib/documents/validation';
 import styles from './documents.module.css';
 import {
+  DOCUMENT_STEPS,
+  documentProgress,
   formatUpdatedAt,
-  percent,
   processingElapsed,
   processingLabel,
   SLOW_PROCESSING_HINT,
@@ -118,40 +120,31 @@ export function statusBadge(row: DocumentRow): { label: string; tone: BadgeTone 
 }
 
 function RowDetail({ row }: { row: DocumentRow }) {
-  if (row.status === 'uploading') {
-    if (row.error) return <p className={styles.error}>{row.error}</p>;
-    const upload = row.upload;
-    const phase = upload?.phase ?? 'uploading';
-    const value = upload ? percent(upload.loaded, upload.total) : 0;
-    const sending = phase === 'uploading';
-    return (
-      <div className={styles.status}>
-        <ProgressBar
-          className={styles.progress}
-          label="업로드 진행률"
-          value={sending || phase === 'completing' ? value : undefined}
-        />
-        {sending ? <span className={styles.statusText}>{value}%</span> : null}
-      </div>
-    );
+  if (row.error && row.status !== 'processing' && row.status !== 'ready') {
+    return <p className={styles.error}>{row.error}</p>;
   }
-  if (row.status === 'processing') return <ProcessingDetail row={row} />;
-  if (row.status === 'failed' && row.error) return <p className={styles.error}>{row.error}</p>;
+  // Uploading and processing share one element tree, so the bar glides across the steps.
+  if (row.status === 'uploading' || row.status === 'processing') return <RowProgress row={row} />;
   return null;
 }
 
-function ProcessingDetail({ row }: { row: DocumentRow }) {
+function RowProgress({ row }: { row: DocumentRow }) {
   const now = useNow();
-  const progress = row.job?.progress ?? null;
+  const progress = documentProgress(row);
   const elapsed = now === null ? null : processingElapsed(row, now);
+  if (!progress) return null;
+  const { current, value, text, label } = progress;
   return (
     <div className={styles.status}>
-      <ProgressBar
-        className={styles.progress}
-        label="파싱·색인 진행률"
-        value={progress ?? undefined}
+      <StepProgress
+        className={styles.steps}
+        label={label}
+        steps={DOCUMENT_STEPS}
+        current={current}
+        value={value}
+        currentText={text}
       />
-      {progress !== null ? <span className={styles.statusText}>{progress}%</span> : null}
+      {value !== undefined ? <span className={styles.statusText}>{value}%</span> : null}
       {elapsed ? (
         <p className={styles.hint}>
           {elapsed} · {SLOW_PROCESSING_HINT}

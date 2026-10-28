@@ -7,8 +7,8 @@
 //                     with the scope checkboxes and one list of options that follows them: the
 //                     heatmap's chapter/type filters for 문제, the content-search options for 내용;
 //                     question papers are searched whenever 문제 is a target, UX4), then two
-//                     button groups: `문서 n` · `문제` (menu: PDF 관리 / 직접 추가 / 변형 출제, UX4)
-//                     · `문제은행`, and, aligned right, `이력` · `공유하기` (icon buttons; share
+//                     button groups: `문서 n` · `문제` (menu: 전체 문제 — the bank, UX6-PROGRESS —
+//                     / PDF 관리 / 직접 추가 / 변형 출제, UX4), and, aligned right, `이력` · `공유하기` (icon buttons; share
 //                     for the owner only)
 //   content results   the 원문 search results when the scope includes 내용
 //   문제 영역         the heatmap (QuestionsOverview)
@@ -37,7 +37,6 @@ import {
   ShareIcon,
   type QuestionType,
 } from '@quiz/ui';
-import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition, type FormEvent, type ReactNode } from 'react';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
@@ -393,13 +392,11 @@ export function WorkspaceHome({
             </Button>
             <QuestionMenu
               canEdit={canEdit}
+              bankHref={`/workspaces/${workspace.id}/questions/bank`}
               onPdfs={() => setPanel('question-pdfs', true)}
               onCreate={() => router.push(bankCreatePath(workspace.id))}
               onGenerate={() => setPanel('generate', true)}
             />
-            <Button asChild>
-              <Link href={`/workspaces/${workspace.id}/questions/bank`}>문제은행</Link>
-            </Button>
           </div>
           <div className={styles.actionGroup} data-align="end">
             <IconButton

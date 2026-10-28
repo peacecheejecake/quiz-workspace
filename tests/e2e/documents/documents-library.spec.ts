@@ -15,6 +15,7 @@ import {
   book,
   docUi,
   documentsPath,
+  expectProgressSteps,
   expect,
   homeUi,
   JOB_TIMEOUT_MS,
@@ -110,6 +111,12 @@ test(
     await chooseFile(page, BOOK.path);
     const row = docUi.item(page, BOOK_TITLE);
     await expect(docUi.uploadProgress(row)).toBeVisible();
+    // UX6-PROGRESS: the steps 업로드 → 분석 → 색인, the upload in progress.
+    await expectProgressSteps(row, [
+      [/업로드|upload/i, 'current'],
+      [/분석|parsing/i, 'pending'],
+      [/색인|indexing/i, 'pending'],
+    ]);
     release();
 
     await expect(docUi.processing(row).first()).toBeVisible();
@@ -249,6 +256,12 @@ test(
     await expect(docUi.ready(docUi.item(page, /book-en/))).toBeVisible({ timeout: JOB_TIMEOUT_MS });
 
     await expect(row.getByText(/처리 준비 중|preparing/i)).toBeVisible();
+    // UX6-PROGRESS: the uploaded file's 업로드 step is done, 분석 is running, 색인 waits.
+    await expectProgressSteps(row, [
+      [/업로드|upload/i, 'done'],
+      [/분석|parsing/i, 'current'],
+      [/색인|indexing/i, 'pending'],
+    ]);
     await expect(row.getByText(/\d+분 \d+초째 처리 중/)).toBeVisible();
     await expect(row.getByText(/첫 처리나 큰 PDF는 몇 분 걸릴 수 있습니다/)).toBeVisible();
     await expect(docUi.ready(row)).toHaveCount(0);

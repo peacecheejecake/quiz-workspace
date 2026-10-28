@@ -13,6 +13,7 @@
 // server already produced.
 import { mkdirSync } from 'node:fs';
 import type { Locator, Page, Route } from '@playwright/test';
+import { localEndpoints } from '../fixtures/local-env.ts';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 import {
   bankPath,
@@ -20,6 +21,7 @@ import {
   chooseQuestionMenu,
   draftFor,
   expect,
+  expectProgressSteps,
   failingOnceCopy,
   forgetImportRuns,
   homePath,
@@ -34,6 +36,7 @@ import {
   listQuestions,
   main,
   pageLabel,
+  progressStepsUi,
   questionFormUi,
   questionPaper,
   signInAs,
@@ -130,6 +133,58 @@ test(
     expect(await listQuestions(owner, workspaceId)).toEqual([]);
     await page.goto(bankPath(workspaceId));
     await expect(bankUi.emptyState(page)).toBeVisible();
+  },
+);
+
+test(
+  'QIMPORT-01-AC01 the import shows its steps 업로드 → PDF 분석 → 문제 추출 as they pass',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(2 * JOB_TIMEOUT_MS + 60_000);
+    const owner = await workspaceFactory.member('qimport01-ac01-steps');
+    const ws = await workspaceFactory.create(owner);
+    await signInAs(page, owner.user);
+    await page.goto(importPath(ws.id));
+
+    // Hold the Storage upload, then the job progress the page follows, so each step is observable.
+    let releaseUpload!: () => void;
+    const uploadGate = new Promise<void>((resolve) => (releaseUpload = resolve));
+    await page.route(`${localEndpoints().supabaseUrl}/storage/v1/**`, async (route: Route) => {
+      if (['GET', 'HEAD', 'OPTIONS'].includes(route.request().method())) return route.fallback();
+      await uploadGate;
+      await route.fallback();
+    });
+    let releaseJobs!: () => void;
+    const jobGate = new Promise<void>((resolve) => (releaseJobs = resolve));
+    await page.route('**/api/jobs/**', async (route: Route) => {
+      await jobGate;
+      await route.fallback();
+    });
+
+    await uploadQuestionPaper(page, PAPER);
+    const scope = main(page);
+    await expect(importUi.progress(page)).toBeVisible();
+    await expectProgressSteps(scope, [
+      [/업로드|upload/i, 'current'],
+      [/pdf 분석|analy/i, 'pending'],
+      [/문제 추출|extract/i, 'pending'],
+    ]);
+
+    releaseUpload();
+    await expectProgressSteps(scope, [
+      [/업로드|upload/i, 'done'],
+      [/pdf 분석|analy/i, 'current'],
+      [/문제 추출|extract/i, 'pending'],
+    ]);
+    // One bar split into the steps: it never drops back to an earlier step's level.
+    await expect(importUi.progress(page)).toHaveAttribute('aria-valuetext', /^2\/3단계/);
+
+    releaseJobs();
+    await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length, {
+      timeout: 2 * JOB_TIMEOUT_MS,
+    });
+    await expect(progressStepsUi.list(scope)).toHaveCount(0);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
   },
 );
 
