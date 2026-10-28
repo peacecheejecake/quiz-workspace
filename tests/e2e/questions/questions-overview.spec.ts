@@ -470,7 +470,7 @@ test(
     await homeUi.questionMenuItem(page, 'bank').click();
     await expect(page).toHaveURL((url) => url.pathname === `${home}/questions/bank`);
     await expect(
-      page.getByRole('heading', { level: 1, name: /문제은행|question bank/i }),
+      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
     ).toBeVisible();
     await page.goto(home);
     const denied = await viewer.api.request('GET', `/workspaces/${s.workspaceId}/share-links`);
@@ -564,7 +564,7 @@ test(
     await expect(dialog.locator('[aria-busy="true"]')).toHaveCount(0);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
 
-    // 문제은행: the route skeleton shows while the page's server render is held back.
+    // 전체 문제 (the bank): the route skeleton shows while the page's server render is held back.
     let releasePage!: () => void;
     const pageGate = new Promise<void>((resolve) => (releasePage = resolve));
     await page.route(
@@ -579,11 +579,11 @@ test(
     await expect(
       main(page)
         .getByRole('status')
-        .filter({ hasText: /문제은행을 불러오는 중/ }),
+        .filter({ hasText: /전체 문제를 불러오는 중|loading all questions/i }),
     ).toBeVisible();
     releasePage();
     await expect(
-      page.getByRole('heading', { level: 1, name: /문제은행|question bank/i }),
+      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
     ).toBeVisible();
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   },
@@ -672,18 +672,18 @@ test(
     await expect(page).toHaveURL((url) => !url.searchParams.has('create'));
     await page.reload();
     await expect(
-      page.getByRole('heading', { level: 1, name: /문제은행|question bank/i }),
+      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
     ).toBeVisible();
     await expect(questionFormUi.form(page)).toHaveCount(0);
 
-    // 전체 문제 → the bank page, still titled 문제은행 (UX6-PROGRESS).
+    // 전체 문제 → the bank page, titled 전체 문제 too (UX6-PROGRESS, UX6-BANK).
     await page.goto(overviewPath(s.workspaceId));
     await chooseQuestionMenu(page, 'bank');
     await expect(page).toHaveURL(
       (url) => url.pathname === `/workspaces/${s.workspaceId}/questions/bank` && url.search === '',
     );
     await expect(
-      page.getByRole('heading', { level: 1, name: /문제은행|question bank/i }),
+      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
     ).toBeVisible();
   },
 );

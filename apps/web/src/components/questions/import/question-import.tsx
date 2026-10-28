@@ -808,7 +808,7 @@ export function QuestionImport({
         actions={
           <>
             <Button asChild>
-              <Link href={`/workspaces/${workspaceId}/questions/bank`}>문제은행</Link>
+              <Link href={`/workspaces/${workspaceId}/questions/bank`}>전체 문제</Link>
             </Button>
             {uploadButton}
           </>
@@ -880,7 +880,7 @@ export function QuestionImport({
             {status.text}{' '}
             {status.bank ? (
               <Link href={`/workspaces/${workspaceId}/questions/bank`} className={styles.link}>
-                문제은행에서 보기
+                전체 문제에서 보기
               </Link>
             ) : null}
           </p>
