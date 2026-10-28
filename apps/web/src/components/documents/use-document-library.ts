@@ -233,7 +233,8 @@ export function useDocumentLibrary({
 
   // `종류 변경` is serialised per document and the last choice wins (Codex P2): a pick made while
   // an earlier one is still being saved is sent once that one has answered, compared with the kind
-  // the server reported then — not with the row's kind from before the first pick.
+  // the server reported then — not with the row's kind from before the first pick — even when the
+  // earlier one was refused; a refusal is shown only when it is the final outcome.
   const wantedKind = useRef(new Map<string, DocumentKind>());
   const savingKind = useRef(new Set<string>());
   const changeKind = useCallback(
@@ -263,6 +264,9 @@ export function useDocumentLibrary({
               router.replace(loginRedirectPath(workspaceHomePath(workspaceId, 'panel=documents')));
               return;
             }
+            // A different pick made meanwhile replaces the refused one: send it, and show no
+            // reason for a choice the user already moved on from.
+            if (wantedKind.current.get(documentId) !== target) continue;
             const message =
               error instanceof DocumentApiError ? error.message : '종류를 바꾸지 못했습니다.';
             setKindFailures((failures) => ({ ...failures, [documentId]: message }));

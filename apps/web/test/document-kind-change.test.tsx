@@ -87,6 +87,91 @@ describe('useDocumentLibrary changeKind', () => {
     expect(result.current.kindFailures).toEqual({});
   });
 
+  it('after a refused pick it still sends the newer pick and shows no reason (409 then 교재+문제)', async () => {
+    const sent: string[] = [];
+    let releaseFirst!: () => void;
+    const firstHeld = new Promise<void>((resolve) => (releaseFirst = resolve));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: string, init?: RequestInit) => {
+        if (!init?.method) return Response.json({ items: DOCS }); // the list refresh
+        const { kind } = JSON.parse(String(init.body)) as { kind: DocumentSummary['kind'] };
+        sent.push(String(kind));
+        if (sent.length === 1) {
+          await firstHeld;
+          return Response.json(
+            { type: 'urn:quiz-workspace:problem:document-in-use', status: 409, title: 'Conflict' },
+            { status: 409 },
+          );
+        }
+        return Response.json({ ...DOC, kind, kind_source: 'user' });
+      }),
+    );
+    const { result } = renderHook(
+      () => useDocumentLibrary({ workspaceId: 'ws', initialDocuments: DOCS, canEdit: true }),
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <ToastProvider>{children}</ToastProvider>
+        ),
+      },
+    );
+    const row = () => {
+      const found = result.current.rows[0];
+      if (!found) throw new Error('no row');
+      return found;
+    };
+    let first!: Promise<void>;
+    act(() => {
+      first = result.current.changeKind(row(), 'question_paper');
+    });
+    await waitFor(() => expect(result.current.changingKind).toBe('d1'));
+    let second!: Promise<void>;
+    act(() => {
+      second = result.current.changeKind(row(), 'mixed');
+    });
+    await act(async () => {
+      releaseFirst();
+      await Promise.all([first, second]);
+    });
+    expect(sent).toEqual(['question_paper', 'mixed']);
+    expect(row().kind).toBe('mixed');
+    expect(result.current.kindFailures).toEqual({});
+    expect(result.current.changingKind).toBeNull();
+  });
+
+  it('shows the reason when the refused pick is the last one', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_path: string, init?: RequestInit) =>
+        init?.method
+          ? Response.json(
+              {
+                type: 'urn:quiz-workspace:problem:document-in-use',
+                status: 409,
+                title: 'Conflict',
+              },
+              { status: 409 },
+            )
+          : Response.json({ items: DOCS }),
+      ),
+    );
+    const { result } = renderHook(
+      () => useDocumentLibrary({ workspaceId: 'ws', initialDocuments: DOCS, canEdit: true }),
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <ToastProvider>{children}</ToastProvider>
+        ),
+      },
+    );
+    const row = result.current.rows[0];
+    if (!row) throw new Error('no row');
+    await act(() => result.current.changeKind(row, 'question_paper'));
+    expect(result.current.kindFailures).toEqual({
+      d1: '이 교재의 챕터나 출처를 쓰는 문제가 있어 문제지로 바꿀 수 없습니다.',
+    });
+    expect(result.current.rows[0]?.kind).toBe('book');
+  });
+
   it('sends nothing when the pick is the kind the PDF already has', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
