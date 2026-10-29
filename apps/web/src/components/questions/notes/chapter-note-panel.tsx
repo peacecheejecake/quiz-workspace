@@ -37,6 +37,13 @@ import styles from './chapter-note.module.css';
 
 /** How often a queued/running generation is re-read. */
 export const NOTE_POLL_MS = 1000;
+/** Longest wait between re-reads after failed ones (doubling from NOTE_POLL_MS). */
+export const NOTE_POLL_MAX_MS = 15_000;
+
+/** Delay before the next re-read after `failures` failed ones in a row. */
+export function notePollDelay(failures: number): number {
+  return Math.min(NOTE_POLL_MS * 2 ** Math.min(failures, 10), NOTE_POLL_MAX_MS);
+}
 
 export interface ChapterNotePanelProps {
   readonly open: boolean;
@@ -129,6 +136,8 @@ function NoteContent({
   const [version, setVersion] = useState<number | null>(null);
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [reload, setReload] = useState(0);
+  // Failed background re-reads in a row (the poll backs off and keeps going).
+  const [pollFailures, setPollFailures] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -149,11 +158,15 @@ function NoteContent({
   useEffect(() => {
     const controller = new AbortController();
     getChapterNote(chapterId, version, controller.signal).then(
-      (state) => setLoad({ status: 'ready', data: state }),
+      (state) => {
+        setPollFailures(0);
+        setLoad({ status: 'ready', data: state });
+      },
       (error: unknown) => {
         if (controller.signal.aborted) return;
         const kind = error instanceof NoteApiError ? error.kind : 'failed';
-        // A background poll that failed keeps the last state on screen.
+        // A background poll that failed keeps the last state on screen and is retried.
+        if (kind === 'failed') setPollFailures((n) => n + 1);
         setLoad((prev) =>
           prev.status === 'ready' && kind === 'failed' ? prev : { status: 'error', kind },
         );
@@ -162,12 +175,12 @@ function NoteContent({
     return () => controller.abort();
   }, [chapterId, version, reload]);
 
-  // Poll while a generation is queued or running.
+  // Poll while a generation is queued or running; a failed re-read is retried with backoff.
   useEffect(() => {
     if (!generating) return;
-    const timer = window.setTimeout(() => setReload((n) => n + 1), NOTE_POLL_MS);
+    const timer = window.setTimeout(() => setReload((n) => n + 1), notePollDelay(pollFailures));
     return () => window.clearTimeout(timer);
-  }, [generating, data]);
+  }, [generating, data, pollFailures]);
 
   useEffect(() => {
     if (data) onTitle(data.chapter_title);

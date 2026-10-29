@@ -75,6 +75,7 @@ import { MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
 import {
   keepNoteChapter,
   noteChapterOf,
+  openChapterNote,
   parsePanels,
   parseScope,
   patchSearch,
@@ -168,10 +169,12 @@ export function WorkspaceHome({
   // `chapter` names the note's chapter while its panel is open (home.ts noteChapterOf).
   const noteChapter = noteChapterOf(searchParams);
   function openNote(chapterId: string) {
-    if (isOpen('chapter-note') && noteChapter === chapterId) {
+    // An open note panel (maybe under another one) comes to the top, whichever chapter it shows.
+    const next = openChapterNote(window.location.search, chapterId);
+    if (next.raise) {
       setRaised((r) => ({ ...r, 'chapter-note': (r['chapter-note'] ?? 0) + 1 }));
     }
-    const target = `${pathname}${withChapterNote(window.location.search, chapterId)}`;
+    const target = `${pathname}${next.search}`;
     if (view.chapter !== null) {
       // The note takes over `chapter`: drop the heatmap's chapter filter with it.
       setView((v) => ({ ...v, chapter: null }));

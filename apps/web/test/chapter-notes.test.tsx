@@ -23,6 +23,7 @@ import { sharedNoteChapterOf, withSharedNote } from '../src/lib/shared/view-stat
 import {
   keepNoteChapter,
   noteChapterOf,
+  openChapterNote,
   parsePanels,
   withChapterNote,
 } from '../src/lib/workspaces/home';
@@ -34,7 +35,8 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 
-const { ChapterNotePanel } = await import('../src/components/questions/notes/chapter-note-panel');
+const { ChapterNotePanel, notePollDelay } =
+  await import('../src/components/questions/notes/chapter-note-panel');
 
 const CH = '11111111-1111-4111-8111-111111111111';
 const Q1 = '22222222-2222-4222-8222-000000000001';
@@ -212,6 +214,22 @@ describe('note URL state', () => {
     expect(withChapterNote(opened, null)).toBe('?status=wrong&panel=history');
     expect(noteChapterOf(new URLSearchParams(`?chapter=${CH}`))).toBeUndefined();
     expect(noteChapterOf(new URLSearchParams('?panel=chapter-note&chapter=x'))).toBeNull();
+  });
+
+  it('raises an open note panel for any chapter, under another dialog too (Codex P2)', () => {
+    const other = '44444444-4444-4444-8444-444444444444';
+    expect(openChapterNote('?panel=history', CH)).toEqual({
+      search: `?panel=history&panel=chapter-note&chapter=${CH}`,
+      raise: false,
+    });
+    // Chapter A's note is open under 이력; opening chapter B switches it and raises it.
+    const under = `?panel=chapter-note&panel=history&chapter=${CH}`;
+    const next = openChapterNote(under, other);
+    expect(next.raise).toBe(true);
+    const params = new URLSearchParams(next.search);
+    expect(parsePanels(params)).toEqual(['history', 'chapter-note']);
+    expect(noteChapterOf(params)).toBe(other);
+    expect(openChapterNote(`?panel=chapter-note&chapter=${CH}`, CH).raise).toBe(true);
   });
 
   it('keeps the note chapter through other filter changes; a chapter filter closes the note', () => {
@@ -398,6 +416,41 @@ describe('ChapterNotePanel', () => {
     const dialog = await screen.findByRole('dialog', { name: '정리 노트' });
     expect(await within(dialog).findByText('이 장에는 확정된 문제가 없습니다.')).toBeTruthy();
     expect(within(dialog).queryByRole('button', { name: '정리 노트 만들기' })).toBeNull();
+  });
+
+  it('keeps polling after a failed re-read and then shows the note (Codex P2)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const running = state({
+        generation: { id: 'g5', status: 'running', job_id: null, error_code: null, progress: null },
+      });
+      let call = 0;
+      fetchMock.mockImplementation(async () => {
+        call += 1;
+        if (call === 1) return Response.json(running);
+        if (call === 2) return Response.json({ status: 503 }, { status: 503 });
+        return Response.json(withNote());
+      });
+      renderPanel();
+      const dialog = await screen.findByRole('dialog', { name: '정리 노트' });
+      expect(await within(dialog).findByText('정리 노트를 만드는 중')).toBeTruthy();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1100); // re-read 2 fails: the state stays
+      });
+      expect(within(dialog).getByText('정리 노트를 만드는 중')).toBeTruthy();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2100); // backed-off re-read 3 succeeds
+      });
+      await waitFor(() => expect(within(dialog).getByText('AI 생성')).toBeTruthy());
+      expect(within(dialog).queryByText(/정리 노트를 만드는 중/)).toBeNull();
+      expect(call).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('backs off failed re-reads up to a cap', () => {
+    expect([0, 1, 2, 3, 10, 50].map(notePollDelay)).toEqual([1000, 2000, 4000, 8000, 15000, 15000]);
   });
 
   it('polls a running generation until it ends', async () => {

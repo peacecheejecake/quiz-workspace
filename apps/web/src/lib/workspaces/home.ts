@@ -89,6 +89,21 @@ export function withChapterNote(search: string, chapterId: string | null): strin
 }
 
 /**
+ * Opening the 정리 노트 panel on `chapterId` from the current `search`: the new query, and whether
+ * an already-open note panel (maybe under another dialog, on any chapter) must be raised — the
+ * most recently requested panel is on top (UX3b stacking, chapter-notes.md "panel").
+ */
+export function openChapterNote(
+  search: string,
+  chapterId: string,
+): { readonly search: string; readonly raise: boolean } {
+  return {
+    search: withChapterNote(search, chapterId),
+    raise: isChapterNoteOpen(new URLSearchParams(search)),
+  };
+}
+
+/**
  * The home query after a heatmap filter change: `merged` is `search` with the filters already
  * merged (overview-filters.ts mergeOverviewFilters), which rewrote `chapter`. A chapter filter
  * takes the parameter over and closes the note panel; any other change keeps the note's chapter.
