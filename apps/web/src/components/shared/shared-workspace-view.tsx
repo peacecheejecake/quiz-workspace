@@ -8,7 +8,9 @@
 // network error or 429). Without a fragment the existing session cookie is used. Every refusal of
 // the link (wrong, expired, revoked, deleted, no session) shows one "unavailable" notice and
 // nothing of the workspace. All reads go through the same-origin relay; nothing here writes,
-// practises or shows personal data, and the API refuses such requests regardless.
+// practises or shows personal data, and the API refuses such requests regardless. A shared book
+// whose current revision has a summary offers `요약` next to its link: the read-only 문서 요약 panel
+// (DOCSUM-01-AC06, `?panel=document-summary&document=<id>`).
 import { Badge, Button } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -24,13 +26,18 @@ import { sharedFailureMessage } from '@/lib/shared/messages';
 import {
   forkPanelHref,
   sharedDocumentHref,
+  sharedSummaryHref,
   sharePath,
   type SharedViewState,
 } from '@/lib/shared/view-state';
 import { ForkWorkspaceDialog } from './fork-workspace-dialog';
+import { SharedChapterNotes } from './shared-chapter-notes';
 import { SharedDocumentView } from './shared-document-view';
 import { SharedQuestions } from './shared-questions';
 import { SharedSearch } from './shared-search';
+import { ownSummaryDocument } from '@/lib/workspaces/home';
+import { SharedSummaryPanel, useSharedSummaries } from './shared-summary';
+import summaryStyles from '@/components/documents/summary/summary.module.css';
 import styles from './shared.module.css';
 
 export interface SharedWorkspaceViewProps {
@@ -76,6 +83,12 @@ export function SharedWorkspaceView({
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const markUnavailable = useCallback(() => setPhase(UNAVAILABLE), []);
+  const summaries = useSharedSummaries(
+    shareId ?? '',
+    phase.status === 'ready' ? phase.workspace.documents : null,
+  );
+  /** The `요약` button that opened the summary panel (focus returns there). */
+  const summaryOpenerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!client) return;
@@ -161,6 +174,7 @@ export function SharedWorkspaceView({
     ? (documents.find((d) => d.id === view.documentId) ?? null)
     : null;
   const forkHref = signedIn ? forkPanelHref(shareId) : forkLoginHref;
+  const summaryDocument = ownSummaryDocument(view.summaryDocumentId, documents);
 
   return (
     <main className={styles.main} data-screen-id={screenId}>
@@ -217,12 +231,30 @@ export function SharedWorkspaceView({
                     {doc.document_type === 'question_paper' ? (
                       <span className={styles.docType}>문제지</span>
                     ) : null}
+                    {summaries.has(doc.id) ? (
+                      <Button
+                        size="sm"
+                        className={summaryStyles.sharedButton}
+                        onClick={(event) => {
+                          summaryOpenerRef.current = event.currentTarget;
+                          router.push(sharedSummaryHref(shareId, doc.id), { scroll: false });
+                        }}
+                      >
+                        <span className="qz-visually-hidden">{doc.title} </span>요약
+                      </Button>
+                    ) : null}
                   </li>
                 ))}
               </ul>
             )}
           </nav>
           <SharedSearch shareId={shareId} client={client} onUnavailable={markUnavailable} />
+          <SharedChapterNotes
+            shareId={shareId}
+            client={client}
+            documents={documents}
+            onUnavailable={markUnavailable}
+          />
         </aside>
 
         <div className={styles.content}>
@@ -247,6 +279,17 @@ export function SharedWorkspaceView({
           )}
         </div>
       </div>
+
+      <SharedSummaryPanel
+        shareId={shareId}
+        open={view.summaryDocumentId !== null}
+        // Only a document of this share (its list); any other id is never requested.
+        documentId={summaryDocument?.id ?? null}
+        title={summaryDocument?.title ?? null}
+        cached={summaryDocument ? summaries.get(summaryDocument.id) : undefined}
+        onClose={() => router.replace(sharePath(shareId), { scroll: false })}
+        returnFocusTo={() => summaryOpenerRef.current}
+      />
 
       {workspace.allow_fork && signedIn ? (
         // WS-FORK-01: mounted while the link allows forking so a running fork survives closing.

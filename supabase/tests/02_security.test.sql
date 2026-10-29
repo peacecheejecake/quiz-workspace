@@ -28,11 +28,14 @@ select is_empty(
                                'content_blocks', 'document_uploads', 'question_import_runs',
                                'question_drafts', 'question_generation_runs', 'questions',
                                'question_revisions', 'question_sources', 'workspace_forks',
-                               'question_import_registration_items')
+                               'question_import_registration_items',
+                               'document_summary_runs', 'document_summary_units',
+                               'document_summary_run_units', 'chapter_notes')
                  and roles = array['quiz_worker']::name[]) $$,
   'every policy in public targets quiz_api only (plus quiz_worker on async_jobs, P0.7b, the '
     || 'document tables, M3.2a, the import runs/drafts, M4.4a, generation, M6.2, and '
-    || 'workspace_forks, S3a, and the QIMP-JOB registration items)'
+    || 'workspace_forks, S3a, the QIMP-JOB registration items, the DOCSUM-B summary tables '
+    || 'and CHNOTE chapter_notes)'
 );
 
 -- Table privileges ------------------------------------------------------------------------------

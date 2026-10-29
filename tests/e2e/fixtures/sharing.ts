@@ -859,9 +859,16 @@ export interface SharingFixtures {
    * failure, attaches a redacted page text and blanks the page (no secret in error-context).
    */
   sharingArtifacts: null;
+  /**
+   * Option (default true): on failure attach the redacted page text. Specs whose pages show
+   * content that must not reach an artifact (DOC-03 exported book text) turn it off; the page is
+   * still blanked and errors redacted.
+   */
+  attachPageTextOnFailure: boolean;
 }
 
 export const test = base.extend<SharingFixtures>({
+  attachPageTextOnFailure: [true, { option: true }],
   sharingCleanup: [
     async ({ userFactory, workspaceFactory }, use) => {
       void workspaceFactory; // torn down after this fixture (dependency order)
@@ -874,7 +881,7 @@ export const test = base.extend<SharingFixtures>({
     { auto: true },
   ],
   sharingArtifacts: [
-    async ({ page }, use, testInfo) => {
+    async ({ page, attachPageTextOnFailure }, use, testInfo) => {
       seenSecrets.clear();
       await use(null);
       if (seenSecrets.size) {
@@ -883,17 +890,19 @@ export const test = base.extend<SharingFixtures>({
         writeFileSync(testInfo.outputPath(SECRET_DIGEST_FILE), `${digests}\n`);
       }
       if (testInfo.status !== testInfo.expectedStatus) {
-        let text: string;
-        try {
-          const body = await page.locator('body').innerText({ timeout: 2_000 });
-          text = `${page.url()}\n\n${body}`;
-        } catch {
-          text = `${page.url()}\n\n(page text unavailable)`;
+        if (attachPageTextOnFailure) {
+          let text: string;
+          try {
+            const body = await page.locator('body').innerText({ timeout: 2_000 });
+            text = `${page.url()}\n\n${body}`;
+          } catch {
+            text = `${page.url()}\n\n(page text unavailable)`;
+          }
+          await testInfo.attach('page-text-redacted', {
+            body: redactSecrets(text),
+            contentType: 'text/plain',
+          });
         }
-        await testInfo.attach('page-text-redacted', {
-          body: redactSecrets(text),
-          contentType: 'text/plain',
-        });
         await page.goto('about:blank').catch(() => undefined);
         // Playwright errors quote URLs verbatim (e.g. "navigation … interrupted by another
         // navigation to …/share/{id}#k=…"); error-context.md and the report are written from

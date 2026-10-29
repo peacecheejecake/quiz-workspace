@@ -6,6 +6,9 @@
     GET  /shared/{shareId}/documents/{docId}      published revision: outline + blocks (paged)
     GET  /shared/{shareId}/documents/{docId}/pdf  the original PDF, proxied (no signed URL leaves
                                                   the server)
+    GET  /shared/{shareId}/documents/{docId}/summary
+                                                  the current published revision's succeeded
+                                                  summary only (DOCSUM-01-AC06, §8)
     POST /shared/{shareId}/search                 search over the published documents
     GET  /shared/{shareId}/questions              CONFIRMED questions, answers included
     GET  /shared/{shareId}/questions/{questionId} one CONFIRMED question
@@ -61,6 +64,7 @@ from quiz_api.api.document_revisions import (
     _block,
     _outline_item,
 )
+from quiz_api.api.document_summaries import SharedSummary, SummaryRepo, summary_parts
 from quiz_api.api.documents import StorageDep
 from quiz_api.api.questions import (
     MAX_CURSOR,
@@ -551,6 +555,31 @@ def get_shared_document_pdf(
     if stream.size is not None:
         headers["Content-Length"] = str(stream.size)
     return StreamingResponse(body(), media_type="application/pdf", headers=headers)
+
+
+@router.get("/documents/{document_id}/summary", operation_id="getSharedDocumentSummary")
+def get_shared_document_summary(
+    link: Shared,
+    document_id: Annotated[str, Path(max_length=64)],
+    search_repo: SearchRepo,
+    summaries: SummaryRepo,
+) -> SharedSummary:
+    """The AI summary of a shared document (DOCSUM-01-AC06, workspace-sharing.md §8): only a
+    succeeded summary of the revision the guest reads now. An older revision's summary, a run in
+    progress or failed, and anything of other workspaces answer the same 404 as a random id; no
+    run, usage, cost or error data."""
+    doc = _shared_document(search_repo, link, document_id)
+    stored = summaries.latest_summary(doc.id, doc.revision_id)
+    summaries.rollback()
+    if stored is None:
+        raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
+    document, chapters = summary_parts(stored)
+    return SharedSummary(
+        revision_id=stored.run.revision_id,
+        published_at=stored.published_at,
+        document=document,
+        chapters=chapters,
+    )
 
 
 @router.post(

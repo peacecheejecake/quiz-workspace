@@ -21,7 +21,11 @@ select tables_are(
         -- S3a forks
         'workspace_forks',
         -- QIMP-JOB server-side registration items
-        'question_import_registration_items'],
+        'question_import_registration_items',
+        -- DOCSUM-B document summaries
+        'document_summary_runs', 'document_summary_units', 'document_summary_run_units',
+        -- CHNOTE chapter notes
+        'chapter_notes'],
   'public schema contains exactly the expected tables'
 );
 
@@ -88,7 +92,8 @@ select is(
   (select array_agg(event_object_table::text order by event_object_table::text)
      from information_schema.triggers
     where trigger_schema = 'public' and action_statement like '%set_updated_at%'),
-  array['async_jobs', 'content_blocks', 'document_revisions', 'document_uploads', 'documents',
+  array['async_jobs', 'chapter_notes', 'content_blocks', 'document_revisions', 'document_uploads',
+        'documents',
         'practice_sessions', 'profiles', 'question_drafts', 'question_generation_runs',
         'question_import_runs', 'question_user_states', 'questions', 'workspace_forks',
         'workspace_memberships', 'workspace_share_links', 'workspaces'],

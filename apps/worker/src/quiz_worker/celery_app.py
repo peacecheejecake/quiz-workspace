@@ -34,6 +34,7 @@ from celery import Celery, Task, signals
 from celery.exceptions import WorkerLostError
 from celery.worker.request import Request
 
+from quiz_worker.chapter_note_job import LazyChapterNoteDeps, chapter_note_definition
 from quiz_worker.document_job import JOB_TYPE as DOCUMENT_PARSE_JOB_TYPE
 from quiz_worker.document_job import (
     LazyDeps,
@@ -68,6 +69,7 @@ from quiz_worker.runner import (
 )
 from quiz_worker.settings import Environment, WorkerSettings, get_settings
 from quiz_worker.store import InMemoryJobStore, JobRecord, JobStatus, JobStore, SqliteJobStore
+from quiz_worker.summary_job import LazySummaryDeps, document_summarize_definition
 
 logger = logging.getLogger(__name__)
 
@@ -539,9 +541,9 @@ def install_parser_warm_up(settings: WorkerSettings, deps: LazyDeps) -> bool:
 def default_definitions(
     settings: WorkerSettings, deps: LazyDeps | None = None
 ) -> list[JobDefinition[Any]]:
-    """Every job type the worker runs. Dependencies of the document, import, generation and fork
-    jobs (DB, Storage, Qdrant, models, LLM) are built on their first run, so a worker without that
-    configuration still starts (those jobs then fail as `worker_not_configured`)."""
+    """Every job type the worker runs. Dependencies of the document, import, generation, fork and
+    summary jobs (DB, Storage, Qdrant, models, LLM) are built on their first run, so a worker
+    without that configuration still starts (those jobs then fail as `worker_not_configured`)."""
     deps = deps if deps is not None else LazyDeps(settings)
     return [
         ECHO_JOB,
@@ -551,4 +553,6 @@ def default_definitions(
         question_register_definition(LazyRegisterDeps(settings)),
         question_generate_definition(LazyGenerationDeps(settings)),
         workspace_fork_definition(LazyForkDeps(settings)),
+        document_summarize_definition(LazySummaryDeps(settings)),
+        chapter_note_definition(LazyChapterNoteDeps(settings)),
     ]

@@ -15,10 +15,13 @@
 | WS-01 | Workspace 목록 | `/workspaces` | [workspaces.md](workspaces.md) |
 | DOC-01 | 문서 관리 Floating Dialog | `/workspaces/:workspaceId?panel=documents` | [documents-library.md](documents-library.md) |
 | DOC-02 | PDF 열람·원문 교정 | `/workspaces/:workspaceId/documents/:documentId` | [documents-editor.md](documents-editor.md) |
+| DOC-03 | 문서 전문 텍스트 내보내기 | DOC-01 행 메뉴 · DOC-02 header (`GET /documents/:documentId/text`) | [documents-text-export.md](documents-text-export.md) |
+| DOCSUM-01 | 문서 요약 Floating Side Panel | `/workspaces/:workspaceId?panel=document-summary&document=:documentId` | [documents-summary.md](documents-summary.md) |
 | SEARCH-01 | 통합 검색 (문제·본문) | `/workspaces/:workspaceId?q=:query` | [search.md](search.md) |
 | QOV-01 | Workspace 홈 (문제 Heatmap) | `/workspaces/:workspaceId` | [questions-overview.md](questions-overview.md) |
 | QBANK-01 | 전체 문제 목록·편집 | `/workspaces/:workspaceId/questions/bank` | [questions-bank.md](questions-bank.md) |
 | QPLAY-01 | 문제 풀이 Floating Side Panel | `/workspaces/:workspaceId?question=:questionId` | [questions-practice.md](questions-practice.md) |
+| CHNOTE-01 | 챕터 정리 노트 Floating Side Panel | `/workspaces/:workspaceId?panel=chapter-note&chapter=:chapterId` | [chapter-notes.md](chapter-notes.md) |
 | QIMPORT-01 | 문제 PDF 가져오기 | `/workspaces/:workspaceId/questions/import` | [questions-import.md](questions-import.md) |
 | QGEN-01 | 문제 변형 출제 | `/workspaces/:workspaceId/questions/generate` | [questions-generation.md](questions-generation.md) |
 | HISTORY-01 | 이력 Floating Dialog | `/workspaces/:workspaceId?panel=history` | [history-jobs.md](history-jobs.md) |
@@ -28,8 +31,9 @@
 
 ## 공통 규칙
 
-- 총 21개 화면, AC 118개(기존 70개, 공유·Fork 신규 17개, Auth CAPTCHA 신규 8개 — A4, 검색 저하 SEARCH-01-AC06 1개 — M7.4b, 처리 진행 표시 DOC-01-AC05 1개 — UX3-JOB, Workspace 홈 통합 10개 — UX3c: QOV-01-AC07~AC10, SEARCH-01-AC07, DOC-01-AC06, QIMPORT-01-AC05, QGEN-01-AC05, HISTORY-01-AC04, QBANK-01-AC05, UX4 2개: 홈 `문제` 메뉴 QOV-01-AC11, 문제은행 검색·필터 접기·PDF dialog QBANK-01-AC06, 서버 측 문제 추출 시작 1개 — QIMP-AUTO: QIMPORT-01-AC06, 여러 문제·임의 선택 묶음 변형 출제 3개 — QGEN-MULTI: QGEN-01-AC06~AC08, 서버 측 등록 1개 — QIMP-JOB: QIMPORT-01-AC07, 교재 챕터 매칭 1개 — CHAPTER-MAP: QIMPORT-01-AC08, 모든 PDF 한 곳 업로드·자동 분류 2개 — UX6-UPLOAD: DOC-01-AC07·AC08, 대량 초안 즉시 선택 1개 — UX6-SELECT: QIMPORT-01-AC09).
+- 총 24개 화면, AC 135개(기존 70개, 공유·Fork 신규 17개, Auth CAPTCHA 신규 8개 — A4, 검색 저하 SEARCH-01-AC06 1개 — M7.4b, 처리 진행 표시 DOC-01-AC05 1개 — UX3-JOB, Workspace 홈 통합 10개 — UX3c: QOV-01-AC07~AC10, SEARCH-01-AC07, DOC-01-AC06, QIMPORT-01-AC05, QGEN-01-AC05, HISTORY-01-AC04, QBANK-01-AC05, UX4 2개: 홈 `문제` 메뉴 QOV-01-AC11, 문제은행 검색·필터 접기·PDF dialog QBANK-01-AC06, 서버 측 문제 추출 시작 1개 — QIMP-AUTO: QIMPORT-01-AC06, 여러 문제·임의 선택 묶음 변형 출제 3개 — QGEN-MULTI: QGEN-01-AC06~AC08, 서버 측 등록 1개 — QIMP-JOB: QIMPORT-01-AC07, 교재 챕터 매칭 1개 — CHAPTER-MAP: QIMPORT-01-AC08, 모든 PDF 한 곳 업로드·자동 분류 2개 — UX6-UPLOAD: DOC-01-AC07·AC08, 대량 초안 즉시 선택 1개 — UX6-SELECT: QIMPORT-01-AC09, 문서 전문·요약·챕터 정리 노트 신규 화면 3개·17개 — DOCSUM-SPEC 2026-10-29: DOC-03-AC01~AC03(phase DOCTXT.0), DOCSUM-01-AC01~AC08(DOCSUM.0), CHNOTE-01-AC01~AC06(CHNOTE.0)).
 - **Workspace 홈 통합(UX3c 2026-10-20):** Workspace 안에는 왼쪽 메뉴(문서/검색/문제/이력/공유 설정)가 없고 `/workspaces/:workspaceId` 하나가 홈이다(QOV-01). 홈 상단의 Workspace header가 통합 검색과 `문서 n`·`문제`(메뉴: 전체 문제·PDF 관리·직접 추가·변형 출제, UX4·UX6-PROGRESS) 버튼 묶음, 오른쪽 정렬된 `이력`·`공유하기` 아이콘 버튼 묶음을 갖는다. 문서 관리·문제 PDF 관리·문제 생성·이력·링크 공유는 홈 위에 겹쳐 뜨는 non-modal Floating Dialog(`?panel=documents|question-pdfs|generate|history|share`)이며 나중에 연 dialog가 위에 온다. 통합 검색 상태는 홈 URL(`?q=&scope=…`)에 둔다. 이전 경로(`/documents`, `/search`, `/questions`, `/history`, `/settings/sharing`)는 같은 상태의 홈으로 redirect한다. 실제 페이지로 남는 하위 화면(DOC-02, QBANK-01, QIMPORT-01·QGEN-01의 검토 화면)은 뒤로가기와 breadcrumb을 둔다. 홈과 dialog에는 화면 제목·설명 header가 없다(접근성 `h1`은 시각적으로 숨겨 유지).
+- **문서 전문·요약·정리 노트 (DOCSUM-SPEC 2026-10-29):** 모두 Workspace 홈에서 닿는다(사용자 결정 "모두 홈에서 볼 수 있게"). 문서 관리 dialog 행의 `텍스트 내보내기` 메뉴(DOC-03)와 `요약` 버튼(DOCSUM-01, `?panel=document-summary&document=`), Heatmap 챕터 그룹 header의 `정리 노트` 버튼(CHNOTE-01, `?panel=chapter-note&chapter=`). 요약·정리 노트 panel은 다른 홈 dialog와 같은 non-modal `FloatingSidePanel` 쌓기 규칙을 따른다. 세 화면의 phase(DOCTXT.0·DOCSUM.0·CHNOTE.0)는 구현 Task(DOCTXT·DOCSUM-W·CHNOTE-W)가 CI `E2E_PHASES`에 추가해 strict trace·E2E에 포함된다. 품질 suite(`tests/e2e/quality/`): axe `A11Y-11`(내보내기 메뉴·요약 panel)·`A11Y-12`(정리 노트 panel, "정답·해설 포함" 접힘·펼침, `a11y-docsum.spec.ts`), visual `VISUAL-06`(내보내기 메뉴·요약 panel·본문을 접은 정리 노트 panel; 정답·해설이 펼쳐진 상태는 screenshot에 남기지 않는다) (implementation-plan §3 DOCSUM-X).
 - 버튼으로 화면이 바뀌면 UI가 먼저 바뀌고 데이터는 skeleton을 보이는 동안 불러온다(route `loading.tsx`, dialog는 즉시 열리고 내용 skeleton).
 
 - 인증 없는 접근 / 권한 오류 / Workspace archive / deleted / 실패 / 빈 데이터 상태를 정의한다.

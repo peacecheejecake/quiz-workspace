@@ -8,7 +8,10 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from quiz_api.api import (
+    chapter_notes,
+    document_export,
     document_revisions,
+    document_summaries,
     documents,
     forks,
     history,
@@ -23,6 +26,7 @@ from quiz_api.api import (
     search,
     share_links,
     shared,
+    shared_chapter_notes,
     workspaces,
 )
 from quiz_api.errors import problem_responses
@@ -35,6 +39,8 @@ api_router.include_router(me.router)
 api_router.include_router(workspaces.router)
 api_router.include_router(documents.router)
 api_router.include_router(document_revisions.router)
+api_router.include_router(document_export.router)
+api_router.include_router(document_summaries.router)
 api_router.include_router(search.router)
 api_router.include_router(questions.router)
 api_router.include_router(question_overview.router)
@@ -47,3 +53,5 @@ api_router.include_router(shared.router)
 api_router.include_router(forks.router)
 api_router.include_router(jobs.router)
 api_router.include_router(history.router)
+api_router.include_router(chapter_notes.router)
+api_router.include_router(shared_chapter_notes.router)

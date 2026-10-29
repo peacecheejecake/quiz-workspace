@@ -56,7 +56,7 @@ concurrency:
   cancel-in-progress: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
 
 env:
-  E2E_PHASES: P0.10,A0,M3.0,M4.0,M5.0,M6.0,M7.0,S0
+  E2E_PHASES: P0.10,A0,M3.0,M4.0,M5.0,M6.0,M7.0,S0,DOCTXT.0,DOCSUM.0,CHNOTE.0
   FORCE_COLOR: '1'
 
 jobs:
@@ -269,6 +269,9 @@ jobs:
         env:
           APP_ENV: test
           WORKER_LLM_SCENARIO_FILE: ${{ github.workspace }}/tests/fixtures/llm/generation-scenarios.json
+          WORKER_CHAPTER_NOTES: 'true'
+          # DOCSUM-01: API + worker summarize; AC05's feature-off stack claims Redis DBs 10-15.
+          WORKER_DOCUMENT_SUMMARY: 'true'
         run: |
           # Skip only the screen specs of phases that are not GREEN yet (none once every phase is
           # listed). A blank entry would be an empty Playwright filter matching every spec.
@@ -294,6 +297,8 @@ jobs:
         env:
           APP_ENV: test
           WORKER_LLM_SCENARIO_FILE: ${{ github.workspace }}/tests/fixtures/llm/generation-scenarios.json
+          WORKER_CHAPTER_NOTES: 'true'
+          WORKER_DOCUMENT_SUMMARY: 'true'
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-visual
         run: >-
           scripts/visual-run.sh pnpm e2e:log-audit --worker --no-build --web-port 3000 --api-port 8000

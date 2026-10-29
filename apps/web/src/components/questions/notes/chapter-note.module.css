@@ -1,0 +1,192 @@
+/* CHNOTE-01 정리 노트 panel and the share page's 정리 노트 card. Semantic tokens only. */
+.content {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  color: var(--color-text-primary);
+}
+
+.head {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.meta,
+.hint,
+.note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-normal);
+}
+
+.note {
+  font-size: var(--font-size-body);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.state {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.state p {
+  margin: 0;
+}
+
+.status {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.alert {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.alert p {
+  margin: 0;
+}
+
+.alertTitle {
+  font-weight: var(--font-weight-semibold);
+}
+
+.disabled[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.previous {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-label);
+}
+
+.disclosure {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+}
+
+.disclosureButton {
+  gap: var(--space-1);
+}
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.body[hidden] {
+  display: none;
+}
+
+.section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--font-size-body-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+.items {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-inline-start: var(--space-5);
+  line-height: var(--line-height-relaxed);
+  overflow-wrap: anywhere;
+}
+
+.ref {
+  margin-inline-start: var(--space-1);
+  color: var(--color-accent);
+  font-size: var(--font-size-label);
+  vertical-align: super;
+  line-height: 1;
+}
+
+.footnotes {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.footnotesTitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.footnoteList {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+}
+
+.footnoteList li {
+  border-radius: var(--radius-sm);
+}
+
+.footnoteLink {
+  /* WCAG 2.5.8: each footnote line is a separate 24px target (axe target-size, A11Y-12). */
+  display: inline-block;
+  min-height: var(--space-6);
+  padding-block: var(--space-1);
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.gone {
+  color: var(--color-text-secondary);
+}
+
+/* Heatmap chapter header: the 정리 노트 button and its "만드는 중" text. */
+.busy {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+/* Share page card. */
+.chapterList {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

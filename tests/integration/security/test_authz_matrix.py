@@ -73,8 +73,14 @@ RULES: dict[str, Rule | str] = {
     "listDocumentRevisions": READ,
     "restoreDocumentRevision": EDIT,
     "getDocumentSourceUrl": READ,
+    "exportDocumentText": READ,  # DOC-03 (published revision; `revision=draft` editors only)
     "createDocumentUploadIntent": EDIT,
     "listDocuments": READ,
+    # DOCSUM-B document summaries
+    "getDocumentSummary": READ,
+    "createDocumentSummary": EDIT,
+    "retryDocumentSummary": EDIT,
+    "disableDocumentSummaryAuto": EDIT,
     # jobs
     "getJob": READ,
     "streamJobEvents": READ,
@@ -112,6 +118,10 @@ RULES: dict[str, Rule | str] = {
     "createQuestion": EDIT,
     "getQuestionOverview": READ,
     "searchWorkspace": READ,
+    # chapter notes (CHNOTE-01)
+    "listChapterNotes": READ,
+    "getChapterNote": READ,
+    "createChapterNote": EDIT,
     # workspace lifecycle and sharing
     "getWorkspace": READ,
     "listWorkspaceActivities": READ,
@@ -134,10 +144,13 @@ RULES: dict[str, Rule | str] = {
     "getSharedWorkspace": SHARED,
     "getSharedDocument": SHARED,
     "getSharedDocumentPdf": SHARED,
+    "getSharedDocumentSummary": SHARED,
     "startWorkspaceFork": SHARED,
     "listSharedQuestions": SHARED,
     "getSharedQuestion": SHARED,
     "searchSharedWorkspace": SHARED,
+    "listSharedChapterNotes": SHARED,
+    "getSharedChapterNote": SHARED,
     "createSharedSession": SHARED,
     # health
     "getLiveness": PUBLIC,

@@ -24,7 +24,8 @@
 2. **통합 검색 결과**: 검색 범위에 "본문"이 포함된 검색을 실행하면 header 아래에 본문 검색 결과 영역이 나타나며 "검색 결과 닫기"로 지운다.
 3. **문제 영역**(기존 QOV-01 내용): 도구 줄에 상태 필터 펼치기 버튼(기본 접힘, 위/아래 화살표 아이콘, `aria-expanded`·`aria-controls`)만 둔다. 문제 수 문구("현재 필터의 문제 n개")와 `문제 PDF 관리`·`문제 생성` 버튼은 없다(UX4; header의 `문제` 메뉴로 옮김). 접힌 상태에서 상태 필터가 적용 중이면 "상태 필터 적용 중" 문구를 보인다. 펼치면 상태 필터(색 견본 + 상태 텍스트, 즐겨찾기만·다시 풀기만, 필터 초기화); 칩은 크기를 유지한 채 칩 단위로 줄바꿈하며 좁은 화면에서도 찌그러지거나 가로 스크롤되지 않는다. 그 아래 Heatmap. 상태 범례와 상태별 집계(문제 상태 요약)는 두지 않는다 — 상태는 marker의 접근성 이름·preview popover·상태 필터의 텍스트로 전달하고 색만으로 전달하지 않는다. 문제가 없을 때 빈 상태의 버튼은 `문제 등록`(전체 문제 페이지) 하나이며 홈의 다른 "PDF 가져오기" 버튼은 없다.
 4. **Floating dialog**: 문서 관리(DOC-01), 문제 PDF 관리(QIMPORT-01), 문제 생성(QGEN-01), 이력(HISTORY-01), 링크 공유(WS-SHARE-01)는 모두 공통 `FloatingSidePanel`(non-modal)로 홈 위에 뜨고 URL `?panel=`에 반영된다(딥링크·이전 경로 redirect). 여러 개를 열 수 있고 나중에 연 dialog가 위에 온다. 문제 풀이 panel(QPLAY-01, `?question=`)도 같은 규칙.
-5. **즉시 반응**: 버튼으로 화면이 바뀌면 먼저 화면을 바꾸고 skeleton을 보이는 동안 데이터를 불러온다. Workspace 홈·하위 페이지 route는 `loading.tsx` skeleton, dialog는 즉시 열리고 데이터를 불러오는 동안 내용 skeleton을 보인다.
+5. **정리 노트 (DOCSUM-SPEC 2026-10-29):** Heatmap의 각 챕터 그룹 header("챕터 없음" 제외) 오른쪽에 `정리 노트` 버튼(접근성 이름 "<장 제목> 정리 노트", 모든 구성원)이 있고 정리 노트 panel(`?panel=chapter-note&chapter=<id>`, non-modal, 4의 쌓기 규칙)을 연다. 버튼은 그룹의 marker grid 위치·크기를 바꾸지 않는다(grid shift 없음). 동작과 AC는 [CHNOTE-01](chapter-notes.md).
+6. **즉시 반응**: 버튼으로 화면이 바뀌면 먼저 화면을 바꾸고 skeleton을 보이는 동안 데이터를 불러온다. Workspace 홈·하위 페이지 route는 `loading.tsx` skeleton, dialog는 즉시 열리고 데이터를 불러오는 동안 내용 skeleton을 보인다.
 
 ## 수용 기준
 

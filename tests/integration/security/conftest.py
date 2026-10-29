@@ -114,6 +114,7 @@ def random_ids() -> dict[str, str]:
         "upload_id",
         "draft_version",
         "question_revision",
+        "chapter_id",
     )
     out = {k: str(uuid.uuid4()) for k in keys}
     out["block_id"] = f"b-{uuid.uuid4().hex[:12]}"
@@ -183,6 +184,7 @@ def build_world(seed: Any, label: str) -> World:
     doc_id = str(done["document_id"])
     revisions = owner.ok("GET", f"/documents/{doc_id}/revisions")["items"]
     blocks = owner.ok("GET", f"/documents/{doc_id}/blocks?limit=5")["items"]
+    chapter_id = str(owner.ok("GET", f"/documents/{doc_id}/outline")["items"][0]["id"])
     question = owner.create_question(wid, f"S4 {label} 문제", answer=1)
     qid = str(question["id"])
     generation = owner.ok(
@@ -272,6 +274,7 @@ def build_world(seed: Any, label: str) -> World:
         "upload_id": str(intent.json()["upload_id"]),
         "draft_version": "1",
         "question_revision": str(question["revision"]["id"]),
+        "chapter_id": chapter_id,
     }
     twin_ids = {
         "workspace_id": tid,
@@ -287,6 +290,7 @@ def build_world(seed: Any, label: str) -> World:
         "link_id": str(twin_link["id"]),
         "share_id": str(twin_link["id"]),
         "batch_id": str(twin_batch["id"]),
+        "chapter_id": str(owner.ok("GET", f"/documents/{twin_doc}/outline")["items"][0]["id"]),
     }
     return World(owner, editor, viewer, outsider, forker, ids, twin_ids, str(link["secret"]))
 

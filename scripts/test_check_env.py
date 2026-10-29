@@ -187,6 +187,8 @@ def test_test_only_switches_are_forbidden() -> None:
         "WORKER_JOB_STORE_PATH",
         "WORKER_FIXTURE_PDF_DIR",
         "WORKER_LLM_SCENARIO_FILE",
+        "WORKER_CHAPTER_NOTE_SCENARIO_FILE",
+        "WORKER_CHAPTER_NOTE_HOLD_DIR",
         "FORWARDED_ALLOW_IPS",
         "RAILWAY_RUN_UID",
     } <= forbidden
@@ -246,6 +248,35 @@ def test_conditional_requirement_and_fake_adapters() -> None:
     report = check_env.run_checks(MANIFEST, "production", {"worker": env})
     assert "worker LLM_MODEL: missing (required when LLM_API_KEY is set)" in report.errors
     assert "worker WORKER_PARSER: fake adapters are for local/test only" in report.errors
+
+
+@pytest.mark.parametrize("switch", ["WORKER_DOCUMENT_SUMMARY", "WORKER_CHAPTER_NOTES"])
+def test_llm_features_need_the_llm_on_worker_and_api(switch: str) -> None:
+    """DOCSUM-B summaries and CHNOTE-B chapter notes: either switch requires the worker's key and
+    the same LLM_MODEL on worker and API."""
+    worker = valid_env("worker", "production")
+    api = valid_env("api", "production")
+    for env in (worker, api):
+        env[switch] = "true"
+    report = check_env.run_checks(MANIFEST, "production", {"worker": worker, "api": api})
+    assert f"worker LLM_API_KEY: missing (required when {switch}=true)" in report.errors
+    assert f"api LLM_MODEL: missing (required when {switch}=true)" in report.errors
+    worker |= {"LLM_API_KEY": SECRET_MARK, "LLM_MODEL": "model-a"}
+    api["LLM_MODEL"] = "model-b"
+    report = check_env.run_checks(MANIFEST, "production", {"worker": worker, "api": api})
+    assert report.errors == ["LLM_MODEL: differs between api and worker (must be identical)"]
+    api["LLM_MODEL"] = "model-a"
+    report = check_env.run_checks(MANIFEST, "production", {"worker": worker, "api": api})
+    assert report.errors == []
+    assert "LLM_API_KEY" not in {v.name for v in MANIFEST.for_service("api")}
+
+
+def test_required_when_accepts_one_condition_or_a_list() -> None:
+    by_name = {v.name: v for v in MANIFEST.vars}
+    both = (("WORKER_DOCUMENT_SUMMARY", "true"), ("WORKER_CHAPTER_NOTES", "true"))
+    assert by_name["LLM_MODEL"].required_when == both
+    assert by_name["LLM_API_KEY"].required_when == both
+    assert by_name["CLOUDFLARE_API_TOKEN"].required_when == (("WORKER_EMBEDDER", "workers_ai"),)
 
 
 def test_production_needs_its_own_qdrant_prefix_on_the_shared_cluster() -> None:
