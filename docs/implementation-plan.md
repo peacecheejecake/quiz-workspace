@@ -41,6 +41,7 @@ flowchart LR
   M5 --> M7[M7 Harden·Release]
   M6 --> M7
   S --> M7
+  M7 --> DS[DOCSUM 전문·요약·정리 노트]
 ```
 
 - **A3(교차 사용자 차단) 완료 전 M3 UI release 금지** (auth.md §6).
@@ -176,6 +177,25 @@ flowchart LR
 | M7.4 ✅ | Staging 배포(구성 A) → 7일 부하·비용 게이트 → Production, SMTP, DEP-01~07 | M7.4a | **사용자 계정·비용 승인 필요** |
 | UX1 | 사용자 피드백 UI 다듬기(2026-10-19): glass 불투명·tint, 상태 배경 token(hover/pressed/selected)·전환 token, toggle off 무테두리, 테두리 축소, 메뉴·선택지 설명 → Tooltip, 계정 버튼 = 이메일, WS-01 설명 문구 삭제·빈 상태 헤더 CTA 숨김·탭 수 badge 제거, DOC-01 빈 상태 헤더 업로드 버튼 숨김 | M7.2 | token·contrast test, lint·typecheck·test GREEN, 영향 E2E(WS-01·DOC-01·ACCOUNT-01·SEARCH-01·QOV·QBANK·A11Y·SMOKE) GREEN, visual baseline 재생성 |
 
+### DOCSUM — 문서 전문·요약·챕터 정리 노트 (DOCSUM-SPEC 2026-10-29)
+
+사용자 요청 "document to text and summary — 문서 전문 텍스트 변환 / 내용 요약 제공 — 문서 내용 변경될 때마다 새로 요약 생성 및 저장 / 문제 및 해설로부터 챕터별 내용 정리 생성 — 추가한 내용은 문제 출처를 주석에 명시". 화면 명세: [DOC-03](screens/documents-text-export.md)(3 AC), [DOCSUM-01](screens/documents-summary.md)(7 AC), [CHNOTE-01](screens/chapter-notes.md)(6 AC); 결정은 §7(2026-10-29). 브랜치 `feature/doc-summary`, Task마다 `task/<ID>-<slug>`. RED Task는 그 트랙의 구현 착수 직전에 쓴다. 새 phase(`DOCTXT.0`·`DOCSUM.0`·`CHNOTE.0`, `scripts/e2e-trace.ts` PHASES)는 구현 Task가 GREEN을 확인한 뒤 orchestrator가 CI `E2E_PHASES`에 추가한다.
+
+| ID | 내용 | 범위(디렉터리) | 의존 | DoD |
+|---|---|---|---|---|
+| DOCTXT.0 | RED: DOC-03-AC01~AC03 E2E + 계약 DOC-03-C01~C03(pytest `red` marker) | `tests/e2e/documents/documents-export.spec.ts`, `tests/e2e/fixtures`, `tests/integration/documents` | DOCSUM-SPEC | RED 증거(메뉴·`/text` endpoint 없음이 원인), `pnpm e2e:trace --strict --phase DOCTXT.0`의 orphan AC 0, `make test-infra` GREEN(red 제외) |
+| DOCTXT | `book_core.export.render_revision`(Markdown·텍스트, golden fixture), `GET /documents/{id}/text`(인가·no-store·attachment·파일 이름), DOC-01 행 `텍스트 내보내기` 메뉴, DOC-02 header 메뉴(초안 그룹·전체 복사), `make contracts` | `packages/core/src/book_core/export`, `packages/core/tests`, `apps/api`, `contracts`, `packages/api-client`, `apps/web`(documents) | DOCTXT.0 | DOC-03 AC01~AC03 GREEN(chromium·webkit), C01~C03 GREEN(`red` 제거), DOC-01·DOC-02 E2E 회귀 없음, log/artifact audit 0 |
+| DOCSUM.0 | RED: DOCSUM-01-AC01~AC07 E2E + 계약 DOCSUM-01-C01~C07(pytest `red`, pgTAP 자리) + E2E fixture(요약 opt-in 문서, `E2E-FAIL-SUMMARY` marker, 기능 꺼짐 stack 설정 방법) | `tests/e2e/documents/documents-summary.spec.ts`, `tests/e2e/fixtures`, `tests/integration/documents` | DOCSUM-SPEC | RED 증거(요약 API·panel 없음), trace `--phase DOCSUM.0` orphan 0 |
+| DOCSUM-B | migration: `documents.summary_enabled_at/by`, `document_summary_runs`·`document_summary_units`·`document_summary_run_units`, SECURITY DEFINER `worker_start_document_summary`(발행·복원 publish 트랜잭션 follow-up), grants·RLS, pgTAP. core `summary`(map/reduce, 장 분할, 쪽 범위 검증, 결정적 fake). worker `document.summarize`(advisory lock, unit 재사용, supersession, 한도·오류 코드, counts-only 결과). API `GET/POST /documents/{id}/summary`, `POST …/summary/retry`, 공유 `GET /shared/{shareId}/documents/{docId}/summary`. Fork 복제, 활동 기록(id만), 설정 `WORKER_DOCUMENT_SUMMARY`·`WORKER_SUMMARY_CHAPTER_CHARS`·`WORKER_SUMMARY_MAX_INPUT_CHARS`(env manifest·check-env), `make contracts` | `supabase/migrations`, `supabase/tests`, `packages/core/src/book_core/summary`, `apps/worker`, `apps/api`, `contracts`, `packages/api-client`, `scripts/check_env.py`·env manifest | DOCSUM.0 | DOCSUM-01-C01~C07 GREEN, pgTAP GREEN, migration은 롤백 트랜잭션으로 검증(orchestrator가 적용), `make test`·`make test-infra` GREEN, 본문 미기록 log test |
+| DOCSUM-W | 문서 관리 행 `요약` 버튼·"요약 중", `DocumentSummaryPanel`(`FloatingSidePanel`, `?panel=document-summary&document=`), 상태·stale·오류·`다시 시도`, DOC-02 header `요약` 링크, 공유 화면 `요약`, 이력 label(활동 `document.summary_*`, 작업 "문서 요약"), Storybook | `apps/web`, `packages/ui`(필요 시 Disclosure) | DOCSUM-B | DOCSUM-01 AC01~AC07 GREEN(chromium·webkit), axe, log/artifact audit 0, `E2E_PHASES`에 `DOCSUM.0` 추가 |
+| CHNOTE.0 | RED: CHNOTE-01-AC01~AC06 E2E + 계약 CHNOTE-01-C01~C07(pytest `red`) + `tests/fixtures/llm/chapter-note-scenarios.json`(정상·`Q99` 인용·각주 없는 항목·실패) | `tests/e2e/questions/chapter-notes.spec.ts`, `tests/e2e/fixtures`, `tests/integration/questions`, `tests/fixtures/llm` | DOCSUM-SPEC | RED 증거(정리 노트 API·버튼 없음), trace `--phase CHNOTE.0` orphan 0 |
+| CHNOTE-B | migration `chapter_notes`(버전, partial unique 진행 1개, grants·RLS, pgTAP). core `notes`(입력 tag, 인용 검증·1회 재요청·항목 제거, 큰 장 묶음·병합, scenario fake). worker `chapter_note.generate`(고정 `question_refs`만 읽음, counts-only 결과). API `GET /workspaces/{id}/chapter-notes`, `GET/POST /chapters/{chapterId}/note`(stale 계산, `version=`), 공유 노트 API, practice API 노트 미포함 test, Fork 복제(문제 id 재매핑), 설정 `WORKER_CHAPTER_NOTES`, `make contracts` | `supabase/migrations`, `supabase/tests`, `packages/core/src/book_core/notes`, `apps/worker`, `apps/api`, `contracts`, `packages/api-client`, env manifest | CHNOTE.0 | CHNOTE-01-C01~C07 GREEN(인용 property test 포함), pgTAP GREEN, `make test`·`make test-infra` GREEN |
+| CHNOTE-W | Heatmap 챕터 그룹 header `정리 노트`(grid shift 없음, "챕터 없음" 제외), `ChapterNotePanel`(`?panel=chapter-note&chapter=`, "정답·해설 포함" disclosure, 각주 목록·링크, `버전`, stale, 동작), 풀이 panel이 열리면 노트 접기, 공유 화면 `정리 노트` 카드, 이력 label | `apps/web`, `packages/ui` | CHNOTE-B | CHNOTE-01 AC01~AC06 GREEN(chromium·webkit), QOV-01·QPLAY-01 E2E 회귀 없음, 영향 visual baseline 재생성, `E2E_PHASES`에 `CHNOTE.0` 추가 |
+| DOCSUM-X | 교차 마무리: `eval/summaries`(요약 쪽 인용 유효율·장 coverage, 노트 각주 precision/coverage; 합성 fixture만), `make test-llm`에 요약·노트 smoke(합성 텍스트만), 새 panel A11Y·VISUAL(light/dark, desktop·iPad), runbook(LLM 비용·키·기능 플래그), 전체 `pnpm e2e:trace --strict` orphan 0 확인, 문서 갱신. **staging·production 활성화(`WORKER_DOCUMENT_SUMMARY`·`WORKER_CHAPTER_NOTES` on, LLM 키)는 ⛔ 사용자 승인 후** | `eval`, `tests/e2e/quality`, `docs`, `.github/workflows/ci.yml`, `Makefile` | DOCTXT, DOCSUM-W, CHNOTE-W | quality suite GREEN, `pnpm e2e:trace --strict`(전체) OK, eval 리포트 생성, CI GREEN |
+
+- 병렬: `DOCTXT ∥ DOCSUM-B ∥ CHNOTE-B`, `DOCSUM-W ∥ CHNOTE-W`. 공유 파일(`apps/api` router 등록, `apps/worker` job 등록·celery 설정, `contracts/openapi.json`, `packages/api-client`, migration timestamp, env manifest)은 충돌이 예상되며 orchestrator가 merge 후 `make contracts`로 재생성한다.
+- 비용 위험: 350쪽 교재의 첫 요약은 입력 0.3–0.5M token 수준(이후 발행은 바뀐 장만). 750문제 장은 노트 묶음 생성(C04). 그래서 요약은 opt-in, 노트는 요청 시에만 만든다.
+
 ## 4. Task 의존 그래프
 
 ```mermaid
@@ -302,6 +322,21 @@ flowchart TB
   end
   M30 --> M70
   M74a --> A4
+
+  subgraph DOCSUM[DOCSUM 문서 전문·요약·정리 노트]
+    DSPEC[DOCSUM-SPEC]
+    DT0[DOCTXT.0 RED] ==> DT[DOCTXT export]
+    DS0[DOCSUM.0 RED] ==> DSB[DOCSUM-B backend] --> DSW[DOCSUM-W panel]
+    CN0[CHNOTE.0 RED] ==> CNB[CHNOTE-B backend] --> CNW[CHNOTE-W panel]
+    DSPEC --> DT0
+    DSPEC --> DS0
+    DSPEC --> CN0
+    DT --> DSX[DOCSUM-X eval·quality]
+    DSW --> DSX
+    CNW --> DSX
+    DSX --> DSENV[staging 활성화 ⛔]
+  end
+  M74 --> DSPEC
   M70 ==> M71
   M52 --> M71
   M55 --> M72
@@ -335,6 +370,10 @@ flowchart TB
 | W18 | M5.4 · M6.3 · M7.1 · S4 | |
 | W19 | M5.5 | |
 | W20 | M7.2 → M7.3 → M7.4a → M7.4b → M7.4c → M7.4⛔ | |
+| W21 | DOCTXT.0 → DOCTXT · DOCSUM.0 · CHNOTE.0 | DOCSUM-SPEC 이후. 세 RED는 서로 다른 spec·fixture 파일 |
+| W22 | DOCSUM-B · CHNOTE-B (· DOCTXT 진행 중이면 계속) | migration·core 모듈은 분리, api/worker 등록·contracts는 orchestrator가 병합 |
+| W23 | DOCSUM-W · CHNOTE-W | DOC-01 행(요약)과 Heatmap header(노트)로 web 파일 범위가 다름 |
+| W24 | DOCSUM-X → staging 활성화⛔ | LLM 키·비용 사용자 승인 필요 |
 
 Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 Task를 즉시 착수한다.
 
@@ -448,6 +487,12 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-10-23 | **사용자 결정(CHAPTER-MAP)**: "교재 챕터에 자동 매칭 + 수정 가능". import 문제가 `chapter_id = null`로 등록되던 것을 바꾼다. 구현: 초안의 문제 PDF 장(첫 출처 블록의 `content_blocks.chapter_id`와 상위 장)을 Workspace 책들의 현재 revision 챕터와 정규화 제목(번호 접두·공백·문장부호 제거, 번호는 동명 후보를 좁힐 때만)으로 비교, 정확히 하나면 추천, 없거나 여럿이면 없음 + 이유(`chapter_match`). 해석: 추천은 저장하지 않고 읽을 때 계산(나중에 올린 교재 반영, worker 변경 없음); 검토자 선택만 `question_drafts.chapter_id/chapter_manual`(20261023130000)에 저장하고 승인을 되돌리지 않는다(메타데이터). 옛 revision 챕터는 등록 시 section_key로 현재 revision에 해석. 등록된 문제의 챕터 변경은 기존 문제 편집기로 충분(변경 없음). CHAPTER-FIX(PR #22)의 문제 PDF 장 복원 코드에 의존하지 않고 `content_blocks.chapter_id`만 읽는다. 새 AC QIMPORT-01-AC08(화면 AC 114 → 115). | QIMPORT-01-AC08, questions.md §6 |
 | 2026-10-28 | **사용자 결정(UX6-UPLOAD)**: "복수의 pdf 같이 올릴 수 있도록 변경 / 문제, 본문 구분 없이 pdf를 올리면 알아서 추출 / 문제 수동 등록은 유지" + 선택 "통합 업로드 1곳", "`문서 n`은 본문 있는 PDF만". 업로드는 문서 관리 한 곳(여러 PDF, `document_type=auto`). 서버가 첫 revision을 규칙 기반 `classify_content`(segment 기반, LLM 없음)로 `content_kind` book/question_paper/mixed로 분류. `document_type`은 '본문인가'(mixed → book)로 유지해 검색·출제 근거·챕터 매칭은 book·mixed를 쓴다. 문제지와 확신 높은 교재+문제는 추출 자동 시작, 낮은 교재+문제는 `문제 추출` 대기. 사람이 고른 종류(명시 업로드 종류, `PATCH /documents/{id}`)와 교정 revision은 재분류하지 않는다. book → question_paper는 문제·등록 대기 초안·출처가 쓰면 409 `document-in-use`, run·초안·문제는 지우지 않는다. 문제 PDF 관리·가져오기 화면은 업로드하지 않는다(`검토할 PDF` 전환). 기존 book/question_paper 업로드 경로는 호환용으로 유지. 설계 메모와 차이: 열 이름 `content_kind`(유효 종류), 원 분류 출력은 `detection`, worker 쓰기는 column grant 대신 `worker_classify_document`. |
 | 2026-10-28 | **사용자 결정(UX6-BANK)**: "문제은행 페이지 제목도 '전체 문제'로 변경". 페이지·링크 이름은 '전체 문제', 개념을 말하는 문장은 '문제은행' 유지. |
+| 2026-10-29 | **사용자 결정(DOCSUM Q1)**: 문서 요약은 문서마다 opt-in(`요약 만들기`, 편집 권한). 요청의 "문서 내용 변경될 때마다 새로 요약 생성 및 저장"과 맞추는 해석: 한 번 요약을 만든 문서(`summary_enabled_at`)는 이후 모든 발행(교정 발행·revision 복원)에서 서버가 자동으로 새 요약을 만들어 revision별로 저장하고(바뀐 장만 다시 요약, 입력 hash로 unit 재사용), 만드는 동안·실패한 동안 이전 요약을 "이전 발행본 기준"으로 보인다. opt-in하지 않은 문서는 본문을 LLM에 보내지 않는다. 초안은 요약하지 않는다. 환경 플래그 `WORKER_DOCUMENT_SUMMARY`(기본 off)와 LLM 설정이 있어야 하며 staging·production의 LLM 키·비용은 별도 승인(⛔). | DOCSUM-01-AC01~AC03·AC05, 설계 초안 Q1의 "설정되면 자동" 권고를 대체 |
+| 2026-10-29 | **사용자 결정(DOCSUM Q4·Q6·Q7)**: 챕터 정리 노트는 CONFIRMED 문제 + 해설만 입력(본문은 참고만), 모든 항목에 문제 출처 각주 필수(지어낸 출처는 저장·표시하지 않음). 모든 구성원과 공유 링크 게스트가 보고, 승인 없이 바로 `AI 생성` 표시, 읽기 전용·다시 만들기만(버전 유지), 본문은 "정답·해설 포함" 뒤에 접어 두고 풀이 panel에는 넣지 않는다. | CHNOTE-01, questions.md §9 |
+| 2026-10-29 | **사용자 결정(DOCSUM Q10)**: "모두 홈에서 볼 수 있게". 요약은 문서 관리 dialog 행 `요약` → 홈 위 `FloatingSidePanel`(`?panel=document-summary&document=`), 정리 노트는 Heatmap 챕터 header `정리 노트` → `?panel=chapter-note&chapter=`. DOC-02는 같은 요약 panel로 가는 링크만 둔다(설계 초안의 DOC-02 `원문 | 요약` 전환을 대체). 묻지 않고 정한 기본값: Q2 문서 + 최상위 장 요약, Q5 노트는 장마다 요청 시 생성 + stale 표시("모든 챕터 정리"는 v1 제외), Q8 원문 언어로 출력, Q9 전문 내보내기 Markdown·텍스트 + 쪽 marker, 모든 구성원(초안은 편집 권한), 공유 게스트 제외, DOC-02 header와 홈 문서 행 메뉴. | DOC-03, DOCSUM-01, CHNOTE-01 |
+| 2026-10-29 | DOCSUM-SPEC 해석(공유 게스트): 요약은 게스트가 읽는 현재 발행 revision의 성공 요약만 준다(이전 revision 요약은 이미 바뀐 원문을 담을 수 있어 404). 노트는 장마다 최신 성공 버전만, 각주는 발행된 확정 문제만 링크. 생성 상태·오류·usage·이전 버전은 비공개. 근거: workspace-sharing.md §1 "발행된 것만 읽기" — 요약·노트는 이미 게스트에게 열린 발행 원문·문제·정답·해설의 파생물. | workspace-sharing.md §8, DOCSUM-01-AC06, CHNOTE-01-AC04 |
+| 2026-10-29 | DOCSUM-SPEC 해석(화면 ID): 내보내기·요약·노트 AC를 DOC-01·DOC-02·QOV-01에 넣지 않고 새 화면 DOC-03·DOCSUM-01·CHNOTE-01과 새 RED phase(DOCTXT.0·DOCSUM.0·CHNOTE.0)로 둔다. `scripts/e2e-trace.ts`는 화면마다 spec 파일 하나를 쓰고 M3.0·M5.0은 CI `E2E_PHASES`에 있어, 기존 화면에 테스트 없는 AC를 더하면 CI strict trace가 구현 전까지 실패한다(ci.yml: 새 RED phase는 구현 Task가 추가할 때까지 CI 밖). 기존 화면 명세에는 진입점 설명과 링크만 더했다. | index.md, 화면 AC 118 → 134 |
+| 2026-10-29 | DOCSUM-SPEC 해석(범위): 성공한 요약의 수동 "다시 생성"은 두지 않는다(같은 입력은 unit 재사용으로 같은 결과; 실패 시 `다시 시도`만). 정리 노트 단위는 Heatmap 그룹(정확히 같은 `chapter_id`)이고 `(document_id, section_key)`로 revision을 넘어 이어진다; "챕터 없음" 그룹은 노트 없음. 풀이 panel은 제출 후에도 노트를 보이지 않는다. 공유 게스트 각주는 조회 전용 문제 panel로 연다. 노트 생성 플래그는 요약과 따로 `WORKER_CHAPTER_NOTES`(기본 off). **열린 질문(사용자):** 요약 opt-in을 끄는(자동 재생성 중지) 기능은 v1에 없다 — 필요하면 결정 요청. | DOCSUM-01, CHNOTE-01 |
 
 ## 8. 진행 현황
 
@@ -559,5 +604,6 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | UX6-BANK 문제은행 페이지 이름 '전체 문제' | ✅ | 1ae2b82 (merge 4160ab2) | 2026-10-28. 사용자 요청 "문제은행 페이지 제목도 '전체 문제'로 변경". h1·metadata·breadcrumb·skeleton·다른 화면의 링크/버튼 문구를 '전체 문제'로. route `/questions/bank`·식별자·QBANK-01 유지, 개념 문장("문제은행에 등록")은 유지. E2E 49 GREEN(chromium·webkit·a11y). Codex 리뷰 지적 없음. 후속: question-bank visual baseline 4개 Linux 재생성 |
 | UX6-UPLOAD-B PDF 종류 자동 분류(core·DB·API·worker) | ✅ | 92d7109 · 511112b · ee27fc9 · 2217169 · a89bd34 · ce4387c · 6b0f568 · 24ee5f8 · 54a601a · b528890 · 1abedcf · ab91abc · 5fa64d9 · 9bebd88 (merge b383e2c · 6317559) | 2026-10-28. migration 20261028120000(공유 DB 적용됨; pgTAP 17 27/27, 18 4/4). `classify_content`(segment 기반 규칙, LLM 없음) → `content_kind` book/question_paper/mixed, `PATCH /documents/{id}`(409 `document-in-use`/`document-not-ready`), upload `auto`, `POST /question-imports` 모든 준비 완료 문서. 챕터별 segmentation을 분류·추출이 공유. infra pytest 623 + authz/kinds 266 GREEN. Codex P2×2(mixed 추출 누락, 등록 대기 중 종류 변경) → P2×3(부록 정답 챕터 제목, 실패 job, 캡션 순서) → P2(빈칸 문제 흡수) → P2(3개 이상 packed 정답) → P2(여러 줄 문제) → 반영. 마지막 P2(챕터 제목으로 나뉜 부록의 단답형 정답 `1. 42`가 초안이 되고 정답 누락)는 **후속**: 검토 화면에서 보이고 고칠 수 있음, 실제 PDF 보정 시 함께. 실제 PDF 보정(2026-10-28, `eval/classify_pdfs.py`, 은행 연수 교재 1·2권 + 3권 문제은행): 3/3 정답 — 1권 book(strong 0, high), 2권 book(strong 1, coverage 0.067, low — 임계값 3 미만이라 교재), 3권 question_paper(strong 750, coverage 0.977, high); 임계값 변경 없음. mixed 실제 표본은 아직 없음. 후속: fork는 `document_type`만 복사(교재+문제 → 교재), `make db-lint`의 기존 `worker_fork_commit` pg_temp 오탐 |
 | UX6-UPLOAD-W 한 곳 여러 PDF 업로드·종류 badge·종류 변경(web) | ✅ | 7c34514 · baf0fa0 · 3480c4b · fbf3baa · 46c49fa · 8b0ea17 (merge 72c824f) | 2026-10-28. 문서 관리 dialog에서 여러 PDF를 `auto`로 업로드, 모든 PDF + 종류 badge(교재/문제지/교재+문제/분석 중), `종류 변경` Radix 메뉴(저장 중 비활성화, 실패 시 행 재조회), `문서 n` = 교재+교재+문제. 문제 PDF 관리·가져오기 화면은 업로드 없음(`문서 관리 열기`), `검토할 PDF` 전환(모든 `latest_import_id` 기준). 화면 AC 118(DOC-01-AC07·AC08). E2E 171 GREEN(chromium·webkit·a11y). Codex P2×2(전환 목록 200 run 한계, 연속 선택) → queue P2 → queue P2 → 비활성화 방식으로 단순화 → P2(문서별 저장 상태) → 지적 없음. 후속: `@quiz/ui` `DropdownMenuRadioItem`, documents visual baseline Linux 재생성 |
+| DOCSUM-SPEC 문서 전문·요약·챕터 정리 노트 명세·계획 | ◐ | (이 커밋) | 2026-10-29. docs만(+`scripts/e2e-trace.ts` PHASES·AC 수 test). 새 화면 DOC-03(3 AC)·DOCSUM-01(7 AC)·CHNOTE-01(6 AC), 화면 AC 118 → 134, 24개 화면. architecture §4·§5·§6, questions.md §9, workspace-sharing.md §1·§5·§8, Task 표 §3 DOCSUM. CI trace(`--phase $E2E_PHASES`) OK, 전체 `--strict`는 새 16 AC orphan(각 RED Task 전까지 예상). Codex 리뷰 대기 |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.

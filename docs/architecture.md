@@ -58,6 +58,7 @@ book_core/
   parser/ structure/ chunker/ embedding/ indexing/
   search/ reranker/ extractor/ question/
   generation/ llm/ evaluation/
+  export/ summary/ notes/        # DOCSUM-SPEC 2026-10-29
 ```
 
 핵심 계약:
@@ -67,6 +68,9 @@ book_core/
 - `SearchHit`: 검색모드, 점수 유형, 관련 구절, 문서·장·절·원본 위치.
 - `Excerpt`: 원문 문단 경계로 확장된 발췌 + 페이지·원본 좌표.
 - `QuestionDraft`: 원문 추출/변형 초안, source evidence, validations, review 상태.
+- `export.render_revision(revision, markdown|plain)`: 발행·초안 revision의 canonical blocks → Markdown/텍스트(heading 깊이, GFM 표, `[그림 p.N]`, 쪽 marker), 결정적 순수 함수(DOC-03).
+- `summary`: 장 입력(정규화 블록 텍스트 + 쪽) → `SummaryUnit{title, summary_md, key_points[{text, pages}]}`(map), 장 unit들 → 문서 요약(reduce); 큰 장 분할·병합, 쪽 범위 검증, 테스트용 결정적 추출 fake(DOCSUM-01).
+- `notes`: 장의 확정 문제(`Q1…Qn`: 발문·보기·정답·해설) + 참고 본문 → `ChapterNote{sections[{heading, items[{text, q[tags], p[{block_id, quote, pages}]}]}]}`; 모든 항목 문제 tag 필수, 모르는 tag·인용 불일치 거절(1회 재요청)·tag 없는 항목 제거, 큰 장 묶음 생성·병합(CHNOTE-01).
 
 CLI: `core parse`, `core chunk`, `core index`, `core search`, `core excerpt`, `core questions extract`, `core questions generate`, `core eval`.
 
@@ -93,7 +97,9 @@ CLI: `core parse`, `core chunk`, `core index`, `core search`, `core excerpt`, `c
 ```text
 workspace
  ├── document ── document_revision ── content_block
- │              └── chapter/section tree
+ │              ├── chapter/section tree
+ │              ├── document_summary_run ── document_summary_unit (발행 revision 요약, DOCSUM)
+ │              └── chapter_note (장 정리 노트 버전, CHNOTE)
  ├── question ── question_revision
  │             ├── question_source
  │             ├── question_user_state  (user별 학습 상태·플래그)
@@ -116,6 +122,12 @@ workspace
 - `question_lineage(parent_question_id, child_question_id, variation_type, source_revision_id)`.
 - `question_generation_runs` / `question_import_runs`; `question_drafts` (approval 전 격리); `question_import_registration_items` (서버 측 등록 job의 항목·진행, QIMP-JOB).
 - `activity_events` (변경 감사), `async_jobs` (재시도/상태).
+- **문서 요약 (DOCSUM-SPEC 2026-10-29, [DOCSUM-01](screens/documents-summary.md)):** `documents.summary_enabled_at`·`summary_enabled_by`(opt-in; 첫 `요약 만들기`에서 기록, 이후 모든 발행에서 자동 재생성).
+  - `document_summary_runs(id, workspace_id, document_id, document_revision_id, status queued|running|succeeded|failed|superseded, trigger manual|publish|retry, job_id, prompt_version, model, error_code, usage jsonb(tokens·cost_usd·reused_units·generated_units), progress jsonb(chapters_done·chapters_total), created_by, created_at, started_at, finished_at)` — revision마다 살아 있는 run 하나(partial unique; `retry`는 같은 revision의 새 run, 이전 실패 run은 남김). 더 새 revision의 run이 생기면 이전 대기·실행 run은 `superseded`.
+  - `document_summary_units(id, workspace_id, document_id, scope chapter|document, section_key, input_hash, prompt_version, model, body jsonb{title, summary_md, key_points[{text, pages}]}, page_from, page_to, usage, created_at)` unique `(document_id, scope, section_key, input_hash, prompt_version, model)` — 내용 주소 방식이라 바뀌지 않은 장은 재사용(문서 범위 밖 공유 없음). `document_summary_run_units(run_id, unit_id, position)`가 run의 장 순서·문서 요약 unit을 묶는다.
+  - 시작: 발행 트랜잭션의 SECURITY DEFINER `public.worker_start_document_summary(document_id, revision_id, enabled)`(QIMP-AUTO의 `worker_start_question_import`와 같은 follow-up 방식) 또는 `POST /documents/{id}/summary`. 문서·요약 본문은 로그·job 결과·활동 기록에 넣지 않는다.
+- **챕터 정리 노트 (CHNOTE, [CHNOTE-01](screens/chapter-notes.md)):** `chapter_notes(id, workspace_id, document_id, section_key, version, status queued|running|succeeded|failed, job_id, input_fingerprint, question_refs jsonb[{tag, question_id, question_revision_id, number_label}], body jsonb{sections[...]}, dropped_items, prompt_version, model, error_code, usage, created_by, created_at, finished_at, superseded_at)` unique `(document_id, section_key, version)`, 장마다 대기·실행 중 하나(partial unique). 장은 revision이 바뀌어도 같은 `section_key`로 이어진다(`documents_remap_question_chapters`와 같은 규칙). stale은 읽을 때 현재 확정 문제 fingerprint와 비교해 계산한다. 이전 버전은 지우지 않는다.
+- Fork는 snapshot revision의 성공한 요약(run·unit·`summary_enabled_at`)과 장마다 최신 성공 정리 노트(`question_refs` 재매핑)를 새 id로 복제한다. 실패·이전 기록과 usage는 복제하지 않는다.
 
 문제 상태는 독립 필드를 합성해 계산한다. 색상 규칙·열람 판정·변형 정책은 `docs/questions.md`가 단일 기준이다.
 
@@ -135,6 +147,10 @@ workspace
 | GET | `/api/v1/workspaces/{id}/documents` | 모든 PDF 목록(`kind`·`kind_source`·`question_count`·`latest_import_id`·처리 작업) |
 | PATCH | `/api/v1/documents/{id}` | `종류 변경`(`kind`, 사람이 고른 종류는 재분류 안 함; 쓰이는 교재 → 문제지는 409 `document-in-use`; 문제 있는 종류면 추출 시작, UX6-UPLOAD) |
 | GET | `/api/v1/documents/{id}/outline` | 장·절 트리 |
+| GET | `/api/v1/documents/{id}/text` | 전문 텍스트 내보내기(`format=markdown\|plain`, `revision=published\|draft` — draft는 편집 권한; attachment·no-store; 공유 게스트 불가, DOC-03) |
+| GET | `/api/v1/documents/{id}/summary` | 문서 요약(`available`·`enabled`·현재 run 상태·진행, 마지막 성공 요약 + `stale`, 장별 요약; DOCSUM-01) |
+| POST | `/api/v1/documents/{id}/summary` | `요약 만들기`(opt-in + 현재 발행 revision run, 편집 권한, `Idempotency-Key`; 문제지 409 `summary-not-applicable`, 꺼짐 409 `summary-disabled`) |
+| POST | `/api/v1/documents/{id}/summary/retry` | 실패한 현재 revision 요약 다시 시도(편집 권한) |
 | GET/PATCH | `/api/v1/documents/{id}/blocks/{blockId}` | 블록 읽기·교정 |
 | POST | `/api/v1/documents/{id}/publish` | 교정본 발행·색인 |
 | POST | `/api/v1/workspaces/{id}/search` | 다국어 문서·문제 검색 |
@@ -156,11 +172,16 @@ workspace
 | POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록(`approve: true`면 선택한 초안을 승인과 함께 등록, 거절 목록 반환) |
 | POST | `/api/v1/question-imports/{id}/registrations` | 선택한 초안 전체를 서버에서 승인·등록(`question.import_register` job, QIMP-JOB) |
 | GET | `/api/v1/question-imports/{id}/registrations/{registration_id}` | 서버 측 등록 진행(처리/전체)·거절 목록 |
+| GET | `/api/v1/workspaces/{id}/chapter-notes` | 장별 최신 정리 노트 상태(진행·stale·버전 수; Heatmap header 표시, CHNOTE-01) |
+| GET | `/api/v1/chapters/{chapterId}/note` | 장 정리 노트(`version=` 이전 버전, `question_refs` 각주, `stale`) |
+| POST | `/api/v1/chapters/{chapterId}/note` | 정리 노트 만들기·다시 만들기(새 버전, 편집 권한, `Idempotency-Key`; 확정 문제 없음 409 `no-chapter-questions`, 진행 중 409 `note-generation-running`, 꺼짐 409 `note-generation-disabled`) |
 | GET | `/api/v1/jobs/{id}` | 비동기 작업 상태 |
 | GET | `/api/v1/jobs/{id}/events` | SSE 진행 상황 |
 | GET | `/api/v1/workspaces/{id}/activities` | 변경 이력 |
 
 인가·workspace filter를 서버에서 강제한다. 문제 풀이 조회 API는 정답/해설을 제출 전까지 전송하지 않는다. POST 작업에는 멱등 키를 지원한다.
+
+Worker job(DOCSUM-SPEC 2026-10-29): `document.summarize {run_id}` — 문서별 advisory lock, 장 map(입력 hash가 같은 unit 재사용)·문서 reduce, 결과 쓰기 직전 run·현재 발행 revision 재확인(대체되면 쓰지 않음), 결과는 개수·usage·오류 코드(`llm_unavailable`·`llm_timeout`·`llm_invalid_output`·`summary_too_large`·`document_unavailable`)만. `chapter_note.generate {note_id}` — 노트 행에 고정된 `question_refs`만 읽고 인용 검증(1회 재요청), 큰 장은 묶음 생성·병합, 결과는 항목 수·버린 항목 수·usage·오류 코드(`note_citation_invalid` 포함)만. 둘 다 `WORKER_DOCUMENT_SUMMARY`·`WORKER_CHAPTER_NOTES`와 LLM 설정(`LLM_API_KEY`·`LLM_MODEL`)이 있을 때만 시작하며, 테스트(`APP_ENV=test`)는 결정적 fake/scenario LLM을 쓴다. 공유 게스트용 읽기 API는 [workspace-sharing.md](workspace-sharing.md) §5·§8.
 
 ## 7. Frontend 기능 범위
 
@@ -173,6 +194,7 @@ workspace
 - Questions Import: PDF 추출 검토, 미완성 초안 수정, 확인/등록.
 - Question Generation: 원본 선택(한 문제·여러 문제·서버 임의 선택 묶음), 변형 유형 지정, LLM 또는 deterministic 변형, diff/정답 검증, 승인.
 - History: 수정·생성·풀이 이력, Job 로그.
+- 문서 전문·요약·정리 노트(DOCSUM-SPEC 2026-10-29): 문서 관리 행·DOC-02의 텍스트 내보내기(DOC-03), 홈의 문서 요약 panel(DOCSUM-01), Heatmap 챕터 header의 정리 노트 panel(CHNOTE-01).
 - Design system 기반 일관된 modal/non-modal floating side panel 제공.
 
 UI의 동작·상태·변형 세부 정책은 `questions.md`, UI 구현·토큰·접근성 기준은 `design-system.md` 참조. 모든 화면의 사양은 `screens/index.md`, 인증은 `auth.md`, E2E는 `e2e-strategy.md`, 배포는 `deployment.md`에서 관리한다.
