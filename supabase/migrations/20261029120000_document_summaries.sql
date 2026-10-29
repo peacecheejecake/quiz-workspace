@@ -29,6 +29,8 @@
 --   normalized block text + pages); scope `document` = the reduce over the chapter units
 --   (section_key 'document', input_hash over the chapter hashes). Never shared across documents.
 --   body = {title, summary_md, key_points: [{text, pages: {from, to} | null}]}.
+--   A unit is inserted only while the run's user may still write into the active workspace
+--   (checked with the rows locked in the same transaction).
 -- document_summary_run_units: the units of a run in display order (position 0 = the document
 --   summary, 1.. = the chapters in outline order).
 --
@@ -135,6 +137,9 @@ create table public.document_summary_units (
   page_from integer,
   page_to integer,
   usage jsonb,
+  -- The run that generated it (null for a forked copy): a retried attempt of that run counts the
+  -- unit as its own work, not as a reuse. No FK: units outlive their runs' history.
+  generated_by_run_id uuid,
   created_at timestamptz not null default now(),
   constraint document_summary_units_workspace_id_id_key unique (workspace_id, id),
   constraint document_summary_units_content_key

@@ -244,10 +244,13 @@ class Settings(BaseSettings):
     )
     search_rate_burst: int = Field(default=20, ge=1, le=1000, validation_alias="SEARCH_RATE_BURST")
 
-    # DOCSUM-B: creating / retrying summaries is offered (`available`) only with the switch
-    # on. Set it together with the worker's (which also needs LLM_API_KEY / LLM_MODEL); stored
+    # DOCSUM-B: creating / retrying summaries is offered (`available`) only with the switch on
+    # AND an LLM provider configured: outside APP_ENV=test the API sees the provider through
+    # LLM_MODEL (not a secret; the env manifest requires it on the API, identical to the
+    # worker's, whenever WORKER_DOCUMENT_SUMMARY=true). The API never holds LLM_API_KEY. Stored
     # summaries stay readable either way.
     document_summary: bool = Field(default=False, validation_alias="WORKER_DOCUMENT_SUMMARY")
+    llm_model: str | None = Field(default=None, validation_alias="LLM_MODEL")
 
     db_pool_size: int = Field(default=5, ge=1, validation_alias="DB_POOL_SIZE")
     db_connect_timeout_seconds: float = Field(
@@ -337,6 +340,14 @@ class Settings(BaseSettings):
             return self.web_origin
         origins = self.effective_cors_origins or LOCAL_CORS_ORIGINS
         return origins[0]
+
+    @property
+    def summary_available(self) -> bool:
+        """Summaries can be created here (DOCSUM-01-AC05): the switch is on and a provider is
+        configured (the worker's deterministic fake under APP_ENV=test)."""
+        if not self.document_summary:
+            return False
+        return self.app_env is Environment.TEST or bool((self.llm_model or "").strip())
 
     @property
     def is_deployed(self) -> bool:

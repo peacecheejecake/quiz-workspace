@@ -8,23 +8,28 @@ from the fixture truth through `FakeDocumentStore`'s row encoding.
 from __future__ import annotations
 
 import logging
+import threading
+import time
 import uuid
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any
 
 import pytest
-from book_core.llm import LLMUsage
+from book_core.llm import LLMProviderError, LLMUsage
 from book_core.parser import FakeParser
 from book_core.structure import apply_edits, build_revision
 from book_core.summary import (
     SUMMARY_FAILURE_MARKER,
+    SUMMARY_HOLD_MARKER,
     ExtractiveFakeSummarizer,
     StoredUnit,
     SummaryBody,
     SummaryLimits,
 )
+from quiz_worker.document_store import WorkspaceUnavailableError
 from quiz_worker.envelope import JobEnvelope
 from quiz_worker.runner import JobRunner, RunOutcome
 from quiz_worker.settings import WorkerSettings
@@ -50,7 +55,8 @@ class FakeSummaryStore:
     links: dict[uuid.UUID, list[str]] = field(default_factory=dict)
     progress: list[tuple[int, int]] = field(default_factory=list)
     documents: FakeDocumentStore | None = None
-    on_generate: Callable[[], None] | None = None
+    writable: bool = True
+    usage_records: list[dict[str, Any]] = field(default_factory=list)
 
     @contextmanager
     def summary_lock(
@@ -77,6 +83,7 @@ class FakeSummaryStore:
             content_kind=doc.content_kind,
             document_deleted=doc.deleted,
             active_revision_id=doc.active_revision_id,
+            usage=run.get("usage"),
         )
 
     def mark_running(
@@ -91,7 +98,18 @@ class FakeSummaryStore:
     def report_progress(self, run_id: uuid.UUID, job_id: uuid.UUID, done: int, total: int) -> None:
         self.progress.append((done, total))
 
-    def unit_store(self, run: RunRow, *, prompt_version: str, model: str) -> Any:
+    def workspace_writable(self, workspace_id: uuid.UUID, user_id: uuid.UUID | None) -> bool:
+        return self.writable
+
+    def record_usage(self, run_id: uuid.UUID, job_id: uuid.UUID, usage: Mapping[str, Any]) -> None:
+        row = self.runs[run_id]
+        if row["job_id"] == job_id and row["status"] in {"queued", "running"}:
+            row["usage"] = dict(usage)
+            self.usage_records.append(dict(usage))
+
+    def unit_store(
+        self, run: RunRow, user_id: uuid.UUID | None, *, prompt_version: str, model: str
+    ) -> Any:
         store = self
 
         class Units:
@@ -109,8 +127,10 @@ class FakeSummaryStore:
                 page_to: int | None,
                 usage: LLMUsage | None,
             ) -> StoredUnit:
+                if not store.writable:
+                    raise WorkspaceUnavailableError("the workspace is no longer writable")
                 key = (run.document_id, scope, section_key, input_hash, prompt_version, model)
-                unit = StoredUnit(str(uuid.uuid4()), body, page_from, page_to)
+                unit = StoredUnit(str(uuid.uuid4()), body, page_from, page_to, str(run.id))
                 return store.units.setdefault(key, unit)
 
         return Units()
@@ -122,8 +142,11 @@ class FakeSummaryStore:
         unit_ids: Sequence[str],
         usage: Mapping[str, Any],
         *,
+        user_id: uuid.UUID | None,
         before_commit: Callable[[], None],
     ) -> FinishOutcome:
+        if not self.writable:
+            return "workspace_unavailable"
         row = self.runs[run.id]
         if row["status"] != "running":
             return "not_running"
@@ -344,3 +367,76 @@ def test_docsum_b_fake_summarizer_only_under_app_env_test(
     test_env = WorkerSettings(_env_file=None, APP_ENV="test")  # type: ignore[call-arg]
     assert isinstance(build_summarizer(test_env), ExtractiveFakeSummarizer)
     assert build_summarizer(WorkerSettings(_env_file=None)) is None  # type: ignore[call-arg]
+
+
+class CountingSummarizer(ExtractiveFakeSummarizer):
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.calls = 0
+        self.fail_document_once = False
+
+    def summarize_chapter(self, *args: Any, **kwargs: Any) -> Any:
+        self.calls += 1
+        return super().summarize_chapter(*args, **kwargs)
+
+    def summarize_document(self, *args: Any, **kwargs: Any) -> Any:
+        self.calls += 1
+        if self.fail_document_once:
+            self.fail_document_once = False
+            raise LLMProviderError("timed out", kind="timeout")
+        return super().summarize_document(*args, **kwargs)
+
+
+def test_docsum_b_an_archived_workspace_sends_nothing_to_the_llm(world: World) -> None:
+    fake = CountingSummarizer(hold_dir=lambda: None)
+    world.deps.summarizer = fake
+    run_id = world.start()
+    world.summaries.writable = False
+    assert world.run(run_id).outcome is RunOutcome.FAILED
+    row = world.run_row(run_id)
+    assert (row["status"], row["error_code"]) == ("failed", "workspace_unavailable")
+    assert fake.calls == 0
+    assert world.summaries.units == {}
+
+
+def test_docsum_b_archived_between_generation_and_commit_writes_nothing_more(
+    world: World, tmp_path: Path
+) -> None:
+    world.deps.summarizer = ExtractiveFakeSummarizer(hold_dir=lambda: str(tmp_path))
+    world.correct(f"{SUMMARY_HOLD_MARKER}-arch1 보류 문장이다.")
+    run_id = world.start()
+    results: list[Any] = []
+    thread = threading.Thread(target=lambda: results.append(world.run(run_id)), daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 10
+    while not (tmp_path / "arch1.held").exists():
+        assert time.monotonic() < deadline, "never reached the hold barrier"
+        time.sleep(0.02)
+    before = dict(world.summaries.units)
+    world.summaries.writable = False  # archived while chapter B is being generated
+    (tmp_path / "arch1.release").touch()
+    thread.join(10)
+    assert results
+    assert results[0].outcome is RunOutcome.FAILED
+    row = world.run_row(run_id)
+    assert (row["status"], row["error_code"]) == ("failed", "workspace_unavailable")
+    assert world.summaries.units == before, "no unit written after the archive"
+    assert run_id not in world.summaries.links
+
+
+def test_docsum_b_usage_accumulates_over_retried_attempts(world: World) -> None:
+    fake = CountingSummarizer(hold_dir=lambda: None)
+    fake.fail_document_once = True
+    world.deps.summarizer = fake
+    run_id = world.start()
+    assert world.run(run_id).outcome is RunOutcome.RETRY
+    first = dict(world.run_row(run_id)["usage"])
+    assert first["generated_units"] == 2
+    world.clock.advance(3600)
+    assert world.run(run_id).outcome is RunOutcome.SUCCEEDED
+    row = world.run_row(run_id)
+    usage = row["usage"]
+    assert row["status"] == "succeeded"
+    assert (usage["generated_units"], usage["reused_units"]) == (3, 0), "its own chapters"
+    assert usage["input_tokens"] > first["input_tokens"]
+    assert fake.calls == 4, "chapters once, the document twice"

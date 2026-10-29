@@ -45,6 +45,8 @@ class StoredUnit:
     body: SummaryBody
     page_from: int | None
     page_to: int | None
+    # The run that generated it (a retried attempt of that run counts it as generated).
+    generated_by: str | None = None
 
 
 class UnitStore(Protocol):
@@ -77,9 +79,17 @@ class SummaryTally:
     reused_units: int = 0
     generated_units: int = 0
     usage: LLMUsage = field(default_factory=LLMUsage)
+    # The run being summarized: its own units from an earlier attempt are not reuses.
+    run_id: str | None = None
 
     def add(self, usage: LLMUsage) -> None:
         self.usage = self.usage + usage
+
+    def found(self, unit: StoredUnit) -> None:
+        if self.run_id is not None and unit.generated_by == self.run_id:
+            self.generated_units += 1
+        else:
+            self.reused_units += 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,7 +128,7 @@ def summarize_revision(
     doc_hash = document_input_hash(chapters)
     document = store.find(DOCUMENT_SCOPE, DOCUMENT_SECTION_KEY, doc_hash)
     if document is not None:
-        tally.reused_units += 1
+        tally.found(document)
     else:
         digests = [
             ChapterDigest(c.title, u.body, u.page_from, u.page_to)
@@ -158,7 +168,7 @@ def _chapter_unit(
     key = chapter.input_hash
     found = store.find(CHAPTER_SCOPE, chapter.section_key, key)
     if found is not None:
-        tally.reused_units += 1
+        tally.found(found)
         return found
     if chapter.empty or chapter.page_from is None or chapter.page_to is None:
         body = SummaryBody(title=chapter.title, summary_md="")

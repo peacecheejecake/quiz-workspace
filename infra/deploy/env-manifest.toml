@@ -749,11 +749,13 @@ note = "optional; unset disables question generation (QGEN) — a user decision 
 
 [[var]]
 name = "LLM_MODEL"
-services = ["worker"]
+services = ["api", "worker"]
 kind = "config"
 requires = "LLM_API_KEY"
+required_when = "WORKER_DOCUMENT_SUMMARY=true"
+same = true
 provider = "operator: the approved model id (no default)"
-note = "required whenever LLM_API_KEY is set"
+note = "required whenever LLM_API_KEY is set; with WORKER_DOCUMENT_SUMMARY=true also on the API (identical), which offers summaries only when it is set (DOCSUM-01-AC05; the API never gets LLM_API_KEY)"
 
 [[var]]
 name = "LLM_PROVIDER"

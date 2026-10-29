@@ -13,7 +13,8 @@ select columns_are('public', 'document_summary_runs',
         'started_at', 'finished_at']);
 select columns_are('public', 'document_summary_units',
   array['id', 'workspace_id', 'document_id', 'scope', 'section_key', 'input_hash',
-        'prompt_version', 'model', 'body', 'page_from', 'page_to', 'usage', 'created_at']);
+        'prompt_version', 'model', 'body', 'page_from', 'page_to', 'usage',
+        'generated_by_run_id', 'created_at']);
 select columns_are('public', 'document_summary_run_units',
   array['workspace_id', 'run_id', 'unit_id', 'position']);
 select has_index('public', 'document_summary_runs', 'document_summary_runs_live_revision_key',

@@ -27,12 +27,14 @@ from book_core.llm import LLMUsage
 from book_core.summary import StoredUnit, SummaryBody, UnitStore
 from sqlalchemy import Engine, text
 
-from quiz_worker.document_store import DocumentBusyError
+from quiz_worker.document_store import DocumentBusyError, WorkspaceUnavailableError
 
 JOB_TYPE = "document.summarize"
 _LOCK_POLL_SECONDS = 0.5
 
-FinishOutcome = Literal["succeeded", "superseded", "not_running", "document_unavailable"]
+FinishOutcome = Literal[
+    "succeeded", "superseded", "not_running", "document_unavailable", "workspace_unavailable"
+]
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,8 @@ class RunRow:
     content_kind: str | None
     document_deleted: bool
     active_revision_id: uuid.UUID | None
+    # Usage recorded by an earlier attempt of this run (tokens/cost carry over).
+    usage: Mapping[str, Any] | None = None
 
 
 def _json(value: Any) -> str:
@@ -65,6 +69,18 @@ def usage_json(usage: LLMUsage | None) -> dict[str, Any] | None:
     }
 
 
+def _writable(
+    conn: Any, workspace_id: Any, user_id: uuid.UUID | None, *, lock: bool = True
+) -> bool:
+    # supabase/migrations/20261017230000_worker_workspace_access.sql
+    return bool(
+        conn.execute(
+            text("select public.worker_workspace_writable(:w, :u, :l)"),
+            {"w": workspace_id, "u": user_id, "l": lock},
+        ).scalar_one()
+    )
+
+
 class PostgresUnitStore:
     """`book_core.summary.UnitStore` over one document's units for one prompt version + model."""
 
@@ -76,8 +92,12 @@ class PostgresUnitStore:
         *,
         prompt_version: str,
         model: str,
+        user_id: uuid.UUID | None = None,
+        run_id: uuid.UUID | None = None,
     ) -> None:
         self._engine = engine
+        self._user_id = user_id
+        self._run_id = run_id
         self._key = {
             "w": workspace_id,
             "d": document_id,
@@ -90,7 +110,8 @@ class PostgresUnitStore:
             row = (
                 conn.execute(
                     text(
-                        "select id, body, page_from, page_to from public.document_summary_units "
+                        "select id, body, page_from, page_to, generated_by_run_id "
+                        "from public.document_summary_units "
                         "where workspace_id = :w and document_id = :d and scope = :s "
                         "and section_key = :k and input_hash = :h and prompt_version = :pv "
                         "and model = :m"
@@ -102,8 +123,13 @@ class PostgresUnitStore:
             )
         if row is None:
             return None
+        generated_by = row["generated_by_run_id"]
         return StoredUnit(
-            str(row["id"]), SummaryBody.from_json(row["body"]), row["page_from"], row["page_to"]
+            str(row["id"]),
+            SummaryBody.from_json(row["body"]),
+            row["page_from"],
+            row["page_to"],
+            str(generated_by) if generated_by is not None else None,
         )
 
     def save(
@@ -125,14 +151,19 @@ class PostgresUnitStore:
             "pf": page_from,
             "pt": page_to,
             "u": _json(usage_json(usage)) if usage is not None else None,
+            "run": self._run_id,
         }
         with self._engine.begin() as conn:
+            # Never into a workspace archived/deleted meanwhile (rows locked FOR SHARE).
+            if not _writable(conn, self._key["w"], self._user_id):
+                raise WorkspaceUnavailableError("the workspace is no longer writable")
             conn.execute(
                 text(
                     "insert into public.document_summary_units (workspace_id, document_id, scope, "
                     "section_key, input_hash, prompt_version, model, body, page_from, page_to, "
-                    "usage) values (:w, :d, :s, :k, :h, :pv, :m, cast(:b as jsonb), :pf, :pt, "
-                    "cast(:u as jsonb)) on conflict do nothing"
+                    "usage, generated_by_run_id) values (:w, :d, :s, :k, :h, :pv, :m, "
+                    "cast(:b as jsonb), :pf, :pt, cast(:u as jsonb), :run) "
+                    "on conflict do nothing"
                 ),
                 values,
             )
@@ -156,7 +187,15 @@ class SummaryStore(Protocol):
         self, run_id: uuid.UUID, job_id: uuid.UUID, done: int, total: int
     ) -> None: ...
 
-    def unit_store(self, run: RunRow, *, prompt_version: str, model: str) -> UnitStore: ...
+    def workspace_writable(self, workspace_id: uuid.UUID, user_id: uuid.UUID | None) -> bool: ...
+
+    def unit_store(
+        self, run: RunRow, user_id: uuid.UUID | None, *, prompt_version: str, model: str
+    ) -> UnitStore: ...
+
+    def record_usage(
+        self, run_id: uuid.UUID, job_id: uuid.UUID, usage: Mapping[str, Any]
+    ) -> None: ...
 
     def finish(
         self,
@@ -165,6 +204,7 @@ class SummaryStore(Protocol):
         unit_ids: Sequence[str],
         usage: Mapping[str, Any],
         *,
+        user_id: uuid.UUID | None,
         before_commit: Callable[[], None],
     ) -> FinishOutcome: ...
 
@@ -183,14 +223,33 @@ class PostgresSummaryStore:
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
 
-    def unit_store(self, run: RunRow, *, prompt_version: str, model: str) -> UnitStore:
+    def workspace_writable(self, workspace_id: uuid.UUID, user_id: uuid.UUID | None) -> bool:
+        with self._engine.begin() as conn:
+            return _writable(conn, workspace_id, user_id, lock=False)
+
+    def unit_store(
+        self, run: RunRow, user_id: uuid.UUID | None, *, prompt_version: str, model: str
+    ) -> UnitStore:
         return PostgresUnitStore(
             self._engine,
             run.workspace_id,
             run.document_id,
             prompt_version=prompt_version,
             model=model,
+            user_id=user_id,
+            run_id=run.id,
         )
+
+    def record_usage(self, run_id: uuid.UUID, job_id: uuid.UUID, usage: Mapping[str, Any]) -> None:
+        """The usage so far of a running run (an attempt that will be retried)."""
+        with self._engine.begin() as conn:
+            conn.execute(
+                text(
+                    "update public.document_summary_runs set usage = cast(:u as jsonb) "
+                    "where id = :r and job_id = :j and status in ('queued', 'running')"
+                ),
+                {"r": run_id, "j": job_id, "u": _json(dict(usage))},
+            )
 
     @contextmanager
     def summary_lock(
@@ -229,7 +288,7 @@ class PostgresSummaryStore:
                         "select r.id, r.workspace_id, r.document_id, r.document_revision_id, "
                         "r.status, r.job_id, d.title, d.filename, d.document_type, "
                         "d.content_kind, d.deleted_at is not null as deleted, "
-                        "d.active_revision_id "
+                        "d.active_revision_id, r.usage "
                         "from public.document_summary_runs r "
                         "join public.documents d on d.id = r.document_id "
                         "and d.workspace_id = r.workspace_id "
@@ -255,6 +314,7 @@ class PostgresSummaryStore:
             content_kind=row["content_kind"],
             document_deleted=row["deleted"],
             active_revision_id=row["active_revision_id"],
+            usage=row["usage"],
         )
 
     def mark_running(
@@ -294,12 +354,16 @@ class PostgresSummaryStore:
         unit_ids: Sequence[str],
         usage: Mapping[str, Any],
         *,
+        user_id: uuid.UUID | None,
         before_commit: Callable[[], None],
     ) -> FinishOutcome:
-        """Under the document row lock: link the units (position 0 = document) and mark the run
-        `succeeded`, unless it is no longer running or its revision is no longer the active one
-        (then `superseded`, nothing written)."""
+        """Under the workspace and document row locks: link the units (position 0 = document)
+        and mark the run `succeeded`, unless it is no longer running or its revision is no
+        longer the active one (then `superseded`, nothing written), or its workspace is no longer
+        writable for the run's user (nothing written)."""
         with self._engine.begin() as conn:
+            if not _writable(conn, run.workspace_id, user_id):
+                return "workspace_unavailable"
             doc = (
                 conn.execute(
                     text(

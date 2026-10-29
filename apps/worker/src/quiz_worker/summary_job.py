@@ -19,7 +19,10 @@ Pipeline, serialised per document by an advisory lock of its own (a publish neve
    nothing (DOCSUM-01-C03).
 
 Failures end the run `failed` with a code only: `llm_unavailable` / `llm_timeout` (retried),
-`llm_invalid_output`, `summary_too_large`, `document_unavailable`. Logs, the job result and the
+`llm_invalid_output`, `summary_too_large`, `document_unavailable`, `workspace_unavailable` (the
+workspace was archived/deleted or the run's user can no longer edit it: checked before any LLM
+call, with every unit write and under the row locks before the commit). Usage accumulates over
+attempts. Logs, the job result and the
 run carry ids, counts, usage and codes; never book text, prompts, summaries or provider messages
 (DOCSUM-01-C04).
 
@@ -40,7 +43,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from book_core.llm import LLMOutputError, LLMProviderError
+from book_core.llm import LLMOutputError, LLMProviderError, LLMUsage
 from book_core.summary import (
     PROMPT_VERSION,
     SUMMARY_SLOW_MARKER,
@@ -56,7 +59,11 @@ from book_core.summary import (
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from quiz_worker.adapters import WorkerNotConfiguredError
-from quiz_worker.document_store import DocumentStore, PostgresDocumentStore
+from quiz_worker.document_store import (
+    DocumentStore,
+    PostgresDocumentStore,
+    WorkspaceUnavailableError,
+)
 from quiz_worker.errors import JobCancelledError, JobError, NonRetryableJobError, is_retryable
 from quiz_worker.retry import RetryPolicy
 from quiz_worker.runner import JobContext, JobDefinition, JobResult, TerminalReason
@@ -74,6 +81,7 @@ ERROR_CODES = frozenset(
         "llm_invalid_output",
         "summary_too_large",
         "document_unavailable",
+        "workspace_unavailable",
     }
 )
 
@@ -169,7 +177,7 @@ def run_document_summary(
         return {"run_id": str(run.id), "skipped": "other_job"}
     if run.status not in {"queued", "running"}:
         return {"run_id": str(run.id), "skipped": run.status}
-    tally = SummaryTally()
+    tally = _resumed_tally(run)
     try:
         slow = deps.slow_step_seconds if SUMMARY_SLOW_MARKER in run.document_filename else None
         if slow:
@@ -184,9 +192,33 @@ def run_document_summary(
         error = _translate(exc)
         if not is_retryable(error) or ctx.is_final_attempt:
             _mark_failed(deps, run, ctx.job_id, error_code_of(error), tally)
+        else:
+            _record_usage(deps, run, ctx.job_id, tally)
         if error is exc:
             raise
         raise error from None
+
+
+def _resumed_tally(run: RunRow) -> SummaryTally:
+    """The tokens and cost an earlier attempt of this run already spent (unit counts are
+    recounted: the run's own units from that attempt count as generated)."""
+    tally = SummaryTally(run_id=str(run.id))
+    earlier = run.usage or {}
+    tally.usage = LLMUsage(
+        input_tokens=int(earlier.get("input_tokens") or 0),
+        output_tokens=int(earlier.get("output_tokens") or 0),
+        cost_usd=earlier.get("cost_usd"),
+    )
+    return tally
+
+
+def _record_usage(
+    deps: SummaryJobDeps, run: RunRow, job_id: uuid.UUID, tally: SummaryTally
+) -> None:
+    try:
+        deps.summaries.record_usage(run.id, job_id, _usage(tally))
+    except Exception as exc:  # best effort: the next attempt then under-reports
+        logger.warning("could not record the summary usage: %s", type(exc).__name__)
 
 
 def _mark_failed(
@@ -211,6 +243,11 @@ def _pipeline(
     if deps.summarizer is None:
         raise LLMUnavailableError("document summaries need LLM_API_KEY / LLM_MODEL")
     summarizer = deps.summarizer
+    # Nothing goes to the provider for a workspace that was archived or deleted (or whose
+    # user can no longer edit it) after the run was queued; re-checked when units are written
+    # and under the row locks before the run commits.
+    if not deps.summaries.workspace_writable(run.workspace_id, ctx.created_by):
+        raise WorkspaceUnavailableError("the workspace is no longer writable")
     if not deps.summaries.mark_running(
         run.id, ctx.job_id, prompt_version=PROMPT_VERSION, model=summarizer.model_name
     ):
@@ -242,7 +279,7 @@ def _pipeline(
             deps.sleep(slow)
 
     units = deps.summaries.unit_store(
-        run, prompt_version=PROMPT_VERSION, model=summarizer.model_name
+        run, ctx.created_by, prompt_version=PROMPT_VERSION, model=summarizer.model_name
     )
     result = summarize_revision(
         chapters,
@@ -259,10 +296,13 @@ def _pipeline(
         ctx.job_id,
         [result.document.id, *(u.id for u in result.chapters)],
         _usage(tally),
+        user_id=ctx.created_by,
         before_commit=ctx.check_cancelled,
     )
     if outcome == "document_unavailable":
         raise DocumentUnavailableError("the document was deleted")
+    if outcome == "workspace_unavailable":
+        raise WorkspaceUnavailableError("the workspace is no longer writable")
     out: dict[str, Any] = {
         "run_id": str(run.id),
         "chapters": len(result.chapters),

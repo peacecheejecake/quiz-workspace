@@ -171,7 +171,7 @@ NOT_FOUND = "Document not found."
 
 def summary_available(request: Request) -> bool:
     settings: Settings = request.app.state.settings
-    return settings.document_summary
+    return settings.summary_available
 
 
 def _run_out(run: RunRecord) -> SummaryRun:
