@@ -179,6 +179,75 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/documents/{document_id}/summary': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Document Summary
+     * @description The summary panel's state (DOCSUM-01): any member, archived workspaces included.
+     */
+    get: operations['getDocumentSummary'];
+    put?: never;
+    /**
+     * Create Document Summary
+     * @description `요약 만들기` (DOCSUM-01-AC01/AC08): opt in and summarize the current published revision.
+     *
+     *     202 with the queued (or still running) run; 200 when the current revision already has a
+     *     succeeded summary (only the opt-in changes, no run). Re-enables auto refresh after
+     *     `자동 갱신 끄기`.
+     */
+    post: operations['createDocumentSummary'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/documents/{document_id}/summary/auto': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * Disable Document Summary Auto
+     * @description `자동 갱신 끄기` (DOCSUM-01-AC08): later publishes start no run and send nothing to the
+     *     LLM; stored summaries stay. Running runs are not cancelled. Idempotent (204).
+     */
+    delete: operations['disableDocumentSummaryAuto'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/documents/{document_id}/summary/retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Retry Document Summary
+     * @description `다시 시도` (DOCSUM-01-AC03): a new run of the current revision after a failed one.
+     */
+    post: operations['retryDocumentSummary'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/documents/{document_id}/text': {
     parameters: {
       query?: never;
@@ -811,6 +880,29 @@ export type paths = {
      *     handed to the guest.
      */
     get: operations['getSharedDocumentPdf'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/documents/{document_id}/summary': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Shared Document Summary
+     * @description The AI summary of a shared document (DOCSUM-01-AC06, workspace-sharing.md §8): only a
+     *     succeeded summary of the revision the guest reads now. An older revision's summary, a run in
+     *     progress or failed, and anything of other workspaces answer the same 404 as a random id; no
+     *     run, usage, cost or error data.
+     */
+    get: operations['getSharedDocumentSummary'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1644,6 +1736,24 @@ export type components = {
        * Format: uuid
        */
       id: string;
+      /** Title */
+      title: string;
+    };
+    /** ChapterSummary */
+    ChapterSummary: {
+      /** Key Points */
+      key_points: components['schemas']['SummaryKeyPoint'][];
+      /** Page From */
+      page_from: number | null;
+      /** Page To */
+      page_to: number | null;
+      /** Section Key */
+      section_key: string;
+      /**
+       * Summary Md
+       * @description Markdown subset (paragraphs, lists, emphasis); render HTML, links and images as text. Empty when the chapter has no body text.
+       */
+      summary_md: string;
       /** Title */
       title: string;
     };
@@ -4201,6 +4311,22 @@ export type components = {
       /** Warnings */
       warnings: string[];
     };
+    /**
+     * SharedSummary
+     * @description What a share-link guest sees: the current published revision's summary only.
+     */
+    SharedSummary: {
+      /** Chapters */
+      chapters: components['schemas']['ChapterSummary'][];
+      document: components['schemas']['SummaryUnit'];
+      /** Published At */
+      published_at: string | null;
+      /**
+       * Revision Id
+       * Format: uuid
+       */
+      revision_id: string;
+    };
     /** SharedWorkspace */
     SharedWorkspace: {
       /**
@@ -4377,6 +4503,146 @@ export type components = {
       answer_text?: string | null;
       /** Selected Option Ids */
       selected_option_ids?: string[] | null;
+    };
+    /** Summary */
+    Summary: {
+      /**
+       * Chapters
+       * @description Top-level chapters in outline order.
+       */
+      chapters: components['schemas']['ChapterSummary'][];
+      document: components['schemas']['SummaryUnit'];
+      /** Published At */
+      published_at: string | null;
+      /**
+       * Revision Id
+       * Format: uuid
+       */
+      revision_id: string;
+      /**
+       * Run Id
+       * Format: uuid
+       */
+      run_id: string;
+      usage: components['schemas']['SummaryUsage'] | null;
+    };
+    /** SummaryKeyPoint */
+    SummaryKeyPoint: {
+      /** @description Pages the point is based on (inside the chapter's range), or null. */
+      pages: components['schemas']['SummaryPages'] | null;
+      /** Text */
+      text: string;
+    };
+    /** SummaryPages */
+    SummaryPages: {
+      /** From */
+      from: number;
+      /** To */
+      to: number;
+    };
+    /** SummaryProgress */
+    SummaryProgress: {
+      /** Chapters Done */
+      chapters_done: number;
+      /** Chapters Total */
+      chapters_total: number;
+    };
+    /** SummaryRun */
+    SummaryRun: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Error Code
+       * @description llm_unavailable | llm_timeout | llm_invalid_output | summary_too_large | document_unavailable (failed runs only).
+       */
+      error_code: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Job Id */
+      job_id: string | null;
+      progress: components['schemas']['SummaryProgress'] | null;
+      /**
+       * Revision Id
+       * Format: uuid
+       */
+      revision_id: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'queued' | 'running' | 'succeeded' | 'failed' | 'superseded';
+      /**
+       * Trigger
+       * @enum {string}
+       */
+      trigger: 'manual' | 'publish' | 'retry';
+      usage: components['schemas']['SummaryUsage'] | null;
+    };
+    /** SummaryState */
+    SummaryState: {
+      /**
+       * Available
+       * @description This environment can create summaries.
+       */
+      available: boolean;
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /**
+       * Enabled
+       * @description Opted in: every publish re-summarizes (auto refresh).
+       */
+      enabled: boolean;
+      /** Published Revision Id */
+      published_revision_id: string | null;
+      /** @description The newest run of the current revision. */
+      run: components['schemas']['SummaryRun'] | null;
+      /**
+       * Stale
+       * @description `summary` is not of the current published revision.
+       */
+      stale: boolean;
+      /** @description The newest succeeded summary (any revision). */
+      summary: components['schemas']['Summary'] | null;
+    };
+    /** SummaryUnit */
+    SummaryUnit: {
+      /** Key Points */
+      key_points: components['schemas']['SummaryKeyPoint'][];
+      /**
+       * Summary Md
+       * @description Markdown subset (paragraphs, lists, emphasis); render HTML, links and images as text. Empty when the chapter has no body text.
+       */
+      summary_md: string;
+      /** Title */
+      title: string;
+    };
+    /** SummaryUsage */
+    SummaryUsage: {
+      /** Cost Usd */
+      cost_usd?: number | null;
+      /**
+       * Generated Units
+       * @default 0
+       */
+      generated_units?: number;
+      /** Input Tokens */
+      input_tokens?: number | null;
+      /** Output Tokens */
+      output_tokens?: number | null;
+      /**
+       * Reused Units
+       * @default 0
+       */
+      reused_units?: number;
     };
     /** TableCells */
     TableCells: {
@@ -5423,6 +5689,302 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getDocumentSummary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SummaryState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createDocumentSummary: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SummaryState'];
+        };
+      };
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SummaryState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  disableDocumentSummaryAuto: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  retryDocumentSummary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SummaryState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };
@@ -7638,6 +8200,75 @@ export interface operations {
         };
         content: {
           'application/pdf': unknown;
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getSharedDocumentSummary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        document_id: string;
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedSummary'];
         };
       };
       /** @description Unauthorized */

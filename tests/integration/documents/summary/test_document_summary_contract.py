@@ -24,8 +24,7 @@ from urllib.parse import urlsplit
 import httpx
 import pytest
 
-# RED (DOCSUM.0): DOCSUM-B removes `red` when the summary API, job and migration make these GREEN.
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = [pytest.mark.infra]
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PDF_DIR = REPO_ROOT / "tests" / "fixtures" / "pdfs"
@@ -320,6 +319,35 @@ def test_docsum_01_c02_publish_and_restore_start_one_run_only_for_enabled_books(
     assert state(owner, other)["stale"] is True
 
 
+def test_docsum_01_c02_publish_runs_belong_to_the_publisher_not_the_opt_in_editor(
+    seed: Any, db: Any
+) -> None:
+    """DOCSUM-B Codex P2: the editor who opted in may lose access later; a publish by another
+    editor still summarizes, attributed to that publisher (DOCSUM-01-AC02)."""
+    owner = seed.client("docsum-c02-publisher")
+    ws = owner.create_workspace()
+    opt_in = editor_member(seed, ws["id"], "docsum-c02-opt-in", "editor")
+    doc = upload(owner, ws["id"])
+    enable(opt_in, doc)
+    finish(opt_in, doc)
+    db(
+        "update public.workspace_memberships set role = 'viewer' "
+        "where workspace_id = %s and user_id = %s",
+        (ws["id"], opt_in.user.id),
+    )
+
+    revision = correct_b_and_publish(owner, doc, "다른 편집자 교정 문장이다.")
+    [run] = [r for r in runs(db, doc) if r["revision_id"] == revision]
+    created_by = db(
+        "select r.created_by::text, j.created_by::text from public.document_summary_runs r "
+        "join public.async_jobs j on j.id = r.job_id where r.id = %s",
+        (run["id"],),
+    )
+    assert created_by == [(owner.user.id, owner.user.id)]
+    done = finish(owner, doc)
+    assert done["summary"]["revision_id"] == revision
+
+
 # ---------------------------------------------------------------------------------------------
 # C03 supersession
 # ---------------------------------------------------------------------------------------------
@@ -405,7 +433,7 @@ def test_docsum_01_c04_no_book_or_summary_text_in_logs_job_results_or_activities
         row = json.dumps([run["usage"], run["error_code"]], ensure_ascii=False)
         assert not [f for f in forbidden if f in row]
     events = db(
-        "select event_type, payload::text from public.activity_events "
+        "select event_type, metadata::text from public.activity_events "
         "where target_id = %s and event_type like 'document.summary%%'",
         (doc,),
     )

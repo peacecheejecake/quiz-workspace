@@ -248,6 +248,23 @@ def test_conditional_requirement_and_fake_adapters() -> None:
     assert "worker WORKER_PARSER: fake adapters are for local/test only" in report.errors
 
 
+def test_docsum_b_document_summaries_need_the_llm_on_worker_and_api() -> None:
+    worker = valid_env("worker", "production")
+    api = valid_env("api", "production")
+    for env in (worker, api):
+        env["WORKER_DOCUMENT_SUMMARY"] = "true"
+    report = check_env.run_checks(MANIFEST, "production", {"worker": worker, "api": api})
+    assert "worker LLM_API_KEY: missing (required when WORKER_DOCUMENT_SUMMARY=true)" in (
+        report.errors
+    )
+    assert "api LLM_MODEL: missing (required when WORKER_DOCUMENT_SUMMARY=true)" in report.errors
+    worker |= {"LLM_API_KEY": SECRET_MARK, "LLM_MODEL": "model-a"}
+    api["LLM_MODEL"] = "model-b"
+    report = check_env.run_checks(MANIFEST, "production", {"worker": worker, "api": api})
+    assert report.errors == ["LLM_MODEL: differs between api and worker (must be identical)"]
+    assert "LLM_API_KEY" not in {v.name for v in MANIFEST.for_service("api")}
+
+
 def test_production_needs_its_own_qdrant_prefix_on_the_shared_cluster() -> None:
     # Staging uses the unprefixed namespace of the shared cluster (user decision 2026-10-19), so a
     # production deployment without a prefix would read and write staging's collections.

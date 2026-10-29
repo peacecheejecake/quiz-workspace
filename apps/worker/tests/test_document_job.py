@@ -805,3 +805,56 @@ def test_qimport_01_ac06_an_archived_workspace_starts_no_import(world: World) ->
 )
 def test_started_import_jobs_ignores_results_without_a_job(result: Any) -> None:
     assert started_import_jobs(result) == []
+
+
+# -- DOCSUM-B: a publish starts an opted-in book's summary (DOCSUM-01-C02) ------------------------
+
+
+def test_docsum_01_c02_publish_passes_the_switch_and_hands_the_summary_job_on(
+    world: World,
+) -> None:
+    world.deps.summary = True
+    document, revision = world.upload()
+    world.store.opted_in.add(document.id)
+    envelope = world.submit(document, revision.id)
+
+    result = world.run(envelope)
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    assert world.store.summary_flags == [True]
+    run_id, job_id, user_id = world.store.summary_starts[revision.id]
+    assert user_id == envelope.created_by, "attributed to the publisher"
+    assert result.record.result["summary_run_id"] == str(run_id)
+    assert started_import_jobs(result.record.result) == [job_id]
+
+
+def test_docsum_01_c02_switch_off_or_not_opted_in_starts_nothing(world: World) -> None:
+    document, revision = world.upload()
+    world.store.opted_in.add(document.id)
+    off = world.run(world.submit(document, revision.id))
+    assert world.store.summary_flags == [False]
+
+    world.deps.summary = True
+    other, other_revision = world.upload()
+    plain = world.run(world.submit(other, other_revision.id))
+
+    for result in (off, plain):
+        assert result.outcome is RunOutcome.SUCCEEDED, result.error
+        assert "summary_run_id" not in (result.record.result or {})
+        assert started_import_jobs(result.record.result) == []
+    assert world.store.summary_starts == {}
+
+
+def test_docsum_b_summary_switch_needs_an_llm_outside_tests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    assert not WorkerSettings(_env_file=None).summary_available  # type: ignore[call-arg]
+    on = {"WORKER_DOCUMENT_SUMMARY": "true"}
+    for key, value in on.items():
+        monkeypatch.setenv(key, value)
+    assert not WorkerSettings(_env_file=None).summary_available  # type: ignore[call-arg]
+    test_env = WorkerSettings(_env_file=None, APP_ENV="test")  # type: ignore[call-arg]
+    assert test_env.summary_available
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    assert WorkerSettings(_env_file=None).summary_available  # type: ignore[call-arg]

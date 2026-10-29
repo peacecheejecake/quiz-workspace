@@ -714,20 +714,48 @@ provider = "operator"
 note = "false; true sends question text to the LLM provider (needs LLM_API_KEY)"
 
 [[var]]
+name = "WORKER_DOCUMENT_SUMMARY"
+services = ["api", "worker"]
+kind = "config"
+check = "bool"
+same = true
+provider = "operator"
+note = "false; true summarizes opted-in books on every publish and sends their text to the LLM provider (worker needs LLM_API_KEY; staging/production need user approval, DOCSUM-X)"
+
+[[var]]
+name = "WORKER_SUMMARY_CHAPTER_CHARS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "24000; longer chapters are summarized in parts, then merged"
+
+[[var]]
+name = "WORKER_SUMMARY_MAX_INPUT_CHARS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "1500000; larger documents fail summary_too_large without an LLM call"
+
+[[var]]
 name = "LLM_API_KEY"
 services = ["worker"]
 kind = "secret"
 check = "nonempty"
+required_when = "WORKER_DOCUMENT_SUMMARY=true"
 provider = "LLM provider console (Anthropic)"
 note = "optional; unset disables question generation (QGEN) — a user decision (cost, data policy)"
 
 [[var]]
 name = "LLM_MODEL"
-services = ["worker"]
+services = ["api", "worker"]
 kind = "config"
 requires = "LLM_API_KEY"
+required_when = "WORKER_DOCUMENT_SUMMARY=true"
+same = true
 provider = "operator: the approved model id (no default)"
-note = "required whenever LLM_API_KEY is set"
+note = "required whenever LLM_API_KEY is set; with WORKER_DOCUMENT_SUMMARY=true also on the API (identical), which offers summaries only when it is set (DOCSUM-01-AC05; the API never gets LLM_API_KEY)"
 
 [[var]]
 name = "LLM_PROVIDER"
@@ -834,6 +862,13 @@ services = ["worker"]
 kind = "config"
 forbidden = true
 note = "APP_ENV=test scripted LLM"
+
+[[var]]
+name = "WORKER_SUMMARY_HOLD_DIR"
+services = ["worker"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test fake summarizer barrier (DOCSUM-01-C03)"
 
 [[var]]
 name = "FORWARDED_ALLOW_IPS"

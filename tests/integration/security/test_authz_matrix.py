@@ -76,6 +76,11 @@ RULES: dict[str, Rule | str] = {
     "exportDocumentText": READ,  # DOC-03 (published revision; `revision=draft` editors only)
     "createDocumentUploadIntent": EDIT,
     "listDocuments": READ,
+    # DOCSUM-B document summaries
+    "getDocumentSummary": READ,
+    "createDocumentSummary": EDIT,
+    "retryDocumentSummary": EDIT,
+    "disableDocumentSummaryAuto": EDIT,
     # jobs
     "getJob": READ,
     "streamJobEvents": READ,
@@ -135,6 +140,7 @@ RULES: dict[str, Rule | str] = {
     "getSharedWorkspace": SHARED,
     "getSharedDocument": SHARED,
     "getSharedDocumentPdf": SHARED,
+    "getSharedDocumentSummary": SHARED,
     "startWorkspaceFork": SHARED,
     "listSharedQuestions": SHARED,
     "getSharedQuestion": SHARED,

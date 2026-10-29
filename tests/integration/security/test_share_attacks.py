@@ -108,6 +108,29 @@ class Shared:
         return "/api/v1"
 
 
+# DOCSUM-B: the shared summary route serves only a succeeded summary of the current revision, so
+# the positive controls need one. Seeded directly (the summary job is covered by
+# tests/integration/documents/summary); synthetic text only.
+_SEED_SUMMARY = """
+with d as (
+  select id, workspace_id, active_revision_id from public.documents where id = %s
+), r as (
+  insert into public.document_summary_runs (workspace_id, document_id, document_revision_id,
+                                            status, trigger, finished_at)
+  select workspace_id, id, active_revision_id, 'succeeded', 'manual', now() from d
+  returning id, workspace_id
+), u as (
+  insert into public.document_summary_units (workspace_id, document_id, scope, section_key,
+                                             input_hash, prompt_version, model, body)
+  select workspace_id, id, 'document', 'document', repeat('5', 64), 's4', 's4',
+         '{"title": "S4", "summary_md": "S4 요약", "key_points": []}'::jsonb from d
+  returning id, workspace_id
+)
+insert into public.document_summary_run_units (workspace_id, run_id, unit_id, position)
+select r.workspace_id, r.id, u.id, 0 from r, u
+"""
+
+
 @pytest.fixture(scope="module")
 def shared(module_seed: Any) -> Shared:
     seed = module_seed
@@ -123,6 +146,8 @@ def shared(module_seed: Any) -> Shared:
     owner.wait_for_job(str(other_done["job_id"]))
     other_question = owner.create_question(other["id"], "S4 다른 공유 문제")
     other_link = owner.create_link(other["id"], allow_fork=True)
+    for document_id in (done["document_id"], other_done["document_id"]):
+        seed._admin(_SEED_SUMMARY, (str(document_id),))
     return Shared(
         seed,
         owner,
