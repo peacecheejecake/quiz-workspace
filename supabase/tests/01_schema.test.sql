@@ -21,7 +21,9 @@ select tables_are(
         -- S3a forks
         'workspace_forks',
         -- QIMP-JOB server-side registration items
-        'question_import_registration_items'],
+        'question_import_registration_items',
+        -- DOCSUM-B document summaries
+        'document_summary_runs', 'document_summary_units', 'document_summary_run_units'],
   'public schema contains exactly the expected tables'
 );
 
