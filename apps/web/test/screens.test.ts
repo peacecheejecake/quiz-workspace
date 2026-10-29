@@ -1,15 +1,19 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { API_SCREEN_ID, PHASES } from '../../../scripts/e2e-trace.ts';
 import { SCREENS, getScreen, isQueryStateActive } from '../src/screens';
 
 const SCREENS_INDEX = resolve(import.meta.dirname, '../../../docs/screens/index.md');
+const CI_WORKFLOW = resolve(import.meta.dirname, '../../../.github/workflows/ci.yml');
 const APP_DIR = resolve(import.meta.dirname, '../src/app');
 
 interface DocScreen {
   id: string;
   name: string;
-  path: string;
+  /** App Router path; undefined for a screen without its own route (DOC-03: a row menu action). */
+  path?: string;
+  /** Primary query parameter (`panel=value` of `?panel=value&document=:id`); extras are ignored. */
   query?: string;
 }
 
@@ -17,17 +21,41 @@ interface DocScreen {
 function parseScreensIndex(markdown: string): DocScreen[] {
   const rows: DocScreen[] = [];
   for (const line of markdown.split(/\r?\n/)) {
-    const m = /^\|\s*([A-Z]+(?:-[A-Z]+)*-\d+)\s*\|\s*([^|]+?)\s*\|\s*`([^`]+)`\s*\|/.exec(line);
+    const m = /^\|\s*([A-Z]+(?:-[A-Z]+)*-\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|/.exec(line);
     if (!m) continue;
-    const [, id, name, route] = m as unknown as [string, string, string, string];
-    const [rawPath, query] = route.split('?') as [string, string | undefined];
+    const [, id, name, routeCell] = m as unknown as [string, string, string, string];
+    const route = /^`(\/[^`]*)`$/.exec(routeCell)?.[1];
+    if (route === undefined) {
+      rows.push({ id, name });
+      continue;
+    }
+    const [rawPath, search] = route.split('?') as [string, string | undefined];
     const path = rawPath.replace(/:(\w+)/g, '[$1]');
+    const query = search?.split('&')[0];
     rows.push(query === undefined ? { id, name, path } : { id, name, path, query });
   }
   return rows;
 }
 
 const docScreens = parseScreensIndex(readFileSync(SCREENS_INDEX, 'utf8'));
+
+/**
+ * Screens of the phases CI runs as GREEN (`E2E_PHASES`). A spec-only screen (its RED phase not yet
+ * in `E2E_PHASES`) may be missing from SCREENS; once its implementing Task adds the phase, it must
+ * be listed. Entries present in SCREENS are always checked against the doc.
+ */
+const shippedScreenIds = new Set(
+  (/^\s*E2E_PHASES:\s*(\S+)\s*$/m.exec(readFileSync(CI_WORKFLOW, 'utf8'))?.[1] ?? '')
+    .split(',')
+    .flatMap((phase) => PHASES[phase] ?? []),
+);
+const listedIds = new Set<string>(SCREENS.map((s) => s.id));
+const routeScreens = docScreens.filter(
+  (s): s is DocScreen & { path: string } => s.path !== undefined,
+);
+const expectedScreens = routeScreens.filter(
+  (s) => shippedScreenIds.has(s.id) || listedIds.has(s.id),
+);
 
 /**
  * `page.tsx`, or `route.ts` for screens that are a Route Handler (AUTH-04 /auth/callback). A page
@@ -46,18 +74,22 @@ function pageFile(path: string): string {
 }
 
 describe('screen route table', () => {
-  it('parses all 21 screens from docs/screens/index.md', () => {
-    expect(docScreens).toHaveLength(21);
+  it('lists every screen of the e2e-trace phases in docs/screens/index.md', () => {
+    const phaseIds = Object.values(PHASES)
+      .flat()
+      .filter((id) => id !== API_SCREEN_ID);
+    expect(docScreens.map((s) => s.id).sort()).toEqual([...new Set(phaseIds)].sort());
+    expect(shippedScreenIds.size).toBeGreaterThan(0);
   });
 
-  it('covers exactly the screen IDs, names and routes of the doc', () => {
+  it('covers exactly the screen IDs, names and routes of the doc (shipped or listed)', () => {
     const table = SCREENS.map((s) => ({ id: s.id, name: s.name, path: s.path }));
-    const doc = docScreens.map(({ id, name, path }) => ({ id, name, path }));
+    const doc = expectedScreens.map(({ id, name, path }) => ({ id, name, path }));
     expect(table).toEqual(doc);
   });
 
   it('matches the query parameters that turn a route into a panel screen', () => {
-    for (const doc of docScreens) {
+    for (const doc of expectedScreens) {
       const screen = SCREENS.find((s) => s.id === doc.id);
       if (doc.query === undefined) {
         expect(screen && 'query' in screen, doc.id).toBe(false);
