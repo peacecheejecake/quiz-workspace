@@ -51,6 +51,13 @@ export interface DocumentSummaryPanelProps {
   /** Reports whether the document has a queued/running run (the row's "요약 중"). */
   readonly onActivity?: (documentId: string, active: boolean) => void;
   readonly client?: SummaryClient;
+  /**
+   * The workspace's document list could not be read, so `documentId` (null) is unresolved rather
+   * than foreign: the panel offers to read the list again instead of "not found". Nothing is
+   * loaded for an unresolved id.
+   */
+  readonly documentListFailed?: boolean;
+  readonly onReloadDocumentList?: () => void;
 }
 
 type Load =
@@ -137,6 +144,8 @@ export function DocumentSummaryPanel({
   returnFocusTo,
   onActivity,
   client: injectedClient,
+  documentListFailed = false,
+  onReloadDocumentList,
 }: DocumentSummaryPanelProps) {
   const client = useMemo(() => injectedClient ?? createSummaryClient(), [injectedClient]);
   const summary = useSummaryState(open ? documentId : null, client);
@@ -160,7 +169,16 @@ export function DocumentSummaryPanel({
         target.focus();
       }}
     >
-      {open ? (
+      {open && documentId === null && documentListFailed ? (
+        <div className={styles.body} data-screen-id={screenId}>
+          <div role="alert" className={styles.alert}>
+            <p>문서 목록을 불러오지 못했습니다.</p>
+            <Button size="sm" onClick={onReloadDocumentList}>
+              다시 시도
+            </Button>
+          </div>
+        </div>
+      ) : open ? (
         <SummaryPanelBody
           key={documentId ?? ''}
           workspaceId={workspaceId}

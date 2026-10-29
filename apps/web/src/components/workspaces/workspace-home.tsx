@@ -640,6 +640,9 @@ export function WorkspaceHome({
             container={host}
             workspaceId={workspace.id}
             documentId={summaryDocument?.id ?? null}
+            // An id the list could not confirm because the list failed: retry, not "not found".
+            documentListFailed={summaryDocId !== null && !summaryDocument && library.listFailed}
+            onReloadDocumentList={() => void library.refresh()}
             documentTitle={summaryDocument?.title ?? null}
             questionPaper={summaryDocument?.document_type === 'question_paper'}
             canEdit={canEdit}

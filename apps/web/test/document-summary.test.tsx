@@ -434,6 +434,31 @@ function renderPanel(initial: SummaryState, props: { canEdit?: boolean } = {}) {
 }
 
 describe('DocumentSummaryPanel', () => {
+  it('a failed document list is retryable, not "not found", and loads once the list resolves', async () => {
+    const user = userEvent.setup();
+    const fake = fakeClient(state({ summary: SUMMARY, enabled: true, run: run() }));
+    const reload = vi.fn();
+    const props = {
+      open: true,
+      onOpenChange: () => undefined,
+      workspaceId: WS,
+      canEdit: true,
+      client: fake.client,
+      onReloadDocumentList: reload,
+    };
+    const view = render(<DocumentSummaryPanel {...props} documentId={null} documentListFailed />);
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('문서 목록을 불러오지 못했습니다.');
+    expect(screen.queryByText(/문서를 찾을 수 없습니다/)).toBeNull();
+    expect(fake.client.get).not.toHaveBeenCalled();
+    await user.click(within(alert).getByRole('button', { name: '다시 시도' }));
+    expect(reload).toHaveBeenCalledTimes(1);
+    // The reloaded list contains the document: the panel now loads and shows its summary.
+    view.rerender(<DocumentSummaryPanel {...props} documentId={DOC} documentListFailed={false} />);
+    expect(await screen.findByRole('heading', { level: 3, name: '전체 요약' })).toBeTruthy();
+    expect(fake.client.get).toHaveBeenCalledWith(DOC, expect.anything());
+  });
+
   it('loads nothing for a document outside the workspace (null) and says it is not found', async () => {
     const fake = fakeClient(state());
     render(
