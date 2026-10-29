@@ -186,10 +186,12 @@ export function FloatingSidePanel({
             if (!modal && contentRef.current) {
               handOffFocus(event, contentRef.current, returnFocusRef.current);
             }
-            // Radix lets only the most recently mounted non-modal panel handle Escape; when focus
-            // is in another one (e.g. raised over it), that panel's guard below declined, so the
-            // panel holding focus closes itself.
-            if (event.key === 'Escape' && !modal && declinedEscapes.has(event.nativeEvent)) {
+            // Radix lets only the layer it ranks highest handle Escape. When that is a non-modal
+            // panel without focus, its guard below declined, so the panel holding focus closes
+            // itself: another non-modal panel raised over it, or a modal panel opened on top
+            // whose layer Radix had not ranked highest yet (CHNOTE-01-AC02: the practice panel
+            // opened from a 정리 노트 footnote ignored Escape while the note panel held the rank).
+            if (event.key === 'Escape' && declinedEscapes.has(event.nativeEvent)) {
               handleOpenChange(false);
             }
           }}
