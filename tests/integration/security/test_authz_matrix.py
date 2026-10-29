@@ -118,6 +118,10 @@ RULES: dict[str, Rule | str] = {
     "createQuestion": EDIT,
     "getQuestionOverview": READ,
     "searchWorkspace": READ,
+    # chapter notes (CHNOTE-01)
+    "listChapterNotes": READ,
+    "getChapterNote": READ,
+    "createChapterNote": EDIT,
     # workspace lifecycle and sharing
     "getWorkspace": READ,
     "listWorkspaceActivities": READ,
@@ -145,6 +149,8 @@ RULES: dict[str, Rule | str] = {
     "listSharedQuestions": SHARED,
     "getSharedQuestion": SHARED,
     "searchSharedWorkspace": SHARED,
+    "listSharedChapterNotes": SHARED,
+    "getSharedChapterNote": SHARED,
     "createSharedSession": SHARED,
     # health
     "getLiveness": PUBLIC,

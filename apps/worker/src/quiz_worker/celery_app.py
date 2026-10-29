@@ -34,6 +34,7 @@ from celery import Celery, Task, signals
 from celery.exceptions import WorkerLostError
 from celery.worker.request import Request
 
+from quiz_worker.chapter_note_job import LazyChapterNoteDeps, chapter_note_definition
 from quiz_worker.document_job import JOB_TYPE as DOCUMENT_PARSE_JOB_TYPE
 from quiz_worker.document_job import (
     LazyDeps,
@@ -553,4 +554,5 @@ def default_definitions(
         question_generate_definition(LazyGenerationDeps(settings)),
         workspace_fork_definition(LazyForkDeps(settings)),
         document_summarize_definition(LazySummaryDeps(settings)),
+        chapter_note_definition(LazyChapterNoteDeps(settings)),
     ]

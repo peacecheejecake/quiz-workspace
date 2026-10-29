@@ -13,7 +13,7 @@
 #   check      value rule applied by the checker (see scripts/check_env.py CHECKS)
 #   same       true = identical value on every service listed (compared by digest)
 #   requires   another variable that must be set whenever this one is
-#   required_when  "NAME=value": required whenever NAME has that value (M7.4b)
+#   required_when  "NAME=value" (or a list of them): required whenever NAME has that value (M7.4b)
 #   never_on   services where setting it is an error (server-only values kept off web)
 #   provider   who produces the value
 #   note       short reason / default
@@ -739,11 +739,20 @@ provider = "default"
 note = "1500000; larger documents fail summary_too_large without an LLM call"
 
 [[var]]
+name = "WORKER_CHAPTER_NOTES"
+services = ["api", "worker"]
+kind = "config"
+check = "bool"
+same = true
+provider = "operator (⛔ user approval: sends questions, answers and explanations to the LLM provider)"
+note = "false; true enables chapter notes (CHNOTE-01): needs LLM_API_KEY on the worker and LLM_MODEL on both (identical); the API offers notes (available, POST) only with the switch on and LLM_MODEL set"
+
+[[var]]
 name = "LLM_API_KEY"
 services = ["worker"]
 kind = "secret"
 check = "nonempty"
-required_when = "WORKER_DOCUMENT_SUMMARY=true"
+required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true"]
 provider = "LLM provider console (Anthropic)"
 note = "optional; unset disables question generation (QGEN) — a user decision (cost, data policy)"
 
@@ -752,10 +761,10 @@ name = "LLM_MODEL"
 services = ["api", "worker"]
 kind = "config"
 requires = "LLM_API_KEY"
-required_when = "WORKER_DOCUMENT_SUMMARY=true"
+required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true"]
 same = true
 provider = "operator: the approved model id (no default)"
-note = "required whenever LLM_API_KEY is set; with WORKER_DOCUMENT_SUMMARY=true also on the API (identical), which offers summaries only when it is set (DOCSUM-01-AC05; the API never gets LLM_API_KEY)"
+note = "required whenever LLM_API_KEY is set; with WORKER_DOCUMENT_SUMMARY=true or WORKER_CHAPTER_NOTES=true also on the API (identical), which offers summaries / chapter notes only when it is set (DOCSUM-01-AC05, CHNOTE-01-AC06; the API never gets LLM_API_KEY)"
 
 [[var]]
 name = "LLM_PROVIDER"
@@ -869,6 +878,20 @@ services = ["worker"]
 kind = "config"
 forbidden = true
 note = "APP_ENV=test fake summarizer barrier (DOCSUM-01-C03)"
+
+[[var]]
+name = "WORKER_CHAPTER_NOTE_SCENARIO_FILE"
+services = ["worker"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test scripted chapter note LLM"
+
+[[var]]
+name = "WORKER_CHAPTER_NOTE_HOLD_DIR"
+services = ["worker"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test E2E hold barrier of the chapter note fake"
 
 [[var]]
 name = "FORWARDED_ALLOW_IPS"

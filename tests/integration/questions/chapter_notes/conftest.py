@@ -12,13 +12,12 @@ tests/e2e/fixtures/chapter-notes.ts, whose header lists every CHNOTE.0 assumptio
 both in sync.
 
 The chapter note feature is ON for this module's app and worker (`WORKER_CHAPTER_NOTES=true` in
-the environment while they are built); `off_app` is a second app instance with it off. CHNOTE-B
-registers `chapter_note.generate` in the M4 `JobWorker` (as M6.2 did for `question.generate`) and
-exposes its dependencies as `JobWorker.chapter_note_deps` whose `llm` is the APP_ENV=test
-`ScenarioLLMClient` over tests/fixtures/llm/chapter-note-scenarios.json (N6; it records
-`calls` as (marker, LLMRequest)); `note_prompts(token)` reads the prompts of this module's calls
-that carry `token`. Until then POST /chapters/{id}/note is not implemented and draining a note
-job fails with "JobWorker has no in-process handler for job type chapter_note.generate".
+the environment while they are built); `off_app` is a second app instance with it off. The M4
+`JobWorker` runs `chapter_note.generate` (CHNOTE-B, like M6.2's `question.generate`) and exposes
+its dependencies as `JobWorker.chapter_note_deps` whose `llm` is the APP_ENV=test
+`ScenarioLLMClient` over tests/fixtures/llm/chapter-note-scenarios.json behind the hold barrier
+(N6, N8; `calls` lists (marker, LLMRequest)); `note_prompts(token)` reads the prompts of this
+module's calls that carry `token`.
 
 The `postgres` superuser reads `chapter_notes` (version rows, `superseded_at`, `usage`,
 `error_code`; docs/architecture.md §5) and `activity_events` for guarantees no API exposes.

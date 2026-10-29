@@ -495,6 +495,208 @@
         "title": "BoundingBox",
         "type": "object"
       },
+      "ChapterNote": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "footnotes": {
+            "items": {
+              "$ref": "#/components/schemas/NoteFootnote"
+            },
+            "title": "Footnotes",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "input_fingerprint": {
+            "title": "Input Fingerprint",
+            "type": "string"
+          },
+          "question_count": {
+            "title": "Question Count",
+            "type": "integer"
+          },
+          "question_refs": {
+            "items": {
+              "$ref": "#/components/schemas/NoteQuestionRef"
+            },
+            "title": "Question Refs",
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/NoteSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoteUsage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null for a copied (forked) note."
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "created_at",
+          "question_count",
+          "input_fingerprint",
+          "question_refs",
+          "sections",
+          "footnotes",
+          "usage"
+        ],
+        "title": "ChapterNote",
+        "type": "object"
+      },
+      "ChapterNoteList": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChapterNoteSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "available",
+          "items"
+        ],
+        "title": "ChapterNoteList",
+        "type": "object"
+      },
+      "ChapterNoteState": {
+        "properties": {
+          "available": {
+            "description": "This environment can create notes.",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "chapter_id": {
+            "format": "uuid",
+            "title": "Chapter Id",
+            "type": "string"
+          },
+          "chapter_title": {
+            "title": "Chapter Title",
+            "type": "string"
+          },
+          "confirmed_question_count": {
+            "title": "Confirmed Question Count",
+            "type": "integer"
+          },
+          "generation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoteGeneration"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The chapter's newest generation."
+          },
+          "note": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChapterNote"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest version, or `version=k`."
+          },
+          "stale": {
+            "description": "The chapter's confirmed questions changed since the note.",
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "versions": {
+            "description": "Newest first.",
+            "items": {
+              "$ref": "#/components/schemas/NoteVersion"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chapter_id",
+          "chapter_title",
+          "available",
+          "confirmed_question_count",
+          "generation",
+          "note",
+          "versions",
+          "stale"
+        ],
+        "title": "ChapterNoteState",
+        "type": "object"
+      },
+      "ChapterNoteSummary": {
+        "properties": {
+          "chapter_id": {
+            "format": "uuid",
+            "title": "Chapter Id",
+            "type": "string"
+          },
+          "chapter_title": {
+            "title": "Chapter Title",
+            "type": "string"
+          },
+          "generating": {
+            "title": "Generating",
+            "type": "boolean"
+          },
+          "latest_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Version"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "chapter_id",
+          "chapter_title",
+          "latest_version",
+          "stale",
+          "generating"
+        ],
+        "title": "ChapterNoteSummary",
+        "type": "object"
+      },
       "ChapterRef": {
         "properties": {
           "document_id": {
@@ -3475,6 +3677,298 @@
         "title": "MyWorkspaceList",
         "type": "object"
       },
+      "NoteFootnote": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: no longer a CONFIRMED question of the chapter (deleted or moved).",
+            "title": "Question Id"
+          },
+          "stem_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "First 40 characters of the current stem.",
+            "title": "Stem Preview"
+          }
+        },
+        "required": [
+          "number",
+          "question_id",
+          "label",
+          "stem_preview"
+        ],
+        "title": "NoteFootnote",
+        "type": "object"
+      },
+      "NoteGeneration": {
+        "properties": {
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it failed (stable code): `llm_unavailable`, `llm_timeout`, `note_citation_invalid`, `llm_invalid_output`, ...",
+            "title": "Error Code"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Job `chapter_note.generate`.",
+            "title": "Job Id"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoteProgress"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Batches of a large chapter while running."
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "job_id",
+          "error_code",
+          "progress"
+        ],
+        "title": "NoteGeneration",
+        "type": "object"
+      },
+      "NoteItem": {
+        "properties": {
+          "footnotes": {
+            "description": "Footnote numbers (at least one).",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Footnotes",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "footnotes"
+        ],
+        "title": "NoteItem",
+        "type": "object"
+      },
+      "NoteProgress": {
+        "properties": {
+          "batches_done": {
+            "title": "Batches Done",
+            "type": "integer"
+          },
+          "batches_total": {
+            "title": "Batches Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "batches_done",
+          "batches_total"
+        ],
+        "title": "NoteProgress",
+        "type": "object"
+      },
+      "NoteQuestionRef": {
+        "properties": {
+          "label": {
+            "description": "`<n>장 <번호>번` (the Heatmap's numbering).",
+            "title": "Label",
+            "type": "string"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "question_revision_id": {
+            "description": "The revision the note was made from.",
+            "format": "uuid",
+            "title": "Question Revision Id",
+            "type": "string"
+          },
+          "tag": {
+            "description": "Input tag (`Q1`..`Qn`).",
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "question_id",
+          "question_revision_id",
+          "label"
+        ],
+        "title": "NoteQuestionRef",
+        "type": "object"
+      },
+      "NoteSection": {
+        "properties": {
+          "heading": {
+            "title": "Heading",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NoteItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "heading",
+          "items"
+        ],
+        "title": "NoteSection",
+        "type": "object"
+      },
+      "NoteUsage": {
+        "properties": {
+          "batches": {
+            "default": 0,
+            "title": "Batches",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "dropped_items": {
+            "default": 0,
+            "title": "Dropped Items",
+            "type": "integer"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "items": {
+            "default": 0,
+            "title": "Items",
+            "type": "integer"
+          },
+          "llm_calls": {
+            "default": 0,
+            "title": "Llm Calls",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          }
+        },
+        "title": "NoteUsage",
+        "type": "object"
+      },
+      "NoteVersion": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "note_id": {
+            "format": "uuid",
+            "title": "Note Id",
+            "type": "string"
+          },
+          "question_count": {
+            "title": "Question Count",
+            "type": "integer"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "note_id",
+          "created_at",
+          "question_count"
+        ],
+        "title": "NoteVersion",
+        "type": "object"
+      },
       "Outline": {
         "properties": {
           "document_id": {
@@ -6294,6 +6788,95 @@
         "title": "ShareLinkUpdate",
         "type": "object"
       },
+      "SharedChapterNote": {
+        "properties": {
+          "chapter_id": {
+            "format": "uuid",
+            "title": "Chapter Id",
+            "type": "string"
+          },
+          "chapter_title": {
+            "title": "Chapter Title",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "footnotes": {
+            "description": "`question_id` links a published question (the shared question panel).",
+            "items": {
+              "$ref": "#/components/schemas/NoteFootnote"
+            },
+            "title": "Footnotes",
+            "type": "array"
+          },
+          "question_count": {
+            "title": "Question Count",
+            "type": "integer"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/NoteSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "stale": {
+            "description": "Questions were added to the chapter since the note.",
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "chapter_id",
+          "chapter_title",
+          "created_at",
+          "question_count",
+          "stale",
+          "sections",
+          "footnotes"
+        ],
+        "title": "SharedChapterNote",
+        "type": "object"
+      },
+      "SharedChapterNoteList": {
+        "properties": {
+          "items": {
+            "description": "Chapters whose newest note can be shown, in outline order.",
+            "items": {
+              "$ref": "#/components/schemas/SharedChapterNoteSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SharedChapterNoteList",
+        "type": "object"
+      },
+      "SharedChapterNoteSummary": {
+        "properties": {
+          "chapter_id": {
+            "format": "uuid",
+            "title": "Chapter Id",
+            "type": "string"
+          },
+          "chapter_title": {
+            "title": "Chapter Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chapter_id",
+          "chapter_title"
+        ],
+        "title": "SharedChapterNoteSummary",
+        "type": "object"
+      },
       "SharedDocument": {
         "properties": {
           "blocks": {
@@ -7992,6 +8575,231 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/chapters/{chapter_id}/note": {
+      "get": {
+        "description": "The chapter's note (newest version or `version=k`), its versions, newest generation and\nwhether it is stale. Read-only: never records a view.",
+        "operationId": "getChapterNote",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chapter_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Chapter Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "An older version.",
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1000000,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "An older version.",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterNoteState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Chapter Note",
+        "tags": [
+          "chapter-notes"
+        ]
+      },
+      "post": {
+        "description": "Make (or remake) the chapter's note from its CONFIRMED questions and explanations: a new\nversion; the previous ones are kept. The questions and explanations are sent to the LLM\nprovider.",
+        "operationId": "createChapterNote",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chapter_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Chapter Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterNoteState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Chapter Note",
+        "tags": [
+          "chapter-notes"
+        ]
+      }
+    },
     "/api/v1/documents/complete-upload": {
       "post": {
         "description": "Verify the uploaded object and start parsing it (202 + job id, DOC-01-AC03/AC04).\n\nIdempotent per upload: repeating it returns the same document and job. 409\n`upload-incomplete` = nothing stored yet (finish the upload, then retry); 409\n`upload-expired` = start over with a new intent; 422 `upload-mismatch` = the stored bytes\ndiffer from the declared size/SHA-256 (the object is discarded).",
@@ -12430,6 +13238,188 @@
         ]
       }
     },
+    "/api/v1/shared/{share_id}/chapter-notes": {
+      "get": {
+        "description": "Chapters of published documents whose newest note is source-matched.",
+        "operationId": "listSharedChapterNotes",
+        "parameters": [
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedChapterNoteList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List Shared Chapter Notes",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/chapters/{chapter_id}/note": {
+      "get": {
+        "description": "The chapter's newest note, read-only, when it is source-matched (else 404).",
+        "operationId": "getSharedChapterNote",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chapter_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Chapter Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedChapterNote"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Shared Chapter Note",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
     "/api/v1/shared/{share_id}/documents/{document_id}": {
       "get": {
         "description": "The published revision of a document: outline and blocks (WS-VIEW-01-AC01/AC02).\n\nOnly the active published revision; drafts and older revisions are never reachable here.",
@@ -14184,6 +15174,95 @@
         "summary": "List My Attempts",
         "tags": [
           "history"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/chapter-notes": {
+      "get": {
+        "description": "Per Heatmap chapter (a chapter with a CONFIRMED question or a note), in outline order:\nthe newest version, whether it is stale and whether a generation is queued/running.",
+        "operationId": "listChapterNotes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterNoteList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Chapter Notes",
+        "tags": [
+          "chapter-notes"
         ]
       }
     },

@@ -70,6 +70,7 @@ class Shared:
     other_doc: str
     other_question: str
     other_link: dict[str, Any]
+    chapter: str
 
     def link(self, **policy: Any) -> tuple[dict[str, Any], str]:
         link = self.owner.create_link(self.ws, **{"allow_fork": True, **policy})
@@ -90,6 +91,7 @@ class Shared:
             .replace("{share_id}", share_id)
             .replace("{document_id}", doc or self.doc)
             .replace("{question_id}", question or self.question)
+            .replace("{chapter_id}", self.chapter)
         )
         if op.operation_id == FORK:
             # Fork needs the user JWT and the web Origin as well; the session is what is attacked.
@@ -148,6 +150,7 @@ def shared(module_seed: Any) -> Shared:
     other_link = owner.create_link(other["id"], allow_fork=True)
     for document_id in (done["document_id"], other_done["document_id"]):
         seed._admin(_SEED_SUMMARY, (str(document_id),))
+    chapter = _seed_chapter_note(seed, owner, str(done["document_id"]), question)
     return Shared(
         seed,
         owner,
@@ -159,7 +162,33 @@ def shared(module_seed: Any) -> Shared:
         str(other_done["document_id"]),
         str(other_question["id"]),
         other_link,
+        chapter,
     )
+
+
+def _seed_chapter_note(seed: Any, owner: Any, document_id: str, question: dict[str, Any]) -> str:
+    """A succeeded, source-matched chapter note (CHNOTE-01) on the book's first chapter citing the
+    shared question, written as the superuser (no LLM job needed for the share checks)."""
+    chapter = owner.ok("GET", f"/documents/{document_id}/outline")["items"][0]
+    refs = [
+        {
+            "tag": "Q1",
+            "question_id": str(question["id"]),
+            "question_revision_id": str(question["revision"]["id"]),
+            "label": "1장 1번",
+        }
+    ]
+    body = {"sections": [{"heading": "S4", "items": [{"text": "S4 정리 노트", "tags": ["Q1"]}]}]}
+    seed._admin(
+        "insert into public.chapter_notes (workspace_id, document_id, document_revision_id, "
+        "section_key, version, status, input_fingerprint, body_hash, question_refs, body, "
+        "created_by, finished_at) "
+        "select c.workspace_id, c.document_id, c.document_revision_id, c.section_key, 1, "
+        "'succeeded', %s, %s, %s::jsonb, %s::jsonb, %s, now() "
+        "from public.chapters c where c.id = %s",
+        ("0" * 64, "0" * 64, json.dumps(refs), json.dumps(body), owner.user.id, chapter["id"]),
+    )
+    return str(chapter["id"])
 
 
 def _type(res: httpx.Response) -> str | None:

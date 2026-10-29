@@ -229,6 +229,21 @@ class WorkerSettings(BaseSettings):
         default=1_500_000, ge=1, validation_alias="WORKER_SUMMARY_MAX_INPUT_CHARS"
     )
 
+    # -- chapter_note.generate (CHNOTE-B) -------------------------------------------------------
+    # Chapter notes send a chapter's questions, answers and explanations to the LLM provider
+    # (needs LLM_API_KEY / LLM_MODEL outside APP_ENV=test). Off by default; the API reads the same
+    # variable to refuse requests (409 note-generation-disabled).
+    chapter_notes: bool = Field(default=False, validation_alias="WORKER_CHAPTER_NOTES")
+    # APP_ENV=test only: scripted chapter note outputs (default: the repository's
+    # tests/fixtures/llm/chapter-note-scenarios.json) and the E2E hold barrier directory
+    # (default: <system temp dir>/quiz-e2e-chapter-note-hold). Ignored elsewhere.
+    chapter_note_scenario_file: str | None = Field(
+        default=None, validation_alias="WORKER_CHAPTER_NOTE_SCENARIO_FILE"
+    )
+    chapter_note_hold_dir: str | None = Field(
+        default=None, validation_alias="WORKER_CHAPTER_NOTE_HOLD_DIR"
+    )
+
     @model_validator(mode="after")
     def _check_limits(self) -> WorkerSettings:
         if self.task_soft_time_limit_seconds >= self.task_time_limit_seconds:
