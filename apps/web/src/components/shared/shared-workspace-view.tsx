@@ -35,6 +35,7 @@ import { SharedChapterNotes } from './shared-chapter-notes';
 import { SharedDocumentView } from './shared-document-view';
 import { SharedQuestions } from './shared-questions';
 import { SharedSearch } from './shared-search';
+import { ownSummaryDocument } from '@/lib/workspaces/home';
 import { SharedSummaryPanel, useSharedSummaries } from './shared-summary';
 import summaryStyles from '@/components/documents/summary/summary.module.css';
 import styles from './shared.module.css';
@@ -173,6 +174,7 @@ export function SharedWorkspaceView({
     ? (documents.find((d) => d.id === view.documentId) ?? null)
     : null;
   const forkHref = signedIn ? forkPanelHref(shareId) : forkLoginHref;
+  const summaryDocument = ownSummaryDocument(view.summaryDocumentId, documents);
 
   return (
     <main className={styles.main} data-screen-id={screenId}>
@@ -280,9 +282,11 @@ export function SharedWorkspaceView({
 
       <SharedSummaryPanel
         shareId={shareId}
-        documentId={view.summaryDocumentId}
-        title={documents.find((d) => d.id === view.summaryDocumentId)?.title ?? null}
-        cached={view.summaryDocumentId ? summaries.get(view.summaryDocumentId) : undefined}
+        open={view.summaryDocumentId !== null}
+        // Only a document of this share (its list); any other id is never requested.
+        documentId={summaryDocument?.id ?? null}
+        title={summaryDocument?.title ?? null}
+        cached={summaryDocument ? summaries.get(summaryDocument.id) : undefined}
         onClose={() => router.replace(sharePath(shareId), { scroll: false })}
         returnFocusTo={() => summaryOpenerRef.current}
       />

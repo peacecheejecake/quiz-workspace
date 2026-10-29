@@ -50,7 +50,8 @@ type Load =
 
 export interface SharedSummaryPanelProps {
   readonly shareId: string;
-  /** The open panel's document, or null (closed). */
+  readonly open: boolean;
+  /** The panel's document when it is one of the share's documents; null shows "볼 수 없습니다". */
   readonly documentId: string | null;
   readonly title: string | null;
   /** What the availability read already returned (shown at once, then refreshed). */
@@ -61,6 +62,7 @@ export interface SharedSummaryPanelProps {
 
 export function SharedSummaryPanel({
   shareId,
+  open,
   documentId,
   title,
   cached,
@@ -70,7 +72,7 @@ export function SharedSummaryPanel({
   return (
     <FloatingSidePanel
       modal={false}
-      open={documentId !== null}
+      open={open}
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
@@ -86,13 +88,19 @@ export function SharedSummaryPanel({
         target.focus();
       }}
     >
-      {documentId ? (
+      {open && documentId ? (
         <SharedSummaryBody
           key={documentId}
           shareId={shareId}
           documentId={documentId}
           cached={cached}
         />
+      ) : open ? (
+        <div className={summaryStyles.body}>
+          <p role="status" className={summaryStyles.note}>
+            이 문서의 요약을 볼 수 없습니다.
+          </p>
+        </div>
       ) : null}
     </FloatingSidePanel>
   );

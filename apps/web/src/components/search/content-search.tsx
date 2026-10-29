@@ -12,6 +12,7 @@
 import { Badge, Button, EmptyState, RadioGroup, Select } from '@quiz/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { summaryOwnsDocumentKey } from '@/lib/workspaces/home';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import {
   createSearchClient,
@@ -264,8 +265,11 @@ export function useContentSearch({
           void run({ ...last, chapterId: null });
         } else {
           const url = new URL(window.location.href);
-          url.searchParams.delete('section');
-          window.history.replaceState(window.history.state, '', url);
+          // An open 문서 요약 panel owns `document`/`section` (DOCSUM-01).
+          if (!summaryOwnsDocumentKey(url.searchParams)) {
+            url.searchParams.delete('section');
+            window.history.replaceState(window.history.state, '', url);
+          }
         }
       }
     };
@@ -340,9 +344,11 @@ export function useContentSearch({
       setChapterId(null);
       setChapterNotice(null);
       const url = new URL(window.location.href);
-      url.searchParams.delete('document');
-      url.searchParams.delete('section');
-      window.history.replaceState(window.history.state, '', url);
+      if (!summaryOwnsDocumentKey(url.searchParams)) {
+        url.searchParams.delete('document');
+        url.searchParams.delete('section');
+        window.history.replaceState(window.history.state, '', url);
+      }
     },
     retry: () => {
       if (submitted) void run(submitted);

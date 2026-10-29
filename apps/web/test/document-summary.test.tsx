@@ -30,7 +30,12 @@ import {
   type WorkspaceJob,
 } from '../src/lib/history/model';
 import { parseSharedViewParams, sharedSummaryHref } from '../src/lib/shared/view-state';
+import { mergeContentSearch } from '../src/lib/search/state';
+import { SharedSummaryPanel } from '../src/components/shared/shared-summary';
 import {
+  contentSearchParams,
+  keepSummaryDocument,
+  ownSummaryDocument,
   parsePanels,
   summaryDocumentId,
   summaryPanelPath,
@@ -258,6 +263,88 @@ describe('summary client', () => {
   });
 });
 
+const OTHER = '55555555-2222-4333-8444-555555555555';
+
+describe('the summary panel owns the URL document key (Codex P2)', () => {
+  const search = (q: Partial<Parameters<typeof mergeContentSearch>[1]>) => ({
+    query: 'x',
+    mode: 'hybrid' as const,
+    documentId: null,
+    chapterId: null,
+    includeQuestionPapers: false,
+    ...q,
+  });
+
+  it("content-search writes keep the open panel's document and section", () => {
+    const open = `?q=x&panel=document-summary&document=${DOC}`;
+    // A search with another document filter, or none, never replaces or removes it.
+    expect(
+      new URLSearchParams(
+        mergeContentSearch(open, search({ documentId: OTHER, chapterId: 's' })),
+      ).get('document'),
+    ).toBe(DOC);
+    const cleared = new URLSearchParams(mergeContentSearch(open, search({ query: 'y' })));
+    expect(cleared.get('document')).toBe(DOC);
+    expect(cleared.get('section')).toBeNull();
+    expect(cleared.get('q')).toBe('y');
+    expect(keepSummaryDocument(open, '?q=z')).toBe(`?q=z&document=${DOC}`);
+  });
+
+  it('writes behave as before once the panel is closed', () => {
+    const closed = `?q=x&document=${DOC}&section=s`;
+    const next = new URLSearchParams(mergeContentSearch(closed, search({ documentId: OTHER })));
+    expect(next.get('document')).toBe(OTHER);
+    expect(next.get('section')).toBeNull();
+    expect(keepSummaryDocument(closed, '?q=z')).toBe('?q=z');
+  });
+
+  it('reads the executed filter, not the panel document, while the panel is open', () => {
+    const open = new URLSearchParams(`q=x&panel=document-summary&document=${DOC}`);
+    const withFilter = contentSearchParams(open, { documentId: OTHER, chapterId: 's' });
+    expect(withFilter.get('document')).toBe(OTHER);
+    expect(withFilter.get('section')).toBe('s');
+    expect(contentSearchParams(open, null).get('document')).toBeNull();
+    const closed = new URLSearchParams(`q=x&document=${OTHER}`);
+    expect(contentSearchParams(closed, null)).toBe(closed);
+  });
+
+  it('closing the panel hands the executed filter back to the content search', () => {
+    const open = `?q=x&panel=documents&panel=document-summary&document=${DOC}`;
+    const closed = new URLSearchParams(
+      withSummaryPanel(open, null, { documentId: OTHER, chapterId: 's' }),
+    );
+    expect(parsePanels(closed)).toEqual(['documents']);
+    expect(closed.get('document')).toBe(OTHER);
+    expect(closed.get('section')).toBe('s');
+    expect(new URLSearchParams(withSummaryPanel(open, null)).get('document')).toBeNull();
+  });
+});
+
+describe("only the current workspace's (or share's) documents (Codex P2)", () => {
+  it('resolves the panel document against the list', () => {
+    const docs = [{ id: DOC, title: '물' }];
+    expect(ownSummaryDocument(DOC, docs)).toEqual(docs[0]);
+    expect(ownSummaryDocument(OTHER, docs)).toBeNull();
+    expect(ownSummaryDocument(null, docs)).toBeNull();
+  });
+
+  it('the guest panel shows "볼 수 없습니다" without requesting another document', () => {
+    const fetchSpy = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchSpy);
+    render(
+      <SharedSummaryPanel
+        shareId={WS}
+        open
+        documentId={null}
+        title={null}
+        onClose={() => undefined}
+      />,
+    );
+    expect(screen.getByText('이 문서의 요약을 볼 수 없습니다.')).toBeTruthy();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('summary URLs and labels', () => {
   it('opens and closes the home panel with its document', () => {
     const opened = withSummaryPanel('?panel=documents&q=x', DOC);
@@ -347,6 +434,22 @@ function renderPanel(initial: SummaryState, props: { canEdit?: boolean } = {}) {
 }
 
 describe('DocumentSummaryPanel', () => {
+  it('loads nothing for a document outside the workspace (null) and says it is not found', async () => {
+    const fake = fakeClient(state());
+    render(
+      <DocumentSummaryPanel
+        open
+        onOpenChange={() => undefined}
+        workspaceId={WS}
+        documentId={null}
+        canEdit
+        client={fake.client}
+      />,
+    );
+    expect(await screen.findByText(/문서를 찾을 수 없습니다/)).toBeTruthy();
+    expect(fake.client.get).not.toHaveBeenCalled();
+  });
+
   it('opens at once, then offers an editor 요약 만들기 that starts one run for two presses', async () => {
     const user = userEvent.setup();
     const { client, panel, onActivity } = renderPanel(state());

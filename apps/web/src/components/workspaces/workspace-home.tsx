@@ -87,7 +87,9 @@ import {
   scopeOf,
   withChapterNote,
   summaryDocumentId,
-  withoutSummaryDocument,
+  contentSearchParams,
+  ownSummaryDocument,
+  type ContentDocumentFilter,
   withPanel,
   withSummaryPanel,
   type HomePanel,
@@ -164,9 +166,10 @@ export function WorkspaceHome({
     if (open && isOpen(panel)) {
       setRaised((r) => ({ ...r, [panel]: (r[panel] ?? 0) + 1 }));
     }
+    // Closing the summary panel hands `document`/`section` back to the executed content search.
     const search =
       panel === 'document-summary' && !open
-        ? withSummaryPanel(window.location.search, null)
+        ? withSummaryPanel(window.location.search, null, executedFilter())
         : withPanel(window.location.search, panel, open);
     window.history.pushState(null, '', `${pathname}${search}`);
   };
@@ -264,9 +267,9 @@ export function WorkspaceHome({
   // UX6-UPLOAD: `문서 n` counts the PDFs with body text (교재, 교재+문제).
   const bookCount = bodyDocumentCount(library.documents);
   const summaryActivity = useSummaryActivity(workspace.id, isOpen('documents'));
-  const summaryDocument = summaryDocId
-    ? (library.documents.find((d) => d.id === summaryDocId) ?? null)
-    : null;
+  // Only this workspace's documents: another workspace's id (even one the user can read) is
+  // "문서를 찾을 수 없습니다." and is never loaded here (DOCSUM-01-AC07).
+  const summaryDocument = ownSummaryDocument(summaryDocId, library.documents);
   const searchDocuments = library.documents
     .filter((d) => d.active_revision_id !== null)
     .map((d) => ({
@@ -331,10 +334,15 @@ export function WorkspaceHome({
   }
   // Question papers follow the 문제 checkbox, not the URL's `papers` flag (unwritten while a
   // search had no body to run on, UX6).
-  // The summary panel's `document` key is not a content-search filter (withoutSummaryDocument).
+  // While the summary panel owns `document`/`section`, the content search reads its own executed
+  // filter there (contentSearchParams): opening or closing the panel never re-runs a search.
+  const executedFilter = (): ContentDocumentFilter | null =>
+    content.submitted
+      ? { documentId: content.submitted.documentId, chapterId: content.submitted.chapterId }
+      : null;
   const contentKey = readiness.effective.body
     ? addressBarContentKey(
-        Object.fromEntries(withoutSummaryDocument(searchParams)),
+        Object.fromEntries(contentSearchParams(searchParams, executedFilter())),
         scopeIncludesQuestions(scope),
       )
     : '';
@@ -631,7 +639,7 @@ export function WorkspaceHome({
             raiseKey={raised['document-summary']}
             container={host}
             workspaceId={workspace.id}
-            documentId={summaryDocId}
+            documentId={summaryDocument?.id ?? null}
             documentTitle={summaryDocument?.title ?? null}
             questionPaper={summaryDocument?.document_type === 'question_paper'}
             canEdit={canEdit}

@@ -135,13 +135,82 @@ export function summaryDocumentId(params: Params): string | null {
   return id !== undefined && UUID.test(id) ? id : null;
 }
 
+/** The content-search filter the summary panel borrowed the `document`/`section` keys from. */
+export interface ContentDocumentFilter {
+  readonly documentId: string | null;
+  readonly chapterId: string | null;
+}
+
 /**
- * `search` with the summary panel opened on `documentId` (moved on top) or, for null, closed
- * (its `document` key goes with it).
+ * `search` with the summary panel opened on `documentId` (moved on top) or, for null, closed.
+ * While the panel is open the `document` key is the panel's; closing it hands `document` and
+ * `section` back to the content search: `restore` (the executed search's filter) or nothing.
  */
-export function withSummaryPanel(search: string, documentId: string | null): string {
+export function withSummaryPanel(
+  search: string,
+  documentId: string | null,
+  restore: ContentDocumentFilter | null = null,
+): string {
   const panels = withPanel(search, SUMMARY_PANEL, documentId !== null);
-  return patchSearch(panels, { [SUMMARY_DOCUMENT_PARAM]: documentId });
+  if (documentId !== null) return patchSearch(panels, { [SUMMARY_DOCUMENT_PARAM]: documentId });
+  const doc = restore?.documentId ?? null;
+  return patchSearch(panels, {
+    [SUMMARY_DOCUMENT_PARAM]: doc,
+    section: doc ? (restore?.chapterId ?? null) : null,
+  });
+}
+
+/** Whether the summary panel owns the URL's `document`/`section` keys (it is open). */
+export function summaryOwnsDocumentKey(params: Params): boolean {
+  return parsePanels(params).includes(SUMMARY_PANEL);
+}
+
+/**
+ * The address-bar params as the content search reads them. While the summary panel owns
+ * `document`/`section`, they are replaced by the executed search's own filter (`executed`), so
+ * opening, switching or closing the panel never changes what the content search runs on.
+ */
+export function contentSearchParams(
+  params: URLSearchParams,
+  executed: ContentDocumentFilter | null,
+): URLSearchParams {
+  if (!summaryOwnsDocumentKey(params)) return params;
+  const out = new URLSearchParams(params);
+  out.delete(SUMMARY_DOCUMENT_PARAM);
+  out.delete('section');
+  if (executed?.documentId) {
+    out.set(SUMMARY_DOCUMENT_PARAM, executed.documentId);
+    if (executed.chapterId) out.set('section', executed.chapterId);
+  }
+  return out;
+}
+
+/**
+ * A content-search write of `next` (a full query string) onto `current`: while the summary panel
+ * owns `document`/`section` in `current`, those keys keep `current`'s values whatever `next` says.
+ */
+export function keepSummaryDocument(current: string, next: string): string {
+  const before = new URLSearchParams(current);
+  if (!summaryOwnsDocumentKey(before)) return next;
+  const after = new URLSearchParams(next);
+  for (const key of [SUMMARY_DOCUMENT_PARAM, 'section']) {
+    after.delete(key);
+    for (const value of before.getAll(key)) after.append(key, value);
+  }
+  const query = after.toString();
+  return query ? `?${query}` : '';
+}
+
+/**
+ * The summary panel's document when it is one of `documents` (this workspace's list), else null:
+ * an id from another workspace is never loaded on this home, even when the user can read it.
+ */
+export function ownSummaryDocument<T extends { readonly id: string }>(
+  documentId: string | null,
+  documents: readonly T[],
+): T | null {
+  if (!documentId) return null;
+  return documents.find((d) => d.id === documentId) ?? null;
 }
 
 /** The summary panel of `documentId` on the workspace home (the DOC-02 header link). */
