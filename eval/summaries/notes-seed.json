@@ -1,0 +1,267 @@
+{
+  "schema_version": 1,
+  "description": "Synthetic chapter-note evaluation set (DOCSUM-X). Hand-written CONFIRMED-style questions with explanations over the chapters of the synthetic books tests/fixtures/pdfs/book-ko and book-en; `keywords` are the concepts a note item must name to be supported by that question (footnote precision) and that the note should carry (keyword coverage). `fake_response` is the scripted LLM output of `--provider fake` (task chapter_notes.generate), written with deliberate faults so the metrics are not trivially 100%: book-ko ch1 has an item citing the wrong question and one citing Q99 (rejected once, then dropped); book-en ch1 leaves Q3 uncited. No real book or exam text.",
+  "chapters": [
+    {
+      "id": "book-ko/ch1",
+      "book": "tests/fixtures/pdfs/book-ko.truth.json",
+      "section_id": "ch1",
+      "chapter_number": 1,
+      "questions": [
+        {
+          "question_type": "MCQ",
+          "stem": "물 분자가 에너지를 얻어 수증기가 되는 과정은?",
+          "options": [
+            { "text": "증발", "correct": true },
+            { "text": "응결", "correct": false },
+            { "text": "침투", "correct": false }
+          ],
+          "explanation": "햇빛이 물의 표면을 데우면 물 분자가 에너지를 얻어 수증기가 된다. 이를 증발이라고 한다.",
+          "keywords": ["증발", "수증기"]
+        },
+        {
+          "question_type": "MCQ",
+          "stem": "온도가 이슬점 아래로 떨어진 공기에서 수증기가 물방울이 되는 과정은?",
+          "options": [
+            { "text": "강수", "correct": false },
+            { "text": "응결", "correct": true },
+            { "text": "증산", "correct": false }
+          ],
+          "explanation": "상승한 공기가 식어 이슬점 아래가 되면 수증기가 작은 입자를 중심으로 모여 물방울이 된다. 이 과정이 응결이며 물방울이 모인 것이 구름이다.",
+          "keywords": ["응결", "이슬점"]
+        },
+        {
+          "question_type": "SHORT_ANSWER",
+          "stem": "빗물이 땅속으로 스며드는 과정을 무엇이라고 하는가?",
+          "accepted_answers": ["침투"],
+          "explanation": "지표의 빗물 일부는 흙 속으로 스며들어 지하수가 되는데, 이 과정을 침투라고 한다. 지표 위를 흐르는 물은 유출이다.",
+          "keywords": ["침투", "지하수"]
+        }
+      ],
+      "fake_response": {
+        "sections": [
+          {
+            "heading": "물의 상태 변화",
+            "items": [
+              {
+                "text": "증발은 물 분자가 에너지를 얻어 수증기가 되는 과정이다.",
+                "tags": ["Q1"],
+                "quote": "이 과정을 증발이라고 한다."
+              },
+              {
+                "text": "공기가 이슬점 아래로 식으면 수증기가 응결하여 구름이 된다.",
+                "tags": ["Q2"],
+                "quote": null
+              },
+              {
+                "text": "식물의 잎에서 수증기가 빠져나가는 증산도 대기 수증기의 공급원이다.",
+                "tags": ["Q3"],
+                "quote": null
+              },
+              {
+                "text": "강수는 구름 속 물방울이 무거워져 떨어지는 현상이다.",
+                "tags": ["Q99"],
+                "quote": null
+              }
+            ]
+          },
+          {
+            "heading": "땅에 닿은 물",
+            "items": [
+              {
+                "text": "빗물이 흙 속으로 스며드는 침투로 지하수가 생긴다.",
+                "tags": ["Q3"],
+                "quote": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "book-ko/ch2",
+      "book": "tests/fixtures/pdfs/book-ko.truth.json",
+      "section_id": "ch2",
+      "chapter_number": 2,
+      "questions": [
+        {
+          "question_type": "MCQ",
+          "stem": "응집제를 넣어 작은 입자가 달라붙어 생긴 덩어리를 무엇이라 하는가?",
+          "options": [
+            { "text": "플록", "correct": true },
+            { "text": "슬러지", "correct": false },
+            { "text": "여과층", "correct": false }
+          ],
+          "explanation": "응집 단계에서 미세 입자가 달라붙어 눈에 보이는 덩어리인 플록이 된다.",
+          "keywords": ["플록", "응집"]
+        },
+        {
+          "question_type": "MCQ",
+          "stem": "플록이 가라앉도록 물을 몇 시간 머물게 하는 시설은?",
+          "options": [
+            { "text": "여과지", "correct": false },
+            { "text": "침전지", "correct": true },
+            { "text": "배수지", "correct": false }
+          ],
+          "explanation": "플록이 생긴 물은 침전지에서 몇 시간 머물며 무거운 플록이 바닥으로 가라앉는다.",
+          "keywords": ["침전지", "침전"]
+        },
+        {
+          "question_type": "MCQ",
+          "stem": "수도관을 따라 이동하는 동안에도 효과가 유지되는 소독제는?",
+          "options": [
+            { "text": "염소", "correct": true },
+            { "text": "모래", "correct": false },
+            { "text": "응집제", "correct": false }
+          ],
+          "explanation": "염소는 관로에서도 소독 효과가 유지되지만 너무 많으면 냄새가 나므로 농도를 조절한다.",
+          "keywords": ["염소", "소독"]
+        }
+      ],
+      "fake_response": {
+        "sections": [
+          {
+            "heading": "응집과 침전",
+            "items": [
+              {
+                "text": "응집제를 넣으면 미세 입자가 뭉쳐 플록이 된다.",
+                "tags": ["Q1"],
+                "quote": "이 덩어리를 플록이라고 부르며"
+              },
+              {
+                "text": "침전지에서 플록이 가라앉고 맑은 물만 다음 단계로 간다.",
+                "tags": ["Q2"],
+                "quote": null
+              },
+              {
+                "text": "응집이 잘 되어야 침전의 효율이 높아진다.",
+                "tags": ["Q1", "Q2"],
+                "quote": null
+              }
+            ]
+          },
+          {
+            "heading": "소독",
+            "items": [
+              {
+                "text": "염소 소독은 관로에서도 효과가 유지되며 농도 조절이 필요하다.",
+                "tags": ["Q3"],
+                "quote": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "book-en/ch1",
+      "book": "tests/fixtures/pdfs/book-en.truth.json",
+      "section_id": "ch1",
+      "chapter_number": 1,
+      "questions": [
+        {
+          "question_type": "MCQ",
+          "stem": "What is the process in which water molecules gain energy and become water vapor?",
+          "options": [
+            { "text": "Evaporation", "correct": true },
+            { "text": "Runoff", "correct": false },
+            { "text": "Infiltration", "correct": false }
+          ],
+          "explanation": "Sunlight warms the water surface and some molecules become vapor; this is evaporation.",
+          "keywords": ["evaporation", "vapor"]
+        },
+        {
+          "question_type": "MCQ",
+          "stem": "Why does rising moist air form clouds?",
+          "options": [
+            { "text": "It warms and expands", "correct": false },
+            { "text": "It cools below the dew point and the vapor condenses", "correct": true },
+            { "text": "It absorbs salt", "correct": false }
+          ],
+          "explanation": "Rising air expands and cools; below the dew point vapor condenses into droplets that make up a cloud.",
+          "keywords": ["condens", "dew point"]
+        },
+        {
+          "question_type": "SHORT_ANSWER",
+          "stem": "What is water flowing over the ground surface called?",
+          "accepted_answers": ["runoff"],
+          "explanation": "Rain that does not soak into the soil flows downhill over the surface; this is runoff.",
+          "keywords": ["runoff"]
+        }
+      ],
+      "fake_response": {
+        "sections": [
+          {
+            "heading": "Changes of state",
+            "items": [
+              {
+                "text": "Evaporation turns surface water into vapor when molecules gain energy.",
+                "tags": ["Q1"],
+                "quote": "This process is called evaporation."
+              },
+              {
+                "text": "Air cooled below the dew point lets vapor condense into cloud droplets.",
+                "tags": ["Q2"],
+                "quote": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "book-en/ch2",
+      "book": "tests/fixtures/pdfs/book-en.truth.json",
+      "section_id": "ch2",
+      "chapter_number": 2,
+      "questions": [
+        {
+          "question_type": "MCQ",
+          "stem": "What are the clumps formed when a coagulant is added to raw water called?",
+          "options": [
+            { "text": "Flocs", "correct": true },
+            { "text": "Sludge", "correct": false },
+            { "text": "Filter beds", "correct": false }
+          ],
+          "explanation": "During coagulation small particles stick together into visible clumps called flocs.",
+          "keywords": ["floc", "coagula"]
+        },
+        {
+          "question_type": "MCQ",
+          "stem": "How are filter beds cleaned?",
+          "options": [
+            { "text": "By adding chlorine", "correct": false },
+            { "text": "By pumping water through them in the opposite direction", "correct": true },
+            { "text": "By replacing the gravel daily", "correct": false }
+          ],
+          "explanation": "Sand and gravel filter beds are cleaned regularly by pumping water through them backwards.",
+          "keywords": ["filter", "opposite direction"]
+        }
+      ],
+      "fake_response": {
+        "sections": [
+          {
+            "heading": "Treatment stages",
+            "items": [
+              {
+                "text": "A coagulant makes fine particles form flocs.",
+                "tags": ["Q1"],
+                "quote": null
+              },
+              {
+                "text": "Filter beds are cleaned by pumping water through them in the opposite direction.",
+                "tags": ["Q2"],
+                "quote": null
+              },
+              {
+                "text": "Coagulation decides how well the filter stage works.",
+                "tags": ["Q1", "Q2"],
+                "quote": null
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

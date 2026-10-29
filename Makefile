@@ -25,7 +25,7 @@ SUPABASE := pnpm exec supabase
 SIGNING_KEYS := supabase/signing_keys.json
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
-	test test-ts test-py test-infra test-models test-llm test-workers-ai eval eval-models eval-workers-ai auth-keys infra-up infra-down infra-status infra-reset \
+	test test-ts test-py test-infra test-models test-llm test-workers-ai eval eval-models eval-workers-ai eval-summaries eval-summaries-llm auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
 	e2e e2e-browsers e2e-trace test-red images image-api image-api-models image-worker image-web reindex backup restore \
 	check-env deploy-prepare smoke-local smoke-staging
@@ -133,6 +133,23 @@ eval-models: ## Retrieval evaluation with Qwen3 embedder + reranker -> eval/repo
 eval-workers-ai: ## Retrieval evaluation with the Workers AI embedder -> eval/reports/seed-workers-ai.{json,md}
 	uv run core eval $(EVAL_DATASET) --config eval/configs/workers-ai.json \
 		-o eval/reports/seed-workers-ai.json --markdown eval/reports/seed-workers-ai.md
+
+# Summary / chapter-note evaluation (DOCSUM-X, eval/summaries/): page-citation validity and chapter
+# coverage of document summaries over the synthetic books, footnote precision/coverage of chapter
+# notes over the synthetic question set. `eval-summaries` uses the deterministic fakes (offline);
+# `eval-summaries-llm` calls the real provider (LLM_API_KEY/LLM_MODEL, optional LLM_PRICE_* for
+# cost_usd; billed, sends only the synthetic fixtures). Reports hold numbers, never text.
+eval-summaries: ## Summary + chapter-note evaluation with fakes -> eval/reports/{summaries,notes}-fake.{json,md}
+	uv run python eval/summaries/summary_eval.py \
+		-o eval/reports/summaries-fake.json --markdown eval/reports/summaries-fake.md
+	uv run python eval/summaries/note_eval.py \
+		-o eval/reports/notes-fake.json --markdown eval/reports/notes-fake.md
+
+eval-summaries-llm: ## Same with the real LLM provider (billed) -> eval/reports/{summaries,notes}-llm.{json,md}
+	uv run python eval/summaries/summary_eval.py --provider llm \
+		-o eval/reports/summaries-llm.json --markdown eval/reports/summaries-llm.md
+	uv run python eval/summaries/note_eval.py --provider llm \
+		-o eval/reports/notes-llm.json --markdown eval/reports/notes-llm.md
 
 auth-keys: $(SIGNING_KEYS) ## Generate the local Auth JWT signing key if missing (idempotent)
 
