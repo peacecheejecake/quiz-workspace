@@ -44,7 +44,12 @@ export interface RelayOptions {
   readonly stream?: boolean;
   /** Ends the upstream request when the browser goes away. */
   readonly signal?: AbortSignal;
+  /** Pass a successful file response through: its `Content-Disposition` (DOC-03 export). */
+  readonly attachment?: boolean;
 }
+
+/** `attachment` Content-Disposition values FastAPI sends (no CR/LF, bounded). */
+const ATTACHMENT = /^attachment;[\x20-\x7e]{1,2048}$/;
 
 async function readJsonBody(request: Request, maxBytes: number): Promise<string | null> {
   if (Number(request.headers.get('content-length') ?? 0) > maxBytes) return null;
@@ -84,7 +89,11 @@ export async function relayToApi(path: string, options: RelayOptions): Promise<R
       method: options.method,
       headers: {
         ...bearerHeaders(token),
-        accept: options.stream ? 'text/event-stream' : 'application/json',
+        accept: options.stream
+          ? 'text/event-stream'
+          : options.attachment
+            ? 'text/markdown, text/plain, application/json'
+            : 'application/json',
         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
         ...(idempotencyKey !== null ? { 'idempotency-key': idempotencyKey } : {}),
       },
@@ -109,6 +118,11 @@ export async function relayToApi(path: string, options: RelayOptions): Promise<R
     return new Response(upstream.body, { status: upstream.status, headers });
   }
   if (upstream.status === 204) return new Response(null, { status: 204, headers });
+  const disposition = upstream.headers.get('content-disposition');
+  if (options.attachment && upstream.ok && disposition && ATTACHMENT.test(disposition)) {
+    headers.set('Content-Disposition', disposition);
+    headers.set('X-Content-Type-Options', 'nosniff');
+  }
   return new Response(await upstream.arrayBuffer(), { status: upstream.status, headers });
 }
 

@@ -114,7 +114,8 @@ class NoStoreMiddleware:
 
     Applied to every response under `path_prefix` (success and error alike), and to any
     response to a request that carried an `Authorization` header, overriding whatever the
-    route set: authenticated responses must never land in a shared cache. Public endpoints
+    route set unless that is already `no-store` (DOC-03 file exports send `private, no-store`):
+    authenticated responses must never land in a shared cache. Public endpoints
     outside the prefix that want caching set their own header.
 
     Responses under `shared_prefix` (the guest share routes, docs/workspace-sharing.md §2) get
@@ -150,6 +151,8 @@ class NoStoreMiddleware:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
                 for key, value in extra.items():
+                    if key == "Cache-Control" and "no-store" in headers.get(key, ""):
+                        continue  # the route's own no-store (e.g. `private, no-store`) stays
                     headers[key] = value
             await send(message)
 

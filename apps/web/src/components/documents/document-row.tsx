@@ -4,7 +4,7 @@
 // ready; the file name in its tooltip) with the kind badge (교재 / 문제지 / 교재+문제, "분석 중"
 // until classified, UX6-UPLOAD) and the status badge right next to it, a meta line
 // "<date time> · <size>", the live progress — upload progress with cancel, parse/index progress,
-// the failure reason with retry — and a trash icon button to delete. Upload and processing are one
+// the failure reason with retry — `텍스트 내보내기` (DOC-03) and a trash icon button to delete. Upload and processing are one
 // step progress 업로드 → 분석 → 색인 (UX6-PROGRESS) whose bar never drops back between steps. A
 // long-running job also shows how long it has waited or run, with a hint (DOC-01-AC05). State is always text, never colour
 // alone (the badge text carries it).
@@ -23,6 +23,7 @@ import type { DocumentKind } from '@/lib/documents/client-api';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
 import { formatBytes } from '@/lib/documents/validation';
 import { DocumentKindMenu } from './document-kind-menu';
+import { TextExportMenu } from './text-export-menu';
 import styles from './documents.module.css';
 import {
   DOCUMENT_STEPS,
@@ -51,6 +52,8 @@ export interface DocumentRowProps {
     /** Why the last change was refused (shown as an alert in the row). */
     readonly failure?: string;
   };
+  /** `텍스트 내보내기` on ready rows for every member (문서 관리, DOC-03). */
+  readonly textExport?: boolean;
 }
 
 export function DocumentRowItem({
@@ -62,6 +65,7 @@ export function DocumentRowItem({
   onDelete,
   actions,
   kindChange,
+  textExport = false,
 }: DocumentRowProps) {
   const { localId } = row;
   const href =
@@ -120,6 +124,9 @@ export function DocumentRowItem({
           <Button size="sm" onClick={() => onCancel(localId)}>
             업로드 취소
           </Button>
+        ) : null}
+        {textExport && row.documentId && row.status === 'ready' ? (
+          <TextExportMenu documentId={row.documentId} title={row.title} variant="row" />
         ) : null}
         {canEdit && row.documentId && !row.cancellable ? (
           <IconButton

@@ -4,7 +4,8 @@
 // canonical text pane side by side (tabs on mobile). Readers (viewer role, archived workspace)
 // see the active published revision without edit controls; editors see the latest revision (the
 // correction draft when there is one), correct blocks inline, publish the draft (index job
-// followed live) and roll back from the revision history. FastAPI decides every write.
+// followed live) and roll back from the revision history. The header's `텍스트 내보내기` menu
+// (DOC-03) saves or copies the text. FastAPI decides every write.
 import { Button, PageHeader } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -44,6 +45,7 @@ import {
 } from '@/lib/documents/publish-state';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import { workspaceHomePath } from '@/lib/workspaces/home';
+import { TextExportMenu } from '../text-export-menu';
 import styles from './editor.module.css';
 import { OutlineTree } from './outline-tree';
 import { PdfViewer } from './pdf-viewer';
@@ -575,6 +577,24 @@ export function DocumentEditor({
             publish,
           });
 
+  // DOC-03: editors with an unpublished correction draft export either revision; `전체 복사`
+  // copies the revision on screen. A pinned (search-hit) view does not load the draft, so the
+  // document detail tells whether one exists.
+  const latest = document.latest_revision;
+  const draftExists =
+    canEdit &&
+    (draft !== null ||
+      (pinned && latest?.status === 'draft' && latest.id !== document.active_revision_id));
+  const textExport = ready ? (
+    <TextExportMenu
+      documentId={documentId}
+      title={document.title}
+      variant="header"
+      draft={draftExists}
+      copyRevision={content?.revision && isDraft(content.revision) ? 'draft' : 'published'}
+    />
+  ) : undefined;
+
   const highlights = viewerHighlights(currentBlock, outlineJump, blocks, page);
   const currentSection = sectionOf(currentBlock, outline);
 
@@ -590,6 +610,7 @@ export function DocumentEditor({
           />
         }
         description={document.filename !== document.title ? document.filename : undefined}
+        actions={textExport}
       />
 
       <PublishBar

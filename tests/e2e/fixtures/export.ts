@@ -142,7 +142,8 @@ async function readDownload(event: Download): Promise<DownloadedFile> {
   if (failure) throw new Error(`download failed: ${failure}`);
   const path = await event.path();
   const bytes = await readFile(path);
-  return { name: event.suggestedFilename(), bytes, text: bytes.toString('utf8') };
+  // WebKit on macOS reports the saved (file-system, NFD) spelling of a Hangul name; compare NFC.
+  return { name: event.suggestedFilename().normalize('NFC'), bytes, text: bytes.toString('utf8') };
 }
 
 /** Records clipboard writes of the page (assumption D3); read them with copiedTexts(). */

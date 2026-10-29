@@ -179,6 +179,26 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/documents/{document_id}/text': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Export Document Text
+     * @description The document's canonical text as a Markdown or text file (DOC-03).
+     */
+    get: operations['exportDocumentText'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/documents/complete-upload': {
     parameters: {
       query?: never;
@@ -5421,6 +5441,79 @@ export interface operations {
       };
       /** @description Service Unavailable */
       503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  exportDocumentText: {
+    parameters: {
+      query?: {
+        /** @description `md` (Markdown) or `txt` (plain text); `markdown` / `plain` alike. */
+        format?: 'md' | 'txt' | 'markdown' | 'plain';
+        /** @description `published` (default) or the unpublished correction `draft` (owners and editors). */
+        revision?: 'published' | 'draft';
+      };
+      header?: never;
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The document text as a file (attachment). */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'text/markdown': string;
+          'text/plain': string;
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
         headers: {
           [name: string]: unknown;
         };

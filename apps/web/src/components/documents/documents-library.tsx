@@ -70,6 +70,7 @@ export function DocumentsLibrary({
         emptyText="아직 문서가 없습니다"
         rowActions={questions.rowActions}
         kindMenu
+        textExport
       />
     </div>
   );
@@ -85,6 +86,7 @@ export function DocumentRows({
   emptyText,
   rowActions,
   kindMenu = false,
+  textExport = false,
 }: {
   readonly label: string;
   readonly rows: readonly DocumentRow[];
@@ -96,6 +98,8 @@ export function DocumentRows({
   readonly rowActions?: (row: DocumentRow) => ReactNode;
   /** Offer editors `종류 변경` on ready rows (문서 관리). */
   readonly kindMenu?: boolean;
+  /** Offer every member `텍스트 내보내기` on ready rows (문서 관리, DOC-03). */
+  readonly textExport?: boolean;
 }) {
   return (
     <>
@@ -121,6 +125,7 @@ export function DocumentRows({
               onRetry={library.retry}
               onDelete={library.requestDelete}
               actions={rowActions?.(row)}
+              textExport={textExport}
               kindChange={
                 kindMenu && canEdit && row.documentId
                   ? {

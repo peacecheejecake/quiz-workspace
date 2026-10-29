@@ -67,6 +67,8 @@ class ProblemType(StrEnum):
     DOCUMENT_NOT_READY = "urn:quiz-workspace:problem:document-not-ready"
     # 409: a correction was based on block text (or a draft) that changed since it was loaded.
     EDIT_CONFLICT = "urn:quiz-workspace:problem:edit-conflict"
+    # 404: `revision=draft` of a document without an unpublished correction draft (DOC-03).
+    DRAFT_NOT_FOUND = "urn:quiz-workspace:problem:draft-not-found"
     # 409: the draft is being published (indexing); wait for the job, then edit again.
     PUBLISH_IN_PROGRESS = "urn:quiz-workspace:problem:publish-in-progress"
     # 409: there is no correction draft, or it does not differ from the published revision.

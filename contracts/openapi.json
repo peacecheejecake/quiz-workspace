@@ -8780,6 +8780,134 @@
         ]
       }
     },
+    "/api/v1/documents/{document_id}/text": {
+      "get": {
+        "description": "The document's canonical text as a Markdown or text file (DOC-03).",
+        "operationId": "exportDocumentText",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`md` (Markdown) or `txt` (plain text); `markdown` / `plain` alike.",
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "md",
+              "description": "`md` (Markdown) or `txt` (plain text); `markdown` / `plain` alike.",
+              "enum": [
+                "md",
+                "txt",
+                "markdown",
+                "plain"
+              ],
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`published` (default) or the unpublished correction `draft` (owners and editors).",
+            "in": "query",
+            "name": "revision",
+            "required": false,
+            "schema": {
+              "default": "published",
+              "description": "`published` (default) or the unpublished correction `draft` (owners and editors).",
+              "enum": [
+                "published",
+                "draft"
+              ],
+              "title": "Revision",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The document text as a file (attachment)."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Export Document Text",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
     "/api/v1/jobs/{job_id}": {
       "get": {
         "description": "Current status of an async job (poll this, or stream `/jobs/{id}/events`).",

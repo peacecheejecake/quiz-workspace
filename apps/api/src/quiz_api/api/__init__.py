@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from quiz_api.api import (
+    document_export,
     document_revisions,
     documents,
     forks,
@@ -35,6 +36,7 @@ api_router.include_router(me.router)
 api_router.include_router(workspaces.router)
 api_router.include_router(documents.router)
 api_router.include_router(document_revisions.router)
+api_router.include_router(document_export.router)
 api_router.include_router(search.router)
 api_router.include_router(questions.router)
 api_router.include_router(question_overview.router)
