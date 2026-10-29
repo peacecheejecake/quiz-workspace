@@ -89,6 +89,7 @@ export * from './history.ts';
 export {
   attemptRevision,
   forgetImportRuns,
+  holdDocumentProcessing,
   seedGradedAttempt,
   seedImportDraftCopies,
   seedMembership,

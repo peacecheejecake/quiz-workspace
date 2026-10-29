@@ -12,6 +12,8 @@
 //      an import run (papers processed before QIMP-AUTO) for QIMPORT-01-AC06.
 //   5. Scaling up state the AC is about beyond what a synthetic fixture yields in E2E time: the
 //      hundreds of drafts of a real question PDF (copies of extracted drafts) for QIMPORT-01-AC09.
+//   6. Holding a parsed document in `processing` (DOC-03-AC03): with a worker running, no public
+//      API keeps a document unprocessed long enough to assert the row and the server's 409.
 // The URL is loopback-checked; ids are validated before they are inlined into SQL.
 import { execFileSync } from 'node:child_process';
 import { localDbAdminUrl } from './local-env.ts';
@@ -129,4 +131,16 @@ export function seedImportDraftCopies(importId: string, copies: number): number 
   return Number(
     psql(`select count(*) from public.question_drafts where import_run_id = ${run}`).trim(),
   );
+}
+
+/**
+ * Puts a document back into `processing` (use 6 in the file comment): the row shows as being
+ * processed and has no published revision, like a first upload whose parse has not finished.
+ */
+export function holdDocumentProcessing(documentId: string): void {
+  const n = psql(
+    `with u as (update public.documents set status = 'processing', active_revision_id = null ` +
+      `where id = ${uuidList([documentId])} returning 1) select count(*) from u`,
+  ).trim();
+  if (n !== '1') throw new Error('db fixture: document row not found');
 }
