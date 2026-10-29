@@ -2,7 +2,7 @@
 
 **상태:** 확정 화면 요구사항 v1.0 · DOCSUM-SPEC 신규 2026-10-29 (사용자 요청 "내용 요약 제공 — 문서 내용 변경될 때마다 새로 요약 생성 및 저장", 사용자 결정 Q1·Q10 "모두 홈에서 볼 수 있게")
 **Route:** `/workspaces/:workspaceId?panel=document-summary&document=:documentId` (Workspace 홈 위 non-modal panel; 진입은 문서 관리 dialog 행의 `요약` 버튼과 DOC-02 header의 `요약` 링크) · 공유 게스트는 `/share/:shareId?panel=document-summary&document=:documentId`
-**테스트:** `tests/e2e/documents/documents-summary.spec.ts` (계약: `tests/integration/documents/test_document_summary_contract.py`, `apps/worker` · `packages/core` unit test)
+**테스트:** `tests/e2e/documents/documents-summary.spec.ts` (계약: `tests/integration/documents/summary/test_document_summary_contract.py`, `apps/worker` · `packages/core` unit test)
 **Phase:** DOCSUM.0 (RED) → DOCSUM-B → DOCSUM-W
 **연계:** [전체 아키텍처](../architecture.md) §5·§6, [DOC-01](documents-library.md), [DOC-02](documents-editor.md), [공유 명세](../workspace-sharing.md) §8, [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
 
@@ -109,7 +109,7 @@ linked_tests: [DOCSUM-01-AC01 … DOCSUM-01-AC08]
 
 ## 계약 요구사항 (pytest·unit, 화면 AC 아님)
 
-`tests/integration/documents/test_document_summary_contract.py`, `apps/worker/tests`, `packages/core/tests`, `supabase/tests`(pgTAP).
+`tests/integration/documents/summary/test_document_summary_contract.py`, `apps/worker/tests`, `packages/core/tests`, `supabase/tests`(pgTAP).
 
 | ID | 요구사항 |
 |---|---|
