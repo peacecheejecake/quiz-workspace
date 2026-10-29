@@ -13,7 +13,8 @@
 //                     for the owner only)
 //   content results   the 본문 search results when the scope includes 본문
 //   문제 영역         the heatmap (QuestionsOverview)
-//   floating dialogs  문서 관리 · 문제 PDF 관리 · 문제 생성 · 이력 · 링크 공유 · 정리 노트: non-modal
+//   floating dialogs  문서 관리 · 문제 PDF 관리 · 문제 생성 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
+//                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): non-modal
 //                     FloatingSidePanels portalled into this page (inside <main>), opened at once
 //                     and listed in the URL (`?panel=`, repeatable); the most recently opened is
 //                     on top (UX3b stacking).
@@ -36,6 +37,8 @@ import {
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
+import { DocumentSummaryPanel } from '@/components/documents/summary/document-summary-panel';
+import { useSummaryActivity } from '@/components/documents/summary/use-summary-activity';
 import { bodyDocumentCount } from '@/components/documents/labels';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
@@ -83,7 +86,12 @@ import {
   scopeIncludesQuestions,
   scopeOf,
   withChapterNote,
+  summaryDocumentId,
+  contentSearchParams,
+  ownSummaryDocument,
+  type ContentDocumentFilter,
   withPanel,
+  withSummaryPanel,
   type HomePanel,
   type SearchScope,
 } from '@/lib/workspaces/home';
@@ -121,6 +129,7 @@ export interface WorkspaceHomeProps {
     readonly history: string;
     readonly share: string;
     readonly chapterNote: string;
+    readonly summary: string;
   };
 }
 
@@ -157,10 +166,25 @@ export function WorkspaceHome({
     if (open && isOpen(panel)) {
       setRaised((r) => ({ ...r, [panel]: (r[panel] ?? 0) + 1 }));
     }
+    // Closing the summary panel hands `document`/`section` back to the executed content search.
+    const search =
+      panel === 'document-summary' && !open
+        ? withSummaryPanel(window.location.search, null, executedFilter())
+        : withPanel(window.location.search, panel, open);
+    window.history.pushState(null, '', `${pathname}${search}`);
+  };
+  // DOCSUM-01: one summary panel; another row's 요약 switches its document (and raises it).
+  const summaryDocId = summaryDocumentId(searchParams);
+  const summaryOpenerRef = useRef<HTMLElement | null>(null);
+  const openSummary = (documentId: string, opener: HTMLElement) => {
+    summaryOpenerRef.current = opener;
+    if (isOpen('document-summary')) {
+      setRaised((r) => ({ ...r, 'document-summary': (r['document-summary'] ?? 0) + 1 }));
+    }
     window.history.pushState(
       null,
       '',
-      `${pathname}${withPanel(window.location.search, panel, open)}`,
+      `${pathname}${withSummaryPanel(window.location.search, documentId)}`,
     );
   };
   const [host, setHost] = useState<HTMLDivElement | null>(null);
@@ -242,6 +266,10 @@ export function WorkspaceHome({
   });
   // UX6-UPLOAD: `문서 n` counts the PDFs with body text (교재, 교재+문제).
   const bookCount = bodyDocumentCount(library.documents);
+  const summaryActivity = useSummaryActivity(workspace.id, isOpen('documents'));
+  // Only this workspace's documents: another workspace's id (even one the user can read) is
+  // "문서를 찾을 수 없습니다." and is never loaded here (DOCSUM-01-AC07).
+  const summaryDocument = ownSummaryDocument(summaryDocId, library.documents);
   const searchDocuments = library.documents
     .filter((d) => d.active_revision_id !== null)
     .map((d) => ({
@@ -306,8 +334,17 @@ export function WorkspaceHome({
   }
   // Question papers follow the 문제 checkbox, not the URL's `papers` flag (unwritten while a
   // search had no body to run on, UX6).
+  // While the summary panel owns `document`/`section`, the content search reads its own executed
+  // filter there (contentSearchParams): opening or closing the panel never re-runs a search.
+  const executedFilter = (): ContentDocumentFilter | null =>
+    content.submitted
+      ? { documentId: content.submitted.documentId, chapterId: content.submitted.chapterId }
+      : null;
   const contentKey = readiness.effective.body
-    ? addressBarContentKey(Object.fromEntries(searchParams), scopeIncludesQuestions(scope))
+    ? addressBarContentKey(
+        Object.fromEntries(contentSearchParams(searchParams, executedFilter())),
+        scopeIncludesQuestions(scope),
+      )
     : '';
   const syncedContentKey = useRef(contentKey);
   const syncContent = content.sync;
@@ -532,6 +569,7 @@ export function WorkspaceHome({
                     ? '뷰어 권한으로는 문서를 볼 수만 있습니다.'
                     : undefined
                 }
+                summary={{ onOpen: openSummary, busy: summaryActivity.busy }}
               />
             </div>
           </FloatingSidePanel>
@@ -594,6 +632,23 @@ export function WorkspaceHome({
             screenId={screenIds.chapterNote}
             onOpenQuestion={openNoteQuestion}
             onGeneratingChange={onNoteGenerating}
+          />
+          <DocumentSummaryPanel
+            open={isOpen('document-summary')}
+            onOpenChange={(open) => setPanel('document-summary', open)}
+            raiseKey={raised['document-summary']}
+            container={host}
+            workspaceId={workspace.id}
+            documentId={summaryDocument?.id ?? null}
+            // An id the list could not confirm because the list failed: retry, not "not found".
+            documentListFailed={summaryDocId !== null && !summaryDocument && library.listFailed}
+            onReloadDocumentList={() => void library.refresh()}
+            documentTitle={summaryDocument?.title ?? null}
+            questionPaper={summaryDocument?.document_type === 'question_paper'}
+            canEdit={canEdit}
+            screenId={screenIds.summary}
+            returnFocusTo={() => summaryOpenerRef.current}
+            onActivity={summaryActivity.report}
           />
           {isOwner && isOpen('share') ? (
             <WorkspaceSharingPanel

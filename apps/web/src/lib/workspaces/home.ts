@@ -2,9 +2,12 @@
 // The home `/workspaces/:id` carries, besides the heatmap filters (overview-filters.ts) and the
 // open question (`?question=`):
 //   ?panel=documents|question-pdfs|generate|history|share   open floating dialogs (repeatable, in
-//        |chapter-note                                       the order they were opened)
+//        |chapter-note|document-summary                      the order they were opened)
 //   ?chapter=<id> (with panel=chapter-note)                  the chapter of the 정리 노트 panel
 //                                                            (CHNOTE-01); see noteChapterOf
+//   &document=<id> (with panel=document-summary)             the summary panel's document (DOCSUM-01;
+//                                                            while that panel is open the key is
+//                                                            the panel's, not the content search's)
 //   ?q=<text>&scope=questions|content|none                    unified search (no scope = both;
 //                                                            none = both boxes off, UX6)
 //   ?mode=&document=&section=&papers=1                        content-search options (state.ts)
@@ -17,6 +20,7 @@ export const HOME_PANELS = [
   'history',
   'share',
   'chapter-note',
+  'document-summary',
 ] as const;
 export type HomePanel = (typeof HOME_PANELS)[number];
 export const PANEL_PARAM = 'panel';
@@ -117,6 +121,120 @@ export function keepNoteChapter(
   if (note === undefined) return merged;
   if (chapterFilter !== null) return withPanel(merged, CHAPTER_NOTE_PANEL, false);
   return patchSearch(merged, { [CHAPTER_PARAM]: note });
+}
+
+// --- 문서 요약 panel (DOCSUM-01) ---------------------------------------------------------------
+
+export const SUMMARY_PANEL = 'document-summary' satisfies HomePanel;
+export const SUMMARY_DOCUMENT_PARAM = 'document';
+
+/** The summary panel's document (DOCSUM-01) when that panel is open with a valid id, else null. */
+export function summaryDocumentId(params: Params): string | null {
+  if (!parsePanels(params).includes(SUMMARY_PANEL)) return null;
+  const id = all(params, SUMMARY_DOCUMENT_PARAM)[0];
+  return id !== undefined && UUID.test(id) ? id : null;
+}
+
+/** The content-search filter the summary panel borrowed the `document`/`section` keys from. */
+export interface ContentDocumentFilter {
+  readonly documentId: string | null;
+  readonly chapterId: string | null;
+}
+
+/**
+ * `search` with the summary panel opened on `documentId` (moved on top) or, for null, closed.
+ * While the panel is open the `document` key is the panel's; closing it hands `document` and
+ * `section` back to the content search: `restore` (the executed search's filter) or nothing.
+ */
+export function withSummaryPanel(
+  search: string,
+  documentId: string | null,
+  restore: ContentDocumentFilter | null = null,
+): string {
+  const panels = withPanel(search, SUMMARY_PANEL, documentId !== null);
+  if (documentId !== null) return patchSearch(panels, { [SUMMARY_DOCUMENT_PARAM]: documentId });
+  const doc = restore?.documentId ?? null;
+  return patchSearch(panels, {
+    [SUMMARY_DOCUMENT_PARAM]: doc,
+    section: doc ? (restore?.chapterId ?? null) : null,
+  });
+}
+
+/** Whether the summary panel owns the URL's `document`/`section` keys (it is open). */
+export function summaryOwnsDocumentKey(params: Params): boolean {
+  return parsePanels(params).includes(SUMMARY_PANEL);
+}
+
+/**
+ * The address-bar params as the content search reads them. While the summary panel owns
+ * `document`/`section`, they are replaced by the executed search's own filter (`executed`), so
+ * opening, switching or closing the panel never changes what the content search runs on.
+ */
+export function contentSearchParams(
+  params: URLSearchParams,
+  executed: ContentDocumentFilter | null,
+): URLSearchParams {
+  if (!summaryOwnsDocumentKey(params)) return params;
+  const out = new URLSearchParams(params);
+  out.delete(SUMMARY_DOCUMENT_PARAM);
+  out.delete('section');
+  if (executed?.documentId) {
+    out.set(SUMMARY_DOCUMENT_PARAM, executed.documentId);
+    if (executed.chapterId) out.set('section', executed.chapterId);
+  }
+  return out;
+}
+
+/**
+ * A content-search write of `next` (a full query string) onto `current`: while the summary panel
+ * owns `document`/`section` in `current`, those keys keep `current`'s values whatever `next` says.
+ */
+export function keepSummaryDocument(current: string, next: string): string {
+  const before = new URLSearchParams(current);
+  if (!summaryOwnsDocumentKey(before)) return next;
+  const after = new URLSearchParams(next);
+  for (const key of [SUMMARY_DOCUMENT_PARAM, 'section']) {
+    after.delete(key);
+    for (const value of before.getAll(key)) after.append(key, value);
+  }
+  const query = after.toString();
+  return query ? `?${query}` : '';
+}
+
+/**
+ * The summary panel's document when it is one of `documents` (this workspace's list), else null:
+ * an id from another workspace is never loaded on this home, even when the user can read it.
+ */
+export function ownSummaryDocument<T extends { readonly id: string }>(
+  documentId: string | null,
+  documents: readonly T[],
+): T | null {
+  if (!documentId) return null;
+  return documents.find((d) => d.id === documentId) ?? null;
+}
+
+/** The summary panel of `documentId` on the workspace home (the DOC-02 header link). */
+export function summaryPanelPath(workspaceId: string, documentId: string): string {
+  return workspaceHomePath(
+    workspaceId,
+    `${PANEL_PARAM}=${SUMMARY_PANEL}&${SUMMARY_DOCUMENT_PARAM}=${encodeURIComponent(documentId)}`,
+  );
+}
+
+/**
+ * Params without the summary panel's `document` key (and the chapter filter tied to it), so the
+ * content search never reads the panel's document as its own filter.
+ */
+export function withoutSummaryDocument<T extends RawParams | URLSearchParams>(params: T): T {
+  if (!parsePanels(params).includes(SUMMARY_PANEL)) return params;
+  if (params instanceof URLSearchParams) {
+    const out = new URLSearchParams(params);
+    out.delete(SUMMARY_DOCUMENT_PARAM);
+    out.delete('section');
+    return out as T;
+  }
+  const { [SUMMARY_DOCUMENT_PARAM]: _document, section: _section, ...rest } = params;
+  return rest as T;
 }
 
 export function parseScope(params: Params): SearchScope {

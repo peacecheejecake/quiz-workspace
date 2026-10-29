@@ -5,7 +5,8 @@
 // see the active published revision without edit controls; editors see the latest revision (the
 // correction draft when there is one), correct blocks inline, publish the draft (index job
 // followed live) and roll back from the revision history. The header's `텍스트 내보내기` menu
-// (DOC-03) saves or copies the text. FastAPI decides every write.
+// (DOC-03) saves or copies the text; its `요약` link (a ready 교재 / 교재+문제) opens the workspace
+// home's 문서 요약 panel (DOCSUM-01). FastAPI decides every write.
 import { Button, PageHeader } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -46,7 +47,7 @@ import {
   type PublishState,
 } from '@/lib/documents/publish-state';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
-import { workspaceHomePath } from '@/lib/workspaces/home';
+import { summaryPanelPath, workspaceHomePath } from '@/lib/workspaces/home';
 import { TextExportMenu } from '../text-export-menu';
 import styles from './editor.module.css';
 import { OutlineTree } from './outline-tree';
@@ -597,6 +598,14 @@ export function DocumentEditor({
     />
   ) : undefined;
 
+  // DOCSUM-01: the summary lives in a panel on the workspace home.
+  const summaryLink =
+    ready && document.document_type === 'book' ? (
+      <Button asChild>
+        <Link href={summaryPanelPath(workspaceId, documentId)}>요약</Link>
+      </Button>
+    ) : null;
+
   const highlights = viewerHighlights(currentBlock, outlineJump, blocks, page);
   const currentSection = sectionOf(currentBlock, outline);
 
@@ -612,7 +621,14 @@ export function DocumentEditor({
           />
         }
         description={document.filename !== document.title ? document.filename : undefined}
-        actions={textExport}
+        actions={
+          summaryLink || textExport ? (
+            <>
+              {summaryLink}
+              {textExport}
+            </>
+          ) : undefined
+        }
       />
 
       <PublishBar

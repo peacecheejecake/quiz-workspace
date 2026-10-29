@@ -649,6 +649,14 @@ test(
     // A deep link to another workspace's document.
     await page.goto(summaryPanelPath(ws.id, foreign.documentId));
     await expect(summaryUi.notFound(summaryUi.panel(page))).toBeVisible();
+
+    // Also when the user can read that other workspace: its summary never shows on this home.
+    const ownOtherWs = await workspaceFactory.create(owner);
+    const ownOther = await summarizedDoc(owner, ownOtherWs.id, book('book-en'));
+    await page.goto(summaryPanelPath(ws.id, ownOther.documentId));
+    const panelElsewhere = summaryUi.panel(page);
+    await expect(summaryUi.notFound(panelElsewhere)).toBeVisible();
+    await expect(summaryUi.overallHeading(panelElsewhere)).toHaveCount(0);
   },
 );
 

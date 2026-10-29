@@ -11,7 +11,7 @@ import type { ReactNode } from 'react';
 import { useQuestionRowActions } from '@/components/questions/import/question-row-actions';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
 import { PDF_CONTENT_TYPE } from '@/lib/documents/validation';
-import { DocumentRowItem } from './document-row';
+import { DocumentRowItem, type RowSummaryAction } from './document-row';
 import styles from './documents.module.css';
 import type { DocumentLibrary } from './use-document-library';
 
@@ -24,6 +24,8 @@ export interface DocumentsLibraryProps {
   readonly canEdit: boolean;
   /** Why the library is read-only (shown as a note), when it is. */
   readonly readOnlyReason?: string;
+  /** `요약` on ready 교재 / 교재+문제 rows (DOCSUM-01). */
+  readonly summary?: RowSummaryAction;
 }
 
 export function DocumentsLibrary({
@@ -31,6 +33,7 @@ export function DocumentsLibrary({
   library,
   canEdit,
   readOnlyReason,
+  summary,
 }: DocumentsLibraryProps) {
   const questions = useQuestionRowActions(workspaceId, library, canEdit);
   return (
@@ -71,6 +74,7 @@ export function DocumentsLibrary({
         rowActions={questions.rowActions}
         kindMenu
         textExport
+        summary={summary}
       />
     </div>
   );
@@ -87,6 +91,7 @@ export function DocumentRows({
   rowActions,
   kindMenu = false,
   textExport = false,
+  summary,
 }: {
   readonly label: string;
   readonly rows: readonly DocumentRow[];
@@ -100,6 +105,8 @@ export function DocumentRows({
   readonly kindMenu?: boolean;
   /** Offer every member `텍스트 내보내기` on ready rows (문서 관리, DOC-03). */
   readonly textExport?: boolean;
+  /** Offer every member `요약` on ready 교재 / 교재+문제 rows (문서 관리, DOCSUM-01). */
+  readonly summary?: RowSummaryAction;
 }) {
   return (
     <>
@@ -126,6 +133,7 @@ export function DocumentRows({
               onDelete={library.requestDelete}
               actions={rowActions?.(row)}
               textExport={textExport}
+              summary={summary}
               kindChange={
                 kindMenu && canEdit && row.documentId
                   ? {

@@ -35,6 +35,12 @@ export const SCREENS = [
     path: '/workspaces/[workspaceId]/documents/[documentId]',
   },
   {
+    id: 'DOCSUM-01',
+    name: '문서 요약 Floating Side Panel',
+    path: '/workspaces/[workspaceId]',
+    query: { param: 'panel', value: 'document-summary' },
+  },
+  {
     id: 'SEARCH-01',
     name: '통합 검색 (문제·본문)',
     path: '/workspaces/[workspaceId]',

@@ -1,7 +1,9 @@
 // WS-VIEW-01 address-bar state (pure, unit-tested): `/share/{id}` is the shared workspace home,
 // `?document=<id>&page=<n>&block=<id>` opens one shared document at a page/block,
-// `?panel=fork` is the WS-FORK-01 entry and `?panel=chapter-note&chapter=<id>` the read-only
-// 정리 노트 panel (CHNOTE-01). Only ids and numbers ever go into this URL — never the
+// `?panel=fork` is the WS-FORK-01 entry, `?panel=chapter-note&chapter=<id>` the read-only
+// 정리 노트 panel (CHNOTE-01) and `?panel=document-summary&document=<id>` the read-only 문서 요약
+// panel (DOCSUM-01) over the shared home (the document itself is not opened then). Only ids and
+// numbers ever go into this URL — never the
 // link secret (that lives in the `#k=` fragment until the exchange removes it).
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BLOCK_ID = /^[A-Za-z0-9_:.-]{1,128}$/;
@@ -12,7 +14,11 @@ export interface SharedViewState {
   readonly page: number | null;
   readonly blockId: string | null;
   readonly forkPanel: boolean;
+  /** The document whose summary panel is open (DOCSUM-01), or null. */
+  readonly summaryDocumentId: string | null;
 }
+
+export const SUMMARY_PANEL = 'document-summary';
 
 type RawParams = Readonly<Record<string, string | string[] | undefined>>;
 
@@ -25,11 +31,22 @@ export function parseSharedViewParams(params: RawParams): SharedViewState {
   const rawPage = first(params.page);
   const page = rawPage !== undefined && /^[0-9]{1,6}$/.test(rawPage) ? Number(rawPage) : null;
   const blockId = first(params.block);
+  const panel = first(params.panel);
+  if (panel === SUMMARY_PANEL && validDocument) {
+    return {
+      documentId: null,
+      page: null,
+      blockId: null,
+      forkPanel: false,
+      summaryDocumentId: validDocument,
+    };
+  }
   return {
     documentId: validDocument,
     page: validDocument && page !== null && page >= 1 && page <= MAX_PAGE ? page : null,
     blockId: validDocument && blockId !== undefined && BLOCK_ID.test(blockId) ? blockId : null,
-    forkPanel: first(params.panel) === 'fork',
+    forkPanel: panel === 'fork',
+    summaryDocumentId: null,
   };
 }
 
@@ -46,6 +63,12 @@ export function sharedDocumentHref(
   const query = new URLSearchParams({ document: documentId });
   if (at.page != null) query.set('page', String(at.page));
   if (at.blockId) query.set('block', at.blockId);
+  return `${sharePath(shareId)}?${query.toString()}`;
+}
+
+/** The read-only summary panel of a shared document (DOCSUM-01). */
+export function sharedSummaryHref(shareId: string, documentId: string): string {
+  const query = new URLSearchParams({ panel: SUMMARY_PANEL, document: documentId });
   return `${sharePath(shareId)}?${query.toString()}`;
 }
 

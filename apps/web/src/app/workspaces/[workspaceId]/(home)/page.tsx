@@ -4,8 +4,8 @@
 // filters (the search text `q` filters it only when the unified search's scope includes 문제),
 // the documents (header count, 문서 관리 / 문제 PDF 관리 dialogs, content-search filter) and the
 // verified user. Everything else — dialogs (`?panel=`, the 정리 노트 panel CHNOTE-01 with its
-// `chapter`), the content search (`q`, `scope`, options) and the practice panel (`?question=`,
-// QPLAY-01) — is client state on top of it.
+// `chapter`, the 문서 요약 panel DOCSUM-01 with its `document`), the content search (`q`, `scope`,
+// options) and the practice panel (`?question=`, QPLAY-01) — is client state on top of it.
 import type { Metadata } from 'next';
 import { WorkspaceHome } from '@/components/workspaces/workspace-home';
 import { loadDocumentsOrFailure } from '@/lib/documents/data';
@@ -14,7 +14,12 @@ import { openQuestionId, parseOverviewFilters } from '@/lib/questions/overview-f
 import { parseSearchParams } from '@/lib/search/state';
 import { getVerifiedUser } from '@/lib/supabase/server';
 import { requireWorkspace } from '@/lib/workspaces/data';
-import { isChapterNoteOpen, parseScope, scopeIncludesQuestions } from '@/lib/workspaces/home';
+import {
+  isChapterNoteOpen,
+  parseScope,
+  scopeIncludesQuestions,
+  withoutSummaryDocument,
+} from '@/lib/workspaces/home';
 
 export const metadata: Metadata = { title: 'Workspace 홈' };
 
@@ -56,7 +61,7 @@ export default async function Page({
         hasQuestions={data.hasQuestions}
         documents={docs.documents}
         documentsLoadFailed={docs.failed}
-        initialSearch={parseSearchParams(query)}
+        initialSearch={parseSearchParams(withoutSummaryDocument(query))}
         screenIds={{
           documents: 'DOC-01',
           search: 'SEARCH-01',
@@ -64,6 +69,7 @@ export default async function Page({
           history: 'HISTORY-01',
           share: 'WS-SHARE-01',
           chapterNote: 'CHNOTE-01',
+          summary: 'DOCSUM-01',
         }}
       />
     </div>

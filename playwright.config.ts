@@ -39,6 +39,8 @@ const apiEnv = {
   CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS || BASE_URL,
   // CHNOTE-01: the main E2E stack creates chapter notes (the feature-off stack sets it false).
   WORKER_CHAPTER_NOTES: process.env.WORKER_CHAPTER_NOTES || 'true',
+  // DOCSUM-01: the E2E stack summarizes (APP_ENV=test fake); AC05 starts its own feature-off stack.
+  WORKER_DOCUMENT_SUMMARY: process.env.WORKER_DOCUMENT_SUMMARY?.trim() || 'true',
 };
 
 // Mirrors TEST_SITE_KEY in tests/e2e/fixtures/turnstile.ts (the config does not import fixtures).
