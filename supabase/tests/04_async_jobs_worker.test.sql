@@ -182,7 +182,8 @@ select is_empty(
                               'question_drafts', 'question_generation_runs', 'questions',
                               'question_revisions', 'question_sources', 'workspace_forks',
                               'question_import_registration_items', 'document_summary_runs',
-                              'document_summary_units', 'document_summary_run_units') $$,
+                              'document_summary_units', 'document_summary_run_units',
+                              'chapter_notes') $$,
   'quiz_worker has policies on async_jobs, the M3.2a document tables, M4.4a imports, M6.2 '
     || 'generation, S3a forks, QIMP-JOB registration items (read) and DOCSUM-B summaries only');
 

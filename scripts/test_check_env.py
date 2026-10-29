@@ -187,6 +187,8 @@ def test_test_only_switches_are_forbidden() -> None:
         "WORKER_JOB_STORE_PATH",
         "WORKER_FIXTURE_PDF_DIR",
         "WORKER_LLM_SCENARIO_FILE",
+        "WORKER_CHAPTER_NOTE_SCENARIO_FILE",
+        "WORKER_CHAPTER_NOTE_HOLD_DIR",
         "FORWARDED_ALLOW_IPS",
         "RAILWAY_RUN_UID",
     } <= forbidden

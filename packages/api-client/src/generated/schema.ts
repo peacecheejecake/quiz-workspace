@@ -3,6 +3,33 @@
 /* eslint-disable */
 
 export type paths = {
+  '/api/v1/chapters/{chapter_id}/note': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Chapter Note
+     * @description The chapter's note (newest version or `version=k`), its versions, newest generation and
+     *     whether it is stale. Read-only: never records a view.
+     */
+    get: operations['getChapterNote'];
+    put?: never;
+    /**
+     * Create Chapter Note
+     * @description Make (or remake) the chapter's note from its CONFIRMED questions and explanations: a new
+     *     version; the previous ones are kept. The questions and explanations are sent to the LLM
+     *     provider.
+     */
+    post: operations['createChapterNote'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/documents/{document_id}': {
     parameters: {
       query?: never;
@@ -843,6 +870,46 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/shared/{share_id}/chapter-notes': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Shared Chapter Notes
+     * @description Chapters of published documents whose newest note is source-matched.
+     */
+    get: operations['listSharedChapterNotes'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/chapters/{chapter_id}/note': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Shared Chapter Note
+     * @description The chapter's newest note, read-only, when it is source-matched (else 404).
+     */
+    get: operations['getSharedChapterNote'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/shared/{share_id}/documents/{document_id}': {
     parameters: {
       query?: never;
@@ -1130,6 +1197,27 @@ export type paths = {
      *     are never listed; a `user_id` parameter is refused (422).
      */
     get: operations['listMyWorkspaceAttempts'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/chapter-notes': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Chapter Notes
+     * @description Per Heatmap chapter (a chapter with a CONFIRMED question or a note), in outline order:
+     *     the newest version, whether it is stale and whether a generation is queued/running.
+     */
+    get: operations['listChapterNotes'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1723,6 +1811,87 @@ export type components = {
       y0: number;
       /** Y1 */
       y1: number;
+    };
+    /** ChapterNote */
+    ChapterNote: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Footnotes */
+      footnotes: components['schemas']['NoteFootnote'][];
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Input Fingerprint */
+      input_fingerprint: string;
+      /** Question Count */
+      question_count: number;
+      /** Question Refs */
+      question_refs: components['schemas']['NoteQuestionRef'][];
+      /** Sections */
+      sections: components['schemas']['NoteSection'][];
+      /** @description null for a copied (forked) note. */
+      usage: components['schemas']['NoteUsage'] | null;
+      /** Version */
+      version: number;
+    };
+    /** ChapterNoteList */
+    ChapterNoteList: {
+      /** Available */
+      available: boolean;
+      /** Items */
+      items: components['schemas']['ChapterNoteSummary'][];
+    };
+    /** ChapterNoteState */
+    ChapterNoteState: {
+      /**
+       * Available
+       * @description This environment can create notes.
+       */
+      available: boolean;
+      /**
+       * Chapter Id
+       * Format: uuid
+       */
+      chapter_id: string;
+      /** Chapter Title */
+      chapter_title: string;
+      /** Confirmed Question Count */
+      confirmed_question_count: number;
+      /** @description The chapter's newest generation. */
+      generation: components['schemas']['NoteGeneration'] | null;
+      /** @description The newest version, or `version=k`. */
+      note: components['schemas']['ChapterNote'] | null;
+      /**
+       * Stale
+       * @description The chapter's confirmed questions changed since the note.
+       */
+      stale: boolean;
+      /**
+       * Versions
+       * @description Newest first.
+       */
+      versions: components['schemas']['NoteVersion'][];
+    };
+    /** ChapterNoteSummary */
+    ChapterNoteSummary: {
+      /**
+       * Chapter Id
+       * Format: uuid
+       */
+      chapter_id: string;
+      /** Chapter Title */
+      chapter_title: string;
+      /** Generating */
+      generating: boolean;
+      /** Latest Version */
+      latest_version: number | null;
+      /** Stale */
+      stale: boolean;
     };
     /** ChapterRef */
     ChapterRef: {
@@ -3051,6 +3220,142 @@ export type components = {
       /** Items */
       items: components['schemas']['MyWorkspace'][];
     };
+    /** NoteFootnote */
+    NoteFootnote: {
+      /** Label */
+      label: string;
+      /** Number */
+      number: number;
+      /**
+       * Question Id
+       * @description null: no longer a CONFIRMED question of the chapter (deleted or moved).
+       */
+      question_id: string | null;
+      /**
+       * Stem Preview
+       * @description First 40 characters of the current stem.
+       */
+      stem_preview: string | null;
+    };
+    /** NoteGeneration */
+    NoteGeneration: {
+      /**
+       * Error Code
+       * @description Why it failed (stable code): `llm_unavailable`, `llm_timeout`, `note_citation_invalid`, `llm_invalid_output`, ...
+       */
+      error_code: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Job Id
+       * @description Job `chapter_note.generate`.
+       */
+      job_id: string | null;
+      /** @description Batches of a large chapter while running. */
+      progress: components['schemas']['NoteProgress'] | null;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'queued' | 'running' | 'succeeded' | 'failed';
+    };
+    /** NoteItem */
+    NoteItem: {
+      /**
+       * Footnotes
+       * @description Footnote numbers (at least one).
+       */
+      footnotes: number[];
+      /** Text */
+      text: string;
+    };
+    /** NoteProgress */
+    NoteProgress: {
+      /** Batches Done */
+      batches_done: number;
+      /** Batches Total */
+      batches_total: number;
+    };
+    /** NoteQuestionRef */
+    NoteQuestionRef: {
+      /**
+       * Label
+       * @description `<n>장 <번호>번` (the Heatmap's numbering).
+       */
+      label: string;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /**
+       * Question Revision Id
+       * Format: uuid
+       * @description The revision the note was made from.
+       */
+      question_revision_id: string;
+      /**
+       * Tag
+       * @description Input tag (`Q1`..`Qn`).
+       */
+      tag: string;
+    };
+    /** NoteSection */
+    NoteSection: {
+      /** Heading */
+      heading: string;
+      /** Items */
+      items: components['schemas']['NoteItem'][];
+    };
+    /** NoteUsage */
+    NoteUsage: {
+      /**
+       * Batches
+       * @default 0
+       */
+      batches?: number;
+      /** Cost Usd */
+      cost_usd?: number | null;
+      /**
+       * Dropped Items
+       * @default 0
+       */
+      dropped_items?: number;
+      /** Input Tokens */
+      input_tokens?: number | null;
+      /**
+       * Items
+       * @default 0
+       */
+      items?: number;
+      /**
+       * Llm Calls
+       * @default 0
+       */
+      llm_calls?: number;
+      /** Output Tokens */
+      output_tokens?: number | null;
+    };
+    /** NoteVersion */
+    NoteVersion: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Note Id
+       * Format: uuid
+       */
+      note_id: string;
+      /** Question Count */
+      question_count: number;
+      /** Version */
+      version: number;
+    };
     /** Outline */
     Outline: {
       /**
@@ -4191,6 +4496,53 @@ export type components = {
        */
       secret: string;
     };
+    /** SharedChapterNote */
+    SharedChapterNote: {
+      /**
+       * Chapter Id
+       * Format: uuid
+       */
+      chapter_id: string;
+      /** Chapter Title */
+      chapter_title: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Footnotes
+       * @description `question_id` links a published question (the shared question panel).
+       */
+      footnotes: components['schemas']['NoteFootnote'][];
+      /** Question Count */
+      question_count: number;
+      /** Sections */
+      sections: components['schemas']['NoteSection'][];
+      /**
+       * Stale
+       * @description Questions were added to the chapter since the note.
+       */
+      stale: boolean;
+    };
+    /** SharedChapterNoteList */
+    SharedChapterNoteList: {
+      /**
+       * Items
+       * @description Chapters whose newest note can be shown, in outline order.
+       */
+      items: components['schemas']['SharedChapterNoteSummary'][];
+    };
+    /** SharedChapterNoteSummary */
+    SharedChapterNoteSummary: {
+      /**
+       * Chapter Id
+       * Format: uuid
+       */
+      chapter_id: string;
+      /** Chapter Title */
+      chapter_title: string;
+    };
     /** SharedDocument */
     SharedDocument: {
       /**
@@ -4972,6 +5324,155 @@ export type components = {
 };
 export type $defs = Record<string, never>;
 export interface operations {
+  getChapterNote: {
+    parameters: {
+      query?: {
+        /** @description An older version. */
+        version?: number | null;
+      };
+      header?: never;
+      path: {
+        chapter_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChapterNoteState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createChapterNote: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        chapter_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChapterNoteState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getDocument: {
     parameters: {
       query?: never;
@@ -8105,6 +8606,143 @@ export interface operations {
       };
     };
   };
+  listSharedChapterNotes: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedChapterNoteList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getSharedChapterNote: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        chapter_id: string;
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedChapterNote'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getSharedDocument: {
     parameters: {
       query?: {
@@ -9259,6 +9897,73 @@ export interface operations {
       };
       /** @description Unprocessable Content */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listChapterNotes: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChapterNoteList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
         headers: {
           [name: string]: unknown;
         };

@@ -211,6 +211,11 @@ class Settings(BaseSettings):
         default=300, ge=10, le=3600, validation_alias="SIGNED_READ_URL_TTL_SECONDS"
     )
 
+    # Chapter notes (CHNOTE-B): the worker's switch, read here so POST /chapters/{id}/note
+    # answers 409 `note-generation-disabled` when the worker would not generate notes. Stored
+    # notes stay readable either way. Turn it on only where the worker has an LLM configured.
+    chapter_notes: bool = Field(default=False, validation_alias="WORKER_CHAPTER_NOTES")
+
     # Workspace search (M3.6a). The query embedder and the collection namespace must be the
     # worker's (same model key, same collections), so these read the worker's variables and
     # pick the embedder through the same `book_core.embedding.select_embedder`.

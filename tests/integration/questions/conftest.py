@@ -40,6 +40,12 @@ from fastapi.testclient import TestClient
 from qdrant_client import QdrantClient
 from qdrant_client import models as qm
 from quiz_worker.adapters import FailureInjectingEmbedder, build_parser
+from quiz_worker.chapter_note_job import (
+    ChapterNoteJobDeps,
+    build_chapter_note_llm,
+    chapter_note_definition,
+)
+from quiz_worker.chapter_note_store import PostgresChapterNoteStore
 from quiz_worker.document_job import (
     DocumentJobDeps,
     Limits,
@@ -117,6 +123,7 @@ class JobWorker:
         self.generation_deps: GenerationJobDeps | None = None
         self.register_deps: RegisterJobDeps | None = None
         self.summary_deps: SummaryJobDeps | None = None
+        self.chapter_note_deps: ChapterNoteJobDeps | None = None
 
     def _build(self) -> tuple[PostgresJobStore, JobRunner, dict[str, JobDefinition[Any]]]:
         if self._built is not None:
@@ -176,6 +183,16 @@ class JobWorker:
         summary.slow_step_seconds = None
         summary.lock_wait_seconds = 30
         self.summary_deps = summary
+        # CHNOTE-B: APP_ENV=test ScenarioLLMClient over
+        # tests/fixtures/llm/chapter-note-scenarios.json (behind the E2E hold barrier); enabled
+        # only where WORKER_CHAPTER_NOTES is set (tests/integration/questions/chapter_notes/).
+        self.chapter_note_deps = ChapterNoteJobDeps(
+            notes=PostgresChapterNoteStore(engine),
+            llm=build_chapter_note_llm(env),
+            enabled=env.chapter_notes,
+            lock_wait_seconds=30,
+        )
+        chapter_note_deps = self.chapter_note_deps
         definitions: list[JobDefinition[Any]] = [
             document_parse_definition(lambda: document_deps),
             index_sync_definition(lambda: document_deps),
@@ -183,6 +200,7 @@ class JobWorker:
             question_generate_definition(lambda: generation_deps),
             question_register_definition(lambda: register_deps),
             document_summarize_definition(lambda: summary),
+            chapter_note_definition(lambda: chapter_note_deps),
         ]
         jobs = PostgresJobStore(engine)
         runner = JobRunner(jobs, worker_id="it-m44a", lease_seconds=600)

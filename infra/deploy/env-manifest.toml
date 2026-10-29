@@ -739,6 +739,15 @@ provider = "default"
 note = "1500000; larger documents fail summary_too_large without an LLM call"
 
 [[var]]
+name = "WORKER_CHAPTER_NOTES"
+services = ["api", "worker"]
+kind = "config"
+check = "bool"
+same = true
+provider = "operator (⛔ user approval: sends questions, answers and explanations to the LLM provider)"
+note = "false; true enables chapter notes (CHNOTE-01) and needs LLM_API_KEY / LLM_MODEL on the worker; the API refuses requests (409) while false"
+
+[[var]]
 name = "LLM_API_KEY"
 services = ["worker"]
 kind = "secret"
@@ -869,6 +878,20 @@ services = ["worker"]
 kind = "config"
 forbidden = true
 note = "APP_ENV=test fake summarizer barrier (DOCSUM-01-C03)"
+
+[[var]]
+name = "WORKER_CHAPTER_NOTE_SCENARIO_FILE"
+services = ["worker"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test scripted chapter note LLM"
+
+[[var]]
+name = "WORKER_CHAPTER_NOTE_HOLD_DIR"
+services = ["worker"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test E2E hold barrier of the chapter note fake"
 
 [[var]]
 name = "FORWARDED_ALLOW_IPS"

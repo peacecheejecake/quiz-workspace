@@ -101,6 +101,13 @@ class ProblemType(StrEnum):
     SUMMARY_DISABLED = "urn:quiz-workspace:problem:summary-disabled"
     # 409: only a failed summary run of the current published revision can be retried.
     SUMMARY_NOT_FAILED = "urn:quiz-workspace:problem:summary-not-failed"
+    # 409: a chapter note needs at least one CONFIRMED question in the chapter (CHNOTE-01).
+    NO_CHAPTER_QUESTIONS = "urn:quiz-workspace:problem:no-chapter-questions"
+    # 409: the chapter's note is already being generated (one queued/running per chapter).
+    NOTE_GENERATION_RUNNING = "urn:quiz-workspace:problem:note-generation-running"
+    # 409: chapter notes are off in this environment (WORKER_CHAPTER_NOTES); stored notes stay
+    # readable.
+    NOTE_GENERATION_DISABLED = "urn:quiz-workspace:problem:note-generation-disabled"
 
 
 class ProblemException(StarletteHTTPException):

@@ -25,8 +25,7 @@ from urllib.parse import urlsplit
 import httpx
 import pytest
 
-# RED (CHNOTE.0): CHNOTE-B removes `red` when the note API, job and migration make these GREEN.
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = pytest.mark.infra
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PDF_DIR = REPO_ROOT / "tests" / "fixtures" / "pdfs"
