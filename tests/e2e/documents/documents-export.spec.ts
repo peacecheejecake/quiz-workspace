@@ -55,7 +55,13 @@ import {
   type Member,
 } from '../fixtures/test.ts';
 
-test.use({ storageState: { cookies: [], origins: [] }, ...NO_BODY_ARTIFACTS });
+// No page text attached on failure (the sharing fixture's default); assertions on shown text are
+// boolean polls so a failure message never quotes document text.
+test.use({
+  storageState: { cookies: [], origins: [] },
+  ...NO_BODY_ARTIFACTS,
+  attachPageTextOnFailure: false,
+});
 test.describe.configure({ timeout: 2 * JOB_TIMEOUT_MS + 90_000 });
 
 const BOOK = book('book-ko');
@@ -100,6 +106,13 @@ function inPaneOrder(text: string, blocks: readonly ApiBlock[]): boolean {
     at = next;
   }
   return true;
+}
+
+/** Polls until `scope` shows `text`; on failure only `message` is printed, never the text. */
+async function expectShown(scope: Locator, text: string, message: string): Promise<void> {
+  await expect
+    .poll(async () => (await scope.innerText().catch(() => '')).includes(text), { message })
+    .toBe(true);
 }
 
 function lineIndex(lines: readonly string[], line: string): number {
@@ -239,7 +252,7 @@ test(
     await captureClipboard(page);
     await signInAs(page, owner.user);
     await page.goto(documentPath(ws.id, documentId));
-    await expect(editorUi.textPanel(page)).toContainText(token);
+    await expectShown(editorUi.textPanel(page), token, 'the draft correction is shown');
     const button = exportUi.headerButton(page);
 
     await button.click();
@@ -279,7 +292,11 @@ test(
     try {
       await signInAs(viewerPage, viewer.user);
       await viewerPage.goto(documentPath(ws.id, documentId));
-      await expect(editorUi.textPanel(viewerPage)).toContainText(original);
+      await expectShown(
+        editorUi.textPanel(viewerPage),
+        original,
+        'the viewer sees the published text',
+      );
       await exportUi.headerButton(viewerPage).click();
       await expect(exportUi.item(viewerPage, 'md')).toBeVisible();
       await expect(exportUi.item(viewerPage, 'txt')).toBeVisible();
@@ -357,7 +374,7 @@ test(
     await expect(exportUi.anyEntry(page)).toHaveCount(0);
     await sharedUi.documentLink(page, sharedDoc?.title ?? readyTitle).click();
     await expect(sharedUi.pdfViewer(page)).toBeVisible();
-    await expect(page.getByText(snippet(RAIN.text)).first()).toBeVisible();
+    await expectShown(page.locator('body'), snippet(RAIN.text), 'the shared document text');
     await expect(exportUi.anyEntry(page)).toHaveCount(0);
   },
 );
