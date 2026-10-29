@@ -434,6 +434,7 @@ def _complete(
         ("GET", "/workspaces/{id}/documents"),
         ("GET", "/documents/{id}"),
         ("GET", "/documents/{id}/source-url"),
+        ("GET", "/documents/{id}/text"),
         ("PATCH", "/documents/{id}"),
         ("DELETE", "/documents/{id}"),
     ],
@@ -935,6 +936,8 @@ def test_openapi_documents_the_document_routes(api: TestClient) -> None:
             "post",
             "/api/v1/documents/{document_id}/revisions/{revision_id}/restore",
         ): "restoreDocumentRevision",
+        # DOCTXT (quiz_api.api.document_export)
+        ("get", "/api/v1/documents/{document_id}/text"): "exportDocumentText",
     }
     intent = spec["paths"]["/api/v1/workspaces/{workspace_id}/documents/upload-intent"]["post"]
     assert {"201", "403", "404", "413", "415", "422", "503"} <= set(intent["responses"])

@@ -46,7 +46,10 @@ STUDY_STATE_EVENT = "question.study_state_changed"
 PARSE_JOB_TYPE = "document.parse"
 # Written by the publishing worker; the reconciler re-runs it, so History offers no retry.
 INDEX_SYNC_JOB_TYPE = "document.index_sync"
-DOCUMENT_JOB_TYPES = frozenset({PARSE_JOB_TYPE, INDEX_SYNC_JOB_TYPE})
+# DOCSUM-B: a summary job works on its document (payload `document_id`); `다시 시도` lives in the
+# summary panel, so History offers no retry either.
+SUMMARY_JOB_TYPE = "document.summarize"
+DOCUMENT_JOB_TYPES = frozenset({PARSE_JOB_TYPE, INDEX_SYNC_JOB_TYPE, SUMMARY_JOB_TYPE})
 IMPORT_JOB_TYPE = "question.import"
 # QIMP-JOB: registers a submitted selection; it works on its import run (no retry from History:
 # the import page submits what is still unregistered again).

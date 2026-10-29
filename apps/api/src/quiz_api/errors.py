@@ -67,6 +67,8 @@ class ProblemType(StrEnum):
     DOCUMENT_NOT_READY = "urn:quiz-workspace:problem:document-not-ready"
     # 409: a correction was based on block text (or a draft) that changed since it was loaded.
     EDIT_CONFLICT = "urn:quiz-workspace:problem:edit-conflict"
+    # 404: `revision=draft` of a document without an unpublished correction draft (DOC-03).
+    DRAFT_NOT_FOUND = "urn:quiz-workspace:problem:draft-not-found"
     # 409: the draft is being published (indexing); wait for the job, then edit again.
     PUBLISH_IN_PROGRESS = "urn:quiz-workspace:problem:publish-in-progress"
     # 409: there is no correction draft, or it does not differ from the published revision.
@@ -93,6 +95,19 @@ class ProblemType(StrEnum):
     DOCUMENT_IN_USE = "urn:quiz-workspace:problem:document-in-use"
     # 409: an import draft's chapter is no longer the one the client showed (CHAPTER-MAP).
     CHAPTER_CHANGED = "urn:quiz-workspace:problem:chapter-changed"
+    # 409: question papers are not summarized (DOCSUM-01); only books and books with questions.
+    SUMMARY_NOT_APPLICABLE = "urn:quiz-workspace:problem:summary-not-applicable"
+    # 409: this environment cannot create summaries (WORKER_DOCUMENT_SUMMARY off / no LLM).
+    SUMMARY_DISABLED = "urn:quiz-workspace:problem:summary-disabled"
+    # 409: only a failed summary run of the current published revision can be retried.
+    SUMMARY_NOT_FAILED = "urn:quiz-workspace:problem:summary-not-failed"
+    # 409: a chapter note needs at least one CONFIRMED question in the chapter (CHNOTE-01).
+    NO_CHAPTER_QUESTIONS = "urn:quiz-workspace:problem:no-chapter-questions"
+    # 409: the chapter's note is already being generated (one queued/running per chapter).
+    NOTE_GENERATION_RUNNING = "urn:quiz-workspace:problem:note-generation-running"
+    # 409: chapter notes are off in this environment (WORKER_CHAPTER_NOTES); stored notes stay
+    # readable.
+    NOTE_GENERATION_DISABLED = "urn:quiz-workspace:problem:note-generation-disabled"
 
 
 class ProblemException(StarletteHTTPException):

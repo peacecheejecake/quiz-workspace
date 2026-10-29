@@ -189,6 +189,47 @@ describe('FloatingSidePanel (non-modal)', () => {
   });
 });
 
+describe('FloatingSidePanel Escape with a modal panel under a non-modal one', () => {
+  // Radix lets only the layer it ranks highest handle Escape. A non-modal panel ranked above the
+  // modal panel that holds focus (CHNOTE-01-AC02: the 정리 노트 panel while the practice panel
+  // opened from its footnote) declines it; the modal panel must still close.
+  function Stacked() {
+    const [modalOpen, setModalOpen] = useState(true);
+    const [noteOpen, setNoteOpen] = useState(false);
+    return (
+      <>
+        <FloatingSidePanel open={modalOpen} onOpenChange={setModalOpen} title="2번 문제">
+          <Button onClick={() => setNoteOpen(true)}>노트 열기</Button>
+        </FloatingSidePanel>
+        <FloatingSidePanel
+          open={noteOpen}
+          onOpenChange={setNoteOpen}
+          modal={false}
+          title="정리 노트"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          본문
+        </FloatingSidePanel>
+      </>
+    );
+  }
+
+  it('closes the focused modal panel', async () => {
+    const user = userEvent.setup();
+    render(<Stacked />);
+    const modal = await screen.findByRole('dialog', { name: '2번 문제' });
+    await user.click(screen.getByRole('button', { name: '노트 열기' }));
+    expect(await screen.findByRole('dialog', { name: '정리 노트', hidden: true })).toBeTruthy();
+    expect(modal).toContainElement(document.activeElement as HTMLElement);
+
+    await user.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: '2번 문제', hidden: true })).toBeNull(),
+    );
+    expect(screen.getByRole('dialog', { name: '정리 노트' })).toBeInTheDocument();
+  });
+});
+
 describe('FloatingSidePanel (non-modal) focus handoff skips unfocusable candidates', () => {
   function PanelWithHiddenNeighbours() {
     const [open, setOpen] = useState(false);

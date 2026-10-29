@@ -841,7 +841,9 @@ export function questionNumberName(n: number): RegExp {
 
 export const overviewUi = {
   heatmap: (page: Page) => main(page).getByRole('group', { name: /문제 heatmap|heatmap/i }),
-  dots: (page: Page) => overviewUi.heatmap(page).getByRole('button'),
+  /** The question markers (chapter headers also hold a `<장 제목> 정리 노트` button, CHNOTE-01). */
+  dots: (page: Page) =>
+    overviewUi.heatmap(page).getByRole('button', { name: /\d+번 문제|question \d+/i }),
   dot: (page: Page, n: number) =>
     overviewUi.heatmap(page).getByRole('button', { name: questionNumberName(n) }),
   markers: (page: Page) => overviewUi.heatmap(page).getByTestId('question-marker'),

@@ -22,6 +22,9 @@ Pipeline (docs/architecture.md §4 indexing flow), serialised per document by an
    revision, make it the document's active revision, set the document `ready` and enqueue a
    `document.index_sync` obligation — the DB is the authority search filters on, so once this
    commits the job succeeds;
+   For an opted-in book (`요약 만들기`, DOCSUM-B) with WORKER_DOCUMENT_SUMMARY on, the same
+   transaction starts the new revision's summary run and `document.summarize` job, handed to
+   the broker the same way;
    For a `question_paper` the same transaction starts its question import once (run + first
    `question.import` job, QIMP-AUTO / QIMPORT-01-AC06); the job's result names it and the task
    publishes that job when the parse job is done (`follow_ups`);
@@ -100,6 +103,9 @@ JOB_TYPE = "document.parse"
 # Result keys (ids only) of the question import a question paper's publish started.
 IMPORT_RUN_KEY = "question_import_id"
 IMPORT_JOB_KEY = "question_import_job_id"
+# Result keys (ids only) of the summary an opted-in book's publish started (DOCSUM-B).
+SUMMARY_RUN_KEY = "summary_run_id"
+SUMMARY_JOB_KEY = "summary_job_id"
 # Result key of the kind an auto document was classified as (UX6-UPLOAD-B; no document text).
 KIND_KEY = "classified_kind"
 PDF_MAGIC = b"%PDF-"
@@ -175,6 +181,8 @@ class DocumentJobDeps:
     parser: PdfParser
     limits: Limits
     page_counter: Callable[[Path], int | None] = page_count
+    # DOCSUM-B: publishes start opted-in books' summaries (WorkerSettings.summary_available).
+    summary: bool = False
 
 
 def parsed_object_key(document: DocumentRow, revision_id: uuid.UUID) -> str:
@@ -280,6 +288,7 @@ def _pipeline(
         content.content_hash,
         before_commit=ctx.check_cancelled,
         classification=classification,
+        summary=deps.summary,
     )
     # From here on the job cannot fail: the Qdrant mirror is synced inline when possible, else
     # by the obligation (retried with backoff, published by the reconciler).
@@ -290,6 +299,9 @@ def _pipeline(
     if outcome.import_run_id is not None and outcome.import_job_id is not None:
         result[IMPORT_RUN_KEY] = str(outcome.import_run_id)
         result[IMPORT_JOB_KEY] = str(outcome.import_job_id)
+    if outcome.summary_run_id is not None and outcome.summary_job_id is not None:
+        result[SUMMARY_RUN_KEY] = str(outcome.summary_run_id)
+        result[SUMMARY_JOB_KEY] = str(outcome.summary_job_id)
     return result
 
 
@@ -422,16 +434,20 @@ def mirror_active_revision(
 
 
 def started_import_jobs(result: JobResult) -> list[uuid.UUID]:
-    """`follow_ups` of `document.parse`: the question import job its publish started."""
+    """`follow_ups` of `document.parse`: the question import job and the summary job its
+    publish started."""
     if not result:
         return []
-    value = result.get(IMPORT_JOB_KEY)
-    if not isinstance(value, str):
-        return []
-    try:
-        return [uuid.UUID(value)]
-    except ValueError:
-        return []
+    found: list[uuid.UUID] = []
+    for key in (IMPORT_JOB_KEY, SUMMARY_JOB_KEY):
+        value = result.get(key)
+        if not isinstance(value, str):
+            continue
+        try:
+            found.append(uuid.UUID(value))
+        except ValueError:
+            continue
+    return found
 
 
 def _result(
@@ -554,6 +570,7 @@ def deps_from_settings(
             max_pages=settings.pdf_max_pages,
             lock_wait_seconds=settings.document_lock_wait_seconds,
         ),
+        summary=settings.summary_available,
     )
 
 

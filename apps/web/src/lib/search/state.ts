@@ -9,6 +9,7 @@ import {
   type SearchQuery,
   type SearchFailureKind,
 } from './client';
+import { keepSummaryDocument } from '@/lib/workspaces/home';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** The API truncates longer queries (with a warning); the URL never carries more than this. */
@@ -63,7 +64,8 @@ export function mergeContentSearch(search: string, q: SearchQuery): string {
   for (const key of CONTENT_SEARCH_KEYS) params.delete(key);
   for (const [key, value] of new URLSearchParams(searchParamsFor(q))) params.set(key, value);
   const query = params.toString();
-  return query ? `?${query}` : '';
+  // An open 문서 요약 panel (DOCSUM-01) owns `document`/`section`: they keep the panel's values.
+  return keepSummaryDocument(search, query ? `?${query}` : '');
 }
 
 /**

@@ -34,6 +34,10 @@ import {
   bankUi,
   block,
   book,
+  createQuestion,
+  homeUi,
+  listDocuments,
+  outlineNodeId,
 } from '../fixtures/test.ts';
 import {
   createShareLink,
@@ -47,6 +51,14 @@ import {
   sharingUi,
   test,
 } from '../fixtures/sharing.ts';
+import { generateNote, notePanelPath, noteQuestion, noteUi } from '../fixtures/chapter-notes.ts';
+import { exportUi } from '../fixtures/export.ts';
+import {
+  startSummary,
+  summaryPanelPath,
+  summaryUi,
+  waitForSummaryRun,
+} from '../fixtures/summary.ts';
 
 test.use(NO_VISUAL_ARTIFACTS);
 test.describe.configure({ timeout: JOB_TIMEOUT_MS + 90_000 });
@@ -199,5 +211,57 @@ test(
     await expectFragmentRemoved(page, link.id);
     await expect(sharedUi.questions(page)).toBeVisible();
     await snap(page, 'shared-view');
+  },
+);
+
+test(
+  'VISUAL-06 text export menu, document summary panel and chapter note panel (body folded)',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('visual06');
+    const ws = await workspaceFactory.create(owner, '요약 스터디');
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    const title = (await listDocuments(owner, ws.id)).find((d) => d.id === documentId)?.title;
+    if (!title) throw new Error('uploaded document is not listed');
+    await startSummary(owner, documentId);
+    await waitForSummaryRun(owner, documentId, 'succeeded');
+    const chapter = await outlineNodeId(owner, documentId, '1장 물의 순환');
+    for (let n = 1; n <= 3; n += 1) {
+      await createQuestion(
+        owner,
+        ws.id,
+        noteQuestion('visual', n, chapter, 'ok', {
+          sources: [{ document_id: documentId, page_start: 2, page_end: 3 }],
+        }),
+      );
+    }
+    await generateNote(owner, chapter);
+    await signInAs(page, owner.user);
+
+    // DOC-03: the 문서 관리 row's export menu.
+    await page.goto(documentsPath(ws.id));
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
+    const row = docUi.item(page, new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    await expect(docUi.ready(row)).toBeVisible();
+    // Opened by keyboard: the first item has focus (a stable focus ring, no hover).
+    await exportUi.rowButton(row).focus();
+    await page.keyboard.press('Enter');
+    await expect(exportUi.item(page, 'md')).toBeFocused();
+    await snap(page, 'documents-export-menu');
+    await page.keyboard.press('Escape');
+
+    // DOCSUM-01: the done summary (meta line holds the publish time).
+    await page.goto(summaryPanelPath(ws.id, documentId));
+    const summary = summaryUi.panel(page);
+    await expect(summaryUi.overallHeading(summary)).toBeVisible();
+    await page.mouse.move(0, 0);
+    await snap(page, 'document-summary', [summaryUi.meta(summary)]);
+
+    // CHNOTE-01: the note with its body folded behind "정답·해설 포함" (answers never captured).
+    await page.goto(notePanelPath(ws.id, chapter));
+    const note = noteUi.panel(page);
+    await expect(noteUi.disclosure(note)).toHaveAttribute('aria-expanded', 'false');
+    await page.mouse.move(0, 0);
+    await snap(page, 'chapter-note', [noteUi.meta(note)]);
   },
 );

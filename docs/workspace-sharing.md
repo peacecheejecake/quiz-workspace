@@ -9,8 +9,8 @@
 | 링크 공유 | OFF; Workspace Owner만 발급·회수·만료·재발급 가능 |
 | 링크 열람 | 유효 링크를 받은 비로그인 사용자도 조회 허용; 로그인 불필요 |
 | Fork | OFF; 링크 단위 `allow_fork` 설정을 Owner만 켤 수 있음 |
-| 열람 범위 | Workspace 명세, 발행된(PUBLISHED) PDF/교정 텍스트/목차, 발행된 문제·정답·해설, 범위가 제한된 검색/발췌 |
-| 비공개 범위 | 초안, 미발행 revision, 개인 풀이·즐겨찾기·다시 풀기, owner 프로필, 공유 링크 비밀값, API 키, 관리·작업·활동 기록 |
+| 열람 범위 | Workspace 명세, 발행된(PUBLISHED) PDF/교정 텍스트/목차, 발행된 문제·정답·해설, 범위가 제한된 검색/발췌, 현재 발행 revision의 문서 요약과 장별 최신 정리 노트(DOCSUM-SPEC 2026-10-29, §8) |
+| 비공개 범위 | 초안, 미발행 revision, 개인 풀이·즐겨찾기·다시 풀기, owner 프로필, 공유 링크 비밀값, API 키, 관리·작업·활동 기록, 전문 텍스트 내보내기 파일, 이전 revision 요약·이전 버전 노트·요약/노트 생성 상태·오류·비용 |
 | 편집 | 링크만 가진 viewer는 업로드·편집·문제 생성·답안 제출·즐겨찾기·삭제·공유 관리 전부 불가 |
 | 삭제·보관 | Archive 후 공유 read 유지(Owner revoke 가능); 삭제 요청 이후 공유와 Fork 즉시 거부 |
 | Fork 결과 | 현재 published snapshot의 독립 복제; 원본과 자동 동기화 없음; 각 문서·문제 식별자는 새로 발급 |
@@ -88,6 +88,9 @@ Shared viewer (공유 session에만 허용):
 - `POST /api/v1/shared/{shareId}/search`: 공개 문서 범위의 제한된 검색
 - `GET /api/v1/shared/{shareId}/questions`: 발행 문제 목록
 - `GET /api/v1/shared/{shareId}/questions/{questionId}`: 발행 문제·해설
+- `GET /api/v1/shared/{shareId}/documents/{docId}/summary`: 현재 발행 revision의 성공한 문서 요약(없으면 404, §8)
+- `GET /api/v1/shared/{shareId}/chapter-notes`: 최신 정리 노트가 있는 장 목록
+- `GET /api/v1/shared/{shareId}/chapters/{chapterId}/note`: 장의 최신 성공 정리 노트(각주는 발행 문제만 링크)
 
 Fork (공유 session + **Supabase 사용자 JWT** 동시 필요):
 - `POST /api/v1/shared/{shareId}/forks`: 이름·멱등 키; 202 Accepted + job id
@@ -116,3 +119,19 @@ AC 5+6+6=17개를 각각 Playwright로 먼저 RED 테스트로 작성한다. 검
 - 토큰/URL 및 개인정보 유출 방지, 복제 및 공유·저작권 안내
 
 개발 순서: S0(명세/E2E) → S1(share API/인가) → S2(공유 UI) → S3(Fork Worker) → S4(보안·성능·배포 검증). M3/M4 및 Auth A 트랙 의존.
+
+## 8. 문서 요약·정리 노트·텍스트 내보내기 (DOCSUM-SPEC 2026-10-29)
+
+원칙은 §1과 같다: 게스트는 **발행된 것만, 읽기만** 한다.
+
+| 기능 | Owner·editor | viewer(멤버) | 링크 게스트 |
+|---|:---:|:---:|:---:|
+| 문서 요약 읽기 | ✅ 마지막 성공 요약(+stale) | ✅ 같음 | 현재 발행 revision의 성공 요약만 |
+| 요약 만들기·다시 시도 | ✅ 활성 Workspace | ❌ | ❌ |
+| 정리 노트 읽기 | ✅ 모든 버전 | ✅ 모든 버전 | 장마다 최신 성공 버전이 출처 일치일 때만 |
+| 정리 노트 만들기·다시 만들기 | ✅ 활성 Workspace | ❌ | ❌ |
+| 전문 텍스트 내보내기 | ✅ 발행본·초안 | ✅ 발행본 | ❌ |
+
+- **결정(2026-10-29):** 요약은 발행 원문에서, 정리 노트는 발행 문제·정답·해설에서 만든 파생 내용이라 게스트에게도 원본과 같은 범위로 보인다. 요약은 게스트가 지금 읽을 수 있는 발행 revision과 일치할 때만 준다(이전 revision 요약은 이미 바뀐 원문을 담을 수 있으므로 404). 정리 노트는 **출처 일치**(인용한 모든 문제가 살아 있고 CONFIRMED이며 active revision이 노트에 고정된 revision과 같음)일 때만 게스트에게 준다 — 인용 문제가 삭제·보관·수정되면 노트 본문에 공개 범위 밖이 된 정답·해설이 남을 수 있으므로 다시 만들 때까지 본문 없이 "정리 노트가 갱신 중이거나 없습니다."(API 404, 목록 제외; Codex P1). 텍스트 내보내기는 사용자 결정 Q9로 멤버 전용이다(게스트는 화면에서 원문을 읽을 수만 있다; DRM 아님 — §1 저작권 행).
+- 공유 응답은 §2의 header(`no-store`, `no-referrer`)를 따르고, 생성 상태·오류 코드·usage·job id·`question_refs`의 revision id를 주지 않는다. 매 요청 링크 상태를 재검증하므로 철회 후에는 이미 열린 panel의 요청도 거부된다.
+- Fork는 요약(현재 snapshot revision의 성공 요약과 자동 갱신 설정)과, 장마다 최신 정리 노트 중 snapshot 기준 출처 일치인 것만 새 id로 복제한다(일치하지 않으면 그 장은 노트 없이 복제)(§6 개인 데이터 제외 규칙 유지; 이전 기록·실패 run·usage 제외).

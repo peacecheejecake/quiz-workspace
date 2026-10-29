@@ -487,3 +487,36 @@ workspace_forks = Table(
     _ts("updated_at", nullable=False),
     _ts("completed_at"),
 )
+
+
+# --- CHNOTE chapter notes (20261029130000_chapter_notes.sql) ----------------------------------
+
+chapter_notes = Table(
+    "chapter_notes",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("document_id", Uuid, nullable=False),
+    Column("document_revision_id", Uuid, nullable=False),
+    Column("section_key", Text, nullable=False),
+    Column("version", Integer),
+    Column("status", Text, nullable=False, server_default=FetchedValue()),
+    Column("job_id", Uuid),
+    Column("input_fingerprint", Text, nullable=False),
+    Column("body_hash", Text, nullable=False),
+    # [{tag, question_id, question_revision_id, label}]; member API only.
+    Column("question_refs", JSONB, nullable=False),
+    Column("body", JSONB),
+    Column("dropped_items", Integer),
+    Column("batches_total", Integer),
+    Column("batches_done", Integer),
+    Column("prompt_version", Text),
+    Column("model", Text),
+    Column("error_code", Text),
+    Column("usage", JSONB),
+    Column("created_by", Uuid),
+    _ts("created_at", nullable=False),
+    _ts("updated_at", nullable=False),
+    _ts("finished_at"),
+    _ts("superseded_at"),
+)

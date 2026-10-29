@@ -205,15 +205,23 @@ describe('share view URL state', () => {
       page: null,
       blockId: null,
       forkPanel: false,
+      summaryDocumentId: null,
     });
     expect(
       parseSharedViewParams({ document: DOC, page: '3', block: 'blk-1', panel: 'fork' }),
-    ).toEqual({ documentId: DOC, page: 3, blockId: 'blk-1', forkPanel: true });
+    ).toEqual({
+      documentId: DOC,
+      page: 3,
+      blockId: 'blk-1',
+      forkPanel: true,
+      summaryDocumentId: null,
+    });
     expect(parseSharedViewParams({ document: 'nope', page: '3', block: 'b' })).toEqual({
       documentId: null,
       page: null,
       blockId: null,
       forkPanel: false,
+      summaryDocumentId: null,
     });
     expect(parseSharedViewParams({ document: DOC, page: '0' }).page).toBeNull();
     expect(parseSharedViewParams({ document: DOC, page: '-1' }).page).toBeNull();

@@ -24,6 +24,7 @@ from quiz_api.authz.permissions import LockMode, Role
 from quiz_api.repositories.forks import FORK_JOB_TYPE
 from quiz_api.repositories.tables import (
     async_jobs,
+    chapters,
     document_revisions,
     document_uploads,
     documents,
@@ -58,6 +59,9 @@ class ResourceType(StrEnum):
     UPLOAD = "upload"
     # S1a. Revoked and expired links stay addressable for their owner (policy edits, listing).
     SHARE_LINK = "share_link"
+    # CHNOTE: a chapter (outline node) of a live document's *active* revision; chapters of older
+    # revisions and of soft-deleted documents are invisible.
+    CHAPTER = "chapter"
 
 
 @dataclass(frozen=True)
@@ -99,6 +103,15 @@ RESOURCES: dict[ResourceType, ResourceBinding] = {
     ),
     ResourceType.UPLOAD: ResourceBinding(document_uploads),
     ResourceType.SHARE_LINK: ResourceBinding(workspace_share_links),
+    ResourceType.CHAPTER: ResourceBinding(
+        chapters,
+        visible_when=exists().where(
+            documents.c.id == chapters.c.document_id,
+            documents.c.workspace_id == chapters.c.workspace_id,
+            documents.c.deleted_at.is_(None),
+            documents.c.active_revision_id == chapters.c.document_revision_id,
+        ),
+    ),
 }
 
 

@@ -82,6 +82,10 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'M6.0': ['QGEN-01'],
   'M7.0': ['HISTORY-01'],
   S0: ['WS-SHARE-01', 'WS-VIEW-01', 'WS-FORK-01'],
+  // DOCSUM-SPEC (2026-10-29): full-text export, document summary, chapter notes.
+  'DOCTXT.0': ['DOC-03'],
+  'DOCSUM.0': ['DOCSUM-01'],
+  'CHNOTE.0': ['CHNOTE-01'],
 };
 
 const LEADING_ID = new RegExp(

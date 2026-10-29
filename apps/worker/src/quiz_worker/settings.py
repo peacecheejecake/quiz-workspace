@@ -6,6 +6,7 @@ credentials are `SecretStr`, so they never show up in `repr()`, logs or tracebac
 
 from __future__ import annotations
 
+import os
 from enum import StrEnum
 from functools import lru_cache
 
@@ -214,6 +215,35 @@ class WorkerSettings(BaseSettings):
     # comes from LLM_API_KEY / LLM_MODEL).
     llm_scenario_file: str | None = Field(default=None, validation_alias="WORKER_LLM_SCENARIO_FILE")
 
+    # -- document.summarize (DOCSUM-B) ----------------------------------------------------------
+    # Off by default: on, opted-in books are summarized on every publish (their text goes to the
+    # LLM provider; needs LLM_API_KEY / LLM_MODEL, or the APP_ENV=test fake). Set it on the API
+    # too, which then offers `요약 만들기`.
+    document_summary: bool = Field(default=False, validation_alias="WORKER_DOCUMENT_SUMMARY")
+    # A chapter longer than this is summarized in parts that are then merged.
+    summary_chapter_chars: int = Field(
+        default=24_000, ge=200, validation_alias="WORKER_SUMMARY_CHAPTER_CHARS"
+    )
+    # A document over this fails `summary_too_large` without any LLM call.
+    summary_max_input_chars: int = Field(
+        default=1_500_000, ge=1, validation_alias="WORKER_SUMMARY_MAX_INPUT_CHARS"
+    )
+
+    # -- chapter_note.generate (CHNOTE-B) -------------------------------------------------------
+    # Chapter notes send a chapter's questions, answers and explanations to the LLM provider
+    # (needs LLM_API_KEY / LLM_MODEL outside APP_ENV=test). Off by default; the API reads the same
+    # variable to refuse requests (409 note-generation-disabled).
+    chapter_notes: bool = Field(default=False, validation_alias="WORKER_CHAPTER_NOTES")
+    # APP_ENV=test only: scripted chapter note outputs (default: the repository's
+    # tests/fixtures/llm/chapter-note-scenarios.json) and the E2E hold barrier directory
+    # (default: <system temp dir>/quiz-e2e-chapter-note-hold). Ignored elsewhere.
+    chapter_note_scenario_file: str | None = Field(
+        default=None, validation_alias="WORKER_CHAPTER_NOTE_SCENARIO_FILE"
+    )
+    chapter_note_hold_dir: str | None = Field(
+        default=None, validation_alias="WORKER_CHAPTER_NOTE_HOLD_DIR"
+    )
+
     @model_validator(mode="after")
     def _check_limits(self) -> WorkerSettings:
         if self.task_soft_time_limit_seconds >= self.task_time_limit_seconds:
@@ -240,6 +270,14 @@ class WorkerSettings(BaseSettings):
     @property
     def is_test(self) -> bool:
         return self.app_env is Environment.TEST
+
+    @property
+    def summary_available(self) -> bool:
+        """Publishes start summaries: the switch is on and an LLM exists (the fake under
+        APP_ENV=test, else LLM_API_KEY, read like book_core `LLMConfig.from_env`)."""
+        if not self.document_summary:
+            return False
+        return self.is_test or bool(os.environ.get("LLM_API_KEY", "").strip())
 
     @property
     def warms_parser(self) -> bool:

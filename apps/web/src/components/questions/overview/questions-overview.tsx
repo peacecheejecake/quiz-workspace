@@ -17,6 +17,7 @@ import {
   QUESTION_DOT_STATUSES,
   questionStatusLabels,
   useToast,
+  type HeatmapChapter,
   type QuestionDotStatus,
 } from '@quiz/ui';
 import Link from 'next/link';
@@ -30,6 +31,8 @@ import {
   useRef,
   useState,
   useTransition,
+  type ReactNode,
+  type RefObject,
 } from 'react';
 import type { OverviewItem, QuestionOverview } from '@/lib/questions/overview-data';
 import {
@@ -78,6 +81,13 @@ export interface QuestionsOverviewProps {
   readonly panelScreenId?: string;
   /** `?question=` resolved outside the current filters by the server render (deep link). */
   readonly requested?: PlacedQuestion | null;
+  /** Controls at the end of each chapter group header (CHNOTE-01 정리 노트). */
+  readonly chapterActions?: (chapter: HeatmapChapter) => ReactNode;
+  /**
+   * Where focus goes when the practice panel closes, when set by whoever opened it (a 정리 노트
+   * footnote: the note's disclosure). Cleared on close; otherwise focus returns to the dot.
+   */
+  readonly practiceReturnFocusRef?: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -145,6 +155,8 @@ export function QuestionsOverview({
   failure,
   panelScreenId,
   requested = null,
+  chapterActions,
+  practiceReturnFocusRef,
 }: QuestionsOverviewProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -542,7 +554,11 @@ export function QuestionsOverview({
             chapters={chapters}
             selectedQuestionId={openPlaced?.item.question_id ?? null}
             headingLevel={3}
-            onOpen={(questionId) => setQuestionParam(questionId)}
+            renderChapterActions={chapterActions}
+            onOpen={(questionId) => {
+              if (practiceReturnFocusRef) practiceReturnFocusRef.current = null;
+              setQuestionParam(questionId);
+            }}
           />
         </div>
       )}
@@ -559,6 +575,13 @@ export function QuestionsOverview({
         onFlagsChange={(questionId, flags) => void changeFlags(questionId, flags)}
         onViewed={markViewed}
         onCloseAutoFocus={(event) => {
+          const requestedFocus = practiceReturnFocusRef?.current ?? null;
+          if (practiceReturnFocusRef) practiceReturnFocusRef.current = null;
+          if (requestedFocus?.isConnected) {
+            requestedFocus.focus();
+            event.preventDefault();
+            return;
+          }
           const root = screenRef.current;
           if (!root) return;
           // An empty heatmap falls back to the status filter toggle (a stable control).
