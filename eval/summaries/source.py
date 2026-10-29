@@ -5,7 +5,9 @@ A document is read from one of:
 - a synthetic fixture truth file (``tests/fixtures/pdfs/*.truth.json``): sections and blocks with
   their pages, no parser or model needed (the committed default);
 - ``core parse`` output (``*.json``, a ``ParsedDocument``) or a PDF (real Docling models), run
-  through the worker's own ``build_revision`` + ``chapter_inputs``. Keep such files outside the
+  through the worker's own ``build_revision`` + ``chapter_inputs``. Revision blocks carry no
+  per-page text, so a block spanning pages counts as evidence on each of its pages there (page
+  support is an upper bound for such documents). Keep such files outside the
   repository; never commit real PDFs or their parsed text.
 
 Nothing here prints or writes document text.
@@ -73,8 +75,12 @@ def _truth(path: Path) -> EvalDocument:
         if not text:
             continue
         pages = [part["page"] for part in block["parts"]]
-        for page in sorted(set(pages)):
-            page_text[page].append(text)
+        # Page evidence is each part's own text: a block that runs onto the next page must not
+        # make its first page support what is only printed on the second (and vice versa).
+        for part in block["parts"]:
+            part_text = normalize_text(part.get("text") or "")
+            if part_text:
+                page_text[part["page"]].append(part_text)
         if block.get("section_id") not in sections:
             continue
         grouped[root(block["section_id"])].append(

@@ -40,6 +40,51 @@ def test_truth_books_load_as_top_level_chapters_with_page_text() -> None:
     assert support("Chlorine reduces pathogenic microorganisms", en.pages_text(2, 2)) < 0.3
 
 
+def test_page_evidence_is_each_parts_own_text() -> None:
+    # book-ko ch1-s2-p3 runs from page 2 onto page 3; the constant total is printed on page 3.
+    doc = load_document(DEFAULT_BOOKS[0])
+    claim = "지구 전체의 물의 양은 거의 일정하게 유지된다"
+    assert support(claim, doc.pages_text(3, 3)) == 1.0
+    assert support(claim, doc.pages_text(2, 2)) < 0.65
+
+
+class _CitesPageTwo:
+    """Puts the page-3 sentence of chapter 1 on page 2 (a wrong-page citation)."""
+
+    model_name = "cites-page-two"
+    usage = LLMUsage(input_tokens=1, output_tokens=1)
+
+    def summarize_chapter(
+        self, title: str, blocks: Sequence[InputBlock], page_from: int, page_to: int
+    ) -> SummaryCall:
+        point = KeyPoint(
+            text="지구 전체의 물의 양은 거의 일정하게 유지된다.", pages=PageRange(from_=2, to=2)
+        )
+        body = SummaryBody(title=title, summary_md="x", key_points=(point,))
+        return SummaryCall(body, self.usage)
+
+    def merge_chapter(
+        self, title: str, parts: Sequence[SummaryBody], page_from: int, page_to: int
+    ) -> SummaryCall:
+        return SummaryCall(parts[0], self.usage)
+
+    def summarize_document(
+        self,
+        title: str,
+        chapters: Sequence[ChapterDigest],
+        page_from: int | None,
+        page_to: int | None,
+    ) -> SummaryCall:
+        return SummaryCall(SummaryBody(title=title, summary_md="y"), self.usage)
+
+
+def test_summary_eval_does_not_support_a_wrong_page_citation() -> None:
+    report = summary_eval.run(DEFAULT_BOOKS[:1], summarizer=_CitesPageTwo())
+    chapter = report["documents"][0]["proposed_citations"]["chapter"]
+    # Chapter 1 (pages 2-3): in range but not on page 2. Chapter 2 (page 4): out of range.
+    assert (chapter["with_pages"], chapter["in_range"], chapter["supported"]) == (2, 1, 0)
+
+
 def test_non_synthetic_truth_files_are_refused(tmp_path: Path) -> None:
     data = json.loads(DEFAULT_BOOKS[0].read_text(encoding="utf-8"))
     data["synthetic"] = False
@@ -123,4 +168,7 @@ def test_note_eval_counts_a_chapter_without_valid_items_as_failed() -> None:
     s = report["summary"]
     assert s["failed"] == 4
     assert s["footnote_coverage"] == 0.0
-    assert s["llm_calls"] == 8  # each chapter: one call + one re-request
+    # Each chapter: one batch, one call + one re-request, the one item finally dropped.
+    assert (s["llm_calls"], s["batches"], s["re_requests"], s["dropped_items"]) == (8, 4, 4, 4)
+    first = report["chapters"][0]
+    assert (first["batches"], first["re_requests"], first["dropped_items"]) == (1, 1, 1)

@@ -50,7 +50,11 @@ from book_core.notes import (
     NoteOption,
     NoteQuestion,
     NoteRequest,
+    check_response,
+    plan_batches,
+    question_size,
 )
+from book_core.notes.prompts import batch_tag
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -65,6 +69,8 @@ class RecordingClient:
     def __init__(self, inner: LLMClient) -> None:
         self.inner = inner
         self.outputs: list[LLMNoteOutput] = []
+        # (request fingerprint, output) per call: a re-request repeats its batch's request.
+        self.calls: list[tuple[str, LLMNoteOutput]] = []
         self.usage = LLMUsage()
 
     @property
@@ -75,6 +81,7 @@ class RecordingClient:
         result = self.inner.complete(request, schema)
         if isinstance(result.output, LLMNoteOutput):
             self.outputs.append(result.output)
+            self.calls.append((request.fingerprint(), result.output))
         self.usage = self.usage + result.info.usage
         return result
 
@@ -188,10 +195,16 @@ def evaluate_chapter(case: ChapterCase, client: LLMClient) -> Tally:
                 tally.proposed_items += 1
                 tags = [t.strip() for t in raw.tags]
                 tally.proposed_valid += bool(tags) and all(t in known for t in tags)
+    # Batches, re-requests and finally dropped items come from the recorded calls, so a chapter
+    # whose every item fails validation (NoteCitationError) is counted like any other.
+    batches = _batch_calls(recorder.calls)
+    tally.batches = len(batches)
+    for fingerprint, last in batches:
+        size = _batch_size(recorder.calls, fingerprint, case)
+        checked = check_response(last, [batch_tag(i) for i in range(size)], case.reference_text)
+        tally.dropped_items += checked.dropped
     if result is None:
         return tally
-    tally.batches = result.usage.batches
-    tally.dropped_items = result.usage.dropped_items
     cited: set[str] = set()
     covered: set[tuple[str, str]] = set()
     for section in result.sections:
@@ -210,6 +223,26 @@ def evaluate_chapter(case: ChapterCase, client: LLMClient) -> Tally:
     tally.questions_cited = len(cited & known)
     tally.keywords_covered = len(covered)
     return tally
+
+
+def _batch_calls(calls: Sequence[tuple[str, LLMNoteOutput]]) -> list[tuple[str, LLMNoteOutput]]:
+    """One entry per batch (consecutive calls with the same request), with its last response."""
+    batches: list[tuple[str, LLMNoteOutput]] = []
+    for fingerprint, output in calls:
+        if batches and batches[-1][0] == fingerprint:
+            batches[-1] = (fingerprint, output)
+        else:
+            batches.append((fingerprint, output))
+    return batches
+
+
+def _batch_size(
+    calls: Sequence[tuple[str, LLMNoteOutput]], fingerprint: str, case: ChapterCase
+) -> int:
+    """Questions in the batch of ``fingerprint`` (the generator's own contiguous plan)."""
+    plan = plan_batches([question_size(q) for q in case.questions])
+    order = [f for i, (f, _) in enumerate(calls) if i == 0 or calls[i - 1][0] != f]
+    return len(plan[order.index(fingerprint)])
 
 
 def client_for(provider: str) -> Callable[[ChapterCase], LLMClient]:
