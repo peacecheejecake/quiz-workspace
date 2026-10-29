@@ -9,7 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SharedQuestion, SharedWorkspace } from '../src/lib/shared/client';
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/',
+  usePathname: () => window.location.pathname,
+  useSearchParams: () => new URLSearchParams(window.location.search),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 
@@ -64,7 +65,9 @@ function routes(handlers: Record<string, () => Response | Promise<Response>>) {
   fetchMock.mockImplementation(async (input) => {
     const url = String(input);
     const path = url.replace(`/api/shared/${SHARE}`, '').split('?')[0] ?? '';
-    const handler = handlers[path];
+    // The 정리 노트 card (CHNOTE-01) reads its list on every ready view.
+    const handler =
+      handlers[path] ?? (path === '/chapter-notes' ? () => json({ items: [] }) : undefined);
     if (!handler) throw new Error(`unexpected request ${path}`);
     return handler();
   });
@@ -231,5 +234,56 @@ describe('SharedWorkspaceView', () => {
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await waitFor(() => expect(screen.getByRole('link', { name: /^fork/i })).toHaveFocus());
+  });
+  it('lists source-matched chapter notes and opens one read-only, folded (CHNOTE-01)', async () => {
+    const CHAPTER = '3e9d8f3b-4a5c-4d6e-9f7a-8b9c0d1e2f3a';
+    window.history.replaceState(null, '', `/share/${SHARE}?panel=chapter-note&chapter=${CHAPTER}`);
+    routes({
+      '': () => json(WORKSPACE),
+      '/questions': () => json({ items: [QUESTION], next_cursor: null }),
+      '/chapter-notes': () => json({ items: [{ chapter_id: CHAPTER, chapter_title: '1장 비' }] }),
+      [`/chapters/${CHAPTER}/note`]: () =>
+        json({
+          chapter_id: CHAPTER,
+          chapter_title: '1장 비',
+          created_at: '2026-10-29T06:00:00Z',
+          question_count: 1,
+          stale: false,
+          sections: [{ heading: '비', items: [{ text: 'NOTE-S', footnotes: [1] }] }],
+          footnotes: [{ number: 1, question_id: Q1, label: '1장 1번', stem_preview: '비는' }],
+        }),
+      [`/questions/${Q1}`]: () => json(QUESTION),
+    });
+    renderView();
+    const card = await screen.findByRole('region', { name: '정리 노트' });
+    expect(await within(card).findByRole('button', { name: '1장 비' })).toBeInTheDocument();
+    const panel = await screen.findByRole('dialog', { name: '정리 노트' });
+    expect(await within(panel).findByText('AI 생성')).toBeInTheDocument();
+    expect(within(panel).queryByRole('combobox')).toBeNull();
+    expect(within(panel).queryByRole('button', { name: /만들기|다시 시도/ })).toBeNull();
+    expect(panel).not.toHaveTextContent('NOTE-S');
+    await userEvent.click(within(panel).getByRole('button', { name: /^정답·해설 포함/ }));
+    expect(panel).toHaveTextContent('NOTE-S');
+    await userEvent.click(
+      within(within(panel).getByRole('list', { name: '각주' })).getByRole('link'),
+    );
+    expect(await screen.findByRole('dialog', { name: /1번 문제/ })).toBeInTheDocument();
+  });
+
+  it('shows only the missing notice for a note that no longer matches its questions', async () => {
+    const CHAPTER = '3e9d8f3b-4a5c-4d6e-9f7a-8b9c0d1e2f3a';
+    window.history.replaceState(null, '', `/share/${SHARE}?panel=chapter-note&chapter=${CHAPTER}`);
+    routes({
+      '': () => json(WORKSPACE),
+      '/questions': () => json({ items: [], next_cursor: null }),
+      [`/chapters/${CHAPTER}/note`]: () => json({ type: 'about:blank', status: 404 }, 404),
+    });
+    renderView();
+    const panel = await screen.findByRole('dialog', { name: '정리 노트' });
+    expect(
+      await within(panel).findByText('정리 노트가 갱신 중이거나 없습니다.'),
+    ).toBeInTheDocument();
+    expect(within(panel).queryByText('AI 생성')).toBeNull();
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
   });
 });

@@ -49,6 +49,12 @@ export const SCREENS = [
     query: { param: 'question' },
   },
   {
+    id: 'CHNOTE-01',
+    name: '챕터 정리 노트 Floating Side Panel',
+    path: '/workspaces/[workspaceId]',
+    query: { param: 'panel', value: 'chapter-note' },
+  },
+  {
     id: 'QIMPORT-01',
     name: '문제 PDF 가져오기',
     path: '/workspaces/[workspaceId]/questions/import',

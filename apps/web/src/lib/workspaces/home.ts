@@ -2,13 +2,22 @@
 // The home `/workspaces/:id` carries, besides the heatmap filters (overview-filters.ts) and the
 // open question (`?question=`):
 //   ?panel=documents|question-pdfs|generate|history|share   open floating dialogs (repeatable, in
-//                                                            the order they were opened)
+//        |chapter-note                                       the order they were opened)
+//   ?chapter=<id> (with panel=chapter-note)                  the chapter of the 정리 노트 panel
+//                                                            (CHNOTE-01); see noteChapterOf
 //   ?q=<text>&scope=questions|content|none                    unified search (no scope = both;
 //                                                            none = both boxes off, UX6)
 //   ?mode=&document=&section=&papers=1                        content-search options (state.ts)
 // Pure helpers, plus the redirects of the pre-UX3c routes onto the home.
 
-export const HOME_PANELS = ['documents', 'question-pdfs', 'generate', 'history', 'share'] as const;
+export const HOME_PANELS = [
+  'documents',
+  'question-pdfs',
+  'generate',
+  'history',
+  'share',
+  'chapter-note',
+] as const;
 export type HomePanel = (typeof HOME_PANELS)[number];
 export const PANEL_PARAM = 'panel';
 
@@ -47,6 +56,52 @@ export function withPanel(search: string, panel: HomePanel, open: boolean): stri
   for (const p of panels) params.append(PANEL_PARAM, p);
   const query = params.toString();
   return query ? `?${query}` : '';
+}
+
+// --- 정리 노트 panel (CHNOTE-01) ----------------------------------------------------------------
+// The panel's route is `?panel=chapter-note&chapter=<id>` (docs/screens/chapter-notes.md), and
+// `chapter` is also the heatmap's chapter filter (overview-filters.ts). One parameter cannot hold
+// both: while the note panel is open, `chapter` names the note's chapter and the heatmap is not
+// filtered by chapter; choosing a chapter filter closes the note panel.
+
+export const CHAPTER_NOTE_PANEL = 'chapter-note' satisfies HomePanel;
+const CHAPTER_PARAM = 'chapter';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isChapterNoteOpen(params: Params): boolean {
+  return parsePanels(params).includes(CHAPTER_NOTE_PANEL);
+}
+
+/**
+ * The chapter of the open 정리 노트 panel: `undefined` when the panel is closed, `null` when it is
+ * open without a usable chapter id (the panel then says the chapter cannot be found).
+ */
+export function noteChapterOf(params: Params): string | null | undefined {
+  if (!isChapterNoteOpen(params)) return undefined;
+  const id = all(params, CHAPTER_PARAM)[0];
+  return id && UUID.test(id) ? id.toLowerCase() : null;
+}
+
+/** `search` with the 정리 노트 panel opened on `chapterId` (on top), or closed (`null`). */
+export function withChapterNote(search: string, chapterId: string | null): string {
+  const opened = withPanel(search, CHAPTER_NOTE_PANEL, chapterId !== null);
+  return patchSearch(opened, { [CHAPTER_PARAM]: chapterId });
+}
+
+/**
+ * The home query after a heatmap filter change: `merged` is `search` with the filters already
+ * merged (overview-filters.ts mergeOverviewFilters), which rewrote `chapter`. A chapter filter
+ * takes the parameter over and closes the note panel; any other change keeps the note's chapter.
+ */
+export function keepNoteChapter(
+  search: string,
+  merged: string,
+  chapterFilter: string | null,
+): string {
+  const note = noteChapterOf(new URLSearchParams(search));
+  if (note === undefined) return merged;
+  if (chapterFilter !== null) return withPanel(merged, CHAPTER_NOTE_PANEL, false);
+  return patchSearch(merged, { [CHAPTER_PARAM]: note });
 }
 
 export function parseScope(params: Params): SearchScope {

@@ -3,8 +3,9 @@
 // deleted workspaces). Server-side, through the Bearer helper: the caller's heatmap under the URL
 // filters (the search text `q` filters it only when the unified search's scope includes 문제),
 // the documents (header count, 문서 관리 / 문제 PDF 관리 dialogs, content-search filter) and the
-// verified user. Everything else — dialogs (`?panel=`), the content search (`q`, `scope`, options)
-// and the practice panel (`?question=`, QPLAY-01) — is client state on top of it.
+// verified user. Everything else — dialogs (`?panel=`, the 정리 노트 panel CHNOTE-01 with its
+// `chapter`), the content search (`q`, `scope`, options) and the practice panel (`?question=`,
+// QPLAY-01) — is client state on top of it.
 import type { Metadata } from 'next';
 import { WorkspaceHome } from '@/components/workspaces/workspace-home';
 import { loadDocumentsOrFailure } from '@/lib/documents/data';
@@ -13,7 +14,7 @@ import { openQuestionId, parseOverviewFilters } from '@/lib/questions/overview-f
 import { parseSearchParams } from '@/lib/search/state';
 import { getVerifiedUser } from '@/lib/supabase/server';
 import { requireWorkspace } from '@/lib/workspaces/data';
-import { parseScope, scopeIncludesQuestions } from '@/lib/workspaces/home';
+import { isChapterNoteOpen, parseScope, scopeIncludesQuestions } from '@/lib/workspaces/home';
 
 export const metadata: Metadata = { title: 'Workspace 홈' };
 
@@ -25,7 +26,9 @@ export default async function Page({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
   const [{ workspaceId }, query] = await Promise.all([params, searchParams]);
-  const parsed = parseOverviewFilters(query);
+  // While the 정리 노트 panel is open, `chapter` is its chapter, not a heatmap filter (home.ts).
+  const urlFilters = parseOverviewFilters(query);
+  const parsed = isChapterNoteOpen(query) ? { ...urlFilters, chapter: null } : urlFilters;
   const filters = scopeIncludesQuestions(parseScope(query)) ? parsed : { ...parsed, q: '' };
   const [workspace, data, docs, user] = await Promise.all([
     requireWorkspace(workspaceId),
@@ -60,6 +63,7 @@ export default async function Page({
           practice: 'QPLAY-01',
           history: 'HISTORY-01',
           share: 'WS-SHARE-01',
+          chapterNote: 'CHNOTE-01',
         }}
       />
     </div>

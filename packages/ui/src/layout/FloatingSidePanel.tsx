@@ -64,6 +64,13 @@ export interface FloatingSidePanelProps {
    * (e.g. the button that opened it was pressed while another panel covered it).
    */
   raiseKey?: string | number;
+  /**
+   * Non-modal only: stays in the accessibility tree while a modal panel is open on top (a modal
+   * hides everything else from assistive technology, but keeps `aria-live` regions; `off` adds no
+   * announcements). For a panel whose state the modal changes, e.g. the 정리 노트 panel that
+   * folds when the practice panel opens (CHNOTE-01).
+   */
+  staysExposedUnderModal?: boolean;
   className?: string;
   children?: ReactNode;
 }
@@ -91,6 +98,7 @@ export function FloatingSidePanel({
   onOpenAutoFocus,
   onCloseAutoFocus,
   raiseKey,
+  staysExposedUnderModal = false,
   className,
   children,
 }: FloatingSidePanelProps) {
@@ -137,6 +145,7 @@ export function FloatingSidePanel({
           ref={setContent}
           // Radix hides the background from assistive technology but does not set aria-modal.
           aria-modal={modal || undefined}
+          aria-live={!modal && staysExposedUnderModal ? 'off' : undefined}
           data-modal={modal}
           data-size={size}
           data-mobile-layout={mobileLayout}

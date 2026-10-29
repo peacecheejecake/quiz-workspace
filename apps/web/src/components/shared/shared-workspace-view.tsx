@@ -28,6 +28,7 @@ import {
   type SharedViewState,
 } from '@/lib/shared/view-state';
 import { ForkWorkspaceDialog } from './fork-workspace-dialog';
+import { SharedChapterNotes } from './shared-chapter-notes';
 import { SharedDocumentView } from './shared-document-view';
 import { SharedQuestions } from './shared-questions';
 import { SharedSearch } from './shared-search';
@@ -223,6 +224,12 @@ export function SharedWorkspaceView({
             )}
           </nav>
           <SharedSearch shareId={shareId} client={client} onUnavailable={markUnavailable} />
+          <SharedChapterNotes
+            shareId={shareId}
+            client={client}
+            documents={documents}
+            onUnavailable={markUnavailable}
+          />
         </aside>
 
         <div className={styles.content}>

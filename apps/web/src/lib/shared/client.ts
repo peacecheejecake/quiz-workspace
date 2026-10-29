@@ -15,6 +15,8 @@ export type SharedQuestionList = Schemas['SharedQuestionList'];
 export type SharedSearchResponse = Schemas['SharedSearchResponse'];
 export type ContentBlock = Schemas['ContentBlock'];
 export type OutlineItem = Schemas['OutlineItem'];
+export type SharedChapterNote = Schemas['SharedChapterNote'];
+export type SharedChapterNoteList = Schemas['SharedChapterNoteList'];
 
 export const SHARE_UNAVAILABLE = 'urn:quiz-workspace:problem:share-unavailable';
 export const SHARE_SESSION_REQUIRED = 'urn:quiz-workspace:problem:share-session-required';
@@ -90,6 +92,12 @@ export interface SharedClient {
   document(documentId: string, signal?: AbortSignal): Promise<SharedDocument>;
   questions(cursor: string | null, signal?: AbortSignal): Promise<SharedQuestionList>;
   search(query: string, signal?: AbortSignal): Promise<SharedSearchResponse>;
+  /** One published question (the read-only question panel, e.g. from a note's footnote). */
+  question(questionId: string, signal?: AbortSignal): Promise<SharedQuestion>;
+  /** Chapters whose newest 정리 노트 can be shown (CHNOTE-01). */
+  chapterNotes(signal?: AbortSignal): Promise<SharedChapterNoteList>;
+  /** A chapter's newest 정리 노트; `notFound` while it does not match its source questions. */
+  chapterNote(chapterId: string, signal?: AbortSignal): Promise<SharedChapterNote>;
   /**
    * The original PDF bytes. Rejects with {@link SharedApiError} when the link or session is no
    * longer usable, else with {@link PdfLoadError}.
@@ -190,6 +198,11 @@ export function createSharedClient(
         body: JSON.stringify({ query, mode: 'hybrid', limit: RESULT_LIMIT }),
         signal,
       }),
+    question: (questionId, signal) =>
+      json<SharedQuestion>(`/questions/${encodeURIComponent(questionId)}`, { signal }),
+    chapterNotes: (signal) => json<SharedChapterNoteList>('/chapter-notes', { signal }),
+    chapterNote: (chapterId, signal) =>
+      json<SharedChapterNote>(`/chapters/${encodeURIComponent(chapterId)}/note`, { signal }),
     async pdf(documentId, signal) {
       let response: Response;
       try {

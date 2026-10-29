@@ -1,6 +1,13 @@
 'use client';
 
-import { useId, useRef, useState, type KeyboardEvent, type FocusEvent } from 'react';
+import {
+  useId,
+  useRef,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { cx } from '../internal/cx';
 import { QuestionDot } from './QuestionDot';
 import type { LastGradedResult, QuestionDotStatus, QuestionType } from './status';
@@ -38,6 +45,11 @@ export interface QuestionHeatmapProps {
   label?: string;
   /** Heading level of the chapter titles. */
   headingLevel?: 2 | 3 | 4;
+  /**
+   * Controls at the end of a chapter header (e.g. the chapter's 정리 노트 button). Every header
+   * keeps the same height with or without them, so the dot grids never shift.
+   */
+  renderChapterActions?: (chapter: HeatmapChapter) => ReactNode;
   className?: string;
 }
 
@@ -91,6 +103,7 @@ export function QuestionHeatmap({
   selectedQuestionId,
   label = '문제 heatmap',
   headingLevel = 3,
+  renderChapterActions,
   className,
 }: QuestionHeatmapProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -168,6 +181,7 @@ export function QuestionHeatmap({
       </p>
       {chapters.map((chapter) => {
         const headingId = `${baseId}-${chapter.id}`;
+        const actions = renderChapterActions?.(chapter);
         return (
           <section key={chapter.id} className="chapter" aria-labelledby={headingId}>
             <div className="header">
@@ -175,6 +189,7 @@ export function QuestionHeatmap({
                 {chapter.title}
               </Heading>
               <span className="count">{chapter.questions.length}문제</span>
+              {actions ? <div className="actions">{actions}</div> : null}
             </div>
             {chapter.questions.length > 0 ? (
               <ul className="grid">
