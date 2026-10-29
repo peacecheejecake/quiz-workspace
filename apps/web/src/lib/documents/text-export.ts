@@ -4,7 +4,8 @@
 // never logged, stored or put into a URL.
 
 export type TextExportFormat = 'md' | 'txt';
-export type TextExportRevision = 'published' | 'draft';
+/** `published`, the correction `draft`, or one revision's id (the revision DOC-02 shows). */
+export type TextExportRevision = 'published' | 'draft' | (string & {});
 
 export const TEXT_EXPORT_MESSAGES = {
   notReady: '아직 처리 중인 문서입니다.',
@@ -27,7 +28,7 @@ export function textExportPath(
   format: TextExportFormat,
   revision: TextExportRevision = 'published',
 ): string {
-  const query = `format=${format}${revision === 'draft' ? '&revision=draft' : ''}`;
+  const query = `format=${format}${revision === 'published' ? '' : `&revision=${encodeURIComponent(revision)}`}`;
   return `/api/documents/${encodeURIComponent(documentId)}/text?${query}`;
 }
 

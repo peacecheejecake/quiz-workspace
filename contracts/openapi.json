@@ -8814,17 +8814,14 @@
             }
           },
           {
-            "description": "`published` (default) or the unpublished correction `draft` (owners and editors).",
+            "description": "`published` (default), the unpublished correction `draft` (owners and editors) or a revision id of this document (the revision a screen shows; a draft id needs owner or editor).",
             "in": "query",
             "name": "revision",
             "required": false,
             "schema": {
               "default": "published",
-              "description": "`published` (default) or the unpublished correction `draft` (owners and editors).",
-              "enum": [
-                "published",
-                "draft"
-              ],
+              "description": "`published` (default), the unpublished correction `draft` (owners and editors) or a revision id of this document (the revision a screen shows; a draft id needs owner or editor).",
+              "pattern": "^(published|draft|[0-9a-fA-F-]{36})$",
               "title": "Revision",
               "type": "string"
             }

@@ -5455,8 +5455,8 @@ export interface operations {
       query?: {
         /** @description `md` (Markdown) or `txt` (plain text); `markdown` / `plain` alike. */
         format?: 'md' | 'txt' | 'markdown' | 'plain';
-        /** @description `published` (default) or the unpublished correction `draft` (owners and editors). */
-        revision?: 'published' | 'draft';
+        /** @description `published` (default), the unpublished correction `draft` (owners and editors) or a revision id of this document (the revision a screen shows; a draft id needs owner or editor). */
+        revision?: string;
       };
       header?: never;
       path: {

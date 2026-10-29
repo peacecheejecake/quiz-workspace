@@ -21,7 +21,9 @@ import {
   type DocumentDetail,
   type OutlineItem,
   type RevisionHistoryItem,
+  type RevisionInfo,
 } from '@/lib/documents/editor-api';
+import type { TextExportRevision } from '@/lib/documents/text-export';
 import { JobGoneError, watchJob } from '@/lib/documents/job-events';
 import {
   applySavedBlock,
@@ -578,7 +580,7 @@ export function DocumentEditor({
           });
 
   // DOC-03: editors with an unpublished correction draft export either revision; `전체 복사`
-  // copies the revision on screen. A pinned (search-hit) view does not load the draft, so the
+  // copies the revision on screen (by id when it is an older, pinned revision). A pinned (search-hit) view does not load the draft, so the
   // document detail tells whether one exists.
   const latest = document.latest_revision;
   const draftExists =
@@ -591,7 +593,7 @@ export function DocumentEditor({
       title={document.title}
       variant="header"
       draft={draftExists}
-      copyRevision={content?.revision && isDraft(content.revision) ? 'draft' : 'published'}
+      copyRevision={copyRevisionOf(content?.revision ?? null)}
     />
   ) : undefined;
 
@@ -757,4 +759,11 @@ export function DocumentEditor({
       </p>
     </div>
   );
+}
+
+/** The `revision` of a 전체 복사: the revision the text pane shows (DOC-03). */
+export function copyRevisionOf(revision: RevisionInfo | null): TextExportRevision {
+  if (!revision) return 'published';
+  if (isDraft(revision)) return 'draft';
+  return revision.is_active ? 'published' : revision.id;
 }

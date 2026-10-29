@@ -160,6 +160,52 @@ def test_doc_03_c01_outsiders_and_share_sessions_are_refused(seed: Any) -> None:
         assert RAIN not in res.text
 
 
+def test_doc_03_c01_a_revision_by_id_exports_the_revision_on_screen(seed: Any) -> None:
+    """DOC-02 shows a search hit's (older) published revision by id; 전체 복사 copies that one."""
+    owner = seed.client("c01r-owner")
+    viewer = seed.client("c01r-viewer")
+    ws = owner.create_workspace()
+    seed.membership(ws["id"], viewer.user, "viewer")
+    doc = owner.upload_ready_book(ws["id"])
+    first = str(owner.ok("GET", f"/documents/{doc}")["active_revision_id"])
+
+    token = f"발행표지{uuid.uuid4().hex[:8]}"
+    owner.correct(doc, RAIN, f"E2E 발행 문장 {token}.")
+    draft_id = str(owner.ok("GET", f"/documents/{doc}/outline?revision=latest")["revision"]["id"])
+    # A draft by id: owners and editors only, named as a draft.
+    for fmt in ("md", "txt"):
+        res = viewer.export(doc, fmt, draft_id)
+        expect_status(res, 403, f"viewer draft id {fmt}", seed.INSUFFICIENT_ROLE)
+        assert token not in res.text
+    by_id = owner.export(doc, "md", draft_id)
+    assert token in ok_text(by_id, "owner draft id")
+    assert seed.attachment_filename(by_id) == "book-ko (초안).md"
+
+    accepted = owner.ok("POST", f"/documents/{doc}/publish", {"revision_id": draft_id}, (202,))
+    owner.wait_for_job(str(accepted["job_id"]))
+    assert str(owner.ok("GET", f"/documents/{doc}")["active_revision_id"]) == draft_id
+
+    # The older published revision by id: its own text, for every member; published = the new one.
+    for member, label in ((owner, "owner"), (viewer, "viewer")):
+        old = member.export(doc, "md", first)
+        body = ok_text(old, f"{label} old revision")
+        assert RAIN in body, f"{label}: the old revision keeps its text"
+        assert token not in body, f"{label}: the newer publish is not in the old revision"
+        assert seed.attachment_filename(old) == "book-ko.md"
+        assert token in ok_text(member.export(doc, "md"), f"{label} published")
+        assert token in ok_text(member.export(doc, "txt", draft_id), f"{label} new revision id")
+
+    # A revision of another document (even the same owner's) or an unknown id: 404.
+    other_ws = owner.create_workspace()
+    other = owner.upload_ready_book(other_ws["id"])
+    other_rev = str(owner.ok("GET", f"/documents/{other}")["active_revision_id"])
+    for revision in (other_rev, RANDOM_ID):
+        res = owner.export(doc, "md", revision)
+        expect_status(res, 404, "foreign or unknown revision id")
+        assert RAIN not in res.text
+    expect_status(owner.export(other, "md", first), 404, "revision of another document")
+
+
 # ---------------------------------------------------------------------------------------------
 # DOC-03-C03 headers, file names, nothing recorded
 # ---------------------------------------------------------------------------------------------

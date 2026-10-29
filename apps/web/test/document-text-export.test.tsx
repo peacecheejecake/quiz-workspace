@@ -5,6 +5,7 @@ import './dom-setup';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { copyRevisionOf } from '../src/components/documents/editor/document-editor';
 import { TextExportMenu } from '../src/components/documents/text-export-menu';
 import {
   attachmentName,
@@ -38,6 +39,9 @@ describe('text export helpers', () => {
     expect(textExportPath(DOC, 'md')).toBe(`/api/documents/${DOC}/text?format=md`);
     expect(textExportPath(DOC, 'txt', 'draft')).toBe(
       `/api/documents/${DOC}/text?format=txt&revision=draft`,
+    );
+    expect(textExportPath(DOC, 'md', DOC)).toBe(
+      `/api/documents/${DOC}/text?format=md&revision=${DOC}`,
     );
   });
 
@@ -98,6 +102,17 @@ describe('text export helpers', () => {
     await copyText(load);
     expect(load).toHaveBeenCalledTimes(1);
     expect(writeText).toHaveBeenCalledWith(MD);
+  });
+});
+
+describe('copyRevisionOf (DOC-02 전체 복사)', () => {
+  const info = (id: string, status: 'draft' | 'published', isActive: boolean) =>
+    ({ id, status, is_active: isActive }) as Parameters<typeof copyRevisionOf>[0];
+  it('copies the draft, the published revision, or an older pinned revision by id', () => {
+    expect(copyRevisionOf(null)).toBe('published');
+    expect(copyRevisionOf(info('r2', 'draft', false))).toBe('draft');
+    expect(copyRevisionOf(info('r1', 'published', true))).toBe('published');
+    expect(copyRevisionOf(info('r0', 'published', false))).toBe('r0');
   });
 });
 

@@ -68,7 +68,7 @@ book_core/
 - `SearchHit`: 검색모드, 점수 유형, 관련 구절, 문서·장·절·원본 위치.
 - `Excerpt`: 원문 문단 경계로 확장된 발췌 + 페이지·원본 좌표.
 - `QuestionDraft`: 원문 추출/변형 초안, source evidence, validations, review 상태.
-- `export.render_revision(revision, markdown|plain)`: 발행·초안 revision의 canonical blocks → Markdown/텍스트(heading 깊이, GFM 표, `[그림 p.N]`, 쪽 marker), 결정적 순수 함수(DOC-03).
+- `export.render_revision(revision, md|txt, *, title)`(`markdown`·`plain` 별칭 허용): 발행·초안 revision의 canonical blocks → Markdown/텍스트(heading 깊이, GFM 표, `[그림 p.N]`, 쪽 marker), 결정적 순수 함수(DOC-03).
 - `summary`: 장 입력(정규화 블록 텍스트 + 쪽) → `SummaryUnit{title, summary_md, key_points[{text, pages}]}`(map), 장 unit들 → 문서 요약(reduce); 큰 장 분할·병합, 쪽 범위 검증, 테스트용 결정적 추출 fake(DOCSUM-01).
 - `notes`: 장의 확정 문제(`Q1…Qn`: 발문·보기·정답·해설) + 참고 본문 → `ChapterNote{sections[{heading, items[{text, q[tags], p[{block_id, quote, pages}]}]}]}`; 모든 항목 문제 tag 필수, 모르는 tag·인용 불일치 거절(1회 재요청)·tag 없는 항목 제거, 큰 장 묶음 생성·병합(CHNOTE-01).
 
@@ -147,7 +147,7 @@ workspace
 | GET | `/api/v1/workspaces/{id}/documents` | 모든 PDF 목록(`kind`·`kind_source`·`question_count`·`latest_import_id`·처리 작업) |
 | PATCH | `/api/v1/documents/{id}` | `종류 변경`(`kind`, 사람이 고른 종류는 재분류 안 함; 쓰이는 교재 → 문제지는 409 `document-in-use`; 문제 있는 종류면 추출 시작, UX6-UPLOAD) |
 | GET | `/api/v1/documents/{id}/outline` | 장·절 트리 |
-| GET | `/api/v1/documents/{id}/text` | 전문 텍스트 내보내기(`format=markdown\|plain`, `revision=published\|draft` — draft는 편집 권한; attachment·no-store; 공유 게스트 불가, DOC-03) |
+| GET | `/api/v1/documents/{id}/text` | 전문 텍스트 내보내기(`format=md\|txt` — 별칭 `markdown\|plain` 허용, `revision=published\|draft\|<revision id>` — draft·초안 id는 편집 권한, 이전 발행본 id는 모든 구성원(DOC-02가 보이는 revision의 `전체 복사`); attachment·no-store; 공유 게스트 불가, DOC-03) |
 | GET | `/api/v1/documents/{id}/summary` | 문서 요약(`available`·`enabled`·현재 run 상태·진행, 마지막 성공 요약 + `stale`, 장별 요약; DOCSUM-01) |
 | POST | `/api/v1/documents/{id}/summary` | `요약 만들기`(opt-in + 현재 발행 revision run, 편집 권한, `Idempotency-Key`; 문제지 409 `summary-not-applicable`, 꺼짐 409 `summary-disabled`) |
 | POST | `/api/v1/documents/{id}/summary/retry` | 실패한 현재 revision 요약 다시 시도(편집 권한) |

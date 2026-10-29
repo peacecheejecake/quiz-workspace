@@ -295,4 +295,32 @@ describe('DocumentEditor', () => {
     const latest = screen.getByRole('link', { name: '최신 원문 보기·교정하기' });
     expect(latest.getAttribute('href')).toMatch(/\/documents\/[^?]+\?page=2&block=b2$/);
   });
+  it('DOC-03 전체 복사 of a pinned older revision copies that revision by id, not the published one', async () => {
+    // A newer revision r1 is published; the screen shows the search hit's revision r0.
+    server.revision = { ...revision('r0', 1, false), is_active: false };
+    const base = vi.mocked(fetch).getMockImplementation();
+    if (!base) throw new Error('fetch mock missing');
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input).includes('/text?')) {
+        return new Response('# 책\n\n원래 문장\n', {
+          headers: { 'content-disposition': "attachment; filename*=UTF-8''%EC%B1%85.md" },
+        });
+      }
+      return base(input, init);
+    });
+    const writeText = vi.fn(async () => undefined);
+    const user = userEvent.setup(); // installs its own clipboard: replace it afterwards
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderEditor({ pinnedRevisionId: 'r0' });
+    expect(await screen.findByText('둘째 문장')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '텍스트 내보내기' }));
+    await user.click(await screen.findByRole('menuitem', { name: '전체 복사' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('# 책\n\n원래 문장\n'));
+    const exports = vi
+      .mocked(fetch)
+      .mock.calls.map(([input]) => String(input))
+      .filter((url) => url.includes('/text?'));
+    expect(exports).toEqual([`/api/documents/${DOC}/text?format=md&revision=r0`]);
+  });
 });
