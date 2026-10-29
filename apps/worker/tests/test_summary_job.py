@@ -56,6 +56,8 @@ class FakeSummaryStore:
     progress: list[tuple[int, int]] = field(default_factory=list)
     documents: FakeDocumentStore | None = None
     writable: bool = True
+    # Owners/editors of the workspace (None = anyone): worker_workspace_writable per user.
+    editors: set[uuid.UUID] | None = None
     usage_records: list[dict[str, Any]] = field(default_factory=list)
 
     @contextmanager
@@ -99,7 +101,7 @@ class FakeSummaryStore:
         self.progress.append((done, total))
 
     def workspace_writable(self, workspace_id: uuid.UUID, user_id: uuid.UUID | None) -> bool:
-        return self.writable
+        return self.writable and (self.editors is None or user_id in self.editors)
 
     def record_usage(self, run_id: uuid.UUID, job_id: uuid.UUID, usage: Mapping[str, Any]) -> None:
         row = self.runs[run_id]
@@ -127,7 +129,7 @@ class FakeSummaryStore:
                 page_to: int | None,
                 usage: LLMUsage | None,
             ) -> StoredUnit:
-                if not store.writable:
+                if not store.workspace_writable(run.workspace_id, user_id):
                     raise WorkspaceUnavailableError("the workspace is no longer writable")
                 key = (run.document_id, scope, section_key, input_hash, prompt_version, model)
                 unit = StoredUnit(str(uuid.uuid4()), body, page_from, page_to, str(run.id))
@@ -145,7 +147,7 @@ class FakeSummaryStore:
         user_id: uuid.UUID | None,
         before_commit: Callable[[], None],
     ) -> FinishOutcome:
-        if not self.writable:
+        if not self.workspace_writable(run.workspace_id, user_id):
             return "workspace_unavailable"
         row = self.runs[run.id]
         if row["status"] != "running":
@@ -228,7 +230,12 @@ class World:
         self._publish(new_id)
         return new_id
 
-    def start(self, revision_id: uuid.UUID | None = None, filename: str = "book.pdf") -> uuid.UUID:
+    def start(
+        self,
+        revision_id: uuid.UUID | None = None,
+        filename: str = "book.pdf",
+        created_by: uuid.UUID | None = None,
+    ) -> uuid.UUID:
         run_id, job_id = uuid.uuid4(), uuid.uuid4()
         self.summaries.runs[run_id] = {
             "workspace_id": self.document.workspace_id,
@@ -244,7 +251,7 @@ class World:
             schema_version=1,
             idempotency_key=f"document_summary:{run_id}",
             workspace_id=self.document.workspace_id,
-            created_by=uuid.uuid4(),
+            created_by=created_by or uuid.uuid4(),
             payload={"run_id": str(run_id), "document_id": str(self.document_id)},
         )
         self.jobs.create(envelope, max_attempts=3)
@@ -440,3 +447,20 @@ def test_docsum_b_usage_accumulates_over_retried_attempts(world: World) -> None:
     assert (usage["generated_units"], usage["reused_units"]) == (3, 0), "its own chapters"
     assert usage["input_tokens"] > first["input_tokens"]
     assert fake.calls == 4, "chapters once, the document twice"
+
+
+def test_docsum_01_ac02_a_publish_run_is_the_publishers_after_the_opt_in_editor_left(
+    world: World,
+) -> None:
+    opted_in_by, publisher = uuid.uuid4(), uuid.uuid4()
+    world.summaries.editors = {publisher}  # A was demoted to viewer; B still edits
+    # The publish path attributes the run and its job to the publishing user (B).
+    world.correct("B가 교정한 문장이다.")
+    run_id = world.start(created_by=publisher)
+    assert world.run(run_id).outcome is RunOutcome.SUCCEEDED
+    assert world.run_row(run_id)["status"] == "succeeded"
+    # Attributed to the opt-in editor instead, the same run could not write.
+    world.correct("A 기준 교정 문장이다.")
+    stale = world.start(created_by=opted_in_by)
+    assert world.run(stale).outcome is RunOutcome.FAILED
+    assert world.run_row(stale)["error_code"] == "workspace_unavailable"

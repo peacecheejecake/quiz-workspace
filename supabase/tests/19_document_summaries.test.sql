@@ -4,7 +4,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(40);
+select plan(41);
 
 -- Schema -----------------------------------------------------------------------------------------
 select columns_are('public', 'document_summary_runs',
@@ -39,24 +39,26 @@ select ok(has_column_privilege('quiz_worker', 'public.document_summary_runs', 's
                                'document_revision_id', 'update'),
   'quiz_worker moves a run''s state only');
 select ok(has_function_privilege('quiz_worker',
-  'public.worker_start_document_summary(uuid, uuid, boolean)', 'execute'), 'quiz_worker may start');
+  'public.worker_start_document_summary(uuid, uuid, uuid, boolean)', 'execute'), 'quiz_worker may start');
 select ok(not has_function_privilege('quiz_api',
-  'public.worker_start_document_summary(uuid, uuid, boolean)', 'execute')
+  'public.worker_start_document_summary(uuid, uuid, uuid, boolean)', 'execute')
   and not has_function_privilege('authenticated',
-  'public.worker_start_document_summary(uuid, uuid, boolean)', 'execute')
+  'public.worker_start_document_summary(uuid, uuid, uuid, boolean)', 'execute')
   and not has_function_privilege('anon',
-  'public.worker_start_document_summary(uuid, uuid, boolean)', 'execute'), 'nobody else may');
+  'public.worker_start_document_summary(uuid, uuid, uuid, boolean)', 'execute'), 'nobody else may');
 
 -- Fixtures (rolled back) -------------------------------------------------------------------------
 insert into auth.users (id, email) values
   ('00000000-0000-4000-8000-0000000d5001', 'docsum-owner@example.test'),
-  ('00000000-0000-4000-8000-0000000d5002', 'docsum-editor@example.test');
+  ('00000000-0000-4000-8000-0000000d5002', 'docsum-editor@example.test'),
+  ('00000000-0000-4000-8000-0000000d5003', 'docsum-viewer@example.test');
 insert into public.workspaces (id, name, owner_id) values
   ('10000000-0000-4000-8000-0000000d5001', 'summary ws', '00000000-0000-4000-8000-0000000d5001'),
   ('10000000-0000-4000-8000-0000000d5002', 'archived ws', '00000000-0000-4000-8000-0000000d5001');
 insert into public.workspace_memberships (workspace_id, user_id, role) values
   ('10000000-0000-4000-8000-0000000d5001', '00000000-0000-4000-8000-0000000d5001', 'owner'),
   ('10000000-0000-4000-8000-0000000d5001', '00000000-0000-4000-8000-0000000d5002', 'editor'),
+  ('10000000-0000-4000-8000-0000000d5001', '00000000-0000-4000-8000-0000000d5003', 'viewer'),
   ('10000000-0000-4000-8000-0000000d5002', '00000000-0000-4000-8000-0000000d5001', 'owner');
 
 -- d1: opted-in book, d2: book never opted in, d3: opted-in question paper, d4: opted-in book in
@@ -178,26 +180,37 @@ select throws_ok(
              '30000000-0000-4000-8000-0000000d5002', 'publish') $$,
   '42501', null, 'quiz_worker cannot insert runs directly');
 select is((select count(*)::int from public.worker_start_document_summary(
-  '20000000-0000-4000-8000-0000000d5001', '30000000-0000-4000-8000-0000000d5005', false)), 0,
+  '20000000-0000-4000-8000-0000000d5001', '30000000-0000-4000-8000-0000000d5005',
+  '00000000-0000-4000-8000-0000000d5001', false)), 0,
   'the worker''s switch is off: nothing starts');
 select is((select count(*)::int from public.worker_start_document_summary(
-  '20000000-0000-4000-8000-0000000d5002', '30000000-0000-4000-8000-0000000d5002', true)), 0,
+  '20000000-0000-4000-8000-0000000d5002', '30000000-0000-4000-8000-0000000d5002',
+  '00000000-0000-4000-8000-0000000d5001', true)), 0,
   'a book never opted in starts nothing');
 select is((select count(*)::int from public.worker_start_document_summary(
-  '20000000-0000-4000-8000-0000000d5003', '30000000-0000-4000-8000-0000000d5003', true)), 0,
+  '20000000-0000-4000-8000-0000000d5003', '30000000-0000-4000-8000-0000000d5003',
+  '00000000-0000-4000-8000-0000000d5001', true)), 0,
   'a question paper is never summarized');
 select is((select count(*)::int from public.worker_start_document_summary(
-  '20000000-0000-4000-8000-0000000d5004', '30000000-0000-4000-8000-0000000d5004', true)), 0,
+  '20000000-0000-4000-8000-0000000d5004', '30000000-0000-4000-8000-0000000d5004',
+  '00000000-0000-4000-8000-0000000d5001', true)), 0,
   'an archived workspace starts nothing');
 select is((select count(*)::int from public.worker_start_document_summary(
-  '20000000-0000-4000-8000-0000000d5001', '30000000-0000-4000-8000-0000000d5001', true)), 0,
+  '20000000-0000-4000-8000-0000000d5001', '30000000-0000-4000-8000-0000000d5001',
+  '00000000-0000-4000-8000-0000000d5001', true)), 0,
   'a revision that is not the active one starts nothing');
+select is((select count(*)::int from public.worker_start_document_summary(
+  '20000000-0000-4000-8000-0000000d5001', '30000000-0000-4000-8000-0000000d5005',
+  '00000000-0000-4000-8000-0000000d5003', true)), 0,
+  'a publisher who can no longer edit starts nothing');
 create temporary table started on commit drop as
 select * from public.worker_start_document_summary('20000000-0000-4000-8000-0000000d5001',
-  '30000000-0000-4000-8000-0000000d5005', true);
+  '30000000-0000-4000-8000-0000000d5005',
+  '00000000-0000-4000-8000-0000000d5001', true);
 select is((select count(*)::int from started), 1, 'the active revision of an opted-in book starts');
 select is((select count(*)::int from public.worker_start_document_summary(
-  '20000000-0000-4000-8000-0000000d5001', '30000000-0000-4000-8000-0000000d5005', true)), 0,
+  '20000000-0000-4000-8000-0000000d5001', '30000000-0000-4000-8000-0000000d5005',
+  '00000000-0000-4000-8000-0000000d5001', true)), 0,
   'a re-delivered publish starts nothing more');
 reset role;
 
@@ -206,16 +219,16 @@ select results_eq(
             r.trigger, r.job_id = s.job_id
        from public.document_summary_runs r join started s on s.run_id = r.id $$,
   $$ values ('10000000-0000-4000-8000-0000000d5001'::uuid,
-             '00000000-0000-4000-8000-0000000d5002'::uuid,
+             '00000000-0000-4000-8000-0000000d5001'::uuid,
              '20000000-0000-4000-8000-0000000d5001'::uuid,
              '30000000-0000-4000-8000-0000000d5005'::uuid, 'queued'::text, 'publish'::text,
              true) $$,
-  'a queued publish run of the revision, attributed to the person who opted in');
+  'a queued publish run of the revision, attributed to the publisher (not the opt-in editor)');
 select results_eq(
   $$ select j.job_type, j.created_by, j.idempotency_key, j.payload, j.status,
             j.published_at is null
        from public.async_jobs j join started s on s.job_id = j.id $$,
-  $$ select 'document.summarize'::text, '00000000-0000-4000-8000-0000000d5002'::uuid,
+  $$ select 'document.summarize'::text, '00000000-0000-4000-8000-0000000d5001'::uuid,
             'document_summary:' || run_id::text,
             jsonb_build_object('run_id', run_id::text,
                                'document_id', '20000000-0000-4000-8000-0000000d5001'),
@@ -236,7 +249,8 @@ update public.document_summary_runs set status = 'failed', finished_at = now(),
  where id = (select run_id from started);
 set local role quiz_worker;
 select is((select count(*)::int from public.worker_start_document_summary(
-  '20000000-0000-4000-8000-0000000d5001', '30000000-0000-4000-8000-0000000d5005', true)), 0,
+  '20000000-0000-4000-8000-0000000d5001', '30000000-0000-4000-8000-0000000d5005',
+  '00000000-0000-4000-8000-0000000d5001', true)), 0,
   'auto refresh off: no run');
 reset role;
 select is((select count(*)::int from public.document_summary_runs

@@ -816,12 +816,14 @@ def test_docsum_01_c02_publish_passes_the_switch_and_hands_the_summary_job_on(
     world.deps.summary = True
     document, revision = world.upload()
     world.store.opted_in.add(document.id)
+    envelope = world.submit(document, revision.id)
 
-    result = world.run(world.submit(document, revision.id))
+    result = world.run(envelope)
 
     assert result.outcome is RunOutcome.SUCCEEDED, result.error
     assert world.store.summary_flags == [True]
-    run_id, job_id = world.store.summary_starts[revision.id]
+    run_id, job_id, user_id = world.store.summary_starts[revision.id]
+    assert user_id == envelope.created_by, "attributed to the publisher"
     assert result.record.result["summary_run_id"] == str(run_id)
     assert started_import_jobs(result.record.result) == [job_id]
 

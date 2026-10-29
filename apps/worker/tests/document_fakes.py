@@ -75,7 +75,9 @@ class FakeDocumentStore:
     # started (revision -> (run id, job id)).
     opted_in: set[uuid.UUID] = field(default_factory=set)
     summary_flags: list[bool] = field(default_factory=list)
-    summary_starts: dict[uuid.UUID, tuple[uuid.UUID, uuid.UUID]] = field(default_factory=dict)
+    summary_starts: dict[uuid.UUID, tuple[uuid.UUID, uuid.UUID, uuid.UUID | None]] = field(
+        default_factory=dict
+    )
     writes: int = 0
     busy: bool = False
     locked: set[uuid.UUID] = field(default_factory=set)
@@ -254,8 +256,8 @@ class FakeDocumentStore:
             )
         # worker_start_document_summary: an opted-in book, once per revision (DOCSUM-B).
         if summary and document.document_type != QUESTION_PAPER and document_id in self.opted_in:
-            run_id, job_id = self.summary_starts.setdefault(
-                revision_id, (uuid.uuid4(), uuid.uuid4())
+            run_id, job_id, _ = self.summary_starts.setdefault(
+                revision_id, (uuid.uuid4(), uuid.uuid4(), user_id)
             )
             return PublishOutcome(
                 previous=previous,

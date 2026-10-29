@@ -34,16 +34,18 @@
 -- document_summary_run_units: the units of a run in display order (position 0 = the document
 --   summary, 1.. = the chapters in outline order).
 --
--- worker_start_document_summary(document, revision, enabled) -> (run_id, job_id) or no row
+-- worker_start_document_summary(document, revision, user, enabled) -> (run_id, job_id) or no row
 --   Called by quiz_worker inside the publish transaction of `revision` (the document row is
 --   already locked FOR UPDATE there). `enabled` is the worker's own switch
 --   (WORKER_DOCUMENT_SUMMARY and an LLM). Starts a run only when the document is a live book
 --   (never a question paper) whose active revision is `revision`, it is opted in
---   (summary_enabled_at), its workspace is active, and the revision has no live run yet (a
+--   (summary_enabled_at), `user` may still write into its active workspace, and the revision has no live run yet (a
 --   retried or re-delivered parse job starts nothing). The run (trigger `publish`) and its
 --   `document.summarize` job (unpublished: the parse job hands it to the broker when it is done,
---   else the reconciler does) are attributed to the person who opted in. Unfinished runs of
---   older revisions are superseded in the same transaction.
+--   else the reconciler does) are attributed to `user`, the parse job's user who published the
+--   revision (its write access was just re-checked under a lock in the same transaction);
+--   summary_enabled_by stays only the record of who opted in. Unfinished runs of older revisions
+--   are superseded in the same transaction.
 --
 -- worker_fork_commit (20261018200000) also copies, per copied document, the newest succeeded run
 --   of the pinned revision with its units (new ids, no usage, no job) and the opt-in
@@ -190,6 +192,7 @@ create index document_summary_run_units_unit_idx
 create function public.worker_start_document_summary(
   p_document_id uuid,
   p_revision_id uuid,
+  p_user_id uuid,
   p_enabled boolean
 )
 returns table (run_id uuid, job_id uuid)
@@ -200,15 +203,15 @@ set search_path = ''
 as $$
 declare
   doc record;
-  ws_status text;
   new_run uuid := pg_catalog.gen_random_uuid();
   new_job uuid := pg_catalog.gen_random_uuid();
 begin
-  if p_document_id is null or p_revision_id is null or not coalesce(p_enabled, false) then
+  if p_document_id is null or p_revision_id is null or p_user_id is null
+     or not coalesce(p_enabled, false) then
     return;
   end if;
   select d.id, d.workspace_id, d.document_type, d.active_revision_id, d.deleted_at,
-         d.summary_enabled_at, d.summary_enabled_by
+         d.summary_enabled_at
     into doc
     from public.documents d
    where d.id = p_document_id
@@ -220,12 +223,7 @@ begin
      or doc.active_revision_id is distinct from p_revision_id then
     return;
   end if;
-  select w.status
-    into ws_status
-    from public.workspaces w
-   where w.id = doc.workspace_id and w.deleted_at is null
-     for share;
-  if ws_status is distinct from 'active' then
+  if not public.worker_workspace_writable(doc.workspace_id, p_user_id, true) then
     return;
   end if;
   if exists (
@@ -244,7 +242,7 @@ begin
 
   insert into public.async_jobs (id, workspace_id, created_by, job_type, schema_version,
                                  idempotency_key, payload)
-  values (new_job, doc.workspace_id, doc.summary_enabled_by, 'document.summarize', 1,
+  values (new_job, doc.workspace_id, p_user_id, 'document.summarize', 1,
           'document_summary:' || new_run::text,
           pg_catalog.jsonb_build_object('run_id', new_run::text,
                                         'document_id', p_document_id::text));
@@ -252,7 +250,7 @@ begin
   insert into public.document_summary_runs (id, workspace_id, document_id, document_revision_id,
                                             status, trigger, job_id, created_by)
   values (new_run, doc.workspace_id, p_document_id, p_revision_id, 'queued', 'publish', new_job,
-          doc.summary_enabled_by);
+          p_user_id);
 
   run_id := new_run;
   job_id := new_job;
@@ -260,13 +258,13 @@ begin
 end;
 $$;
 
-comment on function public.worker_start_document_summary(uuid, uuid, boolean) is
+comment on function public.worker_start_document_summary(uuid, uuid, uuid, boolean) is
   'DOCSUM-B: start the summary of a just-published revision of an opted-in book once '
   '(quiz_worker only).';
 
-revoke all on function public.worker_start_document_summary(uuid, uuid, boolean)
+revoke all on function public.worker_start_document_summary(uuid, uuid, uuid, boolean)
   from public, anon, authenticated, quiz_api;
-grant execute on function public.worker_start_document_summary(uuid, uuid, boolean)
+grant execute on function public.worker_start_document_summary(uuid, uuid, uuid, boolean)
   to quiz_worker;
 
 -- ---------------------------------------------------------------------------------------------

@@ -757,15 +757,16 @@ class PostgresDocumentStore:
                 )
             summarized = None
             if summary and document_type != QUESTION_PAPER:
-                # DOCSUM-B: only for an opted-in book of an active workspace, once per revision
-                # (supabase/migrations/20261029120000_document_summaries.sql).
+                # DOCSUM-B: only for an opted-in book of an active workspace, once per revision,
+                # attributed to the publishing user (the job's user, writable as checked above;
+                # supabase/migrations/20261029120000_document_summaries.sql).
                 summarized = (
                     conn.execute(
                         text(
                             "select run_id, job_id "
-                            "from public.worker_start_document_summary(:d, :r, true)"
+                            "from public.worker_start_document_summary(:d, :r, :u, true)"
                         ),
-                        {"d": document_id, "r": revision_id},
+                        {"d": document_id, "r": revision_id, "u": user_id},
                     )
                     .mappings()
                     .first()
