@@ -67,7 +67,7 @@
 | `VERCEL_TOKEN`, `RAILWAY_TOKEN`, `SUPABASE_DB_URL` | 위 1장 | GitHub Environment secrets |
 | `SMOKE_USER_{A,B}_{EMAIL,PASSWORD}` | 3장 5단계의 smoke 계정 | GitHub Environment secrets |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | 1장 8단계(Workers AI 권한만의 custom token) | Railway `api`, `worker` (Vercel 금지; `WORKER_EMBEDDER=workers_ai`일 때 필수) |
-| `LLM_API_KEY`, `LLM_MODEL` | LLM 제공자(선택, **사용자 결정**: 비용·데이터 정책) | Railway `worker` |
+| `LLM_API_KEY`, `LLM_MODEL` | LLM 제공자(선택, **사용자 결정**: 비용·데이터 정책) | Railway `worker` (`LLM_MODEL`은 문서 요약·정리 노트를 켜면 `api`에도 같은 값, 9장; `LLM_API_KEY`는 `api`에 넣지 않음) |
 
 서비스별 전체 목록과 기본값은 manifest가 기준이다:
 
@@ -249,7 +249,7 @@ make deploy-prepare REF=main ENV=production ARGS="--db-url-env SUPABASE_DB_URL -
 - api 도메인(현재 Railway 기본 domain). (지역 Singapore, production web `quiz.red-10-proto.xyz`, SMTP Resend `mail.red-10-proto.xyz`는 결정됨.)
 - GHCR 이미지 공개 여부 vs Railway registry credential.
 - staging 도메인의 Vercel Deployment Protection.
-- LLM 사용 여부·모델·예산(`LLM_API_KEY`/`LLM_MODEL`; 미설정 시 문제 생성 비활성).
+- LLM 사용 여부·모델·예산(`LLM_API_KEY`/`LLM_MODEL`; 미설정 시 문제 생성 비활성). 문서 요약·챕터 정리 노트(`WORKER_DOCUMENT_SUMMARY`·`WORKER_CHAPTER_NOTES`)를 staging·production에서 켤지와 그 예산(9장, ⛔ 사용자 승인).
 - `/terms`, `/privacy` 실제 문구(현재 placeholder).
 - CAPTCHA(A4 구현 완료): staging을 기본값인 Turnstile 테스트 키 쌍으로 둘지, staging 전용 실제 widget을 쓸지(그 경우 DEP smoke 로그인 단계는 수동). production은 실제 widget 필수.
 
@@ -263,3 +263,40 @@ make deploy-prepare REF=main ENV=production ARGS="--db-url-env SUPABASE_DB_URL -
 - Supabase session pooler로 `quiz_api.<ref>`/`quiz_worker.<ref>` 로그인, GitHub runner(IPv4)에서 `db push`.
 - `supabase config push`가 `[remotes.staging]`을 적용하는지(`--project-ref`가 `project_id`와 같아야 함). `[remotes.staging.auth.captcha]`(Turnstile)가 Dashboard Attack Protection에 반영되는지.
 - Turnstile 테스트 sitekey 위젯이 headless Chromium(DEP-01 UI 로그인)에서 상호작용 없이 통과하는지.
+
+## 9. AI 문서 요약·챕터 정리 노트 켜기 (DOCSUM-X) — ⛔ 사용자 승인 후
+
+문서 요약(DOCSUM-01)과 챕터 정리 노트(CHNOTE-01)는 모든 환경에서 **기본 꺼짐**이다. staging·production에서 켜는 일(기능 플래그, LLM 키, 비용)은 **사용자 승인 후에만** 한다: 이 장은 방법만 적고, 저장소·CI·배포 workflow는 어떤 환경에서도 이 값을 켜지 않는다. 승인(환경, 모델, 월 예산, 데이터 정책 동의)은 `docs/implementation-plan.md` §7 결정 기록에 남긴 뒤 시작한다. CI·E2E는 `APP_ENV=test`의 결정적 fake만 쓴다(실제 provider 호출 없음).
+
+**무엇이 켜지나**
+
+| 변수 | 서비스 | 켜면 |
+|---|---|---|
+| `WORKER_DOCUMENT_SUMMARY=true` | `api`·`worker` **같은 값**(check-env `same`) | 편집자가 `요약 만들기`로 opt-in한 교재의 발행본을 장 단위로 요약하고, 그 뒤 모든 발행(교정 발행·revision 복원)에서 바뀐 장만 다시 요약한다. **발행본 본문이 LLM 제공자로 전송된다.** |
+| `WORKER_CHAPTER_NOTES=true` | `api`·`worker` **같은 값** | 편집자가 Heatmap 장마다 `정리 노트 만들기`/`다시 만들기`를 누를 때 노트를 만든다. **확정 문제의 발문·보기·정답·해설·채점 기준과 장 본문(참고용, 최대 20,000자)이 LLM 제공자로 전송된다.** |
+
+두 플래그는 독립이다(하나만 켤 수 있음). API는 플래그가 켜져 있고 `LLM_MODEL`이 설정된 경우에만 `available: true`를 주고(아니면 버튼이 비활성 + "이 환경에서는 AI 요약/정리 노트를 사용할 수 없습니다."), worker는 플래그와 `LLM_API_KEY`가 모두 있어야 발행 시 요약 run을 시작한다. 플래그만 켜고 키가 없으면 run·노트가 `llm_unavailable`로 실패한다.
+
+**필요한 변수**(manifest `infra/deploy/env-manifest.toml`가 기준; 플래그가 `true`면 `make check-env`가 필수로 검사)
+
+- `worker`: `LLM_API_KEY`(secret, password manager → Railway에 직접), `LLM_MODEL`(승인된 모델 id, 기본값 없음).
+- `api`: `LLM_MODEL` — **worker와 글자까지 같은 값**(check-env `same`). API는 비밀 키를 받지 않는다(`LLM_API_KEY`를 `api`·Vercel에 넣지 않는다).
+- 비용 기록(선택, `worker`): `LLM_PRICE_INPUT_USD_PER_MTOK`·`LLM_PRICE_OUTPUT_USD_PER_MTOK`(둘 다 넣거나 둘 다 빼기; 선택 `LLM_PRICE_CACHE_READ_USD_PER_MTOK`·`LLM_PRICE_CACHE_WRITE_USD_PER_MTOK`). 값은 제공자 가격표의 USD/백만 token. 넣으면 요약 run과 노트의 `usage.cost_usd`, job 결과(counts·usage만)에 호출 비용이 기록된다. 없으면 token 수만 기록된다.
+- 한도(기본값 유지 권장, `worker`): `WORKER_SUMMARY_CHAPTER_CHARS=24000`(이보다 긴 장은 나눠 요약 후 병합 — 호출 수 증가), `WORKER_SUMMARY_MAX_INPUT_CHARS=1500000`(넘는 문서는 LLM 호출 없이 `summary_too_large`). `LLM_TIMEOUT_SECONDS`·`LLM_MAX_RETRIES`·`LLM_MAX_TOKENS`는 문제 생성과 공유.
+
+**비용 가늠**(단가는 제공자 가격표로 계산: 비용 ≈ (input token × 입력 단가 + output token × 출력 단가) / 1,000,000)
+
+- 요약 첫 생성: 본문 전체가 한 번 입력된다. **약 350쪽 교재 ≈ input 0.3–0.5M token**(장별 map; 문서 요약 reduce는 장 요약만 받아 수천 token) + output 장당 대략 0.5–1.5k token(장 20개면 수만 token). 한국어 본문은 같은 글자 수의 영어보다 token이 많다.
+- 이후 발행: 입력 hash가 같은 장은 재사용(호출 없음), **바뀐 장 + 문서 reduce만** 다시 호출한다. 실패 후 `다시 시도`도 이미 만든 장은 재사용한다. `LLM_MODEL`이나 prompt 버전이 바뀌면 재사용되지 않아 다음 요약이 처음부터 다시 든다.
+- 정리 노트: **장마다 요청할 때만** 1회 호출(문제 120개·60,000자 묶음마다 1회), 인용 검증에 걸리면 1회 재요청(최대 2배). 입력은 그 장의 확정 문제·해설 + 참고 본문(최대 20,000자)으로 장당 대략 1–3만 token, output 수천 token. `다시 만들기`마다 새 호출이 든다.
+- 켜기 전 측정: 승인된 모델로 `make eval-summaries-llm`(합성 fixture만 전송, `eval/reports/*-llm.{json,md}`에 token·`cost_usd`와 품질 지표 — 요약 쪽 인용 유효율·장 coverage, 노트 각주 precision·coverage). provider 연결만 확인할 때는 `make test-llm`(합성 텍스트 smoke).
+
+**켜는 순서**(환경마다, staging 먼저)
+
+1. 사용자 승인 기록(위). LLM 제공자 console에서 예산 한도·사용량 알림을 먼저 건다.
+2. env 파일(저장소 밖)에 값을 넣고 검증한다: `worker`에 `LLM_API_KEY`·`LLM_MODEL`·(`LLM_PRICE_*`)·플래그, `api`에 같은 `LLM_MODEL`·같은 플래그 → `make check-env ENV=<staging|production> ARGS="--check api=… --check worker=…"`.
+3. Railway `worker`에 변수를 넣고 Restart, 이어서 `api`에 넣고 Restart(worker가 먼저 준비돼야 API가 받은 요청이 바로 처리된다).
+4. 확인: 작은 교재 하나에서 `요약 만들기` → 패널이 "요약 중"을 거쳐 `AI 생성` 요약을 보이는지, Workspace 이력의 "문서 요약" 작업과 run `usage`(token·`cost_usd`), 장 하나에서 `정리 노트 만들기`. worker 로그에는 본문·프롬프트·출력이 없고 counts·오류 코드만 남는다.
+5. 첫 주에는 provider 사용량과 `usage.cost_usd` 합계를 예산과 비교한다.
+
+**끄기·롤백**: `api`·`worker`의 플래그를 `false`로(같은 값) 바꾸고 Restart. 이미 만든 요약·노트는 그대로 읽히고(공유 링크 포함), 새 생성·발행 시 자동 요약만 멈춘다. LLM 사용 자체를 끊으려면 `LLM_API_KEY`도 지운다(문제 생성도 함께 꺼짐). 문서별로는 편집자가 요약 패널의 `자동 갱신 끄기`로 그 문서의 자동 재요약만 멈출 수 있다.

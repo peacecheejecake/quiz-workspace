@@ -129,6 +129,7 @@ linked_tests: [QOV-AC01, QOV-AC02]
 ### 7.1 품질 게이트 (M7.2)
 
 - 화면 AC와 별개로 `tests/e2e/quality/`가 전 화면 axe(WCAG 2.2 AA + best-practice, light/dark, 주요 상태: 빈·채워진·dialog/panel·오류), visual baseline(light/dark × desktop 1280·iPad 834 portrait), WebKit/모바일 smoke(iPad·iPhone WebKit, Pixel Chrome), 성능 측정을 담당한다. ID는 `A11Y-nn`/`VISUAL-nn`/`SMOKE-nn`/`PERF-nn`(AC 아님, `e2e:trace`가 이 디렉터리에만 허용).
+- 정답·해설이나 책 본문이 보이는 화면(챕터 정리 노트 본문, 풀이 panel, 요약, 내보내기)의 품질 spec은 trace·screenshot·video와 실패 시 page text 첨부를 끈다(`a11y-docsum.spec.ts`; axe 보고는 rule·CSS selector만). Visual은 정리 노트를 "정답·해설 포함"이 접힌 상태로만 찍는다(VISUAL-06).
 - Visual baseline은 고정 Playwright Linux image 렌더가 기준이다(macOS·CI 동일, `pnpm e2e:visual`). 운영 방법은 `tests/e2e/README.md` "Visual baselines".
 - 성능: 수치 목표가 문서에 없어 web.dev "good"(LCP ≤ 2.5s, CLS ≤ 0.1, TTFB ≤ 0.8s)과 API p95 예산(overview·문제은행 500ms, 검색 1s, 로컬 production build·fake adapter)을 회귀 기준으로 쓴다. 2026-10-18 측정(300문항 + book-ko): 화면 LCP 44–160ms, CLS 0, TTFB ≤ 43ms, JS 190–333KiB(문서 편집기 최대, pdf.js); API p95 overview 18ms · 목록 14ms · 검색(hybrid, fake) 25ms. 실모델 검색 지연은 `eval/`·nightly에서 별도 측정한다.
 
