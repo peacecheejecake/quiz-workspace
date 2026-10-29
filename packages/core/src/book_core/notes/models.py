@@ -65,6 +65,8 @@ class NoteQuestion:
     options: tuple[NoteOption, ...] = ()
     accepted_answers: tuple[str, ...] = ()
     explanation: str | None = None
+    # ESSAY: the model answer / grading criteria (the editor's "채점 기준"), often the only answer.
+    rubric: str | None = None
 
 
 @dataclass(frozen=True)

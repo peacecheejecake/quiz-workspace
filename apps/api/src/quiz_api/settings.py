@@ -211,10 +211,13 @@ class Settings(BaseSettings):
         default=300, ge=10, le=3600, validation_alias="SIGNED_READ_URL_TTL_SECONDS"
     )
 
-    # Chapter notes (CHNOTE-B): the worker's switch, read here so POST /chapters/{id}/note
-    # answers 409 `note-generation-disabled` when the worker would not generate notes. Stored
-    # notes stay readable either way. Turn it on only where the worker has an LLM configured.
+    # Chapter notes (CHNOTE-B): creating notes is offered (`available`, POST) only with the
+    # worker's switch on AND an LLM provider configured: outside APP_ENV=test the API sees the
+    # provider through LLM_MODEL (not a secret; the env manifest requires it on the API,
+    # identical to the worker's, whenever WORKER_CHAPTER_NOTES=true). The API never holds
+    # LLM_API_KEY. Stored notes stay readable either way.
     chapter_notes: bool = Field(default=False, validation_alias="WORKER_CHAPTER_NOTES")
+    # LLM_MODEL (`llm_model`) is declared with the DOCSUM-B settings below; both features use it.
 
     # Workspace search (M3.6a). The query embedder and the collection namespace must be the
     # worker's (same model key, same collections), so these read the worker's variables and
@@ -350,8 +353,18 @@ class Settings(BaseSettings):
     def summary_available(self) -> bool:
         """Summaries can be created here (DOCSUM-01-AC05): the switch is on and a provider is
         configured (the worker's deterministic fake under APP_ENV=test)."""
-        if not self.document_summary:
-            return False
+        return self.document_summary and self.llm_provider_configured
+
+    @property
+    def chapter_notes_available(self) -> bool:
+        """Chapter notes can be created here (CHNOTE-01-AC06): the switch is on and a provider is
+        configured (the worker's deterministic fake under APP_ENV=test)."""
+        return self.chapter_notes and self.llm_provider_configured
+
+    @property
+    def llm_provider_configured(self) -> bool:
+        """The worker has an LLM: its fake under APP_ENV=test, else LLM_MODEL is set (the API
+        never holds LLM_API_KEY; the env manifest keeps LLM_MODEL identical on both)."""
         return self.app_env is Environment.TEST or bool((self.llm_model or "").strip())
 
     @property

@@ -14,7 +14,8 @@ Pipeline, serialised per note by an advisory lock:
    is off (`note_generation_disabled`), no LLM is configured (`llm_not_configured`) or the
    workspace is archived/deleted or the user can no longer edit it (`workspace_unavailable`,
    re-checked under a lock in step 4);
-2. the pinned revisions (stem, options with the correct ones, accepted answers, explanation) and
+2. the pinned revisions (stem, options with the correct ones, accepted answers, an essay's model
+   answer / grading criteria (`rubric`), explanation) and
    the chapter's published text (reference only: quotes are checked against it);
 3. `ChapterNoteGenerator` (book_core.notes): contiguous batches, one LLM call each, a response
    with an unknown tag or a quote missing from the chapter is re-requested once, then invalid
@@ -156,6 +157,7 @@ def note_question(tag: str, label: str, row: RevisionRow) -> NoteQuestion:
         ),
         accepted_answers=tuple(a for a in (row.accepted_answers or ()) if a.strip()),
         explanation=row.explanation,
+        rubric=row.rubric,
     )
 
 

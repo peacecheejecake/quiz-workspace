@@ -67,6 +67,8 @@ class RevisionRow:
     correct_option_ids: list[str] | None
     accepted_answers: list[str] | None
     explanation: str | None
+    # ESSAY model answer / grading criteria.
+    rubric: str | None = None
 
 
 class ChapterNoteStore(Protocol):
@@ -146,7 +148,7 @@ _NOTE = text(
 _REVISIONS = text(
     """
     select q.id as question_id, q.question_type, r.id as revision_id, r.stem, r.options,
-           r.correct_option_ids, r.accepted_answers, r.explanation
+           r.correct_option_ids, r.accepted_answers, r.explanation, r.rubric
       from public.question_revisions r
       join public.questions q on q.id = r.question_id and q.workspace_id = r.workspace_id
      where r.workspace_id = :workspace_id and r.id = any(:ids)
@@ -230,6 +232,7 @@ class PostgresChapterNoteStore:
                 if r["accepted_answers"] is not None
                 else None,
                 explanation=r["explanation"],
+                rubric=r["rubric"],
             )
             for r in rows
         }

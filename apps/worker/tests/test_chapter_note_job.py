@@ -247,6 +247,28 @@ def test_a_note_is_generated_from_the_pinned_revisions_with_counts_only_results(
         assert forbidden not in caplog.text
 
 
+def test_an_essay_without_explanation_sends_its_model_answer() -> None:
+    world = World()
+    essay = RevisionRow(
+        question_id=uuid.uuid4(),
+        revision_id=uuid.uuid4(),
+        question_type="ESSAY",
+        stem="essay-stem [E2E-NOTE-OK]",
+        options=[],
+        correct_option_ids=None,
+        accepted_answers=None,
+        explanation=None,
+        rubric="essay-model-answer: 증발과 응결을 함께 설명한다",
+    )
+    world.store.revisions[essay.revision_id] = essay
+    note, envelope = world.note([essay, world.question("q2 [E2E-NOTE-OK]")])
+    assert world.run(envelope).outcome is RunOutcome.SUCCEEDED
+    [prompt] = [r.prompt for _, r in world.llm.calls]
+    assert "essay-model-answer: 증발과 응결을 함께 설명한다" in prompt
+    assert "(채점 기준)" in prompt
+    assert note.id in world.store.results
+
+
 @pytest.mark.parametrize(
     ("marker", "code"),
     [("E2E-NOTE-INVALID", "note_citation_invalid"), ("E2E-NOTE-FAIL", "llm_invalid_output")],

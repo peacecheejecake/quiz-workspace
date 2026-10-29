@@ -236,7 +236,8 @@ class Var:
     requires: str | None
     provider: str
     note: str
-    required_when: tuple[str, str] | None = None
+    # Each (NAME, value): required whenever NAME has that value (any of them).
+    required_when: tuple[tuple[str, str], ...] = ()
     never_on: tuple[str, ...] = ()
 
 
@@ -287,12 +288,15 @@ def load_manifest(path: Path = MANIFEST) -> Manifest:
         if set(required) - set(environments):
             raise ManifestError(f"{name}: required lists an unknown environment")
         when_raw = raw.get("required_when")
-        required_when: tuple[str, str] | None = None
-        if when_raw is not None:
-            when_name, sep, when_value = str(when_raw).partition("=")
+        conditions = (
+            [] if when_raw is None else when_raw if isinstance(when_raw, list) else [when_raw]
+        )
+        required_when: list[tuple[str, str]] = []
+        for condition in conditions:
+            when_name, sep, when_value = str(condition).partition("=")
             if not sep or not when_name or not when_value:
-                raise ManifestError(f"{name}: required_when must be NAME=value")
-            required_when = (when_name, when_value)
+                raise ManifestError(f"{name}: required_when must be NAME=value (or a list)")
+            required_when.append((when_name, when_value))
         never_on = tuple(raw.get("never_on", ()))
         if set(never_on) - services.keys() or set(never_on) & set(raw["services"]):
             raise ManifestError(f"{name}: never_on must list other known services")
@@ -308,7 +312,7 @@ def load_manifest(path: Path = MANIFEST) -> Manifest:
                 requires=raw.get("requires"),
                 provider=raw.get("provider", ""),
                 note=raw.get("note", ""),
-                required_when=required_when,
+                required_when=tuple(required_when),
                 never_on=never_on,
             )
         )
@@ -316,8 +320,9 @@ def load_manifest(path: Path = MANIFEST) -> Manifest:
     for var in out:
         if var.requires and var.requires not in names:
             raise ManifestError(f"{var.name}: requires unknown {var.requires}")
-        if var.required_when and var.required_when[0] not in names:
-            raise ManifestError(f"{var.name}: required_when names unknown {var.required_when[0]}")
+        for when_name, _ in var.required_when:
+            if when_name not in names:
+                raise ManifestError(f"{var.name}: required_when names unknown {when_name}")
         if var.kind == "secret" and var.name.startswith("NEXT_PUBLIC_"):
             raise ManifestError(f"{var.name}: a secret must never use the NEXT_PUBLIC_ prefix")
         if var.name.startswith("NEXT_PUBLIC_") and var.kind != "public":
@@ -397,11 +402,10 @@ def check_service(
                 report.errors.append(f"{label}: missing (required in {environment})")
             elif var.requires and _is_set(env, var.requires):
                 report.errors.append(f"{label}: missing (required when {var.requires} is set)")
-            elif var.required_when and (
-                env.get(var.required_when[0], "").strip().lower() == var.required_when[1]
-            ):
-                when = "=".join(var.required_when)
-                report.errors.append(f"{label}: missing (required when {when})")
+            elif met := [
+                "=".join(w) for w in var.required_when if env.get(w[0], "").strip().lower() == w[1]
+            ]:
+                report.errors.append(f"{label}: missing (required when {met[0]})")
             continue
         value = env[var.name]
         problem = _apply(var.check, value) if var.check else None

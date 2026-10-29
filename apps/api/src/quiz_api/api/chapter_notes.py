@@ -345,7 +345,7 @@ def note_state(
     return ChapterNoteState(
         chapter_id=chapter.id,
         chapter_title=chapter.title,
-        available=settings.chapter_notes,
+        available=settings.chapter_notes_available,
         confirmed_question_count=len(current),
         generation=generation_out(latest) if latest is not None else None,
         note=note_out(note, linkable) if note is not None else None,
@@ -404,7 +404,7 @@ def list_chapter_notes(
                 generating=generating,
             )
         )
-    return ChapterNoteList(available=settings.chapter_notes, items=items)
+    return ChapterNoteList(available=settings.chapter_notes_available, items=items)
 
 
 @router.get("/chapters/{chapter_id}/note", operation_id="getChapterNote")
@@ -451,7 +451,7 @@ def create_chapter_note(
             response = replay(stored, body_hash)
             repo.rollback()
             return response
-    if not settings.chapter_notes:
+    if not settings.chapter_notes_available:
         raise ProblemException(
             409,
             ProblemType.NOTE_GENERATION_DISABLED,

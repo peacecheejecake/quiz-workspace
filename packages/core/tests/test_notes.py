@@ -191,6 +191,21 @@ def test_the_prompt_carries_the_questions_tags_answers_and_reference() -> None:
     assert "Valid tags: Q1, Q2" in request.prompt
 
 
+def test_an_essay_model_answer_is_part_of_the_prompt() -> None:
+    essay = NoteQuestion(
+        tag="Q1",
+        label="1장 1번",
+        question_type="ESSAY",
+        stem="서술하시오",
+        rubric="모범 답안-증발",
+    )
+    prompt = build_request((essay,), REFERENCE).prompt
+    assert "Model answer / grading criteria (채점 기준): 모범 답안-증발" in prompt
+    assert question_size(essay) > question_size(
+        NoteQuestion(tag="Q1", label="1장 1번", question_type="ESSAY", stem="서술하시오")
+    )
+
+
 def test_cancellation_check_runs_before_each_call() -> None:
     class StopError(Exception):
         pass

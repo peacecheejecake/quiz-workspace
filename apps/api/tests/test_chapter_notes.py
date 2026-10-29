@@ -23,7 +23,7 @@ from quiz_api.chapter_notes import (
 )
 from quiz_api.main import create_app
 from quiz_api.repositories.chapter_notes import NoteRow
-from quiz_api.settings import Settings
+from quiz_api.settings import Environment, Settings
 
 Q = [uuid.UUID(int=i + 1) for i in range(4)]
 R = [uuid.UUID(int=100 + i) for i in range(4)]
@@ -202,3 +202,35 @@ def test_note_routes_are_in_the_contract(spec: dict[str, Any]) -> None:
         "listSharedChapterNotes",
         "getSharedChapterNote",
     } <= ops
+
+
+@pytest.mark.parametrize(
+    ("app_env", "switch", "model", "available"),
+    [
+        ("test", False, None, False),
+        ("test", True, None, True),
+        ("local", True, None, False),
+        ("local", True, "  ", False),
+        ("local", True, "model-a", True),
+        ("local", False, "model-a", False),
+        ("production", True, "model-a", True),
+        ("production", True, None, False),
+    ],
+)
+def test_notes_are_available_only_with_the_switch_and_a_provider(
+    app_env: str, switch: bool, model: str | None, available: bool
+) -> None:
+    settings = Settings.model_construct(
+        app_env=Environment(app_env), chapter_notes=switch, llm_model=model
+    )
+    assert settings.chapter_notes_available is available
+
+
+def test_settings_read_the_switch_and_model_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("WORKER_CHAPTER_NOTES", "true")
+    monkeypatch.setenv("LLM_MODEL", "model-a")
+    settings = Settings(_env_file=None, APP_ENV="local")  # type: ignore[call-arg]
+    assert (settings.chapter_notes, settings.llm_model) == (True, "model-a")
+    assert settings.chapter_notes_available

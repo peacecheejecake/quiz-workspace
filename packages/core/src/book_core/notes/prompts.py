@@ -1,9 +1,10 @@
 """Versioned prompt of task ``chapter_notes.generate`` (one request per batch).
 
 The model sees the batch's questions tagged ``Q1``..``Qk`` (stem, options with the correct ones
-marked, accepted answers, explanation) and, as reference only, the chapter's published text.
-Every item must cite at least one question tag; a quote, when given, must be copied verbatim
-from the reference text. The output is checked by :mod:`book_core.notes.validation`.
+marked, accepted answers, an essay's model answer / grading criteria, explanation) and, as
+reference only, the chapter's published text. Every item must cite at least one question tag;
+a quote, when given, must be copied verbatim from the reference text. The output is checked by
+:mod:`book_core.notes.validation`.
 """
 
 from __future__ import annotations
@@ -21,7 +22,8 @@ You write a study note for one chapter of a book from the chapter's exam questio
 explanations. The note summarises what the questions and explanations teach.
 
 Rules:
-- Use only facts from the questions, their answers and explanations. The reference text is
+- Use only facts from the questions, their answers (including model answers / grading
+  criteria) and explanations. The reference text is
   given only to check terms and wording; never add an item that no question supports.
 - Every item cites the question(s) it comes from with their tags (e.g. ["Q1", "Q3"]). Use only
   the tags given below. An item without a tag is discarded.
@@ -46,6 +48,8 @@ def render_question(question: NoteQuestion, tag: str) -> str:
         ]
     if question.accepted_answers:
         lines.append("Accepted answers: " + " | ".join(question.accepted_answers))
+    if question.rubric and question.rubric.strip():
+        lines.append(f"Model answer / grading criteria (채점 기준): {question.rubric}")
     if question.explanation:
         lines.append(f"Explanation: {question.explanation}")
     return "\n".join(lines)
