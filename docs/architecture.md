@@ -107,14 +107,14 @@ workspace
 정규화된 구조 및 핵심 제약:
 - `profiles(user_id FK auth.users, display_name, created_at)`, `workspace_memberships(workspace_id, user_id, role, created_at)`; MVP는 owner 1인이고 다인 공유는 후속이지만 권한 모델은 미리 정의한다.
 - `workspaces(id, name, owner_id, status, archived_at, deleted_at)`.
-- `documents(id, workspace_id, type, storage_key, checksum)`; `document_revisions`; `chapters(parent_id)`; `content_blocks(source_location)`.
+- `documents(id, workspace_id, type, storage_key, checksum)` — `document_type`(`book` | `question_paper`: 본문 여부), `type_source`(`user` | `auto`), `content_kind`(`book` | `question_paper` | `mixed`, 자동 분류 또는 사람이 고른 종류; null = 미분류), `detection`(분류 수치, UX6-UPLOAD); `document_uploads.auto_classify`; `document_revisions`; `chapters(parent_id)`; `content_blocks(source_location)`.
 - `questions(id, workspace_id, chapter_id, question_type, active_revision_id, publication_status)`.
 - `question_revisions(id, question_id, version, stem, options, correct_answer, explanation, rubric)`.
 - `question_sources(question_id, document_id, document_revision_id, page_range, block_ids)`.
 - `question_user_states(user_id, question_id, first_viewed_at, last_viewed_at, last_graded_result, last_graded_attempt_id, is_favorite, needs_retry, updated_at)` with `(user_id, question_id)` unique.
 - `question_attempts(id, question_id, question_revision_id, user_id, displayed_option_ids, submitted_answer, result, grading_method, submitted_at, graded_at)`.
 - `question_lineage(parent_question_id, child_question_id, variation_type, source_revision_id)`.
-- `question_generation_runs` / `question_import_runs`; `question_drafts` (approval 전 격리).
+- `question_generation_runs` / `question_import_runs`; `question_drafts` (approval 전 격리); `question_import_registration_items` (서버 측 등록 job의 항목·진행, QIMP-JOB).
 - `activity_events` (변경 감사), `async_jobs` (재시도/상태).
 
 문제 상태는 독립 필드를 합성해 계산한다. 색상 규칙·열람 판정·변형 정책은 `docs/questions.md`가 단일 기준이다.
@@ -131,6 +131,9 @@ workspace
 | POST | `/api/v1/workspaces/{id}/archive` | 보관 |
 | POST | `/api/v1/workspaces/{id}/restore` | 복원 |
 | POST | `/api/v1/workspaces/{id}/documents` | PDF 업로드/파싱 작업 |
+| POST | `/api/v1/workspaces/{id}/documents/upload-intent` | 업로드 의도(PDF마다 하나; `document_type = auto`면 서버가 교재·문제지·교재+문제로 자동 분류, UX6-UPLOAD) |
+| GET | `/api/v1/workspaces/{id}/documents` | 모든 PDF 목록(`kind`·`kind_source`·`question_count`·`latest_import_id`·처리 작업) |
+| PATCH | `/api/v1/documents/{id}` | `종류 변경`(`kind`, 사람이 고른 종류는 재분류 안 함; 쓰이는 교재 → 문제지는 409 `document-in-use`; 문제 있는 종류면 추출 시작, UX6-UPLOAD) |
 | GET | `/api/v1/documents/{id}/outline` | 장·절 트리 |
 | GET/PATCH | `/api/v1/documents/{id}/blocks/{blockId}` | 블록 읽기·교정 |
 | POST | `/api/v1/documents/{id}/publish` | 교정본 발행·색인 |
@@ -148,9 +151,11 @@ workspace
 | POST | `/api/v1/question-generations/{id}/publish` | 승인한 문제만 등록 |
 | POST | `/api/v1/workspaces/{id}/question-generation-batches` | 여러 문제·임의 선택 묶음 변형 출제(원본마다 `question.generate` run; QGEN-MULTI) |
 | GET | `/api/v1/workspaces/{id}/question-generation-batches/{batch_id}` | 묶음의 원본별 run·진행 상태 |
-| POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기 |
-| GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토 |
+| POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기(준비 완료된 모든 PDF, UX6-UPLOAD) |
+| GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토(초안별 등록 챕터 추천·선택, 교재 챕터 목록 — CHAPTER-MAP) |
 | POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록(`approve: true`면 선택한 초안을 승인과 함께 등록, 거절 목록 반환) |
+| POST | `/api/v1/question-imports/{id}/registrations` | 선택한 초안 전체를 서버에서 승인·등록(`question.import_register` job, QIMP-JOB) |
+| GET | `/api/v1/question-imports/{id}/registrations/{registration_id}` | 서버 측 등록 진행(처리/전체)·거절 목록 |
 | GET | `/api/v1/jobs/{id}` | 비동기 작업 상태 |
 | GET | `/api/v1/jobs/{id}/events` | SSE 진행 상황 |
 | GET | `/api/v1/workspaces/{id}/activities` | 변경 이력 |

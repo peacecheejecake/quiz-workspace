@@ -83,6 +83,8 @@ export { EmptyState } from './feedback/EmptyState';
 export type { EmptyStateProps } from './feedback/EmptyState';
 export { ProgressBar } from './feedback/ProgressBar';
 export type { ProgressBarProps } from './feedback/ProgressBar';
+export { StepProgress } from './feedback/StepProgress';
+export type { ProgressStep, StepProgressProps } from './feedback/StepProgress';
 export { ToastProvider, useToast } from './feedback/Toast';
 export type { ToastOptions, ToastProviderProps, ToastTone } from './feedback/Toast';
 

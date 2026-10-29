@@ -56,6 +56,11 @@ from quiz_worker.question_generation_job import (
 from quiz_worker.question_generation_store import PostgresGenerationStore
 from quiz_worker.question_import_job import ImportJobDeps, question_import_definition
 from quiz_worker.question_import_store import PostgresImportStore
+from quiz_worker.question_register_job import (
+    PostgresRegisterStore,
+    RegisterJobDeps,
+    question_register_definition,
+)
 from quiz_worker.runner import JobDefinition, JobRunner
 from quiz_worker.settings import Environment, WorkerSettings
 from quiz_worker.storage import SupabaseStorage
@@ -109,6 +114,7 @@ class JobWorker:
         self._names = CollectionNames(prefix=f"it_m44a_{uuid.uuid4().hex[:8]}_")
         self._qdrant: QdrantClient | None = None
         self.generation_deps: GenerationJobDeps | None = None
+        self.register_deps: RegisterJobDeps | None = None
 
     def _build(self) -> tuple[PostgresJobStore, JobRunner, dict[str, JobDefinition[Any]]]:
         if self._built is not None:
@@ -154,16 +160,29 @@ class JobWorker:
             search=SearchService(document_deps.index),
         )
         self.generation_deps = generation_deps
+        # QIMP-JOB: small batches, so a two-batch registration is easy to interrupt in tests.
+        self.register_deps = RegisterJobDeps(
+            store=PostgresRegisterStore(engine), batch_size=3, lock_wait_seconds=30
+        )
+        register_deps = self.register_deps
         definitions: list[JobDefinition[Any]] = [
             document_parse_definition(lambda: document_deps),
             index_sync_definition(lambda: document_deps),
             question_import_definition(lambda: import_deps),
             question_generate_definition(lambda: generation_deps),
+            question_register_definition(lambda: register_deps),
         ]
         jobs = PostgresJobStore(engine)
         runner = JobRunner(jobs, worker_id="it-m44a", lease_seconds=600)
         self._built = (jobs, runner, {d.job_type: d for d in definitions})
         return self._built
+
+    def run_once(self, job_id: str) -> None:
+        """One delivery of the job (one attempt), whatever its outcome."""
+        jobs, runner, definitions = self._build()
+        record = jobs.get(uuid.UUID(job_id))
+        assert record is not None, "job row missing"
+        runner.run(definitions[record.job_type], record.to_envelope().to_message())
 
     def drain(self, job_id: str, max_runs: int = 10) -> None:
         """Run the job (retries included) until it is terminal."""
@@ -235,10 +254,17 @@ class QuestionClient(_m3.Client):
             headers={"Authorization": f"Bearer {self.user.token}", **headers},
         )
 
-    def upload_question_paper(self, workspace_id: str, filename: str = QUESTION_PAPER.name) -> str:
+    def upload_question_paper(
+        self,
+        workspace_id: str,
+        filename: str = QUESTION_PAPER.name,
+        document_type: str = "question_paper",
+    ) -> str:
         """Upload flow for questions-ko.pdf as a `question_paper` document (A4); returns its id.
 
         `filename` may carry IMPORT_FAILURE_MARKER (A7); the bytes are always questions-ko.pdf.
+        `document_type="book"` uploads the same PDF as a book (CHAPTER-MAP: a book whose chapter
+        title equals the paper's).
         """
         pdf = QUESTION_PAPER.read_bytes()
         sha256 = hashlib.sha256(pdf).hexdigest()
@@ -250,7 +276,7 @@ class QuestionClient(_m3.Client):
                 "size_bytes": len(pdf),
                 "content_type": "application/pdf",
                 "sha256": sha256,
-                "document_type": "question_paper",
+                "document_type": document_type,
             },
             (200, 201),
         )
@@ -332,6 +358,21 @@ class QuestionClient(_m3.Client):
         return self.call(
             "POST", f"/question-imports/{import_id}/publish", {"drafts": items, "approve": True}
         )
+
+    def register(
+        self, import_id: str, items: list[dict[str, str]], idempotency_key: str | None = None
+    ) -> httpx.Response:
+        """POST the whole selection for server-side registration (QIMP-JOB)."""
+        headers = {"Idempotency-Key": idempotency_key} if idempotency_key else {}
+        return self.call_with_headers(
+            "POST", f"/question-imports/{import_id}/registrations", {"drafts": items}, headers
+        )
+
+    def registration(self, import_id: str, job_id: str) -> dict[str, Any]:
+        out: dict[str, Any] = self.ok(
+            "GET", f"/question-imports/{import_id}/registrations/{job_id}"
+        )
+        return out
 
     def publish(self, import_id: str, draft_ids: list[str]) -> httpx.Response:
         """Review, then register, as the import screen did before QIMP-BULK (A4; the screen now

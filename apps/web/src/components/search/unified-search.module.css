@@ -1,0 +1,98 @@
+/* SEARCH-01 unified search form on the workspace home header (UX6): box + icon submit, the
+   문제 · 본문 scope checkboxes with their "설정" popover buttons, and the status message.
+   Semantic tokens only. */
+
+.form {
+  display: grid;
+  flex: 1 1 22rem;
+  gap: var(--space-1);
+  max-width: 40rem;
+  min-width: 0;
+  justify-items: start;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+}
+
+.field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.scopes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-5);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.scope {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* The small "설정" text button next to each checkbox. */
+.settingsToggle {
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-label);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.settingsToggle:hover {
+  color: var(--color-text-primary);
+}
+
+.settingsToggle[aria-expanded='true'] {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings {
+  display: grid;
+  gap: var(--space-3);
+  width: min(30rem, calc(100vw - 2 * var(--space-4)));
+  max-width: min(30rem, calc(100vw - 2 * var(--space-4)));
+  max-height: min(36rem, calc(100dvh - 8rem));
+  overflow-y: auto;
+}
+
+.settingsTitle {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.message {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.message[data-blocked] {
+  color: var(--color-text-primary);
+}
+
+@media (max-width: 767px) {
+  .form {
+    flex-basis: 100%;
+    max-width: none;
+  }
+}

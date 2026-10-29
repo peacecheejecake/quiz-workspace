@@ -10,7 +10,9 @@ select plan(144);
 select columns_are('public', 'documents',
   array['id', 'workspace_id', 'document_type', 'title', 'filename', 'content_type', 'size_bytes',
         'sha256', 'source_object_key', 'status', 'active_revision_id', 'last_error', 'created_by',
-        'created_at', 'updated_at', 'deleted_at']);
+        'created_at', 'updated_at', 'deleted_at',
+        -- UX6-UPLOAD-B (20261028120000)
+        'type_source', 'content_kind', 'detection']);
 select columns_are('public', 'document_revisions',
   array['id', 'workspace_id', 'document_id', 'revision_number', 'parent_revision_id', 'status',
         'content_hash', 'parser_version', 'source_object_key', 'parsed_object_key',
@@ -26,7 +28,9 @@ select columns_are('public', 'document_uploads',
   array['id', 'workspace_id', 'user_id', 'document_id', 'revision_id', 'document_type', 'title',
         'filename', 'content_type', 'expected_size_bytes', 'expected_sha256', 'object_key',
         'status', 'expires_at', 'completed_at', 'completed_document_id', 'completed_job_id',
-        'created_at', 'updated_at']);
+        'created_at', 'updated_at',
+        -- UX6-UPLOAD-B (20261028120000)
+        'auto_classify']);
 select col_is_pk('public', t, 'id', format('%s PK is id', t))
 from unnest(array['documents', 'document_revisions', 'chapters', 'content_blocks',
                   'document_uploads']) as t;

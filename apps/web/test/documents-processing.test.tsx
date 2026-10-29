@@ -3,10 +3,11 @@
 // tab does not follow the job live (after a reload), "처리 준비 중" while a cold worker loads the
 // parser's models, and the elapsed time with a hint once the job has taken longer than 30 s.
 import './dom-setup';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DocumentRowItem } from '../src/components/documents/document-row';
 import {
+  documentProgress,
   formatElapsed,
   processingElapsed,
   processingLabel,
@@ -140,5 +141,81 @@ describe('DOC-01-AC05 processing row', () => {
 
     act(() => vi.advanceTimersByTime(60_000));
     expect(screen.getByText(/1분 6초째 처리 중 · 첫 처리나 큰 PDF는 몇 분/)).toBeTruthy();
+  });
+});
+
+// UX6-PROGRESS: one step UI 업로드 → 분석 → 색인 instead of a bar that fills per stage and drops.
+describe('DOC-01 step progress (UX6-PROGRESS)', () => {
+  function renderRow(r: DocumentRow) {
+    return render(
+      <ul>
+        <DocumentRowItem
+          row={r}
+          workspaceId="ws"
+          canEdit={false}
+          onCancel={vi.fn()}
+          onRetry={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      </ul>,
+    );
+  }
+
+  function states(): string[] {
+    const list = screen.getByRole('list', { name: '진행 단계' });
+    return within(list)
+      .getAllByRole('listitem')
+      .map((item) => `${item.getAttribute('data-state')}:${item.textContent}`);
+  }
+
+  it('DOC-01-AC05 a processing row shows 업로드 done, 분석 current and 색인 pending', () => {
+    renderRow(row({ stage: 'preparing', progress: 2 }));
+    expect(states()).toEqual(['done:업로드완료', 'current:2분석진행 중', 'pending:3색인대기']);
+    const bar = screen.getByRole('progressbar', { name: '파싱·색인 진행률' });
+    expect(bar).toHaveAttribute('aria-valuetext', '2/3단계: 처리 준비 중, 4%');
+  });
+
+  it('DOC-01-AC02 maps the job stages onto 분석 (0–50 %) and 색인 (50–100 %)', () => {
+    const queued = documentProgress(row({ status: 'queued', started_at: null }));
+    expect(queued).toMatchObject({ current: 1, text: '처리 대기 중' });
+    expect(queued?.value).toBeUndefined();
+    expect(documentProgress(row({ stage: 'parsing', progress: 15 }))).toMatchObject({
+      current: 1,
+      value: 30,
+    });
+    expect(documentProgress(row({ stage: 'chunking', progress: 50 }))).toMatchObject({
+      current: 2,
+      value: 0,
+    });
+    expect(documentProgress(row({ stage: 'publishing', progress: 90 }))).toMatchObject({
+      current: 2,
+      value: 80,
+      text: '게시 중',
+    });
+    // An unknown stage falls back to the job percent.
+    expect(documentProgress(row({ stage: 'mystery', progress: 70 }))).toMatchObject({
+      current: 2,
+      value: 40,
+    });
+  });
+
+  it('DOC-01-AC02 an uploading row shows 업로드 current with the sent bytes', () => {
+    const uploads: UploadItem[] = [
+      {
+        localId: 'l1',
+        filename: 'book.pdf',
+        title: '합성 교재',
+        size: 200,
+        documentType: 'book',
+        phase: 'uploading',
+        loaded: 50,
+        stored: false,
+      },
+    ];
+    const [uploading] = buildRows([], uploads);
+    renderRow(uploading as DocumentRow);
+    expect(states()).toEqual(['current:1업로드진행 중', 'pending:2분석대기', 'pending:3색인대기']);
+    const bar = screen.getByRole('progressbar', { name: '업로드 진행률' });
+    expect(bar).toHaveAttribute('aria-valuetext', '1/3단계: 업로드 중, 25%');
   });
 });

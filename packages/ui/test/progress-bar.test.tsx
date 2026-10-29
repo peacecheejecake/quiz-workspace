@@ -39,6 +39,17 @@ describe('ProgressBar (UX5-UI)', () => {
     expect(bar).toHaveAttribute('aria-valuenow', '100');
   });
 
+  it('UX6-PROGRESS keeps an indeterminate fill at 0 so the first value only moves forwards', () => {
+    const { rerender } = render(<ProgressBar label="진행률" />);
+    const fill = screen.getByRole('progressbar').firstElementChild as HTMLElement;
+    expect(fill.style.width).toBe('0%');
+    // The indeterminate cue is a sweep in the track, not a fake 30 % fill.
+    expect(FOUNDATION).not.toMatch(/\[data-indeterminate\] > \.fill\s*\{[^}]*width:\s*30%/);
+    rerender(<ProgressBar label="진행률" value={10} />);
+    expect(screen.getByRole('progressbar').firstElementChild).toBe(fill);
+    expect(fill.style.width).toBe('10%');
+  });
+
   it('animates the fill with the motion tokens and never under reduced motion', () => {
     expect(FOUNDATION).toMatch(
       /transition:\s*width var\(--duration-progress\) var\(--easing-standard\)/,

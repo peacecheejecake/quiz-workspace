@@ -86,7 +86,13 @@ export { ApiClient, PROBLEM_TYPES, type ApiResponse, type Problem } from './api.
 export * from './documents.ts';
 export * from './generation.ts';
 export * from './history.ts';
-export { attemptRevision, forgetImportRuns, seedGradedAttempt, seedMembership } from './db.ts';
+export {
+  attemptRevision,
+  forgetImportRuns,
+  seedGradedAttempt,
+  seedImportDraftCopies,
+  seedMembership,
+} from './db.ts';
 export * from './questions.ts';
 export * from './workspace-ui.ts';
 export { uniqueWorkspaceName, type Member, type Workspace } from './workspaces.ts';

@@ -9,23 +9,31 @@
 //              confirmation in an alertdialog. Unknown/deleted/foreign workspace routes render the
 //              app's not-found page with HTTP 404.
 //   Home       (UX3c) `/workspaces/:id`: hidden h1 (workspace name), header with the unified
-//              search (searchbox "검색어", icon button "검색", text button "검색 옵션" →
-//              popover with checkboxes "문제"/"내용" and one list of options that follows
-//              them), buttons "문서 n", "문제" (menu button, UX4: menuitems "PDF 관리",
-//              "직접 추가", "변형 출제"; the last two for editors), "문제은행" (link), then
+//              search (searchbox "검색어", icon button "검색", under it checkboxes "문제"/"본문"
+//              each followed by a "설정" text button named "문제 설정"/"본문 설정" → popover
+//              "문제 검색 설정"/"본문 검색 설정", and a status message, UX6), buttons "문서 n", "문제" (menu button, UX4: menuitems "전체 문제" (a link
+//              to the bank that replaced the "문제은행" button, UX6-PROGRESS), "PDF 관리",
+//              "직접 추가", "변형 출제"; the last two for editors), then
 //              icon buttons "이력" and "공유하기" (owner); dialogs are non-modal
 //              FloatingSidePanels inside <main> named "문서 관리", "문제 PDF 관리", "문제 생성",
 //              "이력", "링크 공유" (`?panel=documents|question-pdfs|generate|history|share`).
 //   DOC-01     "문서 관리" dialog: dashed Dropzone whose "PDF 업로드" button opens a file
 //              chooser (the only upload button); one list item per book document with an
 //              upload progressbar, processing status, "준비 완료"/"Ready"; "취소"/"다시 시도";
-//              trash icon button "<title> 삭제".
+//              while uploading/processing an ordered list "진행 단계" 업로드 → 분석 → 색인 whose
+//              items say 완료 / 진행 중 (aria-current="step") / 대기 (UX6-PROGRESS);
+//              trash icon button "<title> 삭제". UX6-UPLOAD: every PDF (one upload place,
+//              several files at once, no type choice); each row's kind badge text "교재" /
+//              "문제지" / "교재+문제" ("분석 중" until classified) before the status badge; editors
+//              get a "<title> 종류 변경" menu button (Radix menu, menuitemradio items, the
+//              current one aria-checked) on ready rows and a refusal as an alert in the row;
+//              question rows link "<title> 문제 검토" or offer the button "<title> 문제 추출".
 //   DOC-02     outline tree "목차" (treeitems), PDF viewer region with a "현재 페이지" field and a
 //              labelled source highlight, text editor region "원문" whose current block carries
 //              aria-current="true"; block "편집"/"저장", revision status "초안"/"발행됨", "발행".
-//   SEARCH-01  the home's unified search: searchbox "검색어"; in the "검색 옵션" popover (portalled
-//              to <body>) radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes "문서"/"장";
-//              region "원문 검색 결과" with list "검색 결과" whose items quote the source text in a
+//   SEARCH-01  the home's unified search: searchbox "검색어"; in the "본문 검색 설정" popover
+//              (portalled to <body>) radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes
+//              "문서"/"장"; in "문제 검색 설정" comboboxes "챕터"/"유형"; region "본문 검색 결과" with list "검색 결과" whose items quote the source text in a
 //              <blockquote>; excerpt in a non-modal FloatingSidePanel (role=dialog without
 //              aria-modal) with "PDF에서 보기".
 import { expect, type Locator, type Page } from '@playwright/test';
@@ -56,7 +64,7 @@ export function documentsPath(workspaceId: string): string {
   return homePath(workspaceId, 'panel=documents');
 }
 
-/** The home with the unified search limited to 원문 (`/search` redirects here). */
+/** The home with the unified search limited to 본문 (`/search` redirects here). */
 export function searchPath(workspaceId: string): string {
   return homePath(workspaceId, 'scope=content');
 }
@@ -65,7 +73,6 @@ export const homeUi = {
   header: (page: Page) => main(page).getByRole('search', { name: /통합 검색|search/i }),
   documentsButton: (page: Page) =>
     main(page).getByRole('button', { name: /^(문서|documents)\s*\d+$/i }),
-  bankLink: (page: Page) => main(page).getByRole('link', { name: /^(문제은행|question bank)$/i }),
   historyButton: (page: Page) => main(page).getByRole('button', { name: /^(이력|history)$/i }),
   shareButton: (page: Page) => main(page).getByRole('button', { name: /^(공유하기|share)$/i }),
   /** The header's `문제` menu button (UX4). Its menu is portalled to <body>. */
@@ -79,22 +86,37 @@ export const homeUi = {
   questionPdfsDialog: (page: Page) => homeUi.dialog(page, /^(문제 pdf 관리|question pdfs?)$/i),
   generateDialog: (page: Page) => homeUi.dialog(page, /^(문제 생성|generate questions?)$/i),
   shareDialog: (page: Page) => homeUi.dialog(page, /^(링크 공유|share link)$/i),
-  searchOptionsButton: (page: Page) =>
-    main(page).getByRole('button', { name: /^(검색 옵션|search options)$/i }),
-  searchOptions: (page: Page) =>
-    page.getByRole('dialog', { name: /^(검색 옵션|search options)$/i }),
+  /** The unified search's scope checkboxes, right under the search box (UX6). */
   scopeQuestions: (page: Page) =>
-    homeUi.searchOptions(page).getByRole('checkbox', { name: /^(문제|questions)$/i }),
+    homeUi.header(page).getByRole('checkbox', { name: /^(문제|questions)$/i }),
   scopeContent: (page: Page) =>
-    homeUi.searchOptions(page).getByRole('checkbox', { name: /^(내용|content)$/i }),
+    homeUi.header(page).getByRole('checkbox', { name: /^(본문|body|content)$/i }),
+  /** The "설정" text button next to a scope checkbox; it opens that scope's settings popover. */
+  scopeSettingsButton: (page: Page, scope: SearchScopeName) =>
+    homeUi.header(page).getByRole('button', { name: SCOPE_SETTINGS_BUTTONS[scope] }),
+  scopeSettings: (page: Page, scope: SearchScopeName) =>
+    page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
+  /** The status message under the scope checkboxes (why the search button is disabled). */
+  searchMessage: (page: Page) => homeUi.header(page).getByRole('status'),
   statusFilterToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(상태 필터|status filter)$/i }),
   statusFilters: (page: Page) =>
     main(page).getByRole('group', { name: /^(상태 필터|status filter)$/i }),
 };
 
-type QuestionMenuItem = 'pdfs' | 'create' | 'generate';
+export type SearchScopeName = 'questions' | 'body';
+const SCOPE_SETTINGS_BUTTONS: Readonly<Record<SearchScopeName, RegExp>> = {
+  questions: /^(문제 설정|question settings)$/i,
+  body: /^(본문 설정|body settings|content settings)$/i,
+};
+const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
+  questions: /^(문제 검색 설정|question search settings)$/i,
+  body: /^(본문 검색 설정|body search settings|content search settings)$/i,
+};
+
+type QuestionMenuItem = 'bank' | 'pdfs' | 'create' | 'generate';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
+  bank: /^(전체 문제|all questions)$/i,
   pdfs: /^(pdf 관리|manage pdfs?)$/i,
   create: /^(직접 추가|add question)$/i,
   generate: /^(변형 출제|generate variants?)$/i,
@@ -106,20 +128,32 @@ export async function chooseQuestionMenu(page: Page, item: QuestionMenuItem): Pr
   await homeUi.questionMenuItem(page, item).click();
 }
 
-/** Opens the "검색 옵션" popover (no-op when it is open). */
-export async function openSearchOptions(page: Page): Promise<Locator> {
-  const button = homeUi.searchOptionsButton(page);
+/** Opens a scope's settings popover ("본문 설정" by default; no-op when it is open). */
+export async function openSearchOptions(
+  page: Page,
+  scope: SearchScopeName = 'body',
+): Promise<Locator> {
+  const button = homeUi.scopeSettingsButton(page, scope);
   if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click();
-  const popover = homeUi.searchOptions(page);
+  const popover = homeUi.scopeSettings(page, scope);
   await expect(popover).toBeVisible();
   return popover;
 }
 
-/** Closes the "검색 옵션" popover when it is open. */
-export async function closeSearchOptions(page: Page): Promise<void> {
-  if ((await homeUi.searchOptionsButton(page).getAttribute('aria-expanded')) !== 'true') return;
-  await page.keyboard.press('Escape');
-  await expect(homeUi.searchOptions(page)).toBeHidden();
+/** Closes a scope's settings popover when it is open. */
+export async function closeSearchOptions(
+  page: Page,
+  scope: SearchScopeName = 'body',
+): Promise<void> {
+  const button = homeUi.scopeSettingsButton(page, scope);
+  if ((await button.getAttribute('aria-expanded')) !== 'true') return;
+  const popover = homeUi.scopeSettings(page, scope);
+  // Escape closes the innermost layer first: a search-mode description tooltip (shown on hover or
+  // keyboard focus) takes one press before the popover does.
+  await expect(async () => {
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeHidden({ timeout: 1_000 });
+  }).toPass();
 }
 
 export const wsUi = {
@@ -184,6 +218,17 @@ export const docUi = {
   cancel: (scope: Locator) => scope.getByRole('button', { name: /^(업로드 )?(취소|cancel)/i }),
   retry: (scope: Locator) => scope.getByRole('button', { name: /다시 시도|재시도|retry/i }),
   alert: (page: Page) => main(page).getByRole('alert'),
+  /** UX6-UPLOAD: the row's kind badge, matched by its exact text. */
+  kindBadge: (row: Locator, label: '교재' | '문제지' | '교재+문제' | '분석 중') =>
+    row.getByText(label, { exact: true }),
+  kindMenuButton: (row: Locator) => row.getByRole('button', { name: /종류 변경|change kind/i }),
+  /** The open `종류 변경` menu (portalled to <body>). */
+  kindMenu: (page: Page) => page.getByRole('menu', { name: /종류 변경|change kind/i }),
+  kindOption: (page: Page, label: '교재' | '문제지' | '교재+문제') =>
+    docUi.kindMenu(page).getByRole('menuitemradio', { name: label, exact: true }),
+  reviewLink: (row: Locator) => row.getByRole('link', { name: /문제 검토|review questions/i }),
+  extractButton: (row: Locator) =>
+    row.getByRole('button', { name: /문제 추출|extract questions/i }),
 };
 
 export const editorUi = {
@@ -217,7 +262,7 @@ export const INDEX_FAILED = /색인.*실패|indexing failed|reindex(ing)? failed
 export const searchUi = {
   box: (page: Page) => main(page).getByRole('searchbox', { name: /검색|search/i }),
   submit: (page: Page) => main(page).getByRole('button', { name: /^(검색|search)$/i }),
-  /** Inside the "검색 옵션" popover (open it first: openSearchOptions). */
+  /** Inside the "본문 검색 설정" popover (open it first: openSearchOptions). */
   modeGroup: (page: Page) =>
     page.getByRole('radiogroup', { name: /검색 (방식|모드)|search mode/i }),
   mode: (page: Page, mode: 'keyword' | 'semantic' | 'hybrid') =>
@@ -232,7 +277,7 @@ export const searchUi = {
   /** The document-section filter (the heatmap's question filter is "챕터"). */
   chapterFilter: (page: Page) => page.getByRole('combobox', { name: /^(장|section)$/i }),
   resultsRegion: (page: Page) =>
-    main(page).getByRole('region', { name: /원문 검색 결과|content results/i }),
+    main(page).getByRole('region', { name: /본문 검색 결과|content results/i }),
   closeResults: (page: Page) =>
     main(page).getByRole('button', { name: /검색 결과 닫기|close results/i }),
   results: (page: Page) => main(page).getByRole('list', { name: /검색 결과|search results/i }),
@@ -257,7 +302,7 @@ export function pageLabel(n: number): RegExp {
   );
 }
 
-/** Runs a search through the UI: mode first (search options), then query + Enter. */
+/** Runs a search through the UI: mode first ("본문 설정"), then query + Enter. */
 export async function runSearch(
   page: Page,
   query: string,
@@ -274,4 +319,34 @@ export async function runSearch(
 export async function chooseFilter(page: Page, combobox: Locator, option: RegExp): Promise<void> {
   await combobox.click();
   await page.getByRole('option', { name: option }).click();
+}
+
+/**
+ * The step list of a multi-step job (UX6-PROGRESS `StepProgress`): ordered list "진행 단계" with
+ * one item per step. A step's state is text, not colour: 완료 / 진행 중 (aria-current="step") / 대기.
+ */
+export const progressStepsUi = {
+  list: (scope: Locator) => scope.getByRole('list', { name: /^(진행 단계|progress steps)$/i }),
+  step: (scope: Locator, name: RegExp) =>
+    progressStepsUi.list(scope).getByRole('listitem').filter({ hasText: name }),
+};
+
+/** Asserts each step's state in order: `done`, `current` or `pending`. */
+export async function expectProgressSteps(
+  scope: Locator,
+  steps: readonly (readonly [RegExp, 'done' | 'current' | 'pending'])[],
+): Promise<void> {
+  const items = progressStepsUi.list(scope).getByRole('listitem');
+  await expect(items).toHaveCount(steps.length);
+  for (const [index, [name, state]] of steps.entries()) {
+    const item = items.nth(index);
+    await expect(item).toContainText(name);
+    if (state === 'current') {
+      await expect(item).toHaveAttribute('aria-current', 'step');
+      await expect(item).toContainText(/진행 중|in progress/i);
+    } else {
+      await expect(item).not.toHaveAttribute('aria-current', /.+/);
+      await expect(item).toContainText(state === 'done' ? /완료|done/i : /대기|pending/i);
+    }
+  }
 }

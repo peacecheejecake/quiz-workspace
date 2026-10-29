@@ -108,7 +108,13 @@ export interface DocumentSummary {
   readonly filename?: string;
   readonly status?: string;
   readonly document_type?: string;
+  /** UX6-UPLOAD: 교재 / 문제지 / 교재+문제; null while an `auto` upload is not classified yet. */
+  readonly kind?: DocumentKind | null;
+  readonly kind_source?: 'user' | 'auto';
+  readonly latest_import_id?: string | null;
 }
+
+export type DocumentKind = 'book' | 'question_paper' | 'mixed';
 
 export interface Job {
   readonly id: string;
@@ -151,14 +157,15 @@ export async function uploadBook(
 
 /**
  * upload-intent → direct Storage upload → complete-upload for any synthetic PDF fixture.
- * `type` is sent as `document_type` (`question_paper` for question PDFs, implementation-plan §7);
- * omitted for books, which keep the server default.
+ * `type` is sent as `document_type` (`question_paper` for question PDFs, implementation-plan §7;
+ * `auto` lets the server classify it, UX6-UPLOAD); omitted for books, which keep the server
+ * default.
  */
 export async function uploadPdf(
   owner: Member,
   workspaceId: string,
   fixture: PdfFile,
-  type?: 'question_paper',
+  type?: 'question_paper' | 'book' | 'auto',
 ): Promise<UploadedDocument> {
   const bytes = readFileSync(fixture.path);
   const intent = await owner.api.ok<{
@@ -193,6 +200,21 @@ export async function uploadPdf(
     [202],
   );
   return { documentId: done.document_id, jobId: done.job_id };
+}
+
+/** `종류 변경` through the public API (`PATCH /documents/{id}`, UX6-UPLOAD); returns the detail. */
+export async function setDocumentKind(
+  member: Member,
+  documentId: string,
+  kind: DocumentKind,
+  extract = true,
+): Promise<DocumentSummary> {
+  return member.api.ok<DocumentSummary>(
+    'PATCH',
+    `/documents/${documentId}`,
+    { kind, extract },
+    [200],
+  );
 }
 
 /** Polls `GET /jobs/{id}` (expect.poll, no sleeps) until terminal; asserts it succeeded. */

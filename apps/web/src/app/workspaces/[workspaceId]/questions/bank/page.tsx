@@ -1,4 +1,4 @@
-// QBANK-01 문제은행 (docs/screens/questions-bank.md). The workspace layout already resolved access
+// QBANK-01 전체 문제 — the question bank (docs/screens/questions-bank.md). The workspace layout already resolved access
 // (404 for unknown/foreign workspaces); this page loads the bank under the URL filters through the
 // server-side Bearer helper and hands it to the client screen.
 import type { Metadata } from 'next';
@@ -8,7 +8,7 @@ import { loadBank } from '@/lib/questions/data';
 import { parseBankFilters, wantsCreate } from '@/lib/questions/filters';
 import { requireWorkspace } from '@/lib/workspaces/data';
 
-export const metadata: Metadata = { title: '문제은행' };
+export const metadata: Metadata = { title: '전체 문제' };
 
 export default async function Page({
   params,

@@ -63,7 +63,7 @@ class ProblemType(StrEnum):
     # 409: self-grade of a session that is not awaiting a grade (still open or already graded).
     PRACTICE_SESSION_NOT_PENDING = "urn:quiz-workspace:problem:practice-session-not-pending"
     # 409: the document has no published revision yet (first parse pending or failed); also a
-    # question import needs a `question_paper` document that finished processing.
+    # question import or a kind change needs a document that finished processing.
     DOCUMENT_NOT_READY = "urn:quiz-workspace:problem:document-not-ready"
     # 409: a correction was based on block text (or a draft) that changed since it was loaded.
     EDIT_CONFLICT = "urn:quiz-workspace:problem:edit-conflict"
@@ -86,6 +86,13 @@ class ProblemType(StrEnum):
     GENERATION_BUSY = "urn:quiz-workspace:problem:generation-busy"
     # 409: a random-pick batch found no CONFIRMED question matching its filters (no run made).
     NO_MATCHING_QUESTIONS = "urn:quiz-workspace:problem:no-matching-questions"
+    # 409: the import's previous registration (QIMP-JOB) is still queued or running; follow it.
+    IMPORT_REGISTRATION_RUNNING = "urn:quiz-workspace:problem:import-registration-running"
+    # 409: a book (body text) cannot become a question paper while questions or import drafts are
+    # registered under its chapters or cite it (UX6-UPLOAD-B, DOC-01-AC08).
+    DOCUMENT_IN_USE = "urn:quiz-workspace:problem:document-in-use"
+    # 409: an import draft's chapter is no longer the one the client showed (CHAPTER-MAP).
+    CHAPTER_CHANGED = "urn:quiz-workspace:problem:chapter-changed"
 
 
 class ProblemException(StarletteHTTPException):

@@ -31,6 +31,7 @@ const EVENT_LABELS: Readonly<Record<string, string>> = {
   'question_import.started': '문제 가져오기 시작',
   'question_import.retried': '문제 가져오기 재시도',
   'question_import.published': '가져온 문제 게시',
+  'question_import.registration_requested': '가져온 문제 등록 요청',
   'workspace.created': 'Workspace 생성',
   'workspace.renamed': 'Workspace 이름 변경',
   'workspace.archived': 'Workspace 보관',
@@ -78,6 +79,7 @@ const JOB_TYPE_LABELS: Readonly<Record<string, string>> = {
   'document.parse': '문서 분석·색인',
   'document.index_sync': '검색 색인 동기화',
   'question.import': '문제 가져오기',
+  'question.import_register': '가져온 문제 등록',
   'question.generate': '변형 문제 생성',
 };
 

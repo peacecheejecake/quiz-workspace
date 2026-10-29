@@ -39,6 +39,8 @@ describe('classifyImportFailure', () => {
     [409, { type: IMPORT_PROBLEMS.importNotRetryable }, 'notRetryable'],
     [409, { type: IMPORT_PROBLEMS.documentNotReady }, 'documentNotReady'],
     [409, { type: IMPORT_PROBLEMS.idempotencyKeyReused }, 'idempotencyKeyReused'],
+    [409, { type: IMPORT_PROBLEMS.registrationRunning }, 'registrationRunning'],
+    [409, { type: IMPORT_PROBLEMS.chapterChanged }, 'chapterChanged'],
     [409, { type: 'urn:other' }, 'unavailable'],
     [422, { errors: [] }, 'invalid'],
     [503, undefined, 'unavailable'],
@@ -81,6 +83,21 @@ describe('createImportClient', () => {
     expect(JSON.parse(String(init?.body))).toEqual({
       drafts: [{ draft_id: DRAFT, version: 'v7' }],
     });
+  });
+
+  it('QIMP-JOB: submits the whole selection with its key and reads the progress', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => json(202, { job_id: 'job-1' }));
+    const client = createImportClient(fetchImpl);
+    await client.register(RUN, [{ draft_id: DRAFT, version: 'v7' }], 'reg-key');
+    const [path, init] = firstCall(fetchImpl);
+    expect(path).toBe(IMPORT_BFF_PATHS.registrations(RUN));
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(String(init?.body))).toEqual({
+      drafts: [{ draft_id: DRAFT, version: 'v7' }],
+    });
+    expect((init?.headers as Record<string, string>)['idempotency-key']).toBe('reg-key');
+    await client.getRegistration(RUN, 'job-1');
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe(IMPORT_BFF_PATHS.registration(RUN, 'job-1'));
   });
 
   it('patches a draft at its base version', async () => {

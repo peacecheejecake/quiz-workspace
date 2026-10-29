@@ -63,6 +63,7 @@ RULES: dict[str, Rule | str] = {
     # documents
     "completeDocumentUpload": UPLOADER,
     "deleteDocument": EDIT,
+    "updateDocumentKind": EDIT,  # UX6-UPLOAD-B 종류 변경
     "getDocument": READ,
     "listDocumentBlocks": READ,
     "getDocumentBlock": READ,
@@ -95,6 +96,8 @@ RULES: dict[str, Rule | str] = {
     "listQuestionImportDrafts": READ,
     "publishQuestionImportDrafts": EDIT,
     "retryQuestionImport": EDIT,
+    "registerQuestionImportDrafts": EDIT,
+    "getQuestionImportRegistration": READ,
     "deleteQuestion": EDIT,
     "getQuestion": READ,
     "updateQuestion": EDIT,
@@ -165,12 +168,15 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
     bodies: dict[str, Any] = {
         "completeDocumentUpload": {"upload_id": ids["upload_id"], "sha256": "0" * 64},
         "correctDocumentBlock": {"text": "S4 교정 시도"},
+        # The world's document is a book: the same kind, so even an allowed call changes nothing.
+        "updateDocumentKind": {"kind": "book", "extract": False},
         "publishDocumentDraft": {},
         "selfGradePracticeSession": {"result": "correct"},
         "submitPracticeSession": {"selected_option_ids": ["opt-1"]},
         "updateQuestionDraft": {"base_version": ids["draft_version"], "stem": "S4 초안 변경"},
         "publishQuestionGenerationDrafts": reviewed,
         "publishQuestionImportDrafts": reviewed,
+        "registerQuestionImportDrafts": reviewed,
         "updateQuestion": {"base_revision_id": ids["question_revision"], "stem": "S4 변경"},
         "createQuestionGeneration": {"variation_types": ["PARAPHRASE"]},
         "createQuestionGenerationBatch": {

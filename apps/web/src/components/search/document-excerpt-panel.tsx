@@ -86,7 +86,7 @@ export function DocumentExcerptPanel({
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
-      title="원문 발췌"
+      title="본문 발췌"
       description={
         item && target ? `${item.document_title} · ${pageLabel(target.page)}` : undefined
       }

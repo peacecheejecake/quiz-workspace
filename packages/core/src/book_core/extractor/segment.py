@@ -28,11 +28,13 @@ Nothing here invents content: every stem/option/answer string is copied from the
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from book_core.contracts import BBox, Block, BlockType, QuestionType, SourceLocation
-from book_core.question.labels import CIRCLED_DIGITS, split_option_line
+from book_core.question.labels import CIRCLED_DIGITS, answer_option_keys, split_option_line
+from book_core.structure.numbering import NumberingKind, parse_numbering
 
 _QUESTION_START = re.compile(
     r"^\s*(?:문(?:제)?\s*|Q\s*)?(?P<num>\d{1,3})\s*(?:\.|번[.)]?)(?!\d)\s*(?P<body>\S.*)$"
@@ -42,8 +44,12 @@ _ANSWER_KEY_HEADING = re.compile(
     r"answer\s*key|answers)\s*[\]>)]?\s*:?\s*$",
     re.IGNORECASE,
 )
+_KEY_LABEL = "[①-⑩A-Ea-e가나다라마]"
+# One answer-key entry: ``1. ③``, ``1번 ③``, ``1) ③``, ``1-③`` (a dash only before an option
+# label, never before a digit: ``1-2. ③`` is entry 2), up to the next entry on the line.
 _ANSWER_ENTRY = re.compile(
-    r"(?P<num>\d{1,3})\s*(?:\.|번[.)]?|\))\s*(?P<ans>.+?)(?=\s+\d{1,3}\s*(?:\.|번[.)]?|\))\s|$)"
+    rf"(?P<num>\d{{1,3}})\s*(?:\.|번[.)]?|\)|-(?=\s*{_KEY_LABEL}))\s*(?P<ans>.+?)"
+    rf"(?=\s+\d{{1,3}}\s*(?:(?:\.|번[.)]?|\))\s|-\s*{_KEY_LABEL})|$)"
 )
 _CAPTION = re.compile(
     r"^\s*[\[<(]?\s*(?P<label>(?:그림|도표|표|Figure|Fig\.?|Table)\s*\d+)\s*[\]>)]?",
@@ -116,6 +122,8 @@ class RawQuestion:
     """The inline answer line printed right after this question (``정답: ②``)."""
     explanation_lines: list[SourceLine] = field(default_factory=list)
     explanation_closed: bool = False
+    chapter: int = 0
+    """Index of the top-level chapter it was segmented in (``segment_chapters``)."""
 
     @property
     def stem(self) -> str:
@@ -146,6 +154,7 @@ class AnswerKeyEntry:
     number: int
     text: str
     line: SourceLine
+    chapter: int = 0
 
 
 @dataclass(slots=True)
@@ -155,6 +164,10 @@ class Segmentation:
     loose_figures: list[RawFigure]
     unparsed_answer_lines: int = 0
     ambiguous_answer_tables: int = 0
+    ended_in_answer_key: bool = False
+    """The last line read was inside the answer key (``segment_chapters`` carries it on)."""
+    chapter_numbering: dict[int, tuple[int, tuple[int, ...]]] = field(default_factory=dict)
+    """Chapter index -> (numbering kind, numbers) of the heading that opened it."""
 
 
 def _norm_label(label: str) -> str:
@@ -175,6 +188,18 @@ def _lines(blocks: Sequence[Block]) -> list[tuple[int, Block, list[str]]]:
 def _looks_like_answer(body: str) -> bool:
     body = body.strip()
     return len(body) <= _MAX_ANSWER_KEY_BODY and not _QUESTION_END_CUES.search(body)
+
+
+def is_answer_line(text: str) -> bool:
+    """A printed answer-key line: numbered entries only, each answering with option labels
+    (``1. ③``, ``1. ③ 2. ① 3. ②``, ``1) A  2) C``, ``1-② 2-④``, ``3번 ①``). The same entry
+    pattern the answer-key parser reads, so a packed key line is never mistaken for a question
+    with inline options."""
+    text = text.strip()
+    matches = list(_ANSWER_ENTRY.finditer(text))
+    if not matches or _ANSWER_ENTRY.sub("", text).strip():
+        return False
+    return all(answer_option_keys(m.group("ans").strip()) is not None for m in matches)
 
 
 def _answer_entries(line: SourceLine) -> list[AnswerKeyEntry]:
@@ -427,12 +452,12 @@ def _asks_something(events: Sequence[_Event], start: int) -> bool:
     )
 
 
-def segment(blocks: Sequence[Block]) -> Segmentation:
+def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmentation:
+    """``in_answer_key``: the blocks continue an answer key printed before them."""
     questions: list[RawQuestion] = []
     answer_key: list[AnswerKeyEntry] = []
     loose_figures: list[RawFigure] = []
     caption_owner: dict[str, RawFigure] = {}
-    in_answer_key = False
     current: RawQuestion | None = None
     seen_numbers: set[int] = set()
     unparsed = 0
@@ -602,7 +627,198 @@ def segment(blocks: Sequence[Block]) -> Segmentation:
         loose_figures=loose_figures,
         unparsed_answer_lines=unparsed,
         ambiguous_answer_tables=ambiguous_tables,
+        ended_in_answer_key=in_answer_key,
     )
+
+
+_CHAPTER_KINDS = (NumberingKind.PART, NumberingKind.CHAPTER)
+
+
+def _chapter_numbering(block: Block) -> tuple[int, tuple[int, ...]] | None:
+    if block.type is not BlockType.HEADING:
+        return None
+    numbering = parse_numbering(block.text.split("\n")[0])
+    if numbering is None or numbering.kind not in _CHAPTER_KINDS:
+        return None
+    return int(numbering.kind), numbering.numbers
+
+
+def chapter_starts(blocks: Sequence[Block]) -> list[int]:
+    """Block indices where a chapter starts: 0, then every heading numbered as a part or chapter
+    (``제1장``, ``2장``, ``Chapter 3``, ``제1편``, ``Part II``; the structure module's numbering).
+    Other headings never split: Docling prints question lines, inline answers and wrapped stems
+    of exam workbooks as headings too, and cutting there would separate a question from its
+    answer."""
+    return [0] + [i for i, b in enumerate(blocks) if i and _chapter_numbering(b) is not None]
+
+
+def _shift_line(line: SourceLine, offset: int) -> SourceLine:
+    return replace(line, block_index=line.block_index + offset)
+
+
+def _shift_entry(entry: AnswerKeyEntry, offset: int, chapter: int) -> AnswerKeyEntry:
+    return replace(entry, line=_shift_line(entry.line, offset), chapter=chapter)
+
+
+def _shift_figure(figure: RawFigure, offset: int, shifted: set[int]) -> None:
+    """A figure's caption line once (a figure can be both owned and loose)."""
+    if id(figure) in shifted:
+        return
+    shifted.add(id(figure))
+    if figure.caption is not None:
+        figure.caption = _shift_line(figure.caption, offset)
+
+
+def _shift_question(question: RawQuestion, offset: int, chapter: int) -> None:
+    question.chapter = chapter
+    question.block_indices = [i + offset for i in question.block_indices]
+    question.stem_lines = [_shift_line(ln, offset) for ln in question.stem_lines]
+    question.trailing = [_shift_line(ln, offset) for ln in question.trailing]
+    question.explanation_lines = [_shift_line(ln, offset) for ln in question.explanation_lines]
+    for option in question.options:
+        option.lines = [_shift_line(ln, offset) for ln in option.lines]
+    question.answer = [_shift_entry(e, offset, chapter) for e in question.answer]
+
+
+def segment_chapters(blocks: Sequence[Block]) -> Segmentation:
+    """``segment`` run per chapter (``chapter_starts``), merged with document-wide
+    block indices and every question / key entry tagged with its ``chapter``.
+
+    ``segment`` reads a repeated number with a short body as the start of an answer key and stays
+    in it to the end; in a book whose chapters each restart their numbering (numbered headings,
+    exercises, a key per chapter) that would swallow every later chapter. Numbering restarts per
+    chapter, so each chapter is read on its own. A document with a single chapter is segmented
+    exactly as by ``segment``. Use ``answer_entries`` to match the key to the questions."""
+    starts = chapter_starts(blocks)
+    if len(starts) == 1:
+        return segment(blocks)
+    merged = Segmentation(questions=[], answer_key=[], loose_figures=[])
+    in_key = False
+    for chapter, (start, end) in enumerate(zip(starts, [*starts[1:], len(blocks)], strict=True)):
+        part = blocks[start:end]
+        seg = segment(part)
+        if in_key and _continues_key(seg, part):
+            # An answer section with chapter subheadings (``정답``, ``제1장``, ``1. ③`` ...)
+            # goes on through the split (``_continues_key``).
+            seg = segment(part, in_answer_key=True)
+        in_key = seg.ended_in_answer_key
+        numbering = _chapter_numbering(part[0])
+        if numbering is not None:
+            merged.chapter_numbering[chapter] = numbering
+        shifted: set[int] = set()
+        for question in seg.questions:
+            _shift_question(question, start, chapter)
+            for figure in question.figures:
+                _shift_figure(figure, start, shifted)
+        for figure in seg.loose_figures:
+            _shift_figure(figure, start, shifted)
+        merged.questions += seg.questions
+        merged.answer_key += [_shift_entry(e, start, chapter) for e in seg.answer_key]
+        merged.loose_figures += seg.loose_figures
+        merged.unparsed_answer_lines += seg.unparsed_answer_lines
+        merged.ambiguous_answer_tables += seg.ambiguous_answer_tables
+    return merged
+
+
+_BLANK = re.compile(r"_{3,}|\(\s*\)")
+
+
+def _only_answer_lines(blocks: Sequence[Block]) -> bool:
+    """Every printed line is an answer line (``is_answer_line``) or a heading that does not open
+    a question (``제1장``, ``Chapter 2``); every table reads as answer entries; nothing else
+    (images, body text, options, stems)."""
+    for index, block in enumerate(blocks):
+        if block.type is BlockType.TABLE:
+            if not _table_answer_entries(block, index)[0]:
+                return False
+            continue
+        if block.type not in (BlockType.TEXT, BlockType.HEADING, BlockType.FORMULA):
+            return False
+        for line in (ln.strip() for ln in block.text.split("\n")):
+            if not line or is_answer_line(line):
+                continue
+            if block.type is BlockType.HEADING and _question_start(line, block) is None:
+                continue
+            return False
+    return True
+
+
+def _asks_on_its_own(question: RawQuestion) -> bool:
+    """Independent evidence of a question anywhere in its span: two or more options, a question
+    cue (``?``, ``시오``), an answer blank, unless every line it owns is an answer line (a packed
+    key line read as a stem with inline options)."""
+    lines = [*question.stem_lines, *(ln for o in question.options for ln in o.lines)]
+    if all(is_answer_line(line.text) for line in lines):
+        return False
+    return (
+        len(question.options) >= 2
+        or _QUESTION_CUE.search(question.stem) is not None
+        or _BLANK.search(question.stem) is not None
+    )
+
+
+def _continues_key(seg: Segmentation, blocks: Sequence[Block]) -> bool:
+    """A chapter after an answer key is more of that key only when it is made of answer lines and
+    headings alone and, read on its own, holds no question with independent evidence and no
+    answer-key heading of its own. Anything else keeps its own reading: a lost question cannot be
+    recovered in review, a missing answer can."""
+    if any(_asks_on_its_own(q) for q in seg.questions):
+        return False
+    if any(_ANSWER_KEY_HEADING.match(line) for _, _, lines in _lines(blocks) for line in lines):
+        return False
+    return _only_answer_lines(blocks)
+
+
+def _asks(question: RawQuestion) -> bool:
+    return bool(question.options) or _QUESTION_CUE.search(question.stem) is not None
+
+
+def answer_entries(seg: Segmentation) -> dict[int, list[AnswerKeyEntry]]:
+    """``id(question)`` -> the answer-key entries for it (not its inline answer).
+
+    A question whose number appears once in the document takes every entry with that number,
+    wherever the key is printed (one key for the whole paper, or an answer chapter). A number
+    repeated across chapters takes its own chapter's entries when it appears once in that chapter
+    (numbering restarts per chapter, each with its own key), or when it is the only one of them
+    there that asks something (options or a question cue); the key then is its chapter's own,
+    or that of a question-less chapter numbered the same (a back-of-book key with ``제1장``
+    subheadings). Otherwise nothing: a wrong answer is
+    worse than none. With a single chapter this is the document-wide match by unique number."""
+    in_chapter = Counter((q.chapter, q.number) for q in seg.questions)
+    # A numbered heading (``1. 개요``) is read as a question too; among a chapter's questions
+    # with the same number, the one that asks something is the one its key answers.
+    asking = Counter((q.chapter, q.number) for q in seg.questions if _asks(q))
+    in_document = Counter(q.number for q in seg.questions)
+    own: dict[tuple[int, int], list[AnswerKeyEntry]] = {}
+    every: dict[int, list[AnswerKeyEntry]] = {}
+    for entry in seg.answer_key:
+        own.setdefault((entry.chapter, entry.number), []).append(entry)
+        every.setdefault(entry.number, []).append(entry)
+    # A back-of-book key with chapter subheadings (``제1장`` ... ``1. ③``): a chapter without
+    # questions keys the questions of the chapter numbered the same way.
+    with_questions = {q.chapter for q in seg.questions}
+    key_chapters: dict[tuple[int, tuple[int, ...]], list[int]] = {}
+    for chapter, numbering in seg.chapter_numbering.items():
+        if chapter not in with_questions:
+            key_chapters.setdefault(numbering, []).append(chapter)
+    found: dict[int, list[AnswerKeyEntry]] = {}
+    for question in seg.questions:
+        entries: list[AnswerKeyEntry] = []
+        if in_document[question.number] == 1:
+            entries = every.get(question.number, [])
+        elif in_chapter[(question.chapter, question.number)] == 1 or (
+            _asks(question) and asking[(question.chapter, question.number)] == 1
+        ):
+            entries = own.get((question.chapter, question.number), [])
+            label = seg.chapter_numbering.get(question.chapter)
+            if not entries and label is not None:
+                entries = [
+                    e
+                    for k in key_chapters.get(label, [])
+                    for e in own.get((k, question.number), [])
+                ]
+        found[id(question)] = entries
+    return found
 
 
 def infer_type(question: RawQuestion, next_block: Block | None) -> tuple[QuestionType, bool]:

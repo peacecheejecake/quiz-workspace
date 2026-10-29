@@ -5,12 +5,17 @@
 import { notFound, redirect } from 'next/navigation';
 import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
 import { loginRedirectPath } from '@/lib/auth/routes';
-import type { ImportDraft, ImportRun } from './drafts';
+import type { BookChapterOption, ImportDraft, ImportRun } from './drafts';
 import { classifyImportFailure, importPath } from './import-client';
+import { reviewPdfs, type ReviewPdf } from './review-pdfs';
 
 export interface ImportScreenData {
   readonly run: ImportRun | null;
   readonly drafts: readonly ImportDraft[];
+  /** The workspace's book chapters: the draft chapter picker (CHAPTER-MAP). */
+  readonly chapters: readonly BookChapterOption[];
+  /** When the run was read (ISO): a registration that ends later is reported on arrival. */
+  readonly loadedAt: string;
   /** The newest run or its drafts could not be loaded (the screen offers a reload). */
   readonly loadFailed: boolean;
 }
@@ -35,6 +40,7 @@ export async function loadLatestImport(
     if (kind === 'notFound' && workspace) notFound();
   };
 
+  const loadedAt = new Date().toISOString();
   const runs = await api
     .GET('/api/v1/workspaces/{workspace_id}/question-imports', {
       params: {
@@ -43,13 +49,13 @@ export async function loadLatestImport(
       },
     })
     .catch(() => null);
-  if (!runs) return { run: null, drafts: [], loadFailed: true };
+  if (!runs) return { run: null, drafts: [], chapters: [], loadedAt, loadFailed: true };
   if (!runs.data) {
     outcome(runs.response.status, runs.error, { workspace: true });
-    return { run: null, drafts: [], loadFailed: true };
+    return { run: null, drafts: [], chapters: [], loadedAt, loadFailed: true };
   }
   const run = runs.data.items[0] ?? null;
-  if (!run) return { run: null, drafts: [], loadFailed: false };
+  if (!run) return { run: null, drafts: [], chapters: [], loadedAt, loadFailed: false };
 
   const drafts = await api
     .GET('/api/v1/question-imports/{import_id}/drafts', {
@@ -58,7 +64,44 @@ export async function loadLatestImport(
     .catch(() => null);
   if (!drafts?.data) {
     if (drafts) outcome(drafts.response.status, drafts.error);
-    return { run, drafts: [], loadFailed: true };
+    return { run, drafts: [], chapters: [], loadedAt, loadFailed: true };
   }
-  return { run, drafts: drafts.data.items, loadFailed: false };
+  return {
+    run,
+    drafts: drafts.data.items,
+    chapters: drafts.data.chapters ?? [],
+    loadedAt,
+    loadFailed: false,
+  };
+}
+
+/** How many runs order `검토할 PDF` (the API's maximum page; older PDFs follow, UX6-UPLOAD). */
+const REVIEW_RUNS = 200;
+
+/**
+ * The PDFs with an extraction for `검토할 PDF` (UX6-UPLOAD), newest extraction first. Best
+ * effort: the switcher is left out (empty list) when the documents cannot be read.
+ */
+export async function loadReviewPdfs(workspaceId: string): Promise<readonly ReviewPdf[]> {
+  let api;
+  try {
+    api = await createServerApiClient();
+  } catch {
+    return [];
+  }
+  const [runs, documents] = await Promise.all([
+    api
+      .GET('/api/v1/workspaces/{workspace_id}/question-imports', {
+        params: { path: { workspace_id: workspaceId }, query: { limit: REVIEW_RUNS } },
+      })
+      .catch(() => null),
+    api
+      .GET('/api/v1/workspaces/{workspace_id}/documents', {
+        params: { path: { workspace_id: workspaceId } },
+      })
+      .catch(() => null),
+  ]);
+  if (!documents?.data) return [];
+  // The runs only order the list; without them every extracted PDF is still offered.
+  return reviewPdfs(runs?.data?.items ?? [], documents.data.items);
 }

@@ -431,6 +431,42 @@
         "title": "BlockLocation",
         "type": "object"
       },
+      "BookChapterOption": {
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "level": {
+            "description": "1 = chapter, 2+ = nested section.",
+            "title": "Level",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "document_id",
+          "document_title",
+          "level"
+        ],
+        "title": "BookChapterOption",
+        "type": "object"
+      },
       "BoundingBox": {
         "properties": {
           "x0": {
@@ -671,6 +707,7 @@
             "type": "string"
           },
           "document_type": {
+            "description": "Body text or not: `book` (also for a `mixed` kind) or `question_paper`. Search, generation sources and chapter matching use books only.",
             "enum": [
               "book",
               "question_paper"
@@ -685,6 +722,33 @@
           "id": {
             "format": "uuid",
             "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "book",
+                  "question_paper",
+                  "mixed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`book` (교재), `question_paper` (문제지) or `mixed` (교재+문제: a book that also prints questions). Null while an automatically classified upload is not classified yet (`분석 중`), or when it failed before that.",
+            "title": "Kind"
+          },
+          "kind_source": {
+            "default": "user",
+            "description": "`auto` = classified by the server; `user` = chosen by a person (at upload or with `PATCH /documents/{id}`), never reclassified.",
+            "enum": [
+              "user",
+              "auto"
+            ],
+            "title": "Kind Source",
             "type": "string"
           },
           "last_error": {
@@ -709,7 +773,7 @@
                 "type": "null"
               }
             ],
-            "description": "Question papers: the newest question import run of the document (the one the server starts once it is processed, QIMPORT-01-AC06); null when it has none.",
+            "description": "The newest question import run of the document, whatever its kind (the server starts one for a question paper or a confident `mixed` PDF once it is processed, QIMPORT-01-AC06); null when it has none.",
             "title": "Latest Import Id"
           },
           "latest_revision": {
@@ -733,6 +797,12 @@
               }
             ],
             "description": "The queued or running parse job; null when there is none."
+          },
+          "question_count": {
+            "default": 0,
+            "description": "Live questions registered from this PDF's question imports.",
+            "title": "Question Count",
+            "type": "integer"
           },
           "sha256": {
             "title": "Sha256",
@@ -785,6 +855,33 @@
           "latest_revision"
         ],
         "title": "DocumentDetail",
+        "type": "object"
+      },
+      "DocumentKindChange": {
+        "additionalProperties": false,
+        "description": "`종류 변경` (DOC-01-AC08).",
+        "properties": {
+          "extract": {
+            "default": true,
+            "description": "For `question_paper` / `mixed`: start the question import when the document has none yet (an existing run, its drafts and questions are kept either way).",
+            "title": "Extract",
+            "type": "boolean"
+          },
+          "kind": {
+            "description": "`book` (교재), `question_paper` (문제지) or `mixed` (교재+문제).",
+            "enum": [
+              "book",
+              "question_paper",
+              "mixed"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "DocumentKindChange",
         "type": "object"
       },
       "DocumentList": {
@@ -896,6 +993,7 @@
             "type": "string"
           },
           "document_type": {
+            "description": "Body text or not: `book` (also for a `mixed` kind) or `question_paper`. Search, generation sources and chapter matching use books only.",
             "enum": [
               "book",
               "question_paper"
@@ -910,6 +1008,33 @@
           "id": {
             "format": "uuid",
             "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "book",
+                  "question_paper",
+                  "mixed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`book` (교재), `question_paper` (문제지) or `mixed` (교재+문제: a book that also prints questions). Null while an automatically classified upload is not classified yet (`분석 중`), or when it failed before that.",
+            "title": "Kind"
+          },
+          "kind_source": {
+            "default": "user",
+            "description": "`auto` = classified by the server; `user` = chosen by a person (at upload or with `PATCH /documents/{id}`), never reclassified.",
+            "enum": [
+              "user",
+              "auto"
+            ],
+            "title": "Kind Source",
             "type": "string"
           },
           "last_error": {
@@ -934,7 +1059,7 @@
                 "type": "null"
               }
             ],
-            "description": "Question papers: the newest question import run of the document (the one the server starts once it is processed, QIMPORT-01-AC06); null when it has none.",
+            "description": "The newest question import run of the document, whatever its kind (the server starts one for a question paper or a confident `mixed` PDF once it is processed, QIMPORT-01-AC06); null when it has none.",
             "title": "Latest Import Id"
           },
           "processing_job": {
@@ -947,6 +1072,12 @@
               }
             ],
             "description": "The queued or running parse job; null when there is none."
+          },
+          "question_count": {
+            "default": 0,
+            "description": "Live questions registered from this PDF's question imports.",
+            "title": "Question Count",
+            "type": "integer"
           },
           "sha256": {
             "title": "Sha256",
@@ -1025,6 +1156,36 @@
           "y1"
         ],
         "title": "DraftBBox",
+        "type": "object"
+      },
+      "DraftChapterRef": {
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "document_id",
+          "document_title"
+        ],
+        "title": "DraftChapterRef",
         "type": "object"
       },
       "DraftEvidence": {
@@ -2055,7 +2216,7 @@
         "additionalProperties": false,
         "properties": {
           "document_id": {
-            "description": "A `question_paper` document of this workspace whose processing finished.",
+            "description": "A document of this workspace whose processing finished: usually a `question_paper` or a `mixed` PDF, but any kind may be imported (UX6-UPLOAD-B).",
             "format": "uuid",
             "title": "Document Id",
             "type": "string"
@@ -2082,6 +2243,45 @@
             "description": "No option answers, no accepted answers and (essay) no model answer.",
             "title": "Answer Missing",
             "type": "boolean"
+          },
+          "chapter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DraftChapterRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Import drafts (CHAPTER-MAP): the book chapter the draft is registered under (the suggestion, or the reviewer's choice), in its book's current revision; null = none."
+          },
+          "chapter_choice": {
+            "default": "auto",
+            "description": "`auto`: the server's suggestion; `manual`: chosen in review.",
+            "enum": [
+              "auto",
+              "manual"
+            ],
+            "title": "Chapter Choice",
+            "type": "string"
+          },
+          "chapter_match": {
+            "anyOf": [
+              {
+                "enum": [
+                  "matched",
+                  "no_match",
+                  "ambiguous",
+                  "no_source_chapter"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the suggestion is what it is (auto only): `matched` (exactly one book chapter with the question's chapter title), `no_match`, `ambiguous` (several), `no_source_chapter` (the question PDF has no chapter there).",
+            "title": "Chapter Match"
           },
           "created_at": {
             "format": "date-time",
@@ -2218,6 +2418,18 @@
             "description": "The generation run (generation drafts).",
             "title": "Run Id"
           },
+          "source_chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The question PDF chapter the suggestion was made from.",
+            "title": "Source Chapter Title"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -2279,6 +2491,14 @@
       },
       "ImportDraftList": {
         "properties": {
+          "chapters": {
+            "description": "Import runs: the workspace's book chapters (current revisions), the choices for `chapter_id`.",
+            "items": {
+              "$ref": "#/components/schemas/BookChapterOption"
+            },
+            "title": "Chapters",
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/ImportDraft"
@@ -2304,7 +2524,7 @@
           },
           "drafts": {
             "items": {
-              "$ref": "#/components/schemas/ReviewedDraft"
+              "$ref": "#/components/schemas/ReviewedImportDraft"
             },
             "maxItems": 200,
             "minItems": 1,
@@ -2424,6 +2644,169 @@
         "title": "ImportRefusedDraft",
         "type": "object"
       },
+      "ImportRegistration": {
+        "description": "A submitted selection being approved and registered on the server (QIMP-JOB).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the job stopped, e.g. `workspace_unavailable` (archived workspace or lost editor role); drafts not processed by then stay unregistered.",
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "import_id": {
+            "format": "uuid",
+            "title": "Import Id",
+            "type": "string"
+          },
+          "job_id": {
+            "description": "The `question.import_register` job (`GET /jobs/{id}`).",
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "processed": {
+            "description": "Drafts done (registered, already registered or refused).",
+            "title": "Processed",
+            "type": "integer"
+          },
+          "refused": {
+            "description": "Drafts left as they were, in submitted order.",
+            "items": {
+              "$ref": "#/components/schemas/ImportRegistrationRefusal"
+            },
+            "title": "Refused",
+            "type": "array"
+          },
+          "registered": {
+            "description": "Drafts this registration registered.",
+            "title": "Registered",
+            "type": "integer"
+          },
+          "skipped": {
+            "description": "Drafts that were registered already (nothing new).",
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "status": {
+            "description": "queued | running | succeeded | failed | cancelled",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "total": {
+            "description": "Distinct drafts submitted.",
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "job_id",
+          "import_id",
+          "status",
+          "error_code",
+          "total",
+          "processed",
+          "registered",
+          "skipped",
+          "refused",
+          "created_at",
+          "finished_at"
+        ],
+        "title": "ImportRegistration",
+        "type": "object"
+      },
+      "ImportRegistrationRefusal": {
+        "properties": {
+          "draft_id": {
+            "format": "uuid",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "position": {
+            "description": "0-based order in the source.",
+            "title": "Position",
+            "type": "integer"
+          },
+          "question_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Number printed in the source.",
+            "title": "Question Number"
+          },
+          "reason": {
+            "description": "`stale-draft`: changed since the sent version; `not-publishable`: cannot be confirmed as it is.",
+            "enum": [
+              "stale-draft",
+              "not-publishable"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "reason",
+          "question_number",
+          "position"
+        ],
+        "title": "ImportRegistrationRefusal",
+        "type": "object"
+      },
+      "ImportRegistrationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "drafts": {
+            "description": "The whole selection, each draft at the version on screen (the version the selection approves).",
+            "items": {
+              "$ref": "#/components/schemas/ReviewedImportDraft"
+            },
+            "maxItems": 5000,
+            "minItems": 1,
+            "title": "Drafts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "drafts"
+        ],
+        "title": "ImportRegistrationRequest",
+        "type": "object"
+      },
       "ImportRun": {
         "properties": {
           "created_at": {
@@ -2492,6 +2875,19 @@
             "title": "Published Count",
             "type": "integer"
           },
+          "registration_job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest registration (QIMP-JOB) of this run, if any: read its progress at `GET /question-imports/{id}/registrations/{registration_id}`.",
+            "title": "Registration Job Id"
+          },
           "source_document_id": {
             "anyOf": [
               {
@@ -2551,6 +2947,7 @@
           "document_title",
           "draft_count",
           "published_count",
+          "registration_job_id",
           "created_at",
           "updated_at",
           "finished_at"
@@ -4164,6 +4561,19 @@
             "title": "Base Version",
             "type": "string"
           },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Import drafts (CHAPTER-MAP): the book chapter to register the draft under (a chapter of a book's current revision here; `null` = no chapter). Sending it replaces the suggestion with this choice; it is not content and keeps an approval.",
+            "title": "Chapter Id"
+          },
           "correct_option_ids": {
             "anyOf": [
               {
@@ -4990,6 +5400,41 @@
           "version"
         ],
         "title": "ReviewedDraft",
+        "type": "object"
+      },
+      "ReviewedImportDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CHAPTER-MAP: the chapter shown for the draft (`null` = 챕터 없음). When sent, the request is refused with 409 `chapter-changed` if the draft's chapter is no longer that one (e.g. a book was added and the suggestion changed): reload and review again. Omitted = not checked.",
+            "title": "Chapter Id"
+          },
+          "draft_id": {
+            "format": "uuid",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "version": {
+            "description": "The `version` of the draft that was approved.",
+            "maxLength": 64,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "version"
+        ],
+        "title": "ReviewedImportDraft",
         "type": "object"
       },
       "RevisionHistory": {
@@ -6432,10 +6877,11 @@
           },
           "document_type": {
             "default": "book",
-            "description": "`question_paper` for question PDFs to import.",
+            "description": "`auto`: the server tells body text and question papers apart (UX6-UPLOAD-B; the document starts as a `book`). `book` / `question_paper`: a kind chosen by the uploader (never reclassified).",
             "enum": [
               "book",
-              "question_paper"
+              "question_paper",
+              "auto"
             ],
             "title": "Document Type",
             "type": "string"
@@ -7361,6 +7807,113 @@
           }
         ],
         "summary": "Get Document",
+        "tags": [
+          "documents"
+        ]
+      },
+      "patch": {
+        "description": "Change a PDF's kind (`종류 변경`, DOC-01-AC08; editor+, archived workspaces read-only).\n\nThe chosen kind is pinned (`kind_source: user`): the parse job never reclassifies it. 409\n`document-not-ready` unless the document finished processing; 409 `document-in-use` when a\nbook would become a question paper (it would leave search, generation sources and chapter\nmatching) while questions or import drafts are registered under its chapters or cite it.\nNothing is deleted: drafts, runs and questions stay whatever the kind. With `extract` (the\ndefault), a `question_paper` / `mixed` kind starts the question import when the document has\nnone yet. Repeating the same change changes nothing.",
+        "operationId": "updateDocumentKind",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentKindChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Update Document Kind",
         "tags": [
           "documents"
         ]
@@ -9611,6 +10164,233 @@
           }
         ],
         "summary": "Publish Question Import Drafts",
+        "tags": [
+          "question-imports"
+        ]
+      }
+    },
+    "/api/v1/question-imports/{import_id}/registrations": {
+      "post": {
+        "description": "Approve and register the whole selection on the server (QIMPORT-01-AC07, \"선택한 문제 승인\n및 등록\"): the request records every listed draft with the version on screen and starts a\n`question.import_register` job, which registers them in batches whether or not the page stays\nopen. Same rules as `publish` with `approve: true`: the job's user (the caller) approves each\ndraft still at the sent version that can be confirmed; drafts changed since (`stale-draft`) or\nnot confirmable (`not-publishable`) are refused and left as they were; drafts registered\nalready are skipped. Idempotent per draft (a re-delivered job never registers twice).\n\nAn id that is not a draft of this import is 404 (nothing recorded). 409\n`import-registration-running` while the previous registration of this import is still queued\nor running (follow `registration_job_id`). The job re-checks the workspace on every batch: an\narchived workspace or a lost editor role stops it (`workspace_unavailable`).",
+        "operationId": "registerQuestionImportDrafts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Import Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRegistrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportRegistration"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Register Question Import Drafts",
+        "tags": [
+          "question-imports"
+        ]
+      }
+    },
+    "/api/v1/question-imports/{import_id}/registrations/{registration_id}": {
+      "get": {
+        "description": "Progress of a registration of this import (`registration_id` = its `job_id`):\nprocessed/total and the refused drafts.",
+        "operationId": "getQuestionImportRegistration",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "registration_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Registration Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Import Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportRegistration"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Question Import Registration",
         "tags": [
           "question-imports"
         ]
@@ -13148,7 +13928,7 @@
         ]
       },
       "post": {
-        "description": "Start extracting draft questions from a question paper (QIMPORT-01-AC01). 409\n`document-not-ready` while the paper is still processing (or failed).\n\nThe server already starts the import of a question paper when its processing succeeds\n(QIMPORT-01-AC06), so this usually attaches: if the paper's active revision already has a\nrun (started by the server or by anyone), that run is returned and nothing new is created.\nIt creates a run for papers that have none (e.g. processed before QIMP-AUTO).",
+        "description": "Start extracting draft questions from a PDF (QIMPORT-01-AC01): a question paper, a book\nwith questions, or any ready document (UX6-UPLOAD-B). 409 `document-not-ready` while it is\nstill processing (or failed).\n\nThe server already starts the import of a question paper when its processing succeeds\n(QIMPORT-01-AC06), so this usually attaches: if the paper's active revision already has a\nrun (started by the server or by anyone), that run is returned and nothing new is created.\nIt creates a run for papers that have none (e.g. processed before QIMP-AUTO).",
         "operationId": "createQuestionImport",
         "parameters": [
           {

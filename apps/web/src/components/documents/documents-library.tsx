@@ -1,12 +1,14 @@
 'use client';
 
-// DOC-01 "문서 관리" dialog body (docs/screens/documents-library.md, UX3c): the dashed Dropzone
-// (editors only; its "PDF 업로드" button is the keyboard/touch path and the single upload CTA),
-// the book documents with live status, and the empty/failure states. The state itself lives in
-// the home (useDocumentLibrary) so closing the dialog never aborts an upload. Question PDFs are
-// listed by QuestionPdfsLibrary instead.
+// DOC-01 "문서 관리" dialog body (docs/screens/documents-library.md, UX3c, UX6-UPLOAD): the dashed
+// Dropzone (editors only; several PDFs at once, no type choice — the server classifies each; its
+// "PDF 업로드" button is the keyboard/touch path and the one upload place of the workspace), every
+// PDF with its kind badge, live status, `종류 변경` (editors) and the question actions (문제 검토 /
+// 문제 추출), and the empty/failure states. The state itself lives in the home
+// (useDocumentLibrary) so closing the dialog never aborts an upload.
 import { Button, Dropzone, EmptyState } from '@quiz/ui';
 import type { ReactNode } from 'react';
+import { useQuestionRowActions } from '@/components/questions/import/question-row-actions';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
 import { PDF_CONTENT_TYPE } from '@/lib/documents/validation';
 import { DocumentRowItem } from './document-row';
@@ -24,17 +26,13 @@ export interface DocumentsLibraryProps {
   readonly readOnlyReason?: string;
 }
 
-export function bookRows(rows: readonly DocumentRow[]): DocumentRow[] {
-  return rows.filter((row) => row.documentType === 'book');
-}
-
 export function DocumentsLibrary({
   workspaceId,
   library,
   canEdit,
   readOnlyReason,
 }: DocumentsLibraryProps) {
-  const rows = bookRows(library.rows);
+  const questions = useQuestionRowActions(workspaceId, library, canEdit);
   return (
     <div className={styles.library}>
       {readOnlyReason ? (
@@ -45,7 +43,7 @@ export function DocumentsLibrary({
       {canEdit ? (
         <Dropzone
           title="PDF 파일을 여기에 끌어다 놓으세요"
-          description="PDF를 올리면 원문을 분석하고 검색 색인을 만듭니다. 최대 50MB."
+          description="PDF 여러 개를 함께 올릴 수 있습니다. 교재·문제지는 자동으로 나누고 문제가 있으면 추출합니다. 파일마다 최대 50MB."
           buttonLabel="PDF 업로드"
           accept={PDF_ACCEPT}
           multiple
@@ -58,13 +56,20 @@ export function DocumentsLibrary({
           {library.alert}
         </p>
       ) : null}
+      {questions.startFailure ? (
+        <p role="alert" className={styles.alert}>
+          {questions.startFailure}
+        </p>
+      ) : null}
       <DocumentRows
         label="문서 목록"
-        rows={rows}
+        rows={library.rows}
         workspaceId={workspaceId}
         library={library}
         canEdit={canEdit}
         emptyText="아직 문서가 없습니다"
+        rowActions={questions.rowActions}
+        kindMenu
       />
     </div>
   );
@@ -79,6 +84,7 @@ export function DocumentRows({
   canEdit,
   emptyText,
   rowActions,
+  kindMenu = false,
 }: {
   readonly label: string;
   readonly rows: readonly DocumentRow[];
@@ -86,8 +92,10 @@ export function DocumentRows({
   readonly library: DocumentLibrary;
   readonly canEdit: boolean;
   readonly emptyText: string;
-  /** Extra per-row actions (the question-PDF list's 문제 추출 / 문제 검토). */
+  /** Extra per-row actions (문제 추출 / 문제 검토). */
   readonly rowActions?: (row: DocumentRow) => ReactNode;
+  /** Offer editors `종류 변경` on ready rows (문서 관리). */
+  readonly kindMenu?: boolean;
 }) {
   return (
     <>
@@ -113,6 +121,15 @@ export function DocumentRows({
               onRetry={library.retry}
               onDelete={library.requestDelete}
               actions={rowActions?.(row)}
+              kindChange={
+                kindMenu && canEdit && row.documentId
+                  ? {
+                      onChange: (target, kind) => void library.changeKind(target, kind),
+                      busy: library.changingKinds.has(row.documentId),
+                      failure: library.kindFailures[row.documentId],
+                    }
+                  : undefined
+              }
             />
           ))}
         </ul>
