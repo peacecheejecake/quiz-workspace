@@ -76,6 +76,13 @@
 //   N9 Feature-off stack (CHNOTE-01-AC06): summary.ts startSummaryOffStack (D8: free ports, a
 //      claimed reserved Redis DB, log audit) with WORKER_CHAPTER_NOTES=false for its API, worker
 //      and web. The main E2E stack runs with WORKER_CHAPTER_NOTES=true (API and worker).
+//   N10 Large-chapter batching (C04, agreed rule): the chapter's questions, in question-number
+//      order, are split into contiguous batches, each at most 120 questions and 60,000 input
+//      characters, with the fewest batches (greedy fill or balanced sizes are both conforming).
+//      Tags are per batch in the request (Q1..Qk) and renumbered chapter-wide (Q1..Qn) when the
+//      batches are merged by section heading. C04 seeds 240 questions (two batches of 120 under
+//      either partition) and 10 questions of ~7,000 characters (two batches of at least two
+//      questions), so no batch is a singleton the OK scenario's Q2 items cannot cite.
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
 //   QOV-01 Heatmap: each chapter group is a region named by the chapter title (QuestionHeatmap

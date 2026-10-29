@@ -434,28 +434,38 @@ def test_chnote_01_c04_large_chapters_are_batched_and_merged_with_chapter_wide_t
     ws = owner.create_workspace()["id"]
     ch = book(owner, ws)
     t = token()
-    many = questions(owner, ws, ch[CH1], OK, t, range(1, 122))  # 121 > 120 questions
+    # 240 > 120 questions: two batches of 120 under any order-preserving partition (N10), so
+    # every batch has the Q1/Q2 the OK scenario cites.
+    many = questions(owner, ws, ch[CH1], OK, t, range(1, 241))
 
     note = generate(owner, ch[CH1])["note"]
-    assert note["usage"]["batches"] >= 2
+    assert note["usage"]["batches"] == 2
     for key in ("cost_usd", "input_tokens", "output_tokens", "llm_calls"):
         assert key in note["usage"], key
     tags = [r["tag"] for r in note["question_refs"]]
-    assert sorted(tags, key=lambda x: int(x[1:])) == [f"Q{n}" for n in range(1, 122)]
+    assert sorted(tags, key=lambda x: int(x[1:])) == [f"Q{n}" for n in range(1, 241)]
     assert ref_ids({"note": note}) == {q["id"] for q in many}
     assert_citations_valid(note)
     cited = {f["question_id"] for f in note["footnotes"]}
-    assert len(cited) >= 4, "each batch's Q1/Q2 are different questions after renumbering"
+    assert len(cited) == 4, "each batch's Q1/Q2 are different questions after renumbering"
+    assert {many[0]["id"], many[1]["id"]} < cited, "the first batch contributed"
+    assert cited - {many[0]["id"], many[1]["id"]} <= {q["id"] for q in many[2:]}
     headings = [s["heading"] for s in note["sections"]]
     assert sorted(headings) == sorted(set(headings)), "sections are merged by heading"
 
-    # Over 60,000 input characters with few questions is batched too.
+    # Over 60,000 input characters with few questions is batched too: 10 x ~7,000 characters
+    # split into batches of at least two questions under a greedy or a balanced partition (N10).
     long_ex = "가" * 7_000
-    for n in range(1, 10):
-        question(owner, ws, f"{t}-long{n}", 200 + n, ch[CH2], OK, explanation=long_ex)
+    longs = [
+        question(owner, ws, f"{t}-long{n}", 300 + n, ch[CH2], OK, explanation=long_ex)
+        for n in range(1, 11)
+    ]
     long_note = generate(owner, ch[CH2])["note"]
-    assert long_note["usage"]["batches"] >= 2
+    assert long_note["usage"]["batches"] == 2
     assert_citations_valid(long_note)
+    long_cited = {f["question_id"] for f in long_note["footnotes"]}
+    assert len(long_cited) == 4, "both batches contributed their own Q1/Q2"
+    assert long_cited <= {q["id"] for q in longs}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -652,9 +662,13 @@ def test_chnote_01_c07_fork_copies_only_source_matched_latest_notes_with_remappe
     ws = owner.create_workspace()["id"]
     ch = book(owner, ws)
     matched = questions(owner, ws, ch[CH1], OK, token(), range(1, 3))
-    generate(owner, ch[CH1])
+    older = generate(owner, ch[CH1])
+    # Version 2 has a different input (a third question), so the copy can only match one of them.
+    matched.append(question(owner, ws, f"{token()}-v2only", 3, ch[CH1], OK))
     source_latest = generate(owner, ch[CH1])
-    changed = questions(owner, ws, ch[CH2], OK, token(), range(3, 5))
+    assert len(older["note"]["question_refs"]) == 2
+    assert len(source_latest["note"]["question_refs"]) == 3
+    changed = questions(owner, ws, ch[CH2], OK, token(), range(4, 6))
     generate(owner, ch[CH2])
     patch_question(owner, changed[0], explanation="포크 전에 고친 해설")  # not source-matched
 
@@ -665,16 +679,27 @@ def test_chnote_01_c07_fork_copies_only_source_matched_latest_notes_with_remappe
     target = str(recipient.wait_fork(str(res.json()["id"]), "COMPLETED")["target_workspace_id"])
     [doc] = recipient.ok("GET", f"/workspaces/{target}/documents")["items"]
     forked = chapters(recipient, str(doc["id"]))
-    target_questions = {q["id"]: q["revision"]["id"] for q in recipient.list_questions(target)}
+    target_list = recipient.list_questions(target)
+    target_questions = {q["id"]: q["revision"]["id"] for q in target_list}
+    target_stems = {q["id"]: q["revision"]["stem"] for q in target_list}
     source_ids = {q["id"] for q in [*matched, *changed]}
+    source_stems = {q["id"]: q["revision"]["stem"] for q in matched}
 
     copy = state(recipient, forked[CH1])
     assert [v["version"] for v in copy["versions"]] == [1], "only the latest version is copied"
     note = copy["note"]
     assert note["id"] != source_latest["note"]["id"]
     assert note["sections"] == source_latest["note"]["sections"]
+    assert note["question_count"] == 3, "version 2 (three questions), not version 1"
+    assert note["input_fingerprint"] != older["note"]["input_fingerprint"]
     assert note["usage"] in (None, {}), "usage is not copied"
     refs = note["question_refs"]
+    # The copy's refs are version 2's refs, remapped one-to-one (same tags, same questions).
+    latest_refs = {
+        r["tag"]: source_stems[r["question_id"]] for r in source_latest["note"]["question_refs"]
+    }
+    assert {r["tag"]: target_stems[r["question_id"]] for r in refs} == latest_refs
+    assert source_stems[matched[2]["id"]] in latest_refs.values()
     assert {r["question_id"] for r in refs} <= set(target_questions)
     assert not {r["question_id"] for r in refs} & source_ids
     assert all(target_questions[r["question_id"]] == r["question_revision_id"] for r in refs)
