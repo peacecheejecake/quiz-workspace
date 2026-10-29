@@ -12,15 +12,16 @@ route: /workspaces/:workspaceId?panel=document-summary&document=:documentId
 actor: workspace_member (보기) · editor/owner (요약 만들기·다시 시도) · share guest (발행본 요약 보기)
 permission: read · edit
 status: confirmed
-api: [GET /api/v1/documents/:id/summary, POST /api/v1/documents/:id/summary, POST /api/v1/documents/:id/summary/retry, GET /api/v1/shared/:shareId/documents/:docId/summary]
+api: [GET /api/v1/documents/:id/summary, POST /api/v1/documents/:id/summary, POST /api/v1/documents/:id/summary/retry, DELETE /api/v1/documents/:id/summary/auto, GET /api/v1/shared/:shareId/documents/:docId/summary]
 components: [FloatingSidePanel, Button, Disclosure, StepProgress, Badge]
-linked_tests: [DOCSUM-01-AC01 … DOCSUM-01-AC07]
+linked_tests: [DOCSUM-01-AC01 … DOCSUM-01-AC08]
 ```
 
 ## 목적과 정책
 
 - 교재(`교재`·`교재+문제`) 문서의 **발행본**을 요약한다: 문서 전체 요약 하나 + 최상위 장(outline 깊이 1)마다 장 요약 하나(사용자 결정 Q2 기본값). 각 요약은 짧은 본문(Markdown 일부)과 핵심 항목 목록이며, 핵심 항목마다 근거 쪽(`p.12–14`)을 단다. 요약 언어는 원문 언어를 따른다(Q8).
 - **opt-in 후 자동 재생성 (사용자 결정 Q1 2026-10-29):** 문서마다 편집 권한자가 `요약 만들기`를 한 번 눌러야 요약이 생긴다(`documents.summary_enabled_at`). 한 번이라도 요약을 만든 문서는 그 뒤 새 revision이 발행될 때마다(DOC-02 교정 발행, 이전 revision 복원) 서버가 자동으로 새 요약을 만들어 저장한다. 내용이 바뀌지 않은 장의 요약은 다시 만들지 않고 재사용한다(장 입력의 content hash 기준, 증분). `요약 만들기`를 누르지 않은 문서는 어떤 경우에도 본문을 LLM으로 보내지 않는다. 교정 중 초안(draft)은 요약하지 않는다.
+- **자동 갱신 끄기 (사용자 결정 2026-10-29):** 편집 권한자는 panel에서 문서의 자동 갱신을 끌 수 있다(`summary_enabled_at = null`, `summary_disabled_at/by` 기록). 꺼진 뒤의 발행은 run을 만들지 않고 LLM을 부르지 않는다. 이미 만든 요약은 지우지 않고 계속 읽히며, 다음 발행 뒤에는 "이전 발행본 기준 요약입니다."가 붙는다. 끌 때 대기·실행 중이던 run은 취소하지 않고 끝까지 진행한다(이미 보낸 요청; 이후 발행만 막는다). `요약 만들기`를 다시 누르면 자동 갱신이 켜지고 현재 발행 revision을 요약한다(바뀌지 않은 장 unit은 재사용, 현재 revision의 성공 요약이 이미 있으면 새 run 없이 켜기만). 켜기·끄기는 활동 기록 `document.summary_enabled`·`document.summary_auto_disabled`(id만)로 남는다. 공유 게스트에게는 영향이 없다(현재 revision 요약 규칙 그대로).
 - **이전 요약 유지:** 새 요약을 만드는 동안과 새 요약이 실패한 동안에는 마지막으로 성공한 요약을 그대로 보이며 "이전 발행본 기준" 안내를 단다(stale). 이전 요약은 지우지 않는다(revision별 기록).
 - **AI 생성 표시:** 요약은 사람이 승인하지 않고 바로 보이며 편집할 수 없다. panel header에 글자 badge `AI 생성`을 둔다.
 - **대상 아님:** `문제지`(문제만 있는 PDF)는 요약하지 않는다(행에 `요약` 버튼 없음, API 409 `summary-not-applicable`). `교재+문제`는 문제 추출이 문제 구간으로 읽은 장을 요약 입력에서 뺀다.
@@ -36,6 +37,7 @@ linked_tests: [DOCSUM-01-AC01 … DOCSUM-01-AC07]
   - **장별 요약** 영역(`h3`): 최상위 장마다 disclosure 버튼(장 제목 + 쪽 범위, `aria-expanded`, 기본 접힘). 펼치면 장 요약 본문과 핵심 목록(쪽 링크). 본문이 없는 장은 "요약할 본문이 없습니다."
   - 요약 본문은 Markdown 일부(문단·목록·강조)만 렌더링하고 HTML·링크·이미지는 글자로 다룬다(LLM 출력 sanitize).
 - **상태 줄과 동작(편집 권한):** 요약 없음 → "아직 요약이 없습니다." + 안내 "요약을 만들면 이후 교정본을 발행할 때마다 요약이 자동으로 다시 만들어집니다. 본문이 AI 서비스로 전송됩니다." + `요약 만들기`. 대기 → "요약 대기 중". 실행 → "요약을 만드는 중 · 장별 요약 3/7"과 진행 막대(`role="progressbar"`, 이름 "요약 진행률"). 실패 → alert "요약을 만들지 못했습니다" + 이유 + `다시 시도`. 상태는 색이 아니라 글자로 전달한다.
+- **자동 갱신 줄(편집 권한, 활성 Workspace, 요약이 있는 문서):** panel 아래쪽에 글자 상태 "자동 갱신 켜짐 — 교정본을 발행하면 요약을 다시 만듭니다." + `자동 갱신 끄기` 버튼. 누르면 확인 dialog(공통 `ConfirmDialog`, Radix) "자동 갱신을 끌까요? 이후 교정본을 발행해도 요약을 다시 만들지 않고 본문을 AI 서비스로 보내지 않습니다. 지금까지 만든 요약은 그대로 남습니다." `끄기`·`취소`(취소·Escape는 아무것도 바꾸지 않고 focus를 버튼으로 돌림). 끈 뒤에는 "자동 갱신 꺼짐" + `요약 만들기`(다시 켜기; 안내 "다시 켜면 현재 발행본을 요약하고 이후 발행마다 다시 만듭니다."). 보기 권한·보관 Workspace에는 이 줄의 버튼이 없고 상태 글자만 보인다.
 - **stale 안내:** 보이는 요약이 현재 발행 revision의 것이 아니면 요약 위에 `role="status"` 안내 "이전 발행본 기준 요약입니다." + 진행 중이면 " 새 발행본의 요약을 만드는 중입니다.", 실패면 " 새 요약을 만들지 못했습니다."(편집 권한에 `다시 시도`).
 - **오류 이유 문구:** `llm_unavailable`·`llm_timeout` → "AI 서비스에 연결하지 못했습니다. 잠시 후 다시 시도하세요.", `summary_too_large` → "문서가 너무 커서 요약할 수 없습니다.", `llm_invalid_output` 그 밖 → "요약을 만들지 못했습니다. 다시 시도하세요."
 - 키보드: panel 안 Tab 순서 header → 전체 요약 → 장 disclosure → 동작 버튼; Escape(focus가 안에 있을 때)·닫기 버튼으로 닫고 focus를 연 버튼으로 돌린다. 모바일은 FloatingSidePanel 규칙(full-height, safe-area).
@@ -50,6 +52,7 @@ linked_tests: [DOCSUM-01-AC01 … DOCSUM-01-AC07]
 | 새 revision 요약 진행·실패 | 이전 요약 + stale 안내(+`다시 시도`) | 이전 요약 + stale 안내 | `요약` 버튼 없음(현재 revision 요약이 아님) |
 | 실패(성공한 요약 없음) | alert + `다시 시도` | alert(버튼 없음) | 버튼 없음 |
 | 기능 꺼짐(환경) | `요약 만들기` 비활성 + 이유, 기존 요약 읽기 | 기존 요약 읽기 | 기존 현재 revision 요약 읽기 |
+| 자동 갱신 꺼짐 | 마지막 요약(+다음 발행 뒤 stale) + "자동 갱신 꺼짐" + `요약 만들기` | 마지막 요약 + "자동 갱신 꺼짐" | 공유 규칙 그대로(현재 revision 요약일 때만) |
 | 보관된 Workspace | 읽기 전용(버튼 없음) | 읽기 전용 | 공유 규칙 그대로 |
 | 문제지·처리 중·실패 문서 | `요약` 버튼 없음 | 같음 | 같음 |
 | 다른 Workspace·삭제 문서 딥링크 | panel에 "문서를 찾을 수 없습니다." | 같음 | 같음 |
@@ -98,6 +101,12 @@ linked_tests: [DOCSUM-01-AC01 … DOCSUM-01-AC07]
 - **When:** 문서 관리 dialog를 보고, DOC-02 header의 `요약` 링크를 누르고, `?panel=document-summary&document=<다른 Workspace 문서 id>`로 직접 연다. 요약 panel이 열린 채로 `이력` dialog를 연다
 - **Then:** `문제지`와 처리 중인 행에는 `요약` 버튼이 없고(`문제지` POST는 409 `summary-not-applicable`, 처리 중 409 `document-not-ready`) 준비 완료 교재 행에는 있다. DOC-02의 `요약` 링크는 Workspace 홈으로 이동해 그 문서의 요약 panel을 연다. 다른 Workspace 문서 딥링크는 panel에 "문서를 찾을 수 없습니다."를 보이고 API는 404다. 이력 dialog가 요약 panel 위에 오고, 이력에는 `요약 만들기`(활동)와 요약 작업(작업, 종류 "문서 요약")이 본문 없이 보인다.
 
+### DOCSUM-01-AC08
+
+- **Given:** 요약이 성공하고 자동 갱신이 켜진 교재(장 A·B), 같은 Workspace의 보기 권한자
+- **When:** 편집 권한자가 요약 panel의 `자동 갱신 끄기`를 눌러 확인 dialog에서 먼저 `취소`, 다시 눌러 `끄기`를 고른다. 장 B를 교정해 발행하고 panel을 연다. 보기 권한자가 panel을 열고 `DELETE /documents/{id}/summary/auto`를 직접 부른다. 편집 권한자가 `요약 만들기`를 누른다
+- **Then:** `취소`는 아무것도 바꾸지 않고 focus가 `자동 갱신 끄기`로 돌아온다. `끄기` 뒤 "자동 갱신 꺼짐"과 `요약 만들기`가 보이고, 발행해도 요약 run이 생기지 않고 fake 요약기가 호출되지 않으며 기존 요약이 "이전 발행본 기준 요약입니다."와 함께 보인다(진행 중 문구 없음). 보기 권한자에게는 끄기·켜기 버튼이 없고 DELETE는 403이다. `요약 만들기`를 누르면 자동 갱신이 다시 켜지고 새 발행 revision의 요약이 만들어져 stale 안내가 사라지며 바뀌지 않은 장 A는 재사용된다(`reused_units` ≥ 1). 이력에는 자동 갱신 끄기·켜기 활동이 본문 없이 보인다.
+
 ## 계약 요구사항 (pytest·unit, 화면 AC 아님)
 
 `tests/integration/documents/test_document_summary_contract.py`, `apps/worker/tests`, `packages/core/tests`, `supabase/tests`(pgTAP).
@@ -105,9 +114,9 @@ linked_tests: [DOCSUM-01-AC01 … DOCSUM-01-AC07]
 | ID | 요구사항 |
 |---|---|
 | DOCSUM-01-C01 | **unit 재사용:** 장 요약 unit은 `(document_id, scope, section_key, input_hash, prompt_version, model)`로 content-addressed. `input_hash`는 장 입력 텍스트(정규화된 블록 텍스트 + 쪽 번호)의 SHA-256이다. 새 revision에서 입력이 같은 장은 LLM을 부르지 않고 기존 unit을 run에 연결한다(fake 호출 수로 검증). 문서 요약(reduce)은 장 unit hash 목록이 같으면 재사용한다. unit은 Workspace·문서 범위를 넘어 공유하지 않는다. |
-| DOCSUM-01-C02 | **시작 조건:** 발행 트랜잭션(`document.parse` publish, revision 복원)이 SECURITY DEFINER `public.worker_start_document_summary`를 부르고 조건이 맞을 때만 run(`trigger = publish`)과 `document.summarize` job을 같은 트랜잭션에서 만든다: `summary_enabled_at`이 있음, 종류가 `question_paper`가 아님, Workspace 활성, worker 설정상 사용 가능. 초안 저장은 run을 만들지 않는다. 같은 revision에 run은 하나(재전달·재시도 멱등). |
+| DOCSUM-01-C02 | **시작 조건:** 발행 트랜잭션(`document.parse` publish, revision 복원)이 SECURITY DEFINER `public.worker_start_document_summary`를 부르고 조건이 맞을 때만 run(`trigger = publish`)과 `document.summarize` job을 같은 트랜잭션에서 만든다: `summary_enabled_at`이 있음(자동 갱신 켜짐; 꺼진 문서는 run·LLM 호출 0), 종류가 `question_paper`가 아님, Workspace 활성, worker 설정상 사용 가능. 초안 저장은 run을 만들지 않는다. 같은 revision에 run은 하나(재전달·재시도 멱등). |
 | DOCSUM-01-C03 | **대체(supersession):** 더 새 revision의 run이 생기면 이전 revision의 대기·실행 run은 `superseded`로 끝나고 결과를 쓰지 않는다. job은 문서별 advisory lock 아래에서 결과를 쓰기 직전에 run 상태와 현재 발행 revision을 다시 확인한다(경쟁 test: 두 발행이 거의 동시에 일어나도 최종 표시 요약은 최신 revision). |
 | DOCSUM-01-C04 | **유출 금지:** 문서 본문·요약 본문·LLM 응답·prompt는 API·worker 로그, job `result`(개수·usage·오류 코드만), 활동 기록(`document.summary_requested` 등은 id만), trace에 남지 않는다(log capture test). LLM 오류 메시지 원문도 저장하지 않고 오류 코드로만 남긴다. |
-| DOCSUM-01-C05 | **인가 matrix:** GET은 모든 구성원(보관 Workspace 포함), POST(`/summary`, `/summary/retry`)는 owner·editor이고 활성 Workspace만(보관 403), 삭제·다른 Workspace 404, `문제지` 409 `summary-not-applicable`, 처리 중 409 `document-not-ready`, 기능 꺼짐 409 `summary-disabled`, `retry`는 현재 revision run이 `failed`일 때만(아니면 409 `summary-not-failed`). 공유 API는 현재 발행 revision의 `succeeded` 요약만, 그 밖 404. POST는 `Idempotency-Key`를 받는다. |
+| DOCSUM-01-C05 | **인가 matrix:** GET은 모든 구성원(보관 Workspace 포함), POST(`/summary`, `/summary/retry`)는 owner·editor이고 활성 Workspace만(보관 403), 삭제·다른 Workspace 404, `문제지` 409 `summary-not-applicable`, 처리 중 409 `document-not-ready`, 기능 꺼짐 409 `summary-disabled`, `retry`는 현재 revision run이 `failed`일 때만(아니면 409 `summary-not-failed`). 공유 API는 현재 발행 revision의 `succeeded` 요약만, 그 밖 404. POST는 `Idempotency-Key`를 받는다. `DELETE /documents/{id}/summary/auto`(자동 갱신 끄기)는 owner·editor·활성 Workspace만(viewer·보관 403, 다른 Workspace 404), 이미 꺼져 있어도 204(멱등, 활동 기록은 실제로 바뀔 때만); 다시 켜기는 `POST /summary`. 끈 뒤 발행·복원은 run을 만들지 않는다(pgTAP·infra test). |
 | DOCSUM-01-C06 | **한도와 검증:** 장 입력이 `WORKER_SUMMARY_CHAPTER_CHARS`(기본 24,000자)를 넘으면 나눠 요약한 뒤 합친다. 문서 입력이 `WORKER_SUMMARY_MAX_INPUT_CHARS`를 넘으면 LLM을 부르지 않고 `summary_too_large`로 실패한다. 핵심 항목의 쪽은 그 장의 쪽 범위 안이어야 하며 벗어난 쪽은 버린다(쪽 없는 항목은 쪽 링크 없이 보임). run에 token usage·`cost_usd`·`reused_units`·`generated_units`를 기록한다. 테스트 환경(`APP_ENV=test`)만 결정적 fake 요약기(블록 앞 문장 추출)와 실패 marker를 쓴다. |
-| DOCSUM-01-C07 | **Fork:** Fork는 snapshot revision의 성공한 요약(run과 연결된 unit)과 `summary_enabled_at`을 새 id로 복제한다(이력 run·실패 run·usage는 복제하지 않음). 복제된 문서도 이후 발행에서 자동 재생성된다. |
+| DOCSUM-01-C07 | **Fork:** Fork는 snapshot revision의 성공한 요약(run과 연결된 unit)과 자동 갱신 설정(`summary_enabled_at`, 꺼져 있으면 null 그대로)을 새 id로 복제한다(이력 run·실패 run·usage는 복제하지 않음). 자동 갱신이 켜진 채 복제된 문서는 이후 발행에서 자동 재생성된다. |

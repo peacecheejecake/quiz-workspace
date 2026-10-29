@@ -122,12 +122,12 @@ workspace
 - `question_lineage(parent_question_id, child_question_id, variation_type, source_revision_id)`.
 - `question_generation_runs` / `question_import_runs`; `question_drafts` (approval 전 격리); `question_import_registration_items` (서버 측 등록 job의 항목·진행, QIMP-JOB).
 - `activity_events` (변경 감사), `async_jobs` (재시도/상태).
-- **문서 요약 (DOCSUM-SPEC 2026-10-29, [DOCSUM-01](screens/documents-summary.md)):** `documents.summary_enabled_at`·`summary_enabled_by`(opt-in; 첫 `요약 만들기`에서 기록, 이후 모든 발행에서 자동 재생성).
+- **문서 요약 (DOCSUM-SPEC 2026-10-29, [DOCSUM-01](screens/documents-summary.md)):** `documents.summary_enabled_at`·`summary_enabled_by`(opt-in·자동 갱신 켜짐; `요약 만들기`에서 기록, 켜져 있는 동안 모든 발행에서 자동 재생성; null = 꺼짐), `summary_disabled_at`·`summary_disabled_by`(마지막 `자동 갱신 끄기`).
   - `document_summary_runs(id, workspace_id, document_id, document_revision_id, status queued|running|succeeded|failed|superseded, trigger manual|publish|retry, job_id, prompt_version, model, error_code, usage jsonb(tokens·cost_usd·reused_units·generated_units), progress jsonb(chapters_done·chapters_total), created_by, created_at, started_at, finished_at)` — revision마다 살아 있는 run 하나(partial unique; `retry`는 같은 revision의 새 run, 이전 실패 run은 남김). 더 새 revision의 run이 생기면 이전 대기·실행 run은 `superseded`.
   - `document_summary_units(id, workspace_id, document_id, scope chapter|document, section_key, input_hash, prompt_version, model, body jsonb{title, summary_md, key_points[{text, pages}]}, page_from, page_to, usage, created_at)` unique `(document_id, scope, section_key, input_hash, prompt_version, model)` — 내용 주소 방식이라 바뀌지 않은 장은 재사용(문서 범위 밖 공유 없음). `document_summary_run_units(run_id, unit_id, position)`가 run의 장 순서·문서 요약 unit을 묶는다.
   - 시작: 발행 트랜잭션의 SECURITY DEFINER `public.worker_start_document_summary(document_id, revision_id, enabled)`(QIMP-AUTO의 `worker_start_question_import`와 같은 follow-up 방식) 또는 `POST /documents/{id}/summary`. 문서·요약 본문은 로그·job 결과·활동 기록에 넣지 않는다.
 - **챕터 정리 노트 (CHNOTE, [CHNOTE-01](screens/chapter-notes.md)):** `chapter_notes(id, workspace_id, document_id, section_key, version, status queued|running|succeeded|failed, job_id, input_fingerprint, question_refs jsonb[{tag, question_id, question_revision_id, number_label}], body jsonb{sections[...]}, dropped_items, prompt_version, model, error_code, usage, created_by, created_at, finished_at, superseded_at)` unique `(document_id, section_key, version)`, 장마다 대기·실행 중 하나(partial unique). 장은 revision이 바뀌어도 같은 `section_key`로 이어진다(`documents_remap_question_chapters`와 같은 규칙). stale은 읽을 때 현재 확정 문제 fingerprint와 비교해 계산한다. 이전 버전은 지우지 않는다.
-- Fork는 snapshot revision의 성공한 요약(run·unit·`summary_enabled_at`)과 장마다 최신 성공 정리 노트(`question_refs` 재매핑)를 새 id로 복제한다. 실패·이전 기록과 usage는 복제하지 않는다.
+- Fork는 snapshot revision의 성공한 요약(run·unit·`summary_enabled_at`)과 장마다 최신 성공 정리 노트 중 snapshot 기준 출처 일치(인용 문제가 모두 CONFIRMED이고 active revision = 고정 revision)인 것(`question_refs` 재매핑)을 새 id로 복제한다. 공유 노트 API도 같은 출처 일치 조건을 쓴다. 실패·이전 기록과 usage는 복제하지 않는다.
 
 문제 상태는 독립 필드를 합성해 계산한다. 색상 규칙·열람 판정·변형 정책은 `docs/questions.md`가 단일 기준이다.
 
@@ -151,6 +151,7 @@ workspace
 | GET | `/api/v1/documents/{id}/summary` | 문서 요약(`available`·`enabled`·현재 run 상태·진행, 마지막 성공 요약 + `stale`, 장별 요약; DOCSUM-01) |
 | POST | `/api/v1/documents/{id}/summary` | `요약 만들기`(opt-in + 현재 발행 revision run, 편집 권한, `Idempotency-Key`; 문제지 409 `summary-not-applicable`, 꺼짐 409 `summary-disabled`) |
 | POST | `/api/v1/documents/{id}/summary/retry` | 실패한 현재 revision 요약 다시 시도(편집 권한) |
+| DELETE | `/api/v1/documents/{id}/summary/auto` | 자동 갱신 끄기(편집 권한, 멱등 204; 이후 발행은 run·LLM 호출 없음, 기존 요약 유지; 다시 켜기는 `POST /summary`) |
 | GET/PATCH | `/api/v1/documents/{id}/blocks/{blockId}` | 블록 읽기·교정 |
 | POST | `/api/v1/documents/{id}/publish` | 교정본 발행·색인 |
 | POST | `/api/v1/workspaces/{id}/search` | 다국어 문서·문제 검색 |
