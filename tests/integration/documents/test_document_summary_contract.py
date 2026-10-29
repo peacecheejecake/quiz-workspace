@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import threading
 import time
 import uuid
@@ -35,6 +36,7 @@ TRUTH = json.loads((PDF_DIR / "book-ko.truth.json").read_text(encoding="utf-8"))
 BLOCK_TEXTS = [b["text"] for b in TRUTH["blocks"] if b["type"] == "text" and len(b["text"]) > 30]
 CHLORINE = "염소와 같은 소독제"  # chapter B (page 4)
 FAILURE_MARKER = "E2E-FAIL-SUMMARY"
+HOLD_MARKER = "E2E-HOLD-SUMMARY"
 JOB_TYPE = "document.summarize"
 RANDOM_ID = "00000000-0000-4000-8000-000000000000"
 P = "urn:quiz-workspace:problem:"
@@ -345,21 +347,34 @@ def test_docsum_01_c03_a_newer_revision_supersedes_unfinished_runs(seed: Any, db
     assert final["summary"]["revision_id"] == third
     assert final["stale"] is False
 
-    # Race: a run of revision N is still working while revision N+1 is published.
-    fourth = correct_b_and_publish(owner, doc, "네번째 교정 문장이다.")
-    [racing] = [r for r in runs(db, doc) if r["revision_id"] == fourth]
-    thread = threading.Thread(target=owner.worker.drain, args=(racing["job_id"],), daemon=True)
+    # Mid-flight: revision N's run is held inside the fake (D7 barrier) while N+1 is published.
+    token = uuid.uuid4().hex[:12]
+    hold_dir = Path(os.environ["WORKER_SUMMARY_HOLD_DIR"])
+    fourth = correct_b_and_publish(owner, doc, f"{HOLD_MARKER}-{token} 네번째 교정 문장이다.")
+    [held] = [r for r in runs(db, doc) if r["revision_id"] == fourth]
+    thread = threading.Thread(target=owner.worker.drain, args=(held["job_id"],), daemon=True)
     thread.start()
+    deadline = time.monotonic() + 60
+    while not (hold_dir / f"{token}.held").exists():
+        assert time.monotonic() < deadline, "the run never reached the hold barrier"
+        assert thread.is_alive(), "the summary job ended before the barrier"
+        time.sleep(0.1)
+    assert {r["id"]: r for r in runs(db, doc)}[held["id"]]["status"] == "running"
     fifth = correct_b_and_publish(owner, doc, "다섯번째 교정 문장이다.")
+    assert {r["id"]: r for r in runs(db, doc)}[held["id"]]["status"] == "superseded"
+    (hold_dir / f"{token}.release").touch()
     thread.join(120)
-    finish(owner, doc)
-    latest = state(owner, doc)
+    assert not thread.is_alive()
+    # The released run re-checks under the lock and commits nothing.
+    assert {r["id"]: r for r in runs(db, doc)}[held["id"]]["status"] == "superseded"
+    linked = db(
+        "select count(*) from public.document_summary_run_units where run_id = %s", (held["id"],)
+    )
+    assert linked[0][0] == 0
+    assert state(owner, doc)["summary"]["revision_id"] == third
+    latest = finish(owner, doc)
     assert latest["summary"]["revision_id"] == fifth
     assert latest["stale"] is False
-    assert {r["id"]: r for r in runs(db, doc)}[racing["id"]]["status"] in {
-        "superseded",
-        "succeeded",
-    }
 
 
 # ---------------------------------------------------------------------------------------------

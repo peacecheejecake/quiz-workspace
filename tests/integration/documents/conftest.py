@@ -11,9 +11,11 @@ sync.
 The summary feature is ON for this module's app and worker (`WORKER_DOCUMENT_SUMMARY=true` in
 the environment while they are built). `worker_with(**env)` builds an extra in-process worker
 under other settings (feature off, small input limits) and `off_app` is a second app instance
-with the feature off. DOCSUM-B registers `document.summarize` in the M4 `JobWorker` (as M6.2 did
-for `question.generate`); until then draining a summary job fails with "JobWorker has no
-in-process handler for job type document.summarize".
+with the feature off. `WORKER_SUMMARY_HOLD_DIR` points the APP_ENV=test fake summarizer's hold
+barrier (D7 `E2E-HOLD-SUMMARY-<token>`) at a per-module temp directory. DOCSUM-B registers
+`document.summarize` in the M4 `JobWorker` (as M6.2 did for `question.generate`); until then
+draining a summary job fails with "JobWorker has no in-process handler for job type
+document.summarize".
 
 The `postgres` superuser reads `document_summary_runs` / `document_summary_units` /
 `document_summary_run_units` / `activity_events` (docs/architecture.md §5) for guarantees no API
@@ -66,10 +68,12 @@ def _app(prefix: str) -> TestClient:
 
 
 @pytest.fixture(scope="module")
-def summary_env() -> Iterator[None]:
+def summary_env(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    """Feature on, plus the hold barrier directory of the fake summarizer (D7, C03)."""
     with pytest.MonkeyPatch.context() as mp:
         for key, value in SUMMARY_ON.items():
             mp.setenv(key, value)
+        mp.setenv("WORKER_SUMMARY_HOLD_DIR", str(tmp_path_factory.mktemp("summary-hold")))
         yield
 
 

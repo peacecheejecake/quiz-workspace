@@ -13,8 +13,8 @@
 // Chapter A = "1장 물의 순환" (pages 2–3), chapter B = "2장 정수 처리" (page 4) of book-ko.
 // Corrections and publishes go through the public API (fixtures/history.ts); viewer memberships
 // through the documented db seed (fixtures/db.ts). A document whose parse is still running cannot
-// be held on demand with the fake adapters, so DOCSUM-01-AC07 calls POST right after
-// complete-upload for the 409 and rewrites the library list (as DOC-01-AC05 does) for the row.
+// be held on demand with the fake adapters, so DOCSUM-01-AC07 puts a parsed book back into
+// `processing` with the db fixture (use 6) for both the 409 and the row.
 import { randomUUID } from 'node:crypto';
 import type { Locator, Page } from '@playwright/test';
 import {
@@ -54,6 +54,7 @@ import {
   stableProblem,
   test,
 } from '../fixtures/sharing.ts';
+import { holdDocumentProcessing } from '../fixtures/db.ts';
 import {
   disableAutoSummary,
   getSummary,
@@ -577,14 +578,12 @@ test(
     const paper = await readyDoc(owner, ws.id, questionPaper(), 'question_paper');
     const summarized = await summarizedDoc(owner, ws.id);
 
-    // A book whose parse job has just been queued is not ready yet.
-    const upload = await uploadPdf(owner, ws.id, book('book-en'));
-    const early = await requestSummary(owner, upload.documentId);
+    // A book held in `processing` (db fixture use 6, as DOC-03-AC03): not ready for a summary.
+    const processing = await readyDoc(owner, ws.id, book('book-en'));
+    holdDocumentProcessing(processing.documentId);
+    const early = await requestSummary(owner, processing.documentId);
     expect(early.status).toBe(409);
     expect((early.body as Problem).type).toBe(SUMMARY_PROBLEMS.notReady);
-    await waitForJob(owner, upload.jobId);
-    const processingTitle =
-      (await listDocuments(owner, ws.id)).find((d) => d.id === upload.documentId)?.title ?? '';
 
     const notApplicable = await requestSummary(owner, paper.documentId);
     expect(notApplicable.status).toBe(409);
@@ -596,30 +595,15 @@ test(
     expect(foreignRes.status).toBe(404);
 
     await signInAs(page, owner.user);
-    // The library's own list (BFF → API) shows the third book as processing (DOC-01-AC05 way).
-    const listPath = `/api/workspaces/${ws.id}/documents`;
-    await page.route(
-      (url) => url.pathname === listPath,
-      async (route) => {
-        if (route.request().method() !== 'GET') return route.fallback();
-        const response = await route.fetch();
-        const body = (await response.json()) as { items: Record<string, unknown>[] };
-        for (const item of body.items) {
-          if (item.id === upload.documentId) item.status = 'processing';
-        }
-        await route.fulfill({ response, json: body });
-      },
-    );
     await page.goto(documentsPath(ws.id));
     const library = homeUi.documentsDialog(page);
     await expect(summaryUi.rowButton(library, summarized.title)).toBeVisible();
     await expect(docUi.item(page, escapeRegExp(paper.title))).toBeVisible();
     await expect(summaryUi.rowButton(library, paper.title)).toHaveCount(0);
-    await expect(
-      docUi.processing(docUi.item(page, escapeRegExp(processingTitle))).first(),
-    ).toBeVisible();
-    await expect(summaryUi.rowButton(library, processingTitle)).toHaveCount(0);
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    const processingRow = docUi.item(page, escapeRegExp(processing.title));
+    await expect(processingRow).toBeVisible();
+    await expect(docUi.ready(processingRow)).toHaveCount(0);
+    await expect(summaryUi.rowButton(library, processing.title)).toHaveCount(0);
 
     // DOC-02 header 요약 → the home's summary panel of that document.
     await page.goto(`/workspaces/${ws.id}/documents/${summarized.documentId}`);

@@ -56,12 +56,20 @@
 //        hold SLOW_SUMMARY_STEP_S seconds while queued (before it turns running) and before each
 //        unit it generates, so the transient states of DOCSUM-01-AC01/AC02 are observable with a
 //        fake that otherwise finishes in milliseconds. Units reused by hash do not wait.
+//      - SUMMARY_HOLD_MARKER followed by a token (`E2E-HOLD-SUMMARY-<token>`) in a chapter's input
+//        text is a barrier for contract tests: when the fake is asked for that chapter it creates
+//        `<WORKER_SUMMARY_HOLD_DIR>/<token>.held`, then waits (at most 60 s) until
+//        `<token>.release` exists before answering. The run is `running` while held. Only with
+//        APP_ENV=test and WORKER_SUMMARY_HOLD_DIR set (read when the fake is called); used by
+//        DOCSUM-01-C03 to publish a newer revision while a run is mid-flight.
 //   D8 Feature-off stack (DOCSUM-01-AC05): an API, a Celery worker and a `next start` of the same
-//      web build, started by startSummaryOffStack() with WORKER_DOCUMENT_SUMMARY=false on their
-//      own ports (E2E_SUMMARY_OFF_WEB_PORT / E2E_SUMMARY_OFF_API_PORT, default: the main ports
-//      + 40) and their own Celery broker (E2E_SUMMARY_OFF_REDIS_URL, default: REDIS_URL with the
-//      next Redis DB index), sharing Postgres, Storage, Qdrant prefix and APP_ENV with the main
-//      stack. The off web relays to the off API (API_INTERNAL_BASE_URL); the session cookie of
+//      web build, started by startSummaryOffStack() with WORKER_DOCUMENT_SUMMARY=false on free
+//      ports the OS assigns per invocation and their own Celery broker (E2E_SUMMARY_OFF_REDIS_URL,
+//      default: REDIS_URL with the next Redis DB index), sharing Postgres, Storage, Qdrant prefix
+//      and APP_ENV with the main stack. One off stack per broker at a time: a cross-process lock
+//      (a directory in the OS temp dir keyed by the broker URL, stolen only from a dead owner)
+//      is held from start to stop, so parallel Playwright workers/projects (and other worktrees
+//      on the same broker) queue instead of sharing a broker or tearing down each other. The off web relays to the off API (API_INTERNAL_BASE_URL); the session cookie of
 //      the main web is valid there (cookies are not port-scoped). The main E2E stack itself runs
 //      with WORKER_DOCUMENT_SUMMARY=true (API and worker).
 //
@@ -83,7 +91,9 @@
 //   DOC-02 header link "요약"; share page: "<title> 요약" button per document with a current
 //     summary.
 import { type ChildProcess } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
@@ -98,6 +108,7 @@ import type { Member } from './workspaces.ts';
 export const SUMMARY_FAILURE_MARKER = 'E2E-FAIL-SUMMARY';
 export const SUMMARY_SLOW_MARKER = 'E2E-SLOW-SUMMARY';
 export const SLOW_SUMMARY_STEP_S = 4;
+export const SUMMARY_HOLD_MARKER = 'E2E-HOLD-SUMMARY';
 export const SUMMARY_JOB_TYPE = 'document.summarize';
 /** Upload/parse plus a slow-marker summary run (3 held units + the queued hold) and slack. */
 export const SUMMARY_TIMEOUT_MS = JOB_TIMEOUT_MS;
@@ -266,9 +277,57 @@ export async function summaryJobs(
 // Feature-off stack (D8)
 // ---------------------------------------------------------------------------------------------
 
-function portOf(url: string): number {
-  const parsed = new URL(url);
-  return Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+/** A port the OS reports free right now (bound to 127.0.0.1, then released). */
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      server.close(() => {
+        if (address && typeof address === 'object') resolve(address.port);
+        else reject(new Error('no free port'));
+      });
+    });
+  });
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Cross-process lock (atomic mkdir) for one off stack per broker; returns its release. */
+async function lockBroker(brokerUrl: string): Promise<() => void> {
+  const key = createHash('sha256').update(brokerUrl).digest('hex').slice(0, 16);
+  const dir = join(tmpdir(), `quiz-summary-off-lock-${key}`);
+  const owner = join(dir, 'pid');
+  await expect
+    .poll(
+      () => {
+        try {
+          mkdirSync(dir);
+          writeFileSync(owner, String(process.pid));
+          return true;
+        } catch {
+          let pid = 0;
+          try {
+            pid = Number(readFileSync(owner, 'utf8'));
+          } catch {
+            // the owner is still writing its pid
+          }
+          if (pid > 0 && !isAlive(pid)) rmSync(dir, { recursive: true, force: true });
+          return false;
+        }
+      },
+      { message: 'the summary-off stack lock is free', timeout: 600_000, intervals: [500] },
+    )
+    .toBe(true);
+  return () => rmSync(dir, { recursive: true, force: true });
 }
 
 function offRedisUrl(): string {
@@ -312,15 +371,16 @@ export interface SummaryOffStack {
 /** Starts API + worker + web with WORKER_DOCUMENT_SUMMARY=false (D8). */
 export async function startSummaryOffStack(): Promise<SummaryOffStack> {
   const main = localEndpoints();
-  const webPort = Number(process.env.E2E_SUMMARY_OFF_WEB_PORT || portOf(main.baseUrl) + 40);
-  const apiPort = Number(process.env.E2E_SUMMARY_OFF_API_PORT || portOf(main.apiUrl) + 40);
+  const broker = offRedisUrl();
+  const release = await lockBroker(broker);
+  const [webPort, apiPort] = [await freePort(), await freePort()];
   const webUrl = `http://127.0.0.1:${webPort}`;
   const apiUrl = `http://127.0.0.1:${apiPort}`;
   const dir = mkdtempSync(join(tmpdir(), 'quiz-summary-off-'));
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     WORKER_DOCUMENT_SUMMARY: 'false',
-    REDIS_URL: offRedisUrl(),
+    REDIS_URL: broker,
     LOG_LEVEL: 'INFO',
     PYTHONUNBUFFERED: '1',
   };
@@ -333,7 +393,13 @@ export async function startSummaryOffStack(): Promise<SummaryOffStack> {
   const children: ChildProcess[] = [];
   const stopAll = async (): Promise<void> => {
     for (const child of children) stop(child);
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // The broker is handed to the next holder only after these processes are gone.
+    const deadline = Date.now() + 15_000;
+    while (children.some((c) => c.exitCode === null && c.signalCode === null)) {
+      if (Date.now() > deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    release();
   };
   try {
     const api = startLogged(
