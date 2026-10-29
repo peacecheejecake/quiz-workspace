@@ -37,6 +37,8 @@ const apiEnv = {
     process.env.DATABASE_URL || 'postgresql://quiz_api:change-me-local@127.0.0.1:54322/postgres',
   // The web origin under test is the browser origin the API must allow (A3 CORS allowlist).
   CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS || BASE_URL,
+  // CHNOTE-01: the main E2E stack creates chapter notes (the feature-off stack sets it false).
+  WORKER_CHAPTER_NOTES: process.env.WORKER_CHAPTER_NOTES || 'true',
 };
 
 // Mirrors TEST_SITE_KEY in tests/e2e/fixtures/turnstile.ts (the config does not import fixtures).

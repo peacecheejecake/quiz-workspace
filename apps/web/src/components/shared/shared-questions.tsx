@@ -151,7 +151,8 @@ export function SharedQuestions({
   );
 }
 
-function SharedQuestionPanel({
+/** Read-only question panel (also opened from a 정리 노트 footnote, CHNOTE-01). */
+export function SharedQuestionPanel({
   shareId,
   question,
   documents,

@@ -13,13 +13,14 @@
 //                     for the owner only)
 //   content results   the 본문 search results when the scope includes 본문
 //   문제 영역         the heatmap (QuestionsOverview)
-//   floating dialogs  문서 관리 · 문제 PDF 관리 · 문제 생성 · 이력 · 링크 공유: non-modal
+//   floating dialogs  문서 관리 · 문제 PDF 관리 · 문제 생성 · 이력 · 링크 공유 · 정리 노트: non-modal
 //                     FloatingSidePanels portalled into this page (inside <main>), opened at once
 //                     and listed in the URL (`?panel=`, repeatable); the most recently opened is
 //                     on top (UX3b stacking).
 //
 // State lives in the URL: heatmap filters (overview-filters.ts), `q`/`scope` and the content
-// options (search/state.ts), `panel`, and `question` (the practice panel). Dialog and panel
+// options (search/state.ts), `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
+// chapter header's `정리 노트` button opens it), and `question` (the practice panel). Dialog and panel
 // changes use history.pushState (Next syncs useSearchParams; no server round trip); filter and
 // search changes that alter the heatmap use router.replace (the server re-reads the overview).
 import {
@@ -33,12 +34,13 @@ import {
   type QuestionType,
 } from '@quiz/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { bodyDocumentCount } from '@/components/documents/labels';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
 import { GenerationDialog } from '@/components/questions/generate/generation-dialog';
+import { ChapterNotePanel } from '@/components/questions/notes/chapter-note-panel';
 import {
   DocumentLibraryFeedback,
   QuestionPdfsDialog,
@@ -51,6 +53,8 @@ import {
   useContentSearch,
 } from '@/components/search/content-search';
 import { UnifiedSearchForm } from '@/components/search/unified-search-form';
+import { listChapterNotes } from '@/lib/notes/client';
+import { generatingChapters, type ChapterNoteList } from '@/lib/notes/model';
 import { WorkspaceSharingPanel } from '@/components/sharing/workspace-sharing-panel';
 import { QuestionMenu } from './question-menu';
 import type { DocumentSummary } from '@/lib/documents/client-api';
@@ -62,19 +66,23 @@ import {
   overviewSearch,
   type OverviewFilters,
 } from '@/lib/questions/overview-filters';
-import type { PlacedQuestion } from '@/lib/questions/overview-placement';
+import { NO_CHAPTER_KEY, type PlacedQuestion } from '@/lib/questions/overview-placement';
 import type { QuestionFailureKind } from '@/lib/questions/problems';
 import { bankCreatePath } from '@/lib/questions/filters';
 import type { SearchQuery } from '@/lib/search/client';
 import { addressBarContentKey, hasSearchableBody, searchReadiness } from '@/lib/search/scope';
 import { MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
 import {
+  keepNoteChapter,
+  noteChapterOf,
+  openChapterNote,
   parsePanels,
   parseScope,
   patchSearch,
   scopeIncludesContent,
   scopeIncludesQuestions,
   scopeOf,
+  withChapterNote,
   withPanel,
   type HomePanel,
   type SearchScope,
@@ -112,6 +120,7 @@ export interface WorkspaceHomeProps {
     readonly practice: string;
     readonly history: string;
     readonly share: string;
+    readonly chapterNote: string;
   };
 }
 
@@ -156,6 +165,74 @@ export function WorkspaceHome({
   };
   const [host, setHost] = useState<HTMLDivElement | null>(null);
 
+  // --- 정리 노트 (CHNOTE-01) ---------------------------------------------------------------------
+  // `chapter` names the note's chapter while its panel is open (home.ts noteChapterOf).
+  const noteChapter = noteChapterOf(searchParams);
+  function openNote(chapterId: string) {
+    // An open note panel (maybe under another one) comes to the top, whichever chapter it shows.
+    const next = openChapterNote(window.location.search, chapterId);
+    if (next.raise) {
+      setRaised((r) => ({ ...r, 'chapter-note': (r['chapter-note'] ?? 0) + 1 }));
+    }
+    const target = `${pathname}${next.search}`;
+    if (view.chapter !== null) {
+      // The note takes over `chapter`: drop the heatmap's chapter filter with it.
+      setView((v) => ({ ...v, chapter: null }));
+      startNavigation(() => router.push(target, { scroll: false }));
+    } else {
+      window.history.pushState(null, '', target);
+    }
+  }
+  function closeNote() {
+    window.history.pushState(
+      null,
+      '',
+      `${pathname}${withChapterNote(window.location.search, null)}`,
+    );
+  }
+  // Practice opened from a footnote returns focus to the note's disclosure when it closes.
+  const practiceReturnFocusRef = useRef<HTMLElement | null>(null);
+  function openNoteQuestion(questionId: string, returnFocus: HTMLElement | null) {
+    practiceReturnFocusRef.current = returnFocus;
+    window.history.pushState(
+      null,
+      '',
+      `${pathname}${patchSearch(window.location.search, { question: questionId })}`,
+    );
+  }
+  // The Heatmap headers' "만드는 중": the workspace's note list, re-read while one is generating,
+  // and what an open note panel last saw.
+  const [noteList, setNoteList] = useState<ChapterNoteList | null>(null);
+  const [noteListRead, setNoteListRead] = useState(0);
+  const [panelGenerating, setPanelGenerating] = useState<ReadonlyMap<string, boolean>>(new Map());
+  useEffect(() => {
+    const controller = new AbortController();
+    listChapterNotes(workspace.id, controller.signal).then(
+      (list) => {
+        setNoteList(list);
+        setPanelGenerating(new Map());
+      },
+      () => undefined, // The header text is a hint; the panel shows the real state.
+    );
+    return () => controller.abort();
+  }, [workspace.id, noteListRead]);
+  const generating = new Set(generatingChapters(noteList));
+  for (const [id, busy] of panelGenerating) {
+    if (busy) generating.add(id);
+    else generating.delete(id);
+  }
+  const anyGenerating = generating.size > 0;
+  useEffect(() => {
+    if (!anyGenerating) return;
+    const timer = window.setTimeout(() => setNoteListRead((n) => n + 1), 2000);
+    return () => window.clearTimeout(timer);
+  }, [anyGenerating, noteList]);
+  const onNoteGenerating = useCallback((chapterId: string, busy: boolean) => {
+    setPanelGenerating((prev) =>
+      prev.get(chapterId) === busy ? prev : new Map(prev).set(chapterId, busy),
+    );
+  }, []);
+
   // --- documents (문서 관리 + 문제 PDF 관리) ----------------------------------------------------
   const library = useDocumentLibrary({
     workspaceId: workspace.id,
@@ -188,9 +265,13 @@ export function WorkspaceHome({
     const next = { ...view, ...patch };
     setView(next);
     startNavigation(() => {
-      router.replace(`${pathname}${mergeOverviewFilters(window.location.search, next)}`, {
-        scroll: false,
-      });
+      const search = window.location.search;
+      const merged = keepNoteChapter(
+        search,
+        mergeOverviewFilters(search, next),
+        patch.chapter ?? null,
+      );
+      router.replace(`${pathname}${merged}`, { scroll: false });
     });
   }
 
@@ -279,10 +360,13 @@ export function WorkspaceHome({
     setView(EMPTY_OVERVIEW_FILTERS);
     content.clear();
     startNavigation(() => {
-      router.replace(
-        `${pathname}${patchSearch(mergeOverviewFilters(window.location.search, EMPTY_OVERVIEW_FILTERS), { q: null })}`,
-        { scroll: false },
+      const search = window.location.search;
+      const merged = keepNoteChapter(
+        search,
+        mergeOverviewFilters(search, EMPTY_OVERVIEW_FILTERS),
+        null,
       );
+      router.replace(`${pathname}${patchSearch(merged, { q: null })}`, { scroll: false });
     });
   }
 
@@ -405,6 +489,23 @@ export function WorkspaceHome({
         failure={failure}
         requested={requested}
         panelScreenId={screenIds.practice}
+        practiceReturnFocusRef={practiceReturnFocusRef}
+        chapterActions={(chapter) =>
+          chapter.id === NO_CHAPTER_KEY ? null : (
+            <>
+              {generating.has(chapter.id) ? <span>만드는 중</span> : null}
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={`${chapter.title} 정리 노트`}
+                aria-haspopup="dialog"
+                onClick={() => openNote(chapter.id)}
+              >
+                정리 노트
+              </Button>
+            </>
+          )
+        }
       />
 
       {/* Dialogs are portalled here so they stay inside the main landmark. */}
@@ -482,6 +583,18 @@ export function WorkspaceHome({
               <HistoryPanel workspaceId={workspace.id} viewerId={viewerId} />
             </div>
           </FloatingSidePanel>
+          <ChapterNotePanel
+            open={isOpen('chapter-note')}
+            onOpenChange={(open) => (open ? undefined : closeNote())}
+            raiseKey={raised['chapter-note']}
+            container={host}
+            chapterId={noteChapter ?? null}
+            chapterTitle={overview.chapters.find((c) => c.id === noteChapter)?.title}
+            canEdit={canEdit}
+            screenId={screenIds.chapterNote}
+            onOpenQuestion={openNoteQuestion}
+            onGeneratingChange={onNoteGenerating}
+          />
           {isOwner && isOpen('share') ? (
             <WorkspaceSharingPanel
               workspaceId={workspace.id}

@@ -41,6 +41,8 @@ const EVENT_LABELS: Readonly<Record<string, string>> = {
   'share_link.updated': '공유 링크 설정 변경',
   'share_link.rotated': '공유 링크 재발급',
   'share_link.revoked': '공유 링크 철회',
+  'chapter_note.requested': '정리 노트 만들기 요청',
+  'chapter_note.generated': '정리 노트 생성',
 };
 
 export function eventLabel(eventType: string): string {
@@ -54,6 +56,7 @@ const TARGET_FALLBACK: Readonly<Record<string, string>> = {
   question_generation: '변형 문제 생성',
   workspace: 'Workspace',
   share_link: '공유 링크',
+  chapter_note: '정리 노트',
 };
 
 export function targetLabel(targetType: string | null, label: string | null): string {
@@ -81,6 +84,7 @@ const JOB_TYPE_LABELS: Readonly<Record<string, string>> = {
   'question.import': '문제 가져오기',
   'question.import_register': '가져온 문제 등록',
   'question.generate': '변형 문제 생성',
+  'chapter_note.generate': '정리 노트',
 };
 
 export function jobTypeLabel(jobType: string): string {

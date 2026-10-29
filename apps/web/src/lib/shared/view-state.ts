@@ -1,6 +1,7 @@
 // WS-VIEW-01 address-bar state (pure, unit-tested): `/share/{id}` is the shared workspace home,
-// `?document=<id>&page=<n>&block=<id>` opens one shared document at a page/block, and
-// `?panel=fork` is the WS-FORK-01 entry. Only ids and numbers ever go into this URL — never the
+// `?document=<id>&page=<n>&block=<id>` opens one shared document at a page/block,
+// `?panel=fork` is the WS-FORK-01 entry and `?panel=chapter-note&chapter=<id>` the read-only
+// 정리 노트 panel (CHNOTE-01). Only ids and numbers ever go into this URL — never the
 // link secret (that lives in the `#k=` fragment until the exchange removes it).
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BLOCK_ID = /^[A-Za-z0-9_:.-]{1,128}$/;
@@ -50,4 +51,30 @@ export function sharedDocumentHref(
 
 export function forkPanelHref(shareId: string): string {
   return `${sharePath(shareId)}?panel=fork`;
+}
+
+const NOTE_PANEL = 'chapter-note';
+
+/**
+ * The chapter of the open 정리 노트 panel: `undefined` when it is closed, `null` when it is open
+ * without a usable chapter id.
+ */
+export function sharedNoteChapterOf(params: URLSearchParams): string | null | undefined {
+  if (params.get('panel') !== NOTE_PANEL) return undefined;
+  const id = params.get('chapter');
+  return id && UUID.test(id) ? id.toLowerCase() : null;
+}
+
+/** `search` with the 정리 노트 panel opened on `chapterId`, or closed (`null`); '' or `?…`. */
+export function withSharedNote(search: string, chapterId: string | null): string {
+  const params = new URLSearchParams(search);
+  if (chapterId) {
+    params.set('panel', NOTE_PANEL);
+    params.set('chapter', chapterId);
+  } else if (params.get('panel') === NOTE_PANEL) {
+    params.delete('panel');
+    params.delete('chapter');
+  }
+  const query = params.toString();
+  return query ? `?${query}` : '';
 }

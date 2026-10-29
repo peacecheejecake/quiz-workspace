@@ -184,6 +184,10 @@ async function main(): Promise<number> {
     // always-passes test sitekey; tests/e2e/fixtures/turnstile.ts answers the browser's requests.
     NEXT_PUBLIC_TURNSTILE_SITE_KEY:
       process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || '1x00000000000000000000AA',
+    // CHNOTE-01: the API and worker of the main E2E stack create chapter notes (the scenario LLM
+    // under APP_ENV=test); the feature-off stack overrides it (tests/e2e/fixtures/chapter-notes.ts
+    // N9).
+    WORKER_CHAPTER_NOTES: process.env.WORKER_CHAPTER_NOTES?.trim() || 'true',
   };
 
   if (options.build) {
