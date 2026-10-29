@@ -65,6 +65,7 @@ from quiz_worker.runner import JobDefinition, JobRunner
 from quiz_worker.settings import Environment, WorkerSettings
 from quiz_worker.storage import SupabaseStorage
 from quiz_worker.store import TERMINAL_STATUSES
+from quiz_worker.summary_job import SummaryJobDeps, document_summarize_definition, summary_deps
 
 _M3_CONFTEST = Path(__file__).resolve().parents[1] / "workspaces" / "conftest.py"
 _spec = importlib.util.spec_from_file_location("_m3_contract_conftest", _M3_CONFTEST)
@@ -115,6 +116,7 @@ class JobWorker:
         self._qdrant: QdrantClient | None = None
         self.generation_deps: GenerationJobDeps | None = None
         self.register_deps: RegisterJobDeps | None = None
+        self.summary_deps: SummaryJobDeps | None = None
 
     def _build(self) -> tuple[PostgresJobStore, JobRunner, dict[str, JobDefinition[Any]]]:
         if self._built is not None:
@@ -141,6 +143,9 @@ class JobWorker:
             ),
             parser=build_parser(env),
             limits=Limits(lock_wait_seconds=30),
+            # DOCSUM-B: publishes start opted-in books' summaries when WORKER_DOCUMENT_SUMMARY is
+            # on in the environment this worker is built in (off by default).
+            summary=env.summary_available,
         )
         import_deps = ImportJobDeps(
             imports=PostgresImportStore(engine),
@@ -165,12 +170,19 @@ class JobWorker:
             store=PostgresRegisterStore(engine), batch_size=3, lock_wait_seconds=30
         )
         register_deps = self.register_deps
+        # DOCSUM-B: `document.summarize` with the APP_ENV=test extractive fake summarizer and the
+        # WORKER_SUMMARY_* limits of the environment (no slow-marker waits in-process).
+        summary = summary_deps(env, engine)
+        summary.slow_step_seconds = None
+        summary.lock_wait_seconds = 30
+        self.summary_deps = summary
         definitions: list[JobDefinition[Any]] = [
             document_parse_definition(lambda: document_deps),
             index_sync_definition(lambda: document_deps),
             question_import_definition(lambda: import_deps),
             question_generate_definition(lambda: generation_deps),
             question_register_definition(lambda: register_deps),
+            document_summarize_definition(lambda: summary),
         ]
         jobs = PostgresJobStore(engine)
         runner = JobRunner(jobs, worker_id="it-m44a", lease_seconds=600)

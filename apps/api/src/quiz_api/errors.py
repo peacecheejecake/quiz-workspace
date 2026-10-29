@@ -93,6 +93,12 @@ class ProblemType(StrEnum):
     DOCUMENT_IN_USE = "urn:quiz-workspace:problem:document-in-use"
     # 409: an import draft's chapter is no longer the one the client showed (CHAPTER-MAP).
     CHAPTER_CHANGED = "urn:quiz-workspace:problem:chapter-changed"
+    # 409: question papers are not summarized (DOCSUM-01); only books and books with questions.
+    SUMMARY_NOT_APPLICABLE = "urn:quiz-workspace:problem:summary-not-applicable"
+    # 409: this environment cannot create summaries (WORKER_DOCUMENT_SUMMARY off / no LLM).
+    SUMMARY_DISABLED = "urn:quiz-workspace:problem:summary-disabled"
+    # 409: only a failed summary run of the current published revision can be retried.
+    SUMMARY_NOT_FAILED = "urn:quiz-workspace:problem:summary-not-failed"
 
 
 class ProblemException(StarletteHTTPException):

@@ -119,12 +119,15 @@ class PublishOutcome:
     """`previous`: the revision that was active before; `sync_job_id`: the durable
     `document.index_sync` obligation created with the publish (None if it was already live);
     `import_run_id` / `import_job_id`: the question import this publish started (question papers
-    without an import run only)."""
+    without an import run only); `summary_run_id` / `summary_job_id`: the summary this publish
+    started (opted-in books only, DOCSUM-B)."""
 
     previous: uuid.UUID | None
     sync_job_id: uuid.UUID | None
     import_run_id: uuid.UUID | None = None
     import_job_id: uuid.UUID | None = None
+    summary_run_id: uuid.UUID | None = None
+    summary_job_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -228,12 +231,14 @@ class DocumentStore(Protocol):
         *,
         before_commit: Callable[[], None],
         classification: Classification | None = None,
+        summary: bool = False,
     ) -> PublishOutcome:
         """In one transaction: re-check (and lock) workspace access, publish the draft, make it
         the document's active revision (status `ready`), store an auto document's
         `classification` (once), enqueue the `document.index_sync` obligation that mirrors the
         switch into Qdrant and, for a question paper (or a confidently classified mixed book)
-        without an import, start its question import."""
+        without an import, start its question import; with `summary` (the worker's
+        WORKER_DOCUMENT_SUMMARY) start an opted-in book's summary run (DOCSUM-B)."""
         ...
 
     def previous_published(self, document_id: uuid.UUID, exclude: uuid.UUID) -> uuid.UUID | None:
@@ -665,6 +670,7 @@ class PostgresDocumentStore:
         *,
         before_commit: Callable[[], None],
         classification: Classification | None = None,
+        summary: bool = False,
     ) -> PublishOutcome:
         with self._engine.begin() as conn:
             # Workspace first (FOR SHARE): an archive/delete/membership change commits before
@@ -749,12 +755,29 @@ class PostgresDocumentStore:
                     .mappings()
                     .first()
                 )
+            summarized = None
+            if summary and document_type != QUESTION_PAPER:
+                # DOCSUM-B: only for an opted-in book of an active workspace, once per revision
+                # (supabase/migrations/20261029120000_document_summaries.sql).
+                summarized = (
+                    conn.execute(
+                        text(
+                            "select run_id, job_id "
+                            "from public.worker_start_document_summary(:d, :r, true)"
+                        ),
+                        {"d": document_id, "r": revision_id},
+                    )
+                    .mappings()
+                    .first()
+                )
             before_commit()
         return PublishOutcome(
             previous=previous,
             sync_job_id=sync_job_id,
             import_run_id=started["run_id"] if started else None,
             import_job_id=started["job_id"] if started else None,
+            summary_run_id=summarized["run_id"] if summarized else None,
+            summary_job_id=summarized["job_id"] if summarized else None,
         )
 
     @staticmethod

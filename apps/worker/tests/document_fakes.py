@@ -71,6 +71,11 @@ class FakeDocumentStore:
     )
     # Classifications stored by a publish (UX6-UPLOAD-B): document -> detection numbers.
     detections: dict[uuid.UUID, dict[str, Any]] = field(default_factory=dict)
+    # DOCSUM-B: opted-in documents, the `summary` flag of every publish call and the summaries
+    # started (revision -> (run id, job id)).
+    opted_in: set[uuid.UUID] = field(default_factory=set)
+    summary_flags: list[bool] = field(default_factory=list)
+    summary_starts: dict[uuid.UUID, tuple[uuid.UUID, uuid.UUID]] = field(default_factory=dict)
     writes: int = 0
     busy: bool = False
     locked: set[uuid.UUID] = field(default_factory=set)
@@ -201,7 +206,9 @@ class FakeDocumentStore:
         *,
         before_commit: Callable[[], None],
         classification: Classification | None = None,
+        summary: bool = False,
     ) -> PublishOutcome:
+        self.summary_flags.append(summary)
         if not self.workspace_writable(workspace_id, user_id):
             raise WorkspaceUnavailableError("the workspace is no longer writable")
         document = self.documents[document_id]
@@ -244,6 +251,17 @@ class FakeDocumentStore:
             run_id, job_id, _ = self.import_starts[document_id]
             return PublishOutcome(
                 previous=previous, sync_job_id=sync_id, import_run_id=run_id, import_job_id=job_id
+            )
+        # worker_start_document_summary: an opted-in book, once per revision (DOCSUM-B).
+        if summary and document.document_type != QUESTION_PAPER and document_id in self.opted_in:
+            run_id, job_id = self.summary_starts.setdefault(
+                revision_id, (uuid.uuid4(), uuid.uuid4())
+            )
+            return PublishOutcome(
+                previous=previous,
+                sync_job_id=sync_id,
+                summary_run_id=run_id,
+                summary_job_id=job_id,
             )
         return PublishOutcome(previous=previous, sync_job_id=sync_id)
 

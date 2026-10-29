@@ -244,6 +244,11 @@ class Settings(BaseSettings):
     )
     search_rate_burst: int = Field(default=20, ge=1, le=1000, validation_alias="SEARCH_RATE_BURST")
 
+    # DOCSUM-B: creating / retrying summaries is offered (`available`) only with the switch
+    # on. Set it together with the worker's (which also needs LLM_API_KEY / LLM_MODEL); stored
+    # summaries stay readable either way.
+    document_summary: bool = Field(default=False, validation_alias="WORKER_DOCUMENT_SUMMARY")
+
     db_pool_size: int = Field(default=5, ge=1, validation_alias="DB_POOL_SIZE")
     db_connect_timeout_seconds: float = Field(
         default=3.0, gt=0, validation_alias="DB_CONNECT_TIMEOUT_SECONDS"

@@ -24,8 +24,7 @@ from urllib.parse import urlsplit
 import httpx
 import pytest
 
-# RED (DOCSUM.0): DOCSUM-B removes `red` when the summary API, job and migration make these GREEN.
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = [pytest.mark.infra]
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PDF_DIR = REPO_ROOT / "tests" / "fixtures" / "pdfs"
@@ -405,7 +404,7 @@ def test_docsum_01_c04_no_book_or_summary_text_in_logs_job_results_or_activities
         row = json.dumps([run["usage"], run["error_code"]], ensure_ascii=False)
         assert not [f for f in forbidden if f in row]
     events = db(
-        "select event_type, payload::text from public.activity_events "
+        "select event_type, metadata::text from public.activity_events "
         "where target_id = %s and event_type like 'document.summary%%'",
         (doc,),
     )
