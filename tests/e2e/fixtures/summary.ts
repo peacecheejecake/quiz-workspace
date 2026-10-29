@@ -64,14 +64,17 @@
 //        DOCSUM-01-C03 to publish a newer revision while a run is mid-flight.
 //   D8 Feature-off stack (DOCSUM-01-AC05): an API, a Celery worker and a `next start` of the same
 //      web build, started by startSummaryOffStack() with WORKER_DOCUMENT_SUMMARY=false on free
-//      ports the OS assigns per invocation and their own Celery broker (E2E_SUMMARY_OFF_REDIS_URL,
-//      default: REDIS_URL with the next Redis DB index), sharing Postgres, Storage, Qdrant prefix
-//      and APP_ENV with the main stack. One off stack per broker at a time: a cross-process lock
-//      (a directory in the OS temp dir keyed by the broker URL, stolen only from a dead owner)
-//      is held from start to stop, so parallel Playwright workers/projects (and other worktrees
-//      on the same broker) queue instead of sharing a broker or tearing down each other. The off web relays to the off API (API_INTERNAL_BASE_URL); the session cookie of
-//      the main web is valid there (cookies are not port-scoped). The main E2E stack itself runs
-//      with WORKER_DOCUMENT_SUMMARY=true (API and worker).
+//      ports the OS assigns per invocation and a Celery broker of their own: a Redis DB claimed
+//      per invocation from a reserved range (E2E_SUMMARY_OFF_REDIS_DBS, default 10-15, on the
+//      REDIS_URL host). The claim on DB n is a TCP listener on 127.0.0.1:<base + n>
+//      (E2E_SUMMARY_OFF_LOCK_PORT_BASE, default 47600) held by the claiming test process: the
+//      kernel grants it to one process at a time, only its holder closes it, and it vanishes
+//      with a dead holder, so there is no stale-lock reclamation. Parallel Playwright workers
+//      (and other worktrees on the host) get different DBs; with every DB claimed a run waits.
+//      Postgres, Storage, Qdrant prefix and APP_ENV are shared with the main stack. The off web
+//      relays to the off API (API_INTERNAL_BASE_URL); the session cookie of the main web is valid
+//      there (cookies are not port-scoped). The main E2E stack itself runs with
+//      WORKER_DOCUMENT_SUMMARY=true (API and worker).
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
 //   문서 관리 row: text button "<title> 요약" on ready 교재 / 교재+문제 rows only; text "요약 중"
@@ -91,9 +94,8 @@
 //   DOC-02 header link "요약"; share page: "<title> 요약" button per document with a current
 //     summary.
 import { type ChildProcess } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
@@ -292,51 +294,66 @@ function freePort(): Promise<number> {
   });
 }
 
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
+/** Reserved Redis DB indexes for off stacks: "10-15" or "10,12" (E2E_SUMMARY_OFF_REDIS_DBS). */
+export function reservedRedisDbs(spec = process.env.E2E_SUMMARY_OFF_REDIS_DBS?.trim() || '10-15') {
+  const dbs = spec.split(',').flatMap((part) => {
+    const bounds = part.split('-').map((n) => Number(n.trim()));
+    const from = bounds[0] ?? NaN;
+    const to = bounds[1] ?? from;
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from > to) return [];
+    return Array.from({ length: to - from + 1 }, (_, i) => from + i);
+  });
+  if (!dbs.length || dbs.some((db) => db < 0 || db > 15)) {
+    throw new Error('E2E_SUMMARY_OFF_REDIS_DBS must list Redis DB indexes 0-15');
   }
+  return dbs;
 }
 
-/** Cross-process lock (atomic mkdir) for one off stack per broker; returns its release. */
-async function lockBroker(brokerUrl: string): Promise<() => void> {
-  const key = createHash('sha256').update(brokerUrl).digest('hex').slice(0, 16);
-  const dir = join(tmpdir(), `quiz-summary-off-lock-${key}`);
-  const owner = join(dir, 'pid');
+function lockPortBase(): number {
+  return Number(process.env.E2E_SUMMARY_OFF_LOCK_PORT_BASE?.trim() || 47600);
+}
+
+/** Tries to hold 127.0.0.1:`port`; resolves the listener, or null when someone else holds it. */
+function listenExclusive(port: number): Promise<Server | null> {
+  return new Promise((resolve) => {
+    const server = createServer((socket) => socket.destroy());
+    server.once('error', () => resolve(null));
+    server.listen({ port, host: '127.0.0.1', exclusive: true }, () => resolve(server));
+  });
+}
+
+export interface RedisDbClaim {
+  readonly db: number;
+  readonly url: string;
+  release(): Promise<void>;
+}
+
+/** Claims one reserved Redis DB for this invocation (D8); waits while all are claimed. */
+export async function claimRedisDb(): Promise<RedisDbClaim> {
+  const dbs = reservedRedisDbs();
+  let claim: RedisDbClaim | null = null;
   await expect
     .poll(
-      () => {
-        try {
-          mkdirSync(dir);
-          writeFileSync(owner, String(process.pid));
+      async () => {
+        for (const db of dbs) {
+          const server = await listenExclusive(lockPortBase() + db);
+          if (!server) continue;
+          const url = new URL(process.env.REDIS_URL?.trim() || 'redis://127.0.0.1:6379/0');
+          url.pathname = `/${db}`;
+          claim = {
+            db,
+            url: url.toString(),
+            release: () => new Promise<void>((resolve) => server.close(() => resolve())),
+          };
           return true;
-        } catch {
-          let pid = 0;
-          try {
-            pid = Number(readFileSync(owner, 'utf8'));
-          } catch {
-            // the owner is still writing its pid
-          }
-          if (pid > 0 && !isAlive(pid)) rmSync(dir, { recursive: true, force: true });
-          return false;
         }
+        return false;
       },
-      { message: 'the summary-off stack lock is free', timeout: 600_000, intervals: [500] },
+      { message: 'a reserved Redis DB is free for the summary-off stack', timeout: 600_000 },
     )
     .toBe(true);
-  return () => rmSync(dir, { recursive: true, force: true });
-}
-
-function offRedisUrl(): string {
-  const explicit = process.env.E2E_SUMMARY_OFF_REDIS_URL?.trim();
-  if (explicit) return explicit;
-  const url = new URL(process.env.REDIS_URL?.trim() || 'redis://127.0.0.1:6379/0');
-  const db = Number(url.pathname.replace(/^\//, '') || '0');
-  url.pathname = `/${(db + 1) % 16}`;
-  return url.toString();
+  if (!claim) throw new Error('no Redis DB claimed');
+  return claim;
 }
 
 async function waitUp(url: string, child: ChildProcess, name: string): Promise<void> {
@@ -362,6 +379,8 @@ export interface SummaryOffStack {
   readonly webUrl: string;
   /** FastAPI of the feature-off stack. */
   readonly apiUrl: string;
+  /** The Redis DB (Celery broker) claimed for this invocation. */
+  readonly redisDb: number;
   /** Calls the off API as `member` (Bearer from the member's session). */
   request<T = unknown>(member: Member, method: string, path: string): Promise<ApiResponse<T>>;
   /** Stops the three processes and fails if their logs hold a secret (log-audit patterns). */
@@ -371,8 +390,8 @@ export interface SummaryOffStack {
 /** Starts API + worker + web with WORKER_DOCUMENT_SUMMARY=false (D8). */
 export async function startSummaryOffStack(): Promise<SummaryOffStack> {
   const main = localEndpoints();
-  const broker = offRedisUrl();
-  const release = await lockBroker(broker);
+  const claim = await claimRedisDb();
+  const broker = claim.url;
   const [webPort, apiPort] = [await freePort(), await freePort()];
   const webUrl = `http://127.0.0.1:${webPort}`;
   const apiUrl = `http://127.0.0.1:${apiPort}`;
@@ -393,13 +412,13 @@ export async function startSummaryOffStack(): Promise<SummaryOffStack> {
   const children: ChildProcess[] = [];
   const stopAll = async (): Promise<void> => {
     for (const child of children) stop(child);
-    // The broker is handed to the next holder only after these processes are gone.
+    // The broker DB is handed to the next claim only after these processes are gone.
     const deadline = Date.now() + 15_000;
     while (children.some((c) => c.exitCode === null && c.signalCode === null)) {
       if (Date.now() > deadline) break;
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
-    release();
+    await claim.release();
   };
   try {
     const api = startLogged(
@@ -454,6 +473,7 @@ export async function startSummaryOffStack(): Promise<SummaryOffStack> {
   return {
     webUrl,
     apiUrl,
+    redisDb: claim.db,
     async request<T>(member: Member, method: string, path: string): Promise<ApiResponse<T>> {
       const res = await fetch(`${apiUrl}${API_PREFIX}${path}`, {
         method,
