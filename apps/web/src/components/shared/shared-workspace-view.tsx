@@ -8,7 +8,9 @@
 // network error or 429). Without a fragment the existing session cookie is used. Every refusal of
 // the link (wrong, expired, revoked, deleted, no session) shows one "unavailable" notice and
 // nothing of the workspace. All reads go through the same-origin relay; nothing here writes,
-// practises or shows personal data, and the API refuses such requests regardless.
+// practises or shows personal data, and the API refuses such requests regardless. A shared book
+// whose current revision has a summary offers `요약` next to its link: the read-only 문서 요약 panel
+// (DOCSUM-01-AC06, `?panel=document-summary&document=<id>`).
 import { Badge, Button } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -24,6 +26,7 @@ import { sharedFailureMessage } from '@/lib/shared/messages';
 import {
   forkPanelHref,
   sharedDocumentHref,
+  sharedSummaryHref,
   sharePath,
   type SharedViewState,
 } from '@/lib/shared/view-state';
@@ -32,6 +35,8 @@ import { SharedChapterNotes } from './shared-chapter-notes';
 import { SharedDocumentView } from './shared-document-view';
 import { SharedQuestions } from './shared-questions';
 import { SharedSearch } from './shared-search';
+import { SharedSummaryPanel, useSharedSummaries } from './shared-summary';
+import summaryStyles from '@/components/documents/summary/summary.module.css';
 import styles from './shared.module.css';
 
 export interface SharedWorkspaceViewProps {
@@ -77,6 +82,12 @@ export function SharedWorkspaceView({
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const markUnavailable = useCallback(() => setPhase(UNAVAILABLE), []);
+  const summaries = useSharedSummaries(
+    shareId ?? '',
+    phase.status === 'ready' ? phase.workspace.documents : null,
+  );
+  /** The `요약` button that opened the summary panel (focus returns there). */
+  const summaryOpenerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!client) return;
@@ -218,6 +229,18 @@ export function SharedWorkspaceView({
                     {doc.document_type === 'question_paper' ? (
                       <span className={styles.docType}>문제지</span>
                     ) : null}
+                    {summaries.has(doc.id) ? (
+                      <Button
+                        size="sm"
+                        className={summaryStyles.sharedButton}
+                        onClick={(event) => {
+                          summaryOpenerRef.current = event.currentTarget;
+                          router.push(sharedSummaryHref(shareId, doc.id), { scroll: false });
+                        }}
+                      >
+                        <span className="qz-visually-hidden">{doc.title} </span>요약
+                      </Button>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -254,6 +277,15 @@ export function SharedWorkspaceView({
           )}
         </div>
       </div>
+
+      <SharedSummaryPanel
+        shareId={shareId}
+        documentId={view.summaryDocumentId}
+        title={documents.find((d) => d.id === view.summaryDocumentId)?.title ?? null}
+        cached={view.summaryDocumentId ? summaries.get(view.summaryDocumentId) : undefined}
+        onClose={() => router.replace(sharePath(shareId), { scroll: false })}
+        returnFocusTo={() => summaryOpenerRef.current}
+      />
 
       {workspace.allow_fork && signedIn ? (
         // WS-FORK-01: mounted while the link allows forking so a running fork survives closing.

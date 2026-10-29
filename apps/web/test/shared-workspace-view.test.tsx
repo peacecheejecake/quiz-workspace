@@ -20,7 +20,13 @@ const SHARE = '0b6a5c0e-1d2f-4a3b-8c4d-5e6f7a8b9c0d';
 const DOC = '1c7b6d1f-2e3a-4b4c-9d5e-6f7a8b9c0d1e';
 const Q1 = '2d8c7e2a-3f4b-4c5d-8e6f-7a8b9c0d1e2f';
 const SECRET = 'Zq9_'.repeat(11);
-const HOME = { documentId: null, page: null, blockId: null, forkPanel: false } as const;
+const HOME = {
+  documentId: null,
+  page: null,
+  blockId: null,
+  forkPanel: false,
+  summaryDocumentId: null,
+} as const;
 
 const WORKSPACE: SharedWorkspace = {
   workspace: { name: '공유 알고리즘', archived: false },

@@ -188,6 +188,9 @@ async function main(): Promise<number> {
     // under APP_ENV=test); the feature-off stack overrides it (tests/e2e/fixtures/chapter-notes.ts
     // N9).
     WORKER_CHAPTER_NOTES: process.env.WORKER_CHAPTER_NOTES?.trim() || 'true',
+    // DOCSUM-01: API and worker summarize (APP_ENV=test fake summarizer); DOCSUM-01-AC05 starts
+    // its own WORKER_DOCUMENT_SUMMARY=false stack (tests/e2e/fixtures/summary.ts D8).
+    WORKER_DOCUMENT_SUMMARY: process.env.WORKER_DOCUMENT_SUMMARY?.trim() || 'true',
   };
 
   if (options.build) {

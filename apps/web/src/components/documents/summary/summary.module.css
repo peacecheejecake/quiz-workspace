@@ -1,0 +1,252 @@
+/* DOCSUM-01 문서 요약 panel. Semantic tokens only; state is always text (never colour alone). */
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.note,
+.hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-normal);
+}
+
+.statusText {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.stale {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-normal);
+}
+
+.progress {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.alert {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+}
+
+.alert p {
+  margin: 0;
+}
+
+.alertTitle {
+  font-weight: var(--font-weight-semibold);
+}
+
+.actionError {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-label);
+}
+
+.empty {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.content {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.meta {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.heading {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+.subheading {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.unit {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.markdown {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-relaxed);
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol {
+  margin: 0;
+}
+
+.markdown ul,
+.markdown ol,
+.keyPoints {
+  padding-inline-start: var(--space-5);
+}
+
+.keyPoints {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-normal);
+}
+
+.pageLink {
+  border-radius: var(--radius-sm);
+  color: var(--color-accent);
+  font-size: var(--font-size-label);
+  white-space: nowrap;
+}
+
+.chapters {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chapter {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.chapterToggle {
+  display: flex;
+  width: 100%;
+  min-height: var(--control-height-md);
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.chapterToggle:hover {
+  background: var(--color-state-hover);
+}
+
+.chapterTitle {
+  flex: 1;
+  font-weight: var(--font-weight-semibold);
+}
+
+.chapterPages {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  white-space: nowrap;
+}
+
+.chevron {
+  flex: none;
+  transition: transform var(--qz-transition-fast);
+}
+
+.chapterToggle[aria-expanded='true'] .chevron {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+.chapterBody {
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+.actions {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.actionRow {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+}
+
+.auto {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.autoText {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+}
+
+/* Unavailable in this environment: looks disabled but stays focusable (its reason is announced). */
+.action[data-unavailable] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* 문서 관리 row: "요약 중" next to the row's 요약 button. */
+.rowSummary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rowBusy {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+/* Share view: the 요약 button next to a shared document's link. */
+.sharedButton {
+  margin-inline-start: var(--space-2);
+}

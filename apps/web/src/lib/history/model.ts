@@ -23,6 +23,9 @@ const EVENT_LABELS: Readonly<Record<string, string>> = {
   'document.block_corrected': '문서 교정',
   'document.publish_requested': '교정 게시 요청',
   'document.revision_restored': '이전 개정 복원',
+  // DOCSUM-01: turning the summary's auto refresh on (요약 만들기) / off; ids only, no text.
+  'document.summary_enabled': '요약 만들기',
+  'document.summary_auto_disabled': '자동 갱신 끄기',
   'question.created': '문제 생성',
   'question.updated': '문제 수정',
   'question.status_changed': '문제 상태 변경',
@@ -81,6 +84,7 @@ export function revisionLabel(activity: Pick<Activity, 'target_type' | 'revision
 const JOB_TYPE_LABELS: Readonly<Record<string, string>> = {
   'document.parse': '문서 분석·색인',
   'document.index_sync': '검색 색인 동기화',
+  'document.summarize': '문서 요약',
   'question.import': '문제 가져오기',
   'question.import_register': '가져온 문제 등록',
   'question.generate': '변형 문제 생성',
@@ -118,6 +122,12 @@ const ERROR_LABELS: Readonly<Record<string, string>> = {
   cancelled: '사용자가 취소함',
   invalid_envelope: '작업 정보 오류',
   timeout: '시간 초과',
+  // AI jobs (document.summarize, chapter notes); never the provider's own message.
+  llm_unavailable: 'AI 서비스 연결 실패',
+  llm_timeout: 'AI 서비스 응답 시간 초과',
+  llm_invalid_output: 'AI 응답 오류',
+  summary_too_large: '문서가 너무 커서 요약 불가',
+  document_unavailable: '문서를 사용할 수 없음',
 };
 
 /** The cause of a failed or cancelled job as text (indexing → "색인 실패"); null otherwise. */

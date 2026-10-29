@@ -4,7 +4,8 @@
 // ready; the file name in its tooltip) with the kind badge (교재 / 문제지 / 교재+문제, "분석 중"
 // until classified, UX6-UPLOAD) and the status badge right next to it, a meta line
 // "<date time> · <size>", the live progress — upload progress with cancel, parse/index progress,
-// the failure reason with retry — `텍스트 내보내기` (DOC-03) and a trash icon button to delete. Upload and processing are one
+// the failure reason with retry — `요약` (DOCSUM-01, ready 교재 / 교재+문제 rows, with "요약 중" while a
+// run is queued/running), `텍스트 내보내기` (DOC-03) and a trash icon button to delete. Upload and processing are one
 // step progress 업로드 → 분석 → 색인 (UX6-PROGRESS) whose bar never drops back between steps. A
 // long-running job also shows how long it has waited or run, with a hint (DOC-01-AC05). State is always text, never colour
 // alone (the badge text carries it).
@@ -25,6 +26,7 @@ import { formatBytes } from '@/lib/documents/validation';
 import { DocumentKindMenu } from './document-kind-menu';
 import { TextExportMenu } from './text-export-menu';
 import styles from './documents.module.css';
+import summaryStyles from './summary/summary.module.css';
 import {
   DOCUMENT_STEPS,
   documentProgress,
@@ -54,6 +56,22 @@ export interface DocumentRowProps {
   };
   /** `텍스트 내보내기` on ready rows for every member (문서 관리, DOC-03). */
   readonly textExport?: boolean;
+  /** `요약` on ready 교재 / 교재+문제 rows for every member (문서 관리, DOCSUM-01). */
+  readonly summary?: RowSummaryAction;
+}
+
+export interface RowSummaryAction {
+  /** Opens the summary panel of `documentId`; `opener` gets focus back when it closes. */
+  readonly onOpen: (documentId: string, opener: HTMLElement) => void;
+  /** Documents with a queued/running summary run ("요약 중"). */
+  readonly busy: ReadonlySet<string>;
+}
+
+/** Ready 교재 / 교재+문제 rows offer `요약` (문제지, processing and failed rows do not). */
+export function summarizable(row: DocumentRow): boolean {
+  return (
+    !!row.documentId && row.status === 'ready' && (row.kind === 'book' || row.kind === 'mixed')
+  );
 }
 
 export function DocumentRowItem({
@@ -66,6 +84,7 @@ export function DocumentRowItem({
   actions,
   kindChange,
   textExport = false,
+  summary,
 }: DocumentRowProps) {
   const { localId } = row;
   const href =
@@ -125,6 +144,9 @@ export function DocumentRowItem({
             업로드 취소
           </Button>
         ) : null}
+        {summary && row.documentId && summarizable(row) ? (
+          <SummaryRowButton documentId={row.documentId} title={row.title} action={summary} />
+        ) : null}
         {textExport && row.documentId && row.status === 'ready' ? (
           <TextExportMenu documentId={row.documentId} title={row.title} variant="row" />
         ) : null}
@@ -139,6 +161,25 @@ export function DocumentRowItem({
         ) : null}
       </div>
     </li>
+  );
+}
+
+function SummaryRowButton({
+  documentId,
+  title,
+  action,
+}: {
+  readonly documentId: string;
+  readonly title: string;
+  readonly action: RowSummaryAction;
+}) {
+  return (
+    <span className={summaryStyles.rowSummary}>
+      {action.busy.has(documentId) ? <span className={summaryStyles.rowBusy}>요약 중</span> : null}
+      <Button size="sm" onClick={(event) => action.onOpen(documentId, event.currentTarget)}>
+        <span className="qz-visually-hidden">{title} </span>요약
+      </Button>
+    </span>
   );
 }
 

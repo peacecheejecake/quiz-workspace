@@ -2,9 +2,12 @@
 // The home `/workspaces/:id` carries, besides the heatmap filters (overview-filters.ts) and the
 // open question (`?question=`):
 //   ?panel=documents|question-pdfs|generate|history|share   open floating dialogs (repeatable, in
-//        |chapter-note                                       the order they were opened)
+//        |chapter-note|document-summary                      the order they were opened)
 //   ?chapter=<id> (with panel=chapter-note)                  the chapter of the 정리 노트 panel
 //                                                            (CHNOTE-01); see noteChapterOf
+//   &document=<id> (with panel=document-summary)             the summary panel's document (DOCSUM-01;
+//                                                            while that panel is open the key is
+//                                                            the panel's, not the content search's)
 //   ?q=<text>&scope=questions|content|none                    unified search (no scope = both;
 //                                                            none = both boxes off, UX6)
 //   ?mode=&document=&section=&papers=1                        content-search options (state.ts)
@@ -17,6 +20,7 @@ export const HOME_PANELS = [
   'history',
   'share',
   'chapter-note',
+  'document-summary',
 ] as const;
 export type HomePanel = (typeof HOME_PANELS)[number];
 export const PANEL_PARAM = 'panel';
@@ -117,6 +121,51 @@ export function keepNoteChapter(
   if (note === undefined) return merged;
   if (chapterFilter !== null) return withPanel(merged, CHAPTER_NOTE_PANEL, false);
   return patchSearch(merged, { [CHAPTER_PARAM]: note });
+}
+
+// --- 문서 요약 panel (DOCSUM-01) ---------------------------------------------------------------
+
+export const SUMMARY_PANEL = 'document-summary' satisfies HomePanel;
+export const SUMMARY_DOCUMENT_PARAM = 'document';
+
+/** The summary panel's document (DOCSUM-01) when that panel is open with a valid id, else null. */
+export function summaryDocumentId(params: Params): string | null {
+  if (!parsePanels(params).includes(SUMMARY_PANEL)) return null;
+  const id = all(params, SUMMARY_DOCUMENT_PARAM)[0];
+  return id !== undefined && UUID.test(id) ? id : null;
+}
+
+/**
+ * `search` with the summary panel opened on `documentId` (moved on top) or, for null, closed
+ * (its `document` key goes with it).
+ */
+export function withSummaryPanel(search: string, documentId: string | null): string {
+  const panels = withPanel(search, SUMMARY_PANEL, documentId !== null);
+  return patchSearch(panels, { [SUMMARY_DOCUMENT_PARAM]: documentId });
+}
+
+/** The summary panel of `documentId` on the workspace home (the DOC-02 header link). */
+export function summaryPanelPath(workspaceId: string, documentId: string): string {
+  return workspaceHomePath(
+    workspaceId,
+    `${PANEL_PARAM}=${SUMMARY_PANEL}&${SUMMARY_DOCUMENT_PARAM}=${encodeURIComponent(documentId)}`,
+  );
+}
+
+/**
+ * Params without the summary panel's `document` key (and the chapter filter tied to it), so the
+ * content search never reads the panel's document as its own filter.
+ */
+export function withoutSummaryDocument<T extends RawParams | URLSearchParams>(params: T): T {
+  if (!parsePanels(params).includes(SUMMARY_PANEL)) return params;
+  if (params instanceof URLSearchParams) {
+    const out = new URLSearchParams(params);
+    out.delete(SUMMARY_DOCUMENT_PARAM);
+    out.delete('section');
+    return out as T;
+  }
+  const { [SUMMARY_DOCUMENT_PARAM]: _document, section: _section, ...rest } = params;
+  return rest as T;
 }
 
 export function parseScope(params: Params): SearchScope {
