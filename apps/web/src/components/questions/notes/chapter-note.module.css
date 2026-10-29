@@ -163,6 +163,10 @@
 }
 
 .footnoteLink {
+  /* WCAG 2.5.8: each footnote line is a separate 24px target (axe target-size, A11Y-12). */
+  display: inline-block;
+  min-height: var(--space-6);
+  padding-block: var(--space-1);
   color: var(--color-accent);
   text-decoration: underline;
   text-underline-offset: 2px;
