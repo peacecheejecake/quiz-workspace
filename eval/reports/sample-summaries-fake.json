@@ -1,0 +1,198 @@
+{
+  "eval": "document-summary",
+  "provider": "fake",
+  "model": "fake-extractive-summary",
+  "support_threshold": 0.65,
+  "chapter_chars": 24000,
+  "summary": {
+    "documents": 2,
+    "chapters_nonempty": 4,
+    "chapters_summarized": 4,
+    "chapters_in_document_summary": 4,
+    "chapter_coverage": 1.0,
+    "document_chapter_coverage": 1.0,
+    "proposed_citations": {
+      "key_points": 16,
+      "with_pages": 16,
+      "in_range": 16,
+      "supported": 16,
+      "pages_present_rate": 1.0,
+      "in_range_rate": 1.0,
+      "supported_rate": 1.0,
+      "mean_support": 1.0
+    },
+    "stored_citations": {
+      "key_points": 16,
+      "with_pages": 16,
+      "in_range": 16,
+      "supported": 16,
+      "pages_present_rate": 1.0,
+      "in_range_rate": 1.0,
+      "supported_rate": 1.0,
+      "mean_support": 1.0
+    },
+    "usage": {
+      "input_tokens": 2907,
+      "output_tokens": 1334,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cost_usd": null
+    }
+  },
+  "documents": [
+    {
+      "document": "book-ko",
+      "chapters_total": 2,
+      "chapters_nonempty": 2,
+      "chapters_summarized": 2,
+      "chapters_in_document_summary": 2,
+      "chapter_coverage": 1.0,
+      "document_chapter_coverage": 1.0,
+      "proposed_citations": {
+        "chapter": {
+          "key_points": 6,
+          "with_pages": 6,
+          "in_range": 6,
+          "supported": 6,
+          "pages_present_rate": 1.0,
+          "in_range_rate": 1.0,
+          "supported_rate": 1.0,
+          "mean_support": 1.0
+        },
+        "document": {
+          "key_points": 2,
+          "with_pages": 2,
+          "in_range": 2,
+          "supported": 2,
+          "pages_present_rate": 1.0,
+          "in_range_rate": 1.0,
+          "supported_rate": 1.0,
+          "mean_support": 1.0
+        }
+      },
+      "stored_citations": {
+        "key_points": 8,
+        "with_pages": 8,
+        "in_range": 8,
+        "supported": 8,
+        "pages_present_rate": 1.0,
+        "in_range_rate": 1.0,
+        "supported_rate": 1.0,
+        "mean_support": 1.0
+      },
+      "calls": {
+        "chapter": 2,
+        "merge": 0,
+        "document": 1
+      },
+      "generated_units": 3,
+      "reused_units": 0,
+      "usage": {
+        "input_tokens": 1517,
+        "output_tokens": 682,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cost_usd": null
+      },
+      "chapters": [
+        {
+          "title": "1장 물의 순환",
+          "pages": [
+            2,
+            3
+          ],
+          "summarized": true,
+          "key_points": 3,
+          "in_document_summary": true
+        },
+        {
+          "title": "2장 정수 처리",
+          "pages": [
+            4,
+            4
+          ],
+          "summarized": true,
+          "key_points": 3,
+          "in_document_summary": true
+        }
+      ]
+    },
+    {
+      "document": "book-en",
+      "chapters_total": 2,
+      "chapters_nonempty": 2,
+      "chapters_summarized": 2,
+      "chapters_in_document_summary": 2,
+      "chapter_coverage": 1.0,
+      "document_chapter_coverage": 1.0,
+      "proposed_citations": {
+        "chapter": {
+          "key_points": 6,
+          "with_pages": 6,
+          "in_range": 6,
+          "supported": 6,
+          "pages_present_rate": 1.0,
+          "in_range_rate": 1.0,
+          "supported_rate": 1.0,
+          "mean_support": 1.0
+        },
+        "document": {
+          "key_points": 2,
+          "with_pages": 2,
+          "in_range": 2,
+          "supported": 2,
+          "pages_present_rate": 1.0,
+          "in_range_rate": 1.0,
+          "supported_rate": 1.0,
+          "mean_support": 1.0
+        }
+      },
+      "stored_citations": {
+        "key_points": 8,
+        "with_pages": 8,
+        "in_range": 8,
+        "supported": 8,
+        "pages_present_rate": 1.0,
+        "in_range_rate": 1.0,
+        "supported_rate": 1.0,
+        "mean_support": 1.0
+      },
+      "calls": {
+        "chapter": 2,
+        "merge": 0,
+        "document": 1
+      },
+      "generated_units": 3,
+      "reused_units": 0,
+      "usage": {
+        "input_tokens": 1390,
+        "output_tokens": 652,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cost_usd": null
+      },
+      "chapters": [
+        {
+          "title": "Chapter 1. The Water Cycle",
+          "pages": [
+            2,
+            3
+          ],
+          "summarized": true,
+          "key_points": 3,
+          "in_document_summary": true
+        },
+        {
+          "title": "Chapter 2. Water Treatment",
+          "pages": [
+            4,
+            4
+          ],
+          "summarized": true,
+          "key_points": 3,
+          "in_document_summary": true
+        }
+      ]
+    }
+  ]
+}
