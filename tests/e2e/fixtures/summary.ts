@@ -66,7 +66,7 @@
 //      web build, started by startSummaryOffStack() with WORKER_DOCUMENT_SUMMARY=false on free
 //      ports the OS assigns per invocation and a Celery broker of their own: a Redis DB claimed
 //      per invocation from a reserved range (E2E_SUMMARY_OFF_REDIS_DBS, default 10-15, on the
-//      REDIS_URL host). The claim on DB n is a TCP listener on 127.0.0.1:<base + n>
+//      REDIS_URL host), never the main stack's REDIS_URL DB (offStackRedisDbs). The claim on DB n is a TCP listener on 127.0.0.1:<base + n>
 //      (E2E_SUMMARY_OFF_LOCK_PORT_BASE, default 47600) held by the claiming test process: the
 //      kernel grants it to one process at a time, only its holder closes it, and it vanishes
 //      with a dead holder, so there is no stale-lock reclamation. Parallel Playwright workers
@@ -329,8 +329,36 @@ export interface RedisDbClaim {
 }
 
 /** Claims one reserved Redis DB for this invocation (D8); waits while all are claimed. */
+/** Redis DB index of a broker URL (`redis://host:port/<n>`, no path = 0). */
+export function redisDbOf(url: string): number {
+  const db = Number(new URL(url).pathname.replace(/^\//, '') || '0');
+  if (!Number.isInteger(db)) throw new Error('REDIS_URL has no numeric DB index');
+  return db;
+}
+
+/**
+ * Off-stack broker candidates: the reserved DBs minus the main stack's broker DB. The main API
+ * and worker read only `REDIS_URL` (process env first, then the repo `.env`, whose value is DB 0),
+ * so that is the one DB to exclude: sharing it would let a summary-off worker consume the main
+ * stack's `quiz.jobs` (or the reverse) with the other feature flag. E.g. REDIS_URL=…/10 with the
+ * default range leaves 11-15; a range of only the main DB is an error, not a wait.
+ */
+export function offStackRedisDbs(
+  spec = process.env.E2E_SUMMARY_OFF_REDIS_DBS?.trim() || '10-15',
+  mainRedisUrl = process.env.REDIS_URL?.trim() || 'redis://127.0.0.1:6379/0',
+): number[] {
+  const main = redisDbOf(mainRedisUrl);
+  const dbs = reservedRedisDbs(spec).filter((db) => db !== main);
+  if (!dbs.length) {
+    throw new Error(
+      `E2E_SUMMARY_OFF_REDIS_DBS leaves no Redis DB besides the main broker DB ${main}`,
+    );
+  }
+  return dbs;
+}
+
 export async function claimRedisDb(): Promise<RedisDbClaim> {
-  const dbs = reservedRedisDbs();
+  const dbs = offStackRedisDbs();
   let claim: RedisDbClaim | null = null;
   await expect
     .poll(
