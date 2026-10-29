@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "description": "Deterministic LLM outputs for chapter notes (CHNOTE-01, CHNOTE.0/CHNOTE-B). APP_ENV=test only: the worker's ScenarioLLMClient (book_core.llm.scenarios) over this file picks the scenario whose marker occurs in the prompt (every confirmed question of the chapter under test ends its stem with ` [<marker>]`) and answers task `chapter_notes.generate` (prompt version `chapter_notes.generate/v1`). Output schema (CHNOTE.0 assumption N7, tests/e2e/fixtures/chapter-notes.ts): {sections: [{heading, items: [{text, tags: [\"Q1\", ...], quote: string|null}]}]}; tags are the input tags Q1..Qn the worker assigns to the chapter's confirmed questions in question-number order (per batch for a large chapter, renumbered chapter-wide when merged); `quote` must occur verbatim in the chapter's published text or the item is invalid. Every item text carries an ASCII token (NOTE-...) so tests can look for it without quoting prose. The same response answers the first request and the one re-request after a rejection (C02), so a rejected response is re-requested exactly once.",
+  "scenarios": [
+    {
+      "marker": "E2E-NOTE-OK",
+      "description": "Valid for any chapter with two or more confirmed questions: three items citing Q1, Q2 and Q1+Q2, no quotes. One LLM call per batch; nothing dropped.",
+      "responses": {
+        "chapter_notes.generate": {
+          "sections": [
+            {
+              "heading": "핵심 개념",
+              "items": [
+                {
+                  "text": "첫 번째 문제는 이 장의 핵심 용어를 묻는다. NOTE-OK-A",
+                  "tags": ["Q1"],
+                  "quote": null
+                },
+                {
+                  "text": "두 번째 문제는 과정의 순서를 묻는다. NOTE-OK-B",
+                  "tags": ["Q2"],
+                  "quote": null
+                }
+              ]
+            },
+            {
+              "heading": "정리",
+              "items": [
+                {
+                  "text": "두 문제를 함께 보면 개념과 순서가 이어진다. NOTE-OK-C",
+                  "tags": ["Q1", "Q2"],
+                  "quote": null
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "marker": "E2E-NOTE-MIXED",
+      "description": "For chapter 1 of book-ko.pdf (\"1장 물의 순환\") with three confirmed questions (CHNOTE-01-AC01..AC05, C02). Valid items A (Q1, with a quote that occurs verbatim in ch1-s1-p1), B (Q2), C (Q3+Q1) and D (Q2); invalid items Q99 (a tag that is not an input), NOTAG (no tag) and BADQUOTE (Q2, but its quote is in no page of the book). The first response is rejected for the unknown tag / quote mismatch and re-requested once; from the second the invalid items are dropped, so a note keeps A, B, C, D (3 dropped). With only Q1 and Q2 left in the chapter (Q3 deleted), C is dropped too.",
+      "responses": {
+        "chapter_notes.generate": {
+          "sections": [
+            {
+              "heading": "핵심 개념",
+              "items": [
+                {
+                  "text": "증발은 물이 에너지를 얻어 수증기가 되는 과정이다. NOTE-MIX-A",
+                  "tags": ["Q1"],
+                  "quote": "이 과정을 증발이라고 한다."
+                },
+                {
+                  "text": "수증기가 식으면 응결하여 구름이 된다. NOTE-MIX-B",
+                  "tags": ["Q2"],
+                  "quote": null
+                },
+                {
+                  "text": "강수와 증발이 이어져 물이 순환한다. NOTE-MIX-C",
+                  "tags": ["Q3", "Q1"],
+                  "quote": null
+                },
+                {
+                  "text": "이 장에 없는 문제를 인용한 지어낸 항목이다. NOTE-MIX-Q99",
+                  "tags": ["Q99"],
+                  "quote": null
+                }
+              ]
+            },
+            {
+              "heading": "주의할 점",
+              "items": [
+                {
+                  "text": "각주가 없는 항목은 저장되지 않아야 한다. NOTE-MIX-NOTAG",
+                  "tags": [],
+                  "quote": null
+                },
+                {
+                  "text": "본문에 없는 문장을 인용한 항목이다. NOTE-MIX-BADQUOTE",
+                  "tags": ["Q2"],
+                  "quote": "증발은 달 표면에서만 일어나는 현상이다."
+                },
+                {
+                  "text": "응결과 증발을 헷갈리지 않도록 한다. NOTE-MIX-D",
+                  "tags": ["Q2"],
+                  "quote": null
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "marker": "E2E-NOTE-INVALID",
+      "description": "Every item is invalid (unknown tag or no tag), in the first response and in the re-request: the generation fails with error_code `note_citation_invalid` and stores no note.",
+      "responses": {
+        "chapter_notes.generate": {
+          "sections": [
+            {
+              "heading": "핵심 개념",
+              "items": [
+                {
+                  "text": "입력에 없는 문제만 인용한 항목이다. NOTE-INV-A",
+                  "tags": ["Q99"],
+                  "quote": null
+                },
+                {
+                  "text": "각주가 없는 항목이다. NOTE-INV-B",
+                  "tags": [],
+                  "quote": null
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "marker": "E2E-NOTE-FAIL",
+      "description": "Output that is not JSON (truncated mid-string): the generation fails with error_code `llm_invalid_output` (the generic reason \"정리 노트를 만들지 못했습니다. 다시 시도하세요.\") and stores no note.",
+      "responses": {
+        "chapter_notes.generate": "{\"sections\": [{\"heading\": \"핵심 개념\", \"items\": [{\"text\": \"끊긴"
+      }
+    }
+  ]
+}

@@ -20,6 +20,9 @@
 //   - summary.ts (DOCSUM.0): document summary API helpers, the APP_ENV=test fake summarizer's
 //     markers, the feature-off stack (API + worker + web) and the DOCSUM-01 UI contract; import
 //     it directly (not re-exported here).
+//   - chapter-notes.ts (CHNOTE.0): chapter note API helpers, the APP_ENV=test scenario LLM markers
+//     and hold barrier, the feature-off stack (summary.ts) and the CHNOTE-01 UI contract; import it
+//     directly (not re-exported here).
 // Never add test-only seed/reset endpoints to the production app (AGENTS.md §5).
 import { test as base, expect } from '@playwright/test';
 import { UserFactory } from './auth.ts';

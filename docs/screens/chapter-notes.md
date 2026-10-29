@@ -2,7 +2,7 @@
 
 **상태:** 확정 화면 요구사항 v1.0 · DOCSUM-SPEC 신규 2026-10-29 (사용자 요청 "문제 및 해설로부터 챕터별 내용 정리 생성 — 추가한 내용은 문제 출처를 주석에 명시", 사용자 결정 Q4·Q6·Q7·Q10)
 **Route:** `/workspaces/:workspaceId?panel=chapter-note&chapter=:chapterId` (Workspace 홈 Heatmap의 챕터 그룹 header `정리 노트` 버튼이 여는 non-modal panel) · 공유 게스트는 `/share/:shareId?panel=chapter-note&chapter=:chapterId`
-**테스트:** `tests/e2e/questions/chapter-notes.spec.ts` (계약: `tests/integration/questions/test_chapter_notes_contract.py`, `apps/worker` · `packages/core` unit test)
+**테스트:** `tests/e2e/questions/chapter-notes.spec.ts` (계약: `tests/integration/questions/chapter_notes/test_chapter_notes_contract.py`, `apps/worker` · `packages/core` unit test)
 **Phase:** CHNOTE.0 (RED) → CHNOTE-B → CHNOTE-W
 **연계:** [Questions 명세](../questions.md) §9, [QOV-01](questions-overview.md), [QPLAY-01](questions-practice.md), [WS-VIEW-01](workspace-shared-view.md), [공유 명세](../workspace-sharing.md) §8, [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
 
@@ -96,7 +96,7 @@ linked_tests: [CHNOTE-01-AC01 … CHNOTE-01-AC06]
 
 ## 계약 요구사항 (pytest·unit, 화면 AC 아님)
 
-`tests/integration/questions/test_chapter_notes_contract.py`, `apps/worker/tests`, `packages/core/tests`, `supabase/tests`(pgTAP).
+`tests/integration/questions/chapter_notes/test_chapter_notes_contract.py`, `apps/worker/tests`, `packages/core/tests`, `supabase/tests`(pgTAP).
 
 | ID | 요구사항 |
 |---|---|

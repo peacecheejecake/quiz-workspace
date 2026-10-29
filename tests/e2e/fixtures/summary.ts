@@ -415,8 +415,14 @@ export interface SummaryOffStack {
   stop(): Promise<void>;
 }
 
-/** Starts API + worker + web with WORKER_DOCUMENT_SUMMARY=false (D8). */
-export async function startSummaryOffStack(): Promise<SummaryOffStack> {
+/**
+ * Starts API + worker + web with WORKER_DOCUMENT_SUMMARY=false (D8). `overrides` add or replace
+ * environment values of all three processes, e.g. `{ WORKER_CHAPTER_NOTES: 'false' }` for the
+ * chapter-notes feature-off stack (CHNOTE-01-AC06, tests/e2e/fixtures/chapter-notes.ts N9).
+ */
+export async function startSummaryOffStack(
+  overrides: Readonly<Record<string, string>> = {},
+): Promise<SummaryOffStack> {
   const main = localEndpoints();
   const claim = await claimRedisDb();
   const broker = claim.url;
@@ -427,6 +433,7 @@ export async function startSummaryOffStack(): Promise<SummaryOffStack> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     WORKER_DOCUMENT_SUMMARY: 'false',
+    ...overrides,
     REDIS_URL: broker,
     LOG_LEVEL: 'INFO',
     PYTHONUNBUFFERED: '1',
