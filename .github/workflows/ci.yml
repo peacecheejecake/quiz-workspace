@@ -56,7 +56,7 @@ concurrency:
   cancel-in-progress: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
 
 env:
-  E2E_PHASES: P0.10,A0,M3.0,M4.0,M5.0,M6.0,M7.0,S0
+  E2E_PHASES: P0.10,A0,M3.0,M4.0,M5.0,M6.0,M7.0,S0,DOCTXT.0
   FORCE_COLOR: '1'
 
 jobs:

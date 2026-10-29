@@ -73,6 +73,7 @@ RULES: dict[str, Rule | str] = {
     "listDocumentRevisions": READ,
     "restoreDocumentRevision": EDIT,
     "getDocumentSourceUrl": READ,
+    "exportDocumentText": READ,  # DOC-03 (published revision; `revision=draft` editors only)
     "createDocumentUploadIntent": EDIT,
     "listDocuments": READ,
     # jobs
