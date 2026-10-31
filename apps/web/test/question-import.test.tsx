@@ -8,7 +8,11 @@ import './dom-setup';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ImportDraft, ImportRun } from '../src/lib/questions/drafts';
+import {
+  reviewDraftFromImport,
+  type ImportDraft,
+  type ImportRun,
+} from '../src/lib/questions/drafts';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
@@ -16,6 +20,9 @@ vi.mock('next/navigation', () => ({
 vi.mock('../src/components/questions/import/source-compare-panel', () => ({
   SourceComparePanel: () => null,
 }));
+
+/** The page hands the drafts over in the review shape (QIMP-PAYLOAD). */
+const reviewed = (list: readonly ImportDraft[]) => list.map(reviewDraftFromImport);
 
 const { QuestionImport } = await import('../src/components/questions/import/question-import');
 
@@ -171,7 +178,7 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly={null}
         initialRun={{ ...RUN, draft_count: 450 }}
-        initialDrafts={drafts}
+        initialDrafts={reviewed(drafts)}
         loadFailed={false}
         registrationPollMs={5}
       />,
@@ -226,7 +233,7 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly={null}
         initialRun={{ ...RUN, draft_count: 2, registration_job_id: JOB }}
-        initialDrafts={drafts}
+        initialDrafts={reviewed(drafts)}
         loadFailed={false}
         registrationPollMs={20}
       />,
@@ -292,7 +299,7 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly={null}
         initialRun={{ ...RUN, draft_count: 4, published_count: 1 }}
-        initialDrafts={initial}
+        initialDrafts={reviewed(initial)}
         loadFailed={false}
         registrationPollMs={5}
       />,
@@ -387,7 +394,7 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly={null}
         initialRun={RUN}
-        initialDrafts={[suggested]}
+        initialDrafts={reviewed([suggested])}
         initialChapters={chapters}
         loadFailed={false}
       />,
@@ -415,7 +422,9 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly="viewer"
         initialRun={RUN}
-        initialDrafts={[{ ...draft(0), chapter_match: 'no_match', source_chapter_title: '제9장' }]}
+        initialDrafts={reviewed([
+          { ...draft(0), chapter_match: 'no_match', source_chapter_title: '제9장' },
+        ])}
         loadFailed={false}
       />,
     );
@@ -453,7 +462,7 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly={null}
         initialRun={{ ...RUN, draft_count: 2, registration_job_id: JOB }}
-        initialDrafts={drafts}
+        initialDrafts={reviewed(drafts)}
         loadFailed={false}
         loadedAt="2026-10-18T00:01:00Z"
         registrationPollMs={5}
@@ -481,7 +490,7 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly={null}
         initialRun={{ ...RUN, registration_job_id: JOB }}
-        initialDrafts={[draft(0)]}
+        initialDrafts={reviewed([draft(0)])}
         loadFailed={false}
         loadedAt="2026-10-18T00:01:00Z"
       />,
