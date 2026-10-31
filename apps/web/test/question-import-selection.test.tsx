@@ -93,7 +93,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('QuestionImport selection with many drafts (UX6-SELECT)', () => {
+// Rendering and clicking through hundreds of drafts in jsdom takes seconds on a CI runner.
+describe('QuestionImport selection with many drafts (UX6-SELECT)', { timeout: 30_000 }, () => {
   it('QIMPORT-01-AC09 checking a draft or 전체 선택 re-renders only the checkboxes and requests nothing', async () => {
     const bodies: unknown[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
