@@ -34,6 +34,7 @@ import {
   JOB_TIMEOUT_MS,
   waitForImportStatus,
   listDocuments,
+  bookChapterOptions,
   listDrafts,
   listImports,
   listQuestions,
@@ -42,6 +43,7 @@ import {
   progressStepsUi,
   questionFormUi,
   questionPaper,
+  seedBookChapters,
   seedImportDraftCopies,
   setDocumentKind,
   signInAs,
@@ -863,6 +865,15 @@ const ONE_NOISE_FLOOR_MS = 8;
 const TOGGLES = 5;
 /** Copies of the paper's 8 drafts: 8 × 64 = 512 drafts, 5 × 64 = 320 in "전체 선택". */
 const COPIES = 63;
+/** Drafts per page of the review (QIMP-REVIEW-SCALE, apps/web/src/lib/questions/draft-pages.ts). */
+const REVIEW_PAGE_SIZE = 100;
+/** Drafts numbered `from..to` that "전체 선택" covers: draft k is a copy of question (k-1) % 8 + 1. */
+const registrableIn = (from: number, to: number): number => {
+  let n = 0;
+  for (let k = from; k <= to; k++)
+    if (Q(((k - 1) % PAPER.questions.length) + 1).answer !== null) n++;
+  return n;
+};
 
 test(
   'QIMPORT-01-AC09 with hundreds of drafts, selecting and 전체 선택 respond at once without a request; 승인 및 등록 sends the selection',
@@ -879,7 +890,9 @@ test(
 
     await signInAs(page, owner.user);
     await page.goto(importPath(ws.id));
-    await expect(importUi.draftItems(page)).toHaveCount(total, { timeout: 30_000 });
+    // QIMP-REVIEW-SCALE: one page of drafts is rendered; the counts are over all of them.
+    await expect(importUi.draftsHeading(page)).toContainText(`${total}개`, { timeout: 30_000 });
+    await expect(importUi.draftItems(page)).toHaveCount(REVIEW_PAGE_SIZE);
     const all = importUi.selectAll(page);
     await expect(all).toHaveAccessibleName(new RegExp(`\\(${registrable}개\\)`));
 
@@ -894,7 +907,7 @@ test(
     await expect(importUi.publish(page)).toContainText(`(${registrable})`);
     await expect(
       importUi.drafts(page).getByRole('checkbox', { name: /번 문제 선택/, checked: true }),
-    ).toHaveCount(registrable);
+    ).toHaveCount(registrableIn(1, REVIEW_PAGE_SIZE));
     const q1 = importUi.select(importUi.draft(page, Q(1).stem).first());
     const oneMs: number[] = [];
     for (let i = 0; i < TOGGLES; i++) {
@@ -951,5 +964,89 @@ test(
     );
     const registered = (await listDrafts(owner, run.id)).filter((d) => d.published_question_id);
     expect(registered).toHaveLength(registrable);
+  },
+);
+
+/**
+ * QIMP-REVIEW-SCALE (QIMPORT-01-AC09 at the size of a real paper): 316 pages gave ~750 drafts, and
+ * the review crashed the tab — every closed chapter picker rendered the whole book outline (~3.4 GB
+ * heap for 752 drafts × 300 chapters). With ~1000 drafts over a long outline the page renders one
+ * page of drafts with closed pickers that hold no options, and `전체 선택` still covers every draft.
+ */
+const SCALE_COPIES = 124; // 8 × 125 = 1000 drafts
+const SCALE_CHAPTERS = 300;
+/** Elements on the page with one page of drafts (~40 per draft, plus the app shell). */
+const SCALE_MAX_ELEMENTS = 8000;
+/**
+ * Chromium's count of every node the renderer holds, incl. detached ones: closed Radix pickers
+ * render their options into detached fragments (one page × 301 options ≈ 120k nodes before the
+ * fix; ~17k after).
+ */
+const SCALE_MAX_NODES = 40_000;
+
+test(
+  'QIMPORT-01-AC09 a review of 1000 drafts over a long book outline renders one page and 전체 선택 covers every page',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory, browserName }) => {
+    const owner = await workspaceFactory.member('qimport01-ac09-scale');
+    const ws = await workspaceFactory.create(owner);
+    const bookId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    seedBookChapters(bookId, SCALE_CHAPTERS);
+    const { run } = await importPaperDrafts(owner, ws.id);
+    const total = seedImportDraftCopies(run.id, SCALE_COPIES);
+    expect(total).toBe(1000);
+    const registrable = registrableIn(1, total);
+
+    await signInAs(page, owner.user);
+    await page.goto(importPath(ws.id));
+    await expect(importUi.draftsHeading(page)).toContainText(`${total}개`, { timeout: 30_000 });
+    const all = importUi.selectAll(page);
+    await expect(all).toHaveAccessibleName(new RegExp(`\\(${registrable}개\\)`));
+
+    // Bounded: one page of drafts, and no picker renders its options while closed.
+    await expect(importUi.draftItems(page)).toHaveCount(REVIEW_PAGE_SIZE);
+    const chapterPickers = importUi.drafts(page).getByRole('combobox', { name: /번 문제 챕터/ });
+    await expect(chapterPickers).toHaveCount(REVIEW_PAGE_SIZE);
+    const elements = await page.evaluate(() => document.getElementsByTagName('*').length);
+    expect(elements, 'elements on the page').toBeLessThan(SCALE_MAX_ELEMENTS);
+    if (browserName === 'chromium') {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Performance.enable');
+      const { metrics } = await cdp.send('Performance.getMetrics');
+      const nodes = metrics.find((m) => m.name === 'Nodes')?.value ?? Infinity;
+      test.info().annotations.push({ type: 'renderer nodes', description: String(nodes) });
+      expect(nodes, 'nodes held by the renderer (incl. detached)').toBeLessThan(SCALE_MAX_NODES);
+      await cdp.detach();
+    }
+    // The picker still lists the whole outline once opened.
+    await chapterPickers.first().click();
+    await expect(page.getByRole('option')).toHaveCount(await bookChapterOptions(owner, run.id));
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('listbox')).toHaveCount(0);
+    await expect(chapterPickers.first()).toBeFocused();
+
+    // 전체 선택 covers the drafts on every page, not only the rendered one.
+    await all.click();
+    await expect(importUi.publish(page)).toContainText(`(${registrable})`);
+    const pager = importUi.pager(page);
+    // Keyboard: the page button keeps focus on the new page (WebKit does not focus on click).
+    await importUi.pagerPage(pager, 10).focus();
+    await page.keyboard.press('Enter');
+    await expect(importUi.pagerPage(pager, 10)).toHaveAttribute('aria-current', 'page');
+    await expect(importUi.pagerPage(pager, 10)).toBeFocused();
+    await expect(importUi.draftItems(page)).toHaveCount(REVIEW_PAGE_SIZE);
+    await expect(
+      importUi.drafts(page).getByRole('checkbox', { name: /번 문제 선택/, checked: true }),
+    ).toHaveCount(registrableIn(total - REVIEW_PAGE_SIZE + 1, total));
+    await expect(
+      importUi.drafts(page).getByRole('checkbox', { name: `${total}번 문제 선택` }),
+    ).toBeChecked();
+
+    // The pager below the list brings keyboard users to the top of the new page.
+    const below = main(page).getByRole('navigation', { name: /초안 페이지 \(목록 아래\)/ });
+    await below.getByRole('button', { name: /^(이전|previous)$/i }).click();
+    await expect(importUi.draftsHeading(page)).toBeFocused();
+    await expect(pager).toContainText(`801–900 / ${total}`);
+    await expect(importUi.publish(page)).toContainText(`(${registrable})`);
   },
 );

@@ -96,6 +96,7 @@ export {
   attemptRevision,
   forgetImportRuns,
   holdDocumentProcessing,
+  seedBookChapters,
   seedGradedAttempt,
   seedImportDraftCopies,
   seedMembership,

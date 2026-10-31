@@ -5,6 +5,10 @@
 // the reviewer's choice, with why. Editors change it with a picker over the workspace's book
 // chapters ("챕터 없음" allowed); the change is saved at once (PATCH chapter_id) and kept for the
 // registration. Read-only users (and registered drafts) see the text only.
+//
+// Every draft has one, and a real import has hundreds of drafts over a book outline of hundreds
+// of chapters: the picker renders its options only while open (`lazyOptions`, QIMP-REVIEW-SCALE —
+// a closed Radix Select renders all of them, which took the review page to >3 GB and crashed it).
 import { Select } from '@quiz/ui';
 import {
   chapterHint,
@@ -70,6 +74,7 @@ export function DraftChapterField({
         label={`${number}번 문제 챕터`}
         options={choices}
         value={info.chapter?.id ?? NO_DRAFT_CHAPTER}
+        lazyOptions
         disabled={disabled}
         onValueChange={(value) => onChange(value === NO_DRAFT_CHAPTER ? null : value)}
         {...(hint ? { description: hint } : {})}
