@@ -190,3 +190,7 @@
 .pdfSwitcher {
   max-width: 32rem;
 }
+
+.sectionTitle:focus:not(:focus-visible) {
+  outline: none;
+}

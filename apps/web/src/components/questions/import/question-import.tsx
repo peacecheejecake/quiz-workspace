@@ -10,7 +10,10 @@
 //   the page is left; the screen follows its progress and reattaches on return. Checking a draft
 //   or "전체 선택" is screen state only; nothing is sent until the button. With hundreds of drafts
 //   it must stay instant (UX6-SELECT, QIMPORT-01-AC09): the list's callbacks are stable so a
-//   selection change re-renders only the checkboxes, not every draft.
+//   selection change re-renders only the checkboxes, not every draft. The list is shown a page
+//   of 100 drafts at a time (QIMP-REVIEW-SCALE: a 316-page paper yields ~750 drafts); only the
+//   rendering is paged — the selection, `전체 선택`, the counts and the registration cover every
+//   draft.
 //
 // The server starts the import itself once the PDF is processed (QIMPORT-01-AC06): a visit (or
 // `?document=<id>` from a row's 문제 검토) shows the run's progress and drafts. One review per PDF
@@ -59,11 +62,13 @@ import {
 } from '@/lib/questions/drafts';
 import { abortableSleep } from '@/lib/documents/job-events';
 import type { QuestionFormValues } from '@/lib/questions/form';
+import { clampDraftPage, draftPageCount, draftPageRange } from '@/lib/questions/draft-pages';
 import { createImportClient, ImportApiError, importPath } from '@/lib/questions/import-client';
 import type { ReviewPdf } from '@/lib/questions/review-pdfs';
 import { workspaceHomePath } from '@/lib/workspaces/home';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import { DraftEditor, type DraftSaveResult } from '../drafts/draft-editor';
+import { DraftPager } from '../drafts/draft-pager';
 import { QuestionDraftReview, type DraftReviewState } from '../drafts/question-draft-review';
 import { DraftChapterField } from './draft-chapter-field';
 import { ImportJobProgress, type ImportStep } from './import-job-progress';
@@ -191,6 +196,11 @@ export function QuestionImport({
   const [editing, setEditing] = useState<ReviewDraft | null>(null);
   const [editorSession, setEditorSession] = useState(0);
   const [comparing, setComparing] = useState<ReviewDraft | null>(null);
+  /** The page of the draft list on screen (0-based; kept within the pages when drafts change). */
+  const [page, setPage] = useState(0);
+  const draftsHeading = useRef<HTMLHeadingElement | null>(null);
+  /** Set by the pager below the list: focus the list heading once the new page is on screen. */
+  const focusListTop = useRef(false);
 
   const controller = useRef<AbortController | null>(null);
   /** Idempotency-Key of the retry of a failed run, per failed job. */
@@ -599,6 +609,28 @@ export function QuestionImport({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // --- pages ---------------------------------------------------------------------------------
+
+  const pageCount = draftPageCount(drafts.length);
+  const currentPage = clampDraftPage(page, drafts.length);
+  const { start: pageStart, end: pageEnd } = draftPageRange(currentPage, drafts.length);
+  const pageDrafts = useMemo(
+    () => (pageCount > 1 ? drafts.slice(pageStart, pageEnd) : drafts),
+    [drafts, pageCount, pageStart, pageEnd],
+  );
+  const changePage = (next: number, fromBottom: boolean) => {
+    focusListTop.current = fromBottom;
+    setPage(next);
+  };
+  useEffect(() => {
+    if (!focusListTop.current) return;
+    focusListTop.current = false;
+    const heading = draftsHeading.current;
+    if (!heading) return;
+    heading.focus({ preventScroll: true });
+    heading.scrollIntoView({ block: 'start' });
+  }, [currentPage]);
+
   // --- render -------------------------------------------------------------------------------
 
   const busy = activity !== null;
@@ -720,7 +752,12 @@ export function QuestionImport({
         <section className={styles.drafts} aria-labelledby="qimport-drafts-title">
           <div className={styles.draftsHeader}>
             <div>
-              <h2 id="qimport-drafts-title" className={styles.sectionTitle}>
+              <h2
+                id="qimport-drafts-title"
+                ref={draftsHeading}
+                tabIndex={-1}
+                className={styles.sectionTitle}
+              >
                 가져온 초안 <span className={styles.count}>{drafts.length}개</span>
               </h2>
               <p className={styles.meta}>
@@ -759,9 +796,20 @@ export function QuestionImport({
           {drafts.length === 0 && !busy ? (
             <p className={styles.meta}>아직 추출된 초안이 없습니다.</p>
           ) : null}
+          {pageCount > 1 ? (
+            <DraftPager
+              label="초안 페이지"
+              page={currentPage}
+              pageCount={pageCount}
+              start={pageStart}
+              end={pageEnd}
+              total={drafts.length}
+              onPageChange={(next) => changePage(next, false)}
+            />
+          ) : null}
           <QuestionDraftReview
             label="가져온 초안"
-            drafts={drafts}
+            drafts={pageDrafts}
             states={states}
             readOnly={!canEdit}
             selected={chosen}
@@ -772,6 +820,17 @@ export function QuestionImport({
             renderExtra={renderChapter}
             pageHref={draftPageHref}
           />
+          {pageCount > 1 ? (
+            <DraftPager
+              label="초안 페이지 (목록 아래)"
+              page={currentPage}
+              pageCount={pageCount}
+              start={pageStart}
+              end={pageEnd}
+              total={drafts.length}
+              onPageChange={(next) => changePage(next, true)}
+            />
+          ) : null}
         </section>
       ) : null}
 
