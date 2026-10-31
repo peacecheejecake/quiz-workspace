@@ -1,7 +1,7 @@
 'use client';
 
 import { Select as RadixSelect } from 'radix-ui';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { cx } from '../internal/cx';
 import { useLayerStyle } from '../internal/layer';
 import { FieldFrame, useFieldIds, type FieldOwnProps } from './Field';
@@ -32,6 +32,14 @@ export interface SelectProps extends FieldOwnProps {
   fieldClassName?: string;
   className?: string;
   'aria-describedby'?: string;
+  /**
+   * Render the options only while the list is open. Radix otherwise renders every option of a
+   * closed picker (into a detached fragment, for typeahead and form submission), so a page with
+   * hundreds of pickers over a long list (QIMPORT-01 draft chapters) held hundreds of thousands
+   * of nodes. The closed trigger shows the selected option's label; typing on the closed trigger
+   * does not change the value (open the list first: Arrow keys and typeahead work there).
+   */
+  lazyOptions?: boolean;
 }
 
 /**
@@ -56,7 +64,15 @@ export function Select({
   fieldClassName,
   className,
   'aria-describedby': ariaDescribedBy,
+  lazyOptions = false,
 }: SelectProps) {
+  const [open, setOpen] = useState(false);
+  const [innerValue, setInnerValue] = useState(defaultValue);
+  const current = value ?? innerValue;
+  const selectedLabel = lazyOptions
+    ? options.find((option) => option.value === current)?.label
+    : undefined;
+  const shownOptions = lazyOptions && !open ? [] : options;
   const ids = useFieldIds(id, description, error, ariaDescribedBy);
   const labelId = `${ids.id}-label`;
   const layerStyle = useLayerStyle();
@@ -73,7 +89,18 @@ export function Select({
       <RadixSelect.Root
         {...(value !== undefined ? { value } : {})}
         {...(defaultValue !== undefined ? { defaultValue } : {})}
-        {...(onValueChange ? { onValueChange } : {})}
+        {...(lazyOptions
+          ? {
+              open,
+              onOpenChange: setOpen,
+              onValueChange: (next: string) => {
+                setInnerValue(next);
+                onValueChange?.(next);
+              },
+            }
+          : onValueChange
+            ? { onValueChange }
+            : {})}
         {...(disabled !== undefined ? { disabled } : {})}
         {...(required !== undefined ? { required } : {})}
         {...(name !== undefined ? { name } : {})}
@@ -87,7 +114,9 @@ export function Select({
           className={cx('qz-control', 'qz-select', 'qz-focus-ring', className)}
         >
           <span className="value">
-            <RadixSelect.Value placeholder={placeholder} />
+            <RadixSelect.Value placeholder={placeholder}>
+              {selectedLabel ?? undefined}
+            </RadixSelect.Value>
           </span>
           <RadixSelect.Icon className="icon">
             <ChevronDownIcon width={18} height={18} />
@@ -101,7 +130,7 @@ export function Select({
             style={layerStyle}
           >
             <RadixSelect.Viewport className="viewport">
-              {options.map((option) => (
+              {shownOptions.map((option) => (
                 <RadixSelect.Item
                   key={option.value}
                   value={option.value}

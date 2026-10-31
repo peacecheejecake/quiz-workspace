@@ -390,6 +390,17 @@ export async function listDrafts(member: Member, importId: string): Promise<Draf
   return [...body.items].sort((a, b) => a.position - b.position);
 }
 
+/** Options of a draft's chapter picker: "챕터 없음" + the workspace's book chapters (CHAPTER-MAP). */
+export async function bookChapterOptions(member: Member, importId: string): Promise<number> {
+  const body = await member.api.ok<{ chapters?: unknown[] }>(
+    'GET',
+    `/question-imports/${importId}/drafts`,
+    undefined,
+    [200],
+  );
+  return (body.chapters?.length ?? 0) + 1;
+}
+
 export async function getImport(member: Member, importId: string): Promise<ImportRun> {
   return member.api.ok<ImportRun>('GET', `/question-imports/${importId}`, undefined, [200]);
 }
@@ -551,6 +562,17 @@ export const importUi = {
     ),
   retry: (page: Page) => button(main(page), /다시 시도|재시도|retry/i),
   alert: (page: Page) => main(page).getByRole('alert').first(),
+  /** "가져온 초안 N개": the section heading with the run's draft count (all pages). */
+  draftsHeading: (page: Page) =>
+    main(page).getByRole('heading', {
+      level: 2,
+      name: /가져온 (초안|문제)|imported (drafts|questions)/i,
+    }),
+  /** QIMP-REVIEW-SCALE: the pager above the draft list (one page of drafts at a time). */
+  pager: (page: Page) =>
+    main(page).getByRole('navigation', { name: /^(초안 페이지|draft pages)$/i }),
+  pagerPage: (pager: Locator, n: number) =>
+    pager.getByRole('button', { name: new RegExp(`^${n}(페이지| page)$`, 'i') }),
 };
 
 /** Fills the open question editor with a single-answer MCQ (`correct` is 1-based, 0 = none). */
