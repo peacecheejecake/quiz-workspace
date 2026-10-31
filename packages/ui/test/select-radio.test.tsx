@@ -49,6 +49,59 @@ describe('Select', () => {
   });
 });
 
+describe('Select lazyOptions', () => {
+  it('renders no option while closed, shows the selected label and still picks from the list', async () => {
+    const user = userEvent.setup();
+    const rendered = vi.fn();
+    function Label({ text }: { text: string }) {
+      rendered(text);
+      return <>{text}</>;
+    }
+    const options = TYPES.map((t) => ({
+      value: t.value,
+      label: <Label text={t.label} />,
+      textValue: t.label,
+    }));
+    function Harness() {
+      const [value, setValue] = useState('MCQ');
+      return (
+        <Select label="챕터" lazyOptions options={options} value={value} onValueChange={setValue} />
+      );
+    }
+    render(<Harness />);
+    const trigger = screen.getByRole('combobox', { name: '챕터' });
+    expect(trigger).toHaveTextContent('객관식');
+    // Closed: only the trigger's label renders (Radix would render every option off-screen).
+    expect(rendered.mock.calls.map(([t]) => t)).toEqual(['객관식']);
+
+    await user.click(trigger);
+    expect(await screen.findAllByRole('option')).toHaveLength(TYPES.length);
+    expect(screen.getByRole('option', { name: '객관식' })).toHaveAttribute('aria-selected', 'true');
+    await user.click(screen.getByRole('option', { name: '서술형' }));
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.getByRole('combobox', { name: '챕터' })).toHaveTextContent('서술형');
+
+    // Keyboard: Enter opens the list on the selected option, Arrow keys move, Enter picks.
+    rendered.mockClear();
+    screen.getByRole('combobox', { name: '챕터' }).focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('option', { name: '서술형' })).toHaveFocus();
+    await user.keyboard('{ArrowUp}{Enter}');
+    expect(screen.getByRole('combobox', { name: '챕터' })).toHaveTextContent('객관식');
+    expect(screen.getByRole('combobox', { name: '챕터' })).toHaveFocus();
+  });
+
+  it('follows an uncontrolled value', async () => {
+    const user = userEvent.setup();
+    render(<Select label="유형" lazyOptions options={TYPES} defaultValue="ALL" />);
+    const trigger = screen.getByRole('combobox', { name: '유형' });
+    expect(trigger).toHaveTextContent('전체');
+    await user.click(trigger);
+    await user.click(await screen.findByRole('option', { name: '객관식' }));
+    expect(trigger).toHaveTextContent('객관식');
+  });
+});
+
 describe('RadioGroup', () => {
   it('names the group and its radios and selects with the arrow keys', async () => {
     const user = userEvent.setup();
