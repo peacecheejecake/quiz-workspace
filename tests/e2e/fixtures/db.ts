@@ -15,6 +15,9 @@
 //      and the hundreds of outline chapters of a real book (QIMP-REVIEW-SCALE).
 //   6. Holding a parsed document in `processing` (DOC-03-AC03): with a worker running, no public
 //      API keeps a document unprocessed long enough to assert the row and the server's 409.
+//   7. Stamping extractor validations on import drafts that the APP_ENV=test (rule-based, no LLM)
+//      extraction never produces, e.g. `llm_unavailable` from a failing LLM provider
+//      (QIMPORT-01-AC09, QIMP-SELECT-FIX).
 // The URL is loopback-checked; ids are validated before they are inlined into SQL.
 import { execFileSync } from 'node:child_process';
 import { localDbAdminUrl } from './local-env.ts';
@@ -169,4 +172,29 @@ export function holdDocumentProcessing(documentId: string): void {
       `where id = ${uuidList([documentId])} returning 1) select count(*) from u`,
   ).trim();
   if (n !== '1') throw new Error('db fixture: document row not found');
+}
+
+/**
+ * Appends a warning validation `code` to the drafts of an import run (use 7 in the file comment)
+ * whose 0-based position satisfies `position % every === offset` (default: every draft).
+ */
+export function stampDraftValidation(
+  importId: string,
+  code: string,
+  { every = 1, offset = 0 }: { every?: number; offset?: number } = {},
+): number {
+  if (!/^[a-z_]{1,64}$/.test(code)) throw new Error('db fixture: invalid validation code');
+  if (!Number.isInteger(every) || every < 1 || !Number.isInteger(offset) || offset < 0) {
+    throw new Error('db fixture: invalid position filter');
+  }
+  const run = uuidList([importId]);
+  const issue = JSON.stringify({ code, severity: 'warning', message: `E2E ${code}`, field: null });
+  return Number(
+    psql(
+      `with u as (update public.question_drafts ` +
+        `set validations = validations || jsonb_build_array('${issue}'::jsonb) ` +
+        `where import_run_id = ${run} and position % ${every} = ${offset} returning 1) ` +
+        `select count(*) from u`,
+    ).trim(),
+  );
 }
