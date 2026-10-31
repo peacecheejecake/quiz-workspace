@@ -100,6 +100,7 @@ export {
   seedGradedAttempt,
   seedImportDraftCopies,
   seedMembership,
+  stampDraftValidation,
 } from './db.ts';
 export * from './questions.ts';
 export * from './workspace-ui.ts';

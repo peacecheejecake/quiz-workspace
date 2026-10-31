@@ -315,6 +315,9 @@ export interface Draft {
   /** CHAPTER-MAP: the book chapter the draft is registered under (suggested or chosen). */
   readonly chapter?: { readonly id: string; readonly title: string } | null;
   readonly chapter_choice?: 'auto' | 'manual';
+  /** Can be confirmed as it is (warnings never block). */
+  readonly publishable: boolean;
+  readonly answer_missing: boolean;
 }
 
 /** Four-option MCQ with client-chosen option ids (A2); option `answer` (0-based) is correct. */

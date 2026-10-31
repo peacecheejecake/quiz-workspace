@@ -95,6 +95,30 @@ describe('QuestionDraftReview', () => {
     expect(within(fifth).getByText('등록됨')).toBeTruthy();
   });
 
+  it('QIMP-SELECT-FIX: an AI assist note reads as a note, a draft warning as something to check', () => {
+    render(
+      <QuestionDraftReview
+        label="가져온 초안"
+        drafts={[
+          draft({
+            issues: [
+              { code: 'llm_unavailable', severity: 'warning' },
+              { code: 'option_sequence_gap', severity: 'warning' },
+            ],
+          }),
+        ]}
+        selected={new Set()}
+        onSelectChange={vi.fn()}
+      />,
+    );
+    const item = screen.getByRole('listitem');
+    expect(within(item).getByText(/^참고: AI 보조 정리를 사용할 수 없어/)).toBeTruthy();
+    expect(within(item).getByText(/^확인: 보기 번호가 중간에 빠져/)).toBeTruthy();
+    expect(within(item).queryByText(/확인이 필요한 항목이 있습니다/)).toBeNull();
+    const box = within(item).getByRole('checkbox', { name: '1번 문제 선택' });
+    expect(box.hasAttribute('disabled')).toBe(false);
+  });
+
   it('blocks approval with a reason until an answer exists and reports approvals', async () => {
     const onApproveChange = vi.fn();
     const onEdit = vi.fn();

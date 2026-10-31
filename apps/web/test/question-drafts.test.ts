@@ -2,6 +2,7 @@
 // draft editor's validation and request bodies, and the approve-then-publish selection — logic
 // the E2E specs only observe indirectly (which version is sent, that an unknown answer stays null,
 // that the API's English validation text never reaches the UI).
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
   applyPublished,
@@ -21,6 +22,7 @@ import {
   draftUpdateBody,
   formFromDraft,
   issueMessage,
+  isAssistNote,
   PUBLISH_BATCH_SIZE,
   publishBatches,
   publishedMessage,
@@ -149,6 +151,39 @@ describe('issueMessage', () => {
     expect(issueMessage('answer_not_in_options')).toMatch(/정답/);
     expect(issueMessage('something_new')).toBe('확인이 필요한 항목이 있습니다.');
     expect(issueMessage('something_new')).not.toMatch(/no answer/i);
+  });
+
+  it('has a Korean message for every validation code the PDF extractor writes', () => {
+    // book_core.extractor (and the question rules it applies) create every issue with
+    // `issue("<code>", ...)`; reading the sources keeps this list from drifting.
+    const core = new URL('../../../packages/core/src/book_core/', import.meta.url);
+    const extractor = new URL('extractor/', core);
+    const sources = [
+      ...readdirSync(extractor)
+        .filter((f) => f.endsWith('.py'))
+        .map((f) => new URL(f, extractor)),
+      new URL('question/validation.py', core),
+    ].map((url) => readFileSync(url, 'utf8'));
+    const codes = new Set(
+      sources.flatMap((src) => [...src.matchAll(/\bissue\(\s*"([a-z_]+)"/g)].map((m) => m[1])),
+    );
+    expect(codes.size).toBeGreaterThan(20);
+    for (const code of ['llm_unavailable', 'duplicate_option_label', 'option_sequence_gap']) {
+      expect(codes).toContain(code);
+    }
+    const generic = issueMessage('something_new');
+    const missing = [...codes].filter((code) => !code || issueMessage(code) === generic);
+    expect(missing).toEqual([]);
+    for (const code of codes) expect(issueMessage(code ?? '')).toMatch(/[가-힣]/);
+  });
+
+  it('AI assist notes describe the extraction, not the draft', () => {
+    expect(isAssistNote('llm_unavailable')).toBe(true);
+    expect(isAssistNote('llm_output_invalid')).toBe(true);
+    for (const code of ['llm_type_rejected', 'llm_answer_rejected', 'llm_text_rejected']) {
+      expect(isAssistNote(code)).toBe(false);
+    }
+    expect(isAssistNote('duplicate_option_label')).toBe(false);
   });
 });
 
@@ -360,6 +395,24 @@ describe('selection (QIMP-BULK)', () => {
     // Drafts without an answer or with a note are selectable one by one only.
     expect(ids(toggleOne(toggleOne(none, 'f', true), 'g', true))).toEqual(['f', 'g']);
     expect(selectAllState(drafts, toggleAll(drafts, rejected, true))).toBe(true);
+  });
+
+  it('QIMP-SELECT-FIX: an AI assist note alone keeps a draft in "전체 선택"', () => {
+    const unavailable = { code: 'llm_unavailable', severity: 'warning' } as const;
+    const list = [
+      rd('a', 0, { issues: [unavailable] }),
+      rd('b', 1, { issues: [{ code: 'llm_output_invalid', severity: 'warning' }] }),
+      rd('c', 2, {
+        issues: [unavailable, { code: 'duplicate_option_label', severity: 'warning' }],
+      }),
+      rd('d', 3, { issues: [{ code: 'llm_answer_rejected', severity: 'warning' }] }),
+      rd('e', 4, { issues: [{ code: 'llm_unavailable', severity: 'error' }], publishable: false }),
+    ];
+    expect(selectAllScope(list).map((d) => d.id)).toEqual(['a', 'b']);
+    // Draft-level warnings stay out of the bulk scope but can be selected one by one.
+    expect(selectionBlocker(at(list, 2))).toBeNull();
+    expect(selectionBlocker(at(list, 3))).toBeNull();
+    expect(ids(toggleAll(list, new Set(['c']), true))).toEqual(['a', 'b', 'c']);
   });
 
   it('registered, blocked or unknown ids are never selected or sent', () => {

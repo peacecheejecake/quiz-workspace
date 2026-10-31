@@ -787,7 +787,7 @@ export function QuestionImport({
                     toggleAll(drafts, pruneSelection(drafts, current), checked === true),
                   )
                 }
-                description="등록되지 않았고 정답이 있으며 확인할 항목이 없는 초안을 모두 고릅니다. 정답이 없거나 확인 항목이 있는 초안은 직접 골라 주세요. 고른 초안은 버튼을 눌러야 승인·등록됩니다."
+                description="등록되지 않았고 정답이 있으며 확인할 항목이 없는 초안을 모두 고릅니다(‘참고’ 안내만 있는 초안도 포함). 정답이 없거나 확인 항목이 있는 초안은 직접 골라 주세요. 고른 초안은 버튼을 눌러야 승인·등록됩니다."
               />
               <p className={styles.meta}>선택 {selectedCount}개</p>
             </div>
