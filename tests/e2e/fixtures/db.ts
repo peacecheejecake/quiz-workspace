@@ -11,7 +11,8 @@
 //   4. Recreating legacy state no current code path produces: a processed question PDF without
 //      an import run (papers processed before QIMP-AUTO) for QIMPORT-01-AC06.
 //   5. Scaling up state the AC is about beyond what a synthetic fixture yields in E2E time: the
-//      hundreds of drafts of a real question PDF (copies of extracted drafts) for QIMPORT-01-AC09.
+//      hundreds of drafts of a real question PDF (copies of extracted drafts) for QIMPORT-01-AC09,
+//      and the hundreds of outline chapters of a real book (QIMP-REVIEW-SCALE).
 //   6. Holding a parsed document in `processing` (DOC-03-AC03): with a worker running, no public
 //      API keeps a document unprocessed long enough to assert the row and the server's 409.
 // The URL is loopback-checked; ids are validated before they are inlined into SQL.
@@ -131,6 +132,31 @@ export function seedImportDraftCopies(importId: string, copies: number): number 
   return Number(
     psql(`select count(*) from public.question_drafts where import_run_id = ${run}`).trim(),
   );
+}
+
+/**
+ * Appends `count` level-1 chapters (`제N장 합성 단원 N`) to the outline of a processed book's
+ * active revision (use 5 in the file comment): a real textbook's outline has hundreds of nodes,
+ * the synthetic fixture a handful. Published revisions are immutable for the application (the
+ * `chapters_revision_content_guard` trigger), so the insert skips triggers for its own transaction
+ * only (one `-c` string = one implicit transaction); the rows reference the book's own workspace, document and revision.
+ */
+export function seedBookChapters(documentId: string, count: number): void {
+  if (!Number.isInteger(count) || count < 1 || count > 2000) {
+    throw new Error('db fixture: invalid chapter count');
+  }
+  const doc = uuidList([documentId]);
+  const n = psql(
+    `set local session_replication_role = replica; ` +
+      `with ins as (insert into public.chapters (workspace_id, document_id, document_revision_id, ` +
+      `section_key, level, sort_order, title) ` +
+      `select d.workspace_id, d.id, d.active_revision_id, 'e2e-scale-' || g, 1, 100000 + g, ` +
+      `'제' || (100 + g) || '장 합성 단원 ' || g ` +
+      `from public.documents d, generate_series(1, ${count}) g ` +
+      `where d.id = ${doc} and d.active_revision_id is not null returning 1) ` +
+      `select count(*) from ins`,
+  ).trim();
+  if (n !== String(count)) throw new Error('db fixture: book revision not found');
 }
 
 /**
