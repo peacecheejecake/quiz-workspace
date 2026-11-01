@@ -556,7 +556,9 @@ def test_qimport_01_ac09_drafts_are_read_page_by_page_and_summarized_without_con
             "answer_missing",
             "validations",
             "chapter_id",
+            "duplicate_of",  # UX7-DEDUP: ids and a number only, no content
         }
+        assert summary["duplicate_of"] == draft["duplicate_of"]
         for key in ("version", "position", "question_number", "question_type", "review_status"):
             assert summary[key] == draft[key], key
         for key in ("published_question_id", "publishable", "answer_missing"):

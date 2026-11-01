@@ -110,6 +110,9 @@ RULES: dict[str, Rule | str] = {
     "updateQuestion": EDIT,
     "createQuestionGeneration": EDIT,
     "createQuestionGenerationBatch": EDIT,
+    # UX7-DEDUP: the scan only serves the merge, so both are question edits (archived 403).
+    "listQuestionDuplicates": EDIT,
+    "mergeQuestionDuplicates": EDIT,
     "getQuestionGenerationBatch": READ,
     "getQuestionRevision": READ,
     "listQuestionGenerations": READ,
@@ -198,6 +201,14 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
             "variation_types": ["PARAPHRASE"],
         },
         "updateMyQuestionState": {"is_favorite": True},
+        "mergeQuestionDuplicates": {
+            "groups": [
+                {
+                    "keep_question_id": ids["question_id"],
+                    "duplicate_question_ids": [str(uuid.UUID(int=1))],
+                }
+            ]
+        },
         "startWorkspaceFork": {"name": "S4 fork"},
         "searchSharedWorkspace": {"query": "S4"},
         "searchWorkspace": {"query": "S4"},
