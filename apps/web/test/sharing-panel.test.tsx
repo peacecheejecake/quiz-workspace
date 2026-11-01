@@ -149,6 +149,8 @@ describe('WorkspaceSharingPanel', () => {
     await user.clear(expiry);
     await user.type(expiry, date);
     expect(actions.update).toHaveBeenCalledTimes(1);
+    // The next stop is 만료일 삭제 (no save yet); leaving it saves the edited date.
+    await user.tab();
     await user.tab();
     await waitFor(() => expect(actions.update).toHaveBeenCalledTimes(2));
     const [, , policy] = actions.update.mock.calls[1] ?? [];
@@ -327,6 +329,8 @@ describe('WorkspaceSharingPanel', () => {
     const date = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
     await user.clear(expiry);
     await user.type(expiry, date);
+    // The next stop is 만료일 삭제 (no save yet); leaving it saves the edited date.
+    await user.tab();
     await user.tab();
     await waitFor(() => expect(actions.update).toHaveBeenCalledTimes(1));
     expect(actions.update.mock.calls[0]?.[1]).toBe(L1);

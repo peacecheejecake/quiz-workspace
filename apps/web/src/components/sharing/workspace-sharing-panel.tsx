@@ -123,6 +123,9 @@ export function WorkspaceSharingPanel({
   const linkFieldRef = useRef<HTMLInputElement>(null);
   const expiryRef = useRef<HTMLInputElement>(null);
   const focusExpiry = useRef(false);
+  const clearRef = useRef<HTMLButtonElement>(null);
+  /** A pointer press on `만료일 삭제` is under way (WebKit does not focus a clicked button). */
+  const clearPressed = useRef(false);
   const revokeRef = useRef<HTMLButtonElement>(null);
   const rotateRef = useRef<HTMLButtonElement>(null);
   const statusId = useId();
@@ -202,14 +205,17 @@ export function WorkspaceSharingPanel({
     });
   }
 
-  function updatePolicy(policy: SharePolicyInput, after?: () => void) {
+  function updatePolicy(policy: SharePolicyInput, after?: () => void, onFailure?: () => void) {
     if (!current) return;
     const linkId = current.id;
     startTransition(async () => {
       const result = await updateShareLinkAction(workspaceId, linkId, policy);
       apply(result);
       if (result.ok) after?.();
-      else if (result.failure === 'invalidExpiry') setExpiryError(result.error);
+      else {
+        onFailure?.();
+        if (result.failure === 'invalidExpiry') setExpiryError(result.error);
+      }
     });
   }
 
@@ -237,14 +243,33 @@ export function WorkspaceSharingPanel({
 
   /** WS-SHARE-01-AC06: no expiry. A saved link is updated at once; otherwise the next link's. */
   function clearExpiry() {
+    clearPressed.current = false;
     setExpiryDraft('');
     setExpiryError(null);
     // The button disappears with the date; keep the focus in the expiry area. The field is
     // disabled while the change saves, so it takes the focus once that is over (effect below).
     focusExpiry.current = true;
     if (current && savedExpiry !== '') {
-      updatePolicy({ expiresAt: null }, () => setExpiryDraft(null));
+      // Either way the field then shows the saved policy: no date after success, the old date
+      // (and the alert) after a failure.
+      const showSaved = () => setExpiryDraft(null);
+      updatePolicy({ expiresAt: null }, showSaved, showSaved);
     }
+  }
+
+  /**
+   * The date field's blur. Focus (or a press) moving to `만료일 삭제` must not save the draft
+   * first: that save would disable the button and win over the clear (review P2).
+   */
+  function onExpiryBlur(next: EventTarget | null) {
+    if (clearPressed.current || (next !== null && next === clearRef.current)) return;
+    commitExpiry();
+  }
+
+  /** Leaving `만료일 삭제` without pressing it saves a pending draft, as the field's blur would. */
+  function onClearBlur(next: EventTarget | null) {
+    if (next !== null && next === expiryRef.current) return;
+    commitExpiry();
   }
 
   /** The success feedback is the button's check and its live region (AC08), not a toast. */
@@ -412,7 +437,7 @@ export function WorkspaceSharingPanel({
                       setExpiryDraft(event.currentTarget.value);
                       setExpiryError(null);
                     }}
-                    onBlur={commitExpiry}
+                    onBlur={(event) => onExpiryBlur(event.relatedTarget)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
                         event.preventDefault();
@@ -422,14 +447,26 @@ export function WorkspaceSharingPanel({
                   />
                   {expiryValue !== '' ? (
                     <Button
+                      ref={clearRef}
                       size="sm"
                       className={styles.clearExpiry}
                       disabled={policyDisabled}
+                      onPointerDown={() => {
+                        clearPressed.current = true;
+                        // Released elsewhere (no click): the draft stays in the field and is
+                        // saved by its next blur or Enter.
+                        const release = () => {
+                          clearPressed.current = false;
+                        };
+                        window.addEventListener('pointerup', release, { once: true });
+                        window.addEventListener('pointercancel', release, { once: true });
+                      }}
+                      onBlur={(event) => onClearBlur(event.relatedTarget)}
                       onClick={clearExpiry}
                     >
                       만료일 삭제
                     </Button>
-                  ) : current && isClient ? (
+                  ) : current && isClient && savedExpiry === '' ? (
                     <p className={styles.noExpiry}>만료 없음 · 이 링크는 만료되지 않습니다.</p>
                   ) : null}
                 </div>
