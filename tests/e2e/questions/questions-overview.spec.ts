@@ -1135,6 +1135,9 @@ test(
     await inactiveUi.close(dialog).click();
     await expect(dialog).toBeHidden();
     await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
+    // As in AC14: WebKit cancels a cross-document Back started under a pending router refresh
+    // (here the status actions' revalidation), not because of the feature.
+    await page.waitForLoadState('networkidle');
     await page.goBack();
     await expect(page).toHaveURL(
       (url) => !url.searchParams.getAll('panel').includes('inactive-questions'),
