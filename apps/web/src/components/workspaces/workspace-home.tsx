@@ -23,11 +23,12 @@
 //
 // State lives in the URL: heatmap filters (overview-filters.ts), the 문제 search `q`, the 본문
 // search `text` and its options (search/state.ts), `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
-// chapter header's `정리 노트` button opens it), and `question` (the practice panel). Dialog and panel
-// changes use history.pushState (Next syncs useSearchParams; no server round trip); filter and
-// 문제 search changes write the URL at once and use router.replace (the server re-reads the
-// overview, rereadHeatmap; the 문제 search only
-// once typing pauses). The 본문 search writes its keys with history.replaceState.
+// chapter header's `정리 노트` button opens it), and `question` (the practice panel). Dialogs and
+// panels open on a new history entry and closing one rewinds those entries (usePanelHistory,
+// UX7-BACK: Back after a close never reopens it; Next syncs useSearchParams, no server round
+// trip); filter and 문제 search changes write the URL at once and use router.replace (the server
+// re-reads the overview, rereadHeatmap; the 문제 search only once typing pauses). The 본문 search
+// writes its keys in place (replace).
 import {
   Button,
   ChevronDownIcon,
@@ -100,8 +101,10 @@ import {
   type ContentDocumentFilter,
   withPanel,
   withSummaryPanel,
+  withoutPanels,
   type HomePanel,
 } from '@/lib/workspaces/home';
+import { usePanelHistory } from './use-panel-history';
 import styles from './workspace-home.module.css';
 
 const ALL = '__all__';
@@ -165,6 +168,12 @@ export function WorkspaceHome({
   const readOnly = workspace.archived ? 'archived' : workspace.role === 'viewer' ? 'viewer' : null;
 
   // --- dialogs ------------------------------------------------------------------------------
+  // Closing a dialog goes back to the entry before the first open (UX7-BACK); that entry gets
+  // the current URL with every dialog closed (see closeTo).
+  const panelHistory = usePanelHistory();
+  function closeTo(url: string) {
+    panelHistory.close(url, (search) => withoutPanels(search, executedFilter()));
+  }
   const allowed = (panel: HomePanel) =>
     (panel !== 'share' || isOwner) &&
     ((panel !== 'generate' && panel !== QUESTION_CREATE_PANEL) || canEdit);
@@ -176,12 +185,17 @@ export function WorkspaceHome({
     if (open && isOpen(panel)) {
       setRaised((r) => ({ ...r, [panel]: (r[panel] ?? 0) + 1 }));
     }
+    if (open) {
+      panelHistory.push(`${pathname}${withPanel(window.location.search, panel, true)}`);
+      return;
+    }
+    if (!isOpen(panel)) return;
     // Closing the summary panel hands `document`/`section` back to the executed content search.
     const search =
-      panel === 'document-summary' && !open
+      panel === 'document-summary'
         ? withSummaryPanel(window.location.search, null, executedFilter())
-        : withPanel(window.location.search, panel, open);
-    window.history.pushState(null, '', `${pathname}${search}`);
+        : withPanel(window.location.search, panel, false);
+    closeTo(`${pathname}${search}`);
   };
   // DOCSUM-01: one summary panel; another row's 요약 switches its document (and raises it).
   const summaryDocId = summaryDocumentId(searchParams);
@@ -191,11 +205,7 @@ export function WorkspaceHome({
     if (isOpen('document-summary')) {
       setRaised((r) => ({ ...r, 'document-summary': (r['document-summary'] ?? 0) + 1 }));
     }
-    window.history.pushState(
-      null,
-      '',
-      `${pathname}${withSummaryPanel(window.location.search, documentId)}`,
-    );
+    panelHistory.push(`${pathname}${withSummaryPanel(window.location.search, documentId)}`);
   };
   const [host, setHost] = useState<HTMLDivElement | null>(null);
 
@@ -209,30 +219,30 @@ export function WorkspaceHome({
       setRaised((r) => ({ ...r, 'chapter-note': (r['chapter-note'] ?? 0) + 1 }));
     }
     const target = `${pathname}${next.search}`;
+    panelHistory.push(target);
     if (view.chapter !== null) {
-      // The note takes over `chapter`: drop the heatmap's chapter filter with it.
+      // The note takes over `chapter`: drop the heatmap's chapter filter with it (re-read).
       setView((v) => ({ ...v, chapter: null }));
-      startNavigation(() => router.push(target, { scroll: false }));
-    } else {
-      window.history.pushState(null, '', target);
+      startNavigation(() => router.replace(target, { scroll: false }));
     }
   }
   function closeNote() {
-    window.history.pushState(
-      null,
-      '',
-      `${pathname}${withChapterNote(window.location.search, null)}`,
-    );
+    if (!isOpen('chapter-note')) return;
+    closeTo(`${pathname}${withChapterNote(window.location.search, null)}`);
   }
   // Practice opened from a footnote returns focus to the note's disclosure when it closes.
   const practiceReturnFocusRef = useRef<HTMLElement | null>(null);
   function openNoteQuestion(questionId: string, returnFocus: HTMLElement | null) {
     practiceReturnFocusRef.current = returnFocus;
-    window.history.pushState(
-      null,
-      '',
+    panelHistory.push(
       `${pathname}${patchSearch(window.location.search, { question: questionId })}`,
     );
+  }
+  // The practice panel's open, previous/next (new entries) and close (QPLAY-01-AC05, UX7-BACK).
+  function changeQuestion(questionId: string | null) {
+    const target = `${pathname}${patchSearch(window.location.search, { question: questionId })}`;
+    if (questionId) panelHistory.push(target);
+    else closeTo(target);
   }
   // The Heatmap headers' "만드는 중": the workspace's note list, re-read while one is generating,
   // and what an open note panel last saw.
@@ -310,7 +320,7 @@ export function WorkspaceHome({
    */
   function rereadHeatmap(search: string) {
     const target = `${pathname}${search}`;
-    window.history.replaceState(null, '', target);
+    panelHistory.replace(target);
     startNavigation(() => router.replace(target, { scroll: false }));
   }
 
@@ -441,7 +451,7 @@ export function WorkspaceHome({
     }
     // …and this write, without Next's state, makes useSearchParams follow it, so a later
     // Back/Forward to another `text` is seen as a change.
-    window.history.replaceState(null, '', `${pathname}${search}`);
+    panelHistory.replace(`${pathname}${search}`);
   }
 
   function closeContentResults() {
@@ -572,6 +582,7 @@ export function WorkspaceHome({
         requested={requested}
         panelScreenId={screenIds.practice}
         practiceReturnFocusRef={practiceReturnFocusRef}
+        onQuestionChange={changeQuestion}
         createOpen={isOpen(QUESTION_CREATE_PANEL)}
         onCreateOpenChange={(open) => setPanel(QUESTION_CREATE_PANEL, open)}
         chapterActions={(chapter) =>
@@ -639,7 +650,7 @@ export function WorkspaceHome({
                   const search = patchSearch(withPanel(window.location.search, 'generate', false), {
                     question: questionId,
                   });
-                  window.history.pushState(null, '', `${pathname}${search}`);
+                  panelHistory.push(`${pathname}${search}`);
                 }}
               />
             </FloatingSidePanel>

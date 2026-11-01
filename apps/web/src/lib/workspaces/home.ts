@@ -36,6 +36,8 @@ export function isFloatingPanel(panel: HomePanel): boolean {
   return panel !== QUESTION_CREATE_PANEL;
 }
 export const PANEL_PARAM = 'panel';
+/** The practice panel's question (overview-filters.ts QUESTION_PARAM). */
+const QUESTION_PARAM = 'question';
 
 /** The unified search's scope (UX6), retired by UX7-SEARCH: only read to migrate old URLs. */
 export const LEGACY_SCOPE_PARAM = 'scope';
@@ -170,6 +172,23 @@ export function withSummaryPanel(
     [SUMMARY_DOCUMENT_PARAM]: doc,
     section: doc ? (restore?.chapterId ?? null) : null,
   });
+}
+
+/**
+ * `search` with every dialog and the practice panel closed (UX7-BACK: what the entry before the
+ * first open gets when a dialog closes, panel-history.ts). The summary panel hands `document` and
+ * `section` back to the content search (`restore`, see withSummaryPanel); the 정리 노트 panel
+ * takes its `chapter` with it.
+ */
+export function withoutPanels(
+  search: string,
+  restore: ContentDocumentFilter | null = null,
+): string {
+  const panels = parsePanels(new URLSearchParams(search));
+  let out = search;
+  if (panels.includes(SUMMARY_PANEL)) out = withSummaryPanel(out, null, restore);
+  if (panels.includes(CHAPTER_NOTE_PANEL)) out = withChapterNote(out, null);
+  return patchSearch(out, { [PANEL_PARAM]: null, [QUESTION_PARAM]: null });
 }
 
 /** Whether the summary panel owns the URL's `document`/`section` keys (it is open). */

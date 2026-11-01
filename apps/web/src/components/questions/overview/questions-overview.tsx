@@ -101,6 +101,11 @@ export interface QuestionsOverviewProps {
    * footnote: the note's disclosure). Cleared on close; otherwise focus returns to the dot.
    */
   readonly practiceReturnFocusRef?: RefObject<HTMLElement | null>;
+  /**
+   * Writes the practice panel's `?question=` (an id on open and previous/next, null on close);
+   * the workspace home keeps its dialog history consistent (UX7-BACK). Without it, a new entry.
+   */
+  readonly onQuestionChange?: (questionId: string | null) => void;
   /** `?panel=question-create` (owned by the home): the 문제 등록 editor is open. */
   readonly createOpen?: boolean;
   readonly onCreateOpenChange?: (open: boolean) => void;
@@ -173,6 +178,7 @@ export function QuestionsOverview({
   requested = null,
   chapterActions,
   practiceReturnFocusRef,
+  onQuestionChange,
   createOpen = false,
   onCreateOpenChange,
 }: QuestionsOverviewProps) {
@@ -319,6 +325,10 @@ export function QuestionsOverview({
   const screenRef = useRef<HTMLElement>(null);
 
   function setQuestionParam(questionId: string | null) {
+    if (onQuestionChange) {
+      onQuestionChange(questionId);
+      return;
+    }
     const params = new URLSearchParams(window.location.search);
     if (questionId) params.set(QUESTION_PARAM, questionId);
     else params.delete(QUESTION_PARAM);
