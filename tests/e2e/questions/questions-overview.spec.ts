@@ -11,6 +11,13 @@
 import type { Locator, Page } from '@playwright/test';
 import {
   answerCorrectly,
+  archiveQuestion,
+  createQuestion,
+  detailUi,
+  getQuestion,
+  INACTIVE_STATUS_OPTIONS,
+  inactiveUi,
+  numberedMcq,
   book,
   chooseFilter,
   chooseQuestionMenu,
@@ -671,6 +678,7 @@ test(
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
       /^(직접 추가|add question)$/i,
       /^(변형 출제|generate variants?)$/i,
+      /^(보관·초안 문제|archived and draft questions)$/i,
     ]);
     await expect(
       homeUi.questionMenu(page).getByRole('menuitem', { name: /^(전체 문제|all questions)$/i }),
@@ -1031,5 +1039,150 @@ test(
     await expect(page).toHaveURL(noPanel);
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await backLeavesHome();
+  },
+);
+
+test(
+  'QOV-01-AC15 the 보관·초안 문제 dialog lists drafts and archived questions with status filters and 더 보기; 보관 해제 and 확정 bring them back to the heatmap, read-only for viewers and archived workspaces',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(120_000);
+    const label = 'qov01-ac15';
+    const s = await seed(workspaceFactory, label, 2);
+    const draftExplanation = `${label} 초안 해설`;
+    const draft = await createQuestion(s.owner, s.workspaceId, {
+      ...numberedMcq(`${label}-draft`, 3, 1, { explanation: draftExplanation }),
+      publication_status: 'DRAFT',
+    });
+    const archived: Question[] = [];
+    for (let start = 10; start < 61; start += 10) {
+      const batch = Array.from({ length: Math.min(10, 61 - start) }, (_, i) => start + i);
+      archived.push(
+        ...(await Promise.all(
+          batch.map(async (n) =>
+            archiveQuestion(
+              s.owner,
+              await createQuestion(s.owner, s.workspaceId, numberedMcq(`${label}-arch`, n)),
+            ),
+          ),
+        )),
+      );
+    }
+    expect(archived).toHaveLength(51);
+    const restored = archived[0];
+    if (!restored) throw new Error('no archived question');
+    const viewer = await workspaceFactory.member(`${label}-viewer`);
+    seedMembership(s.workspaceId, viewer.user.id, 'viewer');
+
+    await openOverview(page, s);
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    await chooseQuestionMenu(page, 'inactive');
+    const dialog = inactiveUi.dialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === `/workspaces/${s.workspaceId}` &&
+        url.searchParams.getAll('panel').includes('inactive-questions'),
+    );
+    // 전체 (default): drafts and archived questions only, 50 at a time.
+    await expect(inactiveUi.rows(dialog)).toHaveCount(50);
+    await expect(dialog).not.toContainText(s.questions[0]?.revision.stem ?? '-');
+    await inactiveUi.more(dialog).click();
+    await expect(inactiveUi.rows(dialog)).toHaveCount(52);
+    await expect(inactiveUi.more(dialog)).toHaveCount(0);
+
+    // 초안: the draft alone, its state in text.
+    await chooseFilter(page, inactiveUi.status(dialog), INACTIVE_STATUS_OPTIONS.draft);
+    await expect(inactiveUi.rows(dialog)).toHaveCount(1);
+    await expect(inactiveUi.rows(dialog)).toContainText(draft.revision.stem);
+    await expect(inactiveUi.rows(dialog)).toContainText(/초안|draft/i);
+    // 보관됨: the archived ones, paged.
+    await chooseFilter(page, inactiveUi.status(dialog), INACTIVE_STATUS_OPTIONS.archived);
+    await expect(inactiveUi.rows(dialog)).toHaveCount(50);
+    await expect(dialog).not.toContainText(draft.revision.stem);
+    await inactiveUi.more(dialog).click();
+    await expect(inactiveUi.rows(dialog)).toHaveCount(51);
+    await expect(inactiveUi.rows(dialog).first()).toContainText(/보관됨|archived/i);
+
+    // A row opens the read-only detail with the answer, explanation and revisions.
+    await chooseFilter(page, inactiveUi.status(dialog), INACTIVE_STATUS_OPTIONS.draft);
+    await inactiveUi.open(inactiveUi.row(dialog, draft.revision.stem)).click();
+    let detail = detailUi.dialog(page);
+    await expect(detail).toBeVisible();
+    await expect(detail).toContainText(draftExplanation);
+    await expect(detailUi.historyHeading(detail)).toBeVisible();
+    await expect(inactiveUi.confirm(detail)).toBeVisible();
+    await expect(inactiveUi.edit(detail)).toBeVisible();
+    await expect(inactiveUi.remove(detail)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(detail).toBeHidden();
+
+    // 확정 the draft and 보관 해제 one archived question: both leave the list for the heatmap.
+    await inactiveUi.confirm(inactiveUi.row(dialog, draft.revision.stem)).click();
+    await expect(inactiveUi.rows(dialog)).toHaveCount(0);
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    await chooseFilter(page, inactiveUi.status(dialog), INACTIVE_STATUS_OPTIONS.archived);
+    const restoredRow = inactiveUi.row(dialog, restored.revision.stem);
+    await expect(restoredRow).toHaveCount(1);
+    await inactiveUi.restore(restoredRow).click();
+    await expect(restoredRow).toHaveCount(0);
+    await expect(overviewUi.dots(page)).toHaveCount(4);
+    await expect(overviewUi.dot(page, 10)).toBeVisible();
+    expect((await getQuestion(s.owner, restored.id)).publication_status).toBe('CONFIRMED');
+    expect((await getQuestion(s.owner, draft.id)).publication_status).toBe('CONFIRMED');
+
+    // Closing drops the panel; Back never reopens it (QOV-01-AC14).
+    await inactiveUi.close(dialog).click();
+    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
+    await page.goBack();
+    await expect(page).toHaveURL(
+      (url) => !url.searchParams.getAll('panel').includes('inactive-questions'),
+    );
+    await page.goto(overviewPath(s.workspaceId));
+    await expect(overviewUi.dots(page)).toHaveCount(4);
+
+    // Viewer: the same list and detail, without write controls; the API refuses.
+    const other = archived[1];
+    if (!other) throw new Error('no archived question');
+    const refused = await viewer.api.request('PATCH', `/questions/${other.id}`, {
+      base_revision_id: other.revision.id,
+      publication_status: 'CONFIRMED',
+    });
+    expect(refused.status).toBe(403);
+    expect((refused.body as Problem).type).toBe(PROBLEM_TYPES.insufficientRole);
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(overviewPath(s.workspaceId));
+    await chooseQuestionMenu(page, 'inactive');
+    await expect(inactiveUi.rows(dialog)).toHaveCount(50);
+    await expect(inactiveUi.restore(dialog)).toHaveCount(0);
+    await expect(inactiveUi.confirm(dialog)).toHaveCount(0);
+    await inactiveUi.open(inactiveUi.row(dialog, other.revision.stem)).click();
+    detail = detailUi.dialog(page);
+    await expect(detail).toBeVisible();
+    await expect(detailUi.correctOptions(detail)).toHaveCount(1);
+    for (const control of [inactiveUi.restore, inactiveUi.edit, inactiveUi.remove]) {
+      await expect(control(detail)).toHaveCount(0);
+    }
+    await page.keyboard.press('Escape');
+
+    // Archived workspace: read-only for the owner too, and says so.
+    await workspaceFactory.archive(s.owner, s.workspaceId);
+    const blocked = await s.owner.api.request('PATCH', `/questions/${other.id}`, {
+      base_revision_id: other.revision.id,
+      publication_status: 'CONFIRMED',
+    });
+    expect(blocked.status).toBe(403);
+    expect((blocked.body as Problem).type).toBe(PROBLEM_TYPES.workspaceArchived);
+    await page.context().clearCookies();
+    await openOverview(page, s);
+    await chooseQuestionMenu(page, 'inactive');
+    await expect(inactiveUi.rows(dialog)).toHaveCount(50);
+    await expect(
+      dialog.getByText(/보관된 workspace는 읽기 전용입니다|archived workspaces are read-only/i),
+    ).toBeVisible();
+    await expect(inactiveUi.restore(dialog)).toHaveCount(0);
+    expect((await getQuestion(s.owner, other.id)).publication_status).toBe('ARCHIVED');
   },
 );

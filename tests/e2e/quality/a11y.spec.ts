@@ -8,8 +8,12 @@ import { mkdirSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { expectAccessible } from '../fixtures/a11y.ts';
 import {
+  archiveQuestion,
   authUi,
   captchaUi,
+  choosePanelMenu,
+  detailUi,
+  inactiveUi,
   createNumberedQuestions,
   createQuestion,
   docUi,
@@ -313,7 +317,25 @@ test(
     await expectAccessible(page, 'question edit form');
     await page.keyboard.press('Escape');
     await expect(editForm).toBeHidden();
+    // UX7-BANK-2: the read-only 문제 상세 dialog (answers, sources, revisions) over the panel.
+    await choosePanelMenu(page, panel, 'history');
+    const detail = detailUi.dialog(page);
+    await expect(detailUi.revisions(detail).first()).toBeVisible();
+    await expectAccessible(page, 'question detail dialog');
+    await page.keyboard.press('Escape');
+    await expect(detail).toBeHidden();
     await panelUi.close(panel).click();
+
+    // UX7-BANK-2: the 보관·초안 문제 dialog, empty and with an archived question.
+    await chooseQuestionMenu(page, 'inactive');
+    const inactive = inactiveUi.dialog(page);
+    await expect(inactive.getByRole('heading', { name: /없습니다|no /i })).toBeVisible();
+    await expectAccessible(page, 'archived and draft questions empty');
+    await archiveQuestion(owner, questions[11] ?? first);
+    await page.reload();
+    await expect(inactiveUi.rows(inactive)).toHaveCount(1);
+    await expectAccessible(page, 'archived and draft questions populated');
+    await inactiveUi.close(inactive).click();
 
     // The 문제 등록 dialog on the home (문제 › 직접 추가, UX7-BANK).
     await chooseQuestionMenu(page, 'create');

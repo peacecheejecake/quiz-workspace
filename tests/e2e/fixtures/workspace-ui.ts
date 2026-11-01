@@ -130,12 +130,14 @@ const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
   body: /^(본문 검색 설정|body search settings|content search settings)$/i,
 };
 
-type QuestionMenuItem = 'pdfs' | 'create' | 'generate';
+type QuestionMenuItem = 'pdfs' | 'create' | 'generate' | 'inactive';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   /** Retired by UX7-DOCS: only ever expected to be absent. */
   pdfs: /^(pdf 관리|manage pdfs?)$/i,
   create: /^(직접 추가|add question)$/i,
   generate: /^(변형 출제|generate variants?)$/i,
+  /** UX7-BANK-2: the 보관·초안 문제 dialog, usable by every member. */
+  inactive: /^(보관·초안 문제|archived and draft questions)$/i,
 };
 
 /** Why the `문제` menu's editor-only items are disabled (UX7-DOCS-2, QOV-01-AC11). */
@@ -146,7 +148,7 @@ export const QUESTION_MENU_REASONS = {
 
 /**
  * Without edit rights the `문제` button stays (UX7-DOCS-2, QOV-01-AC11): its menu shows 직접 추가
- * and 변형 출제 aria-disabled, says why in text (described-by), skips them with the arrow keys
+ * and 변형 출제 aria-disabled (보관·초안 문제 enabled, UX7-BANK-2), says why in text (described-by), skips them with the arrow keys
  * and opens nothing when one is clicked. Leaves the menu closed, focus back on the button.
  */
 export async function expectReadOnlyQuestionMenu(
@@ -163,7 +165,13 @@ export async function expectReadOnlyQuestionMenu(
   await expect(menu.getByRole('menuitem')).toHaveText([
     QUESTION_MENU_ITEMS.create,
     QUESTION_MENU_ITEMS.generate,
+    QUESTION_MENU_ITEMS.inactive,
   ]);
+  // UX7-BANK-2: 보관·초안 문제 is readable by everyone, so it stays enabled.
+  await expect(homeUi.questionMenuItem(page, 'inactive')).not.toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
   await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
   const text = QUESTION_MENU_REASONS[reason];
   await expect(menu.getByText(text)).toBeVisible();
@@ -173,7 +181,7 @@ export async function expectReadOnlyQuestionMenu(
     await expect(el).toHaveAccessibleDescription(text);
   }
   await expect(menu).toHaveAccessibleDescription(text);
-  // The arrow keys skip the disabled items; Escape returns to the button.
+  // The arrow keys skip the disabled items (landing on 보관·초안 문제); Escape returns to the button.
   await page.keyboard.press('ArrowDown');
   for (const item of ['create', 'generate'] as const) {
     await expect(homeUi.questionMenuItem(page, item)).not.toBeFocused();

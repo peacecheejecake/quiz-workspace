@@ -255,6 +255,8 @@ export interface QuestionInput {
   readonly sources?: readonly QuestionSource[];
   /** A9 (M5.0): the heatmap label number (`12번 문제`). */
   readonly question_number?: number;
+  /** Default CONFIRMED; a DRAFT may be incomplete (UX7-BANK-2 seeds manual drafts). */
+  readonly publication_status?: 'DRAFT' | 'CONFIRMED';
 }
 
 export interface QuestionRevision {
@@ -861,16 +863,24 @@ export const panelUi = {
   previous: (panel: Locator) => panel.getByRole('button', { name: /이전 문제|^previous/i }),
   /** UX7-BANK: the editors' "문제 관리" menu button in the panel header. */
   manage: (panel: Locator) => panel.getByRole('button', { name: /^(문제 관리|manage question)$/i }),
+  /** UX7-BANK-2: the read-only "문제 정보" menu button of viewers and archived workspaces. */
+  info: (panel: Locator) => panel.getByRole('button', { name: /^(문제 정보|question info)$/i }),
+  archiveConfirm: (page: Page) =>
+    page.getByRole('alertdialog', { name: /문제를 보관할까요|archive (this )?question/i }),
   manageItem: (page: Page, item: PanelManageItem) =>
     page.getByRole('menu').getByRole('menuitem', { name: PANEL_MANAGE_ITEMS[item] }),
   deleteConfirm: (page: Page) =>
     page.getByRole('alertdialog', { name: /문제를 삭제할까요|delete (this )?question/i }),
 };
 
-type PanelManageItem = 'edit' | 'generate' | 'delete';
-const PANEL_MANAGE_ITEMS: Readonly<Record<PanelManageItem, RegExp>> = {
+type PanelManageItem = 'answers' | 'history' | 'edit' | 'generate' | 'archive' | 'delete';
+export const PANEL_MANAGE_ITEMS: Readonly<Record<PanelManageItem, RegExp>> = {
+  /** UX7-BANK-2: the read items of both menus (문제 관리 and 문제 정보). */
+  answers: /^(정답·해설 보기|show answers?( and explanation)?)$/i,
+  history: /^(수정 이력·출처|revisions and sources)$/i,
   edit: /^(편집|edit)$/i,
   generate: /^(변형 출제|generate variants?)$/i,
+  archive: /^(보관|archive)$/i,
   delete: /^(삭제|delete)$/i,
 };
 
@@ -882,6 +892,69 @@ export async function choosePanelManage(
 ): Promise<void> {
   await panelUi.manage(panel).click();
   await panelUi.manageItem(page, item).click();
+}
+
+/**
+ * Opens the practice panel's header menu — 문제 관리 (editors) or 문제 정보 (viewers, archived
+ * workspaces; UX7-BANK-2) — and chooses `item`.
+ */
+export async function choosePanelMenu(
+  page: Page,
+  panel: Locator,
+  item: PanelManageItem,
+): Promise<void> {
+  await panelUi.manage(panel).or(panelUi.info(panel)).click();
+  await panelUi.manageItem(page, item).click();
+}
+
+/** UX7-BANK-2: the read-only "문제 상세" dialog (answers, explanation, sources, revisions). */
+export const detailUi = {
+  dialog: (page: Page) => page.getByRole('dialog', { name: /^(문제 상세|question details?)$/i }),
+  /** The options marked correct (border + icon + the text "정답"). */
+  correctOptions: (dialog: Locator) =>
+    dialog.getByRole('listitem').filter({ hasText: /정답$|correct$/i }),
+  historyHeading: (dialog: Locator) =>
+    dialog.getByRole('heading', { name: /^(수정 이력|revisions?|history)$/i }),
+  revision: (dialog: Locator, version: number) =>
+    dialog.getByRole('button', { name: new RegExp(`^(버전|version) ${version}(?!\\d)`, 'i') }),
+  revisions: (dialog: Locator) => dialog.getByRole('button', { name: /^(버전|version) \d+/i }),
+  sourcesHeading: (dialog: Locator) => dialog.getByRole('heading', { name: /^(출처|sources?)$/i }),
+  close: (dialog: Locator) => dialog.getByRole('button', { name: /^(닫기|close)$/i }),
+};
+
+/** UX7-BANK-2: the home's "보관·초안 문제" floating dialog (`?panel=inactive-questions`). */
+export const inactiveUi = {
+  dialog: (page: Page) =>
+    main(page).getByRole('dialog', { name: /^(보관·초안 문제|archived and draft questions)$/i }),
+  status: (dialog: Locator) => dialog.getByRole('combobox', { name: /^(상태|status)$/i }),
+  rows: (dialog: Locator) =>
+    dialog.getByRole('list', { name: /문제 목록|questions/i }).getByRole('listitem'),
+  row: (dialog: Locator, text: string) => inactiveUi.rows(dialog).filter({ hasText: text }),
+  open: (row: Locator) => row.getByRole('button', { name: /문제|question/i }).first(),
+  more: (dialog: Locator) => dialog.getByRole('button', { name: /^(더 보기|load more|more)$/i }),
+  restore: (scope: Locator) =>
+    scope.getByRole('button', { name: /^(보관 해제|unarchive|restore)$/i }),
+  confirm: (scope: Locator) => scope.getByRole('button', { name: /^(확정|confirm)$/i }),
+  edit: (scope: Locator) => scope.getByRole('button', { name: /^(편집|edit)$/i }),
+  remove: (scope: Locator) => scope.getByRole('button', { name: /^(삭제|delete)$/i }),
+  close: (dialog: Locator) =>
+    dialog.getByRole('button', { name: /^(보관·초안 문제 닫기|close)$/i }),
+};
+
+export const INACTIVE_STATUS_OPTIONS = {
+  all: /^(전체|all)$/i,
+  draft: /^(초안|drafts?)$/i,
+  archived: /^(보관됨|archived)$/i,
+} as const;
+
+/** Archives `question` through the public API (CONFIRMED → ARCHIVED, A1). */
+export async function archiveQuestion(member: Member, question: Question): Promise<Question> {
+  return (await member.api.ok(
+    'PATCH',
+    `/questions/${question.id}`,
+    { base_revision_id: question.revision.id, publication_status: 'ARCHIVED' },
+    [200],
+  )) as Question;
 }
 
 export const RESULT_TEXT = {
