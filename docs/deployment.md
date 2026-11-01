@@ -106,6 +106,7 @@ PR opened
 - 로그에 검색 원문·비밀번호·JWT·원본 PDF 본문을 기본으로 남기지 않는다. 임베딩/LLM 외부 API로 책 원문을 전송할 때 프라이버시·저작권 조건을 확인한다.
 - **외부 전송(M7.4b, 사용자 결정 2026-10-18)**: 책 원문 chunk와 검색어는 embedding 계산을 위해 Cloudflare Workers AI로 전송될 수 있다(`WORKER_EMBEDDER=workers_ai`). Cloudflare는 처리 수탁자(sub-processor)로 `/privacy`에 명시한다(최종 법률 문구는 사용자 몫). `CLOUDFLARE_API_TOKEN`은 server-only secret(api·worker; web 금지, `NEXT_PUBLIC_` 금지)이며 **Workers AI 권한만** 가진 account API token을 쓴다. 요청·오류 메시지·로그·job `last_error`에는 입력 텍스트·token·account id가 들어가지 않는다(오류는 `embedding_quota_exceeded` / `embedding_unavailable` 같은 code만).
 - Rate limit: 인증 요청, 업로드 요청, 문제 생성 LLM 호출, 검색 및 공개 API 별도 제한.
+- **AI 질문·AI 해설(ASK-SPEC 2026-11-01, 초안):** `WORKER_ASK_LLM`(AI 질문, ASK-01)과 `WORKER_AI_EXPLANATIONS`(AI 해설, AIEXPL-01)는 api·worker에 **같은 값**으로 두는 기능 플래그이고 모든 환경에서 **기본 꺼짐**이다. 켜면 사용자의 질문·첨부 문제(제출 전에는 정답·해설 없음)·검색된 발행 교재 구절이 LLM 제공자(Anthropic)로 전송된다. `LLM_API_KEY`는 worker에만 있고 API·Vercel에는 넣지 않는다(API는 비밀이 아닌 `LLM_MODEL`로 `available`을 정함). staging·production 켜기는 ⛔ 사용자 승인 후([runbook-deploy.md](runbook-deploy.md) §10). 답 글자는 streaming 동안 내부 Redis Stream에 최대 10분 머물고, 질문·답·본문은 로그·trace에 남지 않는다. 사용자별 분당·하루 한도와 선택 월 token 상한(`ASK_*`·`AI_EXPLANATION_*`)이 비용을 막는다. worker는 interactive queue 전용 process(`ASK_WORKER_CONCURRENCY`)를 하나 더 띄운다(같은 서비스의 메모리 예산 안에서 — 추가 RAM은 ASK-X에서 측정).
 
 ### 6.1 Auth release readiness 설정 (A3, 로컬 범위 구현 · 배포 적용은 M7.4)
 
@@ -159,6 +160,7 @@ PR opened
 - Railway는 Hobby 최소 요금과 사용량 기반 추가 청구가 있다. **Embedding+Reranker Worker의 RAM/CPU가 실제 비용의 주요 변수**이므로 1~2권으로 측정한 뒤 확정.
 - **Cloudflare Workers AI(M7.4b)**: Workers **Free** plan(사용자 결정 2026-10-18) — 하루 10,000 neurons 무료, 초과 요청은 오류로 거부된다(과금 없음). `qwen3-embedding-0.6b`는 공개 가격 $0.0118 / 1M input tokens(≈ $0.011 / 1,000 neurons 환산 시 하루 약 900만 token; 정확한 neuron 환산은 Cloudflare dashboard에서 첫 staging 색인 후 확인). quota 초과·429·5xx는 worker에서 재시도 가능한 job 실패(backoff), API 검색에서는 BM25 저하(SEARCH-01-AC06)로 처리한다.
 - **Railway Hobby 업그레이드 보류**(2026-10-18): trial(서비스당 1 GB RAM)에서 시작한다. API는 hosted embedder를 써서 모델을 메모리에 올리지 않고, 남는 RAM 변수는 Docling worker다.
+- **LLM 비용(ASK-SPEC 가늠, `claude-sonnet-5-5` 공개 가격 입력 $2 · 출력 $10 / 1M token, 2026-10 기준):** AI 질문 1개 ≈ $0.03~0.05(입력 1만~1.5만 token, 출력 2k 이하), AI 해설 1개 ≈ $0.02~0.03이며 문제 revision마다 한 번(Workspace 공유 캐시). DOCSUM·CHNOTE와 같은 키·같은 월 예산 목표($20, 2026-11-01 승인)를 쓰므로 켤 때 예산을 다시 정한다.
 - Vercel Hobby는 개인·비상업 목적 제한이 있다. 외부 사용자에게 상용 서비스를 제공한다면 적절한 유료 플랜을 선택해야 한다.
 - 월 비용은 서비스 조합, 사용량, 모델 배치에 따라 크게 달라지므로 고정 총액을 추정하지 않는다. staging 7일 부하·비용 게이트는 사용자 결정(2026-10-19)으로 면제되어 production을 바로 배포한다; 비용은 운영 중 측정·예산 알림으로 관리한다.
 - Qdrant production(사용자 결정 2026-10-19): staging과 **같은 Free cluster**를 쓰고 `QDRANT_COLLECTION_PREFIX`로 분리한다(staging은 빈 prefix, production `prod_`; check-env가 production의 빈 prefix를 거부). Free tier 한계(위)는 production에도 그대로 적용된다.

@@ -9,8 +9,8 @@
 | 링크 공유 | OFF; Workspace Owner만 발급·회수·만료·재발급 가능 |
 | 링크 열람 | 유효 링크를 받은 비로그인 사용자도 조회 허용; 로그인 불필요 |
 | Fork | OFF; 링크 단위 `allow_fork` 설정을 Owner만 켤 수 있음 |
-| 열람 범위 | Workspace 명세, 발행된(PUBLISHED) PDF/교정 텍스트/목차, 발행된 문제·정답·해설, 범위가 제한된 검색/발췌, 현재 발행 revision의 문서 요약과 장별 최신 정리 노트(DOCSUM-SPEC 2026-10-29, §8) |
-| 비공개 범위 | 초안, 미발행 revision, 개인 풀이·즐겨찾기·다시 풀기, owner 프로필, 공유 링크 비밀값, API 키, 관리·작업·활동 기록, 전문 텍스트 내보내기 파일, 이전 revision 요약·이전 버전 노트·요약/노트 생성 상태·오류·비용 |
+| 열람 범위 | Workspace 명세, 발행된(PUBLISHED) PDF/교정 텍스트/목차, 발행된 문제·정답·해설, 범위가 제한된 검색/발췌, 현재 발행 revision의 문서 요약과 장별 최신 정리 노트(DOCSUM-SPEC 2026-10-29, §8), 발행 문제의 이미 만든 최신 AI 해설(ASK-SPEC 제안, §10) |
+| 비공개 범위 | 초안, 미발행 revision, 개인 풀이·즐겨찾기·다시 풀기, owner 프로필, 공유 링크 비밀값, API 키, 관리·작업·활동 기록, 전문 텍스트 내보내기 파일, 이전 revision 요약·이전 버전 노트·요약/노트 생성 상태·오류·비용, 구성원의 AI 질문 대화, AI 해설 생성 상태·이전 버전·비용 |
 | 편집 | 링크만 가진 viewer는 업로드·편집·문제 생성·답안 제출·즐겨찾기·삭제·공유 관리 전부 불가 |
 | 삭제·보관 | Archive 후 공유 read 유지(Owner revoke 가능); 삭제 요청 이후 공유와 Fork 즉시 거부 |
 | Fork 결과 | 현재 published snapshot의 독립 복제; 원본과 자동 동기화 없음; 각 문서·문제 식별자는 새로 발급 |
@@ -92,6 +92,8 @@ Shared viewer (공유 session에만 허용):
 - `GET /api/v1/shared/{shareId}/chapter-notes`: 최신 정리 노트가 있는 장 목록
 - `GET /api/v1/shared/{shareId}/chapters/{chapterId}/note`: 장의 최신 성공 정리 노트(각주는 발행 문제만 링크)
 
+- `GET /api/v1/shared/{shareId}/questions/{questionId}/ai-explanation`: 발행 문제 active revision의 최신 성공 AI 해설(없으면 404, §10; 제안)
+
 Fork (공유 session + **Supabase 사용자 JWT** 동시 필요):
 - `POST /api/v1/shared/{shareId}/forks`: 이름·멱등 키; 202 Accepted + job id
 - `GET /api/v1/me/forks/{forkId}`: 본인 Fork 진행 상태만 조회
@@ -135,3 +137,16 @@ AC 5+6+6=17개를 각각 Playwright로 먼저 RED 테스트로 작성한다. 검
 - **결정(2026-10-29):** 요약은 발행 원문에서, 정리 노트는 발행 문제·정답·해설에서 만든 파생 내용이라 게스트에게도 원본과 같은 범위로 보인다. 요약은 게스트가 지금 읽을 수 있는 발행 revision과 일치할 때만 준다(이전 revision 요약은 이미 바뀐 원문을 담을 수 있으므로 404). 정리 노트는 **출처 일치**(인용한 모든 문제가 살아 있고 CONFIRMED이며 active revision이 노트에 고정된 revision과 같음)일 때만 게스트에게 준다 — 인용 문제가 삭제·보관·수정되면 노트 본문에 공개 범위 밖이 된 정답·해설이 남을 수 있으므로 다시 만들 때까지 본문 없이 "정리 노트가 갱신 중이거나 없습니다."(API 404, 목록 제외; Codex P1). 텍스트 내보내기는 사용자 결정 Q9로 멤버 전용이다(게스트는 화면에서 원문을 읽을 수만 있다; DRM 아님 — §1 저작권 행).
 - 공유 응답은 §2의 header(`no-store`, `no-referrer`)를 따르고, 생성 상태·오류 코드·usage·job id·`question_refs`의 revision id를 주지 않는다. 매 요청 링크 상태를 재검증하므로 철회 후에는 이미 열린 panel의 요청도 거부된다.
 - Fork는 요약(현재 snapshot revision의 성공 요약과 자동 갱신 설정)과, 장마다 최신 정리 노트 중 snapshot 기준 출처 일치인 것만 새 id로 복제한다(일치하지 않으면 그 장은 노트 없이 복제)(§6 개인 데이터 제외 규칙 유지; 이전 기록·실패 run·usage 제외).
+
+## 10. AI 질문·AI 문제 해설 (ASK-SPEC 2026-11-01, 초안)
+
+| 기능 | Owner·editor | viewer(멤버) | 링크 게스트 |
+|:--|:---:|:---:|:---:|
+| AI 질문(ASK-01) | ✅ 자기 대화만, 활성 Workspace에서 질문 | ✅ 같음 | ❌ (버튼 없음, API 401/404) |
+| 남의 AI 질문 대화 보기 | ❌ (Owner도 404, 제안) | ❌ | ❌ |
+| AI 해설 읽기(AIEXPL-01) | ✅ 제출 후·문제 상세 | ✅ 같음 | 이미 만든 최신 해설만, 읽기 전용(제안) |
+| AI 해설 만들기 | ✅ 활성 Workspace | ✅ 활성 Workspace | ❌ |
+| AI 해설 다시 만들기 | ✅ 하루 3번/revision | ❌ | ❌ |
+
+- **결정(제안 — 사용자 확인 필요):** AI 질문은 비용이 들고 질문이 개인 기록이라 게스트에게 열지 않는다. AI 해설은 발행 문제의 정답·해설에서 나온 파생물이라 이미 만든 것은 게스트에게도 같은 범위로 보이고, 게스트 요청으로는 생성(비용)이 일어나지 않는다. 공유 응답에는 상태·버전·오류·usage·job id가 없고 §2 header를 따른다.
+- **Fork:** AI 질문 대화·usage는 개인 데이터라 복제하지 않는다(§6). AI 해설은 snapshot 문제 revision의 최신 성공 해설만 새 id로 복제하고(문제·revision·출처 블록 id 재매핑) 이전 버전·실패·usage는 뺀다(제안; 대안은 복제하지 않음).
