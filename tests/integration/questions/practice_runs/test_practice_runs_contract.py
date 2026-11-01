@@ -8,8 +8,9 @@
     POST /practice-runs/{id}/finish            fix the summary
     POST /questions/{id}/practice-sessions     {practice_run_id, run_position}: a run position
 
-QVIEW.0 (RED): every test carries `red`; QVIEW-B removes it from the `bank` tests, MOCK-P from the
-`mock` ones (implementation-plan §3 MOCK gate). C06 is a Vitest component contract (QVIEW-W).
+QVIEW.0 (RED) marked every test `red`; QVIEW-B removed it from the `bank` tests, MOCK-P removes
+it from the `mock` ones (implementation-plan §3 MOCK gate). C06 is a Vitest component contract
+(QVIEW-W).
 Request/response shapes P1-P7 are the assumptions in the header of
 tests/e2e/fixtures/practice-runs.ts (keep both in sync). Uses the M4 question suite's fixtures
 (../conftest.py: in-process app, per-test users, `quiz_api` role). The `postgres` superuser seeds
@@ -279,7 +280,6 @@ def create_mock_exam(client: Any, workspace_id: str, question_ids: list[str]) ->
 # ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.red
 def test_c01_range_resolves_to_live_confirmed_questions_of_this_workspace(seed: Any) -> None:
     r = Range(seed, "c01")
     owner = r.owner
@@ -349,7 +349,6 @@ def test_c01_range_resolves_to_live_confirmed_questions_of_this_workspace(seed: 
     assert r.viewer.call("GET", f"/practice-runs/{spoofed['id']}").status_code == 404
 
 
-@pytest.mark.red
 def test_c01_filters_follow_the_callers_heatmap_state(seed: Any) -> None:
     r = Range(seed, "c01-filters")
     owner_q = r.confirmed[0]
@@ -369,7 +368,6 @@ def test_c01_filters_follow_the_callers_heatmap_state(seed: Any) -> None:
     assert viewer_wrong == [r.heatmap[1], r.heatmap[4]]
 
 
-@pytest.mark.red
 def test_c01_idempotency_key_returns_the_same_run(seed: Any) -> None:
     r = Range(seed, "c01-idem")
     key = str(uuid.uuid4())
@@ -381,7 +379,6 @@ def test_c01_idempotency_key_returns_the_same_run(seed: Any) -> None:
     assert two["seed"] == one["seed"]
 
 
-@pytest.mark.red
 def test_c01_c02_five_thousand_is_the_cap_and_responses_do_not_grow(seed: Any) -> None:
     owner = seed.client("qview-c01-cap")
     ws = owner.create_workspace()
@@ -427,7 +424,6 @@ def test_c01_c02_five_thousand_is_the_cap_and_responses_do_not_grow(seed: Any) -
 # ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.red
 def test_c02_order_is_heatmap_or_the_stored_seed_shuffle_and_never_changes(seed: Any) -> None:
     r = Range(seed, "c02")
     owner = r.owner
@@ -504,7 +500,6 @@ def _assert_clean(value: Any, secrets: list[str], what: str) -> None:
         assert secret not in text, f"{what} carries an answer text"
 
 
-@pytest.mark.red
 def test_c03_bank_run_reads_and_sessions_never_carry_answers_before_submission(seed: Any) -> None:
     owner = seed.client("qview-c03")
     ws_id = str(owner.create_workspace()["id"])
@@ -587,7 +582,6 @@ def test_c03_mock_run_reads_and_sessions_never_carry_answers_before_submission(s
 # ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.red
 def test_c04_bank_run_records_in_the_question_tables_once_per_position(seed: Any) -> None:
     owner = seed.client("qview-c04")
     ws_id = str(owner.create_workspace()["id"])
@@ -711,7 +705,6 @@ def test_c04_mock_run_leaves_the_question_tables_unchanged(seed: Any) -> None:
 # ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.red
 def test_c05_runs_belong_to_their_creator_and_follow_the_workspace_state(seed: Any) -> None:
     owner = seed.client("qview-c05-owner")
     viewer = seed.client("qview-c05-viewer")
@@ -747,6 +740,10 @@ def test_c05_runs_belong_to_their_creator_and_follow_the_workspace_state(seed: A
         run_session(viewer, qs[0]["id"], mine["id"], 1), "POST", "viewer session", (201,)
     )
     viewer.ok("POST", f"/practice-sessions/{session['id']}/submit", {"selected_option_ids": ["o0"]})
+    # A position opened before the workspace is archived (submitted after it, below).
+    open_before = viewer.ok_response(
+        run_session(viewer, qs[1]["id"], mine["id"], 2), "POST", "viewer session 2", (201,)
+    )
 
     # Archived workspace: create and read yes, practise no.
     owner.ok("POST", f"/workspaces/{ws_id}/archive")
@@ -756,8 +753,22 @@ def test_c05_runs_belong_to_their_creator_and_follow_the_workspace_state(seed: A
     seed.problem(
         run_session(owner, qs[0]["id"], archived["id"], 1), 403, PROBLEM + "workspace-archived"
     )
-    open_before = run_session(viewer, qs[1]["id"], mine["id"], 2)
-    seed.problem(open_before, 403, PROBLEM + "workspace-archived")
+    run_attempts = (
+        "select count(*) from public.question_attempts a join public.practice_sessions s "
+        "on s.id = a.practice_session_id where s.practice_run_id = %s"
+    )
+    assert count(run_attempts, (mine["id"],)) == 1
+    seed.problem(
+        viewer.call(
+            "POST",
+            f"/practice-sessions/{open_before['id']}/submit",
+            {"selected_option_ids": ["o0"]},
+        ),
+        403,
+        PROBLEM + "workspace-archived",
+    )
+    assert count(run_attempts, (mine["id"],)) == 1, "a refused submission writes no attempt"
+    assert item(viewer, mine["id"], 2)["attempt"] is None
     owner.ok("POST", f"/workspaces/{ws_id}/restore")
 
     # Guests: no JWT → 401; a share session cookie only → 401/404.
@@ -788,7 +799,6 @@ def test_c05_runs_belong_to_their_creator_and_follow_the_workspace_state(seed: A
 # ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.red
 def test_c07_ranges_match_the_heatmap_with_archived_and_merged_duplicates(seed: Any) -> None:
     r = Range(seed, "c07")
     viewer = r.viewer
