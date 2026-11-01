@@ -7,6 +7,7 @@
 // public upload flow. E2E runs the deterministic fake embedder/reranker (docs/e2e-strategy.md §3):
 // these tests check the UI/API contract and source mapping, not retrieval quality (eval/ does).
 // Queries come from tests/fixtures/pdfs/retrieval-seed.json (q-ko-01 → section ch2-s2, page 4).
+import { devices } from '@playwright/test';
 import {
   block,
   book,
@@ -613,6 +614,81 @@ sharingTest.describe('shared view', () => {
       await sharedUi.searchBox(page).press('Enter');
       await expect(page.getByText('검색 결과가 없습니다.')).toBeVisible();
       await expect(notice).toBeVisible();
+    },
+  );
+});
+
+// UX7-SELECT: an iPhone (touch, mobile viewport). Desktop WebKit/Chromium still click after a
+// cancelled touch pointerup, iOS Safari does not, so the test also models that: a click that
+// follows a cancelled touch pointerup is swallowed, as on the device.
+test.describe('SEARCH-01-AC08 touch', () => {
+  const { defaultBrowserType: _browser, ...iphone } = devices['iPhone 14'];
+  test.use(iphone);
+
+  test(
+    'SEARCH-01-AC08 one tap on the selected chapter at the top of the open list closes it in the 문제 설정 popover',
+    { tag: '@infra' },
+    async ({ page, workspaceFactory }) => {
+      const owner = await workspaceFactory.member('search01-ac08');
+      const ws = await workspaceFactory.create(owner);
+      // A question without a chapter adds the "챕터 없음" choice below "전체 챕터".
+      await createQuestion(owner, ws.id, mcqInput('search01-ac08 문제', ['예', '아니오']));
+      await page.addInitScript(() => {
+        const w = window as unknown as { __cancelledTouchUps: number };
+        w.__cancelledTouchUps = 0;
+        let swallow = false;
+        window.addEventListener('pointerup', (event) => {
+          swallow = event.pointerType === 'touch' && event.defaultPrevented;
+          if (swallow) w.__cancelledTouchUps += 1;
+        });
+        window.addEventListener(
+          'click',
+          (event) => {
+            if (!swallow) return;
+            swallow = false;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          },
+          true,
+        );
+      });
+      const cancelledTouchUps = () =>
+        page.evaluate(
+          () => (window as unknown as { __cancelledTouchUps: number }).__cancelledTouchUps,
+        );
+
+      await signInAs(page, owner.user);
+      await page.goto(homePath(ws.id));
+      await homeUi.scopeSettingsButton(page, 'questions').tap();
+      const popover = homeUi.scopeSettings(page, 'questions');
+      await expect(popover).toBeVisible();
+      const chapter = popover.getByRole('combobox', { name: /^(챕터|chapter)$/i });
+      await expect(chapter).toHaveText(/전체 챕터|all chapters/i);
+
+      await chapter.tap();
+      const list = page.getByRole('listbox');
+      await expect(list).toBeVisible();
+      const options = list.getByRole('option');
+      await expect(options).toHaveCount(2);
+      const selected = options.first();
+      await expect(selected).toHaveText(/전체 챕터|all chapters/i);
+      await expect(selected).toHaveAttribute('data-state', 'checked');
+
+      await selected.tap();
+      await expect(list).toBeHidden();
+      await expect(chapter).toHaveAttribute('aria-expanded', 'false');
+      await expect(chapter).toHaveText(/전체 챕터|all chapters/i);
+      await expect(popover).toBeVisible();
+      expect(page.url()).not.toContain('chapter=');
+      expect(await cancelledTouchUps()).toBe(0);
+
+      // Another choice still changes the filter on one tap.
+      await chapter.tap();
+      await list.getByRole('option', { name: /챕터 없음|no chapter/i }).tap();
+      await expect(list).toBeHidden();
+      await expect(page).toHaveURL((url) => url.searchParams.get('chapter') === 'none');
+      await expect(chapter).toHaveText(/챕터 없음|no chapter/i);
+      expect(await cancelledTouchUps()).toBe(0);
     },
   );
 });
