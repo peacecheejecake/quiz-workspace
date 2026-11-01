@@ -1,6 +1,6 @@
 # QOV-01 — Questions Heatmap 홈
 
-**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (Workspace 홈 통합) · UX4 개정 2026-10-21 (header 버튼 묶음·`문제` 메뉴) · UX6-PROGRESS 개정 2026-10-28 (`문제은행` 버튼 → `문제` 메뉴의 `전체 문제`) · UX6-BANK 개정 2026-10-28 (문제은행 페이지 이름도 `전체 문제`) · UX7-BANK 개정 2026-11-01 (전체 문제 페이지 폐기: 직접 추가는 홈 위 dialog, 편집·삭제는 풀이 panel) · UX7-DOCS 개정 2026-11-01 (`PDF 관리` 항목 폐기, 문서 관리로 통합) · UX7-SEARCH 개정 2026-11-01 (문제·본문 검색창 분리)
+**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (Workspace 홈 통합) · UX4 개정 2026-10-21 (header 버튼 묶음·`문제` 메뉴) · UX6-PROGRESS 개정 2026-10-28 (`문제은행` 버튼 → `문제` 메뉴의 `전체 문제`) · UX6-BANK 개정 2026-10-28 (문제은행 페이지 이름도 `전체 문제`) · UX7-BANK 개정 2026-11-01 (전체 문제 페이지 폐기: 직접 추가는 홈 위 dialog, 편집·삭제는 풀이 panel) · UX7-DOCS 개정 2026-11-01 (`PDF 관리` 항목 폐기, 문서 관리로 통합) · UX7-SEARCH 개정 2026-11-01 (문제·본문 검색창 분리) · UX7-BACK 개정 2026-11-01 (닫은 dialog를 뒤로가기로 다시 열지 않음)
 **Route:** `/workspaces/:workspaceId` (이전 `/workspaces/:workspaceId/questions`는 같은 query로 redirect)
 **테스트:** `tests/e2e/questions/questions-overview.spec.ts`
 **연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
@@ -25,6 +25,7 @@
 2. **본문 검색**(기본 접힘, UX7-SEARCH): 펼치면 header 아래, Heatmap 위에 본문 검색 입력란·검색 버튼·"본문 설정"이 나타나고, 검색하면 그 아래 "본문 검색 결과" 영역이 나타나며 "검색 결과 닫기"로 지운다. 결과 항목을 누르면 오른쪽 "본문 발췌" panel에 검색어 주변 내용을 보인다(SEARCH-01-AC11).
 3. **문제 영역**(기존 QOV-01 내용): 도구 줄에 상태 필터 펼치기 버튼(기본 접힘, 위/아래 화살표 아이콘, `aria-expanded`·`aria-controls`)만 둔다. 문제 수 문구("현재 필터의 문제 n개")와 `문제 PDF 관리`·`문제 생성` 버튼은 없다(UX4; header의 `문제` 메뉴로 옮김). 접힌 상태에서 상태 필터가 적용 중이면 "상태 필터 적용 중" 문구를 보인다. 펼치면 상태 필터(색 견본 + 상태 텍스트, 즐겨찾기만·다시 풀기만, 필터 초기화); 칩은 크기를 유지한 채 칩 단위로 줄바꿈하며 좁은 화면에서도 찌그러지거나 가로 스크롤되지 않는다. 그 아래 Heatmap. 상태 범례와 상태별 집계(문제 상태 요약)는 두지 않는다 — 상태는 marker의 접근성 이름·preview popover·상태 필터의 텍스트로 전달하고 색만으로 전달하지 않는다. 문제가 없을 때 빈 상태의 버튼은 `문제 등록`(홈 위의 문제 등록 dialog, UX7-BANK) 하나이며 홈의 다른 "PDF 가져오기" 버튼은 없다.
 4. **Floating dialog**: 문서 관리(DOC-01; 문제 PDF 관리는 UX7-DOCS에서 여기로 통합), 문제 생성(QGEN-01), 이력(HISTORY-01), 링크 공유(WS-SHARE-01)는 모두 공통 `FloatingSidePanel`(non-modal)로 홈 위에 뜨고 URL `?panel=`에 반영된다(딥링크·이전 경로 redirect). 여러 개를 열 수 있고 나중에 연 dialog가 위에 온다. 문제 풀이 panel(QPLAY-01, `?question=`)도 같은 규칙.
+   - **뒤로가기 (UX7-BACK 2026-11-01, 사용자: "floating 영역(예: 문서 관리)를 열기 -> 닫기 -> 뒤로(back button) 했을 때 floating dialog가 열리지 않게"):** dialog·panel(문서 관리·문제 생성·이력·링크 공유·정리 노트·문서 요약·문제 등록 dialog `?panel=question-create`·문제 풀이 panel `?question=`)을 열면 기록 항목이 하나 생기고(풀이 panel의 이전/다음, 다른 문서의 요약, 다른 장의 정리 노트도 하나씩), 열려 있는 동안 뒤로가기는 그 열기를 되돌린다(dialog가 닫힌다; 풀이 panel의 이전/다음은 앞 문제로 돌아간다 — QPLAY-01-AC05). 닫기 버튼·Escape·저장·삭제로 닫으면 그 dialog를 연 기록 항목들은 사라진다: 홈은 처음 dialog를 열기 전의 기록 항목으로 돌아가 지금 URL 상태(필터·검색어 등)를 그 항목에 쓰고, 아직 열려 있는 다른 dialog가 있으면 그것들을 연 기록 항목 하나를 다시 만든다. 그래서 닫은 뒤의 뒤로가기는 닫은 dialog를 다시 열지 않고, 남은 dialog가 있으면 그것을 닫고, 없으면 홈에 오기 전 페이지로 간다. 딥링크·새로 고침으로 dialog가 열린 채 들어온 경우처럼 되돌릴 기록 항목이 없으면 닫기는 지금 항목만 고쳐 쓴다(사이트를 떠나지 않음). (제안 — 사용자 확인 필요: 닫은 뒤 앞으로가기는 일반 브라우저처럼 닫기 전 기록을 다시 연다; 남은 dialog가 있을 때 앞으로 기록은 없어진다; 홈에 오기 전 기록이 없으면 닫은 뒤 뒤로가기는 브라우저 기본 동작이다.) AC14.
 5. **정리 노트 (DOCSUM-SPEC 2026-10-29):** Heatmap의 각 챕터 그룹 header("챕터 없음" 제외) 오른쪽에 `정리 노트` 버튼(접근성 이름 "<장 제목> 정리 노트", 모든 구성원)이 있고 정리 노트 panel(`?panel=chapter-note&chapter=<id>`, non-modal, 4의 쌓기 규칙)을 연다. 버튼은 그룹의 marker grid 위치·크기를 바꾸지 않는다(grid shift 없음). 동작과 AC는 [CHNOTE-01](chapter-notes.md).
 6. **즉시 반응**: 버튼으로 화면이 바뀌면 먼저 화면을 바꾸고 skeleton을 보이는 동안 데이터를 불러온다. Workspace 홈·하위 페이지 route는 `loading.tsx` skeleton, dialog는 즉시 열리고 데이터를 불러오는 동안 내용 skeleton을 보인다.
 
@@ -107,6 +108,12 @@
 - **Given:** Workspace 홈과 책 문서 하나가 있는 Workspace(편집 권한)
 - **When:** 버튼으로 들어가는 하위 페이지(문제 PDF 가져오기, 문제 변형 출제, PDF 열람)를 열고, 이전 전체 문제 URL `/workspaces/:id/questions/bank`(와 `?question=<id>`)로 접근
 - **Then:** 각 하위 페이지 제목 위쪽에 뒤로가기 링크(Workspace 홈으로)와 breadcrumb(`Workspace 이름` 링크 › … › 현재 페이지, 현재 항목 `aria-current="page"`)이 있고 breadcrumb 줄 아래 제목까지 12px 이상 여백이 있다(UX5-UI). 뒤로가기나 breadcrumb의 Workspace 이름을 누르면 Workspace 홈으로 돌아간다. 하위 페이지에는 `전체 문제` 링크가 없다. `/questions/bank`는 Workspace 홈으로 redirect하고 `?question=<id>`가 있으면 그 문제의 풀이 panel이 열린다. (QBANK-01-AC05에서 옮김, UX7-BANK)
+
+### QOV-01-AC14
+
+- **Given:** 확정 문제가 있는 Workspace 홈(Owner), 그 전에 Workspace 목록을 연 기록
+- **When:** 문서 관리 dialog, 이력, 링크 공유, 문제 등록 dialog, 문제 풀이 panel(다음 문제로 옮긴 뒤)을 각각 열고 닫은 뒤 뒤로가기를 누르고, 두 dialog(문서 관리 위에 이력)를 쌓아 연 채 아래 dialog를 닫은 뒤 뒤로가기를 두 번 누르고, `?panel=history` 딥링크로 열린 dialog를 닫음
+- **Then:** 닫은 dialog·panel은 뒤로가기로 다시 열리지 않는다(URL에 그 `panel`·`question`이 없고 dialog가 보이지 않는다). 닫은 뒤 첫 뒤로가기는 홈에 오기 전 페이지(Workspace 목록)로 간다. 쌓인 경우 첫 뒤로가기는 남은 이력 dialog만 닫고(문서 관리는 다시 열리지 않음), 다음 뒤로가기가 이전 페이지로 간다. dialog가 열려 있는 동안의 뒤로가기는 그 dialog를 닫는다. 딥링크로 열린 dialog를 닫아도 홈에 머문다(URL에서 `panel`만 빠진다). (UX7-BACK)
 
 ## Test-first 규칙
 - 위 AC ID를 Playwright test title에 포함하고 RED를 확인한 다음 API/UI를 구현한다.
