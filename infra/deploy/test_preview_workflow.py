@@ -252,7 +252,7 @@ def test_prune_runs_after_deploy_and_cleanup_deletes_everything() -> None:
     cleanup = _step("cleanup", "Delete every preview of this PR")
     assert cleanup["run"].strip() == 'python3 -I scripts/deploy/vercel_preview.py prune --pr "$PR"'
     checkout = _jobs()["cleanup"]["steps"][0]
-    assert checkout["with"]["ref"] == "${{ github.event.pull_request.head.sha }}"
+    assert checkout["with"]["ref"] == "${{ github.event.pull_request.base.ref }}"
 
 
 # --- sticky comment ---------------------------------------------------------------------------

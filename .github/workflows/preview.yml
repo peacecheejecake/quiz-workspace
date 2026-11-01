@@ -149,10 +149,11 @@ jobs:
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       PR: ${{ github.event.pull_request.number }}
     steps:
-      # The PR head always exists (a closed PR may have no merge ref); only the helper is needed.
+      # Only the helper, from the base branch tip: a closed PR may have no merge ref, a branch cut
+      # before PR-PREVIEW has no helper at its head, and this job then runs no PR code at all.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.base.ref }}
           persist-credentials: false
           sparse-checkout: scripts/deploy/vercel_preview.py
           sparse-checkout-cone-mode: false
