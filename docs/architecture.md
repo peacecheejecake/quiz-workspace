@@ -121,6 +121,7 @@ workspace
 - `question_attempts(id, question_id, question_revision_id, user_id, displayed_option_ids, submitted_answer, result, grading_method, submitted_at, graded_at)`.
 - `question_lineage(parent_question_id, child_question_id, variation_type, source_revision_id)`.
 - `question_generation_runs` / `question_import_runs`; `question_drafts` (approval 전 격리); `question_import_registration_items` (서버 측 등록 job의 항목·진행, QIMP-JOB).
+- `question_merges(id, workspace_id, duplicate_question_id, kept_question_id, created_by, created_at, ended_at, ended_by, end_reason)` (UX7-DEDUP, questions.md §10): 보관된 중복 → 남길 문제 연결의 이력. 연결 중(`ended_at is null`)인 행은 중복마다 하나(partial unique), 한 단계만(남길 문제는 연결 중인 중복이 아니고 중복은 연결 중인 남길 문제가 아님 — trigger), 중복을 보관 해제하면 trigger가 끝낸다(`end_reason = unarchived`), 옮김은 끝내고 새 행(`repointed`). quiz_api는 insert와 `ended_*` 열 update만. view `question_merged_user_states`(security_invoker): 사용자·남길 문제별로 자신과 연결 중인 중복의 `question_user_states`를 합친 상태(최초·최근 열람, 마지막 채점 결과(`graded_at` 최신), 즐겨찾기·다시 풀기 합집합). attempt·session은 그대로다.
 - `activity_events` (변경 감사), `async_jobs` (재시도/상태).
 - **문서 요약 (DOCSUM-SPEC 2026-10-29, [DOCSUM-01](screens/documents-summary.md)):** `documents.summary_enabled_at`·`summary_enabled_by`(opt-in·자동 갱신 켜짐; `요약 만들기`에서 기록, 켜져 있는 동안 모든 발행에서 자동 재생성; null = 꺼짐), `summary_disabled_at`·`summary_disabled_by`(마지막 `자동 갱신 끄기`).
   - `document_summary_runs(id, workspace_id, document_id, document_revision_id, status queued|running|succeeded|failed|superseded, trigger manual|publish|retry, job_id, prompt_version, model, error_code, usage jsonb(tokens·cost_usd·reused_units·generated_units), progress jsonb(chapters_done·chapters_total), created_by, created_at, started_at, finished_at)` — revision마다 살아 있는 run 하나(partial unique; `retry`는 같은 revision의 새 run, 이전 실패 run은 남김). 더 새 revision의 run이 생기면 이전 대기·실행 run은 `superseded`.
@@ -162,7 +163,9 @@ workspace
 | POST | `/api/v1/questions/{id}/practice-sessions` | 문제 열람·보기 순서 생성(정답 비노출) |
 | POST | `/api/v1/practice-sessions/{id}/submit` | 답변 제출·채점 |
 | POST | `/api/v1/practice-sessions/{id}/self-grade` | 주관식·서술형 자기평가 |
-| GET | `/api/v1/questions/{id}/attempts` | 풀이 이력 |
+| GET | `/api/v1/questions/{id}/attempts` | 풀이 이력(합쳐진 중복의 attempt 포함, 항목별 `question_id`, UX7-DEDUP) |
+| GET | `/api/v1/workspaces/{id}/question-duplicates` | 중복 확정 문제 묶음(편집 권한, 정답 없음; UX7-DEDUP) |
+| POST | `/api/v1/workspaces/{id}/question-duplicates/merge` | 묶음마다 남길 문제 하나, 나머지 보관 + 기록 합침(편집 권한, 멱등; UX7-DEDUP) |
 | POST | `/api/v1/questions/{id}/generations` | 변형 문제 생성 작업 |
 | GET | `/api/v1/question-generations/{id}/drafts` | 생성 문제 검토 |
 | POST | `/api/v1/question-generations/{id}/publish` | 승인한 문제만 등록 |
@@ -170,7 +173,7 @@ workspace
 | GET | `/api/v1/workspaces/{id}/question-generation-batches/{batch_id}` | 묶음의 원본별 run·진행 상태 |
 | POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기(준비 완료된 모든 PDF, UX6-UPLOAD) |
 | GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토(초안별 등록 챕터 추천·선택, 교재 챕터 목록 — CHAPTER-MAP; `offset`/`limit`(≤200)이면 한 페이지와 `total`, `include_chapters=false`이면 챕터 목록 생략 — QIMP-PAGING) |
-| GET | `/api/v1/question-imports/{id}/draft-summaries` | 모든 초안의 요약(본문·보기·정답·해설 없음: id·version·순서·번호·유형·검토 상태·등록 여부·승인 가능·정답 없음·검증 코드·등록 챕터 id)과 교재 챕터 목록 — 검토 화면의 선택·개수·등록용(QIMP-PAGING) |
+| GET | `/api/v1/question-imports/{id}/draft-summaries` | 모든 초안의 요약(본문·보기·정답·해설 없음: id·version·순서·번호·유형·검토 상태·등록 여부·승인 가능·정답 없음·검증 코드·등록 챕터 id·중복 `duplicate_of`(UX7-DEDUP))과 교재 챕터 목록 — 검토 화면의 선택·개수·등록용(QIMP-PAGING) |
 | POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록(`approve: true`면 선택한 초안을 승인과 함께 등록, 거절 목록 반환) |
 | POST | `/api/v1/question-imports/{id}/registrations` | 선택한 초안 전체를 서버에서 승인·등록(`question.import_register` job, QIMP-JOB) |
 | GET | `/api/v1/question-imports/{id}/registrations/{registration_id}` | 서버 측 등록 진행(처리/전체)·거절 목록 |

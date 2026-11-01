@@ -37,6 +37,7 @@ from quiz_api.repositories.tables import (
     question_attempts,
     question_generation_runs,
     question_import_runs,
+    question_merges,
     question_revisions,
     questions,
     workspaces,
@@ -112,6 +113,7 @@ class WorkspaceAttemptRecord:
     question_id: uuid.UUID
     question_number: int | None
     question_type: str
+    merged_into_question_id: uuid.UUID | None
     question_revision_id: uuid.UUID
     revision_version: int
     practice_session_id: uuid.UUID
@@ -221,6 +223,7 @@ def attempts_query(
             qa.c.question_id,
             questions.c.question_number,
             questions.c.question_type,
+            question_merges.c.kept_question_id.label("merged_into_question_id"),
             qa.c.question_revision_id,
             question_revisions.c.version.label("revision_version"),
             qa.c.practice_session_id,
@@ -239,7 +242,15 @@ def attempts_query(
                     questions.c.id == qa.c.question_id,
                     questions.c.workspace_id == qa.c.workspace_id,
                 ),
-            ).join(question_revisions, question_revisions.c.id == qa.c.question_revision_id)
+            )
+            .join(question_revisions, question_revisions.c.id == qa.c.question_revision_id)
+            .outerjoin(
+                question_merges,
+                and_(
+                    question_merges.c.duplicate_question_id == qa.c.question_id,
+                    question_merges.c.ended_at.is_(None),
+                ),
+            )
         )
         .where(
             qa.c.workspace_id == workspace_id,
@@ -346,6 +357,7 @@ class HistoryRepository:
                 question_id=r.question_id,
                 question_number=r.question_number,
                 question_type=r.question_type,
+                merged_into_question_id=r.merged_into_question_id,
                 question_revision_id=r.question_revision_id,
                 revision_version=r.revision_version,
                 practice_session_id=r.practice_session_id,

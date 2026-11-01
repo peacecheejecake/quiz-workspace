@@ -47,7 +47,11 @@ from quiz_api.repositories.tables import (
 UNNUMBERED = 2147483647
 
 ActivityEventType = Literal[
-    "question.created", "question.updated", "question.status_changed", "question.deleted"
+    "question.created",
+    "question.updated",
+    "question.status_changed",
+    "question.deleted",
+    "question.merged",
 ]
 
 

@@ -17,6 +17,7 @@ import type { Locator, Page, Route } from '@playwright/test';
 import { localEndpoints } from '../fixtures/local-env.ts';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 import {
+  createQuestion,
   draftFor,
   expect,
   docUi,
@@ -38,6 +39,7 @@ import {
   overviewUi,
   overviewPath,
   main,
+  mcqInput,
   pageLabel,
   progressStepsUi,
   questionFormUi,
@@ -1178,5 +1180,72 @@ test(
     await expect(importUi.select(q2)).toBeChecked();
     await expect(importUi.publish(page)).toContainText(`(${inScope + 1})`);
     await expect(all).toHaveAttribute('aria-checked', 'true');
+  },
+);
+
+test(
+  'QIMPORT-01-AC10 a draft that duplicates a confirmed question is flagged with the reason, left out of the default selection and 전체 선택, and can still be registered on purpose',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('qimport01-ac10');
+    const ws = await workspaceFactory.create(owner);
+    // Question 1 typed by hand before the import: another option order and labels, a stem
+    // number, extra spacing and an empty answer mark.
+    const q1 = Q(1);
+    const texts = [...q1.options].reverse().map((o, i) => `(${'ABCD'[i]}) ${o.text}`);
+    const answer = truthOptionTexts(q1, q1.answer?.correct_option_labels ?? [])[0] ?? '';
+    const existing = await createQuestion(owner, ws.id, {
+      ...mcqInput(
+        `1) ${q1.stem.replace(/ /g, '  ')} ( )`,
+        texts,
+        texts.findIndex((t) => t.endsWith(answer)),
+      ),
+      question_number: 7,
+    });
+
+    await signInAs(page, owner.user);
+    await uploadQuestionPaper(page, ws.id, PAPER);
+    await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length, {
+      timeout: JOB_TIMEOUT_MS,
+    });
+    const run = await waitForLatestImport(owner, ws.id);
+
+    // The flag: text, not color, on that draft only.
+    const flagged = importUi.draft(page, q1.stem);
+    await expect(importUi.duplicate(flagged)).toBeVisible();
+    await expect(flagged).toContainText(/이미 등록된 7번 문제와 같습니다|same as question 7/i);
+    for (const t of PAPER.questions.filter((q) => q.number !== 1)) {
+      await expect(importUi.duplicate(importUi.draft(page, t.stem))).toHaveCount(0);
+    }
+    const summaries = await owner.api.ok<{
+      items: { id: string; duplicate_of: Record<string, unknown> | null }[];
+    }>('GET', `/question-imports/${run.id}/draft-summaries`, undefined, [200]);
+    const target = draftFor(await listDrafts(owner, run.id), q1);
+    expect(
+      summaries.items.filter((s) => s.duplicate_of).map((s) => [s.id, s.duplicate_of]),
+    ).toEqual([
+      [target.id, { kind: 'question', question_id: existing.id, draft_id: null, number: 7 }],
+    ]);
+
+    // Not selected by default, not in 전체 선택, selectable on purpose.
+    const registrable = PAPER.questions.filter((q) => q.answer !== null);
+    const box = importUi.select(flagged);
+    await expect(box).not.toBeChecked();
+    await expect(box).toBeEnabled();
+    const all = importUi.selectAll(page);
+    await expect(all).toHaveAccessibleName(new RegExp(`\\(${registrable.length - 1}개\\)`));
+    await all.check();
+    await expect(box).not.toBeChecked();
+    await expect(importUi.publish(page)).toContainText(`(${registrable.length - 1})`);
+    await box.check();
+    await expect(box).toBeChecked();
+    await expect(importUi.publish(page)).toContainText(`(${registrable.length})`);
+    await importUi.publish(page).click();
+    await expect(importUi.alert(page).or(page.getByRole('status')).first()).toContainText(
+      new RegExp(`${registrable.length}\\s*개.*등록`),
+    );
+    const registered = draftFor(await listDrafts(owner, run.id), q1);
+    expect(registered.published_question_id).not.toBeNull();
+    expect(await listQuestions(owner, ws.id)).toHaveLength(registrable.length + 1);
   },
 );

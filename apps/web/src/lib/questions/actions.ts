@@ -24,6 +24,7 @@ import {
   type QuestionDetail,
   type QuestionFormValues,
 } from './form';
+import { MERGE_LIMITS, type DuplicateScan, type MergeGroup, type MergeResult } from './duplicates';
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from './problems';
 import {
   callQuestionApi,
@@ -307,4 +308,57 @@ export async function listInactiveQuestionsAction(
   );
   if (!outcome.ok) return fromOutcome(outcome);
   return { ok: true, data: { items: outcome.data.items, nextCursor: outcome.data.next_cursor } };
+}
+
+// --- 중복 문제 정리 (UX7-DEDUP, QOV-01-AC16) ----------------------------------------------------
+
+const MAX_MERGE_GROUPS = MERGE_LIMITS.groups;
+const MAX_MERGE_DUPLICATES = MERGE_LIMITS.duplicates;
+
+/** The workspace's groups of identical confirmed questions (editors; no answers). */
+export async function scanDuplicatesAction(
+  workspaceId: string,
+): Promise<ActionResult<DuplicateScan>> {
+  if (!isWorkspaceId(workspaceId)) return failed('notFound');
+  const outcome = await callQuestionApi(questionsReturnPath(workspaceId), (api) =>
+    api.GET('/api/v1/workspaces/{workspace_id}/question-duplicates', {
+      params: { path: { workspace_id: workspaceId } },
+    }),
+  );
+  return fromOutcome(outcome);
+}
+
+/** Keeps one question per group and archives the others, merging their history (re-checked). */
+export async function mergeDuplicatesAction(
+  workspaceId: string,
+  groups: readonly MergeGroup[],
+): Promise<ActionResult<MergeResult>> {
+  if (!isWorkspaceId(workspaceId)) return failed('notFound');
+  const valid =
+    Array.isArray(groups) &&
+    groups.length >= 1 &&
+    groups.length <= MAX_MERGE_GROUPS &&
+    groups.every(
+      (g) =>
+        isId(g?.keep_question_id) &&
+        Array.isArray(g.duplicate_question_ids) &&
+        g.duplicate_question_ids.length >= 1 &&
+        g.duplicate_question_ids.length <= MAX_MERGE_DUPLICATES &&
+        g.duplicate_question_ids.every((id: unknown) => isId(id)),
+    );
+  if (!valid) return failed('invalid');
+  const body = {
+    groups: groups.map((g) => ({
+      keep_question_id: g.keep_question_id,
+      duplicate_question_ids: [...g.duplicate_question_ids],
+    })),
+  };
+  const outcome = await callQuestionApi(questionsReturnPath(workspaceId), (api) =>
+    api.POST('/api/v1/workspaces/{workspace_id}/question-duplicates/merge', {
+      params: { path: { workspace_id: workspaceId } },
+      body,
+    }),
+  );
+  if (outcome.ok) refresh(workspaceId);
+  return fromOutcome(outcome);
 }

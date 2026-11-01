@@ -16,6 +16,8 @@ import {
   inactiveUi,
   createNumberedQuestions,
   createQuestion,
+  dedupUi,
+  mcqInput,
   docUi,
   documentsPath,
   editorUi,
@@ -406,6 +408,59 @@ test(
     });
     await settle(page);
     await expectAccessible(page, 'import failed with retry');
+  },
+);
+
+test(
+  'A11Y-13 중복 문제 정리 dialog: groups with the answers warning, the confirm step, a stopped merge with the frozen plan, and the empty state',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    // UX7-DEDUP (QOV-01-AC16): two copies of one MCQ (other option order and labels) whose answers
+    // differ, so the group shows its 정답이 서로 다릅니다 warning. Deterministic: no attempts, the
+    // oldest is the default keep.
+    const owner = await workspaceFactory.member('a11y13');
+    const ws = await workspaceFactory.create(owner);
+    const stem = 'a11y13 다음 중 물의 순환에 대한 설명으로 옳은 것은?';
+    const texts = ['증발은 액체가 기체로 변한다', '응결은 기체가 고체로 변한다', '강수는 없다'];
+    await createQuestion(owner, ws.id, { ...mcqInput(stem, texts, 0), question_number: 1 });
+    const copy = await createQuestion(owner, ws.id, {
+      ...mcqInput(`1. ${stem} ( )`, [`③ ${texts[2]}`, `① ${texts[0]}`, `② ${texts[1]}`], 0),
+      question_number: 2,
+    });
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+
+    await chooseQuestionMenu(page, 'duplicates');
+    const dialog = dedupUi.dialog(page);
+    const group = dedupUi.groups(dialog).first();
+    await expect(dedupUi.keep(group)).toHaveCount(2);
+    await expect(dedupUi.warning(group)).toBeVisible();
+    await settle(page);
+    await expectAccessible(page, 'duplicates dialog with a group');
+
+    await dedupUi.merge(dialog).click();
+    const confirm = dedupUi.confirm(page);
+    await expect(confirm).toBeVisible();
+    await expectAccessible(page, 'duplicates confirm');
+    await page.keyboard.press('Escape');
+    await expect(confirm).toBeHidden();
+
+    // The copy is archived elsewhere meanwhile: the merge is refused, the plan is frozen.
+    await archiveQuestion(owner, copy);
+    await dedupUi.merge(dialog).click();
+    await dedupUi.confirmButton(dedupUi.confirm(page)).click();
+    const stopped = dialog.getByRole('alert');
+    await expect(stopped).toBeVisible();
+    await expect(dedupUi.include(group)).toBeDisabled();
+    await expect(dedupUi.include(group)).toHaveAccessibleDescription(
+      /이어서 정리하거나 다시 검사한 뒤 바꿀 수 있습니다/,
+    );
+    await expectAccessible(page, 'duplicates merge stopped, plan frozen');
+
+    await stopped.getByRole('button', { name: /^(다시 검사|scan again)$/i }).click();
+    await expect(dedupUi.empty(dialog)).toBeVisible();
+    await expectAccessible(page, 'duplicates empty');
   },
 );
 

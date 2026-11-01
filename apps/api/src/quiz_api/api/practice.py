@@ -222,6 +222,9 @@ class SubmittedAnswer(BaseModel):
 
 class Attempt(BaseModel):
     id: uuid.UUID
+    question_id: uuid.UUID = Field(
+        description="The question answered: this one, or a duplicate merged into it (UX7-DEDUP)."
+    )
     question_revision_id: uuid.UUID = Field(description="Graded against this revision.")
     revision_version: int
     practice_session_id: uuid.UUID
@@ -346,6 +349,7 @@ def _result_out(s: SessionRecord, attempt_id: uuid.UUID, result: AttemptResult) 
 def _attempt_out(a: AttemptRecord) -> Attempt:
     return Attempt(
         id=a.id,
+        question_id=a.question_id,
         question_revision_id=a.question_revision_id,
         revision_version=a.revision_version,
         practice_session_id=a.practice_session_id,
@@ -626,7 +630,9 @@ def self_grade_practice_session(
 def update_my_state(
     access: PracticeQuestion, body: MyStateUpdate, practice: PracticeRepo
 ) -> MyState:
-    """Toggle the caller's favorite / retry flags (independent of each other and of results)."""
+    """Toggle the caller's favorite / retry flags (independent of each other and of results).
+    The state answered is folded with the merged duplicates' (UX7-DEDUP): a flag set on any of
+    them is set, and turning one off turns it off on all of them."""
     flags = {
         k: v
         for k, v in body.model_dump(include={"is_favorite", "needs_retry"}).items()
@@ -657,8 +663,9 @@ def list_my_attempts(
     limit: Annotated[int, Query(ge=1, le=MAX_ATTEMPTS_PAGE)] = DEFAULT_ATTEMPTS_PAGE,
     cursor: Annotated[str | None, Query(max_length=MAX_CURSOR)] = None,
 ) -> AttemptList:
-    """The caller's own attempts on the question, newest first, each pinned to the revision it
-    was graded on (its content: GET /questions/{id}/revisions/{revision_id})."""
+    """The caller's own attempts on the question and on the duplicates merged into it
+    (UX7-DEDUP), newest first, each pinned to the revision it was graded on (its content:
+    GET /questions/{question_id}/revisions/{revision_id} of the item's `question_id`)."""
     after = _decode_cursor(cursor) if cursor else None
     items, next_cursor = practice.attempts(
         access.resource_id, access.workspace.user_id, limit=limit, after=after

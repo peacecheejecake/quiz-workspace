@@ -1,0 +1,95 @@
+/* UX7-DEDUP 중복 문제 정리 dialog. Semantic tokens only. */
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.status,
+.intro {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.groups {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.group {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  min-width: 0;
+}
+
+.groupHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.warning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-label);
+}
+
+.content {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.stem {
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.options {
+  display: grid;
+  gap: var(--space-1);
+  padding-inline-start: var(--space-3);
+}
+
+.option {
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.alert {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+
+.alert p {
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.actions > * {
+  white-space: nowrap;
+}
