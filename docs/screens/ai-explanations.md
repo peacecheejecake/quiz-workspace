@@ -3,7 +3,7 @@
 **상태:** 화면 요구사항 초안 v0.1 · ASK-SPEC 신규 2026-11-01 (사용자 요청 "LLM 문제 해설 — 문제 제출 후 버튼 노출 -> 해당 버튼 누르면 하단에 llm이 생성한 해설 생성 — 같은 문제에 대한 답변은 캐싱"). [ASK-01](ask-llm.md)과 따로 켜고 끌 수 있는 별도 기능이며 LLM 호출 경로·fake·인용 검증·usage 기록을 ASK와 함께 쓴다. `(제안 — 사용자 확인 필요)` 표시는 implementation-plan §7의 ASK-SPEC 제안 행에 모여 있다.
 **Route:** 별도 route 없음 — 풀이 panel(QPLAY-01, `?question=:questionId`)의 결과 영역, "문제 상세" dialog, 이후 QuestionViewer(QVIEW-01) 결과 영역 안의 영역.
 **테스트:** `tests/e2e/questions/ai-explanations.spec.ts` (계약: `tests/integration/questions/ai_explanations/test_ai_explanations_contract.py`, `apps/worker` · `packages/core` unit test, `supabase/tests` pgTAP)
-**Phase:** EXPL.0 (RED) → EXPL-B (계약) → EXPL-W (AC01~AC06, CI phase 켬) → EXPL-QM (모의고사 문제, C09)
+**Phase:** EXPL.0 (RED) → EXPL-B (계약) → EXPL-W (AC01~AC06, CI phase 켬) → ASK-QM (모의고사 문제, C09)
 **연계:** [ASK-01](ask-llm.md), [QPLAY-01](questions-practice.md), [QVIEW-01 (MOCK-SPEC 브랜치)](question-viewer.md), [WS-VIEW-01](workspace-shared-view.md), [Questions 명세](../questions.md) §11, [공유 명세](../workspace-sharing.md) §10, [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
 
 ```yaml
@@ -35,9 +35,9 @@ linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC06]
 - **다시 만들기 (제안 — 사용자 확인 필요):** 편집 권한(owner·editor)이고 활성 Workspace일 때만 성공한 해설에 `다시 만들기`가 있다. 새 버전 행을 만들고 이전 버전에 `superseded_at`을 적는다(구성원은 최신만 봄). 한도: 같은 문제 revision에 하루 3번, 사용자 분당 한도 공유. 대안: 다시 만들기 없음(문제를 고쳐야만 새 해설).
 - **공유·Fork (제안 — 사용자 확인 필요):** 공유 링크 게스트는 발행된 확정 문제의 **이미 만든** 최신 해설을 공유 문제 panel에서 읽기 전용으로 본다(게스트는 이미 정답·해설을 본다 — workspace-sharing §1). 게스트는 만들 수 없다(버튼 없음, 비용 없음). Fork는 snapshot의 문제 revision에 해당하는 최신 성공 해설을 새 id로 복제한다(출처 블록 id 재매핑, 이전 버전·실패·usage 제외). 대안: 게스트·Fork 모두 제외.
 
-### 모의고사 문제 (EXPL-QM)
+### 모의고사 문제 (ASK-QM)
 
-모의고사 풀이(QVIEW `sequence(mock)`)에서도 제출 후 같은 버튼이 나온다. 키는 `(mock_exam_question_revision_id, prompt_version, model)`이고 그 모의고사를 볼 수 있는 구성원이 공유한다. 서버는 모의고사 practice session의 제출을 확인한다. 모의고사 문제는 `question_sources` 대신 그 문제를 만들 때 쓴 근거 구절을 쓴다. MOCK-P·MOCK-W 뒤의 EXPL-QM이 만들고, 그때 E2E AC를 이 명세에 더한다(C09는 그때까지 `red`).
+모의고사 풀이(QVIEW `sequence(mock)`)에서도 제출 후 같은 버튼이 나온다. 키는 `(mock_exam_question_revision_id, prompt_version, model)`이고 그 모의고사를 볼 수 있는 구성원이 공유한다. 서버는 모의고사 practice session의 제출을 확인한다. 모의고사 문제는 `question_sources` 대신 그 문제를 만들 때 쓴 근거 구절을 쓴다. MOCK-P·MOCK-W 뒤의 ASK-QM이 만들고, 그때 E2E AC를 이 명세에 더한다(C09는 그때까지 `red`).
 
 ### "문제 상세" dialog (제안 — 사용자 확인 필요)
 
@@ -136,7 +136,7 @@ E2E는 `APP_ENV=test`의 결정적 fake 해설기(C08)를 쓴다.
 | AIEXPL-01-C06 | **유출 금지·기록:** 문제·정답·해설·근거 본문·prompt·LLM 응답은 로그·job 결과·trace·활동 기록에 없다. 생성마다 `llm_feature_usage` 행(`feature = ai_explanation`). 활동 기록은 `question.ai_explanation_generated`(id·버전만; 이력 dialog에 "AI 해설 만듦"). |
 | AIEXPL-01-C07 | **Fork:** snapshot의 문제 revision에 해당하는 최신 성공 해설만 새 id로 복제(question·revision·출처 블록 id 재매핑). 이전 버전·실패·usage는 복제하지 않는다. |
 | AIEXPL-01-C08 | **결정적 fake (`APP_ENV=test`만):** 정답 보기 글과 상위 근거 첫 문장으로 보기마다 한 줄을 만들어 정해진 덩어리로 흘린다. marker(문제 발문): `E2E-EXPL-FAIL`, `E2E-EXPL-MISMATCH`, `E2E-EXPL-HOLD-<token>`, `E2E-EXPL-SLOW`. 호출 수는 test 전용 기록 디렉터리로 확인. |
-| AIEXPL-01-C09 | **모의고사 문제 (EXPL-QM):** 키 `(mock_exam_question_revision_id, prompt_version, model)`, 모의고사 practice session의 제출 확인, 그 모의고사를 볼 수 있는 구성원 공유. EXPL-QM까지 pytest `red`. |
+| AIEXPL-01-C09 | **모의고사 문제 (ASK-QM):** 키 `(mock_exam_question_revision_id, prompt_version, model)`, 모의고사 practice session의 제출 확인, 그 모의고사를 볼 수 있는 구성원 공유. ASK-QM까지 pytest `red`. |
 
 ## Test-first 규칙
 
