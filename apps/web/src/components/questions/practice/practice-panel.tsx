@@ -52,15 +52,18 @@ import {
   EMPTY_ANSWER,
   finalResult,
   optionMark,
+  optionTone,
   resultMessage,
   submitBody,
   toggleOption,
   type AttemptResult,
   type GradeResult,
   type Neighbors,
+  type OptionTone,
   type PracticeAnswer,
 } from './practice-model';
 import styles from './practice-panel.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export interface PracticeQuestion {
   readonly id: string;
@@ -418,7 +421,7 @@ export function PracticePanel({
               <p className={styles.notice}>
                 보관된 Workspace는 읽기 전용입니다. 문제를 풀거나 학습 상태를 바꿀 수 없습니다.
               </p>
-              <p className={styles.stem}>{view.preview}</p>
+              <p className={styles.stem}>{displayStem(view.preview)}</p>
             </>
           ) : ready ? (
             <form
@@ -428,13 +431,13 @@ export function PracticePanel({
               aria-busy={work.busy !== null || undefined}
               noValidate
             >
-              <p className={styles.stem}>{ready.stem}</p>
+              <p className={styles.stem}>{displayStem(ready.stem)}</p>
               <AnswerField
                 session={ready}
                 answer={work.answer}
                 disabled={locked}
                 correct={outcome?.correct_option_ids ?? null}
-                revealed={outcome !== null}
+                graded={outcome?.result ?? null}
                 onChange={(answer) => {
                   if (workId) updateWork(workId, () => ({ answer }));
                 }}
@@ -464,7 +467,7 @@ export function PracticePanel({
             </div>
           ) : (
             <div aria-busy="true">
-              <p className={styles.stem}>{view.preview}</p>
+              <p className={styles.stem}>{displayStem(view.preview)}</p>
               <p className={styles.loading}>문제를 불러오는 중입니다…</p>
             </div>
           )}
@@ -506,14 +509,15 @@ function AnswerField({
   answer,
   disabled,
   correct,
-  revealed,
+  graded,
   onChange,
 }: {
   readonly session: PracticeSession;
   readonly answer: PracticeAnswer;
   readonly disabled: boolean;
   readonly correct: readonly string[] | null;
-  readonly revealed: boolean;
+  /** The submit result; null until the answers are revealed. */
+  readonly graded: AttemptResult | null;
   readonly onChange: (answer: PracticeAnswer) => void;
 }) {
   if (session.question_type !== 'MCQ') {
@@ -528,11 +532,22 @@ function AnswerField({
       />
     );
   }
-  const mark = (id: string) => (revealed ? optionMark(id, correct, answer.selected) : undefined);
+  // UX7-QDISPLAY (QPLAY-01-AC12): every row keeps the same (transparent) border, and grading
+  // only colors it; the text mark below the label is the meaning, linked as the description.
+  const mark = (id: string) => {
+    const text = graded ? optionMark(id, correct, answer.selected) : undefined;
+    return text ? <span className={styles.mark}>{text}</span> : undefined;
+  };
+  const rowClass = (id: string) => {
+    const tone = graded ? optionTone(id, correct, answer.selected, graded) : undefined;
+    return tone ? `${styles.option} ${TONE_CLASS[tone]}` : styles.option;
+  };
   if (!session.is_multi_answer) {
     return (
       <RadioGroup
+        // UX7-QDISPLAY: no visible 보기 label; the group keeps it as its accessible name.
         label="보기"
+        hideLabel
         orientation="vertical"
         disabled={disabled}
         value={answer.selected[0] ?? ''}
@@ -544,6 +559,7 @@ function AnswerField({
           return {
             value: o.id,
             label: <OptionLabel index={index} text={o.text} />,
+            className: rowClass(o.id),
             ...(description ? { description } : {}),
           };
         })}
@@ -552,10 +568,13 @@ function AnswerField({
   }
   return (
     <fieldset className={styles.choices}>
-      <legend className={styles.legend}>보기 (정답을 모두 고르세요)</legend>
+      <legend className={styles.legend}>
+        <span className="qz-visually-hidden">보기 —</span> 정답을 모두 고르세요
+      </legend>
       {session.options.map((o, index) => (
         <Checkbox
           key={o.id}
+          className={rowClass(o.id)}
           label={<OptionLabel index={index} text={o.text} />}
           description={mark(o.id)}
           disabled={disabled}
@@ -571,6 +590,12 @@ function AnswerField({
     </fieldset>
   );
 }
+
+const TONE_CLASS: Readonly<Record<OptionTone, string | undefined>> = {
+  correct: styles.toneCorrect,
+  chosen: styles.toneChosen,
+  answer: styles.toneAnswer,
+};
 
 /**
  * An option's display number (`1.`, by displayed position, so a shuffled session numbers its own

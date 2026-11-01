@@ -88,6 +88,27 @@ export function optionMark(
   return selected.includes(optionId) ? '내 선택' : undefined;
 }
 
+/**
+ * Border tone of an MCQ option row once graded (UX7-QDISPLAY, QPLAY-01-AC12): a correct answer
+ * marks the chosen options `correct` (green); a wrong one marks the chosen wrong options `chosen`
+ * (grey) and every correct option `answer` (red), a chosen correct one too. The text mark
+ * (`optionMark`) carries the meaning; the tone only reinforces it.
+ */
+export type OptionTone = 'correct' | 'chosen' | 'answer';
+
+export function optionTone(
+  optionId: string,
+  correct: readonly string[] | null,
+  selected: readonly string[],
+  result: AttemptResult,
+): OptionTone | undefined {
+  if (!correct || result === 'pending') return undefined;
+  const chosen = selected.includes(optionId);
+  if (result === 'correct') return chosen ? 'correct' : undefined;
+  if (correct.includes(optionId)) return 'answer';
+  return chosen ? 'chosen' : undefined;
+}
+
 export interface Neighbors {
   readonly previous: string | null;
   readonly next: string | null;

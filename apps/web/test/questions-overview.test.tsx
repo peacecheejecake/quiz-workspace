@@ -582,6 +582,82 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
   });
 });
 
+describe('UX7-QDISPLAY practice panel display (QPLAY-01-AC12/AC13)', () => {
+  function twoOptions(stem: string, multi = false) {
+    openPracticeSessionAction.mockImplementation((_ws: string, qid: string) => {
+      const base = session(Number(qid.slice(-2)));
+      return Promise.resolve({
+        ...base,
+        data: {
+          ...base.data,
+          stem,
+          is_multi_answer: multi,
+          options: [
+            { id: 'o1', text: '보기 하나' },
+            { id: 'o2', text: '보기 둘' },
+            { id: 'o3', text: '보기 셋' },
+          ],
+          displayed_option_ids: ['o1', 'o2', 'o3'],
+        },
+      });
+    });
+  }
+  /** The kit option row of a radio/checkbox (its parent element). */
+  const row = (control: HTMLElement) => control.parentElement as HTMLElement;
+
+  it('hides the 보기 label and the trailing answer mark; a wrong answer marks the choice and the correct option', async () => {
+    const user = userEvent.setup();
+    twoOptions('빈칸 ( )에 들어갈 말은? ( )');
+    submitPracticeAction.mockResolvedValue(submitted('incorrect', { correct_option_ids: ['o2'] }));
+    render(<Screen />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    const group = await within(panel).findByRole('radiogroup', { name: '보기' });
+    expect(within(panel).getByText('보기')).toHaveClass('qz-visually-hidden');
+    expect(within(panel).getByText('빈칸 ( )에 들어갈 말은?')).toBeInTheDocument();
+    const radios = within(group).getAllByRole('radio');
+    // Before grading every row has the plain (transparent-bordered) row class only.
+    const plain = row(radios[0] as HTMLElement).className;
+    for (const r of radios) expect(row(r).className).toBe(plain);
+
+    await user.click(within(panel).getByRole('radio', { name: '보기 하나' }));
+    await user.click(within(panel).getByRole('button', { name: '제출' }));
+    await waitFor(() => expect(within(panel).getByRole('status')).toHaveTextContent('오답입니다.'));
+    const chosen = within(panel).getByRole('radio', { name: '보기 하나' });
+    const answer = within(panel).getByRole('radio', { name: '보기 둘' });
+    const other = within(panel).getByRole('radio', { name: '보기 셋' });
+    expect(chosen).toHaveAccessibleDescription('내 선택');
+    expect(answer).toHaveAccessibleDescription('정답');
+    expect(other).toHaveAccessibleDescription('');
+    expect(row(chosen).className).toMatch(/toneChosen/);
+    expect(row(answer).className).toMatch(/toneAnswer/);
+    expect(row(other).className).toBe(plain);
+  });
+
+  it('a correct answer marks only the chosen option; multi answer keeps a hidden 보기 in its name', async () => {
+    const user = userEvent.setup();
+    twoOptions('옳은 것을 모두 고르시오. （ ）', true);
+    submitPracticeAction.mockResolvedValue(submitted('correct', { correct_option_ids: ['o3'] }));
+    render(<Screen />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await within(panel).findAllByRole('checkbox');
+    expect(within(panel).getByRole('group')).toHaveAccessibleName('보기 — 정답을 모두 고르세요');
+    expect(within(panel).getByText('옳은 것을 모두 고르시오.')).toBeInTheDocument();
+    await user.click(within(panel).getByRole('checkbox', { name: '보기 셋' }));
+    await user.click(within(panel).getByRole('button', { name: '제출' }));
+    await waitFor(() => expect(within(panel).getByRole('status')).toHaveTextContent('정답입니다.'));
+    const picked = within(panel).getByRole('checkbox', { name: '보기 셋' });
+    expect(picked).toHaveAccessibleDescription('정답 · 내 선택');
+    expect(row(picked).className).toMatch(/toneCorrect/);
+    for (const name of ['보기 하나', '보기 둘']) {
+      const box = within(panel).getByRole('checkbox', { name });
+      expect(box).toHaveAccessibleDescription('');
+      expect(row(box).className).not.toMatch(/tone/);
+    }
+  });
+});
+
 describe('QuestionsOverview practice panel review fixes (M5.5)', () => {
   const dotLabel = (n: number) =>
     document.querySelector(`[data-question-id="${id(n)}"]`)?.getAttribute('aria-label') ?? '';

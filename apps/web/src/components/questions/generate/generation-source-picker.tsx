@@ -7,6 +7,7 @@ import { generatePath } from '@/lib/questions/generation-client';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import { workspaceHomePath } from '@/lib/workspaces/home';
 import styles from './question-generation.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export interface GenerationSourcePickerProps {
   readonly workspaceId: string;
@@ -76,7 +77,7 @@ export function GenerationSourcePicker({
                     <Badge>{QUESTION_TYPE_LABELS[q.question_type]}</Badge>
                     {q.chapter ? <span className={styles.muted}>{q.chapter.title}</span> : null}
                   </span>
-                  <span className={styles.pickStem}>{q.revision.stem}</span>
+                  <span className={styles.pickStem}>{displayStem(q.revision.stem)}</span>
                 </Link>
               </li>
             ))}

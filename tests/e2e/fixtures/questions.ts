@@ -975,6 +975,64 @@ export async function statusColor(page: Page, status: DotStatus): Promise<string
   }, status);
 }
 
+/** Computed `color` of a `--<token>` semantic color token as the browser resolves it. */
+export async function tokenColor(page: Page, token: string): Promise<string> {
+  return page.evaluate((t) => {
+    const probe = document.createElement('span');
+    probe.style.color = `var(--${t})`;
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }, token);
+}
+
+/** UX7-QDISPLAY (QPLAY-01-AC12): the four border sides of an option row. */
+export interface RowBorder {
+  readonly color: string;
+  readonly width: string;
+  readonly style: string;
+  /** All four sides share the same color, width and style. */
+  readonly uniform: boolean;
+}
+
+/**
+ * The border of a practice option's row: the radio/checkbox with its label and result mark. The
+ * row is the control's parent element (kit `RadioGroup` option / `Checkbox`).
+ */
+export async function optionRowBorder(option: Locator): Promise<RowBorder> {
+  return option.evaluate((el) => {
+    const row = el.parentElement;
+    if (!row) throw new Error('option without a row');
+    const cs = getComputedStyle(row);
+    const sides = ['top', 'right', 'bottom', 'left'].map((side) => [
+      cs.getPropertyValue(`border-${side}-color`),
+      cs.getPropertyValue(`border-${side}-width`),
+      cs.getPropertyValue(`border-${side}-style`),
+    ]);
+    const [first] = sides;
+    return {
+      color: first?.[0] ?? '',
+      width: first?.[1] ?? '',
+      style: first?.[2] ?? '',
+      uniform: sides.every((s) => s.join() === first?.join()),
+    };
+  });
+}
+
+/** Box (x, y, width) of an option's row, to check a result border does not move it. */
+export async function optionRowBox(
+  option: Locator,
+): Promise<{ x: number; y: number; width: number }> {
+  return option.evaluate((el) => {
+    const r = (el.parentElement ?? el).getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width };
+  });
+}
+
+/** Transparent as `getComputedStyle` reports it. */
+export const TRANSPARENT = 'rgba(0, 0, 0, 0)';
+
 /** Uniform scale factor of an element's computed transform (1 when none). */
 export async function scaleOf(locator: Locator): Promise<number> {
   return locator.evaluate((el) => {

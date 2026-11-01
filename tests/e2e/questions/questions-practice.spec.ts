@@ -13,7 +13,9 @@
 // labels (questionFormUi). AC09–AC11 (UX7-BANK-2: 정답·해설 보기, 수정 이력·출처, 보관 — the retired
 // bank detail panel's read view and archive, restored on the panel's header menu) read the
 // answer only through the "문제 상세" dialog (detailUi) and check the practice session stays
-// answer-free.
+// answer-free. AC12/AC13 (UX7-QDISPLAY: result borders, no visible 보기 label, trailing empty
+// answer parentheses hidden) compare row borders with the semantic tokens the browser resolves
+// (tokenColor) rather than with a screenshot.
 import { randomUUID } from 'node:crypto';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import {
@@ -37,6 +39,8 @@ import {
   mcqInput,
   notFoundHeading,
   numberedMcq,
+  optionRowBorder,
+  optionRowBox,
   overviewItem,
   overviewPath,
   overviewUi,
@@ -49,6 +53,8 @@ import {
   signInAs,
   startPractice,
   test,
+  tokenColor,
+  TRANSPARENT,
   type ApiResponse,
   type E2EFixtures,
   type Member,
@@ -953,3 +959,207 @@ test(
     expect((await getQuestion(s.owner, kept.id)).publication_status).toBe('CONFIRMED');
   },
 );
+
+/** Border color, width and the accessible mark of each named option row, compared at once. */
+async function expectRows(
+  panel: Locator,
+  rows: readonly { text: string; color: string; mark: RegExp | null }[],
+  width: string,
+): Promise<void> {
+  for (const row of rows) {
+    const option = panelUi.option(panel, row.text);
+    const border = await optionRowBorder(option);
+    expect(border, `row "${row.text}"`).toMatchObject({
+      color: row.color,
+      width,
+      style: 'solid',
+      uniform: true,
+    });
+    if (row.mark) {
+      await expect(option).toHaveAccessibleDescription(row.mark);
+      await expect(panel.getByText(row.mark)).not.toHaveCount(0);
+    } else {
+      await expect(option).toHaveAccessibleDescription('');
+    }
+  }
+}
+
+const MARK = {
+  correctMine: /^(정답 · 내 선택|correct · your (choice|answer))$/i,
+  correct: /^(정답|correct)$/i,
+  mine: /^(내 선택|내 답|your (choice|answer))$/i,
+} as const;
+
+test(
+  'QPLAY-01-AC12 after an MCQ submission the chosen correct option is bordered green, a wrong choice grey and the correct option red, each with a text mark',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const label = unique('qplay01-ac12');
+    const s = await seedOne(workspaceFactory, 'qplay01-ac12', numberedMcq(label, 1, 2));
+    const multiBase = numberedMcq(label, 2);
+    const multiOptions = multiBase.options ?? [];
+    const multi = await createQuestion(s.owner, s.workspaceId, {
+      ...multiBase,
+      is_multi_answer: true,
+      correct_option_ids: [multiOptions[0]?.id ?? '', multiOptions[2]?.id ?? ''],
+    });
+    const texts = q(s, 1).revision.options.map((o) => o.text);
+    const [a = '', b = '', c = '', d = ''] = texts;
+    const [ma = '', mb = '', mc = '', md = ''] = multi.revision.options.map((o) => o.text);
+    await openOverview(page, s);
+    const success = await tokenColor(page, 'color-success');
+    const danger = await tokenColor(page, 'color-danger');
+    const grey = await tokenColor(page, 'color-border-strong');
+    expect(new Set([success, danger, grey, TRANSPARENT]).size).toBe(4);
+
+    // Before submitting: every row has the same transparent border (nothing to see yet).
+    let panel = await openPanel(page, 1);
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    const width = (await optionRowBorder(panelUi.option(panel, a))).width;
+    expect(Number.parseFloat(width)).toBeGreaterThan(0);
+    await expectRows(
+      panel,
+      texts.map((text) => ({ text, color: TRANSPARENT, mark: null })),
+      width,
+    );
+    await panelUi.option(panel, c).check();
+    const before = await Promise.all(texts.map((t) => optionRowBox(panelUi.option(panel, t))));
+
+    // Correct: the chosen (correct) option is green with "정답 · 내 선택"; nothing else is marked.
+    await panelUi.submit(panel).click();
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
+    await expectRows(
+      panel,
+      [
+        { text: c, color: success, mark: MARK.correctMine },
+        { text: a, color: TRANSPARENT, mark: null },
+        { text: b, color: TRANSPARENT, mark: null },
+        { text: d, color: TRANSPARENT, mark: null },
+      ],
+      width,
+    );
+    // Same border width before and after: the rows keep their place and width (the topmost row
+    // does not move at all; a mark line below a row may push the later rows down).
+    const after = await Promise.all(texts.map((t) => optionRowBox(panelUi.option(panel, t))));
+    for (const [i, box] of after.entries()) {
+      expect(box.x).toBeCloseTo(before[i]?.x ?? NaN, 1);
+      expect(box.width).toBeCloseTo(before[i]?.width ?? NaN, 1);
+    }
+    const top = (boxes: readonly { y: number }[]) => Math.min(...boxes.map((x) => x.y));
+    expect(top(after)).toBeCloseTo(top(before), 1);
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+
+    // Wrong: the chosen option grey with "내 선택", the correct option red with "정답".
+    panel = await openPanel(page, 1);
+    await panelUi.option(panel, a).check();
+    await panelUi.submit(panel).click();
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
+    await expectRows(
+      panel,
+      [
+        { text: a, color: grey, mark: MARK.mine },
+        { text: c, color: danger, mark: MARK.correct },
+        { text: b, color: TRANSPARENT, mark: null },
+        { text: d, color: TRANSPARENT, mark: null },
+      ],
+      width,
+    );
+
+    // The same tokens in the dark theme (each theme resolves its own values).
+    await page.emulateMedia({ colorScheme: 'dark' });
+    const dark = {
+      danger: await tokenColor(page, 'color-danger'),
+      grey: await tokenColor(page, 'color-border-strong'),
+    };
+    expect(dark.danger).not.toBe(danger);
+    await expectRows(
+      panel,
+      [
+        { text: a, color: dark.grey, mark: MARK.mine },
+        { text: c, color: dark.danger, mark: MARK.correct },
+      ],
+      width,
+    );
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+
+    // Multi-answer, one right and one wrong pick: both correct options red (the chosen one too).
+    panel = await openPanel(page, 2);
+    await expect(panel.getByRole('checkbox')).toHaveCount(4);
+    await panelUi.option(panel, ma).check();
+    await panelUi.option(panel, mb).check();
+    await panelUi.submit(panel).click();
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
+    await expectRows(
+      panel,
+      [
+        { text: ma, color: danger, mark: MARK.correctMine },
+        { text: mb, color: grey, mark: MARK.mine },
+        { text: mc, color: danger, mark: MARK.correct },
+        { text: md, color: TRANSPARENT, mark: null },
+      ],
+      width,
+    );
+  },
+);
+
+test(
+  'QPLAY-01-AC13 stems are shown without the trailing empty answer parentheses and options without a visible 보기 label; stored text and the editor keep them',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const tag = unique('qplay01-ac13');
+    const shown = `${tag} 빈칸 ( )에 들어갈 말로 옳은 것은?`;
+    const stored = `${shown} ( )`;
+    const s = await seedOne(workspaceFactory, 'qplay01-ac13', {
+      ...mcqInput(stored, ['응결', '증발', '강수', '침투'], 1),
+      explanation: `해설 ${tag}`,
+    });
+    const question = q(s, 1);
+    expect(question.revision.stem).toBe(stored);
+    await openOverview(page, s);
+
+    // Heatmap preview: the trailing mark is gone, the fill-in blank stays.
+    await overviewUi.dot(page, 1).focus();
+    const tooltip = overviewUi.tooltip(page);
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip.getByText(shown, { exact: true })).toBeVisible();
+    await expect(tooltip).not.toContainText(stored);
+
+    // Practice panel: the same stem; the options have no visible 보기 label but a named group.
+    const panel = await openPanel(page, 1);
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    await expect(panel.getByText(shown, { exact: true })).toBeVisible();
+    await expect(panel).not.toContainText(stored);
+    await expect(panel.getByRole('radiogroup')).toHaveAccessibleName(/^(보기|답 선택|options)$/i);
+    await expectNoVisibleLabel(panel);
+
+    // 문제 상세: the same stem, the option list named 보기 without a visible 보기 heading.
+    await choosePanelManage(page, panel, 'answers');
+    const detail = detailUi.dialog(page);
+    await expect(detail).toBeVisible();
+    await expect(detail.getByText(shown, { exact: true })).toBeVisible();
+    await expect(detail).not.toContainText(stored);
+    await expect(detail.getByRole('list', { name: /^(보기|options)$/i })).toBeVisible();
+    await expect(detail.getByRole('heading', { name: /^보기/ })).toHaveCount(0);
+    await expectNoVisibleLabel(detail);
+    await page.keyboard.press('Escape');
+    await expect(detail).toBeHidden();
+
+    // The editor shows (and the API keeps) the stored text, trailing mark included.
+    await choosePanelManage(page, panel, 'edit');
+    const form = questionFormUi.form(page);
+    await expect(form).toBeVisible();
+    await expect(questionFormUi.stem(form)).toHaveValue(stored);
+    expect((await getQuestion(s.owner, question.id)).revision.stem).toBe(stored);
+  },
+);
+
+/** No text "보기" a sighted user can see in `scope` (a visually hidden name is 1×1px). */
+async function expectNoVisibleLabel(scope: Locator): Promise<void> {
+  for (const label of await scope.getByText(/^보기$/).all()) {
+    const box = await label.boundingBox();
+    expect(box === null || (box.width <= 1 && box.height <= 1), 'visible "보기" label').toBe(true);
+  }
+}

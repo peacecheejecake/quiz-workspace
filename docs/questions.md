@@ -122,6 +122,7 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 7. 다시 풀기와 즐겨찾기는 점·패널 어디서든 토글 가능. 변경은 이력에 남김.
 8. 문제를 편집해도 과거 attempt가 참조한 `question_revision_id`의 정답과 표시 순서를 유지하여 역사적 채점이 재현 가능해야 한다.
 9. 화면은 이번 화면에서 연, 아직 제출하지 않은 practice session(정답 없는 필드만)을 메모리에 보관해 같은 문제를 다시 열 때 요청 없이 보인다(UX7-CACHE 2026-11-01, Workspace·화면 단위, 10분, 제출 시작 시 폐기; 정답·해설은 보관하지 않음). 세부: [QPLAY-01](screens/questions-practice.md) AC06.
+10. **문제 내용 끝의 빈 답 괄호는 표시하지 않는다 (UX7-QDISPLAY 2026-11-01, 사용자 결정):** 시험지 문제는 답을 적는 자리로 발문 끝에 빈 괄호를 둔다(예: "옳은 것은? ( )"). 화면은 문제 내용(stem)을 보일 때 맨 끝의 빈 괄호 — 반각 `( )`·전각 `（ ）`·괄호 안 공백 수와 종류(공백·NBSP·전각 공백·zero-width space) 무관, 괄호 안이 비어 있는 `()` 포함, 연달아 여러 개, 앞뒤 공백·줄바꿈 포함 — 를 지우고 보인다. 문장 중간의 빈 괄호(빈칸 채우기, 예: "빈칸 ( )에 들어갈 말")는 그대로 둔다. 문제 내용이 빈 괄호뿐이면 지우지 않고 그대로 보인다(빈 문제로 보이지 않게, 제안 — UX7-QDISPLAY). **표시 전용**이다: 저장된 문제·revision·import 결과와 API로 보내는 값은 바꾸지 않고, 편집기(문제 편집·초안 편집)의 입력값은 저장된 내용을 그대로 보인다. 한 순수 함수(`apps/web/src/lib/questions/display-stem.ts`)가 문제 내용을 보이는 모든 곳에 쓰인다: 풀이 panel(QPLAY-01, 열기 전 미리보기 포함), Heatmap preview, 문제 상세 dialog(수정 이력 미리보기 포함), `보관·초안 문제` 목록 행, 공유 보기(WS-VIEW-01) 목록·panel, 문서 편집기의 문제 카드(DOC-02), 가져오기·변형 초안 검토와 원본 비교, 변형 출제 원본 선택·묶음 목록·비교, 정리 노트 각주(CHNOTE-01). Heatmap preview는 서버가 자른 앞부분(1~3줄)이라 그 끝에 있는 빈 괄호도 지워진다. 세부: [QPLAY-01](screens/questions-practice.md) AC13.
 
 ## 5. 문제 변형 출제
 
