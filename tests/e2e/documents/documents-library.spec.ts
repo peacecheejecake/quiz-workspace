@@ -615,6 +615,9 @@ test(
     await expect(page).toHaveURL(
       (url) => url.pathname === importPath(ws.id) && url.searchParams.get('document') === mixed,
     );
+    // The URL changes before the client navigation commits: wait for the import page itself so
+    // the next goto does not interrupt it.
+    await expect(importUi.heading(page)).toHaveText(/문제 pdf 가져오기|가져오기|import/i);
     const runs = await listImports(owner, ws.id);
     expect(runs.map((r) => r.source_document_id).sort()).toEqual([paper.documentId, mixed].sort());
     expect(runs.map((r) => r.id)).toContain(paperRun.id);
