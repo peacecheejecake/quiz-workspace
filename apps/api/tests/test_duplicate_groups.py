@@ -46,7 +46,7 @@ def test_ties_go_to_the_oldest() -> None:
 
 
 def test_groups_are_identical_questions_oldest_first() -> None:
-    a, b = candidate(2), candidate(1, stem="1. 같은 문제 ( )")
+    a, b = candidate(2), candidate(1, stem="같은  문제 ( )")
     other = candidate(3, stem="다른 문제")
     assert [[q.id for q in g] for g in duplicate_groups([a, other, b])] == [[b.id, a.id]]
 

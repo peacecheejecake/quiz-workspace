@@ -1189,14 +1189,15 @@ test(
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('qimport01-ac10');
     const ws = await workspaceFactory.create(owner);
-    // Question 1 typed by hand before the import: another option order and labels, a stem
-    // number, extra spacing and an empty answer mark.
+    // Question 1 typed by hand before the import: another option order and labels, extra
+    // spacing and an empty answer mark (a stem number would make it another question,
+    // UX7-DEDUP-2).
     const q1 = Q(1);
     const texts = [...q1.options].reverse().map((o, i) => `(${'ABCD'[i]}) ${o.text}`);
     const answer = truthOptionTexts(q1, q1.answer?.correct_option_labels ?? [])[0] ?? '';
     const existing = await createQuestion(owner, ws.id, {
       ...mcqInput(
-        `1) ${q1.stem.replace(/ /g, '  ')} ( )`,
+        `${q1.stem.replace(/ /g, '  ')} ( )`,
         texts,
         texts.findIndex((t) => t.endsWith(answer)),
       ),

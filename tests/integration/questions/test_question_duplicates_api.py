@@ -119,11 +119,11 @@ def test_scan_groups_variants_and_suggests_the_oldest(seed: Any) -> None:
     ws = owner.create_workspace()
     stem = _stem()
     first = owner.create_question(ws["id"], mcq(stem, TEXTS, "증발"))
-    # Option order, circled labels, a stem number and an empty answer mark.
+    # Option order, circled labels and an empty answer mark.
     second = owner.create_question(
         ws["id"],
         mcq(
-            f"1. {stem} ( )",
+            f"{stem} ( )",
             [f"③ {TEXTS[2]}", f"① {TEXTS[0]}", f"② {TEXTS[1]}"],
             "증발",
             ids=["x", "y", "z"],
@@ -139,6 +139,8 @@ def test_scan_groups_variants_and_suggests_the_oldest(seed: Any) -> None:
         ),
     )
     other = owner.create_question(ws["id"], mcq(stem, [*TEXTS[:2], "강수는 있다"], "증발"))
+    # User decision 2026-11-01 (UX7-DEDUP-2): a leading stem number is part of the question.
+    numbered = owner.create_question(ws["id"], mcq(f"12. {stem}", TEXTS, "증발"))
     owner.create_question(ws["id"], {"question_type": "SHORT_ANSWER", "stem": stem})
     owner.create_question(
         ws["id"], {**mcq(stem, TEXTS, "증발"), "publication_status": "DRAFT"}
@@ -150,13 +152,15 @@ def test_scan_groups_variants_and_suggests_the_oldest(seed: Any) -> None:
     assert group["suggested_keep_question_id"] == first["id"]
     assert group["answers_differ"] is True
     shown = group["questions"][1]
-    assert shown["stem"] == f"1. {stem} ( )"
+    assert shown["stem"] == f"{stem} ( )"
     assert [o["text"] for o in shown["options"]] == [
         f"③ {TEXTS[2]}",
         f"① {TEXTS[0]}",
         f"② {TEXTS[1]}",
     ]
-    assert other["id"] not in {q["question_id"] for g in view["groups"] for q in g["questions"]}
+    grouped = {q["question_id"] for g in view["groups"] for q in g["questions"]}
+    assert other["id"] not in grouped
+    assert numbered["id"] not in grouped
 
     # Same answers -> no warning.
     ws2 = owner.create_workspace()
@@ -462,7 +466,7 @@ def test_import_review_flags_duplicates(seed: Any) -> None:
         ws["id"],
         {
             **mcq(
-                f"1) {truth['stem']}  ( )",
+                f"{truth['stem']}  ( )",
                 [f"({chr(65 + i)}) {t}" for i, t in enumerate(reversed(texts))],
                 texts[1],
             ),
@@ -542,3 +546,30 @@ def test_short_answers_and_essays_compare_their_model_answer(seed: Any) -> None:
     assert sorted(group_ids(scan(owner, ws["id"]))) == sorted(
         [[short[0]["id"], short[1]["id"]], [essay[0]["id"], essay[1]["id"]]]
     )
+
+
+def test_existing_links_are_not_rechecked(seed: Any) -> None:
+    """A link made under an older fingerprint (fingerprint/2 ignored stem numbers) stays: a retry
+    of that merge answers already_merged instead of 409 not-duplicates (UX7-DEDUP-2)."""
+    owner = seed.client("dedup-old-link")
+    ws = owner.create_workspace()
+    stem = _stem()
+    keep = owner.create_question(ws["id"], mcq(stem, TEXTS, "증발"))
+    dup = owner.create_question(ws["id"], mcq(f"12. {stem}", TEXTS, "증발"))
+    groups = [{"keep_question_id": keep["id"], "duplicate_question_ids": [dup["id"]]}]
+    problem(merge(owner, ws["id"], groups), 409, "not-duplicates")  # not the same under v3
+    owner.ok(
+        "PATCH",
+        f"/questions/{dup['id']}",
+        {"base_revision_id": dup["revision"]["id"], "publication_status": "ARCHIVED"},
+    )
+    with psycopg.connect(DB_ADMIN_URL, autocommit=True) as conn:  # the link a v2 merge made
+        conn.execute(
+            "insert into public.question_merges (workspace_id, duplicate_question_id, "
+            "kept_question_id) values (%s, %s, %s)",
+            (ws["id"], dup["id"], keep["id"]),
+        )
+    res = merge(owner, ws["id"], groups)
+    assert res.status_code == 200, res.text
+    assert res.json()["groups"][0]["already_merged_question_ids"] == [dup["id"]]
+    assert scan(owner, ws["id"])["groups"] == []

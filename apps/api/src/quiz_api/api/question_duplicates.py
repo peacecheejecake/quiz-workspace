@@ -15,6 +15,8 @@ Merge (one transaction): every named question is locked FOR UPDATE in id order, 
   * any id that is not a live question of this workspace -> 404 for the whole request;
   * an id named twice anywhere in the request, or a keep among its own duplicates -> 422;
   * a keep that is not CONFIRMED -> 409 `question-not-confirmed`;
+  * a duplicate already ARCHIVED and linked to the same keep is left as it is, without comparing
+    fingerprints again (links stay valid across fingerprint versions);
   * a duplicate whose fingerprint (recomputed on the server) differs from its keep's -> 409
     `not-duplicates`;
   * a duplicate that is CONFIRMED is archived and linked to the keep (`question.status_changed`
@@ -241,18 +243,20 @@ def merge_question_duplicates(
         already: list[uuid.UUID] = []
         for dup_id in group.duplicate_question_ids:
             dup = found[dup_id]
+            # An existing link is never re-checked: it stays valid across fingerprint versions
+            # (fingerprint/3 no longer ignores stem numbers), so a retry stays idempotent.
+            if dup.publication_status == "ARCHIVED" and kept_of.get(dup.id) == keep.id:
+                already.append(dup.id)
+                continue
             if dup.fingerprint != keep.fingerprint:
                 raise ProblemException(
                     409,
                     ProblemType.NOT_DUPLICATES,
                     detail="These questions are not the same question any more. Scan again.",
                 )
-            if dup.publication_status == "CONFIRMED":
-                to_archive.append(dup)
-            elif dup.publication_status == "ARCHIVED" and kept_of.get(dup.id) == keep.id:
-                already.append(dup.id)
-            else:
+            if dup.publication_status != "CONFIRMED":
                 raise _not_confirmed(dup.id)
+            to_archive.append(dup)
         plan.append((keep, to_archive, already))
 
     try:
