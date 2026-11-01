@@ -877,3 +877,140 @@ test(
     await expect(panelUi.numbered(page, 1)).toBeVisible();
   },
 );
+
+test(
+  'QOV-01-AC14 browser Back after closing a dialog or the practice panel never reopens it',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(120_000);
+    const s = await seed(workspaceFactory, 'qov01-ac14', 2);
+    const home = overviewPath(s.workspaceId);
+    const onHome = (url: URL) => url.pathname === home;
+    const onList = (url: URL) => url.pathname === '/workspaces';
+    const noPanel = (url: URL) =>
+      onHome(url) && !url.searchParams.has('panel') && !url.searchParams.has('question');
+    const history = homeUi.dialog(page, /^(이력|history)$/i);
+    await signInAs(page, s.owner.user);
+
+    /** A history entry before the home (the workspace list), then the home itself. */
+    async function arrive(search = ''): Promise<void> {
+      await page.goto('/workspaces');
+      await expect(page).toHaveURL(onList);
+      await page.goto(`${home}${search}`);
+      await expect(overviewUi.heatmap(page)).toBeVisible();
+    }
+    /** After a close, Back leaves the home for the page before it: the dialog never reopens. */
+    async function backLeavesHome(): Promise<void> {
+      await page.goBack();
+      await expect(page).toHaveURL(onList);
+    }
+
+    // 문서 관리 · 이력 · 링크 공유: open, close (button or Escape), Back.
+    const closeDocuments = /^(문서 관리 닫기|close)/i;
+    const dialogs = [
+      {
+        open: () => homeUi.documentsButton(page).click(),
+        dialog: homeUi.documentsDialog(page),
+        close: closeDocuments,
+      },
+      {
+        open: () => homeUi.historyButton(page).click(),
+        dialog: history,
+        close: /^(이력 닫기|close)/i,
+      },
+      {
+        open: () => homeUi.shareButton(page).click(),
+        dialog: homeUi.shareDialog(page),
+        close: /^(공유 관리 닫기|close)/i,
+      },
+    ];
+    for (const [i, { open, dialog, close }] of dialogs.entries()) {
+      await arrive();
+      await open();
+      await expect(dialog).toBeVisible();
+      await expect(page).toHaveURL((url) => url.searchParams.has('panel'));
+      const closeButton = dialog.getByRole('button', { name: close });
+      if (i % 2 === 0) {
+        await closeButton.click();
+      } else {
+        await closeButton.focus();
+        await page.keyboard.press('Escape');
+      }
+      await expect(dialog).toBeHidden();
+      await expect(page).toHaveURL(noPanel);
+      await backLeavesHome();
+    }
+
+    // Back while a dialog is open closes it; after Forward reopens it, closing it and Back still
+    // leave the home. A filter chosen while the dialog was open survives its close.
+    await arrive();
+    const documents = homeUi.documentsDialog(page);
+    await homeUi.documentsButton(page).click();
+    await expect(documents).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(noPanel);
+    await expect(documents).toBeHidden();
+    await page.goForward();
+    await expect(documents).toBeVisible();
+    await homeUi.statusFilterToggle(page).click();
+    await homeUi.statusFilters(page).getByRole('button', { name: '미열람', exact: true }).click();
+    await expect(page).toHaveURL(/[?&]status=unseen(&|$)/);
+    await documents.getByRole('button', { name: closeDocuments }).click();
+    await expect(documents).toBeHidden();
+    await expect(page).toHaveURL(
+      (url) => noPanel(url) && url.searchParams.get('status') === 'unseen',
+    );
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    await backLeavesHome();
+
+    // The 문제 등록 dialog (`?panel=question-create`).
+    await arrive();
+    await chooseQuestionMenu(page, 'create');
+    await expect(questionFormUi.form(page)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(questionFormUi.form(page)).toBeHidden();
+    await expect(page).toHaveURL(noPanel);
+    await backLeavesHome();
+
+    // The practice panel, moved to the next question before it is closed.
+    await arrive();
+    await overviewUi.dot(page, 1).click();
+    await expect(panelUi.numbered(page, 1)).toBeVisible();
+    await panelUi.next(panelUi.numbered(page, 1)).click();
+    const second = panelUi.numbered(page, 2);
+    await expect(second).toBeVisible();
+    await expect(page).toHaveURL((url) => url.searchParams.get('question') === q(s, 2).id);
+    await panelUi.close(second).click();
+    await expect(panelUi.panel(page)).toBeHidden();
+    await expect(page).toHaveURL(noPanel);
+    await backLeavesHome();
+
+    // Two stacked dialogs: closing the lower one keeps the upper one open; the first Back closes
+    // it (the closed 문서 관리 stays closed), the next one leaves the home.
+    await arrive();
+    await homeUi.documentsButton(page).click();
+    await expect(documents).toBeVisible();
+    await homeUi.historyButton(page).click();
+    await expect(history).toBeVisible();
+    // 문서 관리 lies under 이력: its close button is pressed from the keyboard.
+    await documents.getByRole('button', { name: closeDocuments }).focus();
+    await page.keyboard.press('Enter');
+    await expect(documents).toBeHidden();
+    await expect(history).toBeVisible();
+    await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').join() === 'history');
+    await page.goBack();
+    await expect(page).toHaveURL(noPanel);
+    await expect(history).toBeHidden();
+    await expect(documents).toBeHidden();
+    await backLeavesHome();
+
+    // A deep-linked dialog has no entry of its own to undo: closing it stays on the home.
+    await arrive('?panel=history');
+    await expect(history).toBeVisible();
+    await history.getByRole('button', { name: /^(이력 닫기|close)/i }).click();
+    await expect(history).toBeHidden();
+    await expect(page).toHaveURL(noPanel);
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await backLeavesHome();
+  },
+);
