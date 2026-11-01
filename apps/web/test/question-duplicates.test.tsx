@@ -348,3 +348,43 @@ describe('Codex P2: merges are sent in batches within the API limits', () => {
     expect(await screen.findByText('중복 문제 51개를 보관했습니다.')).toBeInTheDocument();
   });
 });
+
+describe('Codex P2: the plan is frozen while a merge awaits 이어서 정리', () => {
+  it('disables the group choices with the reason until 이어서 정리 or 다시 검사', async () => {
+    const user = userEvent.setup();
+    scanDuplicatesAction.mockReset();
+    mergeDuplicatesAction.mockReset();
+    scanDuplicatesAction.mockResolvedValue({
+      ok: true,
+      data: { groups: [group('f1', [1, 2]), group('f2', [3, 4])], question_count: 4 },
+    });
+    mergeDuplicatesAction.mockResolvedValue({ ok: false, kind: 'unavailable', message: '오류' });
+    render(
+      <ToastProvider>
+        <QuestionDuplicates workspaceId={WS} />
+      </ToastProvider>,
+    );
+    const first = await screen.findByRole('group', { name: /중복 묶음 1/ });
+    await user.click(screen.getByRole('button', { name: '선택한 묶음 정리 (2)' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '보관' }),
+    );
+    const alert = await screen.findByRole('alert');
+    const reason = '이어서 정리하거나 다시 검사한 뒤 바꿀 수 있습니다';
+    for (const box of screen.getAllByRole('group', { name: /중복 묶음 \d/ })) {
+      const include = within(box).getByRole('checkbox', { name: '이 묶음 정리' });
+      expect(include).toBeDisabled();
+      expect(include).toHaveAccessibleDescription(new RegExp(reason));
+      const keep = within(box).getByRole('radiogroup', { name: /남길 문제/ });
+      expect(keep).toHaveAccessibleDescription(new RegExp(reason));
+      for (const radio of within(keep).getAllByRole('radio')) expect(radio).toBeDisabled();
+    }
+    expect(first).toHaveTextContent(reason);
+
+    // A fresh scan unfreezes the plan.
+    await user.click(within(alert).getByRole('button', { name: '다시 검사' }));
+    const again = await screen.findByRole('group', { name: /중복 묶음 1/ });
+    expect(within(again).getByRole('checkbox', { name: '이 묶음 정리' })).toBeEnabled();
+    expect(again).not.toHaveTextContent(reason);
+  });
+});

@@ -37,6 +37,9 @@ interface Resume {
   readonly message: string;
 }
 
+/** Shown with the group choices while a stopped merge waits: its saved plan would ignore edits. */
+const FROZEN_REASON = '이어서 정리하거나 다시 검사한 뒤 바꿀 수 있습니다';
+
 type ScanState =
   | { readonly status: 'loading' }
   | { readonly status: 'error'; readonly message: string }
@@ -78,6 +81,7 @@ function Group({
   keep,
   include,
   disabled,
+  frozen,
   onKeep,
   onInclude,
 }: {
@@ -86,6 +90,8 @@ function Group({
   readonly keep: string;
   readonly include: boolean;
   readonly disabled: boolean;
+  /** Why the choices cannot change now (a merge awaits 이어서 정리), or null. */
+  readonly frozen: string | null;
   readonly onKeep: (questionId: string) => void;
   readonly onInclude: (on: boolean) => void;
 }) {
@@ -100,7 +106,8 @@ function Group({
         <Checkbox
           label="이 묶음 정리"
           checked={include}
-          disabled={disabled}
+          disabled={disabled || frozen !== null}
+          {...(frozen ? { description: frozen } : {})}
           onCheckedChange={(checked) => onInclude(checked === true)}
         />
       </div>
@@ -114,7 +121,8 @@ function Group({
         orientation="vertical"
         value={keep}
         onValueChange={onKeep}
-        disabled={disabled || !include}
+        disabled={disabled || frozen !== null || !include}
+        {...(frozen ? { description: frozen } : {})}
         options={group.questions.map((q) => ({
           value: q.question_id,
           label: optionLabel(q),
@@ -284,6 +292,7 @@ export function QuestionDuplicates({
                   keep={choice?.keep ?? group.suggested_keep_question_id}
                   include={choice?.include ?? true}
                   disabled={merging}
+                  frozen={resume ? FROZEN_REASON : null}
                   onKeep={(keep) => choose(group, { keep })}
                   onInclude={(include) => choose(group, { include })}
                 />
