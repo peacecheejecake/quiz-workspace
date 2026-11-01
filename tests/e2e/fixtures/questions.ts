@@ -500,6 +500,8 @@ export const importUi = {
   draftItems: (page: Page) => importUi.drafts(page).getByRole('listitem'),
   draft: (page: Page, stem: string) => importUi.draftItems(page).filter({ hasText: stem }),
   number: (n: number) => new RegExp(`(?<!\\d)${n}\\s*번|(question|q)\\s*${n}(?!\\d)`, 'i'),
+  /** UX7-DEDUP (QIMPORT-01-AC10): the `중복` badge of a draft that repeats a question. */
+  duplicate: (draft: Locator) => draft.getByText(/^(중복|duplicate)$/i),
   noAnswer: (draft: Locator) => draft.getByText(/정답 없음|정답 미확인|정답 미지정|no answer/i),
   compare: (draft: Locator) =>
     buttonOrLink(draft, /원본 (비교|보기)|원문 (비교|보기)|compare|view source/i),
@@ -940,6 +942,46 @@ export const inactiveUi = {
   close: (dialog: Locator) =>
     dialog.getByRole('button', { name: /^(보관·초안 문제 닫기|close)$/i }),
 };
+
+/**
+ * UX7-DEDUP 중복 문제 정리 (QOV-01-AC16): a non-modal dialog; one `group` per duplicate group
+ * ("중복 묶음 n · 문제 k개") holding a `이 묶음 정리` checkbox and a radiogroup "중복 묶음 n 남길 문제"
+ * whose radios are named after their question ("n번 문제 …"); `선택한 묶음 정리 (k)` asks in an
+ * alertdialog "중복 문제 k개를 보관할까요?" whose `보관` button merges.
+ */
+export const dedupUi = {
+  dialog: (page: Page) =>
+    main(page).getByRole('dialog', { name: /^(중복 문제 정리|duplicate questions)$/i }),
+  groups: (dialog: Locator) =>
+    dialog.getByRole('group', { name: /중복 묶음 \d+|duplicate group \d+/i }),
+  keep: (group: Locator) =>
+    group.getByRole('radiogroup', { name: /남길 문제|question to keep/i }).getByRole('radio'),
+  keepNumber: (group: Locator, n: number) =>
+    group
+      .getByRole('radiogroup', { name: /남길 문제|question to keep/i })
+      .getByRole('radio', { name: questionNumberName(n) }),
+  include: (group: Locator) =>
+    group.getByRole('checkbox', { name: /이 묶음 정리|merge this group/i }),
+  merge: (dialog: Locator) =>
+    dialog.getByRole('button', { name: /^(선택한 묶음 정리|merge selected groups?)/i }),
+  confirm: (page: Page) =>
+    page.getByRole('alertdialog', {
+      name: /중복 문제 \d+개를 보관할까요|archive \d+ duplicates?/i,
+    }),
+  confirmButton: (confirm: Locator) => confirm.getByRole('button', { name: /^(보관|archive)$/i }),
+  empty: (dialog: Locator) => dialog.getByText(/중복 문제가 없습니다|no duplicate questions/i),
+  warning: (group: Locator) => group.getByText(/정답이 서로 다릅니다|answers differ/i),
+  close: (dialog: Locator) =>
+    dialog.getByRole('button', { name: /^(중복 문제 정리 닫기|close)$/i }),
+};
+
+/** UX7-DEDUP: the duplicate scan through the API (editors only). */
+export async function scanDuplicates(
+  member: Member,
+  workspaceId: string,
+): Promise<{ groups: { questions: { question_id: string }[] }[] }> {
+  return member.api.ok('GET', `/workspaces/${workspaceId}/question-duplicates`, undefined, [200]);
+}
 
 export const INACTIVE_STATUS_OPTIONS = {
   all: /^(전체|all)$/i,

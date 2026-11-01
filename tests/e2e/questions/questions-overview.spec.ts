@@ -22,6 +22,7 @@ import {
   chooseFilter,
   chooseQuestionMenu,
   createNumberedQuestions,
+  dedupUi,
   draftFor,
   expect,
   expectReadOnlyQuestionMenu,
@@ -45,6 +46,7 @@ import {
   questionFormUi,
   questionPaper,
   scaleOf,
+  scanDuplicates,
   searchUi,
   section,
   seedMembership,
@@ -52,6 +54,7 @@ import {
   signInAs,
   startPractice,
   statusColor,
+  submitPractice,
   test,
   truthQuestion,
   uploadPdf,
@@ -678,6 +681,7 @@ test(
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
       /^(직접 추가|add question)$/i,
       /^(변형 출제|generate variants?)$/i,
+      /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
       /^(보관·초안 문제|archived and draft questions)$/i,
     ]);
     await expect(
@@ -1187,5 +1191,224 @@ test(
     ).toBeVisible();
     await expect(inactiveUi.restore(dialog)).toHaveCount(0);
     expect((await getQuestion(s.owner, other.id)).publication_status).toBe('ARCHIVED');
+  },
+);
+
+// --- UX7-DEDUP 중복 문제 정리 (QOV-01-AC16/AC17, docs/questions.md §10) ---------------------------
+
+const DEDUP_STEM = (label: string) => `${label} 다음 중 물의 순환에 대한 설명으로 옳은 것은?`;
+const DEDUP_TEXTS = ['증발은 액체가 기체로 변한다', '응결은 기체가 고체로 변한다', '강수는 없다'];
+
+/** The same MCQ as `DEDUP_STEM(label)` / `DEDUP_TEXTS` (answer: the first text), restyled. */
+function dedupMcq(
+  label: string,
+  n: number,
+  style: 'plain' | 'circled' | 'spaced' = 'plain',
+): ReturnType<typeof mcqInput> & { question_number: number } {
+  const stem = DEDUP_STEM(label);
+  const texts =
+    style === 'circled'
+      ? [`③ ${DEDUP_TEXTS[2]}`, `① ${DEDUP_TEXTS[0]}`, `② ${DEDUP_TEXTS[1]}`]
+      : style === 'spaced'
+        ? DEDUP_TEXTS.map((t) => `${t.replace(/ /g, '  ')}.`)
+        : DEDUP_TEXTS;
+  const answer = style === 'circled' ? 1 : 0;
+  return {
+    ...mcqInput(style === 'spaced' ? `${stem.replace(/ /g, '  ')} ( )` : stem, texts, answer),
+    question_number: n,
+  };
+}
+
+/** Opens 문제 › 중복 문제 정리 and waits for the scan. */
+async function openDedup(page: Page): Promise<Locator> {
+  await chooseQuestionMenu(page, 'duplicates');
+  const dialog = dedupUi.dialog(page);
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('[aria-busy="true"]')).toHaveCount(0);
+  return dialog;
+}
+
+/** 선택한 묶음 정리 (k) → 보관 in the confirmation. */
+async function mergeSelected(page: Page, dialog: Locator, archived: number): Promise<void> {
+  await expect(dedupUi.merge(dialog)).toContainText(`(${archived})`);
+  await dedupUi.merge(dialog).click();
+  const confirm = dedupUi.confirm(page);
+  await expect(confirm).toBeVisible();
+  await expect(confirm).toHaveAccessibleName(new RegExp(`${archived}개|${archived} dup`));
+  await dedupUi.confirmButton(confirm).click();
+  await expect(confirm).toBeHidden();
+}
+
+test(
+  'QOV-01-AC16 중복 문제 정리 groups identical questions across option order, numbering and spacing; keeping one archives the rest, read-only for viewers and archived workspaces',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(120_000);
+    const label = 'qov01-ac16';
+    const owner = await workspaceFactory.member(label);
+    const ws = await workspaceFactory.create(owner);
+    const first = await createQuestion(owner, ws.id, dedupMcq(label, 1));
+    const second = await createQuestion(owner, ws.id, dedupMcq(label, 2, 'circled'));
+    const third = await createQuestion(owner, ws.id, dedupMcq(label, 3, 'spaced'));
+    await createQuestion(owner, ws.id, numberedMcq(label, 4));
+    await createQuestion(owner, ws.id, numberedMcq(label, 5));
+    const explanation = `${label} 해설 비밀`;
+    await owner.api.ok(
+      'PATCH',
+      `/questions/${first.id}`,
+      { base_revision_id: first.revision.id, explanation },
+      [200],
+    );
+    const viewer = await workspaceFactory.member(`${label}-viewer`);
+    seedMembership(ws.id, viewer.user.id, 'viewer');
+
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(5);
+    const dialog = await openDedup(page);
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === `/workspaces/${ws.id}` &&
+        url.searchParams.getAll('panel').includes('question-duplicates'),
+    );
+    // One group of the three restyled copies; the oldest is kept by default; no answers shown.
+    const groups = dedupUi.groups(dialog);
+    await expect(groups).toHaveCount(1);
+    const group = groups.first();
+    await expect(dedupUi.keep(group)).toHaveCount(3);
+    await expect(dedupUi.keepNumber(group, 1)).toBeChecked();
+    await expect(dedupUi.include(group)).toBeChecked();
+    await expect(dedupUi.warning(group)).toHaveCount(0);
+    await expect(group).toContainText(`① ${DEDUP_TEXTS[0]}`);
+    await expect(dialog).not.toContainText(explanation);
+
+    // Keep the second, archive the other two.
+    await dedupUi.keepNumber(group, 2).check();
+    await expect(dedupUi.keepNumber(group, 2)).toBeChecked();
+    await mergeSelected(page, dialog, 2);
+    await expect(dedupUi.empty(dialog)).toBeVisible();
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    await expect(overviewUi.dot(page, 2)).toBeVisible();
+    await expect(overviewUi.dot(page, 1)).toHaveCount(0);
+    await expect(overviewUi.dot(page, 3)).toHaveCount(0);
+    expect((await getQuestion(owner, first.id)).publication_status).toBe('ARCHIVED');
+    expect((await getQuestion(owner, third.id)).publication_status).toBe('ARCHIVED');
+    expect((await getQuestion(owner, second.id)).publication_status).toBe('CONFIRMED');
+    // Scanning again finds nothing.
+    expect((await scanDuplicates(owner, ws.id)).groups).toEqual([]);
+
+    // The archived copies are in 보관·초안 문제 (보관됨).
+    await dedupUi.close(dialog).click();
+    await expect(dialog).toBeHidden();
+    await chooseQuestionMenu(page, 'inactive');
+    const inactive = inactiveUi.dialog(page);
+    await chooseFilter(page, inactiveUi.status(inactive), INACTIVE_STATUS_OPTIONS.archived);
+    await expect(inactiveUi.rows(inactive)).toHaveCount(2);
+    await page.reload();
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+
+    // Viewer: the item is disabled with the reason, the URL opens nothing, the API refuses.
+    for (const res of [
+      await viewer.api.request('GET', `/workspaces/${ws.id}/question-duplicates`),
+      await viewer.api.request('POST', `/workspaces/${ws.id}/question-duplicates/merge`, {
+        groups: [{ keep_question_id: second.id, duplicate_question_ids: [first.id] }],
+      }),
+    ]) {
+      expect(res.status).toBe(403);
+      expect((res.body as Problem).type).toBe(PROBLEM_TYPES.insufficientRole);
+    }
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(`${overviewPath(ws.id)}?panel=question-duplicates`);
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expect(dedupUi.dialog(page)).toHaveCount(0);
+    await expectReadOnlyQuestionMenu(page, 'viewer');
+
+    // Archived workspace: the same for the owner.
+    await workspaceFactory.archive(owner, ws.id);
+    const blocked = await owner.api.request('GET', `/workspaces/${ws.id}/question-duplicates`);
+    expect(blocked.status).toBe(403);
+    expect((blocked.body as Problem).type).toBe(PROBLEM_TYPES.workspaceArchived);
+    await page.context().clearCookies();
+    await signInAs(page, owner.user);
+    await page.goto(`${overviewPath(ws.id)}?panel=question-duplicates`);
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expect(dedupUi.dialog(page)).toHaveCount(0);
+    await expectReadOnlyQuestionMenu(page, 'archived');
+  },
+);
+
+test(
+  'QOV-01-AC17 the kept question shows the archived duplicate history merged in (latest grade, favorite union); clearing the favorite and unarchiving the duplicate unmerge it',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(120_000);
+    const label = 'qov01-ac17';
+    const owner = await workspaceFactory.member(label);
+    const ws = await workspaceFactory.create(owner);
+    const kept = await createQuestion(owner, ws.id, dedupMcq(label, 1));
+    const dup = await createQuestion(owner, ws.id, dedupMcq(label, 2, 'circled'));
+    await answerCorrectly(owner, kept);
+    const session = await startPractice(owner, dup.id);
+    const correct = dup.revision.correct_option_ids ?? [];
+    const wrong = dup.revision.options.find((o) => !correct.includes(o.id));
+    if (!wrong) throw new Error('no wrong option');
+    const graded = await submitPractice(owner, session.id, { selected_option_ids: [wrong.id] });
+    expect(graded.result).toBe('incorrect');
+    await setMyState(owner, dup.id, { is_favorite: true });
+    const attemptsBefore = [
+      ...(await listAttempts(owner, kept.id)),
+      ...(await listAttempts(owner, dup.id)),
+    ].map((a) => a.id);
+
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'correct');
+    await expect(overviewUi.dot(page, 2)).toHaveAttribute('data-status', 'incorrect');
+    const dialog = await openDedup(page);
+    await expect(dedupUi.keepNumber(dedupUi.groups(dialog).first(), 1)).toBeChecked();
+    await mergeSelected(page, dialog, 1);
+    await dedupUi.close(dialog).click();
+
+    // One dot: the duplicate's later wrong answer and its favorite are the kept question's now.
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    const dot = overviewUi.dot(page, 1);
+    await expect(dot).toHaveAttribute('data-status', 'incorrect');
+    await expect(dot).toHaveAttribute('aria-label', /오답|incorrect/i);
+    await expect(dot).toHaveAttribute('aria-label', /즐겨찾기|favorite/i);
+    await expect(overviewUi.marker(dot)).toHaveAttribute('data-shape', 'star');
+    await expect(overviewUi.marker(dot)).toHaveCSS('color', await statusColor(page, 'incorrect'));
+    // Attempts are untouched: the kept question lists both, the same rows as before.
+    const merged = await listAttempts(owner, kept.id);
+    expect(merged.map((a) => a.id).sort()).toEqual([...attemptsBefore].sort());
+
+    // Clearing the favorite on the kept question clears the merged one.
+    await dot.click();
+    const panel = panelUi.numbered(page, 1);
+    await expect(panel).toBeVisible();
+    await panelUi.favoriteOff(panel).click();
+    await expect(panelUi.favoriteOn(panel)).toBeVisible();
+    await panelUi.close(panel).click();
+    await expect(overviewUi.marker(dot)).toHaveAttribute('data-shape', 'square');
+    await page.reload();
+    await expect(overviewUi.marker(overviewUi.dot(page, 1))).toHaveAttribute(
+      'data-shape',
+      'square',
+    );
+
+    // Unarchiving the duplicate unmerges it: each question shows its own record again.
+    await chooseQuestionMenu(page, 'inactive');
+    const inactive = inactiveUi.dialog(page);
+    await chooseFilter(page, inactiveUi.status(inactive), INACTIVE_STATUS_OPTIONS.archived);
+    await expect(inactiveUi.rows(inactive)).toHaveCount(1);
+    await inactiveUi.restore(inactiveUi.rows(inactive).first()).click();
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'correct');
+    await expect(overviewUi.dot(page, 2)).toHaveAttribute('data-status', 'incorrect');
+    await expect(overviewUi.marker(overviewUi.dot(page, 2))).toHaveAttribute(
+      'data-shape',
+      'square',
+    );
+    expect(await listAttempts(owner, kept.id)).toHaveLength(1);
   },
 );

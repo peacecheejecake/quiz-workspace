@@ -130,15 +130,20 @@ const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
   body: /^(본문 검색 설정|body search settings|content search settings)$/i,
 };
 
-type QuestionMenuItem = 'pdfs' | 'create' | 'generate' | 'inactive';
+type QuestionMenuItem = 'pdfs' | 'create' | 'generate' | 'duplicates' | 'inactive';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   /** Retired by UX7-DOCS: only ever expected to be absent. */
   pdfs: /^(pdf 관리|manage pdfs?)$/i,
   create: /^(직접 추가|add question)$/i,
   generate: /^(변형 출제|generate variants?)$/i,
+  /** UX7-DEDUP: the 중복 문제 정리 dialog, editors only (QOV-01-AC16). */
+  duplicates: /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
   /** UX7-BANK-2: the 보관·초안 문제 dialog, usable by every member. */
   inactive: /^(보관·초안 문제|archived and draft questions)$/i,
 };
+
+/** The `문제` menu's editor-only items (UX7-DOCS-2; 중복 문제 정리 since UX7-DEDUP). */
+const EDITOR_ITEMS = ['create', 'generate', 'duplicates'] as const;
 
 /** Why the `문제` menu's editor-only items are disabled (UX7-DOCS-2, QOV-01-AC11). */
 export const QUESTION_MENU_REASONS = {
@@ -165,6 +170,7 @@ export async function expectReadOnlyQuestionMenu(
   await expect(menu.getByRole('menuitem')).toHaveText([
     QUESTION_MENU_ITEMS.create,
     QUESTION_MENU_ITEMS.generate,
+    QUESTION_MENU_ITEMS.duplicates,
     QUESTION_MENU_ITEMS.inactive,
   ]);
   // UX7-BANK-2: 보관·초안 문제 is readable by everyone, so it stays enabled.
@@ -175,7 +181,7 @@ export async function expectReadOnlyQuestionMenu(
   await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
   const text = QUESTION_MENU_REASONS[reason];
   await expect(menu.getByText(text)).toBeVisible();
-  for (const item of ['create', 'generate'] as const) {
+  for (const item of EDITOR_ITEMS) {
     const el = homeUi.questionMenuItem(page, item);
     await expect(el).toHaveAttribute('aria-disabled', 'true');
     await expect(el).toHaveAccessibleDescription(text);
@@ -183,7 +189,7 @@ export async function expectReadOnlyQuestionMenu(
   await expect(menu).toHaveAccessibleDescription(text);
   // The arrow keys skip the disabled items (landing on 보관·초안 문제); Escape returns to the button.
   await page.keyboard.press('ArrowDown');
-  for (const item of ['create', 'generate'] as const) {
+  for (const item of EDITOR_ITEMS) {
     await expect(homeUi.questionMenuItem(page, item)).not.toBeFocused();
   }
   await page.keyboard.press('Escape');
@@ -191,13 +197,16 @@ export async function expectReadOnlyQuestionMenu(
   await expect(button).toBeFocused();
   // A click on a disabled item opens nothing.
   const before = new URL(page.url()).searchParams.getAll('panel');
-  for (const item of ['create', 'generate'] as const) {
+  for (const item of EDITOR_ITEMS) {
     await button.click();
     const el = homeUi.questionMenuItem(page, item);
     // Radix positions the menu after measuring: wait until it is placed before clicking.
     await expect(el).toBeInViewport();
     await el.click({ force: true });
     await expect(homeUi.generateDialog(page)).toHaveCount(0);
+    await expect(
+      page.getByRole('dialog', { name: /^(중복 문제 정리|duplicate questions)$/i }),
+    ).toHaveCount(0);
     await expect(
       page.getByRole('dialog', { name: /문제 (등록|추가)|(new|add) question/i }),
     ).toHaveCount(0);
