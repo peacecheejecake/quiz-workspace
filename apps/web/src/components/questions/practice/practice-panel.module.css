@@ -41,6 +41,10 @@
   padding: var(--space-2) var(--space-3);
   border: 2px solid transparent;
   border-radius: var(--radius-md);
+  /* The result shows at once. Without this, the reduced-motion rule of base.css (every element
+     gets transition-duration 0.01ms with the default transition-property `all`) would turn the
+     color change into a transition, so the border would still read transparent for a frame. */
+  transition: none;
 }
 
 .toneCorrect {
