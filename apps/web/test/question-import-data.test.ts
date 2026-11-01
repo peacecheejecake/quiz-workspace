@@ -224,6 +224,24 @@ describe('loadLatestImport (QIMP-PAYLOAD, QIMP-PAGING)', () => {
     }
   });
 
+  it("Codex P2: the first page's summaries follow the content shown (chapter read later)", async () => {
+    // Between the two reads a book changed: the summary has draft 0 under another chapter.
+    const moved = chapterId(299);
+    api.GET.mockImplementation(async (path: string, options: GetOptions) => {
+      if (path.endsWith('/question-imports')) return ok({ items: [RUN] });
+      if (path.endsWith('/draft-summaries')) {
+        const list = items.map(apiSummary);
+        return ok({ items: [{ ...list[0], chapter_id: moved }, ...list.slice(1)], chapters: [] });
+      }
+      const { offset, limit } = options.params.query as { offset: number; limit: number };
+      return ok({ items: items.slice(offset, offset + limit), total: COUNT });
+    });
+    const { summaries, drafts } = await loadLatestImport(WS);
+    expect(drafts[0]?.chapter?.chapter?.id).toBe(chapterId(0));
+    expect(summaries[0]).toEqual(summaryFromImport(apiSummary(items[0] as ImportDraft)));
+    expect(summaries[0]?.chapter).toEqual({ chapter: { id: chapterId(0) } });
+  });
+
   it('leaves out the API fields the screen never reads', async () => {
     const { drafts, summaries } = await loadLatestImport(WS);
     const sent = JSON.stringify({ drafts, summaries });

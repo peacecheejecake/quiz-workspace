@@ -240,4 +240,81 @@ describe('QuestionImport page-by-page content (QIMP-PAGING)', { timeout: 30_000 
     );
     expect(summaryReads).toHaveLength(1);
   });
+
+  it('Codex P2: a page read for the list before a reload does not overwrite the reloaded list', async () => {
+    let registered = false;
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const state = (d: ImportDraft): ImportDraft =>
+      registered ? { ...d, published_question_id: `q-${d.id}`, version: `${d.version}b` } : d;
+    const offsets: number[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input), 'http://web.test');
+        if (url.pathname.endsWith('/registrations')) {
+          registered = true;
+          return json(202, {
+            job_id: '44444444-4444-4444-8444-444444444444',
+            import_id: RUN_ID,
+            status: 'succeeded',
+            error_code: null,
+            total: TOTAL,
+            processed: TOTAL,
+            registered: TOTAL,
+            skipped: 0,
+            refused: [],
+            created_at: '2026-10-18T00:00:00Z',
+            finished_at: '2026-10-18T00:01:00Z',
+          });
+        }
+        if (url.pathname.endsWith('/draft-summaries')) {
+          return json(200, {
+            items: ALL.map(state).map((d) => ({
+              id: d.id,
+              version: d.version,
+              position: d.position,
+              question_number: d.question_number,
+              question_type: d.question_type,
+              review_status: d.review_status,
+              published_question_id: d.published_question_id,
+              publishable: d.publishable,
+              answer_missing: d.answer_missing,
+              validations: [],
+              chapter_id: d.chapter?.id ?? null,
+            })),
+            chapters: [],
+          });
+        }
+        if (url.pathname.endsWith('/drafts')) {
+          const offset = Number(url.searchParams.get('offset'));
+          offsets.push(offset);
+          // The first read of page 2 (read ahead before the registration) answers late, with
+          // the drafts as they were before it.
+          const items = ALL.slice(offset, offset + DRAFT_PAGE_SIZE).map(state);
+          if (offset === DRAFT_PAGE_SIZE && offsets.filter((o) => o === offset).length === 1) {
+            await held;
+            return json(200, { items: ALL.slice(offset, offset + DRAFT_PAGE_SIZE), total: TOTAL });
+          }
+          return json(200, { items, total: TOTAL });
+        }
+        return json(404, {});
+      }),
+    );
+    renderScreen();
+    const user = userEvent.setup();
+    await waitFor(() => expect(offsets).toEqual([DRAFT_PAGE_SIZE]));
+    await user.click(screen.getByRole('checkbox', { name: `전체 선택 (${TOTAL}개)` }));
+    await user.click(screen.getByRole('button', { name: /선택한 문제 승인 및 등록/ }));
+    expect(await screen.findByText(`${TOTAL}개 문제를 문제은행에 등록했습니다.`)).toBeTruthy();
+    expect(screen.getByText(`미등록 0개 · 등록 ${TOTAL}개`, { exact: false })).toBeTruthy();
+    release();
+    await held;
+    // The late page is dropped: the counts stay, and page 2 is read again, registered.
+    const top = screen.getAllByRole('navigation', { name: /초안 페이지/ })[0] as HTMLElement;
+    await user.click(within(top).getByRole('button', { name: '2페이지' }));
+    await waitFor(() => expect(screen.queryByText(/불러오는 중/)).toBeNull());
+    expect(screen.queryByRole('checkbox', { name: '101번 문제 선택' })).toBeNull();
+    expect(screen.getByText(`미등록 0개 · 등록 ${TOTAL}개`, { exact: false })).toBeTruthy();
+  });
 });

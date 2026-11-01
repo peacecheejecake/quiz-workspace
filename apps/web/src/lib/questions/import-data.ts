@@ -12,7 +12,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
 import { loginRedirectPath } from '@/lib/auth/routes';
-import { DRAFT_PAGE_SIZE, summaryFromImport } from './draft-pages';
+import { DRAFT_PAGE_SIZE, summaryFromImport, summaryOf, withLoaded } from './draft-pages';
 import {
   reviewDraftFromImport,
   sortDrafts,
@@ -98,10 +98,17 @@ export async function loadLatestImport(
     if (failed && !failed.data) outcome(failed.response.status, failed.error);
     return { run, summaries: [], drafts: [], chapters: [], loadedAt, loadFailed: true };
   }
+  // The two reads are independent: the first page's summaries are taken from the content shown
+  // (a chapter suggestion can change between them without a new draft version).
+  const drafts = sortDrafts(page.data.items.map(reviewDraftFromImport));
   return {
     run,
-    summaries: sortDrafts(summaries.data.items.map(summaryFromImport)),
-    drafts: sortDrafts(page.data.items.map(reviewDraftFromImport)),
+    summaries: withLoaded(
+      sortDrafts(summaries.data.items.map(summaryFromImport)),
+      new Map(),
+      drafts,
+    ).summaries.map(summaryOf),
+    drafts,
     chapters: summaries.data.chapters ?? [],
     loadedAt,
     loadFailed: false,

@@ -239,7 +239,10 @@ export function QuestionImport({
   const [reloadingList, setReloadingList] = useState(false);
   /** The page on screen, for list reloads (which read its content with the summaries). */
   const shownPage = useRef(0);
-  /** Pages (by first index) being read, and the reads' abort on leave. */
+  /**
+   * Pages (by first index) being read, and the abort of those reads (on leave, and when the list
+   * is read again: a page read for the older list must not overwrite the newer one).
+   */
   const pagesInFlight = useRef(new Set<number>());
   const pagesController = useRef<AbortController | null>(null);
 
@@ -261,6 +264,9 @@ export function QuestionImport({
    */
   const readDrafts = useCallback(
     async (importId: string, signal?: AbortSignal): Promise<ReviewDraft[]> => {
+      pagesController.current?.abort();
+      pagesController.current = null;
+      pagesInFlight.current = new Set();
       const { items, chapters } = await client.draftSummaries(importId, signal);
       const list = sortDrafts(items.map(summaryFromImport));
       const { start, end } = draftPageRange(shownPage.current, list.length);
@@ -685,13 +691,16 @@ export function QuestionImport({
   /** Reads one page's content (`start` = its first index); a page on screen reports a failure. */
   const loadPage = useCallback(
     async (importId: string, start: number, ids: readonly string[]) => {
-      if (pagesInFlight.current.has(start)) return;
-      pagesInFlight.current.add(start);
+      const inFlight = pagesInFlight.current;
+      if (inFlight.has(start)) return;
+      inFlight.add(start);
       pagesController.current ??= new AbortController();
       const { signal } = pagesController.current;
       let outcome: 'done' | 'failed' = 'failed';
       try {
         const { items } = await client.draftPage(importId, start, DRAFT_PAGE_SIZE, signal);
+        // The list was read again meanwhile (its own page read replaces this one).
+        if (signal.aborted) return;
         const loaded = items.map(reviewDraftFromImport);
         // The list moved under it (drafts added or removed since): `다시 시도` reads both again.
         const got = new Set(loaded.map((d) => d.id));
@@ -706,7 +715,7 @@ export function QuestionImport({
         if (signal.aborted) return;
         if (onUnauthenticated(error)) return;
       } finally {
-        pagesInFlight.current.delete(start);
+        inFlight.delete(start);
       }
       setPageLoads((current) => new Map(current).set(start, outcome));
     },

@@ -79,6 +79,25 @@ export function summaryFromImport(draft: ImportDraftSummary): DraftSummary {
   };
 }
 
+/** Only the summary fields of a draft (e.g. of one whose content is shown). */
+export function summaryOf(draft: DraftSummary): DraftSummary {
+  return {
+    id: draft.id,
+    version: draft.version,
+    position: draft.position,
+    questionNumber: draft.questionNumber,
+    type: draft.type,
+    reviewStatus: draft.reviewStatus,
+    publishedQuestionId: draft.publishedQuestionId,
+    publishable: draft.publishable,
+    answerMissing: draft.answerMissing,
+    issues: draft.issues,
+    ...(draft.chapter
+      ? { chapter: { chapter: draft.chapter.chapter ? { id: draft.chapter.chapter.id } : null } }
+      : {}),
+  };
+}
+
 /** Loaded draft contents by draft id. */
 export type DraftContents = ReadonlyMap<string, ReviewDraft>;
 
