@@ -11,7 +11,7 @@
   --color-accent-hover: #4a5ec1;
   --color-accent-pressed: #4355ad;
   --color-focus: #356cff;
-  --color-glass: rgba(246, 248, 252, 0.9);
+  --color-glass: rgba(246, 248, 252, 0.97);
   --color-glass-solid: #f6f8fc;
   --color-glass-stroke: rgba(255, 255, 255, 0.66);
   --color-border-strong: #7d8799;
@@ -99,7 +99,7 @@
   --color-accent-hover: #9aacfe;
   --color-accent-pressed: #a7b6fd;
   --color-focus: #a2b3ff;
-  --color-glass: rgba(30, 38, 51, 0.9);
+  --color-glass: rgba(30, 38, 51, 0.97);
   --color-glass-solid: #1e2633;
   --color-glass-stroke: rgba(255, 255, 255, 0.12);
   --color-border-strong: #7a8799;
@@ -135,7 +135,7 @@
   --color-accent-hover: #4a5ec1;
   --color-accent-pressed: #4355ad;
   --color-focus: #356cff;
-  --color-glass: rgba(246, 248, 252, 0.9);
+  --color-glass: rgba(246, 248, 252, 0.97);
   --color-glass-solid: #f6f8fc;
   --color-glass-stroke: rgba(255, 255, 255, 0.66);
   --color-border-strong: #7d8799;
@@ -172,7 +172,7 @@
     --color-accent-hover: #9aacfe;
     --color-accent-pressed: #a7b6fd;
     --color-focus: #a2b3ff;
-    --color-glass: rgba(30, 38, 51, 0.9);
+    --color-glass: rgba(30, 38, 51, 0.97);
     --color-glass-solid: #1e2633;
     --color-glass-stroke: rgba(255, 255, 255, 0.12);
     --color-border-strong: #7a8799;
