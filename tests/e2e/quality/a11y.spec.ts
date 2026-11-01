@@ -424,7 +424,11 @@ test(
     const texts = ['증발은 액체가 기체로 변한다', '응결은 기체가 고체로 변한다', '강수는 없다'];
     await createQuestion(owner, ws.id, { ...mcqInput(stem, texts, 0), question_number: 1 });
     const copy = await createQuestion(owner, ws.id, {
-      ...mcqInput(`1. ${stem} ( )`, [`③ ${texts[2]}`, `① ${texts[0]}`, `② ${texts[1]}`], 0),
+      ...mcqInput(
+        `${stem.replace(/ /g, '  ')} ( )`,
+        [`③ ${texts[2]}`, `① ${texts[0]}`, `② ${texts[1]}`],
+        0,
+      ),
       question_number: 2,
     });
     await signInAs(page, owner.user);

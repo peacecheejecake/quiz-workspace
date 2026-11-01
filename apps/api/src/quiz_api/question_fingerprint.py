@@ -8,7 +8,8 @@ only what does not change the question a learner sees:
    jamo/syllable (`①`, `⑴`, `⒜`, `Ⓐ`, `㉠`, `❶`, `➀`) and the `1)`, `1.`, `(1)`, `A.`, `A)`,
    `(A)`, `ㄱ.`, `ㄱ)`, `(ㄱ)`, `가.`, `가)`, `(가)` forms. Stripped before NFKC (NFKC turns `①`
    into `1`); never strips an option to nothing.
-2. a leading question number on the stem: `12.`, `12)`, `(12)`, `Q12.`, `문 12.`, `문제 12.`.
+2. (nothing else of the stem: a leading question number such as `12.` or `문제 12.` is part of
+   it — user decision 2026-11-01, "do not ignore anything"; fingerprint/2 stripped it).
 3. NFKC (full-width and compatibility characters).
 4. empty answer marks: brackets holding only blanks or underscores (`( )`, `[ ]`, `(____)`).
 5. quoting/terminal/separator punctuation (`.,;:!?…·、。` and quotes and angle quotes; a `.` or `,`
@@ -36,7 +37,7 @@ import re
 import unicodedata
 from collections.abc import Iterable, Sequence
 
-VERSION = "fingerprint/2"
+VERSION = "fingerprint/3"
 
 # Enclosed alphanumerics and circled Korean, stripped before NFKC (which turns them into plain
 # digits/letters): U+2460-U+24FF (① ⑴ ⒈ ⒜ Ⓐ ⓪), U+3260-U+327B (㉠ ㉮), U+2776-U+2793 (❶ ➀).
@@ -49,9 +50,6 @@ _LABEL = rf"(?:\d{{1,2}}|[A-Za-z]|[{_JAMO}]|[가나다라마바사아자차카�
 # A label ends with `)` or with a `.` that does not start a decimal (`1.5` is not label `1.`).
 _LABEL_END = r"(?:\)|\.(?!\d))"
 _LEADING_LABEL = re.compile(rf"^\s*(?:\(\s*{_LABEL}\s*\)|{_LABEL}\s*{_LABEL_END})\s*")
-_STEM_NUMBER = re.compile(
-    rf"^\s*(?:(?:문제|문|Q)?\s*\d{{1,4}}\s*{_LABEL_END}|\(\s*\d{{1,4}}\s*\))\s*", re.IGNORECASE
-)
 _EMPTY_MARK = re.compile(r"[(\[{]\s*_*\s*[)\]}]")
 # Quoting, terminal and separator marks (U+2018/2019/201C/201D are the curly quotes).
 _PUNCTUATION = re.compile("[;:!?…·・、。'\"\u2018\u2019\u201c\u201d«»「」『』〈〉《》<>]")
@@ -73,10 +71,9 @@ def _finish(text: str) -> str:
 
 
 def normalize_stem(stem: str) -> str:
-    """A stem without its leading question number, punctuation, blanks and empty answer marks."""
-    text = _nfkc(stem)
-    out = _finish(_STEM_NUMBER.sub("", text, count=1))
-    return out if out else _finish(text)
+    """A stem without punctuation, blanks and empty answer marks (its number, if it has one,
+    stays: it is part of the question asked)."""
+    return _finish(_nfkc(stem))
 
 
 def normalize_option(text: str) -> str:

@@ -70,8 +70,17 @@ def test_an_option_that_is_only_a_label_keeps_its_text() -> None:
     "prefix",
     ["12. ", "12) ", "(12) ", "Q12. ", "q 3) ", "문 12. ", "문제 12. ", "문제12)", "７．"],  # noqa: RUF001
 )
-def test_leading_question_numbers_are_stripped(prefix: str) -> None:
-    assert normalize_stem(f"{prefix}{STEM}") == normalize_stem(STEM)
+def test_leading_question_numbers_are_part_of_the_stem(prefix: str) -> None:
+    """User decision 2026-11-01 (UX7-DEDUP-2): nothing of the question asked is ignored, so a
+    stem with a leading number is another question than the same stem without it."""
+    assert normalize_stem(f"{prefix}{STEM}") != normalize_stem(STEM)
+    assert mcq(stem=f"{prefix}{STEM}") != mcq()
+
+
+def test_a_numbered_stem_is_not_a_duplicate_of_the_unnumbered_one() -> None:
+    assert mcq(stem=f"12. {STEM}") != mcq(stem=STEM)
+    # The same number on both, restyled otherwise, is still the same question.
+    assert mcq(stem=f"12. {STEM}") == mcq(stem=f"12.  {STEM.replace(' ', '  ')} ( )")
 
 
 @pytest.mark.parametrize("stem", ["문제 3에서 구한 값은?", "1.5배가 되는 값은?", "2024년의 값은?"])
@@ -133,7 +142,8 @@ def test_type_is_part_of_the_question() -> None:
 def test_fingerprint_is_stable() -> None:
     assert mcq() == mcq()
     assert len(mcq()) == 64
-    assert fingerprint("ESSAY", "설명하시오", []) == fingerprint("ESSAY", "1. 설명하시오.", [])
+    assert fingerprint("ESSAY", "설명하시오", []) == fingerprint("ESSAY", " 설명 하시오.", [])
+    assert fingerprint("ESSAY", "설명하시오", []) != fingerprint("ESSAY", "1. 설명하시오.", [])
 
 
 def test_answer_key() -> None:
@@ -154,7 +164,7 @@ def test_short_answers_compare_their_accepted_answers() -> None:
     same = fingerprint("SHORT_ANSWER", stem, [], model_answer_of("SHORT_ANSWER", ["증발"], None))
     assert same == fingerprint(
         "SHORT_ANSWER",
-        f"1. {stem} ( )",
+        f"{stem} ( )",
         [],
         model_answer_of("SHORT_ANSWER", [" 증 발.", "증발"], None),
     )
