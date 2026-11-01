@@ -2,24 +2,26 @@
 // UX4 (2026-10-21): the home header's `문제` menu (직접 추가 / 변형 출제, keyboard reachable, for
 // editors only). UX7-BANK retired its 전체 문제 link with the page, and 직접 추가 now opens the
 // 문제 등록 dialog on the home (QOV-01-AC12); UX7-DOCS merged PDF 관리 into 문서 관리
-// (DOC-01-AC09), which leaves viewers without a menu.
+// (DOC-01-AC09). UX7-DOCS-2 keeps the button for viewers and archived workspaces, with both items
+// disabled and the reason in text.
 import './dom-setup';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import type { QuestionMenuReadOnly } from '../src/components/workspaces/question-menu';
 
 const { QuestionMenu } = await import('../src/components/workspaces/question-menu');
 
-function menu(canEdit: boolean) {
+function menu(readOnly: QuestionMenuReadOnly) {
   const handlers = { onCreate: vi.fn(), onGenerate: vi.fn() };
-  render(<QuestionMenu canEdit={canEdit} {...handlers} />);
+  render(<QuestionMenu readOnly={readOnly} {...handlers} />);
   return handlers;
 }
 
 describe('home `문제` menu', () => {
   it('QOV-01-AC11 offers 직접 추가 and 변형 출제 to editors and opens each', async () => {
     const user = userEvent.setup();
-    const handlers = menu(true);
+    const handlers = menu(null);
     const trigger = screen.getByRole('button', { name: '문제' });
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
 
@@ -41,10 +43,30 @@ describe('home `문제` menu', () => {
     expect(trigger).toHaveFocus();
   });
 
-  it('QOV-01-AC11 gives viewers no 문제 menu (UX7-DOCS), and nobody 전체 문제 (UX7-BANK)', () => {
-    menu(false);
-    expect(screen.queryByRole('button', { name: '문제' })).toBeNull();
-    expect(screen.queryByRole('menuitem')).toBeNull();
-    expect(screen.queryByRole('link', { name: '전체 문제' })).toBeNull();
-  });
+  it.each([
+    ['viewer', '편집 권한이 있어야 사용할 수 있습니다'],
+    ['archived', '보관된 Workspace는 읽기 전용입니다'],
+  ] as const)(
+    'QOV-01-AC11 keeps the 문제 menu for %s with both items disabled and the reason (UX7-DOCS-2)',
+    async (readOnly, reason) => {
+      const user = userEvent.setup();
+      const handlers = menu(readOnly);
+      const trigger = screen.getByRole('button', { name: '문제' });
+      await user.click(trigger);
+      const menuEl = await screen.findByRole('menu', { name: '문제' });
+      expect(menuEl).toHaveTextContent(reason);
+      expect(menuEl).toHaveAccessibleDescription(reason);
+      const items = screen.getAllByRole('menuitem');
+      expect(items.map((item) => item.textContent)).toEqual(['직접 추가', '변형 출제']);
+      for (const item of items) {
+        expect(item).toHaveAttribute('aria-disabled', 'true');
+        expect(item).toHaveAccessibleDescription(reason);
+        await user.click(item);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(handlers.onCreate).not.toHaveBeenCalled();
+      expect(handlers.onGenerate).not.toHaveBeenCalled();
+      expect(screen.queryByRole('link', { name: '전체 문제' })).toBeNull();
+    },
+  );
 });

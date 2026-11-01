@@ -52,7 +52,7 @@
 
 - **Given:** 확정 문제가 둘 이상 있는 Workspace 홈(편집 권한)
 - **When:** `문제` 메뉴 › `변형 출제` dialog의 `여러 문제` tab에서 문제 두 개의 선택 checkbox를 고르고 변형 유형 → "생성"(UX7-BANK 2026-11-01; 이전에는 전체 문제 페이지의 선택 막대)
-- **Then:** 한 번의 요청으로 고른 원본마다 run을 하나씩 가진 묶음을 만들고 묶음 결과 페이지(`/questions/generate?batch=<id>`)로 이동해 전체 진행률과 원본별 그룹(원본 문제 앞부분, 초안 수)을 보인다. 초안은 승인 전이라 문제 수와 Heatmap 점 수가 그대로다. 보기 권한(viewer)과 보관된 Workspace에는 `변형 출제` 메뉴 항목이 없다(QGEN-MULTI).
+- **Then:** 한 번의 요청으로 고른 원본마다 run을 하나씩 가진 묶음을 만들고 묶음 결과 페이지(`/questions/generate?batch=<id>`)로 이동해 전체 진행률과 원본별 그룹(원본 문제 앞부분, 초안 수)을 보인다. 초안은 승인 전이라 문제 수와 Heatmap 점 수가 그대로다. 보기 권한(viewer)과 보관된 Workspace에서는 `변형 출제` 메뉴 항목이 이유 문구와 함께 비활성이고(UX7-DOCS-2, QOV-01-AC11; QGEN-MULTI~UX7-DOCS-2 전에는 항목이 없었다) `?panel=generate`로도 dialog가 열리지 않는다.
 
 ### QGEN-01-AC07
 

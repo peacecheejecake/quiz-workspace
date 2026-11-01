@@ -18,6 +18,7 @@ import {
   documentsPath,
   expectProgressSteps,
   expect,
+  expectReadOnlyQuestionMenu,
   homePath,
   homeUi,
   JOB_TIMEOUT_MS,
@@ -614,6 +615,9 @@ test(
     await expect(page).toHaveURL(
       (url) => url.pathname === importPath(ws.id) && url.searchParams.get('document') === mixed,
     );
+    // The URL changes before the client navigation commits: wait for the import page itself so
+    // the next goto does not interrupt it.
+    await expect(importUi.heading(page)).toHaveText(/문제 pdf 가져오기|가져오기|import/i);
     const runs = await listImports(owner, ws.id);
     expect(runs.map((r) => r.source_document_id).sort()).toEqual([paper.documentId, mixed].sort());
     expect(runs.map((r) => r.id)).toContain(paperRun.id);
@@ -621,8 +625,8 @@ test(
     await expect(docUi.reviewLink(row(/book-en/))).toBeVisible();
     await expect(docUi.extractButton(row(/book-en/))).toHaveCount(0);
 
-    // A viewer: no 문제 button at all (nothing is left in its menu); 문서 관리 lists the PDFs
-    // with 문제 검토 but no 문제 추출, upload, 종류 변경 or delete.
+    // A viewer: 문서 관리 lists the PDFs with 문제 검토 but no 문제 추출, upload, 종류 변경 or
+    // delete; the 문제 button stays with its items disabled (UX7-DOCS-2), still no PDF 관리.
     await page.context().clearCookies();
     await signInAs(page, viewer.user);
     await page.goto(homePath(ws.id, 'panel=question-pdfs'));
@@ -630,7 +634,6 @@ test(
       (url) => url.searchParams.getAll('panel').join(',') === 'documents',
     );
     await expect(dialog).toBeVisible();
-    await expect(homeUi.questionMenuButton(page)).toHaveCount(0);
     await expect(list.getByRole('listitem')).toHaveCount(3);
     await expect(docUi.reviewLink(row(/questions-ko/))).toBeVisible();
     await expect(docUi.reviewLink(row(/book-en/))).toBeVisible();
@@ -640,5 +643,6 @@ test(
     await expect(dialog.getByRole('button', { name: /pdf 업로드|upload/i })).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: /종류 변경|change kind/i })).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: /삭제|delete/i })).toHaveCount(0);
+    await expectReadOnlyQuestionMenu(page, 'viewer');
   },
 );

@@ -17,6 +17,7 @@ import {
   createNumberedQuestions,
   draftFor,
   expect,
+  expectReadOnlyQuestionMenu,
   fillMcq,
   getOverview,
   homeUi,
@@ -477,9 +478,9 @@ test(
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await expect(homeUi.shareButton(page)).toHaveCount(0);
     await expect(homeUi.shareDialog(page)).toHaveCount(0);
-    // A viewer has no 문제 menu: no 전체 문제 (UX7-BANK), no PDF 관리 (UX7-DOCS), no 직접 추가 /
-    // 변형 출제.
-    await expect(homeUi.questionMenuButton(page)).toHaveCount(0);
+    // A viewer keeps the 문제 button (UX7-DOCS-2) with 직접 추가 / 변형 출제 disabled; no
+    // 전체 문제 (UX7-BANK), no PDF 관리 (UX7-DOCS).
+    await expectReadOnlyQuestionMenu(page, 'viewer');
     const denied = await viewer.api.request('GET', `/workspaces/${s.workspaceId}/share-links`);
     expect(denied.status).toBe(403);
   },
@@ -656,7 +657,7 @@ test(
 );
 
 test(
-  'QOV-01-AC11 the header 문제 menu opens 직접 추가 and 변형 출제 by mouse and keyboard, without 전체 문제 or PDF 관리',
+  'QOV-01-AC11 the header 문제 menu opens 직접 추가 and 변형 출제 by mouse and keyboard, without 전체 문제 or PDF 관리; viewers and archived workspaces keep the button with both items disabled and the reason',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac11', 1);
@@ -707,6 +708,21 @@ test(
     await expect(form).toBeHidden();
     await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
     await expect(homeUi.questionMenuButton(page)).toBeFocused();
+
+    // Without edit rights the button stays (UX7-DOCS-2): a viewer, then the archived workspace's
+    // owner, see both items disabled with the reason in text.
+    const viewer = await workspaceFactory.member('qov01-ac11-viewer');
+    seedMembership(s.workspaceId, viewer.user.id, 'viewer');
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(overviewPath(s.workspaceId));
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expectReadOnlyQuestionMenu(page, 'viewer');
+
+    await workspaceFactory.archive(s.owner, s.workspaceId);
+    await page.context().clearCookies();
+    await openOverview(page, s);
+    await expectReadOnlyQuestionMenu(page, 'archived');
   },
 );
 
@@ -790,8 +806,8 @@ test(
     await page.goto(`${home}?panel=question-create`);
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await expect(questionFormUi.form(page)).toHaveCount(0);
-    // No 문제 menu at all without edit rights (UX7-DOCS: its PDF 관리 item moved to 문서 관리).
-    await expect(homeUi.questionMenuButton(page)).toHaveCount(0);
+    // The 문제 button stays; 직접 추가 is disabled with the reason (UX7-DOCS-2).
+    await expectReadOnlyQuestionMenu(page, 'viewer');
 
     // Archived: read-only for the owner too.
     await workspaceFactory.archive(owner, ws.id);
@@ -807,7 +823,7 @@ test(
     await page.goto(`${home}?panel=question-create`);
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await expect(questionFormUi.form(page)).toHaveCount(0);
-    await expect(homeUi.questionMenuButton(page)).toHaveCount(0);
+    await expectReadOnlyQuestionMenu(page, 'archived');
   },
 );
 

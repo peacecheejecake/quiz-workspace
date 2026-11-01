@@ -11,9 +11,10 @@
 //   Home       (UX3c) `/workspaces/:id`: hidden h1 (workspace name), header with the unified
 //              search (searchbox "검색어", icon button "검색", under it checkboxes "문제"/"본문"
 //              each followed by a "설정" text button named "문제 설정"/"본문 설정" → popover
-//              "문제 검색 설정"/"본문 검색 설정", and a status message, UX6), buttons "문서 n", "문제" (menu button, UX4, editors only since UX7-DOCS: menuitems
+//              "문제 검색 설정"/"본문 검색 설정", and a status message, UX6), buttons "문서 n", "문제" (menu button, UX4; shown to everyone, UX7-DOCS-2: menuitems
 //              "직접 추가" (the modal "문제 등록" dialog, `?panel=question-create`, UX7-BANK) and
-//              "변형 출제"; no "전체 문제" since UX7-BANK, no "PDF 관리" since UX7-DOCS), then
+//              "변형 출제", aria-disabled without edit rights with the reason as menu text;
+//              no "전체 문제" since UX7-BANK, no "PDF 관리" since UX7-DOCS), then
 //              icon buttons "이력" and "공유하기" (owner); dialogs are non-modal
 //              FloatingSidePanels inside <main> named "문서 관리", "문제 생성", "이력", "링크 공유"
 //              (`?panel=documents|generate|history|share`; the retired 문제 PDF 관리
@@ -136,6 +137,67 @@ const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   create: /^(직접 추가|add question)$/i,
   generate: /^(변형 출제|generate variants?)$/i,
 };
+
+/** Why the `문제` menu's editor-only items are disabled (UX7-DOCS-2, QOV-01-AC11). */
+export const QUESTION_MENU_REASONS = {
+  viewer: /^(편집 권한이 있어야 사용할 수 있습니다|you need edit rights to use these)\.?$/i,
+  archived: /^(보관된 workspace는 읽기 전용입니다|archived workspaces are read-only)\.?$/i,
+} as const;
+
+/**
+ * Without edit rights the `문제` button stays (UX7-DOCS-2, QOV-01-AC11): its menu shows 직접 추가
+ * and 변형 출제 aria-disabled, says why in text (described-by), skips them with the arrow keys
+ * and opens nothing when one is clicked. Leaves the menu closed, focus back on the button.
+ */
+export async function expectReadOnlyQuestionMenu(
+  page: Page,
+  reason: keyof typeof QUESTION_MENU_REASONS,
+): Promise<void> {
+  const button = homeUi.questionMenuButton(page);
+  await expect(button).toBeVisible();
+  await expect(button).toHaveAttribute('aria-haspopup', 'menu');
+  await button.focus();
+  await page.keyboard.press('Enter');
+  const menu = homeUi.questionMenu(page);
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem')).toHaveText([
+    QUESTION_MENU_ITEMS.create,
+    QUESTION_MENU_ITEMS.generate,
+  ]);
+  await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
+  const text = QUESTION_MENU_REASONS[reason];
+  await expect(menu.getByText(text)).toBeVisible();
+  for (const item of ['create', 'generate'] as const) {
+    const el = homeUi.questionMenuItem(page, item);
+    await expect(el).toHaveAttribute('aria-disabled', 'true');
+    await expect(el).toHaveAccessibleDescription(text);
+  }
+  await expect(menu).toHaveAccessibleDescription(text);
+  // The arrow keys skip the disabled items; Escape returns to the button.
+  await page.keyboard.press('ArrowDown');
+  for (const item of ['create', 'generate'] as const) {
+    await expect(homeUi.questionMenuItem(page, item)).not.toBeFocused();
+  }
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(button).toBeFocused();
+  // A click on a disabled item opens nothing.
+  const before = new URL(page.url()).searchParams.getAll('panel');
+  for (const item of ['create', 'generate'] as const) {
+    await button.click();
+    const el = homeUi.questionMenuItem(page, item);
+    // Radix positions the menu after measuring: wait until it is placed before clicking.
+    await expect(el).toBeInViewport();
+    await el.click({ force: true });
+    await expect(homeUi.generateDialog(page)).toHaveCount(0);
+    await expect(
+      page.getByRole('dialog', { name: /문제 (등록|추가)|(new|add) question/i }),
+    ).toHaveCount(0);
+    expect(new URL(page.url()).searchParams.getAll('panel')).toEqual(before);
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+  }
+}
 
 /** Opens the header's `문제` menu and chooses `item` (UX4). */
 export async function chooseQuestionMenu(page: Page, item: QuestionMenuItem): Promise<void> {
