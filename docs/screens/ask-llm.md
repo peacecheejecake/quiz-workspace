@@ -1,6 +1,6 @@
 # ASK-01 — AI 질문 (문서 기반 답변) Floating Side Panel
 
-**상태:** 화면 요구사항 초안 v0.2 · ASK-SPEC 신규 2026-11-01 (사용자 요청 "LLM에 질문하기 — 문서 기반 답변 — 문제별로 '질문하기' 버튼 추가 -> LLM input에 context로 추가") · 사용자 결정 반영 2026-11-01(진입점 세 곳, 대화 저장·비공개, 힌트 모드, 문서 근거만, `질문하기`는 문제 상세·모의고사 문제에만). `(제안 — 사용자 확인 필요)` 표시는 사용자가 아직 정하지 않은 선택이며 implementation-plan §7의 ASK-SPEC 제안 행에 모여 있다. 제안이 확인되면 표시를 `사용자 결정 <날짜>`로 바꾸고 RED(ASK.0)를 시작한다.
+**상태:** 화면 요구사항 v1.0 (모든 제안 사용자 결정 2026-11-01) · ASK-SPEC 신규 2026-11-01 (사용자 요청 "LLM에 질문하기 — 문서 기반 답변 — 문제별로 '질문하기' 버튼 추가 -> LLM input에 context로 추가") · 사용자 결정 반영 2026-11-01(진입점 세 곳, 대화 저장·비공개, 힌트 모드, 문서 근거만, `질문하기`는 문제 상세·모의고사 문제에만). 모든 설계 선택은 사용자가 확인했다(implementation-plan §7 ASK-SPEC 사용자 결정 행). RED(ASK.0)는 구현 착수 직전에 쓴다.
 **Route:** `/workspaces/:workspaceId?panel=ask` (대화 목록·새 대화) · `?panel=ask&conversation=:conversationId` (대화 하나). Workspace header의 `AI 질문` 버튼, header `문제` 메뉴의 `AI 질문` 항목, 본문 검색의 `AI에게 묻기`, 그리고 문제 상세 dialog·모의고사 문제의 `질문하기`가 연다. 공유 링크 게스트(`/share/:shareId`)에는 없다.
 **테스트:** `tests/e2e/ask/ask-llm.spec.ts` (계약: `tests/integration/ask/test_ask_contract.py`, `apps/worker` · `packages/core` unit test, `supabase/tests` pgTAP)
 **Phase:** ASK.0 (RED) → ASK-B (계약) → ASK-W (AC01~AC03·AC06~AC11) → ASK-Q (AC04·AC05, CI phase 켬) → ASK-QM (모의고사 문제, C10) · ASK-X (품질·eval·runbook)
@@ -11,8 +11,8 @@ id: ASK-01
 route: /workspaces/:workspaceId?panel=ask
 actor: workspace_member (owner · editor · viewer — 자기 대화만)
 permission: read · personal conversation
-status: draft
-api: [GET /api/v1/workspaces/:id/ask, GET /api/v1/workspaces/:id/ask/conversations, POST /api/v1/workspaces/:id/ask/conversations, GET /api/v1/ask/conversations/:id, DELETE /api/v1/ask/conversations/:id, DELETE /api/v1/ask/conversations/:id/attachment, POST /api/v1/ask/conversations/:id/messages, GET /api/v1/ask/messages/:id, GET /api/v1/ask/messages/:id/stream, POST /api/v1/ask/messages/:id/cancel, POST /api/v1/ask/messages/:id/retry, PUT /api/v1/ask/messages/:id/feedback]
+status: confirmed
+api: [POST /api/v1/ask/messages/:id/regenerate, GET /api/v1/workspaces/:id/ask, GET /api/v1/workspaces/:id/ask/conversations, POST /api/v1/workspaces/:id/ask/conversations, GET /api/v1/ask/conversations/:id, DELETE /api/v1/ask/conversations/:id, DELETE /api/v1/ask/conversations/:id/attachment, POST /api/v1/ask/conversations/:id/messages, GET /api/v1/ask/messages/:id, GET /api/v1/ask/messages/:id/stream, POST /api/v1/ask/messages/:id/cancel, POST /api/v1/ask/messages/:id/retry, PUT /api/v1/ask/messages/:id/feedback]
 components: [FloatingSidePanel, Button, IconButton, Textarea, Badge, Chip, DropdownMenu, Popover, ConfirmDialog, EmptyState, DocumentExcerptPanel]
 linked_tests: [ASK-01-AC01 … ASK-01-AC11]
 ```
@@ -27,7 +27,7 @@ linked_tests: [ASK-01-AC01 … ASK-01-AC11]
 - **AI 문제 해설과의 관계:** 제출 후 결과 아래의 AI 해설은 별도 화면 [AIEXPL-01](ai-explanations.md)이다(공유 캐시, 자기 플래그). AI 해설 영역의 `이 문제로 질문하기`(사용자 결정 2026-11-01, 유지)는 이 panel을 `practice` 첨부로 연다. 이 링크는 **풀이 panel 안에서 `질문하기`로 가는 유일한 경로**이고, AI 해설처럼 제출 뒤에만 보이며 언제나 `full`이다(서버가 그 session의 제출을 확인). 결정 (9) "풀이 panel header에는 `질문하기`가 없다"는 제출 전에 문제를 첨부하는 header 버튼을 두지 않는다는 뜻이고, 이 링크는 header가 아닌 제출 후 결과 영역에 있으므로 어긋나지 않는다. AI 해설은 ASK의 검색 근거가 아니다.
 - **개인 대화.** 대화는 사용자 한 명 · Workspace 하나에 속한다. 다른 구성원(Owner 포함)은 남의 대화를 볼 수 없다(서버 404). Workspace 이력(HISTORY-01)·활동 기록에도 나오지 않는다 (사용자 결정 2026-11-01).
 
-### 실행 경로 — worker + streaming (제안 — 사용자 확인 필요)
+### 실행 경로 — worker + streaming (사용자 결정 2026-11-01)
 
 API는 `LLM_API_KEY`를 갖지 않는다(결정 기록 2026-10-29 DOCSUM-B). 그래서 LLM 호출은 worker가 하고, 답은 흘려보낸다(streaming).
 
@@ -40,14 +40,14 @@ API는 `LLM_API_KEY`를 갖지 않는다(결정 기록 2026-10-29 DOCSUM-B). 그
 
 ### 검색 범위
 
-- **대상 (제안 — 사용자 확인 필요):** 기본은 Workspace의 모든 발행된 교재(`document_type = book`, 교재+문제 포함). panel의 "질문 범위" popover로 문서·장을 좁힐 수 있다(SEARCH-01 "본문 설정"의 문서·장 필터와 같은 부품·같은 목록). 범위는 메시지마다 저장된다. 대안: 범위 고르기 없이 항상 전체.
+- **대상 (사용자 결정 2026-11-01):** 기본은 Workspace의 모든 발행된 교재(`document_type = book`, 교재+문제 포함). panel의 "질문 범위" popover로 문서·장을 좁힐 수 있다(SEARCH-01 "본문 설정"의 문서·장 필터와 같은 부품·같은 목록). 범위는 메시지마다 저장된다.
 - **문제지는 제외 (UX7-SEARCH-2와 같음):** `question_paper` 문서는 검색하지 않는다. 문제지에는 정답지가 있어, 넣으면 아직 풀지 않은 문제의 정답이 근거로 딸려 올 수 있다. 서버가 항상 범위에서 빼며 요청이 문제지를 지정해도 결과가 없다.
 - **교재+문제의 문제 구간 제외:** `content_kind = mixed` 문서는 문제 추출이 문제·정답지 구간으로 읽은 블록(문서 요약이 입력에서 빼는 것과 같은 구간 — DOCSUM-01 "대상 아님")을 근거에서 뺀다. 검색 결과 chunk의 block이 그 구간에 있으면 버린다(색인은 그대로; 걸러진 수만 기록).
 - **AI 파생물 제외:** 문서 요약(DOCSUM-01)과 챕터 정리 노트(CHNOTE-01)는 근거가 아니다. 특히 정리 노트는 정답·해설에서 나왔으므로 넣지 않는다.
 - **발행본만:** 현재 발행(active published) revision의 chunk만(published-revision 필터는 서버가 강제, SEARCH-01과 같음). 초안·이전 revision·삭제된 문서·다른 Workspace는 없다. client가 보낸 `workspace_id`·문서 id는 믿지 않는다: 범위의 문서·장 id는 서버가 이 Workspace의 발행 교재와 교집합을 내고, 아닌 id는 결과가 없을 뿐이다(SEARCH-01과 같음).
-- **검색어:** 사용자 질문 + 첨부 문제의 발문·보기 글(공개 수준 안의 것만). 이전 대화는 검색어에 넣지 않는다(마지막 질문 기준) (제안 — 사용자 확인 필요; 대안은 직전 질문까지 합침).
+- **검색어:** 사용자 질문 + 첨부 문제의 발문·보기 글(공개 수준 안의 것만). 이전 대화는 검색어에 넣지 않는다(마지막 질문 기준) (사용자 결정 2026-11-01).
 - **개수:** 검색 파이프라인의 기본 후보(dense 30 · BM25 30 → RRF → rerank)에서 상위 `ASK_TOP_K`(기본 8)개, 각 근거는 `ExcerptResolver` 발췌(최대 2,000자), 합계 `ASK_MAX_CONTEXT_CHARS`(기본 16,000자). reranker 점수가 `ASK_MIN_RELEVANCE` 미만인 후보는 버린다(값은 eval로 정함). query embedding이 안 되면 BM25만으로 계속하고 답 위에 SEARCH-01-AC06과 같은 비차단 안내를 단다.
-- **찾지 못함:** 남은 근거가 0개이고 첨부한 문제도 없으면 **LLM을 부르지 않고** 답 메시지를 `no_sources`로 끝낸다: "올린 문서에서 관련 내용을 찾지 못했습니다. 질문을 바꾸거나 질문 범위를 넓혀 보세요." (usage 0). 근거가 있지만 모델이 그 구절로 답할 수 없다고 판단하면 정해진 표시(`[NO_ANSWER]`)로 시작하게 하고, 서버가 같은 문구 + "검색한 구절" 목록으로 바꾼다. 첨부한 문제만 있고 근거가 0개면 모델을 부르되 "문서에서 근거를 찾지 못해 문제 내용으로만 설명합니다." 안내를 단다 (제안 — 사용자 확인 필요; 대안은 이 경우도 LLM 없이 찾지 못함).
+- **찾지 못함:** 남은 근거가 0개이고 첨부한 문제도 없으면 **LLM을 부르지 않고** 답 메시지를 `no_sources`로 끝낸다: "올린 문서에서 관련 내용을 찾지 못했습니다. 질문을 바꾸거나 질문 범위를 넓혀 보세요." (usage 0). 근거가 있지만 모델이 그 구절로 답할 수 없다고 판단하면 정해진 표시(`[NO_ANSWER]`)로 시작하게 하고, 서버가 같은 문구 + "검색한 구절" 목록으로 바꾼다. 첨부한 문제만 있고 근거가 0개면 모델을 부르되 "문서에서 근거를 찾지 못해 문제 내용으로만 설명합니다." 안내를 단다 (사용자 결정 2026-11-01).
 
 ### 문제 첨부와 정답 비노출
 
@@ -69,7 +69,7 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
 - **힌트 모드 지시 (사용자 결정 2026-11-01):** `hint`일 때 모델에게 "사용자는 아직 이 문제를 제출하지 않았다. 어느 보기가 정답인지, 최종 답이 무엇인지 말하지 말고 개념과 근거 구절을 짚어 스스로 풀 수 있게 도와라"라고 지시하고, 칩 옆에 "제출 전 — 정답 없이 힌트만"을 보인다. 교재 구절에 답의 근거가 있으면 모델이 사실상 답을 추론할 수 있다는 한계를 명세에 남긴다 — 이는 사용자가 교재를 직접 읽는 것과 같고, 저장된 정답·해설이 새는 것이 아니다.
 - `hint`에서 출처 구절(`question_sources`)을 넣지 않는 이유: 편집자가 단 정답 근거라 사실상 정답 위치를 알려 준다. 일반 검색으로 같은 구절이 올라오는 것은 막지 않는다(교재는 열람 범위).
 - 답 메시지의 SSE·API 응답에는 서버가 LLM에 넣은 context(정답·해설 포함)를 다시 돌려주지 않는다. 화면의 칩은 문제 번호·발문 앞 40자·공개 수준 글자만 보인다.
-- **대화 하나 = 첨부 문제 하나 (제안 — 사용자 확인 필요):** `질문하기`는 항상 새 대화를 만든다. 칩의 `×`(접근성 이름 "첨부한 문제 빼기")로 빼면 그 뒤 메시지에는 문제 context가 없다(`DELETE …/attachment`; 이전 답은 남음). 같은 대화에 다른 문제를 더 붙이지 않는다. 대안: 열린 대화에 문제를 붙이고 바꿀 수 있음.
+- **대화 하나 = 첨부 문제 하나 (사용자 결정 2026-11-01):** `질문하기`는 항상 새 대화를 만든다. 칩의 `×`(접근성 이름 "첨부한 문제 빼기")로 빼면 그 뒤 메시지에는 문제 context가 없다(`DELETE …/attachment`; 이전 답은 남음). 같은 대화에 다른 문제를 더 붙이지 않는다.
 - (`practice` 첨부 — 지금은 모의고사 문제) 같은 문제를 새 session에서 다시 풀면 새 `질문하기`가 새 대화를 만든다. 예전 대화는 예전 session(이미 제출)에 묶여 그대로다 — 사용자가 이미 본 정답만 들어 있다.
 
 ### 대화·보존
@@ -98,8 +98,8 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
 - **진입 — 세 곳 모두 (사용자 결정 2026-11-01 "위 세 군데 모두"):** 셋 다 같은 `?panel=ask` panel을 연다. panel은 바로 열리고 데이터를 불러오는 동안 skeleton(QOV-01-AC09).
   - **header 버튼:** Workspace header 오른쪽 아이콘 묶음(`이력`·`공유하기`) 앞에 `AI 질문` 버튼(아이콘 + 글자 "AI 질문", 접근성 이름 "AI 질문", 모든 구성원; 보관된 Workspace·기능 꺼짐에서도 보임 — 지난 대화 읽기, 이유는 panel이 보임).
   - **`문제` 메뉴 항목:** header `문제` 메뉴에 `AI 질문` 항목. `requiresEdit` 항목과 같은 방식으로 늘 보이고, 보기 권한도 쓸 수 있다. 기능이 꺼진 환경과 보관된 Workspace에서는 비활성(`aria-disabled`, focus 가능)이고 이유("이 환경에서는 AI 질문을 사용할 수 없습니다." / "보관된 Workspace에서는 새 질문을 할 수 없습니다.")를 항목 설명으로 보인다. 지난 대화는 header 버튼으로 연다.
-  - **본문 검색의 `AI에게 묻기`:** 본문 검색 영역(SEARCH-01, 펼친 상태)의 검색 버튼 옆 글자 버튼 `AI에게 묻기`(접근성 이름 "본문 검색어로 AI에게 묻기"). 누르면 새 대화로 panel을 열고 지금 본문 검색어를 입력란에 **채워 둔다**(자동으로 보내지 않음 — 사용자가 고쳐서 Enter; 제안 — 사용자 확인 필요, 대안은 바로 첫 질문으로 보냄). 본문 설정의 문서·장 필터가 있으면 `질문 범위`로 옮긴다. 검색어가 비어 있으면 빈 입력란으로 연다. 보관·기능 꺼짐에서는 비활성 + 같은 이유. 공유 화면 검색에는 없다.
-- **SEARCH-01과의 관계 (제안 — 사용자 확인 필요):** `AI에게 묻기` 버튼 하나 외에는 본문 검색과 별개다. 같은 검색 파이프라인을 쓰지만 검색창·결과 목록·URL은 바뀌지 않는다. 각주가 여는 "본문 발췌" panel은 SEARCH-01의 `DocumentExcerptPanel`을 그대로 쓴다.
+  - **본문 검색의 `AI에게 묻기`:** 본문 검색 영역(SEARCH-01, 펼친 상태)의 검색 버튼 옆 글자 버튼 `AI에게 묻기`(접근성 이름 "본문 검색어로 AI에게 묻기"). 누르면 새 대화로 panel을 열고 지금 본문 검색어를 입력란에 **채워 둔다**(자동으로 보내지 않음 — 사용자가 고쳐서 Enter; 사용자 결정 2026-11-01). 본문 설정의 문서·장 필터가 있으면 `질문 범위`로 옮긴다. 검색어가 비어 있으면 빈 입력란으로 연다. 보관·기능 꺼짐에서는 비활성 + 같은 이유. 공유 화면 검색에는 없다.
+- **SEARCH-01과의 관계 (사용자 결정 2026-11-01):** 세 진입점(header 버튼·`문제` 메뉴·`AI에게 묻기`) 외에는 본문 검색과 별개다. 같은 검색 파이프라인을 쓰지만 검색창·결과 목록·URL은 바뀌지 않는다. 각주가 여는 "본문 발췌" panel은 SEARCH-01의 `DocumentExcerptPanel`을 그대로 쓴다.
 - **panel:** 공통 `FloatingSidePanel`, non-modal(design-system §5.1; 다른 홈 dialog와 함께 열리고 나중에 연 것이 위 — QOV-01-AC10, 뒤로가기 규칙 QOV-01-AC14). 모바일(<640px)은 full-height sheet(safe-area, 입력란은 아래 고정, 화면 키보드가 올라오면 입력란이 그 위에 남음). 데스크톱 폭은 §5.1 기본(500px).
   - header: 제목 "AI 질문", 부제(대화를 열었으면 대화 제목), `대화 목록` 버튼(목록 ↔ 대화 전환, 목록이면 숨김), `새 대화` 버튼, `질문 범위` 버튼(popover), 닫기.
   - **대화 목록 보기**(`?panel=ask`, 대화 없음): 대화 행(제목·마지막 시각, 누르면 연다)과 행 메뉴 `삭제`. 대화가 없으면 빈 상태 "Workspace 문서에 대해 물어보세요." + 예시 문구 없이 입력란이 바로 아래에 있다(목록 보기에서도 질문을 쓰면 새 대화가 된다).
@@ -108,8 +108,11 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
   - 답 메시지: 왼쪽, `AI 생성` badge, 본문(Markdown 일부 — 문단·목록·강조·코드 — 만 렌더링하고 HTML·링크·이미지는 글자로 다룬다: LLM 출력 sanitize, DOCSUM-01과 같은 renderer), 본문의 각주 번호 `[1]`은 버튼(접근성 이름 "출처 1: <문서 제목> p.12"), 그 아래 `출처` 목록(`ol`: `[1] <문서 제목> · <장> · p.12–13`, 각 줄은 버튼), 동작 줄(`복사`, `도움이 안 됨`), 안내 "AI가 문서를 근거로 만든 답입니다. 틀릴 수 있으니 출처를 확인하세요."
   - 출처 버튼은 오른쪽에 "본문 발췌" panel(SEARCH-01 `DocumentExcerptPanel`, non-modal, 휴대폰은 bottom sheet)을 열어 그 근거 발췌 전체·위치를 보이고, panel의 "PDF에서 보기"는 DOC-02 그 쪽(`?page=`)을 연다. 발췌는 메시지에 고정된 revision의 블록에서 읽는다; 그 revision이 더는 발행본이 아니면 "이 출처는 이전 발행본입니다. 현재 문서와 다를 수 있습니다."를 단다(메시지 내용은 바뀌지 않음).
   - `복사`: 답 본문(Markdown 원문)과 출처 목록(`[1] 문서 제목 p.12`)을 clipboard에 쓴다. 완료 시 `role="status"` "복사했습니다".
-  - `도움이 안 됨` (제안 — 사용자 확인 필요): 누르면 이유 4개 중 하나(`출처와 다름`·`지어낸 내용`·`정답을 알려 줌`·`기타`)를 고르는 작은 popover. 이유 code만 저장한다(자유 글 없음). 사용자 본인만 보고, 운영은 개수만 집계해 eval에 쓴다. 대안: 평가 없음.
-  - **다시 생성 없음 (제안 — 사용자 확인 필요):** 성공한 답에는 `다시 생성`이 없다(DOCSUM-SPEC과 같은 이유 — 같은 근거·같은 질문은 비슷한 답, 비용만 듦). 실패·중지된 답에는 `다시 시도`(같은 질문·같은 근거로 새 답 메시지). 대안: 마지막 답에 `다시 생성`(한도에 포함).
+  - `도움이 안 됨` (사용자 결정 2026-11-01): 누르면 이유 4개 중 하나(`출처와 다름`·`지어낸 내용`·`정답을 알려 줌`·`기타`)를 고르는 작은 popover. 이유 code만 저장한다(자유 글 없음). 사용자 본인만 보고, 운영은 개수만 집계해 eval에 쓴다.
+  - **`다시 생성` (사용자 결정 2026-11-01 — 성공한 답에도):** 대화의 **마지막 답**에는 상태와 상관없이 동작 줄에 `다시 생성`이 있다(성공·찾지 못함·중지·실패; 실패·중지에서는 이름이 `다시 시도`). 누르면 같은 사용자 질문에 대해 새 답 메시지(`regenerated_from_message_id` = 이전 답)를 만든다 — 근거 검색을 다시 실행하고(그사이 발행된 교재 반영) 새 근거를 고정한다.
+    - **이전 답은 버전으로 남긴다**(append-only — 메시지를 바꾸지 않음): 답 위에 "답 2/2" 글자와 `이전 답`·`다음 답` 버튼(접근성 이름 "이전 답 보기"·"다음 답 보기")으로 같은 질문의 답 버전을 오간다. 기본은 최신 버전이고, LLM에 보내는 직전 턴과 대화 목록·복사는 **보고 있는 버전이 아니라 최신 버전**을 쓴다. 이전 버전의 출처·각주·`도움이 안 됨`은 그대로 쓸 수 있다.
+    - 한도: `다시 생성`은 새 질문과 같이 센다 — 사용자 분당·하루 한도, 진행 중 1개, 월 token 상한에 포함된다(대화 턴 수 `ASK_MAX_TURNS`에는 세지 않음). 같은 질문의 답 버전은 최대 `ASK_MAX_REGENERATIONS`(기본 5)개이고, 넘으면 버튼이 비활성 + "이 질문의 답은 5개까지 만들 수 있습니다."(API 409 `ask-regenerate-limit`). 마지막이 아닌 답(뒤에 다른 질문이 있음)에는 `다시 생성`이 없다 — 뒤 대화의 문맥이 어긋나지 않게 한다.
+    - 보관된 Workspace·기능 꺼짐에서는 없다(새 질문과 같음).
 - **입력 영역:** 첨부 칩(있을 때) → 여러 줄 입력란(접근성 이름 "질문", placeholder "문서에 대해 질문하세요", 자동 높이 최대 6줄) → 글자 수(한도의 80%부터 보임) → `보내기`(아이콘 버튼, 접근성 이름 "보내기") / 답을 만드는 동안은 같은 자리에 `답변 중지`.
   - **첨부 칩:** "3장 12번 · <발문 앞 40자>" + 공개 수준 글자("제출 전 — 정답 없이 힌트만" / "제출 후 — 정답·해설 포함" / "정답·해설 포함"), 오른쪽 `×`("첨부한 문제 빼기"). 색만으로 상태를 구분하지 않는다(글자). 칩을 누르면 아무 일도 없다(문제를 다시 열지 않음 — 문제 상세 dialog는 이미 뒤에 열려 있다).
   - Enter = 보내기, Shift+Enter = 줄바꿈. 한글 IME 조합 중(`compositionstart`~`compositionend`)의 Enter는 보내지 않는다(SEARCH-01-AC12와 같은 IME 규칙). 보내면 입력란을 비우고 focus는 입력란에 남는다. 앞뒤 공백만 있는 질문은 보내지 않는다.
@@ -119,8 +122,8 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
   - "문제 상세" dialog(풀이 panel의 `정답·해설 보기`·`수정 이력·출처`, `보관·초안 문제` dialog의 상세) footer: `질문하기`(접근성 이름 "이 문제로 AI에게 질문하기", 모든 구성원, `detail` 첨부 → `full`).
   - 모의고사 문제: QuestionViewer `sequence(mock)`(풀이)·`manage(mock)`(편집 권한)의 header. ASK-QM이 MOCK 트랙 뒤에 더하고 그때 E2E AC를 추가한다. 제출 전·후 모두 보인다(제출 전 `hint`, 제출 후 `full` — 사용자 결정 2026-11-01).
   - 풀이 panel(QPLAY-01) header와 등록 문제의 범위 풀이(QVIEW `sequence(bank)`)에는 **없다**. 풀이 panel의 유일한 경로는 제출 뒤 AI 해설 아래의 `이 문제로 질문하기`(`full`, AIEXPL-01)다. 공유 게스트 미리보기(`read-only`)에도 없다.
-  - **문제 상세 dialog 위로 열기 (제안 — 사용자 확인 필요):** 문제 상세는 풀이 panel 위의 modal dialog다. `질문하기`를 누르면 AI 질문 panel이 그 **위에** 열리고, 그동안은 AI 질문 panel이 modal처럼 focus를 가둔다. 닫으면(닫기·Escape) focus는 `질문하기` 버튼으로 돌아오고, 문제 상세와 그 뒤 풀이 panel의 고르던 답·session이 그대로 남는다(QPLAY-01-AC09). header·메뉴·본문 검색으로 연 panel은 non-modal이다. 대안: 문제 상세를 닫고 non-modal panel을 연다.
-  - 기능이 꺼진 환경과 보관된 Workspace에는 문제의 `질문하기`가 없다(header `AI 질문`은 보이고 panel이 이유를 보인다) (제안 — 사용자 확인 필요; 대안은 `문제` 메뉴처럼 비활성 + 이유).
+  - **문제 상세 dialog 위로 열기 (사용자 결정 2026-11-01):** 문제 상세는 풀이 panel 위의 modal dialog다. `질문하기`를 누르면 AI 질문 panel이 그 **위에** 열리고, 그동안은 AI 질문 panel이 modal처럼 focus를 가둔다. 닫으면(닫기·Escape) focus는 `질문하기` 버튼으로 돌아오고, 문제 상세와 그 뒤 풀이 panel의 고르던 답·session이 그대로 남는다(QPLAY-01-AC09). header·메뉴·본문 검색으로 연 panel은 non-modal이다.
+  - 기능이 꺼진 환경과 보관된 Workspace에는 문제의 `질문하기`가 없다(header `AI 질문`은 보이고 panel이 이유를 보인다) (사용자 결정 2026-11-01).
 - **오류 이유 문구:** `llm_unavailable`·`llm_timeout` → "AI 서비스에 연결하지 못했습니다. 잠시 후 다시 시도하세요.", `llm_refused` → "이 질문에는 답할 수 없습니다.", `sources_unavailable`(고정한 근거 revision이 더는 발행본이 아니거나 문서가 지워짐) → "근거 문서가 바뀌었습니다. 다시 질문하세요.", `workspace_unavailable` → "Workspace를 사용할 수 없습니다.", 그 밖 `ask_failed` → "답을 만들지 못했습니다. 다시 시도하세요." 오류는 답 자리의 `role="alert"`와 `다시 시도`(해당하면)로 보인다. 오류 문구에 LLM 응답 원문은 없다.
 - **접근성:** panel 안 Tab 순서 header → 메시지 목록(답마다 각주 버튼·출처·동작) → 첨부 칩 `×` → 입력란 → 보내기. 메시지 목록은 `role="log"`이지만 **글자 하나하나를 읽어 주지 않는다**: 답을 만드는 동안 그 답 요소는 `aria-busy="true"`이고, 별도의 시각적으로 숨긴 `role="status"`가 "답을 쓰는 중입니다" (시작), "답변이 끝났습니다. 출처 n개" (끝), 오류면 alert 문구를 한 번씩 알린다. 끝난 답은 `aria-busy="false"`가 되어 화면 낭독기로 읽을 수 있다. 새 답이 오면 사용자가 위로 스크롤해 있지 않은 한 아래로 따라간다(스크롤해 있으면 "새 답변" 버튼). Escape(focus가 panel 안이고 IME 조합 중이 아님, 열린 popover가 없음)와 닫기 버튼으로 닫고 focus를 연 버튼으로 돌린다. 터치 target 24px 이상(WCAG 2.5.8). 375px에서 가로 스크롤 없음.
 
@@ -130,16 +133,17 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
 |---|---|---|---|
 | 처음(대화 없음) | 빈 상태 + 입력란 | 빈 상태 + 비활성 입력란 + "보관된 Workspace에서는 새 질문을 할 수 없습니다." | header 버튼 없음, `?panel=ask` 무시 |
 | 근거 찾는 중 · 답 쓰는 중 | 진행 글자 + 받은 글자 + `답변 중지` | (새 질문 없음) | — |
-| 답 성공 | 본문 + 각주 + 출처 + `복사`·`도움이 안 됨` | 지난 대화 읽기 | — |
+| 답 성공 | 본문 + 각주 + 출처 + `복사`·`다시 생성`(마지막 답)·`도움이 안 됨` | 지난 대화 읽기 | — |
 | 찾지 못함(`no_sources`) | 정해진 문구(+ 검색한 구절 목록) | 읽기 | — |
 | 중지됨(`stopped`) | 받은 데까지의 글자 + "답변을 중지했습니다." + `다시 시도` | 읽기 | — |
 | 실패 | alert 이유 + `다시 시도` | 읽기(버튼 없음) | — |
+| 다시 생성한 답 | "답 n/n" + `이전 답`·`다음 답`, 마지막 답에 `다시 생성` | 읽기(버전 오가기만) | — |
 | 한도(턴·하루·분당·월) | 이유 + 보내기 비활성(분당은 남은 초) | — | — |
 | 기능 꺼짐(환경) | 비활성 입력란(`aria-disabled`, focus 가능) + "이 환경에서는 AI 질문을 사용할 수 없습니다." 지난 대화 읽기, 문제 상세의 `질문하기` 없음, `문제` 메뉴 항목·`AI에게 묻기` 비활성 + 이유 | 같음 | — |
 | 다른 사용자·다른 Workspace·지운 대화 딥링크 | panel에 "대화를 찾을 수 없습니다."(API 404) + `새 대화` | 같음 | — |
 | 첨부 문제가 삭제·보관됨 | 칩에 "더 이상 볼 수 없는 문제" — 다음 메시지부터 문제 context 없음 | 같음 | — |
 
-- 대화 삭제: 행 메뉴·대화 header 메뉴의 `삭제` → `ConfirmDialog` "대화를 삭제할까요? 질문과 답이 모두 지워지고 되돌릴 수 없습니다." `삭제`/`취소`. 보관된 Workspace에서도 자기 대화는 지울 수 있다(개인 데이터 — Workspace 내용이 아님) (제안 — 사용자 확인 필요).
+- 대화 삭제: 행 메뉴·대화 header 메뉴의 `삭제` → `ConfirmDialog` "대화를 삭제할까요? 질문과 답이 모두 지워지고 되돌릴 수 없습니다." `삭제`/`취소`. 보관된 Workspace에서도 자기 대화는 지울 수 있다(개인 데이터 — Workspace 내용이 아님) (사용자 결정 2026-11-01).
 - Workspace를 삭제하면 그 Workspace의 대화도 지워진다. 구성원에서 빠진 사용자는 그 Workspace의 대화에 닿을 수 없고(404), 대화는 보존 기간이 지나면 지워진다.
 
 ## 수용 기준
@@ -197,8 +201,8 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
 ### ASK-01-AC09
 
 - **Given:** fake 답변기 marker `E2E-ASK-FAIL`(제공자 오류), `E2E-ASK-SLOW`(글자를 천천히 오래 흘림), 테스트 stack의 분당 한도 2
-- **When:** FAIL 질문을 보내고 `다시 시도`를 누른다(두 번째는 marker 없는 같은 fixture로 성공하도록 설정). SLOW 질문을 보내고 글자가 보이기 시작하면 `답변 중지`를 누른다. 1,001자 질문을 붙여 넣는다. 1분 안에 질문 3개를 보낸다. SLOW 답이 흐르는 동안 새로 고침한다
-- **Then:** FAIL 답은 `role="alert"` "AI 서비스에 연결하지 못했습니다. 잠시 후 다시 시도하세요."와 `다시 시도`를 보이고, `다시 시도`는 같은 질문의 새 답 메시지를 만들어 성공한다(실패한 메시지는 남음). `답변 중지`는 받은 데까지의 글자와 "답변을 중지했습니다."를 남기고(상태 `stopped`) worker 호출을 멈춘다(그 뒤 delta 없음). 1,001자면 "1,001/1,000"이 보이고 보내기가 비활성이며 API는 422 `question-too-long`이다. 세 번째 질문은 429로 "잠시 후 다시 질문하세요 (n초)"를 보이고 입력한 글이 남는다. 흐르는 중에 새로 고침하면 같은 답이 이어서 끝까지 보인다(`Last-Event-ID` 또는 polling). 오류 화면·응답·로그에 LLM 응답 원문과 prompt가 없다.
+- **When:** FAIL 질문을 보내고 `다시 시도`를 누른다(두 번째는 marker 없는 같은 fixture로 성공하도록 설정). SLOW 질문을 보내고 글자가 보이기 시작하면 `답변 중지`를 누른다. 1,001자 질문을 붙여 넣는다. 1분 안에 질문 3개를 보낸다. SLOW 답이 흐르는 동안 새로 고침한다. 성공한 마지막 답의 `다시 생성`을 눌러 끝나기를 기다리고 `이전 답`을 누른다. 같은 질문에 `다시 생성`을 한도(테스트 stack 2개)까지 누른다
+- **Then:** FAIL 답은 `role="alert"` "AI 서비스에 연결하지 못했습니다. 잠시 후 다시 시도하세요."와 `다시 시도`를 보이고, `다시 시도`는 같은 질문의 새 답 메시지를 만들어 성공한다(실패한 메시지는 남음). `답변 중지`는 받은 데까지의 글자와 "답변을 중지했습니다."를 남기고(상태 `stopped`) worker 호출을 멈춘다(그 뒤 delta 없음). 1,001자면 "1,001/1,000"이 보이고 보내기가 비활성이며 API는 422 `question-too-long`이다. 세 번째 질문은 429로 "잠시 후 다시 질문하세요 (n초)"를 보이고 입력한 글이 남는다. 흐르는 중에 새로 고침하면 같은 답이 이어서 끝까지 보인다(`Last-Event-ID` 또는 polling). `다시 생성`은 새 답 버전을 만들어 "답 2/2"를 보이고 `이전 답`은 이전 답(본문·출처 그대로)을 "답 1/2"로 보인다(이전 답은 지워지지 않음). 한도를 넘는 `다시 생성`은 비활성과 이유 문구, API 409 `ask-regenerate-limit`이며, `다시 생성`도 분당 한도에 세어진다. 오류 화면·응답·로그에 LLM 응답 원문과 prompt가 없다.
 
 ### ASK-01-AC10
 
@@ -223,7 +227,7 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
 | ASK-01-C03 | **정답 비노출 (property test; 지금 등록 문제에는 UI 경로가 없어도 서버 규칙으로 유지 — 사용자 결정 2026-11-01):** prompt builder(`book_core.ask.build_request`)는 공개 수준 `hint`에서 `correct_answer`·정답 option id·허용 답안·채점 기준·해설·`question_sources` 구절을 입력으로 받지도 않는다(API가 `hint`면 그 필드를 읽지 않고 DTO에 없음 — 타입으로 강제). 무작위 문제·보기 순서·고른 답으로 만든 `hint` 요청의 직렬화에 정답·해설 문자열이 없다. 공개 수준은 메시지마다 DB에서 계산(첨부 session의 제출 여부)하며 client가 보낸 값은 무시한다. 메시지 행에 `disclosure`(`none`·`hint`·`full`)를 남긴다. 어떤 ask 응답(POST·GET·SSE)도 LLM에 보낸 문제 context를 돌려주지 않는다. practice API(`practice-sessions`·`submit`) 응답은 바뀌지 않는다. |
 | ASK-01-C04 | **인용 검증:** 모델은 근거마다 받은 tag(`S1`…`Sn`)로만 인용한다. 끝난 답에서 모르는 tag는 표시와 저장에서 지우고 개수만 기록한다(`dropped_citations`). 남은 tag는 출처 번호(`[1]`…, 처음 나온 순서)로 다시 매기고 `ask_message_sources.cited = true`. `[NO_ANSWER]`로 시작하면 찾지 못함으로 바꾼다. 근거가 있는데 인용이 하나도 없는 답은 저장은 하되 `uncited = true`로 표시하고 화면은 "출처를 확인하지 못한 답입니다." 안내를 단다. 답 본문 Markdown은 허용 목록 renderer로만 보인다(HTML·링크·이미지 글자 처리). |
 | ASK-01-C05 | **streaming 계약:** SSE event `delta {seq, text}`(seq 연속), `reset`(worker 재시작 시 — client는 받은 글자를 지움), `done {message}`(검증된 최종 본문·출처·상태), `error {code}`. `Last-Event-ID`로 이어 받으면 빠짐·중복이 없다. 연결마다 인가를 다시 확인하고, 대화가 지워지면 열린 stream도 `error {code: not_found}`로 끝난다. Redis Stream key는 TTL 10분·최대 길이 제한, 끝난 메시지는 Postgres에서 답한다. `POST /cancel`은 대기·실행 중 메시지를 `stopped`로(멱등), worker는 다음 delta 전에 확인해 provider stream을 닫는다. polling `GET /ask/messages/{id}`는 지금까지의 글자(진행 중) 또는 최종 상태를 준다. |
-| ASK-01-C06 | **한도·usage:** 질문 길이(422 `question-too-long`), 대화당 턴(409 `ask-turn-limit`), 사용자당 진행 중 1개(409 `ask-answer-running`, partial unique), 분당 rate(429 + Retry-After), 하루 한도(DB 집계, 429 `ask-daily-limit`), 월 token 상한(409 `ask-budget-exceeded`, 0 = 끔). 같은 `Idempotency-Key`의 재시도는 한도 검사 전에 같은 메시지를 돌려준다. LLM을 부른 답마다 `llm_feature_usage`(`feature = ask`, 사용자·Workspace·모델·input/output/cache token·`cost_usd`(가격 설정 시)·상태)를 쓰고 job 결과에는 개수·usage·오류 코드만. 근거 개수·글자 한도(`ASK_TOP_K`·`ASK_MAX_CONTEXT_CHARS`)와 `ASK_MAX_OUTPUT_TOKENS`가 요청에 적용된다(fake가 받은 값으로 확인). |
+| ASK-01-C06 | **한도·usage:** `다시 생성`·`다시 시도`는 새 질문과 같은 분당·하루·진행 1개·월 한도에 세고, 같은 질문의 답 버전은 `ASK_MAX_REGENERATIONS`(5)개까지(409 `ask-regenerate-limit`), 마지막 답에서만(아니면 409 `ask-not-last-answer`); LLM 직전 턴에는 질문마다 최신 답 버전만. 질문 길이(422 `question-too-long`), 대화당 턴(409 `ask-turn-limit`), 사용자당 진행 중 1개(409 `ask-answer-running`, partial unique), 분당 rate(429 + Retry-After), 하루 한도(DB 집계, 429 `ask-daily-limit`), 월 token 상한(409 `ask-budget-exceeded`, 0 = 끔). 같은 `Idempotency-Key`의 재시도는 한도 검사 전에 같은 메시지를 돌려준다. LLM을 부른 답마다 `llm_feature_usage`(`feature = ask`, 사용자·Workspace·모델·input/output/cache token·`cost_usd`(가격 설정 시)·상태)를 쓰고 job 결과에는 개수·usage·오류 코드만. 근거 개수·글자 한도(`ASK_TOP_K`·`ASK_MAX_CONTEXT_CHARS`)와 `ASK_MAX_OUTPUT_TOKENS`가 요청에 적용된다(fake가 받은 값으로 확인). |
 | ASK-01-C07 | **유출 금지:** 질문·답·검색된 본문·prompt·LLM 응답·첨부 문제 내용·token·키는 API·worker 로그, job `result`, trace, 활동 기록에 남지 않는다(log capture test). 오류는 code만(`llm_unavailable`·`llm_timeout`·`llm_refused`·`sources_unavailable`·`workspace_unavailable`·`ask_failed`), provider 오류 원문을 저장하지 않는다. SSE URL·query에 token이 없다. `ask.answer` job은 HISTORY-01 작업 목록과 다른 구성원의 `GET /jobs/{id}`에 나오지 않는다. |
 | ASK-01-C08 | **보존·개인정보:** 대화는 주인만 읽고 지운다(삭제는 메시지·출처·피드백까지, usage는 `message_id = null`로 남김). `ask.purge`(beat, 하루 1회)는 마지막 메시지가 `ASK_RETENTION_DAYS`보다 오래된 대화를 지우고 13개월 넘은 usage를 지운다(멱등). Workspace 삭제는 대화를 지운다. Fork는 대화·usage를 복제하지 않는다. 끝난 메시지는 바뀌지 않는다(append-only trigger; `retry`는 새 메시지 + `retry_of_message_id`). |
 | ASK-01-C09 | **worker 재확인·멱등:** `ask.answer`는 LLM 호출 전과 결과 쓰기 직전(행 잠금)에 메시지 상태(`stopped`면 쓰지 않음)·Workspace 활성·사용자 멤버십을 다시 확인한다. 재전달·재시도는 이미 끝난 메시지를 다시 부르지 않는다. 첫 delta 뒤 실패는 자동 재시도하지 않고 `failed`(사용자의 `다시 시도`만). 첫 delta 전 실패는 `LLM_MAX_RETRIES`만큼 재시도하고 usage를 누적한다. queue는 `interactive`이며 `document.parse`와 같은 process pool을 쓰지 않는다. |

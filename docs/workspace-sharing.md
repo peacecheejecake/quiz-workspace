@@ -93,7 +93,7 @@ Shared viewer (공유 session에만 허용):
 - `GET /api/v1/shared/{shareId}/chapters/{chapterId}/note`: 장의 최신 성공 정리 노트(각주는 발행 문제만 링크)
 
 - `GET /api/v1/shared/{shareId}/questions/{questionId}/ai-explanation`: 발행 문제 active revision의 최신 성공 AI 해설(없으면 404, §10)
-- `GET /api/v1/shared/{shareId}/questions/{questionId}/related-sources`: 발행 문제 active revision·현재 교재 fingerprint의 저장된 관련 본문(없으면 404, 계산하지 않음, §10; 제안)
+- `GET /api/v1/shared/{shareId}/questions/{questionId}/related-sources`: 발행 문제 active revision·현재 교재 fingerprint의 저장된 관련 본문(없으면 404, 계산하지 않음, §10; 사용자 결정 2026-11-01)
 
 Fork (공유 session + **Supabase 사용자 JWT** 동시 필요):
 - `POST /api/v1/shared/{shareId}/forks`: 이름·멱등 키; 202 Accepted + job id
@@ -148,7 +148,7 @@ AC 5+6+6=17개를 각각 Playwright로 먼저 RED 테스트로 작성한다. 검
 | AI 해설 읽기(AIEXPL-01) | ✅ 제출 후·문제 상세 | ✅ 같음 | 이미 만든 최신 해설만, 읽기 전용 |
 | AI 해설 만들기 | ✅ 활성 Workspace | ✅ 활성 Workspace | ❌ |
 | AI 해설 다시 만들기 | ✅ 하루 3번/revision | ❌ | ❌ |
-| 관련 본문(RELSRC-01) | ✅ 제출 후·문제 상세(처음 읽을 때 계산·저장) | ✅ 같음 | 이미 저장된 목록만, 읽기 전용(제안) |
+| 관련 본문(RELSRC-01) | ✅ 제출 후·문제 상세(처음 읽을 때 계산·저장) | ✅ 같음 | 이미 저장된 목록만, 읽기 전용(사용자 결정 2026-11-01) |
 
 - **결정(사용자 결정 2026-11-01):** AI 질문은 비용이 들고 질문이 개인 기록이라 게스트에게 열지 않는다. AI 해설은 발행 문제의 정답·해설에서 나온 파생물이라 이미 만든 것은 게스트에게도 같은 범위로 보이고, 게스트 요청으로는 생성(비용)이 일어나지 않는다. 공유 응답에는 상태·버전·오류·usage·job id가 없고 §2 header를 따른다.
-- **Fork:** AI 질문 대화·usage는 개인 데이터라 복제하지 않는다(§6). AI 해설은 snapshot 문제 revision의 최신 성공 해설만 새 id로 복제하고(문제·revision·출처 블록 id 재매핑) 이전 버전·실패·usage는 뺀다(사용자 결정 2026-11-01). 관련 본문은 복제하지 않는다 — 사본의 문서 id가 달라 교재 fingerprint가 바뀌므로 처음 읽을 때 다시 계산된다(LLM 비용 없음; 제안).
+- **Fork:** AI 질문 대화·usage는 개인 데이터라 복제하지 않는다(§6). AI 해설은 snapshot 문제 revision의 최신 성공 해설만 새 id로 복제하고(문제·revision·출처 블록 id 재매핑) 이전 버전·실패·usage는 뺀다(사용자 결정 2026-11-01). 관련 본문은 복제하지 않는다 — 사본의 문서 id가 달라 교재 fingerprint가 바뀌므로 처음 읽을 때 다시 계산된다(LLM 비용 없음; 사용자 결정 2026-11-01).

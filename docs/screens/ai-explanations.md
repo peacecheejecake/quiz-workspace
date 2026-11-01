@@ -1,6 +1,6 @@
 # AIEXPL-01 — AI 문제 해설 (제출 후)
 
-**상태:** 화면 요구사항 초안 v0.2 · ASK-SPEC 신규 2026-11-01 · 사용자 결정 반영 2026-11-01(공유 해설·모든 보기, 구성원 생성·편집 권한 다시 만들기, 공유 게스트 읽기·Fork 복제) (사용자 요청 "LLM 문제 해설 — 문제 제출 후 버튼 노출 -> 해당 버튼 누르면 하단에 llm이 생성한 해설 생성 — 같은 문제에 대한 답변은 캐싱"). [ASK-01](ask-llm.md)과 따로 켜고 끌 수 있는 별도 기능이며 LLM 호출 경로·fake·인용 검증·usage 기록을 ASK와 함께 쓴다. `(제안 — 사용자 확인 필요)` 표시는 implementation-plan §7의 ASK-SPEC 제안 행에 모여 있다.
+**상태:** 화면 요구사항 v1.0 (모든 제안 사용자 결정 2026-11-01) · ASK-SPEC 신규 2026-11-01 · 사용자 결정 반영 2026-11-01(공유 해설·모든 보기, 구성원 생성·편집 권한 다시 만들기, 공유 게스트 읽기·Fork 복제) (사용자 요청 "LLM 문제 해설 — 문제 제출 후 버튼 노출 -> 해당 버튼 누르면 하단에 llm이 생성한 해설 생성 — 같은 문제에 대한 답변은 캐싱"). [ASK-01](ask-llm.md)과 따로 켜고 끌 수 있는 별도 기능이며 LLM 호출 경로·fake·인용 검증·usage 기록을 ASK와 함께 쓴다. 모든 설계 선택은 사용자가 확인했다(implementation-plan §7 ASK-SPEC 사용자 결정 행).
 **Route:** 별도 route 없음 — 풀이 panel(QPLAY-01, `?question=:questionId`)의 결과 영역, "문제 상세" dialog, 이후 QuestionViewer(QVIEW-01) 결과 영역 안의 영역.
 **테스트:** `tests/e2e/questions/ai-explanations.spec.ts` (계약: `tests/integration/questions/ai_explanations/test_ai_explanations_contract.py`, `apps/worker` · `packages/core` unit test, `supabase/tests` pgTAP)
 **Phase:** EXPL.0 (RED) → EXPL-B (계약) → EXPL-W (AC01~AC06, CI phase 켬) → ASK-QM (모의고사 문제, C09)
@@ -11,7 +11,7 @@ id: AIEXPL-01
 route: /workspaces/:workspaceId?question=:questionId (결과 영역)
 actor: workspace_member (제출 후 보기·만들기) · editor/owner (다시 만들기) · share guest (있는 해설 읽기)
 permission: read · personal attempt · edit (다시 만들기)
-status: draft
+status: confirmed
 api: [GET /api/v1/questions/:id/ai-explanation, POST /api/v1/questions/:id/ai-explanation, POST /api/v1/questions/:id/ai-explanation/regenerate, GET /api/v1/ai-explanations/:id/stream, GET /api/v1/shared/:shareId/questions/:questionId/ai-explanation]
 components: [Button, Badge, Disclosure, DocumentExcerptPanel]
 linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC06]
@@ -24,7 +24,7 @@ linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC06]
 - **해설 내용 (사용자 결정 2026-11-01: 모든 보기를 다룸):** 공유 해설은 (1) 정답 이유, (2) **보기마다** 맞는/틀린 이유(객관식; 단답·서술형은 채점 기준의 핵심과 흔한 오답), (3) 관련 개념 한두 문단, (4) 출처. 문서에 근거가 없는 부분은 "문서에서 근거를 찾지 못했습니다"라고 적고 지어내지 않는다. 기존 해설과 다른 정답을 말하지 않는다 — 모델은 정답을 바꿀 수 없고, 서버의 정답이 기준이다(정답 option ID와 다른 결론이 나오면 `explanation_answer_mismatch`로 실패 처리, 아래 C04).
 - **"내 답은 왜 틀렸나" (사용자 결정 2026-11-01: 공유 해설에는 없음):** 공유 해설에는 개인 내용이 없으므로 사용자별 부분은 v1에 두지 않는다. 대신 AI 해설 아래에 `이 문제로 질문하기`(ASK-01, `practice` 첨부 — 제출 후라 공개 수준 `full`이고 사용자의 답이 들어간다)를 둔다(사용자 결정 2026-11-01, 유지). 풀이 panel에서 `질문하기`로 가는 유일한 경로이며 제출 뒤에만 보인다 — ASK-01 결정 (9)(풀이 panel header에는 없음)와 어긋나지 않는다.
 - **AI 생성 표시:** 해설은 사람의 승인 없이 바로 보이고 편집할 수 없다. `AI 생성` 글자 badge와 "AI가 만든 해설입니다. 정답과 기존 해설이 기준이며, 틀릴 수 있습니다." 안내. 사람이 쓴 해설(문제의 `explanation`)을 바꾸거나 대신하지 않는다 — 문제은행·정리 노트(CHNOTE 입력)·ASK 검색 근거에 들어가지 않는다.
-- **환경별 사용 여부 (제안 — 사용자 확인 필요):** 자기 플래그 `WORKER_AI_EXPLANATIONS`(api·worker 같은 값, 기본 꺼짐)와 LLM 설정이 있을 때만 만든다(ASK의 `WORKER_ASK_LLM`과 따로 켬). 꺼진 환경에서는 버튼 대신 "이 환경에서는 AI 해설을 사용할 수 없습니다."를 보이고 이미 만든 해설은 읽힌다. 대안: ASK와 플래그 하나. **staging·production에서 켜는 것은 ⛔ 사용자 승인 후**(runbook-deploy §10).
+- **환경별 사용 여부 (사용자 결정 2026-11-01):** 자기 플래그 `WORKER_AI_EXPLANATIONS`(api·worker 같은 값, 기본 꺼짐)와 LLM 설정이 있을 때만 만든다(ASK의 `WORKER_ASK_LLM`과 따로 켬). 꺼진 환경에서는 버튼 대신 "이 환경에서는 AI 해설을 사용할 수 없습니다."를 보이고 이미 만든 해설은 읽힌다. **staging·production에서 켜는 것은 ⛔ 사용자 승인 후**(runbook-deploy §10).
 
 ### 캐싱 (사용자 결정 2026-11-01: 문제 revision마다 Workspace 공유 하나)
 
@@ -35,13 +35,13 @@ linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC06]
 - **다시 만들기 (사용자 결정 2026-11-01):** 편집 권한(owner·editor)이고 활성 Workspace일 때만 성공한 해설에 `다시 만들기`가 있다. 새 버전 행을 만들고 이전 버전에 `superseded_at`을 적는다(구성원은 최신만 봄). 한도: 같은 문제 revision에 하루 3번, 사용자 분당 한도 공유.
 - **공유·Fork (사용자 결정 2026-11-01):** 공유 링크 게스트는 발행된 확정 문제의 **이미 만든** 최신 해설을 공유 문제 panel에서 읽기 전용으로 본다(게스트는 이미 정답·해설을 본다 — workspace-sharing §1). 게스트는 만들 수 없다(버튼 없음, 비용 없음). Fork는 snapshot의 문제 revision에 해당하는 최신 성공 해설을 새 id로 복제한다(출처 블록 id 재매핑, 이전 버전·실패·usage 제외).
 
-### 모의고사 문제 (ASK-QM)
+### 모의고사 문제 (ASK-QM, 사용자 결정 2026-11-01)
 
 모의고사 풀이(QVIEW `sequence(mock)`)에서도 제출 후 같은 버튼이 나온다. 키는 `(mock_exam_question_revision_id, prompt_version, model)`이고 그 모의고사를 볼 수 있는 구성원이 공유한다. 서버는 모의고사 practice session의 제출을 확인한다. 모의고사 문제는 `question_sources` 대신 그 문제를 만들 때 쓴 근거 구절을 쓴다. MOCK-P·MOCK-W 뒤의 ASK-QM이 만들고, 그때 E2E AC를 이 명세에 더한다(C09는 그때까지 `red`).
 
-### "문제 상세" dialog (제안 — 사용자 확인 필요)
+### "문제 상세" dialog (사용자 결정 2026-11-01)
 
-구성원은 문제 상세 dialog에서 이미 정답·해설을 본다(UX7-BANK-2). dialog의 해설 아래에도 `AI 해설`을 둔다: 서버는 `view: detail`을 받으면 `GET /questions/{id}` 권한(모든 구성원)으로 판정하고 제출을 요구하지 않는다. 같은 캐시를 쓴다. 대안: 문제 상세에는 없음(풀이 결과에서만).
+구성원은 문제 상세 dialog에서 이미 정답·해설을 본다(UX7-BANK-2). dialog의 해설 아래에도 `AI 해설`을 둔다: 서버는 `view: detail`을 받으면 `GET /questions/{id}` 권한(모든 구성원)으로 판정하고 제출을 요구하지 않는다. 같은 캐시를 쓴다.
 
 ### 한도와 비용 (사용자 결정 2026-11-01)
 
@@ -60,7 +60,7 @@ linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC06]
 - **위치:** 풀이 panel 결과 영역(결과 글자·정답 표시·해설) 바로 아래, footer(`다음` 등) 위. 그 아래에 [RELSRC-01](related-sources.md) "관련 본문". 영역 제목 `AI 해설`(`h3`). QuestionViewer가 풀이 panel을 대신하면(QVIEW-W) 결과 영역의 같은 자리로 옮긴다.
 - **상태:**
   - 만든 적 없음: 글자 버튼 `AI 해설 만들기`(접근성 이름 "AI 해설 만들기") + 작은 안내 "문제와 정답, 관련 교재 구절이 AI 서비스로 전송됩니다."
-  - 이미 있음(캐시) (제안 — 사용자 확인 필요): 결과를 가리지 않도록 버튼 대신 접힌 disclosure `AI 해설 보기`(`aria-expanded`, 기본 접힘)로 보인다. 펼치면 생성 없이 저장된 해설을 불러온다. 대안: 캐시가 있으면 바로 펼쳐 보임.
+  - 이미 있음(캐시) (사용자 결정 2026-11-01): 결과를 가리지 않도록 버튼 대신 접힌 disclosure `AI 해설 보기`(`aria-expanded`, 기본 접힘)로 보인다. 펼치면 생성 없이 저장된 해설을 불러온다.
   - 만드는 중: "AI 해설을 만드는 중" 글자 + 받은 글자를 이어 붙임(ASK-01과 같은 SSE·`aria-busy`·status 알림 규칙: 시작 한 번 "AI 해설을 만드는 중입니다", 끝 한 번 "AI 해설이 준비되었습니다"). 다른 사람이 만드는 중이면 같은 stream을 이어 본다.
   - 완료: `AI 생성` badge, 안내 문구, 본문(Markdown 일부만, sanitize), 각주 `[1]`과 `출처` 목록(문서·장·쪽, 버튼 → "본문 발췌" panel → "PDF에서 보기"가 DOC-02 그 쪽), 메타 "<생성 시각> · 버전 k"(다시 만든 경우), 편집 권한이면 `다시 만들기`, 그리고 `이 문제로 질문하기`(ASK가 켜진 환경).
   - 실패: `role="alert"` 이유(ASK-01 오류 문구, `explanation_answer_mismatch` → "정답과 맞지 않는 해설이 나와 보여 주지 않았습니다. 다시 시도하세요.") + `다시 시도`.
