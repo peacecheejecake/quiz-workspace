@@ -1,4 +1,4 @@
--- MOCK-B (20261102130000_mock_exams.sql): mock exam tables, their grants and RLS, one active
+-- MOCK-B (20261102140000_mock_exams.sql): mock exam tables, their grants and RLS, one active
 -- generation per mock exam, workspace integrity of every reference, the append-only history
 -- (MOCK-01-C04), cascades past the append-only trigger, and the `mock_exam.generated` activity.
 begin;
