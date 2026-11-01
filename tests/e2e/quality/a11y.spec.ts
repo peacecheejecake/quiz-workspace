@@ -167,7 +167,6 @@ test(
     for (const path of [
       homePath(other.id),
       documentsPath(other.id),
-      homePath(other.id, 'panel=question-pdfs'),
       homePath(other.id, 'panel=history'),
       homePath(other.id, 'panel=share'),
     ]) {

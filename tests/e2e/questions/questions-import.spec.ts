@@ -17,7 +17,6 @@ import type { Locator, Page, Route } from '@playwright/test';
 import { localEndpoints } from '../fixtures/local-env.ts';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 import {
-  chooseQuestionMenu,
   draftFor,
   expect,
   docUi,
@@ -501,7 +500,7 @@ test(
 );
 
 test(
-  'QIMPORT-01-AC05 문제 › PDF 관리 lists the PDFs with questions and sends uploads to 문서 관리; the import page has no upload',
+  'QIMPORT-01-AC05 문서 관리 rows give the PDFs with questions their review actions; the import page has no upload and points at 문서 관리',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     test.setTimeout(2 * JOB_TIMEOUT_MS + 60_000);
@@ -517,45 +516,27 @@ test(
 
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
-    // Neither the home nor the dialog has a "PDF 가져오기" button (UX4).
+    // Neither the home nor 문서 관리 has a "PDF 가져오기" button (UX4).
     const importButton = (scope: Locator) =>
       scope
         .getByRole('link', { name: /^pdf 가져오기$|^import pdf$/i })
         .or(scope.getByRole('button', { name: /^pdf 가져오기$|^import pdf$/i }));
     await expect(importButton(main(page))).toHaveCount(0);
-    await chooseQuestionMenu(page, 'pdfs');
-    await expect(page).toHaveURL(/[?&]panel=question-pdfs(&|$)/);
-    const dialog = homeUi.questionPdfsDialog(page);
+    // UX7-DOCS: the PDFs with questions are reviewed from 문서 관리 (DOC-01-AC09).
+    await homeUi.documentsButton(page).click();
+    const dialog = homeUi.documentsDialog(page);
     await expect(dialog).toBeVisible();
-    const list = dialog.getByRole('list', { name: /문제 pdf 목록|question pdfs/i });
-    // The PDFs with questions only, each with its kind badge; the plain book is not listed.
-    await expect(list.getByRole('listitem')).toHaveCount(2);
+    const list = dialog.getByRole('list', { name: /문서 목록|documents/i });
     const paperRow = list.getByRole('listitem').filter({ hasText: /questions-ko/ });
     const mixedRow = list.getByRole('listitem').filter({ hasText: /book-en/ });
+    const bookRow = list.getByRole('listitem').filter({ hasText: /book-ko/ });
     await expect(docUi.kindBadge(paperRow, '문제지')).toBeVisible();
     await expect(docUi.kindBadge(mixedRow, '교재+문제')).toBeVisible();
-    await expect(list).not.toContainText(/book-ko/);
     await expect(docUi.reviewLink(paperRow)).toBeVisible();
     await expect(docUi.extractButton(mixedRow)).toBeVisible();
-    // UX6-UPLOAD: no Dropzone or file input here; uploads go to 문서 관리.
-    await expect(dialog.getByText(/여기에 끌어다 놓으세요|drop/i)).toHaveCount(0);
-    await expect(
-      dialog.getByRole('button', { name: /pdf (선택|업로드)|choose|upload/i }),
-    ).toHaveCount(0);
-    await expect(dialog.locator('input[type="file"]')).toHaveCount(0);
-    await expect(
-      dialog.getByText('PDF는 문서 관리에서 올립니다. 문제가 있는 PDF는 자동으로 추출됩니다.'),
-    ).toBeVisible();
+    await expect(docUi.reviewLink(bookRow)).toHaveCount(0);
+    await expect(docUi.extractButton(bookRow)).toHaveCount(0);
     await expect(importButton(dialog)).toHaveCount(0);
-    await importUi.openDocuments(dialog).click();
-    await expect(page).toHaveURL(/[?&]panel=documents(&|$)/);
-    await expect(homeUi.documentsDialog(page)).toBeVisible();
-
-    // No PDF with questions yet: the empty text, still pointing at 문서 관리.
-    await page.goto(homePath(empty.id, 'panel=question-pdfs'));
-    const emptyDialog = homeUi.questionPdfsDialog(page);
-    await expect(emptyDialog.getByText('등록된 문제 pdf가 없습니다.')).toBeVisible();
-    await expect(importUi.openDocuments(emptyDialog)).toBeVisible();
 
     // The import page uploads nothing; without an extraction it points at 문서 관리.
     await page.goto(importPath(empty.id));
@@ -569,6 +550,7 @@ test(
     await expect(page).toHaveURL(
       (url) => url.pathname === homePath(empty.id) && url.searchParams.get('panel') === 'documents',
     );
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
 
     // Two extracted PDFs: `검토할 PDF` switches between their reviews (one per PDF).
     const mixedRun = await startImport(owner, ws.id, mixed);
@@ -634,9 +616,9 @@ test(
     expect(browserStarts).toBe(0);
 
     // Coming back: the PDF's 문제 검토 shows the extracted drafts for review.
-    await page.goto(homePath(ws.id, 'panel=question-pdfs'));
+    await page.goto(homePath(ws.id, 'panel=documents'));
     const row = homeUi
-      .questionPdfsDialog(page)
+      .documentsDialog(page)
       .getByRole('listitem')
       .filter({ hasText: /questions-ko/ });
     await docUi.reviewLink(row).click();
@@ -648,7 +630,7 @@ test(
 );
 
 test(
-  'QIMPORT-01-AC06 a processed question PDF without an extraction offers 문제 추출 in 문제 PDF 관리',
+  'QIMPORT-01-AC06 a processed question PDF without an extraction offers 문제 추출 in 문서 관리',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('qimport01-ac06-extract');
@@ -661,9 +643,9 @@ test(
     expect(await listImports(owner, ws.id)).toEqual([]);
 
     await signInAs(page, owner.user);
-    await page.goto(homePath(ws.id, 'panel=question-pdfs'));
-    const dialog = homeUi.questionPdfsDialog(page);
-    const list = dialog.getByRole('list', { name: /문제 pdf 목록|question pdfs/i });
+    await page.goto(homePath(ws.id, 'panel=documents'));
+    const dialog = homeUi.documentsDialog(page);
+    const list = dialog.getByRole('list', { name: /문서 목록|documents/i });
     const row = list.getByRole('listitem').filter({ hasText: PAPER.file.replace(/\.pdf$/, '') });
     const extract = row.getByRole('button', { name: /문제 추출|extract questions/i });
     await expect(extract).toBeVisible();
@@ -683,7 +665,7 @@ test(
     expect(runs[0]?.source_document_id).toBe(uploaded.documentId);
 
     // With its extraction in place the row links to the review instead.
-    await page.goto(homePath(ws.id, 'panel=question-pdfs'));
+    await page.goto(homePath(ws.id, 'panel=documents'));
     const review = row.getByRole('link', { name: /문제 검토|review questions/i });
     await expect(review).toBeVisible();
     await expect(row.getByRole('button', { name: /문제 추출|extract questions/i })).toHaveCount(0);

@@ -491,7 +491,7 @@ export const importUi = {
   /** UX6-UPLOAD: `검토할 PDF` (one review per PDF; shown with two or more extracted PDFs). */
   pdfSwitcher: (page: Page) =>
     main(page).getByRole('combobox', { name: /검토할 pdf|pdf to review/i }),
-  /** UX6-UPLOAD: "문서 관리 열기" (empty import page and 문제 PDF 관리). */
+  /** UX6-UPLOAD: "문서 관리 열기" (the empty import page). */
   openDocuments: (scope: Locator) => buttonOrLink(scope, /문서 관리 열기|open documents/i),
   drafts: (page: Page) =>
     main(page).getByRole('list', { name: /가져온 (초안|문제)|초안|drafts?|imported questions/i }),

@@ -11,12 +11,13 @@
 //   Home       (UX3c) `/workspaces/:id`: hidden h1 (workspace name), header with the unified
 //              search (searchbox "검색어", icon button "검색", under it checkboxes "문제"/"본문"
 //              each followed by a "설정" text button named "문제 설정"/"본문 설정" → popover
-//              "문제 검색 설정"/"본문 검색 설정", and a status message, UX6), buttons "문서 n", "문제" (menu button, UX4: menuitems "PDF 관리",
-//              "직접 추가" (the modal "문제 등록" dialog, `?panel=question-create`, UX7-BANK),
-//              "변형 출제"; the last two for editors; no "전체 문제" since UX7-BANK), then
+//              "문제 검색 설정"/"본문 검색 설정", and a status message, UX6), buttons "문서 n", "문제" (menu button, UX4, editors only since UX7-DOCS: menuitems
+//              "직접 추가" (the modal "문제 등록" dialog, `?panel=question-create`, UX7-BANK) and
+//              "변형 출제"; no "전체 문제" since UX7-BANK, no "PDF 관리" since UX7-DOCS), then
 //              icon buttons "이력" and "공유하기" (owner); dialogs are non-modal
-//              FloatingSidePanels inside <main> named "문서 관리", "문제 PDF 관리", "문제 생성",
-//              "이력", "링크 공유" (`?panel=documents|question-pdfs|generate|history|share`).
+//              FloatingSidePanels inside <main> named "문서 관리", "문제 생성", "이력", "링크 공유"
+//              (`?panel=documents|generate|history|share`; the retired 문제 PDF 관리
+//              `?panel=question-pdfs` redirects to `documents`, UX7-DOCS).
 //   DOC-01     "문서 관리" dialog: dashed Dropzone whose "PDF 업로드" button opens a file
 //              chooser (the only upload button); one list item per book document with an
 //              upload progressbar, processing status, "준비 완료"/"Ready"; "취소"/"다시 시도";
@@ -83,6 +84,7 @@ export const homeUi = {
     homeUi.questionMenu(page).getByRole('menuitem', { name: QUESTION_MENU_ITEMS[item] }),
   dialog: (page: Page, name: RegExp) => main(page).getByRole('dialog', { name }),
   documentsDialog: (page: Page) => homeUi.dialog(page, /^(문서 관리|documents)$/i),
+  /** The retired 문제 PDF 관리 dialog (UX7-DOCS): only ever expected to be absent. */
   questionPdfsDialog: (page: Page) => homeUi.dialog(page, /^(문제 pdf 관리|question pdfs?)$/i),
   generateDialog: (page: Page) => homeUi.dialog(page, /^(문제 생성|generate questions?)$/i),
   shareDialog: (page: Page) => homeUi.dialog(page, /^(링크 공유|share link)$/i),
@@ -116,6 +118,7 @@ const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
 
 type QuestionMenuItem = 'pdfs' | 'create' | 'generate';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
+  /** Retired by UX7-DOCS: only ever expected to be absent. */
   pdfs: /^(pdf 관리|manage pdfs?)$/i,
   create: /^(직접 추가|add question)$/i,
   generate: /^(변형 출제|generate variants?)$/i,
