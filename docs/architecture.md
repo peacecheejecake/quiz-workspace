@@ -169,7 +169,8 @@ workspace
 | POST | `/api/v1/workspaces/{id}/question-generation-batches` | 여러 문제·임의 선택 묶음 변형 출제(원본마다 `question.generate` run; QGEN-MULTI) |
 | GET | `/api/v1/workspaces/{id}/question-generation-batches/{batch_id}` | 묶음의 원본별 run·진행 상태 |
 | POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기(준비 완료된 모든 PDF, UX6-UPLOAD) |
-| GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토(초안별 등록 챕터 추천·선택, 교재 챕터 목록 — CHAPTER-MAP) |
+| GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토(초안별 등록 챕터 추천·선택, 교재 챕터 목록 — CHAPTER-MAP; `offset`/`limit`(≤200)이면 한 페이지와 `total`, `include_chapters=false`이면 챕터 목록 생략 — QIMP-PAGING) |
+| GET | `/api/v1/question-imports/{id}/draft-summaries` | 모든 초안의 요약(본문·보기·정답·해설 없음: id·version·순서·번호·유형·검토 상태·등록 여부·승인 가능·정답 없음·검증 코드·등록 챕터 id)과 교재 챕터 목록 — 검토 화면의 선택·개수·등록용(QIMP-PAGING) |
 | POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록(`approve: true`면 선택한 초안을 승인과 함께 등록, 거절 목록 반환) |
 | POST | `/api/v1/question-imports/{id}/registrations` | 선택한 초안 전체를 서버에서 승인·등록(`question.import_register` job, QIMP-JOB) |
 | GET | `/api/v1/question-imports/{id}/registrations/{registration_id}` | 서버 측 등록 진행(처리/전체)·거절 목록 |
