@@ -217,7 +217,8 @@ function EditingItem({ block, current, state, onChange, onSave, onCancel }: Edit
   );
 }
 
-export function TextBlockEditor({
+/** Memoized: the screen re-renders on every page change, the text only when its props change. */
+export const TextBlockEditor = memo(function TextBlockEditor({
   blocks,
   currentBlockId,
   canEdit,
@@ -262,4 +263,4 @@ export function TextBlockEditor({
       )}
     </div>
   );
-}
+});

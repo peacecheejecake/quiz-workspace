@@ -329,6 +329,10 @@ describe('outline helpers', () => {
     expect(blockPage(at(blocks, 3))).toBe(3); // no locations: the block's page
     expect(locationsOn(crossPage, 4)).toHaveLength(1);
     expect(locationsOn(crossPage, 5)).toHaveLength(0);
+    // The continuous viewer gets the block's boxes on every page it spans (DOCVIEW).
+    expect(viewerHighlights(crossPage, null, blocks).map((l) => l.page)).toEqual(
+      crossPage.locations.filter((l) => l.bbox !== null).map((l) => l.page),
+    );
     expect(sectionOf(crossPage, outline)).toBe('ch1-s2');
     expect(ancestorsOf('ch1-s2', outline)).toEqual(['ch1']);
   });
@@ -406,10 +410,10 @@ describe('outline helpers', () => {
     const s1 = blocks.find((b) => b.block_id === 'ch1-s1-h');
     // ch1's own heading and paragraph (both at y 20-40 on page 2), not its subsection 1.1.
     const union = [{ page: 2, bbox: { x0: 10, y0: 20, x1: 100, y1: 40 } }];
-    expect(viewerHighlights(p1, jump, blocks, 2)).toEqual(union);
-    expect(viewerHighlights(s1, jump, blocks, 2)).toEqual(locationsOn(s1, 2));
-    expect(viewerHighlights(p1, null, blocks, 2)).toEqual(locationsOn(p1, 2));
-    expect(viewerHighlights(undefined, jump, blocks, 2)).toEqual([]);
+    expect(viewerHighlights(p1, jump, blocks)).toEqual(union);
+    expect(viewerHighlights(s1, jump, blocks)).toEqual(locationsOn(s1, 2));
+    expect(viewerHighlights(p1, null, blocks)).toEqual(locationsOn(p1, 2));
+    expect(viewerHighlights(undefined, jump, blocks)).toEqual([]);
   });
 
   it('writes page and the selected block into the query, dropping a stale block', () => {

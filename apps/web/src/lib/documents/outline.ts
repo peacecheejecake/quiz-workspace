@@ -132,18 +132,27 @@ export interface OutlineJump {
 }
 
 /**
- * The PDF highlight on `page`: the whole section while the block an outline entry selected is
- * still the selection, else the selected block's own boxes.
+ * The PDF highlights of the selection on every page (the continuous viewer draws each on its own
+ * page; the first one is scrolled into view): the whole section, page by page, while the block an
+ * outline entry selected is still the selection, else the selected block's own boxes.
  */
 export function viewerHighlights(
   currentBlock: ContentBlock | undefined,
   jump: OutlineJump | null,
   blocks: readonly ContentBlock[],
-  page: number,
 ): ContentBlock['locations'] {
-  return jump && currentBlock?.block_id === jump.blockId
-    ? sectionLocationsOn(jump.node, blocks, page)
-    : locationsOn(currentBlock, page);
+  if (!currentBlock) return [];
+  if (!jump || currentBlock.block_id !== jump.blockId) {
+    return currentBlock.locations.filter((l) => l.bbox !== null);
+  }
+  const pages = new Set<number>();
+  for (const block of blocks) {
+    if (block.chapter_id !== jump.node.id && block.block_id !== jump.node.block_id) continue;
+    for (const location of block.locations) if (location.bbox) pages.add(location.page);
+  }
+  return [...pages]
+    .sort((a, b) => a - b)
+    .flatMap((page) => sectionLocationsOn(jump.node, blocks, page));
 }
 
 /** Parses `?page=N` (1-based); null when missing or not a positive integer. */

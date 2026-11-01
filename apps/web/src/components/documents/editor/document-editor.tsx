@@ -555,6 +555,13 @@ export function DocumentEditor({
     }
   }, [client, documentId, handleCommonError, publish.phase, refreshContent, refreshRevisions]);
 
+  // Stable, so a page change (scrolling the PDF) does not re-render the text pane (DOCVIEW).
+  const onTextSelect = useCallback(
+    (block: ContentBlock) => selectBlock(block, { view: 'pdf' }),
+    [selectBlock],
+  );
+  const onSaveClick = useCallback(() => void onSave(), [onSave]);
+
   // Unsaved text survives an accidental tab close.
   useEffect(() => {
     if (editState.phase === 'idle' || editState.text === editState.original) return;
@@ -606,7 +613,10 @@ export function DocumentEditor({
       </Button>
     ) : null;
 
-  const highlights = viewerHighlights(currentBlock, outlineJump, blocks, page);
+  const highlights = useMemo(
+    () => viewerHighlights(currentBlock, outlineJump, blocks),
+    [blocks, currentBlock, outlineJump],
+  );
   const currentSection = sectionOf(currentBlock, outline);
 
   return (
@@ -759,10 +769,10 @@ export function DocumentEditor({
                 canEdit={editable}
                 editLocked={isPublishing(publish) || restoring !== null}
                 editState={editState}
-                onSelect={(block) => selectBlock(block, { view: 'pdf' })}
+                onSelect={onTextSelect}
                 onStartEdit={onStartEdit}
                 onChange={onChange}
-                onSave={() => void onSave()}
+                onSave={onSaveClick}
                 onCancel={onCancel}
               />
             ) : null}

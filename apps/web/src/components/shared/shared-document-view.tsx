@@ -137,7 +137,18 @@ export function SharedDocumentView({
     }
   }
 
-  const currentBlock = blocks.find((b) => b.block_id === currentBlockId);
+  const onTextSelect = useCallback(
+    (block: ContentBlock) => selectBlock(block, 'pdf'),
+    [selectBlock],
+  );
+  const currentBlock = useMemo(
+    () => blocks.find((b) => b.block_id === currentBlockId),
+    [blocks, currentBlockId],
+  );
+  const highlights = useMemo(
+    () => viewerHighlights(currentBlock, outlineJump, blocks),
+    [blocks, currentBlock, outlineJump],
+  );
   const title = document?.title ?? summary?.title ?? '문서';
 
   return (
@@ -215,7 +226,7 @@ export function SharedDocumentView({
                   setPage(next);
                   setAnnouncement(`${next}쪽`);
                 }}
-                highlights={viewerHighlights(currentBlock, outlineJump, blocks, page)}
+                highlights={highlights}
                 highlightKey={`${currentBlockId ?? ''}:${highlightKey}`}
               />
             </section>
@@ -232,7 +243,7 @@ export function SharedDocumentView({
                       canEdit={false}
                       editLocked
                       editState={IDLE}
-                      onSelect={(block) => selectBlock(block, 'pdf')}
+                      onSelect={onTextSelect}
                       onStartEdit={noop}
                       onChange={noop}
                       onSave={noop}
