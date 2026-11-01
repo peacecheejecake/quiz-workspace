@@ -7831,6 +7831,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
+        /** @description 1-based; past the end is 404. */
         position: number;
         run_id: string;
       };

@@ -471,7 +471,7 @@ def get_practice_run_item(
     runs: RunRepo,
     practice: PracticeRepo,
     overview: OverviewRepo,
-    position: Annotated[int, Path(ge=1, le=MAX_RUN)],
+    position: Annotated[int, Path(ge=1, description="1-based; past the end is 404.")],
 ) -> RunItem:
     """One position of the run: the question without answers, or — once submitted — the
     submitted answer, its result and the answers (`attempt`)."""
