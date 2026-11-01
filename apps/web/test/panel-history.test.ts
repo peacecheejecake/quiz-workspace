@@ -487,6 +487,34 @@ describe('PanelHistory', () => {
     expectBackLeavesForwardStaysClosed(fake);
   });
 
+  it('reload → Back across documents keeps what changed while the dialog was open', () => {
+    const { fake, history } = controller('/w?q=a');
+    history.push('/w?q=a&panel=documents');
+    history.replace('/w?q=a&panel=documents&status=retry&text=chlorine');
+    fake.leaveDocument(); // reload with the dialog open
+    new PanelHistory(() => fake.win).attach();
+    fake.goToDocument(-1); // Back loads the previous document's entry afresh
+    new PanelHistory(() => fake.win).attach();
+    expect(fake.url()).toBe('/w?q=a&status=retry&text=chlorine');
+    expect(fake.skips()).toEqual([0, 1, 0]);
+    expectBackLeavesForwardStaysClosed(fake, '/w?q=a&status=retry&text=chlorine');
+  });
+
+  it('the pagehide record is read once, holds path and query only, and expires', () => {
+    const fake = fakeWindow('/w?q=a#k=secret-fragment-value');
+    const history = new PanelHistory(() => fake.win);
+    history.attach();
+    history.push('/w?q=a&panel=documents');
+    fake.leaveDocument();
+    const raw = [...fake.storage.values()].join();
+    expect(raw).toContain('/w?q=a&panel=documents');
+    expect(raw).not.toContain('#');
+    expect(raw).not.toContain('secret');
+    fake.tick(60_000);
+    new PanelHistory(() => fake.win).attach();
+    expect(fake.storage.size).toBe(0);
+  });
+
   it('reload → Back across documents → Forward never reopens the dialog', () => {
     const { fake, history } = controller();
     history.push('/w?panel=documents');
