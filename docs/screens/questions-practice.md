@@ -1,6 +1,6 @@
 # QPLAY-01 — 문제 풀이 Floating Side Panel
 
-**상태:** 확정 화면 요구사항 v1.4 · UX7-BANK 개정 2026-11-01 (문제 관리: 편집·삭제)
+**상태:** 확정 화면 요구사항 v1.5 · UX7-BANK 개정 2026-11-01 (문제 관리: 편집·삭제) · UX7-BANK-2 개정 2026-11-01 (정답·해설 보기·수정 이력·출처·보관 복원)
 **Route:** `/workspaces/:workspaceId?question=:questionId` (Workspace 홈 위 panel; 이전 `/questions?question=`은 redirect — UX3c 2026-10-20)
 **테스트:** `tests/e2e/questions/questions-practice.spec.ts`
 **연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
@@ -12,11 +12,17 @@
 - 모든 편집·상태 변경은 서버 측 인가·revision 일관성을 검증한다.
 - **열어 본 문제 client cache (UX7-CACHE 2026-11-01):** 패널은 이번 화면에서 연 practice session(정답·해설이 없는 `PracticeSession` 필드만)을 메모리에 보관한다. 아직 제출하지 않은 문제를 닫았다 다시 열거나 이전/다음으로 돌아오면 같은 session을 요청 없이 바로 보인다(같은 보기 순서, 같은 session으로 제출 — 열람 기록은 처음 열 때 이미 남았다). 보관 범위는 화면 인스턴스 하나와 Workspace 하나(다른 Workspace·로그아웃·다른 화면으로 이동하면 버려짐)이고 브라우저 저장소에는 쓰지 않는다. 제출을 시작한 session, 실패한 session(`이미 제출` 등), 10분이 지난 session은 다시 쓰지 않는다(다른 곳의 문제 수정은 최대 10분 늦게 보일 수 있으나 채점은 항상 session이 고정한 revision 기준이라 보이는 내용과 채점이 어긋나지 않는다). 제출 결과(정답·해설)는 보관하지 않으며 제출한 문제를 다시 열면 새 session을 연다. 이웃 문제 prefetch는 하지 않는다 — session 열기가 열람 기록이므로 실제로 열지 않은 문제를 viewed로 만들 수 없다(AC06).
 - **정리 노트와 분리 (DOCSUM-SPEC 2026-10-29):** 풀이 panel은 챕터 정리 노트(CHNOTE-01)의 내용·링크를 보이지 않고 practice API도 노트 필드를 보내지 않는다(제출 전후 모두). 풀이 panel이 열리면 펼쳐져 있던 정리 노트 본문은 다시 접힌다(CHNOTE-01-AC05). 이 화면의 기존 AC는 바뀌지 않는다.
-- **문제 관리 (UX7-BANK 2026-11-01):** 전체 문제 페이지(QBANK-01)를 없애면서 그 페이지의 문제 편집·삭제를 이 panel로 옮겼다(사용자 결정 "문제 편집/삭제만 홈으로 옮기면 될듯", 폐기 기록 [questions-bank.md](questions-bank.md)). 편집 권한(Owner·Editor)이고 Workspace가 보관되지 않았으면 header의 즐겨찾기·다시 풀기 toggle 옆에 `문제 관리` 메뉴 버튼(아이콘, Radix DropdownMenu)이 있고 항목은 `편집`·`변형 출제`·`삭제`다. 보기 권한과 보관된 Workspace에는 메뉴가 없다(서버도 거절).
+- **문제 관리 (UX7-BANK 2026-11-01):** 전체 문제 페이지(QBANK-01)를 없애면서 그 페이지의 문제 편집·삭제를 이 panel로 옮겼다(사용자 결정 "문제 편집/삭제만 홈으로 옮기면 될듯", 폐기 기록 [questions-bank.md](questions-bank.md)). 편집 권한(Owner·Editor)이고 Workspace가 보관되지 않았으면 header의 즐겨찾기·다시 풀기 toggle 옆에 `문제 관리` 메뉴 버튼(아이콘, Radix DropdownMenu)이 있고 항목은 `편집`·`변형 출제`·`삭제`다(UX7-BANK-2부터 읽기 항목과 `보관`이 더해짐, 아래). 보기 권한과 보관된 Workspace에는 `문제 관리` 메뉴가 없다(서버도 거절; UX7-BANK-2부터 그 자리에 읽기 전용 `문제 정보` 메뉴).
   - `편집`: 그 문제의 정답·해설을 포함한 편집용 내용을 그때 불러와(풀이 세션 응답에는 여전히 정답이 없다 — AC01) 기존 "문제 편집" modal dialog를 panel 위에 연다. 저장하면 새 question_revision을 만들고(보기 ID 유지), 이전 풀이 기록은 원래 revision을 가리킨다. 저장 뒤 panel은 새 내용으로 풀이 세션을 다시 연다. 다른 사람이 먼저 고쳤으면(stale revision) 편집기의 "최신 내용 불러오기"를 쓴다(기존 편집기 동작).
   - `변형 출제`: 그 문제의 변형 출제 검토 페이지(`/questions/generate?source=<id>`)로 이동한다(이전 전체 문제 상세의 `변형 출제`).
   - `삭제`: 확인 dialog("문제를 삭제할까요?" — Heatmap에서 사라지고 지난 풀이 기록은 이력으로 남는다)에서 `삭제`를 누르면 문제를 삭제하고 panel을 닫으며 그 점이 Heatmap에서 사라진다.
-  - 보관(`보관`·`보관 해제`)은 옮기지 않았다: Heatmap은 확정 문제만 보이므로 홈에서 보관하면 되돌릴 곳이 없다.
+  - ~~보관(`보관`·`보관 해제`)은 옮기지 않았다~~ → UX7-BANK-2에서 `보관`을 되살렸다(아래). 보관 해제는 홈 `문제` 메뉴의 "보관·초안 문제" dialog(QOV-01-AC15).
+- **정답·해설·이력 보기와 보관 (UX7-BANK-2 2026-11-01):** 사용자 결정 "Viewers도 answer를 볼 수 있어야 함 / archiving은 개별 문제에서 할 수 있도록 / version history, source links, status filters는 왜?? 화면 삭제와는 상관 없는것 같은데" — 전체 문제 페이지와 함께 없앤 상세 panel의 읽기 기능과 보관을 이 panel에 되살린다.
+  - **메뉴:** 편집 권한이고 보관되지 않은 Workspace에는 `문제 관리` 메뉴가 `정답·해설 보기` · `수정 이력·출처` | `편집` · `변형 출제` · `보관` | `삭제` 순서다(| = 구분선). 보기 권한과 보관된 Workspace(모든 역할)에는 같은 자리에 `문제 정보` 메뉴 버튼(아이콘, 같은 DropdownMenu)이 있고 읽기 항목 `정답·해설 보기` · `수정 이력·출처`만 있다. 보관된 Workspace에서는 즐겨찾기·다시 풀기 toggle이 없어도 이 메뉴는 보인다. 쓰기 항목은 보기 권한·보관 Workspace에 비활성으로도 보이지 않는다(서버도 거절, AC08).
+  - **문제 상세 dialog (읽기 전용):** 두 읽기 항목은 같은 modal dialog "문제 상세"(설명: panel 제목 · 유형 · 챕터)를 panel 위에 연다. 내용은 전체 문제 상세 panel과 같다: 유형·상태·버전, 문제 내용, 보기(정답 보기는 테두리 + 체크 아이콘 + "정답" 글자 — 색만으로 전달하지 않음; 복수 정답 표시)·허용 답안·채점 기준·해설, `출처`(출처 문서 이름과 쪽, 문서가 있으면 PDF 열람(DOC-02 `?page=`) 링크; 없으면 "연결된 출처가 없습니다."), `수정 이력`(버전마다 `버전 n (현재) · 날짜` toggle 버튼, `aria-pressed`; 지난 버전을 고르면 그 버전의 내용(문제·보기·정답·해설)을 그 아래 미리보기로 보인다). `수정 이력·출처`로 열면 `수정 이력` 제목에 focus가 간다. 닫으면(닫기·Escape) focus는 메뉴 버튼으로 돌아간다.
+  - **불러오기:** 정답이 든 문제(`GET /questions/{id}`, 지난 버전은 `GET /questions/{id}/revisions/{revision_id}` — 전체 문제 페이지가 쓰던 읽기 API, 모든 구성원·보관 Workspace 허용)는 항목을 고를 때만 불러온다. 풀이 session 응답에는 여전히 정답·해설이 없다(AC01). 불러오는 동안 "문제를 불러오는 중입니다." 상태, 실패하면 role=alert 문구와 `다시 시도`.
+  - **풀이와의 관계 (제안 — 사용자 확인 필요):** 정답 보기는 풀이(attempt)가 아니다: 풀이 기록·채점 결과·Heatmap 상태(열람 기록은 panel을 열 때 이미 남았다)를 바꾸지 않는다. 아직 제출하지 않은 풀이 중에 열어도 그 풀이는 그대로다 — dialog를 닫으면 고르던 답안과 같은 session이 남아 있고 그대로 제출할 수 있으며 보통 제출처럼 채점·기록된다(정답을 봤는지는 기록하지 않는다).
+  - **보관:** `보관`은 확인 dialog("문제를 보관할까요?" — Heatmap에서 빠지고 `문제` › `보관·초안 문제`에서 보관 해제할 수 있으며 지난 풀이 기록은 남는다)를 거쳐 문제를 보관(ARCHIVED, 그 순간의 현재 revision 기준)하고 panel을 닫는다. 그 점은 Heatmap에서 사라지고(새로 고침해도), 뒤로가기로 panel이 다시 열리지 않는다. 확정 문제만 보관할 수 있다(서버 규칙: 확정↔보관, 초안→확정).
 
 ## 수용 기준
 
@@ -67,6 +73,24 @@
 - **Given:** 확정 문제가 있는 Workspace 홈: Owner, 보기 권한 멤버, 보관된 Workspace의 Owner, 그리고 다른 Workspace의 사용자
 - **When:** Owner가 풀이 panel의 `문제 관리` › `삭제`를 확인하고, 보기 권한·보관된 Workspace에서 panel을 열고, 다른 사용자가 그 question ID로 읽기·수정·삭제 API를 직접 호출
 - **Then:** Owner의 삭제는 확인 dialog를 거쳐 문제를 지우고 panel을 닫으며 그 점이 Heatmap에서 사라진다(새로 고침해도). 보기 권한과 보관된 Workspace의 panel에는 `문제 관리` 메뉴(편집·삭제)가 없고, 서버는 그들의 수정·삭제를 거절한다(viewer 403 `insufficient-role`, 보관 403 `workspace-archived`). 다른 사용자의 읽기·수정·삭제와 목록 요청은 알 수 없는 ID와 같은 404 응답을 받고 내용이 새지 않으며, 그 사용자가 홈 URL로 와도 404다. (QBANK-01-AC04에서 옮김, UX7-BANK)
+
+### QPLAY-01-AC09
+
+- **Given:** 해설이 있는 확정 객관식 문제가 있는 Workspace 홈: Owner, 보기 권한 멤버, 보관된 Workspace의 Owner
+- **When:** 각자 풀이 panel을 열고(Owner·보기 권한은 보기 하나를 고른 채 제출하지 않음) header 메뉴(편집 권한 `문제 관리`, 그 밖 `문제 정보`) › `정답·해설 보기`를 고른 뒤 dialog를 닫음
+- **Then:** 모두 "문제 상세" dialog에서 문제 내용, 정답 보기("정답" 글자와 아이콘), 해설을 본다. panel을 여는 동안 받은 응답에는 정답·해설이 없고(AC01), 정답이 든 문제는 항목을 고른 뒤에만 불러온다. 보기 권한·보관 Workspace의 메뉴에는 `정답·해설 보기`·`수정 이력·출처`만 있고 `편집`·`변형 출제`·`보관`·`삭제`가 없다. dialog를 닫으면 panel의 고른 답안이 그대로 남아 같은 session으로 제출할 수 있다. 정답을 본 것만으로는 풀이 기록(attempt)이 생기지 않는다. (UX7-BANK-2; QBANK-01 상세 panel의 정답·해설)
+
+### QPLAY-01-AC10
+
+- **Given:** 두 번 수정되어 버전 3까지 있고 책 문서의 쪽을 출처로 가진 확정 문제가 있는 Workspace 홈(보기 권한 멤버)
+- **When:** 풀이 panel의 `문제 정보` › `수정 이력·출처`를 고르고, 버전 1을 고른 뒤 출처 링크를 누름
+- **Then:** "문제 상세" dialog가 열리고 `수정 이력` 제목에 focus가 있다. 수정 이력은 버전 3(현재)·2·1을 최신순으로 보이고 현재 버전이 눌린 상태(`aria-pressed="true"`)다. 버전 1을 누르면 그 버튼이 눌린 상태가 되고 버전 1의 문제 내용이 미리보기로 보인다. 출처는 문서 이름과 쪽을 보이고, 링크는 그 문서의 PDF 열람 페이지 그 쪽(`/documents/<id>?page=<n>`)을 연다. (UX7-BANK-2; QBANK-01 상세 panel의 수정 이력·출처)
+
+### QPLAY-01-AC11
+
+- **Given:** 확정 문제 둘이 있는 Workspace 홈: Owner, 보기 권한 멤버, 보관된 Workspace의 Owner
+- **When:** Owner가 풀이 panel의 `문제 관리` › `보관`을 취소했다가 다시 골라 확인하고, 보기 권한 멤버와 보관된 Workspace에서 panel 메뉴를 열고 보관 API를 직접 호출
+- **Then:** 취소하면 아무것도 바뀌지 않는다. 확인하면 문제가 보관(ARCHIVED)되고 panel이 닫히며 그 점이 Heatmap에서 사라지고(새로 고침해도), 뒤로가기로 panel이 다시 열리지 않으며, 그 문제는 `문제` › `보관·초안 문제`의 `보관됨`에 있다(QOV-01-AC15). 보기 권한과 보관된 Workspace의 메뉴에는 `보관`이 없고 서버는 그들의 보관을 거절한다(viewer 403 `insufficient-role`, 보관 403 `workspace-archived`). (UX7-BANK-2; QBANK-01 상세 panel의 `보관`)
 
 ## Test-first 규칙
 - 위 AC ID를 Playwright test title에 포함하고 RED를 확인한 다음 API/UI를 구현한다.
