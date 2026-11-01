@@ -142,6 +142,8 @@ export interface PanelHistoryWindow {
   clearTimeout(id: number): void;
   /** Epoch milliseconds (Date.now). */
   now(): number;
+  /** Whether this document was loaded by Back/Forward (performance navigation type). */
+  arrivedByTraversal?(): boolean;
 }
 
 /** Where a document of the home was when it unloaded. */

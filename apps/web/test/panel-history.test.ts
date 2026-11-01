@@ -35,6 +35,8 @@ function fakeWindow(
     navigation?: boolean;
     firstEntry?: boolean;
     storage?: Map<string, string>;
+    /** The document arrived by Back/Forward (performance navigation type). */
+    arrivedByTraversal?: boolean;
   } = {},
 ) {
   const storage = opts.storage ?? new Map<string, string>();
@@ -109,6 +111,7 @@ function fakeWindow(
     },
     clearTimeout: (id) => timers.delete(id),
     now: () => clock,
+    arrivedByTraversal: () => opts.arrivedByTraversal ?? false,
     sessionStorage: {
       getItem: (key) => storage.get(key) ?? null,
       setItem: (key, value) => storage.set(key, value),
@@ -318,13 +321,15 @@ describe('PanelHistory', () => {
     expectBackLeavesForwardStaysClosed(fake);
   });
 
-  it('a Back that closes restores the address before the open (SEARCH-01-AC09)', () => {
-    const { fake, history } = controller('/w?q=a');
+  it('a Back that closes keeps what changed while the dialog was open (UX7 확인 7)', () => {
+    const { fake, history, navigations, commit } = routedController('/w?q=a');
     history.push('/w?q=a&panel=documents');
     history.replace('/w?q=a&panel=documents&status=retry');
     fake.back();
-    expect(fake.url()).toBe('/w?q=a');
-    expectBackLeavesForwardStaysClosed(fake, '/w?q=a');
+    expect(navigations).toEqual(['/w?q=a&status=retry']);
+    commit();
+    expect(fake.url()).toBe('/w?q=a&status=retry');
+    expectBackLeavesForwardStaysClosed(fake, '/w?q=a&status=retry');
   });
 
   it('stacked dialogs: each Back closes the top one, Forward reopens neither', () => {
@@ -514,32 +519,67 @@ describe('PanelHistory', () => {
     expect(fake.storage.size).toBe(0);
   });
 
-  it('a deep-linked dialog closes in place when nothing lies ahead (Navigation API)', () => {
-    const { fake, history } = controller('/w?panel=history', { navigation: true });
-    history.close('/w');
-    expect(fake.urls()).toEqual(['/workspaces', '/w']);
-    expectBackLeavesForwardStaysClosed(fake);
-  });
-
-  it('a deep-linked dialog closes on a truncating copy without the Navigation API', () => {
-    const { fake, history } = controller('/w?panel=history');
-    history.close('/w');
-    expect(fake.urls()).toEqual(['/workspaces', '/w', '/w']);
-    expectBackLeavesForwardStaysClosed(fake);
-  });
-
-  it('a deep-linked practice panel moved back and closed drops its forward question', () => {
-    const { fake, history } = controller('/w?question=1', { navigation: true });
-    history.push('/w?question=2');
+  it('a first load with a dialog open: Back closes it, then leaves (UX7 확인 7)', () => {
+    const { fake } = controller('/w?status=retry&panel=history');
+    expect(fake.urls()).toEqual([
+      '/workspaces',
+      '/w?status=retry',
+      '/w?status=retry&panel=history',
+    ]);
+    expect(fake.index()).toBe(2);
     fake.back();
-    history.close('/w');
+    expect(fake.url()).toBe('/w?status=retry');
+    expectBackLeavesForwardStaysClosed(fake, '/w?status=retry');
+  });
+
+  it('a first load with several dialogs open closes them one per Back, top first', () => {
+    const { fake } = controller('/w?panel=documents&panel=history&question=1');
+    expect(fake.urls()).toEqual([
+      '/workspaces',
+      '/w',
+      '/w?panel=documents',
+      '/w?panel=documents&panel=history',
+      '/w?panel=documents&panel=history&question=1',
+    ]);
+    fake.back();
+    expect(fake.url()).toBe('/w?panel=documents&panel=history');
+    fake.back();
+    expect(fake.url()).toBe('/w?panel=documents');
+    fake.back();
     expect(fake.url()).toBe('/w');
     expectBackLeavesForwardStaysClosed(fake);
   });
 
-  it('a deep-linked stack closed from below keeps the rest on an entry Back closes', () => {
+  it('a first-loaded dialog closed with its button stays on the home', () => {
+    const { fake, history } = controller('/w?panel=history', { navigation: true });
+    history.close('/w');
+    fake.traverse();
+    expect(fake.url()).toBe('/w');
+    expectBackLeavesForwardStaysClosed(fake);
+  });
+
+  it('expands no entry of ours (a reload), and none with entries ahead', () => {
+    const marked = markState({ __NA: true }, { pos: 1, depth: 1, under: 0 });
+    const reloaded = controller('/w?panel=history', { startState: marked });
+    expect(reloaded.fake.urls()).toEqual(['/workspaces', '/w?panel=history']);
+    const traversed = controller('/w?panel=history', { arrivedByTraversal: true });
+    expect(traversed.fake.urls()).toEqual(['/workspaces', '/w?panel=history']);
+  });
+
+  it('a first-loaded practice panel moved back and closed drops its forward question', () => {
+    const { fake, history } = controller('/w?question=1', { navigation: true });
+    history.push('/w?question=2');
+    fake.back();
+    history.close('/w');
+    fake.traverse();
+    expect(fake.url()).toBe('/w');
+    expectBackLeavesForwardStaysClosed(fake);
+  });
+
+  it('a first-loaded stack closed from below keeps the rest on an entry Back closes', () => {
     const { fake, history } = controller('/w?panel=documents&panel=history', { navigation: true });
     history.close('/w?panel=history');
+    fake.traverse();
     expect(fake.urls()).toEqual(['/workspaces', '/w', '/w?panel=history']);
     fake.back();
     expect(fake.url()).toBe('/w');
@@ -551,6 +591,7 @@ describe('PanelHistory', () => {
     const history = new PanelHistory(() => fake.win);
     history.attach();
     history.close('/w');
+    fake.traverse();
     expect(fake.urls()).toEqual(['/w', '/w']);
     fake.back();
     // The skip entry's Back has nowhere to go: the page stays on it, as a real entry.
@@ -579,7 +620,8 @@ describe('PanelHistory', () => {
   });
 
   it('pushes nothing for an open that changes nothing, and ignores closing a closed dialog', () => {
-    const { fake, history } = controller('/w?panel=history');
+    const marked = markState({ __NA: true }, { pos: 0, depth: 0, under: 0 });
+    const { fake, history } = controller('/w?panel=history', { startState: marked });
     history.push('/w?panel=history');
     history.close('/w?panel=history');
     expect(fake.urls()).toEqual(['/workspaces', '/w?panel=history']);

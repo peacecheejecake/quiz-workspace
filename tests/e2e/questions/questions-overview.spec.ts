@@ -994,36 +994,44 @@ test(
       await forwardStaysClosed(dialog);
     }
 
-    // Back while a dialog is open closes it, back on the address before the open (as Back
-    // restores it, SEARCH-01-AC09); Forward does not reopen it. Closed with its button instead,
-    // a filter chosen meanwhile survives, and Back still leaves the home.
+    // A filter chosen while a dialog is open survives its close, by Back (UX7 확인 7) or by its
+    // close button; neither Back nor Forward reopens the dialog.
     const unseen = (url: URL) => noPanel(url) && url.searchParams.get('status') === 'unseen';
-    await arrive();
-    await homeUi.documentsButton(page).click();
-    await expect(documents).toBeVisible();
+    /** Opens 문서 관리 and picks the 미열람 filter while it is open. */
+    async function openDocumentsAndFilter(): Promise<void> {
+      await arrive();
+      await homeUi.documentsButton(page).click();
+      await expect(documents).toBeVisible();
+      await homeUi.statusFilterToggle(page).click();
+      await homeUi.statusFilters(page).getByRole('button', { name: '미열람', exact: true }).click();
+      await expect(page).toHaveURL(/[?&]status=unseen(&|$)/);
+    }
+    // The close shows the filtered home over the entry before the open: Next reads it, and
+    // WebKit cancels a Back started before that read ends.
+    const closedRead = () =>
+      page.waitForResponse(
+        (r) =>
+          r.url().includes('_rsc=') &&
+          noPanel(new URL(r.url())) &&
+          new URL(r.url()).searchParams.get('status') === 'unseen',
+      );
+    await openDocumentsAndFilter();
+    let read = closedRead();
     await back();
-    await expect(page).toHaveURL(noPanel);
+    await expect(page).toHaveURL(unseen);
     await expect(documents).toBeHidden();
+    await read;
     await forward();
-    await expect(page).toHaveURL(noPanel);
+    await expect(page).toHaveURL(unseen);
     await expect(documents).toBeHidden();
-    await homeUi.documentsButton(page).click();
-    await expect(documents).toBeVisible();
-    await homeUi.statusFilterToggle(page).click();
-    await homeUi.statusFilters(page).getByRole('button', { name: '미열람', exact: true }).click();
-    await expect(page).toHaveURL(/[?&]status=unseen(&|$)/);
-    // The close shows the filtered home over the base entry: Next reads it, and WebKit cancels a
-    // Back started before that read ends (Next then loads the page again instead).
-    const closedRead = page.waitForResponse(
-      (r) =>
-        r.url().includes('_rsc=') &&
-        noPanel(new URL(r.url())) &&
-        new URL(r.url()).searchParams.get('status') === 'unseen',
-    );
+    await backLeavesHome();
+    await forwardStaysClosed(documents);
+    await openDocumentsAndFilter();
+    read = closedRead();
     await documents.getByRole('button', { name: closeDocuments }).click();
     await expect(documents).toBeHidden();
     await expect(page).toHaveURL(unseen);
-    await closedRead;
+    await read;
     await expect(overviewUi.dots(page)).toHaveCount(2);
     await backLeavesHome();
     await forwardStaysClosed(documents);
@@ -1119,7 +1127,33 @@ test(
     await expect(documents).toBeHidden();
     await backLeavesHome();
 
-    // A deep-linked dialog has no entry of its own to undo: closing it stays on the home.
+    // Deep links (UX7 확인 7): the dialogs a first load opens close one per Back, then Back
+    // leaves the home; closing one with its button stays on the home; Forward reopens nothing.
+    await arrive('?panel=history');
+    await expect(history).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(history).toBeHidden();
+    await backLeavesHome();
+    await forwardStaysClosed(history);
+    await arrive('?panel=documents&panel=history');
+    await expect(history).toBeVisible();
+    await expect(documents).toBeVisible();
+    await back();
+    await expect(page).toHaveURL((url) => onHome(url) && panels(url) === 'documents');
+    await expect(history).toBeHidden();
+    await expect(documents).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(documents).toBeHidden();
+    await backLeavesHome();
+    await forwardStaysClosed(documents);
+    await arrive(`?question=${q(s, 1).id}`);
+    await expect(panelUi.numbered(page, 1)).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(panelUi.panel(page)).toBeHidden();
+    await backLeavesHome();
     await arrive('?panel=history');
     await expect(history).toBeVisible();
     await history.getByRole('button', { name: /^(이력 닫기|close)/i }).click();
@@ -1128,5 +1162,14 @@ test(
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await backLeavesHome();
     await forwardStaysClosed(history);
+    // Reloaded with the deep-linked dialog open: Back still closes it first.
+    await arrive('?panel=history');
+    await expect(history).toBeVisible();
+    await page.reload();
+    await expect(history).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(history).toBeHidden();
+    await backLeavesHome();
   },
 );
