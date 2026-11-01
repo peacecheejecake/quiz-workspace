@@ -1,4 +1,4 @@
-// QPLAY-01 — 문제 풀이 Floating Side Panel (`/workspaces/:workspaceId/questions?question=:id`),
+// QPLAY-01 — 문제 풀이 Floating Side Panel (`/workspaces/:workspaceId?question=:id`),
 // docs/screens/questions-practice.md; rules docs/questions.md §2, §3.2, §4,
 // docs/design-system.md §5, docs/e2e-strategy.md §6 (answer leak by network interception, URL
 // panel state across back/forward/reload, focus return).
@@ -8,25 +8,38 @@
 // (A8, A10). Every endpoint and label assumption is in the header of fixtures/questions.ts.
 // Server-side contracts the browser cannot observe (100 shuffles, revision pinning, viewer and
 // archived rules, cross-user isolation) are in tests/integration/questions/
-// test_practice_api_contract.py.
+// test_practice_api_contract.py. AC07/AC08 (문제 관리: 편집·삭제, moved from the retired QBANK-01 by
+// UX7-BANK) seed one graded attempt as superuser (fixtures/db.ts) and reuse the question editor's
+// labels (questionFormUi).
 import { randomUUID } from 'node:crypto';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import {
   answerKeysIn,
+  attemptRevision,
+  choosePanelManage,
   createNumberedQuestions,
   createQuestion,
   expect,
+  getQuestion,
   listAttempts,
+  mcqInput,
+  notFoundHeading,
   numberedMcq,
   overviewItem,
   overviewPath,
   overviewUi,
   panelUi,
+  PROBLEM_TYPES,
+  questionFormUi,
   RESULT_TEXT,
+  seedGradedAttempt,
+  seedMembership,
   signInAs,
   test,
+  type ApiResponse,
   type E2EFixtures,
   type Member,
+  type Problem,
   type Question,
   type QuestionInput,
 } from '../fixtures/test.ts';
@@ -545,5 +558,161 @@ test(
     await expect(panelUi.option(panel, correctText)).not.toBeChecked();
     expect(after.count()).toBeGreaterThan(0);
     after.stop();
+  },
+);
+
+const RANDOM_ID = '00000000-0000-4000-8000-000000000000';
+
+function stableProblem(res: ApiResponse): Partial<Problem> {
+  const { type, title, status, detail } = (res.body ?? {}) as Problem;
+  return { type, title, status, detail };
+}
+
+test(
+  'QPLAY-01-AC07 문제 관리 › 편집 saves a new revision with the same option ids; past attempts keep the old revision',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const original = unique('염소 소독의 주된 목적은?');
+    const s = await seedOne(workspaceFactory, 'qplay01-ac07', {
+      ...mcqInput(
+        original,
+        ['색을 진하게 한다', '미생물을 줄인다', '온도를 높인다', '침전을 늘린다'],
+        1,
+      ),
+      explanation: `해설 ${unique('qplay01-ac07')}`,
+    });
+    const created = q(s, 1);
+    const v1 = created.revision;
+    expect(v1.version).toBe(1);
+    // A graded attempt that already exists on revision 1.
+    const attemptId = seedGradedAttempt(s.workspaceId, created.id, v1.id, s.owner.user.id);
+
+    await signInAs(page, s.owner.user);
+    // Opening the panel alone never carries the answer (QPLAY-01-AC01): the editor's full
+    // question is fetched only once 편집 is chosen.
+    const capture = captureResponses(page);
+    await page.goto(overviewPath(s.workspaceId));
+    const panel = await openPanel(page, 1);
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    expect(leaks(await capture.stop(), [])).toEqual([]);
+
+    await choosePanelManage(page, panel, 'edit');
+    const form = questionFormUi.form(page);
+    await expect(form).toBeVisible();
+    await expect(form).toHaveAccessibleName(/문제 편집|edit question/i);
+    await expect(questionFormUi.stem(form)).toHaveValue(original);
+    const edited = unique('염소 소독을 하는 가장 중요한 이유는?');
+    await questionFormUi.stem(form).fill(edited);
+    await questionFormUi.option(form, 3).fill('물의 온도를 높인다');
+    await questionFormUi.save(form).click();
+    await expect(form).toBeHidden();
+    // The panel stays open and practises the new revision.
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText(edited);
+    await expect(panel).not.toContainText(original);
+    await expect(panelUi.option(panel, '물의 온도를 높인다')).toBeVisible();
+
+    const after = await getQuestion(s.owner, created.id);
+    expect(after.revision.version).toBe(2);
+    expect(after.revision.id).not.toBe(v1.id);
+    expect(after.revision.stem).toBe(edited);
+    // Option ids are stable across the edit; only the text of option 3 changed.
+    expect(after.revision.options.map((o) => o.id)).toEqual(v1.options.map((o) => o.id));
+    expect(after.revision.options[2]?.text).toBe('물의 온도를 높인다');
+    expect(after.revision.correct_option_ids).toEqual(v1.correct_option_ids);
+    // The earlier attempt still points at revision 1 with its original text.
+    expect(attemptRevision(attemptId)).toEqual({ revisionId: v1.id, version: 1, stem: original });
+  },
+);
+
+test(
+  'QPLAY-01-AC08 문제 관리 › 삭제 removes the dot after confirming; viewers, archived workspaces and other users cannot edit or delete',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedMany(workspaceFactory, 'qplay01-ac08', 3);
+    const [doomed, kept] = [q(s, 2), q(s, 3)];
+    const viewer = await workspaceFactory.member('qplay01-ac08-viewer');
+    seedMembership(s.workspaceId, viewer.user.id, 'viewer');
+    const mallory = await workspaceFactory.member('qplay01-ac08-mallory');
+    await workspaceFactory.create(mallory);
+
+    // Owner: 삭제 asks first; cancelling keeps the question.
+    await openOverview(page, s);
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    let panel = await openPanel(page, 2);
+    await choosePanelManage(page, panel, 'delete');
+    const confirm = panelUi.deleteConfirm(page);
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole('button', { name: /^(취소|cancel)$/i }).click();
+    await expect(confirm).toBeHidden();
+    await expect(panel).toBeVisible();
+    expect((await getQuestion(s.owner, doomed.id)).id).toBe(doomed.id);
+
+    await choosePanelManage(page, panel, 'delete');
+    await panelUi
+      .deleteConfirm(page)
+      .getByRole('button', { name: /^(삭제|delete)$/i })
+      .click();
+    await expect(panel).toBeHidden();
+    await expect(page).toHaveURL((url) => !url.searchParams.has('question'));
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    await expect(overviewUi.dot(page, 2)).toHaveCount(0);
+    const gone = await s.owner.api.request('GET', `/questions/${doomed.id}`);
+    expect(gone.status).toBe(404);
+    await page.reload();
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+
+    // Other users: the same 404 as an unknown id for read, edit, delete and list; nothing leaks.
+    const missing = await mallory.api.request('GET', `/questions/${RANDOM_ID}`);
+    expect(missing.status).toBe(404);
+    for (const [method, path, body] of [
+      ['GET', `/questions/${kept.id}`, undefined],
+      ['PATCH', `/questions/${kept.id}`, { base_revision_id: kept.revision.id, stem: 'mallory' }],
+      ['DELETE', `/questions/${kept.id}`, undefined],
+      ['GET', `/workspaces/${s.workspaceId}/questions`, undefined],
+    ] as const) {
+      const res = await mallory.api.request(method, path, body);
+      expect(res.status, `${method} ${path}`).toBe(404);
+      expect(stableProblem(res), `${method} ${path}`).toEqual(stableProblem(missing));
+      expect(res.text).not.toContain(kept.revision.stem);
+    }
+    expect((await getQuestion(s.owner, kept.id)).revision).toEqual(kept.revision);
+    await page.context().clearCookies();
+    await signInAs(page, mallory.user);
+    await page.goto(overviewPath(s.workspaceId, kept.id));
+    await expect(notFoundHeading(page)).toBeVisible();
+    await expect(page.getByText(kept.revision.stem)).toHaveCount(0);
+
+    // Viewer: practises, but the panel has no 문제 관리 and the API refuses edits and deletes.
+    for (const [method, path, body] of [
+      ['PATCH', `/questions/${kept.id}`, { base_revision_id: kept.revision.id, stem: 'viewer' }],
+      ['DELETE', `/questions/${kept.id}`, undefined],
+    ] as const) {
+      const res = await viewer.api.request(method, path, body);
+      expect(res.status, `${method} ${path}`).toBe(403);
+      expect((res.body as Problem).type).toBe(PROBLEM_TYPES.insufficientRole);
+    }
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(overviewPath(s.workspaceId));
+    panel = await openPanel(page, 3);
+    await expect(panelUi.submit(panel)).toBeVisible();
+    await expect(panelUi.manage(panel)).toHaveCount(0);
+
+    // Archived: read-only for the owner too.
+    await workspaceFactory.archive(s.owner, s.workspaceId);
+    for (const [method, path, body] of [
+      ['PATCH', `/questions/${kept.id}`, { base_revision_id: kept.revision.id, stem: 'archived' }],
+      ['DELETE', `/questions/${kept.id}`, undefined],
+    ] as const) {
+      const res = await s.owner.api.request(method, path, body);
+      expect(res.status, `${method} ${path}`).toBe(403);
+      expect((res.body as Problem).type).toBe(PROBLEM_TYPES.workspaceArchived);
+    }
+    await page.context().clearCookies();
+    await openOverview(page, s);
+    panel = await openPanel(page, 3);
+    await expect(panelUi.manage(panel)).toHaveCount(0);
+    expect((await getQuestion(s.owner, kept.id)).revision).toEqual(kept.revision);
   },
 );

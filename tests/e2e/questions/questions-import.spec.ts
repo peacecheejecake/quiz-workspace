@@ -17,8 +17,6 @@ import type { Locator, Page, Route } from '@playwright/test';
 import { localEndpoints } from '../fixtures/local-env.ts';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 import {
-  bankPath,
-  bankUi,
   chooseQuestionMenu,
   draftFor,
   expect,
@@ -38,6 +36,8 @@ import {
   listDrafts,
   listImports,
   listQuestions,
+  overviewUi,
+  overviewPath,
   main,
   pageLabel,
   progressStepsUi,
@@ -137,10 +137,10 @@ test(
       expect(evidence?.locations.map((l) => l.page)).toContain(q.page);
     }
 
-    // Drafts are isolated: nothing is in the bank yet.
+    // Drafts are isolated: nothing is confirmed yet, so the home heatmap is empty.
     expect(await listQuestions(owner, workspaceId)).toEqual([]);
-    await page.goto(bankPath(workspaceId));
-    await expect(bankUi.emptyState(page)).toBeVisible();
+    await page.goto(overviewPath(workspaceId));
+    await expect(overviewUi.empty(page)).toBeVisible();
   },
 );
 
@@ -310,11 +310,9 @@ test(
       }
     }
 
-    await page.goto(bankPath(workspaceId));
-    await expect(bankUi.items(page)).toHaveCount(approved.length);
-    for (const t of PAPER.questions.filter((x) => !approved.includes(x))) {
-      await expect(bankUi.item(page, t.stem), `question ${t.number}`).toHaveCount(0);
-    }
+    // One heatmap marker per registered question (the unselected drafts have none).
+    await page.goto(overviewPath(workspaceId));
+    await expect(overviewUi.dots(page)).toHaveCount(approved.length);
   },
 );
 
@@ -376,8 +374,8 @@ test(
       await expect(importUi.draft(page, t.stem)).toContainText(/등록됨|registered/i);
     }
 
-    await page.goto(bankPath(workspaceId));
-    await expect(bankUi.items(page)).toHaveCount(registrable.length);
+    await page.goto(overviewPath(workspaceId));
+    await expect(overviewUi.dots(page)).toHaveCount(registrable.length);
   },
 );
 
@@ -497,8 +495,8 @@ test(
       );
     }
     expect((await listImports(owner, workspaceId)).map((r) => r.id)).toEqual([run.id]);
-    await page.goto(bankPath(workspaceId));
-    await expect(bankUi.items(page)).toHaveCount(approved.length);
+    await page.goto(overviewPath(workspaceId));
+    await expect(overviewUi.dots(page)).toHaveCount(approved.length);
   },
 );
 
@@ -799,13 +797,13 @@ test(
     expect(chapterOf(Q(1))).toBe(moved?.id);
     expect(chapterOf(Q(2))).toBe(suggested?.id);
 
-    // The bank lists each under its chapter.
-    await page.goto(`${bankPath(ws.id)}?chapter=${suggested?.id}`);
-    await expect(bankUi.items(page)).toHaveCount(1);
-    await expect(bankUi.item(page, Q(2).stem)).toHaveCount(1);
-    await page.goto(`${bankPath(ws.id)}?chapter=${moved?.id}`);
-    await expect(bankUi.items(page)).toHaveCount(1);
-    await expect(bankUi.item(page, Q(1).stem)).toHaveCount(1);
+    // The home heatmap shows each under its chapter (UX7-BANK: was the 전체 문제 page).
+    await page.goto(overviewPath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    for (const title of [moved?.title, suggested?.title]) {
+      const group = overviewUi.heatmap(page).getByRole('region', { name: title ?? '' });
+      await expect(group.getByRole('button', { name: /\d+번 문제|question \d+/i })).toHaveCount(1);
+    }
   },
 );
 

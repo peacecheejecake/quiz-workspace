@@ -12,7 +12,6 @@ import { COLOR_SCHEMES } from '../fixtures/a11y.ts';
 import {
   answerCorrectly,
   authUi,
-  bankPath,
   createNumberedQuestions,
   docUi,
   documentsPath,
@@ -31,7 +30,6 @@ import {
   snippet,
   uploadReadyBook,
   wsUi,
-  bankUi,
   block,
   book,
   createQuestion,
@@ -126,7 +124,7 @@ test(
 );
 
 test(
-  'VISUAL-03 questions heatmap (statuses, favorite star, retry), practice panel and bank',
+  'VISUAL-03 questions heatmap (statuses, favorite star, retry) and the practice panel',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('visual03');
@@ -160,10 +158,6 @@ test(
     await snap(page, 'practice-panel');
     await panelUi.close(panel).click();
     await expect(panel).toHaveCount(0);
-
-    await page.goto(bankPath(ws.id));
-    await expect(bankUi.items(page).first()).toBeVisible();
-    await snap(page, 'question-bank');
   },
 );
 
