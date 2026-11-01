@@ -53,7 +53,6 @@ import {
   toggleAll,
   toggleOne,
   type BookChapterOption,
-  type ImportDraft,
   type ImportRegistration,
   type ImportRun,
   type RefusedDraft,
@@ -83,7 +82,8 @@ export interface QuestionImportProps {
   readonly workspaceName?: string;
   readonly readOnly: ImportReadOnly;
   readonly initialRun: ImportRun | null;
-  readonly initialDrafts: readonly ImportDraft[];
+  /** The run's drafts, already in the review shape (QIMP-PAYLOAD: a slim initial payload). */
+  readonly initialDrafts: readonly ReviewDraft[];
   /** The workspace's book chapters (draft chapter picker, CHAPTER-MAP). */
   readonly initialChapters?: readonly BookChapterOption[];
   /** The PDF the page was opened for (`?document=`), if any. */
@@ -167,12 +167,10 @@ export function QuestionImport({
   const canEdit = readOnly === null;
 
   const [run, setRun] = useState<ImportRun | null>(initialRun);
-  const [drafts, setDrafts] = useState<ReviewDraft[]>(() =>
-    sortDrafts(initialDrafts.map(reviewDraftFromImport)),
-  );
+  const [drafts, setDrafts] = useState<ReviewDraft[]>(() => sortDrafts(initialDrafts));
   /** Drafts checked for "선택한 문제 승인 및 등록" (screen state only). */
   const [selected, setSelected] = useState<ReadonlySet<string>>(() =>
-    initialSelection(sortDrafts(initialDrafts.map(reviewDraftFromImport))),
+    initialSelection(sortDrafts(initialDrafts)),
   );
   const [chapterOptions, setChapterOptions] =
     useState<readonly BookChapterOption[]>(initialChapters);

@@ -2,16 +2,28 @@
 // `?document=`, the newest run of that question paper, QIMPORT-01-AC06) and its drafts, so a
 // reload shows the same import with its review and registration state. Unknown/foreign
 // workspaces never get here (the workspace layout already answered 404).
+//
+// The drafts reach the client already in the review shape (`reviewDraftFromImport`, what the
+// screen keeps in state anyway), not as the API's `ImportDraft`s: those repeat the validations,
+// timestamps, run ids, producer ids and extraction block ids the screen never reads, and every
+// draft travels in the initial RSC payload (QIMP-PAYLOAD: ~1000 drafts of a 316-page paper).
 import { notFound, redirect } from 'next/navigation';
 import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
 import { loginRedirectPath } from '@/lib/auth/routes';
-import type { BookChapterOption, ImportDraft, ImportRun } from './drafts';
+import {
+  reviewDraftFromImport,
+  sortDrafts,
+  type BookChapterOption,
+  type ImportRun,
+  type ReviewDraft,
+} from './drafts';
 import { classifyImportFailure, importPath } from './import-client';
 import { reviewPdfs, type ReviewPdf } from './review-pdfs';
 
 export interface ImportScreenData {
   readonly run: ImportRun | null;
-  readonly drafts: readonly ImportDraft[];
+  /** The run's drafts in the review shape, in source order. */
+  readonly drafts: readonly ReviewDraft[];
   /** The workspace's book chapters: the draft chapter picker (CHAPTER-MAP). */
   readonly chapters: readonly BookChapterOption[];
   /** When the run was read (ISO): a registration that ends later is reported on arrival. */
@@ -68,7 +80,7 @@ export async function loadLatestImport(
   }
   return {
     run,
-    drafts: drafts.data.items,
+    drafts: sortDrafts(drafts.data.items.map(reviewDraftFromImport)),
     chapters: drafts.data.chapters ?? [],
     loadedAt,
     loadFailed: false,
