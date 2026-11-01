@@ -298,6 +298,8 @@ export function WorkspaceHome({
   const searchDocuments = library.documents
     .filter(isSearchableBody)
     .map((d) => ({ id: d.id, title: d.title }));
+  // Bumped when the heatmap's panel changes a question: an open 보관·초안 문제 list re-reads.
+  const [questionsVersion, setQuestionsVersion] = useState(0);
   // Source titles of the 문제 상세 dialog (UX7-BANK-2).
   const documentTitles = library.documents.map((d) => ({ id: d.id, title: d.title }));
 
@@ -590,6 +592,7 @@ export function WorkspaceHome({
         createOpen={isOpen(QUESTION_CREATE_PANEL)}
         onCreateOpenChange={(open) => setPanel(QUESTION_CREATE_PANEL, open)}
         documents={documentTitles}
+        onQuestionsChanged={() => setQuestionsVersion((n) => n + 1)}
         chapterActions={(chapter) =>
           chapter.id === NO_CHAPTER_KEY ? null : (
             <>
@@ -674,6 +677,7 @@ export function WorkspaceHome({
               workspaceId={workspace.id}
               readOnly={readOnly}
               documents={documentTitles}
+              refreshKey={questionsVersion}
             />
           </FloatingSidePanel>
           <FloatingSidePanel

@@ -81,10 +81,16 @@ export function InactiveQuestions({
   workspaceId,
   readOnly,
   documents,
+  refreshKey = 0,
 }: {
   readonly workspaceId: string;
   readonly readOnly: InactiveReadOnly;
   readonly documents: readonly { readonly id: string; readonly title: string }[];
+  /**
+   * Bumped by the home when questions changed elsewhere (the practice panel archived, deleted or
+   * edited one): the open list re-reads its first page in place.
+   */
+  readonly refreshKey?: number;
 }) {
   const { toast } = useToast();
   const canEdit = readOnly === null;
@@ -121,14 +127,14 @@ export function InactiveQuestions({
         }
       },
     );
-  }, [workspaceId, filter, reload]);
+  }, [workspaceId, filter, reload, refreshKey]);
 
-  async function loadMore() {
-    if (list.status !== 'ready' || !list.cursor || loadingMore) return;
+  async function loadMore(cursor = list.status === 'ready' ? list.cursor : null) {
+    if (!cursor || loadingMore) return;
     const requested = generation.current;
     setLoadingMore(true);
     try {
-      const result = await listInactiveQuestionsAction(workspaceId, filter, list.cursor);
+      const result = await listInactiveQuestionsAction(workspaceId, filter, cursor);
       if (requested !== generation.current) return;
       if (!result.ok) {
         toast({ tone: 'error', title: result.message });
@@ -177,6 +183,10 @@ export function InactiveQuestions({
   });
 
   function removeRow(questionId: string) {
+    // The last loaded row left while more remain on the server: fetch the next page at once.
+    if (list.status === 'ready' && list.cursor && list.items.every((q) => q.id === questionId)) {
+      void loadMore(list.cursor);
+    }
     setList((prev) => {
       if (prev.status !== 'ready') return prev;
       const index = prev.items.findIndex((q) => q.id === questionId);
@@ -302,7 +312,7 @@ export function InactiveQuestions({
             <p>문제 목록을 불러오지 못했습니다. {list.message}</p>
             <Button onClick={() => restart()}>다시 시도</Button>
           </div>
-        ) : list.items.length === 0 ? (
+        ) : list.items.length === 0 && !list.cursor ? (
           <EmptyState headingLevel={3} title={EMPTY_TEXT[filter]} />
         ) : (
           <>

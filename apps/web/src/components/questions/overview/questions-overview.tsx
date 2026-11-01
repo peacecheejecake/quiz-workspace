@@ -121,6 +121,8 @@ export interface QuestionsOverviewProps {
   readonly onCreateOpenChange?: (open: boolean) => void;
   /** The workspace's documents, for the 문제 상세 dialog's source titles (UX7-BANK-2). */
   readonly documents?: readonly { readonly id: string; readonly title: string }[];
+  /** A question was archived, deleted or edited here (the home re-reads open lists, UX7-BANK-2). */
+  readonly onQuestionsChanged?: () => void;
 }
 
 const NO_DOCUMENTS: readonly { readonly id: string; readonly title: string }[] = [];
@@ -196,6 +198,7 @@ export function QuestionsOverview({
   createOpen = false,
   onCreateOpenChange,
   documents = NO_DOCUMENTS,
+  onQuestionsChanged,
 }: QuestionsOverviewProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -563,6 +566,7 @@ export function QuestionsOverview({
 
   /** The question left the heatmap (deleted, archived): forget it and close its panel. */
   function removeOpen(questionId: string) {
+    onQuestionsChanged?.();
     setRemoved((prev) => new Map(prev).set(questionId, latestItems.current));
     invalidate(questionId);
     // After the action's refreshed overview: closing first could let that refresh restore
@@ -800,6 +804,7 @@ export function QuestionsOverview({
               // The saved question's sessions are pinned to its old revision: forget them, and
               // practise the new one if the panel still shows it (not whatever is open now).
               if (mode === 'edit') invalidate(question.id);
+              onQuestionsChanged?.();
             }}
           />
           <ConfirmDialog
