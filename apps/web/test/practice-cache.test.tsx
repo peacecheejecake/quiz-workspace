@@ -5,6 +5,7 @@
 // in another workspace.
 import './dom-setup';
 import { act, render, screen, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PracticeSession, SubmitResult } from '../src/lib/questions/practice-actions';
@@ -79,6 +80,30 @@ describe('PracticeSessionCache', () => {
     expect(JSON.stringify(stored)).not.toMatch(/correct|explanation|rubric|accepted/);
     expect(stored).toEqual(answerFreeSession(leaky));
     expect(stored?.options).toEqual([{ id: 'o1', text: '보기 가' }]);
+  });
+
+  it('never takes back a dropped session (a late duplicate open response), within bounds', () => {
+    let now = 0;
+    const cache = new PracticeSessionCache(WS, { now: () => now, maxEntries: 2 });
+    const s1 = session(Q1);
+    cache.put(s1);
+    cache.dropSession(s1.id);
+    cache.put(s1);
+    expect(cache.get(Q1)).toBeNull();
+    // A new session of the same question is fine.
+    cache.put(session(Q1));
+    expect(cache.get(Q1)).not.toBeNull();
+    // The dropped ids are bounded by the same cap and TTL as the entries.
+    const s2 = session(Q2);
+    const s3 = session(Q2);
+    cache.dropSession(s2.id);
+    cache.dropSession(s3.id);
+    cache.put(s1);
+    expect(cache.get(Q1)?.id).toBe(s1.id);
+    cache.dropSession(s1.id);
+    now += PRACTICE_CACHE_TTL_MS;
+    cache.put(s1);
+    expect(cache.get(Q1)?.id).toBe(s1.id);
   });
 
   it('expires entries after the TTL', () => {
@@ -221,6 +246,56 @@ describe('PracticePanel session cache', () => {
     await act(async () => {
       release({ ok: false, kind: 'alreadySubmitted', message: '이미 제출한 풀이입니다.' });
     });
+  });
+
+  it('a late duplicate open response never restores a session whose submission started', async () => {
+    const user = userEvent.setup();
+    const s1 = session(Q1);
+    let releaseLate: () => void = () => undefined;
+    open
+      .mockImplementationOnce(async () => ({ ok: true, data: s1 }))
+      .mockImplementationOnce(
+        () => new Promise((resolve) => (releaseLate = () => resolve({ ok: true, data: s1 }))),
+      );
+    submit.mockImplementation(async () => ({
+      ok: false,
+      kind: 'unavailable',
+      message: '일시적인 오류',
+    }));
+    const view = render(
+      <StrictMode>
+        <Harness questionId={Q1} />
+      </StrictMode>,
+    );
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    expect(open.mock.calls[0]?.[2]).toBe(open.mock.calls[1]?.[2]);
+    // The first response is cached; close and reopen show it while the duplicate is pending.
+    view.rerender(
+      <StrictMode>
+        <Harness questionId={null} />
+      </StrictMode>,
+    );
+    view.rerender(
+      <StrictMode>
+        <Harness questionId={Q1} />
+      </StrictMode>,
+    );
+    await user.click(await screen.findByRole('radio', { name: '보기 가' }));
+    expect(open).toHaveBeenCalledTimes(2);
+    await user.click(screen.getByRole('button', { name: '제출' }));
+    await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
+    await act(async () => releaseLate());
+    view.rerender(
+      <StrictMode>
+        <Harness questionId={null} />
+      </StrictMode>,
+    );
+    view.rerender(
+      <StrictMode>
+        <Harness questionId={Q1} />
+      </StrictMode>,
+    );
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(3));
   });
 
   it('starts over in another workspace', async () => {

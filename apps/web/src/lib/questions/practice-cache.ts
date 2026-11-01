@@ -4,7 +4,8 @@
 // (sign-out, another workspace or route), never written to browser storage. It holds only the
 // answer-free `PracticeSession` fields (copied field by field, so an unexpected field never gets
 // in) of sessions that are still open; a session whose submission started is never handed out
-// again, and submit results (answers, explanations) are never stored.
+// again (not even when a late duplicate open response for it arrives), and submit results
+// (answers, explanations) are never stored.
 import type { PracticeSession } from './practice-actions';
 
 /** How long an open session is reused (an edit made elsewhere shows up at most this late). */
@@ -44,6 +45,8 @@ export function answerFreeSession(session: PracticeSession): PracticeSession {
 export class PracticeSessionCache {
   readonly workspaceId: string;
   private readonly entries = new Map<string, Entry>();
+  /** Session ids dropped at submission (→ when), refused by `put`; same cap and TTL. */
+  private readonly dropped = new Map<string, number>();
   private readonly ttlMs: number;
   private readonly maxEntries: number;
   private readonly now: () => number;
@@ -71,6 +74,7 @@ export class PracticeSessionCache {
   /** Keeps an open session of this workspace; anything else (submitted, foreign) is ignored. */
   put(session: PracticeSession): void {
     if (session.workspace_id.toLowerCase() !== this.workspaceId) return;
+    if (this.wasDropped(session.id)) return;
     const key = session.question_id.toLowerCase();
     if (session.state !== 'open') {
       this.entries.delete(key);
@@ -90,6 +94,23 @@ export class PracticeSessionCache {
     for (const [key, entry] of this.entries) {
       if (entry.session.id === sessionId) this.entries.delete(key);
     }
+    this.dropped.delete(sessionId);
+    this.dropped.set(sessionId, this.now());
+    while (this.dropped.size > this.maxEntries) {
+      const oldest = this.dropped.keys().next().value;
+      if (oldest === undefined) break;
+      this.dropped.delete(oldest);
+    }
+  }
+
+  private wasDropped(sessionId: string): boolean {
+    const at = this.dropped.get(sessionId);
+    if (at === undefined) return false;
+    if (this.now() - at >= this.ttlMs) {
+      this.dropped.delete(sessionId);
+      return false;
+    }
+    return true;
   }
 
   get size(): number {
