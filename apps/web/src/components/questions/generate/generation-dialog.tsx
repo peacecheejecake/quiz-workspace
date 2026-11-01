@@ -34,6 +34,7 @@ import type { ChapterChoice } from '@/lib/questions/overview-data';
 import { MultiSourcePicker, RandomSourcePicker } from './generation-batch-pickers';
 import { QuestionGenerationForm } from './question-generation-form';
 import styles from './question-generation.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export interface GenerationDialogProps {
   readonly workspaceId: string;
@@ -242,7 +243,7 @@ function SingleSource({
             <Badge>{QUESTION_TYPE_LABELS[source.question_type]}</Badge>
             {source.chapter ? <Badge>{source.chapter.title}</Badge> : null}
           </div>
-          <p className={styles.sourceStem}>{source.revision.stem}</p>
+          <p className={styles.sourceStem}>{displayStem(source.revision.stem)}</p>
         </section>
         <QuestionGenerationForm
           source={{
@@ -281,7 +282,7 @@ function SingleSource({
                     <Badge>{QUESTION_TYPE_LABELS[q.question_type]}</Badge>
                     {q.chapter ? <span className={styles.muted}>{q.chapter.title}</span> : null}
                   </span>
-                  <span className={styles.pickStem}>{q.revision.stem}</span>
+                  <span className={styles.pickStem}>{displayStem(q.revision.stem)}</span>
                 </button>
               </li>
             ))}

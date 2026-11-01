@@ -67,6 +67,7 @@ import { VariationDiffViewer, type VariationOriginal } from './variation-diff-vi
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import { workspaceHomePath } from '@/lib/workspaces/home';
 import styles from './question-generation.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export type GenerationReadOnly = 'viewer' | 'archived' | null;
 
@@ -673,7 +674,7 @@ export function QuestionGeneration({
             <Badge tone="warning">확정되지 않은 문제</Badge>
           ) : null}
         </div>
-        <p className={styles.sourceStem}>{revision.stem}</p>
+        <p className={styles.sourceStem}>{displayStem(revision.stem)}</p>
         {revision.options.length > 0 ? (
           <ol className={styles.sourceOptions}>
             {revision.options.map((o) => (

@@ -6,6 +6,7 @@ import { CheckIcon } from '@quiz/ui';
 import type { QuestionRevision } from '@/lib/questions/actions';
 import type { Question } from '@/lib/questions/form';
 import styles from './question-bank.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export function RevisionView({
   revision,
@@ -21,7 +22,7 @@ export function RevisionView({
     <>
       <section className={styles.detailSection}>
         <h3 className={styles.detailHeading}>{heading}</h3>
-        <p className={styles.detailText}>{revision.stem}</p>
+        <p className={styles.detailText}>{displayStem(revision.stem)}</p>
       </section>
       {type === 'MCQ' ? (
         <section className={styles.detailSection}>

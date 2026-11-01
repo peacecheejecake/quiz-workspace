@@ -61,6 +61,7 @@ import {
   type PracticeAnswer,
 } from './practice-model';
 import styles from './practice-panel.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export interface PracticeQuestion {
   readonly id: string;
@@ -418,7 +419,7 @@ export function PracticePanel({
               <p className={styles.notice}>
                 보관된 Workspace는 읽기 전용입니다. 문제를 풀거나 학습 상태를 바꿀 수 없습니다.
               </p>
-              <p className={styles.stem}>{view.preview}</p>
+              <p className={styles.stem}>{displayStem(view.preview)}</p>
             </>
           ) : ready ? (
             <form
@@ -428,7 +429,7 @@ export function PracticePanel({
               aria-busy={work.busy !== null || undefined}
               noValidate
             >
-              <p className={styles.stem}>{ready.stem}</p>
+              <p className={styles.stem}>{displayStem(ready.stem)}</p>
               <AnswerField
                 session={ready}
                 answer={work.answer}
@@ -464,7 +465,7 @@ export function PracticePanel({
             </div>
           ) : (
             <div aria-busy="true">
-              <p className={styles.stem}>{view.preview}</p>
+              <p className={styles.stem}>{displayStem(view.preview)}</p>
               <p className={styles.loading}>문제를 불러오는 중입니다…</p>
             </div>
           )}

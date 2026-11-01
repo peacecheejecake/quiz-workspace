@@ -3,6 +3,7 @@
 import { deriveDotStatus, type HeatmapChapter, type QuestionDotStatus } from '@quiz/ui';
 import type { OverviewItem } from '@/lib/questions/overview-data';
 import type { PlacedQuestion } from '@/lib/questions/overview-placement';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export {
   chapterKey,
@@ -132,7 +133,7 @@ export function heatmapChapters(placed: readonly PlacedQuestion[]): HeatmapChapt
       type: p.item.question_type,
       status: p.item.status,
       isFavorite: p.item.is_favorite,
-      preview: p.item.preview,
+      preview: displayStem(p.item.preview),
       lastGradedResult: p.item.last_graded_result,
       needsRetry: p.item.needs_retry,
       isPendingGrading: p.item.is_pending_grading,

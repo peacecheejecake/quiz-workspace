@@ -22,6 +22,7 @@ import {
 import { batchItemStatus, batchProgress, VARIATION_LABELS } from '@/lib/questions/generation-model';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import styles from './question-generation.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 /** How often a working batch is re-read. */
 export const BATCH_POLL_MS = 2000;
@@ -193,7 +194,7 @@ export function GenerationBatchView({
                 </Link>
               </div>
               <p id={previewId} className={styles.pickStem}>
-                {source.preview}
+                {displayStem(source.preview)}
               </p>
               {failure ? (
                 <p className={styles.batchGroupStatus}>

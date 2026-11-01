@@ -2,6 +2,7 @@
 // panel shows for a chapter's note state, the failure reasons, footnote lines and the small
 // Markdown subset of item text. Pure; unit-tested without a browser.
 import type { Schemas } from '@quiz/api-client';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export type ChapterNoteState = Schemas['ChapterNoteState'];
 export type ChapterNote = Schemas['ChapterNote'];
@@ -90,7 +91,7 @@ export function versionLabel(version: NoteVersion, newest: boolean): string {
 export function footnoteText(footnote: NoteFootnote): string {
   const tail =
     footnote.question_id !== null && footnote.stem_preview !== null
-      ? footnote.stem_preview
+      ? displayStem(footnote.stem_preview)
       : NOTE_TEXT.footnoteGone;
   return `[^${footnote.number}] ${footnote.label} — ${tail}`;
 }

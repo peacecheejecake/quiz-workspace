@@ -7,6 +7,7 @@ import { FloatingSidePanel } from '@quiz/ui';
 import { draftNumber, type ReviewDraft } from '@/lib/questions/drafts';
 import { VariationDiffViewer, type VariationOriginal } from './variation-diff-viewer';
 import styles from './question-generation.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export interface GenerationComparePanelProps {
   /** The source revision the run was generated from; null while it loads (or failed). */
@@ -52,7 +53,7 @@ export function GenerationComparePanel({
                 {originalPending ?? '생성 당시 원본을 불러오는 중입니다.'}
               </p>
             )}
-            {original ? <p className={styles.compareStem}>{original.stem}</p> : null}
+            {original ? <p className={styles.compareStem}>{displayStem(original.stem)}</p> : null}
             {original && original.options.length > 0 ? (
               <ol className={styles.compareOptions}>
                 {original.options.map((o) => (
@@ -68,7 +69,7 @@ export function GenerationComparePanel({
             <h3 id="qgen-compare-variant" className={styles.diffTitle}>
               {draftNumber(draft)}번 변형
             </h3>
-            <p className={styles.compareStem}>{draft.stem}</p>
+            <p className={styles.compareStem}>{displayStem(draft.stem)}</p>
             {draft.options.length > 0 ? (
               <ol className={styles.compareOptions}>
                 {draft.options.map((o) => (

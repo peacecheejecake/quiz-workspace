@@ -28,6 +28,7 @@ import { HomeQuestionEditor } from '../home-question-editor';
 import { NO_CHAPTER_TITLE } from '../labels';
 import type { EditorTarget } from '../question-editor';
 import styles from './inactive-questions.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export type InactiveReadOnly = 'viewer' | 'archived' | null;
 
@@ -60,7 +61,7 @@ type ListState =
 /** "3번 문제" or the first words of the stem. */
 function questionName(question: Question): string {
   if (question.question_number) return `${question.question_number}번 문제`;
-  const stem = question.revision.stem.replace(/\s+/g, ' ').trim();
+  const stem = displayStem(question.revision.stem).replace(/\s+/g, ' ').trim();
   return stem.length > 30 ? `${stem.slice(0, 30)}…` : stem;
 }
 
@@ -357,7 +358,7 @@ export function InactiveQuestions({
                           })
                         }
                       >
-                        {question.revision.stem}
+                        {displayStem(question.revision.stem)}
                       </button>
                     </div>
                     {label ? (
