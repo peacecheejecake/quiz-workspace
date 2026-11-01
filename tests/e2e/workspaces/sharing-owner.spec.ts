@@ -287,7 +287,7 @@ test(
 test(
   'WS-SHARE-01-AC06 the Owner clears a saved expiry: the link never expires, expired links reopen',
   { tag: '@infra' },
-  async ({ page, workspaceFactory }) => {
+  async ({ page, workspaceFactory, browserName }) => {
     const owner = await workspaceFactory.member('share01-ac06');
     const ws = await workspaceFactory.create(owner, uniqueWorkspaceName('share01-ac06'));
     const link = await createShareLink(owner, ws.id);
@@ -306,7 +306,8 @@ test(
       .poll(async () => nearDate((await listShareLinks(owner, ws.id))[0]?.expires_at ?? null, date))
       .toBe(true);
     const clear = sharingUi.clearExpiryButton(page);
-    await expect(clear).toBeVisible();
+    // Enabled again once the date's save has finished on the client too.
+    await expect(clear).toBeEnabled();
     await expect(sharingUi.noExpiry(page)).toHaveCount(0);
     await clear.focus();
     await page.keyboard.press('Enter');
@@ -324,6 +325,38 @@ test(
     await expect(sharingUi.noExpiry(page)).toBeVisible();
     await expect(sharingUi.expiry(page)).toHaveValue('');
     expect((await session.get()).status, 'the live session keeps working').toBe(200);
+
+    // Review P2: clearing straight from an edited, focused date field (mouse, then Tab + Enter)
+    // saves null, not the draft.
+    for (const how of ['click', 'keyboard'] as const) {
+      await updateShareLink(owner, ws.id, link.id, {
+        expires_at: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+      });
+      await page.reload();
+      await expect(sharingUi.clearExpiryButton(page)).toBeVisible();
+      await sharingUi.expiry(page).fill(seoulDate(20));
+      if (how === 'click') {
+        await sharingUi.clearExpiryButton(page).click();
+      } else {
+        // Tab out of the date (Chromium steps through its year/month/day parts first; WebKit,
+        // like Safari, reaches buttons with Option+Tab).
+        const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+        for (let i = 0; i < 4; i++) {
+          await page.keyboard.press(tab);
+          if (await sharingUi.clearExpiryButton(page).evaluate((b) => b === document.activeElement))
+            break;
+        }
+        await expect(sharingUi.clearExpiryButton(page)).toBeFocused();
+        await page.keyboard.press('Enter');
+      }
+      await expect(sharingUi.noExpiry(page), how).toBeVisible();
+      await expect
+        .poll(async () => {
+          const [l] = await listShareLinks(owner, ws.id);
+          return l ? l.expires_at : 'no link';
+        }, how)
+        .toBeNull();
+    }
 
     // Past the former date: an expired link is cleared and opens again, its live session too.
     await updateShareLink(owner, ws.id, link.id, {
