@@ -901,6 +901,9 @@ test(
     }
     /** After a close, Back leaves the home for the page before it: the dialog never reopens. */
     async function backLeavesHome(): Promise<void> {
+      // A close may refresh the overview (the practice panel's study state): a cross-document
+      // Back started under that router write is cancelled by WebKit, not by the feature.
+      await page.waitForLoadState('networkidle');
       await page.goBack();
       await expect(page).toHaveURL(onList);
     }
