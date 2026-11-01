@@ -106,6 +106,8 @@ import styles from './workspace-home.module.css';
 
 const ALL = '__all__';
 const TYPES: readonly QuestionType[] = ['MCQ', 'SHORT_ANSWER', 'ESSAY'];
+/** Re-reads of the same wanted heatmap filters after interrupted reads (see rereadHeatmap). */
+const MAX_HEATMAP_RETRIES = 3;
 
 export interface WorkspaceHomeProps {
   readonly workspace: {
@@ -314,24 +316,30 @@ export function WorkspaceHome({
 
   // The heatmap filters the address bar asks for (as the page reads them: the open 정리 노트
   // panel owns `chapter`). When they differ from what the server rendered and nothing is
-  // loading, a re-read was discarded (see rereadHeatmap): read the current URL once more.
+  // loading, a re-read was discarded (see rereadHeatmap): read the current URL again.
   const urlFilters = parseOverviewFilters(searchParams);
   const urlFiltersKey = overviewSearch(
     isChapterNoteOpen(searchParams) ? { ...urlFilters, chapter: null } : urlFilters,
   );
-  const healedKeyRef = useRef<string | null>(null);
+  // Retries are tracked per wanted filters: a retry is tried once per navigation target (a retry
+  // that a later history change interrupted has a new target, e.g. a dialog closed meanwhile),
+  // and at most MAX_HEATMAP_RETRIES times in all, so a server that keeps failing never loops.
+  const healRef = useRef<{ key: string; targets: string[] } | null>(null);
   useEffect(() => {
     if (navigating) return;
     if (urlFiltersKey === filtersKey) {
-      healedKeyRef.current = null;
+      healRef.current = null;
       return;
     }
-    if (healedKeyRef.current === urlFiltersKey) return; // one retry per URL, never a loop
-    healedKeyRef.current = urlFiltersKey;
-    startNavigation(() =>
-      router.replace(`${pathname}${window.location.search}`, { scroll: false }),
-    );
-  }, [filtersKey, navigating, pathname, router, urlFiltersKey]);
+    const target = `${pathname}${window.location.search}`;
+    const heal =
+      healRef.current?.key === urlFiltersKey
+        ? healRef.current
+        : (healRef.current = { key: urlFiltersKey, targets: [] });
+    if (heal.targets.includes(target) || heal.targets.length >= MAX_HEATMAP_RETRIES) return;
+    heal.targets.push(target);
+    startNavigation(() => router.replace(target, { scroll: false }));
+  }, [filtersKey, navigating, pathname, router, searchParams, urlFiltersKey]);
 
   function changeFilters(patch: Partial<OverviewFilters>) {
     const next = { ...view, ...patch };
