@@ -149,6 +149,8 @@ describe('WorkspaceSharingPanel', () => {
     await user.clear(expiry);
     await user.type(expiry, date);
     expect(actions.update).toHaveBeenCalledTimes(1);
+    // The next stop is 만료일 삭제 (no save yet); leaving it saves the edited date.
+    await user.tab();
     await user.tab();
     await waitFor(() => expect(actions.update).toHaveBeenCalledTimes(2));
     const [, , policy] = actions.update.mock.calls[1] ?? [];
@@ -200,6 +202,111 @@ describe('WorkspaceSharingPanel', () => {
     expect(within(panel).getByRole('switch', { name: 'Fork 허용' })).toBeEnabled();
   });
 
+  describe('WS-SHARE-01-AC06 clearing right after editing the date (review P2)', () => {
+    const SAVED = '2099-01-31T14:59:59.999Z';
+    const next = new Date(Date.now() + 20 * 86_400_000);
+    const date = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+
+    async function editDate() {
+      actions.update.mockImplementation(async (_ws, _id, policy) => ({
+        ok: true,
+        links: [link(L1, { expires_at: (policy as { expiresAt: string | null }).expiresAt })],
+      }));
+      renderScreen([link(L1, { expires_at: SAVED })]);
+      const panel = await loadedPanel();
+      const expiry = within(panel).getByLabelText('만료일');
+      const user = userEvent.setup();
+      await user.clear(expiry);
+      await user.type(expiry, date);
+      expect(expiry).toHaveFocus();
+      return { panel, user };
+    }
+
+    it('a click on 만료일 삭제 from the focused, edited field saves null, not the draft', async () => {
+      const { panel, user } = await editDate();
+      await user.click(within(panel).getByRole('button', { name: '만료일 삭제' }));
+      await waitFor(() => expect(within(panel).getByText(/^만료 없음/)).toBeVisible());
+      expect(actions.update.mock.calls).toEqual([[WS, L1, { expiresAt: null }]]);
+    });
+
+    it('Tab to 만료일 삭제 then Enter saves null, not the draft', async () => {
+      const { panel, user } = await editDate();
+      await user.tab();
+      expect(within(panel).getByRole('button', { name: '만료일 삭제' })).toHaveFocus();
+      expect(actions.update).not.toHaveBeenCalled();
+      await user.keyboard('{Enter}');
+      await waitFor(() => expect(within(panel).getByText(/^만료 없음/)).toBeVisible());
+      expect(actions.update.mock.calls).toEqual([[WS, L1, { expiresAt: null }]]);
+    });
+
+    it('tabbing past 만료일 삭제 without clearing still saves the edited date', async () => {
+      const { panel, user } = await editDate();
+      await user.tab();
+      await user.tab();
+      await waitFor(() => expect(actions.update).toHaveBeenCalledTimes(1));
+      const [, , policy] = actions.update.mock.calls[0] ?? [];
+      expect((policy as { expiresAt: string }).expiresAt).not.toBeNull();
+      expect(within(panel).queryByText(/^만료 없음/)).toBeNull();
+    });
+  });
+
+  it('WS-SHARE-01-AC06 a failed clear keeps the saved date and the clear button (review P2)', async () => {
+    const user = userEvent.setup();
+    const saved = link(L1, { expires_at: '2099-01-31T14:59:59.999Z' });
+    actions.update.mockResolvedValue({
+      ok: false,
+      failure: 'unavailable',
+      error: '연결할 수 없습니다.',
+      links: [saved],
+    });
+    renderScreen([saved]);
+    const panel = await loadedPanel();
+    const expiry = within(panel).getByLabelText('만료일');
+    const before = (expiry as HTMLInputElement).value;
+    expect(before).not.toBe('');
+    await user.click(within(panel).getByRole('button', { name: '만료일 삭제' }));
+    await waitFor(() => expect(actions.update).toHaveBeenCalledTimes(1));
+    expect(await within(panel).findByRole('alert')).toHaveTextContent('연결할 수 없습니다.');
+    await waitFor(() => expect(expiry).toHaveValue(before));
+    expect(within(panel).queryByText(/^만료 없음/)).toBeNull();
+    expect(within(panel).getByRole('button', { name: '만료일 삭제' })).toBeEnabled();
+  });
+
+  it('WS-SHARE-01-AC06 clears a saved expiry: PATCH null, "만료 없음", focus on the date', async () => {
+    const user = userEvent.setup();
+    actions.update.mockResolvedValue({ ok: true, links: [link(L1, { expires_at: null })] });
+    renderScreen([link(L1, { expires_at: '2099-01-31T14:59:59.999Z' })], true);
+    const panel = await loadedPanel();
+    expect(within(panel).queryByText(/^만료 없음/)).toBeNull();
+    const clear = within(panel).getByRole('button', { name: '만료일 삭제' });
+    clear.focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(actions.update).toHaveBeenCalledTimes(1));
+    expect(actions.update).toHaveBeenLastCalledWith(WS, L1, { expiresAt: null });
+    expect(await within(panel).findByText(/^만료 없음/)).toBeVisible();
+    expect(within(panel).getByLabelText('만료일')).toHaveValue('');
+    await waitFor(() => expect(within(panel).getByLabelText('만료일')).toHaveFocus());
+    expect(within(panel).queryByRole('button', { name: '만료일 삭제' })).toBeNull();
+  });
+
+  it('WS-SHARE-01-AC08 a copy shows "복사됨" instead of a success toast', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    actions.create.mockResolvedValue({
+      ok: true,
+      links: [link(L1)],
+      issued: { linkId: L1, shareUrl: url(L1, SECRET_1) },
+    });
+    renderScreen([]);
+    const panel = await loadedPanel();
+    await user.click(within(panel).getByRole('button', { name: '링크 만들기' }));
+    await user.click(await within(panel).findByRole('button', { name: '링크 복사' }));
+    expect(writeText).toHaveBeenCalledWith(url(L1, SECRET_1));
+    expect(await within(panel).findByRole('button', { name: '복사됨' })).toBeVisible();
+    expect(screen.getAllByText('링크를 복사했습니다.')).toHaveLength(1);
+  });
+
   it('an expired link stays editable (also archived): a later expiry reopens it', async () => {
     const user = userEvent.setup();
     const past = '2026-10-01T14:59:59.999Z';
@@ -222,6 +329,8 @@ describe('WorkspaceSharingPanel', () => {
     const date = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
     await user.clear(expiry);
     await user.type(expiry, date);
+    // The next stop is 만료일 삭제 (no save yet); leaving it saves the edited date.
+    await user.tab();
     await user.tab();
     await waitFor(() => expect(actions.update).toHaveBeenCalledTimes(1));
     expect(actions.update.mock.calls[0]?.[1]).toBe(L1);

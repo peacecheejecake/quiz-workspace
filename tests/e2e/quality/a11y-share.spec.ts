@@ -56,6 +56,21 @@ test(
     await expect(sharingUi.onceNotice(page)).toBeVisible();
     await expectAccessible(page, 'one-time link shown');
 
+    // UX7-SHARE-EXPIRY: the copied state (check + "복사됨") and a saved expiry with 만료일 삭제.
+    await page.evaluate(() => {
+      navigator.clipboard.writeText = async () => undefined;
+    });
+    await sharingUi.copyButton(page).click();
+    await expect(sharingUi.copiedButton(page)).toBeVisible();
+    await expectAccessible(page, 'link copied');
+    const next = new Date(Date.now() + 7 * 86_400_000).toLocaleDateString('sv-SE', {
+      timeZone: 'Asia/Seoul',
+    });
+    await sharingUi.expiry(page).fill(next);
+    await sharingUi.expiry(page).blur();
+    await expect(sharingUi.clearExpiryButton(page)).toBeEnabled();
+    await expectAccessible(page, 'expiry set, clear button');
+
     await sharingUi.revokeButton(page).click();
     await expect(sharingUi.confirmDialog(page)).toBeVisible();
     await expectAccessible(page, 'revoke confirmation');

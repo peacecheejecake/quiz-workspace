@@ -21,6 +21,7 @@ import {
 import {
   createShareLink,
   exchangeRequest,
+  expireShareLinkNow,
   expect,
   expectNoSecret,
   listShareLinks,
@@ -280,5 +281,255 @@ test(
     await expect(notFoundHeading(page)).toBeVisible();
     // revokeShareLink on a deleted workspace is 404 like any invisible resource.
     await expect(revokeShareLink(owner, doomed.id, doomedLink.id)).rejects.toThrow(/404/);
+  },
+);
+
+test(
+  'WS-SHARE-01-AC06 the Owner clears a saved expiry: the link never expires, expired links reopen',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory, browserName }) => {
+    const owner = await workspaceFactory.member('share01-ac06');
+    const ws = await workspaceFactory.create(owner, uniqueWorkspaceName('share01-ac06'));
+    const link = await createShareLink(owner, ws.id);
+    const session = await ShareSession.open(link.id, link.secret);
+
+    await signInAs(page, owner.user);
+    await page.goto(sharingSettingsPath(ws.id));
+    await expect(sharingUi.noExpiry(page)).toBeVisible();
+    await expect(sharingUi.clearExpiryButton(page), 'nothing to clear yet').toHaveCount(0);
+
+    // Set and save a date, then clear it from the keyboard.
+    const date = seoulDate(7);
+    await sharingUi.expiry(page).fill(date);
+    await sharingUi.expiry(page).blur();
+    await expect
+      .poll(async () => nearDate((await listShareLinks(owner, ws.id))[0]?.expires_at ?? null, date))
+      .toBe(true);
+    const clear = sharingUi.clearExpiryButton(page);
+    // Enabled again once the date's save has finished on the client too.
+    await expect(clear).toBeEnabled();
+    await expect(sharingUi.noExpiry(page)).toHaveCount(0);
+    await clear.focus();
+    await page.keyboard.press('Enter');
+    await expect
+      .poll(async () => {
+        const [l] = await listShareLinks(owner, ws.id);
+        return l ? [l.expires_at, l.status] : null;
+      })
+      .toEqual([null, 'active']);
+    await expect(sharingUi.expiry(page)).toHaveValue('');
+    await expect(sharingUi.expiry(page), 'focus stays in the expiry area').toBeFocused();
+    await expect(sharingUi.noExpiry(page)).toBeVisible();
+    await expect(sharingUi.clearExpiryButton(page)).toHaveCount(0);
+    await page.reload();
+    await expect(sharingUi.noExpiry(page)).toBeVisible();
+    await expect(sharingUi.expiry(page)).toHaveValue('');
+    expect((await session.get()).status, 'the live session keeps working').toBe(200);
+
+    // Review P2: clearing straight from an edited, focused date field (mouse, then Tab + Enter)
+    // saves null, not the draft.
+    for (const how of ['click', 'keyboard'] as const) {
+      await updateShareLink(owner, ws.id, link.id, {
+        expires_at: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+      });
+      await page.reload();
+      await expect(sharingUi.clearExpiryButton(page)).toBeVisible();
+      await sharingUi.expiry(page).fill(seoulDate(20));
+      if (how === 'click') {
+        await sharingUi.clearExpiryButton(page).click();
+      } else {
+        // Tab out of the date (Chromium steps through its year/month/day parts first; WebKit,
+        // like Safari, reaches buttons with Option+Tab).
+        const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+        for (let i = 0; i < 4; i++) {
+          await page.keyboard.press(tab);
+          if (await sharingUi.clearExpiryButton(page).evaluate((b) => b === document.activeElement))
+            break;
+        }
+        await expect(sharingUi.clearExpiryButton(page)).toBeFocused();
+        await page.keyboard.press('Enter');
+      }
+      await expect(sharingUi.noExpiry(page), how).toBeVisible();
+      await expect
+        .poll(async () => {
+          const [l] = await listShareLinks(owner, ws.id);
+          return l ? l.expires_at : 'no link';
+        }, how)
+        .toBeNull();
+    }
+
+    // Past the former date: an expired link is cleared and opens again, its live session too.
+    await updateShareLink(owner, ws.id, link.id, {
+      expires_at: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+    });
+    expireShareLinkNow(link.id);
+    expect((await session.get()).status, 'expired').toBe(404);
+    await page.reload();
+    await expect(sharingUi.expiredStatus(page)).toBeVisible();
+    await sharingUi.clearExpiryButton(page).click();
+    await expect
+      .poll(async () => {
+        const [l] = await listShareLinks(owner, ws.id);
+        return l ? [l.expires_at, l.status] : null;
+      })
+      .toEqual([null, 'active']);
+    await expect(sharingUi.noExpiry(page)).toBeVisible();
+    await expect(sharingUi.offStatus(page)).toHaveCount(0);
+    expect((await session.get()).status, 'the session reopens with no expiry').toBe(200);
+    const fresh = await ShareSession.open(link.id, link.secret);
+    expect((await fresh.get()).status).toBe(200);
+
+    // Archived: clearing is a policy edit (AC05) and stays allowed.
+    await updateShareLink(owner, ws.id, link.id, {
+      expires_at: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+    });
+    await workspaceFactory.archive(owner, ws.id);
+    await page.reload();
+    await sharingUi.clearExpiryButton(page).click();
+    await expect
+      .poll(async () => {
+        const [l] = await listShareLinks(owner, ws.id);
+        return l ? l.expires_at : 'no link';
+      })
+      .toBeNull();
+    await expect(sharingUi.noExpiry(page)).toBeVisible();
+  },
+);
+
+/**
+ * Every rendered element of `region` that sticks out of its scroll container's content box (the
+ * dialog body inside its padding), plus a horizontal scroll of that body. Empty = it fits.
+ */
+async function overflowOf(region: Locator): Promise<string[]> {
+  return region.evaluate((section) => {
+    let body: HTMLElement | null = section.parentElement;
+    while (body && !['auto', 'scroll'].includes(getComputedStyle(body).overflowY)) {
+      body = body.parentElement;
+    }
+    if (!body) return ['no scroll container'];
+    const style = getComputedStyle(body);
+    const box = body.getBoundingClientRect();
+    const left = box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    const right = box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+    const out: string[] = [];
+    if (body.scrollWidth > body.clientWidth) {
+      out.push(`dialog body scrolls sideways (${body.scrollWidth} > ${body.clientWidth})`);
+    }
+    for (const el of [section, ...section.querySelectorAll('*')]) {
+      const r = el.getBoundingClientRect();
+      // Skip unrendered and visually hidden (1px clipped) nodes.
+      if (r.width <= 1 || r.height <= 1) continue;
+      if (r.left < left - 0.5 || r.right > right + 0.5) {
+        const type = el.getAttribute('type');
+        out.push(
+          `${el.tagName.toLowerCase()}${type ? `[${type}]` : ''} ${Math.round(r.left)}..` +
+            `${Math.round(r.right)} outside ${Math.round(left)}..${Math.round(right)}`,
+        );
+      }
+    }
+    return out;
+  });
+}
+
+test(
+  'WS-SHARE-01-AC07 the expiry area stays inside the dialog at desktop, iPad and phone widths',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('share01-ac07');
+    const ws = await workspaceFactory.create(owner, uniqueWorkspaceName('share01-ac07'));
+    await createShareLink(owner, ws.id, {
+      expires_at: new Date(Date.now() + 10 * 86_400_000).toISOString(),
+    });
+
+    await signInAs(page, owner.user);
+    for (const [label, viewport] of [
+      ['desktop', { width: 1280, height: 800 }],
+      ['iPad', { width: 834, height: 1194 }],
+      ['phone', { width: 375, height: 812 }],
+    ] as const) {
+      await page.setViewportSize(viewport);
+      await page.goto(sharingSettingsPath(ws.id));
+      await expect(sharingUi.expiry(page)).toBeVisible();
+      for (const scheme of ['light', 'dark'] as const) {
+        await page.emulateMedia({ colorScheme: scheme });
+        expect(
+          await overflowOf(sharingUi.policyRegion(page)),
+          `${label} ${viewport.width}px ${scheme}`,
+        ).toEqual([]);
+      }
+      // iOS/iPadOS Safari draws a native date control with an intrinsic minimum width that the
+      // desktop engines here do not have. Model it as a zero-specificity (UA-like) rule: the
+      // layout must still keep the area inside the dialog.
+      const native = await page.addStyleTag({
+        content: ":where(input[type='date']) { min-width: 34rem; }",
+      });
+      expect(
+        await overflowOf(sharingUi.policyRegion(page)),
+        `${label} ${viewport.width}px with a wide native date control`,
+      ).toEqual([]);
+      await native.evaluate((el) => (el as Element).remove());
+      await expect(sharingUi.clearExpiryButton(page)).toBeVisible();
+      // With the error message shown, too.
+      await page.emulateMedia({ colorScheme: 'light' });
+      await sharingUi.expiry(page).fill('2000-01-01');
+      await sharingUi.expiry(page).blur();
+      await expect(sharingUi.expiryError(page)).toBeVisible();
+      expect(
+        await overflowOf(sharingUi.policyRegion(page)),
+        `${label} ${viewport.width}px with an error`,
+      ).toEqual([]);
+    }
+  },
+);
+
+test(
+  'WS-SHARE-01-AC08 a successful copy shows a check in the same-size button, a failure does not',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('share01-ac08');
+    const ws = await workspaceFactory.create(owner, uniqueWorkspaceName('share01-ac08'));
+    await signInAs(page, owner.user);
+    await page.goto(sharingSettingsPath(ws.id));
+    await sharingUi.createButton(page).click();
+    const [linkId, secret] = await readShareUrl(sharingUi.linkField(page));
+    // Record clipboard writes in the page instead of the OS clipboard (fixtures/export.ts D3).
+    await page.evaluate(() => {
+      const store = window as unknown as { __e2eCopied: string[] };
+      store.__e2eCopied = [];
+      navigator.clipboard.writeText = async (text: string) => {
+        store.__e2eCopied.push(text);
+      };
+    });
+
+    const copy = sharingUi.copyButton(page);
+    const before = await copy.boundingBox();
+    await copy.click();
+    const copied = sharingUi.copiedButton(page);
+    await expect(copied).toBeVisible();
+    await expect(copied.locator('[data-icon="check"]')).toBeVisible();
+    await expect(copied.locator('[data-icon="copy"]')).toBeHidden();
+    expect(await copied.boundingBox(), 'same size and place').toEqual(before);
+    await expect(sharingUi.copiedAnnouncement(page)).toHaveCount(1);
+    const texts = await page.evaluate(
+      () => (window as unknown as { __e2eCopied: string[] }).__e2eCopied,
+    );
+    expect(texts.length).toBe(1);
+    const [, copiedId, copiedSecret] = SHARE_URL.exec(texts[0] ?? '') ?? [];
+    expect(copiedId === linkId && copiedSecret === secret, 'the share URL was copied').toBe(true);
+    // Reverts after about two seconds.
+    await expect(sharingUi.copyButton(page)).toBeVisible({ timeout: 4_000 });
+    await expect(copied).toHaveCount(0);
+    await expect(sharingUi.copyButton(page).locator('[data-icon="copy"]')).toBeVisible();
+
+    // A refused copy: no check, the existing error toast.
+    await page.evaluate(() => {
+      navigator.clipboard.writeText = async () => {
+        throw new DOMException('denied', 'NotAllowedError');
+      };
+    });
+    await sharingUi.copyButton(page).click();
+    await expect(sharingUi.copyFailedToast(page)).toBeVisible();
+    await expect(copied).toHaveCount(0);
+    await expect(sharingUi.copyButton(page).locator('[data-icon="check"]')).toBeHidden();
   },
 );

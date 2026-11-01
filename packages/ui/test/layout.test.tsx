@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
@@ -119,6 +121,38 @@ describe('Toast', () => {
     expect(screen.getByRole('region', { name: /알림/ })).toContainElement(toast);
     await user.click(within(toast as HTMLElement).getByRole('button', { name: '닫기' }));
     await waitFor(() => expect(screen.queryByText('링크를 복사했습니다')).not.toBeInTheDocument());
+  });
+
+  // UX7-SHARE-EXPIRY: no left accent bar; the tone is an icon plus hidden text, not colour alone.
+  it.each([
+    ['success', /^성공/, true],
+    ['error', /^오류/, true],
+    ['neutral', /^저장/, false],
+  ] as const)('marks a %s toast by icon and text, not a coloured bar', async (tone, name, icon) => {
+    function NotifyTone() {
+      const { toast } = useToast();
+      return <Button onClick={() => toast({ title: '저장했습니다', tone })}>알림</Button>;
+    }
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <NotifyTone />
+      </ToastProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: '알림' }));
+    const title = await screen.findByText(/저장했습니다/, { selector: '.qz-toast .title' });
+    const toast = title.closest('li') as HTMLElement;
+    // The hidden tone word is read first, before the title.
+    expect(toast.textContent).toMatch(name);
+    expect(toast.querySelector(':scope > .tone-icon svg') !== null).toBe(icon);
+  });
+});
+
+describe('Toast stylesheet', () => {
+  it('draws no left accent border on any tone', () => {
+    const css = readFileSync(resolve(import.meta.dirname, '../src/styles/overlays.css'), 'utf8');
+    const toast = css.slice(css.indexOf('.qz-toast {'), css.indexOf('/* Mobile navigation drawer'));
+    expect(toast).not.toMatch(/border-left/);
   });
 });
 

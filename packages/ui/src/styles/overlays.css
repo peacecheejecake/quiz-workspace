@@ -337,17 +337,23 @@
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
-  border-left-width: 3px;
   border-radius: var(--radius-lg);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
 
-  &[data-tone='success'] {
-    border-left-color: var(--color-success);
+  /* The tone is this icon plus a hidden word, never a coloured bar (UX7-SHARE-EXPIRY). */
+  > .tone-icon {
+    display: inline-flex;
+    flex: none;
+    padding-top: 6px;
   }
 
-  &[data-tone='error'] {
-    border-left-color: var(--color-danger);
+  &[data-tone='success'] > .tone-icon {
+    color: var(--color-success);
+  }
+
+  &[data-tone='error'] > .tone-icon {
+    color: var(--color-danger);
   }
 
   > .body {
