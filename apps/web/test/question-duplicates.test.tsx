@@ -12,6 +12,8 @@ import {
   archivedCount,
   duplicateReason,
   initialChoices,
+  MERGE_LIMITS,
+  mergeBatches,
   mergeRequest,
   type DuplicateGroup,
 } from '../src/lib/questions/duplicates';
@@ -216,7 +218,7 @@ describe('중복 문제 정리 dialog (QOV-01-AC16)', () => {
     expect(screen.getByRole('button', { name: '선택한 묶음 정리 (0)' })).toBeDisabled();
   });
 
-  it('reports a refused merge and scans again', async () => {
+  it('reports a refused merge; 다시 검사 scans again', async () => {
     const user = userEvent.setup();
     scanDuplicatesAction.mockResolvedValue({
       ok: true,
@@ -233,10 +235,12 @@ describe('중복 문제 정리 dialog (QOV-01-AC16)', () => {
     await user.click(
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: '보관' }),
     );
-    expect(
-      await screen.findByText('그 사이 문제가 바뀌었습니다. 다시 확인해 주세요.'),
-    ).toBeInTheDocument();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('그 사이 문제가 바뀌었습니다. 다시 확인해 주세요.');
+    expect(screen.getByRole('button', { name: '선택한 묶음 정리 (1)' })).toBeDisabled();
+    await user.click(within(alert).getByRole('button', { name: '다시 검사' }));
     await waitFor(() => expect(scanDuplicatesAction).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('offers 다시 시도 when the scan fails', async () => {
@@ -249,5 +253,98 @@ describe('중복 문제 정리 dialog (QOV-01-AC16)', () => {
     expect(alert).toHaveTextContent('중복 문제를 찾지 못했습니다.');
     await user.click(within(alert).getByRole('button', { name: '다시 시도' }));
     expect(await screen.findByText('중복 문제가 없습니다')).toBeInTheDocument();
+  });
+});
+
+describe('Codex P2: merges are sent in batches within the API limits', () => {
+  const ids = (from: number, n: number) => Array.from({ length: n }, (_, i) => id(from + i));
+
+  it('splits a group of 52 into two requests with the same keep', () => {
+    const batches = mergeBatches([{ keep_question_id: id(1), duplicate_question_ids: ids(2, 51) }]);
+    expect(batches).toEqual([
+      [{ keep_question_id: id(1), duplicate_question_ids: ids(2, 50) }],
+      [{ keep_question_id: id(1), duplicate_question_ids: ids(52, 1) }],
+    ]);
+  });
+
+  it('keeps every request within 100 groups and 50 duplicates, never a keep twice', () => {
+    const request = [
+      ...Array.from({ length: 101 }, (_, g) => ({
+        keep_question_id: id(1000 + g * 2),
+        duplicate_question_ids: [id(1001 + g * 2)],
+      })),
+      { keep_question_id: id(1), duplicate_question_ids: ids(2, 120) },
+    ];
+    const batches = mergeBatches(request);
+    const sent = batches.flat();
+    for (const batch of batches) {
+      expect(batch.length).toBeLessThanOrEqual(MERGE_LIMITS.groups);
+      const keeps = batch.map((g) => g.keep_question_id);
+      expect(new Set(keeps).size).toBe(keeps.length);
+      for (const g of batch) {
+        expect(g.duplicate_question_ids.length).toBeLessThanOrEqual(MERGE_LIMITS.duplicates);
+      }
+    }
+    // Every duplicate exactly once, always with its group's keep.
+    const pairs = sent.flatMap((g) => g.duplicate_question_ids.map((d) => [d, g.keep_question_id]));
+    expect(pairs).toHaveLength(101 + 120);
+    expect(new Set(pairs.map(([d]) => d)).size).toBe(101 + 120);
+    expect(pairs.filter(([, k]) => k === id(1)).map(([d]) => d)).toEqual(ids(2, 120));
+  });
+
+  it('a 52-question group merges in two requests; a failed batch can be resumed', async () => {
+    const user = userEvent.setup();
+    scanDuplicatesAction.mockReset();
+    mergeDuplicatesAction.mockReset();
+    const big: DuplicateGroup = group(
+      'big',
+      Array.from({ length: 52 }, (_, i) => i + 1),
+    );
+    scanDuplicatesAction.mockResolvedValue({
+      ok: true,
+      data: { groups: [big], question_count: 52 },
+    });
+    const done = (keep: string, archived: string[]) => ({
+      ok: true,
+      data: {
+        groups: [
+          {
+            keep_question_id: keep,
+            archived_question_ids: archived,
+            already_merged_question_ids: [],
+          },
+        ],
+      },
+    });
+    mergeDuplicatesAction
+      .mockResolvedValueOnce(done(id(1), ids(2, 50)))
+      .mockResolvedValueOnce({ ok: false, kind: 'unavailable', message: '일시적인 오류' })
+      .mockResolvedValueOnce(done(id(1), [id(52)]));
+    render(
+      <ToastProvider>
+        <QuestionDuplicates workspaceId={WS} />
+      </ToastProvider>,
+    );
+    await screen.findByRole('group', { name: /중복 묶음 1/ });
+    await user.click(screen.getByRole('button', { name: '선택한 묶음 정리 (51)' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '보관' }),
+    );
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('중복 문제 50개를 보관했습니다');
+    expect(mergeDuplicatesAction).toHaveBeenNthCalledWith(1, WS, [
+      { keep_question_id: id(1), duplicate_question_ids: ids(2, 50) },
+    ]);
+    expect(mergeDuplicatesAction).toHaveBeenNthCalledWith(2, WS, [
+      { keep_question_id: id(1), duplicate_question_ids: [id(52)] },
+    ]);
+
+    await user.click(within(alert).getByRole('button', { name: '이어서 정리' }));
+    await waitFor(() => expect(mergeDuplicatesAction).toHaveBeenCalledTimes(3));
+    // The resume sends only what is left, with the same keep.
+    expect(mergeDuplicatesAction).toHaveBeenNthCalledWith(3, WS, [
+      { keep_question_id: id(1), duplicate_question_ids: [id(52)] },
+    ]);
+    expect(await screen.findByText('중복 문제 51개를 보관했습니다.')).toBeInTheDocument();
   });
 });

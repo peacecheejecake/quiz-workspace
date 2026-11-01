@@ -24,7 +24,7 @@ import {
   type QuestionDetail,
   type QuestionFormValues,
 } from './form';
-import type { DuplicateScan, MergeGroup, MergeResult } from './duplicates';
+import { MERGE_LIMITS, type DuplicateScan, type MergeGroup, type MergeResult } from './duplicates';
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from './problems';
 import {
   callQuestionApi,
@@ -312,8 +312,8 @@ export async function listInactiveQuestionsAction(
 
 // --- 중복 문제 정리 (UX7-DEDUP, QOV-01-AC16) ----------------------------------------------------
 
-const MAX_MERGE_GROUPS = 100;
-const MAX_MERGE_DUPLICATES = 50;
+const MAX_MERGE_GROUPS = MERGE_LIMITS.groups;
+const MAX_MERGE_DUPLICATES = MERGE_LIMITS.duplicates;
 
 /** The workspace's groups of identical confirmed questions (editors; no answers). */
 export async function scanDuplicatesAction(

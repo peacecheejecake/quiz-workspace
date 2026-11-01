@@ -73,3 +73,38 @@ export function duplicateReason(duplicate: DraftDuplicate | null | undefined): s
     ? `이 PDF의 ${duplicate.number}번 초안과 같습니다`
     : '이 PDF의 앞선 초안과 같습니다';
 }
+
+/** The merge API's limits per request (and mergeDuplicatesAction's). */
+export const MERGE_LIMITS = { groups: 100, duplicates: 50 } as const;
+
+/**
+ * The merge split into requests within MERGE_LIMITS (Codex P2): a group with more than 50
+ * duplicates goes in chunks, each with the group's keep, and chunk r of every group is sent in
+ * round r — so a request never names a keep twice (the API refuses an id named twice) — split
+ * into requests of at most 100 groups. Every request is idempotent on the server (a duplicate
+ * already merged into the same keep is left as it is), so a failed one can be sent again.
+ */
+export function mergeBatches(request: readonly MergeGroup[]): MergeGroup[][] {
+  const chunked = request.map((g) => {
+    const chunks: MergeGroup[] = [];
+    for (let i = 0; i < g.duplicate_question_ids.length; i += MERGE_LIMITS.duplicates) {
+      chunks.push({
+        keep_question_id: g.keep_question_id,
+        duplicate_question_ids: g.duplicate_question_ids.slice(i, i + MERGE_LIMITS.duplicates),
+      });
+    }
+    return chunks;
+  });
+  const rounds = Math.max(0, ...chunked.map((c) => c.length));
+  const batches: MergeGroup[][] = [];
+  for (let r = 0; r < rounds; r++) {
+    const round = chunked.flatMap((c) => {
+      const chunk = c[r];
+      return chunk ? [chunk] : [];
+    });
+    for (let i = 0; i < round.length; i += MERGE_LIMITS.groups) {
+      batches.push(round.slice(i, i + MERGE_LIMITS.groups));
+    }
+  }
+  return batches;
+}

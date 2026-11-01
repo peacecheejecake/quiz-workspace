@@ -8,7 +8,9 @@
 // and a radio group choosing the question to keep (the oldest by default). `선택한 묶음 정리 (k)`
 // asks once, then the server archives the others and merges their study history into the kept
 // question; the action revalidates the home, so the heatmap follows, and the list is scanned
-// again. Nothing here shows answers: the scan has none.
+// again. Nothing here shows answers: the scan has none. The merge goes in requests within the
+// API's limits (mergeBatches, Codex P2); if one fails, the rest of the plan (same keeps) stays
+// and `이어서 정리` resumes it — every request is idempotent — or `다시 검사` starts over.
 import { Badge, Button, Checkbox, ConfirmDialog, EmptyState, RadioGroup, useToast } from '@quiz/ui';
 import { useEffect, useId, useRef, useState } from 'react';
 import { mergeDuplicatesAction, scanDuplicatesAction } from '@/lib/questions/actions';
@@ -16,15 +18,24 @@ import {
   archivedCount,
   duplicateQuestionName,
   initialChoices,
+  mergeBatches,
   mergeRequest,
   type Choices,
   type DuplicateGroup,
   type DuplicateQuestion,
+  type MergeGroup,
 } from '@/lib/questions/duplicates';
 import { QUESTION_TYPE_LABELS } from '@/lib/questions/form';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 import { NO_CHAPTER_TITLE } from '../labels';
 import styles from './question-duplicates.module.css';
+
+/** A merge that stopped part-way: what is left (in order) and what was archived before. */
+interface Resume {
+  readonly batches: readonly (readonly MergeGroup[])[];
+  readonly archived: number;
+  readonly message: string;
+}
 
 type ScanState =
   | { readonly status: 'loading' }
@@ -128,6 +139,7 @@ export function QuestionDuplicates({
   const [reload, setReload] = useState(0);
   const [confirming, setConfirming] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [resume, setResume] = useState<Resume | null>(null);
   const generation = useRef(0);
   const mergeButton = useRef<HTMLButtonElement>(null);
 
@@ -152,6 +164,7 @@ export function QuestionDuplicates({
   }, [workspaceId, reload]);
 
   function rescan() {
+    setResume(null);
     setScan({ status: 'loading' });
     setReload((n) => n + 1);
   }
@@ -171,28 +184,46 @@ export function QuestionDuplicates({
     });
   }
 
-  async function merge() {
-    const request = mergeRequest(groups, choices);
-    if (request.length === 0 || merging) return;
+  /** Sends `batches` in order; stops at the first failure and keeps the rest for 이어서 정리. */
+  async function run(batches: readonly (readonly MergeGroup[])[], before: number) {
+    if (batches.length === 0 || merging) return;
     setMerging(true);
+    let archived = before;
     try {
-      const result = await mergeDuplicatesAction(workspaceId, request);
-      setConfirming(false);
-      if (!result.ok) {
-        toast({ tone: 'error', title: result.message });
-        rescan();
-        return;
+      for (const [index, batch] of batches.entries()) {
+        let message: string | null = null;
+        try {
+          const result = await mergeDuplicatesAction(workspaceId, [...batch]);
+          if (result.ok) {
+            // A resent batch answers already_merged for what an earlier try archived.
+            archived += result.data.groups.reduce(
+              (n, g) => n + g.archived_question_ids.length + g.already_merged_question_ids.length,
+              0,
+            );
+          } else {
+            message = result.message;
+          }
+        } catch {
+          message = QUESTION_FAILURE_MESSAGES.unavailable;
+        }
+        if (message !== null) {
+          setConfirming(false);
+          if (archived > before) onMerged?.();
+          setResume({ batches: batches.slice(index), archived, message });
+          return;
+        }
       }
-      const archived = result.data.groups.reduce((n, g) => n + g.archived_question_ids.length, 0);
+      setConfirming(false);
       toast({ tone: 'success', title: `중복 문제 ${archived}개를 보관했습니다.` });
       onMerged?.();
       rescan();
-    } catch {
-      setConfirming(false);
-      toast({ tone: 'error', title: QUESTION_FAILURE_MESSAGES.unavailable });
     } finally {
       setMerging(false);
     }
+  }
+
+  function merge() {
+    void run(mergeBatches(mergeRequest(groups, choices)), 0);
   }
 
   const busy = scan.status === 'loading';
@@ -207,7 +238,28 @@ export function QuestionDuplicates({
           <p>중복 문제를 찾지 못했습니다. {scan.message}</p>
           <Button onClick={rescan}>다시 시도</Button>
         </div>
-      ) : groups.length === 0 ? (
+      ) : null}
+      {resume ? (
+        <div role="alert" className={styles.alert}>
+          <p>
+            {resume.archived > 0 ? `중복 문제 ${resume.archived}개를 보관했습니다. ` : ''}
+            남은 문제는 정리하지 못했습니다. {resume.message}
+          </p>
+          <div className={styles.actions}>
+            <Button onClick={rescan} disabled={merging}>
+              다시 검사
+            </Button>
+            <Button
+              variant="primary"
+              loading={merging}
+              onClick={() => void run(resume.batches, resume.archived)}
+            >
+              이어서 정리
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {scan.status !== 'ready' ? null : groups.length === 0 ? (
         <EmptyState
           headingLevel={3}
           title="중복 문제가 없습니다"
@@ -242,7 +294,7 @@ export function QuestionDuplicates({
             <Button
               ref={mergeButton}
               variant="primary"
-              disabled={count === 0 || merging}
+              disabled={count === 0 || merging || resume !== null}
               onClick={() => setConfirming(true)}
             >
               선택한 묶음 정리 ({count})
@@ -258,7 +310,7 @@ export function QuestionDuplicates({
         title={`중복 문제 ${count}개를 보관할까요?`}
         description="남길 문제에 풀이 기록이 합쳐집니다. 보관·초안 문제에서 보관 해제하면 되돌릴 수 있습니다."
         confirmLabel="보관"
-        onConfirm={() => void merge()}
+        onConfirm={merge}
         loading={merging}
         returnFocusRef={mergeButton}
       />
