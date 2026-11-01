@@ -108,6 +108,27 @@ export interface ReviewDraft {
   readonly chapter?: DraftChapterInfo;
 }
 
+/**
+ * What selecting, counting and registering a draft reads (QIMP-PAGING): the import screen keeps
+ * this for every draft and the content (`ReviewDraft`, which is one too) only for loaded pages.
+ */
+export interface DraftSummary extends Pick<
+  ReviewDraft,
+  | 'id'
+  | 'version'
+  | 'position'
+  | 'questionNumber'
+  | 'type'
+  | 'reviewStatus'
+  | 'publishedQuestionId'
+  | 'publishable'
+  | 'answerMissing'
+  | 'issues'
+> {
+  /** PDF import drafts only: the chapter it registers under (null = none). */
+  readonly chapter?: { readonly chapter: { readonly id: string } | null };
+}
+
 function generationInfo(draft: ImportDraft): GenerationDraftInfo {
   const p = draft.payload;
   return {
@@ -454,9 +475,12 @@ export function selectionBlocker(draft: ReviewDraft): string | null {
   return approvalBlocker({ ...draft, reviewStatus: 'pending' });
 }
 
-export function isSelectable(draft: ReviewDraft): boolean {
+export function isSelectable(draft: DraftSummary): boolean {
   return draft.publishedQuestionId === null && draft.publishable;
 }
+
+/** Over any draft shape (the import screen passes summaries, QIMP-PAGING). */
+export function selectAllScope<T extends DraftSummary>(drafts: readonly T[]): T[];
 
 /**
  * What "전체 선택" covers: selectable drafts with nothing to check — not excluded (rejected), an
@@ -475,7 +499,7 @@ export function selectAllScope(drafts: readonly ReviewDraft[]): ReviewDraft[] {
 }
 
 /** Initial selection: drafts already approved (e.g. before QIMP-BULK) but not registered. */
-export function initialSelection(drafts: readonly ReviewDraft[]): Set<string> {
+export function initialSelection(drafts: readonly DraftSummary[]): Set<string> {
   return new Set(
     drafts.filter((d) => isSelectable(d) && d.reviewStatus === 'approved').map((d) => d.id),
   );
@@ -483,7 +507,7 @@ export function initialSelection(drafts: readonly ReviewDraft[]): Set<string> {
 
 /** Drops ids that are gone, registered or no longer selectable (e.g. after an edit or reload). */
 export function pruneSelection(
-  drafts: readonly ReviewDraft[],
+  drafts: readonly DraftSummary[],
   selected: ReadonlySet<string>,
 ): Set<string> {
   return new Set(drafts.filter((d) => selected.has(d.id) && isSelectable(d)).map((d) => d.id));
@@ -493,7 +517,7 @@ export type SelectAllState = boolean | 'indeterminate';
 
 /** The "전체 선택" checkbox: checked when its whole scope is selected, indeterminate if partly. */
 export function selectAllState(
-  drafts: readonly ReviewDraft[],
+  drafts: readonly DraftSummary[],
   selected: ReadonlySet<string>,
 ): SelectAllState {
   const scope = selectAllScope(drafts);
@@ -504,7 +528,7 @@ export function selectAllState(
 
 /** Toggling "전체 선택": on selects the whole scope (keeps other picks), off clears everything. */
 export function toggleAll(
-  drafts: readonly ReviewDraft[],
+  drafts: readonly DraftSummary[],
   selected: ReadonlySet<string>,
   on: boolean,
 ): Set<string> {
@@ -528,7 +552,7 @@ export function toggleOne(
  * for import drafts, with the chapter shown (the server refuses if it changed meanwhile).
  */
 export function approvePublishSelection(
-  drafts: readonly ReviewDraft[],
+  drafts: readonly DraftSummary[],
   selected: ReadonlySet<string>,
 ): SelectedImportDraft[] {
   return drafts
@@ -640,10 +664,13 @@ export function registrationRefusedMessage(refused: ImportRegistration['refused'
 }
 
 /** Replaces one draft (after an edit or a review change) and keeps the order. */
-export function replaceDraft(drafts: readonly ReviewDraft[], next: ReviewDraft): ReviewDraft[] {
+export function replaceDraft<T extends Pick<ReviewDraft, 'id'>>(
+  drafts: readonly T[],
+  next: T,
+): T[] {
   return drafts.map((d) => (d.id === next.id ? next : d));
 }
 
-export function sortDrafts(drafts: readonly ReviewDraft[]): ReviewDraft[] {
+export function sortDrafts<T extends Pick<ReviewDraft, 'position'>>(drafts: readonly T[]): T[] {
   return [...drafts].sort((a, b) => a.position - b.position);
 }

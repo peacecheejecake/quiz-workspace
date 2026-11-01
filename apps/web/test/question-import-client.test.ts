@@ -115,9 +115,9 @@ describe('createImportClient', () => {
     const dropped = createImportClient(async () => {
       throw new TypeError('Failed to fetch');
     });
-    await expect(dropped.listDrafts(RUN)).rejects.toMatchObject({ kind: 'network' });
+    await expect(dropped.draftSummaries(RUN)).rejects.toMatchObject({ kind: 'network' });
     const truncated = createImportClient(async () => new Response('{"items": [', { status: 200 }));
-    await expect(truncated.listDrafts(RUN)).rejects.toMatchObject({ kind: 'network' });
+    await expect(truncated.draftPage(RUN, 0, 100)).rejects.toMatchObject({ kind: 'network' });
   });
 
   it('classifies problem responses', async () => {

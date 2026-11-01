@@ -969,6 +969,94 @@ test(
 );
 
 /**
+ * QIMP-PAGING (QIMPORT-01-AC09): the first response carries every draft's summary but only the
+ * first page's content; another page's content is read when it is shown (a loading state until
+ * then), while 전체 선택 and the registration cover drafts whose page was never read.
+ */
+const PAGING_COPIES = 31; // 8 × 32 = 256 drafts, 3 pages
+
+test(
+  'QIMPORT-01-AC09 draft content is read page by page; selections on several pages are registered together',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('qimport01-ac09-paging');
+    const ws = await workspaceFactory.create(owner);
+    const { run } = await importPaperDrafts(owner, ws.id);
+    const total = seedImportDraftCopies(run.id, PAGING_COPIES);
+    expect(total).toBe(PAPER.questions.length * (PAGING_COPIES + 1));
+    const copyOf = (k: number) => Q(((k - 1) % PAPER.questions.length) + 1);
+    /** Draft k's stem (a copy's stem ends with " #<copy>", tests/e2e/fixtures/db.ts). */
+    const stemOf = (k: number) => {
+      const copy = Math.floor((k - 1) / PAPER.questions.length);
+      return copy === 0 ? copyOf(k).stem : `${copyOf(k).stem} #${copy}`;
+    };
+    const registrableFrom = (from: number) => {
+      for (let k = from; ; k++) if (copyOf(k).answer !== null) return k;
+    };
+    // Copies 11 and 26: no other copy's stem contains theirs (" #11" is not " #1").
+    const first = registrableFrom(89);
+    const last = registrableFrom(2 * REVIEW_PAGE_SIZE + 9);
+
+    // The page reads after the first response, by offset; page 3's is held until released.
+    const reads: number[] = [];
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(/\/api\/question-imports\/[^/]+\/drafts\?/, async (route) => {
+      const offset = Number(new URL(route.request().url()).searchParams.get('offset'));
+      reads.push(offset);
+      if (offset === 2 * REVIEW_PAGE_SIZE) await held;
+      await route.continue();
+    });
+
+    await signInAs(page, owner.user);
+    const response = await page.goto(importPath(ws.id));
+    const html = (await response?.text()) ?? '';
+    // Page 1's content is in the first response, page 3's is not (its summary is).
+    expect(html).toContain(stemOf(first));
+    expect(html).not.toContain(stemOf(last));
+    await expect(importUi.draftsHeading(page)).toContainText(`${total}개`, { timeout: 30_000 });
+    await expect(importUi.selectAll(page)).toHaveAccessibleName(
+      new RegExp(`\\(${registrableIn(1, total)}개\\)`),
+    );
+    // The next page is read ahead.
+    await expect.poll(() => reads).toEqual([REVIEW_PAGE_SIZE]);
+
+    const pick = (k: number) => main(page).getByRole('checkbox', { name: `${k}번 문제 선택` });
+    await pick(first).check();
+    const pager = importUi.pager(page);
+    await importUi.pagerPage(pager, 3).click();
+    // Not read yet: a loading state, then the page's drafts.
+    const section = main(page).getByRole('region', { name: /가져온 (초안|문제)|imported/i });
+    await expect(section).toHaveAttribute('aria-busy', 'true');
+    await expect(main(page).getByText(/불러오는 중|loading/i)).toBeVisible();
+    await expect(importUi.draftItems(page)).toHaveCount(0);
+    release();
+    await expect(importUi.draftItems(page)).toHaveCount(total - 2 * REVIEW_PAGE_SIZE);
+    await expect(section).not.toHaveAttribute('aria-busy', 'true');
+    await pick(last).check();
+    await expect(importUi.publish(page)).toContainText('(2)');
+    // Page 2 was read ahead once; nothing is read twice.
+    expect([...reads].sort((a, b) => a - b)).toEqual([REVIEW_PAGE_SIZE, 2 * REVIEW_PAGE_SIZE]);
+
+    // Both selections are registered, whichever page shows.
+    const submitted = page.waitForRequest(
+      (r) => r.method() === 'POST' && r.url().endsWith('/registrations'),
+    );
+    await importUi.publish(page).click();
+    const body = (await submitted).postDataJSON() as { drafts: { draft_id: string }[] };
+    const byNumber = new Map((await listDrafts(owner, run.id)).map((d) => [d.position + 1, d.id]));
+    expect(body.drafts.map((d) => d.draft_id)).toEqual([byNumber.get(first), byNumber.get(last)]);
+    await expect(page.getByRole('status').first()).toContainText(/2\s*개 문제를 문제은행에 등록/, {
+      timeout: JOB_TIMEOUT_MS,
+    });
+    // The list was read again: page 3 still shows, with the draft registered.
+    await expect(importUi.draft(page, stemOf(last))).toContainText(/등록됨|registered/i);
+    const registered = (await listDrafts(owner, run.id)).filter((d) => d.published_question_id);
+    expect(registered.map((d) => d.position + 1).sort((a, b) => a - b)).toEqual([first, last]);
+  },
+);
+
+/**
  * QIMP-REVIEW-SCALE (QIMPORT-01-AC09 at the size of a real paper): 316 pages gave ~750 drafts, and
  * the review crashed the tab — every closed chapter picker rendered the whole book outline (~3.4 GB
  * heap for 752 drafts × 300 chapters). With ~1000 drafts over a long outline the page renders one
