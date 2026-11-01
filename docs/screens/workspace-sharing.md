@@ -1,6 +1,6 @@
 # WS-SHARE-01 — Owner Workspace 공유 관리
 
-**상태:** 확정 요구사항 (v1.3) · UX3c 개정 2026-10-20 (공유하기 버튼 → 링크 공유 floating dialog)
+**상태:** 확정 요구사항 (v1.3) · UX3c 개정 2026-10-20 (공유하기 버튼 → 링크 공유 floating dialog) · UX7-SHARE-EXPIRY 개정 2026-11-01 (만료일 삭제 AC06, 만료일 영역 너비 AC07, 복사 완료 표시 AC08) · UX7-COPY-LABEL 개정 2026-11-02 (AC08 버튼 이름 `복사 완료`)
 **화면:** `/workspaces/:workspaceId?panel=share` (Workspace header의 `공유하기` 버튼, Owner만; 이전 `/workspaces/:workspaceId/settings/sharing`은 여기로 redirect)
 **연계:** [공유·Fork 명세](../workspace-sharing.md), [인증](../auth.md), [디자인 시스템](../design-system.md)
 
@@ -40,6 +40,24 @@
 - Given 해당 화면에 필요한 사용자/링크 상태
 - When 사용자가 기능을 수행하거나 직접 API를 호출
 - Then Archived Workspace에서는 링크 철회와 정책 수정만 가능하고 삭제된 Workspace의 링크는 사용 불가능하다.
+
+### WS-SHARE-01-AC06
+
+- Given 만료일이 저장된(만료 전이거나 이미 지난) 링크가 있는 Owner의 링크 공유 dialog
+- When Owner가 만료일 옆 `만료일 삭제` 버튼(키보드로 도달 가능, 접근 가능한 이름)을 누름
+- Then 만료일이 지워져 무제한으로 저장되고(API `PATCH … {"expires_at": null}`, 목록의 `expires_at`은 null) dialog는 만료일 칸 아래에 `만료 없음`을 표시한다. 만료일이 이미 지난 링크도 다시 열리고, 링크로 연 기존·신규 공유 세션은 이전 만료일이 지나도 계속 열린다. 보관된 Workspace에서도 만료일 삭제는 정책 수정(AC05)이라 가능하다. 만료일이 비어 있으면 `만료일 삭제` 버튼은 없다.
+
+### WS-SHARE-01-AC07
+
+- Given 링크 공유 dialog (데스크톱 1280px, iPad 834px, 휴대폰 375px; light·dark)
+- When 만료일 영역(라벨·날짜 입력·`만료일 삭제`·도움말·오류)을 표시
+- Then 그 영역의 어떤 요소도 dialog 본문의 content box(좌우 padding 안쪽)를 넘지 않고, dialog 본문에 가로 스크롤이 생기지 않는다. 글자 크기를 줄이지 않고 레이아웃(줄바꿈·`min-width: 0`)으로 맞춘다.
+
+### WS-SHARE-01-AC08
+
+- Given 방금 만든 링크가 표시된 링크 공유 dialog
+- When Owner가 `링크 복사`를 누름
+- Then 복사에 성공하면 버튼 안 아이콘이 체크로 바뀌고 버튼 이름이 `복사 완료`가 되며(UX7-COPY-LABEL 사용자 결정 2026-11-02), polite live region이 "링크를 복사했습니다."를 한 번 알린다(성공 toast는 띄우지 않는다 — 사용자 결정 2026-11-01). 약 2초 뒤 원래 아이콘·이름으로 돌아오고, 바뀌는 동안 버튼 크기·위치는 변하지 않는다. 실패하면 체크를 표시하지 않고 링크 칸을 선택한 채 오류 toast를 띄운다. 애니메이션은 없다(`prefers-reduced-motion`과 무관하게 즉시 교체).
 
 ## E2E 우선 개발
 - 같은 AC ID를 사용하는 `tests/e2e/workspaces/sharing-owner.spec.ts`를 화면 구현 전에 작성한다.

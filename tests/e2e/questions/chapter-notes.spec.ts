@@ -13,7 +13,7 @@
 // Notes, footnotes and the practice panel carry answers and explanations: traces, screenshots and
 // videos are off, no page text is attached on failure, and shown text is only checked with boolean
 // polls or by ASCII item tokens (NOTE-…), so a failure message never quotes note content.
-// The bank's edit/delete (QBANK-01) are driven through the same public API they call; this file
+// Question edit/delete (QPLAY-01-AC07/AC08, the practice panel's 문제 관리) are driven through the same public API they call; this file
 // asserts how the note reacts to them.
 import { randomUUID } from 'node:crypto';
 import type { Locator, Page } from '@playwright/test';
@@ -351,7 +351,7 @@ test(
     const v1 = await generateNote(s.owner, s.ch1);
     expect(v1.stale).toBe(false);
 
-    // The bank's 편집 (explanation → new revision) and 삭제, through their public API.
+    // 편집 (explanation → new revision) and 삭제, through their public API.
     const edited = await s.owner.api.ok<Question>(
       'PATCH',
       `/questions/${q(s, 1).id}`,

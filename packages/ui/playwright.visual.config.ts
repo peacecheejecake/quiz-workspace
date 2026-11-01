@@ -23,7 +23,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   reporter: [['list']],
-  expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.002, animations: 'disabled' } },
+  // Static stories on the pinned renderer: no differing pixel beyond the default per-pixel color
+  // threshold (0.2), as in the app visual suite (UX7-VISUAL).
+  expect: { toHaveScreenshot: { maxDiffPixels: 0, animations: 'disabled' } },
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     locale: 'ko-KR',

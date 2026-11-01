@@ -1,13 +1,11 @@
 // @vitest-environment jsdom
-// QGEN-MULTI: batch model helpers, the problem mapping of the batch API, the bank's selection
-// (CONFIRMED only, editors only, ≤ 20, one batch request with the selected ids) and the batch
-// results page (progress, one group per source, review links that keep the batch).
+// QGEN-MULTI: batch model helpers, the problem mapping of the batch API and the batch results page
+// (progress, one group per source, review links that keep the batch). The retired 전체 문제 page's
+// selection (UX7-BANK) went with it; the 문제 생성 dialog's 여러 문제 tab is QGEN-01-AC06/AC07.
 import './dom-setup';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ToastProvider } from '@quiz/ui';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_FILTERS } from '../src/lib/questions/filters';
+import { describe, expect, it, vi } from 'vitest';
 import type { Question } from '../src/lib/questions/form';
 import {
   batchPath,
@@ -28,21 +26,14 @@ import {
 
 const push = vi.fn();
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/workspaces/ws/questions/bank',
+  usePathname: () => '/workspaces/ws/questions/generate',
   useRouter: () => ({ push, replace: vi.fn(), refresh: vi.fn() }),
 }));
 vi.mock('../src/lib/questions/actions', () => ({
   listQuestionsAction: vi.fn(),
-  deleteQuestionAction: vi.fn(),
-  setQuestionStatusAction: vi.fn(),
-  createQuestionAction: vi.fn(),
-  updateQuestionAction: vi.fn(),
-  getQuestionAction: vi.fn(),
   getQuestionRevisionAction: vi.fn(),
 }));
 
-const actions = await import('../src/lib/questions/actions');
-const { QuestionBank } = await import('../src/components/questions/question-bank');
 const { GenerationBatchView } =
   await import('../src/components/questions/generate/generation-batch');
 
@@ -193,134 +184,6 @@ describe('batch model', () => {
     expect(generatePath(WS, 'q', 'r', BATCH)).toBe(
       `/workspaces/${WS}/questions/generate?source=q&run=r&batch=${BATCH}`,
     );
-  });
-});
-
-// Several dialogs and panels per test: slower than the 5 s default on a loaded machine.
-describe('QuestionBank batch selection', { timeout: 20_000 }, () => {
-  const fetchMock = vi.fn<typeof fetch>();
-  beforeEach(() => {
-    push.mockReset();
-    fetchMock.mockReset();
-    vi.stubGlobal('fetch', fetchMock);
-  });
-
-  function Bank({ items, readOnly = null }: { items: Question[]; readOnly?: 'viewer' | null }) {
-    return (
-      <ToastProvider>
-        <QuestionBank
-          workspaceId={WS}
-          readOnly={readOnly}
-          failure={null}
-          chapters={[]}
-          documents={[]}
-          filters={DEFAULT_FILTERS}
-          items={items}
-          nextCursor={null}
-        />
-      </ToastProvider>
-    );
-  }
-
-  it('selects CONFIRMED questions and starts one batch with their ids', async () => {
-    const user = userEvent.setup();
-    fetchMock.mockResolvedValue(
-      new Response(JSON.stringify(batch([run(1), run(3)])), {
-        status: 202,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
-    render(<Bank items={[q(1), q(2, 'DRAFT'), q(3)]} />);
-    expect(screen.queryByRole('checkbox', { name: '2번 문제 선택' })).toBeNull();
-    expect(screen.queryByRole('region', { name: '선택한 문제' })).toBeNull();
-
-    await user.click(screen.getByRole('checkbox', { name: '1번 문제 선택' }));
-    await user.click(screen.getByRole('checkbox', { name: '3번 문제 선택' }));
-    const bar = screen.getByRole('region', { name: '선택한 문제' });
-    expect(bar).toHaveTextContent('2개 선택됨');
-    await user.click(within(bar).getByRole('button', { name: '선택한 문제 변형 출제 (2)' }));
-
-    const dialog = await screen.findByRole('dialog', { name: '선택한 문제 변형 출제 (2)' });
-    expect(within(dialog).queryByRole('checkbox', { name: /보기 섞기/ })).toBeNull();
-    await user.click(within(dialog).getByRole('checkbox', { name: /문구 변형/ }));
-    await user.click(within(dialog).getByRole('button', { name: '생성' }));
-
-    await waitFor(() => expect(push).toHaveBeenCalledWith(batchPath(WS, BATCH)));
-    const [url, init] = fetchMock.mock.calls[0] ?? [];
-    expect(url).toBe(`/api/workspaces/${WS}/question-generation-batches`);
-    expect(JSON.parse(String(init?.body))).toEqual({
-      variation_types: ['PARAPHRASE'],
-      candidate_count: 1,
-      selection: { mode: 'selected', question_ids: [q(1).id, q(3).id] },
-    });
-    expect(new Headers(init?.headers).get('idempotency-key')).toBeTruthy();
-  });
-
-  it('drops a deleted or archived question from the selection', async () => {
-    const user = userEvent.setup();
-    vi.mocked(actions.getQuestionAction).mockResolvedValue({ ok: false } as never);
-    vi.mocked(actions.deleteQuestionAction).mockResolvedValue({
-      ok: true,
-      data: undefined,
-    } as never);
-    vi.mocked(actions.setQuestionStatusAction).mockResolvedValue({
-      ok: true,
-      data: { ...q(2), publication_status: 'ARCHIVED' },
-    } as never);
-    fetchMock.mockResolvedValue(
-      new Response(JSON.stringify(batch([run(1)])), {
-        status: 202,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
-    render(<Bank items={[q(1), q(2), q(3)]} />);
-    for (const n of [1, 2, 3]) {
-      await user.click(screen.getByRole('checkbox', { name: `${n}번 문제 선택` }));
-    }
-    const bar = () => screen.getByRole('region', { name: '선택한 문제' });
-    expect(bar()).toHaveTextContent('3개 선택됨');
-
-    await user.click(screen.getByRole('button', { name: '문제 3' }));
-    await user.click(await screen.findByRole('button', { name: '삭제' }));
-    const confirm = await screen.findByRole('alertdialog');
-    await user.click(within(confirm).getByRole('button', { name: '삭제' }));
-    await waitFor(() => expect(bar()).toHaveTextContent('2개 선택됨'));
-
-    await user.click(screen.getByRole('button', { name: '문제 2' }));
-    await user.click(await screen.findByRole('button', { name: '보관' }));
-    await screen.findByRole('button', { name: '보관 해제' });
-    // Close the detail panel (a modal: it hides the page while open).
-    await user.click(screen.getByRole('button', { name: '패널 닫기' }));
-    await waitFor(() => expect(bar()).toHaveTextContent('1개 선택됨'));
-    expect(screen.queryByRole('checkbox', { name: '2번 문제 선택' })).toBeNull();
-
-    await user.click(within(bar()).getByRole('button', { name: '선택한 문제 변형 출제 (1)' }));
-    const dialog = await screen.findByRole('dialog', { name: '선택한 문제 변형 출제 (1)' });
-    await user.click(within(dialog).getByRole('checkbox', { name: /문구 변형/ }));
-    await user.click(within(dialog).getByRole('button', { name: '생성' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [, init] = fetchMock.mock.calls[0] ?? [];
-    expect(JSON.parse(String(init?.body)).selection.question_ids).toEqual([q(1).id]);
-  });
-
-  it('caps the selection at 20 and has no selection for viewers', async () => {
-    const user = userEvent.setup();
-    const items = Array.from({ length: 21 }, (_, i) => q(i + 1));
-    const { unmount } = render(<Bank items={items} />);
-    // fireEvent keeps 20 clicks fast; the cap logic is what is under test.
-    for (let n = 1; n <= 20; n += 1) {
-      fireEvent.click(screen.getByRole('checkbox', { name: `${n}번 문제 선택` }));
-    }
-    expect(screen.getByRole('checkbox', { name: '21번 문제 선택' })).toBeDisabled();
-    expect(screen.getByRole('region', { name: '선택한 문제' })).toHaveTextContent(
-      '20개 선택됨 · 최대 20개까지',
-    );
-    await user.click(screen.getByRole('button', { name: '선택 해제' }));
-    expect(screen.queryByRole('region', { name: '선택한 문제' })).toBeNull();
-    unmount();
-
-    render(<Bank items={[q(1)]} readOnly="viewer" />);
-    expect(screen.queryByRole('checkbox', { name: '1번 문제 선택' })).toBeNull();
   });
 });
 

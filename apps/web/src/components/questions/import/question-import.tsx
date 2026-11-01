@@ -25,7 +25,7 @@
 // already persisted and "다시 시도" retries the same run (the API reconciles, no duplicates);
 // a registration whose response was lost is retried with the same Idempotency-Key.
 // Drafts the server refuses (changed since, or not confirmable) stay selected and are named.
-import { Button, Checkbox, EmptyState, PageHeader, ProgressBar, Select } from '@quiz/ui';
+import { Badge, Button, Checkbox, EmptyState, PageHeader, ProgressBar, Select } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -33,6 +33,7 @@ import { loginRedirectPath } from '@/lib/auth/routes';
 import { DOCUMENT_KIND_LABELS } from '@/components/documents/labels';
 import type { Job } from '@/lib/documents/client-api';
 import { watchJob } from '@/lib/documents/job-events';
+import { duplicateReason } from '@/lib/questions/duplicates';
 import {
   approvePublishSelection,
   chapterBody,
@@ -413,6 +414,10 @@ export function QuestionImport({
     try {
       const updated = await client.updateDraft(target.id, draftUpdateBody(values, baseVersion));
       showUpdated(updated);
+      // A content edit can make later drafts duplicates of this one, or stop them being ones
+      // (UX7-DEDUP): re-read every summary and the page on screen, whose flags the server
+      // recomputes (cached pages are dropped and re-read when shown).
+      if (run) void refreshDrafts(run.id);
       setStates((s) => {
         const { [target.id]: _done, ...rest } = s;
         return rest;
@@ -533,17 +538,29 @@ export function QuestionImport({
     [sourceDocumentId, workspaceId],
   );
   const renderChapter = useCallback(
-    (draft: ReviewDraft) =>
-      draft.chapter ? (
-        <DraftChapterField
-          number={draftNumber(draft)}
-          info={draft.chapter}
-          options={chapterOptions}
-          readOnly={!canEdit || draft.publishedQuestionId !== null}
-          disabled={publishing || savingChapter.has(draft.id)}
-          onChange={(chapterId) => void changeChapter(draft, chapterId)}
-        />
-      ) : null,
+    (draft: ReviewDraft) => {
+      // UX7-DEDUP (QIMPORT-01-AC10): the same question exists; a hint, not a block.
+      const duplicate = duplicateReason(draft.duplicateOf);
+      return (
+        <>
+          {duplicate ? (
+            <p className={styles.duplicate}>
+              <Badge tone="warning">중복</Badge> <span>{duplicate}</span>
+            </p>
+          ) : null}
+          {draft.chapter ? (
+            <DraftChapterField
+              number={draftNumber(draft)}
+              info={draft.chapter}
+              options={chapterOptions}
+              readOnly={!canEdit || draft.publishedQuestionId !== null}
+              disabled={publishing || savingChapter.has(draft.id)}
+              onChange={(chapterId) => void changeChapter(draft, chapterId)}
+            />
+          ) : null}
+        </>
+      );
+    },
     [canEdit, changeChapter, chapterOptions, publishing, savingChapter],
   );
 
@@ -773,11 +790,6 @@ export function QuestionImport({
         }
         title="문제 PDF 가져오기"
         description="문서 관리에서 올린 PDF에서 추출한 문제를 검토합니다. 원본과 비교해 승인한 문제만 문제은행에 등록됩니다. 정답지에 없는 정답은 만들지 않습니다."
-        actions={
-          <Button asChild>
-            <Link href={`/workspaces/${workspaceId}/questions/bank`}>전체 문제</Link>
-          </Button>
-        }
       />
 
       {readOnly ? <p className={styles.readOnly}>{READ_ONLY_TEXT[readOnly]}</p> : null}
@@ -842,8 +854,8 @@ export function QuestionImport({
           <p>
             {status.text}{' '}
             {status.bank ? (
-              <Link href={`/workspaces/${workspaceId}/questions/bank`} className={styles.link}>
-                전체 문제에서 보기
+              <Link href={workspaceHomePath(workspaceId)} className={styles.link}>
+                홈 Heatmap에서 보기
               </Link>
             ) : null}
           </p>
@@ -911,7 +923,7 @@ export function QuestionImport({
                     toggleAll(drafts, pruneSelection(drafts, current), checked === true),
                   )
                 }
-                description="등록되지 않았고 정답이 있으며 확인할 항목이 없는 초안을 모두 고릅니다(‘참고’ 안내만 있는 초안도 포함). 정답이 없거나 확인 항목이 있는 초안은 직접 골라 주세요. 고른 초안은 버튼을 눌러야 승인·등록됩니다."
+                description="등록되지 않았고 정답이 있으며 확인할 항목이 없는 초안을 모두 고릅니다(‘참고’ 안내만 있는 초안도 포함). 정답이 없거나 확인 항목이 있거나 이미 있는 문제와 같은(중복) 초안은 직접 골라 주세요. 고른 초안은 버튼을 눌러야 승인·등록됩니다."
               />
               <p className={styles.meta}>선택 {selectedCount}개</p>
             </div>

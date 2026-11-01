@@ -12,6 +12,8 @@ export interface RadioOption {
   label: ReactNode;
   description?: ReactNode;
   disabled?: boolean;
+  /** Extra class of the option row (radio + label + description), e.g. a result border. */
+  className?: string;
 }
 
 export interface RadioGroupProps {
@@ -89,7 +91,7 @@ export function RadioGroup({
           const row = (
             <div
               key={option.value}
-              className="qz-radio"
+              className={cx('qz-radio', option.className)}
               data-description={asTooltip ? 'tooltip' : undefined}
             >
               <RadixRadioGroup.Item

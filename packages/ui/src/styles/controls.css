@@ -154,6 +154,9 @@
 /* Field (Input / Textarea) */
 .qz-field {
   display: grid;
+  /* One column that may shrink below a control's intrinsic width (UX7-SHARE-EXPIRY: an `auto`
+     track grew with iOS Safari's native date control and pushed the field out of its panel). */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-1);
   color: var(--color-text-primary);
 
@@ -193,6 +196,8 @@
 .qz-control {
   box-sizing: border-box;
   width: 100%;
+  /* Never wider than the field, whatever minimum the native control (e.g. a date picker) has. */
+  min-width: 0;
   min-height: var(--control-height-md);
   padding: var(--space-1) var(--space-3);
   border: 1px solid var(--color-border-strong);
@@ -204,6 +209,18 @@
   font-size: var(--font-size-body-lg);
   line-height: var(--line-height-normal);
   transition: border-color var(--qz-transition-fast);
+}
+
+/* iOS/iPadOS Safari draws date inputs as a native button with an intrinsic minimum width that
+   ignores `width: 100%`; without the native appearance it sizes like a text field. */
+@supports (-webkit-touch-callout: none) {
+  .qz-control:is([type='date'], [type='datetime-local'], [type='time']) {
+    appearance: none;
+  }
+}
+
+.qz-control::-webkit-date-and-time-value {
+  text-align: start;
 }
 
 .qz-control::placeholder {
@@ -777,5 +794,23 @@
       [data-state='on']
     ).qz-focus-ring:focus-visible {
     outline-offset: -2px;
+  }
+}
+
+/* CopyButton: both icons and both labels share one grid cell, so swapping them (visibility only,
+   no animation) never resizes the button (UX7-SHARE-EXPIRY). */
+.qz-copy-button {
+  > .icons,
+  > .labels {
+    display: inline-grid;
+  }
+
+  > .icons > *,
+  > .labels > * {
+    grid-area: 1 / 1;
+  }
+
+  > .labels > * {
+    justify-self: start;
   }
 }

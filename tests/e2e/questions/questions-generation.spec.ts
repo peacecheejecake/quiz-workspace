@@ -6,18 +6,18 @@
 // Each test signs in its own owner with a fresh workspace. LLM variants start from a source MCQ
 // built from tests/fixtures/llm/generation-scenarios.json whose stem carries the scenario marker
 // that the APP_ENV=test worker's ScenarioLLMClient answers (fixtures/generation.ts G1); it cites
-// page 4 of the synthetic book-ko.pdf uploaded through the public flow. Server state (bank,
+// page 4 of the synthetic book-ko.pdf uploaded through the public flow. Server state (questions,
 // overview dots, attempts, lineage) is checked through the public API. Every endpoint/label
 // assumption is in the fixtures/generation.ts header (G1–G6).
 import type { Locator, Page } from '@playwright/test';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 import {
-  bankPath,
   batchIdFromUrl,
   batchUi,
   chooseQuestionMenu,
   createQuestion,
   expect,
+  expectReadOnlyQuestionMenu,
   GENERATE_TASK,
   generatePath,
   generateUi,
@@ -301,27 +301,31 @@ function batchSources(batch: GenerationBatch): string[] {
 }
 
 test(
-  'QGEN-01-AC06 selecting several confirmed questions in the bank starts one batch whose results page groups the drafts by source',
+  'QGEN-01-AC06 selecting several confirmed questions in the 변형 출제 dialog starts one batch whose results page groups the drafts by source',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seedTwoSources(workspaceFactory, 'qgen01-ac06');
-    await createQuestion(s.owner, s.workspaceId, {
+    const draft = await createQuestion(s.owner, s.workspaceId, {
       ...numberedMcq('qgen01-ac06', 3, 0),
       publication_status: 'DRAFT',
     } as QuestionInput);
 
+    // UX7-BANK: the 전체 문제 page is gone; the 여러 문제 tab of 문제 › 변형 출제 is the entry.
     await signInAs(page, s.owner.user);
-    await page.goto(bankPath(s.workspaceId));
-    const select = (n: number) =>
-      page.getByRole('main').getByRole('checkbox', { name: new RegExp(`^${n}번 문제 선택`) });
-    await expect(select(1)).toBeVisible();
-    await expect(select(3)).toHaveCount(0); // a draft is no source
-    await select(1).check();
-    await select(2).check();
-    const bar = page.getByRole('region', { name: /선택한 문제|selected questions/i });
-    await expect(bar).toContainText(/2개 선택됨|2 selected/i);
-    await bar.getByRole('button', { name: /선택한 문제 변형 출제 \(2\)/ }).click();
-    const dialog = page.getByRole('dialog', { name: /선택한 문제 변형 출제/ });
+    await page.goto(homePath(s.workspaceId));
+    await chooseQuestionMenu(page, 'generate');
+    const dialog = homeUi.generateDialog(page);
+    await dialog.getByRole('tab', { name: /여러 문제|several/i }).click();
+    const list = dialog.getByRole('list', { name: /변형할 문제 선택|select questions/i });
+    const select = (stem: string) =>
+      list.getByRole('checkbox', { name: new RegExp(stem.slice(0, 20)) });
+    await expect(select(s.source.revision.stem)).toBeVisible();
+    await expect(select(draft.revision.stem)).toHaveCount(0); // a draft is no source
+    await select(s.source.revision.stem).check();
+    await select(s.second.revision.stem).check();
+    await expect(
+      dialog.getByRole('status').filter({ hasText: /2개 선택됨|2 selected/i }),
+    ).toBeVisible();
     await expect(batchUi.variation(dialog, 'OPTION_SHUFFLE')).toHaveCount(0);
     await batchUi.variation(dialog, 'PARAPHRASE').check();
     await batchUi.generate(dialog).click();
@@ -351,20 +355,24 @@ test(
     expect(await listQuestions(s.owner, s.workspaceId)).toHaveLength(2);
     expect((await getOverview(s.owner, s.workspaceId)).counts.total).toBe(2);
 
-    // Viewers and archived workspaces get no selection.
+    // Viewers and archived workspaces get no 변형 출제 (so no selection).
     const viewer = await workspaceFactory.member('qgen01-ac06-viewer');
     seedMembership(s.workspaceId, viewer.user.id, 'viewer');
     await page.context().clearCookies();
     await signInAs(page, viewer.user);
-    await page.goto(bankPath(s.workspaceId));
-    await expect(page.getByRole('main').getByText(s.source.revision.stem)).toBeVisible();
-    await expect(select(1)).toHaveCount(0);
+    await page.goto(homePath(s.workspaceId, 'panel=generate'));
+    // UX7-DOCS-2: the 문제 button stays; 변형 출제 is disabled with the reason.
+    await expect(homeUi.documentsButton(page)).toBeVisible();
+    await expect(homeUi.generateDialog(page)).toHaveCount(0);
+    await expectReadOnlyQuestionMenu(page, 'viewer');
     await workspaceFactory.archive(s.owner, s.workspaceId);
     await page.context().clearCookies();
     await signInAs(page, s.owner.user);
-    await page.goto(bankPath(s.workspaceId));
-    await expect(page.getByRole('main').getByText(s.source.revision.stem)).toBeVisible();
-    await expect(select(1)).toHaveCount(0);
+    await page.goto(homePath(s.workspaceId, 'panel=generate'));
+    // UX7-DOCS-2: the 문제 button stays; 변형 출제 is disabled with the reason.
+    await expect(homeUi.documentsButton(page)).toBeVisible();
+    await expect(homeUi.generateDialog(page)).toHaveCount(0);
+    await expectReadOnlyQuestionMenu(page, 'archived');
   },
 );
 

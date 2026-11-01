@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { QUESTION_TYPE_LABELS, type Question } from '@/lib/questions/form';
 import { generatePath } from '@/lib/questions/generation-client';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
+import { workspaceHomePath } from '@/lib/workspaces/home';
 import styles from './question-generation.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export interface GenerationSourcePickerProps {
   readonly workspaceId: string;
@@ -25,7 +27,7 @@ export function GenerationSourcePicker({
   loadFailed,
   limit,
 }: GenerationSourcePickerProps) {
-  const bank = `/workspaces/${workspaceId}/questions/bank`;
+  const home = workspaceHomePath(workspaceId);
   return (
     <div className={styles.screen}>
       <PageHeader
@@ -37,12 +39,7 @@ export function GenerationSourcePicker({
           />
         }
         title="문제 변형 출제"
-        description="변형할 확정 문제를 고르세요. 전체 문제의 문제 상세에서 '변형 출제'를 눌러도 됩니다."
-        actions={
-          <Button asChild>
-            <Link href={bank}>전체 문제</Link>
-          </Button>
-        }
+        description="변형할 확정 문제를 고르세요. 홈 Heatmap에서 문제를 열고 '문제 관리' › '변형 출제'를 눌러도 됩니다."
       />
       {sourceMissing ? (
         <p role="alert" className={styles.alert}>
@@ -59,10 +56,10 @@ export function GenerationSourcePicker({
       ) : candidates.length === 0 ? (
         <EmptyState
           title="변형할 확정 문제가 없습니다"
-          description="전체 문제에서 문제를 등록하고 확정하면 여기에서 변형할 수 있습니다."
+          description="홈의 문제 › 직접 추가로 등록하거나 문제 PDF에서 가져와 확정하면 여기에서 변형할 수 있습니다."
           action={
             <Button asChild variant="primary">
-              <Link href={bank}>전체 문제로 이동</Link>
+              <Link href={home}>Workspace 홈으로</Link>
             </Button>
           }
         />
@@ -80,15 +77,15 @@ export function GenerationSourcePicker({
                     <Badge>{QUESTION_TYPE_LABELS[q.question_type]}</Badge>
                     {q.chapter ? <span className={styles.muted}>{q.chapter.title}</span> : null}
                   </span>
-                  <span className={styles.pickStem}>{q.revision.stem}</span>
+                  <span className={styles.pickStem}>{displayStem(q.revision.stem)}</span>
                 </Link>
               </li>
             ))}
           </ul>
           {candidates.length >= limit ? (
             <p className={styles.muted}>
-              최근 {limit}개만 보여 줍니다. 다른 문제는 전체 문제에서 찾아 &lsquo;변형 출제&rsquo;를
-              눌러 주세요.
+              최근 {limit}개만 보여 줍니다. 다른 문제는 홈 Heatmap에서 문제를 열고 &lsquo;문제
+              관리&rsquo; › &lsquo;변형 출제&rsquo;를 눌러 주세요.
             </p>
           ) : null}
         </section>

@@ -42,12 +42,11 @@ export const SCREENS = [
   },
   {
     id: 'SEARCH-01',
-    name: '통합 검색 (문제·본문)',
+    name: '문제 검색·본문 검색',
     path: '/workspaces/[workspaceId]',
     query: { param: 'q' },
   },
   { id: 'QOV-01', name: 'Workspace 홈 (문제 Heatmap)', path: '/workspaces/[workspaceId]' },
-  { id: 'QBANK-01', name: '전체 문제 목록·편집', path: '/workspaces/[workspaceId]/questions/bank' },
   {
     id: 'QPLAY-01',
     name: '문제 풀이 Floating Side Panel',

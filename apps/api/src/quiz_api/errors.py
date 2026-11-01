@@ -108,6 +108,8 @@ class ProblemType(StrEnum):
     # 409: chapter notes are off in this environment (WORKER_CHAPTER_NOTES); stored notes stay
     # readable.
     NOTE_GENERATION_DISABLED = "urn:quiz-workspace:problem:note-generation-disabled"
+    # 409: a merge named questions whose content is not the same question (UX7-DEDUP).
+    NOT_DUPLICATES = "urn:quiz-workspace:problem:not-duplicates"
 
 
 class ProblemException(StarletteHTTPException):

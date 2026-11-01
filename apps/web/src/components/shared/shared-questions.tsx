@@ -19,6 +19,7 @@ import type {
 import { endsShareView, sharedFailureMessage } from '@/lib/shared/messages';
 import { sharedDocumentHref } from '@/lib/shared/view-state';
 import styles from './shared.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export interface SharedQuestionsProps {
   readonly shareId: string;
@@ -123,7 +124,7 @@ export function SharedQuestions({
                 onClick={() => setOpenId(q.id)}
               >
                 <span className={styles.questionNumber}>{q.question_number ?? index + 1}</span>
-                <span className={styles.questionStem}>{q.revision.stem}</span>
+                <span className={styles.questionStem}>{displayStem(q.revision.stem)}</span>
                 <span className={styles.questionMeta}>
                   {QUESTION_TYPE_LABELS[q.question_type]} · {q.chapter?.title ?? NO_CHAPTER_TITLE}
                 </span>

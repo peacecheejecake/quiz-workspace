@@ -21,6 +21,9 @@ import {
   TrashIcon,
   CloseIcon,
   ConfirmDialog,
+  COPY_FEEDBACK_MS,
+  CopyButton,
+  CopyIcon,
   DialogClose,
   Dropzone,
   DropdownMenu,
@@ -94,7 +97,9 @@ const interactive = [
   RetryToggle,
   ConfirmDialog,
   Dropzone,
+  CopyButton,
 ];
+const copyFeedbackMs = COPY_FEEDBACK_MS;
 
 // The status helpers are plain functions and must be callable on the server.
 const questions = QUESTION_DOT_STATUSES.map((status, index) => ({
@@ -169,6 +174,7 @@ export default function Page() {
             />
             <AlertIcon />
             <CheckIcon />
+            <CopyIcon data-ms={copyFeedbackMs} />
             <ChevronDownIcon />
             <MenuIcon />
             <MinusIcon />

@@ -18,7 +18,6 @@ import {
   TabsList,
   TabsTrigger,
 } from '@quiz/ui';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { listQuestionsAction } from '@/lib/questions/actions';
@@ -35,6 +34,7 @@ import type { ChapterChoice } from '@/lib/questions/overview-data';
 import { MultiSourcePicker, RandomSourcePicker } from './generation-batch-pickers';
 import { QuestionGenerationForm } from './question-generation-form';
 import styles from './question-generation.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export interface GenerationDialogProps {
   readonly workspaceId: string;
@@ -128,7 +128,6 @@ function SourceList({
   readonly children: (items: readonly Question[]) => ReactNode;
 }) {
   const { candidates, load } = useCandidates(workspaceId);
-  const bank = `/workspaces/${workspaceId}/questions/bank`;
 
   if (candidates.status === 'loading') {
     return (
@@ -159,12 +158,7 @@ function SourceList({
       <EmptyState
         headingLevel={3}
         title="변형할 확정 문제가 없습니다"
-        description="전체 문제에서 문제를 등록하고 확정하면 여기에서 변형할 수 있습니다."
-        action={
-          <Button asChild variant="primary">
-            <Link href={bank}>전체 문제로 이동</Link>
-          </Button>
-        }
+        description="문제 › 직접 추가로 등록하거나 문제 PDF에서 가져와 확정하면 여기에서 변형할 수 있습니다."
       />
     );
   }
@@ -174,8 +168,8 @@ function SourceList({
       {children(candidates.items)}
       {candidates.more ? (
         <p className={styles.muted}>
-          최근 문제만 보여 줍니다. 다른 문제는 <Link href={bank}>전체 문제</Link>에서 찾아
-          &lsquo;변형 출제&rsquo;를 누르거나 여러 문제를 골라 변형해 주세요.
+          최근 문제만 보여 줍니다. 다른 문제는 Heatmap에서 문제를 열고 &lsquo;문제 관리&rsquo; ›
+          &lsquo;변형 출제&rsquo;를 눌러 주세요.
         </p>
       ) : null}
     </div>
@@ -249,7 +243,7 @@ function SingleSource({
             <Badge>{QUESTION_TYPE_LABELS[source.question_type]}</Badge>
             {source.chapter ? <Badge>{source.chapter.title}</Badge> : null}
           </div>
-          <p className={styles.sourceStem}>{source.revision.stem}</p>
+          <p className={styles.sourceStem}>{displayStem(source.revision.stem)}</p>
         </section>
         <QuestionGenerationForm
           source={{
@@ -288,7 +282,7 @@ function SingleSource({
                     <Badge>{QUESTION_TYPE_LABELS[q.question_type]}</Badge>
                     {q.chapter ? <span className={styles.muted}>{q.chapter.title}</span> : null}
                   </span>
-                  <span className={styles.pickStem}>{q.revision.stem}</span>
+                  <span className={styles.pickStem}>{displayStem(q.revision.stem)}</span>
                 </button>
               </li>
             ))}

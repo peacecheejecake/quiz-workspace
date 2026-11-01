@@ -25,7 +25,9 @@ select tables_are(
         -- DOCSUM-B document summaries
         'document_summary_runs', 'document_summary_units', 'document_summary_run_units',
         -- CHNOTE chapter notes
-        'chapter_notes'],
+        'chapter_notes',
+        -- UX7-DEDUP duplicate -> kept question merges
+        'question_merges'],
   'public schema contains exactly the expected tables'
 );
 

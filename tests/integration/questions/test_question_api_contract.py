@@ -1,4 +1,6 @@
-"""QBANK-01 server guarantees (docs/architecture.md §6, docs/questions.md §2/§4, auth.md §4).
+"""Question write server guarantees (docs/architecture.md §6, docs/questions.md §2/§4, auth.md §4):
+QOV-01-AC12 (create) and QPLAY-01-AC07/AC08 (edit, delete), moved from the retired QBANK-01
+(UX7-BANK, docs/screens/questions-bank.md).
 
 Questions are validated on save (MCQ options with unique stable ids and an answer among them),
 edits append a revision without touching the history attempts point at, option ids survive
@@ -21,7 +23,7 @@ def _stem(text: str) -> str:
     return f"{text} [{uuid.uuid4().hex[:8]}]"
 
 
-def test_qbank_01_ac02_mcq_is_validated_and_confirmed_on_save(seed: Any) -> None:
+def test_qov_01_ac12_mcq_is_validated_and_confirmed_on_save(seed: Any) -> None:
     alice = seed.client("qbank01-ac02")
     ws = alice.create_workspace()
     assert alice.list_questions(ws["id"]) == []
@@ -68,7 +70,7 @@ def test_qbank_01_ac02_mcq_is_validated_and_confirmed_on_save(seed: Any) -> None
     assert listed == {saved["id"], short["id"], essay["id"]}
 
 
-def test_qbank_01_ac03_edit_appends_a_revision_and_keeps_option_ids_and_history(seed: Any) -> None:
+def test_qplay_01_ac07_edit_appends_a_revision_and_keeps_option_ids_and_history(seed: Any) -> None:
     alice = seed.client("qbank01-ac03")
     ws = alice.create_workspace()
     original = _stem("염소 소독의 목적은?")
@@ -111,7 +113,7 @@ def test_qbank_01_ac03_edit_appends_a_revision_and_keeps_option_ids_and_history(
     assert alice.get_question(q["id"])["revision"] == v2
 
 
-def test_qbank_01_ac04_foreign_questions_are_404_like_missing_ones(seed: Any) -> None:
+def test_qplay_01_ac08_foreign_questions_are_404_like_missing_ones(seed: Any) -> None:
     alice, mallory = seed.client("qbank01-ac04-alice"), seed.client("qbank01-ac04-mallory")
     ws = alice.create_workspace()
     secret = _stem("앨리스의 비공개 문제")
@@ -131,7 +133,7 @@ def test_qbank_01_ac04_foreign_questions_are_404_like_missing_ones(seed: Any) ->
     assert alice.get_question(q["id"])["revision"] == q["revision"]
 
 
-def test_qbank_01_ac04_viewer_is_403_insufficient_role_and_archived_is_403(seed: Any) -> None:
+def test_qplay_01_ac08_viewer_is_403_insufficient_role_and_archived_is_403(seed: Any) -> None:
     owner, viewer = seed.client("qbank01-ac04-owner"), seed.client("qbank01-ac04-viewer")
     ws = owner.create_workspace()
     q = owner.create_question(ws["id"], seed.mcq(_stem("읽기 전용 확인"), ["가", "나"], 0))

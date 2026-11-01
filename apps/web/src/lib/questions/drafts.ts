@@ -22,6 +22,7 @@ export type ImportDraft = Schemas['ImportDraft'];
 export type ImportRun = Schemas['ImportRun'];
 export type ImportRegistration = Schemas['ImportRegistration'];
 export type BookChapterOption = Schemas['BookChapterOption'];
+export type DraftDuplicate = Schemas['DraftDuplicate'];
 export type ChapterMatch = NonNullable<ImportDraft['chapter_match']>;
 
 /** The book chapter an import draft is registered under (CHAPTER-MAP) and why. */
@@ -106,6 +107,8 @@ export interface ReviewDraft {
   readonly generation?: GenerationDraftInfo;
   /** PDF import drafts only (CHAPTER-MAP). */
   readonly chapter?: DraftChapterInfo;
+  /** PDF import drafts not registered yet: the same question exists (UX7-DEDUP). */
+  readonly duplicateOf?: DraftDuplicate | null;
 }
 
 /**
@@ -124,6 +127,7 @@ export interface DraftSummary extends Pick<
   | 'publishable'
   | 'answerMissing'
   | 'issues'
+  | 'duplicateOf'
 > {
   /** PDF import drafts only: the chapter it registers under (null = none). */
   readonly chapter?: { readonly chapter: { readonly id: string } | null };
@@ -189,6 +193,7 @@ export function reviewDraftFromImport(draft: ImportDraft): ReviewDraft {
             match: draft.chapter_match ?? null,
             sourceTitle: draft.source_chapter_title ?? null,
           },
+          duplicateOf: draft.duplicate_of ?? null,
         }),
   };
 }
@@ -479,13 +484,18 @@ export function isSelectable(draft: DraftSummary): boolean {
   return draft.publishedQuestionId === null && draft.publishable;
 }
 
+/** A draft flagged as the same question as a confirmed question or an earlier draft (UX7-DEDUP). */
+export function isDuplicate(draft: Pick<DraftSummary, 'duplicateOf'>): boolean {
+  return Boolean(draft.duplicateOf);
+}
+
 /** Over any draft shape (the import screen passes summaries, QIMP-PAGING). */
 export function selectAllScope<T extends DraftSummary>(drafts: readonly T[]): T[];
 
 /**
  * What "전체 선택" covers: selectable drafts with nothing to check — not excluded (rejected), an
- * answer present and no validation to check. A draft without an answer (short answer / essay may
- * be confirmed without one) or with something to check is selected one by one, never silently in
+ * answer present, not a duplicate (UX7-DEDUP, QIMPORT-01-AC10) and no validation to check. A
+ * draft without an answer (short answer / essay may be confirmed without one) or with something to check is selected one by one, never silently in
  * bulk. A note that the AI assist did not apply (`isAssistNote`) is not something to check.
  */
 export function selectAllScope(drafts: readonly ReviewDraft[]): ReviewDraft[] {
@@ -494,14 +504,20 @@ export function selectAllScope(drafts: readonly ReviewDraft[]): ReviewDraft[] {
       isSelectable(d) &&
       d.reviewStatus !== 'rejected' &&
       !d.answerMissing &&
+      !isDuplicate(d) &&
       d.issues.every((i) => i.severity === 'warning' && isAssistNote(i.code)),
   );
 }
 
-/** Initial selection: drafts already approved (e.g. before QIMP-BULK) but not registered. */
+/**
+ * Initial selection: drafts already approved (e.g. before QIMP-BULK) but not registered, except
+ * duplicates (UX7-DEDUP: they are chosen on purpose, one by one).
+ */
 export function initialSelection(drafts: readonly DraftSummary[]): Set<string> {
   return new Set(
-    drafts.filter((d) => isSelectable(d) && d.reviewStatus === 'approved').map((d) => d.id),
+    drafts
+      .filter((d) => isSelectable(d) && d.reviewStatus === 'approved' && !isDuplicate(d))
+      .map((d) => d.id),
   );
 }
 

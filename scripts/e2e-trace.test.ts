@@ -284,13 +284,13 @@ describe('analyze + strict', () => {
 });
 
 describe('repository docs', () => {
-  it('declares 141 screen ACs (95 + M7.4b SEARCH-01-AC06 + UX3-JOB DOC-01-AC05 + 10 UX3c + 2 UX4 + QIMP-AUTO QIMPORT-01-AC06 + 3 QGEN-MULTI + QIMP-JOB QIMPORT-01-AC07 + CHAPTER-MAP QIMPORT-01-AC08 + UX6-SELECT QIMPORT-01-AC09 + 2 UX6-UPLOAD DOC-01-AC07/AC08 + 17 DOCSUM-SPEC DOC-03/DOCSUM-01/CHNOTE-01 + 6 DOCVIEW DOC-02-AC06~AC11), 24 screens with a spec path, and 3 API ACs', () => {
+  it('declares 159 screen ACs (95 + M7.4b SEARCH-01-AC06 + UX3-JOB DOC-01-AC05 + 10 UX3c + 2 UX4 + QIMP-AUTO QIMPORT-01-AC06 + 3 QGEN-MULTI + QIMP-JOB QIMPORT-01-AC07 + CHAPTER-MAP QIMPORT-01-AC08 + UX6-SELECT QIMPORT-01-AC09 + 2 UX6-UPLOAD DOC-01-AC07/AC08 + 17 DOCSUM-SPEC DOC-03/DOCSUM-01/CHNOTE-01 + 6 DOCVIEW DOC-02-AC06~AC11 + UX7-SELECT SEARCH-01-AC08 + UX7-CACHE QPLAY-01-AC06 - 6 retired QBANK-01 + 4 moved UX7-BANK QOV-01-AC12/AC13 QPLAY-01-AC07/AC08 + UX7-DOCS DOC-01-AC09 - retired UX7-SEARCH SEARCH-01-AC07 + 4 UX7-SEARCH SEARCH-01-AC09~AC12 + UX7-BACK QOV-01-AC14 + UX7-SEARCH-2 SEARCH-01-AC13 + 4 UX7-BANK-2 QPLAY-01-AC09~AC11 QOV-01-AC15 + 3 UX7-SHARE-EXPIRY WS-SHARE-01-AC06~AC08 + 2 UX7-QDISPLAY QPLAY-01-AC12/AC13 + 3 UX7-DEDUP QOV-01-AC16/AC17 QIMPORT-01-AC10), 23 screens with a spec path, and 3 API ACs', () => {
     const report = loadReport(join(import.meta.dirname, '..'));
     const screens = report.screens.filter((s) => s.id !== 'AUTH-API');
-    assert.equal(screens.length, 24);
+    assert.equal(screens.length, 23);
     assert.equal(
       screens.reduce((n, s) => n + s.acs.length, 0),
-      141,
+      159,
     );
     assert.ok(screens.every((s) => s.testPath?.startsWith('tests/e2e/')));
     assert.deepEqual(report.screens.find((s) => s.id === 'AUTH-API')?.acs, [

@@ -102,6 +102,105 @@ describe('Select lazyOptions', () => {
   });
 });
 
+/**
+ * Models iOS Safari (UX7-SELECT): when a touch `pointerup` is cancelled (`preventDefault`), WebKit
+ * on iOS drops the click it would synthesize for that tap. jsdom and desktop browsers still click,
+ * so without this a cancelled tap would look fine here and still do nothing on an iPhone.
+ */
+function modelIosClickSuppression(): () => void {
+  let swallowNextClick = false;
+  const onPointerUp = (event: PointerEvent) => {
+    swallowNextClick = event.pointerType === 'touch' && event.defaultPrevented;
+  };
+  const onClick = (event: MouseEvent) => {
+    if (!swallowNextClick) return;
+    swallowNextClick = false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('click', onClick, true);
+  return () => {
+    window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('click', onClick, true);
+  };
+}
+
+describe('Select touch (UX7-SELECT)', () => {
+  for (const lazyOptions of [false, true]) {
+    it(`a tap on the selected option closes the list${lazyOptions ? ' (lazyOptions)' : ''}`, async () => {
+      const restore = modelIosClickSuppression();
+      try {
+        const user = userEvent.setup();
+        const onValueChange = vi.fn();
+        function Harness() {
+          const [value, setValue] = useState('ALL');
+          return (
+            <Select
+              label="챕터"
+              lazyOptions={lazyOptions}
+              options={TYPES}
+              value={value}
+              onValueChange={(next) => {
+                onValueChange(next);
+                setValue(next);
+              }}
+            />
+          );
+        }
+        render(<Harness />);
+        const trigger = screen.getByRole('combobox', { name: '챕터' });
+        const cancelled: boolean[] = [];
+        const record = (event: PointerEvent) => cancelled.push(event.defaultPrevented);
+
+        // A tap opens the list; the selected option is the first row, right under the finger.
+        await user.pointer({ keys: '[TouchA]', target: trigger });
+        const selected = await screen.findByRole('option', { name: '전체' });
+        window.addEventListener('pointerup', record);
+        await user.pointer({ keys: '[TouchA]', target: selected });
+        window.removeEventListener('pointerup', record);
+
+        // The tap's pointerup is left alone (Radix cancels the first one after opening, which
+        // makes iOS drop the tap), so the list closes on the first tap and the value stays.
+        expect(cancelled).toEqual([false]);
+        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+        expect(trigger).toHaveTextContent('전체');
+        expect(onValueChange).not.toHaveBeenCalledWith('MCQ');
+
+        // A tap on another option still picks it.
+        await user.pointer({ keys: '[TouchA]', target: trigger });
+        await user.pointer({
+          keys: '[TouchA]',
+          target: await screen.findByRole('option', { name: '객관식' }),
+        });
+        expect(screen.queryByRole('listbox')).toBeNull();
+        expect(trigger).toHaveTextContent('객관식');
+      } finally {
+        restore();
+      }
+    });
+  }
+
+  it('keeps the mouse and keyboard paths: clicking or pressing Enter on the selected option closes and refocuses the trigger', async () => {
+    const user = userEvent.setup();
+    render(<Select label="유형" options={TYPES} defaultValue="ALL" />);
+    const trigger = screen.getByRole('combobox', { name: '유형' });
+
+    await user.click(trigger);
+    await user.click(await screen.findByRole('option', { name: '전체' }));
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(trigger).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('option', { name: '전체' })).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveTextContent('전체');
+  });
+});
+
 describe('RadioGroup', () => {
   it('names the group and its radios and selects with the arrow keys', async () => {
     const user = userEvent.setup();

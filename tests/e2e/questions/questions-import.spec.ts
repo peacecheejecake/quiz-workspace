@@ -17,9 +17,7 @@ import type { Locator, Page, Route } from '@playwright/test';
 import { localEndpoints } from '../fixtures/local-env.ts';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 import {
-  bankPath,
-  bankUi,
-  chooseQuestionMenu,
+  createQuestion,
   draftFor,
   expect,
   docUi,
@@ -38,7 +36,10 @@ import {
   listDrafts,
   listImports,
   listQuestions,
+  overviewUi,
+  overviewPath,
   main,
+  mcqInput,
   pageLabel,
   progressStepsUi,
   questionFormUi,
@@ -137,10 +138,10 @@ test(
       expect(evidence?.locations.map((l) => l.page)).toContain(q.page);
     }
 
-    // Drafts are isolated: nothing is in the bank yet.
+    // Drafts are isolated: nothing is confirmed yet, so the home heatmap is empty.
     expect(await listQuestions(owner, workspaceId)).toEqual([]);
-    await page.goto(bankPath(workspaceId));
-    await expect(bankUi.emptyState(page)).toBeVisible();
+    await page.goto(overviewPath(workspaceId));
+    await expect(overviewUi.empty(page)).toBeVisible();
   },
 );
 
@@ -310,11 +311,9 @@ test(
       }
     }
 
-    await page.goto(bankPath(workspaceId));
-    await expect(bankUi.items(page)).toHaveCount(approved.length);
-    for (const t of PAPER.questions.filter((x) => !approved.includes(x))) {
-      await expect(bankUi.item(page, t.stem), `question ${t.number}`).toHaveCount(0);
-    }
+    // One heatmap marker per registered question (the unselected drafts have none).
+    await page.goto(overviewPath(workspaceId));
+    await expect(overviewUi.dots(page)).toHaveCount(approved.length);
   },
 );
 
@@ -376,8 +375,8 @@ test(
       await expect(importUi.draft(page, t.stem)).toContainText(/등록됨|registered/i);
     }
 
-    await page.goto(bankPath(workspaceId));
-    await expect(bankUi.items(page)).toHaveCount(registrable.length);
+    await page.goto(overviewPath(workspaceId));
+    await expect(overviewUi.dots(page)).toHaveCount(registrable.length);
   },
 );
 
@@ -497,13 +496,13 @@ test(
       );
     }
     expect((await listImports(owner, workspaceId)).map((r) => r.id)).toEqual([run.id]);
-    await page.goto(bankPath(workspaceId));
-    await expect(bankUi.items(page)).toHaveCount(approved.length);
+    await page.goto(overviewPath(workspaceId));
+    await expect(overviewUi.dots(page)).toHaveCount(approved.length);
   },
 );
 
 test(
-  'QIMPORT-01-AC05 문제 › PDF 관리 lists the PDFs with questions and sends uploads to 문서 관리; the import page has no upload',
+  'QIMPORT-01-AC05 문서 관리 rows give the PDFs with questions their review actions; the import page has no upload and points at 문서 관리',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     test.setTimeout(2 * JOB_TIMEOUT_MS + 60_000);
@@ -519,45 +518,27 @@ test(
 
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
-    // Neither the home nor the dialog has a "PDF 가져오기" button (UX4).
+    // Neither the home nor 문서 관리 has a "PDF 가져오기" button (UX4).
     const importButton = (scope: Locator) =>
       scope
         .getByRole('link', { name: /^pdf 가져오기$|^import pdf$/i })
         .or(scope.getByRole('button', { name: /^pdf 가져오기$|^import pdf$/i }));
     await expect(importButton(main(page))).toHaveCount(0);
-    await chooseQuestionMenu(page, 'pdfs');
-    await expect(page).toHaveURL(/[?&]panel=question-pdfs(&|$)/);
-    const dialog = homeUi.questionPdfsDialog(page);
+    // UX7-DOCS: the PDFs with questions are reviewed from 문서 관리 (DOC-01-AC09).
+    await homeUi.documentsButton(page).click();
+    const dialog = homeUi.documentsDialog(page);
     await expect(dialog).toBeVisible();
-    const list = dialog.getByRole('list', { name: /문제 pdf 목록|question pdfs/i });
-    // The PDFs with questions only, each with its kind badge; the plain book is not listed.
-    await expect(list.getByRole('listitem')).toHaveCount(2);
+    const list = dialog.getByRole('list', { name: /문서 목록|documents/i });
     const paperRow = list.getByRole('listitem').filter({ hasText: /questions-ko/ });
     const mixedRow = list.getByRole('listitem').filter({ hasText: /book-en/ });
+    const bookRow = list.getByRole('listitem').filter({ hasText: /book-ko/ });
     await expect(docUi.kindBadge(paperRow, '문제지')).toBeVisible();
     await expect(docUi.kindBadge(mixedRow, '교재+문제')).toBeVisible();
-    await expect(list).not.toContainText(/book-ko/);
     await expect(docUi.reviewLink(paperRow)).toBeVisible();
     await expect(docUi.extractButton(mixedRow)).toBeVisible();
-    // UX6-UPLOAD: no Dropzone or file input here; uploads go to 문서 관리.
-    await expect(dialog.getByText(/여기에 끌어다 놓으세요|drop/i)).toHaveCount(0);
-    await expect(
-      dialog.getByRole('button', { name: /pdf (선택|업로드)|choose|upload/i }),
-    ).toHaveCount(0);
-    await expect(dialog.locator('input[type="file"]')).toHaveCount(0);
-    await expect(
-      dialog.getByText('PDF는 문서 관리에서 올립니다. 문제가 있는 PDF는 자동으로 추출됩니다.'),
-    ).toBeVisible();
+    await expect(docUi.reviewLink(bookRow)).toHaveCount(0);
+    await expect(docUi.extractButton(bookRow)).toHaveCount(0);
     await expect(importButton(dialog)).toHaveCount(0);
-    await importUi.openDocuments(dialog).click();
-    await expect(page).toHaveURL(/[?&]panel=documents(&|$)/);
-    await expect(homeUi.documentsDialog(page)).toBeVisible();
-
-    // No PDF with questions yet: the empty text, still pointing at 문서 관리.
-    await page.goto(homePath(empty.id, 'panel=question-pdfs'));
-    const emptyDialog = homeUi.questionPdfsDialog(page);
-    await expect(emptyDialog.getByText('등록된 문제 pdf가 없습니다.')).toBeVisible();
-    await expect(importUi.openDocuments(emptyDialog)).toBeVisible();
 
     // The import page uploads nothing; without an extraction it points at 문서 관리.
     await page.goto(importPath(empty.id));
@@ -571,6 +552,7 @@ test(
     await expect(page).toHaveURL(
       (url) => url.pathname === homePath(empty.id) && url.searchParams.get('panel') === 'documents',
     );
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
 
     // Two extracted PDFs: `검토할 PDF` switches between their reviews (one per PDF).
     const mixedRun = await startImport(owner, ws.id, mixed);
@@ -636,9 +618,9 @@ test(
     expect(browserStarts).toBe(0);
 
     // Coming back: the PDF's 문제 검토 shows the extracted drafts for review.
-    await page.goto(homePath(ws.id, 'panel=question-pdfs'));
+    await page.goto(homePath(ws.id, 'panel=documents'));
     const row = homeUi
-      .questionPdfsDialog(page)
+      .documentsDialog(page)
       .getByRole('listitem')
       .filter({ hasText: /questions-ko/ });
     await docUi.reviewLink(row).click();
@@ -650,7 +632,7 @@ test(
 );
 
 test(
-  'QIMPORT-01-AC06 a processed question PDF without an extraction offers 문제 추출 in 문제 PDF 관리',
+  'QIMPORT-01-AC06 a processed question PDF without an extraction offers 문제 추출 in 문서 관리',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('qimport01-ac06-extract');
@@ -663,9 +645,9 @@ test(
     expect(await listImports(owner, ws.id)).toEqual([]);
 
     await signInAs(page, owner.user);
-    await page.goto(homePath(ws.id, 'panel=question-pdfs'));
-    const dialog = homeUi.questionPdfsDialog(page);
-    const list = dialog.getByRole('list', { name: /문제 pdf 목록|question pdfs/i });
+    await page.goto(homePath(ws.id, 'panel=documents'));
+    const dialog = homeUi.documentsDialog(page);
+    const list = dialog.getByRole('list', { name: /문서 목록|documents/i });
     const row = list.getByRole('listitem').filter({ hasText: PAPER.file.replace(/\.pdf$/, '') });
     const extract = row.getByRole('button', { name: /문제 추출|extract questions/i });
     await expect(extract).toBeVisible();
@@ -685,7 +667,7 @@ test(
     expect(runs[0]?.source_document_id).toBe(uploaded.documentId);
 
     // With its extraction in place the row links to the review instead.
-    await page.goto(homePath(ws.id, 'panel=question-pdfs'));
+    await page.goto(homePath(ws.id, 'panel=documents'));
     const review = row.getByRole('link', { name: /문제 검토|review questions/i });
     await expect(review).toBeVisible();
     await expect(row.getByRole('button', { name: /문제 추출|extract questions/i })).toHaveCount(0);
@@ -799,13 +781,13 @@ test(
     expect(chapterOf(Q(1))).toBe(moved?.id);
     expect(chapterOf(Q(2))).toBe(suggested?.id);
 
-    // The bank lists each under its chapter.
-    await page.goto(`${bankPath(ws.id)}?chapter=${suggested?.id}`);
-    await expect(bankUi.items(page)).toHaveCount(1);
-    await expect(bankUi.item(page, Q(2).stem)).toHaveCount(1);
-    await page.goto(`${bankPath(ws.id)}?chapter=${moved?.id}`);
-    await expect(bankUi.items(page)).toHaveCount(1);
-    await expect(bankUi.item(page, Q(1).stem)).toHaveCount(1);
+    // The home heatmap shows each under its chapter (UX7-BANK: was the 전체 문제 page).
+    await page.goto(overviewPath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    for (const title of [moved?.title, suggested?.title]) {
+      const group = overviewUi.heatmap(page).getByRole('region', { name: title ?? '' });
+      await expect(group.getByRole('button', { name: /\d+번 문제|question \d+/i })).toHaveCount(1);
+    }
   },
 );
 
@@ -1198,5 +1180,73 @@ test(
     await expect(importUi.select(q2)).toBeChecked();
     await expect(importUi.publish(page)).toContainText(`(${inScope + 1})`);
     await expect(all).toHaveAttribute('aria-checked', 'true');
+  },
+);
+
+test(
+  'QIMPORT-01-AC10 a draft that duplicates a confirmed question is flagged with the reason, left out of the default selection and 전체 선택, and can still be registered on purpose',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('qimport01-ac10');
+    const ws = await workspaceFactory.create(owner);
+    // Question 1 typed by hand before the import: another option order and labels, extra
+    // spacing and an empty answer mark (a stem number would make it another question,
+    // UX7-DEDUP-2).
+    const q1 = Q(1);
+    const texts = [...q1.options].reverse().map((o, i) => `(${'ABCD'[i]}) ${o.text}`);
+    const answer = truthOptionTexts(q1, q1.answer?.correct_option_labels ?? [])[0] ?? '';
+    const existing = await createQuestion(owner, ws.id, {
+      ...mcqInput(
+        `${q1.stem.replace(/ /g, '  ')} ( )`,
+        texts,
+        texts.findIndex((t) => t.endsWith(answer)),
+      ),
+      question_number: 7,
+    });
+
+    await signInAs(page, owner.user);
+    await uploadQuestionPaper(page, ws.id, PAPER);
+    await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length, {
+      timeout: JOB_TIMEOUT_MS,
+    });
+    const run = await waitForLatestImport(owner, ws.id);
+
+    // The flag: text, not color, on that draft only.
+    const flagged = importUi.draft(page, q1.stem);
+    await expect(importUi.duplicate(flagged)).toBeVisible();
+    await expect(flagged).toContainText(/이미 등록된 7번 문제와 같습니다|same as question 7/i);
+    for (const t of PAPER.questions.filter((q) => q.number !== 1)) {
+      await expect(importUi.duplicate(importUi.draft(page, t.stem))).toHaveCount(0);
+    }
+    const summaries = await owner.api.ok<{
+      items: { id: string; duplicate_of: Record<string, unknown> | null }[];
+    }>('GET', `/question-imports/${run.id}/draft-summaries`, undefined, [200]);
+    const target = draftFor(await listDrafts(owner, run.id), q1);
+    expect(
+      summaries.items.filter((s) => s.duplicate_of).map((s) => [s.id, s.duplicate_of]),
+    ).toEqual([
+      [target.id, { kind: 'question', question_id: existing.id, draft_id: null, number: 7 }],
+    ]);
+
+    // Not selected by default, not in 전체 선택, selectable on purpose.
+    const registrable = PAPER.questions.filter((q) => q.answer !== null);
+    const box = importUi.select(flagged);
+    await expect(box).not.toBeChecked();
+    await expect(box).toBeEnabled();
+    const all = importUi.selectAll(page);
+    await expect(all).toHaveAccessibleName(new RegExp(`\\(${registrable.length - 1}개\\)`));
+    await all.check();
+    await expect(box).not.toBeChecked();
+    await expect(importUi.publish(page)).toContainText(`(${registrable.length - 1})`);
+    await box.check();
+    await expect(box).toBeChecked();
+    await expect(importUi.publish(page)).toContainText(`(${registrable.length})`);
+    await importUi.publish(page).click();
+    await expect(importUi.alert(page).or(page.getByRole('status')).first()).toContainText(
+      new RegExp(`${registrable.length}\\s*개.*등록`),
+    );
+    const registered = draftFor(await listDrafts(owner, run.id), q1);
+    expect(registered.published_question_id).not.toBeNull();
+    expect(await listQuestions(owner, ws.id)).toHaveLength(registrable.length + 1);
   },
 );

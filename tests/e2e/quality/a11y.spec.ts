@@ -8,11 +8,16 @@ import { mkdirSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { expectAccessible } from '../fixtures/a11y.ts';
 import {
+  archiveQuestion,
   authUi,
   captchaUi,
-  bankUi,
+  choosePanelMenu,
+  detailUi,
+  inactiveUi,
   createNumberedQuestions,
   createQuestion,
+  dedupUi,
+  mcqInput,
   docUi,
   documentsPath,
   editorUi,
@@ -20,6 +25,7 @@ import {
   formAlert,
   homePath,
   homeUi,
+  QUESTION_MENU_REASONS,
   openSearchOptions,
   closeSearchOptions,
   generatePath,
@@ -35,6 +41,7 @@ import {
   overviewUi,
   panelUi,
   questionFormUi,
+  openContentSearch,
   runSearch,
   searchPath,
   searchUi,
@@ -45,6 +52,7 @@ import {
   uploadReadyBook,
   wsUi,
   answerCorrectly,
+  chooseQuestionMenu,
   book,
   block,
   correctBlock,
@@ -53,7 +61,6 @@ import {
   chooseWorkspaceAction,
   ARCHIVE_ACTION,
   DELETE_ACTION,
-  bankPath,
   notFoundHeading,
   RESULT_TEXT,
   failingOnceCopy,
@@ -61,6 +68,7 @@ import {
   main,
   questionPaper,
   uploadQuestionPaper,
+  uniqueWorkspaceName,
 } from '../fixtures/test.ts';
 
 test.describe.configure({ timeout: 2 * JOB_TIMEOUT_MS + 60_000 });
@@ -163,21 +171,26 @@ test(
     await expect(page.locator('[aria-invalid="true"]').first()).toBeVisible();
     await expectAccessible(page, 'account security with field errors');
 
-    // Archived workspace: every screen is read-only (WS-01, QBANK-01 read-only notice). Since UX3c
-    // the sections are the home and its dialogs.
+    // Archived workspace: every screen is read-only (WS-01). Since UX3c the sections are the home
+    // and its dialogs (UX7-BANK retired the 전체 문제 page).
     for (const path of [
       homePath(other.id),
       documentsPath(other.id),
-      homePath(other.id, 'panel=question-pdfs'),
       homePath(other.id, 'panel=history'),
       homePath(other.id, 'panel=share'),
-      bankPath(other.id),
     ]) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
       await settle(page);
       await expectAccessible(page, `archived workspace ${path}`);
     }
+    // The read-only 문제 menu: disabled items with the reason in text (UX7-DOCS-2).
+    await page.goto(homePath(other.id));
+    await homeUi.questionMenuButton(page).click();
+    await expect(homeUi.questionMenu(page).getByText(QUESTION_MENU_REASONS.archived)).toBeVisible();
+    await settle(page);
+    await expectAccessible(page, 'archived workspace 문제 menu');
+    await page.keyboard.press('Escape');
 
     const res = await page.goto('/workspaces/00000000-0000-4000-8000-000000000000/documents');
     expect(res?.status()).toBe(404);
@@ -198,10 +211,10 @@ test(
     await expect(docUi.emptyState(page)).toBeVisible();
     await expectAccessible(page, 'documents empty');
     await page.goto(searchPath(ws.id));
-    await expect(searchUi.box(page)).toBeVisible();
+    await openContentSearch(page);
     await expectAccessible(page, 'search without documents');
-    // The unified search's scope settings popovers (UX6): 문제 (filters), 본문 (mode tooltips,
-    // filters).
+    // The settings popovers of the 문제 search (filters) and the 본문 search (mode tooltips,
+    // filters), UX7-SEARCH.
     await openSearchOptions(page, 'questions');
     await expectAccessible(page, 'question search settings popover');
     await closeSearchOptions(page, 'questions');
@@ -261,7 +274,7 @@ test(
 );
 
 test(
-  'A11Y-04 questions heatmap, preview, practice panel and the question bank',
+  'A11Y-04 questions heatmap, preview, practice panel, its 문제 관리 menu and the question editor',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('a11y04');
@@ -272,9 +285,6 @@ test(
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await settle(page);
     await expectAccessible(page, 'questions overview empty');
-    await page.goto(bankPath(ws.id));
-    await expect(bankUi.emptyState(page)).toBeVisible();
-    await expectAccessible(page, 'question bank empty');
 
     const questions = await createNumberedQuestions(owner, ws.id, 'a11y04', 12);
     const [first, second, third] = questions;
@@ -294,18 +304,45 @@ test(
     const panel = panelUi.numbered(page, 4);
     await expect(panel).toBeVisible();
     await expectAccessible(page, 'practice panel');
-    await panelUi.options(panel).first().check();
+    // A wrong option by its text, not by position: the displayed order is shuffled per session,
+    // so `.first()` scanned the correct or the incorrect graded state at random. Incorrect shows
+    // both result tones (the chosen option and the correct one).
+    await panelUi.option(panel, 'a11y04-4 보기 나').check();
     await panelUi.submit(panel).click();
-    await expect(panelUi.result(panel)).toContainText(
-      new RegExp(`${RESULT_TEXT.correct.source}|${RESULT_TEXT.incorrect.source}`, 'i'),
-    );
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
     await expectAccessible(page, 'practice panel graded');
+    // UX7-BANK: the editors' 문제 관리 menu and the 문제 편집 dialog over the panel.
+    await panelUi.manage(panel).click();
+    await expect(panelUi.manageItem(page, 'edit')).toBeVisible();
+    await expectAccessible(page, 'practice panel 문제 관리 menu');
+    await panelUi.manageItem(page, 'edit').click();
+    const editForm = questionFormUi.form(page);
+    await expect(questionFormUi.stem(editForm)).not.toHaveValue('');
+    await expectAccessible(page, 'question edit form');
+    await page.keyboard.press('Escape');
+    await expect(editForm).toBeHidden();
+    // UX7-BANK-2: the read-only 문제 상세 dialog (answers, sources, revisions) over the panel.
+    await choosePanelMenu(page, panel, 'history');
+    const detail = detailUi.dialog(page);
+    await expect(detailUi.revisions(detail).first()).toBeVisible();
+    await expectAccessible(page, 'question detail dialog');
+    await page.keyboard.press('Escape');
+    await expect(detail).toBeHidden();
     await panelUi.close(panel).click();
 
-    await page.goto(bankPath(ws.id));
-    await expect(bankUi.items(page).first()).toBeVisible();
-    await expectAccessible(page, 'question bank populated');
-    await bankUi.createButton(page).click();
+    // UX7-BANK-2: the 보관·초안 문제 dialog, empty and with an archived question.
+    await chooseQuestionMenu(page, 'inactive');
+    const inactive = inactiveUi.dialog(page);
+    await expect(inactive.getByRole('heading', { name: /없습니다|no /i })).toBeVisible();
+    await expectAccessible(page, 'archived and draft questions empty');
+    await archiveQuestion(owner, questions[11] ?? first);
+    await page.reload();
+    await expect(inactiveUi.rows(inactive)).toHaveCount(1);
+    await expectAccessible(page, 'archived and draft questions populated');
+    await inactiveUi.close(inactive).click();
+
+    // The 문제 등록 dialog on the home (문제 › 직접 추가, UX7-BANK).
+    await chooseQuestionMenu(page, 'create');
     const form = questionFormUi.form(page);
     await expect(form).toBeVisible();
     await expectAccessible(page, 'question form');
@@ -373,6 +410,63 @@ test(
     });
     await settle(page);
     await expectAccessible(page, 'import failed with retry');
+  },
+);
+
+test(
+  'A11Y-13 중복 문제 정리 dialog: groups with the answers warning, the confirm step, a stopped merge with the frozen plan, and the empty state',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    // UX7-DEDUP (QOV-01-AC16): two copies of one MCQ (other option order and labels) whose answers
+    // differ, so the group shows its 정답이 서로 다릅니다 warning. Deterministic: no attempts, the
+    // oldest is the default keep.
+    const owner = await workspaceFactory.member('a11y13');
+    const ws = await workspaceFactory.create(owner);
+    const stem = 'a11y13 다음 중 물의 순환에 대한 설명으로 옳은 것은?';
+    const texts = ['증발은 액체가 기체로 변한다', '응결은 기체가 고체로 변한다', '강수는 없다'];
+    await createQuestion(owner, ws.id, { ...mcqInput(stem, texts, 0), question_number: 1 });
+    const copy = await createQuestion(owner, ws.id, {
+      ...mcqInput(
+        `${stem.replace(/ /g, '  ')} ( )`,
+        [`③ ${texts[2]}`, `① ${texts[0]}`, `② ${texts[1]}`],
+        0,
+      ),
+      question_number: 2,
+    });
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+
+    await chooseQuestionMenu(page, 'duplicates');
+    const dialog = dedupUi.dialog(page);
+    const group = dedupUi.groups(dialog).first();
+    await expect(dedupUi.keep(group)).toHaveCount(2);
+    await expect(dedupUi.warning(group)).toBeVisible();
+    await settle(page);
+    await expectAccessible(page, 'duplicates dialog with a group');
+
+    await dedupUi.merge(dialog).click();
+    const confirm = dedupUi.confirm(page);
+    await expect(confirm).toBeVisible();
+    await expectAccessible(page, 'duplicates confirm');
+    await page.keyboard.press('Escape');
+    await expect(confirm).toBeHidden();
+
+    // The copy is archived elsewhere meanwhile: the merge is refused, the plan is frozen.
+    await archiveQuestion(owner, copy);
+    await dedupUi.merge(dialog).click();
+    await dedupUi.confirmButton(dedupUi.confirm(page)).click();
+    const stopped = dialog.getByRole('alert');
+    await expect(stopped).toBeVisible();
+    await expect(dedupUi.include(group)).toBeDisabled();
+    await expect(dedupUi.include(group)).toHaveAccessibleDescription(
+      /이어서 정리하거나 다시 검사한 뒤 바꿀 수 있습니다/,
+    );
+    await expectAccessible(page, 'duplicates merge stopped, plan frozen');
+
+    await stopped.getByRole('button', { name: /^(다시 검사|scan again)$/i }).click();
+    await expect(dedupUi.empty(dialog)).toBeVisible();
+    await expectAccessible(page, 'duplicates empty');
   },
 );
 
@@ -461,5 +555,89 @@ test(
     await expect(overviewUi.marker(dot)).toHaveAttribute('data-shape', 'star');
     await expectAccessible(page, 'heatmap in forced colors', { schemes: ['light'] });
     await page.emulateMedia({ forcedColors: 'none' });
+  },
+);
+
+// UX7-CSS: under reduced motion nothing transitions at all — not even for one frame — so a
+// token-coloured element shows its new computed style at once, and overlays whose exit relied on
+// a (collapsed) animation still close and unmount.
+const REDUCED_CLOSE_MS = 1_000;
+
+test(
+  'A11Y-10 reduced motion: a style change applies in the same frame; dialogs, menus, toasts and panels still close',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('a11y10rm');
+    const ws = await workspaceFactory.create(owner, uniqueWorkspaceName('a11y10rm'));
+    await signInAs(page, owner.user);
+    await page.goto('/workspaces');
+    const create = wsUi.createButton(page);
+    await expect(create).toBeEnabled();
+
+    // Theme switch: the body (declares no transition) and a kit button (declares one) read the
+    // new token colours synchronously, and the change starts no CSS transition.
+    await settle(page);
+    // Retried only in case a late render resets the attribute mid-sample (`kept` false).
+    await expect(async () => {
+      const sample = await create.evaluate(async (button) => {
+        const read = () => {
+          const body = getComputedStyle(document.body);
+          const own = getComputedStyle(button);
+          return [body.backgroundColor, body.color, own.backgroundColor, own.color];
+        };
+        const root = document.documentElement;
+        const from = root.getAttribute('data-theme');
+        const before = read();
+        const target = from === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', target);
+        const now = read();
+        const transitions = document
+          .getAnimations()
+          .filter((a) => a instanceof CSSTransition)
+          .map((a) => (a as CSSTransition).transitionProperty);
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const settled = read();
+        const kept = root.getAttribute('data-theme') === target;
+        if (from === null) root.removeAttribute('data-theme');
+        else root.setAttribute('data-theme', from);
+        return { before, now, settled, transitions, kept };
+      });
+      expect(sample.kept, 'data-theme kept while sampling').toBe(true);
+      expect(sample.settled, 'the theme switch changes the token colours').not.toEqual(
+        sample.before,
+      );
+      expect(sample.now, 'computed style in the same frame').toEqual(sample.settled);
+      expect(sample.transitions, 'CSS transitions started by the switch').toEqual([]);
+    }).toPass({ timeout: 10_000 });
+
+    // Modal dialog closes and a toast appears; its close button removes it.
+    const name = uniqueWorkspaceName('a11y10rm-new');
+    await create.click();
+    const dialog = wsUi.createDialog(page);
+    await wsUi.nameField(dialog).fill(name);
+    await wsUi.submitCreate(dialog).click();
+    await expect(dialog).toHaveCount(0, { timeout: REDUCED_CLOSE_MS });
+    const toast = page
+      .getByRole('region', { name: /알림|notifications/i })
+      .getByRole('listitem')
+      .filter({ hasText: name });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: /^(닫기|close)$/i }).click();
+    await expect(toast).toHaveCount(0, { timeout: REDUCED_CLOSE_MS });
+
+    // Dropdown menu closes on Escape.
+    await wsUi.moreButton(wsUi.item(wsUi.tabPanel(page), ws.name)).click();
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0, { timeout: REDUCED_CLOSE_MS });
+
+    // FloatingSidePanel (non-modal) unmounts from its close button.
+    await page.goto(homePath(ws.id));
+    await homeUi.documentsButton(page).click();
+    const panel = homeUi.documentsDialog(page);
+    await expect(panel).toBeVisible();
+    await panel.getByRole('button', { name: /문서 관리 닫기|close/i }).click();
+    await expect(panel).toHaveCount(0, { timeout: REDUCED_CLOSE_MS });
   },
 );

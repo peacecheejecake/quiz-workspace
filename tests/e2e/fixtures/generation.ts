@@ -78,7 +78,7 @@
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
 //   QGEN-01  route /workspaces/{id}/questions/generate; `?source=<question id>` preselects the
-//            source question (deep link from the bank/practice panel). h1 "문제 변형 출제"; region
+//            source question (deep link from the practice panel's 문제 관리 › 변형 출제). h1 "문제 변형 출제"; region
 //            "원본 문제" showing the source stem; group "변형 유형" with one radio or checkbox per
 //            type: "보기 섞기" (OPTION_SHUFFLE), "문구 변형" (PARAPHRASE), "정오 반전"
 //            (INVERT_POLARITY), "유사 개념" (ANALOGOUS_CONCEPT); button "생성". 보기 섞기 opens the

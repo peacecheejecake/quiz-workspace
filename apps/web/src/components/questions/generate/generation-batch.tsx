@@ -22,6 +22,7 @@ import {
 import { batchItemStatus, batchProgress, VARIATION_LABELS } from '@/lib/questions/generation-model';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import styles from './question-generation.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 /** How often a working batch is re-read. */
 export const BATCH_POLL_MS = 2000;
@@ -102,11 +103,6 @@ export function GenerationBatchView({
       }
       title="묶음 변형 출제"
       description="원본마다 만든 변형 초안을 원본별로 검토하세요. 승인한 초안만 문제은행에 등록됩니다."
-      actions={
-        <Button asChild>
-          <Link href={`/workspaces/${workspaceId}/questions/bank`}>전체 문제</Link>
-        </Button>
-      }
     />
   );
 
@@ -198,7 +194,7 @@ export function GenerationBatchView({
                 </Link>
               </div>
               <p id={previewId} className={styles.pickStem}>
-                {source.preview}
+                {displayStem(source.preview)}
               </p>
               {failure ? (
                 <p className={styles.batchGroupStatus}>

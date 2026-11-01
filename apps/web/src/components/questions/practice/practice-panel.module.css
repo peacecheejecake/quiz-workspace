@@ -32,6 +32,49 @@
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * One MCQ option row (UX7-QDISPLAY, QPLAY-01-AC12, design-system §4.1 "채점 결과 테두리"): the
+ * 2px border is always there and transparent until the answer is graded, so a result changes only
+ * its color and never the layout. The text mark carries the meaning; color only reinforces it.
+ */
+.option {
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+}
+
+.toneCorrect {
+  border-color: var(--color-success);
+}
+
+.toneChosen {
+  border-color: var(--color-border-strong);
+}
+
+.toneAnswer {
+  border-color: var(--color-danger);
+}
+
+.mark {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+@media (forced-colors: active) {
+  .option {
+    border-color: Canvas;
+  }
+
+  .toneCorrect,
+  .toneAnswer {
+    border-color: Highlight;
+  }
+
+  .toneChosen {
+    border-color: GrayText;
+  }
+}
+
 .legend {
   margin-block-end: var(--space-2);
   padding: 0;

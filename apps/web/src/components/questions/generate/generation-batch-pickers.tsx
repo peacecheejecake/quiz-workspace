@@ -22,6 +22,7 @@ import type { ChapterChoice } from '@/lib/questions/overview-data';
 import { QuestionGenerationForm } from './question-generation-form';
 import { useBatchStart } from './use-batch-start';
 import styles from './question-generation.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 const ALL = '__all__';
 const BATCH_SOURCE = { questionType: 'MCQ', confirmed: true } as const;
@@ -89,7 +90,7 @@ export function MultiSourcePicker({
                       <Badge>{QUESTION_TYPE_LABELS[q.question_type]}</Badge>
                       {q.chapter ? <span className={styles.muted}>{q.chapter.title}</span> : null}
                     </span>
-                    <span className={styles.pickStem}>{q.revision.stem}</span>
+                    <span className={styles.pickStem}>{displayStem(q.revision.stem)}</span>
                   </span>
                 }
               />

@@ -19,6 +19,7 @@ import {
   type OptionLike,
 } from '@/lib/questions/variation-diff';
 import styles from './question-generation.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 /** The source revision the variants are compared with. */
 export interface VariationOriginal {
@@ -149,7 +150,7 @@ export function VariationDiffViewer({
 
 /** Stem and option changes of `draft` against `original`. */
 function Changes({ original, draft }: { original: VariationOriginal; draft: ReviewDraft }) {
-  const stem = diffWords(original.stem, draft.stem);
+  const stem = diffWords(displayStem(original.stem), displayStem(draft.stem));
   const options =
     draft.type === 'MCQ' || original.options.length > 0
       ? diffOptions(original.options, draft.options)

@@ -1,4 +1,4 @@
-// QBANK-01 question editor model. Pure: the form state, its validation (mirroring the API's
+// Question editor model (QOV-01-AC12, QPLAY-01-AC07; first built for the retired QBANK-01). Pure: the form state, its validation (mirroring the API's
 // quiz_api.question_rules so most mistakes are caught before a request) and the request bodies.
 //
 // Option ids are opaque, client-chosen and stable (docs/questions.md §4.3, fixtures A2): a new

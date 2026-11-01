@@ -1,32 +1,56 @@
 // Workspace home URL state (docs/screens/questions-overview.md "Workspace 홈 레이아웃", UX3c).
 // The home `/workspaces/:id` carries, besides the heatmap filters (overview-filters.ts) and the
 // open question (`?question=`):
-//   ?panel=documents|question-pdfs|generate|history|share   open floating dialogs (repeatable, in
+//   ?panel=documents|generate|history|share                 open floating dialogs (repeatable, in
 //        |chapter-note|document-summary                      the order they were opened)
+//        |inactive-questions                                 (보관·초안 문제, UX7-BANK-2)
+//        |question-duplicates                                (중복 문제 정리, editors, UX7-DEDUP)
+//        |question-create                                    the modal 문제 등록 editor (UX7-BANK;
+//                                                            not stacked, see FLOATING_PANELS)
 //   ?chapter=<id> (with panel=chapter-note)                  the chapter of the 정리 노트 panel
 //                                                            (CHNOTE-01); see noteChapterOf
 //   &document=<id> (with panel=document-summary)             the summary panel's document (DOCSUM-01;
 //                                                            while that panel is open the key is
 //                                                            the panel's, not the content search's)
-//   ?q=<text>&scope=questions|content|none                    unified search (no scope = both;
-//                                                            none = both boxes off, UX6)
-//   ?mode=&document=&section=&papers=1                        content-search options (state.ts)
-// Pure helpers, plus the redirects of the pre-UX3c routes onto the home.
+//   ?q=<text>                                               the 문제 search (heatmap, UX7-SEARCH)
+//   ?text=<text>&mode=&document=&section=                    the 본문 search and its options
+//                                                            (search/state.ts); the UX6 `scope`
+//                                                            key is migrated by legacyScopeRedirect
+// Pure helpers, plus the redirects of the pre-UX3c routes onto the home and of retired URL
+// state (`scope`, UX7-SEARCH; `question-pdfs` → `documents`, UX7-DOCS): homeRedirect.
 
 export const HOME_PANELS = [
   'documents',
-  'question-pdfs',
   'generate',
   'history',
   'share',
   'chapter-note',
   'document-summary',
+  'question-create',
+  'inactive-questions',
+  'question-duplicates',
 ] as const;
 export type HomePanel = (typeof HOME_PANELS)[number];
-export const PANEL_PARAM = 'panel';
 
-export type SearchScope = 'all' | 'questions' | 'content' | 'none';
-export const SCOPE_PARAM = 'scope';
+/** UX7-BANK: `?panel=question-create` opens the modal 문제 등록 editor (QOV-01-AC12). */
+export const QUESTION_CREATE_PANEL = 'question-create' satisfies HomePanel;
+
+/** UX7-BANK-2: `?panel=inactive-questions` opens the 보관·초안 문제 dialog (QOV-01-AC15). */
+export const INACTIVE_QUESTIONS_PANEL = 'inactive-questions' satisfies HomePanel;
+
+/** UX7-DEDUP: `?panel=question-duplicates` opens the 중복 문제 정리 dialog (QOV-01-AC16). */
+export const DUPLICATES_PANEL = 'question-duplicates' satisfies HomePanel;
+
+/** The non-modal side panels: they stack and move the home content aside (UX3b). */
+export function isFloatingPanel(panel: HomePanel): boolean {
+  return panel !== QUESTION_CREATE_PANEL;
+}
+export const PANEL_PARAM = 'panel';
+/** The practice panel's question (overview-filters.ts QUESTION_PARAM). */
+const QUESTION_PARAM = 'question';
+
+/** The unified search's scope (UX6), retired by UX7-SEARCH: only read to migrate old URLs. */
+export const LEGACY_SCOPE_PARAM = 'scope';
 
 type RawParams = Readonly<Record<string, string | string[] | undefined>>;
 type Params = RawParams | URLSearchParams;
@@ -160,6 +184,50 @@ export function withSummaryPanel(
   });
 }
 
+/**
+ * `search` with every dialog and the practice panel closed (UX7-BACK: what the entry before the
+ * first open gets when a dialog closes, panel-history.ts). The summary panel hands `document` and
+ * `section` back to the content search (`restore`, see withSummaryPanel); the 정리 노트 panel
+ * takes its `chapter` with it.
+ */
+export function withoutPanels(
+  search: string,
+  restore: ContentDocumentFilter | null = null,
+): string {
+  const panels = parsePanels(new URLSearchParams(search));
+  let out = search;
+  if (panels.includes(SUMMARY_PANEL)) out = withSummaryPanel(out, null, restore);
+  if (panels.includes(CHAPTER_NOTE_PANEL)) out = withChapterNote(out, null);
+  return patchSearch(out, { [PANEL_PARAM]: null, [QUESTION_PARAM]: null });
+}
+
+/** The practice panel's name among the open dialogs (openDialogs). */
+export const PRACTICE_DIALOG = 'question';
+
+/**
+ * What is open in `search` (UX7-BACK-2, panel-history.ts): the dialogs in opening order, then
+ * the practice panel (PRACTICE_DIALOG). Which question, document or chapter they show is not
+ * part of it: changing that is not a close.
+ */
+export function openDialogs(search: string): string[] {
+  const params = new URLSearchParams(search);
+  const out: string[] = parsePanels(params);
+  if (params.get(QUESTION_PARAM)) out.push(PRACTICE_DIALOG);
+  return out;
+}
+
+/** `search` with one dialog of openDialogs closed, as its close button does it. */
+export function closeDialog(
+  search: string,
+  dialog: string,
+  restore: ContentDocumentFilter | null = null,
+): string {
+  if (dialog === PRACTICE_DIALOG) return patchSearch(search, { [QUESTION_PARAM]: null });
+  if (dialog === SUMMARY_PANEL) return withSummaryPanel(search, null, restore);
+  if (dialog === CHAPTER_NOTE_PANEL) return withChapterNote(search, null);
+  return isHomePanel(dialog) ? withPanel(search, dialog, false) : search;
+}
+
 /** Whether the summary panel owns the URL's `document`/`section` keys (it is open). */
 export function summaryOwnsDocumentKey(params: Params): boolean {
   return parsePanels(params).includes(SUMMARY_PANEL);
@@ -237,27 +305,6 @@ export function withoutSummaryDocument<T extends RawParams | URLSearchParams>(pa
   return rest as T;
 }
 
-export function parseScope(params: Params): SearchScope {
-  const value = all(params, SCOPE_PARAM)[0];
-  return value === 'questions' || value === 'content' || value === 'none' ? value : 'all';
-}
-
-export function scopeIncludesQuestions(scope: SearchScope): boolean {
-  return scope === 'all' || scope === 'questions';
-}
-
-export function scopeIncludesContent(scope: SearchScope): boolean {
-  return scope === 'all' || scope === 'content';
-}
-
-/** The scope for the "문제"/"본문" checkboxes (both may be off, UX6). */
-export function scopeOf(questions: boolean, content: boolean): SearchScope {
-  if (questions && content) return 'all';
-  if (questions) return 'questions';
-  if (content) return 'content';
-  return 'none';
-}
-
 /**
  * `search` with the given keys replaced: `undefined` keeps a key, `null`/'' removes it, a string
  * sets it. Returns '' or a string starting with `?`.
@@ -296,21 +343,95 @@ export function legacyQuestionsRedirect(workspaceId: string, params: RawParams):
 }
 
 /**
- * `/workspaces/:id/search?q=&mode=&document=&chapter=&papers=1` (SEARCH-01 before UX3c): the same
- * content search on the home. Its chapter filter is a document section, renamed `section` there
- * (the home's `chapter` is the heatmap's question chapter).
+ * `/workspaces/:id/search?q=&mode=&document=&chapter=` (SEARCH-01 before UX3c): the same 본문
+ * search on the home, its query as `text` (UX7-SEARCH). Its chapter filter is a document section,
+ * renamed `section` there (the home's `chapter` is the heatmap's question chapter). The old
+ * `papers` flag is dropped: the 본문 search never covers question papers (UX7-SEARCH-2).
  */
 export function legacySearchRedirect(workspaceId: string, params: RawParams): string {
   const source = toSearchParams(params);
   const out = new URLSearchParams();
-  for (const key of ['q', 'mode', 'document', 'papers']) {
+  const query = source.get('q');
+  if (query) out.set('text', query);
+  for (const key of ['mode', 'document']) {
     const value = source.get(key);
     if (value) out.set(key, value);
   }
   const chapter = source.get('chapter');
   if (chapter && out.has('document')) out.set('section', chapter);
-  out.set(SCOPE_PARAM, 'content');
   return workspaceHomePath(workspaceId, out.toString());
+}
+
+/**
+ * A home URL of the UX6 unified search (`scope=` present), migrated to the split searches
+ * (UX7-SEARCH), or null when there is nothing to migrate. `scope=content` searched the body only:
+ * its `q` becomes the 본문 `text`. Any other scope (`questions`, `none`) is dropped and `q` stays the
+ * 문제 search. The old `papers` flag is dropped. Every other key is kept.
+ */
+export function legacyScopeRedirect(workspaceId: string, params: RawParams): string | null {
+  const source = toSearchParams(params);
+  if (!source.has(LEGACY_SCOPE_PARAM)) return null;
+  const scope = source.get(LEGACY_SCOPE_PARAM);
+  source.delete(LEGACY_SCOPE_PARAM);
+  source.delete('papers');
+  const query = source.get('q');
+  if (scope === 'content') {
+    source.delete('q');
+    if (query && !source.has('text')) source.set('text', query);
+  }
+  return workspaceHomePath(workspaceId, source.toString());
+}
+
+/**
+ * The retired 전체 문제 page (`/questions/bank`, UX7-BANK): the home. Only `?question=` carries
+ * over (the home's practice panel); the bank's filters and `create` mean nothing there.
+ */
+export function legacyBankRedirect(workspaceId: string, params: RawParams): string {
+  const question = all(params, 'question')[0];
+  return workspaceHomePath(
+    workspaceId,
+    question && UUID.test(question) ? `question=${encodeURIComponent(question)}` : '',
+  );
+}
+
+/**
+ * Retired `?panel=` values and the dialog that replaced them: 문제 PDF 관리 was merged into
+ * 문서 관리 (UX7-DOCS, DOC-01-AC09).
+ */
+const RETIRED_PANELS: Readonly<Record<string, HomePanel>> = { 'question-pdfs': 'documents' };
+
+/**
+ * The home URL with every retired `?panel=` value replaced by its successor (in place; a panel
+ * already open is not listed twice) and the rest of the query kept, or null when there is none.
+ */
+export function retiredPanelRedirect(workspaceId: string, params: RawParams): string | null {
+  const source = toSearchParams(params);
+  const values = source.getAll(PANEL_PARAM);
+  if (!values.some((v) => Object.hasOwn(RETIRED_PANELS, v))) return null;
+  const panels: string[] = [];
+  for (const value of values) {
+    const panel = Object.hasOwn(RETIRED_PANELS, value) ? RETIRED_PANELS[value] : value;
+    if (panel !== undefined && !panels.includes(panel)) panels.push(panel);
+  }
+  const out = new URLSearchParams();
+  for (const [key, value] of source) if (key !== PANEL_PARAM) out.append(key, value);
+  for (const panel of panels) out.append(PANEL_PARAM, panel);
+  return workspaceHomePath(workspaceId, out.toString());
+}
+
+/**
+ * Every migration of retired home URL state, applied together so an old link takes a single
+ * redirect: the UX6 search `scope` (legacyScopeRedirect, UX7-SEARCH), then retired `?panel=`
+ * values (retiredPanelRedirect, UX7-DOCS). Null when the URL is current.
+ */
+export function homeRedirect(workspaceId: string, params: RawParams): string | null {
+  const scoped = legacyScopeRedirect(workspaceId, params);
+  if (scoped === null) return retiredPanelRedirect(workspaceId, params);
+  const next: Record<string, string[]> = {};
+  for (const [key, value] of new URL(scoped, 'http://home').searchParams) {
+    (next[key] ??= []).push(value);
+  }
+  return retiredPanelRedirect(workspaceId, next) ?? scoped;
 }
 
 /** A pre-UX3c section page (`/documents`, `/history`, `/settings/sharing`): its dialog. */

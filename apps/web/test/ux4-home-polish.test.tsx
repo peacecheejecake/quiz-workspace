@@ -1,261 +1,98 @@
 // @vitest-environment jsdom
-// UX4 (2026-10-21): the home header's `문제` menu (전체 문제 — UX6-PROGRESS, the bank link that
-// replaced the 문제은행 button — / PDF 관리 / 직접 추가 / 변형 출제, keyboard reachable, authoring
-// items for editors only), the bank's one-shot `?create=1` that opens the
-// 문제 등록 editor (the menu's 직접 추가), and QBANK-01-AC06: the bank's collapsed search/filters,
-// its empty-state-only actions and "PDF 가져오기" opening the shared 문제 PDF 관리 dialog.
+// UX4 (2026-10-21): the home header's `문제` menu (직접 추가 / 변형 출제, keyboard reachable, for
+// editors only). UX7-BANK retired its 전체 문제 link with the page, and 직접 추가 now opens the
+// 문제 등록 dialog on the home (QOV-01-AC12); UX7-DOCS merged PDF 관리 into 문서 관리
+// (DOC-01-AC09). UX7-DOCS-2 keeps the button for viewers and archived workspaces, with both items
+// disabled and the reason in text. UX7-BANK-2 adds 보관·초안 문제, enabled for every member.
+// UX7-DEDUP adds 중복 문제 정리, editor-only like 직접 추가 and 변형 출제 (QOV-01-AC16).
 import './dom-setup';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ToastProvider } from '@quiz/ui';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DocumentSummary } from '../src/lib/documents/data';
-import {
-  bankCreatePath,
-  DEFAULT_FILTERS,
-  wantsCreate,
-  type BankFilters,
-} from '../src/lib/questions/filters';
-import type { Question } from '../src/lib/questions/form';
-
-vi.mock('next/navigation', () => ({
-  usePathname: () => '/workspaces/ws/questions/bank',
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
-}));
-
-vi.mock('../src/lib/questions/actions', () => ({
-  listQuestionsAction: vi.fn(),
-  deleteQuestionAction: vi.fn(),
-  setQuestionStatusAction: vi.fn(),
-  createQuestionAction: vi.fn(),
-  updateQuestionAction: vi.fn(),
-  getQuestionAction: vi.fn(),
-  getQuestionRevisionAction: vi.fn(),
-}));
+import { describe, expect, it, vi } from 'vitest';
+import type { QuestionMenuReadOnly } from '../src/components/workspaces/question-menu';
 
 const { QuestionMenu } = await import('../src/components/workspaces/question-menu');
-const { QuestionBank } = await import('../src/components/questions/question-bank');
 
-const WS = '55555555-5555-4555-8555-555555555555';
-
-function menu(canEdit: boolean) {
-  const handlers = { onPdfs: vi.fn(), onCreate: vi.fn(), onGenerate: vi.fn() };
-  render(
-    <QuestionMenu canEdit={canEdit} bankHref={`/workspaces/${WS}/questions/bank`} {...handlers} />,
-  );
+function menu(readOnly: QuestionMenuReadOnly) {
+  const handlers = {
+    onCreate: vi.fn(),
+    onGenerate: vi.fn(),
+    onDuplicates: vi.fn(),
+    onInactive: vi.fn(),
+  };
+  render(<QuestionMenu readOnly={readOnly} {...handlers} />);
   return handlers;
 }
 
 describe('home `문제` menu', () => {
-  it('QOV-01-AC11 offers 전체 문제, PDF 관리, 직접 추가 and 변형 출제 to editors and opens each', async () => {
+  it('QOV-01-AC11 offers 직접 추가 and 변형 출제 to editors and opens each', async () => {
     const user = userEvent.setup();
-    const handlers = menu(true);
+    const handlers = menu(null);
     const trigger = screen.getByRole('button', { name: '문제' });
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
 
     await user.click(trigger);
     const items = screen.getAllByRole('menuitem').map((item) => item.textContent);
-    expect(items).toEqual(['전체 문제', 'PDF 관리', '직접 추가', '변형 출제']);
+    expect(items).toEqual(['직접 추가', '변형 출제', '중복 문제 정리', '보관·초안 문제']);
     await user.click(screen.getByRole('menuitem', { name: '직접 추가' }));
-    expect(handlers.onCreate).toHaveBeenCalledTimes(1);
+    // UX7-BANK: the 문제 등록 dialog opens on the home once focus is back on the trigger.
+    await waitFor(() => expect(handlers.onCreate).toHaveBeenCalledTimes(1));
+    expect(trigger).toHaveFocus();
 
     // Keyboard: open with Enter, move with the arrow keys, choose with Enter.
     trigger.focus();
     await user.keyboard('{Enter}');
     await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{Enter}');
+    await user.keyboard('{ArrowDown}{Enter}');
     await waitFor(() => expect(handlers.onGenerate).toHaveBeenCalledTimes(1));
     // The dialog opens after the menu returned focus to its trigger.
     expect(trigger).toHaveFocus();
 
     await user.click(trigger);
-    await user.click(screen.getByRole('menuitem', { name: 'PDF 관리' }));
-    await waitFor(() => expect(handlers.onPdfs).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole('menuitem', { name: '보관·초안 문제' }));
+    await waitFor(() => expect(handlers.onInactive).toHaveBeenCalledTimes(1));
+
+    await user.click(trigger);
+    await user.click(screen.getByRole('menuitem', { name: '중복 문제 정리' }));
+    await waitFor(() => expect(handlers.onDuplicates).toHaveBeenCalledTimes(1));
   });
 
-  it('QOV-01-AC11 shows viewers 전체 문제 and PDF 관리', async () => {
-    const user = userEvent.setup();
-    menu(false);
-    await user.click(screen.getByRole('button', { name: '문제' }));
-    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
-      '전체 문제',
-      'PDF 관리',
-    ]);
-  });
-
-  it('QOV-01-AC11 전체 문제 is a link to the bank (UX6-PROGRESS)', async () => {
-    const user = userEvent.setup();
-    menu(false);
-    await user.click(screen.getByRole('button', { name: '문제' }));
-    const bank = screen.getByRole('menuitem', { name: '전체 문제' });
-    expect(bank.tagName).toBe('A');
-    expect(bank).toHaveAttribute('href', `/workspaces/${WS}/questions/bank`);
-  });
-});
-
-describe('bank `?create=1`', () => {
-  beforeEach(() => {
-    window.history.replaceState(null, '', `${bankCreatePath(WS)}&type=MCQ`);
-  });
-
-  it('builds and reads the one-shot parameter', () => {
-    expect(bankCreatePath(WS)).toBe(`/workspaces/${WS}/questions/bank?create=1`);
-    expect(wantsCreate(new URLSearchParams('create=1'))).toBe(true);
-    expect(wantsCreate({ create: '0' })).toBe(false);
-  });
-
-  it('opens the 문제 등록 editor on arrival and drops the parameter from the URL', async () => {
-    render(
-      <ToastProvider>
-        <QuestionBank
-          workspaceId={WS}
-          readOnly={null}
-          filters={DEFAULT_FILTERS}
-          items={[]}
-          nextCursor={null}
-          failure={null}
-          chapters={[]}
-          documents={[]}
-          openCreate
-        />
-      </ToastProvider>,
-    );
-    expect(await screen.findByRole('dialog', { name: '문제 등록' })).toBeInTheDocument();
-    expect(window.location.search).toBe('?type=MCQ');
-  });
-
-  it('ignores it for read-only banks', () => {
-    render(
-      <ToastProvider>
-        <QuestionBank
-          workspaceId={WS}
-          readOnly="viewer"
-          filters={DEFAULT_FILTERS}
-          items={[]}
-          nextCursor={null}
-          failure={null}
-          chapters={[]}
-          documents={[]}
-          openCreate
-        />
-      </ToastProvider>,
-    );
-    expect(screen.queryByRole('dialog', { name: '문제 등록' })).toBeNull();
-  });
-});
-
-const question = {
-  id: '44444444-4444-4444-8444-000000000001',
-  workspace_id: WS,
-  question_type: 'MCQ',
-  publication_status: 'CONFIRMED',
-  origin: 'manual',
-  chapter_id: null,
-  chapter: null,
-  question_number: null,
-  revision: {
-    id: '11111111-1111-4111-8111-000000000001',
-    version: 1,
-    stem: '첫 문제',
-    options: [],
-    correct_option_ids: null,
-    accepted_answers: null,
-    is_multi_answer: false,
-    explanation: null,
-    rubric: null,
-    created_at: '2026-10-17T00:00:00Z',
-  },
-  sources: [],
-  created_at: '2026-10-17T00:00:00Z',
-  updated_at: '2026-10-17T00:00:00Z',
-} as Question;
-
-const paper = {
-  id: '66666666-6666-4666-8666-000000000001',
-  title: '모의고사 1회',
-  document_type: 'question_paper',
-  status: 'ready',
-  active_revision_id: '77777777-7777-4777-8777-000000000001',
-  created_at: '2026-10-17T00:00:00Z',
-  updated_at: '2026-10-17T00:00:00Z',
-} as unknown as DocumentSummary;
-const book = {
-  ...paper,
-  id: '66666666-6666-4666-8666-000000000002',
-  title: '교과서',
-  document_type: 'book',
-} as DocumentSummary;
-
-function bank(items: Question[], filters: BankFilters = DEFAULT_FILTERS) {
-  render(
-    <ToastProvider>
-      <main>
-        <QuestionBank
-          workspaceId={WS}
-          readOnly={null}
-          filters={filters}
-          items={items}
-          nextCursor={null}
-          failure={null}
-          chapters={[]}
-          documents={[]}
-          questionPdfs={{ documents: [paper, book], failed: false }}
-        />
-      </main>
-    </ToastProvider>,
+  it.each([
+    ['viewer', '편집 권한이 있어야 사용할 수 있습니다'],
+    ['archived', '보관된 Workspace는 읽기 전용입니다'],
+  ] as const)(
+    'QOV-01-AC11 keeps the 문제 menu for %s with the editor items disabled and the reason (UX7-DOCS-2)',
+    async (readOnly, reason) => {
+      const user = userEvent.setup();
+      const handlers = menu(readOnly);
+      const trigger = screen.getByRole('button', { name: '문제' });
+      await user.click(trigger);
+      const menuEl = await screen.findByRole('menu', { name: '문제' });
+      expect(menuEl).toHaveTextContent(reason);
+      expect(menuEl).toHaveAccessibleDescription(reason);
+      const all = screen.getAllByRole('menuitem');
+      expect(all.map((item) => item.textContent)).toEqual([
+        '직접 추가',
+        '변형 출제',
+        '중복 문제 정리',
+        '보관·초안 문제',
+      ]);
+      const items = all.slice(0, 3);
+      for (const item of items) {
+        expect(item).toHaveAttribute('aria-disabled', 'true');
+        expect(item).toHaveAccessibleDescription(reason);
+        await user.click(item);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(handlers.onCreate).not.toHaveBeenCalled();
+      expect(handlers.onGenerate).not.toHaveBeenCalled();
+      expect(handlers.onDuplicates).not.toHaveBeenCalled();
+      expect(screen.queryByRole('link', { name: '전체 문제' })).toBeNull();
+      // UX7-BANK-2: 보관·초안 문제 is readable, so it stays enabled and opens the dialog.
+      const inactive = screen.getByRole('menuitem', { name: '보관·초안 문제' });
+      expect(inactive).not.toHaveAttribute('aria-disabled');
+      await user.click(inactive);
+      await waitFor(() => expect(handlers.onInactive).toHaveBeenCalledTimes(1));
+    },
   );
-}
-
-describe('QBANK-01-AC06 bank polish', () => {
-  beforeEach(() => {
-    window.history.replaceState(null, '', `/workspaces/${WS}/questions/bank`);
-  });
-
-  it('keeps the search and filters behind a collapsed toggle', async () => {
-    const user = userEvent.setup();
-    bank([question]);
-    const toggle = screen.getByRole('button', { name: '검색·필터' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(toggle.querySelector('svg')).not.toBeNull();
-    expect(screen.queryByRole('searchbox', { name: '문제 검색' })).toBeNull();
-
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    const group = screen.getByRole('group', { name: '검색·필터' });
-    expect(toggle).toHaveAttribute('aria-controls', group.id);
-    expect(screen.getByRole('searchbox', { name: '문제 검색' })).toBeVisible();
-    expect(screen.getByRole('combobox', { name: '유형' })).toBeVisible();
-  });
-
-  it('says a collapsed filter applies', () => {
-    bank([question], { ...DEFAULT_FILTERS, type: 'ESSAY' });
-    expect(screen.getByText('검색·필터 적용 중')).toBeInTheDocument();
-  });
-
-  it('has the header actions only while questions exist', () => {
-    bank([]);
-    expect(screen.getByRole('heading', { name: '등록된 문제가 없습니다' })).toBeInTheDocument();
-    // The empty state's own pair only.
-    expect(screen.getAllByRole('button', { name: 'PDF 가져오기' })).toHaveLength(1);
-    expect(screen.queryByRole('button', { name: '문제 등록' })).toBeNull();
-    expect(screen.getByRole('button', { name: '문제 직접 등록' })).toBeInTheDocument();
-  });
-
-  it('opens the 문제 PDF 관리 dialog with the PDFs with questions only, pointing at 문서 관리', async () => {
-    const user = userEvent.setup();
-    bank([question]);
-    expect(screen.getByRole('button', { name: '문제 등록' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'PDF 가져오기' }));
-    const dialog = await screen.findByRole('dialog', { name: '문제 PDF 관리' });
-    expect(dialog).not.toHaveAttribute('aria-modal', 'true');
-    const list = within(dialog).getByRole('list', { name: '문제 PDF 목록' });
-    expect(within(list).getByText('모의고사 1회')).toBeInTheDocument();
-    expect(within(list).queryByText('교과서')).toBeNull();
-    expect(within(list).getByText('문제지')).toBeInTheDocument(); // the kind badge (UX6-UPLOAD)
-    // UX6-UPLOAD: no upload here; 문서 관리 is the one upload place.
-    expect(within(dialog).queryByRole('button', { name: 'PDF 선택' })).toBeNull();
-    expect(within(dialog).getByRole('button', { name: '문서 관리 열기' })).toBeInTheDocument();
-    expect(within(dialog).queryByRole('link', { name: 'PDF 가져오기' })).toBeNull();
-    expect(within(dialog).queryByRole('button', { name: 'PDF 가져오기' })).toBeNull();
-  });
 });

@@ -102,6 +102,7 @@ from quiz_api.question_drafts import (
     source_pages,
     with_review,
 )
+from quiz_api.question_fingerprint import fingerprint, model_answer_of
 from quiz_api.question_generation_review import acknowledged_codes, generation_validations
 from quiz_api.question_rules import (
     MAX_ACCEPTED_ANSWERS,
@@ -116,6 +117,7 @@ from quiz_api.question_rules import (
 )
 from quiz_api.repositories.draft_chapters import DraftChapterRepository
 from quiz_api.repositories.idempotency import IdempotencyStore
+from quiz_api.repositories.question_duplicates import QuestionDuplicateRepository
 from quiz_api.repositories.question_imports import (
     DraftRecord,
     JobStatus,
@@ -327,6 +329,9 @@ class ImportDraft(BaseModel):
     source_chapter_title: str | None = Field(
         default=None, description="The question PDF chapter the suggestion was made from."
     )
+    duplicate_of: DraftDuplicate | None = Field(
+        default=None, description="Import drafts not registered yet: the same question exists."
+    )
 
 
 class ImportDraftList(BaseModel):
@@ -344,6 +349,20 @@ class ImportDraftList(BaseModel):
 class DraftIssue(BaseModel):
     code: str
     severity: Literal["warning", "error"] = Field(description="`error` blocks approval.")
+
+
+class DraftDuplicate(BaseModel):
+    """Why an unregistered import draft looks like a duplicate (UX7-DEDUP, QIMPORT-01-AC10):
+    the same question (docs/questions.md §10.1) as a CONFIRMED question of the workspace or as
+    an earlier draft of the same import. A hint only: the draft can still be registered."""
+
+    kind: Literal["question", "draft"]
+    question_id: uuid.UUID | None = Field(description="`question`: the confirmed question.")
+    draft_id: uuid.UUID | None = Field(description="`draft`: the earlier draft of this import.")
+    number: int | None = Field(
+        description="`question`: its number (null if none); `draft`: its N번 (printed number, "
+        "else position + 1)."
+    )
 
 
 class ImportDraftSummary(BaseModel):
@@ -364,6 +383,9 @@ class ImportDraftSummary(BaseModel):
         default=None,
         description="Import drafts: the book chapter the draft is registered under (as "
         "`ImportDraft.chapter.id`, sent back as `chapter_id` when registering); null = none.",
+    )
+    duplicate_of: DraftDuplicate | None = Field(
+        default=None, description="As `ImportDraft.duplicate_of` (UX7-DEDUP)."
     )
 
 
@@ -700,7 +722,54 @@ def _chapters_of(
     )
 
 
-def _draft_out(record: DraftRecord, chapter: DraftChapter | None = None) -> ImportDraft:
+def draft_duplicates(
+    session: Session, workspace_id: uuid.UUID, drafts: list[DraftRecord]
+) -> dict[uuid.UUID, DraftDuplicate]:
+    """The duplicate flag of every unregistered draft among `drafts` (all drafts of one import,
+    UX7-DEDUP): a CONFIRMED question of the workspace with the same fingerprint (the oldest),
+    else the first earlier draft (source order) with it."""
+    questions_by_key: dict[str, Any] = {}
+    confirmed = QuestionDuplicateRepository(session).confirmed(workspace_id)
+    for q in sorted(confirmed, key=lambda q: (q.created_at, q.id)):
+        questions_by_key.setdefault(q.fingerprint, q)
+    earlier: dict[str, DraftRecord] = {}
+    out: dict[uuid.UUID, DraftDuplicate] = {}
+    for d in sorted(drafts, key=lambda d: (d.position, d.id)):
+        if d.published_question_id is not None:
+            continue
+        content = _content(d, parse_payload(d.payload))
+        key = fingerprint(
+            content.question_type,
+            content.stem,
+            [t for _, t in content.options],
+            model_answer_of(content.question_type, content.accepted_answers, content.rubric),
+        )
+        question = questions_by_key.get(key)
+        first = earlier.setdefault(key, d)
+        if question is not None:
+            out[d.id] = DraftDuplicate(
+                kind="question",
+                question_id=question.id,
+                draft_id=None,
+                number=question.question_number,
+            )
+        elif first is not d:
+            out[d.id] = DraftDuplicate(
+                kind="draft",
+                question_id=None,
+                draft_id=first.id,
+                number=first.question_number
+                if first.question_number is not None
+                else first.position + 1,
+            )
+    return out
+
+
+def _draft_out(
+    record: DraftRecord,
+    chapter: DraftChapter | None = None,
+    duplicate: DraftDuplicate | None = None,
+) -> ImportDraft:
     draft = parse_payload(record.payload)
     content = _content(record, draft)
     blockers = publish_issues(content, record.validations, prefix=())
@@ -739,10 +808,15 @@ def _draft_out(record: DraftRecord, chapter: DraftChapter | None = None) -> Impo
         chapter_choice=chapter.choice if chapter else "auto",
         chapter_match=chapter.match if chapter else None,
         source_chapter_title=chapter.source_title if chapter else None,
+        duplicate_of=duplicate,
     )
 
 
-def _summary_out(record: DraftRecord, chapter: DraftChapter | None = None) -> ImportDraftSummary:
+def _summary_out(
+    record: DraftRecord,
+    chapter: DraftChapter | None = None,
+    duplicate: DraftDuplicate | None = None,
+) -> ImportDraftSummary:
     draft = parse_payload(record.payload)
     content = _content(record, draft)
     return ImportDraftSummary(
@@ -757,6 +831,7 @@ def _summary_out(record: DraftRecord, chapter: DraftChapter | None = None) -> Im
         answer_missing=answer_missing(content),
         validations=[DraftIssue.model_validate(v) for v in record.validations],
         chapter_id=chapter.chapter.id if chapter and chapter.chapter else None,
+        duplicate_of=duplicate,
     )
 
 
@@ -1018,8 +1093,10 @@ def list_question_import_drafts(
     paged = offset > 0 or limit is not None
     drafts = repo.list_drafts(access.resource_id, offset=offset, limit=limit)
     chapters = _chapters_of(repo.session, run, drafts)
+    everything = repo.list_drafts(access.resource_id) if paged else drafts
+    duplicates = draft_duplicates(repo.session, run.workspace_id, everything)
     return ImportDraftList(
-        items=[_draft_out(d, chapters.get(d.id)) for d in drafts],
+        items=[_draft_out(d, chapters.get(d.id), duplicates.get(d.id)) for d in drafts],
         chapters=_chapter_options(repo, run) if include_chapters else [],
         total=repo.count_drafts(access.resource_id) if paged else len(drafts),
     )
@@ -1039,8 +1116,9 @@ def list_question_import_draft_summaries(
     run = _load_run(repo, access.resource_id)
     drafts = repo.list_drafts(access.resource_id)
     chapters = _chapters_of(repo.session, run, drafts)
+    duplicates = draft_duplicates(repo.session, run.workspace_id, drafts)
     return ImportDraftSummaryList(
-        items=[_summary_out(d, chapters.get(d.id)) for d in drafts],
+        items=[_summary_out(d, chapters.get(d.id), duplicates.get(d.id)) for d in drafts],
         chapters=_chapter_options(repo, run),
     )
 
@@ -1192,13 +1270,17 @@ def update_question_draft(
         updated = repo.get_draft(record.id)
         assert updated is not None  # noqa: S101 - locked above
         chapter: DraftChapter | None = None
+        duplicate: DraftDuplicate | None = None
         if updated.import_run_id is not None:
             run = _load_run(repo, updated.import_run_id)
             chapter = _chapters_of(repo.session, run, [updated]).get(updated.id)
+            duplicate = draft_duplicates(
+                repo.session, run.workspace_id, repo.list_drafts(updated.import_run_id)
+            ).get(updated.id)
         repo.commit()
     except (IntegrityError, DataError):
         raise _constraint_violation(repo) from None
-    return _draft_out(updated, chapter)
+    return _draft_out(updated, chapter, duplicate)
 
 
 @router.post(

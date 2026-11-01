@@ -147,8 +147,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* !important beats the global 0.01ms reduced-motion reset (design-tokens base.css): the
-     marker must switch scale instantly, with no transition at all (QOV-01-AC04). */
+  /* The marker switches scale instantly, with no transition at all (QOV-01-AC04); the global
+     base.css rule does the same, this keeps the kit right on its own. */
   .qz-question-marker {
     transition: none !important;
   }

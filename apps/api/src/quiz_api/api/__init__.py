@@ -18,6 +18,7 @@ from quiz_api.api import (
     jobs,
     me,
     practice,
+    question_duplicates,
     question_generation_batches,
     question_generations,
     question_imports,
@@ -44,6 +45,7 @@ api_router.include_router(document_summaries.router)
 api_router.include_router(search.router)
 api_router.include_router(questions.router)
 api_router.include_router(question_overview.router)
+api_router.include_router(question_duplicates.router)
 api_router.include_router(question_imports.router)
 api_router.include_router(question_generations.router)
 api_router.include_router(question_generation_batches.router)

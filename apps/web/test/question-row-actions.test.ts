@@ -1,5 +1,5 @@
-// QIMPORT-01-AC05/AC06 문제 PDF 관리 rows and actions (UX6-UPLOAD: every PDF with questions, and
-// the same actions in 문서 관리): whether a PDF already has an import comes from the document
+// QIMPORT-01-AC05/AC06, DOC-01-AC09: the question actions of a 문서 관리 row (UX7-DOCS: the only
+// place since 문제 PDF 관리 was merged into it): whether a PDF already has an import comes from the document
 // list's per-document `latest_import_id`, never from a (truncated) list of the workspace's runs
 // (Codex P2: a paper whose run is older than the newest 200 runs was offered 문제 추출 again and
 // viewers lost 문제 검토).
@@ -8,8 +8,8 @@ import type { DocumentSummary } from '../src/lib/documents/client-api';
 import { buildRows, newUploadItem } from '../src/lib/documents/upload-machine';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
-const { questionPdfRows, questionPdfAction } =
-  await import('../src/components/questions/import/question-pdfs');
+const { questionPdfAction } =
+  await import('../src/components/questions/import/question-row-actions');
 
 const AT = '2026-10-21T00:00:00Z';
 
@@ -36,32 +36,12 @@ function paper(id: string, extra: Partial<DocumentSummary> = {}): DocumentSummar
 const book = (id: string, extra: Partial<DocumentSummary> = {}) =>
   paper(id, { document_type: 'book', kind: 'book', title: `교재 ${id}`, ...extra });
 
-describe('questionPdfRows', () => {
-  it('lists 문제지, 교재+문제 and extracted PDFs; a plain 교재 and unclassified PDFs stay out', () => {
-    const rows = questionPdfRows(
-      buildRows(
-        [
-          paper('p'),
-          book('m', { kind: 'mixed' }),
-          book('b'),
-          book('extracted', { latest_import_id: 'run-x' }),
-          book('analysing', { kind: null, status: 'processing' }),
-        ],
-        [],
-      ),
-    );
-    expect(rows.map((r) => r.documentId)).toEqual(['p', 'm', 'extracted']);
-  });
-});
-
 describe('questionPdfAction', () => {
   // 250 papers, each with its own run: any fixed window of runs would miss some of them.
   const docs = Array.from({ length: 250 }, (_, i) =>
     paper(`d${i}`, { latest_import_id: `run-${i}` }),
   );
-  const rows = questionPdfRows(
-    buildRows([...docs, paper('fresh', { latest_import_id: null })], []),
-  );
+  const rows = buildRows([...docs, paper('fresh', { latest_import_id: null })], []);
 
   it('offers 문제 검토 for every PDF whose document reports an import', () => {
     const imported = rows.filter((r) => r.documentId !== 'fresh');

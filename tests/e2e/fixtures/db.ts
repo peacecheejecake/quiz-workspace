@@ -7,7 +7,7 @@
 //      is about (e.g. a `viewer` membership before membership management exists). Each call site
 //      says why.
 //   3. Seeding/reading history the AC is about whose public API arrives in a later phase: a
-//      graded attempt on a question revision (practice API is M5) for QBANK-01-AC03.
+//      graded attempt on a question revision (practice API is M5) for QPLAY-01-AC07 (was QBANK-01-AC03).
 //   4. Recreating legacy state no current code path produces: a processed question PDF without
 //      an import run (papers processed before QIMP-AUTO) for QIMPORT-01-AC06.
 //   5. Scaling up state the AC is about beyond what a synthetic fixture yields in E2E time: the

@@ -229,6 +229,8 @@ export interface ShareLink {
   readonly allow_fork: boolean;
   readonly expires_at: string | null;
   readonly revoked_at: string | null;
+  /** Derived by the API from revoked_at / expires_at. */
+  readonly status: 'active' | 'expired' | 'revoked';
   readonly created_at: string;
 }
 
@@ -961,6 +963,35 @@ export const sharingUi = {
       )
       .first(),
   expiry: (page: Page) => main(page).getByLabel(/만료(일| 날짜| 일시)?|expir(y|es|ation)/i),
+  /** UX7-SHARE-EXPIRY (WS-SHARE-01-AC06): clears the saved expiry; absent while there is none. */
+  clearExpiryButton: (page: Page) =>
+    button(
+      main(page),
+      /만료일 (삭제|지우기)|만료 없음으로|clear expir(y|ation)|remove expir(y|ation)/i,
+    ),
+  /** The saved "no expiry" state under the date field. */
+  noExpiry: (page: Page) =>
+    main(page)
+      .getByText(/^(만료 없음|무제한|never expires|no expiry)/i)
+      .first(),
+  expiredStatus: (page: Page) =>
+    main(page)
+      .getByText(/^(만료됨|expired)$/i)
+      .first(),
+  /** UX7-SHARE-EXPIRY (WS-SHARE-01-AC07): the Fork switch + expiry section of the dialog. */
+  policyRegion: (page: Page) => main(page).getByRole('region', { name: /링크 정책|link policy/i }),
+  expiryError: (page: Page) =>
+    main(page)
+      .getByText(/만료일은 오늘 이후|expiry must be/i)
+      .first(),
+  /** WS-SHARE-01-AC08: the copy button right after a successful copy. */
+  copiedButton: (page: Page) => button(main(page), /^(복사 완료|copied)$/i),
+  copiedAnnouncement: (page: Page) =>
+    page.getByRole('status').filter({ hasText: /링크를 복사했습니다|link copied/i }),
+  copyFailedToast: (page: Page) =>
+    page
+      .getByRole('region', { name: /알림|notifications/i })
+      .getByText(/복사에 실패|copy failed|could not copy/i),
   revokeButton: (page: Page) => button(main(page), /링크 철회|^철회$|revoke( link)?/i),
   rotateButton: (page: Page) => button(main(page), /링크 재발급|재발급|새 링크|rotate|regenerate/i),
   confirmDialog: (page: Page) => page.getByRole('alertdialog'),

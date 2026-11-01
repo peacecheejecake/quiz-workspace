@@ -1,12 +1,14 @@
 // QOV-01 Workspace 홈 (docs/screens/questions-overview.md "Workspace 홈 레이아웃", UX3c): the single
 // page of a workspace. The workspace layout already resolved access (404 for unknown, foreign and
 // deleted workspaces). Server-side, through the Bearer helper: the caller's heatmap under the URL
-// filters (the search text `q` filters it only when the unified search's scope includes 문제),
-// the documents (header count, 문서 관리 / 문제 PDF 관리 dialogs, content-search filter) and the
+// filters (`q` is the 문제 search, SEARCH-01-AC12),
+// the documents (header count, 문서 관리 dialog, content-search filter) and the
 // verified user. Everything else — dialogs (`?panel=`, the 정리 노트 panel CHNOTE-01 with its
-// `chapter`, the 문서 요약 panel DOCSUM-01 with its `document`), the content search (`q`, `scope`,
-// options) and the practice panel (`?question=`, QPLAY-01) — is client state on top of it.
+// `chapter`, the 문서 요약 panel DOCSUM-01 with its `document`), the 본문 search (`text`, options)
+// and the practice panel (`?question=`, QPLAY-01) — is client state on top of it. A UX6 unified-
+// search URL (`scope=`) and a retired panel value are redirected first (homeRedirect).
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { WorkspaceHome } from '@/components/workspaces/workspace-home';
 import { loadDocumentsOrFailure } from '@/lib/documents/data';
 import { loadOverview } from '@/lib/questions/overview-data';
@@ -14,12 +16,7 @@ import { openQuestionId, parseOverviewFilters } from '@/lib/questions/overview-f
 import { parseSearchParams } from '@/lib/search/state';
 import { getVerifiedUser } from '@/lib/supabase/server';
 import { requireWorkspace } from '@/lib/workspaces/data';
-import {
-  isChapterNoteOpen,
-  parseScope,
-  scopeIncludesQuestions,
-  withoutSummaryDocument,
-} from '@/lib/workspaces/home';
+import { isChapterNoteOpen, homeRedirect, withoutSummaryDocument } from '@/lib/workspaces/home';
 
 export const metadata: Metadata = { title: 'Workspace 홈' };
 
@@ -31,10 +28,13 @@ export default async function Page({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
   const [{ workspaceId }, query] = await Promise.all([params, searchParams]);
+  // Retired URL state in one redirect: a UX6 unified-search `scope=` (UX7-SEARCH) and
+  // `?panel=question-pdfs`, the retired 문제 PDF 관리 that opens 문서 관리 now (UX7-DOCS).
+  const migrated = homeRedirect(workspaceId, query);
+  if (migrated !== null) redirect(migrated);
   // While the 정리 노트 panel is open, `chapter` is its chapter, not a heatmap filter (home.ts).
   const urlFilters = parseOverviewFilters(query);
-  const parsed = isChapterNoteOpen(query) ? { ...urlFilters, chapter: null } : urlFilters;
-  const filters = scopeIncludesQuestions(parseScope(query)) ? parsed : { ...parsed, q: '' };
+  const filters = isChapterNoteOpen(query) ? { ...urlFilters, chapter: null } : urlFilters;
   const [workspace, data, docs, user] = await Promise.all([
     requireWorkspace(workspaceId),
     loadOverview(workspaceId, filters, openQuestionId(query)),

@@ -18,6 +18,8 @@ import {
   documentsPath,
   expectProgressSteps,
   expect,
+  expectReadOnlyQuestionMenu,
+  homePath,
   homeUi,
   JOB_TIMEOUT_MS,
   importPath,
@@ -536,5 +538,115 @@ test(
     await expect(
       homeUi.documentsDialog(page).getByRole('button', { name: /종류 변경|change kind/i }),
     ).toHaveCount(0);
+  },
+);
+
+test(
+  'DOC-01-AC09 문제 PDF 관리 is merged into 문서 관리: no PDF 관리 menu item, the old panel redirects, question rows review and extract, viewers only review',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(3 * JOB_TIMEOUT_MS + 60_000);
+    const owner = await workspaceFactory.member('doc01-ac09');
+    const viewer = await workspaceFactory.member('doc01-ac09-viewer');
+    const ws = await workspaceFactory.create(owner);
+    seedMembership(ws.id, viewer.user.id, 'viewer');
+    const paperPdf = questionPaper();
+    // A 문제지 with its extraction, a 교재+문제 waiting for 문제 추출, and a plain 교재.
+    const paper = await uploadPdf(owner, ws.id, paperPdf, 'question_paper');
+    await waitForJob(owner, paper.jobId);
+    const paperRun = await waitForLatestImport(owner, ws.id);
+    const mixed = await uploadReadyBook(owner, ws.id, 'book-en');
+    await setDocumentKind(owner, mixed, 'mixed', false);
+    await uploadReadyBook(owner, ws.id, 'book-ko');
+
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id));
+    // The 문제 menu has no PDF 관리 item any more.
+    await homeUi.questionMenuButton(page).click();
+    await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
+      /^(직접 추가|add question)$/i,
+      /^(변형 출제|generate variants?)$/i,
+      // UX7-DEDUP (QOV-01-AC16).
+      /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
+      // UX7-BANK-2 (QOV-01-AC15).
+      /^(보관·초안 문제|archived and draft questions)$/i,
+    ]);
+    await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(homeUi.questionMenu(page)).toBeHidden();
+
+    // The old 문제 PDF 관리 URL lands on 문서 관리, keeping the other panels and their order.
+    await page.goto(homePath(ws.id, 'panel=share&panel=question-pdfs'));
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === homePath(ws.id) &&
+        url.searchParams.getAll('panel').join(',') === 'share,documents',
+    );
+    const dialog = homeUi.documentsDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(homeUi.shareDialog(page)).toBeVisible();
+    await expect(homeUi.questionPdfsDialog(page)).toHaveCount(0);
+
+    // Every PDF in one list (문서 관리 alone, so no other dialog covers its rows); the question rows carry the import actions, the 교재 none.
+    const list = dialog.getByRole('list', { name: /문서 목록|documents/i });
+    const row = (title: RegExp) => list.getByRole('listitem').filter({ hasText: title });
+    await page.goto(documentsPath(ws.id));
+    await expect(list.getByRole('listitem')).toHaveCount(3);
+    await expect(docUi.kindBadge(row(/questions-ko/), '문제지')).toBeVisible();
+    await expect(docUi.kindBadge(row(/book-en/), '교재+문제')).toBeVisible();
+    await expect(docUi.kindBadge(row(/book-ko/), '교재')).toBeVisible();
+    await expect(docUi.reviewLink(row(/questions-ko/))).toBeVisible();
+    await expect(docUi.extractButton(row(/questions-ko/))).toHaveCount(0);
+    await expect(docUi.extractButton(row(/book-en/))).toBeVisible();
+    await expect(docUi.reviewLink(row(/book-en/))).toHaveCount(0);
+    await expect(docUi.reviewLink(row(/book-ko/))).toHaveCount(0);
+    await expect(docUi.extractButton(row(/book-ko/))).toHaveCount(0);
+
+    // 문제 검토 → that PDF's review.
+    await docUi.reviewLink(row(/questions-ko/)).click();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === importPath(ws.id) && url.searchParams.get('document') === paper.documentId,
+    );
+    await expect(importUi.draftItems(page)).toHaveCount(paperPdf.questions.length, {
+      timeout: JOB_TIMEOUT_MS,
+    });
+
+    // Back on the home, 문제 추출 starts one run and opens that PDF's import page.
+    await page.goBack();
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
+    await docUi.extractButton(row(/book-en/)).click();
+    await expect(page).toHaveURL(
+      (url) => url.pathname === importPath(ws.id) && url.searchParams.get('document') === mixed,
+    );
+    // The URL changes before the client navigation commits: wait for the import page itself so
+    // the next goto does not interrupt it.
+    await expect(importUi.heading(page)).toHaveText(/문제 pdf 가져오기|가져오기|import/i);
+    const runs = await listImports(owner, ws.id);
+    expect(runs.map((r) => r.source_document_id).sort()).toEqual([paper.documentId, mixed].sort());
+    expect(runs.map((r) => r.id)).toContain(paperRun.id);
+    await page.goto(documentsPath(ws.id));
+    await expect(docUi.reviewLink(row(/book-en/))).toBeVisible();
+    await expect(docUi.extractButton(row(/book-en/))).toHaveCount(0);
+
+    // A viewer: 문서 관리 lists the PDFs with 문제 검토 but no 문제 추출, upload, 종류 변경 or
+    // delete; the 문제 button stays with its items disabled (UX7-DOCS-2), still no PDF 관리.
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(homePath(ws.id, 'panel=question-pdfs'));
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.getAll('panel').join(',') === 'documents',
+    );
+    await expect(dialog).toBeVisible();
+    await expect(list.getByRole('listitem')).toHaveCount(3);
+    await expect(docUi.reviewLink(row(/questions-ko/))).toBeVisible();
+    await expect(docUi.reviewLink(row(/book-en/))).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /문제 추출|extract questions/i })).toHaveCount(
+      0,
+    );
+    await expect(dialog.getByRole('button', { name: /pdf 업로드|upload/i })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: /종류 변경|change kind/i })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: /삭제|delete/i })).toHaveCount(0);
+    await expectReadOnlyQuestionMenu(page, 'viewer');
   },
 );

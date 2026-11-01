@@ -1,14 +1,14 @@
 'use client';
 
-// SEARCH-01 content (본문) search of the workspace home's unified search (docs/screens/search.md,
-// UX3c). `useContentSearch` holds the options (mode, document/chapter filters, question papers),
-// runs the query through the same-origin relay — FastAPI enforces the workspace and the
+// SEARCH-01 본문 (content) search of the workspace home (docs/screens/search.md, UX3c → UX7-SEARCH:
+// its own box in the collapsed "본문 검색" area). `useContentSearch` holds the options (mode,
+// document/chapter filters), runs the query through the same-origin relay — FastAPI enforces the workspace and the
 // published-revision scope — and mirrors the submitted search into the home URL next to its other
 // keys, so the back button from the PDF viewer restores it. A newer request always wins: older
 // ones are aborted and their late answers ignored. `ContentSearchOptions` renders the options
-// inside the "본문 설정" popover (UX6); `ContentSearchResults` the results under the home header.
-// Question papers are searched exactly when the unified search's scopes include 문제 (UX4): the
-// home passes that with each search, there is no separate toggle.
+// inside the "본문 설정" popover; `ContentSearchResults` the results under the 본문 search form.
+// Question papers are never searched (UX7-SEARCH-2: the server leaves them out, and the document
+// filter lists books only).
 import { Badge, Button, EmptyState, RadioGroup, Select } from '@quiz/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -40,24 +40,10 @@ import { DocumentExcerptPanel } from './document-excerpt-panel';
 import { hitKey, SearchResultList } from './search-result-list';
 import styles from './search.module.css';
 
+/** A published book of the document filter (question papers are not offered, UX7-SEARCH-2). */
 export interface SearchDocumentOption {
   readonly id: string;
   readonly title: string;
-  readonly isQuestionPaper: boolean;
-}
-
-/**
- * Whether the selected document filter must be dropped: a question paper while question papers
- * are not searched (내용 only). The API searches an explicit document regardless of
- * `include_question_papers`, so the filter itself has to go.
- */
-export function dropsSelectedPaper(
-  documentId: string | null,
-  documents: readonly SearchDocumentOption[],
-  includeQuestionPapers: boolean,
-): boolean {
-  if (includeQuestionPapers || documentId === null) return false;
-  return documents.some((d) => d.id === documentId && d.isQuestionPaper);
 }
 
 const ALL = '__all__';
@@ -88,7 +74,7 @@ export interface UseContentSearchOptions {
   readonly workspaceId: string;
   /** The search in the address bar on arrival (run once when `runInitial`). */
   readonly initial: SearchQuery;
-  /** Whether the arrival's search includes content (the unified search's scope). */
+  /** Whether the arrival's search runs (there is a published document to search). */
   readonly runInitial: boolean;
   /** Injected in unit tests. */
   readonly client?: SearchClient;
@@ -99,7 +85,6 @@ export interface ContentSearch {
   readonly mode: SearchMode;
   readonly documentId: string | null;
   readonly chapterId: string | null;
-  readonly includeQuestionPapers: boolean;
   readonly chapters: Chapters;
   readonly chapterNotice: string | null;
   /** The last search that ran (null = none, or cleared). */
@@ -108,18 +93,8 @@ export interface ContentSearch {
   readonly now: number;
   readonly selected: SearchItem | null;
   readonly panelOpen: boolean;
-  /**
-   * Runs `query` with the current options; `includeQuestionPapers`, when given, replaces the
-   * current choice (it follows the unified search's targets) for this and later searches.
-   * `clearDocument` drops the document and chapter filters first (a question paper selected
-   * while papers are no longer searched: the API would still search an explicit document).
-   */
-  readonly search: (
-    query: string,
-    options?: { readonly includeQuestionPapers?: boolean; readonly clearDocument?: boolean },
-  ) => void;
-  /** Drops the document and chapter filters without searching (and from the address bar). */
-  readonly clearDocumentFilter: () => void;
+  /** Runs `query` with the current options. */
+  readonly search: (query: string) => void;
   /** Re-runs the last search (after a failure). */
   readonly retry: () => void;
   /** Forgets the results (the home's "검색 결과 닫기"). */
@@ -148,7 +123,6 @@ export function useContentSearch({
   const [mode, setModeState] = useState<SearchMode>(initial.mode);
   const [documentId, setDocumentId] = useState<string | null>(initial.documentId);
   const [chapterId, setChapterId] = useState<string | null>(initial.chapterId);
-  const [includeQuestionPapers, setPapers] = useState(initial.includeQuestionPapers);
   const [submitted, setSubmitted] = useState<SearchQuery | null>(null);
   const [results, setResults] = useState<Results>({ status: 'idle' });
   const [loadedChapters, setLoadedChapters] = useState<LoadedChapters | null>(null);
@@ -296,7 +270,6 @@ export function useContentSearch({
     mode,
     documentId,
     chapterId: documentId ? chapterId : null,
-    includeQuestionPapers,
     ...overrides,
   });
 
@@ -311,7 +284,6 @@ export function useContentSearch({
     mode,
     documentId,
     chapterId,
-    includeQuestionPapers,
     chapters,
     chapterNotice,
     submitted,
@@ -319,36 +291,9 @@ export function useContentSearch({
     now,
     selected,
     panelOpen,
-    search: (query, overrides) => {
+    search: (query) => {
       pendingInitialRef.current = null;
-      const papers = overrides?.includeQuestionPapers;
-      if (papers !== undefined) setPapers(papers);
-      const clearDocument = overrides?.clearDocument === true;
-      if (clearDocument) {
-        setDocumentId(null);
-        chapterIdRef.current = null;
-        setChapterId(null);
-        setChapterNotice(null);
-      }
-      void run({
-        ...options({
-          ...(papers === undefined ? {} : { includeQuestionPapers: papers }),
-          ...(clearDocument ? { documentId: null, chapterId: null } : {}),
-        }),
-        query: query.trim().slice(0, MAX_QUERY_CHARS),
-      });
-    },
-    clearDocumentFilter: () => {
-      setDocumentId(null);
-      chapterIdRef.current = null;
-      setChapterId(null);
-      setChapterNotice(null);
-      const url = new URL(window.location.href);
-      if (!summaryOwnsDocumentKey(url.searchParams)) {
-        url.searchParams.delete('document');
-        url.searchParams.delete('section');
-        window.history.replaceState(window.history.state, '', url);
-      }
+      void run({ ...options(), query: query.trim().slice(0, MAX_QUERY_CHARS) });
     },
     retry: () => {
       if (submitted) void run(submitted);
@@ -380,7 +325,6 @@ export function useContentSearch({
       setDocumentId(q.documentId);
       chapterIdRef.current = q.chapterId;
       setChapterId(q.chapterId);
-      setPapers(q.includeQuestionPapers);
       setChapterNotice(null);
       void run(q);
     },
@@ -417,8 +361,7 @@ function sameSearch(a: SearchQuery, b: SearchQuery): boolean {
     a.query === b.query &&
     a.mode === b.mode &&
     a.documentId === b.documentId &&
-    (a.documentId ? a.chapterId : null) === (b.documentId ? b.chapterId : null) &&
-    a.includeQuestionPapers === b.includeQuestionPapers
+    (a.documentId ? a.chapterId : null) === (b.documentId ? b.chapterId : null)
   );
 }
 
@@ -467,10 +410,7 @@ export function ContentSearchOptions({
           label="문서"
           options={[
             { value: ALL, label: '전체 문서' },
-            ...documents.map((d) => {
-              const label = d.isQuestionPaper ? `${d.title} (문제지)` : d.title;
-              return { value: d.id, label, textValue: label };
-            }),
+            ...documents.map((d) => ({ value: d.id, label: d.title, textValue: d.title })),
           ]}
           value={search.documentId ?? ALL}
           onValueChange={search.setDocument}

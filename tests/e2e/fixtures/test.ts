@@ -10,7 +10,7 @@
 //   - documents.ts (M3.0): synthetic PDFs from tests/fixtures/pdfs through the public upload flow
 //     (upload-intent → direct Storage upload → complete-upload), job polling, search.
 //   - questions.ts (M4.0): questions, question-PDF imports and drafts through the public API,
-//     the questions-ko paper truth, and the QBANK-01/QIMPORT-01 UI label contract; M5.0 adds the
+//     the questions-ko paper truth, and the QIMPORT-01 UI label contract (QBANK-01 retired, UX7-BANK); M5.0 adds the
 //     overview/practice/my-state/attempts API helpers and the QOV-01/QPLAY-01 UI contract.
 //   - S0: owner/guest/recipient share fixtures on top of the two above.
 //   - generation.ts (M6.0): scenario-driven source questions (fake LLM markers, G1), generation

@@ -7,6 +7,15 @@
 // explanation arrive only with the submit result. Essays and ungradable short answers stay
 // pending until the user grades them (맞음/틀림). Previous/next follow the heatmap order and are
 // URL changes owned by the screen; Escape/close return focus to the dot (the screen decides).
+// UX7-CACHE (QPLAY-01-AC06): the open, answer-free sessions this panel started are kept in memory
+// (lib/questions/practice-cache.ts), so re-opening an unanswered question shows it at once; a
+// session whose submission started is never reused.
+// UX7-BANK: editors get the screen's 문제 관리 menu (`headerExtra`) in the header; after an edit
+// the screen invalidates that question (`invalidated`) and the panel, if it still shows it,
+// opens a session of the new revision
+// (the cached session of the old revision is dropped).
+// UX7-BANK-2: the header menu's 정답·해설 보기 opens a separate read-only dialog over the panel; the
+// session on screen (and an answer being chosen) stays as it is and nothing is recorded.
 import {
   Button,
   Checkbox,
@@ -25,6 +34,7 @@ import {
   useState,
   type ComponentProps,
   type FormEvent,
+  type ReactNode,
 } from 'react';
 import {
   openPracticeSessionAction,
@@ -34,6 +44,7 @@ import {
   type StudyActionResult,
   type SubmitResult,
 } from '@/lib/questions/practice-actions';
+import { PracticeSessionCache } from '@/lib/questions/practice-cache';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 import {
   ANSWER_TEXT_MAX,
@@ -41,15 +52,18 @@ import {
   EMPTY_ANSWER,
   finalResult,
   optionMark,
+  optionTone,
   resultMessage,
   submitBody,
   toggleOption,
   type AttemptResult,
   type GradeResult,
   type Neighbors,
+  type OptionTone,
   type PracticeAnswer,
 } from './practice-model';
 import styles from './practice-panel.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export interface PracticeQuestion {
   readonly id: string;
@@ -88,6 +102,21 @@ export interface PracticePanelProps {
   readonly onGraded?: (questionId: string, result: AttemptResult) => void;
   /** Where focus goes when the panel closes (the opening dot). */
   readonly onCloseAutoFocus?: ComponentProps<typeof FloatingSidePanel>['onCloseAutoFocus'];
+  /**
+   * Header controls after the study toggles (UX7-BANK: the editors' 문제 관리 menu; UX7-BANK-2:
+   * everyone else's 문제 정보 menu, shown in archived workspaces too).
+   */
+  readonly headerExtra?: ReactNode;
+  /**
+   * UX7-BANK: a question whose cached session must never be shown again (edited or deleted);
+   * a new `seq` invalidates `questionId` once.
+   */
+  readonly invalidated?: Invalidation | null;
+}
+
+export interface Invalidation {
+  readonly questionId: string;
+  readonly seq: number;
 }
 
 type SessionState =
@@ -99,11 +128,14 @@ interface Opening {
   readonly questionId: string | null;
   /** Idempotency key of this opening: a re-run effect (Strict Mode, retry) reuses it. */
   readonly key: string;
+  /** The still open session this screen already started for the question: no request. */
+  readonly cached: PracticeSession | null;
 }
 
-/** The answering state of one session. */
+/** The answering state of one session in one opening. */
 interface Work {
-  readonly sessionId: string | null;
+  /** `${opening key}:${session id}`: a re-opened (cached) session starts with an empty answer. */
+  readonly workId: string | null;
   readonly answer: PracticeAnswer;
   readonly busy: 'submit' | 'grade' | null;
   readonly outcome: SubmitResult | null;
@@ -111,9 +143,9 @@ interface Work {
   readonly error: string | null;
 }
 
-function freshWork(sessionId: string | null): Work {
+function freshWork(workId: string | null): Work {
   return {
-    sessionId,
+    workId,
     answer: EMPTY_ANSWER,
     busy: null,
     outcome: null,
@@ -140,15 +172,41 @@ export function PracticePanel({
   onViewed,
   onGraded,
   onCloseAutoFocus,
+  headerExtra,
+  invalidated = null,
 }: PracticePanelProps) {
   const questionId = question?.id ?? null;
   // The last open question keeps rendering while the panel animates closed.
   const [shown, setShown] = useState(question);
   if (question && question !== shown) setShown(question);
 
-  const [opening, setOpening] = useState<Opening>(() => ({ questionId, key: newKey() }));
-  if (opening.questionId !== questionId) {
-    setOpening({ questionId, key: newKey() });
+  // One cache per workspace: another workspace starts empty (the old one is dropped).
+  const [cache, setCache] = useState(() => new PracticeSessionCache(workspaceId));
+  const scoped = cache.workspaceId === workspaceId.toLowerCase();
+  if (!scoped) setCache(new PracticeSessionCache(workspaceId));
+
+  // Forget an invalidated question's cached session before anything reads the cache; when it is
+  // the question on screen, it is opened again (a session of its new revision).
+  const [seenInvalidation, setSeenInvalidation] = useState(invalidated);
+  const invalidating = invalidated !== seenInvalidation;
+  if (invalidating) {
+    setSeenInvalidation(invalidated);
+    const stale = invalidated ? cache.get(invalidated.questionId) : null;
+    if (stale) cache.dropSession(stale.id);
+  }
+  const reopen =
+    invalidating &&
+    invalidated !== null &&
+    questionId !== null &&
+    invalidated.questionId.toLowerCase() === questionId.toLowerCase();
+
+  const [opening, setOpening] = useState<Opening>(() => ({
+    questionId,
+    key: newKey(),
+    cached: cache.get(questionId),
+  }));
+  if (opening.questionId !== questionId || reopen) {
+    setOpening({ questionId, key: newKey(), cached: scoped ? cache.get(questionId) : null });
   }
   const [session, setSession] = useState<SessionState & { readonly key: string | null }>({
     status: 'loading',
@@ -157,12 +215,15 @@ export function PracticePanel({
 
   useEffect(() => {
     const id = opening.questionId;
-    if (!id || readOnly) return;
+    if (!id || readOnly || opening.cached) return;
     let current = true;
     const key = opening.key;
     void openPracticeSessionAction(workspaceId, id, key).then(
       (result: StudyActionResult<PracticeSession>) => {
-        if (result.ok) onViewed(id);
+        if (result.ok) {
+          cache.put(result.data);
+          onViewed(id);
+        }
         if (!current) return;
         setSession(
           result.ok
@@ -181,27 +242,32 @@ export function PracticePanel({
     };
     // onViewed is a stable callback of the screen; the opening identifies the request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opening, readOnly, workspaceId]);
+  }, [opening, readOnly, workspaceId, cache]);
 
   const view = shown;
-  const state: SessionState =
-    session.key === opening.key ? session : { status: 'loading' as const };
+  const state: SessionState = opening.cached
+    ? { status: 'ready', session: opening.cached }
+    : session.key === opening.key
+      ? session
+      : { status: 'loading' as const };
   const ready = state.status === 'ready' ? state.session : null;
 
-  // Answering state belongs to one session: a new session (next question, reopen) starts empty.
+  // Answering state belongs to one opening of one session: a new session (next question, reopen)
+  // and a re-opened cached one start empty.
+  const workId = ready ? `${opening.key}:${ready.id}` : null;
   const [workState, setWorkState] = useState<Work>(() => freshWork(null));
-  const work = ready && workState.sessionId === ready.id ? workState : freshWork(ready?.id ?? null);
+  const work = workId && workState.workId === workId ? workState : freshWork(workId);
   // The session being answered now: a late result of an earlier session (the user moved on to
   // another question meanwhile) must not land in the new one.
-  const liveSession = useRef<string | null>(null);
+  const liveWork = useRef<string | null>(null);
   useLayoutEffect(() => {
-    liveSession.current = ready?.id ?? null;
-  }, [ready?.id]);
-  /** Applies `patch` only while `sessionId` is still the session being answered. */
-  function updateWork(sessionId: string, patch: (w: Work) => Partial<Work>) {
-    if (liveSession.current !== sessionId) return;
+    liveWork.current = workId;
+  }, [workId]);
+  /** Applies `patch` only while `id` is still the opening being answered. */
+  function updateWork(id: string, patch: (w: Work) => Partial<Work>) {
+    if (liveWork.current !== id) return;
     setWorkState((prev) => {
-      const base = prev.sessionId === sessionId ? prev : freshWork(sessionId);
+      const base = prev.workId === id ? prev : freshWork(id);
       return { ...base, ...patch(base) };
     });
   }
@@ -216,40 +282,49 @@ export function PracticePanel({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!ready || !view || work.busy || work.outcome || !canSubmit(ready, work.answer)) return;
-    const sessionId = ready.id;
+    if (!ready || !view || !workId || work.busy || work.outcome || !canSubmit(ready, work.answer)) {
+      return;
+    }
     const qid = view.id;
-    updateWork(sessionId, () => ({ busy: 'submit', error: null }));
+    // Submitted (or failed: already submitted elsewhere) sessions are never shown again.
+    cache.dropSession(ready.id);
+    updateWork(workId, () => ({ busy: 'submit', error: null }));
     let result: StudyActionResult<SubmitResult>;
     try {
-      result = await submitPracticeAction(workspaceId, sessionId, submitBody(ready, work.answer));
+      result = await submitPracticeAction(workspaceId, ready.id, submitBody(ready, work.answer));
     } catch {
       result = { ok: false, kind: 'unavailable', message: QUESTION_FAILURE_MESSAGES.unavailable };
     }
     if (result.ok) onGraded?.(qid, result.data.result);
-    updateWork(sessionId, () =>
+    updateWork(workId, () =>
       result.ok ? { busy: null, outcome: result.data } : { busy: null, error: result.message },
     );
   }
 
   async function selfGrade(grade: GradeResult) {
-    if (!ready || !view || work.busy || work.outcome?.result !== 'pending' || work.selfGrade) {
+    if (
+      !ready ||
+      !view ||
+      !workId ||
+      work.busy ||
+      work.outcome?.result !== 'pending' ||
+      work.selfGrade
+    ) {
       return;
     }
-    const sessionId = ready.id;
     const qid = view.id;
-    updateWork(sessionId, () => ({ busy: 'grade', error: null }));
+    updateWork(workId, () => ({ busy: 'grade', error: null }));
     let ok = false;
     let message: string = QUESTION_FAILURE_MESSAGES.unavailable;
     try {
-      const result = await selfGradePracticeAction(workspaceId, sessionId, grade);
+      const result = await selfGradePracticeAction(workspaceId, ready.id, grade);
       ok = result.ok;
       if (!result.ok) message = result.message;
     } catch {
       // network failure: keep the pending result and let the user try again
     }
     if (ok) onGraded?.(qid, grade);
-    updateWork(sessionId, () =>
+    updateWork(workId, () =>
       ok ? { busy: null, selfGrade: grade } : { busy: null, error: message },
     );
   }
@@ -283,7 +358,10 @@ export function PracticePanel({
         </div>
       ) : null}
       {ready && finished ? (
-        <Button variant="ghost" onClick={() => setOpening((o) => ({ ...o, key: newKey() }))}>
+        <Button
+          variant="ghost"
+          onClick={() => setOpening((o) => ({ ...o, key: newKey(), cached: null }))}
+        >
           한 번 더 풀기
         </Button>
       ) : null}
@@ -328,7 +406,11 @@ export function PracticePanel({
                 if (!view.savingFlags) onFlagsChange(view.id, { needs_retry: pressed });
               }}
             />
+            {headerExtra}
           </>
+        ) : view ? (
+          // Archived: no study toggles, but the read-only 문제 정보 menu stays (UX7-BANK-2).
+          headerExtra
         ) : undefined
       }
     >
@@ -339,7 +421,7 @@ export function PracticePanel({
               <p className={styles.notice}>
                 보관된 Workspace는 읽기 전용입니다. 문제를 풀거나 학습 상태를 바꿀 수 없습니다.
               </p>
-              <p className={styles.stem}>{view.preview}</p>
+              <p className={styles.stem}>{displayStem(view.preview)}</p>
             </>
           ) : ready ? (
             <form
@@ -349,14 +431,16 @@ export function PracticePanel({
               aria-busy={work.busy !== null || undefined}
               noValidate
             >
-              <p className={styles.stem}>{ready.stem}</p>
+              <p className={styles.stem}>{displayStem(ready.stem)}</p>
               <AnswerField
                 session={ready}
                 answer={work.answer}
                 disabled={locked}
                 correct={outcome?.correct_option_ids ?? null}
-                revealed={outcome !== null}
-                onChange={(answer) => updateWork(ready.id, () => ({ answer }))}
+                graded={outcome?.result ?? null}
+                onChange={(answer) => {
+                  if (workId) updateWork(workId, () => ({ answer }));
+                }}
               />
               <p
                 ref={resultRef}
@@ -377,13 +461,13 @@ export function PracticePanel({
           ) : state.status === 'error' ? (
             <div role="alert" className={styles.error}>
               <p>{state.message}</p>
-              <Button onClick={() => setOpening((o) => ({ ...o, key: newKey() }))}>
+              <Button onClick={() => setOpening((o) => ({ ...o, key: newKey(), cached: null }))}>
                 다시 시도
               </Button>
             </div>
           ) : (
             <div aria-busy="true">
-              <p className={styles.stem}>{view.preview}</p>
+              <p className={styles.stem}>{displayStem(view.preview)}</p>
               <p className={styles.loading}>문제를 불러오는 중입니다…</p>
             </div>
           )}
@@ -425,14 +509,15 @@ function AnswerField({
   answer,
   disabled,
   correct,
-  revealed,
+  graded,
   onChange,
 }: {
   readonly session: PracticeSession;
   readonly answer: PracticeAnswer;
   readonly disabled: boolean;
   readonly correct: readonly string[] | null;
-  readonly revealed: boolean;
+  /** The submit result; null until the answers are revealed. */
+  readonly graded: AttemptResult | null;
   readonly onChange: (answer: PracticeAnswer) => void;
 }) {
   if (session.question_type !== 'MCQ') {
@@ -447,11 +532,22 @@ function AnswerField({
       />
     );
   }
-  const mark = (id: string) => (revealed ? optionMark(id, correct, answer.selected) : undefined);
+  // UX7-QDISPLAY (QPLAY-01-AC12): every row keeps the same (transparent) border, and grading
+  // only colors it; the text mark below the label is the meaning, linked as the description.
+  const mark = (id: string) => {
+    const text = graded ? optionMark(id, correct, answer.selected) : undefined;
+    return text ? <span className={styles.mark}>{text}</span> : undefined;
+  };
+  const rowClass = (id: string) => {
+    const tone = graded ? optionTone(id, correct, answer.selected, graded) : undefined;
+    return tone ? `${styles.option} ${TONE_CLASS[tone]}` : styles.option;
+  };
   if (!session.is_multi_answer) {
     return (
       <RadioGroup
+        // UX7-QDISPLAY: no visible 보기 label; the group keeps it as its accessible name.
         label="보기"
+        hideLabel
         orientation="vertical"
         disabled={disabled}
         value={answer.selected[0] ?? ''}
@@ -463,6 +559,7 @@ function AnswerField({
           return {
             value: o.id,
             label: <OptionLabel index={index} text={o.text} />,
+            className: rowClass(o.id),
             ...(description ? { description } : {}),
           };
         })}
@@ -471,10 +568,13 @@ function AnswerField({
   }
   return (
     <fieldset className={styles.choices}>
-      <legend className={styles.legend}>보기 (정답을 모두 고르세요)</legend>
+      <legend className={styles.legend}>
+        <span className="qz-visually-hidden">보기 —</span> 정답을 모두 고르세요
+      </legend>
       {session.options.map((o, index) => (
         <Checkbox
           key={o.id}
+          className={rowClass(o.id)}
           label={<OptionLabel index={index} text={o.text} />}
           description={mark(o.id)}
           disabled={disabled}
@@ -490,6 +590,12 @@ function AnswerField({
     </fieldset>
   );
 }
+
+const TONE_CLASS: Readonly<Record<OptionTone, string | undefined>> = {
+  correct: styles.toneCorrect,
+  chosen: styles.toneChosen,
+  answer: styles.toneAnswer,
+};
 
 /**
  * An option's display number (`1.`, by displayed position, so a shuffled session numbers its own
