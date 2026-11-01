@@ -29,8 +29,18 @@ function browserWindow(): PanelHistoryWindow {
     setTimeout: (handler, ms) => window.setTimeout(handler, ms),
     clearTimeout: (id) => window.clearTimeout(id),
     now: () => Date.now(),
+    arrivedByTraversal: () => {
+      // The navigation type is the document's: it tells only about the first home it shows.
+      const first = !attachedInDocument;
+      attachedInDocument = true;
+      const [entry] = performance.getEntriesByType('navigation');
+      return first && (entry as PerformanceNavigationTiming | undefined)?.type === 'back_forward';
+    },
   };
 }
+
+/** Whether a home of this document attached already (see arrivedByTraversal). */
+let attachedInDocument = false;
 
 /** `dialogs` may change every render (it reads the page's content search); the latest is used. */
 export function usePanelHistory(dialogs: DialogUrls): PanelHistory {

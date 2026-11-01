@@ -2,7 +2,7 @@
 // entry; every close (button or Back) drops the closed dialog's entries, so neither Back nor
 // Forward reopens it.
 import { describe, expect, it } from 'vitest';
-import { openDialogs, withoutPanels } from '../src/lib/workspaces/home';
+import { closeDialog, openDialogs, withoutPanels } from '../src/lib/workspaces/home';
 import {
   DEFAULT_DIALOG_URLS,
   markState,
@@ -206,25 +206,27 @@ function controller(start = '/w', opts: Parameters<typeof fakeWindow>[1] = {}) {
 }
 
 /**
- * A controller whose dialog helpers push other pages through a stand-in router: it records the
- * URL; `commit()` writes the entry as Next's router does (its own state, none of our marks).
+ * A controller whose dialog helpers read other pages through a stand-in router: it records the
+ * URL; `commit()` rewrites the current entry as router.replace does (Next's state only, none of
+ * our marks) and renders (stamp).
  */
 function routedController(start = '/w') {
   const fake = fakeWindow(start);
-  const navigations: string[] = [];
+  const reads: string[] = [];
   const history = new PanelHistory(
     () => fake.win,
-    () => ({ ...DEFAULT_DIALOG_URLS, navigate: (url) => navigations.push(url) }),
+    () => ({ ...DEFAULT_DIALOG_URLS, read: (url) => reads.push(url) }),
   );
   history.attach();
   history.stamp();
   const commit = () => {
-    const url = navigations.shift();
-    if (url === undefined) throw new Error('no navigation');
-    fake.win.history.pushState({ __NA: true }, '', url);
+    fake.fireTimers();
+    const url = reads.shift();
+    if (url === undefined) throw new Error('no read');
+    fake.win.history.replaceState({ __NA: true }, '', url);
     history.stamp();
   };
-  return { fake, history, navigations, commit };
+  return { fake, history, reads, commit };
 }
 
 /**
@@ -276,6 +278,20 @@ describe('openDialogs and withoutPanels', () => {
     expect(openDialogs('?panel=bogus&q=x')).toEqual([]);
   });
 
+  it('closes one dialog as its close button does', () => {
+    expect(closeDialog('?panel=documents&panel=history&status=retry', 'history')).toBe(
+      '?status=retry&panel=documents',
+    );
+    expect(closeDialog('?question=q1&q=x', 'question')).toBe('?q=x');
+    expect(closeDialog('?panel=chapter-note&chapter=c1&text=a', 'chapter-note')).toBe('?text=a');
+    expect(
+      closeDialog('?panel=document-summary&document=d1', 'document-summary', {
+        documentId: 'd2',
+        chapterId: null,
+      }),
+    ).toBe('?document=d2');
+  });
+
   it('closes every dialog and the practice panel, keeping filters and searches', () => {
     expect(withoutPanels('?status=retry&panel=documents&panel=history&question=q1&q=x')).toBe(
       '?status=retry&q=x',
@@ -322,12 +338,14 @@ describe('PanelHistory', () => {
   });
 
   it('a Back that closes keeps what changed while the dialog was open (UX7 확인 7)', () => {
-    const { fake, history, navigations, commit } = routedController('/w?q=a');
+    const { fake, history, reads, commit } = routedController('/w?q=a');
     history.push('/w?q=a&panel=documents');
     history.replace('/w?q=a&panel=documents&status=retry');
     fake.back();
-    expect(navigations).toEqual(['/w?q=a&status=retry']);
+    fake.fireTimers();
+    expect(reads).toEqual(['/w?q=a&status=retry']);
     commit();
+    expect(fake.skips()).toEqual([0, 1, 0]);
     expect(fake.url()).toBe('/w?q=a&status=retry');
     expectBackLeavesForwardStaysClosed(fake, '/w?q=a&status=retry');
   });
@@ -415,39 +433,41 @@ describe('PanelHistory', () => {
     expect(fake.rendered[0]).toBe('/workspaces');
   });
 
-  it('pushes a closed URL with another page (filters) through the router', () => {
-    const { fake, history, navigations, commit } = routedController();
+  it('reads a closed URL with another page (filters) through the router first', () => {
+    const { fake, history, reads, commit } = routedController();
     history.push('/w?panel=documents');
     history.replace('/w?panel=documents&status=retry');
     history.close('/w?status=retry');
     fake.traverse();
-    // The base is a skip entry at once; the router's entry (its read done) drops the dialog's.
-    expect(fake.skips()).toEqual([0, 1, 0]);
-    expect(navigations).toEqual(['/w?status=retry']);
+    // Nothing is written until the router has read the closed page over the base.
+    expect(fake.urls()).toEqual(['/workspaces', '/w', '/w?panel=documents&status=retry']);
+    history.stamp(); // a render before the router's write changes nothing
+    fake.fireTimers();
+    expect(reads).toEqual(['/w?status=retry']);
     commit();
-    expect(fake.urls()).toEqual(['/workspaces', '/w', '/w?status=retry']);
-    expect(readEntry(fake.win.history.state)).toMatchObject({ ours: true, skip: 0 });
+    expect(fake.urls()).toEqual(['/workspaces', '/w?status=retry', '/w?status=retry']);
+    expect(fake.skips()).toEqual([0, 1, 0]);
     expectBackLeavesForwardStaysClosed(fake, '/w?status=retry');
   });
 
-  it('a stacked close that only drops a dialog stays a plain push', () => {
-    const { fake, history, navigations } = routedController();
+  it('a stacked close that only drops a dialog stays a plain write', () => {
+    const { fake, history, reads } = routedController();
     history.push('/w?panel=documents');
     history.push('/w?panel=documents&panel=history');
     history.close('/w?panel=history');
     fake.traverse();
-    expect(navigations).toEqual([]);
+    fake.fireTimers();
+    expect(reads).toEqual([]);
     expect(fake.urls()).toEqual(['/workspaces', '/w', '/w?panel=history']);
   });
 
-  it('keeps what changed while open (filters) on the entry above the base', () => {
+  it('without a router, writes what changed while open (filters) onto the base in place', () => {
     const { fake, history } = controller();
     history.push('/w?panel=documents');
     history.replace('/w?panel=documents&status=retry');
     history.close('/w?status=retry');
     fake.traverse();
-    // The skip entry keeps its own address (Next's saved state matches it).
-    expect(fake.urls()).toEqual(['/workspaces', '/w', '/w?status=retry']);
+    expect(fake.urls()).toEqual(['/workspaces', '/w?status=retry', '/w?status=retry']);
     expect(fake.skips()).toEqual([0, 1, 0]);
     expectBackLeavesForwardStaysClosed(fake, '/w?status=retry');
   });

@@ -912,11 +912,11 @@ test(
     await signInAs(page, s.owner.user);
 
     /** A history entry before the home (the workspace list), then the home itself. */
-    async function arrive(search = ''): Promise<void> {
+    async function arrive(search = '', ready = overviewUi.heatmap(page)): Promise<void> {
       await gotoAfterReload('/workspaces');
       await expect(page).toHaveURL(onList);
       await page.goto(`${home}${search}`);
-      await expect(overviewUi.heatmap(page)).toBeVisible();
+      await expect(ready).toBeVisible();
     }
     // A close may refresh the overview (the practice panel's study state): a cross-document
     // traversal started under that router write is cancelled by WebKit, not by the feature.
@@ -1148,8 +1148,7 @@ test(
     await expect(documents).toBeHidden();
     await backLeavesHome();
     await forwardStaysClosed(documents);
-    await arrive(`?question=${q(s, 1).id}`);
-    await expect(panelUi.numbered(page, 1)).toBeVisible();
+    await arrive(`?question=${q(s, 1).id}`, panelUi.numbered(page, 1));
     await back();
     await expect(page).toHaveURL(noPanel);
     await expect(panelUi.panel(page)).toBeHidden();

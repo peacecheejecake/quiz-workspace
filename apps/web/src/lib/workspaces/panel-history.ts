@@ -1,23 +1,24 @@
 // Browser history of the workspace home's dialogs and panels (UX7-BACK, UX7-BACK-2, docs/screens/
 // questions-overview.md "뒤로가기", QOV-01-AC14). The rule: a closed dialog is never in the
 // history, in either direction; while dialogs are open each Back closes one of them; closing
-// returns to the address before the open (a close button keeps what changed meanwhile: filters,
-// searches; a Back restores that address as it was).
+// returns to the address before the open, keeping what changed meanwhile (filters, searches),
+// whether by a close button or by Back (UX7 확인 7). Dialogs a first load opens (deep links) count
+// as opened one by one (expandFirstLoad).
 //
 // Opening a dialog (or moving the practice panel to another question) pushes an entry, so Back
 // while it is open undoes the open. Browsers cannot drop forward entries except by writing a new
 // one, so every close ends with a push that truncates them:
 // - A close button (or Escape, save, delete) at depth d first goes back d entries to the base
-//   (the entry before the first open; Next shows it), then pushes the closed URL: one entry for
-//   the dialogs still open (Back then closes those), or, with none left, the closed home above
-//   the base, which becomes a "skip" entry.
-// - A Back that closes a dialog lands on the entry before its open (its address, as Back restores
-//   it: SEARCH-01-AC09): that entry becomes a skip entry and a copy is pushed above it.
-// A skip entry keeps its own address (Next's saved tree must match it), the closed address before
-// the open; the entry above it is what it stands for. Back onto it goes on back (`skip` entries:
-// the run of skip entries below it included), Forward onto it goes on forward. Our popstate
-// listener stops Next's when it runs first (WebKit runs capture listeners first; Chromium runs
-// window listeners in registration order, so Next may render the skip entry for a moment there).
+//   (the entry before the first open). A Back that closes a dialog lands on the entry before its
+//   open. Either way that entry is rewritten to the closed URL (what changed while the dialog was
+//   open kept), then becomes a "skip" entry under a copy of it, or, after a close button with
+//   dialogs still open, stays under one entry for those (Back then closes them).
+// The rewrite goes through Next's router when filters or searches differ (it reads that page, so
+// the entry's saved Next tree matches its address; a plain write would make Next reload it); a
+// change of dialog keys only is a plain write. Back onto a skip entry goes on back (`skip`
+// entries: the run of skip entries below it included), Forward onto it goes on forward. Our
+// popstate listener stops Next's when it runs first (WebKit runs capture listeners first;
+// Chromium runs window listeners in registration order, so Next may render it for a moment).
 // Landing on one from another document, or with nowhere further back, stays on it. Without a
 // forward entry to drop (Navigation API `canGoForward`), a close at depth 0 just rewrites the
 // entry. When the base belongs to another document (the page was reloaded with a dialog open),
@@ -32,7 +33,7 @@
 // Back/Forward restores keep custom state; router navigations (router.replace/refresh) drop it, so
 // the home stamps it back (stamp) after renders and before every push.
 
-import { openDialogs, withoutPanels } from './home';
+import { closeDialog, openDialogs, withoutPanels } from './home';
 
 export const PANEL_POS_KEY = '__quizPanelPos';
 export const PANEL_DEPTH_KEY = '__quizPanelDepth';
@@ -104,18 +105,22 @@ export function markState(state: unknown, mark: EntryMark, skip = 0): Record<str
 export interface DialogUrls {
   /** The open dialogs of `search` (openDialogs). */
   open(search: string): readonly string[];
+  /** `search` with `dialog` closed, as its close button does it (closeDialog). */
+  close(search: string, dialog: string): string;
   /** `search` with every dialog closed (withoutPanels). */
   closeAll(search: string): string;
   /**
-   * Pushes `url` through the router (it reads the page for it). Used when a close lands on an
-   * entry whose page (filters, searches) differs from the closed URL: a plain pushState would
-   * carry the entry's saved Next tree under the new address, which Next then reloads in full.
+   * Rewrites the current entry to `url` through the router (router.replace: it reads the page).
+   * Used when a close lands on an entry whose page (filters, searches) differs from the closed
+   * URL: a plain history write would leave the entry's saved Next tree under another address,
+   * which Next then reloads in full.
    */
-  navigate?(url: string): void;
+  read?(url: string): void;
 }
 
 export const DEFAULT_DIALOG_URLS: DialogUrls = {
   open: openDialogs,
+  close: (search, dialog) => closeDialog(search, dialog),
   closeAll: (search) => withoutPanels(search),
 };
 
@@ -151,6 +156,19 @@ interface Leave {
   readonly pos: number;
   readonly path: string;
   readonly dialogs: readonly string[];
+}
+
+/** Same path and the same query parameters, whatever their order. */
+function sameAddress(a: string, b: string): boolean {
+  const x = splitUrl(a);
+  const y = splitUrl(b);
+  if (x.path !== y.path) return false;
+  const sorted = (search: string) => {
+    const params = new URLSearchParams(search);
+    params.sort();
+    return params.toString();
+  };
+  return sorted(x.search) === sorted(y.search);
 }
 
 function parseLeave(raw: string | null, now: number): Leave | null {
@@ -226,6 +244,8 @@ export class PanelHistory {
   /** The address the page rests on (last write or render): what a Back starts from. */
   private resting = '';
   private pending: Pending | null = null;
+  /** A close waiting for the router to read the page of its entry (onPage). */
+  private reading: { readonly url: string; readonly then: () => void } | null = null;
   /** False after landing on another page's entry: the next traversal's direction is unknown. */
   private known = true;
 
@@ -259,8 +279,10 @@ export class PanelHistory {
       // A close's rewind loaded this document (the base): finish the close here.
       this.mark = { ...entry.mark, pos: handover.pos };
       this.settle(handover.base, handover.reopen);
-    } else {
+    } else if (entry.ours) {
       this.arrive(entry, leave);
+    } else {
+      this.expandFirstLoad();
     }
     const onPopState = (event: PopStateEvent) => this.onPopState(event);
     const onPageHide = () => this.storeLeave();
@@ -281,6 +303,7 @@ export class PanelHistory {
       this.win.removeEventListener('pageshow', onPageShow);
       if (this.pending) this.win.clearTimeout(this.pending.timer);
       this.pending = null;
+      this.reading = null;
     };
   }
 
@@ -289,6 +312,15 @@ export class PanelHistory {
     if (this.pending) return;
     const state: unknown = this.win.history.state;
     const entry = readEntry(state);
+    const reading = this.reading;
+    if (reading) {
+      // The router's write of the closed page (Next's state only, none of our marks): finish.
+      if (entry.ours || !sameAddress(this.current(), reading.url)) return;
+      this.reading = null;
+      this.win.history.replaceState(markState(state, this.mark), '');
+      reading.then();
+      return;
+    }
     const { mark } = this;
     // Another entry of ours whose popstate has not come yet (a render can run in between):
     // leave it, and what the page rested on, to onPopState.
@@ -354,59 +386,63 @@ export class PanelHistory {
   }
 
   /**
-   * On the base entry: push the dialogs still open, or the closed home (the base becomes a skip
-   * entry). A base with dialogs (a deep link: nothing to rewind) is first rewritten closed.
+   * On the base entry: rewrite it to `base`, then push the dialogs still open, or a copy of it
+   * (the base becomes a skip entry).
    */
   private settle(base: string, reopen: string | null): void {
     this.mark = { ...this.mark, depth: 0 };
-    if (this.getDialogs().open(this.win.location.search).length > 0) {
-      this.win.history.replaceState(markState(null, this.mark), '', base);
-    }
-    if (reopen) {
-      this.mark = { pos: this.mark.pos + 1, depth: 1, under: 0 };
-      this.pushAddress(reopen);
-    } else {
-      this.truncate(base);
-    }
+    this.onPage(base, () => {
+      if (reopen) {
+        this.mark = { pos: this.mark.pos + 1, depth: 1, under: 0 };
+        // Only dialog keys differ from the base: Next syncs its URL from the plain write.
+        this.win.history.pushState(markState(null, this.mark), '', reopen);
+        this.resting = this.current();
+      } else {
+        this.truncate();
+      }
+    });
     this.resting = reopen ?? base;
   }
 
   /**
-   * Makes the current entry a skip entry (its address stays) and pushes `url` above it, dropping
-   * every forward entry (the closed dialog). The same address is pushed without telling Next.
+   * Runs `then` once the current entry shows `url`: rewritten at once when only dialog keys
+   * differ (Next syncs its URL), else through the router, which reads the page first (stamp()
+   * finishes when its write lands). The router call waits for the popstate dispatch this may run
+   * in: a router action dispatched before Next's own Back/Forward restore would be overridden by
+   * it (WebKit runs our listener first).
    */
-  private truncate(url: string): void {
+  private onPage(url: string, then: () => void): void {
+    const dialogs = this.getDialogs();
+    const samePage =
+      dialogs.closeAll(splitUrl(url).search) === dialogs.closeAll(this.win.location.search);
+    const read = dialogs.read;
+    if (samePage || !read) {
+      if (url !== this.current()) {
+        this.win.history.replaceState(markState(null, this.mark), '', url);
+      }
+      then();
+      return;
+    }
+    this.reading = { url, then };
+    this.win.setTimeout(() => read(url), 0);
+  }
+
+  /**
+   * Makes the current entry a skip entry and pushes a copy of it, dropping every forward entry
+   * (the closed dialog). Neither write changes the address: Next is not told.
+   */
+  private truncate(): void {
     const { history } = this.win;
     const skip = this.mark.under + 1;
     history.replaceState(markState(history.state, this.mark, skip), '');
-    const dialogs = this.getDialogs().open(splitUrl(url).search);
+    const dialogs = this.getDialogs().open(this.win.location.search);
     this.mark = {
       pos: this.mark.pos + 1,
       depth: dialogs.length > 0 ? this.mark.depth + 1 : 0,
       under: skip,
     };
-    this.pushAddress(url);
-  }
-
-  /**
-   * Pushes `url` as the entry `this.mark` describes. The same address is pushed without telling
-   * Next; another page (filters, searches) goes through the router, whose entry stamp() marks
-   * once it is written; a change of dialogs only is a plain pushState (Next syncs its URL).
-   */
-  private pushAddress(url: string): void {
-    const { history } = this.win;
-    if (url === this.current()) {
-      history.pushState(markState(history.state, this.mark), '');
-      return;
-    }
-    const dialogs = this.getDialogs();
-    const samePage =
-      dialogs.closeAll(splitUrl(url).search) === dialogs.closeAll(this.win.location.search);
-    if (!samePage && dialogs.navigate) {
-      dialogs.navigate(url);
-      return;
-    }
-    history.pushState(markState(null, this.mark), '', url);
+    history.pushState(markState(history.state, this.mark), '');
+    this.resting = this.current();
   }
 
   /**
@@ -440,7 +476,38 @@ export class PanelHistory {
     if (entry.mark.pos >= leave.pos) return;
     const now = this.getDialogs().open(this.win.location.search);
     if (leave.dialogs.every((d) => now.includes(d))) return;
-    this.truncate(this.current());
+    this.truncate();
+  }
+
+  /**
+   * A first load (an entry not ours) with dialogs open, a deep link: rewrites the entry to the
+   * address with every dialog closed and pushes one entry per dialog in opening order, so each
+   * Back closes one (UX7 확인 7). Only dialog keys differ between these entries, which Next shows
+   * from the same page: it is not told (it already shows the top one). Skipped for a Back/Forward
+   * arrival or with entries ahead, which a push would drop.
+   */
+  private expandFirstLoad(): void {
+    const traversal = this.win.arrivedByTraversal?.() ?? false;
+    if (traversal || this.win.navigation?.canGoForward === true) return;
+    const dialogs = this.getDialogs();
+    const { path, search } = splitUrl(this.current());
+    const open = dialogs.open(search);
+    if (open.length === 0) return;
+    const chain = [this.current()];
+    let closing = search;
+    for (let i = open.length - 1; i >= 0; i--) {
+      const dialog = open[i];
+      if (dialog === undefined) continue;
+      closing = dialogs.close(closing, dialog);
+      chain.unshift(`${path}${closing}`);
+    }
+    const { history } = this.win;
+    chain.forEach((url, depth) => {
+      this.mark = { pos: depth, depth, under: 0 };
+      const state = markState(history.state, this.mark);
+      if (depth === 0) history.replaceState(state, '', url);
+      else history.pushState(state, '', url);
+    });
     this.resting = this.current();
   }
 
@@ -493,6 +560,7 @@ export class PanelHistory {
   }
 
   private onPopState(event: PopStateEvent): void {
+    this.reading = null;
     const pending = this.pending;
     if (pending) {
       this.win.clearTimeout(pending.timer);
@@ -542,14 +610,20 @@ export class PanelHistory {
     this.resting = this.current();
     if (!back) return;
     // A Back that closed dialogs (not one that changed the practice panel's question): drop the
-    // forward entry. The page stays on the address before the open, as Back restores it (what
-    // changed while the dialog was open goes with it: SEARCH-01-AC09).
+    // forward entry, keeping what changed while they were open (UX7 확인 7): the address before
+    // the Back with those dialogs closed.
     const dialogs = this.getDialogs();
     const now = dialogs.open(this.win.location.search);
     const fromUrl = splitUrl(from);
     if (fromUrl.path !== this.win.location.pathname) return;
-    if (dialogs.open(fromUrl.search).every((d) => now.includes(d))) return;
-    this.truncate(this.current());
-    this.resting = this.current();
+    const closed = dialogs.open(fromUrl.search).filter((d) => !now.includes(d));
+    if (closed.length === 0) return;
+    let search = fromUrl.search;
+    for (const dialog of closed) search = dialogs.close(search, dialog);
+    const target = `${fromUrl.path}${search}`;
+    this.onPage(sameAddress(target, this.current()) ? this.current() : target, () =>
+      this.truncate(),
+    );
+    this.resting = target;
   }
 }
