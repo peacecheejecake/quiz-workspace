@@ -1,0 +1,246 @@
+// @vitest-environment jsdom
+// UX7-CACHE (QPLAY-01-AC06): the practice panel's session cache. The pure cache keeps only open,
+// answer-free sessions of its own workspace for a bounded time; the panel re-opens an unanswered
+// question without a request, never reuses a session whose submission started, and starts over
+// in another workspace.
+import './dom-setup';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PracticeSession, SubmitResult } from '../src/lib/questions/practice-actions';
+import {
+  answerFreeSession,
+  PracticeSessionCache,
+  PRACTICE_CACHE_TTL_MS,
+} from '../src/lib/questions/practice-cache';
+
+const WS = '55555555-5555-4555-8555-555555555555';
+const WS2 = '55555555-5555-4555-8555-000000000002';
+const Q1 = '22222222-2222-4222-8222-000000000001';
+const Q2 = '22222222-2222-4222-8222-000000000002';
+
+let sessionSeq = 0;
+function session(questionId: string, overrides: Partial<PracticeSession> = {}): PracticeSession {
+  sessionSeq += 1;
+  return {
+    id: `99999999-9999-4999-8999-${String(sessionSeq).padStart(12, '0')}`,
+    workspace_id: WS,
+    question_id: questionId,
+    question_revision_id: '77777777-7777-4777-8777-777777777777',
+    question_number: 1,
+    question_type: 'MCQ',
+    chapter_id: null,
+    stem: `stem of ${questionId}`,
+    is_multi_answer: false,
+    displayed_option_ids: ['o2', 'o1'],
+    options: [
+      { id: 'o2', text: '보기 나' },
+      { id: 'o1', text: '보기 가' },
+    ],
+    state: 'open',
+    opened_at: '2026-11-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+describe('PracticeSessionCache', () => {
+  it('returns an open session of its workspace by question id (any case)', () => {
+    const cache = new PracticeSessionCache(WS);
+    const s = session(Q1);
+    cache.put(s);
+    expect(cache.get(Q1)).toEqual(s);
+    expect(cache.get(Q1.toUpperCase())).toEqual(s);
+    expect(cache.get(Q2)).toBeNull();
+    expect(cache.get(null)).toBeNull();
+  });
+
+  it('ignores sessions of another workspace and sessions that are no longer open', () => {
+    const cache = new PracticeSessionCache(WS);
+    cache.put(session(Q1, { workspace_id: WS2 }));
+    cache.put(session(Q2, { state: 'graded' }));
+    expect(cache.size).toBe(0);
+    cache.put(session(Q1));
+    cache.put(session(Q1, { state: 'pending_grade' }));
+    expect(cache.get(Q1)).toBeNull();
+  });
+
+  it('never stores fields outside the answer-free PracticeSession shape', () => {
+    const cache = new PracticeSessionCache(WS);
+    const leaky = {
+      ...session(Q1),
+      correct_option_ids: ['o1'],
+      explanation: '해설',
+      rubric: '기준',
+      accepted_answers: ['가'],
+      options: [{ id: 'o1', text: '보기 가', is_correct: true }],
+    } as unknown as PracticeSession;
+    cache.put(leaky);
+    const stored = cache.get(Q1);
+    expect(JSON.stringify(stored)).not.toMatch(/correct|explanation|rubric|accepted/);
+    expect(stored).toEqual(answerFreeSession(leaky));
+    expect(stored?.options).toEqual([{ id: 'o1', text: '보기 가' }]);
+  });
+
+  it('expires entries after the TTL', () => {
+    let now = 1_000;
+    const cache = new PracticeSessionCache(WS, { now: () => now });
+    cache.put(session(Q1));
+    now += PRACTICE_CACHE_TTL_MS - 1;
+    expect(cache.get(Q1)).not.toBeNull();
+    now += 1;
+    expect(cache.get(Q1)).toBeNull();
+    expect(cache.size).toBe(0);
+  });
+
+  it('drops a session whose submission started, and evicts the oldest beyond the bound', () => {
+    const cache = new PracticeSessionCache(WS, { maxEntries: 2 });
+    const s1 = session(Q1);
+    cache.put(s1);
+    cache.dropSession(s1.id);
+    expect(cache.get(Q1)).toBeNull();
+    const q3 = '22222222-2222-4222-8222-000000000003';
+    cache.put(session(Q1));
+    cache.put(session(Q2));
+    cache.put(session(q3));
+    expect(cache.get(Q1)).toBeNull();
+    expect(cache.get(Q2)).not.toBeNull();
+    expect(cache.get(q3)).not.toBeNull();
+  });
+});
+
+const open = vi.fn<(ws: string, q: string, key: string) => Promise<unknown>>();
+const submit = vi.fn<(ws: string, sessionId: string, answer: unknown) => Promise<unknown>>();
+vi.mock('../src/lib/questions/practice-actions', () => ({
+  openPracticeSessionAction: (ws: string, q: string, key: string) => open(ws, q, key),
+  submitPracticeAction: (ws: string, s: string, a: unknown) => submit(ws, s, a),
+  selfGradePracticeAction: vi.fn(),
+}));
+
+const { PracticePanel } = await import('../src/components/questions/practice/practice-panel');
+
+function question(id: string, n: number) {
+  return {
+    id,
+    title: `1장 ${n}번 문제`,
+    chapterTitle: '1장',
+    questionType: 'MCQ' as const,
+    preview: `preview ${n}`,
+    isFavorite: false,
+    needsRetry: false,
+  };
+}
+
+function Harness({
+  workspaceId = WS,
+  questionId,
+}: {
+  readonly workspaceId?: string;
+  readonly questionId: string | null;
+}) {
+  const q = questionId === Q1 ? question(Q1, 1) : questionId === Q2 ? question(Q2, 2) : null;
+  return (
+    <PracticePanel
+      workspaceId={workspaceId}
+      question={q}
+      readOnly={false}
+      onClose={() => undefined}
+      onFlagsChange={() => undefined}
+      onViewed={() => undefined}
+    />
+  );
+}
+
+beforeEach(() => {
+  open.mockReset();
+  submit.mockReset();
+  open.mockImplementation(async (ws, q) => ({
+    ok: true,
+    data: session(q, { workspace_id: ws, stem: `stem of ${q}` }),
+  }));
+});
+
+describe('PracticePanel session cache', () => {
+  it('re-opens a viewed unanswered question (close/reopen, previous/next) without a request', async () => {
+    const view = render(<Harness questionId={Q1} />);
+    expect(await screen.findByText(`stem of ${Q1}`)).toBeInTheDocument();
+    view.rerender(<Harness questionId={Q2} />);
+    expect(await screen.findByText(`stem of ${Q2}`)).toBeInTheDocument();
+    view.rerender(<Harness questionId={null} />);
+    view.rerender(<Harness questionId={Q1} />);
+    // Shown at once from the cache: no loading state, no new session.
+    expect(screen.getByText(`stem of ${Q1}`)).toBeInTheDocument();
+    expect(screen.queryByText(/불러오는 중/)).not.toBeInTheDocument();
+    view.rerender(<Harness questionId={Q2} />);
+    expect(screen.getByText(`stem of ${Q2}`)).toBeInTheDocument();
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens a new session after a submission instead of reusing the submitted one', async () => {
+    const user = userEvent.setup();
+    const result: SubmitResult = {
+      attempt_id: '88888888-8888-4888-8888-888888888888',
+      practice_session_id: '',
+      question_revision_id: '77777777-7777-4777-8777-777777777777',
+      result: 'correct',
+      correct_option_ids: ['o1'],
+      accepted_answers: null,
+      rubric: null,
+      explanation: 'EXPLANATION-SECRET',
+      my_state: null,
+    } as unknown as SubmitResult;
+    submit.mockImplementation(async (_ws, sessionId) => ({
+      ok: true,
+      data: { ...result, practice_session_id: sessionId },
+    }));
+    const view = render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('radio', { name: '보기 가' }));
+    await user.click(screen.getByRole('button', { name: '제출' }));
+    expect(await screen.findByText('EXPLANATION-SECRET')).toBeInTheDocument();
+    const submitted = submit.mock.calls[0]?.[1];
+
+    view.rerender(<Harness questionId={null} />);
+    view.rerender(<Harness questionId={Q1} />);
+    expect(screen.queryByText('EXPLANATION-SECRET')).not.toBeInTheDocument();
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    await user.click(await screen.findByRole('radio', { name: '보기 가' }));
+    await user.click(screen.getByRole('button', { name: '제출' }));
+    await waitFor(() => expect(submit).toHaveBeenCalledTimes(2));
+    expect(submit.mock.calls[1]?.[1]).not.toBe(submitted);
+  });
+
+  it('does not reuse a session whose submission failed or is still in flight', async () => {
+    const user = userEvent.setup();
+    let release: (v: unknown) => void = () => undefined;
+    submit.mockImplementation(() => new Promise((resolve) => (release = resolve)));
+    const view = render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('radio', { name: '보기 가' }));
+    await user.click(screen.getByRole('button', { name: '제출' }));
+    view.rerender(<Harness questionId={null} />);
+    view.rerender(<Harness questionId={Q1} />);
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      release({ ok: false, kind: 'alreadySubmitted', message: '이미 제출한 풀이입니다.' });
+    });
+  });
+
+  it('starts over in another workspace', async () => {
+    const view = render(<Harness questionId={Q1} />);
+    expect(await screen.findByText(`stem of ${Q1}`)).toBeInTheDocument();
+    view.rerender(<Harness questionId={null} />);
+    view.rerender(<Harness workspaceId={WS2} questionId={null} />);
+    view.rerender(<Harness workspaceId={WS2} questionId={Q1} />);
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    expect(open.mock.calls[1]?.[0]).toBe(WS2);
+  });
+
+  it('re-opens with an empty answer even when the session is reused', async () => {
+    const user = userEvent.setup();
+    const view = render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('radio', { name: '보기 가' }));
+    expect(screen.getByRole('radio', { name: '보기 가' })).toBeChecked();
+    view.rerender(<Harness questionId={null} />);
+    view.rerender(<Harness questionId={Q1} />);
+    expect(screen.getByRole('radio', { name: '보기 가' })).not.toBeChecked();
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+});
