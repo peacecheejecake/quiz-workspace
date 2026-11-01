@@ -69,7 +69,7 @@ workspace_forks(
 
 - `supabase/migrations`를 유일한 DB migration owner로 둔다. FastAPI가 공유 토큰·권한 검사의 유일한 경계다.
 - 원본 Workspace 삭제 후 Fork된 Workspace는 계속 존재. Source provenance는 삭제 가능한 FK와 별도의 복제 시점 attribution으로 보존한다.
-- Fork는 내부 Workspace ID, document, chapter, question, revision, source references를 새 ID로 remap한다. 원본 개인별 `question_attempts`, `question_user_states`는 복사하지 않는다. 중복 정리 연결(`question_merges`, UX7-DEDUP)도 복사하지 않는다: Fork는 확정 문제만 복사하므로 사본에는 남긴 문제만 있고 보관된 중복이 없다(제안 — 사용자 확인 필요, questions.md §10.2). 공유 링크 Viewer는 확정 문제만 보므로 보관된 중복도 보지 않는다.
+- Fork는 내부 Workspace ID, document, chapter, question, revision, source references를 새 ID로 remap한다. 원본 개인별 `question_attempts`, `question_user_states`는 복사하지 않는다. 중복 정리 연결(`question_merges`, UX7-DEDUP)도 복사하지 않는다: Fork는 확정 문제만 복사하므로 사본에는 남긴 문제만 있고 보관된 중복이 없다(사용자 결정 2026-11-01, questions.md §10.2). 공유 링크 Viewer는 확정 문제만 보므로 보관된 중복도 보지 않는다.
 
 ## 5. REST API 계약
 
