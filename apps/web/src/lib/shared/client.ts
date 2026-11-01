@@ -90,7 +90,12 @@ export interface SharedClient {
   workspace(signal?: AbortSignal): Promise<SharedWorkspace>;
   /** The published revision of a document with all of its blocks (read page by page). */
   document(documentId: string, signal?: AbortSignal): Promise<SharedDocument>;
-  questions(cursor: string | null, signal?: AbortSignal): Promise<SharedQuestionList>;
+  /** One page of published questions; `documentId` keeps those with a source in it (DOC-02-AC11). */
+  questions(
+    cursor: string | null,
+    signal?: AbortSignal,
+    documentId?: string,
+  ): Promise<SharedQuestionList>;
   search(query: string, signal?: AbortSignal): Promise<SharedSearchResponse>;
   /** One published question (the read-only question panel, e.g. from a note's footnote). */
   question(questionId: string, signal?: AbortSignal): Promise<SharedQuestion>;
@@ -185,11 +190,11 @@ export function createSharedClient(
     },
     workspace: (signal) => json<SharedWorkspace>('', { signal }),
     document: (documentId, signal) => loadDocument(documentId, signal),
-    questions: (cursor, signal) =>
+    questions: (cursor, signal, documentId) =>
       json<SharedQuestionList>(
         `/questions?limit=${SHARED_QUESTION_PAGE}${
-          cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
-        }`,
+          documentId ? `&document_id=${encodeURIComponent(documentId)}` : ''
+        }${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
         { signal },
       ),
     search: (query, signal) =>

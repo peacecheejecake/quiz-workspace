@@ -579,6 +579,24 @@ describe('editor API client', () => {
     // First outline answered r1 while blocks were r2: loaded a second time.
     expect(fetchImpl.mock.calls.filter(([u]) => String(u).includes('/outline'))).toHaveLength(2);
   });
+
+  it('pages through the questions of one document via the workspace relay (DOC-02-AC11)', async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const cursor = new URL(String(url), 'http://x').searchParams.get('cursor');
+      return Response.json(
+        cursor === null
+          ? { items: [{ id: 'q1' }], next_cursor: 'c_2' }
+          : { items: [{ id: 'q2' }], next_cursor: null },
+      );
+    });
+    const client = createEditorClient(fetchImpl as typeof fetch);
+    const items = await client.listDocumentQuestions('ws-1', 'doc-1');
+    expect(items.map((q) => q.id)).toEqual(['q1', 'q2']);
+    expect(fetchImpl.mock.calls.map(([u]) => String(u))).toEqual([
+      '/api/workspaces/ws-1/questions?document_id=doc-1&limit=200',
+      '/api/workspaces/ws-1/questions?document_id=doc-1&limit=200&cursor=c_2',
+    ]);
+  });
 });
 
 describe('pinned revision (search hit jump)', () => {

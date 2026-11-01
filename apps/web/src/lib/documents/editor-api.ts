@@ -15,6 +15,8 @@ export type RevisionHistoryItem = Schemas['RevisionHistoryItem'];
 export type PublishAccepted = Schemas['PublishAccepted'];
 export type RestoredDraft = Schemas['RestoredDraft'];
 export type SignedReadUrl = Schemas['SignedReadUrl'];
+export type QuestionList = Schemas['QuestionList'];
+export type Question = Schemas['Question'];
 
 /** `active` = the published revision readers see; `latest` = the correction draft if any. */
 export type RevisionSelector = 'active' | 'latest';
@@ -122,7 +124,16 @@ export const EDITOR_PATHS = {
   restore: (id: string, revisionId: string) =>
     `/api/documents/${enc(id)}/revisions/${enc(revisionId)}/restore`,
   sourceUrl: (id: string) => `/api/documents/${enc(id)}/source-url`,
+  documentQuestions: (workspaceId: string, documentId: string, cursor?: string) =>
+    `/api/workspaces/${enc(workspaceId)}/questions?document_id=${enc(documentId)}` +
+    `&limit=${QUESTION_PAGE_SIZE}` +
+    (cursor ? `&cursor=${enc(cursor)}` : ''),
 } as const;
+
+/** FastAPI's maximum page size for the question list. */
+export const QUESTION_PAGE_SIZE = 200;
+/** Safety stop (200 × 50 = 10 000 questions of one document). */
+const MAX_QUESTION_PAGES = 50;
 
 /** FastAPI's maximum page size for block lists. */
 export const BLOCK_PAGE_SIZE = 500;
@@ -154,6 +165,12 @@ export interface EditorClient {
   listRevisions(id: string, signal?: AbortSignal): Promise<RevisionHistoryItem[]>;
   restore(id: string, revisionId: string): Promise<RestoredDraft>;
   getSourceUrl(id: string, signal?: AbortSignal): Promise<SignedReadUrl>;
+  /** DOC-02-AC11: confirmed questions with a source in the document (all pages). */
+  listDocumentQuestions(
+    workspaceId: string,
+    documentId: string,
+    signal?: AbortSignal,
+  ): Promise<Question[]>;
 }
 
 type FetchLike = typeof fetch;
@@ -233,5 +250,19 @@ export function createEditorClient(fetchImpl: FetchLike = (...a) => fetch(...a))
       (await call<{ items: RevisionHistoryItem[] }>(EDITOR_PATHS.revisions(id), { signal })).items,
     restore: (id, revisionId) => call(EDITOR_PATHS.restore(id, revisionId), { method: 'POST' }),
     getSourceUrl: (id, signal) => call(EDITOR_PATHS.sourceUrl(id), { signal }),
+    async listDocumentQuestions(workspaceId, documentId, signal) {
+      const items: Question[] = [];
+      let cursor: string | undefined;
+      for (let page = 0; page < MAX_QUESTION_PAGES; page += 1) {
+        const list = await call<QuestionList>(
+          EDITOR_PATHS.documentQuestions(workspaceId, documentId, cursor),
+          { signal },
+        );
+        items.push(...list.items);
+        if (!list.next_cursor) break;
+        cursor = list.next_cursor;
+      }
+      return items;
+    },
   };
 }

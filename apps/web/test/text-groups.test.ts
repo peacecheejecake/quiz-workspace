@@ -26,7 +26,10 @@ describe('pageGroups', () => {
   it('groups blocks under the page they start on, in reading order', () => {
     const groups = pageGroups(blocks);
     expect(groups.map((g) => g.page)).toEqual([2, 4]);
-    expect(groups[0]?.items.map((i) => i.block.block_id)).toEqual(['a', 'b']);
+    expect(groups[0]?.items.map((i) => (i.kind === 'block' ? i.block.block_id : i.kind))).toEqual([
+      'a',
+      'b',
+    ]);
     expect([...(groups[1]?.blockIds ?? [])]).toEqual(['c', 'd']);
     expect(pageGroups([])).toEqual([]);
   });

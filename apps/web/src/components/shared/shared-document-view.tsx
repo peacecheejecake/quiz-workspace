@@ -30,21 +30,17 @@ import { TextBlockEditor } from '@/components/documents/editor/text-block-editor
 import { scrollTextTo } from '@/components/documents/editor/text-sync';
 import editorStyles from '@/components/documents/editor/editor.module.css';
 import { IDLE } from '@/lib/documents/block-edit';
-import {
-  blockPage,
-  sectionOf,
-  targetBlockFor,
-  viewerHighlights,
-  type OutlineJump,
-} from '@/lib/documents/outline';
+import { blockPage, sectionOf, targetBlockFor, type OutlineJump } from '@/lib/documents/outline';
 import type {
   ContentBlock,
   OutlineItem,
   SharedClient,
   SharedDocument,
+  SharedQuestion,
   SharedDocumentSummary,
 } from '@/lib/shared/client';
-import { pageGroups, textTargetForPage } from '@/lib/documents/text-groups';
+import { documentQuestions, type DocumentQuestion } from '@/lib/documents/document-questions';
+import { pageGroups, selectionHighlights, textTargetForPage } from '@/lib/documents/text-groups';
 import { endsShareView, sharedFailureMessage } from '@/lib/shared/messages';
 import { sharePath } from '@/lib/shared/view-state';
 import styles from './shared.module.css';
@@ -74,6 +70,8 @@ const MOBILE_VIEWS: readonly { id: MobileView; label: string }[] = [
 ];
 
 const noop = () => undefined;
+/** Safety stop for paging a document's shared questions (100 × 100). */
+const MAX_QUESTION_PAGES = 100;
 
 export function SharedDocumentView({
   shareId,
@@ -158,7 +156,26 @@ export function SharedDocumentView({
   }
 
   // DOC-02-AC08: the text pane follows the PDF when the reader moves it.
-  const groups = useMemo(() => pageGroups(blocks), [blocks]);
+  // DOC-02-AC11: published questions imported from this PDF show in question format.
+  const [questions, setQuestions] = useState<readonly DocumentQuestion[]>([]);
+  const loadedDocument = document !== null;
+  useEffect(() => {
+    if (!loadedDocument) return;
+    const controller = new AbortController();
+    void (async () => {
+      const items: SharedQuestion[] = [];
+      let cursor: string | null = null;
+      for (let n = 0; n < MAX_QUESTION_PAGES; n += 1) {
+        const list = await client.questions(cursor, controller.signal, documentId);
+        items.push(...list.items);
+        cursor = list.next_cursor ?? null;
+        if (!cursor) break;
+      }
+      if (!controller.signal.aborted) setQuestions(documentQuestions(items, documentId));
+    })().catch(() => undefined);
+    return () => controller.abort();
+  }, [client, documentId, loadedDocument]);
+  const groups = useMemo(() => pageGroups(blocks, questions), [blocks, questions]);
   const textScrollRef = useRef<HTMLDivElement>(null);
   const syncTextTo = useRef<number | null>(null);
   const onViewerPage = useCallback((next: number, reason: PageChangeReason) => {
@@ -182,8 +199,8 @@ export function SharedDocumentView({
     [blocks, currentBlockId],
   );
   const highlights = useMemo(
-    () => viewerHighlights(currentBlock, outlineJump, blocks),
-    [blocks, currentBlock, outlineJump],
+    () => selectionHighlights(currentBlock, outlineJump, blocks, groups),
+    [blocks, currentBlock, groups, outlineJump],
   );
   const title = document?.title ?? summary?.title ?? '문서';
 

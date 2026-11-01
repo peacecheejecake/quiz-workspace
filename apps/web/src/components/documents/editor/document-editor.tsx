@@ -31,12 +31,12 @@ import {
   blockPage,
   sectionOf,
   targetBlockFor,
-  viewerHighlights,
   viewerSearch,
   type OutlineJump,
 } from '@/lib/documents/outline';
 import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
-import { pageGroups, textTargetForPage } from '@/lib/documents/text-groups';
+import { documentQuestions, type DocumentQuestion } from '@/lib/documents/document-questions';
+import { pageGroups, selectionHighlights, textTargetForPage } from '@/lib/documents/text-groups';
 import {
   INDEX_FAILURE_MESSAGE,
   isDraft,
@@ -158,6 +158,19 @@ export function DocumentEditor({
 
   const content = contentState.status === 'ready' ? contentState.content : null;
 
+  // DOC-02-AC11: confirmed questions imported from this PDF show in question format. Without them
+  // (none registered, or the list failed) the text shows as it is.
+  const [questions, setQuestions] = useState<readonly DocumentQuestion[]>([]);
+  const hasQuestions = (initialDocument.question_count ?? 0) > 0;
+  useEffect(() => {
+    if (!ready || !hasQuestions) return;
+    const controller = new AbortController();
+    client
+      .listDocumentQuestions(workspaceId, documentId, controller.signal)
+      .then((items) => setQuestions(documentQuestions(items, documentId)))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [client, documentId, hasQuestions, ready, workspaceId]);
   useEffect(() => {
     revisionIdRef.current = content?.revision?.id ?? null;
   }, [content]);
@@ -569,7 +582,7 @@ export function DocumentEditor({
 
   // DOC-02-AC08: the reader moved the PDF (scroll, page buttons): the text pane follows to that
   // page, except while a block is being edited.
-  const groups = useMemo(() => pageGroups(blocks), [blocks]);
+  const groups = useMemo(() => pageGroups(blocks, questions), [blocks, questions]);
   const syncTextTo = useRef<number | null>(null);
   const onViewerPage = useCallback((next: number, reason: PageChangeReason) => {
     setPage(next);
@@ -643,8 +656,8 @@ export function DocumentEditor({
     ) : null;
 
   const highlights = useMemo(
-    () => viewerHighlights(currentBlock, outlineJump, blocks),
-    [blocks, currentBlock, outlineJump],
+    () => selectionHighlights(currentBlock, outlineJump, blocks, groups),
+    [blocks, currentBlock, groups, outlineJump],
   );
   const currentSection = sectionOf(currentBlock, outline);
 

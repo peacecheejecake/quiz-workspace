@@ -8,11 +8,20 @@
 // (blockEditReducer). Readers get the same list without any edit control. Each page group is
 // memoized: a page change or a selection re-renders only the groups it touches.
 import { Badge, Button } from '@quiz/ui';
-import { memo, useEffect, useRef, type KeyboardEvent } from 'react';
+import {
+  memo,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { IDLE, type BlockEditState } from '@/lib/documents/block-edit';
 import type { ContentBlock } from '@/lib/documents/editor-api';
 import { blockPage } from '@/lib/documents/outline';
-import { blockPageSpan, type PageGroup } from '@/lib/documents/text-groups';
+import { answerLines, optionLabel, QUESTION_TYPE_LABELS } from '@/lib/documents/document-questions';
+import { blockPageSpan, type PageGroup, type QuestionItem } from '@/lib/documents/text-groups';
 import styles from './editor.module.css';
 
 export interface TextBlockEditorProps {
@@ -233,6 +242,112 @@ function EditingItem({ block, current, state, onChange, onSave, onCancel }: Edit
   );
 }
 
+interface QuestionCardProps {
+  readonly item: QuestionItem;
+  readonly currentBlockId: string | null;
+  readonly renderBlock: (block: ContentBlock) => ReactNode;
+  /** One of its source blocks is being edited: the source blocks stay open. */
+  readonly editingInside: boolean;
+  readonly onSelect: (block: ContentBlock) => void;
+}
+
+/**
+ * DOC-02-AC11: a confirmed imported question in question format — number, type, stem and the
+ * options in their registered order — with the answer and explanation folded away until asked
+ * for, and the source blocks (correctable by editors) behind `원문 블록 보기`.
+ */
+function QuestionCard({
+  item,
+  currentBlockId,
+  renderBlock,
+  editingInside,
+  onSelect,
+}: QuestionCardProps) {
+  const { question, blocks } = item;
+  const [answerOpen, setAnswerOpen] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const id = useId();
+  const showSource = sourceOpen || editingInside;
+  const title = question.number !== null ? `${question.number}번 문제` : '문제';
+  const holdsCurrent = currentBlockId !== null && blocks.some((b) => b.block_id === currentBlockId);
+  const first = blocks[0];
+  return (
+    <div
+      role="group"
+      aria-labelledby={`${id}-title`}
+      className={styles.questionCard}
+      // The selection is marked on the card while its source blocks are folded, else on the block.
+      aria-current={holdsCurrent && !showSource ? 'true' : undefined}
+      data-block-ids={blocks.map((b) => b.block_id).join(' ')}
+    >
+      <div className={styles.blockMeta}>
+        <span id={`${id}-title`} className={styles.questionTitle}>
+          {title}
+        </span>
+        <span>{QUESTION_TYPE_LABELS[question.type]}</span>
+        {first ? <PageSpan block={first} /> : null}
+        <span className={styles.blockActions}>
+          {first ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={`${title} 원문 위치 보기`}
+              onClick={() => onSelect(first)}
+            >
+              위치
+            </Button>
+          ) : null}
+        </span>
+      </div>
+      <p className={styles.questionStem}>{question.stem}</p>
+      {question.options.length > 0 ? (
+        <ol className={styles.optionList} aria-label="보기">
+          {question.options.map((option, index) => (
+            <li key={option.id} className={styles.option}>
+              <span className={styles.optionLabel}>{optionLabel(index)}</span>
+              <span>{option.text}</span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      <div className={styles.questionActions}>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-expanded={answerOpen}
+          aria-controls={`${id}-answer`}
+          onClick={() => setAnswerOpen((open) => !open)}
+        >
+          정답·해설 보기
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-expanded={showSource}
+          aria-controls={`${id}-source`}
+          onClick={() => setSourceOpen((open) => !open)}
+          disabled={editingInside}
+        >
+          원문 블록 보기 ({blocks.length})
+        </Button>
+      </div>
+      {answerOpen ? (
+        <div id={`${id}-answer`} className={styles.answer}>
+          {answerLines(question).map((line, index) => (
+            // Lines have no ids; their order is their identity.
+            <p key={index}>{line}</p>
+          ))}
+        </div>
+      ) : null}
+      {showSource ? (
+        <div id={`${id}-source`} className={styles.questionSource}>
+          {blocks.map((block) => renderBlock(block))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 interface PageGroupViewProps {
   readonly group: PageGroup;
   readonly current: boolean;
@@ -267,6 +382,28 @@ const PageGroupView = memo(function PageGroupView({
 }: PageGroupViewProps) {
   const headingId = `text-page-${group.page}`;
   const editingId = editState.phase === 'idle' ? null : editState.blockId;
+  const renderBlock = (block: ContentBlock) =>
+    canEdit && editState.phase !== 'idle' && block.block_id === editingId ? (
+      <EditingItem
+        key={block.block_id}
+        block={block}
+        current={block.block_id === currentBlockId}
+        state={editState}
+        onChange={onChange}
+        onSave={onSave}
+        onCancel={onCancel}
+      />
+    ) : (
+      <BlockItem
+        key={block.block_id}
+        block={block}
+        current={block.block_id === currentBlockId}
+        canEdit={canEdit}
+        editDisabled={editLocked || editingAny}
+        onSelect={onSelect}
+        onStartEdit={onStartEdit}
+      />
+    );
   return (
     <div
       role="group"
@@ -277,27 +414,18 @@ const PageGroupView = memo(function PageGroupView({
       <h3 id={headingId} className={styles.pageHeading} aria-current={current ? 'page' : undefined}>
         {group.page}쪽
       </h3>
-      {group.items.map(({ block }) =>
-        canEdit && editState.phase !== 'idle' && block.block_id === editingId ? (
-          <EditingItem
-            key={block.block_id}
-            block={block}
-            current={block.block_id === currentBlockId}
-            state={editState}
-            onChange={onChange}
-            onSave={onSave}
-            onCancel={onCancel}
+      {group.items.map((item) =>
+        item.kind === 'question' ? (
+          <QuestionCard
+            key={`q-${item.question.id}`}
+            item={item}
+            currentBlockId={currentBlockId}
+            renderBlock={renderBlock}
+            editingInside={editingId !== null && item.blocks.some((b) => b.block_id === editingId)}
+            onSelect={onSelect}
           />
         ) : (
-          <BlockItem
-            key={block.block_id}
-            block={block}
-            current={block.block_id === currentBlockId}
-            canEdit={canEdit}
-            editDisabled={editLocked || editingAny}
-            onSelect={onSelect}
-            onStartEdit={onStartEdit}
-          />
+          renderBlock(item.block)
         ),
       )}
     </div>
