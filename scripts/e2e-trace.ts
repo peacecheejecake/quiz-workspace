@@ -87,6 +87,9 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'DOCTXT.0': ['DOC-03'],
   'DOCSUM.0': ['DOCSUM-01'],
   'CHNOTE.0': ['CHNOTE-01'],
+  // ASK-SPEC (2026-11-01): ask the LLM about workspace documents, AI explanations after submission.
+  'ASK.0': ['ASK-01'],
+  'EXPL.0': ['AIEXPL-01'],
 };
 
 const LEADING_ID = new RegExp(
