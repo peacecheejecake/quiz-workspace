@@ -116,9 +116,11 @@ export default defineConfig({
   timeout: 45_000,
   expect: {
     timeout: 10_000,
-    // Visual baselines (quality/visual.spec.ts): same renderer, so only antialiasing noise.
+    // Visual baselines (quality/visual.spec.ts): same renderer and content that does not vary per
+    // run (the spec masks or equalizes what does), so no pixel may differ beyond the per-pixel
+    // color threshold (Playwright's default 0.2). UX7-VISUAL: a ratio allowance hid real drift.
     toHaveScreenshot: {
-      maxDiffPixelRatio: 0.002,
+      maxDiffPixels: 0,
       animations: 'disabled',
       caret: 'hide',
       scale: 'css',
