@@ -414,3 +414,192 @@ describe('overlay body scroll region (axe scrollable-region-focusable)', () => {
     expect(screen.getByRole('group', { name: '안내' })).toBe(bodyOf(dialog));
   });
 });
+
+/** DOC-02-like host: a bar toggle outside the panel and a positioned split container. */
+function DockedOutline(props: {
+  initialOpen: boolean;
+  dockMode?: 'inset' | 'overlay';
+  modal?: boolean;
+  focusTreeOnOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(props.initialOpen);
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  return (
+    <main>
+      <div role="group" aria-label="보기 설정">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls="outline-panel"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? '목차 접기' : '목차 펼치기'}
+        </button>
+      </div>
+      <div ref={setHost} data-testid="split-host" style={{ position: 'relative' }}>
+        <button type="button">원본 내용</button>
+      </div>
+      <FloatingSidePanel
+        id="outline-panel"
+        side="start"
+        placement="docked"
+        dockMode={props.dockMode}
+        modal={props.modal}
+        container={host}
+        open={open}
+        onOpenChange={setOpen}
+        title="목차"
+        closeLabel="목차 접기"
+        onOpenAutoFocus={
+          props.focusTreeOnOpen
+            ? (event) => {
+                event.preventDefault();
+                document.getElementById('first-item')?.focus();
+              }
+            : undefined
+        }
+      >
+        <ul role="tree" aria-label="문서 목차">
+          <li role="treeitem" id="first-item" tabIndex={0} aria-selected="false">
+            1장
+          </li>
+        </ul>
+      </FloatingSidePanel>
+    </main>
+  );
+}
+
+describe('FloatingSidePanel side="start" placement="docked"', () => {
+  it('docks non-modally inside the container and makes room for itself (inset)', async () => {
+    render(<DockedOutline initialOpen modal />);
+    const dialog = await screen.findByRole('dialog', { name: '목차' });
+    const host = screen.getByTestId('split-host');
+    expect(host).toContainElement(dialog);
+    expect(dialog).toHaveAttribute('data-side', 'start');
+    expect(dialog).toHaveAttribute('data-placement', 'docked');
+    expect(dialog).toHaveAttribute('data-dock-mode', 'inset');
+    // A docked panel is always the narrow navigation column (--outline-panel-width).
+    expect(dialog).toHaveAttribute('data-size', 'narrow');
+    expect(dialog).toHaveAttribute('id', 'outline-panel');
+    // `modal` is ignored for docked panels: no aria-modal, no backdrop, background reachable.
+    expect(dialog).not.toHaveAttribute('aria-modal');
+    expect(document.querySelector('.qz-backdrop')).toBeNull();
+    expect(screen.getByRole('button', { name: '원본 내용' })).toBeVisible();
+    expect(host).toHaveAttribute('data-qz-dock-inset', 'start');
+
+    await userEvent.click(screen.getByRole('button', { name: '목차 접기', expanded: true }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(host).not.toHaveAttribute('data-qz-dock-inset');
+  });
+
+  it('overlay mode leaves the container untouched', async () => {
+    render(<DockedOutline initialOpen dockMode="overlay" />);
+    const dialog = await screen.findByRole('dialog', { name: '목차' });
+    expect(dialog).toHaveAttribute('data-dock-mode', 'overlay');
+    expect(screen.getByTestId('split-host')).not.toHaveAttribute('data-qz-dock-inset');
+  });
+
+  it('does not move focus when it mounts open (restored state)', async () => {
+    const before = document.createElement('button');
+    before.textContent = '이전 focus';
+    document.body.append(before);
+    before.focus();
+    render(<DockedOutline initialOpen focusTreeOnOpen />);
+    await screen.findByRole('dialog', { name: '목차' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(before).toHaveFocus();
+    before.remove();
+  });
+
+  it('moves focus in when the user opens it, and Escape inside collapses back to the toggle', async () => {
+    const user = userEvent.setup();
+    render(<DockedOutline initialOpen={false} focusTreeOnOpen />);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await user.click(screen.getByRole('button', { name: '목차 펼치기' }));
+    await screen.findByRole('dialog', { name: '목차' });
+    await waitFor(() => expect(screen.getByRole('treeitem', { name: '1장' })).toHaveFocus());
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('button', { name: '목차 펼치기' })).toHaveFocus();
+  });
+
+  it('Escape with focus outside the panel keeps it open', async () => {
+    const user = userEvent.setup();
+    render(<DockedOutline initialOpen />);
+    await screen.findByRole('dialog', { name: '목차' });
+    screen.getByRole('button', { name: '원본 내용' }).focus();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: '목차' })).toBeInTheDocument();
+  });
+
+  it('restored open: Escape inside returns focus to the aria-controls toggle', async () => {
+    const user = userEvent.setup();
+    render(<DockedOutline initialOpen />);
+    await screen.findByRole('dialog', { name: '목차' });
+    screen.getByRole('treeitem', { name: '1장' }).focus();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('button', { name: '목차 펼치기' })).toHaveFocus();
+  });
+
+  it('is not rendered until its container exists', () => {
+    render(
+      <FloatingSidePanel open placement="docked" side="start" container={null} title="목차">
+        내용
+      </FloatingSidePanel>,
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('defaults stay end / viewport', async () => {
+    render(
+      <FloatingSidePanel defaultOpen modal={false} title="발췌">
+        본문
+      </FloatingSidePanel>,
+    );
+    const dialog = await screen.findByRole('dialog', { name: '발췌' });
+    expect(dialog).toHaveAttribute('data-side', 'end');
+    expect(dialog).toHaveAttribute('data-placement', 'viewport');
+    expect(dialog).not.toHaveAttribute('data-dock-mode');
+    expect(document.body).toContainElement(dialog);
+  });
+});
+
+describe('FloatingSidePanel id', () => {
+  it('keeps the Radix content id (trigger aria-controls) when no id is given', async () => {
+    render(
+      <FloatingSidePanel modal={false} title="발췌" trigger={<Button>발췌 열기</Button>}>
+        본문
+      </FloatingSidePanel>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: '발췌 열기' }));
+    const dialog = await screen.findByRole('dialog', { name: '발췌' });
+    expect(dialog.id).not.toBe('');
+    expect(screen.getByRole('button', { name: '발췌 열기' })).toHaveAttribute(
+      'aria-controls',
+      dialog.id,
+    );
+  });
+});
+
+describe('FloatingSidePanel id with a trigger', () => {
+  it('points the trigger aria-controls at the explicit id', async () => {
+    render(
+      <FloatingSidePanel
+        id="excerpt-panel"
+        modal={false}
+        title="발췌"
+        trigger={<Button>발췌 열기</Button>}
+      >
+        본문
+      </FloatingSidePanel>,
+    );
+    const trigger = screen.getByRole('button', { name: '발췌 열기' });
+    expect(trigger).not.toHaveAttribute('aria-controls');
+    await userEvent.click(trigger);
+    const dialog = await screen.findByRole('dialog', { name: '발췌' });
+    expect(dialog).toHaveAttribute('id', 'excerpt-panel');
+    expect(trigger).toHaveAttribute('aria-controls', 'excerpt-panel');
+  });
+});
