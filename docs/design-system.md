@@ -302,6 +302,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - Desktop right panel: width `min(500px, calc(100vw - 32px))`, top/right/bottom margin `16px`, rounded `20px`, glass surface, shadow, viewport 내부 독립 scroll.
 - `QuestionPracticePanel`: **modal** 기본. 정답을 제출하거나 뒤로/다음 이동하는 명확한 흐름. backdrop 클릭/ESC 처리 정책 정의, 닫을 때 trigger dot로 focus 복귀.
 - `DocumentExcerptPanel`: **non-modal** 기본. PDF·검색 결과와 동시에 볼 수 있음.
+- **`QuestionViewer` (MOCK-SPEC 2026-11-01):** 문제를 하나씩 보이는 모든 곳의 공통 컴포넌트. 방식 `practice`(위 `QuestionPracticePanel` 규칙: modal, 한 문제, 이전·다음) · `sequence`(범위 풀이: modal, 진행 `ProgressBar`·`이전`·`다음`·`건너뛰기`·결과 요약) · `manage`(정답·해설·편집 동작) · `read-only`(공유 게스트, non-modal). 범위 고르기 부품 `QuestionRangePicker`(tri-state `전체 선택`·장·문제 checkbox)는 모의고사 만들기와 같이 쓴다. 호출 위치·동작·AC는 [QVIEW-01](screens/question-viewer.md).
 - **왼쪽·좁은 panel (DOCVIEW, 2026-11-01):** `side="start"`(데스크톱에서 왼쪽 16px margin, 들어오고 나갈 때 왼쪽에서 움직임; 모바일은 같은 bottom sheet)와 `size="narrow"`(`min(20rem, 100vw - 32px)`)는 탐색용 panel이다. DOC-02 `목차`가 non-modal로 쓰며, 데스크톱(≥1024px)에서는 화면 내용이 panel 폭만큼 비켜서 PDF를 가리지 않고, 더 좁은 화면에서 PDF 위에 뜰 때는 불투명(`--color-glass-solid`, blur 없음)이다(DOC-02-AC06).
 - `QuestionGenerationReviewPanel`: 충분한 공간이 필요하므로 desktop에서는 600px 이상 비교 drawer 또는 전체 page 모드 제공(500px 강제 금지).
 - Mobile: full width bottom sheet 또는 full-height panel, safe-area inset, `max-height: 90dvh`; 화면이 좁다면 문제 상세 전체 페이지로 전환 가능.
@@ -398,7 +399,7 @@ Workspace 홈(UX3c, 2026-10-20): Workspace 안에는 sidebar가 없다. 홈의 W
 
 ### Domain components
 
-`AuthLayout`, `SignInForm`, `SignUpForm`, `PasswordResetForm`, `VerificationNotice`, `SessionExpiredDialog`, `DocumentOutlineTree`, `PdfViewer`, `TextBlockEditor`, `SearchResultList`, `SearchExcerpt`, `QuestionMarker`, `QuestionDot`, `QuestionHeatmap`, `HeatmapLegend`, `QuestionPreviewPopover`, `QuestionPracticePanel`, `QuestionOptionList`, `QuestionAnswerField`, `FavoriteToggle`, `RetryToggle`, `QuestionGenerationForm`, `VariationDiffViewer`, `QuestionDraftReview`, `ImportJobProgress`.
+`AuthLayout`, `SignInForm`, `SignUpForm`, `PasswordResetForm`, `VerificationNotice`, `SessionExpiredDialog`, `DocumentOutlineTree`, `PdfViewer`, `TextBlockEditor`, `SearchResultList`, `SearchExcerpt`, `QuestionMarker`, `QuestionDot`, `QuestionHeatmap`, `HeatmapLegend`, `QuestionPreviewPopover`, `QuestionPracticePanel`(→ `QuestionViewer` `practice` 방식, MOCK-SPEC), `QuestionViewer`, `QuestionRangePicker`, `QuestionOptionList`, `QuestionAnswerField`, `FavoriteToggle`, `RetryToggle`, `QuestionGenerationForm`, `VariationDiffViewer`, `QuestionDraftReview`, `ImportJobProgress`.
 
 ## 8. 컴포넌트 상태·문서화 규칙
 
