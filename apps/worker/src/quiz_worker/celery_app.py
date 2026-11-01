@@ -46,6 +46,7 @@ from quiz_worker.errors import JobOutcomeError, JobRetryError, sanitize_error
 from quiz_worker.fork_job import LazyForkDeps, workspace_fork_definition
 from quiz_worker.jobs import ECHO_JOB
 from quiz_worker.logging_config import configure_logging, job_id_var
+from quiz_worker.mock_exam_job import LazyMockExamDeps, mock_exam_generate_definition
 from quiz_worker.pg_store import (
     PostgresJobStore,
     create_job_store_engine,
@@ -555,4 +556,5 @@ def default_definitions(
         workspace_fork_definition(LazyForkDeps(settings)),
         document_summarize_definition(LazySummaryDeps(settings)),
         chapter_note_definition(LazyChapterNoteDeps(settings)),
+        mock_exam_generate_definition(LazyMockExamDeps(settings)),
     ]
