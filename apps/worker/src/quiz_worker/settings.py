@@ -293,16 +293,22 @@ class WorkerSettings(BaseSettings):
             raise ValueError(
                 "WORKER_PARSE_PAGE_BATCH_SIZE must not exceed WORKER_PARSE_QUEUE_MAX_SIZE"
             )
-        problem = mock_exam_budget_problem(
-            prompt_tokens=self.mock_exam_max_prompt_tokens,
-            output_tokens=self.mock_exam_max_output_tokens,
-            sources_per_call=self.mock_exam_sources_per_call,
-            concurrency=self.mock_exam_generation_concurrency,
-            context_tokens=_env_int("LLM_CONTEXT_TOKENS", DEFAULT_LLM_CONTEXT_TOKENS),
-            max_tokens=_env_int("LLM_MAX_TOKENS", DEFAULT_LLM_MAX_TOKENS),
-            call_timeout_seconds=_env_int("LLM_TIMEOUT_SECONDS", DEFAULT_LLM_TIMEOUT_SECONDS),
-            task_soft_time_limit_seconds=self.task_soft_time_limit_seconds
-            or self.task_time_limit_seconds,
+        # Only a worker that makes AI mock exams must fit the budgets (other workers, e.g. tests
+        # with tiny task limits, never run them).
+        problem = (
+            None
+            if not self.mock_exams
+            else mock_exam_budget_problem(
+                prompt_tokens=self.mock_exam_max_prompt_tokens,
+                output_tokens=self.mock_exam_max_output_tokens,
+                sources_per_call=self.mock_exam_sources_per_call,
+                concurrency=self.mock_exam_generation_concurrency,
+                context_tokens=_env_int("LLM_CONTEXT_TOKENS", DEFAULT_LLM_CONTEXT_TOKENS),
+                max_tokens=_env_int("LLM_MAX_TOKENS", DEFAULT_LLM_MAX_TOKENS),
+                call_timeout_seconds=_env_int("LLM_TIMEOUT_SECONDS", DEFAULT_LLM_TIMEOUT_SECONDS),
+                task_soft_time_limit_seconds=self.task_soft_time_limit_seconds
+                or self.task_time_limit_seconds,
+            )
         )
         if problem is not None:
             raise ValueError(problem)

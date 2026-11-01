@@ -63,5 +63,6 @@ def test_budgets_over_the_model_or_the_time_limit_are_refused(
     slow = {**base, "sources_per_call": 1, "concurrency": 1}
     assert "SOFT_TIME_LIMIT" in str(mock_exam_budget_problem(**slow))
     monkeypatch.setenv("LLM_MAX_TOKENS", "8000")
+    WorkerSettings(APP_ENV=Environment.TEST)  # type: ignore[call-arg]  # the feature is off
     with pytest.raises(ValidationError, match="LLM_MAX_TOKENS"):
-        WorkerSettings(APP_ENV=Environment.TEST)  # type: ignore[call-arg]
+        WorkerSettings(APP_ENV=Environment.TEST, WORKER_MOCK_EXAMS=True)  # type: ignore[call-arg]

@@ -135,6 +135,16 @@ RULES: dict[str, Rule | str] = {
     "listChapterNotes": READ,
     "getChapterNote": READ,
     "createChapterNote": EDIT,
+    # mock exams (MOCK-01-C05)
+    "listMockExams": READ,
+    "createMockExam": EDIT,
+    "getMockExam": READ,
+    "renameMockExam": EDIT,
+    "deleteMockExam": EDIT,
+    "createMockExamGeneration": EDIT,
+    "listMockExamQuestions": READ,
+    "updateMockExamQuestion": EDIT,
+    "removeMockExamQuestion": EDIT,
     # workspace lifecycle and sharing
     "getWorkspace": READ,
     "listWorkspaceActivities": READ,
@@ -235,6 +245,14 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "createQuestionImport": {"document_id": ids["document_id"]},
         "createQuestion": mcq,
         "createShareLink": {},
+        "createMockExam": {
+            "title": "S4 모의고사",
+            "config": {"variation_types": ["OPTION_SHUFFLE"], "question_count": 1},
+            "range": {"all": True},
+        },
+        "renameMockExam": {"title": "S4 이름"},
+        "createMockExamGeneration": {},
+        "updateMockExamQuestion": {"base_revision_id": str(uuid.UUID(int=1)), "stem": "S4"},
         "updateShareLink": {"allow_fork": False},
     }
     return bodies.get(op_id)
