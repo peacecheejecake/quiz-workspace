@@ -17,7 +17,7 @@
 | DOC-02 | PDF 열람·원문 교정 | `/workspaces/:workspaceId/documents/:documentId` | [documents-editor.md](documents-editor.md) |
 | DOC-03 | 문서 전문 텍스트 내보내기 | DOC-01 행 메뉴 · DOC-02 header (`GET /documents/:documentId/text`) | [documents-text-export.md](documents-text-export.md) |
 | DOCSUM-01 | 문서 요약 Floating Side Panel | `/workspaces/:workspaceId?panel=document-summary&document=:documentId` | [documents-summary.md](documents-summary.md) |
-| SEARCH-01 | 문제 검색·본문 검색 | `/workspaces/:workspaceId?q=:query&text=:query` | [search.md](search.md) |
+| SEARCH-01 | 문제 검색·본문 검색 | `/workspaces/:workspaceId?q=:query` | [search.md](search.md) |
 | QOV-01 | Workspace 홈 (문제 Heatmap) | `/workspaces/:workspaceId` | [questions-overview.md](questions-overview.md) |
 | QPLAY-01 | 문제 풀이 Floating Side Panel | `/workspaces/:workspaceId?question=:questionId` | [questions-practice.md](questions-practice.md) |
 | CHNOTE-01 | 챕터 정리 노트 Floating Side Panel | `/workspaces/:workspaceId?panel=chapter-note&chapter=:chapterId` | [chapter-notes.md](chapter-notes.md) |
