@@ -25,7 +25,8 @@
 // search `text` and its options (search/state.ts), `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
 // chapter header's `정리 노트` button opens it), and `question` (the practice panel). Dialog and panel
 // changes use history.pushState (Next syncs useSearchParams; no server round trip); filter and
-// 문제 search changes use router.replace (the server re-reads the overview; the 문제 search only
+// 문제 search changes write the URL at once and use router.replace (the server re-reads the
+// overview, rereadHeatmap; the 문제 search only
 // once typing pauses). The 본문 search writes its keys with history.replaceState.
 import {
   Button,
@@ -69,6 +70,7 @@ import type { ChapterChoice, QuestionOverview } from '@/lib/questions/overview-d
 import {
   EMPTY_OVERVIEW_FILTERS,
   mergeOverviewFilters,
+  parseOverviewFilters,
   OVERVIEW_SEARCH_MAX,
   overviewSearch,
   type OverviewFilters,
@@ -83,6 +85,7 @@ import {
 } from '@/lib/search/scope';
 import { CONTENT_QUERY_PARAM, MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
 import {
+  isChapterNoteOpen,
   keepNoteChapter,
   noteChapterOf,
   openChapterNote,
@@ -294,21 +297,49 @@ export function WorkspaceHome({
     setView(filters);
   }
 
+  /**
+   * Writes `search` (new heatmap filters or the 문제 search) into the address bar at once, then
+   * has the server re-read the overview for it (UX7-SEARCH). Without the immediate write, a
+   * dialog opened while the re-read was loading pushed a URL without the new filters (its
+   * pushState also discards the pending navigation), or the navigation's URL, a snapshot from
+   * before, dropped the dialog's `panel`. Now later URL writes build on the new URL; a re-read
+   * discarded that way is redone by the reconciliation below. A newer re-read supersedes an older
+   * one, so a late answer never wins.
+   */
+  function rereadHeatmap(search: string) {
+    const target = `${pathname}${search}`;
+    window.history.replaceState(null, '', target);
+    startNavigation(() => router.replace(target, { scroll: false }));
+  }
+
+  // The heatmap filters the address bar asks for (as the page reads them: the open 정리 노트
+  // panel owns `chapter`). When they differ from what the server rendered and nothing is
+  // loading, a re-read was discarded (see rereadHeatmap): read the current URL once more.
+  const urlFilters = parseOverviewFilters(searchParams);
+  const urlFiltersKey = overviewSearch(
+    isChapterNoteOpen(searchParams) ? { ...urlFilters, chapter: null } : urlFilters,
+  );
+  const healedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (navigating) return;
+    if (urlFiltersKey === filtersKey) {
+      healedKeyRef.current = null;
+      return;
+    }
+    if (healedKeyRef.current === urlFiltersKey) return; // one retry per URL, never a loop
+    healedKeyRef.current = urlFiltersKey;
+    startNavigation(() =>
+      router.replace(`${pathname}${window.location.search}`, { scroll: false }),
+    );
+  }, [filtersKey, navigating, pathname, router, urlFiltersKey]);
+
   function changeFilters(patch: Partial<OverviewFilters>) {
     const next = { ...view, ...patch };
     setView(next);
-    startNavigation(() => {
-      const search = window.location.search;
-      const merged = keepNoteChapter(
-        search,
-        mergeOverviewFilters(search, next),
-        patch.chapter ?? null,
-      );
-      // The 문제 search's latest commit, which the address bar may not show yet (SEARCH-01-AC12).
-      router.replace(`${pathname}${patchSearch(merged, { q: next.q || null })}`, {
-        scroll: false,
-      });
-    });
+    const search = window.location.search;
+    rereadHeatmap(
+      keepNoteChapter(search, mergeOverviewFilters(search, next), patch.chapter ?? null),
+    );
   }
 
   // --- 문제 search (SEARCH-01-AC12: live, debounced; `q`) ---------------------------------------
@@ -317,28 +348,21 @@ export function WorkspaceHome({
     max: OVERVIEW_SEARCH_MAX,
     onCommit: (q) => {
       setView((v) => ({ ...v, q }));
-      // `replace`: typing never adds history entries. A newer navigation supersedes an older one
-      // that is still loading, so a late answer never replaces the newer query's heatmap.
-      startNavigation(() =>
-        router.replace(`${pathname}${patchSearch(window.location.search, { q: q || null })}`, {
-          scroll: false,
-        }),
-      );
+      // replaceState: typing never adds history entries.
+      rereadHeatmap(patchSearch(window.location.search, { q: q || null }));
     },
   });
 
   function resetAll() {
     questionSearch.replace('');
     setView(EMPTY_OVERVIEW_FILTERS);
-    startNavigation(() => {
-      const search = window.location.search;
-      const merged = keepNoteChapter(
-        search,
-        mergeOverviewFilters(search, EMPTY_OVERVIEW_FILTERS),
-        null,
-      );
-      router.replace(`${pathname}${patchSearch(merged, { q: null })}`, { scroll: false });
-    });
+    const search = window.location.search;
+    const merged = keepNoteChapter(
+      search,
+      mergeOverviewFilters(search, EMPTY_OVERVIEW_FILTERS),
+      null,
+    );
+    rereadHeatmap(patchSearch(merged, { q: null }));
   }
 
   // --- 본문 search (SEARCH-01-AC09/AC10: collapsed by default; `text` + options) ---------------
