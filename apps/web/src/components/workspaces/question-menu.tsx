@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useId } from 'react';
+import { Fragment, useId, useRef } from 'react';
 import {
   Button,
   ChevronDownIcon,
@@ -37,9 +37,11 @@ interface QuestionMenuAction {
  * into 문서 관리 (UX7-DOCS, DOC-01-AC09). The button is shown to everyone (UX7-DOCS-2,
  * QOV-01-AC11): without edit rights the editor-only items are Radix-disabled (aria-disabled,
  * skipped by the arrow keys) and a text label says why, since a disabled item has no tooltip on
- * touch. A dialog opens once the menu has returned focus to its trigger, so closing the dialog
- * brings focus back there. 보관·초안 문제 (UX7-BANK-2, QOV-01-AC15: the floating dialog of draft and
- * archived questions, `?panel=inactive-questions`) is readable by every member, so it stays enabled.
+ * touch. A chosen action runs only once the menu has handed focus back to its trigger (in
+ * onCloseAutoFocus, which Radix fires from a timer after the menu unmounts), so the dialog it
+ * opens records the trigger as its opener and closing the dialog brings focus back there.
+ * 보관·초안 문제 (UX7-BANK-2, QOV-01-AC15: the floating dialog of draft and archived questions,
+ * `?panel=inactive-questions`) is readable by every member, so it stays enabled.
  */
 export function QuestionMenu({
   readOnly,
@@ -53,7 +55,11 @@ export function QuestionMenu({
   readonly onInactive: () => void;
 }) {
   const reasonId = useId();
-  const afterClose = (action: () => void) => () => window.setTimeout(action, 0);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const pending = useRef<(() => void) | null>(null);
+  const afterClose = (action: () => void) => () => {
+    pending.current = action;
+  };
   const actions: readonly QuestionMenuAction[] = [
     { key: 'create', label: '직접 추가', requiresEdit: true, onSelect: onCreate },
     { key: 'generate', label: '변형 출제', requiresEdit: true, onSelect: onGenerate },
@@ -70,7 +76,7 @@ export function QuestionMenu({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button>
+        <Button ref={triggerRef}>
           문제
           <ChevronDownIcon width={16} height={16} aria-hidden="true" />
         </Button>
@@ -79,6 +85,14 @@ export function QuestionMenu({
         align="start"
         aria-label="문제"
         aria-describedby={anyDisabled ? reasonId : undefined}
+        onCloseAutoFocus={(event) => {
+          const action = pending.current;
+          pending.current = null;
+          if (!action) return;
+          event.preventDefault();
+          triggerRef.current?.focus();
+          action();
+        }}
       >
         {anyDisabled ? <DropdownMenuLabel id={reasonId}>{reason}</DropdownMenuLabel> : null}
         {actions.map((action) => {
