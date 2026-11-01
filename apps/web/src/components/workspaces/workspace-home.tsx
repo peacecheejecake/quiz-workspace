@@ -8,9 +8,9 @@
 //                     filters for 문제, the content-search options for 본문; question papers are
 //                     searched whenever 문제 is checked, UX4; no searchable scope disables the
 //                     submit with a status message, UX6), then two
-//                     button groups: `문서 n` · `문제` (menu: 전체 문제 — the bank, UX6-PROGRESS —
-//                     / PDF 관리 / 직접 추가 / 변형 출제, UX4), and, aligned right, `이력` · `공유하기` (icon buttons; share
-//                     for the owner only)
+//                     button groups: `문서 n` · `문제` (menu: PDF 관리 / 직접 추가 / 변형 출제, UX4;
+//                     no 전체 문제 since UX7-BANK), and, aligned right, `이력` · `공유하기` (icon
+//                     buttons; share for the owner only)
 //   content results   the 본문 search results when the scope includes 본문
 //   문제 영역         the heatmap (QuestionsOverview)
 //   floating dialogs  문서 관리 · 문제 PDF 관리 · 문제 생성 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
@@ -18,6 +18,8 @@
 //                     FloatingSidePanels portalled into this page (inside <main>), opened at once
 //                     and listed in the URL (`?panel=`, repeatable); the most recently opened is
 //                     on top (UX3b stacking).
+//   문제 등록 editor  `?panel=question-create` (문제 › 직접 추가 and the empty heatmap, UX7-BANK): the
+//                     modal question editor, rendered by QuestionsOverview; not a stacked panel.
 //
 // State lives in the URL: heatmap filters (overview-filters.ts), `q`/`scope` and the content
 // options (search/state.ts), `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
@@ -71,7 +73,6 @@ import {
 } from '@/lib/questions/overview-filters';
 import { NO_CHAPTER_KEY, type PlacedQuestion } from '@/lib/questions/overview-placement';
 import type { QuestionFailureKind } from '@/lib/questions/problems';
-import { bankCreatePath } from '@/lib/questions/filters';
 import type { SearchQuery } from '@/lib/search/client';
 import { addressBarContentKey, hasSearchableBody, searchReadiness } from '@/lib/search/scope';
 import { MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
@@ -88,7 +89,9 @@ import {
   withChapterNote,
   summaryDocumentId,
   contentSearchParams,
+  isFloatingPanel,
   ownSummaryDocument,
+  QUESTION_CREATE_PANEL,
   type ContentDocumentFilter,
   withPanel,
   withSummaryPanel,
@@ -157,7 +160,8 @@ export function WorkspaceHome({
 
   // --- dialogs ------------------------------------------------------------------------------
   const allowed = (panel: HomePanel) =>
-    (panel !== 'share' || isOwner) && (panel !== 'generate' || canEdit);
+    (panel !== 'share' || isOwner) &&
+    ((panel !== 'generate' && panel !== QUESTION_CREATE_PANEL) || canEdit);
   const panels = parsePanels(searchParams).filter(allowed);
   const isOpen = (panel: HomePanel) => panels.includes(panel);
   // Pressing the button of a dialog that is already open (maybe under another one) raises it.
@@ -420,7 +424,7 @@ export function WorkspaceHome({
   ];
 
   return (
-    <div className={styles.home} data-panel-open={panels.length > 0 || undefined}>
+    <div className={styles.home} data-panel-open={panels.some(isFloatingPanel) || undefined}>
       <h1 className="qz-visually-hidden">{workspace.name}</h1>
 
       <div className={styles.header}>
@@ -481,9 +485,8 @@ export function WorkspaceHome({
             </Button>
             <QuestionMenu
               canEdit={canEdit}
-              bankHref={`/workspaces/${workspace.id}/questions/bank`}
               onPdfs={() => setPanel('question-pdfs', true)}
-              onCreate={() => router.push(bankCreatePath(workspace.id))}
+              onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
               onGenerate={() => setPanel('generate', true)}
             />
           </div>
@@ -527,6 +530,8 @@ export function WorkspaceHome({
         requested={requested}
         panelScreenId={screenIds.practice}
         practiceReturnFocusRef={practiceReturnFocusRef}
+        createOpen={isOpen(QUESTION_CREATE_PANEL)}
+        onCreateOpenChange={(open) => setPanel(QUESTION_CREATE_PANEL, open)}
         chapterActions={(chapter) =>
           chapter.id === NO_CHAPTER_KEY ? null : (
             <>

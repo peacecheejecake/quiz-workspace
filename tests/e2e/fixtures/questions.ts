@@ -1,4 +1,4 @@
-// Question bank (QBANK-01) and question PDF import (QIMPORT-01) fixtures: public-API factories,
+// Question (editor; QBANK-01 retired by UX7-BANK) and question PDF import (QIMPORT-01) fixtures: public-API factories,
 // the synthetic question paper, and the role/label UI contract. M4.0 keeps every assumption about
 // M4.2a/M4.2b/M4.4a/M4.4b in this header; a deliberate change is a one-place edit here (and in
 // tests/integration/questions/conftest.py, which mirrors the API half).
@@ -134,19 +134,12 @@
 //      exactly +3 markers (questions.md §8: "그중 3개 승인하면 점 103개").
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
-//   QBANK-01  h1 "전체 문제" (UX6-BANK; was "문제은행"); empty-state heading "등록된 문제가 없습니다" with a "문제 직접 등록" button
-//             and a "PDF 가져오기" button; header "PDF 가져오기"/"문제 등록" buttons only while the bank
-//             has questions (UX4); "PDF 가져오기" opens the non-modal dialog "문제 PDF 관리" (same as
-//             the home's); toggle button "검색·필터" (collapsed by default, UX4) controlling a group
-//             "검색·필터" with searchbox "문제 검색" and comboboxes "유형", "챕터", "상태"; `?create=1`
-//             opens the "문제 등록" editor once; one region per chapter named by the chapter
-//             title (questions without one under "챕터 없음"), one listitem per question with
-//             "편집" and a source link (pageLabel) into the document viewer. The editor is a
-//             dialog "문제 등록"/"문제 편집" with radiogroup "문제 유형" (객관식/단답형/서술형),
-//             textbox "문제 내용", textboxes "보기 N" + "보기 추가", per-option checkbox
-//             "보기 N 정답", textbox "허용 답안" (short), "채점 기준" (essay), combobox "챕터",
-//             button "저장"; errors in role=alert. Viewer / archived: no create/edit controls and
-//             a "읽기 전용" notice.
+//   Question editor (QBANK-01 retired by UX7-BANK; its editor opens on the home): a modal dialog
+//             "문제 등록" (home 문제 › 직접 추가 and the empty heatmap's "문제 등록",
+//             `?panel=question-create`) or "문제 편집" (practice panel 문제 관리 › 편집) with
+//             radiogroup "문제 유형" (객관식/단답형/서술형), textbox "문제 내용", textboxes "보기 N" +
+//             "보기 추가", per-option checkbox "보기 N 정답", textbox "허용 답안" (short), "채점
+//             기준" (essay), combobox "챕터", button "저장"; errors in role=alert.
 //   QIMPORT-01 h1 "문제 PDF 가져오기"; no upload since UX6-UPLOAD (PDFs are uploaded in 문서 관리;
 //             combobox "검토할 PDF" with two or more extracted PDFs; "문서 관리 열기" when none);
 //             progressbar "가져오기" while the job runs; list "가져온 초안" with one listitem per draft showing "N번",
@@ -167,6 +160,10 @@
 //             graded result as text 정답/오답/채점 대기 (role=status); the explanation only after
 //             submit; self-grade buttons "맞음"/"틀림"; "이전 문제"/"다음 문제". While open the URL
 //             carries ?question=<id>; closing removes it and returns focus to the trigger dot.
+//             UX7-BANK: editors of a non-archived workspace get a menu button "문제 관리" in the
+//             panel header with menuitems "편집" (the "문제 편집" dialog), "변형 출제" (link to the
+//             review page) and "삭제" (alertdialog "문제를 삭제할까요?" with "삭제"); none for
+//             viewers or archived workspaces.
 import { copyFileSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
@@ -450,10 +447,6 @@ export function draftFor(drafts: readonly Draft[], q: TruthQuestion): Draft {
 // UI
 // ---------------------------------------------------------------------------------------------
 
-export function bankPath(workspaceId: string): string {
-  return `/workspaces/${workspaceId}/questions/bank`;
-}
-
 export function importPath(workspaceId: string): string {
   return `/workspaces/${workspaceId}/questions/import`;
 }
@@ -461,47 +454,6 @@ export function importPath(workspaceId: string): string {
 const button = (scope: Page | Locator, name: RegExp) => scope.getByRole('button', { name });
 const buttonOrLink = (scope: Page | Locator, name: RegExp) =>
   scope.getByRole('button', { name }).or(scope.getByRole('link', { name }));
-
-export const bankUi = {
-  heading: (page: Page) => page.getByRole('heading', { level: 1 }),
-  emptyState: (page: Page) =>
-    main(page).getByRole('heading', { name: /등록된 문제가 없|문제가 없|no questions/i }),
-  createButton: (page: Page) =>
-    button(main(page), /문제 (직접 )?(등록|추가)|새 문제|(add|new|create) question/i).first(),
-  importButtons: (page: Page) => buttonOrLink(main(page), /^(pdf 가져오기|import pdf)$/i),
-  importLink: (page: Page) => bankUi.importButtons(page).first(),
-  /** "검색·필터" toggle (UX4: collapsed by default) and the group it controls. */
-  filterToggle: (page: Page) =>
-    main(page).getByRole('button', { name: /^(검색·필터|search (and|&) filters?)$/i }),
-  filterGroup: (page: Page) =>
-    main(page).getByRole('group', { name: /^(검색·필터|search (and|&) filters?)$/i }),
-  pdfsDialog: (page: Page) =>
-    page.getByRole('dialog', { name: /^(문제 pdf 관리|question pdfs?)$/i }),
-  search: (page: Page) => main(page).getByRole('searchbox', { name: /문제 검색|검색|search/i }),
-  typeFilter: (page: Page) => main(page).getByRole('combobox', { name: /^(문제 )?(유형|type)/i }),
-  chapterFilter: (page: Page) => main(page).getByRole('combobox', { name: /^(장|챕터|chapter)/i }),
-  chapterGroup: (page: Page, title: string | RegExp) =>
-    main(page).getByRole('region', { name: title }),
-  noChapterGroup: (page: Page) =>
-    main(page).getByRole('region', { name: /챕터 없음|미분류|장 없음|no chapter|unassigned/i }),
-  /** Question rows (inside the chapter groups; the page's breadcrumb is a list too). */
-  items: (page: Page) => main(page).getByRole('region').getByRole('listitem'),
-  item: (page: Page, stem: string) =>
-    main(page).getByRole('region').getByRole('listitem').filter({ hasText: stem }),
-  editButton: (item: Locator) => item.getByRole('button', { name: /^(편집|수정|edit)/i }),
-  readOnlyNotice: (page: Page) =>
-    main(page)
-      .getByText(/읽기 전용|보관된 workspace|read-only|archived/i)
-      .first(),
-  alert: (page: Page) => main(page).getByRole('alert').or(page.getByRole('alert')).first(),
-};
-
-/** Opens the bank's "검색·필터" (no-op when it is open; UX4 collapses it by default). */
-export async function openBankFilters(page: Page): Promise<void> {
-  const toggle = bankUi.filterToggle(page);
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
-  await expect(bankUi.filterGroup(page)).toBeVisible();
-}
 
 export const questionFormUi = {
   form: (page: Page) =>
@@ -874,6 +826,9 @@ export const overviewUi = {
   markers: (page: Page) => overviewUi.heatmap(page).getByTestId('question-marker'),
   marker: (dot: Locator) => dot.getByTestId('question-marker'),
   tooltip: (page: Page) => page.getByRole('tooltip'),
+  /** The empty heatmap ("확정된 문제가 없습니다"; editors get its "문제 등록" button). */
+  empty: (page: Page) =>
+    main(page).getByRole('heading', { name: /확정된 문제가 없|no confirmed questions/i }),
   /** The removed count line "현재 필터의 문제 n개" (UX4): must not come back. */
   inFilter: (page: Page) =>
     main(page).getByText(/현재 필터의 문제 \d+개|\d+ questions in (the )?filter/i),
@@ -904,7 +859,30 @@ export const panelUi = {
     panel.getByRole('button', { name: /^(틀림|틀렸|오답으로|incorrect)/i }),
   next: (panel: Locator) => panel.getByRole('button', { name: /다음 문제|^next/i }),
   previous: (panel: Locator) => panel.getByRole('button', { name: /이전 문제|^previous/i }),
+  /** UX7-BANK: the editors' "문제 관리" menu button in the panel header. */
+  manage: (panel: Locator) => panel.getByRole('button', { name: /^(문제 관리|manage question)$/i }),
+  manageItem: (page: Page, item: PanelManageItem) =>
+    page.getByRole('menu').getByRole('menuitem', { name: PANEL_MANAGE_ITEMS[item] }),
+  deleteConfirm: (page: Page) =>
+    page.getByRole('alertdialog', { name: /문제를 삭제할까요|delete (this )?question/i }),
 };
+
+type PanelManageItem = 'edit' | 'generate' | 'delete';
+const PANEL_MANAGE_ITEMS: Readonly<Record<PanelManageItem, RegExp>> = {
+  edit: /^(편집|edit)$/i,
+  generate: /^(변형 출제|generate variants?)$/i,
+  delete: /^(삭제|delete)$/i,
+};
+
+/** Opens the practice panel's "문제 관리" menu and chooses `item` (UX7-BANK). */
+export async function choosePanelManage(
+  page: Page,
+  panel: Locator,
+  item: PanelManageItem,
+): Promise<void> {
+  await panelUi.manage(panel).click();
+  await panelUi.manageItem(page, item).click();
+}
 
 export const RESULT_TEXT = {
   correct: /정답|(?<!in)correct/i,

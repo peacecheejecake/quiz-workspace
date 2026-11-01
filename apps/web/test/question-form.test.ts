@@ -1,4 +1,4 @@
-// QBANK-01 editor logic the browser cannot observe directly: option id stability across edits,
+// Question editor logic the browser cannot observe directly: option id stability across edits,
 // validation that mirrors quiz_api.question_rules, request bodies, 422 loc → field mapping,
 // problem classification and the URL filter state.
 import { describe, expect, it } from 'vitest';

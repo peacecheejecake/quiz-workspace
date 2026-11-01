@@ -3,6 +3,8 @@
 // open question (`?question=`):
 //   ?panel=documents|question-pdfs|generate|history|share   open floating dialogs (repeatable, in
 //        |chapter-note|document-summary                      the order they were opened)
+//        |question-create                                    the modal 문제 등록 editor (UX7-BANK;
+//                                                            not stacked, see FLOATING_PANELS)
 //   ?chapter=<id> (with panel=chapter-note)                  the chapter of the 정리 노트 panel
 //                                                            (CHNOTE-01); see noteChapterOf
 //   &document=<id> (with panel=document-summary)             the summary panel's document (DOCSUM-01;
@@ -21,8 +23,17 @@ export const HOME_PANELS = [
   'share',
   'chapter-note',
   'document-summary',
+  'question-create',
 ] as const;
 export type HomePanel = (typeof HOME_PANELS)[number];
+
+/** UX7-BANK: `?panel=question-create` opens the modal 문제 등록 editor (QOV-01-AC12). */
+export const QUESTION_CREATE_PANEL = 'question-create' satisfies HomePanel;
+
+/** The non-modal side panels: they stack and move the home content aside (UX3b). */
+export function isFloatingPanel(panel: HomePanel): boolean {
+  return panel !== QUESTION_CREATE_PANEL;
+}
 export const PANEL_PARAM = 'panel';
 
 export type SearchScope = 'all' | 'questions' | 'content' | 'none';
@@ -311,6 +322,18 @@ export function legacySearchRedirect(workspaceId: string, params: RawParams): st
   if (chapter && out.has('document')) out.set('section', chapter);
   out.set(SCOPE_PARAM, 'content');
   return workspaceHomePath(workspaceId, out.toString());
+}
+
+/**
+ * The retired 전체 문제 page (`/questions/bank`, UX7-BANK): the home. Only `?question=` carries
+ * over (the home's practice panel); the bank's filters and `create` mean nothing there.
+ */
+export function legacyBankRedirect(workspaceId: string, params: RawParams): string {
+  const question = all(params, 'question')[0];
+  return workspaceHomePath(
+    workspaceId,
+    question && UUID.test(question) ? `question=${encodeURIComponent(question)}` : '',
+  );
 }
 
 /** A pre-UX3c section page (`/documents`, `/history`, `/settings/sharing`): its dialog. */

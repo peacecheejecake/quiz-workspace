@@ -11,25 +11,34 @@
 import type { Locator, Page } from '@playwright/test';
 import {
   answerCorrectly,
+  book,
+  chooseFilter,
   chooseQuestionMenu,
   createNumberedQuestions,
   draftFor,
   expect,
+  fillMcq,
   getOverview,
   homeUi,
   importPaperDrafts,
   JOB_TIMEOUT_MS,
   listAttempts,
+  listQuestions,
   main,
+  mcqInput,
   overviewItem,
+  outlineNodeId,
   overviewPath,
   overviewUi,
+  choosePanelManage,
   panelUi,
+  PROBLEM_TYPES,
   publishDrafts,
   questionFormUi,
   questionPaper,
   scaleOf,
   searchUi,
+  section,
   seedMembership,
   setMyState,
   signInAs,
@@ -42,12 +51,15 @@ import {
   waitForJob,
   type E2EFixtures,
   type Member,
+  type Problem,
   type Question,
 } from '../fixtures/test.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
 const HOVER_SCALE = 1.18;
+const BOOK = book('book-ko');
+const CH1 = section(BOOK, 'ch1'); // "1장 물의 순환"
 
 interface Seeded {
   readonly owner: Member;
@@ -389,7 +401,7 @@ test(
     await expect(main(page).getByText(/문제 하나가 점 하나입니다/)).toHaveCount(0);
 
     // Header: unified search with an icon-only submit, then 문서 n · 문제 and the icon buttons
-    // 이력 · 공유하기 (UX4). No 문제은행 button: the bank is the 문제 menu's 전체 문제 (UX6-PROGRESS).
+    // 이력 · 공유하기 (UX4). No 문제은행 button (UX6-PROGRESS) and no 전체 문제 page (UX7-BANK).
     await expect(homeUi.header(page)).toBeVisible();
     await expect(searchUi.box(page)).toBeVisible();
     await expect(searchUi.submit(page)).toHaveText('');
@@ -463,16 +475,10 @@ test(
     await expect(homeUi.shareButton(page)).toHaveCount(0);
     await expect(homeUi.shareDialog(page)).toHaveCount(0);
     await homeUi.questionMenuButton(page).click();
-    await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveCount(2);
-    await expect(homeUi.questionMenuItem(page, 'bank')).toBeVisible();
+    // A viewer gets PDF 관리 only (no 전체 문제 since UX7-BANK, no 직접 추가 / 변형 출제).
+    await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveCount(1);
     await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeVisible();
-    // A viewer reaches the bank through 전체 문제 too (UX6-PROGRESS).
-    await homeUi.questionMenuItem(page, 'bank').click();
-    await expect(page).toHaveURL((url) => url.pathname === `${home}/questions/bank`);
-    await expect(
-      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
-    ).toBeVisible();
-    await page.goto(home);
+    await page.keyboard.press('Escape');
     const denied = await viewer.api.request('GET', `/workspaces/${s.workspaceId}/share-links`);
     expect(denied.status).toBe(403);
   },
@@ -564,26 +570,34 @@ test(
     await expect(dialog.locator('[aria-busy="true"]')).toHaveCount(0);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
 
-    // 전체 문제 (the bank): the route skeleton shows while the page's server render is held back.
+    // A sub-page (문제 변형 출제, from the practice panel's 문제 관리 › 변형 출제, UX7-BANK): the
+    // route skeleton shows while the page's server render is held back.
     let releasePage!: () => void;
     const pageGate = new Promise<void>((resolve) => (releasePage = resolve));
     await page.route(
-      (url) => url.pathname.endsWith('/questions/bank'),
+      (url) => url.pathname.endsWith('/questions/generate'),
       async (route) => {
-        if (route.request().resourceType() === 'document') return route.fallback();
+        // Only the navigation's render is held: the document and the menu's prefetch (the loading
+        // boundary) go through.
+        const request = route.request();
+        if (request.resourceType() === 'document') return route.fallback();
+        if (request.headers()['next-router-prefetch'] !== undefined) return route.fallback();
         await pageGate;
         await route.fallback();
       },
     );
-    await chooseQuestionMenu(page, 'bank');
+    await overviewUi.dot(page, 1).click();
+    const panel = panelUi.numbered(page, 1);
+    await expect(panel).toBeVisible();
+    await choosePanelManage(page, panel, 'generate');
     await expect(
       main(page)
         .getByRole('status')
-        .filter({ hasText: /전체 문제를 불러오는 중|loading all questions/i }),
+        .filter({ hasText: /문제 변형 출제를 불러오는 중|loading/i }),
     ).toBeVisible();
     releasePage();
     await expect(
-      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
+      page.getByRole('heading', { level: 1, name: /^(문제 변형 출제|generate)/i }),
     ).toBeVisible();
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   },
@@ -626,7 +640,7 @@ test(
 );
 
 test(
-  'QOV-01-AC11 the header 문제 menu opens 전체 문제, PDF 관리, 직접 추가 and 변형 출제 by mouse and keyboard',
+  'QOV-01-AC11 the header 문제 menu opens PDF 관리, 직접 추가 and 변형 출제 by mouse and keyboard, without 전체 문제',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac11', 1);
@@ -638,20 +652,22 @@ test(
     await page.keyboard.press('Enter');
     await expect(homeUi.questionMenu(page)).toBeVisible();
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
-      /^(전체 문제|all questions)$/i,
       /^(pdf 관리|manage pdfs?)$/i,
       /^(직접 추가|add question)$/i,
       /^(변형 출제|generate variants?)$/i,
     ]);
-    await expect(homeUi.questionMenuItem(page, 'bank')).toBeFocused();
+    await expect(
+      homeUi.questionMenu(page).getByRole('menuitem', { name: /^(전체 문제|all questions)$/i }),
+    ).toHaveCount(0);
+    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(homeUi.questionMenuItem(page, 'create')).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(homeUi.questionMenu(page)).toBeHidden();
     await expect(button).toBeFocused();
 
-    // PDF 관리 (Enter, then ArrowDown to the second item) → the 문제 PDF 관리 dialog.
+    // PDF 관리 (Enter on the first item) → the 문제 PDF 관리 dialog.
     await page.keyboard.press('Enter');
-    await expect(homeUi.questionMenuItem(page, 'bank')).toBeFocused();
-    await page.keyboard.press('ArrowDown');
     await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(homeUi.questionPdfsDialog(page)).toBeVisible();
@@ -664,26 +680,192 @@ test(
     await expect(homeUi.generateDialog(page)).toBeVisible();
     await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').includes('generate'));
 
-    // 직접 추가 → the bank with its 문제 등록 editor open; a reload does not reopen it.
+    // 직접 추가 → the 문제 등록 dialog on the home (UX7-BANK): same path, `?panel=question-create`,
+    // modal; closing it drops the panel value.
     await page.goto(overviewPath(s.workspaceId));
     await chooseQuestionMenu(page, 'create');
-    await expect(page).toHaveURL(new RegExp(`/workspaces/${s.workspaceId}/questions/bank`));
-    await expect(questionFormUi.form(page)).toBeVisible();
-    await expect(page).toHaveURL((url) => !url.searchParams.has('create'));
-    await page.reload();
-    await expect(
-      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
-    ).toBeVisible();
-    await expect(questionFormUi.form(page)).toHaveCount(0);
-
-    // 전체 문제 → the bank page, titled 전체 문제 too (UX6-PROGRESS, UX6-BANK).
-    await page.goto(overviewPath(s.workspaceId));
-    await chooseQuestionMenu(page, 'bank');
+    const form = questionFormUi.form(page);
+    await expect(form).toBeVisible();
     await expect(page).toHaveURL(
-      (url) => url.pathname === `/workspaces/${s.workspaceId}/questions/bank` && url.search === '',
+      (url) =>
+        url.pathname === `/workspaces/${s.workspaceId}` &&
+        url.searchParams.getAll('panel').includes('question-create'),
     );
-    await expect(
-      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
-    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(form).toBeHidden();
+    await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
+    await expect(homeUi.questionMenuButton(page)).toBeFocused();
+  },
+);
+
+test(
+  'QOV-01-AC12 직접 추가 and the empty heatmap open the 문제 등록 dialog on the home; a saved MCQ becomes a dot in its chapter',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(JOB_TIMEOUT_MS + 90_000);
+    const owner = await workspaceFactory.member('qov01-ac12');
+    const ws = await workspaceFactory.create(owner);
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    const chapterId = await outlineNodeId(owner, documentId, CH1.title);
+    expect(await listQuestions(owner, ws.id)).toEqual([]);
+    const home = `/workspaces/${ws.id}`;
+    const onHomeWithEditor = (url: URL) =>
+      url.pathname === home && url.searchParams.getAll('panel').includes('question-create');
+
+    await signInAs(page, owner.user);
+    await page.goto(home);
+    // The empty heatmap's 문제 등록 opens the editor on the home, not another page.
+    const emptyCreate = main(page).getByRole('button', { name: /^(문제 등록|add question)$/i });
+    await expect(emptyCreate).toBeVisible();
+    await emptyCreate.click();
+    const form = questionFormUi.form(page);
+    await expect(form).toBeVisible();
+    await expect(page).toHaveURL(onHomeWithEditor);
+    await page.keyboard.press('Escape');
+    await expect(form).toBeHidden();
+    await expect(page).toHaveURL((url) => url.pathname === home && !url.searchParams.has('panel'));
+
+    // 문제 › 직접 추가: an MCQ without a correct option is refused and nothing is saved.
+    await chooseQuestionMenu(page, 'create');
+    await expect(page).toHaveURL(onHomeWithEditor);
+    const text = `물이 액체에서 기체로 변하는 과정은? [${ws.id.slice(0, 8)}]`;
+    const options = ['응결', '증발', '강수', '침전'];
+    await fillMcq(page, text, options, 0);
+    await questionFormUi.save(form).click();
+    await expect(questionFormUi.alert(form)).toContainText(/정답|correct/i);
+    expect(await listQuestions(owner, ws.id)).toEqual([]);
+
+    await questionFormUi.correct(form, 2).check();
+    await chooseFilter(page, questionFormUi.chapter(form), new RegExp(CH1.title));
+    await questionFormUi.save(form).click();
+    await expect(form).toBeHidden();
+    await expect(page).toHaveURL((url) => url.pathname === home && !url.searchParams.has('panel'));
+
+    // The heatmap re-reads: one dot in that chapter's group.
+    const group = overviewUi.heatmap(page).getByRole('region', { name: new RegExp(CH1.title) });
+    await expect(group.getByRole('button', { name: /\d+번 문제|question \d+/i })).toHaveCount(1);
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+
+    // Server: one CONFIRMED MCQ in that chapter, answered by the stable id of "증발".
+    const [saved, ...rest] = await listQuestions(owner, ws.id);
+    expect(rest).toEqual([]);
+    expect(saved).toMatchObject({
+      question_type: 'MCQ',
+      publication_status: 'CONFIRMED',
+      chapter_id: chapterId,
+    });
+    expect(saved?.revision.stem).toBe(text);
+    expect(saved?.revision.options.map((o) => o.text)).toEqual(options);
+    const evaporation = saved?.revision.options.find((o) => o.text === '증발');
+    expect(evaporation).toBeDefined();
+    expect(saved?.revision.correct_option_ids).toEqual([evaporation?.id]);
+
+    await page.reload();
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+
+    // Viewer: no 직접 추가, `?panel=question-create` opens nothing, the API refuses.
+    const viewer = await workspaceFactory.member('qov01-ac12-viewer');
+    seedMembership(ws.id, viewer.user.id, 'viewer');
+    const refused = await viewer.api.request(
+      'POST',
+      `/workspaces/${ws.id}/questions`,
+      mcqInput('viewer', ['a', 'b'], 0),
+    );
+    expect(refused.status).toBe(403);
+    expect((refused.body as Problem).type).toBe(PROBLEM_TYPES.insufficientRole);
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(`${home}?panel=question-create`);
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expect(questionFormUi.form(page)).toHaveCount(0);
+    await homeUi.questionMenuButton(page).click();
+    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeVisible();
+    await expect(homeUi.questionMenuItem(page, 'create')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    // Archived: read-only for the owner too.
+    await workspaceFactory.archive(owner, ws.id);
+    const archived = await owner.api.request(
+      'POST',
+      `/workspaces/${ws.id}/questions`,
+      mcqInput('archived', ['a', 'b'], 0),
+    );
+    expect(archived.status).toBe(403);
+    expect((archived.body as Problem).type).toBe(PROBLEM_TYPES.workspaceArchived);
+    await page.context().clearCookies();
+    await signInAs(page, owner.user);
+    await page.goto(`${home}?panel=question-create`);
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expect(questionFormUi.form(page)).toHaveCount(0);
+    await homeUi.questionMenuButton(page).click();
+    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeVisible();
+    await expect(homeUi.questionMenuItem(page, 'create')).toHaveCount(0);
+  },
+);
+
+test(
+  'QOV-01-AC13 sub-pages show a back link and a breadcrumb to the home; the retired /questions/bank redirects home',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(JOB_TIMEOUT_MS + 60_000);
+    const owner = await workspaceFactory.member('qov01-ac13');
+    const ws = await workspaceFactory.create(owner);
+    const [question] = await createNumberedQuestions(owner, ws.id, 'qov01-ac13', 1);
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    const home = `/workspaces/${ws.id}`;
+    const nav = () => page.getByRole('navigation', { name: /^(위치|breadcrumb)$/i });
+    async function expectSubPageNav(current: RegExp, middle?: RegExp): Promise<void> {
+      await expect(nav()).toBeVisible();
+      await expect(nav().getByRole('link', { name: ws.name, exact: true })).toHaveAttribute(
+        'href',
+        home,
+      );
+      if (middle) await expect(nav().getByRole('link', { name: middle })).toBeVisible();
+      await expect(nav().locator('[aria-current="page"]')).toHaveText(current);
+      // The location row keeps 12px of space above the page title (UX5-UI).
+      const [navBox, titleBox] = await Promise.all([
+        nav().boundingBox(),
+        main(page).getByRole('heading', { level: 1 }).boundingBox(),
+      ]);
+      expect(navBox && titleBox && titleBox.y - (navBox.y + navBox.height)).toBeGreaterThanOrEqual(
+        12,
+      );
+      await expect(main(page).getByRole('link', { name: /workspace 홈|back/i })).toHaveAttribute(
+        'href',
+        home,
+      );
+      // No link to the retired 전체 문제 page (UX7-BANK).
+      await expect(
+        main(page).getByRole('link', { name: /^(전체 문제|all questions)$/i }),
+      ).toHaveCount(0);
+    }
+
+    await signInAs(page, owner.user);
+    await page.goto(`${home}/questions/import`);
+    await expectSubPageNav(/^(문제 pdf 가져오기|import)/i);
+    // The breadcrumb's workspace link and the back link both return home.
+    await nav().getByRole('link', { name: ws.name, exact: true }).click();
+    await expect(page).toHaveURL((url) => url.pathname === home);
+    await expect(homeUi.header(page)).toBeVisible();
+    await page.goto(`${home}/questions/generate`);
+    await expectSubPageNav(/^(문제 변형 출제|generate)/i);
+    await main(page)
+      .getByRole('link', { name: /workspace 홈|back/i })
+      .click();
+    await expect(page).toHaveURL((url) => url.pathname === home);
+    await expect(homeUi.header(page)).toBeVisible();
+    await page.goto(`${home}/documents/${documentId}`);
+    await expectSubPageNav(/물의 순환과 정수 처리|book-ko/i, /^(문서 관리|documents)$/i);
+
+    // The retired bank route: the home, keeping only `?question=` (its practice panel opens).
+    await page.goto(`${home}/questions/bank?status=ALL&create=1`);
+    await expect(page).toHaveURL((url) => url.pathname === home && url.search === '');
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expect(questionFormUi.form(page)).toHaveCount(0);
+    await page.goto(`${home}/questions/bank?question=${question?.id}`);
+    await expect(page).toHaveURL(
+      (url) => url.pathname === home && url.searchParams.get('question') === question?.id,
+    );
+    await expect(panelUi.numbered(page, 1)).toBeVisible();
   },
 );

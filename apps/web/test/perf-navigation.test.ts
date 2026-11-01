@@ -73,7 +73,7 @@ describe('PERF-1 page loaders', () => {
     });
   });
 
-  it('QBANK-01 chapter context reuses the unfiltered document list (books that are ready)', async () => {
+  it('the question editor context reuses the unfiltered document list (books that are ready)', async () => {
     const calls: { path: string; init: unknown }[] = [];
     fakeApi = {
       GET: async (path, init) => {

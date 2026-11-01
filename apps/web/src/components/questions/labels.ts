@@ -1,4 +1,5 @@
-// Display helpers shared by the QBANK-01 list, detail panel and editor.
+// Display helpers of the question editor and the shared workspace view (the QBANK-01 list and
+// detail panel that also used them were retired by UX7-BANK).
 import type { Question } from '@/lib/questions/form';
 import type { ChapterOption, DocumentOption } from '@/lib/questions/server';
 

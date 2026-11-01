@@ -11,9 +11,9 @@
 //   Home       (UX3c) `/workspaces/:id`: hidden h1 (workspace name), header with the unified
 //              search (searchbox "검색어", icon button "검색", under it checkboxes "문제"/"본문"
 //              each followed by a "설정" text button named "문제 설정"/"본문 설정" → popover
-//              "문제 검색 설정"/"본문 검색 설정", and a status message, UX6), buttons "문서 n", "문제" (menu button, UX4: menuitems "전체 문제" (a link
-//              to the bank that replaced the "문제은행" button, UX6-PROGRESS), "PDF 관리",
-//              "직접 추가", "변형 출제"; the last two for editors), then
+//              "문제 검색 설정"/"본문 검색 설정", and a status message, UX6), buttons "문서 n", "문제" (menu button, UX4: menuitems "PDF 관리",
+//              "직접 추가" (the modal "문제 등록" dialog, `?panel=question-create`, UX7-BANK),
+//              "변형 출제"; the last two for editors; no "전체 문제" since UX7-BANK), then
 //              icon buttons "이력" and "공유하기" (owner); dialogs are non-modal
 //              FloatingSidePanels inside <main> named "문서 관리", "문제 PDF 관리", "문제 생성",
 //              "이력", "링크 공유" (`?panel=documents|question-pdfs|generate|history|share`).
@@ -114,9 +114,8 @@ const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
   body: /^(본문 검색 설정|body search settings|content search settings)$/i,
 };
 
-type QuestionMenuItem = 'bank' | 'pdfs' | 'create' | 'generate';
+type QuestionMenuItem = 'pdfs' | 'create' | 'generate';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
-  bank: /^(전체 문제|all questions)$/i,
   pdfs: /^(pdf 관리|manage pdfs?)$/i,
   create: /^(직접 추가|add question)$/i,
   generate: /^(변형 출제|generate variants?)$/i,

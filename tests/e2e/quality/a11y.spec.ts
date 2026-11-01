@@ -10,7 +10,6 @@ import { expectAccessible } from '../fixtures/a11y.ts';
 import {
   authUi,
   captchaUi,
-  bankUi,
   createNumberedQuestions,
   createQuestion,
   docUi,
@@ -45,6 +44,7 @@ import {
   uploadReadyBook,
   wsUi,
   answerCorrectly,
+  chooseQuestionMenu,
   book,
   block,
   correctBlock,
@@ -53,7 +53,6 @@ import {
   chooseWorkspaceAction,
   ARCHIVE_ACTION,
   DELETE_ACTION,
-  bankPath,
   notFoundHeading,
   RESULT_TEXT,
   failingOnceCopy,
@@ -163,15 +162,14 @@ test(
     await expect(page.locator('[aria-invalid="true"]').first()).toBeVisible();
     await expectAccessible(page, 'account security with field errors');
 
-    // Archived workspace: every screen is read-only (WS-01, QBANK-01 read-only notice). Since UX3c
-    // the sections are the home and its dialogs.
+    // Archived workspace: every screen is read-only (WS-01). Since UX3c the sections are the home
+    // and its dialogs (UX7-BANK retired the 전체 문제 page).
     for (const path of [
       homePath(other.id),
       documentsPath(other.id),
       homePath(other.id, 'panel=question-pdfs'),
       homePath(other.id, 'panel=history'),
       homePath(other.id, 'panel=share'),
-      bankPath(other.id),
     ]) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
@@ -261,7 +259,7 @@ test(
 );
 
 test(
-  'A11Y-04 questions heatmap, preview, practice panel and the question bank',
+  'A11Y-04 questions heatmap, preview, practice panel, its 문제 관리 menu and the question editor',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('a11y04');
@@ -272,9 +270,6 @@ test(
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await settle(page);
     await expectAccessible(page, 'questions overview empty');
-    await page.goto(bankPath(ws.id));
-    await expect(bankUi.emptyState(page)).toBeVisible();
-    await expectAccessible(page, 'question bank empty');
 
     const questions = await createNumberedQuestions(owner, ws.id, 'a11y04', 12);
     const [first, second, third] = questions;
@@ -300,12 +295,20 @@ test(
       new RegExp(`${RESULT_TEXT.correct.source}|${RESULT_TEXT.incorrect.source}`, 'i'),
     );
     await expectAccessible(page, 'practice panel graded');
+    // UX7-BANK: the editors' 문제 관리 menu and the 문제 편집 dialog over the panel.
+    await panelUi.manage(panel).click();
+    await expect(panelUi.manageItem(page, 'edit')).toBeVisible();
+    await expectAccessible(page, 'practice panel 문제 관리 menu');
+    await panelUi.manageItem(page, 'edit').click();
+    const editForm = questionFormUi.form(page);
+    await expect(questionFormUi.stem(editForm)).not.toHaveValue('');
+    await expectAccessible(page, 'question edit form');
+    await page.keyboard.press('Escape');
+    await expect(editForm).toBeHidden();
     await panelUi.close(panel).click();
 
-    await page.goto(bankPath(ws.id));
-    await expect(bankUi.items(page).first()).toBeVisible();
-    await expectAccessible(page, 'question bank populated');
-    await bankUi.createButton(page).click();
+    // The 문제 등록 dialog on the home (문제 › 직접 추가, UX7-BANK).
+    await chooseQuestionMenu(page, 'create');
     const form = questionFormUi.form(page);
     await expect(form).toBeVisible();
     await expectAccessible(page, 'question form');

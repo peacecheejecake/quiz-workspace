@@ -2,6 +2,8 @@
 // search scope and the redirects of the pre-UX3c section routes onto the home.
 import { describe, expect, it } from 'vitest';
 import {
+  isFloatingPanel,
+  legacyBankRedirect,
   legacyPanelRedirect,
   legacyQuestionsRedirect,
   legacySearchRedirect,
@@ -40,6 +42,18 @@ describe('home dialogs in the URL', () => {
     expect(withPanel('?panel=documents&question=abc', 'documents', false)).toBe('?question=abc');
     expect(withPanel('', 'share', false)).toBe('');
   });
+
+  it('UX7-BANK: question-create is the modal 문제 등록 editor, not a stacked side panel', () => {
+    expect(parsePanels(new URLSearchParams('panel=history&panel=question-create'))).toEqual([
+      'history',
+      'question-create',
+    ]);
+    expect(withPanel('?panel=history', 'question-create', true)).toBe(
+      '?panel=history&panel=question-create',
+    );
+    expect(isFloatingPanel('question-create')).toBe(false);
+    expect(isFloatingPanel('history')).toBe(true);
+  });
 });
 
 describe('unified search scope', () => {
@@ -74,6 +88,17 @@ describe('pre-UX3c routes redirect onto the home', () => {
     expect(legacyPanelRedirect(WS, 'documents')).toBe(`/workspaces/${WS}?panel=documents`);
     expect(legacyPanelRedirect(WS, 'history')).toBe(`/workspaces/${WS}?panel=history`);
     expect(legacyPanelRedirect(WS, 'share')).toBe(`/workspaces/${WS}?panel=share`);
+  });
+
+  it('the retired 전체 문제 page (UX7-BANK) keeps only a valid ?question=', () => {
+    expect(legacyBankRedirect(WS, {})).toBe(`/workspaces/${WS}`);
+    expect(legacyBankRedirect(WS, { status: 'ALL', create: '1', q: 'x', chapter: DOC })).toBe(
+      `/workspaces/${WS}`,
+    );
+    expect(legacyBankRedirect(WS, { question: [DOC, SECTION], type: 'MCQ' })).toBe(
+      `/workspaces/${WS}?question=${DOC}`,
+    );
+    expect(legacyBankRedirect(WS, { question: '../x' })).toBe(`/workspaces/${WS}`);
   });
 
   it('questions keeps its whole query (filters and the open question)', () => {

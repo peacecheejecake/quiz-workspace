@@ -5,7 +5,7 @@
 // 교재 lives in 문서 관리 only). Nothing is uploaded here since UX6-UPLOAD: 문서 관리 is the one
 // upload place (the server classifies each PDF and extracts the ones with questions), so instead of
 // a Dropzone the dialog says so and offers editors "문서 관리 열기". The same dialog opens from the
-// home's 문제 › PDF 관리 and from the question bank's "PDF 가져오기" (QBANK-01-AC06).
+// home's 문제 › PDF 관리 (the 전체 문제 page's "PDF 가져오기" went with it, UX7-BANK).
 //
 // QIMPORT-01-AC06: a processed PDF with an extraction offers "문제 검토" (its import page); one
 // without (processed before the server started them, or a low-confidence 교재+문제) offers editors
@@ -33,7 +33,7 @@ export interface QuestionPdfsLibraryProps {
   readonly workspaceId: string;
   readonly library: DocumentLibrary;
   readonly canEdit: boolean;
-  /** Opens the "문서 관리" dialog (the home) or goes to it (the bank). */
+  /** Opens the "문서 관리" dialog. */
   readonly onOpenDocuments: () => void;
 }
 

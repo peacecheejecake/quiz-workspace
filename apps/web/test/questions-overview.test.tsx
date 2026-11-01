@@ -26,7 +26,7 @@ const subscribe = (notify: () => void) => {
 const routerRefresh = vi.fn();
 vi.mock('next/navigation', () => ({
   usePathname: () => window.location.pathname,
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: routerRefresh }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: routerRefresh, prefetch: vi.fn() }),
   useSearchParams: () =>
     new URLSearchParams(useSyncExternalStore(subscribe, () => window.location.search)),
 }));
@@ -42,6 +42,19 @@ vi.mock('../src/lib/questions/practice-actions', () => ({
   openPracticeSessionAction: (...a: unknown[]) => openPracticeSessionAction(...a),
   setMyStateAction: (...a: unknown[]) => setMyStateAction(...a),
   lookupOverviewQuestionAction: (...a: unknown[]) => lookupOverviewQuestionAction(...a),
+}));
+
+// UX7-BANK: the question editor and delete of the panel's 문제 관리 menu (QPLAY-01-AC07/AC08).
+const getQuestionAction = vi.fn();
+const updateQuestionAction = vi.fn();
+const deleteQuestionAction = vi.fn();
+const questionEditorContextAction = vi.fn();
+vi.mock('../src/lib/questions/actions', () => ({
+  getQuestionAction: (...a: unknown[]) => getQuestionAction(...a),
+  updateQuestionAction: (...a: unknown[]) => updateQuestionAction(...a),
+  deleteQuestionAction: (...a: unknown[]) => deleteQuestionAction(...a),
+  createQuestionAction: vi.fn(),
+  questionEditorContextAction: (...a: unknown[]) => questionEditorContextAction(...a),
 }));
 
 const { QuestionsOverview } =
@@ -114,18 +127,28 @@ function outsidePlaced(n: number): PlacedQuestion {
 function Screen({
   data = overview,
   requested = null,
+  readOnly = null,
+  createOpen = false,
+  onCreateOpenChange,
+  filters = data === overview ? EMPTY_OVERVIEW_FILTERS : FAVORITES,
 }: {
   data?: QuestionOverview;
   requested?: PlacedQuestion | null;
+  readOnly?: 'viewer' | 'archived' | null;
+  createOpen?: boolean;
+  onCreateOpenChange?: (open: boolean) => void;
+  filters?: typeof EMPTY_OVERVIEW_FILTERS;
 }) {
   return (
     <ToastProvider>
       <main>
         <QuestionsOverview
           workspaceId={WS}
-          readOnly={null}
-          filters={data === overview ? EMPTY_OVERVIEW_FILTERS : FAVORITES}
-          view={data === overview ? EMPTY_OVERVIEW_FILTERS : FAVORITES}
+          readOnly={readOnly}
+          createOpen={createOpen}
+          onCreateOpenChange={onCreateOpenChange}
+          filters={filters}
+          view={filters}
           navigating={false}
           onFiltersChange={onFiltersChange}
           onResetFilters={vi.fn()}
@@ -148,6 +171,11 @@ beforeEach(() => {
   submitPracticeAction.mockReset();
   selfGradePracticeAction.mockReset();
   routerRefresh.mockReset();
+  getQuestionAction.mockReset();
+  updateQuestionAction.mockReset();
+  deleteQuestionAction.mockReset();
+  questionEditorContextAction.mockReset();
+  questionEditorContextAction.mockResolvedValue({ chapters: [], documents: [] });
   lookupOverviewQuestionAction.mockResolvedValue({ ok: true, data: null });
   openPracticeSessionAction.mockImplementation((_ws: string, qid: string) =>
     Promise.resolve(session(Number(qid.slice(-2)))),
@@ -645,3 +673,240 @@ describe('QuestionsOverview practice panel review fixes (M5.5)', () => {
     expect(dotLabel(3)).not.toMatch(/채점 대기/);
   });
 });
+
+function fullQuestion(n: number, stem = `문제 ${n} 본문`) {
+  return {
+    id: id(n),
+    workspace_id: WS,
+    question_type: 'MCQ',
+    publication_status: 'CONFIRMED',
+    origin: 'manual',
+    chapter_id: null,
+    chapter: null,
+    question_number: n,
+    revision: {
+      id: '88888888-8888-4888-8888-888888888888',
+      version: 1,
+      stem,
+      options: [
+        { id: 'o1', text: '보기 하나' },
+        { id: 'o2', text: '보기 둘' },
+      ],
+      correct_option_ids: ['o1'],
+      accepted_answers: null,
+      is_multi_answer: false,
+      explanation: '해설',
+      rubric: null,
+      created_at: '2026-10-17T00:00:00Z',
+    },
+    sources: [],
+    revisions: [],
+    created_at: '2026-10-17T00:00:00Z',
+    updated_at: '2026-10-17T00:00:00Z',
+  };
+}
+
+describe('UX7-BANK 문제 관리 in the practice panel', { timeout: 20_000 }, () => {
+  it('QPLAY-01-AC07 편집 reads the full question only when chosen, saves and practises the new revision', async () => {
+    const user = userEvent.setup();
+    getQuestionAction.mockResolvedValue({ ok: true, data: fullQuestion(2) });
+    updateQuestionAction.mockResolvedValue({ ok: true, data: fullQuestion(2, '고친 본문') });
+    render(<Screen />);
+    await user.click(dot(2));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    await waitFor(() => expect(within(panel).getByText('문제 2 본문')).toBeInTheDocument());
+    // Opening the panel never reads the question with its answers.
+    expect(getQuestionAction).not.toHaveBeenCalled();
+    expect(openPracticeSessionAction).toHaveBeenCalledTimes(1);
+
+    await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
+    await user.click(await screen.findByRole('menuitem', { name: '편집' }));
+    const form = await screen.findByRole('dialog', { name: '문제 편집' });
+    expect(getQuestionAction).toHaveBeenCalledWith(WS, id(2));
+    expect(questionEditorContextAction).toHaveBeenCalledWith(WS);
+    const stem = within(form).getByRole('textbox', { name: '문제 내용' });
+    expect(stem).toHaveValue('문제 2 본문');
+    await user.clear(stem);
+    await user.type(stem, '고친 본문');
+    await user.click(within(form).getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '문제 편집' })).toBeNull());
+    expect(updateQuestionAction.mock.calls[0]?.slice(0, 3)).toEqual([
+      WS,
+      id(2),
+      '88888888-8888-4888-8888-888888888888',
+    ]);
+    // The panel stays on the question and opens a session of the new revision.
+    await waitFor(() => expect(openPracticeSessionAction).toHaveBeenCalledTimes(2));
+    expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
+  });
+
+  it('QPLAY-01-AC08 삭제 asks first, deletes and closes the panel', async () => {
+    const user = userEvent.setup();
+    deleteQuestionAction.mockResolvedValue({ ok: true, data: null });
+    render(<Screen />);
+    await user.click(dot(3));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+
+    await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
+    await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
+    let confirm = await screen.findByRole('alertdialog', { name: '문제를 삭제할까요?' });
+    await user.click(within(confirm).getByRole('button', { name: '취소' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(deleteQuestionAction).not.toHaveBeenCalled();
+
+    await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
+    await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
+    confirm = await screen.findByRole('alertdialog', { name: '문제를 삭제할까요?' });
+    await user.click(within(confirm).getByRole('button', { name: '삭제' }));
+    await waitFor(() => expect(deleteQuestionAction).toHaveBeenCalledWith(WS, id(3)));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(new URLSearchParams(window.location.search).has('question')).toBe(false);
+  });
+
+  it('QPLAY-01-AC08 a refused delete keeps the panel open and says why', async () => {
+    const user = userEvent.setup();
+    deleteQuestionAction.mockResolvedValue({
+      ok: false,
+      kind: 'forbidden',
+      message: '이 작업을 할 권한이 없습니다.',
+    });
+    render(<Screen />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
+    await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
+    const confirm = await screen.findByRole('alertdialog');
+    await user.click(within(confirm).getByRole('button', { name: '삭제' }));
+    expect(await screen.findByText('이 작업을 할 권한이 없습니다.')).toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).get('question')).toBe(id(1));
+  });
+
+  it.each(['viewer', 'archived'] as const)(
+    'QPLAY-01-AC08 a %s gets no 문제 관리 menu',
+    async (readOnly) => {
+      const user = userEvent.setup();
+      render(<Screen readOnly={readOnly} />);
+      await user.click(dot(1));
+      const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+      expect(within(panel).queryByRole('button', { name: '문제 관리' })).toBeNull();
+    },
+  );
+});
+
+const EMPTY: QuestionOverview = { ...overview, chapters: [], items: [] };
+
+describe('UX7-BANK 문제 등록 on the home', () => {
+  it('QOV-01-AC12 the empty heatmap asks the home to open the editor, which then shows', async () => {
+    const user = userEvent.setup();
+    const onCreateOpenChange = vi.fn();
+    const { rerender } = render(
+      <Screen
+        data={EMPTY}
+        filters={EMPTY_OVERVIEW_FILTERS}
+        onCreateOpenChange={onCreateOpenChange}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: '문제 등록' }));
+    expect(onCreateOpenChange).toHaveBeenCalledWith(true);
+
+    rerender(
+      <Screen
+        data={EMPTY}
+        filters={EMPTY_OVERVIEW_FILTERS}
+        createOpen
+        onCreateOpenChange={onCreateOpenChange}
+      />,
+    );
+    const form = await screen.findByRole('dialog', { name: '문제 등록' });
+    expect(questionEditorContextAction).toHaveBeenCalledWith(WS);
+    await user.keyboard('{Escape}');
+    expect(onCreateOpenChange).toHaveBeenLastCalledWith(false);
+    expect(form).toBeInTheDocument(); // the home closes it by dropping the panel from the URL
+  });
+
+  it('QOV-01-AC12 viewers and archived workspaces get neither the button nor the editor', () => {
+    render(<Screen data={EMPTY} filters={EMPTY_OVERVIEW_FILTERS} readOnly="viewer" createOpen />);
+    expect(screen.queryByRole('button', { name: '문제 등록' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: '문제 등록' })).toBeNull();
+  });
+});
+
+describe(
+  'UX7-BANK review fixes: invalidate the edited or deleted question only',
+  { timeout: 20_000 },
+  () => {
+    const sessionsFor = (n: number) =>
+      openPracticeSessionAction.mock.calls.filter((c) => c[1] === id(n)).length;
+
+    it('QPLAY-01-AC08 browser Back to a deleted question never reopens it from the local state', async () => {
+      const user = userEvent.setup();
+      deleteQuestionAction.mockResolvedValue({ ok: true, data: null });
+      render(<Screen />);
+      await user.click(dot(3));
+      let panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+      await waitFor(() => expect(within(panel).getByText('문제 3 본문')).toBeInTheDocument());
+      await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
+      await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
+      const confirm = await screen.findByRole('alertdialog', { name: '문제를 삭제할까요?' });
+      await user.click(within(confirm).getByRole('button', { name: '삭제' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+      // Back restores `?question=<deleted id>`: no panel, no answer controls, no cached session.
+      await act(async () => {
+        realPushState(null, '', `${PATH}?question=${id(3)}`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(screen.queryByRole('dialog', { name: '챕터 없음 3번 문제' })).toBeNull();
+      expect(screen.queryByRole('button', { name: '제출' })).toBeNull();
+      expect(sessionsFor(3)).toBe(1);
+
+      // Other questions still open normally.
+      realPushState(null, '', PATH);
+      await act(async () => {
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await user.click(dot(1));
+      panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+      expect(panel).toBeVisible();
+    });
+
+    it('QPLAY-01-AC07 a save that lands after the editor closed refreshes only the saved question', async () => {
+      const user = userEvent.setup();
+      getQuestionAction.mockResolvedValue({ ok: true, data: fullQuestion(1) });
+      let finishSave: (value: unknown) => void = () => undefined;
+      updateQuestionAction.mockReturnValue(new Promise((resolve) => (finishSave = resolve)));
+      render(<Screen />);
+      await user.click(dot(1));
+      let panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+      await waitFor(() => expect(within(panel).getByText('문제 1 본문')).toBeInTheDocument());
+
+      await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
+      await user.click(await screen.findByRole('menuitem', { name: '편집' }));
+      const form = await screen.findByRole('dialog', { name: '문제 편집' });
+      await user.click(within(form).getByRole('button', { name: '저장' }));
+      // Dismiss the pending dialog and move on to question 2 before the save completes.
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: '문제 편집' })).toBeNull());
+      await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
+      panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+      await waitFor(() => expect(within(panel).getByText('문제 2 본문')).toBeInTheDocument());
+      expect(sessionsFor(2)).toBe(1);
+
+      await act(async () => finishSave({ ok: true, data: fullQuestion(1, '고친 본문') }));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      // Question 2 keeps its session (no reload, no lost answer state)...
+      expect(sessionsFor(2)).toBe(1);
+      // ...and question 1's cached session of the old revision is gone: back to it opens a new one.
+      expect(sessionsFor(1)).toBe(1);
+      await user.click(within(panel).getByRole('button', { name: '이전 문제' }));
+      await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+      await waitFor(() => expect(sessionsFor(1)).toBe(2));
+    });
+  },
+);

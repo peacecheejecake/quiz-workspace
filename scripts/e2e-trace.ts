@@ -77,7 +77,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
     API_SCREEN_ID,
   ],
   'M3.0': ['WS-01', 'DOC-01', 'DOC-02', 'SEARCH-01'],
-  'M4.0': ['QBANK-01', 'QIMPORT-01'],
+  // QBANK-01 (M4.0) was retired by UX7-BANK (2026-11-01): docs/screens/questions-bank.md.
+  'M4.0': ['QIMPORT-01'],
   'M5.0': ['QOV-01', 'QPLAY-01'],
   'M6.0': ['QGEN-01'],
   'M7.0': ['HISTORY-01'],

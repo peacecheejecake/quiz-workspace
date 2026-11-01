@@ -1,4 +1,4 @@
-// Server-only plumbing shared by the QBANK-01 loader and server actions: every call goes through the
+// Server-only plumbing of the question server actions (QOV-01-AC12, QPLAY-01-AC07/AC08): every call goes through the
 // Bearer helper (the access token never reaches the browser) and FastAPI decides what is allowed.
 import type { ApiClient } from '@quiz/api-client';
 import { redirect } from 'next/navigation';
@@ -35,8 +35,9 @@ export async function callQuestionApi<T>(
   return outcome;
 }
 
-export function bankPath(workspaceId: string): string {
-  return `/workspaces/${workspaceId}/questions/bank`;
+/** Where a signed-out question action sends the browser back to: the workspace home. */
+export function questionsReturnPath(workspaceId: string): string {
+  return `/workspaces/${workspaceId}`;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -95,7 +96,7 @@ function outlineNodes(body: unknown): OutlineNode[] {
 /**
  * Source documents (ready books) and the chapter picker: the outline nodes of each ready book's
  * current revision (the API only accepts chapters of a document's active revision). Failures
- * degrade to empty lists; the bank itself still loads.
+ * degrade to empty lists (the editor then offers no chapter or source document).
  */
 export async function loadChapterContext(
   api: ApiClient,
@@ -103,7 +104,7 @@ export async function loadChapterContext(
 ): Promise<{ chapters: ChapterOption[]; documents: DocumentOption[] }> {
   try {
     // The unfiltered list, as the page's own document read requests it: Next memoizes identical
-    // GETs within a render, so the bank costs one documents call instead of two (PERF-1).
+    // GETs within a render, so a page that reads both costs one documents call (PERF-1).
     const { data } = await api.GET('/api/v1/workspaces/{workspace_id}/documents', {
       params: { path: { workspace_id: workspaceId } },
     });

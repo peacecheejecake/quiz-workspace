@@ -1,4 +1,4 @@
-// Maps question API failures (RFC 9457 problems, implementation-plan §7) to what QBANK-01 shows.
+// Maps question API failures (RFC 9457 problems, implementation-plan §7) to what the question screens show.
 // Pure, so the mapping is unit-tested; the API stays the authority on every decision.
 import type { Problem } from '@quiz/api-client';
 import { PROBLEM_TYPES } from '@/lib/workspaces/problems';

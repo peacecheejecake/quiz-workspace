@@ -1,6 +1,6 @@
 'use client';
 
-// Draft editor of QuestionDraftReview ("문제 편집"): the same content fields as the QBANK-01
+// Draft editor of QuestionDraftReview ("문제 편집"): the same content fields as the home
 // question editor, applied to a draft on top of the version the reviewer opened. Saving changes
 // only the draft; an approved draft goes back to "검토 대기" and has to be approved again, and a
 // draft whose source had no answer can be saved without one (it just cannot be approved yet).
