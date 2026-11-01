@@ -570,16 +570,30 @@ test(
 
     // A sub-page (문제 변형 출제, from the practice panel's 문제 관리 › 변형 출제, UX7-BANK): the
     // route skeleton shows while the page's server render is held back.
+    // The menu prefetches the route when the panel mounts; its non-segment prefetch carries the
+    // loading boundary. 변형 출제 is chosen only once that prefetch has been delivered: a click
+    // before it lands makes Next render the skeleton from the navigation's own streamed response,
+    // which the gate holds whole (the WebKit flake, UX7-FLAKE-AC09).
     let releasePage!: () => void;
     const pageGate = new Promise<void>((resolve) => (releasePage = resolve));
+    let boundaryPrefetched = false;
     await page.route(
       (url) => url.pathname.endsWith('/questions/generate'),
       async (route) => {
-        // Only the navigation's render is held: the document and the menu's prefetch (the loading
-        // boundary) go through.
+        // Only the navigation's render is held: the document and the menu's prefetches go through.
         const request = route.request();
         if (request.resourceType() === 'document') return route.fallback();
-        if (request.headers()['next-router-prefetch'] !== undefined) return route.fallback();
+        const headers = request.headers();
+        if (headers['next-router-prefetch'] !== undefined) {
+          const boundary =
+            headers['next-router-segment-prefetch'] === undefined &&
+            new URL(request.url()).searchParams.has('source');
+          if (!boundary) return route.fallback();
+          // Fulfilled whole, so "delivered" is observable (Response.finished() can hang on Chromium).
+          await route.fulfill({ response: await route.fetch() });
+          boundaryPrefetched = true;
+          return;
+        }
         await pageGate;
         await route.fallback();
       },
@@ -587,6 +601,7 @@ test(
     await overviewUi.dot(page, 1).click();
     const panel = panelUi.numbered(page, 1);
     await expect(panel).toBeVisible();
+    await expect.poll(() => boundaryPrefetched).toBe(true);
     await choosePanelManage(page, panel, 'generate');
     await expect(
       main(page)
