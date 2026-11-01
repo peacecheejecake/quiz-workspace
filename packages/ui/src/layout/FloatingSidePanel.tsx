@@ -47,8 +47,13 @@ export interface FloatingSidePanelProps {
   closeLabel?: string;
   /** Modal only: whether clicking the backdrop closes the panel. */
   closeOnBackdropClick?: boolean;
-  /** `default` = min(500px, 100vw - 32px); `wide` for comparison drawers (≥ 600px). */
-  size?: 'default' | 'wide';
+  /**
+   * `default` = min(500px, 100vw - 32px); `wide` for comparison drawers (≥ 600px); `narrow`
+   * (20rem) for navigation such as the DOC-02 목차.
+   */
+  size?: 'default' | 'wide' | 'narrow';
+  /** Desktop edge the panel floats at: `end` (default, right in LTR) or `start` (left). */
+  side?: 'end' | 'start';
   /** Below the mobile breakpoint: bottom sheet (max 90dvh) or full-height panel. */
   mobileLayout?: 'sheet' | 'full';
   /**
@@ -93,6 +98,7 @@ export function FloatingSidePanel({
   closeLabel = '닫기',
   closeOnBackdropClick = true,
   size = 'default',
+  side = 'end',
   mobileLayout = 'sheet',
   container,
   onOpenAutoFocus,
@@ -148,6 +154,7 @@ export function FloatingSidePanel({
           aria-live={!modal && staysExposedUnderModal ? 'off' : undefined}
           data-modal={modal}
           data-size={size}
+          data-side={side}
           data-mobile-layout={mobileLayout}
           className={cx('qz-panel', 'glass-surface', className)}
           data-layer-rank={layer.rank}

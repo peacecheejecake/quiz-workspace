@@ -5636,6 +5636,14 @@
       },
       "QuestionSource": {
         "properties": {
+          "block_ids": {
+            "description": "Canonical text blocks of the source in that document (block ids are stable across revisions); empty when the source names pages only.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Block Ids",
+            "type": "array"
+          },
           "document_id": {
             "anyOf": [
               {
@@ -5660,6 +5668,12 @@
             ],
             "description": "The document revision that was active when the source was saved.",
             "title": "Document Revision Id"
+          },
+          "imported": {
+            "default": false,
+            "description": "The question's printed place in a question PDF (a question import), not a passage the question cites.",
+            "title": "Imported",
+            "type": "boolean"
           },
           "page_end": {
             "anyOf": [

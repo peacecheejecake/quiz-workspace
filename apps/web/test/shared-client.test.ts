@@ -195,6 +195,11 @@ describe('createSharedClient', () => {
     expect(fetchImpl.mock.calls[1]?.[0]).toBe(
       `/api/shared/${SHARE}/questions?limit=100&cursor=abc_-1`,
     );
+    // DOC-02-AC11: the questions of one shared document.
+    await client.questions('c1', undefined, 'doc-1');
+    expect(fetchImpl.mock.calls[2]?.[0]).toBe(
+      `/api/shared/${SHARE}/questions?limit=100&document_id=doc-1&cursor=c1`,
+    );
   });
 });
 

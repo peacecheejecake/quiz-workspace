@@ -81,6 +81,27 @@ function ControlledNonModalPanel() {
   );
 }
 
+describe('FloatingSidePanel side and size', () => {
+  it('floats at the end edge by default and at the start edge with side="start"', async () => {
+    render(
+      <>
+        <FloatingSidePanel defaultOpen modal={false} title="발췌">
+          본문
+        </FloatingSidePanel>
+        <FloatingSidePanel defaultOpen modal={false} title="목차" side="start" size="narrow">
+          목차 본문
+        </FloatingSidePanel>
+      </>,
+    );
+    const end = await screen.findByRole('dialog', { name: '발췌' });
+    const start = await screen.findByRole('dialog', { name: '목차' });
+    expect(end).toHaveAttribute('data-side', 'end');
+    expect(end).toHaveAttribute('data-size', 'default');
+    expect(start).toHaveAttribute('data-side', 'start');
+    expect(start).toHaveAttribute('data-size', 'narrow');
+  });
+});
+
 describe('FloatingSidePanel (modal)', () => {
   it('traps focus, closes on Escape and returns focus to the trigger', async () => {
     const user = userEvent.setup();

@@ -74,6 +74,7 @@ from quiz_api.api.questions import (
     _decode_cursor,
     _encode_cursor,
     _revision_out,
+    source_out,
 )
 from quiz_api.api.search import (
     CHAPTER_NOT_FOUND,
@@ -354,16 +355,7 @@ def _question_out(q: QuestionRecord, published: set[uuid.UUID]) -> SharedQuestio
         else None,
         question_number=q.question_number,
         revision=_revision_out(q.revision),
-        sources=[
-            QuestionSource(
-                document_id=s.document_id,
-                document_revision_id=s.document_revision_id,
-                page_start=s.page_start,
-                page_end=s.page_end,
-            )
-            for s in q.sources
-            if s.document_id in published
-        ],
+        sources=[source_out(s) for s in q.sources if s.document_id in published],
         updated_at=q.updated_at,
     )
 

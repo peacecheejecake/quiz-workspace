@@ -10,7 +10,7 @@
 import { Button, PageHeader } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import { blockEditReducer, IDLE, type BlockEditState } from '@/lib/documents/block-edit';
 import {
@@ -31,11 +31,12 @@ import {
   blockPage,
   sectionOf,
   targetBlockFor,
-  viewerHighlights,
   viewerSearch,
   type OutlineJump,
 } from '@/lib/documents/outline';
 import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
+import { documentQuestions, type DocumentQuestion } from '@/lib/documents/document-questions';
+import { pageGroups, selectionHighlights, textTargetForPage } from '@/lib/documents/text-groups';
 import {
   INDEX_FAILURE_MESSAGE,
   isDraft,
@@ -50,10 +51,13 @@ import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/
 import { summaryPanelPath, workspaceHomePath } from '@/lib/workspaces/home';
 import { TextExportMenu } from '../text-export-menu';
 import styles from './editor.module.css';
+import { OutlinePanel, outlineLayout, useOutlinePanel } from './outline-panel';
 import { OutlineTree } from './outline-tree';
-import { PdfViewer } from './pdf-viewer';
+import { PaneSplitter, splitStyle, useSplitRatio } from './pane-splitter';
+import { PdfViewer, type PageChangeReason } from './pdf-viewer';
 import { PublishBar } from './publish-bar';
 import { TextBlockEditor } from './text-block-editor';
+import { blockElement, scrollTextTo } from './text-sync';
 
 export interface DocumentEditorProps {
   readonly workspaceId: string;
@@ -75,13 +79,13 @@ export interface DocumentEditorProps {
   readonly pinnedRevisionId?: string | null;
 }
 
-type MobileView = 'outline' | 'pdf' | 'text';
+type MobileView = 'pdf' | 'text';
 
 /** Reloads overtaken by newer saves before the screen asks the user to reload. */
 const MAX_SUPERSEDED_RELOADS = 3;
 
+/** Phones show one pane at a time; the outline is the 목차 panel (a bottom sheet there). */
 const MOBILE_VIEWS: readonly { id: MobileView; label: string }[] = [
-  { id: 'outline', label: '목차' },
   { id: 'pdf', label: 'PDF' },
   { id: 'text', label: '원문' },
 ];
@@ -138,6 +142,12 @@ export function DocumentEditor({
   const [notice, setNotice] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [mobileView, setMobileView] = useState<MobileView>('pdf');
+  const [splitShare, setSplitShare, commitSplitShare] = useSplitRatio();
+  const splitRef = useRef<HTMLDivElement>(null);
+  const pdfPaneId = useId();
+  const outlinePanel = useOutlinePanel();
+  const { beside: outlineBeside, dismiss: dismissOutline } = outlinePanel;
+  const [panelHost, setPanelHost] = useState<HTMLDivElement | null>(null);
   const deepLinkApplied = useRef(false);
   const watchController = useRef<AbortController | null>(null);
   const editStateRef = useRef<BlockEditState>(editState);
@@ -147,6 +157,20 @@ export function DocumentEditor({
   const revisionIdRef = useRef<string | null>(null);
 
   const content = contentState.status === 'ready' ? contentState.content : null;
+
+  // DOC-02-AC11: confirmed questions imported from this PDF show in question format. Without them
+  // (none registered, or the list failed) the text shows as it is.
+  const [questions, setQuestions] = useState<readonly DocumentQuestion[]>([]);
+  const hasQuestions = (initialDocument.question_count ?? 0) > 0;
+  useEffect(() => {
+    if (!ready || !hasQuestions) return;
+    const controller = new AbortController();
+    client
+      .listDocumentQuestions(workspaceId, documentId, controller.signal)
+      .then((items) => setQuestions(documentQuestions(items, documentId)))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [client, documentId, hasQuestions, ready, workspaceId]);
   useEffect(() => {
     revisionIdRef.current = content?.revision?.id ?? null;
   }, [content]);
@@ -302,8 +326,10 @@ export function DocumentEditor({
         setMobileView('pdf');
       }
       setAnnouncement(`${node.title}${node.page != null ? ` · ${node.page}쪽` : ''}`);
+      // Where the panel covers the PDF (narrow screens), get it out of the way after the jump.
+      if (outlineBeside === false) dismissOutline();
     },
-    [blocks, selectBlock],
+    [blocks, dismissOutline, outlineBeside, selectBlock],
   );
 
   // Keep `?page=` and `?block=` in the address bar (reload and sharing reopen the same view).
@@ -321,11 +347,10 @@ export function DocumentEditor({
     if (!currentBlockId || !scrollTextOnSelect.current) return;
     scrollTextOnSelect.current = false;
     const scroller = textScrollRef.current;
-    const element = scroller?.querySelector<HTMLElement>(
-      `[data-block-id="${CSS.escape(currentBlockId)}"]`,
-    );
+    const element = scroller ? blockElement(scroller, currentBlockId) : null;
     if (!scroller || !element) return;
-    scroller.scrollTo({ top: Math.max(element.offsetTop - 16, 0) });
+    const offset = element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    scroller.scrollTo({ top: Math.max(scroller.scrollTop + offset - 16, 0) });
   }, [currentBlockId, highlightKey]);
 
   // --- publish ---------------------------------------------------------------------------------
@@ -555,6 +580,30 @@ export function DocumentEditor({
     }
   }, [client, documentId, handleCommonError, publish.phase, refreshContent, refreshRevisions]);
 
+  // DOC-02-AC08: the reader moved the PDF (scroll, page buttons): the text pane follows to that
+  // page, except while a block is being edited.
+  const groups = useMemo(() => pageGroups(blocks, questions), [blocks, questions]);
+  const syncTextTo = useRef<number | null>(null);
+  const onViewerPage = useCallback((next: number, reason: PageChangeReason) => {
+    setPage(next);
+    setLinkedBlockId(null);
+    if (reason === 'navigate') setAnnouncement(`${next}쪽`);
+    if (editStateRef.current.phase === 'idle') syncTextTo.current = next;
+  }, []);
+  useEffect(() => {
+    const target = syncTextTo.current;
+    if (target === null || target !== page) return;
+    syncTextTo.current = null;
+    scrollTextTo(textScrollRef.current, textTargetForPage(groups, target));
+  }, [groups, page]);
+
+  // Stable, so a page change (scrolling the PDF) does not re-render the text pane (DOCVIEW).
+  const onTextSelect = useCallback(
+    (block: ContentBlock) => selectBlock(block, { view: 'pdf' }),
+    [selectBlock],
+  );
+  const onSaveClick = useCallback(() => void onSave(), [onSave]);
+
   // Unsaved text survives an accidental tab close.
   useEffect(() => {
     if (editState.phase === 'idle' || editState.text === editState.original) return;
@@ -606,11 +655,14 @@ export function DocumentEditor({
       </Button>
     ) : null;
 
-  const highlights = viewerHighlights(currentBlock, outlineJump, blocks, page);
+  const highlights = useMemo(
+    () => selectionHighlights(currentBlock, outlineJump, blocks, groups),
+    [blocks, currentBlock, groups, outlineJump],
+  );
   const currentSection = sectionOf(currentBlock, outline);
 
   return (
-    <div className={styles.screen}>
+    <div className={styles.screen} data-outline={outlineLayout(outlinePanel.open)}>
       <PageHeader
         title={document.title}
         back={<WorkspaceBackLink workspaceId={workspaceId} />}
@@ -702,33 +754,44 @@ export function DocumentEditor({
         ))}
       </div>
 
-      <div className={styles.split} data-view={mobileView}>
-        <nav aria-label="문서 목차" className={styles.outlinePane} data-pane="outline">
-          <h2 className={styles.paneTitle}>목차</h2>
-          {contentState.status === 'ready' ? (
-            <OutlineTree
-              items={outline}
-              currentId={currentSection}
-              onNavigate={onOutlineNavigate}
-            />
-          ) : contentState.status === 'loading' && ready ? (
-            <p className={styles.paneNote}>목차를 불러오는 중입니다…</p>
-          ) : null}
-        </nav>
-
-        <section aria-label="PDF 원본" className={styles.pdfPane} data-pane="pdf">
+      <div
+        ref={splitRef}
+        className={styles.split}
+        data-view={mobileView}
+        style={splitStyle(splitShare)}
+      >
+        <section id={pdfPaneId} aria-label="PDF 원본" className={styles.pdfPane} data-pane="pdf">
           <PdfViewer
             source={pdfSource}
             page={page}
-            onPageChange={(next) => {
-              setPage(next);
-              setLinkedBlockId(null);
-              setAnnouncement(`${next}쪽`);
-            }}
+            onPageChange={onViewerPage}
             highlights={highlights}
             highlightKey={`${currentBlockId ?? ''}:${highlightKey}`}
+            toolbarStart={
+              <OutlinePanel state={outlinePanel} container={panelHost}>
+                {contentState.status === 'ready' ? (
+                  <OutlineTree
+                    items={outline}
+                    currentId={currentSection}
+                    onNavigate={onOutlineNavigate}
+                  />
+                ) : contentState.status === 'loading' && ready ? (
+                  <p className={styles.paneNote}>목차를 불러오는 중입니다…</p>
+                ) : (
+                  <p className={styles.paneNote}>이 문서에는 목차가 없습니다.</p>
+                )}
+              </OutlinePanel>
+            }
           />
         </section>
+
+        <PaneSplitter
+          value={splitShare}
+          onChange={setSplitShare}
+          onCommit={commitSplitShare}
+          containerRef={splitRef}
+          controls={pdfPaneId}
+        />
 
         <section aria-label="원문 텍스트" className={styles.textPane} data-pane="text">
           <div className={styles.textScroller} ref={textScrollRef}>
@@ -754,15 +817,16 @@ export function DocumentEditor({
             ) : null}
             {content ? (
               <TextBlockEditor
-                blocks={blocks}
+                groups={groups}
                 currentBlockId={currentBlockId}
+                currentPage={page}
                 canEdit={editable}
                 editLocked={isPublishing(publish) || restoring !== null}
                 editState={editState}
-                onSelect={(block) => selectBlock(block, { view: 'pdf' })}
+                onSelect={onTextSelect}
                 onStartEdit={onStartEdit}
                 onChange={onChange}
-                onSave={() => void onSave()}
+                onSave={onSaveClick}
                 onCancel={onCancel}
               />
             ) : null}
@@ -770,6 +834,8 @@ export function DocumentEditor({
         </section>
       </div>
 
+      {/* The 목차 panel is portalled here so it stays inside the main landmark. */}
+      <div ref={setPanelHost} className={styles.panelHost} />
       <p className="qz-visually-hidden" aria-live="polite">
         {announcement}
       </p>

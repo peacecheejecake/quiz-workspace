@@ -85,6 +85,10 @@ class SourceRecord:
     document_revision_id: uuid.UUID | None
     page_start: int | None
     page_end: int | None
+    # DOCVIEW: canonical block ids of the source (stable across revisions) and whether it is the
+    # question's printed place in a question PDF (a question import), not a cited passage.
+    block_ids: tuple[str, ...] = ()
+    imported: bool = False
 
 
 @dataclass(frozen=True)
@@ -286,6 +290,8 @@ class QuestionRepository:
                 question_sources.c.document_revision_id,
                 question_sources.c.page_start,
                 question_sources.c.page_end,
+                question_sources.c.block_ids,
+                question_sources.c.import_run_id.is_not(None).label("imported"),
             )
             .where(question_sources.c.question_id.in_(ids))
             .order_by(question_sources.c.created_at, question_sources.c.id)
@@ -293,7 +299,12 @@ class QuestionRepository:
         for row in rows:
             out[row.question_id].append(
                 SourceRecord(
-                    row.document_id, row.document_revision_id, row.page_start, row.page_end
+                    row.document_id,
+                    row.document_revision_id,
+                    row.page_start,
+                    row.page_end,
+                    tuple(row.block_ids or ()),
+                    bool(row.imported),
                 )
             )
         return out
