@@ -113,6 +113,11 @@ class WorkspaceAttempt(Attempt):
     question_id: uuid.UUID
     question_number: int | None
     question_type: str
+    merged_into_question_id: uuid.UUID | None = Field(
+        default=None,
+        description="The question was archived as a duplicate of this one (UX7-DEDUP): its "
+        "history shows there, so links open it.",
+    )
 
 
 class WorkspaceAttemptPage(BaseModel):
@@ -210,6 +215,7 @@ def _workspace_attempt(a: WorkspaceAttemptRecord) -> WorkspaceAttempt:
         question_id=a.question_id,
         question_number=a.question_number,
         question_type=a.question_type,
+        merged_into_question_id=a.merged_into_question_id,
         question_revision_id=a.question_revision_id,
         revision_version=a.revision_version,
         practice_session_id=a.practice_session_id,

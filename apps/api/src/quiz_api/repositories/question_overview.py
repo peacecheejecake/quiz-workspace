@@ -2,9 +2,12 @@
 live question of a workspace, in heatmap order. Read-only: nothing here ever writes a view.
 
 One statement (`overview_statement`) returns every row of the requested scope with the caller's
-`question_user_states` row (left join on its primary key) and the "pending grading" flag of the
-caller's latest submitted practice session (correlated lookup on
-`practice_sessions_user_question_idx`). Index use: the questions side is served by the partial
+study state and the "pending grading" flag of the caller's latest submitted practice session
+(correlated lookup on `practice_sessions_user_question_idx`). Both include the question's merged
+duplicates (UX7-DEDUP, docs/questions.md §10.2): the state comes from the
+`question_merged_user_states` view (the caller's `question_user_states` rows of the workspace,
+folded per kept question), and the pending flag looks at the sessions of the question and of its
+actively merged duplicates. Index use: the questions side is served by the partial
 `questions_overview_idx (workspace_id, publication_status, chapter_id, sort_order, created_at,
 id) where deleted_at is null`; tests/integration/questions/test_overview_api.py checks the plan.
 
@@ -23,7 +26,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, Select, and_, false, func, literal, select
+from sqlalchemy import ColumnElement, Select, and_, any_, false, func, literal, select
 from sqlalchemy.orm import Session
 
 from quiz_api.question_rules import QuestionType
@@ -33,8 +36,9 @@ from quiz_api.repositories.tables import (
     chapters,
     documents,
     practice_sessions,
+    question_merged_user_states,
+    question_merges,
     question_revisions,
-    question_user_states,
     questions,
 )
 
@@ -74,6 +78,22 @@ def _like_pattern(text: str) -> str:
     return f"%{escaped}%"
 
 
+def merged_members(workspace_id: uuid.UUID) -> Any:
+    """`array[questions.id, <its actively merged duplicates>]`, correlated to the enclosing
+    `questions` row (UX7-DEDUP): `x = any(...)` keeps an index lookup on `x`."""
+    duplicates = select(question_merges.c.duplicate_question_id).where(
+        question_merges.c.workspace_id == workspace_id,
+        question_merges.c.kept_question_id == questions.c.id,
+        question_merges.c.ended_at.is_(None),
+    )
+    return func.array_prepend(
+        questions.c.id, func.array(duplicates.correlate(questions).scalar_subquery())
+    )
+
+
+states = question_merged_user_states
+
+
 def overview_statement(
     workspace_id: uuid.UUID, user_id: uuid.UUID, flt: OverviewFilter
 ) -> Select[Any]:
@@ -82,7 +102,7 @@ def overview_statement(
         select(practice_sessions.c.state == "pending_grade")
         .where(
             practice_sessions.c.user_id == user_id,
-            practice_sessions.c.question_id == questions.c.id,
+            practice_sessions.c.question_id == any_(merged_members(workspace_id)),
             practice_sessions.c.submitted_at.is_not(None),
         )
         .order_by(practice_sessions.c.submitted_at.desc(), practice_sessions.c.id.desc())
@@ -127,10 +147,11 @@ def overview_statement(
             ),
         )
         .outerjoin(
-            question_user_states,
+            states,
             and_(
-                question_user_states.c.user_id == user_id,
-                question_user_states.c.question_id == questions.c.id,
+                states.c.user_id == user_id,
+                states.c.workspace_id == workspace_id,
+                states.c.question_id == questions.c.id,
             ),
         )
     )
@@ -143,10 +164,10 @@ def overview_statement(
             chapters.c.title.label("chapter_title"),
             chapters.c.document_id.label("chapter_document_id"),
             func.left(question_revisions.c.stem, STEM_HEAD).label("stem_head"),
-            question_user_states.c.first_viewed_at,
-            question_user_states.c.last_graded_result,
-            func.coalesce(question_user_states.c.needs_retry, false()).label("needs_retry"),
-            func.coalesce(question_user_states.c.is_favorite, false()).label("is_favorite"),
+            states.c.first_viewed_at,
+            states.c.last_graded_result,
+            func.coalesce(states.c.needs_retry, false()).label("needs_retry"),
+            func.coalesce(states.c.is_favorite, false()).label("is_favorite"),
             func.coalesce(latest_submitted, false()).label("is_pending_grading"),
         )
         .select_from(source)

@@ -19,7 +19,7 @@ from typing import Any
 import psycopg
 import pytest
 
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = pytest.mark.infra
 
 DB_ADMIN_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 ANSWER_KEYS = {"correct_option_ids", "accepted_answers", "explanation", "rubric", "correct_answer"}

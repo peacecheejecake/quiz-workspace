@@ -186,6 +186,37 @@ question_user_states = Table(
     _ts("updated_at", nullable=False),
 )
 
+# UX7-DEDUP (20261101120000_question_merges.sql): duplicate -> kept links (history).
+question_merges = Table(
+    "question_merges",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=FetchedValue()),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("duplicate_question_id", Uuid, nullable=False),
+    Column("kept_question_id", Uuid, nullable=False),
+    Column("created_by", Uuid),
+    _ts("created_at", nullable=False),
+    _ts("ended_at"),
+    Column("ended_by", Uuid),
+    Column("end_reason", Text),
+)
+
+# The per-user study state of a question folded with its merged duplicates' (a view).
+question_merged_user_states = Table(
+    "question_merged_user_states",
+    metadata,
+    Column("user_id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("question_id", Uuid, primary_key=True),
+    _ts("first_viewed_at"),
+    _ts("last_viewed_at"),
+    Column("last_graded_result", Text),
+    Column("last_graded_attempt_id", Uuid),
+    Column("is_favorite", Boolean, nullable=False),
+    Column("needs_retry", Boolean, nullable=False),
+    Column("merged_states", BigInteger, nullable=False),
+)
+
 practice_sessions = Table(
     "practice_sessions",
     metadata,

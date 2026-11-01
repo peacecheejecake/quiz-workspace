@@ -779,8 +779,9 @@ export type paths = {
     };
     /**
      * List My Attempts
-     * @description The caller's own attempts on the question, newest first, each pinned to the revision it
-     *     was graded on (its content: GET /questions/{id}/revisions/{revision_id}).
+     * @description The caller's own attempts on the question and on the duplicates merged into it
+     *     (UX7-DEDUP), newest first, each pinned to the revision it was graded on (its content:
+     *     GET /questions/{question_id}/revisions/{revision_id} of the item's `question_id`).
      */
     get: operations['listMyQuestionAttempts'];
     put?: never;
@@ -830,6 +831,8 @@ export type paths = {
     /**
      * Update My State
      * @description Toggle the caller's favorite / retry flags (independent of each other and of results).
+     *     The state answered is folded with the merged duplicates' (UX7-DEDUP): a flag set on any of
+     *     them is set, and turning one off turns it off on all of them.
      */
     patch: operations['updateMyQuestionState'];
     trace?: never;
@@ -1316,6 +1319,49 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspace_id}/question-duplicates': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Question Duplicates
+     * @description Groups of identical CONFIRMED questions (same normalised stem and options, any option
+     *     order). A read: scanning again gives the same groups until questions change.
+     */
+    get: operations['listQuestionDuplicates'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/question-duplicates/merge': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Merge Question Duplicates
+     * @description Keep one question per group, archive the others and merge their study history into it
+     *     (the kept question's state, favorite and retry marks include theirs; attempts unchanged).
+     *     Repeating a merge changes nothing. Unarchiving a duplicate later unmerges it.
+     */
+    post: operations['mergeQuestionDuplicates'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspace_id}/question-generation-batches': {
     parameters: {
       query?: never;
@@ -1728,6 +1774,12 @@ export type components = {
        * Format: uuid
        */
       practice_session_id: string;
+      /**
+       * Question Id
+       * Format: uuid
+       * @description The question answered: this one, or a duplicate merged into it (UX7-DEDUP).
+       */
+      question_id: string;
       /**
        * Question Revision Id
        * Format: uuid
@@ -2269,6 +2321,34 @@ export type components = {
       /** Title */
       title: string;
     };
+    /**
+     * DraftDuplicate
+     * @description Why an unregistered import draft looks like a duplicate (UX7-DEDUP, QIMPORT-01-AC10):
+     *     the same question (docs/questions.md §10.1) as a CONFIRMED question of the workspace or as
+     *     an earlier draft of the same import. A hint only: the draft can still be registered.
+     */
+    DraftDuplicate: {
+      /**
+       * Draft Id
+       * @description `draft`: the earlier draft of this import.
+       */
+      draft_id: string | null;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: 'question' | 'draft';
+      /**
+       * Number
+       * @description `question`: its number (null if none); `draft`: its N번 (printed number, else position + 1).
+       */
+      number: number | null;
+      /**
+       * Question Id
+       * @description `question`: the confirmed question.
+       */
+      question_id: string | null;
+    };
     /** DraftEvidence */
     DraftEvidence: {
       /** Block Ids */
@@ -2404,6 +2484,78 @@ export type components = {
        * @enum {string}
        */
       severity: 'warning' | 'error';
+    };
+    /** DuplicateGroup */
+    DuplicateGroup: {
+      /**
+       * Answers Differ
+       * @description The questions' answers (correct option texts / accepted answers) differ.
+       */
+      answers_differ: boolean;
+      /** Fingerprint */
+      fingerprint: string;
+      /**
+       * Questions
+       * @description Registration order, oldest first.
+       */
+      questions: components['schemas']['DuplicateQuestion'][];
+      /**
+       * Suggested Keep Question Id
+       * Format: uuid
+       * @description The oldest confirmed question of the group (registration order).
+       */
+      suggested_keep_question_id: string;
+    };
+    /** DuplicateOption */
+    DuplicateOption: {
+      /** Id */
+      id: string;
+      /** Text */
+      text: string;
+    };
+    /** DuplicateQuestion */
+    DuplicateQuestion: {
+      /** Chapter Id */
+      chapter_id: string | null;
+      /** Chapter Title */
+      chapter_title: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Options
+       * @description Authored order; no answer marks.
+       */
+      options: components['schemas']['DuplicateOption'][];
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /** Question Number */
+      question_number: number | null;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /** Stem */
+      stem: string;
+    };
+    /** DuplicateScan */
+    DuplicateScan: {
+      /**
+       * Groups
+       * @description Heatmap order of each group's first member.
+       */
+      groups: components['schemas']['DuplicateGroup'][];
+      /**
+       * Question Count
+       * @description Confirmed questions scanned.
+       */
+      question_count: number;
     };
     /**
      * Fork
@@ -2735,6 +2887,8 @@ export type components = {
        * Format: date-time
        */
       created_at: string;
+      /** @description Import drafts not registered yet: the same question exists. */
+      duplicate_of?: components['schemas']['DraftDuplicate'] | null;
       /**
        * Id
        * Format: uuid
@@ -2848,6 +3002,8 @@ export type components = {
        * @description Import drafts: the book chapter the draft is registered under (as `ImportDraft.chapter.id`, sent back as `chapter_id` when registering); null = none.
        */
       chapter_id?: string | null;
+      /** @description As `ImportDraft.duplicate_of` (UX7-DEDUP). */
+      duplicate_of?: components['schemas']['DraftDuplicate'] | null;
       /**
        * Id
        * Format: uuid
@@ -3255,6 +3411,44 @@ export type components = {
       id: string;
       /** @description Created on the first authenticated `/me` call. */
       profile: components['schemas']['Profile'];
+    };
+    /** MergedGroup */
+    MergedGroup: {
+      /**
+       * Already Merged Question Ids
+       * @description Already archived and merged into this question (left as they were).
+       */
+      already_merged_question_ids: string[];
+      /**
+       * Archived Question Ids
+       * @description Archived and merged now.
+       */
+      archived_question_ids: string[];
+      /**
+       * Keep Question Id
+       * Format: uuid
+       */
+      keep_question_id: string;
+    };
+    /** MergeGroup */
+    MergeGroup: {
+      /** Duplicate Question Ids */
+      duplicate_question_ids: string[];
+      /**
+       * Keep Question Id
+       * Format: uuid
+       */
+      keep_question_id: string;
+    };
+    /** MergeRequest */
+    MergeRequest: {
+      /** Groups */
+      groups: components['schemas']['MergeGroup'][];
+    };
+    /** MergeResult */
+    MergeResult: {
+      /** Groups */
+      groups: components['schemas']['MergedGroup'][];
     };
     /** MyState */
     MyState: {
@@ -5289,6 +5483,11 @@ export type components = {
        * Format: uuid
        */
       id: string;
+      /**
+       * Merged Into Question Id
+       * @description The question was archived as a duplicate of this one (UX7-DEDUP): its history shows there, so links open it.
+       */
+      merged_into_question_id?: string | null;
       /**
        * Practice Session Id
        * Format: uuid
@@ -10377,6 +10576,153 @@ export interface operations {
       };
       /** @description Unprocessable Content */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listQuestionDuplicates: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuplicateScan'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  mergeQuestionDuplicates: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MergeRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MergeResult'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
         headers: {
           [name: string]: unknown;
         };
