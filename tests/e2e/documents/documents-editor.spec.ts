@@ -456,12 +456,15 @@ test(
     await expect.poll(value).toBe(25);
 
     // Pointer drag to the right widens the PDF pane.
+    // Grab it near its top: the separator is as tall as the panes and may run below the viewport.
+    await splitter.scrollIntoViewIfNeeded();
     const box = await splitter.boundingBox();
     if (!box) throw new Error('separator has no box');
     const before = await pdfWidth();
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    const y = Math.max(box.y, 0) + 24;
+    await page.mouse.move(box.x + box.width / 2, y);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 + 200, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.move(box.x + box.width / 2 + 200, y, { steps: 5 });
     await page.mouse.up();
     await expect.poll(pdfWidth).toBeGreaterThan(before + 150);
     const dragged = await value();
