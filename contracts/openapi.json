@@ -1719,7 +1719,7 @@
           },
           "options": {
             "items": {
-              "$ref": "#/components/schemas/quiz_api__api__questions__QuestionOption"
+              "$ref": "#/components/schemas/QuestionOption"
             },
             "title": "Options",
             "type": "array"
@@ -2385,6 +2385,57 @@
         "title": "GenerationBatchSource",
         "type": "object"
       },
+      "GenerationCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_count": {
+            "default": 1,
+            "description": "Candidates per variation.",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "easier",
+                  "same",
+                  "harder"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional target difficulty relative to the source.",
+            "title": "Difficulty"
+          },
+          "variation_types": {
+            "description": "Distinct variations. OPTION_SHUFFLE is refused (422): it is a practice order (POST /questions/{id}/practice-sessions), never a generation.",
+            "items": {
+              "enum": [
+                "OPTION_SHUFFLE",
+                "PARAPHRASE",
+                "INVERT_POLARITY",
+                "ANALOGOUS_CONCEPT"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Variation Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "variation_types"
+        ],
+        "title": "GenerationCreate",
+        "type": "object"
+      },
       "GenerationDraftList": {
         "properties": {
           "items": {
@@ -2400,24 +2451,6 @@
           "items"
         ],
         "title": "GenerationDraftList",
-        "type": "object"
-      },
-      "GenerationProgress": {
-        "properties": {
-          "done": {
-            "title": "Done",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "done",
-          "total"
-        ],
-        "title": "GenerationProgress",
         "type": "object"
       },
       "GenerationRun": {
@@ -4232,7 +4265,7 @@
           "progress": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/GenerationProgress"
+                "$ref": "#/components/schemas/MockExamProgress"
               },
               {
                 "type": "null"
@@ -4286,6 +4319,47 @@
         "title": "MockExamGeneration",
         "type": "object"
       },
+      "MockExamGenerationCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MockExamConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "설정 바꾸기: new settings."
+          },
+          "range": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MockExamRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          }
+        },
+        "title": "MockExamGenerationCreate",
+        "type": "object"
+      },
       "MockExamList": {
         "properties": {
           "items": {
@@ -4306,6 +4380,46 @@
           "items"
         ],
         "title": "MockExamList",
+        "type": "object"
+      },
+      "MockExamOption": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 5000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "MockExamOption",
+        "type": "object"
+      },
+      "MockExamProgress": {
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "done",
+          "total"
+        ],
+        "title": "MockExamProgress",
         "type": "object"
       },
       "MockExamQuestion": {
@@ -4364,7 +4478,7 @@
           },
           "options": {
             "items": {
-              "$ref": "#/components/schemas/quiz_api__api__mock_exams__QuestionOption"
+              "$ref": "#/components/schemas/MockExamOption"
             },
             "title": "Options",
             "type": "array"
@@ -4383,7 +4497,7 @@
             "type": "string"
           },
           "revision": {
-            "$ref": "#/components/schemas/RevisionRef"
+            "$ref": "#/components/schemas/MockExamRevisionRef"
           },
           "rubric": {
             "anyOf": [
@@ -4397,7 +4511,7 @@
             "title": "Rubric"
           },
           "source": {
-            "$ref": "#/components/schemas/SourceRef"
+            "$ref": "#/components/schemas/MockExamSourceRef"
           },
           "stem": {
             "title": "Stem",
@@ -4407,7 +4521,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/ValidationNote"
+                  "$ref": "#/components/schemas/MockExamValidationNote"
                 },
                 "type": "array"
               },
@@ -4508,7 +4622,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/quiz_api__api__mock_exams__QuestionOption"
+                  "$ref": "#/components/schemas/MockExamOption"
                 },
                 "maxItems": 50,
                 "type": "array"
@@ -4602,6 +4716,53 @@
         "title": "MockExamRange",
         "type": "object"
       },
+      "MockExamRevisionRef": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ],
+        "title": "MockExamRevisionRef",
+        "type": "object"
+      },
+      "MockExamSourceRef": {
+        "properties": {
+          "label": {
+            "description": "\"<n>장 <m>번\", \"<m>번\" or \"원본 삭제됨\".",
+            "title": "Label",
+            "type": "string"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: the source was deleted.",
+            "title": "Question Id"
+          }
+        },
+        "required": [
+          "question_id",
+          "label"
+        ],
+        "title": "MockExamSourceRef",
+        "type": "object"
+      },
       "MockExamUpdate": {
         "additionalProperties": false,
         "properties": {
@@ -4616,6 +4777,28 @@
           "title"
         ],
         "title": "MockExamUpdate",
+        "type": "object"
+      },
+      "MockExamValidationNote": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "error",
+              "warning"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "severity"
+        ],
+        "title": "MockExamValidationNote",
         "type": "object"
       },
       "MyState": {
@@ -6214,7 +6397,7 @@
           "options": {
             "description": "MCQ only.",
             "items": {
-              "$ref": "#/components/schemas/quiz_api__api__questions__QuestionOption"
+              "$ref": "#/components/schemas/QuestionOption"
             },
             "maxItems": 50,
             "title": "Options",
@@ -6495,7 +6678,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/quiz_api__api__questions__QuestionOption"
+                  "$ref": "#/components/schemas/QuestionOption"
                 },
                 "maxItems": 50,
                 "type": "array"
@@ -6654,6 +6837,28 @@
         "title": "QuestionList",
         "type": "object"
       },
+      "QuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "Opaque, client-chosen id (no whitespace, unique in the question). Grading and practice use it; keep it when editing the option.",
+            "maxLength": 256,
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 5000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "QuestionOption",
+        "type": "object"
+      },
       "QuestionOverview": {
         "properties": {
           "chapters": {
@@ -6795,7 +7000,7 @@
           },
           "options": {
             "items": {
-              "$ref": "#/components/schemas/quiz_api__api__questions__QuestionOption"
+              "$ref": "#/components/schemas/QuestionOption"
             },
             "title": "Options",
             "type": "array"
@@ -7030,7 +7235,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/quiz_api__api__questions__QuestionOption"
+                  "$ref": "#/components/schemas/QuestionOption"
                 },
                 "maxItems": 50,
                 "type": "array"
@@ -7615,25 +7820,6 @@
           "status"
         ],
         "title": "RevisionJob",
-        "type": "object"
-      },
-      "RevisionRef": {
-        "properties": {
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "version"
-        ],
-        "title": "RevisionRef",
         "type": "object"
       },
       "RunAttempt": {
@@ -9225,34 +9411,6 @@
         "title": "SignedReadUrl",
         "type": "object"
       },
-      "SourceRef": {
-        "properties": {
-          "label": {
-            "description": "\"<n>장 <m>번\", \"<m>번\" or \"원본 삭제됨\".",
-            "title": "Label",
-            "type": "string"
-          },
-          "question_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "null: the source was deleted.",
-            "title": "Question Id"
-          }
-        },
-        "required": [
-          "question_id",
-          "label"
-        ],
-        "title": "SourceRef",
-        "type": "object"
-      },
       "SubmitBody": {
         "additionalProperties": false,
         "description": "`selected_option_ids` for an MCQ (one id unless multi-answer), `answer_text` otherwise.",
@@ -9994,28 +10152,6 @@
         "title": "ValidationIssue",
         "type": "object"
       },
-      "ValidationNote": {
-        "properties": {
-          "code": {
-            "title": "Code",
-            "type": "string"
-          },
-          "severity": {
-            "enum": [
-              "error",
-              "warning"
-            ],
-            "title": "Severity",
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "severity"
-        ],
-        "title": "ValidationNote",
-        "type": "object"
-      },
       "Workspace": {
         "properties": {
           "archived_at": {
@@ -10573,142 +10709,6 @@
           "published_at"
         ],
         "title": "RevisionSummary",
-        "type": "object"
-      },
-      "quiz_api__api__mock_exams__GenerationCreate": {
-        "additionalProperties": false,
-        "properties": {
-          "config": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/MockExamConfig"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "설정 바꾸기: new settings."
-          },
-          "range": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/MockExamRange"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "seed": {
-            "anyOf": [
-              {
-                "maximum": 2147483647.0,
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Seed"
-          }
-        },
-        "title": "GenerationCreate",
-        "type": "object"
-      },
-      "quiz_api__api__mock_exams__QuestionOption": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Id",
-            "type": "string"
-          },
-          "text": {
-            "maxLength": 5000,
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "text"
-        ],
-        "title": "QuestionOption",
-        "type": "object"
-      },
-      "quiz_api__api__question_generations__GenerationCreate": {
-        "additionalProperties": false,
-        "properties": {
-          "candidate_count": {
-            "default": 1,
-            "description": "Candidates per variation.",
-            "maximum": 20.0,
-            "minimum": 1.0,
-            "title": "Candidate Count",
-            "type": "integer"
-          },
-          "difficulty": {
-            "anyOf": [
-              {
-                "enum": [
-                  "easier",
-                  "same",
-                  "harder"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Optional target difficulty relative to the source.",
-            "title": "Difficulty"
-          },
-          "variation_types": {
-            "description": "Distinct variations. OPTION_SHUFFLE is refused (422): it is a practice order (POST /questions/{id}/practice-sessions), never a generation.",
-            "items": {
-              "enum": [
-                "OPTION_SHUFFLE",
-                "PARAPHRASE",
-                "INVERT_POLARITY",
-                "ANALOGOUS_CONCEPT"
-              ],
-              "type": "string"
-            },
-            "maxItems": 3,
-            "minItems": 1,
-            "title": "Variation Types",
-            "type": "array"
-          }
-        },
-        "required": [
-          "variation_types"
-        ],
-        "title": "GenerationCreate",
-        "type": "object"
-      },
-      "quiz_api__api__questions__QuestionOption": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "description": "Opaque, client-chosen id (no whitespace, unique in the question). Grading and practice use it; keep it when editing the option.",
-            "maxLength": 256,
-            "title": "Id",
-            "type": "string"
-          },
-          "text": {
-            "maxLength": 5000,
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "text"
-        ],
-        "title": "QuestionOption",
         "type": "object"
       },
       "quiz_api__api__questions__RevisionSummary": {
@@ -13635,7 +13635,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/quiz_api__api__mock_exams__GenerationCreate"
+                "$ref": "#/components/schemas/MockExamGenerationCreate"
               }
             }
           },
@@ -16134,7 +16134,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/quiz_api__api__question_generations__GenerationCreate"
+                "$ref": "#/components/schemas/GenerationCreate"
               }
             }
           },

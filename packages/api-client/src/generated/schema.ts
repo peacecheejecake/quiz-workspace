@@ -2653,7 +2653,7 @@ export type components = {
        */
       justification?: string | null;
       /** Options */
-      options: components['schemas']['quiz_api__api__questions__QuestionOption'][];
+      options: components['schemas']['QuestionOption'][];
       /**
        * Origin
        * @enum {string}
@@ -2941,6 +2941,27 @@ export type components = {
       /** Question Number */
       question_number: number | null;
     };
+    /** GenerationCreate */
+    GenerationCreate: {
+      /**
+       * Candidate Count
+       * @description Candidates per variation.
+       * @default 1
+       */
+      candidate_count?: number;
+      /**
+       * Difficulty
+       * @description Optional target difficulty relative to the source.
+       */
+      difficulty?: ('easier' | 'same' | 'harder') | null;
+      /**
+       * Variation Types
+       * @description Distinct variations. OPTION_SHUFFLE is refused (422): it is a practice order (POST /questions/{id}/practice-sessions), never a generation.
+       */
+      variation_types: (
+        'OPTION_SHUFFLE' | 'PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT'
+      )[];
+    };
     /** GenerationDraftList */
     GenerationDraftList: {
       /**
@@ -2948,13 +2969,6 @@ export type components = {
        * @description Generation drafts (`run_id` set).
        */
       items: components['schemas']['ImportDraft'][];
-    };
-    /** GenerationProgress */
-    GenerationProgress: {
-      /** Done */
-      done: number;
-      /** Total */
-      total: number;
     };
     /** GenerationRun */
     GenerationRun: {
@@ -3766,7 +3780,7 @@ export type components = {
        */
       job_id: string | null;
       /** @description While queued or running. */
-      progress: components['schemas']['GenerationProgress'] | null;
+      progress: components['schemas']['MockExamProgress'] | null;
       /** Requested Count */
       requested_count: number;
       /** Seed */
@@ -3781,6 +3795,14 @@ export type components = {
       /** Version */
       version: number;
     };
+    /** MockExamGenerationCreate */
+    MockExamGenerationCreate: {
+      /** @description 설정 바꾸기: new settings. */
+      config?: components['schemas']['MockExamConfig'] | null;
+      range?: components['schemas']['MockExamRange'] | null;
+      /** Seed */
+      seed?: number | null;
+    };
     /** MockExamList */
     MockExamList: {
       /** Items */
@@ -3790,6 +3812,20 @@ export type components = {
        * @description This environment can use the AI variation types.
        */
       llm_available: boolean;
+    };
+    /** MockExamOption */
+    MockExamOption: {
+      /** Id */
+      id: string;
+      /** Text */
+      text: string;
+    };
+    /** MockExamProgress */
+    MockExamProgress: {
+      /** Done */
+      done: number;
+      /** Total */
+      total: number;
     };
     /** MockExamQuestion */
     MockExamQuestion: {
@@ -3809,7 +3845,7 @@ export type components = {
       /** Is Multi Answer */
       is_multi_answer: boolean;
       /** Options */
-      options: components['schemas']['quiz_api__api__mock_exams__QuestionOption'][];
+      options: components['schemas']['MockExamOption'][];
       /** Position */
       position: number;
       /**
@@ -3817,14 +3853,14 @@ export type components = {
        * @enum {string}
        */
       question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
-      revision: components['schemas']['RevisionRef'];
+      revision: components['schemas']['MockExamRevisionRef'];
       /** Rubric */
       rubric?: string | null;
-      source: components['schemas']['SourceRef'];
+      source: components['schemas']['MockExamSourceRef'];
       /** Stem */
       stem: string;
       /** Validation Issues */
-      validation_issues?: components['schemas']['ValidationNote'][] | null;
+      validation_issues?: components['schemas']['MockExamValidationNote'][] | null;
       /**
        * Variation Type
        * @enum {string}
@@ -3847,7 +3883,7 @@ export type components = {
       /** Is Multi Answer */
       is_multi_answer?: boolean | null;
       /** Options */
-      options?: components['schemas']['quiz_api__api__mock_exams__QuestionOption'][] | null;
+      options?: components['schemas']['MockExamOption'][] | null;
       /** Rubric */
       rubric?: string | null;
       /** Stem */
@@ -3874,10 +3910,43 @@ export type components = {
       /** Question Ids */
       question_ids?: string[];
     };
+    /** MockExamRevisionRef */
+    MockExamRevisionRef: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Version */
+      version: number;
+    };
+    /** MockExamSourceRef */
+    MockExamSourceRef: {
+      /**
+       * Label
+       * @description "<n>장 <m>번", "<m>번" or "원본 삭제됨".
+       */
+      label: string;
+      /**
+       * Question Id
+       * @description null: the source was deleted.
+       */
+      question_id: string | null;
+    };
     /** MockExamUpdate */
     MockExamUpdate: {
       /** Title */
       title: string;
+    };
+    /** MockExamValidationNote */
+    MockExamValidationNote: {
+      /** Code */
+      code: string;
+      /**
+       * Severity
+       * @enum {string}
+       */
+      severity: 'error' | 'warning';
     };
     /** MyState */
     MyState: {
@@ -4599,7 +4668,7 @@ export type components = {
        * Options
        * @description MCQ only.
        */
-      options?: components['schemas']['quiz_api__api__questions__QuestionOption'][];
+      options?: components['schemas']['QuestionOption'][];
       /**
        * Publication Status
        * @description DRAFT or CONFIRMED (ARCHIVED is not a creation state).
@@ -4706,7 +4775,7 @@ export type components = {
       /** Is Multi Answer */
       is_multi_answer?: boolean | null;
       /** Options */
-      options?: components['schemas']['quiz_api__api__questions__QuestionOption'][] | null;
+      options?: components['schemas']['QuestionOption'][] | null;
       /** Question Number */
       question_number?: number | null;
       /** Question Type */
@@ -4757,6 +4826,16 @@ export type components = {
        * @description Pass as `cursor` for the next page.
        */
       next_cursor: string | null;
+    };
+    /** QuestionOption */
+    QuestionOption: {
+      /**
+       * Id
+       * @description Opaque, client-chosen id (no whitespace, unique in the question). Grading and practice use it; keep it when editing the option.
+       */
+      id: string;
+      /** Text */
+      text: string;
     };
     /** QuestionOverview */
     QuestionOverview: {
@@ -4814,7 +4893,7 @@ export type components = {
       /** Is Multi Answer */
       is_multi_answer: boolean;
       /** Options */
-      options: components['schemas']['quiz_api__api__questions__QuestionOption'][];
+      options: components['schemas']['QuestionOption'][];
       /** Rubric */
       rubric: string | null;
       /** Stem */
@@ -4885,7 +4964,7 @@ export type components = {
       /** Is Multi Answer */
       is_multi_answer?: boolean | null;
       /** Options */
-      options?: components['schemas']['quiz_api__api__questions__QuestionOption'][] | null;
+      options?: components['schemas']['QuestionOption'][] | null;
       /** Publication Status */
       publication_status?: ('DRAFT' | 'CONFIRMED' | 'ARCHIVED') | null;
       /** Question Number */
@@ -4918,52 +4997,6 @@ export type components = {
        * @enum {string}
        */
       status: 'draft' | 'published';
-    };
-    /** GenerationCreate */
-    quiz_api__api__mock_exams__GenerationCreate: {
-      /** @description 설정 바꾸기: new settings. */
-      config?: components['schemas']['MockExamConfig'] | null;
-      range?: components['schemas']['MockExamRange'] | null;
-      /** Seed */
-      seed?: number | null;
-    };
-    /** QuestionOption */
-    quiz_api__api__mock_exams__QuestionOption: {
-      /** Id */
-      id: string;
-      /** Text */
-      text: string;
-    };
-    /** GenerationCreate */
-    quiz_api__api__question_generations__GenerationCreate: {
-      /**
-       * Candidate Count
-       * @description Candidates per variation.
-       * @default 1
-       */
-      candidate_count?: number;
-      /**
-       * Difficulty
-       * @description Optional target difficulty relative to the source.
-       */
-      difficulty?: ('easier' | 'same' | 'harder') | null;
-      /**
-       * Variation Types
-       * @description Distinct variations. OPTION_SHUFFLE is refused (422): it is a practice order (POST /questions/{id}/practice-sessions), never a generation.
-       */
-      variation_types: (
-        'OPTION_SHUFFLE' | 'PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT'
-      )[];
-    };
-    /** QuestionOption */
-    quiz_api__api__questions__QuestionOption: {
-      /**
-       * Id
-       * @description Opaque, client-chosen id (no whitespace, unique in the question). Grading and practice use it; keep it when editing the option.
-       */
-      id: string;
-      /** Text */
-      text: string;
     };
     /** RevisionSummary */
     quiz_api__api__questions__RevisionSummary: {
@@ -5195,16 +5228,6 @@ export type components = {
        * @description queued | running | succeeded | failed | cancelled
        */
       status: string;
-    };
-    /** RevisionRef */
-    RevisionRef: {
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /** Version */
-      version: number;
     };
     /**
      * RunAttempt
@@ -5869,19 +5892,6 @@ export type components = {
        */
       url: string;
     };
-    /** SourceRef */
-    SourceRef: {
-      /**
-       * Label
-       * @description "<n>장 <m>번", "<m>번" or "원본 삭제됨".
-       */
-      label: string;
-      /**
-       * Question Id
-       * @description null: the source was deleted.
-       */
-      question_id: string | null;
-    };
     /**
      * SubmitBody
      * @description `selected_option_ids` for an MCQ (one id unless multi-answer), `answer_text` otherwise.
@@ -6194,16 +6204,6 @@ export type components = {
       msg: string;
       /** Type */
       type: string;
-    };
-    /** ValidationNote */
-    ValidationNote: {
-      /** Code */
-      code: string;
-      /**
-       * Severity
-       * @enum {string}
-       */
-      severity: 'error' | 'warning';
     };
     /** Workspace */
     Workspace: {
@@ -8453,7 +8453,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['quiz_api__api__mock_exams__GenerationCreate'];
+        'application/json': components['schemas']['MockExamGenerationCreate'];
       };
     };
     responses: {
@@ -10209,7 +10209,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['quiz_api__api__question_generations__GenerationCreate'];
+        'application/json': components['schemas']['GenerationCreate'];
       };
     };
     responses: {

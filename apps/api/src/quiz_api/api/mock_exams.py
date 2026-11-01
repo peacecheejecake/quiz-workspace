@@ -159,7 +159,7 @@ class MockExamUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=100)
 
 
-class GenerationCreate(BaseModel):
+class MockExamGenerationCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     config: MockExamConfig | None = Field(default=None, description="설정 바꾸기: new settings.")
@@ -167,7 +167,7 @@ class GenerationCreate(BaseModel):
     seed: int | None = Field(default=None, ge=0, le=MAX_SEED)
 
 
-class GenerationProgress(BaseModel):
+class MockExamProgress(BaseModel):
     done: int
     total: int
 
@@ -184,7 +184,7 @@ class MockExamGeneration(BaseModel):
         description="`llm_unavailable`, `llm_timeout`, `no_valid_questions`, "
         "`mock_exam_unavailable`, ..."
     )
-    progress: GenerationProgress | None = Field(description="While queued or running.")
+    progress: MockExamProgress | None = Field(description="While queued or running.")
     seed: int
     created_at: datetime
     finished_at: datetime | None
@@ -212,24 +212,24 @@ class MockExamList(BaseModel):
     items: list[MockExam]
 
 
-class QuestionOption(BaseModel):
+class MockExamOption(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(min_length=1, max_length=256)
     text: str = Field(max_length=5000)
 
 
-class RevisionRef(BaseModel):
+class MockExamRevisionRef(BaseModel):
     id: uuid.UUID
     version: int
 
 
-class SourceRef(BaseModel):
+class MockExamSourceRef(BaseModel):
     question_id: uuid.UUID | None = Field(description="null: the source was deleted.")
     label: str = Field(description='"<n>장 <m>번", "<m>번" or "원본 삭제됨".')
 
 
-class ValidationNote(BaseModel):
+class MockExamValidationNote(BaseModel):
     code: str
     severity: Literal["error", "warning"]
 
@@ -240,17 +240,17 @@ class MockExamQuestion(BaseModel):
     question_type: Literal["MCQ", "SHORT_ANSWER", "ESSAY"]
     variation_type: VariationName
     stem: str
-    options: list[QuestionOption]
+    options: list[MockExamOption]
     is_multi_answer: bool
-    revision: RevisionRef
+    revision: MockExamRevisionRef
     edited: bool
-    source: SourceRef
+    source: MockExamSourceRef
     # Editors with include=answers only (never for viewers).
     correct_option_ids: list[str] | None = None
     accepted_answers: list[str] | None = None
     explanation: str | None = None
     rubric: str | None = None
-    validation_issues: list[ValidationNote] | None = None
+    validation_issues: list[MockExamValidationNote] | None = None
 
 
 class MockExamQuestionList(BaseModel):
@@ -262,7 +262,7 @@ class MockExamQuestionUpdate(BaseModel):
 
     base_revision_id: uuid.UUID
     stem: str | None = Field(default=None, max_length=MAX_STEM)
-    options: list[QuestionOption] | None = Field(default=None, max_length=MAX_OPTIONS)
+    options: list[MockExamOption] | None = Field(default=None, max_length=MAX_OPTIONS)
     correct_option_ids: list[str] | None = Field(default=None, max_length=MAX_OPTIONS)
     is_multi_answer: bool | None = None
     accepted_answers: list[str] | None = Field(default=None, max_length=MAX_ACCEPTED_ANSWERS)
@@ -384,7 +384,7 @@ def generation_out(row: GenerationRecord) -> MockExamGeneration:
         created_count=row.created_count,
         skipped_count=row.skipped_count,
         error_code=code if status_value in {"failed", "cancelled"} else None,
-        progress=GenerationProgress(done=row.progress_done, total=row.requested_count)
+        progress=MockExamProgress(done=row.progress_done, total=row.requested_count)
         if active
         else None,
         seed=row.seed,
@@ -442,13 +442,13 @@ def exam_out(repo: MockExamRepository, exam: ExamRecord) -> MockExam:
 
 def source_labels(
     repo: MockExamRepository, questions: list[QuestionRecord]
-) -> dict[uuid.UUID, SourceRef]:
+) -> dict[uuid.UUID, MockExamSourceRef]:
     chapters = {q.source_chapter_id for q in questions if q.source_chapter_id is not None}
     lineage = QuestionOverviewRepository(repo.session).chapter_lineage(chapters)
-    out: dict[uuid.UUID, SourceRef] = {}
+    out: dict[uuid.UUID, MockExamSourceRef] = {}
     for q in questions:
         if q.source_question_id is None or q.source_deleted:
-            out[q.id] = SourceRef(question_id=None, label=DELETED_SOURCE)
+            out[q.id] = MockExamSourceRef(question_id=None, label=DELETED_SOURCE)
             continue
         number = (
             chapter_number(lineage.get(q.source_chapter_id, []))
@@ -457,20 +457,22 @@ def source_labels(
         )
         tail = f"{q.source_number}번" if q.source_number is not None else "번호 없음"
         label = f"{number}장 {tail}" if number is not None else tail
-        out[q.id] = SourceRef(question_id=q.source_question_id, label=label)
+        out[q.id] = MockExamSourceRef(question_id=q.source_question_id, label=label)
     return out
 
 
-def question_out(q: QuestionRecord, source: SourceRef, *, answers: bool) -> MockExamQuestion:
+def question_out(
+    q: QuestionRecord, source: MockExamSourceRef, *, answers: bool
+) -> MockExamQuestion:
     out = MockExamQuestion(
         id=q.id,
         position=q.position,
         question_type=q.question_type,  # type: ignore[arg-type]
         variation_type=q.variation_type,  # type: ignore[arg-type]
         stem=q.stem,
-        options=[QuestionOption(id=o["id"], text=o["text"]) for o in q.options],
+        options=[MockExamOption(id=o["id"], text=o["text"]) for o in q.options],
         is_multi_answer=q.is_multi_answer,
-        revision=RevisionRef(id=q.revision_id, version=q.revision_version),
+        revision=MockExamRevisionRef(id=q.revision_id, version=q.revision_version),
         edited=q.revision_version > 1,
         source=source,
     )
@@ -480,7 +482,9 @@ def question_out(q: QuestionRecord, source: SourceRef, *, answers: bool) -> Mock
         out.explanation = q.explanation
         out.rubric = q.rubric
         out.validation_issues = [
-            ValidationNote(code=str(i.get("code", "")), severity=i.get("severity", "warning"))
+            MockExamValidationNote(
+                code=str(i.get("code", "")), severity=i.get("severity", "warning")
+            )
             for i in q.validation_issues
             if i.get("severity") in {"error", "warning"}
         ]
@@ -748,7 +752,7 @@ def delete_mock_exam(access: EditExam, repo: Repo) -> Response:
 )
 def create_mock_exam_generation(
     access: EditExam,
-    body: GenerationCreate,
+    body: MockExamGenerationCreate,
     repo: Repo,
     jobs: JobRepo,
     idempotency: IdempotencyStoreDep,

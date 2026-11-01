@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from quiz_api.api.mock_exams import (
     MockExamConfig,
     MockExamCreate,
-    SourceRef,
+    MockExamSourceRef,
     _check_config,
     _question_json,
     generation_out,
@@ -129,7 +129,7 @@ def test_viewers_get_no_answers() -> None:
         source_chapter_id=None,
         source_number=None,
     )
-    ref = SourceRef(question_id=None, label="원본 삭제됨")
+    ref = MockExamSourceRef(question_id=None, label="원본 삭제됨")
     viewer = _question_json(question_out(q, ref, answers=False), answers=False)
     assert not ANSWER_KEYS & set(viewer)
     assert "validation_issues" not in viewer
