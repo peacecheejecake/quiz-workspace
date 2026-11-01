@@ -420,6 +420,88 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/practice-runs/{run_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Practice Run
+     * @description The run's counts, progress and summary (no items, no content).
+     */
+    get: operations['getPracticeRun'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/practice-runs/{run_id}/finish': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Finish Practice Run
+     * @description End the run: unsubmitted positions count as skipped and no position can be submitted
+     *     any more. Finishing a finished run returns it unchanged.
+     */
+    post: operations['finishPracticeRun'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/practice-runs/{run_id}/items/{position}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Practice Run Item
+     * @description One position of the run: the question without answers, or — once submitted — the
+     *     submitted answer, its result and the answers (`attempt`).
+     */
+    get: operations['getPracticeRunItem'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/practice-runs/{run_id}/results': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Practice Run Results
+     * @description Positions offset+1 .. offset+limit with their result (no answers).
+     */
+    get: operations['listPracticeRunResults'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/practice-sessions/{session_id}': {
     parameters: {
       query?: never;
@@ -473,7 +555,8 @@ export type paths = {
     /**
      * Submit Practice Session
      * @description Grade the answer on the server against the session's revision (option ids, never
-     *     positions); append the attempt; reveal answers and explanation. Once per session.
+     *     positions); append the attempt; reveal answers and explanation. Once per session — for a
+     *     run position once per position (409 `already-submitted`), and not after the run finished.
      */
     post: operations['submitPracticeSession'];
     delete?: never;
@@ -849,7 +932,9 @@ export type paths = {
     /**
      * Start Practice Session
      * @description Open the practice panel on a CONFIRMED question: pins its active revision, shuffles MCQ
-     *     options, records the caller's view. No answers in the response.
+     *     options, records the caller's view. No answers in the response. With a run position
+     *     (QVIEW-B) the caller's run of this workspace must hold this question there; the position's
+     *     open session is resumed (another view), a submitted one is 409 `already-submitted`.
      */
     post: operations['startPracticeSession'];
     delete?: never;
@@ -1313,6 +1398,27 @@ export type paths = {
     get: operations['listWorkspaceJobs'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/practice-runs': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Practice Run
+     * @description Resolve the range on the server into a fixed, ordered run of at most 5,000 questions.
+     *     The response carries counts only (read positions through /items/{position}).
+     */
+    post: operations['createPracticeRun'];
     delete?: never;
     options?: never;
     head?: never;
@@ -3790,6 +3896,81 @@ export type components = {
       text: string;
     };
     /**
+     * PracticeRun
+     * @description Counts, progress and summary only: never the item list or question content.
+     */
+    PracticeRun: {
+      /**
+       * Answered
+       * @description Positions submitted.
+       */
+      answered: number;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Finished At */
+      finished_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Mock Exam Id */
+      mock_exam_id: string | null;
+      /** Random Order */
+      random_order: boolean;
+      /**
+       * Reached
+       * @description The furthest position opened (0: none yet).
+       */
+      reached: number;
+      /** Seed */
+      seed: number;
+      /**
+       * Source
+       * @enum {string}
+       */
+      source: 'bank' | 'mock';
+      summary: components['schemas']['RunSummary'];
+      /**
+       * Total
+       * @description Positions 1..total.
+       */
+      total: number;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /**
+     * PracticeRunCreate
+     * @description `source=bank`: the workspace's questions. `source=mock` (with `mock_exam_id`) arrives with
+     *     MOCK-P. Unknown body fields are ignored (never a workspace or user override).
+     */
+    PracticeRunCreate: {
+      /** Mock Exam Id */
+      mock_exam_id?: string | null;
+      /**
+       * Random Order
+       * @default false
+       */
+      random_order?: boolean;
+      range: components['schemas']['QuestionRange'];
+      /**
+       * Seed
+       * @description Shuffle seed; the server picks one if absent.
+       */
+      seed?: number | null;
+      /**
+       * Source
+       * @enum {string}
+       */
+      source: 'bank' | 'mock';
+    };
+    /**
      * PracticeSession
      * @description What the practice panel needs to show a question. Never carries answers, explanations,
      *     rubrics or accepted answers (a new field here is a reviewed change).
@@ -3820,6 +4001,11 @@ export type components = {
        */
       options: components['schemas']['PracticeOption'][];
       /**
+       * Practice Run Id
+       * @description The practice run this session practises a position of.
+       */
+      practice_run_id?: string | null;
+      /**
        * Question Id
        * Format: uuid
        */
@@ -3838,6 +4024,11 @@ export type components = {
        */
       question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
       /**
+       * Run Position
+       * @description That run position (1-based).
+       */
+      run_position?: number | null;
+      /**
        * State
        * @enum {string}
        */
@@ -3850,8 +4041,17 @@ export type components = {
        */
       workspace_id: string;
     };
-    /** PracticeSessionCreate */
-    PracticeSessionCreate: Record<string, never>;
+    /**
+     * PracticeSessionCreate
+     * @description Empty for the practice panel; `practice_run_id` + `run_position` for a run position
+     *     (QVIEW-B): the position must hold this question; one session per position.
+     */
+    PracticeSessionCreate: {
+      /** Practice Run Id */
+      practice_run_id?: string | null;
+      /** Run Position */
+      run_position?: number | null;
+    };
     /** PracticeSessionDetail */
     PracticeSessionDetail: {
       /** Chapter Id */
@@ -3883,6 +4083,11 @@ export type components = {
       /** @description null while the session is open (no answers before submission). */
       outcome: components['schemas']['SubmitResult'] | null;
       /**
+       * Practice Run Id
+       * @description The practice run this session practises a position of.
+       */
+      practice_run_id?: string | null;
+      /**
        * Question Id
        * Format: uuid
        */
@@ -3900,6 +4105,11 @@ export type components = {
        * @enum {string}
        */
       question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * Run Position
+       * @description That run position (1-based).
+       */
+      run_position?: number | null;
       /**
        * State
        * @enum {string}
@@ -4244,6 +4454,26 @@ export type components = {
       /** Items */
       items: components['schemas']['OverviewItem'][];
     };
+    /**
+     * QuestionRange
+     * @description Whole groups (`all`, `chapter_ids`) plus single questions, minus exclusions, narrowed by
+     *     `filters`. Id lists are capped at 5,000 entries each.
+     */
+    QuestionRange: {
+      /**
+       * All
+       * @description Every question of the Heatmap.
+       * @default false
+       */
+      all?: boolean;
+      /** Chapter Ids */
+      chapter_ids?: (string | 'none')[];
+      /** Excluded Question Ids */
+      excluded_question_ids?: string[];
+      filters?: components['schemas']['RangeFilters'];
+      /** Question Ids */
+      question_ids?: string[];
+    };
     /** QuestionRevision */
     QuestionRevision: {
       /**
@@ -4426,6 +4656,26 @@ export type components = {
        */
       statuses?: ('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry')[];
     };
+    /**
+     * RangeFilters
+     * @description The overview's state/type filters (GET /workspaces/{id}/questions/overview).
+     */
+    RangeFilters: {
+      /** Favorite */
+      favorite?: boolean | null;
+      /**
+       * Retry
+       * @description The `needs_retry` flag.
+       */
+      retry?: boolean | null;
+      /**
+       * Status
+       * @description Keep these dot statuses.
+       */
+      status?: ('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry')[] | null;
+      /** Type */
+      type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+    };
     /** ReadinessReport */
     ReadinessReport: {
       /** Checks */
@@ -4586,6 +4836,144 @@ export type components = {
        * @description queued | running | succeeded | failed | cancelled
        */
       status: string;
+    };
+    /**
+     * RunAttempt
+     * @description The submitted position's result with its answers (present only after submission).
+     */
+    RunAttempt: {
+      /** Accepted Answers */
+      accepted_answers: string[] | null;
+      /**
+       * Attempt Id
+       * Format: uuid
+       */
+      attempt_id: string;
+      /** Correct Option Ids */
+      correct_option_ids: string[] | null;
+      /** Explanation */
+      explanation: string | null;
+      /**
+       * Result
+       * @enum {string}
+       */
+      result: 'correct' | 'incorrect' | 'pending';
+      /** Rubric */
+      rubric: string | null;
+      submitted_answer: components['schemas']['RunSubmittedAnswer'];
+    };
+    /**
+     * RunItem
+     * @description One position. `available=false` (deleted or archived since the run started): no content.
+     *     Before submission no answer field exists anywhere outside `attempt` (null).
+     */
+    RunItem: {
+      attempt: components['schemas']['RunAttempt'] | null;
+      /** Available */
+      available: boolean;
+      /** Chapter Id */
+      chapter_id: string | null;
+      /**
+       * Chapter Number
+       * @description For `3장 12번` labels, if known.
+       */
+      chapter_number: number | null;
+      /** Chapter Title */
+      chapter_title: string | null;
+      /** Is Multi Answer */
+      is_multi_answer: boolean | null;
+      /**
+       * Options
+       * @description MCQ options; in the session's displayed order once a session is open.
+       */
+      options: components['schemas']['RunOption'][];
+      /** Position */
+      position: number;
+      /**
+       * Practice Session Id
+       * @description This position's session, if any.
+       */
+      practice_session_id: string | null;
+      /** Question Id */
+      question_id: string | null;
+      /** Question Number */
+      question_number: number | null;
+      /** Question Type */
+      question_type: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      /** Session State */
+      session_state: ('open' | 'pending_grade' | 'graded') | null;
+      /** Stem */
+      stem: string | null;
+      /** Total */
+      total: number;
+    };
+    /** RunOption */
+    RunOption: {
+      /**
+       * Id
+       * @description Stable option id; submit it, never a position.
+       */
+      id: string;
+      /** Text */
+      text: string;
+    };
+    /** RunResultItem */
+    RunResultItem: {
+      /** Available */
+      available: boolean;
+      /** Chapter Id */
+      chapter_id: string | null;
+      /** Chapter Number */
+      chapter_number: number | null;
+      /** Chapter Title */
+      chapter_title: string | null;
+      /** Position */
+      position: number;
+      /**
+       * Preview
+       * @description First lines of the stem; never the answer.
+       */
+      preview: string | null;
+      /** Question Id */
+      question_id: string | null;
+      /** Question Number */
+      question_number: number | null;
+      /** Question Type */
+      question_type: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      /**
+       * Result
+       * @description null: not reached yet (open run).
+       */
+      result: ('correct' | 'incorrect' | 'pending' | 'skipped') | null;
+    };
+    /** RunResults */
+    RunResults: {
+      /** Items */
+      items: components['schemas']['RunResultItem'][];
+      /** Limit */
+      limit: number;
+      /** Offset */
+      offset: number;
+      /** Total */
+      total: number;
+    };
+    /** RunSubmittedAnswer */
+    RunSubmittedAnswer: {
+      /** Answer Text */
+      answer_text?: string | null;
+      /** Selected Option Ids */
+      selected_option_ids?: string[] | null;
+    };
+    /** RunSummary */
+    RunSummary: {
+      /** Correct */
+      correct: number;
+      /** Incorrect */
+      incorrect: number;
+      /** Pending */
+      pending: number;
+      /** Skipped */
+      skipped: number;
     };
     /** SearchItem */
     SearchItem: {
@@ -7255,6 +7643,278 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['MyWorkspaceList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getPracticeRun: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PracticeRun'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  finishPracticeRun: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PracticeRun'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getPracticeRunItem: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        position: number;
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RunItem'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listPracticeRunResults: {
+    parameters: {
+      query?: {
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RunResults'];
         };
       };
       /** @description Unauthorized */
@@ -10576,6 +11236,89 @@ export interface operations {
       };
       /** @description Unprocessable Content */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createPracticeRun: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PracticeRunCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PracticeRun'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
         headers: {
           [name: string]: unknown;
         };

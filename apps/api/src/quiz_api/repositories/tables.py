@@ -233,6 +233,27 @@ practice_sessions = Table(
     _ts("graded_at"),
     _ts("created_at", nullable=False),
     _ts("updated_at", nullable=False),
+    # QVIEW-B: the run position this session practises (both null outside a run).
+    Column("practice_run_id", Uuid),
+    Column("run_position", Integer),
+)
+
+# QVIEW-B range practice runs (one user's fixed, ordered questions; only finished_at changes).
+practice_runs = Table(
+    "practice_runs",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=FetchedValue()),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("user_id", Uuid, nullable=False),
+    Column("source", Text, nullable=False),
+    Column("mock_exam_id", Uuid),
+    Column("mock_exam_generation_id", Uuid),
+    Column("range", JSONB, nullable=False),
+    Column("random_order", Boolean, nullable=False),
+    Column("seed", BigInteger, nullable=False),
+    Column("item_ids", ARRAY(Uuid), nullable=False),
+    _ts("created_at", nullable=False),
+    _ts("finished_at"),
 )
 
 question_attempts = Table(

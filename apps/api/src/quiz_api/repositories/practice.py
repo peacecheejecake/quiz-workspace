@@ -74,6 +74,9 @@ class SessionRecord:
     submitted_at: datetime | None
     graded_at: datetime | None
     revision: RevisionRecord
+    # QVIEW-B: the run position this session practises (None outside a run).
+    practice_run_id: uuid.UUID | None = None
+    run_position: int | None = None
 
 
 @dataclass(frozen=True)
@@ -131,6 +134,8 @@ _SESSION_COLUMNS = (
     practice_sessions.c.opened_at,
     practice_sessions.c.submitted_at,
     practice_sessions.c.graded_at,
+    practice_sessions.c.practice_run_id,
+    practice_sessions.c.run_position,
     questions.c.question_type,
     questions.c.chapter_id,
     questions.c.question_number,
@@ -192,6 +197,8 @@ def _session(row: Any) -> SessionRecord:
             rubric=row.rev_rubric,
             created_at=row.rev_created_at,
         ),
+        practice_run_id=row.practice_run_id,
+        run_position=row.run_position,
     )
 
 
@@ -242,30 +249,49 @@ class PracticeRepository:
     ) -> SessionRecord | None:
         """The caller's session whose question is still live; `lock` = FOR UPDATE of the session
         row only (the submit/self-grade path)."""
-        stmt = (
-            select(*_SESSION_COLUMNS)
-            .select_from(
-                practice_sessions.join(
-                    questions,
-                    and_(
-                        questions.c.id == practice_sessions.c.question_id,
-                        questions.c.workspace_id == practice_sessions.c.workspace_id,
-                    ),
-                ).join(
-                    question_revisions,
-                    question_revisions.c.id == practice_sessions.c.question_revision_id,
-                )
-            )
-            .where(
-                practice_sessions.c.id == session_id,
-                practice_sessions.c.user_id == user_id,
-                questions.c.deleted_at.is_(None),
-            )
+        stmt = self._session_select().where(
+            practice_sessions.c.id == session_id,
+            practice_sessions.c.user_id == user_id,
+            questions.c.deleted_at.is_(None),
         )
         if lock:
             stmt = stmt.with_for_update(of=practice_sessions)
         row = self._session.execute(stmt).one_or_none()
         return _session(row) if row is not None else None
+
+    def run_session(
+        self, run_id: uuid.UUID, position: int, user_id: uuid.UUID
+    ) -> SessionRecord | None:
+        """The caller's session of a run position (at most one), whatever its question's state."""
+        row = self._session.execute(
+            self._session_select().where(
+                practice_sessions.c.practice_run_id == run_id,
+                practice_sessions.c.run_position == position,
+                practice_sessions.c.user_id == user_id,
+            )
+        ).one_or_none()
+        return _session(row) if row is not None else None
+
+    def record_view(
+        self, workspace_id: uuid.UUID, question_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        """Re-opening a run position's open session is a study view like opening one."""
+        self._session.execute(self._view_upsert(workspace_id, question_id, user_id))
+
+    @staticmethod
+    def _session_select() -> Any:
+        return select(*_SESSION_COLUMNS).select_from(
+            practice_sessions.join(
+                questions,
+                and_(
+                    questions.c.id == practice_sessions.c.question_id,
+                    questions.c.workspace_id == practice_sessions.c.workspace_id,
+                ),
+            ).join(
+                question_revisions,
+                question_revisions.c.id == practice_sessions.c.question_revision_id,
+            )
+        )
 
     def open_session(
         self,
@@ -276,6 +302,8 @@ class PracticeRepository:
         user_id: uuid.UUID,
         displayed_option_ids: list[str],
         shuffle_seed: int | None,
+        practice_run_id: uuid.UUID | None = None,
+        run_position: int | None = None,
     ) -> OpenedSession:
         """Insert the session and record the caller's view (`record_view`) in one statement."""
         opened = (
@@ -288,6 +316,8 @@ class PracticeRepository:
                 displayed_option_ids=displayed_option_ids,
                 shuffle_seed=shuffle_seed,
                 state="open",
+                practice_run_id=practice_run_id,
+                run_position=run_position,
             )
             .returning(
                 practice_sessions.c.id, practice_sessions.c.state, practice_sessions.c.opened_at

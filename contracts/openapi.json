@@ -4788,6 +4788,153 @@
         "title": "PracticeOption",
         "type": "object"
       },
+      "PracticeRun": {
+        "description": "Counts, progress and summary only: never the item list or question content.",
+        "properties": {
+          "answered": {
+            "description": "Positions submitted.",
+            "title": "Answered",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "mock_exam_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mock Exam Id"
+          },
+          "random_order": {
+            "title": "Random Order",
+            "type": "boolean"
+          },
+          "reached": {
+            "description": "The furthest position opened (0: none yet).",
+            "title": "Reached",
+            "type": "integer"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "bank",
+              "mock"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/RunSummary"
+          },
+          "total": {
+            "description": "Positions 1..total.",
+            "title": "Total",
+            "type": "integer"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "source",
+          "mock_exam_id",
+          "random_order",
+          "seed",
+          "total",
+          "answered",
+          "reached",
+          "created_at",
+          "finished_at",
+          "summary"
+        ],
+        "title": "PracticeRun",
+        "type": "object"
+      },
+      "PracticeRunCreate": {
+        "description": "`source=bank`: the workspace's questions. `source=mock` (with `mock_exam_id`) arrives with\nMOCK-P. Unknown body fields are ignored (never a workspace or user override).",
+        "properties": {
+          "mock_exam_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mock Exam Id"
+          },
+          "random_order": {
+            "default": false,
+            "title": "Random Order",
+            "type": "boolean"
+          },
+          "range": {
+            "$ref": "#/components/schemas/QuestionRange"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Shuffle seed; the server picks one if absent.",
+            "title": "Seed"
+          },
+          "source": {
+            "enum": [
+              "bank",
+              "mock"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "range"
+        ],
+        "title": "PracticeRunCreate",
+        "type": "object"
+      },
       "PracticeSession": {
         "description": "What the practice panel needs to show a question. Never carries answers, explanations,\nrubrics or accepted answers (a new field here is a reviewed change).",
         "properties": {
@@ -4833,6 +4980,19 @@
             "title": "Options",
             "type": "array"
           },
+          "practice_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The practice run this session practises a position of.",
+            "title": "Practice Run Id"
+          },
           "question_id": {
             "format": "uuid",
             "title": "Question Id",
@@ -4863,6 +5023,18 @@
             ],
             "title": "Question Type",
             "type": "string"
+          },
+          "run_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "That run position (1-based).",
+            "title": "Run Position"
           },
           "state": {
             "enum": [
@@ -4903,7 +5075,34 @@
       },
       "PracticeSessionCreate": {
         "additionalProperties": false,
-        "properties": {},
+        "description": "Empty for the practice panel; `practice_run_id` + `run_position` for a run position\n(QVIEW-B): the position must hold this question; one session per position.",
+        "properties": {
+          "practice_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practice Run Id"
+          },
+          "run_position": {
+            "anyOf": [
+              {
+                "maximum": 5000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Position"
+          }
+        },
         "title": "PracticeSessionCreate",
         "type": "object"
       },
@@ -4974,6 +5173,19 @@
             ],
             "description": "null while the session is open (no answers before submission)."
           },
+          "practice_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The practice run this session practises a position of.",
+            "title": "Practice Run Id"
+          },
           "question_id": {
             "format": "uuid",
             "title": "Question Id",
@@ -5004,6 +5216,18 @@
             ],
             "title": "Question Type",
             "type": "string"
+          },
+          "run_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "That run position (1-based).",
+            "title": "Run Position"
           },
           "state": {
             "enum": [
@@ -5875,6 +6099,59 @@
         "title": "QuestionOverview",
         "type": "object"
       },
+      "QuestionRange": {
+        "additionalProperties": false,
+        "description": "Whole groups (`all`, `chapter_ids`) plus single questions, minus exclusions, narrowed by\n`filters`. Id lists are capped at 5,000 entries each.",
+        "properties": {
+          "all": {
+            "default": false,
+            "description": "Every question of the Heatmap.",
+            "title": "All",
+            "type": "boolean"
+          },
+          "chapter_ids": {
+            "items": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "const": "none",
+                  "type": "string"
+                }
+              ],
+              "description": "A chapter id, or `none` for the questions without a chapter."
+            },
+            "maxItems": 5000,
+            "title": "Chapter Ids",
+            "type": "array"
+          },
+          "excluded_question_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 5000,
+            "title": "Excluded Question Ids",
+            "type": "array"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/RangeFilters"
+          },
+          "question_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 5000,
+            "title": "Question Ids",
+            "type": "array"
+          }
+        },
+        "title": "QuestionRange",
+        "type": "object"
+      },
       "QuestionRevision": {
         "properties": {
           "accepted_answers": {
@@ -6366,6 +6643,76 @@
         "title": "RandomSources",
         "type": "object"
       },
+      "RangeFilters": {
+        "additionalProperties": false,
+        "description": "The overview's state/type filters (GET /workspaces/{id}/questions/overview).",
+        "properties": {
+          "favorite": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Favorite"
+          },
+          "retry": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The `needs_retry` flag.",
+            "title": "Retry"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "unseen",
+                    "viewed",
+                    "incorrect",
+                    "correct",
+                    "retry"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Keep these dot statuses.",
+            "title": "Status"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "MCQ",
+                  "SHORT_ANSWER",
+                  "ESSAY"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          }
+        },
+        "title": "RangeFilters",
+        "type": "object"
+      },
       "ReadinessReport": {
         "properties": {
           "checks": {
@@ -6684,6 +7031,506 @@
           "status"
         ],
         "title": "RevisionJob",
+        "type": "object"
+      },
+      "RunAttempt": {
+        "description": "The submitted position's result with its answers (present only after submission).",
+        "properties": {
+          "accepted_answers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Answers"
+          },
+          "attempt_id": {
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "correct_option_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct Option Ids"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "result": {
+            "enum": [
+              "correct",
+              "incorrect",
+              "pending"
+            ],
+            "title": "Result",
+            "type": "string"
+          },
+          "rubric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
+          "submitted_answer": {
+            "$ref": "#/components/schemas/RunSubmittedAnswer"
+          }
+        },
+        "required": [
+          "attempt_id",
+          "result",
+          "submitted_answer",
+          "correct_option_ids",
+          "accepted_answers",
+          "explanation",
+          "rubric"
+        ],
+        "title": "RunAttempt",
+        "type": "object"
+      },
+      "RunItem": {
+        "description": "One position. `available=false` (deleted or archived since the run started): no content.\nBefore submission no answer field exists anywhere outside `attempt` (null).",
+        "properties": {
+          "attempt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunAttempt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Id"
+          },
+          "chapter_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For `3장 12번` labels, if known.",
+            "title": "Chapter Number"
+          },
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title"
+          },
+          "is_multi_answer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Multi Answer"
+          },
+          "options": {
+            "description": "MCQ options; in the session's displayed order once a session is open.",
+            "items": {
+              "$ref": "#/components/schemas/RunOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "practice_session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "This position's session, if any.",
+            "title": "Practice Session Id"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Id"
+          },
+          "question_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Number"
+          },
+          "question_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "MCQ",
+                  "SHORT_ANSWER",
+                  "ESSAY"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Type"
+          },
+          "session_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "open",
+                  "pending_grade",
+                  "graded"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session State"
+          },
+          "stem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stem"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "position",
+          "total",
+          "available",
+          "question_id",
+          "question_type",
+          "chapter_id",
+          "chapter_number",
+          "chapter_title",
+          "question_number",
+          "stem",
+          "is_multi_answer",
+          "options",
+          "practice_session_id",
+          "session_state",
+          "attempt"
+        ],
+        "title": "RunItem",
+        "type": "object"
+      },
+      "RunOption": {
+        "properties": {
+          "id": {
+            "description": "Stable option id; submit it, never a position.",
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "RunOption",
+        "type": "object"
+      },
+      "RunResultItem": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Id"
+          },
+          "chapter_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Number"
+          },
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "First lines of the stem; never the answer.",
+            "title": "Preview"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Id"
+          },
+          "question_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Number"
+          },
+          "question_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "MCQ",
+                  "SHORT_ANSWER",
+                  "ESSAY"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Type"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "enum": [
+                  "correct",
+                  "incorrect",
+                  "pending",
+                  "skipped"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: not reached yet (open run).",
+            "title": "Result"
+          }
+        },
+        "required": [
+          "position",
+          "question_id",
+          "available",
+          "question_type",
+          "chapter_id",
+          "chapter_number",
+          "chapter_title",
+          "question_number",
+          "preview",
+          "result"
+        ],
+        "title": "RunResultItem",
+        "type": "object"
+      },
+      "RunResults": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunResultItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "offset",
+          "limit",
+          "items"
+        ],
+        "title": "RunResults",
+        "type": "object"
+      },
+      "RunSubmittedAnswer": {
+        "properties": {
+          "answer_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer Text"
+          },
+          "selected_option_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Option Ids"
+          }
+        },
+        "title": "RunSubmittedAnswer",
+        "type": "object"
+      },
+      "RunSummary": {
+        "properties": {
+          "correct": {
+            "title": "Correct",
+            "type": "integer"
+          },
+          "incorrect": {
+            "title": "Incorrect",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "correct",
+          "incorrect",
+          "pending",
+          "skipped"
+        ],
+        "title": "RunSummary",
         "type": "object"
       },
       "SearchItem": {
@@ -11492,6 +12339,397 @@
         ]
       }
     },
+    "/api/v1/practice-runs/{run_id}": {
+      "get": {
+        "description": "The run's counts, progress and summary (no items, no content).",
+        "operationId": "getPracticeRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Practice Run",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
+    "/api/v1/practice-runs/{run_id}/finish": {
+      "post": {
+        "description": "End the run: unsubmitted positions count as skipped and no position can be submitted\nany more. Finishing a finished run returns it unchanged.",
+        "operationId": "finishPracticeRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Finish Practice Run",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
+    "/api/v1/practice-runs/{run_id}/items/{position}": {
+      "get": {
+        "description": "One position of the run: the question without answers, or — once submitted — the\nsubmitted answer, its result and the answers (`attempt`).",
+        "operationId": "getPracticeRunItem",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "position",
+            "required": true,
+            "schema": {
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Position",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Practice Run Item",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
+    "/api/v1/practice-runs/{run_id}/results": {
+      "get": {
+        "description": "Positions offset+1 .. offset+limit with their result (no answers).",
+        "operationId": "listPracticeRunResults",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 5000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunResults"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Practice Run Results",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
     "/api/v1/practice-sessions/{session_id}": {
       "get": {
         "description": "Resume one of the caller's sessions. `outcome` (with answers) only once submitted.",
@@ -11692,7 +12930,7 @@
     },
     "/api/v1/practice-sessions/{session_id}/submit": {
       "post": {
-        "description": "Grade the answer on the server against the session's revision (option ids, never\npositions); append the attempt; reveal answers and explanation. Once per session.",
+        "description": "Grade the answer on the server against the session's revision (option ids, never\npositions); append the attempt; reveal answers and explanation. Once per session — for a\nrun position once per position (409 `already-submitted`), and not after the run finished.",
         "operationId": "submitPracticeSession",
         "parameters": [
           {
@@ -13582,7 +14820,7 @@
     },
     "/api/v1/questions/{question_id}/practice-sessions": {
       "post": {
-        "description": "Open the practice panel on a CONFIRMED question: pins its active revision, shuffles MCQ\noptions, records the caller's view. No answers in the response.",
+        "description": "Open the practice panel on a CONFIRMED question: pins its active revision, shuffles MCQ\noptions, records the caller's view. No answers in the response. With a run position\n(QVIEW-B) the caller's run of this workspace must hold this question there; the position's\nopen session is resumed (another view), a submitted one is 409 `already-submitted`.",
         "operationId": "startPracticeSession",
         "parameters": [
           {
@@ -16263,6 +17501,134 @@
         "summary": "List Jobs",
         "tags": [
           "history"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/practice-runs": {
+      "post": {
+        "description": "Resolve the range on the server into a fixed, ordered run of at most 5,000 questions.\nThe response carries counts only (read positions through /items/{position}).",
+        "operationId": "createPracticeRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PracticeRunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Practice Run",
+        "tags": [
+          "practice"
         ]
       }
     },

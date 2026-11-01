@@ -55,10 +55,17 @@ from pydantic import (
     TypeAdapter,
     ValidationError,
     field_validator,
+    model_validator,
 )
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
+from quiz_api.api.practice_runs import (
+    MAX_RUN,
+    already_submitted,
+    run_finished,
+    wrong_position,
+)
 from quiz_api.auth import CurrentUser
 from quiz_api.authz import (
     AccessRepository,
@@ -96,6 +103,7 @@ from quiz_api.repositories.practice import (
     SessionRecord,
     StateRecord,
 )
+from quiz_api.repositories.practice_runs import PracticeRunRepository
 from quiz_api.repositories.questions import QuestionRepository
 
 router = APIRouter(tags=["practice"], responses=problem_responses(503))
@@ -136,10 +144,26 @@ class PracticeSession(BaseModel):
     displayed_option_ids: list[str] = Field(description="The displayed order (MCQ), as ids.")
     state: SessionState
     opened_at: datetime
+    practice_run_id: uuid.UUID | None = Field(
+        default=None, description="The practice run this session practises a position of."
+    )
+    run_position: int | None = Field(default=None, description="That run position (1-based).")
 
 
 class PracticeSessionCreate(BaseModel):
+    """Empty for the practice panel; `practice_run_id` + `run_position` for a run position
+    (QVIEW-B): the position must hold this question; one session per position."""
+
     model_config = ConfigDict(extra="forbid")
+
+    practice_run_id: uuid.UUID | None = None
+    run_position: int | None = Field(default=None, ge=1, le=MAX_RUN)
+
+    @model_validator(mode="after")
+    def _run_pair(self) -> PracticeSessionCreate:
+        if (self.practice_run_id is None) != (self.run_position is None):
+            raise ValueError("practice_run_id and run_position go together.")
+        return self
 
 
 class SubmitBody(BaseModel):
@@ -265,7 +289,14 @@ def get_idempotency_store(
     return IdempotencyStore(session)
 
 
+def get_run_repository(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> PracticeRunRepository:
+    return PracticeRunRepository(session)
+
+
 PracticeRepo = Annotated[PracticeRepository, Depends(get_practice_repository)]
+RunRepo = Annotated[PracticeRunRepository, Depends(get_run_repository)]
 QuestionRepo = Annotated[QuestionRepository, Depends(get_question_repository)]
 IdempotencyStoreDep = Annotated[IdempotencyStore, Depends(get_idempotency_store)]
 AccessRepo = Annotated[AccessRepository, Depends(get_access_repository)]
@@ -328,6 +359,8 @@ def _session_out(s: SessionRecord) -> PracticeSession:
         displayed_option_ids=s.displayed_option_ids,
         state=s.state,  # type: ignore[arg-type]
         opened_at=s.opened_at,
+        practice_run_id=s.practice_run_id,
+        run_position=s.run_position,
     )
 
 
@@ -462,20 +495,42 @@ def start_practice_session(
     access: PracticeQuestion,
     practice: PracticeRepo,
     questions: QuestionRepo,
+    runs: RunRepo,
     idempotency: IdempotencyStoreDep,
     user: CurrentUser,
     body: PracticeSessionCreate | None = None,
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
     """Open the practice panel on a CONFIRMED question: pins its active revision, shuffles MCQ
-    options, records the caller's view. No answers in the response."""
+    options, records the caller's view. No answers in the response. With a run position
+    (QVIEW-B) the caller's run of this workspace must hold this question there; the position's
+    open session is resumed (another view), a submitted one is 409 `already-submitted`."""
+    body = body or PracticeSessionCreate()
     scope = f"POST /questions/{access.resource_id}/practice-sessions"
-    body_hash = request_hash((body or PracticeSessionCreate()).model_dump(mode="json"))
+    body_hash = request_hash(body.model_dump(mode="json", exclude_none=True))
     if idempotency_key is not None:
         idempotency.lock(user.id, scope, idempotency_key)
         stored = idempotency.find(user.id, scope, idempotency_key)
         if stored is not None:
             return replay(stored, body_hash)
+
+    run_id, position = body.practice_run_id, body.run_position
+    if run_id is not None and position is not None:
+        run = runs.get_in_workspace(run_id, user.id, access.workspace.workspace_id)
+        if run is None:
+            raise _not_found()
+        if run.finished_at is not None:
+            raise run_finished()
+        if position > run.total or runs.question_at(run.id, position) != access.resource_id:
+            raise wrong_position()
+        existing = practice.run_session(run.id, position, user.id)
+        if existing is not None:
+            if existing.state != "open":
+                raise already_submitted()
+            practice.record_view(existing.workspace_id, existing.question_id, user.id)
+            resumed = _session_out(existing)
+            practice.commit()
+            return resumed
 
     question = questions.get(access.resource_id, with_sources=False)
     if question is None:  # soft-deleted after the authorization lookup
@@ -499,6 +554,8 @@ def start_practice_session(
         user_id=user.id,
         displayed_option_ids=displayed,
         shuffle_seed=seed,
+        practice_run_id=run_id,
+        run_position=position,
     )
     # The session pins the revision just read in this transaction: no re-read needed.
     result = _session_out(
@@ -516,6 +573,8 @@ def start_practice_session(
             submitted_at=None,
             graded_at=None,
             revision=question.revision,
+            practice_run_id=run_id,
+            run_position=position,
         )
     )
     if idempotency_key is not None:
@@ -562,10 +621,18 @@ def submit_practice_session(
     body: SubmitBody,
     user: CurrentUser,
     practice: PracticeRepo,
+    runs: RunRepo,
 ) -> SubmitResult:
     """Grade the answer on the server against the session's revision (option ids, never
-    positions); append the attempt; reveal answers and explanation. Once per session."""
+    positions); append the attempt; reveal answers and explanation. Once per session — for a
+    run position once per position (409 `already-submitted`), and not after the run finished."""
     _, found = _own_session(session_id, user.id, practice, Action.PRACTICE)
+    if found.practice_run_id is not None:
+        if found.state != "open":
+            raise already_submitted()
+        run = runs.get(found.practice_run_id, user.id, lock=True)
+        if run is None or run.finished_at is not None:
+            raise run_finished()
     if found.state != "open":
         raise ProblemException(
             409,
