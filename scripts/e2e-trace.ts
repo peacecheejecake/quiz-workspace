@@ -90,6 +90,9 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   // DOCVIEW-SPEC (2026-10-29) / DOCVIEW-PORT (2026-11-02): the DOC-02 / WS-VIEW-01 viewer layout —
   // docked outline panel, view modes, resizable and swappable split. It replaced DOC-02-AC06/AC10.
   'DOCVIEW.0': ['DOCVIEW-01'],
+  // MOCK-SPEC (2026-11-01): mock exams, unified QuestionViewer range practice.
+  'MOCK.0': ['MOCK-01'],
+  'QVIEW.0': ['QVIEW-01'],
 };
 
 const LEADING_ID = new RegExp(
