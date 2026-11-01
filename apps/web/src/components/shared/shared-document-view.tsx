@@ -4,10 +4,11 @@
 // original PDF (streamed by the same-origin relay after the share check) and the published
 // revision's text blocks with their pages. No correction, publish or revision controls.
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { OutlineTree } from '@/components/documents/editor/outline-tree';
-import { PdfViewer } from '@/components/documents/editor/pdf-viewer';
+import { PdfViewer, type PageChangeReason } from '@/components/documents/editor/pdf-viewer';
 import { TextBlockEditor } from '@/components/documents/editor/text-block-editor';
+import { scrollTextTo } from '@/components/documents/editor/text-sync';
 import editorStyles from '@/components/documents/editor/editor.module.css';
 import { IDLE } from '@/lib/documents/block-edit';
 import {
@@ -24,6 +25,7 @@ import type {
   SharedDocument,
   SharedDocumentSummary,
 } from '@/lib/shared/client';
+import { pageGroups, textTargetForPage } from '@/lib/documents/text-groups';
 import { endsShareView, sharedFailureMessage } from '@/lib/shared/messages';
 import { sharePath } from '@/lib/shared/view-state';
 import styles from './shared.module.css';
@@ -137,6 +139,22 @@ export function SharedDocumentView({
     }
   }
 
+  // DOC-02-AC08: the text pane follows the PDF when the reader moves it.
+  const groups = useMemo(() => pageGroups(blocks), [blocks]);
+  const textScrollRef = useRef<HTMLDivElement>(null);
+  const syncTextTo = useRef<number | null>(null);
+  const onViewerPage = useCallback((next: number, reason: PageChangeReason) => {
+    setPage(next);
+    if (reason === 'navigate') setAnnouncement(`${next}쪽`);
+    syncTextTo.current = next;
+  }, []);
+  useEffect(() => {
+    const target = syncTextTo.current;
+    if (target === null || target !== page) return;
+    syncTextTo.current = null;
+    scrollTextTo(textScrollRef.current, textTargetForPage(groups, target));
+  }, [groups, page]);
+
   const onTextSelect = useCallback(
     (block: ContentBlock) => selectBlock(block, 'pdf'),
     [selectBlock],
@@ -222,24 +240,22 @@ export function SharedDocumentView({
               <PdfViewer
                 source={pdfSource}
                 page={page}
-                onPageChange={(next) => {
-                  setPage(next);
-                  setAnnouncement(`${next}쪽`);
-                }}
+                onPageChange={onViewerPage}
                 highlights={highlights}
                 highlightKey={`${currentBlockId ?? ''}:${highlightKey}`}
               />
             </section>
 
             <section aria-label="원문 텍스트" className={editorStyles.textPane} data-pane="text">
-              <div className={editorStyles.textScroller}>
+              <div className={editorStyles.textScroller} ref={textScrollRef}>
                 {document ? (
                   blocks.length === 0 ? (
                     <p className={editorStyles.paneNote}>이 문서에는 원문 텍스트가 없습니다.</p>
                   ) : (
                     <TextBlockEditor
-                      blocks={blocks}
+                      groups={groups}
                       currentBlockId={currentBlockId}
+                      currentPage={page}
                       canEdit={false}
                       editLocked
                       editState={IDLE}

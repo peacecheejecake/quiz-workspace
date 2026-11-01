@@ -36,6 +36,7 @@ import {
   type OutlineJump,
 } from '@/lib/documents/outline';
 import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
+import { pageGroups, textTargetForPage } from '@/lib/documents/text-groups';
 import {
   INDEX_FAILURE_MESSAGE,
   isDraft,
@@ -51,9 +52,10 @@ import { summaryPanelPath, workspaceHomePath } from '@/lib/workspaces/home';
 import { TextExportMenu } from '../text-export-menu';
 import styles from './editor.module.css';
 import { OutlineTree } from './outline-tree';
-import { PdfViewer } from './pdf-viewer';
+import { PdfViewer, type PageChangeReason } from './pdf-viewer';
 import { PublishBar } from './publish-bar';
 import { TextBlockEditor } from './text-block-editor';
+import { blockElement, scrollTextTo } from './text-sync';
 
 export interface DocumentEditorProps {
   readonly workspaceId: string;
@@ -321,11 +323,10 @@ export function DocumentEditor({
     if (!currentBlockId || !scrollTextOnSelect.current) return;
     scrollTextOnSelect.current = false;
     const scroller = textScrollRef.current;
-    const element = scroller?.querySelector<HTMLElement>(
-      `[data-block-id="${CSS.escape(currentBlockId)}"]`,
-    );
+    const element = scroller ? blockElement(scroller, currentBlockId) : null;
     if (!scroller || !element) return;
-    scroller.scrollTo({ top: Math.max(element.offsetTop - 16, 0) });
+    const offset = element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    scroller.scrollTo({ top: Math.max(scroller.scrollTop + offset - 16, 0) });
   }, [currentBlockId, highlightKey]);
 
   // --- publish ---------------------------------------------------------------------------------
@@ -555,6 +556,23 @@ export function DocumentEditor({
     }
   }, [client, documentId, handleCommonError, publish.phase, refreshContent, refreshRevisions]);
 
+  // DOC-02-AC08: the reader moved the PDF (scroll, page buttons): the text pane follows to that
+  // page, except while a block is being edited.
+  const groups = useMemo(() => pageGroups(blocks), [blocks]);
+  const syncTextTo = useRef<number | null>(null);
+  const onViewerPage = useCallback((next: number, reason: PageChangeReason) => {
+    setPage(next);
+    setLinkedBlockId(null);
+    if (reason === 'navigate') setAnnouncement(`${next}쪽`);
+    if (editStateRef.current.phase === 'idle') syncTextTo.current = next;
+  }, []);
+  useEffect(() => {
+    const target = syncTextTo.current;
+    if (target === null || target !== page) return;
+    syncTextTo.current = null;
+    scrollTextTo(textScrollRef.current, textTargetForPage(groups, target));
+  }, [groups, page]);
+
   // Stable, so a page change (scrolling the PDF) does not re-render the text pane (DOCVIEW).
   const onTextSelect = useCallback(
     (block: ContentBlock) => selectBlock(block, { view: 'pdf' }),
@@ -730,11 +748,7 @@ export function DocumentEditor({
           <PdfViewer
             source={pdfSource}
             page={page}
-            onPageChange={(next) => {
-              setPage(next);
-              setLinkedBlockId(null);
-              setAnnouncement(`${next}쪽`);
-            }}
+            onPageChange={onViewerPage}
             highlights={highlights}
             highlightKey={`${currentBlockId ?? ''}:${highlightKey}`}
           />
@@ -764,8 +778,9 @@ export function DocumentEditor({
             ) : null}
             {content ? (
               <TextBlockEditor
-                blocks={blocks}
+                groups={groups}
                 currentBlockId={currentBlockId}
+                currentPage={page}
                 canEdit={editable}
                 editLocked={isPublishing(publish) || restoring !== null}
                 editState={editState}

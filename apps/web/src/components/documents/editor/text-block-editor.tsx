@@ -1,20 +1,26 @@
 'use client';
 
 // TextBlockEditor (DOC-02-AC02): the canonical text of one revision as a list of blocks
-// (<article>, the current one aria-current="true"). Editors correct one block at a time inline;
-// the save goes to the draft revision with the block's `version` as `base_version`, and a
-// conflict shows the server's text next to the user's (blockEditReducer). Readers get the same
-// list without any edit control.
+// (<article>, the current one aria-current="true"), grouped by the page they start on under an
+// `N쪽` heading (DOCVIEW, DOC-02-AC09; the current page's heading is aria-current="page").
+// Editors correct one block at a time inline; the save goes to the draft revision with the
+// block's `version` as `base_version`, and a conflict shows the server's text next to the user's
+// (blockEditReducer). Readers get the same list without any edit control. Each page group is
+// memoized: a page change or a selection re-renders only the groups it touches.
 import { Badge, Button } from '@quiz/ui';
 import { memo, useEffect, useRef, type KeyboardEvent } from 'react';
-import type { BlockEditState } from '@/lib/documents/block-edit';
+import { IDLE, type BlockEditState } from '@/lib/documents/block-edit';
 import type { ContentBlock } from '@/lib/documents/editor-api';
 import { blockPage } from '@/lib/documents/outline';
+import { blockPageSpan, type PageGroup } from '@/lib/documents/text-groups';
 import styles from './editor.module.css';
 
 export interface TextBlockEditorProps {
-  readonly blocks: readonly ContentBlock[];
+  /** The revision's blocks grouped by page (lib/documents/text-groups pageGroups). */
+  readonly groups: readonly PageGroup[];
   readonly currentBlockId: string | null;
+  /** The PDF viewer's current page: its group heading is aria-current="page". */
+  readonly currentPage: number;
   readonly canEdit: boolean;
   /** Edits are paused (publish in progress). */
   readonly editLocked: boolean;
@@ -71,6 +77,16 @@ function BlockContent({ block }: { readonly block: ContentBlock }) {
   );
 }
 
+/** The page heading names the first page; only a block running onto later pages says so. */
+function PageSpan({ block }: { readonly block: ContentBlock }) {
+  const [first, last] = blockPageSpan(block);
+  return last > first ? (
+    <span>
+      {first}–{last}쪽
+    </span>
+  ) : null;
+}
+
 interface BlockItemProps {
   readonly block: ContentBlock;
   readonly current: boolean;
@@ -98,7 +114,7 @@ const BlockItem = memo(function BlockItem({
     >
       <div className={styles.blockMeta}>
         <span className={styles.blockType}>{TYPE_LABELS[block.type]}</span>
-        <span>{page}쪽</span>
+        <PageSpan block={block} />
         {block.edited ? <Badge tone="accent">수정됨</Badge> : null}
         <span className={styles.blockActions}>
           <Button
@@ -171,7 +187,7 @@ function EditingItem({ block, current, state, onChange, onSave, onCancel }: Edit
     >
       <div className={styles.blockMeta}>
         <span className={styles.blockType}>{TYPE_LABELS[block.type]}</span>
-        <span>{blockPage(block)}쪽</span>
+        <PageSpan block={block} />
         <span>편집 중</span>
       </div>
       <label htmlFor={fieldId} className={styles.fieldLabel}>
@@ -217,28 +233,51 @@ function EditingItem({ block, current, state, onChange, onSave, onCancel }: Edit
   );
 }
 
-/** Memoized: the screen re-renders on every page change, the text only when its props change. */
-export const TextBlockEditor = memo(function TextBlockEditor({
-  blocks,
+interface PageGroupViewProps {
+  readonly group: PageGroup;
+  readonly current: boolean;
+  /** The selection when it is in this group, else null (so other groups do not re-render). */
+  readonly currentBlockId: string | null;
+  readonly canEdit: boolean;
+  readonly editLocked: boolean;
+  /** Another block (in any group) is being edited: no second edit. */
+  readonly editingAny: boolean;
+  /** The edit state when the edited block is in this group, else IDLE. */
+  readonly editState: BlockEditState;
+  readonly onSelect: (block: ContentBlock) => void;
+  readonly onStartEdit: (block: ContentBlock) => void;
+  readonly onChange: (text: string) => void;
+  readonly onSave: () => void;
+  readonly onCancel: () => void;
+}
+
+const PageGroupView = memo(function PageGroupView({
+  group,
+  current,
   currentBlockId,
   canEdit,
   editLocked,
+  editingAny,
   editState,
   onSelect,
   onStartEdit,
   onChange,
   onSave,
   onCancel,
-}: TextBlockEditorProps) {
+}: PageGroupViewProps) {
+  const headingId = `text-page-${group.page}`;
   const editingId = editState.phase === 'idle' ? null : editState.blockId;
-
-  if (blocks.length === 0) {
-    return <p className={styles.paneNote}>표시할 원문 텍스트가 없습니다.</p>;
-  }
-
   return (
-    <div className={styles.blockList}>
-      {blocks.map((block) =>
+    <div
+      role="group"
+      aria-labelledby={headingId}
+      className={styles.pageGroup}
+      data-page-group={group.page}
+    >
+      <h3 id={headingId} className={styles.pageHeading} aria-current={current ? 'page' : undefined}>
+        {group.page}쪽
+      </h3>
+      {group.items.map(({ block }) =>
         canEdit && editState.phase !== 'idle' && block.block_id === editingId ? (
           <EditingItem
             key={block.block_id}
@@ -255,12 +294,57 @@ export const TextBlockEditor = memo(function TextBlockEditor({
             block={block}
             current={block.block_id === currentBlockId}
             canEdit={canEdit}
-            editDisabled={editLocked || editingId !== null}
+            editDisabled={editLocked || editingAny}
             onSelect={onSelect}
             onStartEdit={onStartEdit}
           />
         ),
       )}
+    </div>
+  );
+});
+
+/** Memoized: the screen re-renders on every page change, the text only when its props change. */
+export const TextBlockEditor = memo(function TextBlockEditor({
+  groups,
+  currentBlockId,
+  currentPage,
+  canEdit,
+  editLocked,
+  editState,
+  onSelect,
+  onStartEdit,
+  onChange,
+  onSave,
+  onCancel,
+}: TextBlockEditorProps) {
+  const editingId = editState.phase === 'idle' ? null : editState.blockId;
+
+  if (groups.length === 0) {
+    return <p className={styles.paneNote}>표시할 원문 텍스트가 없습니다.</p>;
+  }
+
+  return (
+    <div className={styles.blockList}>
+      {groups.map((group) => (
+        <PageGroupView
+          key={group.page}
+          group={group}
+          current={group.page === currentPage}
+          currentBlockId={
+            currentBlockId !== null && group.blockIds.has(currentBlockId) ? currentBlockId : null
+          }
+          canEdit={canEdit}
+          editLocked={editLocked}
+          editingAny={editingId !== null}
+          editState={editingId !== null && group.blockIds.has(editingId) ? editState : IDLE}
+          onSelect={onSelect}
+          onStartEdit={onStartEdit}
+          onChange={onChange}
+          onSave={onSave}
+          onCancel={onCancel}
+        />
+      ))}
     </div>
   );
 });

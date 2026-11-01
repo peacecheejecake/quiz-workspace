@@ -455,7 +455,32 @@ button.viewSwitchButton:focus-visible {
 
 .blockList {
   display: grid;
+  gap: var(--space-4);
+}
+
+/* DOC-02-AC09: blocks grouped by the page they start on; the heading stays on top while its
+   group scrolls by. */
+.pageGroup {
+  display: grid;
   gap: var(--space-2);
+}
+
+.pageHeading {
+  position: sticky;
+  z-index: 1;
+  top: calc(-1 * var(--space-3));
+  margin: 0 calc(-1 * var(--space-1));
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+.pageHeading[aria-current='page'] {
+  color: var(--color-text-primary);
 }
 
 .block {
