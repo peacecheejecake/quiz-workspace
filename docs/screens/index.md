@@ -23,7 +23,7 @@
 | QVIEW-01 | 통합 문제 보기 `QuestionViewer` (범위 풀이 popup) | `/workspaces/:workspaceId?practice=new&source=bank\|mock` · `?practice=:practiceRunId` | [question-viewer.md](question-viewer.md) |
 | CHNOTE-01 | 챕터 정리 노트 Floating Side Panel | `/workspaces/:workspaceId?panel=chapter-note&chapter=:chapterId` | [chapter-notes.md](chapter-notes.md) |
 | QIMPORT-01 | 문제 PDF 가져오기 | `/workspaces/:workspaceId/questions/import` | [questions-import.md](questions-import.md) |
-| QGEN-01 | 문제 변형 출제 (**폐지 예정** — QGEN-RM, MOCK-SPEC 2026-11-01) | `/workspaces/:workspaceId/questions/generate` | [questions-generation.md](questions-generation.md) |
+| QGEN-01 | 문제 변형 출제 | `/workspaces/:workspaceId/questions/generate` | [questions-generation.md](questions-generation.md) — **폐지 예정** (QGEN-RM, MOCK-SPEC 2026-11-01; 화면 이름은 `apps/web/src/screens.ts`와 같게 두고 QGEN-RM이 행을 지운다) |
 | MOCK-01 | 모의고사 목록·만들기·편집 Floating Dialog | `/workspaces/:workspaceId?panel=mock-exams` | [mock-exams.md](mock-exams.md) |
 | HISTORY-01 | 이력 Floating Dialog | `/workspaces/:workspaceId?panel=history` | [history-jobs.md](history-jobs.md) |
 | WS-SHARE-01 | Workspace 공유 관리 (Owner) | `/workspaces/:workspaceId?panel=share` | [workspace-sharing.md](workspace-sharing.md) |
