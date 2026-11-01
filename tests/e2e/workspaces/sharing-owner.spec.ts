@@ -434,7 +434,7 @@ test(
         await overflowOf(sharingUi.policyRegion(page)),
         `${label} ${viewport.width}px with a wide native date control`,
       ).toEqual([]);
-      await native.evaluate((el) => el.remove());
+      await native.evaluate((el) => (el as Element).remove());
       await expect(sharingUi.clearExpiryButton(page)).toBeVisible();
       // With the error message shown, too.
       await page.emulateMedia({ colorScheme: 'light' });

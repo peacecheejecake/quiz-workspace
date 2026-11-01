@@ -229,6 +229,8 @@ export interface ShareLink {
   readonly allow_fork: boolean;
   readonly expires_at: string | null;
   readonly revoked_at: string | null;
+  /** Derived by the API from revoked_at / expires_at. */
+  readonly status: 'active' | 'expired' | 'revoked';
   readonly created_at: string;
 }
 
