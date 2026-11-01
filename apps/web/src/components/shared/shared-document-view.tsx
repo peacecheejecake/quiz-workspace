@@ -4,26 +4,43 @@
 // original PDF (streamed by the same-origin relay after the share check) and the published
 // revision's text blocks with their pages. No correction, publish or revision controls.
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
+import {
+  OutlinePanel,
+  outlineLayout,
+  useOutlinePanel,
+} from '@/components/documents/editor/outline-panel';
 import { OutlineTree } from '@/components/documents/editor/outline-tree';
-import { PdfViewer } from '@/components/documents/editor/pdf-viewer';
+import {
+  PaneSplitter,
+  splitStyle,
+  useSplitRatio,
+} from '@/components/documents/editor/pane-splitter';
+import { PdfViewer, type PageChangeReason } from '@/components/documents/editor/pdf-viewer';
 import { TextBlockEditor } from '@/components/documents/editor/text-block-editor';
+import { scrollTextTo } from '@/components/documents/editor/text-sync';
 import editorStyles from '@/components/documents/editor/editor.module.css';
 import { IDLE } from '@/lib/documents/block-edit';
-import {
-  blockPage,
-  sectionOf,
-  targetBlockFor,
-  viewerHighlights,
-  type OutlineJump,
-} from '@/lib/documents/outline';
+import { blockPage, sectionOf, targetBlockFor, type OutlineJump } from '@/lib/documents/outline';
 import type {
   ContentBlock,
   OutlineItem,
   SharedClient,
   SharedDocument,
+  SharedQuestion,
   SharedDocumentSummary,
 } from '@/lib/shared/client';
+import { documentQuestions, type DocumentQuestion } from '@/lib/documents/document-questions';
+import { pageGroups, selectionHighlights, textTargetForPage } from '@/lib/documents/text-groups';
 import { endsShareView, sharedFailureMessage } from '@/lib/shared/messages';
 import { sharePath } from '@/lib/shared/view-state';
 import styles from './shared.module.css';
@@ -45,15 +62,16 @@ type ContentState =
   | { readonly status: 'error'; readonly message: string; readonly missing: boolean }
   | { readonly status: 'ready'; readonly document: SharedDocument };
 
-type MobileView = 'outline' | 'pdf' | 'text';
+type MobileView = 'pdf' | 'text';
 
 const MOBILE_VIEWS: readonly { id: MobileView; label: string }[] = [
-  { id: 'outline', label: '목차' },
   { id: 'pdf', label: 'PDF' },
   { id: 'text', label: '원문' },
 ];
 
 const noop = () => undefined;
+/** Safety stop for paging a document's shared questions (100 × 100). */
+const MAX_QUESTION_PAGES = 100;
 
 export function SharedDocumentView({
   shareId,
@@ -137,11 +155,95 @@ export function SharedDocumentView({
     }
   }
 
-  const currentBlock = blocks.find((b) => b.block_id === currentBlockId);
+  // DOC-02-AC08: the text pane follows the PDF when the reader moves it.
+  // DOC-02-AC11: published questions imported from this PDF show in question format.
+  const [questions, setQuestions] = useState<readonly DocumentQuestion[]>([]);
+  const loadedDocument = document !== null;
+  useEffect(() => {
+    if (!loadedDocument) return;
+    const controller = new AbortController();
+    void (async () => {
+      const items: SharedQuestion[] = [];
+      let cursor: string | null = null;
+      for (let n = 0; n < MAX_QUESTION_PAGES; n += 1) {
+        const list = await client.questions(cursor, controller.signal, documentId);
+        items.push(...list.items);
+        cursor = list.next_cursor ?? null;
+        if (!cursor) break;
+      }
+      if (!controller.signal.aborted) setQuestions(documentQuestions(items, documentId));
+    })().catch(() => undefined);
+    return () => controller.abort();
+  }, [client, documentId, loadedDocument]);
+  const groups = useMemo(() => pageGroups(blocks, questions), [blocks, questions]);
+  const textScrollRef = useRef<HTMLDivElement>(null);
+  const syncTextTo = useRef<number | null>(null);
+  const onViewerPage = useCallback((next: number, reason: PageChangeReason) => {
+    setPage(next);
+    if (reason === 'navigate') setAnnouncement(`${next}쪽`);
+    syncTextTo.current = next;
+  }, []);
+  useEffect(() => {
+    const target = syncTextTo.current;
+    if (target === null || target !== page) return;
+    syncTextTo.current = null;
+    scrollTextTo(textScrollRef.current, textTargetForPage(groups, target));
+  }, [groups, page]);
+
+  const onTextSelect = useCallback(
+    (block: ContentBlock) => selectBlock(block, 'pdf'),
+    [selectBlock],
+  );
+  const currentBlock = useMemo(
+    () => blocks.find((b) => b.block_id === currentBlockId),
+    [blocks, currentBlockId],
+  );
+  const highlights = useMemo(
+    () => selectionHighlights(currentBlock, outlineJump, blocks, groups),
+    [blocks, currentBlock, groups, outlineJump],
+  );
   const title = document?.title ?? summary?.title ?? '문서';
 
+  const [splitShare, setSplitShare, commitSplitShare] = useSplitRatio();
+  const splitRef = useRef<HTMLDivElement>(null);
+  const pdfPaneId = useId();
+
+  // DOC-02-AC06 in the shared view: the 목차 panel, below the share page's own header.
+  const outlinePanel = useOutlinePanel();
+  const { beside: outlineBeside, dismiss: dismissOutline } = outlinePanel;
+  const [panelHost, setPanelHost] = useState<HTMLDivElement | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const [panelTop, setPanelTop] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const top = sectionRef.current?.getBoundingClientRect().top ?? 0;
+      setPanelTop(Math.max(Math.round(top + window.scrollY), 16));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+  const onOutlineNavigate = useCallback(
+    (node: OutlineItem) => {
+      const block = targetBlockFor(node, blocks);
+      setOutlineJump(block ? { node, blockId: block.block_id } : null);
+      if (block) selectBlock(block);
+      else if (node.page != null) {
+        setCurrentBlockId(null);
+        setPage(node.page);
+      }
+      if (outlineBeside === false) dismissOutline();
+    },
+    [blocks, dismissOutline, outlineBeside, selectBlock],
+  );
+
   return (
-    <section className={styles.document} aria-labelledby="shared-document-title">
+    <section
+      ref={sectionRef}
+      className={styles.document}
+      aria-labelledby="shared-document-title"
+      data-outline={outlineLayout(outlinePanel.open)}
+    >
       <div className={styles.documentHeader}>
         <nav aria-label="위치">
           <Link href={sharePath(shareId)} className={`${styles.backLink} qz-focus-ring`}>
@@ -185,54 +287,62 @@ export function SharedDocumentView({
             ))}
           </div>
 
-          <div className={`${editorStyles.split} ${styles.split}`} data-view={mobileView}>
-            <nav aria-label="장·절 목차" className={editorStyles.outlinePane} data-pane="outline">
-              <h3 className={editorStyles.paneTitle}>목차</h3>
-              {document ? (
-                <OutlineTree
-                  items={outline}
-                  currentId={sectionOf(currentBlock, outline)}
-                  onNavigate={(node) => {
-                    const block = targetBlockFor(node, blocks);
-                    setOutlineJump(block ? { node, blockId: block.block_id } : null);
-                    if (block) selectBlock(block);
-                    else if (node.page != null) {
-                      setCurrentBlockId(null);
-                      setPage(node.page);
-                    }
-                  }}
-                />
-              ) : (
-                <p className={editorStyles.paneNote}>목차를 불러오는 중입니다…</p>
-              )}
-            </nav>
-
-            <section aria-label="PDF 원본" className={editorStyles.pdfPane} data-pane="pdf">
+          <div
+            ref={splitRef}
+            className={`${editorStyles.split} ${styles.split}`}
+            data-view={mobileView}
+            style={splitStyle(splitShare)}
+          >
+            <section
+              id={pdfPaneId}
+              aria-label="PDF 원본"
+              className={editorStyles.pdfPane}
+              data-pane="pdf"
+            >
               <PdfViewer
                 source={pdfSource}
                 page={page}
-                onPageChange={(next) => {
-                  setPage(next);
-                  setAnnouncement(`${next}쪽`);
-                }}
-                highlights={viewerHighlights(currentBlock, outlineJump, blocks, page)}
+                onPageChange={onViewerPage}
+                highlights={highlights}
                 highlightKey={`${currentBlockId ?? ''}:${highlightKey}`}
+                toolbarStart={
+                  <OutlinePanel state={outlinePanel} container={panelHost}>
+                    {document ? (
+                      <OutlineTree
+                        items={outline}
+                        currentId={sectionOf(currentBlock, outline)}
+                        onNavigate={onOutlineNavigate}
+                      />
+                    ) : (
+                      <p className={editorStyles.paneNote}>목차를 불러오는 중입니다…</p>
+                    )}
+                  </OutlinePanel>
+                }
               />
             </section>
 
+            <PaneSplitter
+              value={splitShare}
+              onChange={setSplitShare}
+              onCommit={commitSplitShare}
+              containerRef={splitRef}
+              controls={pdfPaneId}
+            />
+
             <section aria-label="원문 텍스트" className={editorStyles.textPane} data-pane="text">
-              <div className={editorStyles.textScroller}>
+              <div className={editorStyles.textScroller} ref={textScrollRef}>
                 {document ? (
                   blocks.length === 0 ? (
                     <p className={editorStyles.paneNote}>이 문서에는 원문 텍스트가 없습니다.</p>
                   ) : (
                     <TextBlockEditor
-                      blocks={blocks}
+                      groups={groups}
                       currentBlockId={currentBlockId}
+                      currentPage={page}
                       canEdit={false}
                       editLocked
                       editState={IDLE}
-                      onSelect={(block) => selectBlock(block, 'pdf')}
+                      onSelect={onTextSelect}
                       onStartEdit={noop}
                       onChange={noop}
                       onSave={noop}
@@ -250,6 +360,15 @@ export function SharedDocumentView({
         </>
       )}
 
+      <div
+        ref={setPanelHost}
+        className={editorStyles.panelHost}
+        style={
+          panelTop === null
+            ? undefined
+            : ({ '--outline-panel-top': `${panelTop}px` } as CSSProperties)
+        }
+      />
       <p className="qz-visually-hidden" aria-live="polite">
         {announcement}
       </p>

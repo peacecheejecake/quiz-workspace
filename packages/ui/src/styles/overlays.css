@@ -44,6 +44,17 @@
     width: min(720px, calc(100vw - 2 * var(--space-4)));
   }
 
+  /* Navigation panels (DOC-02 목차): a narrow column. */
+  &[data-size='narrow'] {
+    width: min(20rem, calc(100vw - 2 * var(--space-4)));
+  }
+
+  /* `side="start"`: the panel floats at the inline start (left in LTR) edge. */
+  &[data-side='start'] {
+    right: auto;
+    left: var(--space-4);
+  }
+
   /* The panel container receives programmatic focus on open (so its title is announced); it is
      not itself an interactive control, so it shows no ring. Controls inside use FocusRing. */
   &:focus {
@@ -56,6 +67,14 @@
 
   &[data-state='closed'] {
     animation: qz-panel-out var(--duration-panel-exit) ease-in;
+  }
+
+  &[data-side='start'][data-state='open'] {
+    animation-name: qz-panel-in-start;
+  }
+
+  &[data-side='start'][data-state='closed'] {
+    animation-name: qz-panel-out-start;
   }
 }
 
@@ -170,8 +189,13 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
 
-    &[data-size='wide'] {
+    &:is([data-size='wide'], [data-size='narrow']) {
       width: 100%;
+    }
+
+    &[data-side='start'] {
+      right: 0;
+      left: 0;
     }
 
     &[data-mobile-layout='full'] {
@@ -182,11 +206,13 @@
       padding-top: env(safe-area-inset-top);
     }
 
-    &[data-state='open'] {
+    &[data-state='open'],
+    &[data-side='start'][data-state='open'] {
       animation-name: qz-sheet-in;
     }
 
-    &[data-state='closed'] {
+    &[data-state='closed'],
+    &[data-side='start'][data-state='closed'] {
       animation-name: qz-sheet-out;
     }
 
@@ -435,6 +461,20 @@
   to {
     opacity: 0;
     transform: translateX(var(--space-6));
+  }
+}
+
+@keyframes qz-panel-in-start {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-1 * var(--space-6)));
+  }
+}
+
+@keyframes qz-panel-out-start {
+  to {
+    opacity: 0;
+    transform: translateX(calc(-1 * var(--space-6)));
   }
 }
 

@@ -249,6 +249,36 @@ export const editorUi = {
     editorUi.textPanel(page).getByRole('textbox', { name: /블록|원문|block|text/i }),
   saveButton: (page: Page) =>
     editorUi.textPanel(page).getByRole('button', { name: /^(저장|save)/i }),
+  /** DOCVIEW (AC06): the `목차` toggle in the PDF toolbar and the floating outline panel. */
+  outlineToggle: (page: Page) =>
+    editorUi.viewer(page).getByRole('button', { name: /^(목차|outline)$/i }),
+  outlinePanel: (page: Page) => page.getByRole('dialog', { name: /^(목차|outline)$/i }),
+  /** The scrolling page area of the PDF viewer (continuous pages, AC07/AC08). */
+  pdfPages: (page: Page) =>
+    editorUi.viewer(page).getByRole('group', { name: /pdf 페이지 영역|pdf pages/i }),
+  /** The rendered canvas of PDF page `n`. */
+  pdfPage: (page: Page, n: number) =>
+    editorUi
+      .viewer(page)
+      .getByRole('img', { name: new RegExp(`^(PDF ${n}쪽|PDF page ${n})$`, 'i') }),
+  /** AC09: the text pane's group of blocks that start on page `n`, and its heading. */
+  pageGroup: (page: Page, n: number) =>
+    editorUi.textPanel(page).getByRole('group', { name: new RegExp(`^(${n}쪽|page ${n})$`, 'i') }),
+  pageHeading: (page: Page, n: number) =>
+    editorUi
+      .textPanel(page)
+      .getByRole('heading', { name: new RegExp(`^(${n}쪽|page ${n})$`, 'i') }),
+  /** AC10: the PDF ↔ text width separator. */
+  splitter: (page: Page) => page.getByRole('separator', { name: /(pdf|원문).*(폭|너비)|resize/i }),
+  /** AC11: an imported, confirmed question shown in question format. */
+  questionCard: (page: Page, n: number) =>
+    editorUi
+      .textPanel(page)
+      .getByRole('group', { name: new RegExp(`^(${n}번 문제|question ${n})(\\D|$)`, 'i') }),
+  answerToggle: (card: Locator) =>
+    card.getByRole('button', { name: /정답.*(보기|확인)|show answer/i }),
+  sourceBlocksToggle: (card: Locator) =>
+    card.getByRole('button', { name: /원문 블록|source blocks/i }),
   revisionStatus: (page: Page) => main(page).getByRole('status'),
   publishButton: (page: Page) => main(page).getByRole('button', { name: /^(발행|publish)/i }),
   retryIndexButton: (page: Page) =>

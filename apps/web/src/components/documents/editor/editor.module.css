@@ -7,6 +7,39 @@
   min-width: 0;
 }
 
+/* DOC-02-AC06: on desktop the open 목차 panel sits beside the content instead of over the PDF —
+   the screen makes room for it (`auto` = before hydration, when the default is open). */
+@media (width >= 1024px) {
+  .screen:is([data-outline='open'], [data-outline='auto']) {
+    padding-inline-start: calc(20rem + var(--space-3));
+  }
+}
+
+.panelHost {
+  display: contents;
+}
+
+/* The 목차 panel (FloatingSidePanel side="start", size="narrow") starts below the sticky app
+   header, which it would otherwise cover. */
+@media (width >= 768px) {
+  :global(.qz-panel).outlinePanel {
+    top: var(--outline-panel-top, calc(var(--app-header-height) + var(--space-4)));
+  }
+}
+
+/* Where it covers the PDF (tablet), the panel is opaque: no glass over the reading area. */
+@media (width >= 768px) and (width < 1024px) {
+  :global(.qz-panel).outlinePanel {
+    background: var(--color-glass-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.outlinePanel .tree {
+  padding: 0;
+}
+
 .note {
   margin: 0;
   color: var(--color-text-secondary);
@@ -166,7 +199,6 @@ button.viewSwitchButton:focus-visible {
   min-width: 0;
 }
 
-.outlinePane,
 .pdfPane,
 .textPane {
   display: flex;
@@ -180,7 +212,6 @@ button.viewSwitchButton:focus-visible {
 
 /* Mobile: one pane at a time, chosen with the view switch. */
 @media (width < 768px) {
-  .split[data-view='outline'] > :not([data-pane='outline']),
   .split[data-view='pdf'] > :not([data-pane='pdf']),
   .split[data-view='text'] > :not([data-pane='text']) {
     display: none;
@@ -198,35 +229,68 @@ button.viewSwitchButton:focus-visible {
     display: none;
   }
 
+  /* DOC-02-AC10: PDF | separator | text, the shares set by the separator (pane-splitter.tsx). */
   .split {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns:
+      minmax(0, var(--pdf-share, 55fr))
+      var(--space-6)
+      minmax(0, var(--text-share, 45fr));
+    gap: 0;
     height: calc(100dvh - var(--app-header-height) - 15rem);
     min-height: 28rem;
   }
+}
 
-  .outlinePane {
-    grid-column: 1 / -1;
-    max-height: 12rem;
+.splitter {
+  display: none;
+}
+
+@media (width >= 768px) {
+  .splitter {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    border-radius: var(--radius-sm);
+    cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+    transition: background-color var(--qz-transition-fast);
+  }
+
+  /* The line between the panes; the 24px column around it is the touch/pointer target. */
+  .splitter::before {
+    position: absolute;
+    inset-block: var(--space-2);
+    left: 50%;
+    width: 1px;
+    background: var(--color-border);
+    content: '';
+  }
+
+  .splitterGrip {
+    position: relative;
+    width: var(--space-1);
+    height: var(--space-8);
+    border-radius: var(--radius-sm);
+    background: var(--color-border-strong);
+  }
+
+  .splitter[data-active='true'],
+  .splitter:active {
+    background: var(--color-state-pressed);
+  }
+
+  .splitter:focus-visible {
+    outline-offset: -2px;
   }
 }
 
-@media (width >= 1024px) {
-  .split {
-    grid-template-columns: minmax(10rem, 14rem) minmax(0, 1.2fr) minmax(0, 1fr);
+@media (width >= 768px) and (hover: hover) {
+  .splitter:hover {
+    background: var(--color-state-hover);
   }
-
-  .outlinePane {
-    grid-column: auto;
-    max-height: none;
-  }
-}
-
-.paneTitle {
-  margin: 0;
-  padding: var(--space-3) var(--space-4) var(--space-2);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-label);
-  font-weight: var(--font-weight-semibold);
 }
 
 .paneNote {
@@ -365,8 +429,10 @@ button.viewSwitchButton:focus-visible {
   position: relative;
   flex: 1;
   min-height: 0;
-  padding: var(--space-4);
   overflow: auto;
+  /* Page jumps are instant (no smooth scrolling): no page in between is reported (AC08). */
+  scroll-behavior: auto;
+  overflow-anchor: none;
   background: var(--color-surface-muted);
 }
 
@@ -375,19 +441,41 @@ button.viewSwitchButton:focus-visible {
   outline-offset: -2px;
 }
 
-.pageFrame {
+/* Continuous pages (DOCVIEW): absolutely placed boxes from pdf-layout.ts; only drawn pages hold
+   a canvas, the rest are empty page-sized placeholders. */
+.pageStack {
   position: relative;
-  margin-inline: auto;
+  width: 100%;
+}
+
+.pageFrame {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   background: var(--color-surface);
   box-shadow: 0 0 0 1px var(--color-border);
 }
 
-.pageFrame[hidden] {
-  display: none;
+.canvasSlot {
+  position: absolute;
+  inset: 0;
 }
 
 .pageCanvas {
   display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pageFailed {
+  position: absolute;
+  inset-inline: 0;
+  top: var(--space-4);
+  margin: 0;
+  padding: 0 var(--space-4);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  text-align: center;
 }
 
 .highlight {
@@ -400,7 +488,7 @@ button.viewSwitchButton:focus-visible {
 }
 
 .viewerNote {
-  margin: 0;
+  margin: var(--space-4);
   /* Sits on the muted viewer backdrop, where the secondary text color is below 4.5:1. */
   color: var(--color-text-primary);
   font-size: var(--font-size-body);
@@ -410,7 +498,7 @@ button.viewSwitchButton:focus-visible {
   display: grid;
   justify-items: start;
   gap: var(--space-2);
-  margin: 0 0 var(--space-3);
+  margin: var(--space-4);
   color: var(--color-text-primary);
   font-size: var(--font-size-body);
 }
@@ -431,7 +519,32 @@ button.viewSwitchButton:focus-visible {
 
 .blockList {
   display: grid;
+  gap: var(--space-4);
+}
+
+/* DOC-02-AC09: blocks grouped by the page they start on; the heading stays on top while its
+   group scrolls by. */
+.pageGroup {
+  display: grid;
   gap: var(--space-2);
+}
+
+.pageHeading {
+  position: sticky;
+  z-index: 1;
+  top: calc(-1 * var(--space-3));
+  margin: 0 calc(-1 * var(--space-1));
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+.pageHeading[aria-current='page'] {
+  color: var(--color-text-primary);
 }
 
 .block {
@@ -581,4 +694,86 @@ button.viewSwitchButton:focus-visible {
   .linkButton:hover {
     text-decoration-thickness: 2px;
   }
+}
+
+/* --- DOC-02-AC11: confirmed imported questions in question format -------------------------- */
+
+.questionCard {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.questionCard[aria-current='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-surface-muted);
+}
+
+.questionTitle {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.questionStem {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-relaxed);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.optionList {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.option {
+  display: flex;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+}
+
+.optionLabel {
+  flex: 0 0 auto;
+  font-weight: var(--font-weight-semibold);
+}
+
+.questionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.answer {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+}
+
+.answer p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.questionSource {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
 }

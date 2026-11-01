@@ -302,6 +302,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - Desktop right panel: width `min(500px, calc(100vw - 32px))`, top/right/bottom margin `16px`, rounded `20px`, glass surface, shadow, viewport 내부 독립 scroll.
 - `QuestionPracticePanel`: **modal** 기본. 정답을 제출하거나 뒤로/다음 이동하는 명확한 흐름. backdrop 클릭/ESC 처리 정책 정의, 닫을 때 trigger dot로 focus 복귀.
 - `DocumentExcerptPanel`: **non-modal** 기본. PDF·검색 결과와 동시에 볼 수 있음.
+- **왼쪽·좁은 panel (DOCVIEW, 2026-11-01):** `side="start"`(데스크톱에서 왼쪽 16px margin, 들어오고 나갈 때 왼쪽에서 움직임; 모바일은 같은 bottom sheet)와 `size="narrow"`(`min(20rem, 100vw - 32px)`)는 탐색용 panel이다. DOC-02 `목차`가 non-modal로 쓰며, 데스크톱(≥1024px)에서는 화면 내용이 panel 폭만큼 비켜서 PDF를 가리지 않고, 더 좁은 화면에서 PDF 위에 뜰 때는 불투명(`--color-glass-solid`, blur 없음)이다(DOC-02-AC06).
 - `QuestionGenerationReviewPanel`: 충분한 공간이 필요하므로 desktop에서는 600px 이상 비교 drawer 또는 전체 page 모드 제공(500px 강제 금지).
 - Mobile: full width bottom sheet 또는 full-height panel, safe-area inset, `max-height: 90dvh`; 화면이 좁다면 문제 상세 전체 페이지로 전환 가능.
 - URL query: `?question=<id>` 또는 `?panel=...`로 열림 상태/딥링크 복원. 뒤로가기와 동기화.
