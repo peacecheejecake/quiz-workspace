@@ -312,7 +312,7 @@ AI 질문(ASK-01)과 AI 문제 해설(AIEXPL-01)은 모든 환경에서 **기본
 | `WORKER_ASK_LLM=true` | `api`·`worker` **같은 값** | 구성원이 header `AI 질문`과 문제의 `질문하기`로 질문한다. **질문, 첨부 문제(제출 전에는 발문·보기·고른 답만, 제출 후·문제 상세에서는 정답·해설·출처 포함), 검색된 발행 교재 구절(질문마다 최대 16,000자)이 LLM 제공자로 전송된다.** |
 | `WORKER_AI_EXPLANATIONS=true` | `api`·`worker` **같은 값** | 제출 후 결과 아래·문제 상세의 `AI 해설 만들기`. **문제 revision의 발문·보기·정답·해설·출처와 교재 구절(최대 8,000자)이 전송된다.** 문제 revision마다 한 번 만들어 Workspace가 공유한다. |
 
-두 플래그는 독립이다. worker는 `interactive` queue를 읽는 process를 띄워야 한다(`ASK_WORKER_CONCURRENCY`, 기본 2; 플래그가 둘 다 꺼져 있으면 띄우지 않아도 됨). LLM 변수는 9장과 같다: worker `LLM_API_KEY`·`LLM_MODEL`, api 같은 `LLM_MODEL`(check-env `same`), 선택 `LLM_PRICE_*`(넣어야 `cost_usd`가 기록됨).
+두 플래그는 독립이다. 관련 본문(RELSRC-01)은 LLM을 쓰지 않아 이 장의 승인 대상이 아니다(api `RELATED_SOURCES_ENABLED`, 기본 true). worker는 `interactive` queue를 읽는 process를 띄워야 한다(`ASK_WORKER_CONCURRENCY`, 기본 2; 플래그가 둘 다 꺼져 있으면 띄우지 않아도 됨). LLM 변수는 9장과 같다: worker `LLM_API_KEY`·`LLM_MODEL`, api 같은 `LLM_MODEL`(check-env `same`), 선택 `LLM_PRICE_*`(넣어야 `cost_usd`가 기록됨).
 
 **한도(기본값 유지 권장)** — `ASK_MAX_QUESTION_CHARS=1000`, `ASK_MAX_TURNS=20`, `ASK_HISTORY_TURNS=3`, `ASK_TOP_K=8`, `ASK_MAX_CONTEXT_CHARS=16000`, `ASK_MAX_OUTPUT_TOKENS=2000`, `ASK_LLM_EFFORT=low`, `ASK_RATE_LIMIT_PER_MINUTE=6`, `ASK_DAILY_LIMIT_PER_USER=50`, `ASK_MONTHLY_TOKEN_CAP=0`(끔; 켜려면 월 input+output token 합계), `ASK_RETENTION_DAYS=90`; `AI_EXPLANATION_TOP_K=5`, `AI_EXPLANATION_MAX_OUTPUT_TOKENS=1500`, `AI_EXPLANATION_RATE_LIMIT_PER_MINUTE=6`, `AI_EXPLANATION_DAILY_LIMIT_PER_USER=30`, `AI_EXPLANATION_MONTHLY_TOKEN_CAP=0`.
 

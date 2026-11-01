@@ -111,7 +111,8 @@ workspace
  │             ├── question_user_state  (user별 학습 상태·플래그)
  │             ├── question_attempt     (채점 이력)
  │             └── question_lineage     (변형 관계)
- │             └── question_ai_explanation (revision별 공유 AI 해설, AIEXPL)
+ │             ├── question_ai_explanation (revision별 공유 AI 해설, AIEXPL)
+ │             └── question_related_sources (revision·교재 fingerprint별 공유 관련 본문, RELSRC)
  ├── question_draft ── generation_run / pdf_import_run
  ├── ask_conversation ── ask_message ── ask_message_source (사용자별, ASK)
  ├── llm_feature_usage (ASK·AIEXPL 호출 usage, 내용 없음)
@@ -142,6 +143,7 @@ workspace
   - `ask_message_sources(message_id, tag, rank, document_id, document_revision_id, chapter_id, block_ids, page_from, page_to, chunk_id, score, cited, citation_number)` — 본문 복사 없음.
   - `ask_message_feedback(message_id, user_id, rating, reason_code, created_at)` — 자유 글 없음.
 - **AI 문제 해설 ([AIEXPL-01](screens/ai-explanations.md)) — 초안:** `question_ai_explanations(id, workspace_id, question_id, question_revision_id, version, status queued|running|succeeded|failed, job_id, prompt_version, model, body jsonb{correct_option_ids, summary_md, options, concepts_md}, sources jsonb[{tag, document_id, document_revision_id, block_ids, pages}], error_code, usage, created_by, created_at, finished_at, superseded_at)`; 대기·실행·성공(미대체) 행은 `(question_revision_id, prompt_version, model)`마다 하나(partial unique) — 동시 요청은 같은 행을 받는다. 모의고사 문제는 같은 모양의 `mock_exam_question_ai_explanations`(ASK-QM).
+- **관련 본문 ([RELSRC-01](screens/related-sources.md)) — 초안:** `question_related_sources(id, workspace_id, question_id, question_revision_id, corpus_fingerprint, retrieval_version, items jsonb[{position, document_id, document_revision_id, chapter_id, block_ids, pages, score, from_question_source}], created_by, created_at, superseded_at)` unique `(question_revision_id, corpus_fingerprint, retrieval_version)`. `corpus_fingerprint` = Workspace의 살아 있는 `book` 문서의 정렬된 `(document_id, active published revision id)` + embedding model + chunk 설정 버전의 SHA-256(발행·복원·교재 추가/삭제·embedder 전환이 키를 바꿈). LLM 없이 API 요청 안에서 계산(advisory xact lock + 재확인), 본문 복사 없음, 보관 Workspace·검색 저하 결과는 저장하지 않음, Fork는 복제하지 않음(다시 계산).
 - **usage:** `llm_feature_usage(id, feature ask|ai_explanation, workspace_id, user_id, ref_id(set null on delete), model, input/output/cache tokens, cost_usd, status, created_at)` — 하루·월 한도 집계와 비용 기록, 내용 없음, 13개월 보존(`ask.purge`).
 - Fork는 snapshot revision의 성공한 요약(run·unit·`summary_enabled_at`)과 장마다 최신 성공 정리 노트 중 snapshot 기준 출처 일치(인용 문제가 모두 CONFIRMED이고 active revision = 고정 revision)인 것(`question_refs` 재매핑)을 새 id로 복제한다. 공유 노트 API도 같은 출처 일치 조건을 쓴다. 실패·이전 기록과 usage는 복제하지 않는다.
 
@@ -204,6 +206,7 @@ workspace
 | GET/POST | `/api/v1/questions/{id}/ai-explanation` | 제출 후 AI 해설 읽기 / 만들기(`practice_session_id` 제출 확인 또는 `view=detail`; 캐시 있으면 생성 없음, AIEXPL-01) |
 | POST | `/api/v1/questions/{id}/ai-explanation/regenerate` | 다시 만들기(편집 권한, revision당 하루 3번) |
 | GET | `/api/v1/ai-explanations/{id}/stream` | AI 해설 SSE |
+| GET | `/api/v1/questions/{id}/related-sources` | 제출 후 관련 본문(`practice_session_id` 제출 확인 또는 `view=detail`; 없으면 API 안에서 검색해 저장, LLM 없음 — RELSRC-01) |
 | GET | `/api/v1/jobs/{id}` | 비동기 작업 상태 |
 | GET | `/api/v1/jobs/{id}/events` | SSE 진행 상황 |
 | GET | `/api/v1/workspaces/{id}/activities` | 변경 이력 |
@@ -226,7 +229,7 @@ Worker job(ASK-SPEC 2026-11-01, 초안): `ask.answer {message_id}`와 `question.
 - Question Generation: 원본 선택(한 문제·여러 문제·서버 임의 선택 묶음), 변형 유형 지정, LLM 또는 deterministic 변형, diff/정답 검증, 승인.
 - History: 수정·생성·풀이 이력, Job 로그.
 - 문서 전문·요약·정리 노트(DOCSUM-SPEC 2026-10-29): 문서 관리 행·DOC-02의 텍스트 내보내기(DOC-03), 홈의 문서 요약 panel(DOCSUM-01), Heatmap 챕터 header의 정리 노트 panel(CHNOTE-01).
-- AI 질문·AI 해설(ASK-SPEC 2026-11-01, 초안): header `AI 질문` → `AskPanel`(`?panel=ask`, streaming 답·각주 → 본문 발췌 panel), 문제의 `질문하기`(풀이 panel·문제 상세·QuestionViewer), 제출 결과 아래 `AI 해설`(AIEXPL-01).
+- AI 질문·AI 해설·관련 본문(ASK-SPEC 2026-11-01, 초안): header `AI 질문`·`문제` 메뉴 `AI 질문`·본문 검색 `AI에게 묻기` → `AskPanel`(`?panel=ask`, streaming 답·각주 → 본문 발췌 panel), 문제의 `질문하기`(문제 상세 dialog·모의고사 문제; 풀이 panel header에는 없음), 제출 결과 아래 `AI 해설`(AIEXPL-01)과 "관련 본문"(RELSRC-01).
 - Design system 기반 일관된 modal/non-modal floating side panel 제공.
 
 UI의 동작·상태·변형 세부 정책은 `questions.md`, UI 구현·토큰·접근성 기준은 `design-system.md` 참조. 모든 화면의 사양은 `screens/index.md`, 인증은 `auth.md`, E2E는 `e2e-strategy.md`, 배포는 `deployment.md`에서 관리한다.
