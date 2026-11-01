@@ -858,6 +858,64 @@ test(
 );
 
 test(
+  'SEARCH-01-AC12 the heatmap still filters when a dialog opened and then closed interrupts two re-reads',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac12-race2');
+    const ws = await workspaceFactory.create(owner);
+    for (const title of QUESTION_TITLES) {
+      await createQuestion(owner, ws.id, mcqInput(title, ['예', '아니오']));
+    }
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    const home = `/workspaces/${ws.id}`;
+    const QUERY = 'search01-ac12 chlorine';
+    const gate = () => {
+      let open: () => void = () => undefined;
+      const opened = new Promise<void>((resolve) => (open = resolve));
+      return { open, opened, held: 0 };
+    };
+    // 1st: the 문제 search's re-read (no dialog yet). 2nd: the retry of the same filters, read
+    // while the 문서 dialog is open.
+    const first = gate();
+    const second = gate();
+    await page.route(
+      (url) => url.pathname === home && url.searchParams.get('q') === QUERY,
+      async (route) => {
+        const withDialog = new URL(route.request().url()).searchParams
+          .getAll('panel')
+          .includes('documents');
+        const g = withDialog ? second : first;
+        g.held += 1;
+        await g.opened;
+        await route.continue().catch(() => undefined);
+      },
+    );
+
+    await homeUi.questionSearch(page).fill(QUERY);
+    await expect.poll(() => first.held).toBeGreaterThan(0);
+    await homeUi.documentsButton(page).click(); // interrupts the 1st re-read
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
+    first.open();
+    await expect.poll(() => second.held).toBeGreaterThan(0); // the retry, held in turn
+    await homeUi
+      .documentsDialog(page)
+      .getByRole('button', { name: /문서 관리 닫기|close/i })
+      .click(); // interrupts the retry
+    await expect(homeUi.documentsDialog(page)).toHaveCount(0);
+    second.open();
+
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get('q') === QUERY && !url.searchParams.has('panel'),
+    );
+    await expect(homeUi.questionSearch(page)).toHaveValue(QUERY);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  },
+);
+
+test(
   'SEARCH-01-AC12 Korean IME composition does not filter until the composition ends',
   { tag: '@infra' },
   async ({ page, workspaceFactory, browserName }) => {
