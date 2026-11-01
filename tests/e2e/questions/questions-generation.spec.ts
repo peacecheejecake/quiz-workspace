@@ -360,18 +360,18 @@ test(
     await page.context().clearCookies();
     await signInAs(page, viewer.user);
     await page.goto(homePath(s.workspaceId, 'panel=generate'));
-    await expect(homeUi.questionMenuButton(page)).toBeVisible();
+    // UX7-DOCS: without edit rights the 문제 menu (직접 추가 / 변형 출제 only) is not shown at all.
+    await expect(homeUi.documentsButton(page)).toBeVisible();
     await expect(homeUi.generateDialog(page)).toHaveCount(0);
-    await homeUi.questionMenuButton(page).click();
-    await expect(homeUi.questionMenuItem(page, 'generate')).toHaveCount(0);
+    await expect(homeUi.questionMenuButton(page)).toHaveCount(0);
     await workspaceFactory.archive(s.owner, s.workspaceId);
     await page.context().clearCookies();
     await signInAs(page, s.owner.user);
     await page.goto(homePath(s.workspaceId, 'panel=generate'));
-    await expect(homeUi.questionMenuButton(page)).toBeVisible();
+    // UX7-DOCS: without edit rights the 문제 menu (직접 추가 / 변형 출제 only) is not shown at all.
+    await expect(homeUi.documentsButton(page)).toBeVisible();
     await expect(homeUi.generateDialog(page)).toHaveCount(0);
-    await homeUi.questionMenuButton(page).click();
-    await expect(homeUi.questionMenuItem(page, 'generate')).toHaveCount(0);
+    await expect(homeUi.questionMenuButton(page)).toHaveCount(0);
   },
 );
 

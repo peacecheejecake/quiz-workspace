@@ -669,6 +669,7 @@ test(
     await page.keyboard.press('Enter');
     await expect(homeUi.questionMenuItem(page, 'create')).toBeFocused();
     await page.keyboard.press('ArrowDown');
+    await expect(homeUi.questionMenuItem(page, 'generate')).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(homeUi.generateDialog(page)).toBeVisible();
     await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').includes('generate'));
@@ -771,10 +772,8 @@ test(
     await page.goto(`${home}?panel=question-create`);
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await expect(questionFormUi.form(page)).toHaveCount(0);
-    await homeUi.questionMenuButton(page).click();
-    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeVisible();
-    await expect(homeUi.questionMenuItem(page, 'create')).toHaveCount(0);
-    await page.keyboard.press('Escape');
+    // No 문제 menu at all without edit rights (UX7-DOCS: its PDF 관리 item moved to 문서 관리).
+    await expect(homeUi.questionMenuButton(page)).toHaveCount(0);
 
     // Archived: read-only for the owner too.
     await workspaceFactory.archive(owner, ws.id);
@@ -790,9 +789,7 @@ test(
     await page.goto(`${home}?panel=question-create`);
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await expect(questionFormUi.form(page)).toHaveCount(0);
-    await homeUi.questionMenuButton(page).click();
-    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeVisible();
-    await expect(homeUi.questionMenuItem(page, 'create')).toHaveCount(0);
+    await expect(homeUi.questionMenuButton(page)).toHaveCount(0);
   },
 );
 

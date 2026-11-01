@@ -582,9 +582,10 @@ test(
     await expect(homeUi.shareDialog(page)).toBeVisible();
     await expect(homeUi.questionPdfsDialog(page)).toHaveCount(0);
 
-    // Every PDF in one list; the question rows carry the import actions, the 교재 none.
+    // Every PDF in one list (문서 관리 alone, so no other dialog covers its rows); the question rows carry the import actions, the 교재 none.
     const list = dialog.getByRole('list', { name: /문서 목록|documents/i });
     const row = (title: RegExp) => list.getByRole('listitem').filter({ hasText: title });
+    await page.goto(documentsPath(ws.id));
     await expect(list.getByRole('listitem')).toHaveCount(3);
     await expect(docUi.kindBadge(row(/questions-ko/), '문제지')).toBeVisible();
     await expect(docUi.kindBadge(row(/book-en/), '교재+문제')).toBeVisible();
