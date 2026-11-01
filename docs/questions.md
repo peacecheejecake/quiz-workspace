@@ -121,6 +121,7 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 6. 채점 확정 시 `question_attempt` 추가, `question_user_state.last_graded_result`와 materialized counts 업데이트, dot 색상 반영.
 7. 다시 풀기와 즐겨찾기는 점·패널 어디서든 토글 가능. 변경은 이력에 남김.
 8. 문제를 편집해도 과거 attempt가 참조한 `question_revision_id`의 정답과 표시 순서를 유지하여 역사적 채점이 재현 가능해야 한다.
+9. 화면은 이번 화면에서 연, 아직 제출하지 않은 practice session(정답 없는 필드만)을 메모리에 보관해 같은 문제를 다시 열 때 요청 없이 보인다(UX7-CACHE 2026-11-01, Workspace·화면 단위, 10분, 제출 시작 시 폐기; 정답·해설은 보관하지 않음). 세부: [QPLAY-01](screens/questions-practice.md) AC06.
 
 ## 5. 문제 변형 출제
 
