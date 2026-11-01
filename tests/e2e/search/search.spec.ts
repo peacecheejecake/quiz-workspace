@@ -20,6 +20,7 @@ import {
   homePath,
   homeUi,
   JOB_TIMEOUT_MS,
+  listDocuments,
   main,
   mcqInput,
   notFoundHeading,
@@ -35,7 +36,9 @@ import {
   section,
   signInAs,
   test,
+  uploadPdf,
   uploadReadyBook,
+  waitForJob,
   type Problem,
   type SearchItem,
 } from '../fixtures/test.ts';
@@ -1095,3 +1098,99 @@ test.describe('SEARCH-01-AC08 touch', () => {
     },
   );
 });
+
+// UX7-SEARCH-2: question papers are found by the 문제 search only; the 본문 search leaves them
+// out on the server (the English book uploaded as a 문제지 next to the Korean 교재; the query
+// matches both texts).
+const BOTH_BOOKS_QUERY = 'chlorine 염소';
+
+interface SearchHit {
+  readonly document_id: string;
+  readonly document_type: string;
+}
+
+test(
+  'SEARCH-01-AC13 the 본문 search leaves question papers out, on the server and in its document filter',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac13');
+    const ws = await workspaceFactory.create(owner);
+    const bookId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    const paper = await uploadPdf(owner, ws.id, EN, 'question_paper');
+    await waitForJob(owner, paper.jobId);
+    const docs: readonly (Awaited<ReturnType<typeof listDocuments>>[number] & {
+      readonly active_revision_id?: string | null;
+    })[] = await listDocuments(owner, ws.id);
+    const paperDoc = docs.find((d) => d.id === paper.documentId);
+    const bookDoc = docs.find((d) => d.id === bookId);
+    expect(paperDoc?.active_revision_id, 'the paper is published').toBeTruthy();
+    expect(paperDoc?.document_type).toBe('question_paper');
+    await createQuestion(owner, ws.id, mcqInput('search01-ac13 chlorine 문제', ['예', '아니오']));
+    await createQuestion(owner, ws.id, mcqInput('search01-ac13 다른 문제', ['예', '아니오']));
+
+    // API: no question-paper hit, whatever the request asks for.
+    const searchApi = async (body: Record<string, unknown>) =>
+      (
+        await owner.api.ok<{ items: SearchHit[] }>(
+          'POST',
+          `/workspaces/${ws.id}/search`,
+          { query: BOTH_BOOKS_QUERY, mode: 'keyword', limit: 50, ...body },
+          [200],
+        )
+      ).items;
+    const plain = await searchApi({});
+    expect(plain.length).toBeGreaterThan(0);
+    expect(new Set(plain.map((h) => h.document_id))).toEqual(new Set([bookId]));
+    const asked = await searchApi({ include_question_papers: true });
+    expect(asked.map((h) => h.document_id)).toEqual(plain.map((h) => h.document_id));
+    expect(asked.some((h) => h.document_type === 'question_paper')).toBe(false);
+    expect(
+      await searchApi({ document_ids: [paper.documentId], include_question_papers: true }),
+    ).toEqual([]);
+
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+
+    // The document filter lists the book only.
+    const popover = await openSearchOptions(page);
+    await searchUi.documentFilter(page).click();
+    const options = page.getByRole('option');
+    await expect(options.filter({ hasText: bookDoc?.title ?? bookId })).toHaveCount(1);
+    await expect(options.filter({ hasText: paperDoc?.title ?? paper.documentId })).toHaveCount(0);
+    await expect(options.filter({ hasText: /문제지|question paper/i })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeVisible();
+    await closeSearchOptions(page);
+
+    // The 본문 results are the book's only, as many as the API's (the page asks for 20).
+    await runSearch(page, BOTH_BOOKS_QUERY, 'keyword');
+    const items = searchUi.resultItems(page);
+    await expect(items.first()).toBeVisible();
+    await expect(items).toHaveCount(Math.min(plain.length, 20));
+    await expect(items.filter({ hasText: /chlorine/i })).toHaveCount(0);
+
+    // The 문제 search still filters the questions.
+    await homeUi.questionSearch(page).fill('chlorine');
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+  },
+);
+
+test(
+  'SEARCH-01-AC13 a workspace whose only published PDF is a question paper has no body to search',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac13-paper-only');
+    const ws = await workspaceFactory.create(owner);
+    const paper = await uploadPdf(owner, ws.id, EN, 'question_paper');
+    await waitForJob(owner, paper.jobId);
+
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id));
+    await openContentSearch(page);
+    const submit = searchUi.submit(page);
+    await expect(submit).toBeDisabled();
+    await expect(homeUi.contentSearchMessage(page)).toHaveText(NO_BODY);
+    await expect(submit).toHaveAccessibleDescription(NO_BODY);
+  },
+);

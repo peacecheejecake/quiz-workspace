@@ -376,19 +376,31 @@ def test_stale_revisions_never_match_even_while_still_indexed(
         assert {h["revision_id"] for h in found} <= {str(en.revision_id)}, mode
 
 
-def test_question_papers_are_left_out_unless_asked_for(
+def test_search01_ac13_question_papers_are_never_searched(
     world: World, caller: Callable[[], Caller]
 ) -> None:
+    """UX7-SEARCH-2: papers are found by the 문제 search only, whatever the request names."""
     alice = caller()
     ws = _member(world, alice)
     book = world.add(ws, "book-en")
     paper = world.add(ws, "book-en", document_type="question_paper", title="Paper")
-    assert _strs(alice.items(ws, query="chlorine"), "document_id") == {str(book.id)}
-    both = alice.items(ws, query="chlorine", include_question_papers=True, limit=20)
-    assert _strs(both, "document_id") == {str(book.id), str(paper.id)}
-    named = alice.items(ws, query="chlorine", document_ids=[str(paper.id)])
-    assert _strs(named, "document_id") == {str(paper.id)}
-    assert {h["document_type"] for h in named} == {"question_paper"}
+    plain = alice.items(ws, query="chlorine", limit=20)
+    assert _strs(plain, "document_id") == {str(book.id)}
+    # The deprecated flag is accepted and ignored: the same hits, in the same order.
+    asked = alice.items(ws, query="chlorine", include_question_papers=True, limit=20)
+    assert [h["chunk_id"] for h in asked] == [h["chunk_id"] for h in plain]
+    # Naming the paper (alone, with the book, or by one of its chapters) finds nothing of it.
+    assert alice.items(ws, query="chlorine", document_ids=[str(paper.id)]) == []
+    both = alice.items(ws, query="chlorine", document_ids=[str(paper.id), str(book.id)])
+    assert _strs(both, "document_id") == {str(book.id)}
+    chapter = paper.chapters[0]
+    assert alice.items(ws, query="chlorine", chapter_ids=[str(chapter.id)]) == []
+    for hits in (plain, asked, both):
+        assert {h["document_type"] for h in hits} == {"book"}
+    # Only papers in the workspace: nothing to search.
+    lone = _member(world, alice)
+    world.add(lone, "book-en", document_type="question_paper", title="Lone paper")
+    assert alice.items(lone, query="chlorine") == []
 
 
 def test_chapter_filter_includes_sub_sections_and_stays_in_its_document(
