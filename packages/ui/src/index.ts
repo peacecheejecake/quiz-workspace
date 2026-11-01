@@ -33,6 +33,7 @@ export {
   AlertIcon,
   ArrowLeftIcon,
   CheckIcon,
+  CopyIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   ChevronUpIcon,
@@ -46,6 +47,8 @@ export {
   TrashIcon,
   UploadIcon,
 } from './primitives/icons';
+export { COPY_FEEDBACK_MS, CopyButton } from './primitives/CopyButton';
+export type { CopyButtonProps } from './primitives/CopyButton';
 export { Input } from './primitives/Input';
 export type { InputProps } from './primitives/Input';
 export {

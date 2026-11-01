@@ -779,3 +779,21 @@
     outline-offset: -2px;
   }
 }
+
+/* CopyButton: both icons and both labels share one grid cell, so swapping them (visibility only,
+   no animation) never resizes the button (UX7-SHARE-EXPIRY). */
+.qz-copy-button {
+  > .icons,
+  > .labels {
+    display: inline-grid;
+  }
+
+  > .icons > *,
+  > .labels > * {
+    grid-area: 1 / 1;
+  }
+
+  > .labels > * {
+    justify-self: start;
+  }
+}

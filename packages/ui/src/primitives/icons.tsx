@@ -145,6 +145,16 @@ export function HistoryIcon(props: IconProps) {
   );
 }
 
+/** Two overlapping sheets (copy to clipboard). */
+export function CopyIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V6a2 2 0 0 1 2-2h8" />
+    </BaseIcon>
+  );
+}
+
 /** Two linked rings (share link). */
 export function ShareIcon(props: IconProps) {
   return (
