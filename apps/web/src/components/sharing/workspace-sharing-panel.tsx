@@ -6,7 +6,8 @@
 // while the link metadata loads (listShareLinksAction), so closing it also drops a shown URL. The screen manages one link: the
 // newest active one, else the newest expired one, whose policy stays editable (a later expiry
 // reopens a URL already handed out, also while archived). Policy controls save on change; revoke
-// and rotate are confirmed.
+// and rotate are confirmed. UX7-SHARE-EXPIRY: `만료일 삭제` saves "no expiry" (AC06; a policy
+// edit, so also while archived), and `링크 복사` confirms with its own check (AC08), not a toast.
 //
 // Secret handling (docs/workspace-sharing.md §2): the share URL with `#k=` comes back once from
 // create/rotate and lives only in this component's state while the link stays current — never in
@@ -15,6 +16,7 @@ import {
   Badge,
   Button,
   ConfirmDialog,
+  CopyButton,
   FloatingSidePanel,
   Input,
   Skeleton,
@@ -119,6 +121,8 @@ export function WorkspaceSharingPanel({
   // Create/rotate Idempotency-Key: kept only while the last attempt's outcome is unknown.
   const issueKey = useRef<PendingCreate | null>(null);
   const linkFieldRef = useRef<HTMLInputElement>(null);
+  const expiryRef = useRef<HTMLInputElement>(null);
+  const focusExpiry = useRef(false);
   const revokeRef = useRef<HTMLButtonElement>(null);
   const rotateRef = useRef<HTMLButtonElement>(null);
   const statusId = useId();
@@ -129,6 +133,12 @@ export function WorkspaceSharingPanel({
   const expiryValue = expiryDraft ?? (isClient ? savedExpiry : '');
   const policyDisabled = pending || (archived && !current);
   const today = isClient ? localDateString(new Date()) : undefined;
+
+  useEffect(() => {
+    if (pending || !focusExpiry.current) return;
+    focusExpiry.current = false;
+    expiryRef.current?.focus();
+  });
 
   /** Takes the refreshed list and shows or clears the failure; returns the result for narrowing. */
   function apply(result: ShareActionResult, success?: string): ShareActionResult {
@@ -225,17 +235,31 @@ export function WorkspaceSharingPanel({
     updatePolicy({ expiresAt: parsed.expiresAt }, () => setExpiryDraft(null));
   }
 
-  async function copy() {
-    if (!shownUrl) return;
+  /** WS-SHARE-01-AC06: no expiry. A saved link is updated at once; otherwise the next link's. */
+  function clearExpiry() {
+    setExpiryDraft('');
+    setExpiryError(null);
+    // The button disappears with the date; keep the focus in the expiry area. The field is
+    // disabled while the change saves, so it takes the focus once that is over (effect below).
+    focusExpiry.current = true;
+    if (current && savedExpiry !== '') {
+      updatePolicy({ expiresAt: null }, () => setExpiryDraft(null));
+    }
+  }
+
+  /** The success feedback is the button's check and its live region (AC08), not a toast. */
+  async function copy(): Promise<boolean> {
+    if (!shownUrl) return false;
     try {
       await navigator.clipboard.writeText(shownUrl);
-      toast({ tone: 'success', title: '링크를 복사했습니다.' });
+      return true;
     } catch {
       linkFieldRef.current?.select();
       toast({
         tone: 'error',
         title: '자동 복사에 실패했습니다. 선택된 링크를 직접 복사해 주세요.',
       });
+      return false;
     }
   }
 
@@ -351,7 +375,11 @@ export function WorkspaceSharingPanel({
                     description="이 링크는 지금 한 번만 표시됩니다. 닫거나 새로 고치면 다시 볼 수 없으니 지금 복사해 두세요."
                   />
                   <div>
-                    <Button onClick={copy}>링크 복사</Button>
+                    <CopyButton
+                      label="링크 복사"
+                      announcement="링크를 복사했습니다."
+                      onCopy={copy}
+                    />
                   </div>
                 </section>
               ) : current ? (
@@ -370,26 +398,41 @@ export function WorkspaceSharingPanel({
                   onCheckedChange={onForkChange}
                   disabled={policyDisabled}
                 />
-                <Input
-                  type="date"
-                  label="만료일"
-                  description="비워 두면 만료되지 않습니다. 선택한 날의 끝까지 링크가 열립니다."
-                  value={expiryValue}
-                  min={today}
-                  disabled={policyDisabled}
-                  error={expiryError ?? undefined}
-                  onChange={(event) => {
-                    setExpiryDraft(event.currentTarget.value);
-                    setExpiryError(null);
-                  }}
-                  onBlur={commitExpiry}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      commitExpiry();
-                    }
-                  }}
-                />
+                <div className={styles.expiry} data-clearable={expiryValue !== '' || undefined}>
+                  <Input
+                    ref={expiryRef}
+                    type="date"
+                    label="만료일"
+                    description="비워 두면 만료되지 않습니다. 선택한 날의 끝까지 링크가 열립니다."
+                    value={expiryValue}
+                    min={today}
+                    disabled={policyDisabled}
+                    error={expiryError ?? undefined}
+                    onChange={(event) => {
+                      setExpiryDraft(event.currentTarget.value);
+                      setExpiryError(null);
+                    }}
+                    onBlur={commitExpiry}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        commitExpiry();
+                      }
+                    }}
+                  />
+                  {expiryValue !== '' ? (
+                    <Button
+                      size="sm"
+                      className={styles.clearExpiry}
+                      disabled={policyDisabled}
+                      onClick={clearExpiry}
+                    >
+                      만료일 삭제
+                    </Button>
+                  ) : current && isClient ? (
+                    <p className={styles.noExpiry}>만료 없음 · 이 링크는 만료되지 않습니다.</p>
+                  ) : null}
+                </div>
               </section>
 
               <section className={styles.notices} aria-label="공개 범위와 저작권">

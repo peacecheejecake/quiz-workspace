@@ -200,6 +200,41 @@ describe('WorkspaceSharingPanel', () => {
     expect(within(panel).getByRole('switch', { name: 'Fork 허용' })).toBeEnabled();
   });
 
+  it('WS-SHARE-01-AC06 clears a saved expiry: PATCH null, "만료 없음", focus on the date', async () => {
+    const user = userEvent.setup();
+    actions.update.mockResolvedValue({ ok: true, links: [link(L1, { expires_at: null })] });
+    renderScreen([link(L1, { expires_at: '2099-01-31T14:59:59.999Z' })], true);
+    const panel = await loadedPanel();
+    expect(within(panel).queryByText(/^만료 없음/)).toBeNull();
+    const clear = within(panel).getByRole('button', { name: '만료일 삭제' });
+    clear.focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(actions.update).toHaveBeenCalledTimes(1));
+    expect(actions.update).toHaveBeenLastCalledWith(WS, L1, { expiresAt: null });
+    expect(await within(panel).findByText(/^만료 없음/)).toBeVisible();
+    expect(within(panel).getByLabelText('만료일')).toHaveValue('');
+    await waitFor(() => expect(within(panel).getByLabelText('만료일')).toHaveFocus());
+    expect(within(panel).queryByRole('button', { name: '만료일 삭제' })).toBeNull();
+  });
+
+  it('WS-SHARE-01-AC08 a copy shows "복사됨" instead of a success toast', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    actions.create.mockResolvedValue({
+      ok: true,
+      links: [link(L1)],
+      issued: { linkId: L1, shareUrl: url(L1, SECRET_1) },
+    });
+    renderScreen([]);
+    const panel = await loadedPanel();
+    await user.click(within(panel).getByRole('button', { name: '링크 만들기' }));
+    await user.click(await within(panel).findByRole('button', { name: '링크 복사' }));
+    expect(writeText).toHaveBeenCalledWith(url(L1, SECRET_1));
+    expect(await within(panel).findByRole('button', { name: '복사됨' })).toBeVisible();
+    expect(screen.getAllByText('링크를 복사했습니다.')).toHaveLength(1);
+  });
+
   it('an expired link stays editable (also archived): a later expiry reopens it', async () => {
     const user = userEvent.setup();
     const past = '2026-10-01T14:59:59.999Z';

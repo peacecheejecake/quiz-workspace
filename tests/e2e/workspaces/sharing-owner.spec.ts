@@ -354,7 +354,10 @@ test(
     await page.reload();
     await sharingUi.clearExpiryButton(page).click();
     await expect
-      .poll(async () => (await listShareLinks(owner, ws.id))[0]?.expires_at ?? 'unset')
+      .poll(async () => {
+        const [l] = await listShareLinks(owner, ws.id);
+        return l ? l.expires_at : 'no link';
+      })
       .toBeNull();
     await expect(sharingUi.noExpiry(page)).toBeVisible();
   },
