@@ -231,7 +231,46 @@ const ISSUE_MESSAGES: Readonly<Record<string, string>> = {
   text_too_long: '내용이 너무 깁니다.',
   answer_text_invalid: '허용 답안이 올바르지 않습니다.',
   draft_invalid: '초안 형식이 올바르지 않습니다.',
+  // PDF import drafts (book_core.extractor validation codes; the unit test keeps this in sync).
+  answer_missing: '정답지에서 이 문제의 정답을 찾지 못했습니다.',
+  duplicate_question_number:
+    '같은 문제 번호가 두 번 이상 나와 정답지를 적용하지 않았습니다. 원본과 비교해 정답을 확인해 주세요.',
+  question_skipped: '문제 내용이 없어 건너뛴 문제가 있습니다.',
+  question_number_gap:
+    '문제 번호가 중간에 빠져 있습니다. 원본에서 빠진 문제가 있는지 확인해 주세요.',
+  no_questions_found: 'PDF에서 문제를 찾지 못했습니다.',
+  duplicate_option_label: '같은 번호의 보기가 두 번 있습니다. 원본과 비교해 보기를 확인해 주세요.',
+  option_sequence_gap: '보기 번호가 중간에 빠져 있습니다. 원본과 비교해 보기를 확인해 주세요.',
+  option_text_missing: '내용이 없는 보기가 있습니다. 원본과 비교해 보기를 확인해 주세요.',
+  answer_key_conflict: '정답지에 이 문제의 정답이 서로 다르게 적혀 있습니다. 정답을 확인해 주세요.',
+  answer_key_unmapped: '정답지의 정답을 보기와 맞추지 못했습니다. 정답을 확인해 주세요.',
+  answer_key_type_mismatch: '정답지의 정답 형식이 문제 유형과 맞지 않습니다. 정답을 확인해 주세요.',
+  answer_key_missing: '정답지를 찾지 못했습니다.',
+  answer_key_unknown_number: '정답지에 없는 문제 번호의 정답이 있습니다.',
+  answer_key_unparsed: '정답지의 일부 줄을 읽지 못했습니다.',
+  answer_key_table_ambiguous: '정답표를 해석하기 어려워 적용하지 않은 부분이 있습니다.',
+  type_uncertain: '문제 유형을 확실히 알 수 없습니다. 유형이 맞는지 확인해 주세요.',
+  figure_missing: '문제에서 말하는 그림을 PDF에서 찾지 못했습니다. 원본과 비교해 확인해 주세요.',
+  llm_output_invalid: 'AI 보조 정리 결과를 쓸 수 없어 PDF에서 읽은 그대로 두었습니다.',
+  llm_unavailable: 'AI 보조 정리를 사용할 수 없어 PDF에서 읽은 그대로 두었습니다.',
+  llm_type_rejected:
+    'AI가 제안한 문제 유형이 원본 보기와 맞지 않아 쓰지 않았습니다. 유형을 확인해 주세요.',
+  llm_answer_rejected: 'AI가 제안한 정답이 정답지와 달라 쓰지 않았습니다. 정답을 확인해 주세요.',
+  llm_text_rejected:
+    'AI가 정리한 문구가 원본과 달라 쓰지 않았습니다. 원본과 비교해 문구를 확인해 주세요.',
 };
+
+/**
+ * Codes that say the optional AI assist of the extraction did not apply (provider unavailable,
+ * unusable output), so the rule-based draft was kept as read from the PDF. They describe the
+ * extraction, not the draft's content: shown as a note, never a reason to check the draft.
+ */
+const ASSIST_NOTE_CODES: ReadonlySet<string> = new Set(['llm_unavailable', 'llm_output_invalid']);
+
+/** A validation that is only a note about the extraction (not something to check). */
+export function isAssistNote(code: string): boolean {
+  return ASSIST_NOTE_CODES.has(code);
+}
 
 export function issueMessage(code: string): string {
   return ISSUE_MESSAGES[code] ?? '확인이 필요한 항목이 있습니다.';
@@ -421,13 +460,17 @@ export function isSelectable(draft: ReviewDraft): boolean {
 
 /**
  * What "전체 선택" covers: selectable drafts with nothing to check — not excluded (rejected), an
- * answer present and no validation notes. A draft without an answer (short answer / essay may be
- * confirmed without one) or with a note is selected one by one, never silently in bulk.
+ * answer present and no validation to check. A draft without an answer (short answer / essay may
+ * be confirmed without one) or with something to check is selected one by one, never silently in
+ * bulk. A note that the AI assist did not apply (`isAssistNote`) is not something to check.
  */
 export function selectAllScope(drafts: readonly ReviewDraft[]): ReviewDraft[] {
   return drafts.filter(
     (d) =>
-      isSelectable(d) && d.reviewStatus !== 'rejected' && !d.answerMissing && d.issues.length === 0,
+      isSelectable(d) &&
+      d.reviewStatus !== 'rejected' &&
+      !d.answerMissing &&
+      d.issues.every((i) => i.severity === 'warning' && isAssistNote(i.code)),
   );
 }
 

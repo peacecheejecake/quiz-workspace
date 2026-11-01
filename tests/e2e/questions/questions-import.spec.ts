@@ -47,6 +47,7 @@ import {
   seedImportDraftCopies,
   setDocumentKind,
   signInAs,
+  stampDraftValidation,
   startImport,
   test,
   truthQuestion,
@@ -1048,5 +1049,66 @@ test(
     await expect(importUi.draftsHeading(page)).toBeFocused();
     await expect(pager).toContainText(`801–900 / ${total}`);
     await expect(importUi.publish(page)).toContainText(`(${registrable})`);
+  },
+);
+
+/**
+ * QIMP-SELECT-FIX (production, 750 drafts): every draft of a run whose LLM assist failed carries
+ * `llm_unavailable`, a note about the extraction rather than the draft. It kept every draft out of
+ * `전체 선택 (0개)` and read as the generic "확인이 필요한 항목이 있습니다". The note no longer
+ * counts as something to check; a draft-level warning still keeps its draft out of the bulk scope
+ * while it stays selectable one by one. The validations are stamped in the DB (the APP_ENV=test
+ * extraction never calls an LLM).
+ */
+const ASSIST_COPIES = 93; // 8 × 94 = 752 drafts, like the reported paper
+
+test(
+  'QIMPORT-01-AC03 drafts with only an AI assist note are in 전체 선택; a draft warning is selected one by one',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(JOB_TIMEOUT_MS + 120_000);
+    const owner = await workspaceFactory.member('qimport01-ac03-assist');
+    const ws = await workspaceFactory.create(owner);
+    const { run } = await importPaperDrafts(owner, ws.id);
+    const total = seedImportDraftCopies(run.id, ASSIST_COPIES);
+    expect(total).toBe(PAPER.questions.length * (ASSIST_COPIES + 1));
+    expect(stampDraftValidation(run.id, 'llm_unavailable')).toBe(total);
+    // Every copy of question 2 (answered) also has a draft-level warning.
+    const warned = stampDraftValidation(run.id, 'option_sequence_gap', {
+      every: PAPER.questions.length,
+      offset: 1,
+    });
+    expect(warned).toBe(ASSIST_COPIES + 1);
+    expect(Q(2).answer).not.toBeNull();
+    const drafts = await listDrafts(owner, run.id);
+    // The server still confirms them as they are (warnings never block).
+    expect(drafts.filter((d) => d.publishable).length).toBeGreaterThan(warned);
+    expect(drafts.filter((d) => !d.publishable).every((d) => d.answer_missing)).toBe(true);
+    const inScope = registrableIn(1, total) - warned;
+
+    await signInAs(page, owner.user);
+    await page.goto(importPath(ws.id));
+    await expect(importUi.draftsHeading(page)).toContainText(`${total}개`, { timeout: 30_000 });
+    const all = importUi.selectAll(page);
+    await expect(all).toHaveAccessibleName(new RegExp(`\\(${inScope}개\\)`));
+    await expect(all).toBeEnabled();
+
+    // The assist note is a plain Korean note, not something to check.
+    const q1 = importUi.draft(page, Q(1).stem).first();
+    await expect(q1).toContainText(/참고:\s*AI 보조 정리를 사용할 수 없어/);
+    await expect(importUi.drafts(page)).not.toContainText('확인이 필요한 항목이 있습니다');
+    const q2 = importUi.draft(page, Q(2).stem).first();
+    await expect(q2).toContainText(/확인:\s*보기 번호가 중간에 빠져/);
+
+    await all.click();
+    await expect(importUi.publish(page)).toContainText(`(${inScope})`);
+    await expect(importUi.select(q1)).toBeChecked();
+    // The draft warning keeps question 2 out of the bulk scope, but it can be selected.
+    await expect(importUi.select(q2)).toBeEnabled();
+    await expect(importUi.select(q2)).not.toBeChecked();
+    await importUi.select(q2).click();
+    await expect(importUi.select(q2)).toBeChecked();
+    await expect(importUi.publish(page)).toContainText(`(${inScope + 1})`);
+    await expect(all).toHaveAttribute('aria-checked', 'true');
   },
 );

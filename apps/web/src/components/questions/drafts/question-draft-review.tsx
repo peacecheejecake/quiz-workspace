@@ -34,6 +34,7 @@ import {
   draftNumber,
   DRAFT_ORIGIN_LABELS,
   issueMessage,
+  isAssistNote,
   REVIEW_STATUS_LABELS,
   type ReviewDraft,
 } from '@/lib/questions/drafts';
@@ -219,7 +220,11 @@ const DraftItem = memo(function DraftItem({
           {draft.issues.map((issue, index) => (
             <p key={`${issue.code}-${index}`} data-severity={issue.severity}>
               <AlertIcon width={14} height={14} aria-hidden="true" />
-              {issue.severity === 'error' ? '승인 불가: ' : '확인: '}
+              {issue.severity === 'error'
+                ? '승인 불가: '
+                : isAssistNote(issue.code)
+                  ? '참고: '
+                  : '확인: '}
               {issueMessage(issue.code)}
             </p>
           ))}
