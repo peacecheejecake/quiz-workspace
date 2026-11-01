@@ -22,9 +22,10 @@ function browserWindow(): PanelHistoryWindow {
     get sessionStorage() {
       return window.sessionStorage;
     },
-    addEventListener: (type, listener, options) => window.addEventListener(type, listener, options),
+    addEventListener: (type, listener, options) =>
+      window.addEventListener(type, listener as EventListener, options),
     removeEventListener: (type, listener, options) =>
-      window.removeEventListener(type, listener, options),
+      window.removeEventListener(type, listener as EventListener, options),
     setTimeout: (handler, ms) => window.setTimeout(handler, ms),
     clearTimeout: (id) => window.clearTimeout(id),
     now: () => Date.now(),

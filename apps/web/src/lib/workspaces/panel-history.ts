@@ -21,7 +21,10 @@
 // Landing on one from another document, or with nowhere further back, stays on it. Without a
 // forward entry to drop (Navigation API `canGoForward`), a close at depth 0 just rewrites the
 // entry. When the base belongs to another document (the page was reloaded with a dialog open),
-// the rewind loads it: the close is handed over in sessionStorage and finished there.
+// the rewind loads it: the close is handed over in sessionStorage and finished there. Likewise a
+// browser Back into another document of the home (no BFCache after a reload): each document
+// records on pagehide the entry it was on and its dialogs, and the next one (attach, or pageshow
+// from the BFCache) drops the forward entry when that Back closed a dialog.
 //
 // Each entry of ours records in `history.state` (beside Next's keys) its position (`pos`, to tell
 // Back from Forward), its depth (entries above its base) and, on a skip entry, how far to skip.
@@ -39,6 +42,10 @@ export const PANEL_UNDER_KEY = '__quizPanelUnder';
 export const PANEL_SKIP_KEY = '__quizPanelSkip';
 /** sessionStorage: a close whose rewind left the document (see the module comment). */
 export const PANEL_CLOSE_KEY = '__quizPanelClose';
+/** sessionStorage: the entry a document of the home was on when it unloaded (pagehide). */
+export const PANEL_LEAVE_KEY = '__quizPanelLeave';
+/** How old a pagehide record may be when the next document reads it (a slow page load). */
+export const LEAVE_MAX_AGE_MS = 30_000;
 
 /**
  * How long a close or a skip waits for the traversal it started before settling in place. A
@@ -106,26 +113,57 @@ export const DEFAULT_DIALOG_URLS: DialogUrls = {
   closeAll: (search) => withoutPanels(search),
 };
 
+export type PageEventType = 'popstate' | 'pagehide' | 'pageshow';
+
 export interface PanelHistoryWindow {
   readonly history: Pick<History, 'state' | 'pushState' | 'replaceState' | 'go'>;
   readonly location: Pick<Location, 'pathname' | 'search' | 'href'>;
   /** The Navigation API where the browser has it. */
   readonly navigation?: { readonly canGoForward: boolean } | undefined;
   readonly sessionStorage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+  /** `popstate` (with capture), `pagehide` and `pageshow` (PageTransitionEvent). */
   addEventListener(
-    type: 'popstate',
-    listener: (event: PopStateEvent) => void,
-    options: { capture: boolean },
+    type: PageEventType,
+    listener: (event: never) => void,
+    options?: { capture: boolean },
   ): void;
   removeEventListener(
-    type: 'popstate',
-    listener: (event: PopStateEvent) => void,
-    options: { capture: boolean },
+    type: PageEventType,
+    listener: (event: never) => void,
+    options?: { capture: boolean },
   ): void;
   setTimeout(handler: () => void, ms: number): number;
   clearTimeout(id: number): void;
   /** Epoch milliseconds (Date.now). */
   now(): number;
+}
+
+/** Where a document of the home was when it unloaded. */
+interface Leave {
+  readonly pos: number;
+  readonly path: string;
+  readonly dialogs: readonly string[];
+}
+
+function parseLeave(raw: string | null, now: number): Leave | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<Leave> & { at?: unknown };
+    if (
+      typeof value.at === 'number' &&
+      now - value.at >= 0 &&
+      now - value.at <= LEAVE_MAX_AGE_MS &&
+      typeof value.pos === 'number' &&
+      typeof value.path === 'string' &&
+      Array.isArray(value.dialogs) &&
+      value.dialogs.every((d) => typeof d === 'string')
+    ) {
+      return { pos: value.pos, path: value.path, dialogs: value.dialogs };
+    }
+  } catch {
+    // A malformed value is no record.
+  }
+  return null;
 }
 
 /** A close waiting for its rewind to land on the base (`pos`). */
@@ -202,6 +240,7 @@ export class PanelHistory {
     const entry = readEntry(this.win.history.state);
     this.mark = entry.mark;
     this.resting = this.current();
+    const leave = this.takeLeave();
     const handover = this.takeRewind();
     const basePath = handover ? splitUrl(handover.base).path : null;
     if (
@@ -212,14 +251,26 @@ export class PanelHistory {
       // A close's rewind loaded this document (the base): finish the close here.
       this.mark = { ...entry.mark, pos: handover.pos };
       this.settle(handover.base, handover.reopen);
-    } else if (entry.skip > 0) {
-      // Arrived on a skip entry (a reload, or Forward from another document): stay on it.
-      this.rest(this.current());
+    } else {
+      this.arrive(entry, leave);
     }
     const onPopState = (event: PopStateEvent) => this.onPopState(event);
+    const onPageHide = () => this.storeLeave();
+    const onPageShow = (event: PageTransitionEvent) => {
+      // Restored from the BFCache: like a load, but this document's state is still here.
+      if (!event.persisted) return;
+      if (this.pending) this.win.clearTimeout(this.pending.timer);
+      this.pending = null;
+      this.known = true;
+      this.arrive(readEntry(this.win.history.state), this.takeLeave());
+    };
     this.win.addEventListener('popstate', onPopState, CAPTURE);
+    this.win.addEventListener('pagehide', onPageHide);
+    this.win.addEventListener('pageshow', onPageShow);
     return () => {
       this.win.removeEventListener('popstate', onPopState, CAPTURE);
+      this.win.removeEventListener('pagehide', onPageHide);
+      this.win.removeEventListener('pageshow', onPageShow);
       if (this.pending) this.win.clearTimeout(this.pending.timer);
       this.pending = null;
     };
@@ -346,6 +397,53 @@ export class PanelHistory {
       history.replaceState(markState(null, this.mark), '', this.current());
     }
     this.resting = this.current();
+  }
+
+  /**
+   * This document arrived on the current entry from another one (a load, or a BFCache restore).
+   * A skip entry is stayed on. A Back from a document of the home (its pagehide record) that
+   * closed dialogs drops the forward entry, as onPopState does within one document.
+   */
+  private arrive(entry: PanelEntry, leave: Leave | null): void {
+    this.mark = entry.mark;
+    this.resting = this.current();
+    if (entry.skip > 0) {
+      this.rest(this.current());
+      return;
+    }
+    if (!leave || !entry.ours || leave.path !== this.win.location.pathname) return;
+    if (entry.mark.pos >= leave.pos) return;
+    const now = this.getDialogs().open(this.win.location.search);
+    if (leave.dialogs.every((d) => now.includes(d))) return;
+    this.truncate(this.current());
+    this.resting = this.current();
+  }
+
+  private storeLeave(): void {
+    try {
+      const { path, search } = splitUrl(this.resting);
+      const record = {
+        pos: this.mark.pos,
+        path,
+        dialogs: this.getDialogs().open(search),
+        at: this.win.now(),
+      };
+      this.win.sessionStorage?.setItem(PANEL_LEAVE_KEY, JSON.stringify(record));
+    } catch {
+      // Without storage a Back across documents leaves the forward entry.
+    }
+  }
+
+  private takeLeave(): Leave | null {
+    try {
+      const storage = this.win.sessionStorage;
+      if (!storage) return null;
+      const leave = parseLeave(storage.getItem(PANEL_LEAVE_KEY), this.win.now());
+      storage.removeItem(PANEL_LEAVE_KEY);
+      return leave;
+    } catch {
+      return null;
+    }
   }
 
   private storeRewind(rewind: Rewind): void {

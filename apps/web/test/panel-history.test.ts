@@ -88,7 +88,7 @@ function fakeWindow(
     get navigation() {
       return opts.navigation ? { canGoForward: index < entries.length - 1 } : undefined;
     },
-    addEventListener: (type: string, listener: (event: never) => void, options?: unknown) => {
+    addEventListener: (type, listener, options) => {
       if (type === 'popstate') {
         expect(options).toEqual({ capture: true });
         capture.add(listener as (event: PopStateEvent) => void);
@@ -98,7 +98,7 @@ function fakeWindow(
       set.add(listener as (event: Event) => void);
       lifecycle.set(type, set);
     },
-    removeEventListener: (type: string, listener: (event: never) => void) => {
+    removeEventListener: (type, listener) => {
       if (type === 'popstate') capture.delete(listener as (event: PopStateEvent) => void);
       else lifecycle.get(type)?.delete(listener as (event: Event) => void);
     },
@@ -444,12 +444,23 @@ describe('PanelHistory', () => {
     expect(fake.urls()).toEqual(entries);
   });
 
-  it('ignores a stale or foreign close handover', () => {
+  it('a stale close handover is ignored; the pagehide record still finishes the Back', () => {
     const { fake, history } = controller();
     history.push('/w?panel=documents');
     history.close('/w');
     fake.traverseToDocument();
     fake.tick(10_000);
+    new PanelHistory(() => fake.win).attach();
+    expect(fake.urls()).toEqual(['/workspaces', '/w', '/w']);
+    expect(fake.storage.size).toBe(0);
+  });
+
+  it('ignores records older than a page load', () => {
+    const { fake, history } = controller();
+    history.push('/w?panel=documents');
+    history.close('/w');
+    fake.traverseToDocument();
+    fake.tick(60_000);
     new PanelHistory(() => fake.win).attach();
     expect(fake.urls()).toEqual(['/workspaces', '/w', '/w?panel=documents']);
     expect(fake.storage.size).toBe(0);
