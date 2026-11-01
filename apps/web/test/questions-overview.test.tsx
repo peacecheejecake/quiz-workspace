@@ -135,6 +135,7 @@ function Screen({
   readOnly = null,
   createOpen = false,
   onCreateOpenChange,
+  onQuestionsChanged,
   filters = data === overview ? EMPTY_OVERVIEW_FILTERS : FAVORITES,
 }: {
   data?: QuestionOverview;
@@ -142,6 +143,7 @@ function Screen({
   readOnly?: 'viewer' | 'archived' | null;
   createOpen?: boolean;
   onCreateOpenChange?: (open: boolean) => void;
+  onQuestionsChanged?: () => void;
   filters?: typeof EMPTY_OVERVIEW_FILTERS;
 }) {
   return (
@@ -152,6 +154,7 @@ function Screen({
           readOnly={readOnly}
           createOpen={createOpen}
           onCreateOpenChange={onCreateOpenChange}
+          onQuestionsChanged={onQuestionsChanged}
           filters={filters}
           view={filters}
           navigating={false}
@@ -887,7 +890,8 @@ describe('UX7-BANK-2 정답·해설 보기 and 보관 in the practice panel', { 
       ok: true,
       data: { ...fullQuestion(3), publication_status: 'ARCHIVED' },
     });
-    render(<Screen />);
+    const onQuestionsChanged = vi.fn();
+    render(<Screen onQuestionsChanged={onQuestionsChanged} />);
     await user.click(dot(3));
     const panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
     await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
@@ -911,6 +915,8 @@ describe('UX7-BANK-2 정답·해설 보기 and 보관 in the practice panel', { 
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(new URLSearchParams(window.location.search).has('question')).toBe(false);
+    // An open 보관·초안 문제 list must re-read (the home bumps its refreshKey).
+    expect(onQuestionsChanged).toHaveBeenCalledTimes(1);
   });
 });
 

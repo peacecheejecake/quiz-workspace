@@ -169,3 +169,47 @@ describe('UX7-BANK-2 보관·초안 문제', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('UX7-BANK-2 review fixes', () => {
+  it('QOV-01-AC15 an open list re-reads when the home changes questions (refreshKey)', async () => {
+    listInactiveQuestionsAction.mockResolvedValueOnce(page([question(1, 'DRAFT')]));
+    const view = (refreshKey: number) => (
+      <ToastProvider>
+        <InactiveQuestions
+          workspaceId={WS}
+          readOnly={null}
+          documents={[]}
+          refreshKey={refreshKey}
+        />
+      </ToastProvider>
+    );
+    const { rerender } = render(view(0));
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    // The practice panel archived question 2 meanwhile.
+    listInactiveQuestionsAction.mockResolvedValueOnce(
+      page([question(1, 'DRAFT'), question(2, 'ARCHIVED')]),
+    );
+    rerender(view(1));
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    expect(listInactiveQuestionsAction).toHaveBeenLastCalledWith(WS, 'INACTIVE', null);
+  });
+
+  it('QOV-01-AC15 emptying the loaded page still reaches the next one', async () => {
+    const user = userEvent.setup();
+    listInactiveQuestionsAction.mockImplementation(
+      (_ws: string, _f: string, cursor: string | null) =>
+        Promise.resolve(
+          cursor === 'next'
+            ? page([question(2, 'ARCHIVED')])
+            : page([question(1, 'ARCHIVED')], 'next'),
+        ),
+    );
+    setQuestionStatusAction.mockResolvedValue({ ok: true, data: question(1, 'DRAFT') });
+    render(<Screen />);
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    await user.click(within(rows()[0] as HTMLElement).getByRole('button', { name: '보관 해제' }));
+    await waitFor(() => expect(rows()[0]).toHaveTextContent('문제 2 본문'));
+    expect(listInactiveQuestionsAction).toHaveBeenCalledWith(WS, 'INACTIVE', 'next');
+    expect(screen.queryByRole('heading', { name: '보관하거나 초안인 문제가 없습니다' })).toBeNull();
+  });
+});
