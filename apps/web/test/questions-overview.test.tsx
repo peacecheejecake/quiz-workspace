@@ -873,5 +873,40 @@ describe(
       panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
       expect(panel).toBeVisible();
     });
+
+    it('QPLAY-01-AC07 a save that lands after the editor closed refreshes only the saved question', async () => {
+      const user = userEvent.setup();
+      getQuestionAction.mockResolvedValue({ ok: true, data: fullQuestion(1) });
+      let finishSave: (value: unknown) => void = () => undefined;
+      updateQuestionAction.mockReturnValue(new Promise((resolve) => (finishSave = resolve)));
+      render(<Screen />);
+      await user.click(dot(1));
+      let panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+      await waitFor(() => expect(within(panel).getByText('문제 1 본문')).toBeInTheDocument());
+
+      await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
+      await user.click(await screen.findByRole('menuitem', { name: '편집' }));
+      const form = await screen.findByRole('dialog', { name: '문제 편집' });
+      await user.click(within(form).getByRole('button', { name: '저장' }));
+      // Dismiss the pending dialog and move on to question 2 before the save completes.
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: '문제 편집' })).toBeNull());
+      await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
+      panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+      await waitFor(() => expect(within(panel).getByText('문제 2 본문')).toBeInTheDocument());
+      expect(sessionsFor(2)).toBe(1);
+
+      await act(async () => finishSave({ ok: true, data: fullQuestion(1, '고친 본문') }));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      // Question 2 keeps its session (no reload, no lost answer state)...
+      expect(sessionsFor(2)).toBe(1);
+      // ...and question 1's cached session of the old revision is gone: back to it opens a new one.
+      expect(sessionsFor(1)).toBe(1);
+      await user.click(within(panel).getByRole('button', { name: '이전 문제' }));
+      await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+      await waitFor(() => expect(sessionsFor(1)).toBe(2));
+    });
   },
 );

@@ -11,7 +11,8 @@
 // (lib/questions/practice-cache.ts), so re-opening an unanswered question shows it at once; a
 // session whose submission started is never reused.
 // UX7-BANK: editors get the screen's 문제 관리 menu (`headerExtra`) in the header; after an edit
-// the screen bumps `reloadKey` and the panel opens a session of the new revision
+// the screen invalidates that question (`invalidated`) and the panel, if it still shows it,
+// opens a session of the new revision
 // (the cached session of the old revision is dropped).
 import {
   Button,
@@ -98,8 +99,6 @@ export interface PracticePanelProps {
   readonly onCloseAutoFocus?: ComponentProps<typeof FloatingSidePanel>['onCloseAutoFocus'];
   /** Header controls after the study toggles (UX7-BANK: the editors' 문제 관리 menu). */
   readonly headerExtra?: ReactNode;
-  /** A change opens a new session of the same question (its content was edited). */
-  readonly reloadKey?: number;
   /**
    * UX7-BANK: a question whose cached session must never be shown again (edited or deleted);
    * a new `seq` invalidates `questionId` once.
@@ -166,7 +165,6 @@ export function PracticePanel({
   onGraded,
   onCloseAutoFocus,
   headerExtra,
-  reloadKey = 0,
   invalidated = null,
 }: PracticePanelProps) {
   const questionId = question?.id ?? null;
@@ -179,32 +177,28 @@ export function PracticePanel({
   const scoped = cache.workspaceId === workspaceId.toLowerCase();
   if (!scoped) setCache(new PracticeSessionCache(workspaceId));
 
-  // Forget an invalidated question's cached session before anything reads the cache.
+  // Forget an invalidated question's cached session before anything reads the cache; when it is
+  // the question on screen, it is opened again (a session of its new revision).
   const [seenInvalidation, setSeenInvalidation] = useState(invalidated);
-  if (invalidated !== seenInvalidation) {
+  const invalidating = invalidated !== seenInvalidation;
+  if (invalidating) {
     setSeenInvalidation(invalidated);
     const stale = invalidated ? cache.get(invalidated.questionId) : null;
     if (stale) cache.dropSession(stale.id);
   }
+  const reopen =
+    invalidating &&
+    invalidated !== null &&
+    questionId !== null &&
+    invalidated.questionId.toLowerCase() === questionId.toLowerCase();
 
   const [opening, setOpening] = useState<Opening>(() => ({
     questionId,
     key: newKey(),
     cached: cache.get(questionId),
   }));
-  // UX7-BANK: an edit (`reloadKey`) makes the cached session stale (it is pinned to the old
-  // revision): forget it and open a new one.
-  const [seenReload, setSeenReload] = useState(reloadKey);
-  const reloading = seenReload !== reloadKey;
-  if (opening.questionId !== questionId || reloading) {
-    setSeenReload(reloadKey);
-    const stale = reloading ? cache.get(questionId) : null;
-    if (stale) cache.dropSession(stale.id);
-    setOpening({
-      questionId,
-      key: newKey(),
-      cached: scoped && !reloading ? cache.get(questionId) : null,
-    });
+  if (opening.questionId !== questionId || reopen) {
+    setOpening({ questionId, key: newKey(), cached: scoped ? cache.get(questionId) : null });
   }
   const [session, setSession] = useState<SessionState & { readonly key: string | null }>({
     status: 'loading',

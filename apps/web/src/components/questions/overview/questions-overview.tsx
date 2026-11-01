@@ -474,7 +474,6 @@ export function QuestionsOverview({
     if (creating) setEditorSession((n) => n + 1);
   }
   const editorTarget: EditorTarget | null = editing ?? (creating ? { mode: 'create' } : null);
-  const [reloadPanel, setReloadPanel] = useState(0);
   const [invalidated, setInvalidated] = useState<Invalidation | null>(null);
   const invalidate = (questionId: string) =>
     setInvalidated((prev) => ({ questionId, seq: (prev?.seq ?? 0) + 1 }));
@@ -669,7 +668,6 @@ export function QuestionsOverview({
         onGraded={markGraded}
         onFlagsChange={(questionId, flags) => void changeFlags(questionId, flags)}
         onViewed={markViewed}
-        reloadKey={reloadPanel}
         invalidated={invalidated}
         headerExtra={
           canAuthor && panelQuestion ? (
@@ -707,9 +705,10 @@ export function QuestionsOverview({
             target={editorTarget}
             session={editorSession}
             onClose={closeEditor}
-            onSaved={(_question, mode) => {
-              // The open panel practises the new revision (its session is pinned to the old one).
-              if (mode === 'edit') setReloadPanel((n) => n + 1);
+            onSaved={(question, mode) => {
+              // The saved question's sessions are pinned to its old revision: forget them, and
+              // practise the new one if the panel still shows it (not whatever is open now).
+              if (mode === 'edit') invalidate(question.id);
             }}
           />
           <ConfirmDialog
