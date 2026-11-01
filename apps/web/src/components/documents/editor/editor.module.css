@@ -229,10 +229,67 @@ button.viewSwitchButton:focus-visible {
     display: none;
   }
 
+  /* DOC-02-AC10: PDF | separator | text, the shares set by the separator (pane-splitter.tsx). */
   .split {
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    grid-template-columns:
+      minmax(0, var(--pdf-share, 55fr))
+      var(--space-6)
+      minmax(0, var(--text-share, 45fr));
+    gap: 0;
     height: calc(100dvh - var(--app-header-height) - 15rem);
     min-height: 28rem;
+  }
+}
+
+.splitter {
+  display: none;
+}
+
+@media (width >= 768px) {
+  .splitter {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    border-radius: var(--radius-sm);
+    cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+    transition: background-color var(--qz-transition-fast);
+  }
+
+  /* The line between the panes; the 24px column around it is the touch/pointer target. */
+  .splitter::before {
+    position: absolute;
+    inset-block: var(--space-2);
+    left: 50%;
+    width: 1px;
+    background: var(--color-border);
+    content: '';
+  }
+
+  .splitterGrip {
+    position: relative;
+    width: var(--space-1);
+    height: var(--space-8);
+    border-radius: var(--radius-sm);
+    background: var(--color-border-strong);
+  }
+
+  .splitter[data-active='true'],
+  .splitter:active {
+    background: var(--color-state-pressed);
+  }
+
+  .splitter:focus-visible {
+    outline-offset: -2px;
+  }
+}
+
+@media (width >= 768px) and (hover: hover) {
+  .splitter:hover {
+    background: var(--color-state-hover);
   }
 }
 

@@ -7,6 +7,7 @@ import Link from 'next/link';
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -19,6 +20,11 @@ import {
   useOutlinePanel,
 } from '@/components/documents/editor/outline-panel';
 import { OutlineTree } from '@/components/documents/editor/outline-tree';
+import {
+  PaneSplitter,
+  splitStyle,
+  useSplitRatio,
+} from '@/components/documents/editor/pane-splitter';
 import { PdfViewer, type PageChangeReason } from '@/components/documents/editor/pdf-viewer';
 import { TextBlockEditor } from '@/components/documents/editor/text-block-editor';
 import { scrollTextTo } from '@/components/documents/editor/text-sync';
@@ -181,6 +187,10 @@ export function SharedDocumentView({
   );
   const title = document?.title ?? summary?.title ?? '문서';
 
+  const [splitShare, setSplitShare, commitSplitShare] = useSplitRatio();
+  const splitRef = useRef<HTMLDivElement>(null);
+  const pdfPaneId = useId();
+
   // DOC-02-AC06 in the shared view: the 목차 panel, below the share page's own header.
   const outlinePanel = useOutlinePanel();
   const { beside: outlineBeside, dismiss: dismissOutline } = outlinePanel;
@@ -260,8 +270,18 @@ export function SharedDocumentView({
             ))}
           </div>
 
-          <div className={`${editorStyles.split} ${styles.split}`} data-view={mobileView}>
-            <section aria-label="PDF 원본" className={editorStyles.pdfPane} data-pane="pdf">
+          <div
+            ref={splitRef}
+            className={`${editorStyles.split} ${styles.split}`}
+            data-view={mobileView}
+            style={splitStyle(splitShare)}
+          >
+            <section
+              id={pdfPaneId}
+              aria-label="PDF 원본"
+              className={editorStyles.pdfPane}
+              data-pane="pdf"
+            >
               <PdfViewer
                 source={pdfSource}
                 page={page}
@@ -283,6 +303,14 @@ export function SharedDocumentView({
                 }
               />
             </section>
+
+            <PaneSplitter
+              value={splitShare}
+              onChange={setSplitShare}
+              onCommit={commitSplitShare}
+              containerRef={splitRef}
+              controls={pdfPaneId}
+            />
 
             <section aria-label="원문 텍스트" className={editorStyles.textPane} data-pane="text">
               <div className={editorStyles.textScroller} ref={textScrollRef}>

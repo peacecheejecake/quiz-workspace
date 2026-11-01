@@ -10,7 +10,7 @@
 import { Button, PageHeader } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import { blockEditReducer, IDLE, type BlockEditState } from '@/lib/documents/block-edit';
 import {
@@ -53,6 +53,7 @@ import { TextExportMenu } from '../text-export-menu';
 import styles from './editor.module.css';
 import { OutlinePanel, outlineLayout, useOutlinePanel } from './outline-panel';
 import { OutlineTree } from './outline-tree';
+import { PaneSplitter, splitStyle, useSplitRatio } from './pane-splitter';
 import { PdfViewer, type PageChangeReason } from './pdf-viewer';
 import { PublishBar } from './publish-bar';
 import { TextBlockEditor } from './text-block-editor';
@@ -141,6 +142,9 @@ export function DocumentEditor({
   const [notice, setNotice] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [mobileView, setMobileView] = useState<MobileView>('pdf');
+  const [splitShare, setSplitShare, commitSplitShare] = useSplitRatio();
+  const splitRef = useRef<HTMLDivElement>(null);
+  const pdfPaneId = useId();
   const outlinePanel = useOutlinePanel();
   const { beside: outlineBeside, dismiss: dismissOutline } = outlinePanel;
   const [panelHost, setPanelHost] = useState<HTMLDivElement | null>(null);
@@ -153,6 +157,7 @@ export function DocumentEditor({
   const revisionIdRef = useRef<string | null>(null);
 
   const content = contentState.status === 'ready' ? contentState.content : null;
+
   useEffect(() => {
     revisionIdRef.current = content?.revision?.id ?? null;
   }, [content]);
@@ -736,8 +741,13 @@ export function DocumentEditor({
         ))}
       </div>
 
-      <div className={styles.split} data-view={mobileView}>
-        <section aria-label="PDF 원본" className={styles.pdfPane} data-pane="pdf">
+      <div
+        ref={splitRef}
+        className={styles.split}
+        data-view={mobileView}
+        style={splitStyle(splitShare)}
+      >
+        <section id={pdfPaneId} aria-label="PDF 원본" className={styles.pdfPane} data-pane="pdf">
           <PdfViewer
             source={pdfSource}
             page={page}
@@ -761,6 +771,14 @@ export function DocumentEditor({
             }
           />
         </section>
+
+        <PaneSplitter
+          value={splitShare}
+          onChange={setSplitShare}
+          onCommit={commitSplitShare}
+          containerRef={splitRef}
+          controls={pdfPaneId}
+        />
 
         <section aria-label="원문 텍스트" className={styles.textPane} data-pane="text">
           <div className={styles.textScroller} ref={textScrollRef}>
