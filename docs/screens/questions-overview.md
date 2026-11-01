@@ -1,6 +1,6 @@
 # QOV-01 — Questions Heatmap 홈
 
-**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (Workspace 홈 통합) · UX4 개정 2026-10-21 (header 버튼 묶음·`문제` 메뉴) · UX6-PROGRESS 개정 2026-10-28 (`문제은행` 버튼 → `문제` 메뉴의 `전체 문제`) · UX6-BANK 개정 2026-10-28 (문제은행 페이지 이름도 `전체 문제`) · UX7-BANK 개정 2026-11-01 (전체 문제 페이지 폐기: 직접 추가는 홈 위 dialog, 편집·삭제는 풀이 panel) · UX7-DOCS 개정 2026-11-01 (`PDF 관리` 항목 폐기, 문서 관리로 통합) · UX7-SEARCH 개정 2026-11-01 (문제·본문 검색창 분리) · UX7-BACK 개정 2026-11-01 (닫은 dialog를 뒤로가기로 다시 열지 않음)
+**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (Workspace 홈 통합) · UX4 개정 2026-10-21 (header 버튼 묶음·`문제` 메뉴) · UX6-PROGRESS 개정 2026-10-28 (`문제은행` 버튼 → `문제` 메뉴의 `전체 문제`) · UX6-BANK 개정 2026-10-28 (문제은행 페이지 이름도 `전체 문제`) · UX7-BANK 개정 2026-11-01 (전체 문제 페이지 폐기: 직접 추가는 홈 위 dialog, 편집·삭제는 풀이 panel) · UX7-DOCS 개정 2026-11-01 (`PDF 관리` 항목 폐기, 문서 관리로 통합) · UX7-SEARCH 개정 2026-11-01 (문제·본문 검색창 분리) · UX7-BACK 개정 2026-11-01 (닫은 dialog를 뒤로가기로 다시 열지 않음) · UX7-DOCS-2 개정 2026-11-01 (`문제` 버튼은 편집 권한이 없어도 보이고 항목은 이유와 함께 비활성)
 **Route:** `/workspaces/:workspaceId` (이전 `/workspaces/:workspaceId/questions`는 같은 query로 redirect)
 **테스트:** `tests/e2e/questions/questions-overview.spec.ts`
 **연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
@@ -19,7 +19,7 @@
 1. **Workspace header**(홈 최상단, 화면 제목·설명 없음; 접근성 `h1`은 Workspace 이름을 시각적으로 숨겨 둔다)
    - 왼쪽: 문제 검색 입력란(접근성 이름 "문제 검색", 검색 버튼 없이 입력하는 대로 Heatmap을 거름 — SEARCH-01-AC12)과 그 옆 "문제 설정" popover 버튼(챕터·유형), 그 아래 "본문 검색" 펼치기 버튼(기본 접힘, SEARCH-01-AC10). 이전 통합 검색창과 검색 범위 체크박스는 없다(UX7-SEARCH 2026-11-01, search.md).
    - 오른쪽 버튼은 두 묶음이다(UX4 2026-10-21). 첫 묶음: `문서 n`(등록된 책 문서 수 — UX6-UPLOAD부터 본문이 있는 PDF(`교재`·`교재+문제`) 수, 문서 관리 dialog) · `문제`(메뉴 버튼, 아래). 별도의 `문제은행` 버튼은 없다(UX6-PROGRESS 2026-10-28, 사용자 피드백 "문제은행 버튼은 '문제' dropdown menu 안으로 이동, 문구는 '전체 문제'로 변경"). 둘째 묶음(오른쪽 정렬): `이력`(아이콘 버튼, 이력 dialog) · `공유하기`(Owner만; `이력`과 같은 흰색(secondary) 아이콘 버튼, 접근성 이름·tooltip "공유하기", 링크 공유 dialog).
-   - `문제` 메뉴(Radix DropdownMenu, `aria-haspopup="menu"`, 화살표·Enter·Escape 키보드 조작): `직접 추가`(홈 위에 "문제 등록" dialog를 연다: `?panel=question-create`, AC12) · `변형 출제`(문제 생성 dialog `?panel=generate`, QGEN-01-AC05). `직접 추가`·`변형 출제`는 편집 권한에만 보이므로 편집 권한이 없으면(보기 권한, 보관된 Workspace) `문제` 버튼이 없다(제안 — 사용자 확인 필요). `PDF 관리`(문제 PDF 관리 dialog `?panel=question-pdfs`) 항목은 없다(UX7-DOCS 2026-11-01, 사용자 "문제 Pdf 관리를 문서 관리로 통합": 문제 PDF는 `문서 n`의 문서 관리 dialog에서 다룬다, DOC-01-AC09; 이전 URL은 `?panel=documents`로 redirect). `전체 문제` 항목과 전체 문제 페이지(QBANK-01)는 없다(UX7-BANK 2026-11-01, 사용자 결정 "'전체 문제' 페이지 삭제. 문제 편집/삭제만 홈으로 옮기면 될듯. 나머지는 이미 홈에 있음" — 폐기 기록 [questions-bank.md](questions-bank.md)). 이전 URL `/questions/bank`는 홈으로 redirect한다(`?question=`만 유지).
+   - `문제` 메뉴(Radix DropdownMenu, `aria-haspopup="menu"`, 화살표·Enter·Escape 키보드 조작): `직접 추가`(홈 위에 "문제 등록" dialog를 연다: `?panel=question-create`, AC12) · `변형 출제`(문제 생성 dialog `?panel=generate`, QGEN-01-AC05). `문제` 버튼은 편집 권한이 없어도(보기 권한, 보관된 Workspace) 숨기지 않는다(UX7-DOCS-2 2026-11-01, 사용자 결정 "문제 버튼: Do not hide"; UX7-DOCS의 숨김 제안 기각). `직접 추가`·`변형 출제`는 편집 권한에만 쓸 수 있으므로 그 밖에는 비활성 항목(`aria-disabled="true"`, 화살표 키는 건너뜀, 골라도 아무 일 없음)으로 보이고, 그 아래 글자로 이유를 보인다: 보기 권한 "편집 권한이 있어야 사용할 수 있습니다", 보관된 Workspace "보관된 Workspace는 읽기 전용입니다"(보관이 우선). 이유는 색이나 흐림만이 아니라 글자로 보이며(touch에는 tooltip이 없으므로 tooltip에만 두지 않는다), 비활성 항목과 메뉴의 `aria-describedby`로 연결된다. 보기 권한자도 쓸 수 있는 항목(이후 `모의고사`·`문제 풀기`)이 생기면 같은 메뉴에 활성 항목으로 함께 둔다. `PDF 관리`(문제 PDF 관리 dialog `?panel=question-pdfs`) 항목은 없다(UX7-DOCS 2026-11-01, 사용자 "문제 Pdf 관리를 문서 관리로 통합": 문제 PDF는 `문서 n`의 문서 관리 dialog에서 다룬다, DOC-01-AC09; 이전 URL은 `?panel=documents`로 redirect). `전체 문제` 항목과 전체 문제 페이지(QBANK-01)는 없다(UX7-BANK 2026-11-01, 사용자 결정 "'전체 문제' 페이지 삭제. 문제 편집/삭제만 홈으로 옮기면 될듯. 나머지는 이미 홈에 있음" — 폐기 기록 [questions-bank.md](questions-bank.md)). 이전 URL `/questions/bank`는 홈으로 redirect한다(`?question=`만 유지).
    - **문제 등록 dialog (UX7-BANK):** `직접 추가`와 빈 Heatmap의 `문제 등록`은 같은 "문제 등록" dialog(기존 문제 편집기: 유형·문제 내용·보기·정답·챕터·문제 번호·출처)를 홈 위에 연다. 입력 중 다른 곳을 실수로 누르지 않도록 modal dialog이고 URL에 `?panel=question-create`를 남긴다(다른 dialog와 달리 쌓기·옆으로 비키기 대상이 아니다). 챕터·출처 문서 목록은 dialog가 열린 뒤 불러온다. 저장하면 확정 문제로 등록되고 dialog가 닫히며 Heatmap이 새로 읽혀 그 챕터에 점이 생긴다. 닫으면(취소·Escape·저장) `question-create`가 URL에서 빠진다. 보기 권한·보관된 Workspace에서는 열리지 않는다(`?panel=question-create`도 무시).
    - 버튼 문구는 줄바꿈하지 않는다. 좁은 화면(375px)에서는 묶음과 버튼이 버튼 단위로 다음 줄로 넘어가고 페이지 가로 스크롤은 없다.
 2. **본문 검색**(기본 접힘, UX7-SEARCH): 펼치면 header 아래, Heatmap 위에 본문 검색 입력란·검색 버튼·"본문 설정"이 나타나고, 검색하면 그 아래 "본문 검색 결과" 영역이 나타나며 "검색 결과 닫기"로 지운다. 결과 항목을 누르면 오른쪽 "본문 발췌" panel에 검색어 주변 내용을 보인다(SEARCH-01-AC11).
@@ -71,7 +71,7 @@
 
 - **Given:** 로그인 사용자가 접근할 수 있는 Workspace(Owner, 그리고 Owner가 아닌 멤버)
 - **When:** `/workspaces/:workspaceId`를 열거나 이전 경로(`/documents`, `/search?q=…`, `/questions?…`, `/history`, `/settings/sharing`)로 접근
-- **Then:** Workspace 왼쪽 메뉴 없이 Workspace header(문제 검색 입력란과 "본문 검색" 펼치기 버튼, `문서 n`·`문제` 묶음 — 별도의 `문제은행` 버튼 없음(UX6-PROGRESS), 오른쪽 정렬된 `이력`·Owner에게만 `공유하기` 아이콘 버튼 묶음) 바로 아래에 문제 Heatmap이 보이고, 화면 제목·설명 header와 문제 수 문구는 없다. `공유하기`는 `이력`처럼 글자 없는 흰색(secondary) 아이콘 버튼이며 접근성 이름은 "공유하기"다(UX4). `문서 n`의 n은 등록된 책 문서 수(문제 PDF 제외; UX6-UPLOAD부터 `교재`·`교재+문제`, DOC-01-AC06)다. 이전 경로는 홈으로 redirect되며 해당 dialog(`?panel=documents|history|share`)나 검색 상태(문제 검색 `q`, 본문 검색 `text`, 필터; 이전 `/search?q=`는 `text=`로)를 그대로 연다. Owner가 아닌 멤버가 `?panel=share`로 와도 공유 dialog는 열리지 않고 공유 API는 거부된다(UX3c).
+- **Then:** Workspace 왼쪽 메뉴 없이 Workspace header(문제 검색 입력란과 "본문 검색" 펼치기 버튼, `문서 n`·`문제` 묶음 — `문제` 버튼은 보기 권한에도 보인다(UX7-DOCS-2, AC11), 별도의 `문제은행` 버튼 없음(UX6-PROGRESS), 오른쪽 정렬된 `이력`·Owner에게만 `공유하기` 아이콘 버튼 묶음) 바로 아래에 문제 Heatmap이 보이고, 화면 제목·설명 header와 문제 수 문구는 없다. `공유하기`는 `이력`처럼 글자 없는 흰색(secondary) 아이콘 버튼이며 접근성 이름은 "공유하기"다(UX4). `문서 n`의 n은 등록된 책 문서 수(문제 PDF 제외; UX6-UPLOAD부터 `교재`·`교재+문제`, DOC-01-AC06)다. 이전 경로는 홈으로 redirect되며 해당 dialog(`?panel=documents|history|share`)나 검색 상태(문제 검색 `q`, 본문 검색 `text`, 필터; 이전 `/search?q=`는 `text=`로)를 그대로 연다. Owner가 아닌 멤버가 `?panel=share`로 와도 공유 dialog는 열리지 않고 공유 API는 거부된다(UX3c).
 
 ### QOV-01-AC08
 
@@ -93,9 +93,9 @@
 
 ### QOV-01-AC11
 
-- **Given:** Workspace 홈(편집 권한, 그리고 보기 권한)
+- **Given:** Workspace 홈(편집 권한, 보기 권한, 그리고 보관된 Workspace의 Owner)
 - **When:** header의 `문제` 버튼을 마우스나 키보드(Enter, 화살표)로 열고 항목을 고름
-- **Then:** `문서 n` 오른쪽의 `문제` 버튼이 메뉴(`role="menu"`)를 열고, 편집 권한에는 `직접 추가`·`변형 출제` 두 항목이 보이고, 보기 권한에는 `문제` 버튼이 없다(UX7-DOCS 2026-11-01: `PDF 관리` 항목이 문서 관리로 통합되어 없어짐, DOC-01-AC09; 그 전에는 편집 권한 세 항목, 보기 권한 `PDF 관리` 하나). `전체 문제` 항목은 없다(UX7-BANK; UX6-PROGRESS~UX6-BANK에는 전체 문제 페이지 링크였다). `변형 출제`는 문제 생성 dialog(`?panel=generate`)를 열고, `직접 추가`는 홈을 떠나지 않고 "문제 등록" dialog(`?panel=question-create`)를 연다(UX7-BANK). 홈에는 별도의 `문제 PDF 관리`·`문제 생성`(UX4)·`문제은행`(UX6-PROGRESS) 버튼이 없다.
+- **Then:** `문서 n` 오른쪽의 `문제` 버튼이 메뉴(`role="menu"`)를 열고, 편집 권한에는 `직접 추가`·`변형 출제` 두 항목이 활성으로 보인다. 보기 권한과 보관된 Workspace에도 `문제` 버튼이 보이고 같은 두 항목이 비활성(`aria-disabled="true"`)으로 보이며, 메뉴 안에 이유 문구(보기 권한 "편집 권한이 있어야 사용할 수 있습니다", 보관 "보관된 Workspace는 읽기 전용입니다")가 글자로 보인다. 비활성 항목은 화살표 키 이동에서 건너뛰고, 클릭해도 dialog를 열지 않으며, Escape는 메뉴를 닫고 `문제` 버튼으로 focus를 돌린다(UX7-DOCS-2 2026-11-01, 사용자 결정 "문제 버튼: Do not hide"; UX7-DOCS 2026-11-01~UX7-DOCS-2 전에는 보기 권한에 `문제` 버튼이 없었다. UX7-DOCS에서 `PDF 관리` 항목이 문서 관리로 통합되어 없어짐, DOC-01-AC09; 그 전에는 편집 권한 세 항목, 보기 권한 `PDF 관리` 하나). `전체 문제` 항목은 없다(UX7-BANK; UX6-PROGRESS~UX6-BANK에는 전체 문제 페이지 링크였다). `변형 출제`는 문제 생성 dialog(`?panel=generate`)를 열고, `직접 추가`는 홈을 떠나지 않고 "문제 등록" dialog(`?panel=question-create`)를 연다(UX7-BANK). 홈에는 별도의 `문제 PDF 관리`·`문제 생성`(UX4)·`문제은행`(UX6-PROGRESS) 버튼이 없다.
 
 ### QOV-01-AC12
 
