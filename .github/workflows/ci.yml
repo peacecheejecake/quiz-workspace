@@ -270,6 +270,7 @@ jobs:
           APP_ENV: test
           WORKER_LLM_SCENARIO_FILE: ${{ github.workspace }}/tests/fixtures/llm/generation-scenarios.json
           WORKER_CHAPTER_NOTES: 'true'
+          WORKER_MOCK_EXAMS: 'true'
           # DOCSUM-01: API + worker summarize; AC05's feature-off stack claims Redis DBs 10-15.
           WORKER_DOCUMENT_SUMMARY: 'true'
         run: |
@@ -298,6 +299,7 @@ jobs:
           APP_ENV: test
           WORKER_LLM_SCENARIO_FILE: ${{ github.workspace }}/tests/fixtures/llm/generation-scenarios.json
           WORKER_CHAPTER_NOTES: 'true'
+          WORKER_MOCK_EXAMS: 'true'
           WORKER_DOCUMENT_SUMMARY: 'true'
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-visual
         run: >-

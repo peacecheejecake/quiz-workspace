@@ -189,6 +189,8 @@ def test_test_only_switches_are_forbidden() -> None:
         "WORKER_LLM_SCENARIO_FILE",
         "WORKER_CHAPTER_NOTE_SCENARIO_FILE",
         "WORKER_CHAPTER_NOTE_HOLD_DIR",
+        "WORKER_MOCK_EXAM_HOLD_DIR",
+        "WORKER_MOCK_EXAM_FAULT_DIR",
         "FORWARDED_ALLOW_IPS",
         "RAILWAY_RUN_UID",
     } <= forbidden
@@ -250,7 +252,9 @@ def test_conditional_requirement_and_fake_adapters() -> None:
     assert "worker WORKER_PARSER: fake adapters are for local/test only" in report.errors
 
 
-@pytest.mark.parametrize("switch", ["WORKER_DOCUMENT_SUMMARY", "WORKER_CHAPTER_NOTES"])
+@pytest.mark.parametrize(
+    "switch", ["WORKER_DOCUMENT_SUMMARY", "WORKER_CHAPTER_NOTES", "WORKER_MOCK_EXAMS"]
+)
 def test_llm_features_need_the_llm_on_worker_and_api(switch: str) -> None:
     """DOCSUM-B summaries and CHNOTE-B chapter notes: either switch requires the worker's key and
     the same LLM_MODEL on worker and API."""
@@ -273,10 +277,31 @@ def test_llm_features_need_the_llm_on_worker_and_api(switch: str) -> None:
 
 def test_required_when_accepts_one_condition_or_a_list() -> None:
     by_name = {v.name: v for v in MANIFEST.vars}
-    both = (("WORKER_DOCUMENT_SUMMARY", "true"), ("WORKER_CHAPTER_NOTES", "true"))
+    both = (
+        ("WORKER_DOCUMENT_SUMMARY", "true"),
+        ("WORKER_CHAPTER_NOTES", "true"),
+        ("WORKER_MOCK_EXAMS", "true"),
+    )
     assert by_name["LLM_MODEL"].required_when == both
     assert by_name["LLM_API_KEY"].required_when == both
     assert by_name["CLOUDFLARE_API_TOKEN"].required_when == (("WORKER_EMBEDDER", "workers_ai"),)
+
+
+def test_mock_exam_budgets_must_fit_the_model_and_the_time_limit() -> None:
+    """MOCK-B: prompt + output within the context, output within LLM_MAX_TOKENS, a 100-question
+    generation within the worker task's soft time limit; messages name variables only."""
+    worker = valid_env("worker", "production")
+    assert check_env.run_checks(MANIFEST, "production", {"worker": worker}).errors == []
+    big = worker | {"MOCK_EXAM_MAX_PROMPT_TOKENS": "190000"}
+    errors = check_env.run_checks(MANIFEST, "production", {"worker": big}).errors
+    assert any("LLM_CONTEXT_TOKENS" in e for e in errors)
+    out = worker | {"MOCK_EXAM_MAX_OUTPUT_TOKENS": "32000"}
+    errors = check_env.run_checks(MANIFEST, "production", {"worker": out}).errors
+    assert any("LLM_MAX_TOKENS" in e for e in errors)
+    slow = worker | {"MOCK_EXAM_SOURCES_PER_CALL": "1", "MOCK_EXAM_GENERATION_CONCURRENCY": "1"}
+    errors = check_env.run_checks(MANIFEST, "production", {"worker": slow}).errors
+    assert any("WORKER_TASK_SOFT_TIME_LIMIT_SECONDS" in e for e in errors)
+    assert not [e for e in errors if "190000" in e or "32000" in e]
 
 
 def test_production_needs_its_own_qdrant_prefix_on_the_shared_cluster() -> None:
