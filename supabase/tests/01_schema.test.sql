@@ -29,7 +29,11 @@ select tables_are(
         -- UX7-DEDUP duplicate -> kept question merges
         'question_merges',
         -- QVIEW-B range practice runs
-        'practice_runs'],
+        'practice_runs',
+        -- MOCK-B mock exams
+        'mock_exams', 'mock_exam_revisions', 'mock_exam_generations',
+        'mock_exam_generation_items', 'mock_exam_questions', 'mock_exam_question_revisions',
+        'mock_exam_practice_sessions', 'mock_exam_attempts'],
   'public schema contains exactly the expected tables'
 );
 
@@ -97,7 +101,8 @@ select is(
      from information_schema.triggers
     where trigger_schema = 'public' and action_statement like '%set_updated_at%'),
   array['async_jobs', 'chapter_notes', 'content_blocks', 'document_revisions', 'document_uploads',
-        'documents',
+        'documents', 'mock_exam_generation_items', 'mock_exam_generations',
+        'mock_exam_practice_sessions', 'mock_exam_questions', 'mock_exams',
         'practice_sessions', 'profiles', 'question_drafts', 'question_generation_runs',
         'question_import_runs', 'question_user_states', 'questions', 'workspace_forks',
         'workspace_memberships', 'workspace_share_links', 'workspaces'],
