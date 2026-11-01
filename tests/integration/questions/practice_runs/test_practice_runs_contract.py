@@ -866,3 +866,57 @@ def test_c07_ranges_match_the_heatmap_with_archived_and_merged_duplicates(seed: 
     assert finished["summary"]["skipped"] == 3
     results = r.owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200")
     assert [i["result"] for i in results["items"]] == ["skipped", "skipped", "skipped"]
+
+
+# ---------------------------------------------------------------------------------------------
+# QVIEW-B review follow-ups (Codex P2s)
+# ---------------------------------------------------------------------------------------------
+
+
+def test_c04_resuming_a_position_with_an_idempotency_key_replays_it(seed: Any) -> None:
+    """A resumed open position is stored under its Idempotency-Key like a new session: a retry
+    replays it (no new view write), also after the position was submitted, and the key cannot be
+    reused with another body."""
+    owner = seed.client("qview-idem-resume")
+    ws_id = str(owner.create_workspace()["id"])
+    qs = [owner.create_question(ws_id, mcq("idem", 1, n, None)) for n in (1, 2)]
+    run = created(owner, ws_id, bank({"all": True}))
+    opened = owner.ok_response(
+        run_session(owner, qs[0]["id"], run["id"], 1), "POST", "first open", (201,)
+    )
+    path = f"/questions/{qs[0]['id']}/practice-sessions"
+    body = {"practice_run_id": run["id"], "run_position": 1}
+    key = {"Idempotency-Key": str(uuid.uuid4())}
+    resumed = owner.call_with_headers("POST", path, body, key)
+    assert resumed.status_code == 201, resumed.text[:200]
+    assert resumed.json()["id"] == opened["id"]
+
+    def last_viewed() -> Any:
+        return admin(
+            "select last_viewed_at from public.question_user_states "
+            "where user_id = %s and question_id = %s",
+            (owner.user.id, qs[0]["id"]),
+        )
+
+    viewed = last_viewed()
+    again = owner.call_with_headers("POST", path, body, key)
+    assert again.status_code == 201
+    assert again.headers.get("idempotent-replayed") == "true"
+    assert again.json() == resumed.json()
+    assert last_viewed() == viewed, "a replay must not record another view"
+
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{opened['id']}/submit",
+        {"selected_option_ids": [wrong_option(qs[0])]},
+    )
+    after = owner.call_with_headers("POST", path, body, key)
+    assert after.status_code == 201, "a retry after submission replays the original response"
+    assert after.json()["id"] == opened["id"]
+    seed.problem(
+        owner.call_with_headers(
+            "POST", path, {"practice_run_id": run["id"], "run_position": 2}, key
+        ),
+        409,
+        PROBLEM + "idempotency-key-reused",
+    )

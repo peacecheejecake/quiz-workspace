@@ -529,6 +529,17 @@ def start_practice_session(
                 raise already_submitted()
             practice.record_view(existing.workspace_id, existing.question_id, user.id)
             resumed = _session_out(existing)
+            if idempotency_key is not None:
+                # Stored like a new session: a retry replays it (no second view, no 409 after
+                # the position is submitted) and the key stays bound to this body.
+                idempotency.save(
+                    user.id,
+                    scope,
+                    idempotency_key,
+                    body_hash,
+                    status.HTTP_201_CREATED,
+                    resumed.model_dump(mode="json"),
+                )
             practice.commit()
             return resumed
 
