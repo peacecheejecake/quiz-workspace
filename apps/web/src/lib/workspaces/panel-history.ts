@@ -106,6 +106,12 @@ export interface DialogUrls {
   open(search: string): readonly string[];
   /** `search` with every dialog closed (withoutPanels). */
   closeAll(search: string): string;
+  /**
+   * Pushes `url` through the router (it reads the page for it). Used when a close lands on an
+   * entry whose page (filters, searches) differs from the closed URL: a plain pushState would
+   * carry the entry's saved Next tree under the new address, which Next then reloads in full.
+   */
+  navigate?(url: string): void;
 }
 
 export const DEFAULT_DIALOG_URLS: DialogUrls = {
@@ -356,11 +362,11 @@ export class PanelHistory {
     }
     if (reopen) {
       this.mark = { pos: this.mark.pos + 1, depth: 1, under: 0 };
-      this.win.history.pushState(markState(null, this.mark), '', reopen);
+      this.pushAddress(reopen);
     } else {
       this.truncate(base);
     }
-    this.resting = this.current();
+    this.resting = reopen ?? base;
   }
 
   /**
@@ -377,11 +383,28 @@ export class PanelHistory {
       depth: dialogs.length > 0 ? this.mark.depth + 1 : 0,
       under: skip,
     };
+    this.pushAddress(url);
+  }
+
+  /**
+   * Pushes `url` as the entry `this.mark` describes. The same address is pushed without telling
+   * Next; another page (filters, searches) goes through the router, whose entry stamp() marks
+   * once it is written; a change of dialogs only is a plain pushState (Next syncs its URL).
+   */
+  private pushAddress(url: string): void {
+    const { history } = this.win;
     if (url === this.current()) {
       history.pushState(markState(history.state, this.mark), '');
-    } else {
-      history.pushState(markState(null, this.mark), '', url);
+      return;
     }
+    const dialogs = this.getDialogs();
+    const samePage =
+      dialogs.closeAll(splitUrl(url).search) === dialogs.closeAll(this.win.location.search);
+    if (!samePage && dialogs.navigate) {
+      dialogs.navigate(url);
+      return;
+    }
+    history.pushState(markState(null, this.mark), '', url);
   }
 
   /**

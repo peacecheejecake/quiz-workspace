@@ -175,6 +175,7 @@ export function WorkspaceHome({
   const panelHistory = usePanelHistory({
     open: openDialogs,
     closeAll: (search) => withoutPanels(search, executedFilter()),
+    navigate: (url) => router.push(url, { scroll: false }),
   });
   function closeTo(url: string) {
     panelHistory.close(url);
