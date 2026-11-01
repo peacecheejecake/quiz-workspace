@@ -26,12 +26,19 @@
   }
 }
 
+/*
+ * Reduced motion: no transition or animation at all. Not a near-zero duration: with the default
+ * `transition-property: all` that made every style change a one-frame transition, so computed
+ * styles still reported the start value for a frame (UX7-CSS). Exit animations need no stand-in:
+ * Radix presence unmounts at once when `animation-name` is `none`, and nothing in the kit waits
+ * for `transitionend` under reduced motion (useAnimatedHeight skips it).
+ */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+    animation: none !important;
+    transition: none !important;
   }
 }

@@ -238,10 +238,13 @@
 @media (prefers-reduced-transparency: reduce) {
   .glass-surface { background: var(--color-glass-solid); backdrop-filter: none; }
 }
+/* 짧은 duration이 아니라 끈다(UX7-CSS 2026-11-02): transition-property 기본값이 all이라 0.01ms는 모든 스타일 변경을 1 frame transition으로 만들어 computed style이 한 frame 동안 시작 값을 보였다. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
 ```
+
+reduced motion에서는 transition·animation이 전혀 실행되지 않으므로 상태 변화(색·테두리·크기)는 같은 frame에 computed style에 반영된다. 종료 animation에 기대는 overlay(Radix dialog·popover·menu·toast, `FloatingSidePanel`)는 `animation-name: none`이면 Radix presence가 바로 unmount하므로 그대로 닫히고, kit에서 `transitionend`를 기다리는 `useAnimatedHeight`는 reduced motion에서 전환을 시작하지 않는다. `transitionend`/`animationend`에 의존하는 새 코드는 reduced motion에서도 끝나는 경로(타이머 또는 즉시 완료)를 둔다. 품질 suite `A11Y-10`이 같은 frame 반영과 overlay 닫힘을 검사한다.
 
 ## 4. Typography / Layout / Elevation
 
@@ -296,7 +299,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
   hover는 `@media (hover: hover)` 안에서만 적용해 터치 후 hover가 남지 않게 하고, 비활성(`:disabled`)에는 적용하지 않는다. pressed는 모든 입력에 적용한다. focus 중인 테두리 컨트롤은 hover 중에도 focus 경계 하나를 유지한다(아래 "Focus 경계는 하나"). 기능 코드는 kit `Button`/`IconButton`을 쓰고, 부득이한 버튼형 클래스도 위 토큰만 쓴다.
 - **Dropdown 메뉴 (v1.2.2, UX3b):** 성격이 다른 항목은 `DropdownMenuGroup` + `DropdownMenuLabel`(그룹 이름, `aria-labelledby`로 연결)과 `DropdownMenuSeparator`로 나눈다(예: Workspace 전환 메뉴의 "내 Workspace" 목록과 "모든 Workspace 보기"). 링크로 렌더링되는 항목(`asChild` + `<a>`/Next `Link`)은 방문·hover·focus·누름 어느 상태에서도 밑줄이 없고 메뉴 글자색(`--color-text-primary`, danger 항목은 `--color-danger`)을 유지하며, kit의 항목 스타일이 이를 보장하므로 기능 코드는 따로 지정하지 않는다. 현재 항목(`aria-current`)은 굵기로 표시한다.
 - **열린 목록의 현재 항목은 닫기 (UX7-SELECT, 2026-11-01):** 열린 `Select` 목록이나 Dropdown 메뉴에서 현재 선택된(체크·`aria-current`) 항목을 누르면 값은 그대로 두고 목록이 닫히며 focus는 trigger로 돌아간다. 마우스 클릭, 터치 탭(iPhone Safari 포함), 키보드 Enter/Space 모두 첫 입력에 닫힌다. `Select`는 터치·펜으로 열 때 Radix의 "여는 동작의 pointerup 무시" 보호를 쓰지 않는다: 탭은 pointerup 뒤에 click으로 열리므로 그 보호가 다음 탭(목록 맨 위의 선택 항목)의 pointerup을 취소했고, iOS Safari는 취소된 터치 pointerup의 click을 보내지 않아 첫 탭이 무시됐다. 마우스로 열 때는 보호를 유지해 trigger를 누른 포인터가 떼어지는 순간 항목이 골라지지 않는다.
-- **전환:** 상태 전환은 `--duration-state`/`--easing-standard`(kit 변수 `--qz-transition-fast`), `prefers-reduced-motion: reduce`에서는 즉시(`@quiz/design-tokens/base.css`).
+- **전환:** 상태 전환은 `--duration-state`/`--easing-standard`(kit 변수 `--qz-transition-fast`), `prefers-reduced-motion: reduce`에서는 transition 없이 즉시(`@quiz/design-tokens/base.css`, §3.3).
 - **메뉴·선택 항목 설명은 Tooltip:** 선택지 옆 설명 문구는 항상 보이는 텍스트 대신 공통 `Tooltip`(hover·키보드 focus)으로 보여 주고(hover 지연: 일반 tooltip `TOOLTIP_DELAY_MS` 300ms, 선택지 설명 `TOOLTIP_DESCRIPTION_DELAY_MS` 700ms — 포인터가 선택지 목록을 지나갈 때 설명이 연달아 뜨지 않게 함. 키보드 focus는 지연 없이 즉시, v1.2.2), 같은 문구를 숨김 텍스트로 `aria-describedby`에 연결한다. hover가 없는 기기(`(hover: none)`)에서는 설명을 인라인 텍스트로 계속 표시한다. 오답·정답 표시, 비활성 사유처럼 필수 정보는 tooltip으로 옮기지 않는다.
 
 ## 5. Floating Side Panel
