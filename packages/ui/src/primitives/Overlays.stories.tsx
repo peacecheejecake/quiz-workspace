@@ -95,7 +95,9 @@ export const Toast: Story = {
       description: {
         story:
           'Toasts are announced politely (errors assertively), pause on hover/focus, can be ' +
-          'swiped or dismissed with Escape, and the region is reachable with F8.',
+          'swiped or dismissed with Escape, and the region is reachable with F8. Success and ' +
+          'error toasts lead with a check / alert icon and a hidden "성공"/"오류" word; there ' +
+          'is no coloured left bar (UX7-SHARE-EXPIRY).',
       },
     },
   },
