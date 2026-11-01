@@ -54,6 +54,9 @@ export function QuestionManageMenu({
   }, [router, generateHref]);
   const afterClose = (action: () => void) => () => window.setTimeout(action, 0);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  function showDetail(focus: DetailFocus) {
+    window.setTimeout(() => onShowDetail(focus, triggerRef.current), 0);
+  }
   return (
     // Non-modal: a modal menu that opens a dialog can leave the page inert.
     <DropdownMenu modal={false}>
@@ -67,12 +70,8 @@ export function QuestionManageMenu({
         />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" aria-label={label}>
-        <DropdownMenuItem onSelect={afterClose(() => onShowDetail('answers', triggerRef.current))}>
-          정답·해설 보기
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={afterClose(() => onShowDetail('history', triggerRef.current))}>
-          수정 이력·출처
-        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => showDetail('answers')}>정답·해설 보기</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => showDetail('history')}>수정 이력·출처</DropdownMenuItem>
         {manage && generateHref ? (
           <>
             <DropdownMenuSeparator />
