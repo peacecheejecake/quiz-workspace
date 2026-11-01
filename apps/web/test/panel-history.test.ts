@@ -49,6 +49,8 @@ function fakeWindow(
     return found;
   };
   const capture = new Set<(event: PopStateEvent) => void>();
+  /** Page lifecycle listeners (pagehide, pageshow) of the current document. */
+  const lifecycle = new Map<string, Set<(event: Event) => void>>();
   const rendered: string[] = [];
   const timers = new Map<number, () => void>();
   let nextTimer = 1;
@@ -86,11 +88,20 @@ function fakeWindow(
     get navigation() {
       return opts.navigation ? { canGoForward: index < entries.length - 1 } : undefined;
     },
-    addEventListener: (_type, listener, options) => {
-      expect(options).toEqual({ capture: true });
-      capture.add(listener);
+    addEventListener: (type: string, listener: (event: never) => void, options?: unknown) => {
+      if (type === 'popstate') {
+        expect(options).toEqual({ capture: true });
+        capture.add(listener as (event: PopStateEvent) => void);
+        return;
+      }
+      const set = lifecycle.get(type) ?? new Set();
+      set.add(listener as (event: Event) => void);
+      lifecycle.set(type, set);
     },
-    removeEventListener: (_type, listener) => capture.delete(listener),
+    removeEventListener: (type: string, listener: (event: never) => void) => {
+      if (type === 'popstate') capture.delete(listener as (event: PopStateEvent) => void);
+      else lifecycle.get(type)?.delete(listener as (event: Event) => void);
+    },
     setTimeout: (handler) => {
       timers.set(nextTimer, handler);
       return nextTimer++;
@@ -153,10 +164,23 @@ function fakeWindow(
      */
     traverseToDocument() {
       if (pendingGo === null) return;
+      this.leaveDocument();
       index += pendingGo;
       pendingGo = null;
+    },
+    /** The current document unloads (pagehide), taking its listeners and timers with it. */
+    leaveDocument() {
+      for (const listener of lifecycle.get('pagehide') ?? []) {
+        listener({ persisted: false } as PageTransitionEvent);
+      }
       capture.clear();
+      lifecycle.clear();
       timers.clear();
+    },
+    /** A Back/Forward into another document that the browser loads afresh. */
+    goToDocument(delta: number) {
+      win.history.go(delta);
+      this.traverseToDocument();
     },
     fireTimers() {
       for (const [id, handler] of [...timers]) {
@@ -388,6 +412,36 @@ describe('PanelHistory', () => {
     expect(fake.urls()).toEqual(['/workspaces', '/w', '/w']);
     expect(fake.storage.size).toBe(0);
     expectBackLeavesForwardStaysClosed(fake);
+  });
+
+  it('reload → Back across documents → Forward never reopens the dialog', () => {
+    const { fake, history } = controller();
+    history.push('/w?panel=documents');
+    // Reloaded with the dialog open (a new document on the same entry).
+    fake.leaveDocument();
+    new PanelHistory(() => fake.win).attach();
+    // Back: the base belongs to the previous document, loaded afresh (no BFCache).
+    fake.goToDocument(-1);
+    expect(fake.url()).toBe('/w');
+    new PanelHistory(() => fake.win).attach();
+    expect(fake.urls()).toEqual(['/workspaces', '/w', '/w']);
+    expectBackLeavesForwardStaysClosed(fake);
+  });
+
+  it('a reload, a question change or a Forward across documents drops nothing', () => {
+    const { fake, history } = controller();
+    history.push('/w?question=1');
+    history.push('/w?question=2');
+    const entries = fake.urls();
+    fake.leaveDocument(); // reload on question 2
+    new PanelHistory(() => fake.win).attach();
+    fake.goToDocument(-1); // back to question 1: the panel stays open
+    new PanelHistory(() => fake.win).attach();
+    expect(fake.url()).toBe('/w?question=1');
+    fake.goToDocument(1);
+    new PanelHistory(() => fake.win).attach();
+    expect(fake.url()).toBe('/w?question=2');
+    expect(fake.urls()).toEqual(entries);
   });
 
   it('ignores a stale or foreign close handover', () => {
