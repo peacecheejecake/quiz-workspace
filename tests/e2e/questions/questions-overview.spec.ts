@@ -913,7 +913,7 @@ test(
 
     /** A history entry before the home (the workspace list), then the home itself. */
     async function arrive(search = ''): Promise<void> {
-      await page.goto('/workspaces');
+      await gotoAfterReload('/workspaces');
       await expect(page).toHaveURL(onList);
       await page.goto(`${home}${search}`);
       await expect(overviewUi.heatmap(page)).toBeVisible();
@@ -941,6 +941,21 @@ test(
       await forward();
       await expect(page).toHaveURL(noPanel);
       await expect(closed).toBeHidden();
+    }
+    /**
+     * WebKit loads the home afresh on the first Forward above; the second one restores an entry
+     * the previous document wrote, which Next may then load once more (the same closed address).
+     * A navigation the test starts meanwhile is interrupted by that reload: start it again.
+     */
+    async function gotoAfterReload(url: string): Promise<void> {
+      try {
+        await page.goto(url);
+      } catch (error) {
+        if (!String(error).includes('interrupted by another navigation')) throw error;
+        await expect(page).toHaveURL(noPanel);
+        await page.waitForLoadState('load');
+        await page.goto(url);
+      }
     }
 
     // 문서 관리 · 이력 · 링크 공유: open, close (button or Escape), Back, Forward.

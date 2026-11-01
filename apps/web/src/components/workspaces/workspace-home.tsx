@@ -24,9 +24,9 @@
 // State lives in the URL: heatmap filters (overview-filters.ts), the 문제 search `q`, the 본문
 // search `text` and its options (search/state.ts), `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
 // chapter header's `정리 노트` button opens it), and `question` (the practice panel). Dialogs and
-// panels open on a new history entry and closing one rewinds those entries (usePanelHistory,
-// UX7-BACK: Back after a close never reopens it; Next syncs useSearchParams, no server round
-// trip); filter and 문제 search changes write the URL at once and use router.replace (the server
+// panels open on a new history entry and closing one (its button or Back) drops those entries
+// (usePanelHistory, UX7-BACK/UX7-BACK-2: neither Back nor Forward reopens it; Next syncs
+// useSearchParams, no server round trip); filter and 문제 search changes write the URL at once and use router.replace (the server
 // re-reads the overview, rereadHeatmap; the 문제 search only once typing pauses). The 본문 search
 // writes its keys in place (replace).
 import {
@@ -103,6 +103,8 @@ import {
   withPanel,
   withSummaryPanel,
   withoutPanels,
+  openDialogs,
+  closeDialog,
   type HomePanel,
 } from '@/lib/workspaces/home';
 import { usePanelHistory } from './use-panel-history';
@@ -169,11 +171,15 @@ export function WorkspaceHome({
   const readOnly = workspace.archived ? 'archived' : workspace.role === 'viewer' ? 'viewer' : null;
 
   // --- dialogs ------------------------------------------------------------------------------
-  // Closing a dialog goes back to the entry before the first open (UX7-BACK); that entry gets
-  // the current URL with every dialog closed (see closeTo).
-  const panelHistory = usePanelHistory();
+  // Closing a dialog (its button or Back) drops the entries that opened it, so neither Back nor
+  // Forward reopens it (UX7-BACK, UX7-BACK-2); what changed meanwhile (filters) is kept.
+  const panelHistory = usePanelHistory({
+    open: openDialogs,
+    close: (search, dialog) => closeDialog(search, dialog, executedFilter()),
+    closeAll: (search) => withoutPanels(search, executedFilter()),
+  });
   function closeTo(url: string) {
-    panelHistory.close(url, (search) => withoutPanels(search, executedFilter()));
+    panelHistory.close(url);
   }
   const allowed = (panel: HomePanel) =>
     (panel !== 'share' || isOwner) &&
