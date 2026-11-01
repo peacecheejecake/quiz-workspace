@@ -1,6 +1,6 @@
-# Design System v1.2.5 — Minimal Glass (Platform v1.2)
+# Design System v1.2.6 — Minimal Glass (Platform v1.2)
 
-**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19 · v1.2.1 버튼 hover 개정 2026-10-19 · v1.2.2 밀도(compact)·스위치·메뉴·Dropzone·Breadcrumb·패널 쌓기 개정 2026-10-20 · v1.2.5 floating glass 불투명도 개정 2026-11-01  
+**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19 · v1.2.1 버튼 hover 개정 2026-10-19 · v1.2.2 밀도(compact)·스위치·메뉴·Dropzone·Breadcrumb·패널 쌓기 개정 2026-10-20 · v1.2.5 floating glass 불투명도 개정 2026-11-01 · v1.2.6 Toast 왼쪽 bar 제거·CopyButton 2026-11-01  
 **적용:** 전역 Workspace UI, 문서 뷰어, 검색, Questions heatmap, floating side panels  
 **키워드:** minimalism, restrained glassmorphism, readability, focus, consistent semantics
 
@@ -386,6 +386,10 @@ function Marker({ favorite }: { favorite: boolean }) {
 `ProgressBar` (v1.2.3, UX5-UI): 한 단계 작업(변형 생성·묶음 생성·등록·Fork)의 진행률은 모두 이 공통 컴포넌트다(여러 단계인 업로드·처리·가져오기는 아래 `StepProgress`, UX6-PROGRESS; `role="progressbar"`, 이름 필수, `value` 없음 = indeterminate로 `aria-valuenow` 없음). 값이 바뀌면 fill 폭이 `--duration-progress`(600ms) `--easing-standard`로 부드럽게 이어진다 — 서버가 보고하는 단계(예: 2→40→60→90%) 사이를 끊김 없이 잇기만 하고 보고되지 않은 진행률을 지어내지 않는다. `prefers-reduced-motion`에서는 transition 없이 바로 바뀐다. indeterminate는 fill이 아니라 막대 안을 천천히 지나는 반투명 줄(reduced motion에서는 멈춘 줄)이고 fill은 0%에 머문다 — 그래서 값이 생길 때(예: 준비 중 → 10%) fill이 앞으로만 움직인다(UX6-PROGRESS 2026-10-28; 이전 30% 고정 fill은 10%로 뒤로 갔다).
 
 `StepProgress` (v1.2.4, UX6-PROGRESS 2026-10-28): 여러 단계를 차례로 거치는 작업(문서 업로드·처리 `업로드 → 분석 → 색인`, 문제 PDF 가져오기 `업로드 → PDF 분석 → 문제 추출`)의 진행 표시. 순서 목록(`<ol>`, 이름 "<label> 단계")의 각 단계는 완료(체크 아이콘)·진행 중(단계 번호, 굵은 글씨, `aria-current="step"`)·대기(단계 번호, 보조 텍스트 색)이고 상태를 시각적으로 숨긴 텍스트("완료"/"진행 중"/"대기")로도 읽어 색만으로 구분하지 않는다. 그 아래 하나의 `role="progressbar"`가 단계 수만큼 같은 폭의 칸으로 나뉜다: 완료 칸은 가득, 현재 칸은 그 단계의 진행률(`value`, 없으면 indeterminate 줄무늬), 대기 칸은 빈 칸. 결정: 단계마다 0→100%를 다시 채우는 막대 대신 칸으로 나눈 전체 막대를 쓴다 — 전체 막대는 뒤로 가지 않고(이전 피드백: "다 찼다가 줄어들었다"), 현재 단계의 진행도 그 칸에서 그대로 보인다. `aria-valuenow`는 전체 진행률((완료 단계 수 + 현재 단계 비율) / 단계 수), `aria-valuetext`는 "2/3단계: 분석 중, 30%". 칸 fill은 `transform: scaleX`를 `--duration-progress` `--easing-standard`로 전환하고 `prefers-reduced-motion`에서는 전환·줄무늬 움직임이 없다. 단계가 하나뿐인 작업(Fork·변형 생성·묶음 생성·등록)은 `ProgressBar`를 그대로 쓴다.
+
+`Toast` (v1.2.6, UX7-SHARE-EXPIRY 2026-11-01): glass 표면 + 제목/설명 + 닫기 버튼. 왼쪽 accent 테두리(UX1의 3px 색 bar)는 없앴다 — "선택 표시 bar 없음"(§4.1)과 같은 이유로 색 bar로 상태를 전하지 않는다. 종류는 색이 아니라 맨 앞 아이콘과 숨김 텍스트로 구분한다: `success` 체크 아이콘(`--color-success`) + "성공", `error` 경고 아이콘(`--color-danger`) + "오류", `neutral` 아이콘 없음. 숨김 텍스트는 제목 앞에 붙어 함께 읽힌다(`role="status"`/assertive 안내 그대로).
+
+`CopyButton` (v1.2.6, UX7-SHARE-EXPIRY): 클립보드 복사 버튼의 공통 패턴. `onCopy`가 성공하면 버튼 안 복사 아이콘이 체크 아이콘으로, 이름이 `copiedLabel`(기본 "복사됨")로 바뀌고, 버튼 안의 시각적으로 숨긴 polite live region이 `announcement`를 한 번 알린다(성공 toast를 따로 띄우지 않아 두 번 읽히지 않음). 약 2초(`COPY_FEEDBACK_MS`) 뒤 돌아온다. 두 이름·두 아이콘을 같은 grid 칸에 겹쳐 두고 보이지 않는 쪽은 `visibility: hidden`이라 바뀌어도 버튼 크기·위치가 변하지 않는다. 교체는 애니메이션 없이 즉시다. 실패(`onCopy`가 reject 또는 `false`)하면 체크를 표시하지 않고 오류 안내는 호출한 화면이 한다(링크 공유: 링크 칸 선택 + 오류 toast). 사용처: 링크 공유 dialog의 `링크 복사`(WS-SHARE-01-AC08). DOC-02 `전체 복사`는 버튼이 아니라 메뉴 항목이라 기존 상태 문구("복사했습니다")를 유지한다.
 
 `Dropzone` (v1.2.2, UX3b): 파일을 끌어다 놓는 영역. 2px 점선 `--color-border-strong` 테두리, drag-over(`data-dragging`)는 실선 accent 테두리 + `--color-state-selected` 배경 + accent 아이콘(테두리 모양도 바뀌어 색만으로 구분하지 않음). 끌어다 놓기와 별개로 항상 실제 "파일 선택" 버튼(키보드·터치·스크린 리더 경로, 설명 문구는 `aria-describedby`)을 둔다. `accept`·`multiple`·`disabled`를 받고, 선택·드롭한 파일은 `onFiles`, `accept`에 맞지 않는 드롭은 `onReject`로 전달한다.
 
