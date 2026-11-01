@@ -34,7 +34,7 @@ const HIDDEN = { visibility: 'hidden' } as const;
  */
 export function CopyButton({
   label,
-  copiedLabel = '복사됨',
+  copiedLabel = '복사 완료',
   announcement,
   onCopy,
   feedbackMs = COPY_FEEDBACK_MS,

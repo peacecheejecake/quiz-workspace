@@ -289,7 +289,7 @@ describe('WorkspaceSharingPanel', () => {
     expect(within(panel).queryByRole('button', { name: '만료일 삭제' })).toBeNull();
   });
 
-  it('WS-SHARE-01-AC08 a copy shows "복사됨" instead of a success toast', async () => {
+  it('WS-SHARE-01-AC08 a copy shows "복사 완료" instead of a success toast', async () => {
     const user = userEvent.setup();
     const writeText = vi.fn(async () => undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
@@ -303,7 +303,7 @@ describe('WorkspaceSharingPanel', () => {
     await user.click(within(panel).getByRole('button', { name: '링크 만들기' }));
     await user.click(await within(panel).findByRole('button', { name: '링크 복사' }));
     expect(writeText).toHaveBeenCalledWith(url(L1, SECRET_1));
-    expect(await within(panel).findByRole('button', { name: '복사됨' })).toBeVisible();
+    expect(await within(panel).findByRole('button', { name: '복사 완료' })).toBeVisible();
     expect(screen.getAllByText('링크를 복사했습니다.')).toHaveLength(1);
   });
 

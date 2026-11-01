@@ -141,7 +141,7 @@ export const CopyButtons: StoryObj<typeof CopyButton> = {
       description: {
         story:
           'CopyButton (UX7-SHARE-EXPIRY): after a successful copy the icon becomes a check and ' +
-          'the label "복사됨" for 2 s, announced once by a polite live region; both states share ' +
+          'the label "복사 완료" for 2 s, announced once by a polite live region; both states share ' +
           'one grid cell so the button never resizes. A failed copy shows no check.',
       },
     },
