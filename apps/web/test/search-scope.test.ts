@@ -5,6 +5,7 @@ import {
   addressBarContentKey,
   hasSearchableBody,
   hasSearchableQuestions,
+  isSearchableBody,
 } from '../src/lib/search/scope';
 
 const book = { document_type: 'book' as const, active_revision_id: 'r1' };
@@ -12,11 +13,14 @@ const paper = { document_type: 'question_paper' as const, active_revision_id: 'r
 const processingBook = { document_type: 'book' as const, active_revision_id: null };
 
 describe('hasSearchableBody', () => {
-  it('needs a published document, a book or a question paper', () => {
+  it('SEARCH-01-AC13 needs a published book: question papers do not count (UX7-SEARCH-2)', () => {
     expect(hasSearchableBody([])).toBe(false);
     expect(hasSearchableBody([processingBook])).toBe(false);
     expect(hasSearchableBody([book])).toBe(true);
-    expect(hasSearchableBody([paper])).toBe(true);
+    expect(hasSearchableBody([paper])).toBe(false);
+    expect(hasSearchableBody([paper, book])).toBe(true);
+    expect(isSearchableBody(paper)).toBe(false);
+    expect(isSearchableBody(book)).toBe(true);
   });
 
   it('never blocks on a list that failed to load', () => {
@@ -40,9 +44,9 @@ describe('addressBarContentKey', () => {
     expect(addressBarContentKey({ q: 'chlorine' })).toBe('');
   });
 
-  it('searches question papers unless papers=0, and is empty without a query', () => {
+  it('ignores the retired papers key, and is empty without a query', () => {
     expect(addressBarContentKey({ text: 'x', papers: '1' })).toBe('text=x');
-    expect(addressBarContentKey({ text: 'x', papers: '0' })).toBe('text=x&papers=0');
+    expect(addressBarContentKey({ text: 'x', papers: '0' })).toBe('text=x');
     expect(addressBarContentKey({ mode: 'keyword' })).toBe('');
   });
 });

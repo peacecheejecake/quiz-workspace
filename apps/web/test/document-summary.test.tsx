@@ -271,7 +271,6 @@ describe('the summary panel owns the URL document key (Codex P2)', () => {
     mode: 'hybrid' as const,
     documentId: null,
     chapterId: null,
-    includeQuestionPapers: false,
     ...q,
   });
 

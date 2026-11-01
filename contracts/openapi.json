@@ -6415,7 +6415,7 @@
             "type": "string"
           },
           "document_type": {
-            "description": "`book` or `question_paper`.",
+            "description": "`book` (question papers are never searched, so never `question_paper`).",
             "title": "Document Type",
             "type": "string"
           },
@@ -6577,7 +6577,8 @@
           },
           "include_question_papers": {
             "default": false,
-            "description": "Also search question-paper documents (left out of book search by default).",
+            "deprecated": true,
+            "description": "Ignored: question papers are never searched (UX7-SEARCH-2). Accepted so older clients keep working.",
             "title": "Include Question Papers",
             "type": "boolean"
           },

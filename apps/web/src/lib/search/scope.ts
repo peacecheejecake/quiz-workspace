@@ -8,14 +8,19 @@ export interface BodyDocument {
   readonly active_revision_id?: string | null;
 }
 
+/** A published document the 본문 search covers: a 교재 (or 교재+문제), never a 문제지 (UX7-SEARCH-2). */
+export function isSearchableBody(d: BodyDocument): boolean {
+  return d.active_revision_id != null && d.document_type !== 'question_paper';
+}
+
 /**
- * Whether the 본문 search has a published document to search (a book or a question paper: both
- * are searched, UX7-SEARCH). An unknown list (failed to load) counts as searchable so a load
+ * Whether the 본문 search has a published book to search (question papers are found by the 문제
+ * search only, UX7-SEARCH-2). An unknown list (failed to load) counts as searchable so a load
  * failure never blocks the search.
  */
 export function hasSearchableBody(documents: readonly BodyDocument[], listFailed = false): boolean {
   if (listFailed) return true;
-  return documents.some((d) => d.active_revision_id != null);
+  return documents.some(isSearchableBody);
 }
 
 /** Whether the 문제 search has something to search; unknown (null) never blocks. */

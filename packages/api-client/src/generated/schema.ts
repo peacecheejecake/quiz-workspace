@@ -4433,7 +4433,7 @@ export type components = {
       document_title: string;
       /**
        * Document Type
-       * @description `book` or `question_paper`.
+       * @description `book` (question papers are never searched, so never `question_paper`).
        */
       document_type: string;
       /**
@@ -4502,7 +4502,8 @@ export type components = {
       document_ids?: string[] | null;
       /**
        * Include Question Papers
-       * @description Also search question-paper documents (left out of book search by default).
+       * @deprecated
+       * @description Ignored: question papers are never searched (UX7-SEARCH-2). Accepted so older clients keep working.
        * @default false
        */
       include_question_papers?: boolean;
