@@ -501,7 +501,8 @@ export const runUi = {
   selectAll: (panel: Locator) => panel.getByRole('checkbox', { name: /^(전체 선택|select all)$/i }),
   chapter: (panel: Locator, title: string) =>
     panel.getByRole('checkbox', { name: new RegExp(`^${title}`) }),
-  chapters: (panel: Locator) => panel.getByRole('checkbox', { name: /^\d+장 /i }),
+  /** Chapter checkboxes ("1장 물의 순환 …"), not the question ones ("1장 1번 · …"). */
+  chapters: (panel: Locator) => panel.getByRole('checkbox', { name: /^\d+장 (?!\d+번 · )/i }),
   expand: (panel: Locator, title: string) =>
     panel.getByRole('button', { name: new RegExp(`${title}.*(펼치기|접기|expand|collapse)`, 'i') }),
   question: (panel: Locator, chapter: number, n: number) =>

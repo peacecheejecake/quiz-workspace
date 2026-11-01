@@ -52,7 +52,6 @@ import {
 } from '../fixtures/sharing.ts';
 import {
   answerKeysIn,
-  createNumberedQuestions,
   createQuestion,
   getOverview,
   homePath,
@@ -82,6 +81,10 @@ test.describe.configure({ timeout: JOB_TIMEOUT_MS + 120_000 });
 
 function unique(label: string): string {
   return `${label}-${randomUUID().slice(0, 8)}`;
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function nth<T>(items: readonly T[], i: number): T {
@@ -242,8 +245,9 @@ test(
     // Hold the API reads: the panel must already be open, busy, before any data arrives.
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
+    const isApi = (url: URL) => url.pathname.includes('/api/');
     await page.route(
-      (url) => url.pathname.includes('/api/'),
+      isApi, // the same function instance unroutes it below
       async (route) => {
         await gate;
         await route.continue();
@@ -258,7 +262,7 @@ test(
     await expect(page).toHaveURL(/[?&]practice=new(&|$)/);
     await expect(page).toHaveURL(/[?&]source=bank(&|$)/);
     release();
-    await page.unroute((url) => url.pathname.includes('/api/'));
+    await page.unroute(isApi);
 
     await expect(runUi.chapters(panel)).toHaveCount(2);
     await expect(runUi.chapter(panel, CH1)).toBeVisible();
@@ -277,12 +281,14 @@ test(
     const first = runUi.question(panel, 1, 1);
     await expect(first).toBeVisible();
     await expect(first).toHaveAccessibleName(
-      new RegExp(`^1장 1번 · ${rangeStem(s.label, 1, 1).slice(0, 20)}`),
+      new RegExp(`^1장 1번 · ${escapeRegExp(rangeStem(s.label, 1, 1).slice(0, 20))}`),
     );
     for (const n of [4, 5, 6]) await expect(runUi.question(panel, 1, n)).toHaveCount(0);
     await expect(runUi.question(panel, 2, 3)).toHaveCount(0); // the merged duplicate
-    await expect(panel).not.toContainText(rangeStem(s.label, 1, 4));
-    await expect(panel).not.toContainText(rangeStem(s.label, 1, 5));
+    // The list shows only a stem prefix: compare prefixes (a full stem would never be there).
+    for (const n of [4, 5, 6]) {
+      await expect(panel).not.toContainText(rangeStem(s.label, 1, n).slice(0, 30));
+    }
 
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
@@ -455,7 +461,11 @@ test(
     // A wrong answer, chosen by its text wherever the shuffle put it, graded by its stable id.
     const wrong = wrongOption(mcq);
     await answerMcq(panel, wrong.text, RESULT_TEXT.incorrect);
-    await expect(panel).toContainText(correctText(mcq));
+    // The correct option's row says so in text (UX7-QDISPLAY "정답", described-by), not by color.
+    await expect(runUi.option(panel, correctText(mcq))).toHaveAccessibleDescription(
+      /정답|correct/i,
+    );
+    await expect(runUi.option(panel, wrong.text)).toHaveAccessibleDescription(/내 선택|your/i);
     await expect(panel).toContainText(explanation);
     const [attempt] = await listAttempts(s.owner, mcq.id);
     expect(attempt).toMatchObject({ result: 'incorrect' });
@@ -496,7 +506,11 @@ test(
     const label = unique('qview01-ac05');
     const owner = await workspaceFactory.member('qview01-ac05');
     const ws = await workspaceFactory.create(owner);
-    const bank = await createNumberedQuestions(owner, ws.id, label, 10);
+    // MCQs with explanations: the mock copies carry them, so the result can show one.
+    const bank: Question[] = [];
+    for (let n = 1; n <= 10; n += 1) {
+      bank.push(await createQuestion(owner, ws.id, { ...flatMcq(label, n), question_number: n }));
+    }
     const name = `모의 ${label}`;
     const exam = await createShuffleMockExam(
       owner,
@@ -538,7 +552,7 @@ test(
       await panel.getByRole('radio').first().check();
       await runUi.submit(panel).click();
       await expect(runUi.result(panel)).toContainText(/정답|오답|correct|incorrect/i);
-      await expect(panel).toContainText(/해설|explanation/i);
+      await expect(panel).toContainText(new RegExp(`${escapeRegExp(label)}-\\d+ 해설`));
       if (k < 3) await runUi.next(panel).click();
     }
     await runUi.showResults(panel).click();
@@ -663,8 +677,8 @@ test(
 
     // Another user's run: not found on screen and through the API.
     await page.goto(practiceRunPath(s.workspaceId, foreignRun.id));
-    panel = runUi.panel(page);
-    await expect(runUi.notFound(panel)).toBeVisible();
+    // The notice may sit in the panel or replace it: look on the whole page.
+    await expect(runUi.notFound(page.locator('body'))).toBeVisible();
     expect((await getPracticeRun(s.owner, foreignRun.id)).status).toBe(404);
 
     // A guest of a share link: no 문제 풀기, the preview stays non-modal and read-only.

@@ -462,7 +462,7 @@ def test_c02_order_is_heatmap_or_the_stored_seed_shuffle_and_never_changes(seed:
 
     # The run read carries counts and progress only: no ids list, no question content.
     run = owner.ok("GET", f"/practice-runs/{ordered['id']}")
-    assert not (_keys(run) & {"item_ids", "items", "stem", "options"} | ANSWER_KEYS)
+    assert not (_keys(run) & ({"item_ids", "items", "stem", "options"} | ANSWER_KEYS))
     assert set(run["summary"]) >= {"correct", "incorrect", "pending", "skipped"}
 
 
