@@ -102,11 +102,10 @@
 //   Create / 설정 바꾸기: StepProgress list "진행 단계" with 옵션 → 범위; step 1 textbox "이름",
 //   group "변형 유형" with four checkboxes (an unavailable one is disabled and described by
 //   "이 환경에서는 AI 변형을 쓸 수 없습니다."), spinbutton "문항 수", combobox "난이도", button "다음";
-//   step 2 QuestionRangePicker (shared with QVIEW-01): checkbox "전체 선택" (aria-checked mixed when
-//   partial), one group per chapter named by the chapter title holding a checkbox of the same
-//   name (mixed when partial) and a button "<장 제목> 펼치기" (aria-expanded) that shows one
-//   checkbox per question ("<n>장 <m>번 · <발문 앞부분> · <유형>"), the filter checkbox
-//   "즐겨찾기만" (or a toggle button with aria-pressed), text "선택 n문제 중 m문항을 만듭니다", the AI
+//   step 2 QuestionRangePicker (shared with QVIEW-01; labels in fixtures/range-picker.ts: "전체
+//   선택", chapter checkboxes by title — "챕터 없음" for questions without one — with "<장 제목>
+//   펼치기", question checkboxes "<n>장 <m>번 · …", "선택 n문제", the "상태 필터" chips incl.
+//   "즐겨찾기만"), text "선택 n문제 중 m문항을 만듭니다", the AI
 //   notice "…AI 서비스로 전송됩니다.", buttons "이전" and "만들기" (설정 바꾸기: "다시 만들기"), disabled
 //   and described by "출제 범위를 고르세요" when nothing is selected; "아직 확정된 문제가 없습니다."
 //   Detail: heading (name), badge, meta with "<k>회차", buttons 풀기 · 설정 바꾸기 · 다시 만들기 ·
@@ -229,6 +228,8 @@ export function scriptedStems(name: MockSourceName): string[] {
 
 export const CH1 = '1장 물의 순환';
 export const CH2 = '2장 정수 처리';
+/** The picker's group of questions without a chapter (the Heatmap's "챕터 없음"). */
+export const NO_CHAPTER = '챕터 없음';
 
 /**
  * CONFIRMED question input for scenario source `name`: the stem ends with ` [<marker>]` (K5)
@@ -538,11 +539,9 @@ export const MOCK_TEXT = {
   needsReview: /^(확인 필요|needs review)$/i,
 } as const;
 
-/** "선택 n문제 중 m문항을 만듭니다" (or just "선택 n문제" in the picker summary). */
-export function selectedText(selected: number, made?: number): RegExp {
-  return made === undefined
-    ? new RegExp(`선택 ${selected}문제(?!\\d)|${selected} selected`, 'i')
-    : new RegExp(`선택 ${selected}문제 중 ${made}문항을 만듭니다|${made} of ${selected}`, 'i');
+/** "선택 n문제 중 m문항을 만듭니다" (the picker's own "선택 n문제": rangePickerUi.selected). */
+export function makeText(selected: number, made: number): RegExp {
+  return new RegExp(`선택 ${selected}문제 중 ${made}문항을 만듭니다|${made} of ${selected}`, 'i');
 }
 
 /** "n개 중 k개" (any k when omitted) — the generation progress value text. */
@@ -615,18 +614,7 @@ export const mockUi = {
   make: (dialog: Locator) => dialog.getByRole('button', { name: /^(만들기|create)$/i }),
   remake: (scope: Locator) => scope.getByRole('button', { name: /^(다시 만들기|regenerate)$/i }),
   retry: (scope: Locator) => scope.getByRole('button', { name: /^(다시 시도|try again)$/i }),
-  // QuestionRangePicker (QVIEW-01, shared)
-  selectAll: (dialog: Locator) =>
-    dialog.getByRole('checkbox', { name: /^(전체 선택|select all)$/i }),
-  chapter: (dialog: Locator, title: string) =>
-    dialog.getByRole('checkbox', { name: new RegExp(`^${escape(title)}`) }),
-  expand: (dialog: Locator, title: string) =>
-    dialog.getByRole('button', { name: new RegExp(`^${escape(title)} (펼치기|expand)`, 'i') }),
-  question: (dialog: Locator, label: RegExp) => dialog.getByRole('checkbox', { name: label }),
-  favoriteOnly: (dialog: Locator) =>
-    dialog
-      .getByRole('checkbox', { name: /^(즐겨찾기만|favou?rites only)$/i })
-      .or(dialog.getByRole('button', { name: /^(즐겨찾기만|favou?rites only)$/i })),
+  // QuestionRangePicker: fixtures/range-picker.ts rangePickerUi (shared with QVIEW-01)
   // Detail
   questions: (dialog: Locator) =>
     dialog.getByRole('list', { name: /^(문제 목록|questions)$/i }).getByRole('listitem'),

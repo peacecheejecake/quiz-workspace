@@ -40,7 +40,8 @@ import {
   progressText,
   questionRow,
   scriptedStems,
-  selectedText,
+  makeText,
+  NO_CHAPTER,
   startMockExamsOffStack,
   STATUS_TEXT,
   VARIATION_LABEL,
@@ -49,6 +50,7 @@ import {
   type MockSourceName,
   type VariationType,
 } from '../fixtures/mock-exams.ts';
+import { openRangeFilters, rangePickerUi as picker } from '../fixtures/range-picker.ts';
 import {
   createShareLink,
   expect,
@@ -156,19 +158,17 @@ async function fillOptions(
   await mockUi.next(dialog).click();
 }
 
-/** The whole 만들기 flow with a range of whole chapters (`null` = "챕터 없음"). */
+/** The whole 만들기 flow with a range of whole chapters, by title (CH1, CH2, NO_CHAPTER). */
 async function createInUi(
   dialog: Locator,
   title: string,
   types: readonly VariationType[],
   count: number,
-  chapters: readonly (string | null)[],
+  chapterTitles: readonly string[],
 ): Promise<void> {
   await mockUi.add(dialog).click();
   await fillOptions(dialog, title, types, count);
-  for (const chapter of chapters) {
-    await mockUi.chapter(dialog, chapter ?? '챕터 없음').check();
-  }
+  for (const chapter of chapterTitles) await picker.chapter(dialog, chapter).check();
   await mockUi.make(dialog).click();
   await expect(mockUi.heading(dialog, title)).toBeVisible();
 }
@@ -287,13 +287,13 @@ test(
     await fillOptions(dialog, '중간 점검', ['PARAPHRASE', 'INVERT_POLARITY'], 4);
 
     // Step 2: the range lists the six confirmed questions, never the drafts.
-    await mockUi.selectAll(dialog).check();
-    for (const chapter of [CH1, CH2]) await mockUi.expand(dialog, chapter).click();
-    await expect(mockUi.question(dialog, /^\d장 \d+번/)).toHaveCount(6);
+    await picker.selectAll(dialog).check();
+    for (const chapter of [CH1, CH2]) await picker.expand(dialog, chapter).click();
+    await expect(picker.questions(dialog)).toHaveCount(6);
     for (const draft of drafts) {
       await expect(dialog.getByText(draft.revision.stem.slice(0, 12))).toHaveCount(0);
     }
-    await expect(dialog.getByText(selectedText(6, 4))).toBeVisible();
+    await expect(dialog.getByText(makeText(6, 4))).toBeVisible();
     await expect(dialog.getByText(MOCK_TEXT.aiNotice)).toBeVisible();
     await mockUi.make(dialog).click();
 
@@ -348,51 +348,52 @@ test(
     await mockUi.add(dialog).click();
     await fillOptions(dialog, '범위 점검', ['PARAPHRASE'], 4);
 
-    const all = mockUi.selectAll(dialog);
+    const all = picker.selectAll(dialog);
     await all.check();
-    await expect(dialog.getByText(selectedText(6))).toBeVisible();
-    await mockUi.chapter(dialog, CH2).uncheck();
-    await expect(dialog.getByText(selectedText(4))).toBeVisible();
+    await expect(picker.selected(dialog, 6)).toBeVisible();
+    await picker.chapter(dialog, CH2).uncheck();
+    await expect(picker.selected(dialog, 4)).toBeVisible();
     await expect(all).toHaveAttribute('aria-checked', 'mixed');
-    await mockUi.expand(dialog, CH1).click();
-    await expect(mockUi.expand(dialog, CH1)).toHaveAttribute('aria-expanded', 'true');
-    await mockUi.question(dialog, /^1장 2번/).uncheck();
-    await expect(mockUi.chapter(dialog, CH1)).toHaveAttribute('aria-checked', 'mixed');
-    await expect(dialog.getByText(selectedText(3))).toBeVisible();
+    await picker.expand(dialog, CH1).click();
+    await expect(picker.expand(dialog, CH1)).toHaveAttribute('aria-expanded', 'true');
+    await picker.question(dialog, 1, 2).uncheck();
+    await expect(picker.chapter(dialog, CH1)).toHaveAttribute('aria-checked', 'mixed');
+    await expect(picker.selected(dialog, 3)).toBeVisible();
 
     // A filter keeps only the visible questions in the selection.
-    await mockUi.favoriteOnly(dialog).click();
-    await expect(mockUi.question(dialog, /^\d장 \d+번/)).toHaveCount(1);
-    await expect(dialog.getByText(selectedText(1))).toBeVisible();
-    await mockUi.favoriteOnly(dialog).click();
-    await expect(dialog.getByText(selectedText(1))).toBeVisible();
+    await openRangeFilters(dialog);
+    await picker.favoriteFilter(dialog).click();
+    await expect(picker.questions(dialog)).toHaveCount(1);
+    await expect(picker.selected(dialog, 1)).toBeVisible();
+    await picker.favoriteFilter(dialog).click();
+    await expect(picker.selected(dialog, 1)).toBeVisible();
 
     await all.click();
-    await expect(dialog.getByText(selectedText(6))).toBeVisible();
+    await expect(picker.selected(dialog, 6)).toBeVisible();
     await all.click();
-    await expect(dialog.getByText(selectedText(0))).toBeVisible();
+    await expect(picker.selected(dialog, 0)).toBeVisible();
     await expect(mockUi.make(dialog)).toBeDisabled();
     await expect(dialog.getByText(MOCK_TEXT.noRange)).toBeVisible();
 
     // The same with the keyboard only (Space toggles, Tab moves on).
     await all.focus();
     await page.keyboard.press('Space');
-    await expect(dialog.getByText(selectedText(6))).toBeVisible();
-    await mockUi.chapter(dialog, CH2).focus();
+    await expect(picker.selected(dialog, 6)).toBeVisible();
+    await picker.chapter(dialog, CH2).focus();
     await page.keyboard.press('Space');
-    await expect(dialog.getByText(selectedText(4))).toBeVisible();
+    await expect(picker.selected(dialog, 4)).toBeVisible();
     await expect(all).toHaveAttribute('aria-checked', 'mixed');
-    await mockUi.question(dialog, /^1장 3번/).focus();
+    await picker.question(dialog, 1, 3).focus();
     await page.keyboard.press('Space');
-    await expect(mockUi.chapter(dialog, CH1)).toHaveAttribute('aria-checked', 'mixed');
-    await expect(dialog.getByText(selectedText(3))).toBeVisible();
+    await expect(picker.chapter(dialog, CH1)).toHaveAttribute('aria-checked', 'mixed');
+    await expect(picker.selected(dialog, 3)).toBeVisible();
     await page.keyboard.press('Tab');
     await expect(dialog.locator(':focus')).toHaveCount(1);
     await all.focus();
     await page.keyboard.press('Space');
-    await expect(dialog.getByText(selectedText(6))).toBeVisible();
+    await expect(picker.selected(dialog, 6)).toBeVisible();
     await page.keyboard.press('Space');
-    await expect(dialog.getByText(selectedText(0))).toBeVisible();
+    await expect(picker.selected(dialog, 0)).toBeVisible();
     await expect(mockUi.make(dialog)).toBeDisabled();
   },
 );
@@ -524,13 +525,20 @@ test(
     await questionRow(viewerDialog, 1).click();
     const preview = mockUi.viewer(page, 1);
     await expect(preview).toBeVisible();
+    await expect(preview).toContainText('(고친 발문)');
     await expect(mockUi.edit(preview)).toHaveCount(0);
     await expect(mockUi.remove(preview)).toHaveCount(0);
     await expect(preview.getByText('고친 해설입니다.')).toHaveCount(0);
     await expect(preview.getByText(/^(정답|correct)$/i)).toHaveCount(0);
     const res = await viewer.api.request('GET', `/mock-exams/${exam.id}/questions?include=answers`);
     expect([200, 403]).toContain(res.status);
-    if (res.status === 200) expect(answerKeysIn(res.body)).toEqual([]);
+    if (res.status === 200) {
+      expect((res.body as { items?: unknown[] } | undefined)?.items?.length).toBe(3);
+      expect(answerKeysIn(res.body)).toEqual([]);
+    }
+    const plain = await listMockQuestions(viewer, exam.id);
+    expect(plain).toHaveLength(3);
+    expect(answerKeysIn(plain)).toEqual([]);
   },
 );
 
@@ -562,8 +570,8 @@ test(
     await mockUi.variation(dialog, 'PARAPHRASE').uncheck();
     await mockUi.variation(dialog, 'OPTION_SHUFFLE').check();
     await mockUi.next(dialog).click();
-    await mockUi.chapter(dialog, CH1).uncheck();
-    await mockUi.chapter(dialog, CH2).check();
+    await picker.chapter(dialog, CH1).uncheck();
+    await picker.chapter(dialog, CH2).check();
     await mockUi.remake(dialog).click();
     let confirm = mockUi.confirm(page);
     await expect(confirm).toContainText(MOCK_TEXT.replaceConfirm);
@@ -584,8 +592,8 @@ test(
     await expect(mockUi.variation(dialog, 'OPTION_SHUFFLE')).toBeChecked();
     await expect(mockUi.variation(dialog, 'PARAPHRASE')).not.toBeChecked();
     await mockUi.next(dialog).click();
-    await expect(mockUi.chapter(dialog, CH2)).toBeChecked();
-    await expect(mockUi.chapter(dialog, CH1)).not.toBeChecked();
+    await expect(picker.chapter(dialog, CH2)).toBeChecked();
+    await expect(picker.chapter(dialog, CH1)).not.toBeChecked();
 
     // A failing round (문구 변형 on 2장, provider unavailable): progress over the old questions,
     // then the alert; the 2회차 questions stay.
@@ -723,23 +731,25 @@ test(
     const dialog = await openMockExams(page);
 
     // 정오 반전 × 3 in one call: the multi-answer inversion fails twice and is dropped.
-    await createInUi(dialog, '정오 반전 점검', ['INVERT_POLARITY'], 3, [s.ch1]);
+    await createInUi(dialog, '정오 반전 점검', ['INVERT_POLARITY'], 3, [CH1]);
     await expect(dialog.getByText(STATUS_TEXT.partial).first()).toBeVisible({
       timeout: MOCK_TIMEOUT_MS,
     });
     await expect(dialog.getByText(partialText(3, 2))).toBeVisible();
     await expect(mockUi.questions(dialog)).toHaveCount(2);
-    const multiStem = scriptedStems('inv-multi')[0] ?? '';
+    const [multiStem] = scriptedStems('inv-multi');
+    if (!multiStem) throw new Error('inv-multi has no scripted item');
     await expect(dialog.getByText(multiStem.slice(0, 20))).toHaveCount(0);
     const inverted = await exams('정오 반전 점검');
     if (!inverted?.latest_generation) throw new Error('no generation');
     const invQuestions = await listMockQuestions(s.owner, inverted.id, true);
+    expect(invQuestions).toHaveLength(2);
     expect(invQuestions.map((q) => q.stem)).not.toContain(multiStem);
     expect(await llmCalls(s.owner, inverted.latest_generation)).toBe(2);
 
     // A batch the model cannot answer as a whole: halved once, every source recovered.
     await mockUi.backToList(dialog).click();
-    await createInUi(dialog, '깨진 묶음 점검', ['PARAPHRASE'], 4, [s.ch2]);
+    await createInUi(dialog, '깨진 묶음 점검', ['PARAPHRASE'], 4, [CH2]);
     await expect(dialog.getByText(STATUS_TEXT.ready).first()).toBeVisible({
       timeout: MOCK_TIMEOUT_MS,
     });
@@ -750,7 +760,7 @@ test(
 
     // Every candidate fails validation: 실패 with the reason.
     await mockUi.backToList(dialog).click();
-    await createInUi(dialog, '전부 실패 점검', ['PARAPHRASE'], 2, [null]);
+    await createInUi(dialog, '전부 실패 점검', ['PARAPHRASE'], 2, [NO_CHAPTER]);
     await expect(mockUi.alert(dialog)).toBeVisible({ timeout: MOCK_TIMEOUT_MS });
     await expect(mockUi.alert(dialog)).toContainText(MOCK_TEXT.noValid);
     await expect(dialog.getByText(STATUS_TEXT.failed).first()).toBeVisible();
@@ -770,7 +780,7 @@ test(
       }
       await expect(mockUi.variation(offDialog, 'OPTION_SHUFFLE')).toBeEnabled();
       await fillOptions(offDialog, '섞기만', ['OPTION_SHUFFLE'], 2);
-      await mockUi.chapter(offDialog, CH1).check();
+      await picker.chapter(offDialog, CH1).check();
       await mockUi.make(offDialog).click();
       await expect(offDialog.getByText(STATUS_TEXT.ready).first()).toBeVisible({
         timeout: MOCK_TIMEOUT_MS,
