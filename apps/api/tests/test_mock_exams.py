@@ -20,6 +20,8 @@ from quiz_api.api.mock_exams import (
     question_out,
 )
 from quiz_api.errors import ProblemException, ProblemType
+from quiz_api.mock_exam_ranges import chapter_ranks
+from quiz_api.question_ranges import QuestionRange, RangeRow, select_rows
 from quiz_api.repositories.jobs import public_result
 from quiz_api.repositories.mock_exams import GenerationRecord, QuestionRecord
 from quiz_api.settings import Settings
@@ -155,3 +157,31 @@ def test_only_counts_of_a_mock_exam_job_result_are_public() -> None:
         "error_code": "no_valid_questions",
     }
     assert public_result("question.generate", raw) is None
+
+
+# --- range (MOCK-01-C03/C08) -----------------------------------------------------------------
+
+
+def range_row(chapter: uuid.UUID | None) -> RangeRow:
+    return RangeRow(uuid.uuid4(), chapter, "MCQ", "unseen", False, False, uuid.uuid4())
+
+
+def test_chapter_ranks_follow_the_heatmap_with_unchaptered_questions_last() -> None:
+    ch1, ch2 = uuid.uuid4(), uuid.uuid4()
+    rows = [range_row(ch1), range_row(ch1), range_row(ch2), range_row(None), range_row(None)]
+    assert chapter_ranks(rows) == [0, 0, 1, 2, 2]
+    assert chapter_ranks([range_row(None)]) == [0]
+    assert chapter_ranks([]) == []
+
+
+def test_a_saved_range_drops_questions_gone_since_and_a_new_one_refuses_them() -> None:
+    live, gone = range_row(None), uuid.uuid4()
+    picked = QuestionRange(question_ids=[live.question_id, gone], excluded_question_ids=[gone])
+    with pytest.raises(ProblemException) as info:
+        select_rows([live], picked)
+    assert info.value.problem_type is ProblemType.RANGE_INVALID
+    assert select_rows([live], picked, drop_unknown=True) == [live]
+    # A range naming only an archived (merged away) duplicate resolves to nothing, never to the
+    # kept question.
+    kept = range_row(None)
+    assert select_rows([kept], QuestionRange(question_ids=[gone]), drop_unknown=True) == []

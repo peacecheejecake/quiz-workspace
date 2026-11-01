@@ -4066,7 +4066,7 @@
             "type": "integer"
           },
           "range": {
-            "$ref": "#/components/schemas/MockExamRange"
+            "$ref": "#/components/schemas/QuestionRange"
           },
           "status": {
             "enum": [
@@ -4179,7 +4179,7 @@
             "$ref": "#/components/schemas/MockExamConfig"
           },
           "range": {
-            "$ref": "#/components/schemas/MockExamRange"
+            "$ref": "#/components/schemas/QuestionRange"
           },
           "seed": {
             "anyOf": [
@@ -4336,7 +4336,7 @@
           "range": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/MockExamRange"
+                "$ref": "#/components/schemas/QuestionRange"
               },
               {
                 "type": "null"
@@ -4662,58 +4662,6 @@
           "base_revision_id"
         ],
         "title": "MockExamQuestionUpdate",
-        "type": "object"
-      },
-      "MockExamRange": {
-        "additionalProperties": false,
-        "description": "The range a person chose (QVIEW-01-C01): re-resolved on every generation.",
-        "properties": {
-          "all": {
-            "default": false,
-            "title": "All",
-            "type": "boolean"
-          },
-          "chapter_ids": {
-            "items": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "maxItems": 1000,
-            "title": "Chapter Ids",
-            "type": "array"
-          },
-          "excluded_question_ids": {
-            "items": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "maxItems": 5000,
-            "title": "Excluded Question Ids",
-            "type": "array"
-          },
-          "filters": {
-            "additionalProperties": true,
-            "title": "Filters",
-            "type": "object"
-          },
-          "question_ids": {
-            "items": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "maxItems": 5000,
-            "title": "Question Ids",
-            "type": "array"
-          }
-        },
-        "title": "MockExamRange",
         "type": "object"
       },
       "MockExamRevisionRef": {

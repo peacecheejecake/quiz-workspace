@@ -296,14 +296,15 @@ export function startMockExamsOffStack(): Promise<SummaryOffStack> {
 
 export interface QuestionRange {
   readonly all: boolean;
-  /** Outline chapter ids; `null` = the "챕터 없음" group. */
-  readonly chapter_ids: readonly (string | null)[];
+  /** Outline chapter ids; `'none'` = the "챕터 없음" group (QVIEW-01-C01). */
+  readonly chapter_ids: readonly string[];
   readonly question_ids: readonly string[];
   readonly excluded_question_ids: readonly string[];
   readonly filters: {
-    readonly statuses?: readonly DotStatus[];
+    readonly status?: readonly DotStatus[];
     readonly favorite?: boolean;
-    readonly question_types?: readonly QuestionType[];
+    readonly retry?: boolean;
+    readonly type?: QuestionType;
   };
 }
 
@@ -315,7 +316,7 @@ export const ALL: QuestionRange = {
   filters: {},
 };
 
-export function chaptersRange(...chapterIds: (string | null)[]): QuestionRange {
+export function chaptersRange(...chapterIds: string[]): QuestionRange {
   return { ...ALL, all: false, chapter_ids: chapterIds };
 }
 

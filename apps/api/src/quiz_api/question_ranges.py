@@ -88,14 +88,25 @@ class RangeRow:
     status: DotStatus
     is_favorite: bool
     needs_retry: bool
+    revision_id: uuid.UUID
+    """The question's active revision (what a mock exam generation pins)."""
 
 
 def select_range(rows: Sequence[RangeRow], range_: QuestionRange) -> list[uuid.UUID]:
     """Pure part of the resolver: `rows` are the Heatmap in order; the result keeps that order.
     Raises `range-invalid` for unknown ids (see the module docstring)."""
+    return [r.question_id for r in select_rows(rows, range_)]
+
+
+def select_rows(
+    rows: Sequence[RangeRow], range_: QuestionRange, *, drop_unknown: bool = False
+) -> list[RangeRow]:
+    """`select_range` returning the rows. With `drop_unknown` an id that is no longer a live
+    CONFIRMED question (deleted, archived, merged away since the range was saved) is ignored
+    instead of refused: a saved range re-resolved "with the questions of the time"."""
     live = {r.question_id for r in rows}
     unknown = [i for i in (*range_.question_ids, *range_.excluded_question_ids) if i not in live]
-    if unknown:
+    if unknown and not drop_unknown:
         raise range_invalid()
     chapter_ids = {c for c in range_.chapter_ids if c != NO_CHAPTER}
     no_chapter = NO_CHAPTER in range_.chapter_ids
@@ -104,7 +115,7 @@ def select_range(rows: Sequence[RangeRow], range_: QuestionRange) -> list[uuid.U
     f = range_.filters
     wanted = set(f.status) if f.status else None
     return [
-        r.question_id
+        r
         for r in rows
         if (
             range_.all
@@ -145,6 +156,7 @@ class QuestionRangeResolver:
         stmt = (
             select(
                 questions.c.id,
+                questions.c.active_revision_id,
                 questions.c.chapter_id,
                 questions.c.question_type,
                 merged.c.first_viewed_at,
@@ -181,6 +193,7 @@ class QuestionRangeResolver:
                     status=derive_dot_status(state),
                     is_favorite=bool(r.is_favorite),
                     needs_retry=bool(r.needs_retry),
+                    revision_id=r.active_revision_id,
                 )
             )
         return out
@@ -199,13 +212,27 @@ class QuestionRangeResolver:
         self, workspace_id: uuid.UUID, user_id: uuid.UUID, range_: QuestionRange
     ) -> list[uuid.UUID]:
         """The range's question ids in Heatmap order (never empty)."""
-        chapter_ids = {c for c in range_.chapter_ids if isinstance(c, uuid.UUID)}
-        if self._known_chapters(workspace_id, chapter_ids) != chapter_ids:
-            raise range_invalid()
-        ids = select_range(self.heatmap_rows(workspace_id, user_id), range_)
-        if not ids:
+        rows = self.resolve_rows(workspace_id, user_id, range_)
+        if not rows:
             raise no_matching_questions()
-        return ids
+        return [r.question_id for r in rows]
+
+    def resolve_rows(
+        self,
+        workspace_id: uuid.UUID,
+        user_id: uuid.UUID,
+        range_: QuestionRange,
+        *,
+        drop_unknown: bool = False,
+    ) -> list[RangeRow]:
+        """The range's Heatmap rows in order (possibly empty). `drop_unknown` re-resolves a saved
+        range: ids and chapters that are gone are ignored instead of 422 (see `select_rows`)."""
+        chapter_ids = {c for c in range_.chapter_ids if isinstance(c, uuid.UUID)}
+        if not drop_unknown and self._known_chapters(workspace_id, chapter_ids) != chapter_ids:
+            raise range_invalid()
+        return select_rows(
+            self.heatmap_rows(workspace_id, user_id), range_, drop_unknown=drop_unknown
+        )
 
 
 def stored_range(range_: QuestionRange) -> dict[str, Any]:
