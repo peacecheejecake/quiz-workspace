@@ -286,7 +286,7 @@ describe('the summary panel owns the URL document key (Codex P2)', () => {
     const cleared = new URLSearchParams(mergeContentSearch(open, search({ query: 'y' })));
     expect(cleared.get('document')).toBe(DOC);
     expect(cleared.get('section')).toBeNull();
-    expect(cleared.get('q')).toBe('y');
+    expect(cleared.get('text')).toBe('y');
     expect(keepSummaryDocument(open, '?q=z')).toBe(`?q=z&document=${DOC}`);
   });
 

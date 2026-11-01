@@ -1,7 +1,9 @@
 'use client';
 
 // `DocumentExcerptPanel` (docs/design-system.md §5.1): non-modal FloatingSidePanel next to the
-// results with the hit's paragraph-complete excerpt, its location and the jump into the PDF.
+// results (a bottom sheet on phones) with the hit's paragraph-complete excerpt — the text around the
+// keyword, the keyword marked (SEARCH-01-AC11) and scrolled into view —, its location and the jump
+// into the PDF.
 // The jump target is refined to the block that holds the match (lib/search/jump.ts) while the
 // panel is open; a click before that finished waits for it.
 import { Button, FloatingSidePanel } from '@quiz/ui';
@@ -44,6 +46,7 @@ export function DocumentExcerptPanel({
   onClose,
 }: DocumentExcerptPanelProps) {
   const router = useRouter();
+  const bodyRef = useRef<HTMLDivElement | null>(null);
   const [resolved, setResolved] = useState<{ key: string; target: JumpTarget } | null>(null);
   const pendingRef = useRef<{ key: string; promise: Promise<JumpTarget> } | null>(null);
 
@@ -60,6 +63,18 @@ export function DocumentExcerptPanel({
   }, [client, item]);
 
   const key = item ? hitKey(item) : null;
+
+  // The first query term (else the matched passage) in view once the panel shows a hit.
+  const visible = open && item !== null;
+  useEffect(() => {
+    if (!visible) return;
+    const frame = window.requestAnimationFrame(() => {
+      const mark =
+        bodyRef.current?.querySelector('mark[data-term]') ?? bodyRef.current?.querySelector('mark');
+      mark?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [visible, key]);
   const target = item ? (resolved?.key === key ? resolved.target : apiJumpTarget(item)) : null;
 
   const onJump = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -105,7 +120,7 @@ export function DocumentExcerptPanel({
       }
     >
       {item ? (
-        <div className={styles.panelBody}>
+        <div ref={bodyRef} className={styles.panelBody}>
           {item.breadcrumb.length > 1 ? (
             <nav aria-label="위치">
               <ol className={styles.panelBreadcrumb}>

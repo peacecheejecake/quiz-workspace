@@ -162,25 +162,32 @@ describe('search address-bar state', () => {
     };
     const params = Object.fromEntries(new URLSearchParams(searchParamsFor(q)));
     expect(parseSearchParams(params)).toEqual(q);
+    // Without question papers (never written by the home since UX7-SEARCH, still parsed).
+    const books = { ...q, includeQuestionPapers: false };
+    const bookParams = Object.fromEntries(new URLSearchParams(searchParamsFor(books)));
+    expect(bookParams.papers).toBe('0');
+    expect(parseSearchParams(bookParams)).toEqual(books);
   });
 
   it('drops invalid values and a chapter without its document', () => {
     expect(
-      parseSearchParams({ q: '  water ', mode: 'fuzzy', document: 'nope', section: CHAPTER }),
+      parseSearchParams({ text: '  water ', mode: 'fuzzy', document: 'nope', section: CHAPTER }),
     ).toEqual({
       query: 'water',
       mode: 'hybrid',
       documentId: null,
       chapterId: null,
-      includeQuestionPapers: false,
+      includeQuestionPapers: true,
     });
-    expect(parseSearchParams({ q: 'x'.repeat(5000) }).query).toHaveLength(1000);
+    expect(parseSearchParams({ text: 'x'.repeat(5000) }).query).toHaveLength(1000);
+    // UX7-SEARCH: `q` is the 문제 search, not the 본문 query.
+    expect(parseSearchParams({ q: 'water' }).query).toBe('');
     expect(searchParamsFor(parseSearchParams({}))).toBe('');
   });
 
   it('merges a content search into the home URL and keeps the other keys', () => {
     const merged = mergeContentSearch(
-      `?panel=history&chapter=none&status=retry&q=old&mode=keyword&section=${CHAPTER}`,
+      `?panel=history&chapter=none&status=retry&q=문제&text=old&mode=keyword&section=${CHAPTER}`,
       {
         query: '염소',
         mode: 'hybrid',
@@ -193,12 +200,13 @@ describe('search address-bar state', () => {
     expect(params.get('panel')).toBe('history');
     expect(params.get('chapter')).toBe('none');
     expect(params.get('status')).toBe('retry');
-    expect(params.get('q')).toBe('염소');
+    expect(params.get('q')).toBe('문제'); // the 문제 search is not the content search's
+    expect(params.get('text')).toBe('염소');
     expect(params.has('mode')).toBe(false);
     expect(params.get('document')).toBe(DOC);
     expect(params.has('section')).toBe(false);
-    expect(params.get('papers')).toBe('1');
-    expect(mergeContentSearch('?q=x', { ...parseSearchParams({}) })).toBe('');
+    expect(params.has('papers')).toBe(false);
+    expect(mergeContentSearch('?text=x', { ...parseSearchParams({}) })).toBe('');
   });
 
   it('builds the DOC-02 deep link with page, block and the hit revision', () => {

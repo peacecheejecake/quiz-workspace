@@ -38,10 +38,10 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-const { ContentSearchOptions, ContentSearchResults, dropsSelectedPaper, useContentSearch } =
+const { ContentSearchOptions, ContentSearchResults, useContentSearch } =
   await import('../src/components/search/content-search');
 
-/** The home's unified search reduced to the content part. */
+/** The home's 본문 search (UX7-SEARCH) reduced to its parts. */
 function SearchScreen({
   workspaceId,
   documents,
@@ -56,7 +56,7 @@ function SearchScreen({
   client: SearchClient;
   /** What the home hands to `sync` when the address bar changes (Back/Forward). */
   syncTo?: SearchQuery | null;
-  /** What the home passes with each search: whether 문제 is a target (UX4). */
+  /** What the caller passes with each search for question papers (the home: always true). */
   papers?: boolean;
 }) {
   const search = useContentSearch({ workspaceId, initial, runInitial: true, client });
@@ -67,15 +67,9 @@ function SearchScreen({
         role="search"
         onSubmit={(event) => {
           event.preventDefault();
-          // Mirrors the home: papers follow 문제, and a selected paper goes without it.
           search.search(
             draft,
-            papers === undefined
-              ? undefined
-              : {
-                  includeQuestionPapers: papers,
-                  clearDocument: dropsSelectedPaper(search.documentId, documents, papers),
-                },
+            papers === undefined ? undefined : { includeQuestionPapers: papers },
           );
         }}
       >
@@ -101,18 +95,13 @@ function SearchScreen({
 const WS = '22222222-2222-4222-8222-222222222222';
 const DOC = '11111111-1111-4111-8111-111111111111';
 const REV = '44444444-4444-4444-8444-444444444444';
-const PAPER = '33333333-3333-4333-8333-333333333333';
-const PAPER_DOCS: SearchDocumentOption[] = [
-  { id: DOC, title: 'Water Book', isQuestionPaper: false },
-  { id: PAPER, title: '모의고사', isQuestionPaper: true },
-];
 
 const INITIAL: SearchQuery = {
   query: '',
   mode: 'hybrid',
   documentId: null,
   chapterId: null,
-  includeQuestionPapers: false,
+  includeQuestionPapers: true,
 };
 
 const hit = (overrides: Partial<SearchItem> = {}): SearchItem =>
@@ -188,7 +177,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('content search (unified search, scope 내용)', () => {
+describe("content search (the home's 본문 search)", () => {
   it('SEARCH-01-AC04 shows an empty state with guidance and mirrors the search in the home URL', async () => {
     const user = userEvent.setup();
     const client = makeClient(async () => response([], ['no keyword matches']));
@@ -203,7 +192,7 @@ describe('content search (unified search, scope 내용)', () => {
     expect(screen.queryByRole('list', { name: '검색 결과' })).toBeNull();
     expect(screen.getByRole('heading', { name: '본문 검색 결과' })).toBeVisible();
     // Merged into the home URL: the open dialog stays.
-    expect(window.location.search).toBe('?panel=history&q=zzz&mode=keyword');
+    expect(window.location.search).toBe('?panel=history&text=zzz&mode=keyword');
   });
 
   it('SEARCH-01-AC06 shows the degraded notice next to the empty state when BM25 finds nothing', async () => {
@@ -226,11 +215,17 @@ describe('content search (unified search, scope 내용)', () => {
     expect(notice).toBeVisible();
   });
 
-  it('searches question papers when the home says 문제 is a target, without a toggle (UX4)', async () => {
+  it('searches question papers unless the caller says otherwise, without a toggle (UX7-SEARCH)', async () => {
     const user = userEvent.setup();
     const client = makeClient(async () => response([]));
     const { unmount } = render(
-      <SearchScreen workspaceId={WS} documents={[]} initial={INITIAL} client={client} papers />,
+      <SearchScreen
+        workspaceId={WS}
+        documents={[]}
+        initial={{ ...INITIAL, includeQuestionPapers: false }}
+        client={client}
+        papers
+      />,
     );
     expect(screen.queryByRole('checkbox', { name: /문제지/ })).toBeNull();
 
@@ -239,7 +234,7 @@ describe('content search (unified search, scope 내용)', () => {
       query: 'water',
       includeQuestionPapers: true,
     });
-    expect(new URLSearchParams(window.location.search).get('papers')).toBe('1');
+    expect(new URLSearchParams(window.location.search).has('papers')).toBe(false);
     // An option change re-runs the search with the same choice.
     await user.click(screen.getByRole('radio', { name: '의미' }));
     expect(client.search.mock.calls[1]?.[1]).toMatchObject({
@@ -259,42 +254,7 @@ describe('content search (unified search, scope 내용)', () => {
     );
     await submit(user, 'water');
     expect(client.search.mock.calls[2]?.[1]).toMatchObject({ includeQuestionPapers: false });
-    expect(new URLSearchParams(window.location.search).get('papers')).toBeNull();
-  });
-
-  it('drops a selected question paper filter once 문제 is no longer a target (UX4 review)', async () => {
-    const user = userEvent.setup();
-    const client = makeClient(async () => response([]));
-    const props = { workspaceId: WS, documents: PAPER_DOCS, initial: INITIAL, client };
-    const { rerender } = render(<SearchScreen {...props} papers />);
-
-    await user.click(screen.getByRole('combobox', { name: '문서' }));
-    await user.click(await screen.findByRole('option', { name: '모의고사 (문제지)' }));
-    await submit(user, 'water');
-    expect(client.search.mock.calls.at(-1)?.[1]).toMatchObject({
-      documentId: PAPER,
-      includeQuestionPapers: true,
-    });
-
-    // 문제 unchecked: the paper filter is cleared before the books-only search runs.
-    rerender(<SearchScreen {...props} papers={false} />);
-    await submit(user, 'water');
-    expect(client.search.mock.calls.at(-1)?.[1]).toMatchObject({
-      documentId: null,
-      chapterId: null,
-      includeQuestionPapers: false,
-    });
-    const params = new URLSearchParams(window.location.search);
-    expect(params.has('document')).toBe(false);
-    expect(params.has('papers')).toBe(false);
-    expect(screen.getByRole('combobox', { name: '문서' })).toHaveTextContent('전체 문서');
-  });
-
-  it('keeps a selected book, or any document while papers are searched', () => {
-    expect(dropsSelectedPaper(PAPER, PAPER_DOCS, false)).toBe(true);
-    expect(dropsSelectedPaper(PAPER, PAPER_DOCS, true)).toBe(false);
-    expect(dropsSelectedPaper(DOC, PAPER_DOCS, false)).toBe(false);
-    expect(dropsSelectedPaper(null, PAPER_DOCS, false)).toBe(false);
+    expect(new URLSearchParams(window.location.search).get('papers')).toBe('0');
   });
 
   it('re-runs the submitted query when the mode changes and ignores an overtaken answer', async () => {
@@ -421,7 +381,7 @@ describe('content search (unified search, scope 내용)', () => {
     window.history.replaceState(
       null,
       '',
-      `/workspaces/${WS}?q=water&document=${DOC}&section=${stale}`,
+      `/workspaces/${WS}?text=water&document=${DOC}&section=${stale}`,
     );
     const client = makeClient(
       async () => response([hit()]),
@@ -440,7 +400,7 @@ describe('content search (unified search, scope 내용)', () => {
     expect(client.search.mock.calls[0]?.[1]).toMatchObject({ documentId: DOC, chapterId: null });
     expect(screen.getByText(/장 필터를 해제했습니다/)).toBeVisible();
     expect(screen.getByRole('combobox', { name: '장' })).toHaveTextContent('전체 장');
-    expect(window.location.search).toBe(`?q=water&document=${DOC}`);
+    expect(window.location.search).toBe(`?text=water&document=${DOC}`);
   });
 
   it('keeps a valid bookmarked chapter and searches with it', async () => {
@@ -531,7 +491,7 @@ describe('content search (unified search, scope 내용)', () => {
       expect(client.search).toHaveBeenCalledTimes(1);
       expect(client.search.mock.calls[0]?.[1]).toMatchObject({ query: 'chlorine' });
       expect(screen.getByText('hit for chlorine')).toBeVisible();
-      expect(window.location.search).toContain('q=chlorine');
+      expect(window.location.search).toContain('text=chlorine');
     });
 
     it('is dropped when the mode changes before the chapters arrive', async () => {

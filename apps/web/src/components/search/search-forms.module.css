@@ -1,8 +1,9 @@
-/* SEARCH-01 unified search form on the workspace home header (UX6): box + icon submit, the
-   문제 · 본문 scope checkboxes with their "설정" popover buttons, and the status message.
-   Semantic tokens only. */
+/* SEARCH-01 search forms on the workspace home (UX7-SEARCH): the header's 문제 search (box +
+   "설정") with the "본문 검색" disclosure under it, and the 본문 search form (box + icon submit +
+   "설정") at the top of the expanded 본문 search area. Semantic tokens only. */
 
-.form {
+/* The header's search column: 문제 search, then the 본문 disclosure button. */
+.column {
   display: grid;
   flex: 1 1 22rem;
   gap: var(--space-1);
@@ -11,9 +12,17 @@
   justify-items: start;
 }
 
+.form {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  min-width: 0;
+  max-width: 40rem;
+}
+
 .row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-2);
   width: 100%;
   min-width: 0;
@@ -24,25 +33,20 @@
   min-width: 0;
 }
 
-.scopes {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1) var(--space-5);
-  margin: 0;
-  padding: 0;
-  border: 0;
+/* The expanded 본문 search: its form, then the results. */
+.contentArea {
+  display: grid;
+  gap: var(--space-3);
   min-width: 0;
 }
 
-.scope {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
+.contentArea[hidden] {
+  display: none;
 }
 
-/* The small "설정" text button next to each checkbox. */
+/* The small "설정" text button next to a search box. */
 .settingsToggle {
+  flex: none;
   padding: var(--space-1);
   border: 0;
   border-radius: var(--radius-sm);
@@ -52,6 +56,7 @@
   font-size: var(--font-size-label);
   text-decoration: underline;
   text-underline-offset: 2px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -80,6 +85,13 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* A row of selects in the 문제 settings popover. */
+.optionRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-3);
+}
+
 .message {
   margin: 0;
   color: var(--color-text-secondary);
@@ -91,7 +103,7 @@
 }
 
 @media (max-width: 767px) {
-  .form {
+  .column {
     flex-basis: 100%;
     max-width: none;
   }

@@ -10,11 +10,12 @@
 //   &document=<id> (with panel=document-summary)             the summary panel's document (DOCSUM-01;
 //                                                            while that panel is open the key is
 //                                                            the panel's, not the content search's)
-//   ?q=<text>&scope=questions|content|none                    unified search (no scope = both;
-//                                                            none = both boxes off, UX6)
-//   ?mode=&document=&section=&papers=1                        content-search options (state.ts)
-// Pure helpers, plus the redirects of the pre-UX3c routes onto the home and of retired panel
-// values (`question-pdfs` → `documents`, UX7-DOCS).
+//   ?q=<text>                                               the 문제 search (heatmap, UX7-SEARCH)
+//   ?text=<text>&mode=&document=&section=                    the 본문 search and its options
+//                                                            (search/state.ts); the UX6 `scope`
+//                                                            key is migrated by legacyScopeRedirect
+// Pure helpers, plus the redirects of the pre-UX3c routes onto the home and of retired URL
+// state (`scope`, UX7-SEARCH; `question-pdfs` → `documents`, UX7-DOCS): homeRedirect.
 
 export const HOME_PANELS = [
   'documents',
@@ -36,8 +37,8 @@ export function isFloatingPanel(panel: HomePanel): boolean {
 }
 export const PANEL_PARAM = 'panel';
 
-export type SearchScope = 'all' | 'questions' | 'content' | 'none';
-export const SCOPE_PARAM = 'scope';
+/** The unified search's scope (UX6), retired by UX7-SEARCH: only read to migrate old URLs. */
+export const LEGACY_SCOPE_PARAM = 'scope';
 
 type RawParams = Readonly<Record<string, string | string[] | undefined>>;
 type Params = RawParams | URLSearchParams;
@@ -248,27 +249,6 @@ export function withoutSummaryDocument<T extends RawParams | URLSearchParams>(pa
   return rest as T;
 }
 
-export function parseScope(params: Params): SearchScope {
-  const value = all(params, SCOPE_PARAM)[0];
-  return value === 'questions' || value === 'content' || value === 'none' ? value : 'all';
-}
-
-export function scopeIncludesQuestions(scope: SearchScope): boolean {
-  return scope === 'all' || scope === 'questions';
-}
-
-export function scopeIncludesContent(scope: SearchScope): boolean {
-  return scope === 'all' || scope === 'content';
-}
-
-/** The scope for the "문제"/"본문" checkboxes (both may be off, UX6). */
-export function scopeOf(questions: boolean, content: boolean): SearchScope {
-  if (questions && content) return 'all';
-  if (questions) return 'questions';
-  if (content) return 'content';
-  return 'none';
-}
-
 /**
  * `search` with the given keys replaced: `undefined` keeps a key, `null`/'' removes it, a string
  * sets it. Returns '' or a string starting with `?`.
@@ -307,21 +287,43 @@ export function legacyQuestionsRedirect(workspaceId: string, params: RawParams):
 }
 
 /**
- * `/workspaces/:id/search?q=&mode=&document=&chapter=&papers=1` (SEARCH-01 before UX3c): the same
- * content search on the home. Its chapter filter is a document section, renamed `section` there
- * (the home's `chapter` is the heatmap's question chapter).
+ * `/workspaces/:id/search?q=&mode=&document=&chapter=` (SEARCH-01 before UX3c): the same 본문
+ * search on the home, its query as `text` (UX7-SEARCH). Its chapter filter is a document section,
+ * renamed `section` there (the home's `chapter` is the heatmap's question chapter). The old
+ * `papers` flag is dropped: question papers are always searched now.
  */
 export function legacySearchRedirect(workspaceId: string, params: RawParams): string {
   const source = toSearchParams(params);
   const out = new URLSearchParams();
-  for (const key of ['q', 'mode', 'document', 'papers']) {
+  const query = source.get('q');
+  if (query) out.set('text', query);
+  for (const key of ['mode', 'document']) {
     const value = source.get(key);
     if (value) out.set(key, value);
   }
   const chapter = source.get('chapter');
   if (chapter && out.has('document')) out.set('section', chapter);
-  out.set(SCOPE_PARAM, 'content');
   return workspaceHomePath(workspaceId, out.toString());
+}
+
+/**
+ * A home URL of the UX6 unified search (`scope=` present), migrated to the split searches
+ * (UX7-SEARCH), or null when there is nothing to migrate. `scope=content` searched the body only:
+ * its `q` becomes the 본문 `text`. Any other scope (`questions`, `none`) is dropped and `q` stays the
+ * 문제 search. The old `papers` flag is dropped. Every other key is kept.
+ */
+export function legacyScopeRedirect(workspaceId: string, params: RawParams): string | null {
+  const source = toSearchParams(params);
+  if (!source.has(LEGACY_SCOPE_PARAM)) return null;
+  const scope = source.get(LEGACY_SCOPE_PARAM);
+  source.delete(LEGACY_SCOPE_PARAM);
+  source.delete('papers');
+  const query = source.get('q');
+  if (scope === 'content') {
+    source.delete('q');
+    if (query && !source.has('text')) source.set('text', query);
+  }
+  return workspaceHomePath(workspaceId, source.toString());
 }
 
 /**
@@ -359,6 +361,21 @@ export function retiredPanelRedirect(workspaceId: string, params: RawParams): st
   for (const [key, value] of source) if (key !== PANEL_PARAM) out.append(key, value);
   for (const panel of panels) out.append(PANEL_PARAM, panel);
   return workspaceHomePath(workspaceId, out.toString());
+}
+
+/**
+ * Every migration of retired home URL state, applied together so an old link takes a single
+ * redirect: the UX6 search `scope` (legacyScopeRedirect, UX7-SEARCH), then retired `?panel=`
+ * values (retiredPanelRedirect, UX7-DOCS). Null when the URL is current.
+ */
+export function homeRedirect(workspaceId: string, params: RawParams): string | null {
+  const scoped = legacyScopeRedirect(workspaceId, params);
+  if (scoped === null) return retiredPanelRedirect(workspaceId, params);
+  const next: Record<string, string[]> = {};
+  for (const [key, value] of new URL(scoped, 'http://home').searchParams) {
+    (next[key] ??= []).push(value);
+  }
+  return retiredPanelRedirect(workspaceId, next) ?? scoped;
 }
 
 /** A pre-UX3c section page (`/documents`, `/history`, `/settings/sharing`): its dialog. */

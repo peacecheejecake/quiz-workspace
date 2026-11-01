@@ -3,15 +3,15 @@
 // Workspace home `/workspaces/:id` (QOV-01, docs/screens/questions-overview.md "Workspace 홈
 // 레이아웃", UX3c): the single page of a workspace, without a sidebar.
 //
-//   Workspace header  unified search (SEARCH-01-AC07: one box, icon submit, the 문제 · 본문 scope
-//                     checkboxes under it, each with a "설정" popover: the heatmap's chapter/type
-//                     filters for 문제, the content-search options for 본문; question papers are
-//                     searched whenever 문제 is checked, UX4; no searchable scope disables the
-//                     submit with a status message, UX6), then two
+//   Workspace header  the 문제 search (SEARCH-01-AC12: filters the heatmap as you type, no button;
+//                     its "설정" popover holds the heatmap's chapter/type filters) with the
+//                     "본문 검색" disclosure under it (AC10, collapsed by default), then two
 //                     button groups: `문서 n` · `문제` (editors' menu: 직접 추가 / 변형 출제, UX4;
-//                     no 전체 문제 since UX7-BANK, no PDF 관리 since UX7-DOCS), and, aligned right, `이력` · `공유하기` (icon
+//                     no 전체 문제 since UX7-BANK, no PDF 관리 since UX7-DOCS), and, aligned right,
+//                     `이력` · `공유하기` (icon
 //                     buttons; share for the owner only)
-//   content results   the 본문 search results when the scope includes 본문
+//   본문 search       when expanded: its form (box, icon submit, "본문 설정") and the results
+//                     (AC09; clicking a result opens the excerpt panel, AC11)
 //   문제 영역         the heatmap (QuestionsOverview)
 //   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 문제 생성 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
 //                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): non-modal
@@ -21,13 +21,16 @@
 //   문제 등록 editor  `?panel=question-create` (문제 › 직접 추가 and the empty heatmap, UX7-BANK): the
 //                     modal question editor, rendered by QuestionsOverview; not a stacked panel.
 //
-// State lives in the URL: heatmap filters (overview-filters.ts), `q`/`scope` and the content
-// options (search/state.ts), `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
+// State lives in the URL: heatmap filters (overview-filters.ts), the 문제 search `q`, the 본문
+// search `text` and its options (search/state.ts), `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
 // chapter header's `정리 노트` button opens it), and `question` (the practice panel). Dialog and panel
 // changes use history.pushState (Next syncs useSearchParams; no server round trip); filter and
-// search changes that alter the heatmap use router.replace (the server re-reads the overview).
+// 문제 search changes use router.replace (the server re-reads the overview; the 문제 search only
+// once typing pauses). The 본문 search writes its keys with history.replaceState.
 import {
   Button,
+  ChevronDownIcon,
+  ChevronUpIcon,
   FloatingSidePanel,
   HistoryIcon,
   IconButton,
@@ -37,7 +40,7 @@ import {
   type QuestionType,
 } from '@quiz/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from 'react';
 import { DocumentLibraryFeedback } from '@/components/documents/document-library-feedback';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { DocumentSummaryPanel } from '@/components/documents/summary/document-summary-panel';
@@ -51,10 +54,12 @@ import { QuestionsOverview } from '@/components/questions/overview/questions-ove
 import {
   ContentSearchOptions,
   ContentSearchResults,
-  dropsSelectedPaper,
   useContentSearch,
 } from '@/components/search/content-search';
-import { UnifiedSearchForm } from '@/components/search/unified-search-form';
+import { ContentSearchForm } from '@/components/search/content-search-form';
+import { QuestionSearch } from '@/components/search/question-search';
+import searchStyles from '@/components/search/search-forms.module.css';
+import { useLiveQuery } from '@/components/search/use-live-query';
 import { listChapterNotes } from '@/lib/notes/client';
 import { generatingChapters, type ChapterNoteList } from '@/lib/notes/model';
 import { WorkspaceSharingPanel } from '@/components/sharing/workspace-sharing-panel';
@@ -71,18 +76,18 @@ import {
 import { NO_CHAPTER_KEY, type PlacedQuestion } from '@/lib/questions/overview-placement';
 import type { QuestionFailureKind } from '@/lib/questions/problems';
 import type { SearchQuery } from '@/lib/search/client';
-import { addressBarContentKey, hasSearchableBody, searchReadiness } from '@/lib/search/scope';
-import { MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
+import {
+  addressBarContentKey,
+  hasSearchableBody,
+  hasSearchableQuestions,
+} from '@/lib/search/scope';
+import { CONTENT_QUERY_PARAM, MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
 import {
   keepNoteChapter,
   noteChapterOf,
   openChapterNote,
   parsePanels,
-  parseScope,
   patchSearch,
-  scopeIncludesContent,
-  scopeIncludesQuestions,
-  scopeOf,
   withChapterNote,
   summaryDocumentId,
   contentSearchParams,
@@ -93,7 +98,6 @@ import {
   withPanel,
   withSummaryPanel,
   type HomePanel,
-  type SearchScope,
 } from '@/lib/workspaces/home';
 import styles from './workspace-home.module.css';
 
@@ -109,7 +113,7 @@ export interface WorkspaceHomeProps {
   };
   /** Verified id of the signed-in user (history entries of this actor read "나"). */
   readonly viewerId: string | null;
-  /** Heatmap filters the server rendered `overview` with (`q` only when the scope has 문제). */
+  /** Heatmap filters the server rendered `overview` with (`q` = the 문제 search). */
   readonly filters: OverviewFilters;
   readonly overview: QuestionOverview;
   readonly chapterChoices: readonly ChapterChoice[];
@@ -300,52 +304,85 @@ export function WorkspaceHome({
         mergeOverviewFilters(search, next),
         patch.chapter ?? null,
       );
-      router.replace(`${pathname}${merged}`, { scroll: false });
+      // The 문제 search's latest commit, which the address bar may not show yet (SEARCH-01-AC12).
+      router.replace(`${pathname}${patchSearch(merged, { q: next.q || null })}`, {
+        scroll: false,
+      });
     });
   }
 
-  // --- unified search -----------------------------------------------------------------------
-  const scope = parseScope(searchParams);
-  const [draft, setDraft] = useState(searchParams.get('q') ?? '');
-  /** What a search under `s` runs on, and whether it is blocked (UX6). */
-  const readinessFor = (s: SearchScope) =>
-    searchReadiness(
-      { questions: scopeIncludesQuestions(s), body: scopeIncludesContent(s) },
-      {
-        questions: hasQuestions ?? true,
-        body: hasSearchableBody(library.documents, scopeIncludesQuestions(s), library.listFailed),
-      },
-    );
-  const readiness = readinessFor(scope);
-  const content = useContentSearch({
-    workspaceId: workspace.id,
-    // UX4: question papers are searched exactly when 문제 is a target.
-    initial: { ...initialSearch, includeQuestionPapers: scopeIncludesQuestions(scope) },
-    runInitial: readiness.effective.body,
+  // --- 문제 search (SEARCH-01-AC12: live, debounced; `q`) ---------------------------------------
+  const questionSearch = useLiveQuery({
+    urlValue: (searchParams.get('q') ?? '').trim().slice(0, OVERVIEW_SEARCH_MAX),
+    max: OVERVIEW_SEARCH_MAX,
+    onCommit: (q) => {
+      setView((v) => ({ ...v, q }));
+      // `replace`: typing never adds history entries. A newer navigation supersedes an older one
+      // that is still loading, so a late answer never replaces the newer query's heatmap.
+      startNavigation(() =>
+        router.replace(`${pathname}${patchSearch(window.location.search, { q: q || null })}`, {
+          scroll: false,
+        }),
+      );
+    },
   });
 
-  // The address bar can change under us (browser Back/Forward restores an earlier search): the
-  // search box, the content options and the executed content search follow it. Our own updates
-  // write the same state they already show, so following them is a no-op.
-  const urlQ = searchParams.get('q') ?? '';
-  const [seenQ, setSeenQ] = useState(urlQ);
-  if (seenQ !== urlQ) {
-    setSeenQ(urlQ);
-    setDraft(urlQ);
+  function resetAll() {
+    questionSearch.replace('');
+    setView(EMPTY_OVERVIEW_FILTERS);
+    startNavigation(() => {
+      const search = window.location.search;
+      const merged = keepNoteChapter(
+        search,
+        mergeOverviewFilters(search, EMPTY_OVERVIEW_FILTERS),
+        null,
+      );
+      router.replace(`${pathname}${patchSearch(merged, { q: null })}`, { scroll: false });
+    });
   }
-  // Question papers follow the 문제 checkbox, not the URL's `papers` flag (unwritten while a
-  // search had no body to run on, UX6).
-  // While the summary panel owns `document`/`section`, the content search reads its own executed
-  // filter there (contentSearchParams): opening or closing the panel never re-runs a search.
+
+  // --- 본문 search (SEARCH-01-AC09/AC10: collapsed by default; `text` + options) ---------------
+  const hasBody = hasSearchableBody(library.documents, library.listFailed);
+  const content = useContentSearch({
+    workspaceId: workspace.id,
+    initial: initialSearch,
+    runInitial: hasBody,
+  });
+  const urlText = searchParams.get(CONTENT_QUERY_PARAM) ?? '';
+  const [contentDraft, setContentDraft] = useState(urlText);
+  // Open on arrival with a 본문 search in the URL, and whenever the address bar brings one back.
+  const [contentOpen, setContentOpen] = useState(urlText !== '');
+  const [seenText, setSeenText] = useState(urlText);
+  if (seenText !== urlText) {
+    setSeenText(urlText);
+    setContentDraft(urlText);
+    if (urlText) setContentOpen(true);
+  }
+  const contentRegionId = useId();
+  const contentInputRef = useRef<HTMLInputElement | null>(null);
+  const focusContentRef = useRef(false);
+  useEffect(() => {
+    if (!contentOpen || !focusContentRef.current) return;
+    focusContentRef.current = false;
+    contentInputRef.current?.focus();
+  }, [contentOpen]);
+  function toggleContent() {
+    if (contentOpen) content.closeHit();
+    else focusContentRef.current = true;
+    setContentOpen(!contentOpen);
+  }
+
+  // The address bar can change under us (browser Back/Forward restores an earlier search): the
+  // executed content search follows it. Our own updates write the same state they already show,
+  // so following them is a no-op. While the summary panel owns `document`/`section`, the content
+  // search reads its own executed filter there (contentSearchParams): opening or closing the
+  // panel never re-runs a search.
   const executedFilter = (): ContentDocumentFilter | null =>
     content.submitted
       ? { documentId: content.submitted.documentId, chapterId: content.submitted.chapterId }
       : null;
-  const contentKey = readiness.effective.body
-    ? addressBarContentKey(
-        Object.fromEntries(contentSearchParams(searchParams, executedFilter())),
-        scopeIncludesQuestions(scope),
-      )
+  const contentKey = hasBody
+    ? addressBarContentKey(Object.fromEntries(contentSearchParams(searchParams, executedFilter())))
     : '';
   const syncedContentKey = useRef(contentKey);
   const syncContent = content.sync;
@@ -358,63 +395,28 @@ export function WorkspaceHome({
     void Promise.resolve().then(() => syncContent(q));
   }, [contentKey, syncContent]);
 
-  /** Runs `query` under `nextScope`: content results, heatmap filter and the URL. */
-  function applySearch(query: string, nextScope: SearchScope) {
+  /** Runs the 본문 search for `query` (empty: clears it and its `text`). */
+  function applyContentSearch(query: string) {
     const q = query.trim().slice(0, MAX_QUERY_CHARS);
-    const papers = scopeIncludesQuestions(nextScope);
-    // Without 문제 only books are searched: a selected question paper (and its chapter) must go,
-    // or the API would keep searching that explicit document.
-    const clearDocument = dropsSelectedPaper(content.documentId, searchDocuments, papers);
-    // UX6: the 본문 side runs only when it has a published document to search.
-    if (q && readinessFor(nextScope).effective.body) {
-      content.search(q, { includeQuestionPapers: papers, clearDocument });
+    let search: string;
+    if (q && hasBody) {
+      // Writes the search into the address bar at once (keeping Next's history state)…
+      content.search(q, { includeQuestionPapers: true });
+      search = window.location.search;
     } else {
       content.clear();
-      if (clearDocument) content.clearDocumentFilter();
+      search = patchSearch(window.location.search, { [CONTENT_QUERY_PARAM]: null });
     }
-    const target = `${pathname}${patchSearch(window.location.search, {
-      q: q || null,
-      scope: nextScope === 'all' ? null : nextScope,
-    })}`;
-    const heatmapQ = scopeIncludesQuestions(nextScope) ? q.slice(0, OVERVIEW_SEARCH_MAX) : '';
-    if (heatmapQ !== filters.q) {
-      setView((v) => ({ ...v, q: heatmapQ }));
-      startNavigation(() => router.replace(target, { scroll: false }));
-    } else {
-      window.history.replaceState(null, '', target);
-    }
-  }
-
-  function changeScope(questions: boolean, includeContent: boolean) {
-    // Both boxes may be off (UX6): the search button is then disabled and nothing is searched.
-    applySearch(
-      content.submitted?.query ?? searchParams.get('q') ?? '',
-      scopeOf(questions, includeContent),
-    );
-  }
-
-  function resetAll() {
-    setDraft('');
-    setView(EMPTY_OVERVIEW_FILTERS);
-    content.clear();
-    startNavigation(() => {
-      const search = window.location.search;
-      const merged = keepNoteChapter(
-        search,
-        mergeOverviewFilters(search, EMPTY_OVERVIEW_FILTERS),
-        null,
-      );
-      router.replace(`${pathname}${patchSearch(merged, { q: null })}`, { scroll: false });
-    });
+    // …and this write, without Next's state, makes useSearchParams follow it, so a later
+    // Back/Forward to another `text` is seen as a change.
+    window.history.replaceState(null, '', `${pathname}${search}`);
   }
 
   function closeContentResults() {
-    setDraft('');
-    applySearch('', scope);
+    setContentDraft('');
+    applyContentSearch('');
   }
 
-  const withQuestions = scopeIncludesQuestions(scope);
-  const withContent = scopeIncludesContent(scope);
   const chapterOptions = [
     { value: ALL, label: '전체 챕터' },
     ...chapterChoices.map((c) => ({ value: c.value, label: c.title })),
@@ -425,17 +427,14 @@ export function WorkspaceHome({
       <h1 className="qz-visually-hidden">{workspace.name}</h1>
 
       <div className={styles.header}>
-        <UnifiedSearchForm
-          screenId={screenIds.search}
-          draft={draft}
-          onDraftChange={setDraft}
-          onSearch={() => applySearch(draft, scope)}
-          readiness={readiness}
-          questions={{
-            checked: withQuestions,
-            onCheckedChange: (checked) => changeScope(checked, withContent),
-            settings: (
-              <div className={styles.optionRow}>
+        <div className={searchStyles.column}>
+          <QuestionSearch
+            screenId={screenIds.search}
+            query={questionSearch}
+            max={OVERVIEW_SEARCH_MAX}
+            searchable={hasSearchableQuestions(hasQuestions)}
+            settings={
+              <div className={searchStyles.optionRow}>
                 <Select
                   label="챕터"
                   options={chapterOptions}
@@ -456,24 +455,23 @@ export function WorkspaceHome({
                   }
                 />
               </div>
-            ),
-          }}
-          body={{
-            checked: withContent,
-            onCheckedChange: (checked) => changeScope(withQuestions, checked),
-            settings: (
-              <ContentSearchOptions
-                search={content}
-                documents={
-                  withQuestions
-                    ? searchDocuments
-                    : searchDocuments.filter((d) => !d.isQuestionPaper)
-                }
-                documentsLoadFailed={library.listFailed}
-              />
-            ),
-          }}
-        />
+            }
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-expanded={contentOpen}
+            aria-controls={contentRegionId}
+            onClick={toggleContent}
+          >
+            본문 검색
+            {contentOpen ? (
+              <ChevronUpIcon width={16} height={16} aria-hidden="true" />
+            ) : (
+              <ChevronDownIcon width={16} height={16} aria-hidden="true" />
+            )}
+          </Button>
+        </div>
 
         <div className={styles.actions}>
           <div className={styles.actionGroup}>
@@ -505,13 +503,29 @@ export function WorkspaceHome({
         </div>
       </div>
 
-      {readiness.effective.body ? (
-        <ContentSearchResults
-          workspaceId={workspace.id}
-          search={content}
-          onClose={closeContentResults}
+      <div id={contentRegionId} className={searchStyles.contentArea} hidden={!contentOpen}>
+        <ContentSearchForm
+          inputRef={contentInputRef}
+          draft={contentDraft}
+          onDraftChange={setContentDraft}
+          onSearch={() => applyContentSearch(contentDraft)}
+          searchable={hasBody}
+          settings={
+            <ContentSearchOptions
+              search={content}
+              documents={searchDocuments}
+              documentsLoadFailed={library.listFailed}
+            />
+          }
         />
-      ) : null}
+        {hasBody ? (
+          <ContentSearchResults
+            workspaceId={workspace.id}
+            search={content}
+            onClose={closeContentResults}
+          />
+        ) : null}
+      </div>
 
       <QuestionsOverview
         workspaceId={workspace.id}
