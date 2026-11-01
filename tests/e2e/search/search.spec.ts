@@ -521,7 +521,7 @@ test(
     await runSearch(page, 'chlorine', 'keyword');
     const items = searchUi.resultItems(page);
     await expect(items.filter({ hasText: /chlorine/i }).first()).toBeVisible();
-    // A dialog opens on a new history entry; a second search replaces that entry's query.
+    // A dialog opens on a new history entry; a second search rewrites that entry's query.
     await homeUi.documentsButton(page).click();
     await expect(homeUi.documentsDialog(page)).toBeVisible();
     await searchUi.box(page).fill('evaporation');
@@ -529,13 +529,23 @@ test(
     await expect(page).toHaveURL((url) => url.searchParams.get('text') === 'evaporation');
     await expect(items.filter({ hasText: /evaporat/i }).first()).toBeVisible();
 
+    // Back with the dialog open closes it and keeps the search made meanwhile (UX7 확인 7).
+    await page.waitForLoadState('networkidle');
     await page.goBack();
     await expect(page).toHaveURL(
-      (url) => url.searchParams.get('text') === 'chlorine' && !url.searchParams.has('panel'),
+      (url) => url.searchParams.get('text') === 'evaporation' && !url.searchParams.has('panel'),
     );
     await expect(homeUi.documentsDialog(page)).toHaveCount(0);
-    await expect(searchUi.box(page)).toHaveValue('chlorine');
-    await expect(items.filter({ hasNotText: /chlorine/i })).toHaveCount(0);
+    await expect(searchUi.box(page)).toHaveValue('evaporation');
+    await expect(items.filter({ hasText: /evaporat/i }).first()).toBeVisible();
+
+    // Without a dialog, Back onto the home restores the body search it had.
+    await page.waitForLoadState('networkidle');
+    await page.goto('/workspaces');
+    await page.goBack();
+    await expect(page).toHaveURL((url) => url.searchParams.get('text') === 'evaporation');
+    await expect(searchUi.box(page)).toHaveValue('evaporation');
+    await expect(items.filter({ hasNotText: /evaporat/i })).toHaveCount(0);
     await expect(items.first()).toBeVisible();
 
     // The unified search's body-only URL (UX6) and the pre-UX3c route open the 본문 search.

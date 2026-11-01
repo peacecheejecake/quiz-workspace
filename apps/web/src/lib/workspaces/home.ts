@@ -201,6 +201,33 @@ export function withoutPanels(
   return patchSearch(out, { [PANEL_PARAM]: null, [QUESTION_PARAM]: null });
 }
 
+/** The practice panel's name among the open dialogs (openDialogs). */
+export const PRACTICE_DIALOG = 'question';
+
+/**
+ * What is open in `search` (UX7-BACK-2, panel-history.ts): the dialogs in opening order, then
+ * the practice panel (PRACTICE_DIALOG). Which question, document or chapter they show is not
+ * part of it: changing that is not a close.
+ */
+export function openDialogs(search: string): string[] {
+  const params = new URLSearchParams(search);
+  const out: string[] = parsePanels(params);
+  if (params.get(QUESTION_PARAM)) out.push(PRACTICE_DIALOG);
+  return out;
+}
+
+/** `search` with one dialog of openDialogs closed, as its close button does it. */
+export function closeDialog(
+  search: string,
+  dialog: string,
+  restore: ContentDocumentFilter | null = null,
+): string {
+  if (dialog === PRACTICE_DIALOG) return patchSearch(search, { [QUESTION_PARAM]: null });
+  if (dialog === SUMMARY_PANEL) return withSummaryPanel(search, null, restore);
+  if (dialog === CHAPTER_NOTE_PANEL) return withChapterNote(search, null);
+  return isHomePanel(dialog) ? withPanel(search, dialog, false) : search;
+}
+
 /** Whether the summary panel owns the URL's `document`/`section` keys (it is open). */
 export function summaryOwnsDocumentKey(params: Params): boolean {
   return parsePanels(params).includes(SUMMARY_PANEL);
