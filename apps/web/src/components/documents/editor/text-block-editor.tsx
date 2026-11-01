@@ -411,9 +411,9 @@ const PageGroupView = memo(function PageGroupView({
       className={styles.pageGroup}
       data-page-group={group.page}
     >
-      <h3 id={headingId} className={styles.pageHeading} aria-current={current ? 'page' : undefined}>
+      <h2 id={headingId} className={styles.pageHeading} aria-current={current ? 'page' : undefined}>
         {group.page}쪽
-      </h3>
+      </h2>
       {group.items.map((item) =>
         item.kind === 'question' ? (
           <QuestionCard
