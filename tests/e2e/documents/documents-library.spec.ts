@@ -566,6 +566,8 @@ test(
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
       /^(직접 추가|add question)$/i,
       /^(변형 출제|generate variants?)$/i,
+      // UX7-BANK-2 (QOV-01-AC15).
+      /^(보관·초안 문제|archived and draft questions)$/i,
     ]);
     await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
     await page.keyboard.press('Escape');
