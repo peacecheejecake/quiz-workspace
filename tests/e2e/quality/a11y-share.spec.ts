@@ -56,7 +56,7 @@ test(
     await expect(sharingUi.onceNotice(page)).toBeVisible();
     await expectAccessible(page, 'one-time link shown');
 
-    // UX7-SHARE-EXPIRY: the copied state (check + "복사됨") and a saved expiry with 만료일 삭제.
+    // UX7-SHARE-EXPIRY: the copied state (check + "복사 완료") and a saved expiry with 만료일 삭제.
     await page.evaluate(() => {
       navigator.clipboard.writeText = async () => undefined;
     });

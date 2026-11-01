@@ -985,7 +985,7 @@ export const sharingUi = {
       .getByText(/만료일은 오늘 이후|expiry must be/i)
       .first(),
   /** WS-SHARE-01-AC08: the copy button right after a successful copy. */
-  copiedButton: (page: Page) => button(main(page), /^(복사됨|copied)$/i),
+  copiedButton: (page: Page) => button(main(page), /^(복사 완료|copied)$/i),
   copiedAnnouncement: (page: Page) =>
     page.getByRole('status').filter({ hasText: /링크를 복사했습니다|link copied/i }),
   copyFailedToast: (page: Page) =>

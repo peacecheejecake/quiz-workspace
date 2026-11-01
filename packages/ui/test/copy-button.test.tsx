@@ -10,7 +10,7 @@ describe('CopyButton', () => {
     expect(COPY_FEEDBACK_MS).toBe(2000);
   });
 
-  it('swaps to a check and "복사됨" after a successful copy, announces once, then reverts', async () => {
+  it('swaps to a check and "복사 완료" after a successful copy, announces once, then reverts', async () => {
     const user = userEvent.setup();
     const onCopy = vi.fn(async () => true);
     render(
@@ -27,7 +27,7 @@ describe('CopyButton', () => {
 
     await user.click(button);
     expect(onCopy).toHaveBeenCalledOnce();
-    expect(await screen.findByRole('button', { name: '복사됨' })).toBe(button);
+    expect(await screen.findByRole('button', { name: '복사 완료' })).toBe(button);
     expect(button.querySelector('[data-icon="check"]')).toBeVisible();
     expect(button.querySelector('[data-icon="copy"]')).not.toBeVisible();
     expect(screen.getByRole('status')).toHaveTextContent('링크를 복사했습니다.');
@@ -45,7 +45,7 @@ describe('CopyButton', () => {
     // Both label slots are rendered; the inactive one is hidden with visibility, not display.
     const slots = button.querySelectorAll('[data-slot="label"]');
     expect(slots).toHaveLength(2);
-    expect([...slots].map((s) => s.textContent)).toEqual(['링크 복사', '복사됨']);
+    expect([...slots].map((s) => s.textContent)).toEqual(['링크 복사', '복사 완료']);
   });
 
   it.each([

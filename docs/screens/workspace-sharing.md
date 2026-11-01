@@ -1,6 +1,6 @@
 # WS-SHARE-01 — Owner Workspace 공유 관리
 
-**상태:** 확정 요구사항 (v1.3) · UX3c 개정 2026-10-20 (공유하기 버튼 → 링크 공유 floating dialog) · UX7-SHARE-EXPIRY 개정 2026-11-01 (만료일 삭제 AC06, 만료일 영역 너비 AC07, 복사 완료 표시 AC08)
+**상태:** 확정 요구사항 (v1.3) · UX3c 개정 2026-10-20 (공유하기 버튼 → 링크 공유 floating dialog) · UX7-SHARE-EXPIRY 개정 2026-11-01 (만료일 삭제 AC06, 만료일 영역 너비 AC07, 복사 완료 표시 AC08) · UX7-COPY-LABEL 개정 2026-11-02 (AC08 버튼 이름 `복사 완료`)
 **화면:** `/workspaces/:workspaceId?panel=share` (Workspace header의 `공유하기` 버튼, Owner만; 이전 `/workspaces/:workspaceId/settings/sharing`은 여기로 redirect)
 **연계:** [공유·Fork 명세](../workspace-sharing.md), [인증](../auth.md), [디자인 시스템](../design-system.md)
 
@@ -57,7 +57,7 @@
 
 - Given 방금 만든 링크가 표시된 링크 공유 dialog
 - When Owner가 `링크 복사`를 누름
-- Then 복사에 성공하면 버튼 안 아이콘이 체크로 바뀌고 버튼 이름이 `복사됨`이 되며, polite live region이 "링크를 복사했습니다."를 한 번 알린다(성공 toast는 띄우지 않는다). 약 2초 뒤 원래 아이콘·이름으로 돌아오고, 바뀌는 동안 버튼 크기·위치는 변하지 않는다. 실패하면 체크를 표시하지 않고 링크 칸을 선택한 채 오류 toast를 띄운다. 애니메이션은 없다(`prefers-reduced-motion`과 무관하게 즉시 교체).
+- Then 복사에 성공하면 버튼 안 아이콘이 체크로 바뀌고 버튼 이름이 `복사 완료`가 되며(UX7-COPY-LABEL 사용자 결정 2026-11-02), polite live region이 "링크를 복사했습니다."를 한 번 알린다(성공 toast는 띄우지 않는다 — 사용자 결정 2026-11-01). 약 2초 뒤 원래 아이콘·이름으로 돌아오고, 바뀌는 동안 버튼 크기·위치는 변하지 않는다. 실패하면 체크를 표시하지 않고 링크 칸을 선택한 채 오류 toast를 띄운다. 애니메이션은 없다(`prefers-reduced-motion`과 무관하게 즉시 교체).
 
 ## E2E 우선 개발
 - 같은 AC ID를 사용하는 `tests/e2e/workspaces/sharing-owner.spec.ts`를 화면 구현 전에 작성한다.
