@@ -2,11 +2,12 @@
 // page of a workspace. The workspace layout already resolved access (404 for unknown, foreign and
 // deleted workspaces). Server-side, through the Bearer helper: the caller's heatmap under the URL
 // filters (the search text `q` filters it only when the unified search's scope includes 문제),
-// the documents (header count, 문서 관리 / 문제 PDF 관리 dialogs, content-search filter) and the
+// the documents (header count, 문서 관리 dialog, content-search filter) and the
 // verified user. Everything else — dialogs (`?panel=`, the 정리 노트 panel CHNOTE-01 with its
 // `chapter`, the 문서 요약 panel DOCSUM-01 with its `document`), the content search (`q`, `scope`,
 // options) and the practice panel (`?question=`, QPLAY-01) — is client state on top of it.
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { WorkspaceHome } from '@/components/workspaces/workspace-home';
 import { loadDocumentsOrFailure } from '@/lib/documents/data';
 import { loadOverview } from '@/lib/questions/overview-data';
@@ -17,6 +18,7 @@ import { requireWorkspace } from '@/lib/workspaces/data';
 import {
   isChapterNoteOpen,
   parseScope,
+  retiredPanelRedirect,
   scopeIncludesQuestions,
   withoutSummaryDocument,
 } from '@/lib/workspaces/home';
@@ -31,6 +33,9 @@ export default async function Page({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
   const [{ workspaceId }, query] = await Promise.all([params, searchParams]);
+  // UX7-DOCS: `?panel=question-pdfs` (the retired 문제 PDF 관리) opens 문서 관리 instead.
+  const retired = retiredPanelRedirect(workspaceId, query);
+  if (retired) redirect(retired);
   // While the 정리 노트 panel is open, `chapter` is its chapter, not a heatmap filter (home.ts).
   const urlFilters = parseOverviewFilters(query);
   const parsed = isChapterNoteOpen(query) ? { ...urlFilters, chapter: null } : urlFilters;

@@ -10,22 +10,23 @@ import {
 } from '@quiz/ui';
 
 /**
- * The header's `문제` menu (UX4): 문제 PDF 관리 dialog, 직접 추가 (the 문제 등록 editor on the home,
- * `?panel=question-create`, UX7-BANK) and 변형 출제 (the 문제 생성 dialog); the last two need edit
- * rights. The 전체 문제 link (UX6-PROGRESS) went with its page (UX7-BANK). A dialog opens once the
- * menu has returned focus to its trigger, so closing the dialog brings focus back there.
+ * The header's `문제` menu (UX4): 직접 추가 (the 문제 등록 editor on the home,
+ * `?panel=question-create`, UX7-BANK) and 변형 출제 (the 문제 생성 dialog). The 전체 문제 link
+ * (UX6-PROGRESS) went with its page (UX7-BANK) and PDF 관리 with the 문제 PDF 관리 dialog, merged
+ * into 문서 관리 (UX7-DOCS, DOC-01-AC09). Both items need edit rights, so without them there is no
+ * menu at all. A dialog opens once the menu has returned focus to its trigger, so closing the
+ * dialog brings focus back there.
  */
 export function QuestionMenu({
   canEdit,
-  onPdfs,
   onCreate,
   onGenerate,
 }: {
   readonly canEdit: boolean;
-  readonly onPdfs: () => void;
   readonly onCreate: () => void;
   readonly onGenerate: () => void;
 }) {
+  if (!canEdit) return null;
   const afterClose = (action: () => void) => () => window.setTimeout(action, 0);
   return (
     <DropdownMenu modal={false}>
@@ -36,13 +37,8 @@ export function QuestionMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" aria-label="문제">
-        <DropdownMenuItem onSelect={afterClose(onPdfs)}>PDF 관리</DropdownMenuItem>
-        {canEdit ? (
-          <>
-            <DropdownMenuItem onSelect={afterClose(onCreate)}>직접 추가</DropdownMenuItem>
-            <DropdownMenuItem onSelect={afterClose(onGenerate)}>변형 출제</DropdownMenuItem>
-          </>
-        ) : null}
+        <DropdownMenuItem onSelect={afterClose(onCreate)}>직접 추가</DropdownMenuItem>
+        <DropdownMenuItem onSelect={afterClose(onGenerate)}>변형 출제</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

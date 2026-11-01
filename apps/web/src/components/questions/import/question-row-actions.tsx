@@ -1,6 +1,7 @@
 'use client';
 
-// The question actions of a PDF row (QIMP-AUTO; UX6-UPLOAD: in 문서 관리 as well as 문제 PDF 관리).
+// The question actions of a 문서 관리 row (QIMP-AUTO, UX6-UPLOAD; the only place since UX7-DOCS
+// merged 문제 PDF 관리 into 문서 관리, DOC-01-AC09).
 // A ready PDF with an extraction (the list's `latest_import_id`, read for every listed PDF) links
 // "문제 검토" to its import page for every member; a ready 문제지 / 교재+문제 without one offers
 // editors "문제 추출", which starts it and opens that page. A plain 교재 without an extraction,
