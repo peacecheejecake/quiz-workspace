@@ -23,6 +23,9 @@
 //   - chapter-notes.ts (CHNOTE.0): chapter note API helpers, the APP_ENV=test scenario LLM markers
 //     and hold barrier, the feature-off stack (summary.ts) and the CHNOTE-01 UI contract; import it
 //     directly (not re-exported here).
+//   - mock-exams.ts (MOCK.0): mock exam API helpers, the APP_ENV=test batched scenario LLM
+//     (sources, hold barrier, call counts), the LLM-off stack (summary.ts) and the MOCK-01 UI
+//     contract; import it directly (not re-exported here).
 // Never add test-only seed/reset endpoints to the production app (AGENTS.md §5).
 import { test as base, expect } from '@playwright/test';
 import { UserFactory } from './auth.ts';
