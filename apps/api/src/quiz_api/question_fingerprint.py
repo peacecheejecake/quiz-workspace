@@ -20,6 +20,10 @@ only what does not change the question a learner sees:
 normalised option texts: option order and ids do not matter; answers, explanations, rubrics,
 chapters and numbers are not part of it (an essay or short answer is its stem). `answer_key`
 gives the normalised answer of a question so a group can warn when its answers differ.
+
+Not `book_core.question.question_fingerprint` (M6.1): that one includes the answer and folds
+case, because it tells whether a generated variant changed anything at all; this one asks
+whether two bank questions are the same question to a learner.
 """
 
 from __future__ import annotations
