@@ -1,6 +1,6 @@
 # QPLAY-01 — 문제 풀이 Floating Side Panel
 
-**상태:** 확정 화면 요구사항 v1.3
+**상태:** 확정 화면 요구사항 v1.4
 **Route:** `/workspaces/:workspaceId?question=:questionId` (Workspace 홈 위 panel; 이전 `/questions?question=`은 redirect — UX3c 2026-10-20)
 **테스트:** `tests/e2e/questions/questions-practice.spec.ts`
 **연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
@@ -10,6 +10,7 @@
 - 객관식 보기는 각 줄 앞에 표시 순서대로 번호(`1.` `2.` …)를 보인다(UX5-UI 2026-10-23, 전체 문제 페이지 상세·초안 검토와 같은 형식). 섞인 세션은 표시된 순서로 번호를 매긴다. 번호는 표시용(`aria-hidden`)이라 radio/checkbox 이름은 보기 문구이고 위치는 그룹이 읽어 주며, 채점은 번호·위치가 아니라 option ID로 한다(AC02).
 - API와 화면은 owner / viewer / 로그인 상태에 따라 기능과 데이터 표시 범위를 구분한다.
 - 모든 편집·상태 변경은 서버 측 인가·revision 일관성을 검증한다.
+- **열어 본 문제 client cache (UX7-CACHE 2026-11-01):** 패널은 이번 화면에서 연 practice session(정답·해설이 없는 `PracticeSession` 필드만)을 메모리에 보관한다. 아직 제출하지 않은 문제를 닫았다 다시 열거나 이전/다음으로 돌아오면 같은 session을 요청 없이 바로 보인다(같은 보기 순서, 같은 session으로 제출 — 열람 기록은 처음 열 때 이미 남았다). 보관 범위는 화면 인스턴스 하나와 Workspace 하나(다른 Workspace·로그아웃·다른 화면으로 이동하면 버려짐)이고 브라우저 저장소에는 쓰지 않는다. 제출을 시작한 session, 실패한 session(`이미 제출` 등), 10분이 지난 session은 다시 쓰지 않는다(다른 곳의 문제 수정은 최대 10분 늦게 보일 수 있으나 채점은 항상 session이 고정한 revision 기준이라 보이는 내용과 채점이 어긋나지 않는다). 제출 결과(정답·해설)는 보관하지 않으며 제출한 문제를 다시 열면 새 session을 연다. 이웃 문제 prefetch는 하지 않는다 — session 열기가 열람 기록이므로 실제로 열지 않은 문제를 viewed로 만들 수 없다(AC06).
 - **정리 노트와 분리 (DOCSUM-SPEC 2026-10-29):** 풀이 panel은 챕터 정리 노트(CHNOTE-01)의 내용·링크를 보이지 않고 practice API도 노트 필드를 보내지 않는다(제출 전후 모두). 풀이 panel이 열리면 펼쳐져 있던 정리 노트 본문은 다시 접힌다(CHNOTE-01-AC05). 이 화면의 기존 AC는 바뀌지 않는다.
 
 ## 수용 기준
@@ -43,6 +44,12 @@
 - **Given:** 해당 화면과 테스트용 데이터 및 권한이 주어진 상태
 - **When:** 관련 조작/네트워크 요청을 수행
 - **Then:** Esc/닫기로 패널을 닫으면 URL query를 갱신하고 열기 버튼으로 포커스가 복귀한다.
+
+### QPLAY-01-AC06
+
+- **Given:** 이번 화면에서 열어 보고 아직 제출하지 않은 문제가 있는 상태
+- **When:** 패널을 닫았다 그 문제를 다시 열거나 이전/다음으로 그 문제로 돌아온다
+- **Then:** 새 문제 내용 요청(server action·API) 없이 같은 session(같은 보기 순서)을 바로 보이고, 그 session으로 제출하면 한 번만 채점된다. 제출한 문제를 다시 열면 새 session을 연다.
 
 ## Test-first 규칙
 - 위 AC ID를 Playwright test title에 포함하고 RED를 확인한 다음 API/UI를 구현한다.

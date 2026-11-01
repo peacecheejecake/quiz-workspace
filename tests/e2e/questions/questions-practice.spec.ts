@@ -10,7 +10,7 @@
 // archived rules, cross-user isolation) are in tests/integration/questions/
 // test_practice_api_contract.py.
 import { randomUUID } from 'node:crypto';
-import type { Locator, Page, Response } from '@playwright/test';
+import type { Locator, Page, Request, Response } from '@playwright/test';
 import {
   answerKeysIn,
   createNumberedQuestions,
@@ -476,5 +476,74 @@ test(
     for (const n of [1, 2, 3]) {
       expect((await overviewItem(s.owner, s.workspaceId, q(s, n).id)).status).toBe('viewed');
     }
+  },
+);
+
+/**
+ * Counts the page's question-content loads: server-action POSTs (`Next-Action`, the BFF relay of
+ * the practice session) and any browser call to the API. Router RSC refreshes of the overview
+ * are not question content.
+ */
+function countContentLoads(page: Page): { count: () => number; stop: () => void } {
+  let n = 0;
+  const api = new URL(process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || 'http://127.0.0.1:8000');
+  const onRequest = (req: Request) => {
+    const url = new URL(req.url());
+    if (req.method() === 'POST' && req.headers()['next-action'] !== undefined) n += 1;
+    else if (url.host === api.host) n += 1;
+  };
+  page.on('request', onRequest);
+  return { count: () => n, stop: () => page.off('request', onRequest) };
+}
+
+test(
+  'QPLAY-01-AC06 re-opening a viewed unanswered question (close/reopen, previous/next) shows it from the client cache without a new content request',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedMany(workspaceFactory, 'qplay01-ac06', 2);
+    const texts = q(s, 1).revision.options.map((o) => o.text);
+    await openOverview(page, s);
+
+    let panel = await openPanel(page, 1);
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    const order = await displayedOrder(panel, texts);
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+    panel = await openPanel(page, 2);
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+
+    // Close/reopen and previous/next back to already viewed questions: no new load.
+    const loads = countContentLoads(page);
+    panel = await openPanel(page, 1);
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    // The same session: the same displayed order (a new session would reshuffle).
+    expect(await displayedOrder(panel, texts)).toEqual(order);
+    await panelUi.next(panel).click();
+    await expect(panelUi.options(panelUi.numbered(page, 2))).toHaveCount(4);
+    await panelUi.previous(panelUi.numbered(page, 2)).click();
+    panel = panelUi.numbered(page, 1);
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    expect(loads.count(), 'question content requests while re-opening viewed questions').toBe(0);
+    loads.stop();
+
+    // The cached session is the server's open session: submitting it grades once.
+    const correctText = q(s, 1).revision.options[0]?.text ?? '';
+    await panelUi.option(panel, correctText).check();
+    await panelUi.submit(panel).click();
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
+    expect((await listAttempts(s.owner, q(s, 1).id)).map((a) => a.result)).toEqual(['correct']);
+
+    // A submitted session is never reused: re-opening starts a new session (a new request).
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+    const after = countContentLoads(page);
+    panel = await openPanel(page, 1);
+    await expect(panelUi.submit(panel)).toBeVisible();
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    await expect(panelUi.option(panel, correctText)).not.toBeChecked();
+    expect(after.count()).toBeGreaterThan(0);
+    after.stop();
   },
 );
