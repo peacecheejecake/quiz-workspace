@@ -166,7 +166,10 @@ select is((select count(*)::int from public.question_attempts
             where workspace_id = '10000000-0000-4000-8000-0000000d0001'),
   2, 'attempts are untouched by merging');
 
--- quiz_api can end a link but not re-point or delete one.
+-- quiz_api can end a link but not re-point or delete one. Test-only (rolled back), as in
+-- 02_security: postgres may switch to quiz_api, which may run the pgTAP assertions.
+grant quiz_api to postgres;
+grant usage on schema extensions to quiz_api;
 set local role quiz_api;
 select throws_ok(
   $$ update public.question_merges set kept_question_id = '20000000-0000-4000-8000-0000000d000d'
