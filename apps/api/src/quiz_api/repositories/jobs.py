@@ -43,6 +43,7 @@ class JobView:
     updated_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    result: dict[str, Any] | None = None
 
     @property
     def terminal(self) -> bool:
@@ -56,6 +57,25 @@ def error_code(status: str, last_error: str | None) -> str | None:
         return None
     code = (last_error or "").split(":", 1)[0].strip()
     return code if _CODE.fullmatch(code) else FALLBACK_ERROR_CODE
+
+
+# Job types whose (counts-only) result is part of GET /jobs/{id}: MOCK-B K5 (`usage.llm_calls`).
+RESULT_JOB_TYPES = frozenset({"mock_exam.generate"})
+_RESULT_COUNTS = ("created_count", "skipped_count")
+_USAGE_COUNTS = ("llm_calls", "batches", "input_tokens", "output_tokens")
+
+
+def public_result(job_type: str, result: Any) -> dict[str, Any] | None:
+    """The allow-listed counts and code of a job's result, else None."""
+    if job_type not in RESULT_JOB_TYPES or not isinstance(result, dict):
+        return None
+    out: dict[str, Any] = {k: result[k] for k in _RESULT_COUNTS if isinstance(result.get(k), int)}
+    usage = result.get("usage")
+    if isinstance(usage, dict):
+        out["usage"] = {k: usage[k] for k in _USAGE_COUNTS if isinstance(usage.get(k), int)}
+    code = result.get("error_code")
+    out["error_code"] = code if isinstance(code, str) and _CODE.fullmatch(code) else None
+    return out
 
 
 def progress_of(status: str, result: Any) -> tuple[int | None, str | None]:
@@ -116,4 +136,5 @@ class JobRepository:
             updated_at=row.updated_at,
             started_at=row.started_at,
             finished_at=row.finished_at,
+            result=public_result(row.job_type, row.result),
         )

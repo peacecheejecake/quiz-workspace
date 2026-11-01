@@ -34,7 +34,6 @@ from quiz_worker.question_generation_job import (
     build_generation_llm,
     question_generate_definition,
     run_prompt_version,
-    source_question,
 )
 from quiz_worker.question_generation_store import (
     JOB_TYPE,
@@ -47,6 +46,7 @@ from quiz_worker.question_generation_store import (
     SourceRow,
     TerminalRunStatus,
 )
+from quiz_worker.question_sources import source_question
 from quiz_worker.runner import JobRunner, RunOutcome
 from quiz_worker.settings import Environment, WorkerSettings
 from quiz_worker.store import InMemoryJobStore, JobStatus

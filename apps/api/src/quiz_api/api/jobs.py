@@ -76,6 +76,12 @@ class Job(BaseModel):
     updated_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    result: dict[str, Any] | None = Field(
+        default=None,
+        description="Counts and code only, for `mock_exam.generate`: {created_count, "
+        "skipped_count, usage: {llm_calls, batches, input_tokens, output_tokens}, error_code}; "
+        "null for other job types.",
+    )
 
 
 def _job(view: JobView) -> Job:
@@ -93,6 +99,7 @@ def _job(view: JobView) -> Job:
         updated_at=view.updated_at,
         started_at=view.started_at,
         finished_at=view.finished_at,
+        result=view.result,
     )
 
 

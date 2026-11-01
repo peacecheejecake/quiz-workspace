@@ -53,6 +53,7 @@ from quiz_worker.document_job import (
     index_sync_definition,
 )
 from quiz_worker.document_store import PostgresDocumentStore
+from quiz_worker.mock_exam_job import MockExamJobDeps, mock_exam_deps, mock_exam_generate_definition
 from quiz_worker.pg_store import PostgresJobStore, create_job_store_engine
 from quiz_worker.question_generation_job import (
     GenerationJobDeps,
@@ -124,6 +125,7 @@ class JobWorker:
         self.register_deps: RegisterJobDeps | None = None
         self.summary_deps: SummaryJobDeps | None = None
         self.chapter_note_deps: ChapterNoteJobDeps | None = None
+        self.mock_exam_deps: MockExamJobDeps | None = None
 
     def _build(self) -> tuple[PostgresJobStore, JobRunner, dict[str, JobDefinition[Any]]]:
         if self._built is not None:
@@ -193,6 +195,12 @@ class JobWorker:
             lock_wait_seconds=30,
         )
         chapter_note_deps = self.chapter_note_deps
+        # MOCK-B: `mock_exam.generate` with the APP_ENV=test batched scenario fake (K5) and the
+        # WORKER_MOCK_EXAMS / MOCK_EXAM_* settings of the environment this worker is built in
+        # (on only in tests/integration/questions/mock_exams/).
+        built = mock_exam_deps(env, engine)
+        built.lock_wait_seconds = 30
+        self.mock_exam_deps = built
         definitions: list[JobDefinition[Any]] = [
             document_parse_definition(lambda: document_deps),
             index_sync_definition(lambda: document_deps),
@@ -201,6 +209,7 @@ class JobWorker:
             question_register_definition(lambda: register_deps),
             document_summarize_definition(lambda: summary),
             chapter_note_definition(lambda: chapter_note_deps),
+            mock_exam_generate_definition(lambda: built),
         ]
         jobs = PostgresJobStore(engine)
         runner = JobRunner(jobs, worker_id="it-m44a", lease_seconds=600)

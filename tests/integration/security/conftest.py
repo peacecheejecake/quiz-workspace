@@ -116,6 +116,8 @@ def random_ids() -> dict[str, str]:
         "draft_version",
         "question_revision",
         "chapter_id",
+        "mock_exam_id",
+        "mock_exam_question_id",
     )
     out = {k: str(uuid.uuid4()) for k in keys}
     out["block_id"] = f"b-{uuid.uuid4().hex[:12]}"
@@ -244,6 +246,10 @@ def build_world(seed: Any, label: str) -> World:
     fork = forker.fork(str(link["id"]), cookie, f"S4 {label} fork")
     assert fork.status_code == 202, f"fork start: HTTP {fork.status_code}"
 
+    # MOCK-B: a made mock exam with one question, seeded as the superuser (making one through
+    # the API needs the range resolver of QVIEW-B; MOCK-B-2 can switch this to the API).
+    mock_exam_id, mock_question_id = seed_mock_exam(seed, wid, owner.user.id, qid, question)
+
     # A second workspace of the same owner, for requests that mix ids of two workspaces.
     twin = owner.create_workspace(f"S4 {label} twin")
     tid = str(twin["id"])
@@ -285,6 +291,8 @@ def build_world(seed: Any, label: str) -> World:
         "draft_version": "1",
         "question_revision": str(question["revision"]["id"]),
         "chapter_id": chapter_id,
+        "mock_exam_id": mock_exam_id,
+        "mock_exam_question_id": mock_question_id,
     }
     twin_ids = {
         "workspace_id": tid,
@@ -303,6 +311,71 @@ def build_world(seed: Any, label: str) -> World:
         "chapter_id": str(owner.ok("GET", f"/documents/{twin_doc}/outline")["items"][0]["id"]),
     }
     return World(owner, editor, viewer, outsider, forker, ids, twin_ids, str(link["secret"]))
+
+
+def seed_mock_exam(
+    seed: Any, workspace_id: str, user_id: Any, question_id: str, question: dict[str, Any]
+) -> tuple[str, str]:
+    """A succeeded OPTION_SHUFFLE mock exam of `question` (superuser rows, MOCK-B schema)."""
+    exam, generation, made, revision = (str(uuid.uuid4()) for _ in range(4))
+    rev = question["revision"]
+    plan = [
+        {
+            "position": 0,
+            "question_id": question_id,
+            "question_revision_id": rev["id"],
+            "variation_type": "OPTION_SHUFFLE",
+            "chapter_rank": 0,
+        }
+    ]
+    config = {"variation_types": ["OPTION_SHUFFLE"], "question_count": 1, "difficulty": None}
+    rng = {
+        "all": True,
+        "chapter_ids": [],
+        "question_ids": [],
+        "excluded_question_ids": [],
+        "filters": {},
+    }
+    seed._admin(
+        "insert into public.mock_exams (id, workspace_id, title, config, range, created_by) "
+        "values (%s, %s, 'S4 모의고사', %s::jsonb, %s::jsonb, %s)",
+        (exam, workspace_id, json.dumps(config), json.dumps(rng), str(user_id)),
+    )
+    seed._admin(
+        "insert into public.mock_exam_generations (id, workspace_id, mock_exam_id, version, "
+        "status, config, range, plan, seed, requested_count, created_count, progress_done, "
+        "finished_at) values (%s, %s, %s, 1, 'succeeded', %s::jsonb, %s::jsonb, %s::jsonb, 7, "
+        "1, 1, 1, now())",
+        (generation, workspace_id, exam, json.dumps(config), json.dumps(rng), json.dumps(plan)),
+    )
+    seed._admin(
+        "insert into public.mock_exam_questions (id, workspace_id, mock_exam_id, generation_id, "
+        "position, question_type, variation_type, source_question_id, "
+        "source_question_revision_id) values (%s, %s, %s, %s, 0, %s, 'OPTION_SHUFFLE', %s, %s)",
+        (made, workspace_id, exam, generation, question["question_type"], question_id, rev["id"]),
+    )
+    seed._admin(
+        "insert into public.mock_exam_question_revisions (id, workspace_id, "
+        "mock_exam_question_id, version, stem, options, correct_option_ids, is_multi_answer, "
+        "origin) values (%s, %s, %s, 1, %s, %s::jsonb, %s, %s, 'generated')",
+        (
+            revision,
+            workspace_id,
+            made,
+            rev["stem"],
+            json.dumps(list(reversed(rev["options"]))),
+            rev["correct_option_ids"],
+            rev["is_multi_answer"],
+        ),
+    )
+    seed._admin(
+        "update public.mock_exam_questions set active_revision_id = %s where id = %s",
+        (revision, made),
+    )
+    seed._admin(
+        "update public.mock_exams set current_generation_id = %s where id = %s", (generation, exam)
+    )
+    return exam, made
 
 
 class LogCapture(logging.Handler):

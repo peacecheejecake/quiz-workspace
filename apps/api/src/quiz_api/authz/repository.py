@@ -28,6 +28,8 @@ from quiz_api.repositories.tables import (
     document_revisions,
     document_uploads,
     documents,
+    mock_exam_questions,
+    mock_exams,
     practice_sessions,
     question_drafts,
     question_generation_runs,
@@ -62,6 +64,10 @@ class ResourceType(StrEnum):
     # CHNOTE: a chapter (outline node) of a live document's *active* revision; chapters of older
     # revisions and of soft-deleted documents are invisible.
     CHAPTER = "chapter"
+    # MOCK-B: a soft-deleted mock exam and its questions are invisible; so is a question taken
+    # out of its mock exam (`removed_at`).
+    MOCK_EXAM = "mock_exam"
+    MOCK_EXAM_QUESTION = "mock_exam_question"
 
 
 @dataclass(frozen=True)
@@ -110,6 +116,16 @@ RESOURCES: dict[ResourceType, ResourceBinding] = {
             documents.c.workspace_id == chapters.c.workspace_id,
             documents.c.deleted_at.is_(None),
             documents.c.active_revision_id == chapters.c.document_revision_id,
+        ),
+    ),
+    ResourceType.MOCK_EXAM: ResourceBinding(mock_exams, deleted_column="deleted_at"),
+    ResourceType.MOCK_EXAM_QUESTION: ResourceBinding(
+        mock_exam_questions,
+        deleted_column="removed_at",
+        visible_when=exists().where(
+            mock_exams.c.id == mock_exam_questions.c.mock_exam_id,
+            mock_exams.c.workspace_id == mock_exam_questions.c.workspace_id,
+            mock_exams.c.deleted_at.is_(None),
         ),
     ),
 }
