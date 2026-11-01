@@ -13,7 +13,9 @@
 //   selection change re-renders only the checkboxes, not every draft. The list is shown a page
 //   of 100 drafts at a time (QIMP-REVIEW-SCALE: a 316-page paper yields ~750 drafts); only the
 //   rendering is paged — the selection, `전체 선택`, the counts and the registration cover every
-//   draft.
+//   draft. They work on a summary of every draft (QIMP-PAGING: no question text or answers); the
+//   content is read a page at a time (the first page comes with the page, the next and previous
+//   ones are read ahead) and a page not read yet shows a loading state.
 //
 // The server starts the import itself once the PDF is processed (QIMPORT-01-AC06): a visit (or
 // `?document=<id>` from a row's 문제 검토) shows the run's progress and drafts. One review per PDF
@@ -53,6 +55,8 @@ import {
   toggleAll,
   toggleOne,
   type BookChapterOption,
+  type DraftSummary,
+  type ImportDraft,
   type ImportRegistration,
   type ImportRun,
   type RefusedDraft,
@@ -61,7 +65,16 @@ import {
 } from '@/lib/questions/drafts';
 import { abortableSleep } from '@/lib/documents/job-events';
 import type { QuestionFormValues } from '@/lib/questions/form';
-import { clampDraftPage, draftPageCount, draftPageRange } from '@/lib/questions/draft-pages';
+import {
+  clampDraftPage,
+  DRAFT_PAGE_SIZE,
+  draftPageCount,
+  draftPageRange,
+  pageContent,
+  summaryFromImport,
+  withLoaded,
+  type DraftContents,
+} from '@/lib/questions/draft-pages';
 import { createImportClient, ImportApiError, importPath } from '@/lib/questions/import-client';
 import type { ReviewPdf } from '@/lib/questions/review-pdfs';
 import { workspaceHomePath } from '@/lib/workspaces/home';
@@ -82,8 +95,13 @@ export interface QuestionImportProps {
   readonly workspaceName?: string;
   readonly readOnly: ImportReadOnly;
   readonly initialRun: ImportRun | null;
-  /** The run's drafts, already in the review shape (QIMP-PAYLOAD: a slim initial payload). */
+  /**
+   * Drafts with their content, in the review shape (QIMP-PAYLOAD): the first page (QIMP-PAGING),
+   * or every draft when `initialSummaries` is left out.
+   */
   readonly initialDrafts: readonly ReviewDraft[];
+  /** Every draft of the run without its content (QIMP-PAGING); defaults to `initialDrafts`. */
+  readonly initialSummaries?: readonly DraftSummary[];
   /** The workspace's book chapters (draft chapter picker, CHAPTER-MAP). */
   readonly initialChapters?: readonly BookChapterOption[];
   /** The PDF the page was opened for (`?document=`), if any. */
@@ -155,6 +173,7 @@ export function QuestionImport({
   readOnly,
   initialRun,
   initialDrafts,
+  initialSummaries,
   initialChapters = [],
   documentId,
   reviewPdfs = [],
@@ -167,10 +186,21 @@ export function QuestionImport({
   const canEdit = readOnly === null;
 
   const [run, setRun] = useState<ImportRun | null>(initialRun);
-  const [drafts, setDrafts] = useState<ReviewDraft[]>(() => sortDrafts(initialDrafts));
+  /** Every draft (summary or loaded content): selection, counts, registration and paging. */
+  const [drafts, setDrafts] = useState<DraftSummary[]>(() =>
+    sortDrafts(initialSummaries ?? initialDrafts),
+  );
+  /** The content of the drafts read so far (QIMP-PAGING), by id. */
+  const [contents, setContents] = useState<DraftContents>(
+    () => new Map(initialDrafts.map((d) => [d.id, d])),
+  );
+  /** Pages (by first index) read since the list was last read: `failed` offers a retry. */
+  const [pageLoads, setPageLoads] = useState<ReadonlyMap<number, 'done' | 'failed'>>(
+    () => new Map(),
+  );
   /** Drafts checked for "선택한 문제 승인 및 등록" (screen state only). */
   const [selected, setSelected] = useState<ReadonlySet<string>>(() =>
-    initialSelection(sortDrafts(initialDrafts)),
+    initialSelection(initialSummaries ?? initialDrafts),
   );
   const [chapterOptions, setChapterOptions] =
     useState<readonly BookChapterOption[]>(initialChapters);
@@ -207,6 +237,11 @@ export function QuestionImport({
   const registerKey = useRef<{ readonly body: string; readonly key: string } | null>(null);
   const registrationController = useRef<AbortController | null>(null);
   const [reloadingList, setReloadingList] = useState(false);
+  /** The page on screen, for list reloads (which read its content with the summaries). */
+  const shownPage = useRef(0);
+  /** Pages (by first index) being read, and the reads' abort on leave. */
+  const pagesInFlight = useRef(new Set<number>());
+  const pagesController = useRef<AbortController | null>(null);
 
   const onUnauthenticated = useCallback(
     (error: unknown) => {
@@ -219,12 +254,33 @@ export function QuestionImport({
     [documentId, router, workspaceId],
   );
 
+  /**
+   * Reads every draft's summary and the content of the page on screen (kept within the pages of
+   * the new list) into state; contents read before are dropped (the next pages are read again).
+   * Resolves with the page's drafts; throws when either read fails.
+   */
+  const readDrafts = useCallback(
+    async (importId: string, signal?: AbortSignal): Promise<ReviewDraft[]> => {
+      const { items, chapters } = await client.draftSummaries(importId, signal);
+      const list = sortDrafts(items.map(summaryFromImport));
+      const { start, end } = draftPageRange(shownPage.current, list.length);
+      const page =
+        end > start ? (await client.draftPage(importId, start, DRAFT_PAGE_SIZE, signal)).items : [];
+      const loaded = page.map(reviewDraftFromImport);
+      const next = withLoaded(list, new Map(), loaded);
+      setDrafts(next.summaries);
+      setContents(next.contents);
+      setPageLoads(new Map(end > start ? [[start, 'done']] : []));
+      setChapterOptions(chapters);
+      return loaded;
+    },
+    [client],
+  );
+
   const refreshDrafts = useCallback(
     async (importId: string, signal?: AbortSignal) => {
       try {
-        const { items, chapters } = await client.draftList(importId, signal);
-        setDrafts(sortDrafts(items.map(reviewDraftFromImport)));
-        setChapterOptions(chapters);
+        await readDrafts(importId, signal);
         setListFailed(false);
         return true;
       } catch (error) {
@@ -233,8 +289,15 @@ export function QuestionImport({
         return false;
       }
     },
-    [client, onUnauthenticated],
+    [onUnauthenticated, readDrafts],
   );
+
+  /** A draft the server returned after a write: its content and summary on screen. */
+  const showUpdated = useCallback((updated: ImportDraft) => {
+    const next = reviewDraftFromImport(updated);
+    setDrafts((list) => replaceDraft<DraftSummary>(list, next));
+    setContents((current) => new Map(current).set(next.id, next));
+  }, []);
 
   /** Follows the run's current job to its end, then loads the run and its drafts. */
   const followRun = useCallback(
@@ -343,7 +406,7 @@ export function QuestionImport({
     if (!target) return { ok: false, message: '편집할 초안이 없습니다.' };
     try {
       const updated = await client.updateDraft(target.id, draftUpdateBody(values, baseVersion));
-      setDrafts((list) => replaceDraft(list, reviewDraftFromImport(updated)));
+      showUpdated(updated);
       setStates((s) => {
         const { [target.id]: _done, ...rest } = s;
         return rest;
@@ -370,7 +433,7 @@ export function QuestionImport({
       setStates(({ [target.id]: _old, ...rest }) => rest);
       try {
         const updated = await client.updateDraft(target.id, chapterBody(target, chapterId));
-        setDrafts((list) => replaceDraft(list, reviewDraftFromImport(updated)));
+        showUpdated(updated);
       } catch (error) {
         if (onUnauthenticated(error)) return;
         const message =
@@ -387,14 +450,14 @@ export function QuestionImport({
         });
       }
     },
-    [client, onUnauthenticated, refreshDrafts, runId],
+    [client, onUnauthenticated, refreshDrafts, runId, showUpdated],
   );
 
   async function reloadDraft(draftId: string): Promise<ReviewDraft | null> {
     if (!run) return null;
     try {
-      const items = (await client.listDrafts(run.id)).map(reviewDraftFromImport);
-      setDrafts(sortDrafts(items));
+      // The draft being edited is on the page on screen.
+      const items = await readDrafts(run.id);
       return items.find((d) => d.id === draftId) ?? null;
     } catch (error) {
       onUnauthenticated(error);
@@ -612,10 +675,60 @@ export function QuestionImport({
   const pageCount = draftPageCount(drafts.length);
   const currentPage = clampDraftPage(page, drafts.length);
   const { start: pageStart, end: pageEnd } = draftPageRange(currentPage, drafts.length);
+  /** The page's drafts with their content; null until it is read (QIMP-PAGING). */
   const pageDrafts = useMemo(
-    () => (pageCount > 1 ? drafts.slice(pageStart, pageEnd) : drafts),
-    [drafts, pageCount, pageStart, pageEnd],
+    () => pageContent(drafts, contents, currentPage),
+    [drafts, contents, currentPage],
   );
+  const pageFailed = pageDrafts === null && pageLoads.has(pageStart);
+
+  /** Reads one page's content (`start` = its first index); a page on screen reports a failure. */
+  const loadPage = useCallback(
+    async (importId: string, start: number, ids: readonly string[]) => {
+      if (pagesInFlight.current.has(start)) return;
+      pagesInFlight.current.add(start);
+      pagesController.current ??= new AbortController();
+      const { signal } = pagesController.current;
+      let outcome: 'done' | 'failed' = 'failed';
+      try {
+        const { items } = await client.draftPage(importId, start, DRAFT_PAGE_SIZE, signal);
+        const loaded = items.map(reviewDraftFromImport);
+        // The list moved under it (drafts added or removed since): `다시 시도` reads both again.
+        const got = new Set(loaded.map((d) => d.id));
+        if (ids.every((id) => got.has(id))) outcome = 'done';
+        setDrafts((list) => withLoaded(list, new Map(), loaded).summaries);
+        setContents((current) => {
+          const next = new Map(current);
+          for (const d of loaded) next.set(d.id, d);
+          return next;
+        });
+      } catch (error) {
+        if (signal.aborted) return;
+        if (onUnauthenticated(error)) return;
+      } finally {
+        pagesInFlight.current.delete(start);
+      }
+      setPageLoads((current) => new Map(current).set(start, outcome));
+    },
+    [client, onUnauthenticated],
+  );
+
+  // The page on screen is read when it has no content yet, then its neighbours ahead of time.
+  useEffect(() => {
+    shownPage.current = currentPage;
+    if (!runId || drafts.length === 0) return;
+    const wanted = pageDrafts === null ? [currentPage] : [currentPage + 1, currentPage - 1];
+    for (const p of wanted) {
+      if (p < 0 || p >= pageCount || pageContent(drafts, contents, p)) continue;
+      const { start, end } = draftPageRange(p, drafts.length);
+      if (pageLoads.has(start)) continue;
+      const ids = drafts.slice(start, end).map((d) => d.id);
+      // Outside the effect body: the read updates state when it arrives.
+      void Promise.resolve().then(() => loadPage(runId, start, ids));
+    }
+  }, [contents, currentPage, drafts, loadPage, pageCount, pageDrafts, pageLoads, runId]);
+
+  useEffect(() => () => pagesController.current?.abort(), []);
   const changePage = (next: number, fromBottom: boolean) => {
     focusListTop.current = fromBottom;
     setPage(next);
@@ -747,7 +860,11 @@ export function QuestionImport({
       ) : null}
 
       {run !== null ? (
-        <section className={styles.drafts} aria-labelledby="qimport-drafts-title">
+        <section
+          className={styles.drafts}
+          aria-labelledby="qimport-drafts-title"
+          aria-busy={pageDrafts === null && !pageFailed ? true : undefined}
+        >
           <div className={styles.draftsHeader}>
             <div>
               <h2
@@ -805,19 +922,34 @@ export function QuestionImport({
               onPageChange={(next) => changePage(next, false)}
             />
           ) : null}
-          <QuestionDraftReview
-            label="가져온 초안"
-            drafts={pageDrafts}
-            states={states}
-            readOnly={!canEdit}
-            selected={chosen}
-            selectionDisabled={publishing}
-            onSelectChange={selectDraft}
-            onEdit={editDraft}
-            onCompare={setComparing}
-            renderExtra={renderChapter}
-            pageHref={draftPageHref}
-          />
+          {pageDrafts ? (
+            <QuestionDraftReview
+              label="가져온 초안"
+              drafts={pageDrafts}
+              states={states}
+              readOnly={!canEdit}
+              selected={chosen}
+              selectionDisabled={publishing}
+              onSelectChange={selectDraft}
+              onEdit={editDraft}
+              onCompare={setComparing}
+              renderExtra={renderChapter}
+              pageHref={draftPageHref}
+            />
+          ) : pageFailed ? (
+            <div role="alert" className={styles.failure}>
+              <p>
+                초안 {pageStart + 1}–{pageEnd}을 불러오지 못했습니다.
+              </p>
+              <Button size="sm" onClick={() => void reloadList()} loading={reloadingList}>
+                다시 시도
+              </Button>
+            </div>
+          ) : (
+            <p role="status" className={styles.meta}>
+              초안 {pageStart + 1}–{pageEnd}을 불러오는 중입니다…
+            </p>
+          )}
           {pageCount > 1 ? (
             <DraftPager
               label="초안 페이지 (목록 아래)"

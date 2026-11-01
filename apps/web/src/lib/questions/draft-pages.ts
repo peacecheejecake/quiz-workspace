@@ -1,6 +1,15 @@
 // Pages of the QIMPORT-01 draft review (QIMP-REVIEW-SCALE): a real question PDF yields hundreds
 // of drafts (316 pages → ~750), so the review shows them a page at a time. Only the rendering is
 // paged — the drafts, the selection, `전체 선택` and every count stay over all drafts.
+//
+// QIMP-PAGING: the screen keeps a summary of every draft (`DraftSummary`: what selecting,
+// counting and registering reads, no question text or answers) and the content of the pages it
+// has loaded (`GET /drafts?offset&limit`); a page whose content is not loaded yet shows a loading
+// state until it arrives.
+import type { Schemas } from '@quiz/api-client';
+import type { DraftSummary, ReviewDraft } from './drafts';
+
+export type ImportDraftSummary = Schemas['ImportDraftSummary'];
 
 /** Drafts per page of the review. */
 export const DRAFT_PAGE_SIZE = 100;
@@ -49,4 +58,61 @@ export function pagerItems(current: number, count: number): PagerItem[] {
   if (to < count - 2) items.push('gap');
   items.push(count - 1);
   return items;
+}
+
+/** The screen's summary of an API draft summary (same rules as `reviewDraftFromImport`). */
+export function summaryFromImport(draft: ImportDraftSummary): DraftSummary {
+  return {
+    id: draft.id,
+    version: draft.version,
+    position: draft.position,
+    questionNumber: draft.question_number,
+    type: draft.question_type,
+    reviewStatus: draft.review_status,
+    publishedQuestionId: draft.published_question_id,
+    publishable: draft.publishable,
+    answerMissing: draft.answer_missing,
+    issues: draft.validations
+      .filter((v) => v.code !== 'answer_missing')
+      .map((v) => ({ code: v.code, severity: v.severity })),
+    chapter: { chapter: draft.chapter_id ? { id: draft.chapter_id } : null },
+  };
+}
+
+/** Loaded draft contents by draft id. */
+export type DraftContents = ReadonlyMap<string, ReviewDraft>;
+
+/**
+ * The drafts of `page` with their content, or null while any of them is not loaded (or was
+ * loaded at another version: the content on screen is always the version that is selected and
+ * registered).
+ */
+export function pageContent(
+  summaries: readonly DraftSummary[],
+  contents: DraftContents,
+  page: number,
+): ReviewDraft[] | null {
+  const { start, end } = draftPageRange(page, summaries.length);
+  const out: ReviewDraft[] = [];
+  for (const summary of summaries.slice(start, end)) {
+    const content = contents.get(summary.id);
+    if (!content || content.version !== summary.version) return null;
+    out.push(content);
+  }
+  return out;
+}
+
+/**
+ * Adds loaded drafts: their content, and their summary in the list (a draft read later is newer:
+ * its version, review state and chapter replace what the list had).
+ */
+export function withLoaded(
+  summaries: readonly DraftSummary[],
+  contents: DraftContents,
+  loaded: readonly ReviewDraft[],
+): { summaries: DraftSummary[]; contents: Map<string, ReviewDraft> } {
+  const byId = new Map(loaded.map((d) => [d.id, d]));
+  const next = new Map(contents);
+  for (const d of loaded) next.set(d.id, d);
+  return { summaries: summaries.map((s) => byId.get(s.id) ?? s), contents: next };
 }

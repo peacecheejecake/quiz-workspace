@@ -5,15 +5,19 @@
 //
 // The drafts reach the client already in the review shape (`reviewDraftFromImport`, what the
 // screen keeps in state anyway), not as the API's `ImportDraft`s: those repeat the validations,
-// timestamps, run ids, producer ids and extraction block ids the screen never reads, and every
-// draft travels in the initial RSC payload (QIMP-PAYLOAD: ~1000 drafts of a 316-page paper).
+// timestamps, run ids, producer ids and extraction block ids the screen never reads (QIMP-PAYLOAD).
+// And only the first page of them carries its content (QIMP-PAGING): every draft travels in the
+// initial RSC payload as a summary (selection, counts, registration), the other pages' content is
+// read by the screen when it shows them (~1000 drafts of a 316-page paper).
 import { notFound, redirect } from 'next/navigation';
 import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
 import { loginRedirectPath } from '@/lib/auth/routes';
+import { DRAFT_PAGE_SIZE, summaryFromImport } from './draft-pages';
 import {
   reviewDraftFromImport,
   sortDrafts,
   type BookChapterOption,
+  type DraftSummary,
   type ImportRun,
   type ReviewDraft,
 } from './drafts';
@@ -22,7 +26,9 @@ import { reviewPdfs, type ReviewPdf } from './review-pdfs';
 
 export interface ImportScreenData {
   readonly run: ImportRun | null;
-  /** The run's drafts in the review shape, in source order. */
+  /** Every draft of the run without its content, in source order (QIMP-PAGING). */
+  readonly summaries: readonly DraftSummary[];
+  /** The drafts of the first page in the review shape, in source order. */
   readonly drafts: readonly ReviewDraft[];
   /** The workspace's book chapters: the draft chapter picker (CHAPTER-MAP). */
   readonly chapters: readonly BookChapterOption[];
@@ -61,27 +67,42 @@ export async function loadLatestImport(
       },
     })
     .catch(() => null);
-  if (!runs) return { run: null, drafts: [], chapters: [], loadedAt, loadFailed: true };
+  if (!runs)
+    return { run: null, summaries: [], drafts: [], chapters: [], loadedAt, loadFailed: true };
   if (!runs.data) {
     outcome(runs.response.status, runs.error, { workspace: true });
-    return { run: null, drafts: [], chapters: [], loadedAt, loadFailed: true };
+    return { run: null, summaries: [], drafts: [], chapters: [], loadedAt, loadFailed: true };
   }
   const run = runs.data.items[0] ?? null;
-  if (!run) return { run: null, drafts: [], chapters: [], loadedAt, loadFailed: false };
+  if (!run) {
+    return { run: null, summaries: [], drafts: [], chapters: [], loadedAt, loadFailed: false };
+  }
 
-  const drafts = await api
-    .GET('/api/v1/question-imports/{import_id}/drafts', {
-      params: { path: { import_id: run.id } },
-    })
-    .catch(() => null);
-  if (!drafts?.data) {
-    if (drafts) outcome(drafts.response.status, drafts.error);
-    return { run, drafts: [], chapters: [], loadedAt, loadFailed: true };
+  const [summaries, page] = await Promise.all([
+    api
+      .GET('/api/v1/question-imports/{import_id}/draft-summaries', {
+        params: { path: { import_id: run.id } },
+      })
+      .catch(() => null),
+    api
+      .GET('/api/v1/question-imports/{import_id}/drafts', {
+        params: {
+          path: { import_id: run.id },
+          query: { offset: 0, limit: DRAFT_PAGE_SIZE, include_chapters: false },
+        },
+      })
+      .catch(() => null),
+  ]);
+  if (!summaries?.data || !page?.data) {
+    const failed = summaries?.data ? page : summaries;
+    if (failed && !failed.data) outcome(failed.response.status, failed.error);
+    return { run, summaries: [], drafts: [], chapters: [], loadedAt, loadFailed: true };
   }
   return {
     run,
-    drafts: sortDrafts(drafts.data.items.map(reviewDraftFromImport)),
-    chapters: drafts.data.chapters ?? [],
+    summaries: sortDrafts(summaries.data.items.map(summaryFromImport)),
+    drafts: sortDrafts(page.data.items.map(reviewDraftFromImport)),
+    chapters: summaries.data.chapters ?? [],
     loadedAt,
     loadFailed: false,
   };
