@@ -303,11 +303,12 @@ test(
     const panel = panelUi.numbered(page, 4);
     await expect(panel).toBeVisible();
     await expectAccessible(page, 'practice panel');
-    await panelUi.options(panel).first().check();
+    // A wrong option by its text, not by position: the displayed order is shuffled per session,
+    // so `.first()` scanned the correct or the incorrect graded state at random. Incorrect shows
+    // both result tones (the chosen option and the correct one).
+    await panelUi.option(panel, 'a11y04-4 보기 나').check();
     await panelUi.submit(panel).click();
-    await expect(panelUi.result(panel)).toContainText(
-      new RegExp(`${RESULT_TEXT.correct.source}|${RESULT_TEXT.incorrect.source}`, 'i'),
-    );
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
     await expectAccessible(page, 'practice panel graded');
     // UX7-BANK: the editors' 문제 관리 menu and the 문제 편집 dialog over the panel.
     await panelUi.manage(panel).click();
