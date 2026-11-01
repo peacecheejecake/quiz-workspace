@@ -252,4 +252,4 @@ fingerprint = SHA-256(`fingerprint/2`, 문제 유형, 정규화한 발문, 정�
 
 ### 10.3 가져오기 검토의 중복 표시
 
-`GET /question-imports/{id}/draft-summaries`·`/drafts`·초안 PATCH 응답의 `duplicate_of`: 등록되지 않은 초안의 fingerprint가 Workspace의 살아 있는 확정 문제와 같으면 `{kind: "question", question_id, number}`, 아니면 같은 가져오기에서 앞선(위치 순) 초안과 같으면 `{kind: "draft", draft_id, number}`, 아니면 null. 표시만 하고 막지 않는다: 중복 초안은 처음에 선택되지 않고 `전체 선택`에서 빠지며(사용자 결정 2026-11-01) 이유("이미 등록된 3번 문제와 같습니다" / "이 PDF의 5번 초안과 같습니다")를 보인다. 개별로 골라 등록할 수 있다(등록한 뒤 정리 dialog로 합칠 수 있다).
+`GET /question-imports/{id}/draft-summaries`·`/drafts`·초안 PATCH 응답의 `duplicate_of`: 등록되지 않은 초안의 fingerprint가 Workspace의 살아 있는 확정 문제와 같으면 `{kind: "question", question_id, number}`, 아니면 같은 가져오기에서 앞선(위치 순) 초안과 같으면 `{kind: "draft", draft_id, number}`, 아니면 null. 표시만 하고 막지 않는다: 중복 초안은 처음에 선택되지 않고 `전체 선택`에서 빠지며(사용자 결정 2026-11-01) 이유("이미 등록된 3번 문제와 같습니다" / "이 PDF의 5번 초안과 같습니다")를 보인다. 개별로 골라 등록할 수 있다(등록한 뒤 정리 dialog로 합칠 수 있다). 초안 내용을 편집해 저장하면 다른 초안의 중복 여부도 바뀔 수 있으므로(앞선 초안을 뒤의 초안과 같게, 또는 다르게 고침) 검토 화면은 저장 뒤 모든 초안 요약과 보고 있는 페이지를 다시 읽는다(Codex P2).

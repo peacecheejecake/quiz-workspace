@@ -414,6 +414,10 @@ export function QuestionImport({
     try {
       const updated = await client.updateDraft(target.id, draftUpdateBody(values, baseVersion));
       showUpdated(updated);
+      // A content edit can make later drafts duplicates of this one, or stop them being ones
+      // (UX7-DEDUP): re-read every summary and the page on screen, whose flags the server
+      // recomputes (cached pages are dropped and re-read when shown).
+      if (run) void refreshDrafts(run.id);
       setStates((s) => {
         const { [target.id]: _done, ...rest } = s;
         return rest;
