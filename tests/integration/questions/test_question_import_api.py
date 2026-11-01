@@ -8,6 +8,7 @@ Fixtures: conftest.py (jobs run in-process). Needs the 20261018100000 migration.
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -490,3 +491,92 @@ def test_qimport_01_ac06_documents_carry_their_latest_import_beyond_the_run_wind
     assert latest[busy] == newest[0]["id"]
     detail = viewer.ok("GET", f"/documents/{old}")
     assert detail["latest_import_id"] == old_run["id"]
+
+
+CONTENT_FIELDS = {
+    "payload",
+    "stem",
+    "options",
+    "correct_option_ids",
+    "accepted_answers",
+    "explanation",
+    "rubric",
+    "justification",
+    "evidence",
+}
+
+
+def test_qimport_01_ac09_drafts_are_read_page_by_page_and_summarized_without_content(
+    seed: Any,
+) -> None:
+    """QIMP-PAGING: `offset`/`limit` read one page of the drafts (bounded, `total` counts the
+    run); the summaries list every draft without stems, options, answers or explanations; both
+    keep the drafts' audience (other users 404, viewers and archived workspaces read)."""
+    owner = seed.client("qpaging")
+    viewer = seed.client("qpaging-viewer")
+    mallory = seed.client("qpaging-mallory")
+    ws = owner.create_workspace()
+    run, full = owner.import_paper(ws["id"])
+    seed.membership(ws["id"], viewer.user, "viewer")
+    base = f"/question-imports/{run['id']}"
+    n = len(full)
+    assert n >= 3
+
+    everything = owner.ok("GET", f"{base}/drafts")
+    assert everything["total"] == n
+    assert [d["id"] for d in everything["items"]] == [d["id"] for d in full]
+
+    page = owner.ok("GET", f"{base}/drafts?offset=1&limit=2")
+    assert page["total"] == n
+    assert page["items"] == full[1:3]
+    assert page["chapters"] == everything["chapters"]
+    slim = owner.ok("GET", f"{base}/drafts?offset=1&limit=2&include_chapters=false")
+    assert (slim["items"], slim["chapters"], slim["total"]) == (full[1:3], [], n)
+    tail = owner.ok("GET", f"{base}/drafts?offset={n - 1}")
+    assert (tail["items"], tail["total"]) == (full[n - 1 :], n)
+    assert owner.ok("GET", f"{base}/drafts?offset={n}&limit=200")["items"] == []
+    for bad in ("limit=0", "limit=201", "offset=-1", "limit=x"):
+        res = owner.call("GET", f"{base}/drafts?{bad}")
+        assert res.status_code == 422, bad
+
+    summaries = owner.ok("GET", f"{base}/draft-summaries")
+    assert summaries["chapters"] == everything["chapters"]
+    items = summaries["items"]
+    assert [s["id"] for s in items] == [d["id"] for d in full]
+    for summary, draft in zip(items, full, strict=True):
+        assert set(summary) == {
+            "id",
+            "version",
+            "position",
+            "question_number",
+            "question_type",
+            "review_status",
+            "published_question_id",
+            "publishable",
+            "answer_missing",
+            "validations",
+            "chapter_id",
+        }
+        for key in ("version", "position", "question_number", "question_type", "review_status"):
+            assert summary[key] == draft[key], key
+        for key in ("published_question_id", "publishable", "answer_missing"):
+            assert summary[key] == draft[key], key
+        assert summary["validations"] == [
+            {"code": v["code"], "severity": v["severity"]} for v in draft["validations"]
+        ]
+        assert summary["chapter_id"] == (draft["chapter"] or {}).get("id")
+    text = json.dumps(summaries["items"], ensure_ascii=False)
+    assert not CONTENT_FIELDS & {k for s in items for k in s}
+    for draft in full:
+        assert draft["payload"]["stem"] not in text
+        for option in draft["payload"]["options"]:
+            assert f'"{option["text"]}"' not in text
+
+    for path in (f"{base}/drafts?offset=0&limit=2", f"{base}/draft-summaries"):
+        seed.problem(mallory.call("GET", path), 404)
+        assert viewer.ok("GET", path) == owner.ok("GET", path)
+    seed.problem(owner.call("GET", f"/question-imports/{seed.new_id()}/draft-summaries"), 404)
+
+    owner.ok("POST", f"/workspaces/{ws['id']}/archive")
+    assert owner.ok("GET", f"{base}/draft-summaries")["items"] == items
+    assert owner.ok("GET", f"{base}/drafts?offset=1&limit=2")["items"] == full[1:3]
