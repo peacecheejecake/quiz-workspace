@@ -17,6 +17,7 @@
 | `.github/workflows/deploy.yml` | 배포(staging: `develop` CI 후 자동·수동, production: `main` 수동): preflight → 이미지(digest) → migration → Railway → Vercel → smoke |
 | `scripts/deploy_prepare.py` (`make deploy-prepare`) | 한 ref의 배포 준비 점검 + 로컬 이미지 빌드(배포·원격 변경 없음, 4장 "배포 준비 점검") |
 | `scripts/deploy/railway_deploy.py` | Railway 서비스를 이미지 digest로 갱신·배포·SUCCESS 대기 |
+| `.github/workflows/preview.yml`, `scripts/deploy/vercel_preview.py` | PR마다 web preview(staging backend) 배포·고정 댓글·PR close 시 삭제(10장) |
 | `tests/smoke/` (`make smoke-local`, `make smoke-staging`) | DEP-01~07 자동 점검 |
 
 > secret 값은 저장소·이슈·채팅에 쓰지 않는다. 생성한 값은 password manager에 보관하고 각 플랫폼 화면에 직접 붙여 넣는다. 로컬에서 env 파일을 만들 때는 저장소 밖(예: `~/secure/quiz/`)에 두고 `chmod 600`.
@@ -252,6 +253,7 @@ make deploy-prepare REF=main ENV=production ARGS="--db-url-env SUPABASE_DB_URL -
 - LLM 사용 여부·모델·예산(`LLM_API_KEY`/`LLM_MODEL`; 미설정 시 문제 생성 비활성). 문서 요약·챕터 정리 노트(`WORKER_DOCUMENT_SUMMARY`·`WORKER_CHAPTER_NOTES`)를 staging·production에서 켤지와 그 예산(9장, ⛔ 사용자 승인).
 - `/terms`, `/privacy` 실제 문구(현재 placeholder).
 - CAPTCHA(A4 구현 완료): staging을 기본값인 Turnstile 테스트 키 쌍으로 둘지, staging 전용 실제 widget을 쓸지(그 경우 DEP smoke 로그인 단계는 수동). production은 실제 widget 필수.
+- PR preview(10장): 켤지(`PR_PREVIEW_ENABLED`), preview project에 `RELAY_CLIENT_SECRET`을 넣을지(공유 링크 preview), staging이 실제 Turnstile widget을 쓸 때 preview 로그인을 어떻게 할지.
 
 ## 8. 첫 staging 배포에서 확인할 가정
 
@@ -300,3 +302,28 @@ make deploy-prepare REF=main ENV=production ARGS="--db-url-env SUPABASE_DB_URL -
 5. 첫 주에는 provider 사용량과 `usage.cost_usd` 합계를 예산과 비교한다.
 
 **끄기·롤백**: `api`·`worker`의 플래그를 `false`로(같은 값) 바꾸고 Restart. 이미 만든 요약·노트는 그대로 읽히고(공유 링크 포함), 새 생성·발행 시 자동 요약만 멈춘다. LLM 사용 자체를 끊으려면 `LLM_API_KEY`도 지운다(문제 생성도 함께 꺼짐). 문서별로는 편집자가 요약 패널의 `자동 갱신 끄기`로 그 문서의 자동 재요약만 멈출 수 있다.
+
+## 10. PR preview 켜기 (PR-PREVIEW)
+
+설계: [deployment.md §5.1](deployment.md). 같은 저장소 branch에서 `develop`으로 연 PR마다 web만 Vercel preview로 배포하고 staging backend를 쓴다. 저장소 쪽은 준비돼 있고, 아래를 마치기 전에는 workflow의 job이 모두 skipped다.
+
+1. **Vercel preview project**: Add New → Project → 같은 GitHub repo import, 이름 예: `quiz-web-preview`, Root Directory `apps/web`, Framework Next.js, Node 24, Functions region `sin1`. `vercel.json`이 git 자동 배포를 끈다(Git 연결을 끊어도 된다). **도메인을 추가하지 않는다**(staging·production 도메인 금지). Settings → Deployment Protection → **Vercel Authentication: Standard Protection 유지**(preview는 team member만 연다).
+2. **preview project의 Environment Variables (Preview 환경만)** — staging web과 같은 public 값, 비밀은 preview 전용:
+   - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`: staging project의 Preview 값과 **같게**(staging Supabase·staging API·staging과 같은 sitekey).
+   - `APP_ENV=preview`, `RELAY_CLIENT_IP_HEADER=x-real-ip`: staging과 같게.
+   - `AUTH_RECOVERY_MARKER_SECRET`: **새 값** `openssl rand -base64 48`(staging과 다르게, Sensitive로 저장).
+   - `RELAY_CLIENT_SECRET`(선택, 사용자 결정): staging Railway `api`와 같은 값이어야 preview의 `/shared`가 동작한다. 넣지 않으면 preview에서 공유 링크만 503. 넣으면 저장소 push 권한자가 PR build에서 이 값을 읽을 수 있다(staging `/shared`의 per-client rate limit 구분만 위조 가능).
+   - 넣지 않는 것: `SUPABASE_SECRET_KEY`·`DATABASE_URL` 등 server-only backend 값(web이 쓰지 않음), production 값 전부, `API_INTERNAL_BASE_URL`.
+   - Production 환경 값은 비워 둔다(이 project는 `--prod` 배포를 하지 않는다).
+3. **Vercel token**: Account Settings → Tokens → 새 token(이름 `pr-preview`, 같은 team scope, **짧은 만료**). staging·production token과 따로 두어 단독으로 폐기할 수 있게 한다.
+4. **GitHub Environment `pr-preview`**: Settings → Environments → New → `pr-preview`. Deployment branches **No restriction**(PR run의 ref는 `refs/pull/<n>/merge`; 대상 제한은 workflow의 같은-저장소·`develop` 조건), required reviewers 없음.
+   - secret `VERCEL_TOKEN`(3단계), variables `VERCEL_ORG_ID`(team id, staging과 같음), `VERCEL_PROJECT_ID`(**1단계 preview project의 id** — staging/production project id를 넣지 않는다).
+   - `VERCEL_CLI_VERSION`은 기존 repository variable을 그대로 쓴다.
+   - 확인: `staging` environment의 Deployment branches가 `develop`만, `production`이 `main`만인지(1장 7단계, 6장 9단계). PR workflow가 그 environment를 참조해도 거부되게 하는 경계다.
+5. **켜기**: repository variable `PR_PREVIEW_ENABLED=true`.
+6. **확인**: `apps/web`을 건드리는 시험 PR을 `develop`으로 연다 → Actions `Preview`의 `preview · deploy`가 성공하고, PR에 `**PR preview** (<sha>): https://…vercel.app` 댓글이 하나 생기며, push하면 같은 댓글이 새 URL로 바뀐다. URL을 열면 Vercel 로그인 후 `/login`이 뜨고 staging 계정으로 로그인·workspace 목록이 보인다. Vercel preview project의 Deployments에는 그 PR의 최신 배포만 남는다. PR을 닫으면 `preview · cleanup` 뒤 배포가 사라지고 댓글이 "삭제됨"으로 바뀐다.
+7. **끄기**: `PR_PREVIEW_ENABLED`를 지우거나 `false`. 남은 배포는 Vercel preview project에서 지우고, 필요하면 `pr-preview` token을 폐기한다.
+
+**메일 링크.** preview에서 가입·재설정을 요청하면 메일 링크는 staging 웹(`site_url`)으로 열린다(template이 `{{ .SiteURL }}`). staging Supabase의 redirect allowlist에 preview host를 넣지 않는다(wildcard 금지).
+
+**첫 PR preview에서 확인할 가정.** `vercel deploy --prebuilt --meta`가 meta를 붙이는지, REST `GET /v6/deployments`(projectId, `meta-previewPr` filter)와 `DELETE /v13/deployments/{id}`가 team token으로 동작하는지 — `vercel_preview.py`는 응답의 `meta.previewPr`를 직접 비교하므로 server-side filter가 무시돼도 다른 배포를 지우지 않는다. 실패는 `vercel_preview: …: HTTP <status>`로 보인다.
