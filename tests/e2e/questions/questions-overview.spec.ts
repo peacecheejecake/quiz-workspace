@@ -994,22 +994,37 @@ test(
       await forwardStaysClosed(dialog);
     }
 
-    // Back while a dialog is open closes it, keeping a filter chosen meanwhile; Forward does not
-    // reopen it, and the next Back leaves the home.
+    // Back while a dialog is open closes it, back on the address before the open (as Back
+    // restores it, SEARCH-01-AC09); Forward does not reopen it. Closed with its button instead,
+    // a filter chosen meanwhile survives, and Back still leaves the home.
     const unseen = (url: URL) => noPanel(url) && url.searchParams.get('status') === 'unseen';
     await arrive();
+    await homeUi.documentsButton(page).click();
+    await expect(documents).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(documents).toBeHidden();
+    await forward();
+    await expect(page).toHaveURL(noPanel);
+    await expect(documents).toBeHidden();
     await homeUi.documentsButton(page).click();
     await expect(documents).toBeVisible();
     await homeUi.statusFilterToggle(page).click();
     await homeUi.statusFilters(page).getByRole('button', { name: '미열람', exact: true }).click();
     await expect(page).toHaveURL(/[?&]status=unseen(&|$)/);
-    await back();
-    await expect(page).toHaveURL(unseen);
+    // The close shows the filtered home over the base entry: Next reads it, and WebKit cancels a
+    // Back started before that read ends (Next then loads the page again instead).
+    const closedRead = page.waitForResponse(
+      (r) =>
+        r.url().includes('_rsc=') &&
+        noPanel(new URL(r.url())) &&
+        new URL(r.url()).searchParams.get('status') === 'unseen',
+    );
+    await documents.getByRole('button', { name: closeDocuments }).click();
     await expect(documents).toBeHidden();
+    await expect(page).toHaveURL(unseen);
+    await closedRead;
     await expect(overviewUi.dots(page)).toHaveCount(2);
-    await forward();
-    await expect(page).toHaveURL(unseen);
-    await expect(documents).toBeHidden();
     await backLeavesHome();
     await forwardStaysClosed(documents);
 

@@ -1,21 +1,27 @@
 // Browser history of the workspace home's dialogs and panels (UX7-BACK, UX7-BACK-2, docs/screens/
 // questions-overview.md "뒤로가기", QOV-01-AC14). The rule: a closed dialog is never in the
 // history, in either direction; while dialogs are open each Back closes one of them; closing
-// returns to the address before the open, keeping what changed meanwhile (filters, searches).
+// returns to the address before the open (a close button keeps what changed meanwhile: filters,
+// searches; a Back restores that address as it was).
 //
 // Opening a dialog (or moving the practice panel to another question) pushes an entry, so Back
 // while it is open undoes the open. Browsers cannot drop forward entries except by writing a new
 // one, so every close ends with a push that truncates them:
 // - A close button (or Escape, save, delete) at depth d first goes back d entries to the base
-//   (the entry before the first open), writes the closed URL there, and then either pushes one
-//   entry for the dialogs still open (Back then closes those) or, with none left, marks the base
-//   "skip" and pushes the closed URL again.
-// - A Back that closes a dialog lands on the entry before its open: that entry is marked "skip"
-//   and the closed URL (the address before the Back with that dialog closed) is pushed again.
-// A skip entry duplicates the entry above it: Back onto it goes on back (`skip` entries, the run
-// of skip entries below it included) and Forward onto it goes on forward, before Next renders it
-// (our listener runs in the capture phase and stops Next's). Without a forward entry to drop
-// (Navigation API `canGoForward`), a close at depth 0 just rewrites the entry.
+//   (the entry before the first open; Next shows it), then pushes the closed URL: one entry for
+//   the dialogs still open (Back then closes those), or, with none left, the closed home above
+//   the base, which becomes a "skip" entry.
+// - A Back that closes a dialog lands on the entry before its open (its address, as Back restores
+//   it: SEARCH-01-AC09): that entry becomes a skip entry and a copy is pushed above it.
+// A skip entry keeps its own address (Next's saved tree must match it), the closed address before
+// the open; the entry above it is what it stands for. Back onto it goes on back (`skip` entries:
+// the run of skip entries below it included), Forward onto it goes on forward. Our popstate
+// listener stops Next's when it runs first (WebKit runs capture listeners first; Chromium runs
+// window listeners in registration order, so Next may render the skip entry for a moment there).
+// Landing on one from another document, or with nowhere further back, stays on it. Without a
+// forward entry to drop (Navigation API `canGoForward`), a close at depth 0 just rewrites the
+// entry. When the base belongs to another document (the page was reloaded with a dialog open),
+// the rewind loads it: the close is handed over in sessionStorage and finished there.
 //
 // Each entry of ours records in `history.state` (beside Next's keys) its position (`pos`, to tell
 // Back from Forward), its depth (entries above its base) and, on a skip entry, how far to skip.
@@ -23,7 +29,7 @@
 // Back/Forward restores keep custom state; router navigations (router.replace/refresh) drop it, so
 // the home stamps it back (stamp) after renders and before every push.
 
-import { closeDialog, openDialogs, withoutPanels } from './home';
+import { openDialogs, withoutPanels } from './home';
 
 export const PANEL_POS_KEY = '__quizPanelPos';
 export const PANEL_DEPTH_KEY = '__quizPanelDepth';
@@ -31,9 +37,15 @@ export const PANEL_DEPTH_KEY = '__quizPanelDepth';
 export const PANEL_UNDER_KEY = '__quizPanelUnder';
 /** On a skip entry: how many entries Back onto it goes on back. */
 export const PANEL_SKIP_KEY = '__quizPanelSkip';
+/** sessionStorage: a close whose rewind left the document (see the module comment). */
+export const PANEL_CLOSE_KEY = '__quizPanelClose';
 
-/** How long a close (or a skip) waits for the traversal it started before settling in place. */
-export const REWIND_TIMEOUT_MS = 1000;
+/**
+ * How long a close or a skip waits for the traversal it started before settling in place. A
+ * traversal to another document never reports back here, and settling (a Next navigation) while
+ * it loads would cancel it in WebKit: keep this well above a page load.
+ */
+export const TRAVERSAL_TIMEOUT_MS = 5000;
 
 export interface EntryMark {
   readonly pos: number;
@@ -85,15 +97,12 @@ export function markState(state: unknown, mark: EntryMark, skip = 0): Record<str
 export interface DialogUrls {
   /** The open dialogs of `search` (openDialogs). */
   open(search: string): readonly string[];
-  /** `search` with `dialog` closed (closeDialog). */
-  close(search: string, dialog: string): string;
   /** `search` with every dialog closed (withoutPanels). */
   closeAll(search: string): string;
 }
 
 export const DEFAULT_DIALOG_URLS: DialogUrls = {
   open: openDialogs,
-  close: (search, dialog) => closeDialog(search, dialog),
   closeAll: (search) => withoutPanels(search),
 };
 
@@ -102,6 +111,7 @@ export interface PanelHistoryWindow {
   readonly location: Pick<Location, 'pathname' | 'search' | 'href'>;
   /** The Navigation API where the browser has it. */
   readonly navigation?: { readonly canGoForward: boolean } | undefined;
+  readonly sessionStorage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
   addEventListener(
     type: 'popstate',
     listener: (event: PopStateEvent) => void,
@@ -114,18 +124,21 @@ export interface PanelHistoryWindow {
   ): void;
   setTimeout(handler: () => void, ms: number): number;
   clearTimeout(id: number): void;
+  /** Epoch milliseconds (Date.now). */
+  now(): number;
+}
+
+/** A close waiting for its rewind to land on the base (`pos`). */
+interface Rewind {
+  readonly pos: number;
+  /** The target with every dialog closed. */
+  readonly base: string;
+  /** Pushed above the base when dialogs stay open. */
+  readonly reopen: string | null;
 }
 
 type Pending =
-  | {
-      readonly kind: 'rewind';
-      /** Written onto the base: the target with every dialog closed. */
-      readonly base: string;
-      /** Pushed after the base when dialogs stay open. */
-      readonly reopen: string | null;
-      readonly fallback: string;
-      timer: number;
-    }
+  | ({ readonly kind: 'rewind'; readonly fallback: string; timer: number } & Rewind)
   | { readonly kind: 'skip'; timer: number };
 
 /** Path + query of `url` (resolved against `href`). */
@@ -139,17 +152,24 @@ function splitUrl(url: string): { path: string; search: string } {
   return at === -1 ? { path: url, search: '' } : { path: url.slice(0, at), search: url.slice(at) };
 }
 
-/** Same path and the same query parameters, whatever their order. */
-function sameAddress(a: string, b: string): boolean {
-  const x = splitUrl(a);
-  const y = splitUrl(b);
-  if (x.path !== y.path) return false;
-  const sorted = (search: string) => {
-    const params = new URLSearchParams(search);
-    params.sort();
-    return params.toString();
-  };
-  return sorted(x.search) === sorted(y.search);
+function parseRewind(raw: string | null, now: number): Rewind | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<Rewind> & { at?: unknown };
+    if (
+      typeof value.at === 'number' &&
+      now - value.at >= 0 &&
+      now - value.at <= TRAVERSAL_TIMEOUT_MS &&
+      typeof value.pos === 'number' &&
+      typeof value.base === 'string' &&
+      (typeof value.reopen === 'string' || value.reopen === null)
+    ) {
+      return { pos: value.pos, base: value.base, reopen: value.reopen };
+    }
+  } catch {
+    // A malformed value is no handover.
+  }
+  return null;
 }
 
 const NO_MARK: EntryMark = { pos: 0, depth: 0, under: 0 };
@@ -182,8 +202,20 @@ export class PanelHistory {
     const entry = readEntry(this.win.history.state);
     this.mark = entry.mark;
     this.resting = this.current();
-    // Arrived on a skip entry (a reload, or Forward from another document): stay on it.
-    if (entry.skip > 0) this.rest(this.current());
+    const handover = this.takeRewind();
+    const basePath = handover ? splitUrl(handover.base).path : null;
+    if (
+      handover &&
+      basePath === this.win.location.pathname &&
+      (!entry.ours || entry.mark.pos === handover.pos)
+    ) {
+      // A close's rewind loaded this document (the base): finish the close here.
+      this.mark = { ...entry.mark, pos: handover.pos };
+      this.settle(handover.base, handover.reopen);
+    } else if (entry.skip > 0) {
+      // Arrived on a skip entry (a reload, or Forward from another document): stay on it.
+      this.rest(this.current());
+    }
     const onPopState = (event: PopStateEvent) => this.onPopState(event);
     this.win.addEventListener('popstate', onPopState, CAPTURE);
     return () => {
@@ -206,7 +238,6 @@ export class PanelHistory {
     if (
       entry.ours &&
       entry.skip === 0 &&
-      entry.mark.pos === mark.pos &&
       entry.mark.depth === mark.depth &&
       entry.mark.under === mark.under
     ) {
@@ -242,14 +273,17 @@ export class PanelHistory {
     const base = `${path}${this.getDialogs().closeAll(search)}`;
     const reopen = base === target ? null : target;
     if (this.mark.depth > 0) {
-      const pending: Pending = { kind: 'rewind', base, reopen, fallback: target, timer: 0 };
+      const rewind: Rewind = { pos: this.mark.pos - this.mark.depth, base, reopen };
+      const pending: Pending = { kind: 'rewind', ...rewind, fallback: target, timer: 0 };
       pending.timer = this.win.setTimeout(() => {
         // The traversal never came: close in place rather than leave the dialog open.
         if (this.pending !== pending) return;
         this.pending = null;
+        this.takeRewind();
         this.replace(pending.fallback);
-      }, REWIND_TIMEOUT_MS);
+      }, TRAVERSAL_TIMEOUT_MS);
       this.pending = pending;
+      this.storeRewind(rewind);
       this.win.history.go(-this.mark.depth);
       return;
     }
@@ -260,10 +294,15 @@ export class PanelHistory {
     this.settle(base, reopen);
   }
 
-  /** On the base entry: write `base`, then the dialogs still open or a truncating copy. */
+  /**
+   * On the base entry: push the dialogs still open, or the closed home (the base becomes a skip
+   * entry). A base with dialogs (a deep link: nothing to rewind) is first rewritten closed.
+   */
   private settle(base: string, reopen: string | null): void {
     this.mark = { ...this.mark, depth: 0 };
-    this.win.history.replaceState(markState(null, this.mark), '', base);
+    if (this.getDialogs().open(this.win.location.search).length > 0) {
+      this.win.history.replaceState(markState(null, this.mark), '', base);
+    }
     if (reopen) {
       this.mark = { pos: this.mark.pos + 1, depth: 1, under: 0 };
       this.win.history.pushState(markState(null, this.mark), '', reopen);
@@ -274,26 +313,24 @@ export class PanelHistory {
   }
 
   /**
-   * Rewrites the current entry to `url` as a skip entry and pushes a copy above it, dropping every
-   * forward entry (the closed dialog). Only an address change is Next's to render; the copy is
-   * pushed without telling it. The skip entry carries `url` too: a page that lands on it from
-   * another document (Forward from the page before the home) shows the closed address.
+   * Makes the current entry a skip entry (its address stays) and pushes `url` above it, dropping
+   * every forward entry (the closed dialog). The same address is pushed without telling Next.
    */
   private truncate(url: string): void {
     const { history } = this.win;
     const skip = this.mark.under + 1;
-    if (url === this.current()) {
-      history.replaceState(markState(history.state, this.mark, skip), '');
-    } else {
-      history.replaceState(markState(null, this.mark, skip), '', url);
-    }
+    history.replaceState(markState(history.state, this.mark, skip), '');
     const dialogs = this.getDialogs().open(splitUrl(url).search);
     this.mark = {
       pos: this.mark.pos + 1,
       depth: dialogs.length > 0 ? this.mark.depth + 1 : 0,
       under: skip,
     };
-    history.pushState(markState(history.state, this.mark), '');
+    if (url === this.current()) {
+      history.pushState(markState(history.state, this.mark), '');
+    } else {
+      history.pushState(markState(null, this.mark), '', url);
+    }
   }
 
   /**
@@ -311,6 +348,27 @@ export class PanelHistory {
     this.resting = this.current();
   }
 
+  private storeRewind(rewind: Rewind): void {
+    try {
+      const at = this.win.now();
+      this.win.sessionStorage?.setItem(PANEL_CLOSE_KEY, JSON.stringify({ ...rewind, at }));
+    } catch {
+      // Without storage a rewind into another document leaves the forward entries.
+    }
+  }
+
+  private takeRewind(): Rewind | null {
+    try {
+      const storage = this.win.sessionStorage;
+      if (!storage) return null;
+      const rewind = parseRewind(storage.getItem(PANEL_CLOSE_KEY), this.win.now());
+      storage.removeItem(PANEL_CLOSE_KEY);
+      return rewind;
+    } catch {
+      return null;
+    }
+  }
+
   private onPopState(event: PopStateEvent): void {
     const pending = this.pending;
     if (pending) {
@@ -319,7 +377,8 @@ export class PanelHistory {
     }
     const entry = readEntry(event.state);
     if (pending?.kind === 'rewind') {
-      // Landed on the base: write the closed URL there (Next then restores what we wrote).
+      // Landed on the base (Next restores it): push the closed URL above it.
+      this.takeRewind();
       this.mark = entry.mark;
       this.settle(pending.base, pending.reopen);
       return;
@@ -347,7 +406,7 @@ export class PanelHistory {
         if (this.pending !== skipping) return;
         this.pending = null;
         this.rest(shown);
-      }, REWIND_TIMEOUT_MS);
+      }, TRAVERSAL_TIMEOUT_MS);
       this.pending = skipping;
       // Forward only when it surely came from below: a skip entry always has its copy above it.
       this.win.history.go(entry.mark.pos > this.mark.pos ? 1 : -entry.skip);
@@ -360,17 +419,14 @@ export class PanelHistory {
     this.resting = this.current();
     if (!back) return;
     // A Back that closed dialogs (not one that changed the practice panel's question): drop the
-    // forward entry, keeping what changed while they were open.
+    // forward entry. The page stays on the address before the open, as Back restores it (what
+    // changed while the dialog was open goes with it: SEARCH-01-AC09).
     const dialogs = this.getDialogs();
     const now = dialogs.open(this.win.location.search);
     const fromUrl = splitUrl(from);
     if (fromUrl.path !== this.win.location.pathname) return;
-    const closed = dialogs.open(fromUrl.search).filter((d) => !now.includes(d));
-    if (closed.length === 0) return;
-    let search = fromUrl.search;
-    for (const dialog of closed) search = dialogs.close(search, dialog);
-    const target = `${fromUrl.path}${search}`;
-    this.truncate(sameAddress(target, this.current()) ? this.current() : target);
+    if (dialogs.open(fromUrl.search).every((d) => now.includes(d))) return;
+    this.truncate(this.current());
     this.resting = this.current();
   }
 }

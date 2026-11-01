@@ -104,7 +104,6 @@ import {
   withSummaryPanel,
   withoutPanels,
   openDialogs,
-  closeDialog,
   type HomePanel,
 } from '@/lib/workspaces/home';
 import { usePanelHistory } from './use-panel-history';
@@ -172,10 +171,9 @@ export function WorkspaceHome({
 
   // --- dialogs ------------------------------------------------------------------------------
   // Closing a dialog (its button or Back) drops the entries that opened it, so neither Back nor
-  // Forward reopens it (UX7-BACK, UX7-BACK-2); what changed meanwhile (filters) is kept.
+  // Forward reopens it (UX7-BACK, UX7-BACK-2); a close button keeps what changed meanwhile.
   const panelHistory = usePanelHistory({
     open: openDialogs,
-    close: (search, dialog) => closeDialog(search, dialog, executedFilter()),
     closeAll: (search) => withoutPanels(search, executedFilter()),
   });
   function closeTo(url: string) {

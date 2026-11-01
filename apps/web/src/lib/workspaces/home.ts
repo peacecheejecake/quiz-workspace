@@ -206,18 +206,6 @@ export function openDialogs(search: string): string[] {
   return out;
 }
 
-/** `search` with one dialog of openDialogs closed, as its close button does it. */
-export function closeDialog(
-  search: string,
-  dialog: string,
-  restore: ContentDocumentFilter | null = null,
-): string {
-  if (dialog === PRACTICE_DIALOG) return patchSearch(search, { [QUESTION_PARAM]: null });
-  if (dialog === SUMMARY_PANEL) return withSummaryPanel(search, null, restore);
-  if (dialog === CHAPTER_NOTE_PANEL) return withChapterNote(search, null);
-  return isHomePanel(dialog) ? withPanel(search, dialog, false) : search;
-}
-
 /** Whether the summary panel owns the URL's `document`/`section` keys (it is open). */
 export function summaryOwnsDocumentKey(params: Params): boolean {
   return parsePanels(params).includes(SUMMARY_PANEL);

@@ -2,7 +2,7 @@
 // entry; every close (button or Back) drops the closed dialog's entries, so neither Back nor
 // Forward reopens it.
 import { describe, expect, it } from 'vitest';
-import { closeDialog, openDialogs, withoutPanels } from '../src/lib/workspaces/home';
+import { openDialogs, withoutPanels } from '../src/lib/workspaces/home';
 import {
   markState,
   PANEL_DEPTH_KEY,
@@ -29,8 +29,15 @@ interface Entry {
  */
 function fakeWindow(
   start: string,
-  opts: { startState?: unknown; navigation?: boolean; firstEntry?: boolean } = {},
+  opts: {
+    startState?: unknown;
+    navigation?: boolean;
+    firstEntry?: boolean;
+    storage?: Map<string, string>;
+  } = {},
 ) {
+  const storage = opts.storage ?? new Map<string, string>();
+  let clock = 1_000_000;
   const entries: Entry[] = [
     ...(opts.firstEntry ? [] : [{ url: '/workspaces', state: null }]),
     { url: start, state: opts.startState ?? { __NA: true } },
@@ -89,6 +96,12 @@ function fakeWindow(
       return nextTimer++;
     },
     clearTimeout: (id) => timers.delete(id),
+    now: () => clock,
+    sessionStorage: {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: (key) => storage.delete(key),
+    },
   };
   /** Delivers the traversal a `go` started; false when there was none (or out of range). */
   function traverseOnce(beforeEvent?: () => void): boolean {
@@ -130,6 +143,21 @@ function fakeWindow(
       win.history.go(1);
       this.traverse();
     },
+    storage,
+    tick(ms: number) {
+      clock += ms;
+    },
+    /**
+     * The traversal a `go` started, into another document: no popstate (the page unloads and
+     * its listeners and timers go with it). Attach a new PanelHistory to continue.
+     */
+    traverseToDocument() {
+      if (pendingGo === null) return;
+      index += pendingGo;
+      pendingGo = null;
+      capture.clear();
+      timers.clear();
+    },
     fireTimers() {
       for (const [id, handler] of [...timers]) {
         timers.delete(id);
@@ -149,12 +177,15 @@ function controller(start = '/w', opts: Parameters<typeof fakeWindow>[1] = {}) {
   return { fake, history };
 }
 
-/** From the closed home: Back reaches the page before it, Forward comes back to `closed` only. */
+/**
+ * From the closed home: Back reaches the page before it, Forward comes back to a closed home (the
+ * skip entry, with the address before the open), the next one to `closed`, and no further.
+ */
 function expectBackLeavesForwardStaysClosed(fake: Fake, closed = '/w') {
   fake.back();
   expect(fake.url()).toBe('/workspaces');
   fake.forward();
-  expect(fake.url()).toBe(closed);
+  expect(openDialogs(new URL(fake.url(), ORIGIN).search)).toEqual([]);
   fake.forward();
   expect(fake.url()).toBe(closed);
   expect(fake.index()).toBe(fake.urls().length - 1);
@@ -185,7 +216,7 @@ describe('entry marks', () => {
   });
 });
 
-describe('openDialogs, closeDialog and withoutPanels', () => {
+describe('openDialogs and withoutPanels', () => {
   it('lists the dialogs and the practice panel, not which question or document they show', () => {
     expect(openDialogs('?status=retry&panel=documents&panel=history&question=q1')).toEqual([
       'documents',
@@ -193,20 +224,6 @@ describe('openDialogs, closeDialog and withoutPanels', () => {
       'question',
     ]);
     expect(openDialogs('?panel=bogus&q=x')).toEqual([]);
-  });
-
-  it('closes one dialog as its close button does', () => {
-    expect(closeDialog('?panel=documents&panel=history&status=retry', 'history')).toBe(
-      '?status=retry&panel=documents',
-    );
-    expect(closeDialog('?question=q1&q=x', 'question')).toBe('?q=x');
-    expect(closeDialog('?panel=chapter-note&chapter=c1&text=a', 'chapter-note')).toBe('?text=a');
-    expect(
-      closeDialog('?panel=document-summary&document=d1', 'document-summary', {
-        documentId: 'd2',
-        chapterId: null,
-      }),
-    ).toBe('?document=d2');
   });
 
   it('closes every dialog and the practice panel, keeping filters and searches', () => {
@@ -254,13 +271,13 @@ describe('PanelHistory', () => {
     expectBackLeavesForwardStaysClosed(fake);
   });
 
-  it('a Back that closes keeps what changed while the dialog was open', () => {
+  it('a Back that closes restores the address before the open (SEARCH-01-AC09)', () => {
     const { fake, history } = controller('/w?q=a');
     history.push('/w?q=a&panel=documents');
     history.replace('/w?q=a&panel=documents&status=retry');
     fake.back();
-    expect(fake.url()).toBe('/w?q=a&status=retry');
-    expectBackLeavesForwardStaysClosed(fake, '/w?q=a&status=retry');
+    expect(fake.url()).toBe('/w?q=a');
+    expectBackLeavesForwardStaysClosed(fake, '/w?q=a');
   });
 
   it('stacked dialogs: each Back closes the top one, Forward reopens neither', () => {
@@ -281,11 +298,15 @@ describe('PanelHistory', () => {
   it('a render between the Back and its popstate neither restamps nor moves the start', () => {
     const { fake, history } = controller();
     history.push('/w?panel=documents');
-    history.replace('/w?panel=documents&status=retry');
+    history.push('/w?panel=documents&panel=history');
     fake.win.history.go(-1);
     fake.traverse(() => history.stamp());
-    expect(fake.url()).toBe('/w?status=retry');
-    expectBackLeavesForwardStaysClosed(fake, '/w?status=retry');
+    // The Back closed 이력 only: one Back each, then the page before the home.
+    expect(fake.url()).toBe('/w?panel=documents');
+    expect(fake.skips()).toEqual([0, 0, 1, 0]);
+    fake.back();
+    expect(fake.url()).toBe('/w');
+    expectBackLeavesForwardStaysClosed(fake);
   });
 
   it('a stacked close keeps the dialog still open on one entry; Back then closes it', () => {
@@ -342,14 +363,42 @@ describe('PanelHistory', () => {
     expect(fake.rendered[0]).toBe('/workspaces');
   });
 
-  it('writes what changed while open (filters) onto the base entry', () => {
+  it('keeps what changed while open (filters) on the entry above the base', () => {
     const { fake, history } = controller();
     history.push('/w?panel=documents');
     history.replace('/w?panel=documents&status=retry');
     history.close('/w?status=retry');
     fake.traverse();
-    expect(fake.urls()).toEqual(['/workspaces', '/w?status=retry', '/w?status=retry']);
+    // The skip entry keeps its own address (Next's saved state matches it).
+    expect(fake.urls()).toEqual(['/workspaces', '/w', '/w?status=retry']);
+    expect(fake.skips()).toEqual([0, 1, 0]);
     expectBackLeavesForwardStaysClosed(fake, '/w?status=retry');
+  });
+
+  it('finishes a close whose rewind loaded another document (a reload while open)', () => {
+    const { fake, history } = controller();
+    history.push('/w?panel=documents');
+    // Reloaded with the dialog open: the base belongs to the previous document now.
+    const reloaded = new PanelHistory(() => fake.win);
+    reloaded.attach();
+    reloaded.close('/w');
+    fake.traverseToDocument();
+    expect(fake.url()).toBe('/w');
+    new PanelHistory(() => fake.win).attach();
+    expect(fake.urls()).toEqual(['/workspaces', '/w', '/w']);
+    expect(fake.storage.size).toBe(0);
+    expectBackLeavesForwardStaysClosed(fake);
+  });
+
+  it('ignores a stale or foreign close handover', () => {
+    const { fake, history } = controller();
+    history.push('/w?panel=documents');
+    history.close('/w');
+    fake.traverseToDocument();
+    fake.tick(10_000);
+    new PanelHistory(() => fake.win).attach();
+    expect(fake.urls()).toEqual(['/workspaces', '/w', '/w?panel=documents']);
+    expect(fake.storage.size).toBe(0);
   });
 
   it('a deep-linked dialog closes in place when nothing lies ahead (Navigation API)', () => {
