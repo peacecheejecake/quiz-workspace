@@ -572,3 +572,25 @@ chapter_notes = Table(
     _ts("finished_at"),
     _ts("superseded_at"),
 )
+
+
+# --- MOCK-B mock exams (20261102140000_mock_exams.sql) -------------------------------------
+# Only the columns the authorization registry needs; quiz_api.repositories.mock_exams reads and
+# writes the mock exam tables with SQL text.
+
+mock_exams = Table(
+    "mock_exams",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    _ts("deleted_at"),
+)
+
+mock_exam_questions = Table(
+    "mock_exam_questions",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("mock_exam_id", Uuid, nullable=False),
+    _ts("removed_at"),
+)

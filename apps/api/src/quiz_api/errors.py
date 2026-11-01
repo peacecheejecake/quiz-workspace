@@ -119,6 +119,11 @@ class ProblemType(StrEnum):
     ALREADY_SUBMITTED = "urn:quiz-workspace:problem:already-submitted"
     # 409: the practice run is finished; its summary is fixed (start a new run to practise).
     PRACTICE_RUN_FINISHED = "urn:quiz-workspace:problem:practice-run-finished"
+    # 409: the mock exam already has a queued or running generation (MOCK-01-C04).
+    MOCK_GENERATION_RUNNING = "urn:quiz-workspace:problem:mock-generation-running"
+    # 409: AI variation types are off in this environment (WORKER_MOCK_EXAMS / no LLM);
+    # 보기 섞기 still works and stored mock exams stay readable.
+    MOCK_LLM_DISABLED = "urn:quiz-workspace:problem:mock-llm-disabled"
 
 
 class ProblemException(StarletteHTTPException):

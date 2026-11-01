@@ -1719,7 +1719,7 @@
           },
           "options": {
             "items": {
-              "$ref": "#/components/schemas/QuestionOption"
+              "$ref": "#/components/schemas/quiz_api__api__questions__QuestionOption"
             },
             "title": "Options",
             "type": "array"
@@ -2385,57 +2385,6 @@
         "title": "GenerationBatchSource",
         "type": "object"
       },
-      "GenerationCreate": {
-        "additionalProperties": false,
-        "properties": {
-          "candidate_count": {
-            "default": 1,
-            "description": "Candidates per variation.",
-            "maximum": 20.0,
-            "minimum": 1.0,
-            "title": "Candidate Count",
-            "type": "integer"
-          },
-          "difficulty": {
-            "anyOf": [
-              {
-                "enum": [
-                  "easier",
-                  "same",
-                  "harder"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Optional target difficulty relative to the source.",
-            "title": "Difficulty"
-          },
-          "variation_types": {
-            "description": "Distinct variations. OPTION_SHUFFLE is refused (422): it is a practice order (POST /questions/{id}/practice-sessions), never a generation.",
-            "items": {
-              "enum": [
-                "OPTION_SHUFFLE",
-                "PARAPHRASE",
-                "INVERT_POLARITY",
-                "ANALOGOUS_CONCEPT"
-              ],
-              "type": "string"
-            },
-            "maxItems": 3,
-            "minItems": 1,
-            "title": "Variation Types",
-            "type": "array"
-          }
-        },
-        "required": [
-          "variation_types"
-        ],
-        "title": "GenerationCreate",
-        "type": "object"
-      },
       "GenerationDraftList": {
         "properties": {
           "items": {
@@ -2451,6 +2400,24 @@
           "items"
         ],
         "title": "GenerationDraftList",
+        "type": "object"
+      },
+      "GenerationProgress": {
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "done",
+          "total"
+        ],
+        "title": "GenerationProgress",
         "type": "object"
       },
       "GenerationRun": {
@@ -4010,6 +3977,632 @@
           "already_merged_question_ids"
         ],
         "title": "MergedGroup",
+        "type": "object"
+      },
+      "MockExam": {
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/MockExamConfig"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_generation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MockExamGeneration"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The generation whose questions are shown."
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "latest_generation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MockExamGeneration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "question_count_current": {
+            "title": "Question Count Current",
+            "type": "integer"
+          },
+          "range": {
+            "$ref": "#/components/schemas/MockExamRange"
+          },
+          "status": {
+            "enum": [
+              "generating",
+              "ready",
+              "partial",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "title",
+          "version",
+          "status",
+          "config",
+          "range",
+          "question_count_current",
+          "current_generation",
+          "latest_generation",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "MockExam",
+        "type": "object"
+      },
+      "MockExamConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "difficulty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "easy",
+                  "medium",
+                  "hard"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = like the source.",
+            "title": "Difficulty"
+          },
+          "question_count": {
+            "anyOf": [
+              {
+                "maximum": 5000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Questions to make: 1..100 with an AI type; with 보기 섞기 only 1..range (null = the whole range).",
+            "title": "Question Count"
+          },
+          "variation_types": {
+            "description": "Distinct variation types (one or more).",
+            "items": {
+              "enum": [
+                "OPTION_SHUFFLE",
+                "PARAPHRASE",
+                "INVERT_POLARITY",
+                "ANALOGOUS_CONCEPT"
+              ],
+              "type": "string"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Variation Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "variation_types",
+          "question_count"
+        ],
+        "title": "MockExamConfig",
+        "type": "object"
+      },
+      "MockExamCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/MockExamConfig"
+          },
+          "range": {
+            "$ref": "#/components/schemas/MockExamRange"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "title": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "config",
+          "range"
+        ],
+        "title": "MockExamCreate",
+        "type": "object"
+      },
+      "MockExamGeneration": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_count": {
+            "title": "Created Count",
+            "type": "integer"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`llm_unavailable`, `llm_timeout`, `no_valid_questions`, `mock_exam_unavailable`, ...",
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Job `mock_exam.generate`.",
+            "title": "Job Id"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GenerationProgress"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "While queued or running."
+          },
+          "requested_count": {
+            "title": "Requested Count",
+            "type": "integer"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          },
+          "skipped_count": {
+            "title": "Skipped Count",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "partial",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "status",
+          "job_id",
+          "requested_count",
+          "created_count",
+          "skipped_count",
+          "error_code",
+          "progress",
+          "seed",
+          "created_at",
+          "finished_at"
+        ],
+        "title": "MockExamGeneration",
+        "type": "object"
+      },
+      "MockExamList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MockExam"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "llm_available": {
+            "description": "This environment can use the AI variation types.",
+            "title": "Llm Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "llm_available",
+          "items"
+        ],
+        "title": "MockExamList",
+        "type": "object"
+      },
+      "MockExamQuestion": {
+        "properties": {
+          "accepted_answers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Answers"
+          },
+          "correct_option_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct Option Ids"
+          },
+          "edited": {
+            "title": "Edited",
+            "type": "boolean"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_multi_answer": {
+            "title": "Is Multi Answer",
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/quiz_api__api__mock_exams__QuestionOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "question_type": {
+            "enum": [
+              "MCQ",
+              "SHORT_ANSWER",
+              "ESSAY"
+            ],
+            "title": "Question Type",
+            "type": "string"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/RevisionRef"
+          },
+          "rubric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceRef"
+          },
+          "stem": {
+            "title": "Stem",
+            "type": "string"
+          },
+          "validation_issues": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ValidationNote"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Issues"
+          },
+          "variation_type": {
+            "enum": [
+              "OPTION_SHUFFLE",
+              "PARAPHRASE",
+              "INVERT_POLARITY",
+              "ANALOGOUS_CONCEPT"
+            ],
+            "title": "Variation Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "position",
+          "question_type",
+          "variation_type",
+          "stem",
+          "options",
+          "is_multi_answer",
+          "revision",
+          "edited",
+          "source"
+        ],
+        "title": "MockExamQuestion",
+        "type": "object"
+      },
+      "MockExamQuestionUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_answers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Answers"
+          },
+          "base_revision_id": {
+            "format": "uuid",
+            "title": "Base Revision Id",
+            "type": "string"
+          },
+          "correct_option_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct Option Ids"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "is_multi_answer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Multi Answer"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/quiz_api__api__mock_exams__QuestionOption"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "rubric": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
+          "stem": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stem"
+          }
+        },
+        "required": [
+          "base_revision_id"
+        ],
+        "title": "MockExamQuestionUpdate",
+        "type": "object"
+      },
+      "MockExamRange": {
+        "additionalProperties": false,
+        "description": "The range a person chose (QVIEW-01-C01): re-resolved on every generation.",
+        "properties": {
+          "all": {
+            "default": false,
+            "title": "All",
+            "type": "boolean"
+          },
+          "chapter_ids": {
+            "items": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxItems": 1000,
+            "title": "Chapter Ids",
+            "type": "array"
+          },
+          "excluded_question_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 5000,
+            "title": "Excluded Question Ids",
+            "type": "array"
+          },
+          "filters": {
+            "additionalProperties": true,
+            "title": "Filters",
+            "type": "object"
+          },
+          "question_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 5000,
+            "title": "Question Ids",
+            "type": "array"
+          }
+        },
+        "title": "MockExamRange",
+        "type": "object"
+      },
+      "MockExamUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "MockExamUpdate",
         "type": "object"
       },
       "MyState": {
@@ -5608,7 +6201,7 @@
           "options": {
             "description": "MCQ only.",
             "items": {
-              "$ref": "#/components/schemas/QuestionOption"
+              "$ref": "#/components/schemas/quiz_api__api__questions__QuestionOption"
             },
             "maxItems": 50,
             "title": "Options",
@@ -5889,7 +6482,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/QuestionOption"
+                  "$ref": "#/components/schemas/quiz_api__api__questions__QuestionOption"
                 },
                 "maxItems": 50,
                 "type": "array"
@@ -6048,28 +6641,6 @@
         "title": "QuestionList",
         "type": "object"
       },
-      "QuestionOption": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "description": "Opaque, client-chosen id (no whitespace, unique in the question). Grading and practice use it; keep it when editing the option.",
-            "maxLength": 256,
-            "title": "Id",
-            "type": "string"
-          },
-          "text": {
-            "maxLength": 5000,
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "text"
-        ],
-        "title": "QuestionOption",
-        "type": "object"
-      },
       "QuestionOverview": {
         "properties": {
           "chapters": {
@@ -6211,7 +6782,7 @@
           },
           "options": {
             "items": {
-              "$ref": "#/components/schemas/QuestionOption"
+              "$ref": "#/components/schemas/quiz_api__api__questions__QuestionOption"
             },
             "title": "Options",
             "type": "array"
@@ -6446,7 +7017,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/QuestionOption"
+                  "$ref": "#/components/schemas/quiz_api__api__questions__QuestionOption"
                 },
                 "maxItems": 50,
                 "type": "array"
@@ -7031,6 +7602,25 @@
           "status"
         ],
         "title": "RevisionJob",
+        "type": "object"
+      },
+      "RevisionRef": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ],
+        "title": "RevisionRef",
         "type": "object"
       },
       "RunAttempt": {
@@ -8622,6 +9212,34 @@
         "title": "SignedReadUrl",
         "type": "object"
       },
+      "SourceRef": {
+        "properties": {
+          "label": {
+            "description": "\"<n>장 <m>번\", \"<m>번\" or \"원본 삭제됨\".",
+            "title": "Label",
+            "type": "string"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: the source was deleted.",
+            "title": "Question Id"
+          }
+        },
+        "required": [
+          "question_id",
+          "label"
+        ],
+        "title": "SourceRef",
+        "type": "object"
+      },
       "SubmitBody": {
         "additionalProperties": false,
         "description": "`selected_option_ids` for an MCQ (one id unless multi-answer), `answer_text` otherwise.",
@@ -9363,6 +9981,28 @@
         "title": "ValidationIssue",
         "type": "object"
       },
+      "ValidationNote": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "error",
+              "warning"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "severity"
+        ],
+        "title": "ValidationNote",
+        "type": "object"
+      },
       "Workspace": {
         "properties": {
           "archived_at": {
@@ -9907,6 +10547,142 @@
           "published_at"
         ],
         "title": "RevisionSummary",
+        "type": "object"
+      },
+      "quiz_api__api__mock_exams__GenerationCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MockExamConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "설정 바꾸기: new settings."
+          },
+          "range": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MockExamRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          }
+        },
+        "title": "GenerationCreate",
+        "type": "object"
+      },
+      "quiz_api__api__mock_exams__QuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 5000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "QuestionOption",
+        "type": "object"
+      },
+      "quiz_api__api__question_generations__GenerationCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_count": {
+            "default": 1,
+            "description": "Candidates per variation.",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "easier",
+                  "same",
+                  "harder"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional target difficulty relative to the source.",
+            "title": "Difficulty"
+          },
+          "variation_types": {
+            "description": "Distinct variations. OPTION_SHUFFLE is refused (422): it is a practice order (POST /questions/{id}/practice-sessions), never a generation.",
+            "items": {
+              "enum": [
+                "OPTION_SHUFFLE",
+                "PARAPHRASE",
+                "INVERT_POLARITY",
+                "ANALOGOUS_CONCEPT"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Variation Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "variation_types"
+        ],
+        "title": "GenerationCreate",
+        "type": "object"
+      },
+      "quiz_api__api__questions__QuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "Opaque, client-chosen id (no whitespace, unique in the question). Grading and practice use it; keep it when editing the option.",
+            "maxLength": 256,
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 5000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "QuestionOption",
         "type": "object"
       },
       "quiz_api__api__questions__RevisionSummary": {
@@ -12339,6 +13115,707 @@
         ]
       }
     },
+    "/api/v1/mock-exam-questions/{mock_exam_question_id}": {
+      "delete": {
+        "description": "이 모의고사에서 빼기: the question leaves the list and later 풀기 (attempts stay).",
+        "operationId": "removeMockExamQuestion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Remove Mock Exam Question",
+        "tags": [
+          "mock-exams"
+        ]
+      },
+      "patch": {
+        "description": "Edit (a new revision; earlier attempts keep pointing at theirs). A stale\n`base_revision_id` is 409 `stale-revision`.",
+        "operationId": "updateMockExamQuestion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockExamQuestionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockExamQuestion"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Update Mock Exam Question",
+        "tags": [
+          "mock-exams"
+        ]
+      }
+    },
+    "/api/v1/mock-exams/{mock_exam_id}": {
+      "delete": {
+        "description": "Soft delete: the mock exam leaves the list (attempts stay); a running generation is\ncancelled.",
+        "operationId": "deleteMockExam",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Delete Mock Exam",
+        "tags": [
+          "mock-exams"
+        ]
+      },
+      "get": {
+        "description": "Settings, current and newest generation (status, progress, counts).",
+        "operationId": "getMockExam",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockExam"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Mock Exam",
+        "tags": [
+          "mock-exams"
+        ]
+      },
+      "patch": {
+        "description": "이름 바꾸기 (1-100 characters; names may repeat in a workspace).",
+        "operationId": "renameMockExam",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockExamUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockExam"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Rename Mock Exam",
+        "tags": [
+          "mock-exams"
+        ]
+      }
+    },
+    "/api/v1/mock-exams/{mock_exam_id}/generations": {
+      "post": {
+        "description": "다시 만들기 (empty body), 설정 바꾸기 (`config` / `range`: saved as a new revision) or\n다시 시도: a new generation; on success it replaces the shown questions (earlier ones and\ntheir attempts are kept).",
+        "operationId": "createMockExamGeneration",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/quiz_api__api__mock_exams__GenerationCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockExam"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Mock Exam Generation",
+        "tags": [
+          "mock-exams"
+        ]
+      }
+    },
+    "/api/v1/mock-exams/{mock_exam_id}/questions": {
+      "get": {
+        "description": "The shown generation's questions by position (removed ones excluded). Viewers never get\nanswers or explanations, also with `include=answers`.",
+        "operationId": "listMockExamQuestions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`answers`: answers, explanations and checks (editors only).",
+            "in": "query",
+            "name": "include",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "answers",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`answers`: answers, explanations and checks (editors only).",
+              "title": "Include"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Listmockexamquestions"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Mock Exam Questions",
+        "tags": [
+          "mock-exams"
+        ]
+      }
+    },
     "/api/v1/practice-runs/{run_id}": {
       "get": {
         "description": "The run's counts, progress and summary (no items, no content).",
@@ -14631,7 +16108,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GenerationCreate"
+                "$ref": "#/components/schemas/quiz_api__api__question_generations__GenerationCreate"
               }
             }
           },
@@ -17502,6 +18979,231 @@
         "summary": "List Jobs",
         "tags": [
           "history"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/mock-exams": {
+      "get": {
+        "description": "The workspace's mock exams, newest first, with their generation state.",
+        "operationId": "listMockExams",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockExamList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Mock Exams",
+        "tags": [
+          "mock-exams"
+        ]
+      },
+      "post": {
+        "description": "Save a mock exam and start its first generation. With an AI variation type the range's\nquestions, answers, explanations and related book text are sent to the LLM provider.",
+        "operationId": "createMockExam",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockExamCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockExam"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Mock Exam",
+        "tags": [
+          "mock-exams"
         ]
       }
     },
