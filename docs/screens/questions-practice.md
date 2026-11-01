@@ -25,6 +25,7 @@
   - **불러오기:** 정답이 든 문제(`GET /questions/{id}`, 지난 버전은 `GET /questions/{id}/revisions/{revision_id}` — 전체 문제 페이지가 쓰던 읽기 API, 모든 구성원·보관 Workspace 허용)는 항목을 고를 때만 불러온다. 풀이 session 응답에는 여전히 정답·해설이 없다(AC01). 불러오는 동안 "문제를 불러오는 중입니다." 상태, 실패하면 role=alert 문구와 `다시 시도`.
   - **풀이와의 관계 (사용자 결정 2026-11-01, UX7 확인 7):** 정답 보기는 풀이(attempt)가 아니다: 풀이 기록·채점 결과·Heatmap 상태(열람 기록은 panel을 열 때 이미 남았다)를 바꾸지 않는다. 아직 제출하지 않은 풀이 중에 열어도 그 풀이는 그대로다 — dialog를 닫으면 고르던 답안과 같은 session이 남아 있고 그대로 제출할 수 있으며 보통 제출처럼 채점·기록된다(정답을 봤는지는 기록하지 않는다).
   - **보관:** `보관`은 확인 dialog("문제를 보관할까요?" — Heatmap에서 빠지고 `문제` › `보관·초안 문제`에서 보관 해제할 수 있으며 지난 풀이 기록은 남는다)를 거쳐 문제를 보관(ARCHIVED, 그 순간의 현재 revision 기준)하고 panel을 닫는다. 그 점은 Heatmap에서 사라지고(새로 고침해도), 뒤로가기로 panel이 다시 열리지 않는다. 확정 문제만 보관할 수 있다(서버 규칙: 확정↔보관, 초안→확정).
+- **통합 `QuestionViewer` (MOCK-SPEC 2026-11-01):** 이 panel은 공통 `QuestionViewer`의 `practice` 방식(modal `FloatingSidePanel`, 한 문제, 이전·다음 = Heatmap 순서)이 된다(Task QVIEW-W). 범위를 골라 하나씩 푸는 `sequence` 방식과 호출 위치 목록은 [QVIEW-01](question-viewer.md). 이 화면의 기존 AC는 바뀌지 않고 QuestionViewer를 대상으로 그대로 검증한다.
 
 ## 수용 기준
 

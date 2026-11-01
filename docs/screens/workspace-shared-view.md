@@ -9,6 +9,7 @@
 - 모바일/데스크톱 레이아웃, 로딩·에러·빈 상태, 키보드 포커스·스크린리더, URL/token 로그 비노출을 충족한다.
 - **요약·정리 노트 (DOCSUM-SPEC 2026-10-29):** 게스트는 현재 발행 revision의 문서 요약(문서 목록 행의 `요약`, [DOCSUM-01-AC06](documents-summary.md))과 인용 문제와 출처가 일치하는 장별 최신 정리 노트(`정리 노트` 카드, [CHNOTE-01-AC04](chapter-notes.md))를 읽기 전용으로 볼 수 있다. 텍스트 내보내기(DOC-03)는 게스트에게 없다. 이 화면의 기존 AC는 바뀌지 않는다.
 - **문서 보기 개선 (DOCVIEW 2026-11-01):** 공유 문서 화면은 DOC-02의 viewer 부품을 쓰므로 연속 스크롤 PDF·PDF↔원문 동기화·쪽별 묶음·확정된 가져온 문제의 문제 형식(정답·해설은 접힘, 발행 문제 범위)이 같다([DOC-02-AC07–AC09·AC11](documents-editor.md)). 배치(보기 설정 막대·docked 목차 panel·함께 보기/원본/변환본·좌우/상하 분할·위치 바꾸기, 이 브라우저에 기억)도 DOC-02와 같다([DOCVIEW-01](documents-viewer-layout.md), AC12; DOCVIEW-PORT 2026-11-02에 이전 목차 panel·폭 조정 구분선을 대신함). 편집 UI는 계속 없다. 이 화면의 기존 AC는 바뀌지 않는다.
+- **통합 `QuestionViewer` (MOCK-SPEC 2026-11-01):** 게스트의 문제 미리보기(정리 노트 각주에서 여는 것 포함)는 공통 `QuestionViewer`의 `read-only` 방식(non-modal, 발행 문제·정답·해설, 저장 없음)이 된다([QVIEW-01](question-viewer.md) 호출 위치 5). 게스트에게 모의고사(MOCK-01)와 범위 풀이(`문제 풀기`)는 없다. 이 화면의 기존 AC는 바뀌지 않는다.
 
 ## 수용 기준
 
