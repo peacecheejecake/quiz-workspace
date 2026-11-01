@@ -1,6 +1,6 @@
-# Design System v1.2.2 — Minimal Glass (Platform v1.2)
+# Design System v1.2.5 — Minimal Glass (Platform v1.2)
 
-**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19 · v1.2.1 버튼 hover 개정 2026-10-19 · v1.2.2 밀도(compact)·스위치·메뉴·Dropzone·Breadcrumb·패널 쌓기 개정 2026-10-20  
+**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19 · v1.2.1 버튼 hover 개정 2026-10-19 · v1.2.2 밀도(compact)·스위치·메뉴·Dropzone·Breadcrumb·패널 쌓기 개정 2026-10-20 · v1.2.5 floating glass 불투명도 개정 2026-11-01  
 **적용:** 전역 Workspace UI, 문서 뷰어, 검색, Questions heatmap, floating side panels  
 **키워드:** minimalism, restrained glassmorphism, readability, focus, consistent semantics
 
@@ -62,7 +62,7 @@
 | `--color-accent-hover` | `#4A5EC1` | primary(accent 채움) 버튼·체크된 선택 컨트롤 hover |
 | `--color-accent-pressed` | `#4355AD` | primary 버튼 누르는 동안(`:active`) |
 | `--color-focus` | `#356CFF` | focus outline |
-| `--color-glass` | `rgba(246,248,252,.9)` | floating glass surface(아주 옅은 tint) |
+| `--color-glass` | `rgba(246,248,252,.97)` | floating glass surface(아주 옅은 tint, 거의 불투명) |
 | `--color-glass-solid` | `#F6F8FC` | glass의 불투명 대응색(reduced transparency·blur 미지원 fallback, 모바일 sheet) |
 | `--color-glass-stroke` | `rgba(255,255,255,.66)` | inset/translucent border |
 | `--question-status-unseen` | `#D9DEE5` | 보지 않은 문제 |
@@ -95,6 +95,8 @@
 
 **v1.2.2 (UX3b, 2026-10-20 사용자 피드백):** 스위치 track 테두리를 채움보다 연한 색으로 바꿨다. 꺼진 track은 옅은 회색 + 진한 테두리 대신 `--color-switch-track` 채움(표면·canvas·muted·glass 대비 3:1 이상)이 컨트롤 경계를 맡고, 테두리 `--color-switch-track-border`는 그 채움보다 밝다. 켜진 track은 accent 채움 + 더 밝은 `--color-switch-track-checked-border`. thumb은 두 상태 모두 `--color-on-accent`(track 대비 3:1 이상)이며 켜짐/꺼짐은 thumb 위치·`aria-checked`·상태 문구로 전달한다(색만으로 구분하지 않음). 꺼진 track hover는 테두리가 아니라 채움이 `--color-switch-track-hover`로 바뀐다(`contrast.test.ts`).
 
+**v1.2.5 (UX-GLASS, 2026-11-01 사용자 피드백):** floating 계층(side panel·popover·menu·select·toast·top bar)의 glass를 아래 내용이 거의 보이지 않을 만큼 더 불투명하게 했다(light·dark 모두 `.9`→`.97`). tint와 blur(`--glass-blur` 16px)는 그대로이고, reduced transparency·blur 미지원·모바일 sheet fallback은 계속 같은 색의 `--color-glass-solid`다. 대비: 반투명 glass를 가장 나쁜 배경(순흑·순백) 위에 합성해도 text-primary·text-secondary가 4.5:1 이상이다(light text-secondary 최저 4.59:1; `.96`은 4.47:1로 미달, `contrast.test.ts`).
+
 **상태 점은 기본 표면과 충분히 구분되도록** 최소 얇은 outline을 갖고, 상태 필터(색 견본 + 상태 텍스트)가 범례 역할을 한다(UX3c 2026-10-20: 상시 범례·상태 요약 삭제, 사용자 결정). 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
 
 ### 3.2 Dark theme (초안)
@@ -111,7 +113,7 @@
   --color-accent-hover: #9AACFE;
   --color-accent-pressed: #A7B6FD;
   --color-focus: #A2B3FF;
-  --color-glass: rgba(30, 38, 51, 0.9);
+  --color-glass: rgba(30, 38, 51, 0.97);
   --color-glass-solid: #1E2633;
   --color-glass-stroke: rgba(255,255,255,.12);
   --question-status-unseen: #4E5967;
@@ -153,7 +155,7 @@
   --color-accent-hover: #4A5EC1;
   --color-accent-pressed: #4355AD;
   --color-focus: #356CFF;
-  --color-glass: rgba(246,248,252,.9);
+  --color-glass: rgba(246,248,252,.97);
   --color-glass-solid: #F6F8FC;
   --color-glass-stroke: rgba(255,255,255,.66);
   --question-status-unseen: #D9DEE5;
