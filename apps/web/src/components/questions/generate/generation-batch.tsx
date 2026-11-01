@@ -102,11 +102,6 @@ export function GenerationBatchView({
       }
       title="묶음 변형 출제"
       description="원본마다 만든 변형 초안을 원본별로 검토하세요. 승인한 초안만 문제은행에 등록됩니다."
-      actions={
-        <Button asChild>
-          <Link href={`/workspaces/${workspaceId}/questions/bank`}>전체 문제</Link>
-        </Button>
-      }
     />
   );
 

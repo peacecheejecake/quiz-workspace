@@ -10,6 +10,9 @@
 // UX7-CACHE (QPLAY-01-AC06): the open, answer-free sessions this panel started are kept in memory
 // (lib/questions/practice-cache.ts), so re-opening an unanswered question shows it at once; a
 // session whose submission started is never reused.
+// UX7-BANK: editors get the screen's 문제 관리 menu (`headerExtra`) in the header; after an edit
+// the screen bumps `reloadKey` and the panel opens a session of the new revision
+// (the cached session of the old revision is dropped).
 import {
   Button,
   Checkbox,
@@ -28,6 +31,7 @@ import {
   useState,
   type ComponentProps,
   type FormEvent,
+  type ReactNode,
 } from 'react';
 import {
   openPracticeSessionAction,
@@ -92,6 +96,10 @@ export interface PracticePanelProps {
   readonly onGraded?: (questionId: string, result: AttemptResult) => void;
   /** Where focus goes when the panel closes (the opening dot). */
   readonly onCloseAutoFocus?: ComponentProps<typeof FloatingSidePanel>['onCloseAutoFocus'];
+  /** Header controls after the study toggles (UX7-BANK: the editors' 문제 관리 menu). */
+  readonly headerExtra?: ReactNode;
+  /** A change opens a new session of the same question (its content was edited). */
+  readonly reloadKey?: number;
 }
 
 type SessionState =
@@ -147,6 +155,8 @@ export function PracticePanel({
   onViewed,
   onGraded,
   onCloseAutoFocus,
+  headerExtra,
+  reloadKey = 0,
 }: PracticePanelProps) {
   const questionId = question?.id ?? null;
   // The last open question keeps rendering while the panel animates closed.
@@ -163,8 +173,19 @@ export function PracticePanel({
     key: newKey(),
     cached: cache.get(questionId),
   }));
-  if (opening.questionId !== questionId) {
-    setOpening({ questionId, key: newKey(), cached: scoped ? cache.get(questionId) : null });
+  // UX7-BANK: an edit (`reloadKey`) makes the cached session stale (it is pinned to the old
+  // revision): forget it and open a new one.
+  const [seenReload, setSeenReload] = useState(reloadKey);
+  const reloading = seenReload !== reloadKey;
+  if (opening.questionId !== questionId || reloading) {
+    setSeenReload(reloadKey);
+    const stale = reloading ? cache.get(questionId) : null;
+    if (stale) cache.dropSession(stale.id);
+    setOpening({
+      questionId,
+      key: newKey(),
+      cached: scoped && !reloading ? cache.get(questionId) : null,
+    });
   }
   const [session, setSession] = useState<SessionState & { readonly key: string | null }>({
     status: 'loading',
@@ -364,6 +385,7 @@ export function PracticePanel({
                 if (!view.savingFlags) onFlagsChange(view.id, { needs_retry: pressed });
               }}
             />
+            {headerExtra}
           </>
         ) : undefined
       }

@@ -65,6 +65,7 @@ import { GenerationComparePanel } from './generation-compare-panel';
 import { QuestionGenerationForm } from './question-generation-form';
 import { VariationDiffViewer, type VariationOriginal } from './variation-diff-viewer';
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
+import { workspaceHomePath } from '@/lib/workspaces/home';
 import styles from './question-generation.module.css';
 
 export type GenerationReadOnly = 'viewer' | 'archived' | null;
@@ -654,9 +655,6 @@ export function QuestionGeneration({
             <Button asChild>
               <Link href={generatePath(workspaceId)}>다른 문제 선택</Link>
             </Button>
-            <Button asChild>
-              <Link href={`/workspaces/${workspaceId}/questions/bank`}>전체 문제</Link>
-            </Button>
           </>
         }
       />
@@ -786,8 +784,8 @@ export function QuestionGeneration({
           <p>
             {status.text}{' '}
             {status.bank ? (
-              <Link href={`/workspaces/${workspaceId}/questions/bank`} className={styles.link}>
-                전체 문제에서 보기
+              <Link href={workspaceHomePath(workspaceId)} className={styles.link}>
+                홈 Heatmap에서 보기
               </Link>
             ) : null}
           </p>

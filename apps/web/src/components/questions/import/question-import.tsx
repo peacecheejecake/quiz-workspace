@@ -773,11 +773,6 @@ export function QuestionImport({
         }
         title="문제 PDF 가져오기"
         description="문서 관리에서 올린 PDF에서 추출한 문제를 검토합니다. 원본과 비교해 승인한 문제만 문제은행에 등록됩니다. 정답지에 없는 정답은 만들지 않습니다."
-        actions={
-          <Button asChild>
-            <Link href={`/workspaces/${workspaceId}/questions/bank`}>전체 문제</Link>
-          </Button>
-        }
       />
 
       {readOnly ? <p className={styles.readOnly}>{READ_ONLY_TEXT[readOnly]}</p> : null}
@@ -842,8 +837,8 @@ export function QuestionImport({
           <p>
             {status.text}{' '}
             {status.bank ? (
-              <Link href={`/workspaces/${workspaceId}/questions/bank`} className={styles.link}>
-                전체 문제에서 보기
+              <Link href={workspaceHomePath(workspaceId)} className={styles.link}>
+                홈 Heatmap에서 보기
               </Link>
             ) : null}
           </p>

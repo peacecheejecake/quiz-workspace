@@ -8,10 +8,16 @@
 // filter state (search box and chapter/type live in its header). Hover/focus previews never record
 // a view: only opening the panel (a practice session) does. Viewers practise their own state;
 // archived workspaces are read-only.
+// UX7-BANK (the retired QBANK-01's editing, docs/screens/questions-bank.md): editors open the 문제
+// 등록 editor from the empty state (the home owns `?panel=question-create`), and the practice
+// panel's 문제 관리 menu edits (new revision; the panel then practises it) or deletes (after a
+// confirmation; the panel closes) the open question. Both server actions revalidate the home, so
+// the heatmap follows; the API decides who may.
 import {
   Button,
   ChevronDownIcon,
   ChevronUpIcon,
+  ConfirmDialog,
   EmptyState,
   QuestionHeatmap,
   QUESTION_DOT_STATUSES,
@@ -20,7 +26,6 @@ import {
   type HeatmapChapter,
   type QuestionDotStatus,
 } from '@quiz/ui';
-import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   useCallback,
@@ -34,6 +39,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import { deleteQuestionAction, getQuestionAction } from '@/lib/questions/actions';
 import type { OverviewItem, QuestionOverview } from '@/lib/questions/overview-data';
 import {
   isOverviewFiltered,
@@ -43,7 +49,10 @@ import {
 } from '@/lib/questions/overview-filters';
 import { lookupOverviewQuestionAction, setMyStateAction } from '@/lib/questions/practice-actions';
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from '@/lib/questions/problems';
+import { HomeQuestionEditor } from '../home-question-editor';
 import { PracticePanel, type PracticeQuestion } from '../practice/practice-panel';
+import { QuestionManageMenu } from '../practice/question-manage-menu';
+import type { EditorTarget } from '../question-editor';
 import { neighbors, type AttemptResult } from '../practice/practice-model';
 import {
   applyOverrides,
@@ -88,6 +97,9 @@ export interface QuestionsOverviewProps {
    * footnote: the note's disclosure). Cleared on close; otherwise focus returns to the dot.
    */
   readonly practiceReturnFocusRef?: RefObject<HTMLElement | null>;
+  /** `?panel=question-create` (owned by the home): the 문제 등록 editor is open. */
+  readonly createOpen?: boolean;
+  readonly onCreateOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -157,6 +169,8 @@ export function QuestionsOverview({
   requested = null,
   chapterActions,
   practiceReturnFocusRef,
+  createOpen = false,
+  onCreateOpenChange,
 }: QuestionsOverviewProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -442,6 +456,70 @@ export function QuestionsOverview({
     wasOpen.current = open;
   }, [openId, router]);
 
+  // --- 문제 등록 / 편집 / 삭제 (UX7-BANK) ----------------------------------------------------------
+  const [editing, setEditing] = useState<Extract<EditorTarget, { mode: 'edit' }> | null>(null);
+  const [editorSession, setEditorSession] = useState(0);
+  const [createSeen, setCreateSeen] = useState(false);
+  const creating = canAuthor && createOpen;
+  if (creating !== createSeen) {
+    setCreateSeen(creating);
+    if (creating) setEditorSession((n) => n + 1);
+  }
+  const editorTarget: EditorTarget | null = editing ?? (creating ? { mode: 'create' } : null);
+  const [reloadPanel, setReloadPanel] = useState(0);
+  const [loadingEdit, setLoadingEdit] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  async function startEdit(questionId: string) {
+    if (loadingEdit) return;
+    setLoadingEdit(true);
+    try {
+      // The full question (answers included) is read only now, for the editor: the practice
+      // session itself never carries it (QPLAY-01-AC01).
+      const result = await getQuestionAction(workspaceId, questionId);
+      if (!result.ok) {
+        toast({ tone: 'error', title: result.message });
+        return;
+      }
+      setEditorSession((n) => n + 1);
+      setEditing({ mode: 'edit', question: result.data });
+    } catch {
+      toast({ tone: 'error', title: QUESTION_FAILURE_MESSAGES.unavailable });
+    } finally {
+      setLoadingEdit(false);
+    }
+  }
+
+  function closeEditor() {
+    if (editing) setEditing(null);
+    else onCreateOpenChange?.(false);
+  }
+
+  async function runDelete() {
+    const questionId = confirmDelete;
+    if (!questionId || deleting) return;
+    setDeleting(true);
+    try {
+      const result = await deleteQuestionAction(workspaceId, questionId);
+      if (!result.ok) {
+        toast({ tone: 'error', title: result.message });
+        return;
+      }
+      setConfirmDelete(null);
+      // After the action's refreshed overview: closing first could let that refresh restore
+      // `?question=` (practice-actions.ts).
+      if (openQuestionId(new URLSearchParams(window.location.search)) === questionId) {
+        setQuestionParam(null);
+      }
+      toast({ tone: 'success', title: '문제를 삭제했습니다.' });
+    } catch {
+      toast({ tone: 'error', title: QUESTION_FAILURE_MESSAGES.unavailable });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const filtered = isOverviewFiltered(filters);
   const stateFiltered = view.status.length > 0 || view.favorite !== null || view.retry !== null;
   const busy = navigating || reloading;
@@ -541,8 +619,12 @@ export function QuestionsOverview({
             }
             action={
               canAuthor ? (
-                <Button asChild variant="primary">
-                  <Link href={`/workspaces/${workspaceId}/questions/bank`}>문제 등록</Link>
+                <Button
+                  variant="primary"
+                  aria-haspopup="dialog"
+                  onClick={() => onCreateOpenChange?.(true)}
+                >
+                  문제 등록
                 </Button>
               ) : null
             }
@@ -574,6 +656,18 @@ export function QuestionsOverview({
         onGraded={markGraded}
         onFlagsChange={(questionId, flags) => void changeFlags(questionId, flags)}
         onViewed={markViewed}
+        reloadKey={reloadPanel}
+        headerExtra={
+          canAuthor && panelQuestion ? (
+            <QuestionManageMenu
+              workspaceId={workspaceId}
+              questionId={panelQuestion.id}
+              busy={loadingEdit || deleting}
+              onEdit={() => void startEdit(panelQuestion.id)}
+              onDelete={() => setConfirmDelete(panelQuestion.id)}
+            />
+          ) : undefined
+        }
         onCloseAutoFocus={(event) => {
           const requestedFocus = practiceReturnFocusRef?.current ?? null;
           if (practiceReturnFocusRef) practiceReturnFocusRef.current = null;
@@ -591,6 +685,32 @@ export function QuestionsOverview({
           }
         }}
       />
+
+      {canAuthor ? (
+        <>
+          <HomeQuestionEditor
+            workspaceId={workspaceId}
+            target={editorTarget}
+            session={editorSession}
+            onClose={closeEditor}
+            onSaved={(_question, mode) => {
+              // The open panel practises the new revision (its session is pinned to the old one).
+              if (mode === 'edit') setReloadPanel((n) => n + 1);
+            }}
+          />
+          <ConfirmDialog
+            open={confirmDelete !== null}
+            onOpenChange={(open) => {
+              if (!open && !deleting) setConfirmDelete(null);
+            }}
+            title="문제를 삭제할까요?"
+            description="Heatmap에서 사라집니다. 지난 풀이 기록은 이력으로 남습니다."
+            confirmLabel="삭제"
+            onConfirm={() => void runDelete()}
+            loading={deleting}
+          />
+        </>
+      ) : null}
     </section>
   );
 }

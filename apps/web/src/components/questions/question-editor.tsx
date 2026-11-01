@@ -1,6 +1,7 @@
 'use client';
 
-// QBANK-01 question editor ("문제 등록" / "문제 편집"). The dialog stays mounted across sessions:
+// Question editor ("문제 등록" / "문제 편집"; on the home since UX7-BANK retired QBANK-01: QOV-01-AC12,
+// QPLAY-01-AC07). The dialog stays mounted across sessions:
 // each opening is a session (`session` prop), and a response that arrives after its dialog was
 // closed or reopened reports itself with a toast instead of touching the form on screen.
 // Creation sends one Idempotency-Key per creation attempt: retries of the same content reuse it,
