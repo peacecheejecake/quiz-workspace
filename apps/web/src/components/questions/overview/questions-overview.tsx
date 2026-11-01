@@ -13,6 +13,10 @@
 // panel's 문제 관리 menu edits (new revision; the panel then practises it) or deletes (after a
 // confirmation; the panel closes) the open question. Both server actions revalidate the home, so
 // the heatmap follows; the API decides who may.
+// UX7-BANK-2: the panel's header menu also reads the full question for every member (정답·해설 보기
+// / 수정 이력·출처: the 문제 상세 dialog over the panel; the practice session stays answer-free), and
+// editors archive the open question (보관, after a confirmation; the panel closes and the dot
+// leaves; it comes back from the home's 보관·초안 문제 dialog).
 import {
   Button,
   ChevronDownIcon,
@@ -22,6 +26,7 @@ import {
   QuestionHeatmap,
   QUESTION_DOT_STATUSES,
   questionStatusLabels,
+  questionTypeLabels,
   useToast,
   type HeatmapChapter,
   type QuestionDotStatus,
@@ -39,7 +44,11 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { deleteQuestionAction, getQuestionAction } from '@/lib/questions/actions';
+import {
+  deleteQuestionAction,
+  getQuestionAction,
+  setQuestionStatusAction,
+} from '@/lib/questions/actions';
 import type { OverviewItem, QuestionOverview } from '@/lib/questions/overview-data';
 import {
   isOverviewFiltered,
@@ -49,6 +58,7 @@ import {
 } from '@/lib/questions/overview-filters';
 import { lookupOverviewQuestionAction, setMyStateAction } from '@/lib/questions/practice-actions';
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from '@/lib/questions/problems';
+import { QuestionDetailDialog, type DetailTarget } from '../detail/question-detail-dialog';
 import { HomeQuestionEditor } from '../home-question-editor';
 import {
   PracticePanel,
@@ -109,7 +119,13 @@ export interface QuestionsOverviewProps {
   /** `?panel=question-create` (owned by the home): the 문제 등록 editor is open. */
   readonly createOpen?: boolean;
   readonly onCreateOpenChange?: (open: boolean) => void;
+  /** The workspace's documents, for the 문제 상세 dialog's source titles (UX7-BANK-2). */
+  readonly documents?: readonly { readonly id: string; readonly title: string }[];
+  /** A question was archived, deleted or edited here (the home re-reads open lists, UX7-BANK-2). */
+  readonly onQuestionsChanged?: () => void;
 }
+
+const NO_DOCUMENTS: readonly { readonly id: string; readonly title: string }[] = [];
 
 /**
  * Whether a failed deep-link lookup may succeed when retried. `notFound`, `forbidden`,
@@ -181,6 +197,8 @@ export function QuestionsOverview({
   onQuestionChange,
   createOpen = false,
   onCreateOpenChange,
+  documents = NO_DOCUMENTS,
+  onQuestionsChanged,
 }: QuestionsOverviewProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -228,12 +246,19 @@ export function QuestionsOverview({
   // filtered list does not show (deep link under other filters, or one that left the list while
   // open, e.g. un-favorited under the favorites filter) is resolved without the filters —
   // by the server render (`requested`) or, after client-side navigation, a lookup action.
-  // A question deleted here never reopens from the local state (browser Back restores its
-  // `?question=`): it is treated as closed, like an unknown id.
-  const [deletedIds, setDeletedIds] = useState<ReadonlySet<string>>(() => new Set());
+  // A question deleted or archived here never reopens from the local state (browser Back restores
+  // its `?question=`): it is treated as closed, like an unknown id — unless a newer server overview
+  // than the one on screen at removal lists it again (archived, then restored from the 보관·초안
+  // 문제 dialog).
+  const [removed, setRemoved] = useState<ReadonlyMap<string, readonly OverviewItem[]>>(
+    () => new Map(),
+  );
   const urlOpenId = openQuestionId(searchParams);
-  const openId = urlOpenId && !deletedIds.has(urlOpenId) ? urlOpenId : null;
-  const found = openId ? (placed.find((p) => p.item.question_id === openId) ?? null) : null;
+  const listed = urlOpenId ? (placed.find((p) => p.item.question_id === urlOpenId) ?? null) : null;
+  const removedOn = urlOpenId ? removed.get(urlOpenId) : undefined;
+  const blocked = removedOn !== undefined && (!listed || removedOn === serverItems);
+  const openId = urlOpenId && !blocked ? urlOpenId : null;
+  const found = openId ? listed : null;
   const [outside, setOutside] = useState<ReadonlyMap<string, PlacedQuestion>>(() =>
     requested ? new Map([[requested.item.question_id, requested]]) : new Map(),
   );
@@ -490,6 +515,9 @@ export function QuestionsOverview({
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState(false);
+  const [detail, setDetail] = useState<DetailTarget | null>(null);
 
   async function startEdit(questionId: string) {
     if (loadingEdit) return;
@@ -527,18 +555,53 @@ export function QuestionsOverview({
         return;
       }
       setConfirmDelete(null);
-      setDeletedIds((prev) => new Set(prev).add(questionId));
-      invalidate(questionId);
-      // After the action's refreshed overview: closing first could let that refresh restore
-      // `?question=` (practice-actions.ts).
-      if (openQuestionId(new URLSearchParams(window.location.search)) === questionId) {
-        setQuestionParam(null);
-      }
+      removeOpen(questionId);
       toast({ tone: 'success', title: '문제를 삭제했습니다.' });
     } catch {
       toast({ tone: 'error', title: QUESTION_FAILURE_MESSAGES.unavailable });
     } finally {
       setDeleting(false);
+    }
+  }
+
+  /** The question left the heatmap (deleted, archived): forget it and close its panel. */
+  function removeOpen(questionId: string) {
+    onQuestionsChanged?.();
+    setRemoved((prev) => new Map(prev).set(questionId, latestItems.current));
+    invalidate(questionId);
+    // After the action's refreshed overview: closing first could let that refresh restore
+    // `?question=` (practice-actions.ts).
+    if (openQuestionId(new URLSearchParams(window.location.search)) === questionId) {
+      setQuestionParam(null);
+    }
+  }
+
+  async function runArchive() {
+    const questionId = confirmArchive;
+    if (!questionId || archiving) return;
+    setArchiving(true);
+    try {
+      // The status change is based on the question's current revision, read now.
+      const current = await getQuestionAction(workspaceId, questionId);
+      const result = current.ok
+        ? await setQuestionStatusAction(
+            workspaceId,
+            questionId,
+            current.data.revision.id,
+            'ARCHIVED',
+          )
+        : current;
+      if (!result.ok) {
+        toast({ tone: 'error', title: result.message });
+        return;
+      }
+      setConfirmArchive(null);
+      removeOpen(questionId);
+      toast({ tone: 'success', title: '문제를 보관했습니다.' });
+    } catch {
+      toast({ tone: 'error', title: QUESTION_FAILURE_MESSAGES.unavailable });
+    } finally {
+      setArchiving(false);
     }
   }
 
@@ -680,13 +743,28 @@ export function QuestionsOverview({
         onViewed={markViewed}
         invalidated={invalidated}
         headerExtra={
-          canAuthor && panelQuestion ? (
+          panelQuestion ? (
             <QuestionManageMenu
               workspaceId={workspaceId}
               questionId={panelQuestion.id}
-              busy={loadingEdit || deleting}
-              onEdit={() => void startEdit(panelQuestion.id)}
-              onDelete={() => setConfirmDelete(panelQuestion.id)}
+              busy={loadingEdit || deleting || archiving}
+              onShowDetail={(focus, trigger) =>
+                setDetail({
+                  questionId: panelQuestion.id,
+                  focus,
+                  returnFocus: trigger,
+                  description: `${panelQuestion.title} · ${questionTypeLabels[panelQuestion.questionType]} · ${panelQuestion.chapterTitle}`,
+                })
+              }
+              manage={
+                canAuthor
+                  ? {
+                      onEdit: () => void startEdit(panelQuestion.id),
+                      onArchive: () => setConfirmArchive(panelQuestion.id),
+                      onDelete: () => setConfirmDelete(panelQuestion.id),
+                    }
+                  : null
+              }
             />
           ) : undefined
         }
@@ -708,6 +786,13 @@ export function QuestionsOverview({
         }}
       />
 
+      <QuestionDetailDialog
+        workspaceId={workspaceId}
+        target={detail}
+        onClose={() => setDetail(null)}
+        documents={documents}
+      />
+
       {canAuthor ? (
         <>
           <HomeQuestionEditor
@@ -719,6 +804,7 @@ export function QuestionsOverview({
               // The saved question's sessions are pinned to its old revision: forget them, and
               // practise the new one if the panel still shows it (not whatever is open now).
               if (mode === 'edit') invalidate(question.id);
+              onQuestionsChanged?.();
             }}
           />
           <ConfirmDialog
@@ -731,6 +817,17 @@ export function QuestionsOverview({
             confirmLabel="삭제"
             onConfirm={() => void runDelete()}
             loading={deleting}
+          />
+          <ConfirmDialog
+            open={confirmArchive !== null}
+            onOpenChange={(open) => {
+              if (!open && !archiving) setConfirmArchive(null);
+            }}
+            title="문제를 보관할까요?"
+            description="Heatmap에서 빠집니다. 문제 › 보관·초안 문제에서 보관 해제할 수 있고, 지난 풀이 기록은 그대로 남습니다."
+            confirmLabel="보관"
+            onConfirm={() => void runArchive()}
+            loading={archiving}
           />
         </>
       ) : null}

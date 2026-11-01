@@ -3,7 +3,7 @@
 // editors only). UX7-BANK retired its 전체 문제 link with the page, and 직접 추가 now opens the
 // 문제 등록 dialog on the home (QOV-01-AC12); UX7-DOCS merged PDF 관리 into 문서 관리
 // (DOC-01-AC09). UX7-DOCS-2 keeps the button for viewers and archived workspaces, with both items
-// disabled and the reason in text.
+// disabled and the reason in text. UX7-BANK-2 adds 보관·초안 문제, enabled for every member.
 import './dom-setup';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -13,7 +13,7 @@ import type { QuestionMenuReadOnly } from '../src/components/workspaces/question
 const { QuestionMenu } = await import('../src/components/workspaces/question-menu');
 
 function menu(readOnly: QuestionMenuReadOnly) {
-  const handlers = { onCreate: vi.fn(), onGenerate: vi.fn() };
+  const handlers = { onCreate: vi.fn(), onGenerate: vi.fn(), onInactive: vi.fn() };
   render(<QuestionMenu readOnly={readOnly} {...handlers} />);
   return handlers;
 }
@@ -27,7 +27,7 @@ describe('home `문제` menu', () => {
 
     await user.click(trigger);
     const items = screen.getAllByRole('menuitem').map((item) => item.textContent);
-    expect(items).toEqual(['직접 추가', '변형 출제']);
+    expect(items).toEqual(['직접 추가', '변형 출제', '보관·초안 문제']);
     await user.click(screen.getByRole('menuitem', { name: '직접 추가' }));
     // UX7-BANK: the 문제 등록 dialog opens on the home once focus is back on the trigger.
     await waitFor(() => expect(handlers.onCreate).toHaveBeenCalledTimes(1));
@@ -41,6 +41,10 @@ describe('home `문제` menu', () => {
     await waitFor(() => expect(handlers.onGenerate).toHaveBeenCalledTimes(1));
     // The dialog opens after the menu returned focus to its trigger.
     expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    await user.click(screen.getByRole('menuitem', { name: '보관·초안 문제' }));
+    await waitFor(() => expect(handlers.onInactive).toHaveBeenCalledTimes(1));
   });
 
   it.each([
@@ -56,8 +60,13 @@ describe('home `문제` menu', () => {
       const menuEl = await screen.findByRole('menu', { name: '문제' });
       expect(menuEl).toHaveTextContent(reason);
       expect(menuEl).toHaveAccessibleDescription(reason);
-      const items = screen.getAllByRole('menuitem');
-      expect(items.map((item) => item.textContent)).toEqual(['직접 추가', '변형 출제']);
+      const all = screen.getAllByRole('menuitem');
+      expect(all.map((item) => item.textContent)).toEqual([
+        '직접 추가',
+        '변형 출제',
+        '보관·초안 문제',
+      ]);
+      const items = all.slice(0, 2);
       for (const item of items) {
         expect(item).toHaveAttribute('aria-disabled', 'true');
         expect(item).toHaveAccessibleDescription(reason);
@@ -67,6 +76,11 @@ describe('home `문제` menu', () => {
       expect(handlers.onCreate).not.toHaveBeenCalled();
       expect(handlers.onGenerate).not.toHaveBeenCalled();
       expect(screen.queryByRole('link', { name: '전체 문제' })).toBeNull();
+      // UX7-BANK-2: 보관·초안 문제 is readable, so it stays enabled and opens the dialog.
+      const inactive = screen.getByRole('menuitem', { name: '보관·초안 문제' });
+      expect(inactive).not.toHaveAttribute('aria-disabled');
+      await user.click(inactive);
+      await waitFor(() => expect(handlers.onInactive).toHaveBeenCalledTimes(1));
     },
   );
 });

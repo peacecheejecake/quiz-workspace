@@ -1,6 +1,7 @@
 // A question revision's content (stem, options with correct markers, accepted answers, rubric,
-// explanation) for readers allowed to see answers: the shared workspace view (WS-VIEW-01). The
-// QBANK-01 detail panel that also used it was retired with its page (UX7-BANK).
+// explanation) for readers allowed to see answers: the shared workspace view (WS-VIEW-01) and the
+// home's 문제 상세 dialog (UX7-BANK-2, detail/question-detail-dialog.tsx), which brought back the
+// retired QBANK-01 detail panel's read view.
 import { CheckIcon } from '@quiz/ui';
 import type { QuestionRevision } from '@/lib/questions/actions';
 import type { Question } from '@/lib/questions/form';

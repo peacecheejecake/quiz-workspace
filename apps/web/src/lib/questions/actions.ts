@@ -2,7 +2,7 @@
 
 // Question server actions (the home's 문제 등록 / 문제 편집 / 삭제, QOV-01-AC12 and
 // QPLAY-01-AC07/AC08; the 문제 생성 dialog's list; UX7-BANK retired the QBANK-01 page that used
-// them first). Inputs are untrusted: ids are checked to be UUIDs and form values are
+// them first; UX7-BANK-2 brought back its detail reads, 보관 and the draft/archived list). Inputs are untrusted: ids are checked to be UUIDs and form values are
 // re-read and re-validated here before FastAPI (the authority on authorization, revision
 // consistency and content rules) is called with the session's Bearer token.
 import { revalidatePath } from 'next/cache';
@@ -19,6 +19,7 @@ import {
   updateBody,
   validateQuestionForm,
   type FieldErrors,
+  type PublicationStatus,
   type Question,
   type QuestionDetail,
   type QuestionFormValues,
@@ -243,4 +244,67 @@ export async function questionEditorContextAction(
   // redirect() throws, so it stays outside the try block.
   if (!api) redirect(loginRedirectPath(questionsReturnPath(workspaceId)));
   return loadChapterContext(api, workspaceId);
+}
+
+const STATUSES = new Set<PublicationStatus>(['DRAFT', 'CONFIRMED', 'ARCHIVED']);
+
+/**
+ * Publication status transition (UX7-BANK-2, as the retired QBANK-01 offered it): archive a
+ * confirmed question (the practice panel's 보관), restore an archived one or confirm a draft (the
+ * 보관·초안 문제 dialog). FastAPI checks the role, the archived workspace, the allowed transition and
+ * the base revision.
+ */
+export async function setQuestionStatusAction(
+  workspaceId: string,
+  questionId: string,
+  baseRevisionId: string,
+  status: PublicationStatus,
+): Promise<ActionResult<Question>> {
+  if (!isWorkspaceId(workspaceId) || !isId(questionId) || !isId(baseRevisionId)) {
+    return failed('notFound');
+  }
+  if (!STATUSES.has(status)) return failed('invalid');
+  const outcome = await callQuestionApi(questionsReturnPath(workspaceId), (api) =>
+    api.PATCH('/api/v1/questions/{question_id}', {
+      params: { path: { question_id: questionId } },
+      body: { base_revision_id: baseRevisionId, publication_status: status },
+    }),
+  );
+  if (outcome.ok || outcome.failure.kind === 'notFound') refresh(workspaceId);
+  return fromOutcome(outcome);
+}
+
+/** The 보관·초안 문제 dialog's filter: both (default), drafts only or archived only. */
+export type InactiveFilter = 'INACTIVE' | 'DRAFT' | 'ARCHIVED';
+
+const INACTIVE_QUERY: Readonly<Record<InactiveFilter, PublicationStatus[]>> = {
+  INACTIVE: ['DRAFT', 'ARCHIVED'],
+  DRAFT: ['DRAFT'],
+  ARCHIVED: ['ARCHIVED'],
+};
+
+/** One page (bank order, 50) of the workspace's draft and/or archived questions, after `cursor`. */
+export async function listInactiveQuestionsAction(
+  workspaceId: string,
+  filter: InactiveFilter,
+  cursor: string | null,
+): Promise<ActionResult<QuestionPage>> {
+  if (!isWorkspaceId(workspaceId)) return failed('notFound');
+  const statuses = Object.hasOwn(INACTIVE_QUERY, filter)
+    ? INACTIVE_QUERY[filter]
+    : INACTIVE_QUERY.INACTIVE;
+  const outcome = await callQuestionApi(questionsReturnPath(workspaceId), (api) =>
+    api.GET('/api/v1/workspaces/{workspace_id}/questions', {
+      params: {
+        path: { workspace_id: workspaceId },
+        query: {
+          publication_status: statuses,
+          limit: PAGE_SIZE,
+          ...(typeof cursor === 'string' && cursor ? { cursor: cursor.slice(0, 500) } : {}),
+        },
+      },
+    }),
+  );
+  if (!outcome.ok) return fromOutcome(outcome);
+  return { ok: true, data: { items: outcome.data.items, nextCursor: outcome.data.next_cursor } };
 }

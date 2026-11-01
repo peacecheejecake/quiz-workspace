@@ -10,13 +10,25 @@
 // archived rules, cross-user isolation) are in tests/integration/questions/
 // test_practice_api_contract.py. AC07/AC08 (문제 관리: 편집·삭제, moved from the retired QBANK-01 by
 // UX7-BANK) seed one graded attempt as superuser (fixtures/db.ts) and reuse the question editor's
-// labels (questionFormUi).
+// labels (questionFormUi). AC09–AC11 (UX7-BANK-2: 정답·해설 보기, 수정 이력·출처, 보관 — the retired
+// bank detail panel's read view and archive, restored on the panel's header menu) read the
+// answer only through the "문제 상세" dialog (detailUi) and check the practice session stays
+// answer-free.
 import { randomUUID } from 'node:crypto';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import {
   answerKeysIn,
   attemptRevision,
+  chooseFilter,
   choosePanelManage,
+  choosePanelMenu,
+  chooseQuestionMenu,
+  detailUi,
+  INACTIVE_STATUS_OPTIONS,
+  inactiveUi,
+  JOB_TIMEOUT_MS,
+  PANEL_MANAGE_ITEMS,
+  uploadReadyBook,
   createNumberedQuestions,
   createQuestion,
   expect,
@@ -35,6 +47,7 @@ import {
   seedGradedAttempt,
   seedMembership,
   signInAs,
+  startPractice,
   test,
   type ApiResponse,
   type E2EFixtures,
@@ -714,5 +727,229 @@ test(
     panel = await openPanel(page, 3);
     await expect(panelUi.manage(panel)).toHaveCount(0);
     expect((await getQuestion(s.owner, kept.id)).revision).toEqual(kept.revision);
+  },
+);
+
+/** The menu items of the panel's open header menu, in order. */
+async function expectMenuItems(
+  page: Page,
+  items: readonly (keyof typeof PANEL_MANAGE_ITEMS)[],
+): Promise<void> {
+  await expect(page.getByRole('menu').getByRole('menuitem')).toHaveText(
+    items.map((item) => PANEL_MANAGE_ITEMS[item]),
+  );
+}
+
+test(
+  'QPLAY-01-AC09 정답·해설 보기 shows the answer and explanation to every member without a practice attempt; an unanswered practice survives it',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const label = unique('qplay01-ac09');
+    const explanation = `해설 ${label}: 증발은 액체가 기체로 변하는 현상이다.`;
+    const s = await seedOne(
+      workspaceFactory,
+      'qplay01-ac09',
+      numberedMcq(label, 1, 2, { explanation }),
+    );
+    const question = q(s, 1);
+    const correctText = question.revision.options[2]?.text ?? '';
+    const wrongText = question.revision.options[0]?.text ?? '';
+    const viewer = await workspaceFactory.member('qplay01-ac09-viewer');
+    seedMembership(s.workspaceId, viewer.user.id, 'viewer');
+
+    // Owner: the panel opens without the answer; an option is chosen but not submitted.
+    await signInAs(page, s.owner.user);
+    const capture = captureResponses(page);
+    await page.goto(overviewPath(s.workspaceId));
+    let panel = await openPanel(page, 1);
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    await panelUi.option(panel, wrongText).check();
+    expect(leaks(await capture.stop(), [explanation])).toEqual([]);
+
+    await panelUi.manage(panel).click();
+    await expectMenuItems(page, ['answers', 'history', 'edit', 'generate', 'archive', 'delete']);
+    await panelUi.manageItem(page, 'answers').click();
+    let detail = detailUi.dialog(page);
+    await expect(detail).toBeVisible();
+    await expect(detail).toContainText(question.revision.stem);
+    await expect(detail).toContainText(explanation);
+    await expect(detailUi.correctOptions(detail)).toHaveCount(1);
+    await expect(detailUi.correctOptions(detail)).toContainText(correctText);
+    await page.keyboard.press('Escape');
+    await expect(detail).toBeHidden();
+    // The unanswered practice is untouched: same choice, nothing recorded.
+    await expect(panel).toBeVisible();
+    await expect(panelUi.option(panel, wrongText)).toBeChecked();
+    expect(await listAttempts(s.owner, question.id)).toEqual([]);
+    // …and its session still submits once, as usual.
+    await panelUi.option(panel, correctText).check();
+    await panelUi.submit(panel).click();
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
+    expect(await listAttempts(s.owner, question.id)).toHaveLength(1);
+
+    // Viewer: a read-only 문제 정보 menu with just the read items.
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    const viewerCapture = captureResponses(page);
+    await page.goto(overviewPath(s.workspaceId));
+    panel = await openPanel(page, 1);
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    expect(leaks(await viewerCapture.stop(), [explanation])).toEqual([]);
+    await expect(panelUi.manage(panel)).toHaveCount(0);
+    await panelUi.info(panel).click();
+    await expectMenuItems(page, ['answers', 'history']);
+    await panelUi.manageItem(page, 'answers').click();
+    detail = detailUi.dialog(page);
+    await expect(detail).toContainText(explanation);
+    await expect(detailUi.correctOptions(detail)).toContainText(correctText);
+    await expect(inactiveUi.edit(detail)).toHaveCount(0);
+    await detailUi.close(detail).click();
+    await expect(detail).toBeHidden();
+    await expect(panelUi.info(panel)).toBeFocused();
+    expect(await listAttempts(viewer, question.id)).toEqual([]);
+    // The practice session itself still carries no answer field (QPLAY-01-AC01).
+    expect(answerKeysIn(await startPractice(viewer, question.id))).toEqual([]);
+
+    // Archived workspace: the panel is read-only, the answers stay readable.
+    await workspaceFactory.archive(s.owner, s.workspaceId);
+    await page.context().clearCookies();
+    await openOverview(page, s);
+    panel = await openPanel(page, 1);
+    await expect(panelUi.manage(panel)).toHaveCount(0);
+    await choosePanelMenu(page, panel, 'answers');
+    await expect(detailUi.dialog(page)).toContainText(explanation);
+  },
+);
+
+test(
+  'QPLAY-01-AC10 수정 이력·출처 lists the revisions newest first, previews an older one and links each source to its PDF page',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(JOB_TIMEOUT_MS + 90_000);
+    const owner = await workspaceFactory.member('qplay01-ac10');
+    const ws = await workspaceFactory.create(owner);
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    const label = unique('qplay01-ac10');
+    const v1Stem = `${label} 처음 문제`;
+    let question = await createQuestion(owner, ws.id, {
+      ...mcqInput(v1Stem, ['가', '나', '다', '라'], 1),
+      question_number: 1,
+      sources: [{ document_id: documentId, page_start: 2, page_end: 3 }],
+    });
+    for (const stem of [`${label} 두 번째`, `${label} 세 번째`]) {
+      question = await owner.api.ok<Question>(
+        'PATCH',
+        `/questions/${question.id}`,
+        { base_revision_id: question.revision.id, stem },
+        [200],
+      );
+    }
+    expect(question.revision.version).toBe(3);
+    const viewer = await workspaceFactory.member('qplay01-ac10-viewer');
+    seedMembership(ws.id, viewer.user.id, 'viewer');
+
+    await signInAs(page, viewer.user);
+    await page.goto(overviewPath(ws.id));
+    const panel = await openPanel(page, 1);
+    await choosePanelMenu(page, panel, 'history');
+    const detail = detailUi.dialog(page);
+    await expect(detail).toBeVisible();
+    await expect(detailUi.historyHeading(detail)).toBeFocused();
+    await expect(detailUi.revisions(detail)).toHaveText([
+      /^(버전|version) 3 \((현재|current)\)/i,
+      /^(버전|version) 2(?!\d)/i,
+      /^(버전|version) 1(?!\d)/i,
+    ]);
+    await expect(detailUi.revision(detail, 3)).toHaveAttribute('aria-pressed', 'true');
+    await expect(detail).not.toContainText(v1Stem);
+    await detailUi.revision(detail, 1).click();
+    await expect(detailUi.revision(detail, 1)).toHaveAttribute('aria-pressed', 'true');
+    await expect(detailUi.revision(detail, 3)).toHaveAttribute('aria-pressed', 'false');
+    await expect(detail).toContainText(v1Stem);
+
+    await expect(detailUi.sourcesHeading(detail)).toBeVisible();
+    const link = detail.getByRole('link', { name: /2–3쪽|pages? 2/i });
+    await expect(link).toHaveAttribute(
+      'href',
+      `/workspaces/${ws.id}/documents/${documentId}?page=2`,
+    );
+    await link.click();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === `/workspaces/${ws.id}/documents/${documentId}` &&
+        url.searchParams.get('page') === '2',
+    );
+  },
+);
+
+test(
+  'QPLAY-01-AC11 문제 관리 › 보관 archives after confirming and the dot leaves the heatmap; viewers and archived workspaces cannot archive',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedMany(workspaceFactory, 'qplay01-ac11', 2);
+    const [target, kept] = [q(s, 1), q(s, 2)];
+    const viewer = await workspaceFactory.member('qplay01-ac11-viewer');
+    seedMembership(s.workspaceId, viewer.user.id, 'viewer');
+
+    await openOverview(page, s);
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    const panel = await openPanel(page, 1);
+    await choosePanelManage(page, panel, 'archive');
+    let confirm = panelUi.archiveConfirm(page);
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole('button', { name: /^(취소|cancel)$/i }).click();
+    await expect(confirm).toBeHidden();
+    await expect(panel).toBeVisible();
+    expect((await getQuestion(s.owner, target.id)).publication_status).toBe('CONFIRMED');
+
+    await choosePanelManage(page, panel, 'archive');
+    confirm = panelUi.archiveConfirm(page);
+    await confirm.getByRole('button', { name: /^(보관|archive)$/i }).click();
+    await expect(panel).toBeHidden();
+    await expect(page).toHaveURL((url) => !url.searchParams.has('question'));
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(overviewUi.dot(page, 1)).toHaveCount(0);
+    expect((await getQuestion(s.owner, target.id)).publication_status).toBe('ARCHIVED');
+    // Back never reopens the archived question.
+    await page.goBack();
+    await expect(panelUi.panel(page)).toHaveCount(0);
+    await page.goto(overviewPath(s.workspaceId));
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    // It is listed under 보관·초안 문제 › 보관됨.
+    await chooseQuestionMenu(page, 'inactive');
+    const dialog = inactiveUi.dialog(page);
+    await chooseFilter(page, inactiveUi.status(dialog), INACTIVE_STATUS_OPTIONS.archived);
+    await expect(inactiveUi.rows(dialog)).toHaveCount(1);
+    await expect(inactiveUi.rows(dialog)).toContainText(target.revision.stem);
+
+    // Viewer: no 보관 in the read-only menu; the API refuses.
+    const refused = await viewer.api.request('PATCH', `/questions/${kept.id}`, {
+      base_revision_id: kept.revision.id,
+      publication_status: 'ARCHIVED',
+    });
+    expect(refused.status).toBe(403);
+    expect((refused.body as Problem).type).toBe(PROBLEM_TYPES.insufficientRole);
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(overviewPath(s.workspaceId));
+    let other = await openPanel(page, 2);
+    await panelUi.info(other).click();
+    await expectMenuItems(page, ['answers', 'history']);
+    await page.keyboard.press('Escape');
+
+    // Archived workspace: no 보관 either; the API refuses.
+    await workspaceFactory.archive(s.owner, s.workspaceId);
+    const archived = await s.owner.api.request('PATCH', `/questions/${kept.id}`, {
+      base_revision_id: kept.revision.id,
+      publication_status: 'ARCHIVED',
+    });
+    expect(archived.status).toBe(403);
+    expect((archived.body as Problem).type).toBe(PROBLEM_TYPES.workspaceArchived);
+    await page.context().clearCookies();
+    await openOverview(page, s);
+    other = await openPanel(page, 2);
+    await panelUi.info(other).click();
+    await expectMenuItems(page, ['answers', 'history']);
+    expect((await getQuestion(s.owner, kept.id)).publication_status).toBe('CONFIRMED');
   },
 );

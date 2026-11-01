@@ -49,8 +49,13 @@ const getQuestionAction = vi.fn();
 const updateQuestionAction = vi.fn();
 const deleteQuestionAction = vi.fn();
 const questionEditorContextAction = vi.fn();
+// UX7-BANK-2: 보관 and the 문제 상세 dialog's past revisions.
+const setQuestionStatusAction = vi.fn();
+const getQuestionRevisionAction = vi.fn();
 vi.mock('../src/lib/questions/actions', () => ({
   getQuestionAction: (...a: unknown[]) => getQuestionAction(...a),
+  setQuestionStatusAction: (...a: unknown[]) => setQuestionStatusAction(...a),
+  getQuestionRevisionAction: (...a: unknown[]) => getQuestionRevisionAction(...a),
   updateQuestionAction: (...a: unknown[]) => updateQuestionAction(...a),
   deleteQuestionAction: (...a: unknown[]) => deleteQuestionAction(...a),
   createQuestionAction: vi.fn(),
@@ -130,6 +135,7 @@ function Screen({
   readOnly = null,
   createOpen = false,
   onCreateOpenChange,
+  onQuestionsChanged,
   filters = data === overview ? EMPTY_OVERVIEW_FILTERS : FAVORITES,
 }: {
   data?: QuestionOverview;
@@ -137,6 +143,7 @@ function Screen({
   readOnly?: 'viewer' | 'archived' | null;
   createOpen?: boolean;
   onCreateOpenChange?: (open: boolean) => void;
+  onQuestionsChanged?: () => void;
   filters?: typeof EMPTY_OVERVIEW_FILTERS;
 }) {
   return (
@@ -147,6 +154,7 @@ function Screen({
           readOnly={readOnly}
           createOpen={createOpen}
           onCreateOpenChange={onCreateOpenChange}
+          onQuestionsChanged={onQuestionsChanged}
           filters={filters}
           view={filters}
           navigating={false}
@@ -175,6 +183,8 @@ beforeEach(() => {
   updateQuestionAction.mockReset();
   deleteQuestionAction.mockReset();
   questionEditorContextAction.mockReset();
+  setQuestionStatusAction.mockReset();
+  getQuestionRevisionAction.mockReset();
   questionEditorContextAction.mockResolvedValue({ chapters: [], documents: [] });
   lookupOverviewQuestionAction.mockResolvedValue({ ok: true, data: null });
   openPracticeSessionAction.mockImplementation((_ws: string, qid: string) =>
@@ -792,6 +802,122 @@ describe('UX7-BANK 문제 관리 in the practice panel', { timeout: 20_000 }, ()
       expect(within(panel).queryByRole('button', { name: '문제 관리' })).toBeNull();
     },
   );
+});
+
+describe('UX7-BANK-2 정답·해설 보기 and 보관 in the practice panel', { timeout: 20_000 }, () => {
+  it.each([null, 'viewer', 'archived'] as const)(
+    'QPLAY-01-AC09 the menu (%s) reads the answer only when chosen and keeps the session',
+    async (readOnly) => {
+      const user = userEvent.setup();
+      getQuestionAction.mockResolvedValue({ ok: true, data: fullQuestion(2) });
+      render(<Screen readOnly={readOnly} />);
+      await user.click(dot(2));
+      const panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+      const sessions = openPracticeSessionAction.mock.calls.length;
+      expect(getQuestionAction).not.toHaveBeenCalled();
+      const label = readOnly ? '문제 정보' : '문제 관리';
+      await user.click(within(panel).getByRole('button', { name: label }));
+      const items = screen.getAllByRole('menuitem').map((item) => item.textContent);
+      expect(items).toEqual(
+        readOnly
+          ? ['정답·해설 보기', '수정 이력·출처']
+          : ['정답·해설 보기', '수정 이력·출처', '편집', '변형 출제', '보관', '삭제'],
+      );
+      await user.click(screen.getByRole('menuitem', { name: '정답·해설 보기' }));
+      const detail = await screen.findByRole('dialog', { name: '문제 상세' });
+      expect(await within(detail).findByRole('heading', { name: '해설' })).toBeInTheDocument();
+      expect(within(detail).getByText('정답')).toBeInTheDocument();
+      expect(getQuestionAction).toHaveBeenCalledWith(WS, id(2));
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: '문제 상세' })).toBeNull());
+      // No new session, no submission: the practice is untouched.
+      expect(openPracticeSessionAction).toHaveBeenCalledTimes(sessions);
+      expect(submitPracticeAction).not.toHaveBeenCalled();
+      expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
+    },
+  );
+
+  it('QPLAY-01-AC10 수정 이력·출처 focuses the history and previews a past revision', async () => {
+    const user = userEvent.setup();
+    const current = fullQuestion(1, '지금 본문');
+    getQuestionAction.mockResolvedValue({
+      ok: true,
+      data: {
+        ...current,
+        revision: { ...current.revision, version: 2 },
+        revisions: [
+          { id: current.revision.id, version: 2, created_at: '2026-10-18T00:00:00Z' },
+          {
+            id: '77777777-7777-4777-8777-777777777777',
+            version: 1,
+            created_at: '2026-10-17T00:00:00Z',
+          },
+        ],
+      },
+    });
+    getQuestionRevisionAction.mockResolvedValue({
+      ok: true,
+      data: {
+        ...current.revision,
+        id: '77777777-7777-4777-8777-777777777777',
+        version: 1,
+        stem: '처음 본문',
+      },
+    });
+    render(<Screen readOnly="viewer" />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await user.click(within(panel).getByRole('button', { name: '문제 정보' }));
+    await user.click(screen.getByRole('menuitem', { name: '수정 이력·출처' }));
+    const detail = await screen.findByRole('dialog', { name: '문제 상세' });
+    await waitFor(() =>
+      expect(within(detail).getByRole('heading', { name: '수정 이력' })).toHaveFocus(),
+    );
+    const v1 = await within(detail).findByRole('button', { name: /^버전 1 ·/ });
+    expect(within(detail).getByRole('button', { name: /^버전 2 \(현재\)/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await user.click(v1);
+    expect(await within(detail).findByText('처음 본문')).toBeInTheDocument();
+    expect(v1).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('QPLAY-01-AC11 보관 confirms, archives the current revision and closes the panel', async () => {
+    const user = userEvent.setup();
+    getQuestionAction.mockResolvedValue({ ok: true, data: fullQuestion(3) });
+    setQuestionStatusAction.mockResolvedValue({
+      ok: true,
+      data: { ...fullQuestion(3), publication_status: 'ARCHIVED' },
+    });
+    const onQuestionsChanged = vi.fn();
+    render(<Screen onQuestionsChanged={onQuestionsChanged} />);
+    await user.click(dot(3));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+    await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
+    await user.click(await screen.findByRole('menuitem', { name: '보관' }));
+    let confirm = await screen.findByRole('alertdialog', { name: '문제를 보관할까요?' });
+    await user.click(within(confirm).getByRole('button', { name: '취소' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(setQuestionStatusAction).not.toHaveBeenCalled();
+
+    await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
+    await user.click(await screen.findByRole('menuitem', { name: '보관' }));
+    confirm = await screen.findByRole('alertdialog', { name: '문제를 보관할까요?' });
+    await user.click(within(confirm).getByRole('button', { name: '보관' }));
+    await waitFor(() =>
+      expect(setQuestionStatusAction).toHaveBeenCalledWith(
+        WS,
+        id(3),
+        '88888888-8888-4888-8888-888888888888',
+        'ARCHIVED',
+      ),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(new URLSearchParams(window.location.search).has('question')).toBe(false);
+    // An open 보관·초안 문제 list must re-read (the home bumps its refreshKey).
+    expect(onQuestionsChanged).toHaveBeenCalledTimes(1);
+  });
 });
 
 const EMPTY: QuestionOverview = { ...overview, chapters: [], items: [] };
