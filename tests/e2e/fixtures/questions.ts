@@ -745,18 +745,20 @@ export function numberedMcq(
   };
 }
 
-/** Creates numbered MCQs 1..count in parallel batches of 10; returns them in number order. */
+/** Creates numbered MCQs 1..count in parallel batches of 10; returns them in number order.
+ *  `input` replaces the default `numberedMcq(label, n)` for chosen numbers. */
 export async function createNumberedQuestions(
   owner: Member,
   workspaceId: string,
   label: string,
   count: number,
+  input: (n: number) => QuestionInput = (n) => numberedMcq(label, n),
 ): Promise<Question[]> {
   const out: Question[] = [];
   for (let start = 1; start <= count; start += 10) {
     const batch = Array.from({ length: Math.min(10, count - start + 1) }, (_, i) => start + i);
     const created = await Promise.all(
-      batch.map((n) => createQuestion(owner, workspaceId, numberedMcq(label, n))),
+      batch.map((n) => createQuestion(owner, workspaceId, input(n))),
     );
     out.push(...created);
   }
