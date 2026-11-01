@@ -895,17 +895,20 @@ test(
 );
 
 test(
-  'QOV-01-AC14 browser Back after closing a dialog or the practice panel never reopens it',
+  'QOV-01-AC14 browser Back or Forward after closing a dialog or the practice panel never reopens it',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     const s = await seed(workspaceFactory, 'qov01-ac14', 2);
     const home = overviewPath(s.workspaceId);
     const onHome = (url: URL) => url.pathname === home;
     const onList = (url: URL) => url.pathname === '/workspaces';
     const noPanel = (url: URL) =>
       onHome(url) && !url.searchParams.has('panel') && !url.searchParams.has('question');
+    const panels = (url: URL) => url.searchParams.getAll('panel').join();
     const history = homeUi.dialog(page, /^(이력|history)$/i);
+    const documents = homeUi.documentsDialog(page);
+    const closeDocuments = /^(문서 관리 닫기|close)/i;
     await signInAs(page, s.owner.user);
 
     /** A history entry before the home (the workspace list), then the home itself. */
@@ -915,21 +918,36 @@ test(
       await page.goto(`${home}${search}`);
       await expect(overviewUi.heatmap(page)).toBeVisible();
     }
-    /** After a close, Back leaves the home for the page before it: the dialog never reopens. */
-    async function backLeavesHome(): Promise<void> {
-      // A close may refresh the overview (the practice panel's study state): a cross-document
-      // Back started under that router write is cancelled by WebKit, not by the feature.
+    // A close may refresh the overview (the practice panel's study state): a cross-document
+    // traversal started under that router write is cancelled by WebKit, not by the feature.
+    async function back(): Promise<void> {
       await page.waitForLoadState('networkidle');
       await page.goBack();
+    }
+    async function forward(): Promise<void> {
+      await page.waitForLoadState('networkidle');
+      await page.goForward();
+    }
+    /** After a close, Back leaves the home for the page before it: the dialog never reopens. */
+    async function backLeavesHome(): Promise<void> {
+      await back();
       await expect(page).toHaveURL(onList);
     }
+    /** From the page before the home, Forward returns to the closed home and no further. */
+    async function forwardStaysClosed(closed: Locator): Promise<void> {
+      await forward();
+      await expect(page).toHaveURL(noPanel);
+      await expect(overviewUi.heatmap(page)).toBeVisible();
+      await forward();
+      await expect(page).toHaveURL(noPanel);
+      await expect(closed).toBeHidden();
+    }
 
-    // 문서 관리 · 이력 · 링크 공유: open, close (button or Escape), Back.
-    const closeDocuments = /^(문서 관리 닫기|close)/i;
+    // 문서 관리 · 이력 · 링크 공유: open, close (button or Escape), Back, Forward.
     const dialogs = [
       {
         open: () => homeUi.documentsButton(page).click(),
-        dialog: homeUi.documentsDialog(page),
+        dialog: documents,
         close: closeDocuments,
       },
       {
@@ -958,29 +976,27 @@ test(
       await expect(dialog).toBeHidden();
       await expect(page).toHaveURL(noPanel);
       await backLeavesHome();
+      await forwardStaysClosed(dialog);
     }
 
-    // Back while a dialog is open closes it; after Forward reopens it, closing it and Back still
-    // leave the home. A filter chosen while the dialog was open survives its close.
+    // Back while a dialog is open closes it, keeping a filter chosen meanwhile; Forward does not
+    // reopen it, and the next Back leaves the home.
+    const unseen = (url: URL) => noPanel(url) && url.searchParams.get('status') === 'unseen';
     await arrive();
-    const documents = homeUi.documentsDialog(page);
     await homeUi.documentsButton(page).click();
-    await expect(documents).toBeVisible();
-    await page.goBack();
-    await expect(page).toHaveURL(noPanel);
-    await expect(documents).toBeHidden();
-    await page.goForward();
     await expect(documents).toBeVisible();
     await homeUi.statusFilterToggle(page).click();
     await homeUi.statusFilters(page).getByRole('button', { name: '미열람', exact: true }).click();
     await expect(page).toHaveURL(/[?&]status=unseen(&|$)/);
-    await documents.getByRole('button', { name: closeDocuments }).click();
+    await back();
+    await expect(page).toHaveURL(unseen);
     await expect(documents).toBeHidden();
-    await expect(page).toHaveURL(
-      (url) => noPanel(url) && url.searchParams.get('status') === 'unseen',
-    );
     await expect(overviewUi.dots(page)).toHaveCount(2);
+    await forward();
+    await expect(page).toHaveURL(unseen);
+    await expect(documents).toBeHidden();
     await backLeavesHome();
+    await forwardStaysClosed(documents);
 
     // The 문제 등록 dialog (`?panel=question-create`).
     await arrive();
@@ -990,22 +1006,68 @@ test(
     await expect(questionFormUi.form(page)).toBeHidden();
     await expect(page).toHaveURL(noPanel);
     await backLeavesHome();
+    await forwardStaysClosed(questionFormUi.form(page));
 
-    // The practice panel, moved to the next question before it is closed.
+    // The practice panel: previous/next are question changes (Back/Forward move between the
+    // questions, QPLAY-01); Forward does not undo the Back that closed it.
+    const onQuestion = (n: number) => (url: URL) =>
+      onHome(url) && url.searchParams.get('question') === q(s, n).id;
     await arrive();
+    await overviewUi.dot(page, 1).click();
+    await expect(panelUi.numbered(page, 1)).toBeVisible();
+    await panelUi.next(panelUi.numbered(page, 1)).click();
+    await expect(panelUi.numbered(page, 2)).toBeVisible();
+    await expect(page).toHaveURL(onQuestion(2));
+    await back();
+    await expect(page).toHaveURL(onQuestion(1));
+    await expect(panelUi.numbered(page, 1)).toBeVisible();
+    await forward();
+    await expect(page).toHaveURL(onQuestion(2));
+    await expect(panelUi.numbered(page, 2)).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(onQuestion(1));
+    await expect(panelUi.numbered(page, 1)).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(panelUi.panel(page)).toBeHidden();
+    await forward();
+    await expect(page).toHaveURL(noPanel);
+    await expect(panelUi.panel(page)).toBeHidden();
+    // Moved to the next question, then closed with its button.
     await overviewUi.dot(page, 1).click();
     await expect(panelUi.numbered(page, 1)).toBeVisible();
     await panelUi.next(panelUi.numbered(page, 1)).click();
     const second = panelUi.numbered(page, 2);
     await expect(second).toBeVisible();
-    await expect(page).toHaveURL((url) => url.searchParams.get('question') === q(s, 2).id);
+    await expect(page).toHaveURL(onQuestion(2));
     await panelUi.close(second).click();
     await expect(panelUi.panel(page)).toBeHidden();
     await expect(page).toHaveURL(noPanel);
     await backLeavesHome();
+    await forwardStaysClosed(panelUi.panel(page));
 
-    // Two stacked dialogs: closing the lower one keeps the upper one open; the first Back closes
-    // it (the closed 문서 관리 stays closed), the next one leaves the home.
+    // Two stacked dialogs (이력 over 문서 관리): each Back closes the top one only, and Forward
+    // reopens neither.
+    await arrive();
+    await homeUi.documentsButton(page).click();
+    await expect(documents).toBeVisible();
+    await homeUi.historyButton(page).click();
+    await expect(history).toBeVisible();
+    await back();
+    await expect(page).toHaveURL((url) => onHome(url) && panels(url) === 'documents');
+    await expect(history).toBeHidden();
+    await expect(documents).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(documents).toBeHidden();
+    await forward();
+    await expect(page).toHaveURL(noPanel);
+    await expect(documents).toBeHidden();
+    await expect(history).toBeHidden();
+    await backLeavesHome();
+
+    // Closing the lower one keeps the upper one open; the first Back closes it (the closed 문서
+    // 관리 stays closed), Forward reopens neither, the next Back leaves the home.
     await arrive();
     await homeUi.documentsButton(page).click();
     await expect(documents).toBeVisible();
@@ -1016,8 +1078,12 @@ test(
     await page.keyboard.press('Enter');
     await expect(documents).toBeHidden();
     await expect(history).toBeVisible();
-    await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').join() === 'history');
-    await page.goBack();
+    await expect(page).toHaveURL((url) => panels(url) === 'history');
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(history).toBeHidden();
+    await expect(documents).toBeHidden();
+    await forward();
     await expect(page).toHaveURL(noPanel);
     await expect(history).toBeHidden();
     await expect(documents).toBeHidden();
@@ -1031,5 +1097,6 @@ test(
     await expect(page).toHaveURL(noPanel);
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await backLeavesHome();
+    await forwardStaysClosed(history);
   },
 );
