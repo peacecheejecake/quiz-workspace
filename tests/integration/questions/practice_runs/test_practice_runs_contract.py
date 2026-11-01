@@ -8,8 +8,9 @@
     POST /practice-runs/{id}/finish            fix the summary
     POST /questions/{id}/practice-sessions     {practice_run_id, run_position}: a run position
 
-QVIEW.0 (RED): every test carries `red`; QVIEW-B removes it from the `bank` tests, MOCK-P from the
-`mock` ones (implementation-plan §3 MOCK gate). C06 is a Vitest component contract (QVIEW-W).
+QVIEW.0 (RED) marked every test `red`; QVIEW-B removed it from the `bank` tests, MOCK-P removes
+it from the `mock` ones (implementation-plan §3 MOCK gate). C06 is a Vitest component contract
+(QVIEW-W).
 Request/response shapes P1-P7 are the assumptions in the header of
 tests/e2e/fixtures/practice-runs.ts (keep both in sync). Uses the M4 question suite's fixtures
 (../conftest.py: in-process app, per-test users, `quiz_api` role). The `postgres` superuser seeds
@@ -279,7 +280,6 @@ def create_mock_exam(client: Any, workspace_id: str, question_ids: list[str]) ->
 # ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.red
 def test_c01_range_resolves_to_live_confirmed_questions_of_this_workspace(seed: Any) -> None:
     r = Range(seed, "c01")
     owner = r.owner
@@ -349,7 +349,6 @@ def test_c01_range_resolves_to_live_confirmed_questions_of_this_workspace(seed: 
     assert r.viewer.call("GET", f"/practice-runs/{spoofed['id']}").status_code == 404
 
 
-@pytest.mark.red
 def test_c01_filters_follow_the_callers_heatmap_state(seed: Any) -> None:
     r = Range(seed, "c01-filters")
     owner_q = r.confirmed[0]
@@ -369,7 +368,6 @@ def test_c01_filters_follow_the_callers_heatmap_state(seed: Any) -> None:
     assert viewer_wrong == [r.heatmap[1], r.heatmap[4]]
 
 
-@pytest.mark.red
 def test_c01_idempotency_key_returns_the_same_run(seed: Any) -> None:
     r = Range(seed, "c01-idem")
     key = str(uuid.uuid4())
@@ -381,7 +379,6 @@ def test_c01_idempotency_key_returns_the_same_run(seed: Any) -> None:
     assert two["seed"] == one["seed"]
 
 
-@pytest.mark.red
 def test_c01_c02_five_thousand_is_the_cap_and_responses_do_not_grow(seed: Any) -> None:
     owner = seed.client("qview-c01-cap")
     ws = owner.create_workspace()
@@ -427,7 +424,6 @@ def test_c01_c02_five_thousand_is_the_cap_and_responses_do_not_grow(seed: Any) -
 # ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.red
 def test_c02_order_is_heatmap_or_the_stored_seed_shuffle_and_never_changes(seed: Any) -> None:
     r = Range(seed, "c02")
     owner = r.owner
@@ -504,7 +500,6 @@ def _assert_clean(value: Any, secrets: list[str], what: str) -> None:
         assert secret not in text, f"{what} carries an answer text"
 
 
-@pytest.mark.red
 def test_c03_bank_run_reads_and_sessions_never_carry_answers_before_submission(seed: Any) -> None:
     owner = seed.client("qview-c03")
     ws_id = str(owner.create_workspace()["id"])
@@ -587,7 +582,6 @@ def test_c03_mock_run_reads_and_sessions_never_carry_answers_before_submission(s
 # ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.red
 def test_c04_bank_run_records_in_the_question_tables_once_per_position(seed: Any) -> None:
     owner = seed.client("qview-c04")
     ws_id = str(owner.create_workspace()["id"])
@@ -711,7 +705,6 @@ def test_c04_mock_run_leaves_the_question_tables_unchanged(seed: Any) -> None:
 # ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.red
 def test_c05_runs_belong_to_their_creator_and_follow_the_workspace_state(seed: Any) -> None:
     owner = seed.client("qview-c05-owner")
     viewer = seed.client("qview-c05-viewer")
@@ -747,6 +740,10 @@ def test_c05_runs_belong_to_their_creator_and_follow_the_workspace_state(seed: A
         run_session(viewer, qs[0]["id"], mine["id"], 1), "POST", "viewer session", (201,)
     )
     viewer.ok("POST", f"/practice-sessions/{session['id']}/submit", {"selected_option_ids": ["o0"]})
+    # A position opened before the workspace is archived (submitted after it, below).
+    open_before = viewer.ok_response(
+        run_session(viewer, qs[1]["id"], mine["id"], 2), "POST", "viewer session 2", (201,)
+    )
 
     # Archived workspace: create and read yes, practise no.
     owner.ok("POST", f"/workspaces/{ws_id}/archive")
@@ -756,8 +753,22 @@ def test_c05_runs_belong_to_their_creator_and_follow_the_workspace_state(seed: A
     seed.problem(
         run_session(owner, qs[0]["id"], archived["id"], 1), 403, PROBLEM + "workspace-archived"
     )
-    open_before = run_session(viewer, qs[1]["id"], mine["id"], 2)
-    seed.problem(open_before, 403, PROBLEM + "workspace-archived")
+    run_attempts = (
+        "select count(*) from public.question_attempts a join public.practice_sessions s "
+        "on s.id = a.practice_session_id where s.practice_run_id = %s"
+    )
+    assert count(run_attempts, (mine["id"],)) == 1
+    seed.problem(
+        viewer.call(
+            "POST",
+            f"/practice-sessions/{open_before['id']}/submit",
+            {"selected_option_ids": ["o0"]},
+        ),
+        403,
+        PROBLEM + "workspace-archived",
+    )
+    assert count(run_attempts, (mine["id"],)) == 1, "a refused submission writes no attempt"
+    assert item(viewer, mine["id"], 2)["attempt"] is None
     owner.ok("POST", f"/workspaces/{ws_id}/restore")
 
     # Guests: no JWT → 401; a share session cookie only → 401/404.
@@ -788,7 +799,6 @@ def test_c05_runs_belong_to_their_creator_and_follow_the_workspace_state(seed: A
 # ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.red
 def test_c07_ranges_match_the_heatmap_with_archived_and_merged_duplicates(seed: Any) -> None:
     r = Range(seed, "c07")
     viewer = r.viewer
@@ -856,3 +866,99 @@ def test_c07_ranges_match_the_heatmap_with_archived_and_merged_duplicates(seed: 
     assert finished["summary"]["skipped"] == 3
     results = r.owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200")
     assert [i["result"] for i in results["items"]] == ["skipped", "skipped", "skipped"]
+
+
+# ---------------------------------------------------------------------------------------------
+# QVIEW-B review follow-ups (Codex P2s)
+# ---------------------------------------------------------------------------------------------
+
+
+def test_c04_resuming_a_position_with_an_idempotency_key_replays_it(seed: Any) -> None:
+    """A resumed open position is stored under its Idempotency-Key like a new session: a retry
+    replays it (no new view write), also after the position was submitted, and the key cannot be
+    reused with another body."""
+    owner = seed.client("qview-idem-resume")
+    ws_id = str(owner.create_workspace()["id"])
+    qs = [owner.create_question(ws_id, mcq("idem", 1, n, None)) for n in (1, 2)]
+    run = created(owner, ws_id, bank({"all": True}))
+    opened = owner.ok_response(
+        run_session(owner, qs[0]["id"], run["id"], 1), "POST", "first open", (201,)
+    )
+    path = f"/questions/{qs[0]['id']}/practice-sessions"
+    body = {"practice_run_id": run["id"], "run_position": 1}
+    key = {"Idempotency-Key": str(uuid.uuid4())}
+    resumed = owner.call_with_headers("POST", path, body, key)
+    assert resumed.status_code == 201, resumed.text[:200]
+    assert resumed.json()["id"] == opened["id"]
+
+    def last_viewed() -> Any:
+        return admin(
+            "select last_viewed_at from public.question_user_states "
+            "where user_id = %s and question_id = %s",
+            (owner.user.id, qs[0]["id"]),
+        )
+
+    viewed = last_viewed()
+    again = owner.call_with_headers("POST", path, body, key)
+    assert again.status_code == 201
+    assert again.headers.get("idempotent-replayed") == "true"
+    assert again.json() == resumed.json()
+    assert last_viewed() == viewed, "a replay must not record another view"
+
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{opened['id']}/submit",
+        {"selected_option_ids": [wrong_option(qs[0])]},
+    )
+    after = owner.call_with_headers("POST", path, body, key)
+    assert after.status_code == 201, "a retry after submission replays the original response"
+    assert after.json()["id"] == opened["id"]
+    seed.problem(
+        owner.call_with_headers(
+            "POST", path, {"practice_run_id": run["id"], "run_position": 2}, key
+        ),
+        409,
+        PROBLEM + "idempotency-key-reused",
+    )
+
+
+def test_c07_submitted_positions_that_become_unavailable_count_as_skipped(seed: Any) -> None:
+    """Archived or deleted after submission: the position is unavailable and skipped in the
+    summary and the results (questions.md §12, QVIEW-01 state table); attempts stay."""
+    owner = seed.client("qview-gone-submitted")
+    ws_id = str(owner.create_workspace()["id"])
+    qs = [owner.create_question(ws_id, mcq("gone", 1, n, None)) for n in (1, 2, 3)]
+    run = created(owner, ws_id, bank({"all": True}))
+    for position, question in ((1, qs[0]), (2, qs[1])):
+        session = owner.ok_response(
+            run_session(owner, question["id"], run["id"], position), "POST", "open", (201,)
+        )
+        owner.ok(
+            "POST",
+            f"/practice-sessions/{session['id']}/submit",
+            {"selected_option_ids": question["revision"]["correct_option_ids"]},
+        )
+    owner.ok_response(run_session(owner, qs[2]["id"], run["id"], 3), "POST", "open 3", (201,))
+    owner.ok(
+        "PATCH",
+        f"/questions/{qs[0]['id']}",
+        {"base_revision_id": qs[0]["revision"]["id"], "publication_status": "ARCHIVED"},
+    )
+    owner.ok("DELETE", f"/questions/{qs[1]['id']}", None, (204,))
+    for position in (1, 2):
+        assert item(owner, run["id"], position)["available"] is False
+
+    current = owner.ok("GET", f"/practice-runs/{run['id']}")
+    assert current["summary"] == {"correct": 0, "incorrect": 0, "pending": 0, "skipped": 2}
+    assert current["answered"] == 0
+    results = owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200")
+    assert [i["result"] for i in results["items"]] == ["skipped", "skipped", None]
+    finished = owner.ok("POST", f"/practice-runs/{run['id']}/finish", {})
+    assert finished["summary"] == {"correct": 0, "incorrect": 0, "pending": 0, "skipped": 3}
+    results = owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200")
+    assert [i["result"] for i in results["items"]] == ["skipped", "skipped", "skipped"]
+    run_attempts = (
+        "select count(*) from public.question_attempts a join public.practice_sessions s "
+        "on s.id = a.practice_session_id where s.practice_run_id = %s"
+    )
+    assert count(run_attempts, (run["id"],)) == 2, "historical attempts are never touched"

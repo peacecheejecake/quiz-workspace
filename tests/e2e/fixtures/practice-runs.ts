@@ -27,7 +27,8 @@
 //      integer, total, finished_at: string|null, summary: {correct, incorrect, pending, skipped}}
 //      — no item list, no question content (C02). `skipped` counts positions without a submitted
 //      attempt (skipped or unavailable) once the run is finished, and the positions before the
-//      furthest one reached while it is open.
+//      furthest one reached while it is open. QVIEW-B adds `answered` (positions submitted),
+//      `reached` (furthest position opened, 0 = none) and `created_at`.
 //   P3 GET /practice-runs/{id}/items/{position} (1-based) → 200 RunItem =
 //        {position, total, available: boolean, question_id: string|null, chapter_number,
 //         question_number, question_type, stem, is_multi_answer, options: [{id, text}],
@@ -35,7 +36,9 @@
 //                          accepted_answers, explanation, rubric}}
 //      `available: false` (question deleted/archived since the run started, or removed from the
 //      mock exam) carries no content. Answer fields appear only inside `attempt`, which exists only
-//      after that position was submitted. position outside 1..total → 404.
+//      after that position was submitted. position outside 1..total → 404. QVIEW-B adds
+//      `chapter_id`, `chapter_title`, `practice_session_id`, `session_state` (open|pending_grade|
+//      graded|null); options are in the open session's displayed order once one exists.
 //   P4 A position is practised through the existing practice API with the run link:
 //        POST /questions/{qid}/practice-sessions {practice_run_id, run_position} → 201
 //        PracticeSession (bank; records the view like the panel) and
@@ -43,8 +46,13 @@
 //      submit / self-grade are the existing /practice-sessions/{id}/submit · /self-grade (bank)
 //      and /mock-practice-sessions/{id}/submit · /self-grade (mock). A position that already has a
 //      submitted attempt refuses a new session or a second submit with 409 already-submitted.
-//   P5 GET /practice-runs/{id}/results?offset=&limit= → 200 {total, items: [{position,
-//      question_id|null, label, preview, result: correct|incorrect|pending|skipped|null}]}.
+//   P5 GET /practice-runs/{id}/results?offset=&limit= → 200 {total, offset, limit, items:
+//      [{position, question_id|null, available, question_type, chapter_id, chapter_number,
+//      chapter_title, question_number, preview, result: correct|incorrect|pending|skipped|null}]}
+//      (QVIEW-B: no server-built `label` — the client labels "1장 1번" from chapter_number /
+//      chapter_title and question_number like the Heatmap).
+//   QVIEW-B also: a finished run takes no new session or submission (409
+//      practice-run-finished); an open session of a position is resumed by a repeated P4 call.
 //   P6 APP_ENV=test fixes the server-chosen seed to PRACTICE_RUN_TEST_SEED when the request sends
 //      none (AC03 "fake seed 고정"), so a random run of five shows Heatmap positions
 //      TEST_SEED_ORDER_5 = random.Random(20261101).shuffle([1, 2, 3, 4, 5]).

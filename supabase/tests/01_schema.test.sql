@@ -27,7 +27,9 @@ select tables_are(
         -- CHNOTE chapter notes
         'chapter_notes',
         -- UX7-DEDUP duplicate -> kept question merges
-        'question_merges'],
+        'question_merges',
+        -- QVIEW-B range practice runs
+        'practice_runs'],
   'public schema contains exactly the expected tables'
 );
 

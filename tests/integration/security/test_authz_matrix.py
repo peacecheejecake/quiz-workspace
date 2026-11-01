@@ -52,6 +52,9 @@ UPLOADER = Rule(EDITORS, writes=True, personal=True)
 OWNER_WRITE = Rule(OWNERS, writes=True)
 OWNER_LIFECYCLE = Rule(OWNERS, writes=True, archived_ok=True)
 OWNER_READ = Rule(OWNERS, writes=False)
+# QVIEW-B practice runs: personal, so creating and finishing one is allowed when archived.
+RUN_CREATE = Rule(ALL, writes=True, archived_ok=True)
+OWN_RUN_WRITE = Rule(ALL, writes=True, archived_ok=True, personal=True)
 
 # Not workspace-scoped: the caller's own account data, the guest share API, health probes.
 ME = "me"  # any signed-in user, own data only
@@ -93,6 +96,12 @@ RULES: dict[str, Rule | str] = {
     "updateMyQuestionState": PRACTICE,
     "startPracticeSession": PRACTICE,
     "listMyWorkspaceAttempts": READ,
+    # QVIEW-B range practice runs (QVIEW-01-C05): the creator's only
+    "createPracticeRun": RUN_CREATE,
+    "getPracticeRun": OWN_READ,
+    "getPracticeRunItem": OWN_READ,
+    "listPracticeRunResults": OWN_READ,
+    "finishPracticeRun": OWN_RUN_WRITE,
     # questions, drafts, generation, import
     "updateQuestionDraft": EDIT,
     "getQuestionGeneration": READ,
@@ -201,6 +210,8 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
             "variation_types": ["PARAPHRASE"],
         },
         "updateMyQuestionState": {"is_favorite": True},
+        "createPracticeRun": {"source": "bank", "range": {"all": True}},
+        "finishPracticeRun": {},
         "mergeQuestionDuplicates": {
             "groups": [
                 {
@@ -346,13 +357,13 @@ def test_member_role_matrix(op_id: str, role: str, s4: Any, world: Any, app_clie
 
 def _multi_id_ops() -> list[str]:
     """Operations whose path names a parent and a child id. Block ids are structural and local to
-    a document revision (`p1-b0` exists in every book), so they cannot belong to "another
-    workspace" and are left out."""
+    a document revision (`p1-b0` exists in every book), and run positions index one run, so
+    neither can belong to "another workspace"; both are left out."""
     spec = json.loads(OPENAPI.read_text())
     out = []
     for path, methods in spec["paths"].items():
         params = [p for p in path.split("/") if p.startswith("{")]
-        if len(params) >= 2 and params[-1] != "{block_id}":
+        if len(params) >= 2 and params[-1] not in ("{block_id}", "{position}"):
             out += [op["operationId"] for op in methods.values()]
     return [o for o in out if isinstance(RULES.get(o), Rule)]
 

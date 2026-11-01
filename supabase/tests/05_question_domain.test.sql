@@ -24,7 +24,9 @@ select columns_are('public', 'question_user_states',
 select columns_are('public', 'practice_sessions',
   array['id', 'workspace_id', 'question_id', 'question_revision_id', 'user_id',
         'displayed_option_ids', 'shuffle_seed', 'state', 'opened_at', 'submitted_at',
-        'graded_at', 'created_at', 'updated_at']);
+        'graded_at', 'created_at', 'updated_at',
+        -- QVIEW-B run link
+        'practice_run_id', 'run_position']);
 select columns_are('public', 'question_attempts',
   array['id', 'workspace_id', 'question_id', 'question_revision_id', 'practice_session_id',
         'user_id', 'displayed_option_ids', 'submitted_answer', 'result', 'grading_method',

@@ -136,11 +136,7 @@ def overview_statement(
         .scalar_subquery()
     )
     states = merged_state(workspace_id, user_id)
-    conditions: list[ColumnElement[bool]] = [
-        questions.c.workspace_id == workspace_id,
-        questions.c.publication_status == "CONFIRMED",
-        questions.c.deleted_at.is_(None),
-    ]
+    conditions = heatmap_conditions(workspace_id)
     if flt.no_chapter:
         conditions.append(chapters.c.id.is_(None))
     elif flt.chapter_id is not None:
@@ -150,7 +146,31 @@ def overview_statement(
     if flt.text:
         conditions.append(question_revisions.c.stem.ilike(_like_pattern(flt.text), "\\"))
 
-    source = (
+    return (
+        select(
+            questions.c.id.label("question_id"),
+            questions.c.question_type,
+            questions.c.question_number,
+            chapters.c.id.label("chapter_id"),
+            chapters.c.title.label("chapter_title"),
+            chapters.c.document_id.label("chapter_document_id"),
+            func.left(question_revisions.c.stem, STEM_HEAD).label("stem_head"),
+            states.c.first_viewed_at,
+            states.c.last_graded_result,
+            func.coalesce(states.c.needs_retry, false()).label("needs_retry"),
+            func.coalesce(states.c.is_favorite, false()).label("is_favorite"),
+            func.coalesce(latest_submitted, false()).label("is_pending_grading"),
+        )
+        .select_from(heatmap_source().outerjoin(states, true()))
+        .where(*conditions)
+        .order_by(*heatmap_order())
+    )
+
+
+def heatmap_source() -> Any:
+    """Live questions with their active revision, chapter and the chapter's document: the FROM
+    of the Heatmap (also `quiz_api.question_ranges`, so a range is the Heatmap's set)."""
+    return (
         questions.join(
             question_revisions,
             and_(
@@ -172,36 +192,31 @@ def overview_statement(
                 documents.c.workspace_id == chapters.c.workspace_id,
             ),
         )
-        .outerjoin(states, true())
     )
+
+
+def heatmap_conditions(workspace_id: uuid.UUID) -> list[ColumnElement[bool]]:
+    """The Heatmap's questions: CONFIRMED and not deleted (drafts and archived ones — merged
+    duplicates included — never appear)."""
+    return [
+        questions.c.workspace_id == workspace_id,
+        questions.c.publication_status == "CONFIRMED",
+        questions.c.deleted_at.is_(None),
+    ]
+
+
+def heatmap_order() -> tuple[ColumnElement[Any], ...]:
+    """Heatmap order over `heatmap_source()` (docs/questions.md §3.1, module docstring)."""
     return (
-        select(
-            questions.c.id.label("question_id"),
-            questions.c.question_type,
-            questions.c.question_number,
-            chapters.c.id.label("chapter_id"),
-            chapters.c.title.label("chapter_title"),
-            chapters.c.document_id.label("chapter_document_id"),
-            func.left(question_revisions.c.stem, STEM_HEAD).label("stem_head"),
-            states.c.first_viewed_at,
-            states.c.last_graded_result,
-            func.coalesce(states.c.needs_retry, false()).label("needs_retry"),
-            func.coalesce(states.c.is_favorite, false()).label("is_favorite"),
-            func.coalesce(latest_submitted, false()).label("is_pending_grading"),
-        )
-        .select_from(source)
-        .where(*conditions)
-        .order_by(
-            chapters.c.id.is_(None),
-            documents.c.created_at,
-            documents.c.id,
-            chapters.c.sort_order,
-            chapters.c.id,
-            questions.c.sort_order,
-            func.coalesce(questions.c.question_number, literal(UNNUMBERED)),
-            questions.c.created_at,
-            questions.c.id,
-        )
+        chapters.c.id.is_(None),
+        documents.c.created_at,
+        documents.c.id,
+        chapters.c.sort_order,
+        chapters.c.id,
+        questions.c.sort_order,
+        func.coalesce(questions.c.question_number, literal(UNNUMBERED)),
+        questions.c.created_at,
+        questions.c.id,
     )
 
 

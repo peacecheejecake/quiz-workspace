@@ -103,6 +103,7 @@ def random_ids() -> dict[str, str]:
         "job_id",
         "fork_id",
         "session_id",
+        "run_id",
         "draft_id",
         "generation_id",
         "batch_id",
@@ -118,6 +119,7 @@ def random_ids() -> dict[str, str]:
     )
     out = {k: str(uuid.uuid4()) for k in keys}
     out["block_id"] = f"b-{uuid.uuid4().hex[:12]}"
+    out["position"] = "1"  # a run position, not an id (the run id is the random part)
     return out
 
 
@@ -227,6 +229,12 @@ def build_world(seed: Any, label: str) -> World:
         (202,),
     )
     session = owner.ok("POST", f"/questions/{qid}/practice-sessions", None, (200, 201))
+    run = owner.ok(
+        "POST",
+        f"/workspaces/{wid}/practice-runs",
+        {"source": "bank", "range": {"all": True}},
+        (201,),
+    )
     link = owner.create_link(wid, allow_fork=True)
     intent = owner.upload_intent(wid)
     assert intent.status_code in (200, 201), f"upload-intent: HTTP {intent.status_code}"
@@ -262,6 +270,8 @@ def build_world(seed: Any, label: str) -> World:
         "job_id": str(done["job_id"]),
         "fork_id": str(fork.json()["id"]),
         "session_id": str(session["id"]),
+        "run_id": str(run["id"]),
+        "position": "1",
         "draft_id": draft_id,
         "generation_id": str(generation["id"]),
         "batch_id": str(batch["id"]),
