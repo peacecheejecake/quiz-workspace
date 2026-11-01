@@ -9,7 +9,10 @@
 // while it is open undoes the open. Browsers cannot drop forward entries except by writing a new
 // one, so every close ends with a push that truncates them:
 // - A close button (or Escape, save, delete) at depth d first goes back d entries to the base
-//   (the entry before the first open). A Back that closes a dialog lands on the entry before its
+//   (the entry before the first open), or, closing the top-most opened dialog while others stay,
+//   only to the entry before its open (each entry records the depth its dialogs were opened at):
+//   Chromium renders a traversed entry before its popstate arrives, so passing an entry without
+//   the dialogs that stay would remount them. A Back that closes a dialog lands on the entry before its
 //   open. Either way that entry is rewritten to the closed URL (what changed while the dialog was
 //   open kept), then becomes a "skip" entry under a copy of it, or, after a close button with
 //   dialogs still open, stays under one entry for those (Back then closes them).
@@ -42,6 +45,8 @@ export const PANEL_DEPTH_KEY = '__quizPanelDepth';
 export const PANEL_UNDER_KEY = '__quizPanelUnder';
 /** On a skip entry: how many entries Back onto it goes on back. */
 export const PANEL_SKIP_KEY = '__quizPanelSkip';
+/** The depth each open dialog was opened at (closing the top one rewinds only to below it). */
+export const PANEL_OPENED_KEY = '__quizPanelOpened';
 /** sessionStorage: a close whose rewind left the document (see the module comment). */
 export const PANEL_CLOSE_KEY = '__quizPanelClose';
 /** sessionStorage: the entry a document of the home was on when it unloaded (pagehide). */
@@ -60,6 +65,17 @@ export interface EntryMark {
   readonly pos: number;
   readonly depth: number;
   readonly under: number;
+  /** Open dialog → the depth of the entry that opened it (missing: unknown). */
+  readonly opened?: Readonly<Record<string, number>>;
+}
+
+function readOpened(value: unknown): Record<string, number> {
+  if (typeof value !== 'object' || value === null) return {};
+  const out: Record<string, number> = {};
+  for (const [dialog, depth] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof depth === 'number' && Number.isInteger(depth) && depth >= 0) out[dialog] = depth;
+  }
+  return out;
 }
 
 export interface PanelEntry {
@@ -85,6 +101,7 @@ export function readEntry(state: unknown): PanelEntry {
       pos: count(record, PANEL_POS_KEY),
       depth: count(record, PANEL_DEPTH_KEY),
       under: count(record, PANEL_UNDER_KEY),
+      opened: readOpened(record[PANEL_OPENED_KEY]),
     },
     skip: count(record, PANEL_SKIP_KEY),
   };
@@ -98,6 +115,7 @@ export function markState(state: unknown, mark: EntryMark, skip = 0): Record<str
   out[PANEL_POS_KEY] = mark.pos;
   out[PANEL_DEPTH_KEY] = mark.depth;
   out[PANEL_UNDER_KEY] = mark.under;
+  out[PANEL_OPENED_KEY] = { ...(mark.opened ?? {}) };
   if (skip > 0) out[PANEL_SKIP_KEY] = skip;
   return out;
 }
@@ -202,13 +220,18 @@ function parseLeave(raw: string | null, now: number): Leave | null {
   return null;
 }
 
-/** A close waiting for its rewind to land on the base (`pos`). */
+/** A close waiting for its rewind to land on the base, or below the closed dialog (`pos`). */
 interface Rewind {
   readonly pos: number;
   /** The target with every dialog closed. */
   readonly base: string;
   /** Pushed above the base when dialogs stay open. */
   readonly reopen: string | null;
+  /**
+   * Set when the rewind lands on the entry before the closed (top-most) dialog's open instead of
+   * the base: that entry, which shows exactly the dialogs that stay, is rewritten to this target.
+   */
+  readonly below: string | null;
 }
 
 type Pending =
@@ -236,9 +259,10 @@ function parseRewind(raw: string | null, now: number): Rewind | null {
       now - value.at <= TRAVERSAL_TIMEOUT_MS &&
       typeof value.pos === 'number' &&
       typeof value.base === 'string' &&
-      (typeof value.reopen === 'string' || value.reopen === null)
+      (typeof value.reopen === 'string' || value.reopen === null) &&
+      (typeof value.below === 'string' || value.below === null)
     ) {
-      return { pos: value.pos, base: value.base, reopen: value.reopen };
+      return { pos: value.pos, base: value.base, reopen: value.reopen, below: value.below };
     }
   } catch {
     // A malformed value is no handover.
@@ -286,9 +310,9 @@ export class PanelHistory {
       basePath === this.win.location.pathname &&
       (!entry.ours || entry.mark.pos === handover.pos)
     ) {
-      // A close's rewind loaded this document (the base): finish the close here.
+      // A close's rewind loaded this document (its landing entry): finish the close here.
       this.mark = { ...entry.mark, pos: handover.pos };
-      this.settle(handover.base, handover.reopen);
+      this.land(handover);
     } else if (entry.ours) {
       this.arrive(entry, leave);
     } else {
@@ -340,7 +364,8 @@ export class PanelHistory {
       entry.ours &&
       entry.skip === 0 &&
       entry.mark.depth === mark.depth &&
-      entry.mark.under === mark.under
+      entry.mark.under === mark.under &&
+      JSON.stringify(entry.mark.opened ?? {}) === JSON.stringify(mark.opened ?? {})
     ) {
       return;
     }
@@ -354,7 +379,15 @@ export class PanelHistory {
     const target = pathAndQuery(url, this.win.location.href);
     if (target === this.current()) return;
     this.stamp();
-    this.mark = { pos: this.mark.pos + 1, depth: this.mark.depth + 1, under: 0 };
+    const depth = this.mark.depth + 1;
+    // Dialogs open already keep the depth they were opened at; the new one is opened here.
+    const opened: Record<string, number> = {};
+    const before = this.getDialogs().open(this.win.location.search);
+    for (const dialog of this.getDialogs().open(splitUrl(target).search)) {
+      const known = this.mark.opened?.[dialog];
+      opened[dialog] = before.includes(dialog) ? (known ?? 0) : depth;
+    }
+    this.mark = { pos: this.mark.pos + 1, depth, under: 0, opened };
     this.win.history.pushState(markState(null, this.mark), '', target);
     this.resting = target;
   }
@@ -374,7 +407,9 @@ export class PanelHistory {
     const base = `${path}${this.getDialogs().closeAll(search)}`;
     const reopen = base === target ? null : target;
     if (this.mark.depth > 0) {
-      const rewind: Rewind = { pos: this.mark.pos - this.mark.depth, base, reopen };
+      const steps = this.rewindSteps(target);
+      const below = steps < this.mark.depth ? target : null;
+      const rewind: Rewind = { pos: this.mark.pos - steps, base, reopen, below };
       const pending: Pending = { kind: 'rewind', ...rewind, fallback: target, timer: 0 };
       pending.timer = this.win.setTimeout(() => {
         // The traversal never came: close in place rather than leave the dialog open.
@@ -385,7 +420,7 @@ export class PanelHistory {
       }, TRAVERSAL_TIMEOUT_MS);
       this.pending = pending;
       this.storeRewind(rewind);
-      this.win.history.go(-this.mark.depth);
+      this.win.history.go(-steps);
       return;
     }
     if (reopen === null && this.win.navigation?.canGoForward === false) {
@@ -396,6 +431,37 @@ export class PanelHistory {
   }
 
   /**
+   * How far a close to `target` goes back. Closing the top-most opened dialog (the others were
+   * open before it) goes only to the entry before its open, which shows exactly the dialogs that
+   * stay: passing through an entry without them would unmount them (Chromium renders a traversed
+   * entry before its popstate arrives), and they would lose state and focus. Otherwise: the base.
+   */
+  private rewindSteps(target: string): number {
+    const dialogs = this.getDialogs();
+    const stay = dialogs.open(splitUrl(target).search);
+    const closed = dialogs.open(this.win.location.search).filter((d) => !stay.includes(d));
+    const opened = this.mark.opened ?? {};
+    const [dialog] = closed;
+    if (closed.length !== 1 || dialog === undefined || stay.length === 0) return this.mark.depth;
+    const at = opened[dialog];
+    if (at === undefined || at < 2 || at > this.mark.depth) return this.mark.depth;
+    if (!stay.every((d) => opened[d] !== undefined && (opened[d] ?? at) < at)) {
+      return this.mark.depth;
+    }
+    return this.mark.depth - (at - 1);
+  }
+
+  /** Where a close's rewind landed: the base (settle) or the entry below the closed dialog. */
+  private land(rewind: Rewind): void {
+    if (rewind.below !== null) {
+      this.onPage(rewind.below, () => this.truncate());
+      this.resting = rewind.below;
+      return;
+    }
+    this.settle(rewind.base, rewind.reopen);
+  }
+
+  /**
    * On the base entry: rewrite it to `base`, then push the dialogs still open, or a copy of it
    * (the base becomes a skip entry).
    */
@@ -403,7 +469,12 @@ export class PanelHistory {
     this.mark = { ...this.mark, depth: 0 };
     this.onPage(base, () => {
       if (reopen) {
-        this.mark = { pos: this.mark.pos + 1, depth: 1, under: 0 };
+        const opened = Object.fromEntries(
+          this.getDialogs()
+            .open(splitUrl(reopen).search)
+            .map((d) => [d, 1]),
+        );
+        this.mark = { pos: this.mark.pos + 1, depth: 1, under: 0, opened };
         // Only dialog keys differ from the base: Next syncs its URL from the plain write.
         this.win.history.pushState(markState(null, this.mark), '', reopen);
         this.resting = this.current();
@@ -446,10 +517,17 @@ export class PanelHistory {
     const skip = this.mark.under + 1;
     history.replaceState(markState(history.state, this.mark, skip), '');
     const dialogs = this.getDialogs().open(this.win.location.search);
+    const known = this.mark.opened ?? {};
+    const opened: Record<string, number> = {};
+    for (const dialog of dialogs) {
+      const at = known[dialog];
+      if (at !== undefined) opened[dialog] = at;
+    }
     this.mark = {
       pos: this.mark.pos + 1,
       depth: dialogs.length > 0 ? this.mark.depth + 1 : 0,
       under: skip,
+      opened,
     };
     history.pushState(markState(history.state, this.mark), '');
     this.resting = this.current();
@@ -532,7 +610,8 @@ export class PanelHistory {
     }
     const { history } = this.win;
     chain.forEach((url, depth) => {
-      this.mark = { pos: depth, depth, under: 0 };
+      const opened = Object.fromEntries(open.slice(0, depth).map((d, i) => [d, i + 1]));
+      this.mark = { pos: depth, depth, under: 0, opened };
       const state = markState(history.state, this.mark);
       if (depth === 0) history.replaceState(state, '', url);
       else history.pushState(state, '', url);
@@ -595,10 +674,10 @@ export class PanelHistory {
     }
     const entry = readEntry(event.state);
     if (pending?.kind === 'rewind') {
-      // Landed on the base (Next restores it): push the closed URL above it.
+      // Landed (Next restores the entry): finish the close there.
       this.takeRewind();
       this.mark = entry.mark;
-      this.settle(pending.base, pending.reopen);
+      this.land(pending);
       return;
     }
     if (!entry.ours) {

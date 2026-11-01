@@ -7,6 +7,7 @@ import {
   DEFAULT_DIALOG_URLS,
   markState,
   PANEL_DEPTH_KEY,
+  PANEL_OPENED_KEY,
   PANEL_POS_KEY,
   PANEL_SKIP_KEY,
   PANEL_UNDER_KEY,
@@ -247,12 +248,22 @@ describe('entry marks', () => {
   it('reads only positive integer marks, and a fresh entry is not ours', () => {
     expect(readEntry(null)).toEqual({
       ours: false,
-      mark: { pos: 0, depth: 0, under: 0 },
+      mark: { pos: 0, depth: 0, under: 0, opened: {} },
       skip: 0,
     });
     expect(
-      readEntry({ [PANEL_POS_KEY]: 3, [PANEL_DEPTH_KEY]: 2, [PANEL_UNDER_KEY]: '1', x: 1 }),
-    ).toEqual({ ours: true, mark: { pos: 3, depth: 2, under: 0 }, skip: 0 });
+      readEntry({
+        [PANEL_POS_KEY]: 3,
+        [PANEL_DEPTH_KEY]: 2,
+        [PANEL_UNDER_KEY]: '1',
+        [PANEL_OPENED_KEY]: { documents: 1, history: -1, question: '2' },
+        x: 1,
+      }),
+    ).toEqual({
+      ours: true,
+      mark: { pos: 3, depth: 2, under: 0, opened: { documents: 1 } },
+      skip: 0,
+    });
     expect(readEntry({ [PANEL_POS_KEY]: 1, [PANEL_SKIP_KEY]: -1 }).skip).toBe(0);
   });
 
@@ -263,6 +274,7 @@ describe('entry marks', () => {
       [PANEL_POS_KEY]: 1,
       [PANEL_DEPTH_KEY]: 0,
       [PANEL_UNDER_KEY]: 2,
+      [PANEL_OPENED_KEY]: {},
     });
     expect(markState(null, mark, 3)[PANEL_SKIP_KEY]).toBe(3);
   });
@@ -377,6 +389,39 @@ describe('PanelHistory', () => {
     fake.back();
     expect(fake.url()).toBe('/w');
     expectBackLeavesForwardStaysClosed(fake);
+  });
+
+  it('closing the top-most dialog never passes an entry without the ones that stay', () => {
+    // A deep-linked 정리 노트, then a practice question opened from it and moved on once.
+    const { fake, history } = controller('/w?panel=chapter-note&chapter=c1');
+    history.push('/w?panel=chapter-note&chapter=c1&question=1');
+    history.push('/w?panel=chapter-note&chapter=c1&question=2');
+    fake.rendered.length = 0;
+    history.close('/w?panel=chapter-note&chapter=c1');
+    fake.traverse();
+    // One traversal, onto the entry before the practice panel opened: the note never leaves.
+    expect(fake.rendered).toEqual(['/w?panel=chapter-note&chapter=c1']);
+    expect(fake.url()).toBe('/w?panel=chapter-note&chapter=c1');
+    expect(fake.urls()).toEqual([
+      '/workspaces',
+      '/w',
+      '/w?panel=chapter-note&chapter=c1',
+      '/w?panel=chapter-note&chapter=c1',
+    ]);
+    expect(fake.skips()).toEqual([0, 0, 1, 0]);
+    // Back closes the note, then leaves; Forward reopens neither.
+    fake.back();
+    expect(fake.url()).toBe('/w');
+    expectBackLeavesForwardStaysClosed(fake);
+  });
+
+  it('closing a lower dialog (or one raised later) still rewinds to the base', () => {
+    const { fake, history } = controller();
+    history.push('/w?panel=documents');
+    history.push('/w?panel=documents&panel=history');
+    history.close('/w?panel=history');
+    fake.traverse();
+    expect(fake.urls()).toEqual(['/workspaces', '/w', '/w?panel=history']);
   });
 
   it('a stacked close keeps the dialog still open on one entry; Back then closes it', () => {
@@ -686,6 +731,7 @@ describe('PanelHistory', () => {
       [PANEL_POS_KEY]: 1,
       [PANEL_DEPTH_KEY]: 1,
       [PANEL_UNDER_KEY]: 0,
+      [PANEL_OPENED_KEY]: { documents: 1 },
     });
     history.push('/w?panel=documents&panel=history');
     fake.back();
