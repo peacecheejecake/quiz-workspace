@@ -49,6 +49,7 @@ _MARKER = re.compile(r"\[(E2E-MOCK-[A-Za-z0-9-]+)\]")
 _PASSAGE = re.compile(r"<<<(P\d+)[^\n]*\n(.*?)\n>>>", re.S)
 _SOURCE = re.compile(r"<<<(S\d+)\n(.*?)\n>>>", re.S)
 _VARIATION = re.compile(r"^variation_type: (\S+)$", re.M)
+_OWN = re.compile(r"^passages: (P\d+(?:, P\d+)*)$", re.M)
 _BULK = re.compile(r"^E2E-MOCK-BULK-(\d{3})$")
 _CRASH = re.compile(r"^E2E-MOCK-CRASH-([0-9a-f]{16})$")
 _HOLD = re.compile(r"^E2E-MOCK-HOLD-([0-9a-f]{16})$")
@@ -173,7 +174,10 @@ class MockExamScenarioLLM:
         passages = [(tag, text) for tag, text in _PASSAGE.findall(head)]
         blocks = _SOURCE.findall(tail)
         scripted: list[tuple[str, str, dict[str, Any]]] = []
+        own: dict[str, list[str]] = {}
         for tag, body in blocks:
+            listed = _OWN.search(body)
+            own[tag] = [t.strip() for t in listed.group(1).split(",")] if listed else []
             found = _VARIATION.search(body)
             source = next(
                 (s for m in _MARKER.findall(body) if (s := self._scripted(m)) is not None), None
@@ -193,7 +197,9 @@ class MockExamScenarioLLM:
             citations = []
             for c in item.get("citations", []):
                 quote = str(c["quote"])
-                ids = [t for t, text in passages if quote in text]
+                # The source's own passages first (the request's tags of its `passages:` line).
+                mine = [(t, text) for t, text in passages if t in own.get(tag, [])]
+                ids = [t for t, text in mine + passages if quote in text]
                 citations.append({"passage_id": ids[0] if ids else "P1", "quote": quote})
             items.append(
                 {**item, "source_tag": tag, "variation_type": variation, "citations": citations}

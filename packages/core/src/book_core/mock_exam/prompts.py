@@ -40,7 +40,7 @@ Output rules (each item):
 - justification explains why the answer is correct, based on the passages.
 - citations: at least one {passage_id, quote} per item when its source lists passages; quote
   must be copied verbatim from that passage (a sentence or phrase), never invented. Cite only
-  passages of this request.
+  the passages its own source lists; an item whose source lists none has no citations.
 - Never copy a source question unchanged and never repeat an item.
 - Use only facts from the source question and the passages.
 

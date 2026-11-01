@@ -20,7 +20,7 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 from book_core.contracts import Excerpt, ValidationIssue, ValidationSeverity
-from book_core.generation import LLMVariant
+from book_core.generation import LLMVariant, passage_tag
 from book_core.generation.validation import VariantContent, content_from_llm, content_issues
 from book_core.mock_exam.prompts import BatchSource, LLMMockBatch, LLMMockItem
 from book_core.question import issue
@@ -64,18 +64,50 @@ def accept_for_mock_exam(
                 error=True,
             )
         ]
-    candidate = LLMVariant.model_validate(item.model_dump(exclude={"source_tag", "variation_type"}))
-    content, issues = content_from_llm(candidate, source.source, passages)
+    # Only the source's own passages count: the batch tags (P1..Pk of the request) map onto
+    # them, a citation of another source's passage is unknown to this item, and a source without
+    # passages needs no citation (its evidence is the source's own provenance).
+    own, local = source_passages(source, passages)
+    citations = []
+    for citation in item.citations:
+        tag = local.get(citation.passage_id.strip().strip("[]").casefold())
+        if tag is None:
+            return None, [
+                issue(
+                    "citation_unknown_passage",
+                    "A citation does not reference one of its source's passages.",
+                    error=True,
+                    field="evidence",
+                )
+            ]
+        citations.append({"passage_id": tag, "quote": citation.quote})
+    raw = item.model_dump(exclude={"source_tag", "variation_type"})
+    candidate = LLMVariant.model_validate({**raw, "citations": citations})
+    content, issues = content_from_llm(candidate, source.source, own)
     if content is None:
         return None, issues
     return content, content_issues(
         content,
         variation_type=source.variation_type,
         source=source.source,
-        passages=passages,
+        passages=own,
         existing_fingerprints=existing_fingerprints,
         sibling_fingerprints=sibling_fingerprints,
     )
+
+
+def source_passages(
+    source: BatchSource, passages: Sequence[Excerpt]
+) -> tuple[list[Excerpt], dict[str, str]]:
+    """The source's own passages (in its tag order) and batch tag -> local tag (``P1``..)."""
+    own: list[Excerpt] = []
+    local: dict[str, str] = {}
+    for tag in source.passage_tags:
+        index = int(tag[1:]) - 1 if tag[:1].upper() == "P" and tag[1:].isdigit() else -1
+        if 0 <= index < len(passages) and tag.casefold() not in local:
+            own.append(passages[index])
+            local[tag.casefold()] = passage_tag(len(own) - 1)
+    return own, local
 
 
 def check_batch(

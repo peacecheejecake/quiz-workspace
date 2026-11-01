@@ -180,6 +180,61 @@ def test_one_bad_inversion_is_dropped_while_its_batch_mates_are_kept() -> None:
     assert llm.max_in_flight == 1
 
 
+def own(passage_text: str, block: str) -> Excerpt:
+    return Excerpt(
+        document_id="d",
+        revision_id="r",
+        text=passage_text,
+        block_ids=(block,),
+        locations=(SourceLocation(page=2),),
+    )
+
+
+def item(key: str, tag: str, citations: list[dict[str, str]]) -> dict[str, object]:
+    scripted = BLOCK["sources"][key]["items"]["PARAPHRASE"]
+    return {**scripted, "source_tag": tag, "variation_type": "PARAPHRASE", "citations": citations}
+
+
+def with_tags(source: BatchSource, tags: tuple[str, ...]) -> BatchSource:
+    return BatchSource(source.tag, source.position, source.source, source.variation_type, tags)
+
+
+EVAP_QUOTE = "이 과정을 증발이라고 한다."
+
+
+def test_a_source_without_passages_needs_no_citation_in_a_mixed_batch() -> None:
+    """Codex P2: citations are required and checked against the source's own passages only."""
+    a = with_tags(named("evaporation", "S1", 0, PT), ("P1",))
+    b = with_tags(named("flocculation", "S2", 1, PT), ())
+    output = LLMMockBatch.model_validate(
+        {
+            "items": [
+                item("evaporation", "S1", [{"passage_id": "P1", "quote": EVAP_QUOTE}]),
+                item("flocculation", "S2", []),
+            ]
+        }
+    )
+    outcomes = check_batch(output, [a, b], [own(PAGE2.text, "p2")])
+    assert [o.accepted for o in outcomes] == [True, True], [o.codes for o in outcomes]
+
+
+def test_an_item_citing_another_sources_passage_is_rejected() -> None:
+    a = with_tags(named("evaporation", "S1", 0, PT), ("P1",))
+    b = with_tags(named("flocculation", "S2", 1, PT), ("P2",))
+    output = LLMMockBatch.model_validate(
+        {
+            "items": [
+                item("evaporation", "S1", [{"passage_id": "P1", "quote": EVAP_QUOTE}]),
+                item("flocculation", "S2", [{"passage_id": "P1", "quote": EVAP_QUOTE}]),
+            ]
+        }
+    )
+    outcomes = check_batch(output, [a, b], [own(PAGE2.text, "p2"), own(PAGE4.text, "p4")])
+    assert outcomes[0].accepted
+    assert not outcomes[1].accepted
+    assert "citation_unknown_passage" in outcomes[1].codes
+
+
 def test_missing_and_unknown_items_fail() -> None:
     sources = [named("evaporation", "S1", 0, PT)]
     outcomes = check_batch(LLMMockBatch(items=[]), sources, [PAGE2])
