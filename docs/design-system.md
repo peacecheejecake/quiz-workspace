@@ -306,7 +306,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - **왼쪽·좁은 panel (DOCVIEW, 2026-11-01):** `side="start"`(데스크톱에서 왼쪽 16px margin, 들어오고 나갈 때 왼쪽에서 움직임; 모바일은 같은 bottom sheet)와 `size="narrow"`(`min(20rem, 100vw - 32px)`)는 탐색용 panel이다. DOC-02 `목차`가 non-modal로 쓰며, 데스크톱(≥1024px)에서는 화면 내용이 panel 폭만큼 비켜서 PDF를 가리지 않고, 더 좁은 화면에서 PDF 위에 뜰 때는 불투명(`--color-glass-solid`, blur 없음)이다(DOC-02-AC06).
 - `QuestionGenerationReviewPanel`: 충분한 공간이 필요하므로 desktop에서는 600px 이상 비교 drawer 또는 전체 page 모드 제공(500px 강제 금지).
 - Mobile: full width bottom sheet 또는 full-height panel, safe-area inset, `max-height: 90dvh`; 화면이 좁다면 문제 상세 전체 페이지로 전환 가능.
-- URL query: `?question=<id>` 또는 `?panel=...`로 열림 상태/딥링크 복원. 뒤로가기와 동기화.
+- URL query: `?question=<id>` 또는 `?panel=...`로 열림 상태/딥링크 복원. 뒤로가기와 동기화(열면 기록 항목 하나, 열린 동안 뒤로가기는 닫기). 닫기 버튼·Escape로 닫으면 연 기록 항목을 되돌려 닫은 뒤 뒤로가기가 그 panel을 다시 열지 않는다(UX7-BACK, Workspace 홈 규칙은 [QOV-01](screens/questions-overview.md) "뒤로가기"·AC14).
 - Panel Header: title / breadcrumb / action icons(즐겨찾기·다시 풀기) / close.
 - Panel Footer: submit, self-grade, next/previous, loading/error 상태.
 - Modal focus trap, title/description, Escape and focus restore는 Radix 기반으로 구성. Non-modal은 배경과 panel 간 키보드 이동을 허용.
