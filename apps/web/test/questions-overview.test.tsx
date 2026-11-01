@@ -831,3 +831,47 @@ describe('UX7-BANK 문제 등록 on the home', () => {
     expect(screen.queryByRole('dialog', { name: '문제 등록' })).toBeNull();
   });
 });
+
+describe(
+  'UX7-BANK review fixes: invalidate the edited or deleted question only',
+  { timeout: 20_000 },
+  () => {
+    const sessionsFor = (n: number) =>
+      openPracticeSessionAction.mock.calls.filter((c) => c[1] === id(n)).length;
+
+    it('QPLAY-01-AC08 browser Back to a deleted question never reopens it from the local state', async () => {
+      const user = userEvent.setup();
+      deleteQuestionAction.mockResolvedValue({ ok: true, data: null });
+      render(<Screen />);
+      await user.click(dot(3));
+      let panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+      await waitFor(() => expect(within(panel).getByText('문제 3 본문')).toBeInTheDocument());
+      await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
+      await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
+      const confirm = await screen.findByRole('alertdialog', { name: '문제를 삭제할까요?' });
+      await user.click(within(confirm).getByRole('button', { name: '삭제' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+      // Back restores `?question=<deleted id>`: no panel, no answer controls, no cached session.
+      await act(async () => {
+        realPushState(null, '', `${PATH}?question=${id(3)}`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(screen.queryByRole('dialog', { name: '챕터 없음 3번 문제' })).toBeNull();
+      expect(screen.queryByRole('button', { name: '제출' })).toBeNull();
+      expect(sessionsFor(3)).toBe(1);
+
+      // Other questions still open normally.
+      realPushState(null, '', PATH);
+      await act(async () => {
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await user.click(dot(1));
+      panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+      expect(panel).toBeVisible();
+    });
+  },
+);

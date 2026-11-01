@@ -50,7 +50,11 @@ import {
 import { lookupOverviewQuestionAction, setMyStateAction } from '@/lib/questions/practice-actions';
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from '@/lib/questions/problems';
 import { HomeQuestionEditor } from '../home-question-editor';
-import { PracticePanel, type PracticeQuestion } from '../practice/practice-panel';
+import {
+  PracticePanel,
+  type Invalidation,
+  type PracticeQuestion,
+} from '../practice/practice-panel';
 import { QuestionManageMenu } from '../practice/question-manage-menu';
 import type { EditorTarget } from '../question-editor';
 import { neighbors, type AttemptResult } from '../practice/practice-model';
@@ -218,7 +222,11 @@ export function QuestionsOverview({
   // filtered list does not show (deep link under other filters, or one that left the list while
   // open, e.g. un-favorited under the favorites filter) is resolved without the filters —
   // by the server render (`requested`) or, after client-side navigation, a lookup action.
-  const openId = openQuestionId(searchParams);
+  // A question deleted here never reopens from the local state (browser Back restores its
+  // `?question=`): it is treated as closed, like an unknown id.
+  const [deletedIds, setDeletedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const urlOpenId = openQuestionId(searchParams);
+  const openId = urlOpenId && !deletedIds.has(urlOpenId) ? urlOpenId : null;
   const found = openId ? (placed.find((p) => p.item.question_id === openId) ?? null) : null;
   const [outside, setOutside] = useState<ReadonlyMap<string, PlacedQuestion>>(() =>
     requested ? new Map([[requested.item.question_id, requested]]) : new Map(),
@@ -467,6 +475,9 @@ export function QuestionsOverview({
   }
   const editorTarget: EditorTarget | null = editing ?? (creating ? { mode: 'create' } : null);
   const [reloadPanel, setReloadPanel] = useState(0);
+  const [invalidated, setInvalidated] = useState<Invalidation | null>(null);
+  const invalidate = (questionId: string) =>
+    setInvalidated((prev) => ({ questionId, seq: (prev?.seq ?? 0) + 1 }));
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -507,6 +518,8 @@ export function QuestionsOverview({
         return;
       }
       setConfirmDelete(null);
+      setDeletedIds((prev) => new Set(prev).add(questionId));
+      invalidate(questionId);
       // After the action's refreshed overview: closing first could let that refresh restore
       // `?question=` (practice-actions.ts).
       if (openQuestionId(new URLSearchParams(window.location.search)) === questionId) {
@@ -657,6 +670,7 @@ export function QuestionsOverview({
         onFlagsChange={(questionId, flags) => void changeFlags(questionId, flags)}
         onViewed={markViewed}
         reloadKey={reloadPanel}
+        invalidated={invalidated}
         headerExtra={
           canAuthor && panelQuestion ? (
             <QuestionManageMenu

@@ -100,6 +100,16 @@ export interface PracticePanelProps {
   readonly headerExtra?: ReactNode;
   /** A change opens a new session of the same question (its content was edited). */
   readonly reloadKey?: number;
+  /**
+   * UX7-BANK: a question whose cached session must never be shown again (edited or deleted);
+   * a new `seq` invalidates `questionId` once.
+   */
+  readonly invalidated?: Invalidation | null;
+}
+
+export interface Invalidation {
+  readonly questionId: string;
+  readonly seq: number;
 }
 
 type SessionState =
@@ -157,6 +167,7 @@ export function PracticePanel({
   onCloseAutoFocus,
   headerExtra,
   reloadKey = 0,
+  invalidated = null,
 }: PracticePanelProps) {
   const questionId = question?.id ?? null;
   // The last open question keeps rendering while the panel animates closed.
@@ -167,6 +178,14 @@ export function PracticePanel({
   const [cache, setCache] = useState(() => new PracticeSessionCache(workspaceId));
   const scoped = cache.workspaceId === workspaceId.toLowerCase();
   if (!scoped) setCache(new PracticeSessionCache(workspaceId));
+
+  // Forget an invalidated question's cached session before anything reads the cache.
+  const [seenInvalidation, setSeenInvalidation] = useState(invalidated);
+  if (invalidated !== seenInvalidation) {
+    setSeenInvalidation(invalidated);
+    const stale = invalidated ? cache.get(invalidated.questionId) : null;
+    if (stale) cache.dropSession(stale.id);
+  }
 
   const [opening, setOpening] = useState<Opening>(() => ({
     questionId,
