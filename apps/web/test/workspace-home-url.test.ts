@@ -1,19 +1,17 @@
-// UX3c workspace home URL state: open dialogs (`?panel=`, repeatable in opening order), the unified
-// search scope and the redirects of the pre-UX3c section routes onto the home.
+// UX3c workspace home URL state: open dialogs (`?panel=`, repeatable in opening order), the
+// redirects of the pre-UX3c section routes and the UX6 search scope onto the home.
 import { describe, expect, it } from 'vitest';
 import {
   isFloatingPanel,
+  homeRedirect,
   legacyBankRedirect,
   legacyPanelRedirect,
   legacyQuestionsRedirect,
+  legacyScopeRedirect,
   legacySearchRedirect,
   parsePanels,
-  parseScope,
   patchSearch,
   retiredPanelRedirect,
-  scopeIncludesContent,
-  scopeIncludesQuestions,
-  scopeOf,
   withPanel,
   workspaceHomePath,
 } from '../src/lib/workspaces/home';
@@ -57,27 +55,7 @@ describe('home dialogs in the URL', () => {
   });
 });
 
-describe('unified search scope', () => {
-  it('defaults to both and parses one-sided scopes', () => {
-    expect(parseScope({})).toBe('all');
-    expect(parseScope({ scope: 'bogus' })).toBe('all');
-    expect(parseScope({ scope: 'questions' })).toBe('questions');
-    expect(parseScope(new URLSearchParams('scope=content'))).toBe('content');
-    expect(parseScope({ scope: 'none' })).toBe('none');
-  });
-
-  it('maps the two checkboxes onto a scope and back', () => {
-    expect(scopeOf(true, true)).toBe('all');
-    expect(scopeOf(true, false)).toBe('questions');
-    expect(scopeOf(false, true)).toBe('content');
-    // UX6: both boxes can be off (the search button is then disabled).
-    expect(scopeOf(false, false)).toBe('none');
-    expect(scopeIncludesQuestions('none') || scopeIncludesContent('none')).toBe(false);
-    expect(scopeIncludesQuestions('content')).toBe(false);
-    expect(scopeIncludesContent('questions')).toBe(false);
-    expect(scopeIncludesQuestions('all') && scopeIncludesContent('all')).toBe(true);
-  });
-
+describe('home URL helpers', () => {
   it('patches keys: undefined keeps, null or empty removes', () => {
     expect(patchSearch('?a=1&b=2', { a: undefined, b: null, c: '3' })).toBe('?a=1&c=3');
     expect(patchSearch('?q=x', { q: '' })).toBe('');
@@ -130,7 +108,7 @@ describe('pre-UX3c routes redirect onto the home', () => {
     expect(legacyQuestionsRedirect(WS, {})).toBe(`/workspaces/${WS}`);
   });
 
-  it('search becomes a content-only search and its chapter a section', () => {
+  it('search becomes a 본문 search (text=) and its chapter a section (UX7-SEARCH)', () => {
     const target = legacySearchRedirect(WS, {
       q: 'water',
       mode: 'keyword',
@@ -142,15 +120,52 @@ describe('pre-UX3c routes redirect onto the home', () => {
     const url = new URL(target, 'http://x');
     expect(url.pathname).toBe(`/workspaces/${WS}`);
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      q: 'water',
+      text: 'water',
       mode: 'keyword',
       document: DOC,
-      papers: '1',
       section: SECTION,
-      scope: 'content',
     });
     // A chapter without its document is meaningless.
-    expect(legacySearchRedirect(WS, { chapter: SECTION })).toBe(`/workspaces/${WS}?scope=content`);
+    expect(legacySearchRedirect(WS, { chapter: SECTION })).toBe(`/workspaces/${WS}`);
+  });
+
+  it('UX6 unified-search URLs (scope=) move to the split searches (UX7-SEARCH)', () => {
+    const migrate = (params: Record<string, string | string[]>) => {
+      const target = legacyScopeRedirect(WS, params);
+      expect(target).not.toBeNull();
+      return Object.fromEntries(new URL(target ?? '', 'http://x').searchParams);
+    };
+    // Nothing to migrate.
+    expect(legacyScopeRedirect(WS, { q: 'x', text: 'y' })).toBeNull();
+    // Body only: its query is the 본문 search; other keys stay, papers goes.
+    expect(
+      migrate({ scope: 'content', q: 'water', mode: 'keyword', papers: '1', panel: 'history' }),
+    ).toEqual({ text: 'water', mode: 'keyword', panel: 'history' });
+    // Questions only or both off: `q` stays the 문제 search.
+    expect(migrate({ scope: 'questions', q: '염소', chapter: 'none' })).toEqual({
+      q: '염소',
+      chapter: 'none',
+    });
+    expect(migrate({ scope: 'none' })).toEqual({});
+    // An explicit text wins over a body-only q.
+    expect(migrate({ scope: 'content', q: 'old', text: 'new' })).toEqual({ text: 'new' });
+  });
+
+  it('applies the scope and retired-panel migrations in one redirect', () => {
+    expect(homeRedirect(WS, { q: 'x', panel: 'history' })).toBeNull();
+    expect(homeRedirect(WS, { panel: 'question-pdfs' })).toBe(`/workspaces/${WS}?panel=documents`);
+    expect(homeRedirect(WS, { scope: 'questions', q: '염소' })).toBe(
+      `/workspaces/${WS}?q=%EC%97%BC%EC%86%8C`,
+    );
+    const both = homeRedirect(WS, {
+      scope: 'content',
+      q: 'water',
+      panel: ['history', 'question-pdfs'],
+    });
+    const url = new URL(both ?? '', 'http://x');
+    expect(url.searchParams.get('text')).toBe('water');
+    expect(url.searchParams.has('q') || url.searchParams.has('scope')).toBe(false);
+    expect(url.searchParams.getAll('panel')).toEqual(['history', 'documents']);
   });
 
   it('builds home paths with or without a query', () => {

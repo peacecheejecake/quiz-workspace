@@ -1,5 +1,5 @@
-/* Workspace home (QOV-01, UX3c): header with the unified search and actions, then the content
-   results and the 문제 영역. Semantic tokens only. */
+/* Workspace home (QOV-01, UX3c): header with the 문제 search and actions, then the 본문 search
+   (collapsed by default, UX7-SEARCH) and the 문제 영역. Semantic tokens only. */
 
 .home {
   display: grid;
@@ -22,13 +22,6 @@
   justify-content: space-between;
   gap: var(--space-3);
   min-width: 0;
-}
-
-/* A row of selects in the 문제 settings popover of the unified search (SEARCH-01, UX6). */
-.optionRow {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: var(--space-3);
 }
 
 /* Two button groups (UX4): 문서 · 문제, then 이력 · 공유하기 aligned right. Groups and

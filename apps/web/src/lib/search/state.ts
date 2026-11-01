@@ -1,7 +1,9 @@
-// SEARCH-01 address-bar state and Korean copy (pure, unit-tested). The submitted content search
-// lives in the workspace home URL (`?q=&mode=&document=&section=&papers=1`, next to the home's
+// SEARCH-01 address-bar state and Korean copy (pure, unit-tested). The submitted 본문 (content)
+// search lives in the workspace home URL (`?text=&mode=&document=&section=`, next to the home's
 // other keys) so returning from the PDF viewer with the browser's back button restores the same
-// results. `section` is the document chapter filter (the home's `chapter` is the heatmap's).
+// results. `text` is the 본문 query (UX7-SEARCH; the home's `q` is the 문제 search) and `section`
+// the document chapter filter (the home's `chapter` is the heatmap's). Question papers are searched
+// too unless `papers=0` (UX7-SEARCH: no toggle, the old default).
 import {
   DEFAULT_MODE,
   SEARCH_MODES,
@@ -26,7 +28,7 @@ export function isSearchMode(value: unknown): value is SearchMode {
 
 /** Search state from the page's query string; invalid values fall back to defaults. */
 export function parseSearchParams(params: RawParams): SearchQuery {
-  const query = (first(params.q) ?? '').trim().slice(0, MAX_QUERY_CHARS);
+  const query = (first(params[CONTENT_QUERY_PARAM]) ?? '').trim().slice(0, MAX_QUERY_CHARS);
   const mode = first(params.mode);
   const documentId = first(params.document);
   const chapterId = first(params.section);
@@ -37,21 +39,30 @@ export function parseSearchParams(params: RawParams): SearchQuery {
     documentId: validDocument,
     // A chapter filter only makes sense inside its document.
     chapterId: validDocument && chapterId && UUID.test(chapterId) ? chapterId : null,
-    includeQuestionPapers: first(params.papers) === '1',
+    includeQuestionPapers: first(params.papers) !== '0',
   };
 }
 
+/** URL key of the 본문 query (the home's `q` is the 문제 search, UX7-SEARCH). */
+export const CONTENT_QUERY_PARAM = 'text';
+
 /** URL keys of a content search. */
-export const CONTENT_SEARCH_KEYS = ['q', 'mode', 'document', 'section', 'papers'] as const;
+export const CONTENT_SEARCH_KEYS = [
+  CONTENT_QUERY_PARAM,
+  'mode',
+  'document',
+  'section',
+  'papers',
+] as const;
 
 /** Query string (without `?`) for a submitted search. */
 export function searchParamsFor(q: SearchQuery): string {
   const out = new URLSearchParams();
-  if (q.query) out.set('q', q.query.slice(0, MAX_QUERY_CHARS));
+  if (q.query) out.set(CONTENT_QUERY_PARAM, q.query.slice(0, MAX_QUERY_CHARS));
   if (q.mode !== DEFAULT_MODE) out.set('mode', q.mode);
   if (q.documentId) out.set('document', q.documentId);
   if (q.documentId && q.chapterId) out.set('section', q.chapterId);
-  if (q.includeQuestionPapers) out.set('papers', '1');
+  if (!q.includeQuestionPapers) out.set('papers', '0');
   return out.toString();
 }
 

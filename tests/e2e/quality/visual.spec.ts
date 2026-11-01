@@ -146,7 +146,7 @@ test(
     await expect(overviewUi.dots(page)).toHaveCount(24);
     await page.mouse.move(0, 0);
     await snap(page, 'questions-overview');
-    // UX6: the unified search's 본문 settings popover over the home.
+    // The 본문 search's settings popover over the home (UX7-SEARCH: the 본문 search is expanded).
     await openSearchOptions(page, 'body');
     await page.mouse.move(0, 0);
     await snap(page, 'search-options');

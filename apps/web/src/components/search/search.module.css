@@ -1,5 +1,5 @@
-/* SEARCH-01 content search: options (in the home's "검색 옵션" popover) and results. Semantic
-   tokens only. */
+/* SEARCH-01 본문 search: options (in the "본문 설정" popover), results and the excerpt panel.
+   Semantic tokens only. */
 
 .options {
   display: grid;
@@ -129,6 +129,14 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+  cursor: pointer;
+}
+
+/* The whole item opens the excerpt panel (SEARCH-01-AC11): a hover cue besides the cursor. */
+@media (hover: hover) {
+  .hit:hover {
+    border-color: var(--color-border-strong);
+  }
 }
 
 /* Selected hit: accent border on the muted surface; its title button carries aria-current (no

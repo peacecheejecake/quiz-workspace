@@ -1,5 +1,5 @@
-// Pre-UX3c SEARCH-01 route: the content search is part of the workspace home's unified search now.
-// Redirects to the same search there (`scope=content`, its chapter filter as `section`).
+// Pre-UX3c SEARCH-01 route: the 본문 search lives on the workspace home now. Redirects to the same
+// search there (its query as `text`, its chapter filter as `section`; UX7-SEARCH).
 import { redirect } from 'next/navigation';
 import { legacySearchRedirect } from '@/lib/workspaces/home';
 

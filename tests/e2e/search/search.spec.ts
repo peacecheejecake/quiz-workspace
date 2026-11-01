@@ -1,5 +1,6 @@
-// SEARCH-01 — 통합 검색 (the workspace home header, `/workspaces/:workspaceId?q=`; most tests use the
-// content-only scope `?scope=content`, which the old `/search` route redirects to), docs/screens/search.md;
+// SEARCH-01 — 문제 검색·본문 검색 (the workspace home header, `/workspaces/:workspaceId?q=&text=`; UX7-SEARCH
+// split the unified box: the 문제 search filters the heatmap live, the 본문 search is collapsed behind
+// its disclosure and runs on Enter; the old `/search?q=` route redirects to `text=`), docs/screens/search.md;
 // search flow docs/architecture.md §4 (keyword | semantic | hybrid, server-side workspace and
 // published-revision filters, SourceLocation = page + block + revision).
 //
@@ -7,7 +8,7 @@
 // public upload flow. E2E runs the deterministic fake embedder/reranker (docs/e2e-strategy.md §3):
 // these tests check the UI/API contract and source mapping, not retrieval quality (eval/ does).
 // Queries come from tests/fixtures/pdfs/retrieval-seed.json (q-ko-01 → section ch2-s2, page 4).
-import { devices } from '@playwright/test';
+import { devices, type Locator } from '@playwright/test';
 import {
   block,
   book,
@@ -22,6 +23,7 @@ import {
   main,
   mcqInput,
   notFoundHeading,
+  openContentSearch,
   openSearchOptions,
   outlineNodeId,
   overviewUi,
@@ -344,43 +346,41 @@ test(
   },
 );
 
+const NO_QUESTIONS = /검색할 문제가 없|no questions to search/i;
+const NO_BODY = /검색할 본문이 없|no (body|documents) to search/i;
+const SCOPE_CHECKBOX = /^(문제|본문|questions|body|content)$/i;
+
 test(
-  'SEARCH-01-AC07 the unified header search filters questions and/or finds body text by its scope checkboxes',
+  'SEARCH-01-AC09 the 문제 and 본문 searches are separate inputs with their own settings, URL keys and results',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
-    const owner = await workspaceFactory.member('search01-ac07');
+    const owner = await workspaceFactory.member('search01-ac09');
     const ws = await workspaceFactory.create(owner);
     await uploadReadyBook(owner, ws.id, 'book-en');
     await createQuestion(
       owner,
       ws.id,
-      mcqInput('search01-ac07 chlorine 소독 문제', ['예', '아니오']),
+      mcqInput('search01-ac09 chlorine 소독 문제', ['예', '아니오']),
     );
-    await createQuestion(owner, ws.id, mcqInput('search01-ac07 다른 문제', ['예', '아니오']));
+    await createQuestion(owner, ws.id, mcqInput('search01-ac09 다른 문제', ['예', '아니오']));
 
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(2);
-    // Icon-only submit with an accessible name.
-    await expect(searchUi.submit(page)).toHaveText('');
-    await expect(searchUi.submit(page)).toBeEnabled();
-    // UX6: no "검색 옵션" popover; the 문제 · 본문 checkboxes sit right under the box (both on).
+    // No unified box, no scope checkboxes, no "검색 옵션" popover (UX7-SEARCH).
+    await expect(main(page).getByRole('checkbox', { name: SCOPE_CHECKBOX })).toHaveCount(0);
     await expect(
       main(page).getByRole('button', { name: /^(검색 옵션|search options)$/i }),
     ).toHaveCount(0);
-    await expect(homeUi.scopeQuestions(page)).toBeChecked();
-    await expect(homeUi.scopeContent(page)).toBeChecked();
-    const boxRect = await searchUi.box(page).boundingBox();
-    for (const checkbox of [homeUi.scopeQuestions(page), homeUi.scopeContent(page)]) {
-      const rect = await checkbox.boundingBox();
-      expect(rect && boxRect && rect.y >= boxRect.y + boxRect.height - 1).toBe(true);
-    }
+    const questionBox = homeUi.questionSearch(page);
+    await expect(questionBox).toBeVisible();
+    await expect(questionBox).toBeEnabled();
 
-    // Each scope's "설정" opens its own settings popover: 문제 by click…
-    const questionSettings = homeUi.scopeSettingsButton(page, 'questions');
+    // 문제 설정 (next to the 문제 search) by click: chapter and type only.
+    const questionSettings = homeUi.searchSettingsButton(page, 'questions');
     await expect(questionSettings).toHaveAttribute('aria-expanded', 'false');
     await questionSettings.click();
-    const questionPopover = homeUi.scopeSettings(page, 'questions');
+    const questionPopover = homeUi.searchSettings(page, 'questions');
     await expect(questionPopover).toBeVisible();
     await expect(questionSettings).toHaveAttribute('aria-expanded', 'true');
     await expect(
@@ -391,11 +391,13 @@ test(
     await closeSearchOptions(page, 'questions');
     await expect(questionSettings).toBeFocused();
 
-    // …본문 by keyboard: search mode, document and section filters only.
-    const bodySettings = homeUi.scopeSettingsButton(page, 'body');
+    // 본문 설정 (inside the 본문 search) by keyboard: mode, document and section filters only.
+    await openContentSearch(page);
+    const bodySettings = homeUi.searchSettingsButton(page, 'body');
+    await expect(homeUi.contentSearch(page).getByRole('button', { name: /설정/ })).toHaveCount(1);
     await bodySettings.focus();
     await page.keyboard.press('Enter');
-    const bodyPopover = homeUi.scopeSettings(page, 'body');
+    const bodyPopover = homeUi.searchSettings(page, 'body');
     await expect(bodyPopover).toBeVisible();
     await expect(bodySettings).toHaveAttribute('aria-expanded', 'true');
     await expect(
@@ -403,16 +405,21 @@ test(
     ).toBeVisible();
     await expect(bodyPopover.getByRole('combobox', { name: /^(문서|document)$/i })).toBeVisible();
     await expect(bodyPopover.getByRole('combobox', { name: /^(챕터|chapter)$/i })).toHaveCount(0);
-    // UX4: no question-paper toggle.
     await expect(page.getByRole('checkbox', { name: /문제지|question papers?/i })).toHaveCount(0);
     await closeSearchOptions(page, 'body');
     await expect(bodySettings).toBeFocused();
+    await expect(searchUi.submit(page)).toHaveText('');
 
-    // Both (default): the heatmap is filtered and the body results appear.
+    // The 문제 search filters the heatmap only: no body results, the 본문 box stays empty.
+    await questionBox.fill('chlorine');
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'chlorine');
+    await expect(searchUi.resultsRegion(page)).toHaveCount(0);
+    await expect(searchUi.box(page)).toHaveValue('');
+
+    // The 본문 search finds body text and leaves the heatmap's search alone.
     await searchUi.box(page).fill('chlorine');
     await searchUi.submit(page).click();
-    await expect(overviewUi.dots(page)).toHaveCount(1);
-    await expect(searchUi.resultsRegion(page)).toBeVisible();
     await expect(
       searchUi
         .resultItems(page)
@@ -420,141 +427,89 @@ test(
         .first(),
     ).toBeVisible();
     await expect(page).toHaveURL(
-      (url) => url.searchParams.get('q') === 'chlorine' && url.searchParams.get('papers') === '1',
+      (url) =>
+        url.searchParams.get('text') === 'chlorine' && url.searchParams.get('q') === 'chlorine',
+    );
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(questionBox).toHaveValue('chlorine');
+
+    // Changing the 문제 search keeps the body results.
+    await questionBox.fill('다른');
+    await expect(page).toHaveURL((url) => url.searchParams.get('q') === '다른');
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(searchUi.resultItems(page).first()).toBeVisible();
+    await expect(searchUi.box(page)).toHaveValue('chlorine');
+    await questionBox.fill('');
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    await expect(page).toHaveURL(
+      (url) => !url.searchParams.has('q') && url.searchParams.get('text') === 'chlorine',
     );
 
-    // 문제 only: no body results.
-    await homeUi.scopeContent(page).click();
-    await expect(page).toHaveURL((url) => url.searchParams.get('scope') === 'questions');
-    await expect(searchUi.resultsRegion(page)).toHaveCount(0);
+    // Both states are in the URL: a reload shows the same searches.
+    await questionBox.fill('chlorine');
     await expect(overviewUi.dots(page)).toHaveCount(1);
-    await expect(searchUi.submit(page)).toBeEnabled();
-
-    // 본문 only: the heatmap is not filtered, the body results are back.
-    await homeUi.scopeContent(page).click();
-    await homeUi.scopeQuestions(page).click();
-    await expect(page).toHaveURL((url) => url.searchParams.get('scope') === 'content');
-    // Question papers are searched only while 문제 is checked.
-    await expect(page).toHaveURL((url) => !url.searchParams.has('papers'));
-    await expect(overviewUi.dots(page)).toHaveCount(2);
-    await expect(searchUi.resultItems(page).first()).toBeVisible();
-
-    // The state is in the URL: a reload shows the same search.
     await page.reload();
+    await expect(homeUi.questionSearch(page)).toHaveValue('chlorine');
+    await expect(overviewUi.dots(page)).toHaveCount(1);
     await expect(searchUi.box(page)).toHaveValue('chlorine');
-    await expect(homeUi.scopeQuestions(page)).not.toBeChecked();
-    await expect(homeUi.scopeContent(page)).toBeChecked();
     await expect(searchUi.resultItems(page).first()).toBeVisible();
-    await expect(overviewUi.dots(page)).toHaveCount(2);
 
+    // "검색 결과 닫기" clears the 본문 search only.
     await searchUi.closeResults(page).click();
     await expect(searchUi.resultsRegion(page)).toHaveCount(0);
-    await expect(page).toHaveURL((url) => !url.searchParams.has('q'));
+    await expect(page).toHaveURL(
+      (url) => !url.searchParams.has('text') && url.searchParams.get('q') === 'chlorine',
+    );
     await expect(searchUi.box(page)).toHaveValue('');
+    await expect(homeUi.questionSearch(page)).toHaveValue('chlorine');
+    await expect(overviewUi.dots(page)).toHaveCount(1);
   },
 );
 
-const NOTHING_TO_SEARCH = /검색할 문제와 본문이 없|nothing to search/i;
-const NO_SCOPE = /검색 범위를 하나 이상|choose at least one/i;
-const NO_QUESTIONS = /검색할 문제가 없|no questions to search/i;
-const NO_BODY = /검색할 본문이 없|no (body|documents) to search/i;
-
 test(
-  'SEARCH-01-AC07 the search button is disabled with a stated reason when the checked scopes have nothing to search',
+  'SEARCH-01-AC09 each search is disabled with a stated reason when it has nothing to search',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
-    const owner = await workspaceFactory.member('search01-ac07-disabled');
+    const owner = await workspaceFactory.member('search01-ac09-disabled');
     const ws = await workspaceFactory.create(owner);
 
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
+    // No question: the 문제 search is disabled and says why.
+    const questionBox = homeUi.questionSearch(page);
+    await expect(questionBox).toBeDisabled();
+    await expect(homeUi.questionSearchMessage(page)).toHaveText(NO_QUESTIONS);
+    await expect(questionBox).toHaveAccessibleDescription(NO_QUESTIONS);
+    // No published document: the 본문 search button is disabled, Enter does not search either.
+    await openContentSearch(page);
     const submit = searchUi.submit(page);
-    const message = homeUi.searchMessage(page);
-    // An empty workspace: both scopes stay checked (the default) but there is nothing to search.
-    await expect(homeUi.scopeQuestions(page)).toBeChecked();
-    await expect(homeUi.scopeContent(page)).toBeChecked();
     await expect(submit).toBeDisabled();
-    await expect(message).toHaveText(NOTHING_TO_SEARCH);
-    await expect(submit).toHaveAccessibleDescription(NOTHING_TO_SEARCH);
-    // Enter does not search either.
+    await expect(homeUi.contentSearchMessage(page)).toHaveText(NO_BODY);
+    await expect(submit).toHaveAccessibleDescription(NO_BODY);
     await searchUi.box(page).fill('chlorine');
     await searchUi.box(page).press('Enter');
-    await expect(page).toHaveURL((url) => !url.searchParams.has('q'));
+    await expect(searchUi.resultsRegion(page)).toHaveCount(0);
+    expect(new URL(page.url()).searchParams.has('text')).toBe(false);
 
-    // Questions but no published document: both checked searches the questions only.
-    await createQuestion(owner, ws.id, mcqInput('search01-ac07 chlorine 문제', ['예', '아니오']));
-    await createQuestion(owner, ws.id, mcqInput('search01-ac07 다른 문제', ['예', '아니오']));
+    // Questions now: the 문제 search works, the 본문 search is still disabled.
+    await createQuestion(owner, ws.id, mcqInput('search01-ac09 chlorine 문제', ['예', '아니오']));
+    await createQuestion(owner, ws.id, mcqInput('search01-ac09 다른 문제', ['예', '아니오']));
     await page.reload();
     await expect(overviewUi.dots(page)).toHaveCount(2);
-    await expect(submit).toBeEnabled();
-    await expect(message).toHaveText(/본문이 없어 문제만 검색|questions only/i);
-
-    // 본문 only, without a document: disabled.
-    await homeUi.scopeQuestions(page).click();
-    await expect(page).toHaveURL((url) => url.searchParams.get('scope') === 'content');
-    await expect(submit).toBeDisabled();
-    await expect(message).toHaveText(NO_BODY);
-    await expect(submit).toHaveAccessibleDescription(NO_BODY);
-
-    // Both off: disabled until a scope is chosen again.
-    await homeUi.scopeContent(page).click();
-    await expect(page).toHaveURL((url) => url.searchParams.get('scope') === 'none');
-    await expect(homeUi.scopeContent(page)).not.toBeChecked();
-    await expect(submit).toBeDisabled();
-    await expect(message).toHaveText(NO_SCOPE);
-    await expect(submit).toHaveAccessibleDescription(NO_SCOPE);
-
-    // 문제 only, with questions: searches again, without a message.
-    await homeUi.scopeQuestions(page).click();
-    await expect(page).toHaveURL((url) => url.searchParams.get('scope') === 'questions');
-    await expect(submit).toBeEnabled();
-    await expect(message).toHaveText('');
-    await searchUi.box(page).fill('chlorine');
-    await submit.click();
-    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'chlorine');
+    await expect(homeUi.questionSearch(page)).toBeEnabled();
+    await expect(homeUi.questionSearchMessage(page)).toHaveText('');
+    await homeUi.questionSearch(page).fill('chlorine');
     await expect(overviewUi.dots(page)).toHaveCount(1);
+    await openContentSearch(page);
+    await expect(searchUi.submit(page)).toBeDisabled();
   },
 );
 
 test(
-  'SEARCH-01-AC07 a workspace with a document but no questions searches the body only and disables a 문제-only search',
+  'SEARCH-01-AC09 browser Back restores the earlier body search, and old scope URLs move to text=',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
-    const owner = await workspaceFactory.member('search01-ac07-body');
-    const ws = await workspaceFactory.create(owner);
-    await uploadReadyBook(owner, ws.id, 'book-en');
-
-    await signInAs(page, owner.user);
-    await page.goto(homePath(ws.id, 'scope=questions'));
-    const submit = searchUi.submit(page);
-    const message = homeUi.searchMessage(page);
-    await expect(homeUi.scopeQuestions(page)).toBeChecked();
-    await expect(homeUi.scopeContent(page)).not.toBeChecked();
-    await expect(submit).toBeDisabled();
-    await expect(message).toHaveText(NO_QUESTIONS);
-    await expect(submit).toHaveAccessibleDescription(NO_QUESTIONS);
-
-    // Both checked: the body is searched alone, and the screen says so.
-    await homeUi.scopeContent(page).click();
-    await expect(page).toHaveURL((url) => !url.searchParams.has('scope'));
-    await expect(submit).toBeEnabled();
-    await expect(message).toHaveText(/문제가 없어 본문만 검색|body only/i);
-    await searchUi.box(page).fill('chlorine');
-    await searchUi.box(page).press('Enter');
-    await expect(
-      searchUi
-        .resultItems(page)
-        .filter({ hasText: /chlorine/i })
-        .first(),
-    ).toBeVisible();
-  },
-);
-
-test(
-  'SEARCH-01-AC07 browser Back restores the earlier search in the box and the results',
-  { tag: '@infra' },
-  async ({ page, workspaceFactory }) => {
-    const owner = await workspaceFactory.member('search01-ac07-back');
+    const owner = await workspaceFactory.member('search01-ac09-back');
     const ws = await workspaceFactory.create(owner);
     await uploadReadyBook(owner, ws.id, 'book-en');
 
@@ -568,18 +523,466 @@ test(
     await expect(homeUi.documentsDialog(page)).toBeVisible();
     await searchUi.box(page).fill('evaporation');
     await searchUi.box(page).press('Enter');
-    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'evaporation');
+    await expect(page).toHaveURL((url) => url.searchParams.get('text') === 'evaporation');
     await expect(items.filter({ hasText: /evaporat/i }).first()).toBeVisible();
 
     await page.goBack();
     await expect(page).toHaveURL(
-      (url) => url.searchParams.get('q') === 'chlorine' && !url.searchParams.has('panel'),
+      (url) => url.searchParams.get('text') === 'chlorine' && !url.searchParams.has('panel'),
     );
     await expect(homeUi.documentsDialog(page)).toHaveCount(0);
     await expect(searchUi.box(page)).toHaveValue('chlorine');
-    // The restored search runs again: every listed hit is a chlorine hit once it settles.
     await expect(items.filter({ hasNotText: /chlorine/i })).toHaveCount(0);
     await expect(items.first()).toBeVisible();
+
+    // The unified search's body-only URL (UX6) and the pre-UX3c route open the 본문 search.
+    await page.goto(homePath(ws.id, 'q=chlorine&scope=content&mode=keyword'));
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.get('text') === 'chlorine' &&
+        !url.searchParams.has('q') &&
+        !url.searchParams.has('scope'),
+    );
+    await expect(searchUi.box(page)).toHaveValue('chlorine');
+    await expect(homeUi.questionSearch(page)).toHaveValue('');
+    await expect(items.first()).toBeVisible();
+    await page.goto(`/workspaces/${ws.id}/search?q=evaporation&mode=keyword`);
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === `/workspaces/${ws.id}` &&
+        url.searchParams.get('text') === 'evaporation' &&
+        !url.searchParams.has('q'),
+    );
+    await expect(items.filter({ hasText: /evaporat/i }).first()).toBeVisible();
+  },
+);
+
+test(
+  'SEARCH-01-AC10 the body search is collapsed by default and opens with its disclosure button',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac10');
+    const ws = await workspaceFactory.create(owner);
+
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id));
+    const toggle = homeUi.contentSearchToggle(page);
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const controlled = await toggle.getAttribute('aria-controls');
+    expect(controlled).toBeTruthy();
+    expect(await page.locator(`[id="${controlled}"]`).count()).toBe(1);
+    await expect(searchUi.box(page)).toBeHidden();
+    await expect(homeUi.searchSettingsButton(page, 'body')).toBeHidden();
+    await expect(searchUi.submit(page)).toBeHidden();
+
+    // Mouse: opens, focus moves into the 본문 search box.
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator(`[id="${controlled}"]`)).toBeVisible();
+    await expect(searchUi.box(page)).toBeVisible();
+    await expect(searchUi.box(page)).toBeFocused();
+    await expect(homeUi.searchSettingsButton(page, 'body')).toBeVisible();
+    await searchUi.box(page).fill('정수장');
+
+    // Keyboard: closes and reopens; the typed query is kept.
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(searchUi.box(page)).toBeHidden();
+    await page.keyboard.press('Space');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(searchUi.box(page)).toHaveValue('정수장');
+
+    // A body search in the URL opens it expanded.
+    await page.goto(homePath(ws.id, 'text=chlorine'));
+    await expect(homeUi.contentSearchToggle(page)).toHaveAttribute('aria-expanded', 'true');
+    await expect(searchUi.box(page)).toHaveValue('chlorine');
+    await page.goto(homePath(ws.id));
+    await expect(homeUi.contentSearchToggle(page)).toHaveAttribute('aria-expanded', 'false');
+  },
+);
+
+/** Whether the keyword in `panel` is marked by more than colour (bold or underlined). */
+async function expectMarkedKeyword(panel: Locator, keyword: RegExp): Promise<void> {
+  const mark = panel.locator('mark').filter({ hasText: keyword }).first();
+  await expect(mark).toBeVisible();
+  const style = await mark.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { weight: Number(s.fontWeight), decoration: s.textDecorationLine };
+  });
+  expect(style.weight >= 600 || style.decoration.includes('underline')).toBe(true);
+}
+
+test(
+  'SEARCH-01-AC11 clicking anywhere on a body result opens its text around the keyword on the right; the keyboard does the same',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac11');
+    const ws = await workspaceFactory.create(owner);
+    await uploadReadyBook(owner, ws.id, 'book-en');
+
+    await signInAs(page, owner.user);
+    await page.goto(searchPath(ws.id));
+    await runSearch(page, 'water', 'keyword');
+    const items = searchUi.resultItems(page);
+    await expect(items.nth(1)).toBeVisible();
+    const panel = searchUi.excerptPanel(page);
+    await expect(panel).toHaveCount(0);
+
+    // Mouse on the excerpt paragraph (not the title) of the second hit.
+    const second = items.nth(1);
+    const secondText = (await searchUi.excerpt(second).innerText()).replace(/…/g, '').trim();
+    await searchUi.excerpt(second).click();
+    await expect(panel).toBeVisible();
+    await expect(panel).not.toHaveAttribute('aria-modal', 'true');
+    await expect(panel).toContainText(secondText.slice(0, 30));
+    await expectMarkedKeyword(panel, /water/i);
+    await expect(second.getByRole('button').first()).toHaveAttribute('aria-current', 'true');
+    // On the right of the results.
+    const panelBox = await panel.boundingBox();
+    const listBox = await searchUi.results(page).boundingBox();
+    expect(panelBox && listBox && panelBox.x >= listBox.x + listBox.width - 1).toBe(true);
+
+    // Keyboard: the first hit's title button with Enter switches the panel to it.
+    const first = items.first();
+    const firstText = (await searchUi.excerpt(first).innerText()).replace(/…/g, '').trim();
+    await first.getByRole('button').first().focus();
+    await page.keyboard.press('Enter');
+    await expect(panel).toContainText(firstText.slice(0, 30));
+    await expect(first.getByRole('button').first()).toHaveAttribute('aria-current', 'true');
+    await expect(second.getByRole('button').first()).not.toHaveAttribute('aria-current', 'true');
+  },
+);
+
+test.describe('SEARCH-01-AC11 touch', () => {
+  const { defaultBrowserType: _browser, ...iphone } = devices['iPhone 14'];
+  test.use(iphone);
+
+  test(
+    'SEARCH-01-AC11 tapping a body result on a phone opens its text around the keyword in the bottom sheet',
+    { tag: '@infra' },
+    async ({ page, workspaceFactory }) => {
+      const owner = await workspaceFactory.member('search01-ac11-touch');
+      const ws = await workspaceFactory.create(owner);
+      await uploadReadyBook(owner, ws.id, 'book-en');
+
+      await signInAs(page, owner.user);
+      await page.goto(searchPath(ws.id));
+      await homeUi.contentSearchToggle(page).tap();
+      await expect(searchUi.box(page)).toBeVisible();
+      await searchUi.box(page).fill('chlorine');
+      await searchUi.box(page).press('Enter');
+      const hit = searchUi
+        .resultItems(page)
+        .filter({ hasText: /chlorine/i })
+        .first();
+      await expect(hit).toBeVisible();
+      await searchUi.excerpt(hit).tap();
+      const panel = searchUi.excerptPanel(page);
+      await expect(panel).toBeVisible();
+      await expect(panel).toContainText(CHLORINE_EN.text.slice(0, 40));
+      await expectMarkedKeyword(panel, /chlorine/i);
+      // The existing mobile sheet: anchored to the bottom of the viewport.
+      const viewport = page.viewportSize();
+      await expect
+        .poll(async () => {
+          const box = await panel.boundingBox();
+          return box && viewport ? Math.round(viewport.height - (box.y + box.height)) : null;
+        })
+        .toBe(0);
+    },
+  );
+});
+
+const QUESTION_TITLES = [
+  'search01-ac12 chlorine 소독',
+  'search01-ac12 염소 처리',
+  'search01-ac12 다른 문제',
+] as const;
+
+test(
+  'SEARCH-01-AC12 the 문제 search filters the heatmap live without Enter, keeps the typed text and replaces history',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac12');
+    const ws = await workspaceFactory.create(owner);
+    for (const title of QUESTION_TITLES) {
+      await createQuestion(owner, ws.id, mcqInput(title, ['예', '아니오']));
+    }
+
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    const box = homeUi.questionSearch(page);
+    const historyLength = await page.evaluate(() => window.history.length);
+
+    // Typed key by key, never Enter: the heatmap follows.
+    await box.pressSequentially('search01-ac12', { delay: 20 });
+    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'search01-ac12');
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    await box.pressSequentially(' chlorine', { delay: 20 });
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'search01-ac12 chlorine');
+    await expect(box).toHaveValue('search01-ac12 chlorine');
+
+    // Editing in the middle: the caret stays where the user typed while the heatmap re-reads.
+    const caret = 'search01-ac12 '.length;
+    await box.evaluate((el: HTMLInputElement, at: number) => el.setSelectionRange(at, at), caret);
+    await box.pressSequentially('x', { delay: 0 });
+    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'search01-ac12 xchlorine');
+    await expect(overviewUi.heatmap(page)).toHaveCount(0); // filtered empty state
+    await expect(box).toHaveValue('search01-ac12 xchlorine');
+    expect(await box.evaluate((el: HTMLInputElement) => el.selectionStart)).toBe(
+      'search01-ac12 x'.length,
+    );
+    await box.press('Backspace');
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+
+    // Fast typing never loses a character, and the last query wins over an answer that is late:
+    // the re-read for the shorter query is held back until after the longer one.
+    await box.fill('');
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    let held = 0;
+    await page.route(
+      (url) =>
+        url.pathname === `/workspaces/${ws.id}` && url.searchParams.get('q') === 'search01-ac12',
+      async (route) => {
+        held += 1;
+        await new Promise((resolve) => setTimeout(resolve, 1_500));
+        await route.continue().catch(() => undefined);
+      },
+    );
+    await box.pressSequentially('search01-ac12', { delay: 0 });
+    await expect.poll(() => held).toBeGreaterThan(0);
+    await box.pressSequentially(' 염소', { delay: 0 });
+    await expect(box).toHaveValue('search01-ac12 염소');
+    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'search01-ac12 염소');
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await page.waitForTimeout(2_000); // the held answer arrives (or is dropped) by now
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(box).toHaveValue('search01-ac12 염소');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+    // Clearing shows every question; typing never added history entries.
+    await box.fill('');
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    await expect(page).toHaveURL((url) => !url.searchParams.has('q'));
+    expect(await page.evaluate(() => window.history.length)).toBe(historyLength);
+  },
+);
+
+test(
+  'SEARCH-01-AC12 a dialog opened while the filtered heatmap is still loading stays open (search and filter)',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac12-race');
+    const ws = await workspaceFactory.create(owner);
+    for (const title of QUESTION_TITLES) {
+      await createQuestion(owner, ws.id, mcqInput(title, ['예', '아니오']));
+    }
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    const home = `/workspaces/${ws.id}`;
+    // Hold every heatmap re-read for the searched query or the type filter until released.
+    let release: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let held = 0;
+    await page.route(
+      (url) =>
+        url.pathname === home &&
+        (url.searchParams.get('q') === 'search01-ac12 chlorine' || url.searchParams.has('type')),
+      async (route) => {
+        held += 1;
+        await released;
+        await route.continue().catch(() => undefined);
+      },
+    );
+
+    // The 문제 search commits, its re-read is held, and the 문서 dialog opens meanwhile.
+    await homeUi.questionSearch(page).fill('search01-ac12 chlorine');
+    await expect.poll(() => held).toBeGreaterThan(0);
+    await homeUi.documentsButton(page).click();
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
+    release();
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.get('q') === 'search01-ac12 chlorine' &&
+        url.searchParams.getAll('panel').includes('documents'),
+    );
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
+    await homeUi
+      .documentsDialog(page)
+      .getByRole('button', { name: /문서 관리 닫기|close/i })
+      .click();
+    await expect(homeUi.documentsDialog(page)).toHaveCount(0);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+    // The same for the type filter of "문제 설정".
+    let releaseType: () => void = () => undefined;
+    const typeReleased = new Promise<void>((resolve) => (releaseType = resolve));
+    let typeHeld = 0;
+    await page.route(
+      (url) => url.pathname === home && url.searchParams.get('type') === 'MCQ',
+      async (route) => {
+        typeHeld += 1;
+        await typeReleased;
+        await route.continue().catch(() => undefined);
+      },
+    );
+    await openSearchOptions(page, 'questions');
+    await chooseFilter(
+      page,
+      homeUi.searchSettings(page, 'questions').getByRole('combobox', { name: /^(유형|type)$/i }),
+      /객관식|multiple choice|mcq/i,
+    );
+    await closeSearchOptions(page, 'questions');
+    await expect.poll(() => typeHeld).toBeGreaterThan(0);
+    await homeUi.historyButton(page).click();
+    const history = main(page).getByRole('dialog', { name: /^(이력|history)$/i });
+    await expect(history).toBeVisible();
+    releaseType();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.get('type') === 'MCQ' &&
+        url.searchParams.get('q') === 'search01-ac12 chlorine' &&
+        url.searchParams.getAll('panel').includes('history'),
+    );
+    await page.waitForTimeout(1_000); // the released re-read has landed by now
+    await expect(history).toBeVisible();
+    expect(new URL(page.url()).searchParams.getAll('panel')).toContain('history');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  },
+);
+
+test(
+  'SEARCH-01-AC12 the heatmap still filters when a dialog opened and then closed interrupts two re-reads',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac12-race2');
+    const ws = await workspaceFactory.create(owner);
+    for (const title of QUESTION_TITLES) {
+      await createQuestion(owner, ws.id, mcqInput(title, ['예', '아니오']));
+    }
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    const home = `/workspaces/${ws.id}`;
+    const QUERY = 'search01-ac12 chlorine';
+    const gate = () => {
+      let open: () => void = () => undefined;
+      const opened = new Promise<void>((resolve) => (open = resolve));
+      return { open, opened, held: 0 };
+    };
+    // 1st: the 문제 search's re-read (no dialog yet). 2nd: the retry of the same filters, read
+    // while the 문서 dialog is open.
+    const first = gate();
+    const second = gate();
+    await page.route(
+      (url) => url.pathname === home && url.searchParams.get('q') === QUERY,
+      async (route) => {
+        const withDialog = new URL(route.request().url()).searchParams
+          .getAll('panel')
+          .includes('documents');
+        const g = withDialog ? second : first;
+        g.held += 1;
+        await g.opened;
+        await route.continue().catch(() => undefined);
+      },
+    );
+
+    await homeUi.questionSearch(page).fill(QUERY);
+    await expect.poll(() => first.held).toBeGreaterThan(0);
+    await homeUi.documentsButton(page).click(); // interrupts the 1st re-read
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
+    first.open();
+    await expect.poll(() => second.held).toBeGreaterThan(0); // the retry, held in turn
+    await homeUi
+      .documentsDialog(page)
+      .getByRole('button', { name: /문서 관리 닫기|close/i })
+      .click(); // interrupts the retry
+    await expect(homeUi.documentsDialog(page)).toHaveCount(0);
+    second.open();
+
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(page).toHaveURL(
+      (url) => url.searchParams.get('q') === QUERY && !url.searchParams.has('panel'),
+    );
+    await expect(homeUi.questionSearch(page)).toHaveValue(QUERY);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  },
+);
+
+test(
+  'SEARCH-01-AC12 Korean IME composition does not filter until the composition ends',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory, browserName }) => {
+    const owner = await workspaceFactory.member('search01-ac12-ime');
+    const ws = await workspaceFactory.create(owner);
+    for (const title of QUESTION_TITLES) {
+      await createQuestion(owner, ws.id, mcqInput(title, ['예', '아니오']));
+    }
+
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    const box = homeUi.questionSearch(page);
+    await box.fill('search01-ac12 ');
+    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'search01-ac12');
+
+    // Compose "염" from its jamo. Chromium drives a real IME composition (CDP); WebKit gets the
+    // same DOM events (compositionstart, input while composing, compositionend).
+    const steps = ['ㅇ', '여', '염'];
+    const cdp = browserName === 'chromium' ? await page.context().newCDPSession(page) : null;
+    if (cdp) {
+      for (const text of steps) {
+        await cdp.send('Input.imeSetComposition', {
+          text,
+          selectionStart: text.length,
+          selectionEnd: text.length,
+        });
+        await page.waitForTimeout(150);
+      }
+    } else {
+      await box.evaluate((el: HTMLInputElement, jamo: string[]) => {
+        el.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' }));
+        const base = el.value;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        for (const text of jamo) {
+          el.dispatchEvent(
+            new CompositionEvent('compositionupdate', { bubbles: true, data: text }),
+          );
+          setter?.call(el, base + text);
+          el.dispatchEvent(
+            new InputEvent('input', {
+              bubbles: true,
+              data: text,
+              isComposing: true,
+              inputType: 'insertCompositionText',
+            }),
+          );
+        }
+      }, steps);
+    }
+    await expect(box).toHaveValue('search01-ac12 염');
+    // Well past the debounce: still composing, so nothing is filtered yet.
+    await page.waitForTimeout(800);
+    expect(new URL(page.url()).searchParams.get('q')).toBe('search01-ac12');
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+
+    // The composition ends: the composed value filters.
+    if (cdp) {
+      await cdp.send('Input.insertText', { text: '염' });
+    } else {
+      await box.evaluate((el: HTMLInputElement) => {
+        el.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '염' }));
+      });
+    }
+    await expect(box).toHaveValue('search01-ac12 염');
+    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'search01-ac12 염');
+    await expect(overviewUi.dots(page)).toHaveCount(1);
   },
 );
 
@@ -659,8 +1062,8 @@ test.describe('SEARCH-01-AC08 touch', () => {
 
       await signInAs(page, owner.user);
       await page.goto(homePath(ws.id));
-      await homeUi.scopeSettingsButton(page, 'questions').tap();
-      const popover = homeUi.scopeSettings(page, 'questions');
+      await homeUi.searchSettingsButton(page, 'questions').tap();
+      const popover = homeUi.searchSettings(page, 'questions');
       await expect(popover).toBeVisible();
       const chapter = popover.getByRole('combobox', { name: /^(챕터|chapter)$/i });
       await expect(chapter).toHaveText(/전체 챕터|all chapters/i);

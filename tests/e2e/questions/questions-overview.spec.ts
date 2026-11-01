@@ -400,11 +400,13 @@ test(
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(main(page).getByText(/문제 하나가 점 하나입니다/)).toHaveCount(0);
 
-    // Header: unified search with an icon-only submit, then 문서 n · 문제 and the icon buttons
-    // 이력 · 공유하기 (UX4). No 문제은행 button (UX6-PROGRESS) and no 전체 문제 page (UX7-BANK).
+    // Header: the 문제 search and the collapsed "본문 검색" disclosure (UX7-SEARCH), then 문서 n ·
+    // 문제 and the icon buttons 이력 · 공유하기 (UX4). No 문제은행 button (UX6-PROGRESS) and no
+    // 전체 문제 page (UX7-BANK).
     await expect(homeUi.header(page)).toBeVisible();
-    await expect(searchUi.box(page)).toBeVisible();
-    await expect(searchUi.submit(page)).toHaveText('');
+    await expect(homeUi.questionSearch(page)).toBeVisible();
+    await expect(homeUi.contentSearchToggle(page)).toHaveAttribute('aria-expanded', 'false');
+    await expect(searchUi.box(page)).toBeHidden();
     await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*1$/); // the book; not the paper
     await expect(main(page).getByRole('link', { name: /^(문제은행|question bank)$/i })).toHaveCount(
       0,
@@ -460,8 +462,9 @@ test(
     await expect(page).toHaveURL(
       (url) =>
         url.pathname === home &&
-        url.searchParams.get('scope') === 'content' &&
-        url.searchParams.get('q') === 'chlorine',
+        url.searchParams.get('text') === 'chlorine' &&
+        !url.searchParams.has('q') &&
+        !url.searchParams.has('scope'),
     );
     await expect(searchUi.resultsRegion(page)).toBeVisible();
 
