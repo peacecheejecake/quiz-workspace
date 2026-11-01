@@ -79,6 +79,7 @@ import { apiError, type ApiResponse } from './api.ts';
 import { JOB_TIMEOUT_MS, outlineNodeId, uploadReadyBook } from './documents.ts';
 import { seedMembership } from './db.ts';
 import { localDbAdminUrl } from './local-env.ts';
+import { rangePickerUi } from './range-picker.ts';
 import {
   archiveQuestion,
   createQuestion,
@@ -498,34 +499,19 @@ export const runUi = {
     panel.getByRole('heading', { name: /^(문제 풀기|practice questions?)$/i }),
   busy: (panel: Locator) =>
     panel.locator('[aria-busy="true"]').or(panel.getByText(/불러오는 중|loading/i)),
-  selectAll: (panel: Locator) => panel.getByRole('checkbox', { name: /^(전체 선택|select all)$/i }),
-  chapter: (panel: Locator, title: string) =>
-    panel.getByRole('checkbox', { name: new RegExp(`^${title}`) }),
-  /** Chapter checkboxes ("1장 물의 순환 …"), not the question ones ("1장 1번 · …"). */
-  chapters: (panel: Locator) => panel.getByRole('checkbox', { name: /^\d+장 (?!\d+번 · )/i }),
-  expand: (panel: Locator, title: string) =>
-    panel.getByRole('button', { name: new RegExp(`${title}.*(펼치기|접기|expand|collapse)`, 'i') }),
-  question: (panel: Locator, chapter: number, n: number) =>
-    panel.getByRole('checkbox', { name: new RegExp(`^${chapter}장 ${n}번 · `) }),
-  questions: (panel: Locator) => panel.getByRole('checkbox', { name: /^\d+장 \d+번 · / }),
-  selected: (panel: Locator, n: number) =>
-    panel.getByText(new RegExp(`선택 ${n}문제|${n} selected`, 'i')),
-  filterToggle: (panel: Locator) =>
-    panel.getByRole('button', { name: /^(상태 필터|필터|status filter|filters?)$/i }),
-  filters: (panel: Locator) =>
-    panel.getByRole('group', { name: /^(상태 필터|필터|status filter|filters?)$/i }),
-  incorrectFilter: (panel: Locator) =>
-    runUi
-      .filters(panel)
-      .getByRole('button', { name: /^(틀린 문제|오답|incorrect)$/i })
-      .or(runUi.filters(panel).getByRole('checkbox', { name: /^(틀린 문제|오답|incorrect)$/i })),
-  retryFilter: (panel: Locator) =>
-    runUi
-      .filters(panel)
-      .getByRole('button', { name: /^(다시 풀기만?|retry( only)?)$/i })
-      .or(runUi.filters(panel).getByRole('checkbox', { name: /^(다시 풀기만?|retry( only)?)$/i })),
-  resetFilters: (panel: Locator) =>
-    panel.getByRole('button', { name: /^(필터 초기화|reset filters?|clear filters?)$/i }),
+  // QuestionRangePicker (shared with MOCK-01, fixtures/range-picker.ts)
+  selectAll: rangePickerUi.selectAll,
+  chapter: rangePickerUi.chapter,
+  chapters: rangePickerUi.chapters,
+  expand: rangePickerUi.expand,
+  question: rangePickerUi.question,
+  questions: rangePickerUi.questions,
+  selected: rangePickerUi.selected,
+  filterToggle: rangePickerUi.filterToggle,
+  filters: rangePickerUi.filters,
+  incorrectFilter: rangePickerUi.incorrectFilter,
+  retryFilter: rangePickerUi.retryFilter,
+  resetFilters: rangePickerUi.resetFilters,
   random: (panel: Locator) =>
     panel.getByRole('checkbox', { name: /^(무작위 순서|random order|shuffle)$/i }),
   start: (panel: Locator) => panel.getByRole('button', { name: /^(시작|start)$/i }),
