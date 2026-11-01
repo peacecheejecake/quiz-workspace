@@ -287,10 +287,27 @@ def test_required_when_accepts_one_condition_or_a_list() -> None:
     assert by_name["CLOUDFLARE_API_TOKEN"].required_when == (("WORKER_EMBEDDER", "workers_ai"),)
 
 
+def test_mock_exam_budgets_are_not_checked_while_the_feature_is_off() -> None:
+    """Codex P2: a deployment without WORKER_MOCK_EXAMS (production today) passes with an
+    LLM_MAX_TOKENS below the unused default mock exam output budget, like WorkerSettings."""
+    worker = valid_env("worker", "production") | {"LLM_MAX_TOKENS": "8000"}
+    api = valid_env("api", "production")
+    assert "WORKER_MOCK_EXAMS" not in worker
+    assert "WORKER_MOCK_EXAMS" not in api
+    sources = {"worker": worker, "api": api}
+    assert check_env.run_checks(MANIFEST, "production", sources).errors == []
+    off = {"worker": worker | {"WORKER_MOCK_EXAMS": "false"}, "api": api}
+    assert check_env.run_checks(MANIFEST, "production", off).errors == []
+
+
 def test_mock_exam_budgets_must_fit_the_model_and_the_time_limit() -> None:
     """MOCK-B: prompt + output within the context, output within LLM_MAX_TOKENS, a 100-question
     generation within the worker task's soft time limit; messages name variables only."""
-    worker = valid_env("worker", "production")
+    worker = valid_env("worker", "production") | {
+        "WORKER_MOCK_EXAMS": "true",
+        "LLM_API_KEY": SECRET_MARK,
+        "LLM_MODEL": "model-a",
+    }
     assert check_env.run_checks(MANIFEST, "production", {"worker": worker}).errors == []
     big = worker | {"MOCK_EXAM_MAX_PROMPT_TOKENS": "190000"}
     errors = check_env.run_checks(MANIFEST, "production", {"worker": big}).errors

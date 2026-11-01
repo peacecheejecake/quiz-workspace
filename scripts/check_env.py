@@ -479,6 +479,7 @@ def check_captcha_pair(sources: Mapping[str, Mapping[str, str]], report: Report)
         )
 
 
+TRUTHY = frozenset({"true", "1", "yes"})
 MOCK_EXAM_DEFAULTS = {
     "MOCK_EXAM_MAX_PROMPT_TOKENS": 60_000,
     "MOCK_EXAM_MAX_OUTPUT_TOKENS": 16_000,
@@ -492,10 +493,12 @@ MOCK_EXAM_DEFAULTS = {
 
 
 def check_mock_exam_budget(sources: Mapping[str, Mapping[str, str]], report: Report) -> None:
-    """The worker's MOCK_EXAM_* budgets fit the model (context, LLM_MAX_TOKENS) and a
-    100-question generation fits the task soft time limit (quiz_worker.settings, MOCK-B)."""
+    """With WORKER_MOCK_EXAMS on, the worker's MOCK_EXAM_* budgets fit the model (context,
+    LLM_MAX_TOKENS) and a 100-question generation fits the task soft time limit
+    (quiz_worker.settings, MOCK-B)."""
     env = sources.get("worker")
-    if env is None:
+    # Like quiz_worker.settings: only a worker that makes AI mock exams must fit the budgets.
+    if env is None or env.get("WORKER_MOCK_EXAMS", "").strip().lower() not in TRUTHY:
         return
     values: dict[str, int] = {}
     for name, default in MOCK_EXAM_DEFAULTS.items():
