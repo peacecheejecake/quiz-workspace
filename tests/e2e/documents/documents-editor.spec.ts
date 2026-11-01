@@ -7,19 +7,23 @@
 // search API as the owner (published-revision filter is enforced server-side, architecture §4).
 // The shared-link Viewer half of AC05 is covered by WS-VIEW-01 (S0).
 import { randomUUID } from 'node:crypto';
-import type { Page } from '@playwright/test';
+import type { Locator, Page, Request } from '@playwright/test';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 import {
   block,
   book,
+  draftFor,
   DRAFT_SAVED,
   editorUi,
   expect,
   INDEX_FAILED,
+  importPaperDrafts,
   INDEX_FAILURE_MARKER,
   JOB_TIMEOUT_MS,
   PROBLEM_TYPES,
+  publishDrafts,
   PUBLISHED,
+  questionPaper,
   search,
   section,
   seedMembership,
@@ -27,6 +31,7 @@ import {
   signInAs,
   snippet,
   test,
+  truthQuestion,
   uploadReadyBook,
   type Member,
   type Problem,
@@ -241,5 +246,281 @@ test(
     const publish = await owner.api.request('POST', `/documents/${documentId}/publish`, {});
     expect(publish.status).toBe(403);
     expect((publish.body as Problem).type).toBe(PROBLEM_TYPES.workspaceArchived);
+  },
+);
+
+// --- DOCVIEW (user feedback 2026-11-01): outline panel, paging, sync, page groups, splitter,
+// question format. book-ko: page 1 = title + TOC (no blocks), blocks start on pages 2 and 4, and
+// ch1-s2-p3 continues from page 2 onto page 3.
+
+const LAST_BODY_BLOCK = block(BOOK, 'ch1-s2-p3'); // pages 2 → 3
+
+/** True once the canvas holds a drawn page (some non-white pixels), not just a placeholder. */
+async function painted(canvas: Locator): Promise<boolean> {
+  return canvas
+    .evaluate((el) => {
+      if (!(el instanceof HTMLCanvasElement) || el.width === 0 || el.height === 0) return false;
+      const ctx = el.getContext('2d');
+      if (!ctx) return false;
+      const { data } = ctx.getImageData(0, 0, el.width, el.height);
+      for (let i = 0; i < data.length; i += 4 * 97) {
+        if ((data[i] ?? 255) < 200 || (data[i + 1] ?? 255) < 200 || (data[i + 2] ?? 255) < 200) {
+          return true;
+        }
+      }
+      return false;
+    })
+    .catch(() => false);
+}
+
+async function expectPainted(page: Page, n: number, timeout = 10_000): Promise<void> {
+  await expect
+    .poll(() => painted(editorUi.pdfPage(page, n)), { message: `PDF page ${n} drawn`, timeout })
+    .toBe(true);
+}
+
+/** Wheel-scrolls the PDF pages until the viewer reports page `n` as the current page. */
+async function scrollPdfTo(page: Page, n: number): Promise<void> {
+  await editorUi.pdfPages(page).hover();
+  await expect(async () => {
+    const current = Number(await editorUi.currentPage(page).inputValue());
+    await page.mouse.wheel(0, current < n ? 300 : -300);
+    await expect(editorUi.currentPage(page)).toHaveValue(String(n), { timeout: 300 });
+  }).toPass({ timeout: 20_000 });
+}
+
+test(
+  'DOC-02-AC06 the outline is a floating panel that folds away and remembers its state',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await setup(page, workspaceFactory, 'doc02-ac06');
+    const toggle = editorUi.outlineToggle(page);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(editorUi.outlinePanel(page)).toBeVisible();
+    await expect(editorUi.outlinePanel(page).getByRole('tree')).toBeVisible();
+    const openWidth = (await editorUi.viewer(page).boundingBox())?.width ?? 0;
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(editorUi.outline(page)).toBeHidden();
+    await expect
+      .poll(async () => (await editorUi.viewer(page).boundingBox())?.width ?? 0)
+      .toBeGreaterThan(openWidth + 100);
+
+    await page.reload();
+    await expect(editorUi.outlineToggle(page)).toHaveAttribute('aria-expanded', 'false');
+    await expect(editorUi.outline(page)).toBeHidden();
+
+    await editorUi.outlineToggle(page).click();
+    await expect(editorUi.outlineToggle(page)).toHaveAttribute('aria-expanded', 'true');
+    const target = section(BOOK, 'ch2-s2');
+    await editorUi.outlineItem(page, target.title).click();
+    await expect(editorUi.currentPage(page)).toHaveValue(String(target.page));
+    await expect(editorUi.currentBlock(page)).toContainText(snippet(block(BOOK, 'ch2-s2-p1').text));
+    await page.reload();
+    await expect(editorUi.outlineToggle(page)).toHaveAttribute('aria-expanded', 'true');
+  },
+);
+
+test(
+  'DOC-02-AC07 page turns draw from the PDF already in memory, the next page is pre-drawn and no request is sent',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await setup(page, workspaceFactory, 'doc02-ac07');
+    await expectPainted(page, 1);
+    await page.waitForLoadState('networkidle');
+    // Neighbour prefetch: page 2 is drawn before anyone asks for it.
+    await expectPainted(page, 2);
+
+    const requests: string[] = [];
+    const onRequest = (request: Request) => {
+      if (request.headers()['next-router-prefetch'] === '1') return; // Next <Link> prefetch
+      requests.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    };
+    page.on('request', onRequest);
+
+    const turn = async (go: () => Promise<void>, n: number) => {
+      const started = Date.now();
+      await go();
+      await expect(editorUi.currentPage(page)).toHaveValue(String(n));
+      await expectPainted(page, n, 1_000);
+      expect(Date.now() - started, `page ${n} drawn within 1 s`).toBeLessThan(1_000);
+    };
+    const next = editorUi.viewer(page).getByRole('button', { name: /다음 페이지|next page/i });
+    const previous = editorUi
+      .viewer(page)
+      .getByRole('button', { name: /이전 페이지|previous page/i });
+    await turn(() => next.click(), 2);
+    await turn(() => next.click(), 3);
+    await turn(async () => {
+      await editorUi.currentPage(page).fill('1');
+      await editorUi.currentPage(page).press('Enter');
+    }, 1);
+    await turn(async () => {
+      await editorUi.currentPage(page).fill('4');
+      await editorUi.currentPage(page).press('Enter');
+    }, 4);
+    await turn(() => previous.click(), 3);
+
+    page.off('request', onRequest);
+    expect(requests, 'no network request while turning pages').toEqual([]);
+  },
+);
+
+test(
+  'DOC-02-AC08 scrolling or turning PDF pages scrolls the text pane to that page, except while editing',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await setup(page, workspaceFactory, 'doc02-ac08');
+    await expectPainted(page, 1);
+    await expect(editorUi.pageHeading(page, 2)).toBeVisible();
+
+    await scrollPdfTo(page, 4);
+    await expect(editorUi.pageHeading(page, 4)).toBeInViewport();
+    await expect(editorUi.pageHeading(page, 2)).not.toBeInViewport();
+
+    const previous = editorUi
+      .viewer(page)
+      .getByRole('button', { name: /이전 페이지|previous page/i });
+    await previous.click();
+    await expect(editorUi.currentPage(page)).toHaveValue('3');
+    // No block starts on page 3: the block that continues onto it is shown.
+    await expect(editorUi.block(page, snippet(LAST_BODY_BLOCK.text))).toBeInViewport();
+
+    await scrollPdfTo(page, 2);
+    await expect(editorUi.pageHeading(page, 2)).toBeInViewport();
+
+    // While a block is being edited the text pane stays where it is.
+    await editorUi.editButton(editorUi.block(page, snippet(RAIN.text))).click();
+    await expect(editorUi.blockTextbox(page)).toBeInViewport();
+    await scrollPdfTo(page, 4);
+    await expect(editorUi.blockTextbox(page)).toBeInViewport();
+    await expect(editorUi.pageHeading(page, 4)).not.toBeInViewport();
+  },
+);
+
+test(
+  'DOC-02-AC09 the text pane groups blocks by the page they start on',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await setup(page, workspaceFactory, 'doc02-ac09');
+    const starts = new Map<number, string[]>();
+    for (const b of BOOK.blocks) {
+      if (b.type === 'image' || !b.text) continue;
+      const first = b.parts[0]?.page ?? 0;
+      starts.set(first, [...(starts.get(first) ?? []), b.text]);
+    }
+    const headings = editorUi.textPanel(page).getByRole('heading', { name: /^\d+쪽$|^page \d+$/i });
+    await expect(headings).toHaveText(
+      [...starts.keys()].sort((a, b) => a - b).map((n) => `${n}쪽`),
+    );
+    for (const [n, texts] of starts) {
+      const group = editorUi.pageGroup(page, n);
+      for (const text of texts) await expect(group).toContainText(snippet(text));
+      for (const [other, otherTexts] of starts) {
+        if (other === n) continue;
+        await expect(group).not.toContainText(snippet(otherTexts[0] ?? ''));
+      }
+    }
+
+    const target = section(BOOK, 'ch2-s2');
+    await editorUi.outlineItem(page, target.title).click();
+    await expect(editorUi.pageHeading(page, target.page)).toHaveAttribute('aria-current', 'page');
+    await expect(editorUi.pageHeading(page, 2)).not.toHaveAttribute('aria-current', 'page');
+  },
+);
+
+test(
+  'DOC-02-AC10 a separator resizes the PDF and text panes by pointer and keyboard and keeps the ratio',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await setup(page, workspaceFactory, 'doc02-ac10');
+    const splitter = editorUi.splitter(page);
+    await expect(splitter).toBeVisible();
+    await expect(splitter).toHaveAttribute('aria-orientation', 'vertical');
+    await expect(splitter).toHaveAttribute('aria-valuemin', '25');
+    await expect(splitter).toHaveAttribute('aria-valuemax', '75');
+    const value = async () => Number(await splitter.getAttribute('aria-valuenow'));
+    const pdfWidth = async () => (await editorUi.viewer(page).boundingBox())?.width ?? 0;
+    const start = await value();
+    const startWidth = await pdfWidth();
+
+    await splitter.focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect.poll(value).toBe(start - 5);
+    await expect.poll(pdfWidth).toBeLessThan(startWidth - 20);
+    await page.keyboard.press('End');
+    await expect.poll(value).toBe(75);
+    await page.keyboard.press('Home');
+    await expect.poll(value).toBe(25);
+
+    // Pointer drag to the right widens the PDF pane.
+    const box = await splitter.boundingBox();
+    if (!box) throw new Error('separator has no box');
+    const before = await pdfWidth();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 200, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(pdfWidth).toBeGreaterThan(before + 150);
+    const dragged = await value();
+    expect(dragged).toBeGreaterThan(25);
+    expect(dragged).toBeLessThanOrEqual(75);
+
+    await page.reload();
+    await expect(editorUi.splitter(page)).toHaveAttribute('aria-valuenow', String(dragged));
+
+    // Phones keep the PDF / 원문 view switch and have no separator.
+    await page.setViewportSize({ width: 375, height: 800 });
+    await expect(editorUi.splitter(page)).toBeHidden();
+  },
+);
+
+test(
+  'DOC-02-AC11 confirmed imported questions show in question format with the answer folded away',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('doc02-ac11');
+    const ws = await workspaceFactory.create(owner);
+    const { run, drafts } = await importPaperDrafts(owner, ws.id);
+    const paper = questionPaper();
+    const [q1, q2, q3] = [1, 2, 3].map((n) => truthQuestion(paper, n));
+    if (!q1 || !q2 || !q3) throw new Error('questions-ko truth');
+    await publishDrafts(owner, run.id, [draftFor(drafts, q1).id, draftFor(drafts, q2).id]);
+    const documentId = run.source_document_id;
+    expect(documentId, 'import run source document').toBeTruthy();
+
+    await signInAs(page, owner.user);
+    await page.goto(documentPath(ws.id, documentId ?? ''));
+
+    const card = editorUi.questionCard(page, 1);
+    await expect(card).toBeVisible();
+    await expect(card).toContainText(q1.stem);
+    const options = card.getByRole('list', { name: /보기|options/i }).getByRole('listitem');
+    await expect(options).toHaveCount(q1.options.length);
+    for (const [i, option] of q1.options.entries()) {
+      await expect(options.nth(i)).toContainText(option.text);
+    }
+    // The stem is not shown a second time as a raw block.
+    await expect(editorUi.block(page, snippet(q1.stem, 16))).toHaveCount(0);
+
+    // Answer folded away until asked for.
+    const answer = card.getByText(/정답\s*[:：]?\s*②|answer\s*[:：]?\s*②/i);
+    await expect(answer).toBeHidden();
+    const reveal = editorUi.answerToggle(card);
+    await expect(reveal).toHaveAttribute('aria-expanded', 'false');
+    await reveal.click();
+    await expect(reveal).toHaveAttribute('aria-expanded', 'true');
+    await expect(answer).toBeVisible();
+
+    // The source blocks stay reachable (and correctable) from the card.
+    await editorUi.sourceBlocksToggle(card).click();
+    await expect(card.getByRole('article').first()).toBeVisible();
+    await expect(editorUi.editButton(card).first()).toBeVisible();
+
+    await expect(editorUi.questionCard(page, 2)).toContainText(q2.stem);
+    // Not confirmed: question 3 stays raw text.
+    await expect(editorUi.questionCard(page, 3)).toHaveCount(0);
+    await expect(editorUi.block(page, snippet(q3.stem, 16))).toBeVisible();
   },
 );
