@@ -1,6 +1,6 @@
 # SEARCH-01 — 통합 검색 (문제·다국어 본문)
 
-**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (Workspace header 통합 검색) · UX4 개정 2026-10-21 (검색 옵션 단일 목록) · UX6 개정 2026-10-28 (문제·본문 검색 범위 분리와 on/off)
+**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (Workspace header 통합 검색) · UX4 개정 2026-10-21 (검색 옵션 단일 목록) · UX6 개정 2026-10-28 (문제·본문 검색 범위 분리와 on/off) · UX7-SELECT 개정 2026-11-01 (터치로 연 Select의 현재 항목 탭)
 **Route:** `/workspaces/:workspaceId?q=:query` (Workspace 홈 header; 이전 `/workspaces/:workspaceId/search?…`는 `scope=content`로 redirect)
 **테스트:** `tests/e2e/search/search.spec.ts`
 **연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
@@ -76,6 +76,12 @@
 - **Given:** 문서가 색인된 Workspace에서 query embedding(dense) 공급자를 일시적으로 쓸 수 없는 상태(hosted embedder 장애·quota 초과·timeout; 테스트는 `APP_ENV=test` 실패 marker로 재현)
 - **When:** 하이브리드 또는 의미 검색을 실행
 - **Then:** 검색은 실패(503)하지 않고 BM25 키워드 결과만 반환하며, API 응답은 `degraded: ["dense_unavailable"]`을 담고, 화면은 결과 위에 차단하지 않는 안내 "의미 검색을 일시적으로 사용할 수 없어 키워드 결과만 표시합니다"를 `role="status"`(텍스트, 색만으로 구분하지 않음)로 표시한다. 정상 상태의 같은 검색에는 안내도 `degraded`도 없다.
+
+### SEARCH-01-AC08
+
+- **Given:** Workspace 홈의 "문제 설정" popover("문제 검색 설정")를 연 휴대폰(iPhone Safari, 터치) 화면
+- **When:** `챕터` Select를 탭해 목록을 열고, 목록 맨 위의 현재 선택 항목(기본 "전체 챕터")을 한 번 탭함
+- **Then:** 첫 탭에 목록이 닫히고(`aria-expanded="false"`) 선택값과 URL 필터는 그대로이며 popover는 열린 채 남는다. 탭한 항목의 pointerup은 취소되지 않는다(iOS Safari는 취소된 터치 pointerup의 click을 보내지 않는다; design-system.md §4.1 "열린 목록의 현재 항목은 닫기"). 다른 항목을 탭하면 그 값으로 바뀐다(UX7-SELECT 2026-11-01).
 
 ## 검색 저하(dense 불가) 규칙 (M7.4b)
 
