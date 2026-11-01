@@ -233,22 +233,26 @@ function History({
   readonly question: QuestionDetail;
 }) {
   const [selected, setSelected] = useState(question.revision.id);
-  const [past, setPast] = useState<{ id: string; revision: QuestionRevision } | null>(null);
-  const [pastError, setPastError] = useState<string | null>(null);
+  // Past revisions are immutable: cache each one by id. Only the latest selection's failure shows,
+  // so a late response of an earlier click never replaces the preview or its error.
+  const [loaded, setLoaded] = useState<ReadonlyMap<string, QuestionRevision>>(() => new Map());
+  const [pastError, setPastError] = useState<{ id: string; message: string } | null>(null);
+  const latest = useRef(selected);
 
   async function show(revisionId: string) {
+    latest.current = revisionId;
     setSelected(revisionId);
     setPastError(null);
-    if (revisionId === question.revision.id) {
-      setPast(null);
-      return;
-    }
-    if (past?.id === revisionId) return;
+    if (revisionId === question.revision.id || loaded.has(revisionId)) return;
     const result = await getQuestionRevisionAction(workspaceId, question.id, revisionId);
-    if (result.ok) setPast({ id: revisionId, revision: result.data });
-    else setPastError(result.message);
+    if (result.ok) {
+      setLoaded((prev) => new Map(prev).set(revisionId, result.data));
+    } else if (latest.current === revisionId) {
+      setPastError({ id: revisionId, message: result.message });
+    }
   }
 
+  const past = selected === question.revision.id ? undefined : loaded.get(selected);
   return (
     <>
       <ul className={styles.plainList}>
@@ -266,13 +270,13 @@ function History({
           </li>
         ))}
       </ul>
-      {pastError ? <p role="alert">{pastError}</p> : null}
-      {past && selected === past.id ? (
+      {pastError && pastError.id === selected ? <p role="alert">{pastError.message}</p> : null}
+      {past ? (
         <div className={styles.revisionPreview}>
           <RevisionView
-            revision={past.revision}
+            revision={past}
             type={question.question_type}
-            heading={`버전 ${past.revision.version} 내용`}
+            heading={`버전 ${past.version} 내용`}
           />
         </div>
       ) : null}
