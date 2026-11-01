@@ -3,7 +3,7 @@
 // 초안, 보관됨) and "더 보기" paging through listInactiveQuestionsAction, editors' 보관 해제 / 확정
 // (a changed question leaves the list) and the read-only roles without write controls.
 import './dom-setup';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ToastProvider } from '@quiz/ui';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -211,5 +211,39 @@ describe('UX7-BANK-2 review fixes', () => {
     await waitFor(() => expect(rows()[0]).toHaveTextContent('문제 2 본문'));
     expect(listInactiveQuestionsAction).toHaveBeenCalledWith(WS, 'INACTIVE', 'next');
     expect(screen.queryByRole('heading', { name: '보관하거나 초안인 문제가 없습니다' })).toBeNull();
+  });
+
+  it('QOV-01-AC15 a refresh during a pending 더 보기 leaves paging usable', async () => {
+    const user = userEvent.setup();
+    let releaseMore: (value: unknown) => void = () => undefined;
+    listInactiveQuestionsAction.mockImplementation(
+      (_ws: string, _f: string, cursor: string | null) =>
+        cursor === 'next'
+          ? new Promise((resolve) => {
+              releaseMore = resolve;
+            })
+          : Promise.resolve(page([question(1, 'ARCHIVED')], 'next')),
+    );
+    const view = (refreshKey: number) => (
+      <ToastProvider>
+        <InactiveQuestions
+          workspaceId={WS}
+          readOnly={null}
+          documents={[]}
+          refreshKey={refreshKey}
+        />
+      </ToastProvider>
+    );
+    const { rerender } = render(view(0));
+    await user.click(await screen.findByRole('button', { name: '더 보기' }));
+    // The practice panel changed a question while the second page was loading.
+    rerender(view(1));
+    await waitFor(() =>
+      expect(listInactiveQuestionsAction.mock.calls.filter((c) => c[2] === null)).toHaveLength(2),
+    );
+    await act(async () => releaseMore(page([question(2, 'ARCHIVED')])));
+    const more = await screen.findByRole('button', { name: '더 보기' });
+    await waitFor(() => expect(more).toBeEnabled());
+    expect(rows()).toHaveLength(1);
   });
 });

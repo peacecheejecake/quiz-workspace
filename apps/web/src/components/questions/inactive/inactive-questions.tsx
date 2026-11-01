@@ -110,6 +110,14 @@ export function InactiveQuestions({
     setReload((n) => n + 1);
   }
 
+  // A home-level change (refreshKey) restarts the list through the same reset as 다시 시도, so
+  // a pending 더 보기 of the old list can never leave paging disabled.
+  const [seenRefreshKey, setSeenRefreshKey] = useState(refreshKey);
+  if (seenRefreshKey !== refreshKey) {
+    setSeenRefreshKey(refreshKey);
+    restart();
+  }
+
   useEffect(() => {
     const requested = ++generation.current;
     listInactiveQuestionsAction(workspaceId, filter, null).then(
@@ -127,7 +135,7 @@ export function InactiveQuestions({
         }
       },
     );
-  }, [workspaceId, filter, reload, refreshKey]);
+  }, [workspaceId, filter, reload]);
 
   async function loadMore(cursor = list.status === 'ready' ? list.cursor : null) {
     if (!cursor || loadingMore) return;
