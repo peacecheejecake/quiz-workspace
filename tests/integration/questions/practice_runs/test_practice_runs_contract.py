@@ -920,3 +920,45 @@ def test_c04_resuming_a_position_with_an_idempotency_key_replays_it(seed: Any) -
         409,
         PROBLEM + "idempotency-key-reused",
     )
+
+
+def test_c07_submitted_positions_that_become_unavailable_count_as_skipped(seed: Any) -> None:
+    """Archived or deleted after submission: the position is unavailable and skipped in the
+    summary and the results (questions.md §12, QVIEW-01 state table); attempts stay."""
+    owner = seed.client("qview-gone-submitted")
+    ws_id = str(owner.create_workspace()["id"])
+    qs = [owner.create_question(ws_id, mcq("gone", 1, n, None)) for n in (1, 2, 3)]
+    run = created(owner, ws_id, bank({"all": True}))
+    for position, question in ((1, qs[0]), (2, qs[1])):
+        session = owner.ok_response(
+            run_session(owner, question["id"], run["id"], position), "POST", "open", (201,)
+        )
+        owner.ok(
+            "POST",
+            f"/practice-sessions/{session['id']}/submit",
+            {"selected_option_ids": question["revision"]["correct_option_ids"]},
+        )
+    owner.ok_response(run_session(owner, qs[2]["id"], run["id"], 3), "POST", "open 3", (201,))
+    owner.ok(
+        "PATCH",
+        f"/questions/{qs[0]['id']}",
+        {"base_revision_id": qs[0]["revision"]["id"], "publication_status": "ARCHIVED"},
+    )
+    owner.ok("DELETE", f"/questions/{qs[1]['id']}", None, (204,))
+    for position in (1, 2):
+        assert item(owner, run["id"], position)["available"] is False
+
+    current = owner.ok("GET", f"/practice-runs/{run['id']}")
+    assert current["summary"] == {"correct": 0, "incorrect": 0, "pending": 0, "skipped": 2}
+    assert current["answered"] == 0
+    results = owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200")
+    assert [i["result"] for i in results["items"]] == ["skipped", "skipped", None]
+    finished = owner.ok("POST", f"/practice-runs/{run['id']}/finish", {})
+    assert finished["summary"] == {"correct": 0, "incorrect": 0, "pending": 0, "skipped": 3}
+    results = owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200")
+    assert [i["result"] for i in results["items"]] == ["skipped", "skipped", "skipped"]
+    run_attempts = (
+        "select count(*) from public.question_attempts a join public.practice_sessions s "
+        "on s.id = a.practice_session_id where s.practice_run_id = %s"
+    )
+    assert count(run_attempts, (run["id"],)) == 2, "historical attempts are never touched"

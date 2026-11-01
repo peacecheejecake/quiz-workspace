@@ -35,9 +35,12 @@ from the practice API). Share-session guests have no user JWT (401).
 
 Summary: `correct`/`incorrect`/`pending` count submitted positions by their current result;
 `skipped` counts positions without a submission — all of them once the run is finished, and
-while it is open those before the furthest position opened (`reached`). A finished run takes no
-new session and no new submission (409 `practice-run-finished`); a pending answer can still be
-self-graded.
+while it is open those before the furthest position opened (`reached`). A position whose question
+is no longer available (archived, merged away or deleted) counts as not submitted wherever it is
+read — item, summary, results — through one condition
+(quiz_api.repositories.practice_runs.eligible_question); its attempts stay as they were. A
+finished run takes no new session and no new submission (409 `practice-run-finished`); a pending
+answer can still be self-graded.
 """
 
 from __future__ import annotations
@@ -462,7 +465,7 @@ def create_practice_run(
 @router.get("/practice-runs/{run_id}", operation_id="getPracticeRun")
 def get_practice_run(run: ReadRun, runs: RunRepo) -> PracticeRun:
     """The run's counts, progress and summary (no items, no content)."""
-    return _run_out(run, runs.progress(run.id))
+    return _run_out(run, runs.progress(run))
 
 
 @router.get("/practice-runs/{run_id}/items/{position}", operation_id="getPracticeRunItem")
@@ -518,7 +521,7 @@ def list_practice_run_results(
     limit: Annotated[int, Query(ge=1, le=MAX_RESULTS_PAGE)] = DEFAULT_RESULTS_PAGE,
 ) -> RunResults:
     """Positions offset+1 .. offset+limit with their result (no answers)."""
-    reached = runs.progress(run.id).reached
+    reached = runs.progress(run).reached
     rows: list[ResultRow] = runs.results(run, offset, limit) if offset < run.total else []
     numbers = _chapter_numbers(overview, [r.chapter_id for r in rows])
     return RunResults(
@@ -551,7 +554,7 @@ def finish_practice_run(run: WriteRun, runs: RunRepo) -> PracticeRun:
     finished = runs.get(run.id, run.user_id)
     if finished is None:  # pragma: no cover - locked by the membership lookup
         raise _not_found()
-    out = _run_out(finished, runs.progress(run.id))
+    out = _run_out(finished, runs.progress(finished))
     runs.commit()
     return out
 

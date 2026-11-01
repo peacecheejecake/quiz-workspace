@@ -7,6 +7,12 @@ a results page takes a slice `item_ids[offset+1 : offset+limit]`. Progress and s
 aggregate over the run's sessions (the partial unique `(practice_run_id, run_position)` index).
 
 Every read is keyed by the run id AND the caller's user id: a run belongs to its creator only.
+
+Eligibility (QVIEW-01-C07, the question-viewer state table): a position is available only while
+its question is a live CONFIRMED question of the run's workspace (`eligible_question`). The item
+read, the summary and the results all use that one condition: a position whose question was
+archived (merged duplicates included) or deleted shows no content and counts as skipped, even if
+it was submitted before; its attempts are history and are never changed.
 """
 
 from __future__ import annotations
@@ -16,7 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import Integer, and_, func, insert, literal, select, true, update
+from sqlalchemy import ColumnElement, Integer, and_, func, insert, literal, select, true, update
 from sqlalchemy.orm import Session
 
 from quiz_api.authz.permissions import LockMode
@@ -122,6 +128,16 @@ def _run(row: Any) -> RunRecord:
     )
 
 
+def eligible_question(question_id: Any, workspace_id: uuid.UUID) -> ColumnElement[bool]:
+    """`questions` row condition: `question_id` is a live CONFIRMED question of the workspace."""
+    return and_(
+        questions.c.id == question_id,
+        questions.c.workspace_id == workspace_id,
+        questions.c.publication_status == "CONFIRMED",
+        questions.c.deleted_at.is_(None),
+    )
+
+
 def _latest_result() -> Any:
     """LATERAL: the current result of the enclosing session (its newest attempt)."""
     return (
@@ -220,27 +236,36 @@ class PracticeRunRepository:
             .values(finished_at=func.now())
         )
 
-    def progress(self, run_id: uuid.UUID) -> RunProgress:
+    def progress(self, run: RunRecord) -> RunProgress:
+        """`reached` counts every opened position; the submissions count only at positions that
+        are still eligible (an unavailable position is skipped)."""
         latest = _latest_result()
         sessions = (
             select(
                 practice_sessions.c.run_position.label("position"),
                 practice_sessions.c.state,
                 latest.c.result,
+                questions.c.id.is_not(None).label("eligible"),
             )
-            .select_from(practice_sessions.outerjoin(latest, true()))
-            .where(practice_sessions.c.practice_run_id == run_id)
+            .select_from(
+                practice_sessions.outerjoin(latest, true()).outerjoin(
+                    questions, eligible_question(practice_sessions.c.question_id, run.workspace_id)
+                )
+            )
+            .where(practice_sessions.c.practice_run_id == run.id)
             .cte("run_sessions")
         )
         reached = select(func.coalesce(func.max(sessions.c.position), 0)).scalar_subquery()
-        submitted = sessions.c.state != "open"
+        submitted = and_(sessions.c.state != "open", sessions.c.eligible)
         row = self._session.execute(
             select(
                 reached.label("reached"),
                 func.count().filter(submitted).label("submitted"),
                 func.count().filter(submitted, sessions.c.result == "correct").label("correct"),
                 func.count().filter(submitted, sessions.c.result == "incorrect").label("incorrect"),
-                func.count().filter(sessions.c.state == "pending_grade").label("pending"),
+                func.count()
+                .filter(submitted, sessions.c.state == "pending_grade")
+                .label("pending"),
                 func.count()
                 .filter(submitted, sessions.c.position < reached)
                 .label("submitted_before_reached"),
@@ -283,12 +308,7 @@ class PracticeRunRepository:
                     ),
                 )
             )
-            .where(
-                questions.c.id == question_id,
-                questions.c.workspace_id == workspace_id,
-                questions.c.publication_status == "CONFIRMED",
-                questions.c.deleted_at.is_(None),
-            )
+            .where(eligible_question(question_id, workspace_id))
         ).one_or_none()
         if row is None:
             return None
@@ -331,12 +351,7 @@ class PracticeRunRepository:
             .where(practice_sessions.c.practice_run_id == run.id)
             .subquery("run_sessions")
         )
-        live = and_(
-            questions.c.id == page.c.question_id,
-            questions.c.workspace_id == run.workspace_id,
-            questions.c.publication_status == "CONFIRMED",
-            questions.c.deleted_at.is_(None),
-        )
+        live = eligible_question(page.c.question_id, run.workspace_id)
         stmt = (
             select(
                 page.c.position,
@@ -366,7 +381,14 @@ class PracticeRunRepository:
                         chapters.c.workspace_id == questions.c.workspace_id,
                     ),
                 )
-                .outerjoin(run_sessions, run_sessions.c.run_position == page.c.position)
+                # An unavailable position has no result (it is skipped), whatever it had.
+                .outerjoin(
+                    run_sessions,
+                    and_(
+                        run_sessions.c.run_position == page.c.position,
+                        questions.c.id.is_not(None),
+                    ),
+                )
             )
             .order_by(page.c.position)
         )
