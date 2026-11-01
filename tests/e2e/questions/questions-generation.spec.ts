@@ -17,6 +17,7 @@ import {
   chooseQuestionMenu,
   createQuestion,
   expect,
+  expectReadOnlyQuestionMenu,
   GENERATE_TASK,
   generatePath,
   generateUi,
@@ -360,18 +361,18 @@ test(
     await page.context().clearCookies();
     await signInAs(page, viewer.user);
     await page.goto(homePath(s.workspaceId, 'panel=generate'));
-    // UX7-DOCS: without edit rights the 문제 menu (직접 추가 / 변형 출제 only) is not shown at all.
+    // UX7-DOCS-2: the 문제 button stays; 변형 출제 is disabled with the reason.
     await expect(homeUi.documentsButton(page)).toBeVisible();
     await expect(homeUi.generateDialog(page)).toHaveCount(0);
-    await expect(homeUi.questionMenuButton(page)).toHaveCount(0);
+    await expectReadOnlyQuestionMenu(page, 'viewer');
     await workspaceFactory.archive(s.owner, s.workspaceId);
     await page.context().clearCookies();
     await signInAs(page, s.owner.user);
     await page.goto(homePath(s.workspaceId, 'panel=generate'));
-    // UX7-DOCS: without edit rights the 문제 menu (직접 추가 / 변형 출제 only) is not shown at all.
+    // UX7-DOCS-2: the 문제 button stays; 변형 출제 is disabled with the reason.
     await expect(homeUi.documentsButton(page)).toBeVisible();
     await expect(homeUi.generateDialog(page)).toHaveCount(0);
-    await expect(homeUi.questionMenuButton(page)).toHaveCount(0);
+    await expectReadOnlyQuestionMenu(page, 'archived');
   },
 );
 

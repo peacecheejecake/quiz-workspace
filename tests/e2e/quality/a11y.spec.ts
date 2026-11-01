@@ -19,6 +19,7 @@ import {
   formAlert,
   homePath,
   homeUi,
+  QUESTION_MENU_REASONS,
   openSearchOptions,
   closeSearchOptions,
   generatePath,
@@ -176,6 +177,13 @@ test(
       await settle(page);
       await expectAccessible(page, `archived workspace ${path}`);
     }
+    // The read-only 문제 menu: disabled items with the reason in text (UX7-DOCS-2).
+    await page.goto(homePath(other.id));
+    await homeUi.questionMenuButton(page).click();
+    await expect(homeUi.questionMenu(page).getByText(QUESTION_MENU_REASONS.archived)).toBeVisible();
+    await settle(page);
+    await expectAccessible(page, 'archived workspace 문제 menu');
+    await page.keyboard.press('Escape');
 
     const res = await page.goto('/workspaces/00000000-0000-4000-8000-000000000000/documents');
     expect(res?.status()).toBe(404);
