@@ -53,7 +53,7 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 
 ## 레이아웃 및 컴포넌트
 
-- **진입 (bank):** Workspace header `문제` 메뉴에 `문제 풀기` 항목(모든 구성원; 보관된 Workspace에서도 보임). 누르면 QuestionViewer가 범위 고르기 단계로 바로 열리고(`?practice=new&source=bank`) 목록을 불러오는 동안 skeleton(QOV-01-AC09 규칙).
+- **진입 (bank):** Workspace header `문제` 메뉴에 `문제 풀기` 항목(모든 구성원; 보관된 Workspace에서도 보임) (제안 — 사용자 확인 필요; 대안은 Heatmap 도구 줄 버튼). 누르면 QuestionViewer가 범위 고르기 단계로 바로 열리고(`?practice=new&source=bank`) 목록을 불러오는 동안 skeleton(QOV-01-AC09 규칙).
 - **진입 (mock):** 모의고사 행·상세의 `풀기`(MOCK-01). 범위 고르기 단계는 그 모의고사의 문제만 보이고(출처 장별 묶음) 처음에 모두 선택되어 있다.
 - **범위 고르기 단계:** 제목 "문제 풀기"(mock이면 "<모의고사 이름> 풀기").
   - 필터 줄(접힘 가능, 홈 상태 필터와 같은 칩) → `QuestionRangePicker`.

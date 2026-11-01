@@ -42,6 +42,7 @@ flowchart LR
   M6 --> M7
   S --> M7
   M7 --> DS[DOCSUM 전문·요약·정리 노트]
+  M7 --> MK[MOCK 모의고사·QuestionViewer]
 ```
 
 - **A3(교차 사용자 차단) 완료 전 M3 UI release 금지** (auth.md §6).
@@ -196,6 +197,26 @@ flowchart LR
 - 병렬: `DOCTXT ∥ DOCSUM-B ∥ CHNOTE-B`, `DOCSUM-W ∥ CHNOTE-W`. 공유 파일(`apps/api` router 등록, `apps/worker` job 등록·celery 설정, `contracts/openapi.json`, `packages/api-client`, migration timestamp, env manifest)은 충돌이 예상되며 orchestrator가 merge 후 `make contracts`로 재생성한다.
 - 비용 위험: 350쪽 교재의 첫 요약은 입력 0.3–0.5M token 수준(이후 발행은 바뀐 장만). 750문제 장은 노트 묶음 생성(C04). 그래서 요약은 opt-in, 노트는 요청 시에만 만든다.
 
+### MOCK — 모의고사·통합 QuestionViewer (MOCK-SPEC 2026-11-01)
+
+사용자 요청 "변형 출제 -> '문제 생성' 삭제 / 대신 '모의고사' 기능 추가 … 정해진 범위의 문제에서 하나씩 팝업 위에서 문제를 보여주는 기능 추가(랜덤 여부는 시작 전 체크) … 공통 컴포넌트로 개발"과 추가 결정 "통합 QuestionViewer로 하고, 기존 문제를 보여줄 때도 이 컴포넌트를 사용". 화면 명세: [MOCK-01](screens/mock-exams.md)(8 AC), [QVIEW-01](screens/question-viewer.md)(8 AC), 폐지 [QGEN-01](screens/questions-generation.md)(8 AC → QGEN-RM에서 제거); 결정은 §7(2026-11-01). 브랜치 `feature/mock-exams`, Task마다 `task/<ID>-<slug>`. **전제:** 병렬 진행 중인 UX7-CACHE·UX7-BANK(전체 문제 페이지 QBANK-01 폐지, 문제 편집·삭제를 홈 문제 상세로)가 먼저 `develop`에 merge되어야 QVIEW.0·QVIEW-W·QGEN-RM을 시작한다(같은 문제 상세·풀이 panel·`문제` 메뉴를 고친다). §7의 MOCK-SPEC 제안(a~n)을 사용자가 확인하기 전에는 RED를 쓰지 않는다. 새 phase `MOCK.0`·`QVIEW.0`(`scripts/e2e-trace.ts` PHASES)는 구현 Task가 GREEN을 확인한 뒤 orchestrator가 CI `E2E_PHASES`에 넣는다 — `MOCK.0`은 QGEN-RM 이후(MOCK-01-AC01이 `변형 출제` 없음을 확인).
+
+| ID | 내용 | 범위(디렉터리) | 의존 | DoD |
+|---|---|---|---|---|
+| QVIEW.0 | RED: QVIEW-01-AC01~AC08 E2E + 계약 QVIEW-01-C01~C05(pytest `infra red`) + fixture(두 장 확정 문제·초안, 서술형, 고정 seed) | `tests/e2e/questions/question-viewer.spec.ts`, `tests/e2e/fixtures`(새 `practice-runs.ts`), `tests/integration/questions/practice_runs` | MOCK-SPEC, UX7-BANK | RED 증거(`문제 풀기` 메뉴·`/practice-runs` 없음이 원인), `pnpm e2e:trace --strict --phase QVIEW.0` orphan AC 0, `make test-infra` GREEN(red 제외) |
+| MOCK.0 | RED: MOCK-01-AC01~AC08 E2E + 계약 MOCK-01-C01~C08(pytest `infra red`, pgTAP 자리) + `tests/fixtures/llm/generation-scenarios.json`에 모의고사 시나리오(정상·정오 반전 복수 정답·전부 실패·두 번째 생성 실패) + LLM 꺼짐 stack 설정 방법 | `tests/e2e/questions/mock-exams.spec.ts`, `tests/e2e/fixtures`(새 `mock-exams.ts`), `tests/integration/questions/mock_exams`, `tests/fixtures/llm` | MOCK-SPEC | RED 증거(`모의고사` 메뉴·API 없음), trace `--phase MOCK.0` orphan 0. QGEN-01 테스트는 그대로 GREEN |
+| QVIEW-B | migration: `practice_runs`, `practice_sessions.practice_run_id`·`run_position`(additive, partial unique), grants·RLS(만든 사용자만), pgTAP. API `quiz_api.question_ranges`(범위 resolver: Workspace 확정 문제·필터·Heatmap 순서, MOCK-B와 공용), `POST /workspaces/{id}/practice-runs`(`source=bank`), `GET /practice-runs/{id}`·`/items/{position}`(정답 비노출, 제출 후 결과), `POST …/finish`, 기존 practice session·submit에 묶음 연결(문제마다 1회), `make contracts` | `supabase/migrations`, `supabase/tests`, `apps/api`(새 `api/practice_runs.py`·`question_ranges.py`, `api/practice.py`의 묶음 연결만), `contracts`, `packages/api-client` | QVIEW.0 | QVIEW-01-C01~C05 GREEN(`red` 제거), 정답 비노출 schema test, pgTAP GREEN, migration은 롤백 트랜잭션으로 검증(orchestrator가 적용), `make test`·`make test-infra` GREEN |
+| QVIEW-W | `QuestionViewer`(방식 `practice`·`sequence`·`manage`·`read-only`) + `QuestionRangePicker`(tri-state `전체 선택`)·`QuestionBody`를 만들고 **기존 호출 위치를 모두 옮긴다**: Heatmap `?question=` 풀이 panel(`PracticePanel` 대체), 이력·정리 노트 링크, UX7-BANK의 홈 문제 상세(`manage`), 공유 게스트 미리보기(`read-only`, non-modal 유지). `문제` 메뉴 › `문제 풀기`, `?practice=` URL state, 진행·결과 요약, Storybook(방식별·light/dark), Vitest(QVIEW-01-C06) | `apps/web/src/components/questions/viewer`(새), `apps/web/src/components/questions/practice`·`overview`·`notes`, `apps/web/src/components/shared/shared-questions.tsx`, `apps/web/src/components/workspaces`(메뉴 항목), `packages/ui`(mixed Checkbox 등 필요 시) | QVIEW-B, UX7-CACHE, UX7-BANK | QVIEW-01 AC01~AC08 GREEN(chromium·webkit). **회귀:** QPLAY-01·QOV-01·CHNOTE-01·WS-VIEW-01·HISTORY-01 E2E 그대로 GREEN(테스트 의미 변경 없음), 이전 panel 구현 제거, axe, `E2E_PHASES`에 `QVIEW.0` 추가 |
+| MOCK-B | migration: `mock_exams`·`mock_exam_revisions`·`mock_exam_generations`·`mock_exam_questions`·`mock_exam_question_revisions`·`mock_exam_practice_sessions`·`mock_exam_attempts`(append-only trigger, 진행 회차 1개 partial unique, grants·RLS), pgTAP. core `book_core.mock_exam`(plan·seed 재현, `OPTION_SHUFFLE` 복사, 검증 통과 판정; `generation` 재사용). worker: `question.generate`의 원본·passage·근거 helper를 공용 모듈로 옮기고 `mock_exam.generate`(advisory lock, 원본별 1회 재요청, 진행, 취소·삭제 재확인, counts-only 결과). API: 모의고사 CRUD·`generations`·문제 목록·문제 PATCH/DELETE(`question_ranges` 재사용), 한도·rate limit·idempotency, 활동 기록(`mock_exam.*` id·개수만), 설정 `WORKER_MOCK_EXAMS`·`MOCK_EXAM_*`(env manifest·check-env), `make contracts` | `supabase/migrations`, `supabase/tests`, `packages/core/src/book_core/mock_exam`, `packages/core/tests`, `apps/worker`(새 `mock_exam_job.py`·`mock_exam_store.py`, 공용 helper 이동), `apps/api`(새 `api/mock_exams.py`), `contracts`, `packages/api-client`, `scripts/check_env.py`·env manifest | MOCK.0, QVIEW-B(`question_ranges`) | MOCK-01-C01~C03·C05~C08 GREEN(C04는 풀이 행 제외), 은행 격리 행 수 test, pgTAP GREEN, QGEN 계약 test 회귀 없음(helper 이동), `make test`·`make test-infra` GREEN, 본문 미기록 log test |
+| MOCK-P | 모의고사 풀이: `POST /mock-exam-questions/{id}/practice-sessions`, `POST /mock-practice-sessions/{id}/submit`·`/self-grade`(option ID 채점, `practice_grading` 재사용), `practice-runs`의 `source=mock`(현재 회차·뺀 문제 제외), 결과 요약에 mock 포함, `make contracts` | `apps/api`(새 `api/mock_practice.py`, `api/practice_runs.py`의 mock source), `contracts`, `packages/api-client`, `tests/integration/questions` | MOCK-B, QVIEW-B | MOCK-01-C04 전체, QVIEW-01-C03·C04의 mock 경우 GREEN, `question_*` 행 수 불변 test |
+| MOCK-W | `모의고사` dialog(`?panel=mock-exams`, DOC-01 목록 dialog 패턴): 목록·`추가`·빈 상태, 만들기 2단계(`StepProgress`, 변형 유형·문항 수·난이도 → `QuestionRangePicker`), 상세(진행·실패·일부만 만듦·회차·문제 목록), 이름 바꾸기·설정 바꾸기·다시 만들기·삭제(`ConfirmDialog`), 문제 `manage`(QuestionViewer + 문제 편집 field 재사용)·빼기, `풀기` → QuestionViewer `sequence(mock)`, `문제` 메뉴 `모의고사` 항목, 이력 label(`mock_exam.*`, 작업 "모의고사 생성"), Storybook | `apps/web/src/components/questions/mock-exams`(새), `apps/web/src/components/workspaces`(메뉴 항목·dialog 등록), `apps/web/src/components/history`(label) | MOCK-P, QVIEW-W | MOCK-01 AC02~AC08 GREEN(chromium·webkit; AC01은 QGEN-RM 뒤), QVIEW-01-AC05 GREEN, QOV-01 E2E 회귀 없음, axe |
+| QGEN-RM | 변형 출제 폐지: `문제` 메뉴 `변형 출제`·"문제 생성" dialog·검토/묶음 페이지·`PracticePanel` 미리보기 제거, `?panel=generate`·`/questions/generate?…` → 홈 redirect(`?panel=mock-exams`), 홈 문제 상세에 `변형 출제`가 남지 않음 확인. API `generations`·`question-generations/*`·`question-generation-batches*` router 제거(404), worker `question.generate` 등록 제거(MOCK-B 공용 helper만 남김), 테이블·기존 행 보존(drop migration 없음). 테스트: `questions-generation.spec.ts`·fixture QGEN 부분 삭제, QOV-01-AC10·AC11 test와 명세 문구 `변형 출제` → `모의고사`, questions-generation.md tombstone(명세의 폐지 처리 표), index "폐지된 화면", `scripts/e2e-trace.ts` PHASES `M6.0` 제거·AC 수 test(157 − 8 = 149, 25 screens), CI `E2E_PHASES`에서 `M6.0` 제거·`MOCK.0` 추가, `make contracts` | `apps/web`(generate 디렉터리, 메뉴, redirect), `apps/api`(generation router·tests), `apps/worker`(job 등록), `tests/e2e/questions`, `tests/e2e/fixtures/generation.ts`, `tests/integration/questions`(QGEN 계약), `docs/screens`, `scripts/e2e-trace*.ts`, `.github/workflows/ci.yml`, `contracts`, `packages/api-client` | MOCK-W, UX7-BANK | MOCK-01-AC01 GREEN, 전체 E2E GREEN(지운 QGEN 외 회귀 없음), `pnpm e2e:trace --strict`(CI phases) OK, orphan test 0 |
+| MOCK-X | 교차 마무리: 새 화면·방식 A11Y(axe: 모의고사 목록·만들기·상세, QuestionViewer 범위 고르기·풀이·결과, 키보드 전용 흐름)·VISUAL(light/dark, desktop·iPad·375px; 정답·해설이 보이는 상태는 screenshot에 남기지 않음), `make test-llm`에 모의고사 생성 smoke(합성 텍스트), `eval/`에 모의고사 검증 통과율 리포트(합성 fixture), runbook(LLM 비용·`WORKER_MOCK_EXAMS`), AGENTS.md §5 Data 문구 보완(orchestrator — §7 MOCK 2), 전체 `pnpm e2e:trace --strict` orphan 0. **staging·production 활성화(`WORKER_MOCK_EXAMS` on)는 ⛔ 사용자 승인 후** | `tests/e2e/quality`, `eval`, `docs`, `Makefile`, `.github/workflows/ci.yml` | QGEN-RM, QVIEW-W, MOCK-W | quality suite GREEN, `pnpm e2e:trace --strict`(전체) OK, CI GREEN |
+
+- 병렬: `QVIEW.0 ∥ MOCK.0`, `QVIEW-B ∥ MOCK-B`(MOCK-B의 schema·core·worker는 동시에 진행하고, API의 `question_ranges` 사용만 QVIEW-B merge를 기다린다), `QVIEW-W ∥ MOCK-P`, 그 뒤 `MOCK-W → QGEN-RM → MOCK-X`. 공유 파일(`apps/api` router 등록, `apps/worker` job 등록, `contracts/openapi.json`, `packages/api-client`, migration timestamp, env manifest, `문제` 메뉴 파일)은 충돌이 예상되며 orchestrator가 merge 후 `make contracts`로 재생성한다.
+- 파일 범위 겹침 최소화: QuestionViewer 부품은 QVIEW-W만 만들고 MOCK-W는 import만 한다. `문제` 메뉴는 QVIEW-W(`문제 풀기`) → MOCK-W(`모의고사`) → QGEN-RM(`변형 출제` 제거) 순서로만 고친다.
+- 비용 위험: 모의고사 하나 = LLM 호출 ≤ 문항 수 × 2(재요청). 한도(MOCK-01-C06)와 LLM 없는 `보기 섞기` 경로로 막는다.
+
 ## 4. Task 의존 그래프
 
 ```mermaid
@@ -337,6 +358,28 @@ flowchart TB
     DSX --> DSENV[staging 활성화 ⛔]
   end
   M74 --> DSPEC
+
+  subgraph MOCK[MOCK 모의고사·통합 QuestionViewer]
+    MSPEC[MOCK-SPEC]
+    UX7[UX7-CACHE · UX7-BANK 병렬 Task]
+    QV0[QVIEW.0 RED] ==> QVB[QVIEW-B practice runs] --> QVW[QVIEW-W QuestionViewer + 호출 위치 이전]
+    MK0[MOCK.0 RED] ==> MKB[MOCK-B schema·core·worker·API]
+    QVB --> MKB
+    MKB --> MKP[MOCK-P mock practice]
+    QVB --> MKP
+    MKP --> MKW[MOCK-W 모의고사 dialog]
+    QVW --> MKW
+    MKW --> QRM[QGEN-RM 변형 출제 폐지]
+    UX7 --> QVW
+    UX7 --> QV0
+    UX7 --> QRM
+    MSPEC --> QV0
+    MSPEC --> MK0
+    QRM --> MKX[MOCK-X a11y·visual·eval]
+    QVW --> MKX
+    MKX --> MKENV[staging 활성화 ⛔]
+  end
+  DSX --> MSPEC
   M70 ==> M71
   M52 --> M71
   M55 --> M72
@@ -374,6 +417,11 @@ flowchart TB
 | W22 | DOCSUM-B · CHNOTE-B (· DOCTXT 진행 중이면 계속) | migration·core 모듈은 분리, api/worker 등록·contracts는 orchestrator가 병합 |
 | W23 | DOCSUM-W · CHNOTE-W | DOC-01 행(요약)과 Heatmap header(노트)로 web 파일 범위가 다름 |
 | W24 | DOCSUM-X → staging 활성화⛔ | LLM 키·비용 사용자 승인 필요 |
+| W25 | MOCK.0 · QVIEW.0 | MOCK-SPEC 사용자 확인 이후. QVIEW.0은 UX7-BANK merge 뒤(홈 문제 상세가 확정된 화면 기준). 서로 다른 spec·fixture |
+| W26 | QVIEW-B · MOCK-B | migration 파일·API 모듈 분리. MOCK-B API의 범위 resolver는 QVIEW-B merge 뒤 |
+| W27 | QVIEW-W · MOCK-P | QVIEW-W는 UX7-CACHE·UX7-BANK merge 뒤. web(QVIEW-W)과 api(MOCK-P)로 범위가 다름 |
+| W28 | MOCK-W → QGEN-RM | 같은 `문제` 메뉴 파일을 순서대로 고침 |
+| W29 | MOCK-X → staging 활성화⛔ | LLM 비용 사용자 승인 필요 |
 
 Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 Task를 즉시 착수한다.
 
@@ -505,6 +553,14 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-11-01 | QIMP-SELECT-FIX(AI 보조 안내와 전체 선택): 운영의 문제 PDF 초안 750개가 모두 `llm_unavailable` warning을 가져 `전체 선택 (0개)`가 비활성이었고, 초안마다 일반 문구 "확인: 확인이 필요한 항목이 있습니다."가 보였다(서버 `publishable`은 749개 true). `llm_unavailable`은 추출기가 LLM 보조 정리를 켠 상태(`WORKER_QUESTION_IMPORT_LLM` + `LLM_API_KEY`/`LLM_MODEL`)에서 제공자 호출이 실패할 때만(`LLMProviderError`) 초안마다 붙이고, LLM이 꺼져 있으면 붙이지 않는다 — 즉 운영에서는 보조 정리가 켜져 있고 호출이 매번 실패한 것이다(운영 설정·worker 로그 확인 필요). 결정: (1) 추출기는 바꾸지 않는다 — 안내는 실패를 드러내는 유일한 흔적이라 남기고, 화면이 해석을 바꾼다. (2) `llm_unavailable`·`llm_output_invalid`(쓸 수 없는 출력; 둘 다 규칙 기반 추출 결과를 그대로 둠)는 초안 내용이 아니라 추출 실행에 대한 안내이므로 `전체 선택` 범위를 막는 확인 항목으로 세지 않고 초안에 `참고:` 안내로 보인다. AI 제안을 버린 경우(`llm_type_rejected`·`llm_answer_rejected`·`llm_text_rejected`)와 다른 초안 warning(보기 번호 중복·누락, 정답지 매칭 등)은 계속 전체 선택에서 빠지고 개별 선택한다. (3) 추출기의 모든 검증 코드에 한국어 문구를 둔다(단위 테스트가 `book_core.extractor`·`book_core.question.validation`의 `issue("<code>")`를 읽어 동기화를 확인). 체크박스가 모두 비활성이었다는 보고는 같은 상태(초안 752개, 모두 `llm_unavailable`, 일부 초안 warning, 같은 run의 끝난 등록 작업 포함)를 Chromium·WebKit에서 재현했으나 정답 없는 객관식 초안 외에는 모두 선택 가능해 재현되지 않았다 — 원인 미확정으로 진행 현황에 남긴다. | QIMPORT-01-AC03 |
 | 2026-11-01 | UX-GLASS(floating glass 불투명도, 사용자 피드백 "floating dialog들의 Opacity를 높이기. 하단에 깔린 것이 거의 보이지 않을 정도로"): `--color-glass` alpha를 light·dark 모두 `.9` → `.97`로 올린다(design-system.md v1.2.5). 모든 floating 계층(FloatingSidePanel·Popover·DropdownMenu·Select·Toast·top bar·QuestionPreviewPopover)이 `.glass-surface` 하나를 쓰므로 토큰만 바꾼다. tint·`--glass-blur` 16px·`--color-glass-solid` fallback(reduced transparency·blur 미지원·모바일 sheet)은 그대로. `.97`은 반투명 glass를 순흑 배경 위에 합성해도 light text-secondary가 4.59:1로 AA를 지키는 값이다(`.96`은 4.47:1 미달); `contrast.test.ts`가 alpha ≥ `.97`·solid와 같은 tint·순흑/순백 합성 대비를 검사한다. | design-system.md §3 |
 | 2026-11-01 | DOCVIEW(DOC-02 보기 개선, 사용자 피드백 2026-11-01): (1) **느린 쪽 넘김의 원인**(production build·로컬 stack, 300쪽 합성 PDF·블록 6,900개, Chromium/WebKit 측정): 쪽 넘김에 네트워크 요청은 0건이었다 — 원본은 한 번만 받는다. 원인은 화면 쪽이었다: 쪽이 바뀔 때마다 원문 텍스트 전체가 다시 렌더링되고(인라인 `onSelect`가 `BlockItem` memo를 무력화, 블록 수에 비례해 main thread 50–55 ms; 480블록이면 5 ms) 쪽마다 하나뿐인 canvas를 지우고 처음부터 다시 그렸다(prefetch·cache 없음, 빈 화면 후 84–86 ms; 실제 362쪽 교재는 그리기만 쪽당 30–450 ms, 2× DPR). 휴대 기기에서는 몇 배로 늘어난다. 결정: 문서 한 번 열기는 그대로 두고 쪽을 연속 스크롤로 쌓아 보이는 쪽과 이웃 쪽만(보이는 쪽 먼저, 한 번에 하나) off-screen canvas에 그려 12쪽 LRU cache에 두며, 텍스트 영역은 memo + 쪽 묶음별 memo로 쪽 변경에 다시 그리지 않는다. 결과: 쪽 넘김 → 그려진 canvas 중앙값 5 ms(앞·뒤 모두), 다음 프레임까지 5 ms. 연속 스크롤(한 쪽씩 보기 대신)은 "스크롤하면 텍스트도 따라가게" 요청과 함께 고른 것이다. (2) **문제 형식의 데이터**: 문제 PDF import로 확정된 문제의 `question_sources`에 이미 있던 `block_ids`·import 여부를 `QuestionSource`에 additive 필드(`block_ids`, `imported`)로 내보내고(마이그레이션 없음), 생성 문제의 인용 출처·직접 만든 문제의 쪽 출처·검토 전 초안은 문제 형식으로 바꾸지 않는다. 정답·해설은 그 사용자가 이미 볼 수 있는 범위(구성원: 문제은행, 공유 Viewer: 발행 문제)이며 기본으로 접는다. (3) **목차 panel**: 디자인 체크리스트 "PDF 읽기 영역을 glass blur로 가리지 않음"과 맞추려고 데스크톱(≥1024px)에서는 열린 panel 폭만큼 화면이 비켜서고, 더 좁은 화면에서 PDF 위에 뜰 때는 불투명이다. 기본값: 데스크톱 펼침·그 아래 접힘, 선택은 브라우저별 기억. (4) **폭 조정**: PDF 비율 25–75%, 기본 55%, 브라우저별 기억, 모바일은 기존 보기 전환. 공유 문서 화면도 같은 부품이라 같은 동작(편집 없음). | DOC-02-AC06–AC11, WS-VIEW-01, design-system §5.1 |
+| 2026-11-01 | **사용자 결정(MOCK 1)**: 변형 출제를 사용자 진입점에서 없앤다 — `문제` 메뉴 `변형 출제`, "문제 생성" dialog(QGEN-01, QGEN-MULTI 묶음 포함), 검토·묶음 결과 페이지, 문제 상세의 `변형 출제`. 생성 엔진(`book_core.generation` 변형 유형·검증, fake LLM adapter, worker의 원본·근거 helper)은 모의고사가 재사용하고, QGEN API·`question.generate` job 등록은 QGEN-RM에서 뺀다. 기존 `question_generation_runs`·초안·lineage 행은 보존(additive-first). 재사용·폐지 표는 MOCK-01 "재사용과 폐지". QGEN-01 AC 8개는 QGEN-RM이 테스트와 함께 제거한다(그 전까지 GREEN 유지; 화면 명세의 AC별 처리 표). | 사용자 요청 "변형 출제 -> '문제 생성' 삭제 / 대신 '모의고사' 기능 추가" |
+| 2026-11-01 | **사용자 결정(MOCK 2) — AGENTS.md §5 의도된 예외**: 모의고사가 만든 문제는 그 모의고사 안에만 있다. 바로 풀 수 있고 문제은행·Heatmap·홈 집계·검색·정리 노트 입력에 들어가지 않으므로 "Generated or imported questions stay in drafts until a human approves them"이 적용되지 않는다(은행에 들어가는 경로가 없음). 저장 조건은 사람 승인 대신 기존 승인 차단 검증 통과다(MOCK-01-C02). **후속:** AGENTS.md §5 Data 문구를 "…until a human approves them before they enter the question bank; mock-exam questions (MOCK-01) never enter the bank and are exempt"처럼 보완한다(orchestrator, MOCK-X 범위; MOCK-SPEC은 AGENTS.md를 고치지 않음). | 사용자 결정; questions.md §10, MOCK-01 목적과 정책 |
+| 2026-11-01 | **사용자 결정(MOCK 3)**: 공통 문제 풀이 popup — 답 고르기 → 제출 → 채점 → 정답·해설. 풀이는 immutable, stable option ID 채점, 제출 전 정답·해설 비전송. 등록 문제의 풀이는 기존 문제 상태·Heatmap에 반영, 모의고사 문제의 풀이는 그 모의고사 문제에 기록(Heatmap 무관). `무작위 순서`는 시작 전 checkbox, 범위 고르기에 `전체 선택`. 두 출처에 하나의 컴포넌트. | 사용자 결정; QVIEW-01 |
+| 2026-11-01 | **사용자 결정(MOCK 4)**: 모의고사 편집 = 이름 바꾸기, 만든 문제 개별 편집·빼기, 옵션(변형 유형·범위) 바꿔 다시 만들기. 삭제 가능. 저장된 모의고사는 남는다. | 사용자 결정; MOCK-01-AC04~AC06 |
+| 2026-11-01 | **사용자 결정(MOCK 5) — 병렬 작업 전제**: UX7-BANK가 전체 문제 페이지(QBANK-01)를 지우고 문제 편집·삭제를 홈 문제 상세로 옮기며, 다른 Task가 문제 PDF 관리를 문서 관리로 합치고 문제 검색(필터)과 본문 검색을 나눈다. 모의고사·QuestionViewer 명세는 전체 문제 페이지가 없다고 가정하고 questions-bank.md는 고치지 않는다(UX7-BANK 소유). QVIEW.0·QVIEW-W·QGEN-RM은 UX7-CACHE·UX7-BANK merge 뒤에 시작한다. | 사용자 결정 |
+| 2026-11-01 | **사용자 결정(MOCK 6) — 통합 QuestionViewer**: "하나씩 팝업 위에서 문제를 보여주는 기능을 통합 QuestionViewer로 하고, 기존 문제를 보여줄 때도 이 컴포넌트를 사용해도 되겠다". 모든 호출 위치(Heatmap `?question=` 풀이 panel, 이력·정리 노트 링크, UX7-BANK의 홈 문제 상세, 공유 게스트 미리보기, 새 범위 풀이, 모의고사 문제 관리)가 QuestionViewer로 옮겨 간다(QVIEW-W). 기존 AC가 요구하는 modal/non-modal·정답 표시 차이는 방식(`practice`·`manage`·`read-only`·`sequence`)으로 남기고 바꾸지 않는다. 기존 QPLAY/QOV/CHNOTE/WS-VIEW AC는 QuestionViewer를 대상으로 그대로 유효하고, 새 AC는 새 동작(범위·`전체 선택`·무작위·진행·결과·모의고사 출처)에만 둔다. | 사용자 결정; QVIEW-01 호출 위치 표 |
+| 2026-11-01 | MOCK-SPEC 해석(화면 ID·phase): 모의고사와 범위 풀이를 QOV-01·QPLAY-01에 넣지 않고 새 화면 MOCK-01·QVIEW-01과 새 RED phase `MOCK.0`·`QVIEW.0`으로 둔다(DOCSUM-SPEC와 같은 방식). 목록 dialog는 DOC-01 문서 관리·문제 PDF 관리와 같은 non-modal 목록 dialog 패턴("다른 화면과 레이아웃 비슷하게"). QGEN-01은 지금 지우지 않는다 — develop의 모든 테스트 GREEN 규칙 때문에 AC·테스트·PHASES `M6.0`은 QGEN-RM이 한 번에 제거하고 화면 명세는 tombstone(제목을 `# 폐지된 화면 …`으로 바꿔 trace에서 빠짐)으로 남긴다. | AGENTS.md §3.1, e2e-strategy §5 |
+| 2026-11-01 | MOCK-SPEC 제안(사용자 확인 필요 — 확인 전 RED 착수 금지): (a) 범위 단위 = 장 그룹 → 문제 checkbox + 상태·즐겨찾기·유형 필터(문서·쪽 단위 없음); (b) 모의고사 문항 수 1~50(기본 20), 원본 하나 = 문제 하나, 변형 유형은 seed로 고르게 배정, `후보 수` 없음, `난이도` 유지; (c) 시간 제한 없음, 끝에 결과 요약(맞음·틀림·채점 대기·건너뜀); (d) 다시 만들기는 새 회차로 문제를 **바꾼다**(이전 회차·풀이 기록은 보존·숨김, 편집한 문제도 바뀜); (e) 모의고사는 Workspace 단위(모든 구성원이 보고 풂, 편집 권한자가 관리); (f) 공유 게스트에게 모의고사·범위 풀이 없음, Fork 복제 없음; (g) 범위 풀이는 modal `FloatingSidePanel`(QPLAY와 같은 겉모습; 대안은 가운데 `ModalDialog`); (h) 묶음 안 문제마다 제출 1회, 다시 풀기는 `처음부터 다시`; (i) 도중에 닫으면 확인 없이 닫고 URL로 이어 풀기, 이어 풀기 목록 없음; (j) 모의고사 문제에는 즐겨찾기·다시 풀기 없음; (k) LLM 꺼진 환경에서도 `보기 섞기` 모의고사는 만들 수 있음; (l) 한 묶음 최대 500문제; (m) 승인되지 않은 기존 QGEN 생성 초안은 보존만 하고 볼 화면이 없어짐; (n) 모의고사 삭제·다시 만들기 뒤에도 이미 시작한 묶음은 시작 때의 문제로 계속 풀 수 있음; (o) `문제 풀기` 진입점은 `문제` 메뉴 항목(Heatmap 도구 줄 버튼 아님). | 사용자 결정에 없는 사용자 노출 선택; 명세에 `(제안 — 사용자 확인 필요)`로 표시 |
 
 ## 8. 진행 현황
 
@@ -632,5 +688,6 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | QIMP-SELECT-FIX 가져온 초안 전체 선택·검증 안내 문구 | ✅ | f3852ef · 3a6f69f · Codex review 지적 없음 | 2026-11-01. `selectAllScope`가 AI 보조 안내(`llm_unavailable`·`llm_output_invalid`)만 있는 초안을 포함(`isAssistNote`), 초안에 `참고:`로 표시; 추출기 검증 코드 전부의 한국어 문구 + 동기화 단위 테스트. E2E QIMPORT-01-AC03(초안 752개 모두 `llm_unavailable`, 질문 2 사본에 `option_sequence_gap`): 수정 전 `전체 선택 (0개)`(RED 확인), 수정 후 GREEN. 남은 일: 운영 보고의 '모든 선택 체크박스 비활성'은 재현되지 않음(서버 publishable=true면 비활성 조건은 등록 진행 중(`publishing`)뿐 — 운영 run의 `registration_job_id`와 그 작업 상태 확인 필요); 운영 LLM 보조 정리 호출 실패 원인 확인. |
 | UX-GLASS floating dialog·panel 불투명도 상향 | ✅ | 544b5f9 · Codex review 지적 없음 | 2026-11-01. 사용자 피드백. `--color-glass` light·dark `.9` → `.97`(§7), design-system.md v1.2.5. `contrast.test.ts`: glass alpha ≥ .97, tint = `--color-glass-solid`, 순흑/순백 배경 합성 위 text-primary·secondary 4.5:1 이상. design-tokens 129·ui 304·web 813 GREEN, `make lint`·`make typecheck` GREEN. Visual(Linux renderer, `scripts/visual-run.sh`): `@quiz/ui` Storybook 17/17, app `visual.spec.ts` 12/12 — `--update-snapshots`에서도 baseline 변경 없음(차이가 허용치 안). a11y quality 12/12(log-audit 0). |
 | DOCVIEW DOC-02 PDF 보기 개선(목차 panel·쪽 넘김 속도·동기화·쪽 묶음·폭 조정·문제 형식) | 🔄 orchestrator 확인 대기 | c0b3d3d(RED) · 42eaced · 82a5be9 · 33e6725 · 32c6338 · b1d30d7 · 4471f15 · cc4ce30 · a5f41fa · c97d856 · 3b02aea · 506ec6c · c1c6abe · docs 이 커밋 | 2026-11-01. 사용자 피드백 6건(§7). RED 6/6(기능 없음). 쪽 넘김 50–55 ms main thread + 84–86 ms 그리기 → 5 ms/5 ms(300쪽·블록 6,900개, 요청 0건). `FloatingSidePanel` `side="start"`·`size="narrow"`, `QuestionSource.block_ids`·`imported`(additive, `make contracts`), relay `GET /api/workspaces/{id}/questions?document_id=`. visual baseline document-editor 4장 Linux renderer로 재생성(전체 visual 2회 24/24). 검증: make lint·typecheck·contracts-check, web 852·ui 305·api 679, E2E(DOC-02·검색·요약·공유·내보내기·A11Y-03/06/08/11·smoke) Chromium·WebKit 103 passed, log-audit 0. Codex: P2×2(숨긴 PDF pane·쪽 크기 변경 시 읽던 위치 유실) → c1c6abe, 재리뷰 지적 없음; 수정 후 E2E 92 passed(smoke 포함). |
+| MOCK-SPEC 모의고사·통합 QuestionViewer 명세·계획 | 🔄 사용자 확인 대기(§7 MOCK-SPEC 제안 a~o) | 988dc6d · c72fe25 · docs(plan) | 2026-11-01. docs만(+`scripts/e2e-trace.ts` PHASES `MOCK.0`·`QVIEW.0`, AC 수 test 141 → 157, 26 screens). 새 화면 MOCK-01(8 AC, 계약 C01~C08)·QVIEW-01(8 AC, 계약 C01~C06), QGEN-01 폐지 예정(AC별 처리 표, QGEN-RM에서 제거). Task: QVIEW.0·MOCK.0·QVIEW-B·QVIEW-W·MOCK-B·MOCK-P·MOCK-W·QGEN-RM·MOCK-X. Codex review 대기 |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.
