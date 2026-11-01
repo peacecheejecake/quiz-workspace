@@ -3,7 +3,7 @@
 **상태:** 확정 화면 요구사항 v1.0 · MOCK-SPEC 신규 2026-11-01 (사용자 요청 "변형 출제 -> '문제 생성' 삭제 / 대신 '모의고사' 기능 추가 — 모의고사 리스트 화면 필요, 리스트 위 '추가' 버튼 눌러 생성, 다른 화면과 레이아웃 비슷하게 — 생성 버튼을 누르면 현재 '변형 유형'에 해당하는 옵션과 출제 문제 범위 선택 화면 — 한 번 생성한 모의고사는 저장됨(수정, 삭제 가능) — 문제 선택에는 전체 선택 기능이 필요", 사용자 결정 1·2·4)
 **Route:** 목록 `/workspaces/:workspaceId?panel=mock-exams` · 만들기 `?panel=mock-exams&mock=new` · 상세·편집 `?panel=mock-exams&mock=:mockExamId` (Workspace header `문제` 메뉴 › `모의고사`가 여는 non-modal floating dialog "모의고사") · 풀기는 QuestionViewer(`?practice=new&source=mock&mock=:mockExamId`, [QVIEW-01](question-viewer.md))
 **테스트:** `tests/e2e/questions/mock-exams.spec.ts` (계약: `tests/integration/questions/mock_exams/test_mock_exams_contract.py`, `apps/worker` · `packages/core` unit test, `supabase/tests` pgTAP)
-**Phase:** MOCK.0 (RED) → MOCK-B → MOCK-P → MOCK-W
+**Phase:** MOCK.0 (RED) → MOCK-B (생성·편집 계약) → MOCK-P (풀이 계약) → MOCK-W (AC02~AC08) → QGEN-RM (AC01, CI phase 켬)
 **연계:** [QVIEW-01](question-viewer.md), [QOV-01](questions-overview.md), [QGEN-01 (폐지)](questions-generation.md), [Questions 명세](../questions.md) §5·§10, [공유 명세](../workspace-sharing.md) §9, [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
 
 ```yaml

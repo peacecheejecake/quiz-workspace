@@ -3,7 +3,7 @@
 **상태:** 확정 화면 요구사항 v1.0 · MOCK-SPEC 신규 2026-11-01 (사용자 요청 "정해진 범위의 문제에서 하나씩 팝업 위에서 문제를 보여주는 기능 추가(랜덤 여부는 시작 전 체크) — 등록된 문제 전체, 그리고 모의고사로 생성된 문제에서 각각 해당 기능 사용 — 공통 컴포넌트로 개발", 추가 결정 "하나씩 팝업 위에서 문제를 보여주는 기능을 통합 QuestionViewer로 하고, 기존 문제를 보여줄 때도 이 컴포넌트를 사용해도 되겠다")
 **Route:** 범위 고르기 `/workspaces/:workspaceId?practice=new&source=bank` · 모의고사 범위 고르기 `/workspaces/:workspaceId?practice=new&source=mock&mock=:mockExamId` · 진행 중 `/workspaces/:workspaceId?practice=:practiceRunId&i=:position` (Workspace 홈 위 modal panel). 한 문제 보기는 기존 route 그대로(`?question=:questionId` — QPLAY-01)
 **테스트:** `tests/e2e/questions/question-viewer.spec.ts` (계약: `tests/integration/questions/practice_runs/test_practice_runs_contract.py`, `packages/ui` · `apps/web` Vitest)
-**Phase:** QVIEW.0 (RED) → QVIEW-B → QVIEW-W (UX7-CACHE·UX7-BANK merge 이후)
+**Phase:** QVIEW.0 (RED) → QVIEW-B → QVIEW-W (UX7-CACHE·UX7-BANK merge 이후; `bank` 출처 AC) → MOCK-P·MOCK-W (`mock` 출처: AC05, C03·C04의 mock 경우; CI phase는 MOCK-W에서 켬)
 **연계:** [QPLAY-01](questions-practice.md), [QOV-01](questions-overview.md), [MOCK-01](mock-exams.md), [CHNOTE-01](chapter-notes.md), [WS-VIEW-01](workspace-shared-view.md), [Questions 명세](../questions.md) §4·§10, [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
 
 ```yaml
