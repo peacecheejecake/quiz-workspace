@@ -232,11 +232,25 @@ export function PdfViewer({
     };
   }, [source, attempt]);
 
-  // Fit-to-width follows the pane's width.
+  // Fit-to-width follows the pane's width. A hidden pane (phones: the 원문 view) measures 0 and
+  // keeps the last width; when it shows again, the reading spot is restored (its scroll position
+  // may have been reset while hidden).
+  const hidden = useRef(false);
+  const restoreAnchor = useRef<() => void>(() => undefined);
   useEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
-    const measure = () => setContainerWidth(element.clientWidth);
+    const measure = () => {
+      if (element.clientWidth === 0 || element.clientHeight === 0) {
+        hidden.current = true;
+        return;
+      }
+      setContainerWidth(element.clientWidth);
+      if (hidden.current) {
+        hidden.current = false;
+        restoreAnchor.current();
+      }
+    };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(measure);
@@ -296,7 +310,7 @@ export function PdfViewer({
   const readViewport = useCallback(() => {
     const scroller = scrollRef.current;
     const current = layoutRef.current;
-    if (!scroller || !current) return null;
+    if (!scroller || !current || scroller.clientHeight === 0) return null;
     const view = {
       scrollTop: scroller.scrollTop,
       clientHeight: scroller.clientHeight,
@@ -333,23 +347,31 @@ export function PdfViewer({
     }
   }, [readViewport]);
 
-  // Keep the reading spot in place when the scale changes (zoom, fit width after a resize).
-  const layoutScale = useRef<number | null>(null);
+  // Keep the reading spot in place whenever the layout changes: a new scale (zoom, fit width
+  // after a resize) or a page whose real size replaced its placeholder.
+  const restore = useCallback(() => {
+    const scroller = scrollRef.current;
+    const current = layoutRef.current;
+    if (!scroller || !current || scroller.clientHeight === 0) return;
+    const { page: n, fraction } = anchor.current;
+    const top = (current.tops[n - 1] ?? 0) + fraction * (current.heights[n - 1] ?? 0);
+    scrollToTop(top - scroller.clientHeight * READING_LINE);
+    readViewport();
+  }, [readViewport, scrollToTop]);
+  useLayoutEffect(() => {
+    restoreAnchor.current = restore;
+  }, [restore]);
+  const laidOut = useRef<PageLayout | null>(null);
   useLayoutEffect(() => {
     if (!layout) return;
-    const previous = layoutScale.current;
-    layoutScale.current = scale;
-    if (previous === null || previous === scale) {
+    const previous = laidOut.current;
+    laidOut.current = layout;
+    if (previous === null) {
       readViewport();
       return;
     }
-    const scroller = scrollRef.current;
-    if (!scroller) return;
-    const { page: n, fraction } = anchor.current;
-    const top = (layout.tops[n - 1] ?? 0) + fraction * (layout.heights[n - 1] ?? 0);
-    scrollToTop(top - scroller.clientHeight * READING_LINE);
-    readViewport();
-  }, [layout, readViewport, scale, scrollToTop]);
+    restore();
+  }, [layout, readViewport, restore]);
 
   // A page or highlight chosen outside (outline, text pane, deep link, toolbar): scroll there
   // immediately — instant, so no intermediate page is reported.
