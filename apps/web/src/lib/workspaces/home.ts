@@ -309,7 +309,7 @@ export function legacyQuestionsRedirect(workspaceId: string, params: RawParams):
  * `/workspaces/:id/search?q=&mode=&document=&chapter=` (SEARCH-01 before UX3c): the same 본문
  * search on the home, its query as `text` (UX7-SEARCH). Its chapter filter is a document section,
  * renamed `section` there (the home's `chapter` is the heatmap's question chapter). The old
- * `papers` flag is dropped: question papers are always searched now.
+ * `papers` flag is dropped: the 본문 search never covers question papers (UX7-SEARCH-2).
  */
 export function legacySearchRedirect(workspaceId: string, params: RawParams): string {
   const source = toSearchParams(params);
