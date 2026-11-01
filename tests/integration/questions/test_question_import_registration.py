@@ -92,6 +92,14 @@ def test_qimport_01_ac07_the_server_registers_the_whole_selection(seed: Any) -> 
     q1 = alice.get_question(_review_of(seed.draft_for(drafts, 1)["id"])[2])
     [source] = q1["sources"]
     assert source["document_revision_id"] == run["source_document_revision_id"]
+    # DOCVIEW: the printed place of the question (its text blocks) in the question PDF.
+    draft1 = seed.draft_for(drafts, 1)
+    evidence_blocks = list(
+        dict.fromkeys(b for e in draft1["payload"]["evidence"] for b in e["block_ids"])
+    )
+    assert source["imported"] is True
+    assert source["block_ids"] == evidence_blocks
+    assert source["block_ids"]
 
     # Submitting the same selection again registers nothing twice.
     again = _submit(alice, run["id"], selection)

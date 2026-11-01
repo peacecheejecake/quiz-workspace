@@ -110,6 +110,7 @@ from quiz_api.repositories.questions import (
     QuestionRepository,
     RevisionRecord,
     SourceInputRecord,
+    SourceRecord,
 )
 
 router = APIRouter(tags=["questions"], responses=problem_responses(503))
@@ -154,6 +155,27 @@ class QuestionSource(BaseModel):
     )
     page_start: int | None
     page_end: int | None
+    block_ids: list[str] = Field(
+        default_factory=list,
+        description="Canonical text blocks of the source in that document (block ids are stable "
+        "across revisions); empty when the source names pages only.",
+    )
+    imported: bool = Field(
+        default=False,
+        description="The question's printed place in a question PDF (a question import), not a "
+        "passage the question cites.",
+    )
+
+
+def source_out(s: SourceRecord) -> QuestionSource:
+    return QuestionSource(
+        document_id=s.document_id,
+        document_revision_id=s.document_revision_id,
+        page_start=s.page_start,
+        page_end=s.page_end,
+        block_ids=list(s.block_ids),
+        imported=s.imported,
+    )
 
 
 class QuestionRevision(BaseModel):
@@ -372,15 +394,7 @@ def _out(q: QuestionRecord) -> Question:
         else None,
         question_number=q.question_number,
         revision=_revision_out(q.revision),
-        sources=[
-            QuestionSource(
-                document_id=s.document_id,
-                document_revision_id=s.document_revision_id,
-                page_start=s.page_start,
-                page_end=s.page_end,
-            )
-            for s in q.sources
-        ],
+        sources=[source_out(s) for s in q.sources],
         created_at=q.created_at,
         updated_at=q.updated_at,
     )

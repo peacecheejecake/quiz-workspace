@@ -256,6 +256,8 @@ def test_chapter_links_sources_filters_and_pagination(seed: Any) -> None:
             "document_revision_id": doc["active_revision_id"],
             "page_start": 4,
             "page_end": 4,
+            "block_ids": [],
+            "imported": False,
         }
     ]
     q2 = alice.create_question(

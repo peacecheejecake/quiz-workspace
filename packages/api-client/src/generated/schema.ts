@@ -4087,6 +4087,11 @@ export type components = {
     };
     /** QuestionSource */
     QuestionSource: {
+      /**
+       * Block Ids
+       * @description Canonical text blocks of the source in that document (block ids are stable across revisions); empty when the source names pages only.
+       */
+      block_ids?: string[];
       /** Document Id */
       document_id: string | null;
       /**
@@ -4094,6 +4099,12 @@ export type components = {
        * @description The document revision that was active when the source was saved.
        */
       document_revision_id: string | null;
+      /**
+       * Imported
+       * @description The question's printed place in a question PDF (a question import), not a passage the question cites.
+       * @default false
+       */
+      imported?: boolean;
       /** Page End */
       page_end: number | null;
       /** Page Start */
