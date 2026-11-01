@@ -80,7 +80,7 @@ export function DocumentsLibrary({
   );
 }
 
-/** A labelled document list (book or question PDFs) with its failure and empty states. */
+/** A labelled document list with its failure and empty states. */
 export function DocumentRows({
   label,
   rows,

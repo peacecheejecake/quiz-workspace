@@ -34,11 +34,6 @@ export function bodyDocumentCount(documents: readonly DocumentSummary[]): number
   return documents.filter((d) => hasBodyText(documentKind(d))).length;
 }
 
-/** PDFs with questions: a 문제지 / 교재+문제, or any PDF that has an extraction (UX6-UPLOAD). */
-export function hasQuestions(row: Pick<DocumentRow, 'kind' | 'latestImportId'>): boolean {
-  return row.kind === 'question_paper' || row.kind === 'mixed' || Boolean(row.latestImportId);
-}
-
 const UPLOAD_PHASE_LABELS: Partial<Record<UploadPhase, string>> = {
   hashing: '파일 확인 중',
   requesting: '업로드 준비 중',

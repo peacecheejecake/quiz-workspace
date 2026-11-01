@@ -1,16 +1,11 @@
 // @vitest-environment jsdom
-// UX6-UPLOAD (DOC-01-AC06–AC08): the kind badge text, what `문서 n` counts, which rows have
-// questions, the `종류 변경` client call and its refusals, and the row's kind menu (Radix menu
+// UX6-UPLOAD (DOC-01-AC06–AC08): the kind badge text, what `문서 n` counts, the `종류 변경` client call and its refusals, and the row's kind menu (Radix menu
 // with radio items, the current kind checked, a refusal as an alert in the row).
 import './dom-setup';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  bodyDocumentCount,
-  hasQuestions,
-  kindBadgeLabel,
-} from '../src/components/documents/labels';
+import { bodyDocumentCount, kindBadgeLabel } from '../src/components/documents/labels';
 import { createDocumentsClient, type DocumentSummary } from '../src/lib/documents/client-api';
 import { DocumentApiError } from '../src/lib/documents/errors';
 import { buildRows } from '../src/lib/documents/upload-machine';
@@ -62,14 +57,6 @@ describe('kind labels and counts', () => {
         doc('oldq', { kind: undefined, document_type: 'question_paper' }),
       ]),
     ).toBe(3);
-  });
-
-  it('says which rows have questions: a 문제지, a 교재+문제 or an extracted PDF', () => {
-    expect(hasQuestions({ kind: 'question_paper', latestImportId: null })).toBe(true);
-    expect(hasQuestions({ kind: 'mixed', latestImportId: null })).toBe(true);
-    expect(hasQuestions({ kind: 'book', latestImportId: null })).toBe(false);
-    expect(hasQuestions({ kind: 'book', latestImportId: 'run' })).toBe(true);
-    expect(hasQuestions({ kind: null, latestImportId: undefined })).toBe(false);
   });
 });
 

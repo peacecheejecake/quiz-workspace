@@ -1,7 +1,7 @@
 // Workspace home URL state (docs/screens/questions-overview.md "Workspace 홈 레이아웃", UX3c).
 // The home `/workspaces/:id` carries, besides the heatmap filters (overview-filters.ts) and the
 // open question (`?question=`):
-//   ?panel=documents|question-pdfs|generate|history|share   open floating dialogs (repeatable, in
+//   ?panel=documents|generate|history|share                 open floating dialogs (repeatable, in
 //        |chapter-note|document-summary                      the order they were opened)
 //        |question-create                                    the modal 문제 등록 editor (UX7-BANK;
 //                                                            not stacked, see FLOATING_PANELS)
@@ -13,11 +13,11 @@
 //   ?q=<text>&scope=questions|content|none                    unified search (no scope = both;
 //                                                            none = both boxes off, UX6)
 //   ?mode=&document=&section=&papers=1                        content-search options (state.ts)
-// Pure helpers, plus the redirects of the pre-UX3c routes onto the home.
+// Pure helpers, plus the redirects of the pre-UX3c routes onto the home and of retired panel
+// values (`question-pdfs` → `documents`, UX7-DOCS).
 
 export const HOME_PANELS = [
   'documents',
-  'question-pdfs',
   'generate',
   'history',
   'share',
@@ -334,6 +334,31 @@ export function legacyBankRedirect(workspaceId: string, params: RawParams): stri
     workspaceId,
     question && UUID.test(question) ? `question=${encodeURIComponent(question)}` : '',
   );
+}
+
+/**
+ * Retired `?panel=` values and the dialog that replaced them: 문제 PDF 관리 was merged into
+ * 문서 관리 (UX7-DOCS, DOC-01-AC09).
+ */
+const RETIRED_PANELS: Readonly<Record<string, HomePanel>> = { 'question-pdfs': 'documents' };
+
+/**
+ * The home URL with every retired `?panel=` value replaced by its successor (in place; a panel
+ * already open is not listed twice) and the rest of the query kept, or null when there is none.
+ */
+export function retiredPanelRedirect(workspaceId: string, params: RawParams): string | null {
+  const source = toSearchParams(params);
+  const values = source.getAll(PANEL_PARAM);
+  if (!values.some((v) => Object.hasOwn(RETIRED_PANELS, v))) return null;
+  const panels: string[] = [];
+  for (const value of values) {
+    const panel = Object.hasOwn(RETIRED_PANELS, value) ? RETIRED_PANELS[value] : value;
+    if (panel !== undefined && !panels.includes(panel)) panels.push(panel);
+  }
+  const out = new URLSearchParams();
+  for (const [key, value] of source) if (key !== PANEL_PARAM) out.append(key, value);
+  for (const panel of panels) out.append(PANEL_PARAM, panel);
+  return workspaceHomePath(workspaceId, out.toString());
 }
 
 /** A pre-UX3c section page (`/documents`, `/history`, `/settings/sharing`): its dialog. */

@@ -10,6 +10,7 @@ import {
   parsePanels,
   parseScope,
   patchSearch,
+  retiredPanelRedirect,
   scopeIncludesContent,
   scopeIncludesQuestions,
   scopeOf,
@@ -88,6 +89,27 @@ describe('pre-UX3c routes redirect onto the home', () => {
     expect(legacyPanelRedirect(WS, 'documents')).toBe(`/workspaces/${WS}?panel=documents`);
     expect(legacyPanelRedirect(WS, 'history')).toBe(`/workspaces/${WS}?panel=history`);
     expect(legacyPanelRedirect(WS, 'share')).toBe(`/workspaces/${WS}?panel=share`);
+  });
+
+  it('UX7-DOCS: the retired 문제 PDF 관리 panel opens 문서 관리, keeping the rest of the query', () => {
+    expect(parsePanels({ panel: 'question-pdfs' })).toEqual([]);
+    expect(retiredPanelRedirect(WS, { panel: 'question-pdfs' })).toBe(
+      `/workspaces/${WS}?panel=documents`,
+    );
+    expect(retiredPanelRedirect(WS, { q: 'x', panel: ['share', 'question-pdfs', 'history'] })).toBe(
+      `/workspaces/${WS}?q=x&panel=share&panel=documents&panel=history`,
+    );
+    // 문서 관리 already open: listed once, where it first appears.
+    expect(retiredPanelRedirect(WS, { panel: ['documents', 'question-pdfs'] })).toBe(
+      `/workspaces/${WS}?panel=documents`,
+    );
+    expect(retiredPanelRedirect(WS, { panel: ['question-pdfs', 'documents'] })).toBe(
+      `/workspaces/${WS}?panel=documents`,
+    );
+    // Nothing retired: no redirect (unknown values are just ignored by parsePanels).
+    expect(retiredPanelRedirect(WS, { panel: ['documents', 'bogus'] })).toBeNull();
+    expect(retiredPanelRedirect(WS, { panel: 'toString' })).toBeNull();
+    expect(retiredPanelRedirect(WS, {})).toBeNull();
   });
 
   it('the retired 전체 문제 page (UX7-BANK) keeps only a valid ?question=', () => {

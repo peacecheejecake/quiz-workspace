@@ -474,11 +474,9 @@ test(
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await expect(homeUi.shareButton(page)).toHaveCount(0);
     await expect(homeUi.shareDialog(page)).toHaveCount(0);
-    await homeUi.questionMenuButton(page).click();
-    // A viewer gets PDF 관리 only (no 전체 문제 since UX7-BANK, no 직접 추가 / 변형 출제).
-    await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveCount(1);
-    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeVisible();
-    await page.keyboard.press('Escape');
+    // A viewer has no 문제 menu: no 전체 문제 (UX7-BANK), no PDF 관리 (UX7-DOCS), no 직접 추가 /
+    // 변형 출제.
+    await expect(homeUi.questionMenuButton(page)).toHaveCount(0);
     const denied = await viewer.api.request('GET', `/workspaces/${s.workspaceId}/share-links`);
     expect(denied.status).toBe(403);
   },
@@ -640,7 +638,7 @@ test(
 );
 
 test(
-  'QOV-01-AC11 the header 문제 menu opens PDF 관리, 직접 추가 and 변형 출제 by mouse and keyboard, without 전체 문제',
+  'QOV-01-AC11 the header 문제 menu opens 직접 추가 and 변형 출제 by mouse and keyboard, without 전체 문제 or PDF 관리',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac11', 1);
@@ -652,35 +650,31 @@ test(
     await page.keyboard.press('Enter');
     await expect(homeUi.questionMenu(page)).toBeVisible();
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
-      /^(pdf 관리|manage pdfs?)$/i,
       /^(직접 추가|add question)$/i,
       /^(변형 출제|generate variants?)$/i,
     ]);
     await expect(
       homeUi.questionMenu(page).getByRole('menuitem', { name: /^(전체 문제|all questions)$/i }),
     ).toHaveCount(0);
-    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeFocused();
-    await page.keyboard.press('ArrowDown');
+    // UX7-DOCS: PDF 관리 moved into 문서 관리 (DOC-01-AC09).
+    await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
     await expect(homeUi.questionMenuItem(page, 'create')).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(homeUi.questionMenuItem(page, 'generate')).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(homeUi.questionMenu(page)).toBeHidden();
     await expect(button).toBeFocused();
 
-    // PDF 관리 (Enter on the first item) → the 문제 PDF 관리 dialog.
+    // 변형 출제 by keyboard (Enter opens the menu on 직접 추가, ArrowDown, Enter).
     await page.keyboard.press('Enter');
-    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeFocused();
+    await expect(homeUi.questionMenuItem(page, 'create')).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(homeUi.questionMenuItem(page, 'generate')).toBeFocused();
     await page.keyboard.press('Enter');
-    await expect(homeUi.questionPdfsDialog(page)).toBeVisible();
-    await expect(page).toHaveURL((url) =>
-      url.searchParams.getAll('panel').includes('question-pdfs'),
-    );
-
-    // 변형 출제 → the 문제 생성 dialog, on top.
-    await chooseQuestionMenu(page, 'generate');
     await expect(homeUi.generateDialog(page)).toBeVisible();
     await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').includes('generate'));
 
-    // 직접 추가 → the 문제 등록 dialog on the home (UX7-BANK): same path, `?panel=question-create`,
+    // 직접 추가 by mouse → the 문제 등록 dialog on the home (UX7-BANK): same path, `?panel=question-create`,
     // modal; closing it drops the panel value.
     await page.goto(overviewPath(s.workspaceId));
     await chooseQuestionMenu(page, 'create');
@@ -778,10 +772,8 @@ test(
     await page.goto(`${home}?panel=question-create`);
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await expect(questionFormUi.form(page)).toHaveCount(0);
-    await homeUi.questionMenuButton(page).click();
-    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeVisible();
-    await expect(homeUi.questionMenuItem(page, 'create')).toHaveCount(0);
-    await page.keyboard.press('Escape');
+    // No 문제 menu at all without edit rights (UX7-DOCS: its PDF 관리 item moved to 문서 관리).
+    await expect(homeUi.questionMenuButton(page)).toHaveCount(0);
 
     // Archived: read-only for the owner too.
     await workspaceFactory.archive(owner, ws.id);
@@ -797,9 +789,7 @@ test(
     await page.goto(`${home}?panel=question-create`);
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await expect(questionFormUi.form(page)).toHaveCount(0);
-    await homeUi.questionMenuButton(page).click();
-    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeVisible();
-    await expect(homeUi.questionMenuItem(page, 'create')).toHaveCount(0);
+    await expect(homeUi.questionMenuButton(page)).toHaveCount(0);
   },
 );
 

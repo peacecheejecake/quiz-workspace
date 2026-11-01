@@ -8,12 +8,12 @@
 //                     filters for 문제, the content-search options for 본문; question papers are
 //                     searched whenever 문제 is checked, UX4; no searchable scope disables the
 //                     submit with a status message, UX6), then two
-//                     button groups: `문서 n` · `문제` (menu: PDF 관리 / 직접 추가 / 변형 출제, UX4;
-//                     no 전체 문제 since UX7-BANK), and, aligned right, `이력` · `공유하기` (icon
+//                     button groups: `문서 n` · `문제` (editors' menu: 직접 추가 / 변형 출제, UX4;
+//                     no 전체 문제 since UX7-BANK, no PDF 관리 since UX7-DOCS), and, aligned right, `이력` · `공유하기` (icon
 //                     buttons; share for the owner only)
 //   content results   the 본문 search results when the scope includes 본문
 //   문제 영역         the heatmap (QuestionsOverview)
-//   floating dialogs  문서 관리 · 문제 PDF 관리 · 문제 생성 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
+//   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 문제 생성 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
 //                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): non-modal
 //                     FloatingSidePanels portalled into this page (inside <main>), opened at once
 //                     and listed in the URL (`?panel=`, repeatable); the most recently opened is
@@ -38,6 +38,7 @@ import {
 } from '@quiz/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { DocumentLibraryFeedback } from '@/components/documents/document-library-feedback';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { DocumentSummaryPanel } from '@/components/documents/summary/document-summary-panel';
 import { useSummaryActivity } from '@/components/documents/summary/use-summary-activity';
@@ -46,10 +47,6 @@ import { useDocumentLibrary } from '@/components/documents/use-document-library'
 import { HistoryPanel } from '@/components/history/history-panel';
 import { GenerationDialog } from '@/components/questions/generate/generation-dialog';
 import { ChapterNotePanel } from '@/components/questions/notes/chapter-note-panel';
-import {
-  DocumentLibraryFeedback,
-  QuestionPdfsDialog,
-} from '@/components/questions/import/question-pdfs';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
 import {
   ContentSearchOptions,
@@ -261,7 +258,7 @@ export function WorkspaceHome({
     );
   }, []);
 
-  // --- documents (문서 관리 + 문제 PDF 관리) ----------------------------------------------------
+  // --- documents (문서 관리, with the question PDFs since UX7-DOCS) -------------------------------
   const library = useDocumentLibrary({
     workspaceId: workspace.id,
     initialDocuments: documents,
@@ -485,7 +482,6 @@ export function WorkspaceHome({
             </Button>
             <QuestionMenu
               canEdit={canEdit}
-              onPdfs={() => setPanel('question-pdfs', true)}
               onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
               onGenerate={() => setPanel('generate', true)}
             />
@@ -578,16 +574,6 @@ export function WorkspaceHome({
               />
             </div>
           </FloatingSidePanel>
-          <QuestionPdfsDialog
-            open={isOpen('question-pdfs')}
-            onOpenChange={(open) => setPanel('question-pdfs', open)}
-            raiseKey={raised['question-pdfs']}
-            container={host}
-            workspaceId={workspace.id}
-            library={library}
-            canEdit={canEdit}
-            onOpenDocuments={() => setPanel('documents', true)}
-          />
           {canEdit ? (
             <FloatingSidePanel
               open={isOpen('generate')}
