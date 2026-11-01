@@ -521,7 +521,7 @@ export function WorkspaceHome({
               문서 <span className={styles.count}>{bookCount}</span>
             </Button>
             <QuestionMenu
-              canEdit={canEdit}
+              readOnly={readOnly}
               onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
               onGenerate={() => setPanel('generate', true)}
             />

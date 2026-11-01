@@ -185,9 +185,14 @@ export async function expectReadOnlyQuestionMenu(
   const before = new URL(page.url()).searchParams.getAll('panel');
   for (const item of ['create', 'generate'] as const) {
     await button.click();
-    await homeUi.questionMenuItem(page, item).click({ force: true });
+    const el = homeUi.questionMenuItem(page, item);
+    // Radix positions the menu after measuring: wait until it is placed before clicking.
+    await expect(el).toBeInViewport();
+    await el.click({ force: true });
     await expect(homeUi.generateDialog(page)).toHaveCount(0);
-    await expect(page.getByRole('dialog', { name: /문제 (등록|추가)|(new|add) question/i })).toHaveCount(0);
+    await expect(
+      page.getByRole('dialog', { name: /문제 (등록|추가)|(new|add) question/i }),
+    ).toHaveCount(0);
     expect(new URL(page.url()).searchParams.getAll('panel')).toEqual(before);
     await page.keyboard.press('Escape');
     await expect(menu).toBeHidden();
