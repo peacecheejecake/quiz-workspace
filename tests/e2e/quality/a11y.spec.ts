@@ -34,6 +34,7 @@ import {
   overviewUi,
   panelUi,
   questionFormUi,
+  openContentSearch,
   runSearch,
   searchPath,
   searchUi,
@@ -195,10 +196,10 @@ test(
     await expect(docUi.emptyState(page)).toBeVisible();
     await expectAccessible(page, 'documents empty');
     await page.goto(searchPath(ws.id));
-    await expect(searchUi.box(page)).toBeVisible();
+    await openContentSearch(page);
     await expectAccessible(page, 'search without documents');
-    // The unified search's scope settings popovers (UX6): 문제 (filters), 본문 (mode tooltips,
-    // filters).
+    // The settings popovers of the 문제 search (filters) and the 본문 search (mode tooltips,
+    // filters), UX7-SEARCH.
     await openSearchOptions(page, 'questions');
     await expectAccessible(page, 'question search settings popover');
     await closeSearchOptions(page, 'questions');

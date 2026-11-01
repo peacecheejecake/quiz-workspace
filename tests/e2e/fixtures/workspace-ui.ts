@@ -65,13 +65,18 @@ export function documentsPath(workspaceId: string): string {
   return homePath(workspaceId, 'panel=documents');
 }
 
-/** The home with the unified search limited to 본문 (`/search` redirects here). */
+/**
+ * The home, where the 본문 search lives (UX7-SEARCH: collapsed until its "본문 검색" disclosure is
+ * opened; runSearch/openContentSearch open it). `/search?q=` redirects here with `text=`.
+ */
 export function searchPath(workspaceId: string): string {
-  return homePath(workspaceId, 'scope=content');
+  return homePath(workspaceId);
 }
 
 export const homeUi = {
-  header: (page: Page) => main(page).getByRole('search', { name: /통합 검색|search/i }),
+  /** The header's 문제 search (UX7-SEARCH; the unified search before). */
+  header: (page: Page) =>
+    main(page).getByRole('search', { name: /^(문제 검색|question search|search questions)$/i }),
   documentsButton: (page: Page) =>
     main(page).getByRole('button', { name: /^(문서|documents)\s*\d+$/i }),
   historyButton: (page: Page) => main(page).getByRole('button', { name: /^(이력|history)$/i }),
@@ -88,18 +93,26 @@ export const homeUi = {
   questionPdfsDialog: (page: Page) => homeUi.dialog(page, /^(문제 pdf 관리|question pdfs?)$/i),
   generateDialog: (page: Page) => homeUi.dialog(page, /^(문제 생성|generate questions?)$/i),
   shareDialog: (page: Page) => homeUi.dialog(page, /^(링크 공유|share link)$/i),
-  /** The unified search's scope checkboxes, right under the search box (UX6). */
-  scopeQuestions: (page: Page) =>
-    homeUi.header(page).getByRole('checkbox', { name: /^(문제|questions)$/i }),
-  scopeContent: (page: Page) =>
-    homeUi.header(page).getByRole('checkbox', { name: /^(본문|body|content)$/i }),
-  /** The "설정" text button next to a scope checkbox; it opens that scope's settings popover. */
-  scopeSettingsButton: (page: Page, scope: SearchScopeName) =>
-    homeUi.header(page).getByRole('button', { name: SCOPE_SETTINGS_BUTTONS[scope] }),
-  scopeSettings: (page: Page, scope: SearchScopeName) =>
+  /** The 문제 search box: filters the heatmap as you type (SEARCH-01-AC12, no button). */
+  questionSearch: (page: Page) =>
+    homeUi.header(page).getByRole('searchbox', {
+      name: /^(문제 검색|question search|search questions)$/i,
+    }),
+  /** The status message under the 문제 search (why it is disabled). */
+  questionSearchMessage: (page: Page) => homeUi.header(page).getByRole('status'),
+  /** The "본문 검색" disclosure button (collapsed by default, SEARCH-01-AC10). */
+  contentSearchToggle: (page: Page) =>
+    main(page).getByRole('button', { name: /^(본문 검색|body search|content search)$/i }),
+  /** The 본문 search form inside the disclosure. */
+  contentSearch: (page: Page) =>
+    main(page).getByRole('search', { name: /^(본문 검색|body search|content search)$/i }),
+  /** The status message of the 본문 search (why its button is disabled). */
+  contentSearchMessage: (page: Page) => homeUi.contentSearch(page).getByRole('status'),
+  /** The "설정" text button of a search; it opens that search's settings popover. */
+  searchSettingsButton: (page: Page, scope: SearchScopeName) =>
+    main(page).getByRole('button', { name: SCOPE_SETTINGS_BUTTONS[scope] }),
+  searchSettings: (page: Page, scope: SearchScopeName) =>
     page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
-  /** The status message under the scope checkboxes (why the search button is disabled). */
-  searchMessage: (page: Page) => homeUi.header(page).getByRole('status'),
   statusFilterToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(상태 필터|status filter)$/i }),
   statusFilters: (page: Page) =>
@@ -130,14 +143,23 @@ export async function chooseQuestionMenu(page: Page, item: QuestionMenuItem): Pr
   await homeUi.questionMenuItem(page, item).click();
 }
 
-/** Opens a scope's settings popover ("본문 설정" by default; no-op when it is open). */
+/** Expands the collapsed 본문 search (SEARCH-01-AC10; no-op when it is open). */
+export async function openContentSearch(page: Page): Promise<void> {
+  const toggle = homeUi.contentSearchToggle(page);
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(searchUi.box(page)).toBeVisible();
+}
+
+/** Opens a search's settings popover ("본문 설정" by default; no-op when it is open). */
 export async function openSearchOptions(
   page: Page,
   scope: SearchScopeName = 'body',
 ): Promise<Locator> {
-  const button = homeUi.scopeSettingsButton(page, scope);
+  if (scope === 'body') await openContentSearch(page);
+  const button = homeUi.searchSettingsButton(page, scope);
   if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click();
-  const popover = homeUi.scopeSettings(page, scope);
+  const popover = homeUi.searchSettings(page, scope);
   await expect(popover).toBeVisible();
   return popover;
 }
@@ -147,9 +169,9 @@ export async function closeSearchOptions(
   page: Page,
   scope: SearchScopeName = 'body',
 ): Promise<void> {
-  const button = homeUi.scopeSettingsButton(page, scope);
+  const button = homeUi.searchSettingsButton(page, scope);
   if ((await button.getAttribute('aria-expanded')) !== 'true') return;
-  const popover = homeUi.scopeSettings(page, scope);
+  const popover = homeUi.searchSettings(page, scope);
   // Escape closes the innermost layer first: a search-mode description tooltip (shown on hover or
   // keyboard focus) takes one press before the popover does.
   await expect(async () => {
@@ -292,7 +314,9 @@ export const PUBLISHED = /발행(됨| 완료)|published/i;
 export const INDEX_FAILED = /색인.*실패|indexing failed|reindex(ing)? failed/i;
 
 export const searchUi = {
-  box: (page: Page) => main(page).getByRole('searchbox', { name: /검색|search/i }),
+  /** The 본문 search box (inside the "본문 검색" disclosure: openContentSearch). */
+  box: (page: Page) =>
+    main(page).getByRole('searchbox', { name: /^(본문 검색어|body search (query|text))$/i }),
   submit: (page: Page) => main(page).getByRole('button', { name: /^(검색|search)$/i }),
   /** Inside the "본문 검색 설정" popover (open it first: openSearchOptions). */
   modeGroup: (page: Page) =>
@@ -334,7 +358,7 @@ export function pageLabel(n: number): RegExp {
   );
 }
 
-/** Runs a search through the UI: mode first ("본문 설정"), then query + Enter. */
+/** Runs a 본문 search through the UI: mode first ("본문 설정", which opens the 본문 search), then query + Enter. */
 export async function runSearch(
   page: Page,
   query: string,
