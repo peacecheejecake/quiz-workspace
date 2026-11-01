@@ -604,33 +604,39 @@ class PracticeRepository:
         workspace_id: uuid.UUID | None = None,
     ) -> StateRecord:
         """The caller's state of the question folded with its merged duplicates' (UX7-DEDUP).
-        `lock` = FOR UPDATE of the question's own row first (see lock_state)."""
+        `lock` = FOR UPDATE of the question's own row (see lock_state), in the same statement
+        (PERF-1 round trips): the read hangs off the locked row."""
+        merged = question_merged_user_states
+        on = [merged.c.user_id == user_id, merged.c.question_id == question_id]
+        if workspace_id is not None:
+            on.append(merged.c.workspace_id == workspace_id)
+        columns = (
+            merged.c.first_viewed_at,
+            merged.c.last_graded_result,
+            merged.c.is_favorite,
+            merged.c.needs_retry,
+        )
         if lock:
-            self._session.execute(
+            own = (
                 select(question_user_states.c.user_id)
                 .where(
                     question_user_states.c.user_id == user_id,
                     question_user_states.c.question_id == question_id,
                 )
                 .with_for_update()
+                .cte("own")
             )
-        merged = question_merged_user_states
-        stmt = select(
-            merged.c.first_viewed_at,
-            merged.c.last_graded_result,
-            merged.c.is_favorite,
-            merged.c.needs_retry,
-        ).where(merged.c.user_id == user_id, merged.c.question_id == question_id)
-        if workspace_id is not None:
-            stmt = stmt.where(merged.c.workspace_id == workspace_id)
+            stmt = select(*columns).select_from(own.outerjoin(merged, and_(*on)))
+        else:
+            stmt = select(*columns).where(*on)
         row = self._session.execute(stmt).one_or_none()
         if row is None:
             return StateRecord(None, None, False, False)
         return StateRecord(
             first_viewed_at=row.first_viewed_at,
             last_graded_result=cast("LastGradedResult | None", row.last_graded_result),
-            is_favorite=row.is_favorite,
-            needs_retry=row.needs_retry,
+            is_favorite=bool(row.is_favorite),
+            needs_retry=bool(row.needs_retry),
         )
 
     def record_activity(

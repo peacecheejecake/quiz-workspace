@@ -4,10 +4,11 @@ live question of a workspace, in heatmap order. Read-only: nothing here ever wri
 One statement (`overview_statement`) returns every row of the requested scope with the caller's
 study state and the "pending grading" flag of the caller's latest submitted practice session
 (correlated lookup on `practice_sessions_user_question_idx`). Both include the question's merged
-duplicates (UX7-DEDUP, docs/questions.md §10.2): the state comes from the
-`question_merged_user_states` view (the caller's `question_user_states` rows of the workspace,
-folded per kept question), and the pending flag looks at the sessions of the question and of its
-actively merged duplicates. Index use: the questions side is served by the partial
+duplicates (UX7-DEDUP, docs/questions.md §10.2): a lateral fold of the caller's
+`question_user_states` rows of the question and of its actively merged duplicates (the same fold
+as the `question_merged_user_states` view, looked up per question on the state primary key
+`(user_id, question_id)` so it stays index-bounded by the caller), and the pending flag looks at
+the sessions of the same questions. Index use: the questions side is served by the partial
 `questions_overview_idx (workspace_id, publication_status, chapter_id, sort_order, created_at,
 id) where deleted_at is null`; tests/integration/questions/test_overview_api.py checks the plan.
 
@@ -26,7 +27,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, Select, and_, any_, false, func, literal, select
+from sqlalchemy import ColumnElement, Select, and_, any_, false, func, literal, select, true
+from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.orm import Session
 
 from quiz_api.question_rules import QuestionType
@@ -36,9 +38,10 @@ from quiz_api.repositories.tables import (
     chapters,
     documents,
     practice_sessions,
-    question_merged_user_states,
+    question_attempts,
     question_merges,
     question_revisions,
+    question_user_states,
     questions,
 )
 
@@ -91,7 +94,29 @@ def merged_members(workspace_id: uuid.UUID) -> Any:
     )
 
 
-states = question_merged_user_states
+def merged_state(workspace_id: uuid.UUID, user_id: uuid.UUID) -> Any:
+    """LATERAL: the caller's state of the enclosing question folded with its merged duplicates'
+    (earliest view, latest graded result by graded_at, OR of the flags), one row."""
+    s, a = question_user_states, question_attempts
+    order = (a.c.graded_at.desc().nulls_last(), a.c.submitted_at.desc(), a.c.id.desc())
+    graded = func.array_agg(aggregate_order_by(s.c.last_graded_result, *order)).filter(
+        s.c.last_graded_result.is_not(None)
+    )
+    return (
+        select(
+            func.min(s.c.first_viewed_at).label("first_viewed_at"),
+            graded[1].label("last_graded_result"),
+            func.bool_or(s.c.is_favorite).label("is_favorite"),
+            func.bool_or(s.c.needs_retry).label("needs_retry"),
+        )
+        .select_from(s.outerjoin(a, a.c.id == s.c.last_graded_attempt_id))
+        .where(
+            s.c.user_id == user_id,
+            s.c.question_id == any_(merged_members(workspace_id)),
+        )
+        .correlate(questions)
+        .lateral("states")
+    )
 
 
 def overview_statement(
@@ -110,6 +135,7 @@ def overview_statement(
         .correlate(questions)
         .scalar_subquery()
     )
+    states = merged_state(workspace_id, user_id)
     conditions: list[ColumnElement[bool]] = [
         questions.c.workspace_id == workspace_id,
         questions.c.publication_status == "CONFIRMED",
@@ -146,14 +172,7 @@ def overview_statement(
                 documents.c.workspace_id == chapters.c.workspace_id,
             ),
         )
-        .outerjoin(
-            states,
-            and_(
-                states.c.user_id == user_id,
-                states.c.workspace_id == workspace_id,
-                states.c.question_id == questions.c.id,
-            ),
-        )
+        .outerjoin(states, true())
     )
     return (
         select(
