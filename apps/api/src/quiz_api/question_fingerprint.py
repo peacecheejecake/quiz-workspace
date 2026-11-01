@@ -16,10 +16,12 @@ only what does not change the question a learner sees:
    and math symbols (`- + = / %` …) stay, so `2+(-3)` never equals `2+3`.
 6. every whitespace character (spacing differences). Case is kept.
 
-`fingerprint(question_type, stem, options)` hashes the type, the normalised stem and the sorted
-normalised option texts: option order and ids do not matter; answers, explanations, rubrics,
-chapters and numbers are not part of it (an essay or short answer is its stem). `answer_key`
-gives the normalised answer of a question so a group can warn when its answers differ.
+`fingerprint(question_type, stem, options, model_answer)` hashes the type, the normalised stem,
+the sorted normalised option texts (order and ids do not matter) and the model answer
+(`model_answer_of`, user decision 2026-11-01): none for an MCQ (its answer is not part of what
+makes it the same question), the accepted answers of a short answer, the rubric/model answer of
+an essay, each normalised with steps 3-6. Explanations, chapters and numbers are never part of
+it. `answer_key` gives the normalised MCQ/short answer so a group can warn when answers differ.
 
 Not `book_core.question.question_fingerprint` (M6.1): that one includes the answer and folds
 case, because it tells whether a generated variant changed anything at all; this one asks
@@ -34,7 +36,7 @@ import re
 import unicodedata
 from collections.abc import Iterable, Sequence
 
-VERSION = "fingerprint/1"
+VERSION = "fingerprint/2"
 
 # Enclosed alphanumerics and circled Korean, stripped before NFKC (which turns them into plain
 # digits/letters): U+2460-U+24FF (① ⑴ ⒈ ⒜ Ⓐ ⓪), U+3260-U+327B (㉠ ㉮), U+2776-U+2793 (❶ ➀).
@@ -87,14 +89,32 @@ def normalize_option(text: str) -> str:
     return out if out else _finish(_nfkc(text))
 
 
-def fingerprint(question_type: str, stem: str, options: Iterable[str]) -> str:
+def model_answer_of(
+    question_type: str, accepted_answers: Iterable[str] | None, rubric: str | None
+) -> list[str]:
+    """What a question's model answer contributes to its fingerprint, normalised and sorted:
+    nothing for an MCQ, the distinct accepted answers of a short answer, the rubric of an essay
+    (empty when it has none)."""
+    if question_type == "SHORT_ANSWER":
+        return sorted({_finish(_nfkc(a)) for a in accepted_answers or ()} - {""})
+    if question_type == "ESSAY":
+        text = _finish(_nfkc(rubric or ""))
+        return [text] if text else []
+    return []
+
+
+def fingerprint(
+    question_type: str, stem: str, options: Iterable[str], model_answer: Iterable[str] = ()
+) -> str:
     """The duplicate key of a question: same type, same normalised stem, same normalised options
-    in any order (a multiset: an option listed twice counts twice)."""
+    in any order (a multiset: an option listed twice counts twice), same model answer (pass
+    `model_answer_of(...)`)."""
     payload = [
         VERSION,
         question_type,
         normalize_stem(stem),
         sorted(normalize_option(o) for o in options),
+        sorted(model_answer),
     ]
     raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()

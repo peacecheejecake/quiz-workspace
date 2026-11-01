@@ -6,6 +6,7 @@ import pytest
 from quiz_api.question_fingerprint import (
     answer_key,
     fingerprint,
+    model_answer_of,
     normalize_option,
     normalize_stem,
 )
@@ -143,3 +144,38 @@ def test_answer_key() -> None:
     assert answer_key([], None, ["물", " 물 "]) == ("물",)
     assert answer_key([], None, None) is None
     assert answer_key(options, None, None) is None
+
+
+# --- user decision 2026-11-01: short answer / essay = stem + model answer --------------------
+
+
+def test_short_answers_compare_their_accepted_answers() -> None:
+    stem = "물이 기체로 변하는 현상은?"
+    same = fingerprint("SHORT_ANSWER", stem, [], model_answer_of("SHORT_ANSWER", ["증발"], None))
+    assert same == fingerprint(
+        "SHORT_ANSWER",
+        f"1. {stem} ( )",
+        [],
+        model_answer_of("SHORT_ANSWER", [" 증 발.", "증발"], None),
+    )
+    assert same != fingerprint(
+        "SHORT_ANSWER", stem, [], model_answer_of("SHORT_ANSWER", ["응결"], None)
+    )
+    assert same != fingerprint(
+        "SHORT_ANSWER", stem, [], model_answer_of("SHORT_ANSWER", None, None)
+    )
+
+
+def test_essays_compare_their_model_answer() -> None:
+    stem = "물의 순환을 설명하시오."
+    model = "증발, 응결, 강수가 반복된다."
+    same = fingerprint("ESSAY", stem, [], model_answer_of("ESSAY", None, model))
+    assert same == fingerprint(
+        "ESSAY", stem, [], model_answer_of("ESSAY", None, "증발 응결 강수가  반복된다")
+    )
+    assert same != fingerprint("ESSAY", stem, [], model_answer_of("ESSAY", None, "다른 답"))
+    assert same != fingerprint("ESSAY", stem, [], model_answer_of("ESSAY", None, None))
+
+
+def test_mcq_answers_stay_out_of_the_fingerprint() -> None:
+    assert model_answer_of("MCQ", ["x"], "y") == []

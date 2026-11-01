@@ -1907,7 +1907,7 @@
             "type": "array"
           },
           "suggested_keep_question_id": {
-            "description": "The oldest confirmed question of the group (registration order).",
+            "description": "The question with the most graded attempts by the workspace's members (its merged duplicates' included), ties to the oldest. Counts are not returned.",
             "format": "uuid",
             "title": "Suggested Keep Question Id",
             "type": "string"

@@ -1261,6 +1261,8 @@ test(
     );
     const viewer = await workspaceFactory.member(`${label}-viewer`);
     seedMembership(ws.id, viewer.user.id, 'viewer');
+    // The third copy has the most graded attempts: it is the suggested keep (user decision).
+    await answerCorrectly(owner, third);
 
     await signInAs(page, owner.user);
     await page.goto(overviewPath(ws.id));
@@ -1271,13 +1273,15 @@ test(
         url.pathname === `/workspaces/${ws.id}` &&
         url.searchParams.getAll('panel').includes('question-duplicates'),
     );
-    // One group of the three restyled copies; the oldest is kept by default; no answers shown.
+    // One group of the three restyled copies; the most-practised one is kept by default (no
+    // counts shown); no answers shown.
     const groups = dedupUi.groups(dialog);
     await expect(groups).toHaveCount(1);
     const group = groups.first();
     await expect(dedupUi.keep(group)).toHaveCount(3);
-    await expect(dedupUi.keepNumber(group, 1)).toBeChecked();
+    await expect(dedupUi.keepNumber(group, 3)).toBeChecked();
     await expect(dedupUi.include(group)).toBeChecked();
+    await expect(group).not.toContainText(/풀이 \d+|\d+ attempts?/i);
     await expect(dedupUi.warning(group)).toHaveCount(0);
     await expect(group).toContainText(`① ${DEDUP_TEXTS[0]}`);
     await expect(dialog).not.toContainText(explanation);
@@ -1366,6 +1370,7 @@ test(
     await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'correct');
     await expect(overviewUi.dot(page, 2)).toHaveAttribute('data-status', 'incorrect');
     const dialog = await openDedup(page);
+    // One graded attempt each: the tie goes to the oldest (user decision 2026-11-01).
     await expect(dedupUi.keepNumber(dedupUi.groups(dialog).first(), 1)).toBeChecked();
     await mergeSelected(page, dialog, 1);
     await dedupUi.close(dialog).click();

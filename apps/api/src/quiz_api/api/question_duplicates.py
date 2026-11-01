@@ -77,7 +77,8 @@ class DuplicateQuestion(BaseModel):
 class DuplicateGroup(BaseModel):
     fingerprint: str
     suggested_keep_question_id: uuid.UUID = Field(
-        description="The oldest confirmed question of the group (registration order)."
+        description="The question with the most graded attempts by the workspace's members (its "
+        "merged duplicates' included), ties to the oldest. Counts are not returned."
     )
     answers_differ: bool = Field(
         description="The questions' answers (correct option texts / accepted answers) differ."
@@ -163,6 +164,12 @@ def duplicate_groups(candidates: list[CandidateRecord]) -> list[list[CandidateRe
     ]
 
 
+def suggest_keep(members: list[CandidateRecord], graded: dict[uuid.UUID, int]) -> CandidateRecord:
+    """The question to keep by default (user decision 2026-11-01): the most graded attempts by
+    any member, ties broken by the oldest (registration order, then id)."""
+    return min(members, key=lambda q: (-graded.get(q.id, 0), q.created_at, q.id))
+
+
 @router.get(
     "/workspaces/{workspace_id}/question-duplicates",
     operation_id="listQuestionDuplicates",
@@ -171,13 +178,17 @@ def list_question_duplicates(access: EditWorkspace, repo: DuplicateRepo) -> Dupl
     """Groups of identical CONFIRMED questions (same normalised stem and options, any option
     order). A read: scanning again gives the same groups until questions change."""
     candidates = repo.confirmed(access.workspace_id)
+    grouped = duplicate_groups(candidates)
+    graded = repo.graded_attempt_counts(
+        access.workspace_id, (q.id for members in grouped for q in members)
+    )
     groups = []
-    for members in duplicate_groups(candidates):
+    for members in grouped:
         answers = {m.answer_key for m in members if m.answer_key is not None}
         groups.append(
             DuplicateGroup(
                 fingerprint=members[0].fingerprint,
-                suggested_keep_question_id=members[0].id,
+                suggested_keep_question_id=suggest_keep(members, graded).id,
                 answers_differ=len(answers) > 1,
                 questions=[_question_out(m) for m in members],
             )

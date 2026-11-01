@@ -102,7 +102,7 @@ from quiz_api.question_drafts import (
     source_pages,
     with_review,
 )
-from quiz_api.question_fingerprint import fingerprint
+from quiz_api.question_fingerprint import fingerprint, model_answer_of
 from quiz_api.question_generation_review import acknowledged_codes, generation_validations
 from quiz_api.question_rules import (
     MAX_ACCEPTED_ANSWERS,
@@ -738,7 +738,12 @@ def draft_duplicates(
         if d.published_question_id is not None:
             continue
         content = _content(d, parse_payload(d.payload))
-        key = fingerprint(content.question_type, content.stem, [t for _, t in content.options])
+        key = fingerprint(
+            content.question_type,
+            content.stem,
+            [t for _, t in content.options],
+            model_answer_of(content.question_type, content.accepted_answers, content.rubric),
+        )
         question = questions_by_key.get(key)
         first = earlier.setdefault(key, d)
         if question is not None:

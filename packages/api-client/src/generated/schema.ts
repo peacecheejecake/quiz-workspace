@@ -2502,7 +2502,7 @@ export type components = {
       /**
        * Suggested Keep Question Id
        * Format: uuid
-       * @description The oldest confirmed question of the group (registration order).
+       * @description The question with the most graded attempts by the workspace's members (its merged duplicates' included), ties to the oldest. Counts are not returned.
        */
       suggested_keep_question_id: string;
     };

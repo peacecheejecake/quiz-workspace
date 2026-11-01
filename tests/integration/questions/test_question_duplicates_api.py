@@ -492,3 +492,53 @@ def test_import_review_flags_duplicates(seed: Any) -> None:
     assert res.status_code == 200, res.text
     summaries = owner.ok("GET", f"/question-imports/{run['id']}/draft-summaries")["items"]
     assert all(s["duplicate_of"] is None for s in summaries)  # registered drafts are not flagged
+
+
+def test_suggested_keep_has_the_most_graded_attempts_of_any_member(seed: Any) -> None:
+    """User decision 2026-11-01: most graded attempts by any member, ties to the oldest; the scan
+    exposes the suggestion only, never per-question counts or who answered."""
+    owner = seed.client("dedup-suggest-owner")
+    viewer = seed.client("dedup-suggest-viewer")
+    ws = owner.create_workspace()
+    seed.membership(ws["id"], viewer.user, "viewer")
+    stem = _stem()
+    oldest = owner.create_question(ws["id"], mcq(stem, TEXTS, "증발"))
+    middle = owner.create_question(ws["id"], mcq(stem, TEXTS, "증발"))
+    newest = owner.create_question(ws["id"], mcq(stem, TEXTS, "증발"))
+    assert scan(owner, ws["id"])["groups"][0]["suggested_keep_question_id"] == oldest["id"]
+
+    answer(owner, middle, "o0")
+    answer(viewer, newest, "o1")  # another member's graded attempts count too
+    answer(viewer, newest, "o0")
+    group = scan(owner, ws["id"])["groups"][0]
+    assert group["suggested_keep_question_id"] == newest["id"]
+    assert set(group) == {
+        "fingerprint",
+        "suggested_keep_question_id",
+        "answers_differ",
+        "questions",
+    }
+    for q in group["questions"]:
+        assert not {"attempts", "attempt_count", "graded", "user_id"} & set(q)
+    # Opening a session (no graded attempt) changes nothing.
+    owner.ok("POST", f"/questions/{middle['id']}/practice-sessions", {}, (201,))
+    assert scan(owner, ws["id"])["groups"][0]["suggested_keep_question_id"] == newest["id"]
+
+
+def test_short_answers_and_essays_compare_their_model_answer(seed: Any) -> None:
+    owner = seed.client("dedup-model-answer")
+    ws = owner.create_workspace()
+    stem = _stem()
+    short = [
+        owner.create_question(
+            ws["id"], {"question_type": "SHORT_ANSWER", "stem": stem, "accepted_answers": answers}
+        )
+        for answers in (["증발"], [" 증 발. "], ["응결"])
+    ]
+    essay = [
+        owner.create_question(ws["id"], {"question_type": "ESSAY", "stem": stem, "rubric": rubric})
+        for rubric in ("증발, 응결, 강수", "증발 응결 강수.", "다른 모범답안")
+    ]
+    assert sorted(group_ids(scan(owner, ws["id"]))) == sorted(
+        [[short[0]["id"], short[1]["id"]], [essay[0]["id"], essay[1]["id"]]]
+    )

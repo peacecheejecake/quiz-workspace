@@ -17,16 +17,18 @@ from typing import Any, cast
 from sqlalchemy import and_, func, insert, literal, select, update
 from sqlalchemy.orm import Session
 
-from quiz_api.question_fingerprint import answer_key, fingerprint
+from quiz_api.question_fingerprint import answer_key, fingerprint, model_answer_of
 from quiz_api.question_rules import QuestionType
 from quiz_api.repositories.questions import UNNUMBERED
 from quiz_api.repositories.tables import (
     activity_events,
     chapters,
     documents,
+    question_attempts,
     question_merges,
     question_revisions,
     questions,
+    workspace_memberships,
 )
 
 
@@ -47,10 +49,16 @@ class CandidateRecord:
     options: list[dict[str, str]]
     correct_option_ids: list[str] | None
     accepted_answers: list[str] | None
+    rubric: str | None
 
     @property
     def fingerprint(self) -> str:
-        return fingerprint(self.question_type, self.stem, [o["text"] for o in self.options])
+        return fingerprint(
+            self.question_type,
+            self.stem,
+            [o["text"] for o in self.options],
+            model_answer_of(self.question_type, self.accepted_answers, self.rubric),
+        )
 
     @property
     def answer_key(self) -> tuple[str, ...] | None:
@@ -82,6 +90,7 @@ _COLUMNS = (
     question_revisions.c.options,
     question_revisions.c.correct_option_ids,
     question_revisions.c.accepted_answers,
+    question_revisions.c.rubric,
 )
 
 
@@ -128,6 +137,7 @@ def _candidate(row: Any) -> CandidateRecord:
         if row.correct_option_ids is not None
         else None,
         accepted_answers=list(row.accepted_answers) if row.accepted_answers is not None else None,
+        rubric=row.rubric,
     )
 
 
@@ -164,6 +174,44 @@ class QuestionDuplicateRepository:
             )
         )
         return [_candidate(r) for r in self._session.execute(stmt)]
+
+    def graded_attempt_counts(
+        self, workspace_id: uuid.UUID, question_ids: Iterable[uuid.UUID]
+    ) -> dict[uuid.UUID, int]:
+        """Graded (correct/incorrect) attempt rows of the workspace's current members per question,
+        attempts on its actively merged duplicates included (UX7-DEDUP keep suggestion). Only the
+        numbers leave this method: no user ids."""
+        ids = list(set(question_ids))
+        if not ids:
+            return {}
+        a, m = question_attempts, question_merges
+        target = func.coalesce(m.c.kept_question_id, a.c.question_id)
+        rows = self._session.execute(
+            select(target.label("question_id"), func.count().label("graded"))
+            .select_from(
+                a.join(
+                    workspace_memberships,
+                    and_(
+                        workspace_memberships.c.workspace_id == a.c.workspace_id,
+                        workspace_memberships.c.user_id == a.c.user_id,
+                    ),
+                ).outerjoin(
+                    m,
+                    and_(
+                        m.c.duplicate_question_id == a.c.question_id,
+                        m.c.workspace_id == a.c.workspace_id,
+                        m.c.ended_at.is_(None),
+                    ),
+                )
+            )
+            .where(
+                a.c.workspace_id == workspace_id,
+                a.c.result.in_(("correct", "incorrect")),
+                target.in_(ids),
+            )
+            .group_by(target)
+        )
+        return {r.question_id: int(r.graded) for r in rows}
 
     def lock(self, workspace_id: uuid.UUID, ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, Any]:
         """The live questions of the workspace among `ids`, locked FOR UPDATE in id order."""
