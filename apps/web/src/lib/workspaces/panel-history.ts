@@ -24,8 +24,9 @@
 // entry. When the base belongs to another document (the page was reloaded with a dialog open),
 // the rewind loads it: the close is handed over in sessionStorage and finished there. Likewise a
 // browser Back into another document of the home (no BFCache after a reload): each document
-// records on pagehide the entry it was on and its dialogs, and the next one (attach, or pageshow
-// from the BFCache) drops the forward entry when that Back closed a dialog.
+// records on pagehide the entry and the address (path and query only) it was on, and the next
+// one (attach, or pageshow from the BFCache) closes behind that Back as onPopState does
+// (closeBehind), keeping what changed while the dialog was open.
 //
 // Each entry of ours records in `history.state` (beside Next's keys) its position (`pos`, to tell
 // Back from Forward), its depth (entries above its base) and, on a skip entry, how far to skip.
@@ -154,8 +155,17 @@ export interface PanelHistoryWindow {
 /** Where a document of the home was when it unloaded. */
 interface Leave {
   readonly pos: number;
-  readonly path: string;
-  readonly dialogs: readonly string[];
+  /**
+   * The address it rested on: path and query only (never a fragment), as in the address bar. It
+   * stays in sessionStorage (this tab), is read once and expires; it is never logged.
+   */
+  readonly address: string;
+}
+
+/** `url` without its fragment (share links carry their secret there: never stored). */
+function withoutFragment(url: string): string {
+  const at = url.indexOf('#');
+  return at === -1 ? url : url.slice(0, at);
 }
 
 /** Same path and the same query parameters, whatever their order. */
@@ -180,11 +190,11 @@ function parseLeave(raw: string | null, now: number): Leave | null {
       now - value.at >= 0 &&
       now - value.at <= LEAVE_MAX_AGE_MS &&
       typeof value.pos === 'number' &&
-      typeof value.path === 'string' &&
-      Array.isArray(value.dialogs) &&
-      value.dialogs.every((d) => typeof d === 'string')
+      typeof value.address === 'string' &&
+      value.address.startsWith('/') &&
+      !value.address.includes('#')
     ) {
-      return { pos: value.pos, path: value.path, dialogs: value.dialogs };
+      return { pos: value.pos, address: value.address };
     }
   } catch {
     // A malformed value is no record.
@@ -472,11 +482,30 @@ export class PanelHistory {
       this.rest(this.current());
       return;
     }
-    if (!leave || !entry.ours || leave.path !== this.win.location.pathname) return;
-    if (entry.mark.pos >= leave.pos) return;
-    const now = this.getDialogs().open(this.win.location.search);
-    if (leave.dialogs.every((d) => now.includes(d))) return;
-    this.truncate();
+    if (!leave || !entry.ours || entry.mark.pos >= leave.pos) return;
+    this.closeBehind(leave.address);
+  }
+
+  /**
+   * After a Back from `from` (path and query) onto the current entry: when that Back closed
+   * dialogs (not one that changed the practice panel's question), rewrites the entry to `from`
+   * with those dialogs closed, keeping what changed while they were open (UX7 확인 7), and drops
+   * the forward entry. Within one document (onPopState) and across documents (arrive).
+   */
+  private closeBehind(from: string): void {
+    const dialogs = this.getDialogs();
+    const now = dialogs.open(this.win.location.search);
+    const fromUrl = splitUrl(from);
+    if (fromUrl.path !== this.win.location.pathname) return;
+    const closed = dialogs.open(fromUrl.search).filter((d) => !now.includes(d));
+    if (closed.length === 0) return;
+    let search = fromUrl.search;
+    for (const dialog of closed) search = dialogs.close(search, dialog);
+    const target = `${fromUrl.path}${search}`;
+    this.onPage(sameAddress(target, this.current()) ? this.current() : target, () =>
+      this.truncate(),
+    );
+    this.resting = target;
   }
 
   /**
@@ -513,11 +542,9 @@ export class PanelHistory {
 
   private storeLeave(): void {
     try {
-      const { path, search } = splitUrl(this.resting);
       const record = {
         pos: this.mark.pos,
-        path,
-        dialogs: this.getDialogs().open(search),
+        address: withoutFragment(this.resting),
         at: this.win.now(),
       };
       this.win.sessionStorage?.setItem(PANEL_LEAVE_KEY, JSON.stringify(record));
@@ -608,22 +635,6 @@ export class PanelHistory {
     this.known = true;
     this.mark = entry.mark;
     this.resting = this.current();
-    if (!back) return;
-    // A Back that closed dialogs (not one that changed the practice panel's question): drop the
-    // forward entry, keeping what changed while they were open (UX7 확인 7): the address before
-    // the Back with those dialogs closed.
-    const dialogs = this.getDialogs();
-    const now = dialogs.open(this.win.location.search);
-    const fromUrl = splitUrl(from);
-    if (fromUrl.path !== this.win.location.pathname) return;
-    const closed = dialogs.open(fromUrl.search).filter((d) => !now.includes(d));
-    if (closed.length === 0) return;
-    let search = fromUrl.search;
-    for (const dialog of closed) search = dialogs.close(search, dialog);
-    const target = `${fromUrl.path}${search}`;
-    this.onPage(sameAddress(target, this.current()) ? this.current() : target, () =>
-      this.truncate(),
-    );
-    this.resting = target;
+    if (back) this.closeBehind(from);
   }
 }
