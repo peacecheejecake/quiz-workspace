@@ -94,9 +94,8 @@ linked_tests: [QOV-AC01, QOV-AC02]
 | DOC-01 | DOC-01-AC01~03 | `documents/library.spec.ts` | M3 |
 | DOC-02 | DOC-02-AC01~04 | `documents/editor.spec.ts` | M3 |
 | SEARCH-01 | SEARCH-01-AC01~04 | `search/search.spec.ts` | M3 |
-| QOV-01 | QOV-01-AC01~06 | `questions/overview.spec.ts` | M5 |
-| QBANK-01 | QBANK-01-AC01~03 | `questions/bank.spec.ts` | M4 |
-| QPLAY-01 | QPLAY-01-AC01~05 | `questions/practice.spec.ts` | M5 |
+| QOV-01 | QOV-01-AC01~13 | `questions/overview.spec.ts` | M5 (AC12·AC13: UX7-BANK, QBANK-01-AC01·02·05에서 옮김) |
+| QPLAY-01 | QPLAY-01-AC01~08 | `questions/practice.spec.ts` | M5 (AC07·AC08: UX7-BANK; AC06 UX7-CACHE, QBANK-01-AC03·04에서 옮김) |
 | QIMPORT-01 | QIMPORT-01-AC01~03 | `questions/import.spec.ts` | M4 |
 | QGEN-01 | QGEN-01-AC01~08 | `questions/generation.spec.ts` | M6 |
 | HISTORY-01 | HISTORY-01-AC01~03 | `history/history.spec.ts` | M7 |
