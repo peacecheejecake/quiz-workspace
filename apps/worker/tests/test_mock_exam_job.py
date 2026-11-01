@@ -5,6 +5,7 @@ tests/integration/questions/mock_exams (MOCK-01-C02..C09)."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from book_core.llm.mock_exam_scenarios import MockExamScenarioLLM
@@ -66,3 +67,28 @@ def test_budgets_over_the_model_or_the_time_limit_are_refused(
     WorkerSettings(APP_ENV=Environment.TEST)  # type: ignore[call-arg]  # the feature is off
     with pytest.raises(ValidationError, match="LLM_MAX_TOKENS"):
         WorkerSettings(APP_ENV=Environment.TEST, WORKER_MOCK_EXAMS=True)  # type: ignore[call-arg]
+
+
+def test_the_real_provider_gets_the_mock_exam_output_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex P2: the provider's max_tokens is MOCK_EXAM_MAX_OUTPUT_TOKENS, not LLM_MAX_TOKENS."""
+    import book_core.llm as llm
+
+    seen: list[Any] = []
+
+    def capture(config: Any) -> object:
+        seen.append(config)
+        return object()
+
+    monkeypatch.setattr(llm, "create_llm_client", capture)
+    monkeypatch.setenv("LLM_API_KEY", "sk-test-not-a-key")
+    monkeypatch.setenv("LLM_MODEL", "model-a")
+    monkeypatch.setenv("LLM_MAX_TOKENS", "16000")
+    settings = WorkerSettings(
+        APP_ENV=Environment.LOCAL,
+        WORKER_MOCK_EXAMS=True,
+        MOCK_EXAM_MAX_OUTPUT_TOKENS=8000,
+    )  # type: ignore[call-arg]
+    build_mock_exam_llm(settings)
+    assert [c.max_tokens for c in seen] == [8000]

@@ -629,7 +629,12 @@ def build_mock_exam_llm(settings: WorkerSettings) -> LLMClient | None:
         config = LLMConfig.from_env()
     except LLMConfigError:
         raise WorkerNotConfiguredError("the LLM configuration is invalid") from None
-    return create_llm_client(config) if config is not None else None
+    if config is None:
+        return None
+    # A dedicated client: its output ceiling is the mock exam output budget the batches are
+    # packed for (MOCK_EXAM_MAX_OUTPUT_TOKENS <= LLM_MAX_TOKENS, checked by the settings).
+    config = config.model_copy(update={"max_tokens": settings.mock_exam_max_output_tokens})
+    return create_llm_client(config)
 
 
 def budget_from_settings(settings: WorkerSettings) -> Budget:
