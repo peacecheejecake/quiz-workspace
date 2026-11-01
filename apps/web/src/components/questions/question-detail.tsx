@@ -26,10 +26,9 @@ export function RevisionView({
       </section>
       {type === 'MCQ' ? (
         <section className={styles.detailSection}>
-          <h3 className={styles.detailHeading}>
-            보기{revision.is_multi_answer ? ' (복수 정답)' : ''}
-          </h3>
-          <ol className={styles.optionList}>
+          {/* UX7-QDISPLAY: no visible 보기 heading; the list keeps it as its name. */}
+          {revision.is_multi_answer ? <p className={styles.detailText}>복수 정답</p> : null}
+          <ol className={styles.optionList} aria-label="보기">
             {revision.options.map((option, i) => {
               const isCorrect = correct.has(option.id);
               return (

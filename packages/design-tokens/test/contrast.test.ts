@@ -66,6 +66,13 @@ const REQUIRED: Pair[] = [
   ),
   ['color-on-accent', 'color-switch-track', NON_TEXT_MIN],
   ['color-on-accent', 'color-switch-track-hover', NON_TEXT_MIN],
+  // UX7-QDISPLAY: graded MCQ option borders (QPLAY-01-AC12) — chosen correct success, wrong
+  // choice border-strong, correct option danger — on every surface the practice panel sits on.
+  ...(['color-success', 'color-border-strong', 'color-danger'] as const).flatMap((fg) =>
+    (['color-surface', 'color-canvas', 'color-surface-muted', 'color-glass-solid'] as const).map(
+      (bg): Pair => [fg, bg, NON_TEXT_MIN],
+    ),
+  ),
   // Tooltip: inverted text.
   ['color-canvas', 'color-text-primary', TEXT_MIN],
   ...NON_TEXT_TOKENS.flatMap((fg) => BACKGROUNDS.map((bg): Pair => [fg, bg, NON_TEXT_MIN])),
