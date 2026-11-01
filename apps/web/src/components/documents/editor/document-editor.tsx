@@ -51,6 +51,7 @@ import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/
 import { summaryPanelPath, workspaceHomePath } from '@/lib/workspaces/home';
 import { TextExportMenu } from '../text-export-menu';
 import styles from './editor.module.css';
+import { OutlinePanel, outlineLayout, useOutlinePanel } from './outline-panel';
 import { OutlineTree } from './outline-tree';
 import { PdfViewer, type PageChangeReason } from './pdf-viewer';
 import { PublishBar } from './publish-bar';
@@ -77,13 +78,13 @@ export interface DocumentEditorProps {
   readonly pinnedRevisionId?: string | null;
 }
 
-type MobileView = 'outline' | 'pdf' | 'text';
+type MobileView = 'pdf' | 'text';
 
 /** Reloads overtaken by newer saves before the screen asks the user to reload. */
 const MAX_SUPERSEDED_RELOADS = 3;
 
+/** Phones show one pane at a time; the outline is the 목차 panel (a bottom sheet there). */
 const MOBILE_VIEWS: readonly { id: MobileView; label: string }[] = [
-  { id: 'outline', label: '목차' },
   { id: 'pdf', label: 'PDF' },
   { id: 'text', label: '원문' },
 ];
@@ -140,6 +141,9 @@ export function DocumentEditor({
   const [notice, setNotice] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [mobileView, setMobileView] = useState<MobileView>('pdf');
+  const outlinePanel = useOutlinePanel();
+  const { beside: outlineBeside, dismiss: dismissOutline } = outlinePanel;
+  const [panelHost, setPanelHost] = useState<HTMLDivElement | null>(null);
   const deepLinkApplied = useRef(false);
   const watchController = useRef<AbortController | null>(null);
   const editStateRef = useRef<BlockEditState>(editState);
@@ -304,8 +308,10 @@ export function DocumentEditor({
         setMobileView('pdf');
       }
       setAnnouncement(`${node.title}${node.page != null ? ` · ${node.page}쪽` : ''}`);
+      // Where the panel covers the PDF (narrow screens), get it out of the way after the jump.
+      if (outlineBeside === false) dismissOutline();
     },
-    [blocks, selectBlock],
+    [blocks, dismissOutline, outlineBeside, selectBlock],
   );
 
   // Keep `?page=` and `?block=` in the address bar (reload and sharing reopen the same view).
@@ -638,7 +644,7 @@ export function DocumentEditor({
   const currentSection = sectionOf(currentBlock, outline);
 
   return (
-    <div className={styles.screen}>
+    <div className={styles.screen} data-outline={outlineLayout(outlinePanel.open)}>
       <PageHeader
         title={document.title}
         back={<WorkspaceBackLink workspaceId={workspaceId} />}
@@ -731,19 +737,6 @@ export function DocumentEditor({
       </div>
 
       <div className={styles.split} data-view={mobileView}>
-        <nav aria-label="문서 목차" className={styles.outlinePane} data-pane="outline">
-          <h2 className={styles.paneTitle}>목차</h2>
-          {contentState.status === 'ready' ? (
-            <OutlineTree
-              items={outline}
-              currentId={currentSection}
-              onNavigate={onOutlineNavigate}
-            />
-          ) : contentState.status === 'loading' && ready ? (
-            <p className={styles.paneNote}>목차를 불러오는 중입니다…</p>
-          ) : null}
-        </nav>
-
         <section aria-label="PDF 원본" className={styles.pdfPane} data-pane="pdf">
           <PdfViewer
             source={pdfSource}
@@ -751,6 +744,21 @@ export function DocumentEditor({
             onPageChange={onViewerPage}
             highlights={highlights}
             highlightKey={`${currentBlockId ?? ''}:${highlightKey}`}
+            toolbarStart={
+              <OutlinePanel state={outlinePanel} container={panelHost}>
+                {contentState.status === 'ready' ? (
+                  <OutlineTree
+                    items={outline}
+                    currentId={currentSection}
+                    onNavigate={onOutlineNavigate}
+                  />
+                ) : contentState.status === 'loading' && ready ? (
+                  <p className={styles.paneNote}>목차를 불러오는 중입니다…</p>
+                ) : (
+                  <p className={styles.paneNote}>이 문서에는 목차가 없습니다.</p>
+                )}
+              </OutlinePanel>
+            }
           />
         </section>
 
@@ -795,6 +803,8 @@ export function DocumentEditor({
         </section>
       </div>
 
+      {/* The 목차 panel is portalled here so it stays inside the main landmark. */}
+      <div ref={setPanelHost} className={styles.panelHost} />
       <p className="qz-visually-hidden" aria-live="polite">
         {announcement}
       </p>

@@ -4,7 +4,20 @@
 // original PDF (streamed by the same-origin relay after the share check) and the published
 // revision's text blocks with their pages. No correction, publish or revision controls.
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
+import {
+  OutlinePanel,
+  outlineLayout,
+  useOutlinePanel,
+} from '@/components/documents/editor/outline-panel';
 import { OutlineTree } from '@/components/documents/editor/outline-tree';
 import { PdfViewer, type PageChangeReason } from '@/components/documents/editor/pdf-viewer';
 import { TextBlockEditor } from '@/components/documents/editor/text-block-editor';
@@ -47,10 +60,9 @@ type ContentState =
   | { readonly status: 'error'; readonly message: string; readonly missing: boolean }
   | { readonly status: 'ready'; readonly document: SharedDocument };
 
-type MobileView = 'outline' | 'pdf' | 'text';
+type MobileView = 'pdf' | 'text';
 
 const MOBILE_VIEWS: readonly { id: MobileView; label: string }[] = [
-  { id: 'outline', label: '목차' },
   { id: 'pdf', label: 'PDF' },
   { id: 'text', label: '원문' },
 ];
@@ -169,8 +181,42 @@ export function SharedDocumentView({
   );
   const title = document?.title ?? summary?.title ?? '문서';
 
+  // DOC-02-AC06 in the shared view: the 목차 panel, below the share page's own header.
+  const outlinePanel = useOutlinePanel();
+  const { beside: outlineBeside, dismiss: dismissOutline } = outlinePanel;
+  const [panelHost, setPanelHost] = useState<HTMLDivElement | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const [panelTop, setPanelTop] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const top = sectionRef.current?.getBoundingClientRect().top ?? 0;
+      setPanelTop(Math.max(Math.round(top + window.scrollY), 16));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+  const onOutlineNavigate = useCallback(
+    (node: OutlineItem) => {
+      const block = targetBlockFor(node, blocks);
+      setOutlineJump(block ? { node, blockId: block.block_id } : null);
+      if (block) selectBlock(block);
+      else if (node.page != null) {
+        setCurrentBlockId(null);
+        setPage(node.page);
+      }
+      if (outlineBeside === false) dismissOutline();
+    },
+    [blocks, dismissOutline, outlineBeside, selectBlock],
+  );
+
   return (
-    <section className={styles.document} aria-labelledby="shared-document-title">
+    <section
+      ref={sectionRef}
+      className={styles.document}
+      aria-labelledby="shared-document-title"
+      data-outline={outlineLayout(outlinePanel.open)}
+    >
       <div className={styles.documentHeader}>
         <nav aria-label="위치">
           <Link href={sharePath(shareId)} className={`${styles.backLink} qz-focus-ring`}>
@@ -215,27 +261,6 @@ export function SharedDocumentView({
           </div>
 
           <div className={`${editorStyles.split} ${styles.split}`} data-view={mobileView}>
-            <nav aria-label="장·절 목차" className={editorStyles.outlinePane} data-pane="outline">
-              <h3 className={editorStyles.paneTitle}>목차</h3>
-              {document ? (
-                <OutlineTree
-                  items={outline}
-                  currentId={sectionOf(currentBlock, outline)}
-                  onNavigate={(node) => {
-                    const block = targetBlockFor(node, blocks);
-                    setOutlineJump(block ? { node, blockId: block.block_id } : null);
-                    if (block) selectBlock(block);
-                    else if (node.page != null) {
-                      setCurrentBlockId(null);
-                      setPage(node.page);
-                    }
-                  }}
-                />
-              ) : (
-                <p className={editorStyles.paneNote}>목차를 불러오는 중입니다…</p>
-              )}
-            </nav>
-
             <section aria-label="PDF 원본" className={editorStyles.pdfPane} data-pane="pdf">
               <PdfViewer
                 source={pdfSource}
@@ -243,6 +268,19 @@ export function SharedDocumentView({
                 onPageChange={onViewerPage}
                 highlights={highlights}
                 highlightKey={`${currentBlockId ?? ''}:${highlightKey}`}
+                toolbarStart={
+                  <OutlinePanel state={outlinePanel} container={panelHost}>
+                    {document ? (
+                      <OutlineTree
+                        items={outline}
+                        currentId={sectionOf(currentBlock, outline)}
+                        onNavigate={onOutlineNavigate}
+                      />
+                    ) : (
+                      <p className={editorStyles.paneNote}>목차를 불러오는 중입니다…</p>
+                    )}
+                  </OutlinePanel>
+                }
               />
             </section>
 
@@ -277,6 +315,15 @@ export function SharedDocumentView({
         </>
       )}
 
+      <div
+        ref={setPanelHost}
+        className={editorStyles.panelHost}
+        style={
+          panelTop === null
+            ? undefined
+            : ({ '--outline-panel-top': `${panelTop}px` } as CSSProperties)
+        }
+      />
       <p className="qz-visually-hidden" aria-live="polite">
         {announcement}
       </p>

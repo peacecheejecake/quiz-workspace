@@ -310,8 +310,9 @@ button.questionButton:focus-visible {
   }
 }
 
+/* DOC-02-AC06: the open 목차 panel sits beside the document on desktop. */
 @media (width >= 1024px) {
-  .split {
-    grid-template-columns: minmax(9rem, 12rem) minmax(0, 1.2fr) minmax(0, 1fr);
+  .document:is([data-outline='open'], [data-outline='auto']) {
+    padding-inline-start: calc(20rem + var(--space-3));
   }
 }
