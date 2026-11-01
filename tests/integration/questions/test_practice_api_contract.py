@@ -35,6 +35,9 @@ SESSION_KEYS = {
     "question_number",
     "displayed_option_ids",
     "opened_at",
+    # QVIEW-B: the run position the session practises (null outside a run)
+    "practice_run_id",
+    "run_position",
 }
 RANDOM_ID = "00000000-0000-4000-8000-000000000000"
 
