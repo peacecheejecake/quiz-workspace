@@ -8,6 +8,7 @@ import {
   finalResult,
   neighbors,
   optionMark,
+  optionTone,
   resultMessage,
   submitBody,
   toggleOption,
@@ -78,6 +79,24 @@ describe('result wording', () => {
     expect(optionMark('a', ['a'], [])).toBe('정답');
     expect(optionMark('b', ['a'], ['b'])).toBe('내 선택');
     expect(optionMark('b', ['a'], [])).toBeUndefined();
+  });
+
+  // UX7-QDISPLAY (QPLAY-01-AC12): correct = the chosen option green; incorrect = the chosen
+  // options grey and every correct option red (a chosen correct one too). Text marks stay.
+  it('tones revealed option rows by the graded result', () => {
+    expect(optionTone('a', ['a'], ['a'], 'correct')).toBe('correct');
+    expect(optionTone('b', ['a'], ['a'], 'correct')).toBeUndefined();
+    expect(optionTone('b', ['a'], ['b'], 'incorrect')).toBe('chosen');
+    expect(optionTone('a', ['a'], ['b'], 'incorrect')).toBe('answer');
+    expect(optionTone('c', ['a'], ['b'], 'incorrect')).toBeUndefined();
+    // Multi-answer, one right and one wrong pick: the right pick is still a correct option.
+    expect(optionTone('a', ['a', 'c'], ['a', 'b'], 'incorrect')).toBe('answer');
+    expect(optionTone('b', ['a', 'c'], ['a', 'b'], 'incorrect')).toBe('chosen');
+    expect(optionTone('c', ['a', 'c'], ['a', 'b'], 'incorrect')).toBe('answer');
+    expect(optionTone('a', ['a', 'c'], ['a', 'c'], 'correct')).toBe('correct');
+    // No answer key in the result or no grade: no tone.
+    expect(optionTone('a', null, ['a'], 'incorrect')).toBeUndefined();
+    expect(optionTone('a', ['a'], ['a'], 'pending')).toBeUndefined();
   });
 });
 
