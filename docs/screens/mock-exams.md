@@ -23,10 +23,10 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 - **모의고사 문제는 그 모의고사 안에만 있다 (사용자 결정 2 — 의도된 예외):** 만들어지는 즉시 풀 수 있고 문제은행(확정 문제)·Heatmap·문제 수·홈 검색·정리 노트 입력에 들어가지 않는다. 그래서 "생성·가져온 문제는 사람이 승인할 때까지 초안" 규칙(AGENTS.md §5 Data)은 모의고사 문제에 적용되지 않는다 — 모의고사 문제는 은행에 들어가는 경로가 없다(승인·등록 API 없음). AGENTS.md 문구 보완은 후속(implementation-plan §7).
 - **변형 출제 대체 (사용자 결정 1):** 이전 `문제` 메뉴 › `변형 출제`와 "문제 생성" dialog(QGEN-01, 묶음 QGEN-MULTI 포함)는 없어지고 그 자리에 `모의고사`가 온다. 생성 엔진(변형 유형별 LLM 생성·검증·fake adapter)은 재사용한다(아래 "재사용과 폐지").
 - **옵션 = 지금의 변형 유형 (사용자 요청):** 만들기 화면의 옵션은 QGEN-01 생성 form과 같은 변형 유형이다: `보기 섞기`(`OPTION_SHUFFLE`, 원본 문제를 그대로 옮기고 보기 순서만 섞음 — LLM 없음), `문구 변형`(`PARAPHRASE`), `정오 반전`(`INVERT_POLARITY`), `유사 개념`(`ANALOGOUS_CONCEPT`). 하나 이상 고른다. 그 밖의 옵션:
-  - `문항 수` 1~50(기본 20) (제안 — 사용자 확인 필요). 서버가 범위에서 원본을 `min(문항 수, 범위 문제 수)`개 고르고(범위가 문항 수보다 크면 seed로 임의 선택, 작으면 전부) 원본마다 문제 1개를 만든다. 원본마다 쓸 변형 유형은 고른 유형 중에서 seed로 고르게 돌려 정한다(제안 — 사용자 확인 필요). QGEN-01의 `후보 수`는 없다(원본 하나 = 문제 하나).
+  - `문항 수`: AI 변형 유형(`문구 변형`·`정오 반전`·`유사 개념`)을 하나라도 고르면 1~**100**(기본 20) (제안 — 사용자 확인 필요: 사용자가 "더 많이는 안 될까?"라고 물었고 숫자는 아직 고르지 않음). `보기 섞기`만 고르면 LLM이 없으므로 한도는 범위 문제 수이고 `범위 전체`도 고를 수 있다(풀이 묶음 한도와 같은 5,000문제까지). 서버가 범위에서 원본을 `min(문항 수, 범위 문제 수)`개 고르고(범위가 문항 수보다 크면 seed로 임의 선택, 작으면 전부) 원본마다 문제 1개를 만든다. 원본마다 쓸 변형 유형은 고른 유형 중에서 seed로 고르게 돌려 정한다(사용자 결정 2026-11-01 — b의 배정 방식). QGEN-01의 `후보 수`는 없다(원본 하나 = 문제 하나). 원본 하나당 LLM 호출 하나가 아니다 — 아래 "LLM 호출 묶기"처럼 여러 원본을 한 호출로 만든다.
   - `난이도`(선택, `쉬움`·`보통`·`어려움`, 기본 "원본과 같게") — QGEN-01 form과 같다.
 - **범위 (사용자 결정 2026-11-01):** QVIEW-01과 같은 `QuestionRangePicker`(장 그룹 → 문제 checkbox, 맨 위 `전체 선택`, 상태·즐겨찾기·유형 필터)로 이 Workspace의 확정 문제를 고른다. 저장되는 범위는 사람이 고른 의도(`전체 선택` 여부·장·개별 문제·제외 문제·필터)이고, 다시 만들 때 그 의도를 그때의 확정 문제로 다시 푼다(새로 등록된 문제는 `전체 선택`·장 선택이면 포함).
-- **만든 직후 바로 사용:** 생성 결과 중 기계 검증(형식·정답 개수·중복·출처 근거 — 이전 QGEN의 승인 차단 검증)을 통과한 문제만 저장되고 곧바로 `풀기`에 쓰인다. 통과하지 못한 후보는 저장·표시하지 않는다(그 원본으로 한 번 다시 요청, 그래도 실패면 그 원본은 건너뜀). 승인을 막지 않는 경고(`warning`)는 편집 권한자에게 문제 행의 "확인 필요" 글자 badge와 편집 화면의 안내로만 보이고 풀이 화면에는 보이지 않는다.
+- **만든 직후 바로 사용:** 생성 결과 중 기계 검증(형식·정답 개수·중복·출처 근거 — 이전 QGEN의 승인 차단 검증)을 통과한 문제만 저장되고 곧바로 `풀기`에 쓰인다. 통과하지 못한 후보는 저장·표시하지 않는다(실패 항목은 모아서 함께 한 번 다시 요청, 그래도 실패면 그 원본은 건너뜀). 승인을 막지 않는 경고(`warning`)는 편집 권한자에게 문제 행의 "확인 필요" 글자 badge와 편집 화면의 안내로만 보이고 풀이 화면에는 보이지 않는다.
 - **다시 만들기 (사용자 결정 2026-11-01):** 설정(변형 유형·문항 수·난이도·범위)을 바꾸거나 그대로 `다시 만들기`하면 새 회차(generation)로 문제를 모두 새로 만들고, 성공하면 모의고사의 문제 목록을 새 회차로 **바꾼다**. 이전 회차 문제와 그 풀이 기록은 지우지 않고(풀이 기록 불변) 화면에서 숨긴다(v1에 이전 회차 열람 없음). 새 회차가 실패하면 이전 문제가 그대로 남는다. 사람이 편집한 문제도 다시 만들면 바뀐다(확인 dialog에서 알림).
 - **공유 범위 (사용자 결정 2026-11-01):** 모의고사는 Workspace 단위다 — 모든 구성원이 목록을 보고 풀 수 있고(풀이 기록은 사람마다), 편집 권한자가 만들고 고친다. 공유 링크 게스트에게는 보이지 않고 Fork에 복제되지 않는다(v1; [공유 명세 §9](../workspace-sharing.md)).
 - **환경별 사용 여부:** LLM 변형 유형은 worker 설정 `WORKER_MOCK_EXAMS`와 LLM 설정이 있을 때만 고를 수 있다. 꺼진 환경에서도 `보기 섞기`만 고른 모의고사는 만들 수 있고(LLM 없음) 저장된 모의고사는 풀 수 있다 (사용자 결정 2026-11-01).
@@ -35,16 +35,28 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 
 | 부분 | 처리 |
 |---|---|
-| `book_core.generation`(`VariantGenerator`, `prompts`, `validation`의 형식·정답 개수·정오 반전 정답 불일치·중복 fingerprint·출처 근거 검증) | **재사용**(바꾸지 않음). 모의고사 job이 원본마다 같은 요청(`VariantRequest`, 후보 1개)으로 부른다. 승인 차단(`is_rejection`) 검증을 통과하지 못하면 저장하지 않는다 — 사람의 승인 대신 이 검증이 저장 조건이다. |
+| `book_core.generation`(`VariantGenerator`, `prompts`, `validation`의 형식·정답 개수·정오 반전 정답 불일치·중복 fingerprint·출처 근거 검증) | `validation`·`models`는 **재사용**(바꾸지 않음). `prompts`·`VariantGenerator`의 원본 하나 단위 호출 대신 모의고사는 여러 원본을 한 호출로 만드는 묶음 prompt(`book_core.mock_exam`, 아래 "LLM 호출 묶기")를 쓰고, 응답 항목마다 같은 검증 함수를 부른다. 승인 차단(`is_rejection`) 검증을 통과하지 못하면 저장하지 않는다 — 사람의 승인 대신 이 검증이 저장 조건이다. |
 | `OPTION_SHUFFLE` 결정적 shuffle(M5.2) | **재사용**: 모의고사 문제는 원본 revision의 발문·보기·정답·해설을 복사하고 보기 순서를 seed로 섞어 저장한다(풀이 때 보기 섞기는 QVIEW-01 세션 규칙 그대로). |
-| fake LLM adapter·`tests/fixtures/llm/generation-scenarios.json` | **재사용**(E2E·계약 test). 모의고사용 시나리오(정상·정오 반전 복수 정답·전부 실패)를 같은 파일에 추가한다. |
+| fake LLM adapter·`tests/fixtures/llm/generation-scenarios.json` | **재사용**(E2E·계약 test). fake adapter가 묶음 응답(원본 여러 개 → 항목 여러 개)을 돌려주고 호출 수를 기록하도록 넓히고, 모의고사용 시나리오(정상 묶음·항목 하나만 정오 반전 복수 정답·해석할 수 없는 묶음·출력 예산에서 잘린 묶음·전부 실패·두 번째 생성 실패)를 같은 파일에 추가한다. |
 | worker `question.generate` job의 원본 읽기·근거 passage 검색·근거 좁히기(`source_question`, `build_passages`, `narrow_evidence`) | **재사용**: 공용 모듈로 옮겨 새 job `mock_exam.generate`가 쓴다. `question.generate` job 등록은 QGEN-RM에서 뺀다. |
 | `question_generation_runs`·생성 `question_drafts`·`question_lineage` 테이블과 기존 행 | **보존**(additive-first; 삭제 migration 없음). 새 행은 생기지 않는다. 승인되지 않은 기존 생성 초안은 검토 화면이 없어져 볼 수 없게 된다 — 보존만 하고 지우지 않는다(사용자 결정 2026-11-01). 이미 등록된 변형 문제와 lineage는 그대로 확정 문제다. |
 | API `POST /questions/{id}/generations`, `/question-generations/*`, `/workspaces/{id}/question-generation-batches*` | **폐지**(QGEN-RM에서 router 제거 → 404). OpenAPI·api-client 재생성. |
 | 화면: `문제` 메뉴 `변형 출제`, "문제 생성" dialog(`?panel=generate`), 검토 페이지·묶음 결과 페이지(`/questions/generate?…`), 문제 상세의 `변형 출제` | **폐지**. 이전 URL은 홈으로 redirect(`?panel=generate` → `?panel=mock-exams`). |
 | 이력의 `question_generation.*` 활동·"문제 생성" 작업 label | **보존**(과거 기록 표시용). |
 
-## 레이아웃 및 컴포넌트
+## LLM 호출 묶기 (batching — 사용자 결정 2026-11-01 "API 호출을 최소화")
+
+사용자 질문 "꼭 한 문제당 하나의 call이어야 하나?" → **목표는 LLM API 호출 수 최소화**다. 원본마다 호출하던 QGEN(`prompts.build_request`: 원본 하나·변형 유형 하나에 후보 `candidate_count`개)과 달리, 모의고사는 한 호출에 원본 여러 개의 문제를 함께 만든다.
+
+- **token 예산으로 채운다:** 한 호출에는 model context와 출력 예산에 들어가는 만큼 원본을 최대한 넣는다. 입력 예산 `MOCK_EXAM_MAX_PROMPT_TOKENS`(기본 60,000 — 지시문·원본·근거 passage 전부 포함), 출력 예산 `MOCK_EXAM_MAX_OUTPUT_TOKENS`(기본 16,000; 문제 하나 출력 ≈ 400 token으로 추정해 자리를 남김), `MOCK_EXAM_SOURCES_PER_CALL`(기본 40)은 **상한일 뿐**이다. token 수는 provider tokenizer가 있으면 그것으로, 없으면 보수적인 글자 수 기반 추정으로 센다. 기본값은 MOCK-B·MOCK-X eval에서 model에 맞춰 조정한다(model context보다 크게 둘 수 없음 — 설정 검사).
+- **passage는 한 번만:** 근거 passage를 공유하는 원본(같은 장·같은 블록)은 같은 호출에 모은다. 한 호출 안에서 passage는 중복 없이 한 번만 `P1`, `P2`, …로 싣고 원본(`S1`, `S2`, …)들이 그 tag를 인용한다. 묶기는 결정적이다(같은 plan → 같은 묶음; 장·블록 순서로 정렬한 뒤 예산이 찰 때까지 채움). 변형 유형이 다른 원본도 한 호출에 넣는다(항목마다 유형 지시).
+- **혼자서 예산을 넘는 원본:** 원본 하나의 passage만으로 입력 예산을 넘으면 기존 근거 좁히기(`narrow_evidence`)·상위 passage만 남겨 예산에 맞추고, 그래도 넘으면 그 원본은 `source_too_large`로 건너뛴다.
+- **항목마다 검증:** 응답의 각 항목(`S` tag 하나 = 문제 하나)을 그 원본 기준으로 따로 검증한다(MOCK-01-C02의 승인 차단 검증, 인용 tag는 그 호출에 실린 passage만). 모르는 `S` tag·중복 항목·빠진 원본은 실패 항목이다.
+- **실패 항목 재요청은 함께 한 번:** 모든 묶음이 끝난 뒤 실패 항목 전부를 같은 방식으로 다시 묶어(대개 호출 1번) **한 번만** 다시 요청한다. 다시 실패한 항목은 건너뛴다(`skipped_count`).
+- **해석할 수 없는 응답:** 묶음 응답이 schema에 맞지 않거나 출력 예산에서 잘리면 그 묶음을 반으로 나눠 각각 다시 요청한다(반복해서 나누되 원본 하나짜리 묶음이 또 실패하면 그 원본은 실패 항목으로 넘긴다; 이미 재요청을 거친 항목이면 건너뜀).
+- **실행·checkpoint:** 묶음은 `MOCK_EXAM_GENERATION_CONCURRENCY`(기본 2)개까지 동시에 부른다. 묶음 하나가 끝날 때마다 그 결과(저장된 문제·실패 항목·usage·진행)를 한 트랜잭션으로 기록하므로(`mock_exam_generation_items`), job이 시간 한도·재전달로 다시 시작해도 끝난 묶음은 다시 부르지 않는다. job 시간 한도는 `ceil(묶음 수 / 동시 수 + 재요청) × LLM 호출 timeout`을 넘지 않게 설정 검사한다.
+- **예상 호출 수**(원본 하나 ≈ 300 token, passage 원본당 ≈ 1,200 token이고 같은 장끼리 일부 공유, 문제 하나 출력 ≈ 400 token일 때): **20문항 → 1번**(+ 실패 항목이 있으면 1번), **100문항 → 3번**(40·40·20, 입력·출력 예산 모두 40개 이내) + 재요청 1번 ≈ 3~4번. passage가 큰 교재(원본당 ≈ 3,000 token, 공유 없음)면 입력 예산이 묶음을 ≈ 18개로 줄여 100문항 → 6번 + 1번. 해석할 수 없는 응답 하나마다 +2번(반으로 나눔). 원본마다 부르던 방식(100문항 → 100번 이상)과 비교해 1/20~1/30 수준이다. `보기 섞기`는 호출 0번.
+
 
 **레이아웃 패턴 (floating dialog — 사용자 결정 2026-11-01):** 문서 관리 dialog([DOC-01](documents-library.md))와 문제 PDF 관리 dialog(QIMPORT-01-AC05)의 목록 dialog 패턴을 따른다 — Workspace header에서 여는 non-modal `FloatingSidePanel`, 제목·설명 header 없음(접근성 이름 "모의고사"), 위쪽 동작 영역 + 행 목록, 행은 제목 · 글자 badge · 메타 줄 · 오른쪽 아이콘 동작, 즉시 열리고 skeleton(QOV-01-AC09), 다른 홈 dialog와 쌓기(QOV-01-AC10). 만들기·상세는 같은 dialog 안에서 목록을 대신하고 위에 `BackLink` "모의고사 목록"을 둔다(넓은 화면 전환 없음).
 
@@ -132,9 +144,9 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 
 ### MOCK-01-AC08
 
-- **Given:** fake 시나리오: 원본 하나는 정오 반전 결과가 복수 정답(검증 실패)이고 다시 요청해도 실패한다. 또 모든 후보가 실패하는 범위, LLM 기능이 꺼진 stack 설정
-- **When:** `정오 반전`으로 문항 수 3을 만들고, 모든 후보가 실패하는 범위로 만들고, LLM 기능이 꺼진 환경에서 `추가`를 연다
-- **Then:** 첫 모의고사는 `일부만 만듦`과 "3문항 중 2문항을 만들었습니다. 1개는 검증을 통과하지 못했습니다."를 보이고 복수 정답 문제는 목록·`풀기`·API 어디에도 없다. 모두 실패하면 `실패`와 "검증을 통과한 문제를 만들지 못했습니다. 범위나 변형 유형을 바꿔 보세요."이다. LLM 기능이 꺼진 환경에서는 `문구 변형`·`정오 반전`·`유사 개념`이 비활성이고 이유 "이 환경에서는 AI 변형을 쓸 수 없습니다."를 보이며 `보기 섞기`만으로 만들 수 있다.
+- **Given:** fake 시나리오: 원본 3개를 한 호출로 만드는데 그중 하나는 정오 반전 결과가 복수 정답(검증 실패)이고 다시 요청해도 실패한다. 첫 응답이 해석할 수 없는(깨진) 묶음인 범위 하나, 모든 후보가 실패하는 범위, LLM 기능이 꺼진 stack 설정
+- **When:** `정오 반전`으로 문항 수 3을 만들고, 깨진 묶음 범위로 문항 수 4를 만들고, 모든 후보가 실패하는 범위로 만들고, LLM 기능이 꺼진 환경에서 `추가`를 연다
+- **Then:** 첫 모의고사는 `일부만 만듦`과 "3문항 중 2문항을 만들었습니다. 1개는 검증을 통과하지 못했습니다."를 보이고 복수 정답 문제는 목록·`풀기`·API 어디에도 없다. 깨진 묶음 범위는 (반으로 나눠 다시 요청해) `준비됨`과 문제 4개다. 모두 실패하면 `실패`와 "검증을 통과한 문제를 만들지 못했습니다. 범위나 변형 유형을 바꿔 보세요."이다. LLM 기능이 꺼진 환경에서는 `문구 변형`·`정오 반전`·`유사 개념`이 비활성이고 이유 "이 환경에서는 AI 변형을 쓸 수 없습니다."를 보이며 `보기 섞기`만으로 만들 수 있다.
 
 ## 계약 요구사항 (pytest·unit, 화면 AC 아님)
 
@@ -143,11 +155,12 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 | ID | 요구사항 |
 |---|---|
 | MOCK-01-C01 | **은행 격리:** 모의고사 생성·편집·풀이는 `questions`·`question_revisions`·`question_drafts`·`question_lineage`·`question_user_states`·`question_attempts`에 행을 만들거나 바꾸지 않는다(행 수·갱신 시각 비교). overview·Heatmap·검색 색인(Qdrant payload)·정리 노트 입력·Fork snapshot에 모의고사 문제가 없다. 모의고사 문제를 확정 문제로 등록하는 API는 없다. |
-| MOCK-01-C02 | **검증이 저장 조건:** worker는 원본마다 `VariantGenerator`를 후보 1개로 부르고 승인 차단 검증(형식·정답 개수·정오 반전 정답 불일치·중복 fingerprint·출처 근거)을 통과한 결과만 `mock_exam_questions`에 저장한다. 실패하면 그 원본으로 한 번 다시 요청하고, 그래도 실패면 건너뛴다(`skipped` 수 기록). 저장된 문제가 0이면 회차 `failed`/`no_valid_questions`. LLM이 선언한 정답은 검증 없이 쓰지 않는다. |
+| MOCK-01-C02 | **검증이 저장 조건:** worker는 묶음 응답의 항목마다 승인 차단 검증(형식·정답 개수·정오 반전 정답 불일치·중복 fingerprint·출처 근거 — `book_core.generation.validation` 그대로)을 따로 돌리고 통과한 항목만 `mock_exam_questions`에 저장한다. 실패 항목은 모아서 함께 한 번 다시 요청하고, 그래도 실패면 건너뛴다(`skipped` 수 기록). 저장된 문제가 0이면 회차 `failed`/`no_valid_questions`. LLM이 선언한 정답은 검증 없이 쓰지 않는다. |
 | MOCK-01-C03 | **범위·선택 재현:** 생성 요청의 범위는 서버가 이 Workspace의 살아 있는 CONFIRMED 문제로 푼다(QVIEW-01-C01과 같은 resolver; 다른 Workspace·초안 id는 422 `range-invalid`, 0개면 409 `no-matching-questions`). 원본 선택과 변형 유형 배정은 회차에 저장된 seed로 재현된다(같은 seed·같은 후보 → 같은 원본·유형). 회차는 원본 `question_revision_id`를 고정한다. |
 | MOCK-01-C04 | **회차·이력:** `다시 만들기`는 새 회차(`version + 1`)를 만들고 성공하면 `mock_exams.current_generation_id`를 바꾼다. 이전 회차와 그 문제·revision·풀이 기록은 지우지 않는다. 모의고사마다 대기·실행 중 회차는 하나(partial unique; 진행 중 POST 409 `mock-generation-running`). 문제 편집은 새 `mock_exam_question_revisions` 행, 빼기는 `removed_at`(soft). 이름·설정 변경은 `mock_exam_revisions` 행을 남긴다. 풀이 기록·revision 행은 UPDATE·DELETE 불가(pgTAP). |
 | MOCK-01-C05 | **인가 matrix:** GET(목록·상세·문제 목록)은 모든 구성원(보관 Workspace 포함), 쓰기(만들기·PATCH·DELETE·다시 만들기·문제 편집·빼기)는 owner·editor이고 활성 Workspace만(보관 403 `workspace-archived`). 다른 Workspace·삭제된 모의고사 404. 공유 세션은 모든 모의고사 API에 404. 보기 권한자의 문제 목록·문제 상세 응답에는 정답·해설이 없다(편집 권한자의 `manage` 응답에만 있음). |
-| MOCK-01-C06 | **한도(비용 보호):** 문항 수 1~50(초과 422). Workspace에서 대기·실행 중인 모의고사 회차 수가 한도(`MOCK_EXAM_MAX_RUNNING_PER_WORKSPACE`, 기본 5)를 넘으면 409 `generation-busy`. 사용자별 생성 시작 분당 횟수 제한(`MOCK_EXAM_GENERATION_RATE_LIMIT_PER_MINUTE`, 기본 6) 초과 429 + Retry-After. `Idempotency-Key`로 재시도하면 같은 회차를 돌려준다. |
+| MOCK-01-C06 | **한도(비용 보호):** 문항 수는 AI 유형이 있으면 1~100(초과 422), `보기 섞기`만이면 1~min(범위, 5,000). Workspace에서 대기·실행 중인 모의고사 회차 수가 한도(`MOCK_EXAM_MAX_RUNNING_PER_WORKSPACE`, 기본 5)를 넘으면 409 `generation-busy`. 사용자별 생성 시작 분당 횟수 제한(`MOCK_EXAM_GENERATION_RATE_LIMIT_PER_MINUTE`, 기본 6) 초과 429 + Retry-After. `Idempotency-Key`로 재시도하면 같은 회차를 돌려준다. |
+| MOCK-01-C09 | **호출 묶기(fake LLM이 호출을 셈):** (1) 같은 장 원본 20개·기본 예산 → LLM 호출 1번, passage는 호출 안에서 중복 없이 한 번씩. (2) 원본 100개 → 입력·출력 예산과 `MOCK_EXAM_SOURCES_PER_CALL`을 넘지 않는 최소 묶음 수(기본 값으로 3번), 묶음 구성은 같은 plan에서 결정적. (3) 묶음 안 항목 하나만 검증 실패 → 나머지는 저장되고 실패 항목들만 모여 호출 1번으로 다시 요청, 또 실패하면 건너뜀. (4) 해석할 수 없는(또는 잘린) 묶음 응답 → 그 묶음만 반으로 나눠 다시 요청하고 다른 묶음은 영향 없음. (5) 원본 하나가 예산을 넘으면 근거를 좁히고, 그래도 넘으면 `source_too_large`로 건너뜀. (6) 묶음 하나가 끝난 뒤 job을 죽이고 다시 실행하면 끝난 묶음을 다시 부르지 않는다(checkpoint). (7) 동시 호출 수가 `MOCK_EXAM_GENERATION_CONCURRENCY`를 넘지 않는다. |
 | MOCK-01-C07 | **유출 금지:** 문제·해설·근거 본문·prompt·LLM 응답은 API·worker 로그, job `result`(만든 수·건너뛴 수·usage·오류 코드만), 활동 기록(`mock_exam.*`은 id·개수만), trace에 남지 않는다. |
 | MOCK-01-C08 | **원본 변경·삭제:** 원본 확정 문제를 편집·삭제·보관해도 이미 만든 모의고사 문제는 바뀌지 않고 그대로 풀 수 있다(출처는 "원본 삭제됨"). 다시 만들 때는 그때의 범위로 다시 풀므로 삭제·보관된 원본은 빠진다. Workspace 삭제 시 모의고사 API는 404. |
 
