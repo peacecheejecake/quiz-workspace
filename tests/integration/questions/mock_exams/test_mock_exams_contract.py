@@ -340,7 +340,15 @@ def test_mock_01_c01_making_editing_and_practising_never_touch_the_bank(
     book = Book(owner)
     sources = book.sources(NORMAL)
     owner.ok("PATCH", f"/questions/{sources[0]['id']}/my-state", {"is_favorite": True})
+    session = owner.ok("POST", f"/questions/{sources[1]['id']}/practice-sessions", {}, (201,))
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{session['id']}/submit",
+        {"selected_option_ids": sources[1]["revision"]["correct_option_ids"]},
+    )
     before = bank_snapshot(db, book.ws)
+    for table in ("questions", "question_revisions", "question_user_states", "question_attempts"):
+        assert before[table][0] >= 1, f"{table} has rows to compare"
     overview = owner.ok("GET", f"/workspaces/{book.ws}/questions/overview")
     note_count = owner.ok("GET", f"/chapters/{book.ch1}/note")["confirmed_question_count"]
 
@@ -367,13 +375,16 @@ def test_mock_01_c01_making_editing_and_practising_never_touch_the_bank(
     # No search index point carries a mock exam question.
     qdrant = job_worker._qdrant
     stems = {q["stem"] for q in items}
+    scanned = 0
     for collection in qdrant.get_collections().collections:
         if not collection.name.startswith(job_worker._names.prefix):
             continue
         points, _ = qdrant.scroll(collection.name, limit=10_000, with_payload=True)
+        scanned += len(points)
         dumped = json.dumps([p.payload for p in points], ensure_ascii=False)
         assert not [i for i in mock_ids if i in dumped], collection.name
         assert not [s for s in stems if s in dumped], collection.name
+    assert scanned >= 1, "the book's index points were read"
 
     # A fork copies the bank, never the mock exams.
     recipient = seed.client("mock-c01-recipient")
@@ -427,6 +438,7 @@ def test_mock_01_c02_only_items_passing_validation_are_stored_failures_retried_o
         "where q.mock_exam_id = %s",
         (partial["id"],),
     )
+    assert len(rows) == 2, "the two valid items are stored"
     assert not [r for (r,) in rows if r in multi], "the blocked item was stored"
     # The declared answer is used only after validation: label 4 = the false statement.
     for q in stored:
@@ -509,6 +521,7 @@ def test_mock_01_c03_the_range_is_this_workspaces_live_confirmed_questions_and_s
         "select plan from public.mock_exam_generations where id = %s",
         (a["latest_generation"]["id"],),
     )
+    assert len(plan) == 3
     revisions = {q["id"]: q["revision"]["id"] for q in sources}
     assert {str(p["question_revision_id"]) for p in plan} == {
         revisions[str(p["question_id"])] for p in plan
@@ -553,7 +566,9 @@ def test_mock_01_c04_remaking_is_a_new_round_and_history_rows_are_append_only(
     seed.problem(regenerate(owner, first["id"]), 409, RUNNING)
     second = finish(owner, res.json())
     assert second["current_generation"]["version"] == 2
-    assert {q["id"] for q in questions(owner, first["id"])}.isdisjoint({q["id"] for q in old})
+    new = questions(owner, first["id"])
+    assert len(new) == 2
+    assert {q["id"] for q in new}.isdisjoint({q["id"] for q in old})
     kept = db(
         "select count(*) from public.mock_exam_questions where generation_id = %s",
         (round1["id"],),
@@ -637,10 +652,12 @@ def test_mock_01_c05_roles_archived_deleted_guests_and_the_feature_switch(
         assert listed["llm_available"] is True
         m.ok("GET", f"/mock-exams/{exam_id}")
     viewer_items = viewer.ok("GET", f"/mock-exams/{exam_id}/questions")
+    assert len(viewer_items["items"]) == 2
     assert answer_keys(viewer_items) == []
     with_answers = viewer.call("GET", f"/mock-exams/{exam_id}/questions?include=answers")
     assert with_answers.status_code in {200, 403}
     if with_answers.status_code == 200:
+        assert len(with_answers.json()["items"]) == 2
         assert answer_keys(with_answers.json()) == []
 
     unknown = seed.problem(outsider.call("GET", f"/mock-exams/{RANDOM_ID}"), 404)
@@ -830,6 +847,7 @@ def test_mock_01_c07_no_question_explanation_book_or_prompt_text_in_logs_results
     )
     assert events, "mock_exam.* activities are recorded"
     assert not [f for f in forbidden for _, payload in events if f in payload]
+    assert caplog.records, "the generation logged something to check"
     assert not [f for f in forbidden if f in caplog.text], "logs hold question or book text"
 
 
@@ -880,11 +898,21 @@ def test_mock_01_c08_later_source_changes_leave_made_questions_alone(seed: Any, 
     original = book.source("flocculation", chapter=2)
     pinned = make(owner, book.ws, config(("OPTION_SHUFFLE",), 1), picked(original["id"]))
     [copy] = questions(owner, pinned["id"], answers=True)
-    attempts = db(
-        "select count(*) from public.mock_exam_attempts a "
-        "join public.mock_exam_questions q on q.id = a.mock_exam_question_id "
-        "where q.mock_exam_id = %s",
-        (pinned["id"],),
+    practise(owner, copy)
+
+    def pinned_attempts() -> list[tuple[Any, ...]]:
+        return db(
+            "select row_to_json(a)::text from public.mock_exam_attempts a "
+            "join public.mock_exam_questions q on q.id = a.mock_exam_question_id "
+            "where q.mock_exam_id = %s order by a.id",
+            (pinned["id"],),
+        )
+
+    attempts = pinned_attempts()
+    assert len(attempts) >= 1, "the pinned copy has an attempt to preserve"
+    bank_attempts = db(
+        "select count(*) from public.question_attempts where question_id = any(%s::uuid[])",
+        ([twin["id"], original["id"]],),
     )
     owner.ok(
         "POST",
@@ -897,21 +925,23 @@ def test_mock_01_c08_later_source_changes_leave_made_questions_alone(seed: Any, 
         copy["revision"]["id"],
         copy["source"],
     )
+    assert pinned_attempts() == attempts, "the merge moved or changed mock exam attempts"
     assert (
         db(
-            "select count(*) from public.mock_exam_attempts a "
-            "join public.mock_exam_questions q on q.id = a.mock_exam_question_id "
-            "where q.mock_exam_id = %s",
-            (pinned["id"],),
+            "select count(*) from public.question_attempts where question_id = any(%s::uuid[])",
+            ([twin["id"], original["id"]],),
         )
-        == attempts
-    )
+        == bank_attempts
+    ), "mock exam attempts never become bank attempts"
     seed.problem(regenerate(owner, pinned["id"]), 409, NO_MATCHING)
 
     # Mock exam questions are never duplicate candidates (a shuffle copy equals its source).
+    pair = [book.source("disinfection", chapter=2) for _ in range(2)]
     groups = owner.ok("GET", f"/workspaces/{book.ws}/question-duplicates")["groups"]
+    grouped = [q["question_id"] for g in groups for q in g["questions"]]
+    assert {q["id"] for q in pair} <= set(grouped), "the scan finds the bank duplicates"
     mock_ids = {q["id"] for q in after} | {copy["id"]}
-    assert not [q for g in groups for q in g["questions"] if q["question_id"] in mock_ids]
+    assert not [i for i in grouped if i in mock_ids]
 
     # Workspace deletion: the mock exam API answers 404.
     assert owner.call("DELETE", f"/workspaces/{book.ws}").status_code in {200, 202, 204}
@@ -1006,7 +1036,9 @@ def test_mock_01_c09_an_oversized_source_is_skipped_as_source_too_large(
         made["latest_generation"]["created_count"],
         made["latest_generation"]["skipped_count"],
     ) == (1, 1)
-    assert not [p for p in llm_calls(tight_worker) if "E2E-MOCK-BULK-999" in p]
+    prompts = llm_calls(tight_worker)
+    assert [p for p in prompts if "E2E-MOCK-BULK-001" in p], "the small source was requested"
+    assert not [p for p in prompts if "E2E-MOCK-BULK-999" in p]
     assert db(
         "select skip_reason from public.mock_exam_generation_items "
         "where generation_id = %s and source_question_id = %s",
