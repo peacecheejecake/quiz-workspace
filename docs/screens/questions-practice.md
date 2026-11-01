@@ -16,7 +16,7 @@
 - **정리 노트와 분리 (DOCSUM-SPEC 2026-10-29):** 풀이 panel은 챕터 정리 노트(CHNOTE-01)의 내용·링크를 보이지 않고 practice API도 노트 필드를 보내지 않는다(제출 전후 모두). 풀이 panel이 열리면 펼쳐져 있던 정리 노트 본문은 다시 접힌다(CHNOTE-01-AC05). 이 화면의 기존 AC는 바뀌지 않는다.
 - **문제 관리 (UX7-BANK 2026-11-01):** 전체 문제 페이지(QBANK-01)를 없애면서 그 페이지의 문제 편집·삭제를 이 panel로 옮겼다(사용자 결정 "문제 편집/삭제만 홈으로 옮기면 될듯", 폐기 기록 [questions-bank.md](questions-bank.md)). 편집 권한(Owner·Editor)이고 Workspace가 보관되지 않았으면 header의 즐겨찾기·다시 풀기 toggle 옆에 `문제 관리` 메뉴 버튼(아이콘, Radix DropdownMenu)이 있고 항목은 `편집`·`변형 출제`·`삭제`다(UX7-BANK-2부터 읽기 항목과 `보관`이 더해짐, 아래). 보기 권한과 보관된 Workspace에는 `문제 관리` 메뉴가 없다(서버도 거절; UX7-BANK-2부터 그 자리에 읽기 전용 `문제 정보` 메뉴).
   - `편집`: 그 문제의 정답·해설을 포함한 편집용 내용을 그때 불러와(풀이 세션 응답에는 여전히 정답이 없다 — AC01) 기존 "문제 편집" modal dialog를 panel 위에 연다. 저장하면 새 question_revision을 만들고(보기 ID 유지), 이전 풀이 기록은 원래 revision을 가리킨다. 저장 뒤 panel은 새 내용으로 풀이 세션을 다시 연다. 다른 사람이 먼저 고쳤으면(stale revision) 편집기의 "최신 내용 불러오기"를 쓴다(기존 편집기 동작).
-  - `변형 출제`: 그 문제의 변형 출제 검토 페이지(`/questions/generate?source=<id>`)로 이동한다(이전 전체 문제 상세의 `변형 출제`).
+  - `변형 출제`: 그 문제의 변형 출제 검토 페이지(`/questions/generate?source=<id>`)로 이동한다(이전 전체 문제 상세의 `변형 출제`). **폐지 예정** — QGEN-RM에서 이 항목을 지운다(MOCK-SPEC 사용자 결정 1, [MOCK-01](mock-exams.md)).
   - `삭제`: 확인 dialog("문제를 삭제할까요?" — Heatmap에서 사라지고 지난 풀이 기록은 이력으로 남는다)에서 `삭제`를 누르면 문제를 삭제하고 panel을 닫으며 그 점이 Heatmap에서 사라진다.
   - ~~보관(`보관`·`보관 해제`)은 옮기지 않았다~~ → UX7-BANK-2에서 `보관`을 되살렸다(아래). 보관 해제는 홈 `문제` 메뉴의 "보관·초안 문제" dialog(QOV-01-AC15).
 - **정답·해설·이력 보기와 보관 (UX7-BANK-2 2026-11-01):** 사용자 결정 "Viewers도 answer를 볼 수 있어야 함 / archiving은 개별 문제에서 할 수 있도록 / version history, source links, status filters는 왜?? 화면 삭제와는 상관 없는것 같은데" — 전체 문제 페이지와 함께 없앤 상세 panel의 읽기 기능과 보관을 이 panel에 되살린다.
@@ -25,7 +25,7 @@
   - **불러오기:** 정답이 든 문제(`GET /questions/{id}`, 지난 버전은 `GET /questions/{id}/revisions/{revision_id}` — 전체 문제 페이지가 쓰던 읽기 API, 모든 구성원·보관 Workspace 허용)는 항목을 고를 때만 불러온다. 풀이 session 응답에는 여전히 정답·해설이 없다(AC01). 불러오는 동안 "문제를 불러오는 중입니다." 상태, 실패하면 role=alert 문구와 `다시 시도`.
   - **풀이와의 관계 (사용자 결정 2026-11-01, UX7 확인 7):** 정답 보기는 풀이(attempt)가 아니다: 풀이 기록·채점 결과·Heatmap 상태(열람 기록은 panel을 열 때 이미 남았다)를 바꾸지 않는다. 아직 제출하지 않은 풀이 중에 열어도 그 풀이는 그대로다 — dialog를 닫으면 고르던 답안과 같은 session이 남아 있고 그대로 제출할 수 있으며 보통 제출처럼 채점·기록된다(정답을 봤는지는 기록하지 않는다).
   - **보관:** `보관`은 확인 dialog("문제를 보관할까요?" — Heatmap에서 빠지고 `문제` › `보관·초안 문제`에서 보관 해제할 수 있으며 지난 풀이 기록은 남는다)를 거쳐 문제를 보관(ARCHIVED, 그 순간의 현재 revision 기준)하고 panel을 닫는다. 그 점은 Heatmap에서 사라지고(새로 고침해도), 뒤로가기로 panel이 다시 열리지 않는다. 확정 문제만 보관할 수 있다(서버 규칙: 확정↔보관, 초안→확정).
-- **통합 `QuestionViewer` (MOCK-SPEC 2026-11-01):** 이 panel은 공통 `QuestionViewer`의 `practice` 방식(modal `FloatingSidePanel`, 한 문제, 이전·다음 = Heatmap 순서)이 된다(Task QVIEW-W). 범위를 골라 하나씩 푸는 `sequence` 방식과 호출 위치 목록은 [QVIEW-01](question-viewer.md). 이 화면의 기존 AC는 바뀌지 않고 QuestionViewer를 대상으로 그대로 검증한다.
+- **통합 `QuestionViewer` (MOCK-SPEC 2026-11-01):** 이 panel은 공통 `QuestionViewer`의 `practice` 방식(modal `FloatingSidePanel`, 한 문제, 이전·다음 = Heatmap 순서)이 된다(Task QVIEW-W). 범위를 골라 하나씩 푸는 `sequence` 방식과 호출 위치 목록은 [QVIEW-01](question-viewer.md). 이 화면의 기존 AC는 바뀌지 않고 QuestionViewer를 대상으로 그대로 검증한다. header의 `문제 관리`/`문제 정보` 메뉴, 그 위의 "문제 상세" dialog(QuestionViewer `manage`), session cache(AC06), 채점 결과 테두리(AC12), `보기` 글자·끝 빈 괄호 표시(AC13)는 QVIEW-01 호출 위치 표 1·1a·4와 "모든 방식이 지켜야 하는 UX7 동작"에 그대로 옮겨 적었다(MOCK-SYNC 2026-11-02). QGEN-RM은 `문제 관리`의 `변형 출제`를 지운다(→ `정답·해설 보기`·`수정 이력·출처` | `편집`·`보관` | `삭제`); AC09의 "`변형 출제`가 없다"는 그 뒤에도 참이다.
 
 ## 수용 기준
 

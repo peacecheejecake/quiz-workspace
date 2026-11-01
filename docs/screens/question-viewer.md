@@ -1,10 +1,10 @@
 # QVIEW-01 — 통합 문제 보기 `QuestionViewer` (범위 풀이 popup)
 
-**상태:** 확정 화면 요구사항 v1.0 · MOCK-SPEC 신규 2026-11-01 (사용자 요청 "정해진 범위의 문제에서 하나씩 팝업 위에서 문제를 보여주는 기능 추가(랜덤 여부는 시작 전 체크) — 등록된 문제 전체, 그리고 모의고사로 생성된 문제에서 각각 해당 기능 사용 — 공통 컴포넌트로 개발", 추가 결정 "하나씩 팝업 위에서 문제를 보여주는 기능을 통합 QuestionViewer로 하고, 기존 문제를 보여줄 때도 이 컴포넌트를 사용해도 되겠다")
+**상태:** 확정 화면 요구사항 v1.0 · MOCK-SPEC 신규 2026-11-01 (사용자 요청 "정해진 범위의 문제에서 하나씩 팝업 위에서 문제를 보여주는 기능 추가(랜덤 여부는 시작 전 체크) — 등록된 문제 전체, 그리고 모의고사로 생성된 문제에서 각각 해당 기능 사용 — 공통 컴포넌트로 개발", 추가 결정 "하나씩 팝업 위에서 문제를 보여주는 기능을 통합 QuestionViewer로 하고, 기존 문제를 보여줄 때도 이 컴포넌트를 사용해도 되겠다") · MOCK-SYNC 개정 2026-11-02 (UX7이 만든 호출 위치·메뉴·보관·중복 정리에 맞춤)
 **Route:** 범위 고르기 `/workspaces/:workspaceId?practice=new&source=bank` · 모의고사 범위 고르기 `/workspaces/:workspaceId?practice=new&source=mock&mock=:mockExamId` · 진행 중 `/workspaces/:workspaceId?practice=:practiceRunId&i=:position` (Workspace 홈 위 modal panel). 한 문제 보기는 기존 route 그대로(`?question=:questionId` — QPLAY-01)
 **테스트:** `tests/e2e/questions/question-viewer.spec.ts` (계약: `tests/integration/questions/practice_runs/test_practice_runs_contract.py`, `packages/ui` · `apps/web` Vitest)
 **Phase:** QVIEW.0 (RED) → QVIEW-B → QVIEW-W (UX7-CACHE·UX7-BANK merge 이후; `bank` 출처 AC) → MOCK-P·MOCK-W (`mock` 출처: AC05, C03·C04의 mock 경우; CI phase는 MOCK-W에서 켬)
-**연계:** [QPLAY-01](questions-practice.md), [QOV-01](questions-overview.md), [MOCK-01](mock-exams.md), [CHNOTE-01](chapter-notes.md), [WS-VIEW-01](workspace-shared-view.md), [Questions 명세](../questions.md) §4·§10, [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
+**연계:** [QPLAY-01](questions-practice.md), [QOV-01](questions-overview.md), [MOCK-01](mock-exams.md), [CHNOTE-01](chapter-notes.md), [WS-VIEW-01](workspace-shared-view.md), [Questions 명세](../questions.md) §4·§11·§12, [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
 
 ```yaml
 id: QVIEW-01
@@ -32,31 +32,43 @@ linked_tests: [QVIEW-01-AC01 … QVIEW-01-AC08]
 
 ## 기존 호출 위치 (call sites)와 보기 방식
 
-QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하는 동작(modal/non-modal, 정답 표시 여부, 이전·다음 순서)은 방식으로 남기고 바꾸지 않는다. 각 기존 화면의 AC는 그대로 유효하며 이제 QuestionViewer를 대상으로 검증한다.
+QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하는 동작(modal/non-modal, 정답 표시 여부, 이전·다음 순서)은 방식으로 남기고 바꾸지 않는다. 각 기존 화면의 AC는 그대로 유효하며 이제 QuestionViewer를 대상으로 검증한다. 아래 표는 UX7(2026-11-01, `feature/ux7-feedback`)이 실제로 만든 화면 기준이다(MOCK-SYNC 2026-11-02 — MOCK-SPEC 초안은 UX7-BANK가 "홈 문제 상세 panel"을 따로 만든다고 가정했으나, UX7-BANK·BANK-2는 풀이 panel의 메뉴와 그 위의 modal "문제 상세" dialog로 만들었다).
 
-| # | 호출 위치 | 문제 수 | 방식 | 겉 panel | 기준 AC |
+| # | 호출 위치 (지금 구현) | 문제 수 | 방식 | 겉 panel | 기준 AC |
 |---|---|---|---|---|---|
-| 1 | Workspace 홈 Heatmap marker click/Enter, `?question=` 딥링크 | 한 문제(이전·다음 = Heatmap 순서·현재 필터, URL이 문제마다 바뀜) | `practice` | modal `FloatingSidePanel`(design-system §5.1 `QuestionPracticePanel` 규칙) | QOV-01-AC06, QPLAY-01-AC01~AC05 |
-| 2 | 이력 dialog의 풀이 기록 링크(`?question=`) | 한 문제 | `practice` | 1과 같음 | HISTORY-01 |
+| 1 | Workspace 홈 Heatmap marker click/Enter, `?question=` 딥링크 (`components/questions/practice/practice-panel.tsx`) | 한 문제(이전·다음 = Heatmap 순서·현재 필터, URL이 문제마다 바뀜) | `practice` | modal `FloatingSidePanel`(design-system §5.1 `QuestionPracticePanel` 규칙) | QOV-01-AC06·AC14, QPLAY-01-AC01~AC06·AC12·AC13 |
+| 1a | 1의 header 메뉴 (`practice/question-manage-menu.tsx`): 편집 권한·보관되지 않은 Workspace는 `문제 관리`(`정답·해설 보기`·`수정 이력·출처` \| `편집`·`변형 출제`·`보관` \| `삭제`), 보기 권한·보관된 Workspace는 읽기 전용 `문제 정보`(`정답·해설 보기`·`수정 이력·출처`) | 한 문제 | `practice`의 header 메뉴(쓰기 항목은 편집 권한에만 보이고 비활성으로도 보이지 않음) | 1과 같음; `편집`은 그 위에 modal "문제 편집" dialog, `보관`·`삭제`는 확인 dialog 후 panel을 닫음, `변형 출제`는 QGEN 검토 페이지로 이동(QGEN-RM에서 제거) | QPLAY-01-AC07~AC11 |
+| 2 | 이력 dialog의 풀이 기록 링크(`?question=`, 합쳐진 중복이면 남길 문제를 엶 — UX7-DEDUP) | 한 문제 | `practice` | 1과 같음 | HISTORY-01, QOV-01-AC17 |
 | 3 | 챕터 정리 노트 각주 링크(구성원, `?question=`) | 한 문제 | `practice` | 1과 같음(열리면 노트 본문 접힘) | CHNOTE-01-AC02·AC05 |
-| 4 | 홈의 문제 상세 + 편집·삭제(UX7-BANK가 QBANK-01 상세를 홈으로 옮김) | 한 문제 | `manage`(정답·해설·출처 표시, 편집·삭제 동작; 풀이 기록 없음, viewed 기록 없음) | UX7-BANK가 정한 panel 방식 그대로 | UX7-BANK의 AC(QBANK-01 대체) |
-| 5 | 공유 링크 게스트의 문제 미리보기(`/share/:shareId`, 정리 노트 각주 포함) | 한 문제 | `read-only`(발행 문제·정답·해설 표시, 제출·즐겨찾기·다시 풀기 없음, 아무것도 저장 안 함) | non-modal `FloatingSidePanel` | WS-VIEW-01-AC01·AC03, CHNOTE-01-AC04 |
-| 6 | **새로:** `문제` 메뉴 › `문제 풀기`(등록된 문제 범위 풀이) | 범위 묶음 | `sequence`(`source=bank`) | modal `FloatingSidePanel` | QVIEW-01 |
-| 7 | **새로:** 모의고사 목록·상세의 `풀기` | 범위 묶음 | `sequence`(`source=mock`) | modal `FloatingSidePanel` | QVIEW-01-AC05, MOCK-01 |
-| 8 | **새로:** 모의고사 상세의 문제 행(편집 권한) | 한 문제 | `manage`(`source=mock`: 편집·빼기) | modal `FloatingSidePanel` | MOCK-01-AC05 |
+| 4 | 1a의 `정답·해설 보기`·`수정 이력·출처`가 여는 "문제 상세" dialog (`components/questions/detail/question-detail-dialog.tsx`, 본문 `question-detail.tsx`의 `RevisionView`) | 한 문제 | `manage`(정답·해설·허용 답안·채점 기준·출처(DOC-02 `?page=` 링크)·수정 이력(버전 toggle `aria-pressed`, 지난 버전 미리보기); 정답이 든 문제는 항목을 고를 때만 `GET /questions/{id}`로 불러옴; 풀이 기록·viewed 기록 없음; 여기서는 동작 버튼 없음) | panel 위 modal `ModalDialog` "문제 상세"(설명: 제목 · 유형 · 챕터). `수정 이력·출처`로 열면 `수정 이력` 제목에 focus, 닫으면 메뉴 버튼으로 focus 복귀. 닫아도 아래 `practice`의 고른 답·session이 그대로 남아 제출할 수 있다 | QPLAY-01-AC09·AC10·AC13 |
+| 5 | `문제` › `보관·초안 문제` dialog(`?panel=inactive-questions`, `components/questions/inactive/inactive-questions.tsx`)의 행 → 4와 같은 "문제 상세" dialog | 한 문제(목록 행은 QuestionViewer가 아님: 번호·유형·상태 badge·챕터·발문 앞부분) | `manage` — 편집 권한(보관되지 않은 Workspace)은 footer에 그 상태의 `보관 해제`/`확정`·`편집`·`삭제`, 보기 권한·보관된 Workspace는 동작 없는 읽기 전용(행에도 버튼 없음) | non-modal 목록 dialog 위 modal `ModalDialog` "문제 상세" | QOV-01-AC15 |
+| 6 | 공유 링크 게스트의 문제 미리보기(`/share/:shareId`, 정리 노트 각주 포함; `components/shared/shared-questions.tsx`, 본문 `RevisionView`) | 한 문제 | `read-only`(발행 문제·정답·해설 표시, 제출·즐겨찾기·다시 풀기·수정 이력 없음, 아무것도 저장 안 함) | non-modal `FloatingSidePanel` | WS-VIEW-01-AC01·AC03, CHNOTE-01-AC04 |
+| 7 | **새로:** `문제` 메뉴 › `문제 풀기`(등록된 문제 범위 풀이) | 범위 묶음 | `sequence`(`source=bank`) | modal `FloatingSidePanel` | QVIEW-01 |
+| 8 | **새로:** 모의고사 목록·상세의 `풀기` | 범위 묶음 | `sequence`(`source=mock`) | modal `FloatingSidePanel` | QVIEW-01-AC05, MOCK-01 |
+| 9 | **새로:** 모의고사 상세의 문제 행(편집 권한) | 한 문제 | `manage`(`source=mock`: 정답·해설·검증 경고, 동작 `편집`·`이 모의고사에서 빼기`; 수정 이력·출처 링크는 원본 번호만) | modal `FloatingSidePanel` | MOCK-01-AC05 |
+| — | `문제` › `중복 문제 정리` dialog(`?panel=question-duplicates`, `components/questions/duplicates/question-duplicates.tsx`)의 묶음 행 | — | 범위 밖: popup이 아니라 목록 안 렌더링(번호·챕터·등록일·발문·보기, **정답 표시 없음**, `남길 문제` radio). 바꿀 때 문제 본문 부품을 쓰더라도 정답·해설을 렌더링하지 않는다 | — | QOV-01-AC16 |
+| — | Heatmap marker hover/focus preview(`QuestionPreviewPopover`) | — | 범위 밖: 발문 앞부분 미리보기. `displayStem`만 공유한다 | — | QOV-01, QPLAY-01-AC13 |
 | — | DOC-02·공유 문서 화면의 "가져온 문제 형식"(본문 안에 펼쳐 보이는 문제) | — | 범위 밖: popup이 아니라 본문 안 렌더링. 문제 본문 부품(`QuestionBody` — 발문·번호 붙은 보기·접힌 정답·해설)만 공유한다 | — | DOC-02-AC11 |
 | — | 문제 변형 출제의 보기 섞기 미리보기(QGEN-01) | — | 없앤다(QGEN-RM) | — | — |
 
-- **modal vs non-modal:** 새 범위 풀이(6·7)는 사용자 요청의 "팝업"에 맞춰 1과 같은 modal `FloatingSidePanel`(데스크톱 오른쪽 500px, 모바일 bottom sheet)로 한다 (사용자 결정 2026-11-01). 게스트 미리보기(5)는 지금처럼 non-modal로 남긴다 — 공유 화면 AC가 문제 목록과 panel을 함께 쓰는 동작을 전제한다. 4의 방식은 UX7-BANK 결정을 따른다.
-- 방식마다 header 동작: `practice`·`sequence(bank)`는 즐겨찾기·다시 풀기 toggle(QPLAY), `sequence(mock)`는 없음(모의고사 문제는 개인 상태가 없음, 사용자 결정 2026-11-01), `manage`는 편집·삭제(또는 빼기), `read-only`는 없음.
+- **modal vs non-modal:** 새 범위 풀이(7·8)는 사용자 요청의 "팝업"에 맞춰 1과 같은 modal `FloatingSidePanel`(데스크톱 오른쪽 500px, 모바일 bottom sheet)로 한다 (사용자 결정 2026-11-01). 게스트 미리보기(6)는 지금처럼 non-modal로 남긴다 — 공유 화면 AC가 문제 목록과 panel을 함께 쓰는 동작을 전제한다. 4·5의 "문제 상세"는 UX7-BANK-2가 만든 대로 다른 panel·dialog 위의 modal `ModalDialog`로 남는다(QuestionViewer `manage`가 그 안을 그린다).
+- 방식마다 header 동작: `practice`·`sequence(bank)`는 즐겨찾기·다시 풀기 toggle(QPLAY; 합쳐진 중복이 있으면 끄기는 기존 my-state PATCH 그대로 — 합쳐진 중복의 flag도 함께 꺼짐, questions.md §10.2)과 1a의 `문제 관리`/`문제 정보` 메뉴, `sequence(mock)`는 toggle·메뉴 없음(모의고사 문제는 개인 상태가 없음, 사용자 결정 2026-11-01), `manage`는 호출 위치가 넘긴 동작(4: 없음, 5: `보관 해제`/`확정`·`편집`·`삭제`, 9: `편집`·`빼기`), `read-only`는 없음. 보관된 Workspace의 `practice`는 toggle 없이 `문제 정보` 메뉴만 보인다(QPLAY-01 "메뉴").
 - 문제 본문 부품은 모든 방식이 같다: 번호, 장, 유형 badge, 발문, 번호 붙은 보기(`1.` `2.` … 표시용, `aria-hidden`), 답 입력, 결과 영역(`role="status"`, 글자로 "정답"·"오답"·"채점 대기"), 정답·해설.
+
+**모든 방식이 지켜야 하는 UX7 동작 (기존 AC GREEN 유지, MOCK-SYNC):**
+
+- **표시 (QPLAY-01-AC13, UX7-QDISPLAY):** 발문은 모든 방식(미리보기·`practice`·`sequence`·`manage`·`read-only`, 모의고사 문제 포함)에서 `displayStem`으로 끝의 빈 답 괄호만 숨긴다(저장값·편집기 입력값·API 값은 그대로). 보기 목록 위 `보기` 글자는 보이지 않고 radiogroup·목록의 접근 가능한 이름으로만 남는다(kit `RadioGroup` `hideLabel`, 복수 정답은 "정답을 모두 고르세요" + 숨긴 `보기`).
+- **채점 결과 테두리 (QPLAY-01-AC12, UX7-QDISPLAY):** 객관식 결과를 보이는 모든 곳 — `practice`, `sequence(bank|mock)`의 제출 직후, `이전`·결과 목록으로 돌아간 읽기 전용 결과 — 은 같은 표시를 쓴다: 맞힘 = 고른 보기 `--color-success`, 오답 = 고른 보기 `--color-border-strong` + 정답 보기 `--color-danger`, 행마다 "정답"·"내 선택"·"정답 · 내 선택" 글자(`aria-describedby`), 제출 전후 같은 두께(레이아웃 이동 없음). `manage`·`read-only`의 정답 표시는 채점 결과가 아니므로 기존 "정답" 글자 + 체크 아이콘 그대로다.
+- **열어 본 문제 client cache (QPLAY-01-AC06, UX7-CACHE):** `practice` 방식은 지금처럼 이번 화면에서 연 정답 없는 session을 메모리에 보관한다(화면 인스턴스·Workspace 단위, TTL 10분, 200개, browser storage 없음, 제출 시작·실패·만료 session 버림, 제출 결과 미보관, 이웃 prefetch 없음 — 열기 = 열람 기록). `sequence`가 같은 cache를 쓰면 같은 규칙을 따르고, 묶음 안 위치(`practice_run_id`, position)를 key에 넣어 묶음 밖 `practice` session과 섞지 않는다. `manage`·`read-only`의 정답이 든 내용은 cache하지 않는다.
+- **정답 보기는 풀이가 아님 (QPLAY-01-AC09, UX7 확인 7):** 4의 "문제 상세"를 열고 닫아도 아래 `practice`(또는 `sequence`)의 고른 답·session은 그대로이고 그대로 제출된다. `sequence`에서는 4의 메뉴를 열 수 있어도 묶음 진행·결과를 바꾸지 않는다.
+- **뒤로가기·URL state (QOV-01-AC14, UX7-BACK·UX7-BACK-2):** 새 URL state `?practice=new&source=…`·`?practice=<id>&i=<n>`·`?panel=mock-exams`(`&mock=new|<id>`)도 홈 dialog 기록 규칙을 그대로 따른다: 열면 기록 항목 하나, 열린 동안 뒤로가기 한 번 = 맨 위 dialog 하나 닫기, 닫힌 dialog는 뒤로가기·앞으로가기 어느 쪽으로도 다시 열리지 않음, 닫으면 열기 전 주소로 돌아가되 열린 동안 바꾼 필터·검색어는 유지, 딥링크·새로 고침으로 열린 dialog도 뒤로가기 한 번에 하나씩 닫힘. 묶음 안 `이전`·`다음`(`i` 변경)은 풀이 panel의 이전/다음처럼 dialog 닫기가 아니다: 뒤로가기는 panel을 연 채 앞 위치로, 앞으로가기는 다시 뒤 위치로 간다. `practice`와 `?practice=`·모의고사 `manage`(9)는 둘 다 modal이라 함께 열리지 않는다; `?panel=mock-exams`는 다른 non-modal 홈 dialog와 쌓인다(QOV-01-AC10). (제안 — 사용자 확인 필요) 범위 고르기에서 `시작`해 `practice=new`가 `practice=<id>`로 바뀌는 것, `결과 보기`, `처음부터 다시`는 같은 dialog 안의 단계 전환이라 기록 항목을 **바꾸고**(replace) 새로 쌓지 않는다 — 시작한 뒤 뒤로가기 한 번이 범위 고르기로 돌아가지 않고 panel을 닫는다. 모의고사 dialog 안의 목록 → 만들기·상세 전환(`mock=`)은 `이전`·`다음`처럼 항목을 쌓아 뒤로가기가 dialog를 연 채 목록으로 돌아간다(`BackLink` "모의고사 목록"과 같은 결과).
 
 ## 레이아웃 및 컴포넌트
 
-- **진입 (bank):** Workspace header `문제` 메뉴에 `문제 풀기` 항목(모든 구성원; 보관된 Workspace에서도 보임) (사용자 결정 2026-11-01). 누르면 QuestionViewer가 범위 고르기 단계로 바로 열리고(`?practice=new&source=bank`) 목록을 불러오는 동안 skeleton(QOV-01-AC09 규칙).
+- **진입 (bank):** Workspace header `문제` 메뉴에 `문제 풀기` 항목(모든 구성원; 보관된 Workspace에서도 보임) (사용자 결정 2026-11-01). 메뉴 항목은 `requiresEdit: false`(UX7-DOCS-2 패턴)라 보기 권한·보관된 Workspace에서도 활성이고 이유 글자가 붙지 않는다 — 위치는 구분선 아래 보기 권한 항목 묶음(`보관·초안 문제`·`모의고사`·`문제 풀기`, QOV-01 "Workspace header"). 누르면 QuestionViewer가 범위 고르기 단계로 바로 열리고(`?practice=new&source=bank`) 목록을 불러오는 동안 skeleton(QOV-01-AC09 규칙).
 - **진입 (mock):** 모의고사 행·상세의 `풀기`(MOCK-01). 범위 고르기 단계는 그 모의고사의 문제만 보이고(출처 장별 묶음) 처음에 모두 선택되어 있다.
 - **범위 고르기 단계:** 제목 "문제 풀기"(mock이면 "<모의고사 이름> 풀기").
-  - 필터 줄(접힘 가능, 홈 상태 필터와 같은 칩) → `QuestionRangePicker`.
+  - 필터 줄(접힘 가능, 홈 상태 필터와 같은 칩) → `QuestionRangePicker`. 목록은 Heatmap에 보이는 문제와 같다: 보관된 문제(중복 정리로 보관된 중복 포함)·초안은 없고, 풀이 상태·즐겨찾기·다시 풀기 필터는 합쳐진 중복의 기록까지 합친 상태로 판정한다(Heatmap marker와 같은 상태, C07).
   - `QuestionRangePicker`: 맨 위 `전체 선택` checkbox(지금 필터에 보이는 문제 전체; 일부만 선택이면 `aria-checked="mixed"`), 장 그룹마다 장 checkbox(장 제목·문제 수, 일부 선택 = mixed)와 펼치기 버튼(`aria-expanded`), 펼치면 문제 checkbox 목록("3장 12번 · 발문 앞 40자 · 유형"). 필터를 바꾸면 보이지 않게 된 문제는 선택에서 빠진다(선택 = 보이는 문제 중에서만). 아래 "선택 n문제" 글자.
   - `무작위 순서` checkbox(기본 꺼짐, 시작할 때마다 다시 고름 — 기억하지 않음).
   - `시작`(선택 0이면 비활성 + 이유 "풀 문제를 고르세요").
@@ -72,12 +84,12 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 | 확정 문제 없음(bank) | "아직 확정된 문제가 없습니다." `시작` 없음 |
 | 필터에 맞는 문제 없음 | "조건에 맞는 문제가 없습니다." + `필터 초기화`, `시작` 비활성 |
 | 문제 불러오는 중 | 본문 skeleton, 진행 막대 유지 |
-| 묶음 도중 문제가 삭제·보관됨(bank) 또는 모의고사에서 빠짐(mock) | "이 문제는 더 이상 풀 수 없습니다." + `다음` (결과 요약에서 "건너뜀") |
+| 묶음 도중 문제가 삭제·보관됨(bank — 중복 정리로 보관된 경우 포함) 또는 모의고사에서 빠짐(mock) | "이 문제는 더 이상 풀 수 없습니다." + `다음` (결과 요약에서 "건너뜀") |
 | 모의고사 삭제됨·다시 만들어 문제가 바뀜 | 묶음은 시작할 때의 문제로 계속 풀 수 있다(사용자 결정 2026-11-01); 삭제된 모의고사의 묶음은 "모의고사를 찾을 수 없습니다."(404) |
 | 제출 실패(네트워크) | 답 유지 + alert "제출하지 못했습니다. 다시 시도하세요." |
 | 보관된 Workspace | 범위 고르기·보기는 가능, `제출` 비활성 + "보관된 Workspace에서는 답안을 제출할 수 없습니다."(API 403 `workspace-archived`) |
 | 다른 Workspace·다른 사용자의 묶음 딥링크 | "풀이를 찾을 수 없습니다."(404; 묶음은 만든 사용자만) |
-| 공유 링크 게스트 | `문제 풀기`·`?practice=` 없음(사용자 결정 2026-11-01), 게스트 미리보기(호출 위치 5)는 그대로 |
+| 공유 링크 게스트 | `문제 풀기`·`?practice=` 없음(사용자 결정 2026-11-01), 게스트 미리보기(호출 위치 6)는 그대로 |
 
 ## 접근성
 
@@ -147,9 +159,10 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 | QVIEW-01-C03 | **정답 비노출:** `GET /practice-runs/{id}`·`/items/{position}`과 묶음에서 여는 practice session은 제출 전 정답·허용 답안·채점 기준·해설을 보내지 않는다(응답 schema test + 항목마다 key 검사). 제출 응답에서만 그 문제의 정답·해설을 보낸다. |
 | QVIEW-01-C04 | **기록:** `bank` 묶음의 세션·풀이는 기존 `practice_sessions`·`question_attempts`에 `practice_run_id`와 함께 기록되어 `question_user_states`·Heatmap에 반영된다. `mock` 묶음은 `mock_exam_practice_sessions`·`mock_exam_attempts`에만 기록되고 `question_*` 테이블은 바뀌지 않는다(행 수 비교 test). 묶음 안 문제마다 제출 1회(두 번째 제출 409 `already-submitted`); 풀이 기록은 UPDATE·DELETE 불가(pgTAP). |
 | QVIEW-01-C05 | **인가 matrix:** 묶음은 만든 사용자만 읽고 쓴다(다른 사용자·다른 Workspace 404). 모든 구성원(viewer 포함)이 만들고 풀 수 있고, 보관 Workspace는 만들기·읽기 가능·제출 403 `workspace-archived`, 삭제 Workspace 404. 공유 세션(게스트)은 묶음 API에 접근할 수 없다(401/404). |
-| QVIEW-01-C06 | **컴포넌트 계약(Vitest):** `QuestionViewer`는 방식 `practice`·`sequence`·`manage`·`read-only`를 갖고, `read-only`·`manage`는 제출 UI를 렌더링하지 않으며, `sequence(mock)`는 즐겨찾기·다시 풀기를 렌더링하지 않는다. 기존 호출 위치(홈 marker, 이력·정리 노트 링크, 홈 문제 상세, 공유 미리보기)는 모두 이 컴포넌트를 쓴다(이전 `PracticePanel`·`QuestionDetail`·`SharedQuestionPanel` 구현 제거). |
+| QVIEW-01-C06 | **컴포넌트 계약(Vitest):** `QuestionViewer`는 방식 `practice`·`sequence`·`manage`·`read-only`를 갖고, `read-only`·`manage`는 제출 UI를 렌더링하지 않으며, `sequence(mock)`는 즐겨찾기·다시 풀기를 렌더링하지 않는다. 기존 호출 위치(홈 marker와 그 header 메뉴, 이력·정리 노트 링크, "문제 상세" dialog(풀이 panel 메뉴·보관·초안 문제 행), 공유 미리보기)는 모두 이 컴포넌트를 쓴다(이전 `PracticePanel`의 본문, `QuestionDetailDialog`·`RevisionView`의 본문, `shared-questions.tsx`의 문제 panel 본문을 대체; `QuestionManageMenu`·`QuestionMenu`·"문제 편집"·확인 dialog는 그대로 재사용). `displayStem`·`hideLabel`·채점 결과 테두리·session cache 규칙(위 "모든 방식이 지켜야 하는 UX7 동작")을 방식별로 검사한다. |
+| QVIEW-01-C07 | **범위와 보관·중복 (MOCK-SYNC, UX7-BANK-2·UX7-DEDUP):** `quiz_api.question_ranges`는 Heatmap overview와 같은 판정을 쓴다 — 살아 있는 CONFIRMED 문제만(보관 ARCHIVED — 중복 정리로 보관된 중복 포함 — 과 초안 DRAFT는 범위 고르기 목록·`전체 선택`·장 선택에 없다), 풀이 상태·즐겨찾기·다시 풀기 필터는 요청한 사용자의 `question_merged_user_states`(합쳐진 중복까지 합친 상태, questions.md §10.2)로 판정해 Heatmap 필터와 같은 문제를 고른다. 보관·초안 문제 id를 직접 보내면 422 `range-invalid`(C01). 묶음을 만든 뒤 보관(중복 정리 포함)·삭제된 문제의 위치는 "이 문제는 더 이상 풀 수 없습니다."·건너뜀이다(AC08). `bank` 묶음의 제출은 그 문제(남길 문제)의 `question_attempts`·`question_user_states`에 기록되고 합친 상태는 view가 계산한다(기록을 옮기지 않음). Heatmap과 같은 결과를 내는지 같은 fixture로 비교하는 test. |
 
 ## Test-first 규칙
 
 - 위 AC ID를 Playwright test title에 포함하고 RED를 확인한 다음 API/UI를 구현한다.
-- 기존 QPLAY-01·QOV-01-AC06·CHNOTE-01-AC02/AC05·WS-VIEW-01 테스트는 QVIEW-W에서 바꾸지 않고 GREEN으로 남아야 한다(회귀 기준). 테스트가 구현 컴포넌트 이름에 기대고 있으면 role/label locator로만 고친다.
+- 기존 QPLAY-01(AC01~AC13 — 특히 AC06 cache, AC09~AC11 메뉴·문제 상세·보관, AC12 결과 테두리, AC13 표시)·QOV-01-AC06·AC14·AC15·AC17·CHNOTE-01-AC02/AC05·WS-VIEW-01·HISTORY-01 테스트는 QVIEW-W에서 바꾸지 않고 GREEN으로 남아야 한다(회귀 기준). 테스트가 구현 컴포넌트 이름에 기대고 있으면 role/label locator로만 고친다.
