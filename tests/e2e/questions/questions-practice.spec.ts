@@ -969,7 +969,7 @@ async function expectRows(
   for (const row of rows) {
     const option = panelUi.option(panel, row.text);
     // Read once on purpose: the tone renders with the result text the caller waited for, and the
-    // row has no transition (not even the 0.01ms one reduced motion would give it), so the final
+    // row declares no transition and reduced motion adds none (base.css, UX7-CSS), so the final
     // color is there at once. A transition creeping back fails here instead of being polled away.
     const border = await optionRowBorder(option);
     expect(border, `row "${row.text}"`).toMatchObject({

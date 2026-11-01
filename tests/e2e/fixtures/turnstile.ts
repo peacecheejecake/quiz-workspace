@@ -260,7 +260,7 @@ export async function expectBlockedForCaptcha(button: Locator): Promise<void> {
 
 /**
  * No element in the security-check region animates or transitions (reduced motion). Durations up
- * to 1 ms count as none: the global reduced-motion reset (design-tokens base.css) sets 0.01 ms.
+ * to 1 ms count as none.
  */
 export async function expectNoMotion(region: Locator): Promise<void> {
   const moving = await region.evaluate((root) => {

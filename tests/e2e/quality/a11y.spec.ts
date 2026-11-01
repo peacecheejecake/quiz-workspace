@@ -68,6 +68,7 @@ import {
   main,
   questionPaper,
   uploadQuestionPaper,
+  uniqueWorkspaceName,
 } from '../fixtures/test.ts';
 
 test.describe.configure({ timeout: 2 * JOB_TIMEOUT_MS + 60_000 });
@@ -553,5 +554,89 @@ test(
     await expect(overviewUi.marker(dot)).toHaveAttribute('data-shape', 'star');
     await expectAccessible(page, 'heatmap in forced colors', { schemes: ['light'] });
     await page.emulateMedia({ forcedColors: 'none' });
+  },
+);
+
+// UX7-CSS: under reduced motion nothing transitions at all — not even for one frame — so a
+// token-coloured element shows its new computed style at once, and overlays whose exit relied on
+// a (collapsed) animation still close and unmount.
+const REDUCED_CLOSE_MS = 1_000;
+
+test(
+  'A11Y-10 reduced motion: a style change applies in the same frame; dialogs, menus, toasts and panels still close',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('a11y10rm');
+    const ws = await workspaceFactory.create(owner, uniqueWorkspaceName('a11y10rm'));
+    await signInAs(page, owner.user);
+    await page.goto('/workspaces');
+    const create = wsUi.createButton(page);
+    await expect(create).toBeEnabled();
+
+    // Theme switch: the body (declares no transition) and a kit button (declares one) read the
+    // new token colours synchronously, and the change starts no CSS transition.
+    await settle(page);
+    // Retried only in case a late render resets the attribute mid-sample (`kept` false).
+    await expect(async () => {
+      const sample = await create.evaluate(async (button) => {
+        const read = () => {
+          const body = getComputedStyle(document.body);
+          const own = getComputedStyle(button);
+          return [body.backgroundColor, body.color, own.backgroundColor, own.color];
+        };
+        const root = document.documentElement;
+        const from = root.getAttribute('data-theme');
+        const before = read();
+        const target = from === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', target);
+        const now = read();
+        const transitions = document
+          .getAnimations()
+          .filter((a) => a instanceof CSSTransition)
+          .map((a) => (a as CSSTransition).transitionProperty);
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const settled = read();
+        const kept = root.getAttribute('data-theme') === target;
+        if (from === null) root.removeAttribute('data-theme');
+        else root.setAttribute('data-theme', from);
+        return { before, now, settled, transitions, kept };
+      });
+      expect(sample.kept, 'data-theme kept while sampling').toBe(true);
+      expect(sample.settled, 'the theme switch changes the token colours').not.toEqual(
+        sample.before,
+      );
+      expect(sample.now, 'computed style in the same frame').toEqual(sample.settled);
+      expect(sample.transitions, 'CSS transitions started by the switch').toEqual([]);
+    }).toPass({ timeout: 10_000 });
+
+    // Modal dialog closes and a toast appears; its close button removes it.
+    const name = uniqueWorkspaceName('a11y10rm-new');
+    await create.click();
+    const dialog = wsUi.createDialog(page);
+    await wsUi.nameField(dialog).fill(name);
+    await wsUi.submitCreate(dialog).click();
+    await expect(dialog).toHaveCount(0, { timeout: REDUCED_CLOSE_MS });
+    const toast = page
+      .getByRole('region', { name: /알림|notifications/i })
+      .getByRole('listitem')
+      .filter({ hasText: name });
+    await expect(toast).toBeVisible();
+    await toast.getByRole('button', { name: /^(닫기|close)$/i }).click();
+    await expect(toast).toHaveCount(0, { timeout: REDUCED_CLOSE_MS });
+
+    // Dropdown menu closes on Escape.
+    await wsUi.moreButton(wsUi.item(wsUi.tabPanel(page), ws.name)).click();
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0, { timeout: REDUCED_CLOSE_MS });
+
+    // FloatingSidePanel (non-modal) unmounts from its close button.
+    await page.goto(homePath(ws.id));
+    await homeUi.documentsButton(page).click();
+    const panel = homeUi.documentsDialog(page);
+    await expect(panel).toBeVisible();
+    await panel.getByRole('button', { name: /문서 관리 닫기|close/i }).click();
+    await expect(panel).toHaveCount(0, { timeout: REDUCED_CLOSE_MS });
   },
 );
