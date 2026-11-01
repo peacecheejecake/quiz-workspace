@@ -86,6 +86,9 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'DOCTXT.0': ['DOC-03'],
   'DOCSUM.0': ['DOCSUM-01'],
   'CHNOTE.0': ['CHNOTE-01'],
+  // MOCK-SPEC (2026-11-01): mock exams, unified QuestionViewer range practice.
+  'MOCK.0': ['MOCK-01'],
+  'QVIEW.0': ['QVIEW-01'],
 };
 
 const LEADING_ID = new RegExp(

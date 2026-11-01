@@ -11,6 +11,7 @@
 - API와 화면은 owner / viewer / 로그인 상태에 따라 기능과 데이터 표시 범위를 구분한다.
 - 모든 편집·상태 변경은 서버 측 인가·revision 일관성을 검증한다.
 - **정리 노트와 분리 (DOCSUM-SPEC 2026-10-29):** 풀이 panel은 챕터 정리 노트(CHNOTE-01)의 내용·링크를 보이지 않고 practice API도 노트 필드를 보내지 않는다(제출 전후 모두). 풀이 panel이 열리면 펼쳐져 있던 정리 노트 본문은 다시 접힌다(CHNOTE-01-AC05). 이 화면의 기존 AC는 바뀌지 않는다.
+- **통합 `QuestionViewer` (MOCK-SPEC 2026-11-01):** 이 panel은 공통 `QuestionViewer`의 `practice` 방식(modal `FloatingSidePanel`, 한 문제, 이전·다음 = Heatmap 순서)이 된다(Task QVIEW-W). 범위를 골라 하나씩 푸는 `sequence` 방식과 호출 위치 목록은 [QVIEW-01](question-viewer.md). 이 화면의 기존 AC는 바뀌지 않고 QuestionViewer를 대상으로 그대로 검증한다.
 
 ## 수용 기준
 

@@ -1,9 +1,25 @@
 # QGEN-01 — 문제 변형 출제
 
-**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (문제 생성 dialog) · UX4 개정 2026-10-21 (`문제` 메뉴의 변형 출제)
+**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (문제 생성 dialog) · UX4 개정 2026-10-21 (`문제` 메뉴의 변형 출제) · **폐지 예정 — MOCK-SPEC 2026-11-01** (사용자 결정 1: 변형 출제·"문제 생성" dialog 삭제, 대신 [모의고사 MOCK-01](mock-exams.md))
 **Route:** 검토 페이지 `/workspaces/:workspaceId/questions/generate?source=&run=` (뒤로가기·breadcrumb `Workspace 이름 › 문제 변형 출제`) · 묶음 결과 페이지 `/workspaces/:workspaceId/questions/generate?batch=` · 문제 생성 dialog `/workspaces/:workspaceId?panel=generate`
 **테스트:** `tests/e2e/questions/questions-generation.spec.ts`
 **연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
+
+## 폐지 (MOCK-SPEC 2026-11-01)
+
+사용자 요청 "변형 출제 -> '문제 생성' 삭제 / 대신 '모의고사' 기능 추가". 이 화면의 모든 진입점(`문제` 메뉴 `변형 출제`, "문제 생성" dialog `?panel=generate`, 검토 페이지·묶음 결과 페이지 `/questions/generate?…`, 문제 상세의 `변형 출제`)과 묶음 변형 출제(QGEN-MULTI)는 Task **QGEN-RM**에서 없어진다. 생성 엔진의 재사용·폐지 목록은 [MOCK-01 "재사용과 폐지"](mock-exams.md)가 기준이다.
+
+- **지금(QGEN-RM 전):** 아래 AC와 `tests/e2e/questions/questions-generation.spec.ts`는 그대로 GREEN으로 유지한다(develop의 모든 테스트 GREEN 규칙). AC 문구는 바꾸지 않는다.
+- **QGEN-RM이 하는 일(한 커밋 묶음):** spec 파일과 fixture의 QGEN 부분을 지우고, 이 문서의 `### QGEN-01-ACnn` heading을 아래 처리 표로 바꾸며, 제목을 `# 폐지된 화면 QGEN-01 — 문제 변형 출제`로 바꿔 `e2e:trace`가 더는 화면으로 읽지 않게 한다. `screens/index.md` 행을 "폐지된 화면" 표로 옮기고, `scripts/e2e-trace.ts` PHASES에서 `M6.0`을 빼고(CI `E2E_PHASES`에서도), AC 수 test를 고친다. 이전 URL은 홈으로 redirect한다(`?panel=generate` → `?panel=mock-exams`, `/questions/generate?…` → 홈).
+
+| AC | 처리 | 이어받는 곳 |
+|---|---|---|
+| QGEN-01-AC01 (보기 섞기는 새 문제·Heatmap 점을 만들지 않음) | 폐지(보기 섞기 생성 진입점이 없어짐) | 불변식은 QOV-01-AC01("보기 셔플로 점 개수가 증가하지 않는다")과 QPLAY-01-AC02가 계속 검증한다. 모의고사의 `보기 섞기`는 MOCK-01-AC06. |
+| QGEN-01-AC02 (문구 변형 diff·근거·정답 검증 표시) | 폐지(사람 검토 화면 없음) | 검증은 MOCK-01-C02의 저장 조건으로, 결과는 MOCK-01-AC02(출처 표시). |
+| QGEN-01-AC03 (정오 반전 복수 정답 경고·승인 차단) | 폐지(승인 단계 없음) | MOCK-01-AC08·C02: 복수 정답 후보는 저장·표시되지 않는다. |
+| QGEN-01-AC04 (유사 개념 승인 → lineage 있는 새 확정 문제) | 폐지(은행 등록 경로 없음 — 사용자 결정 2) | MOCK-01-C01(은행 격리). 이미 등록된 변형 문제·lineage는 그대로. |
+| QGEN-01-AC05 (`문제` 메뉴 `변형 출제` → "문제 생성" dialog) | 폐지 | MOCK-01-AC01(`모의고사` 메뉴·dialog), QOV-01-AC10·AC11 문구는 QGEN-RM에서 `변형 출제` → `모의고사`로 고친다. |
+| QGEN-01-AC06~AC08 (QGEN-MULTI 묶음: 여러 문제 선택·임의 선택·묶음 결과) | 폐지 | 여러 원본 고르기는 MOCK-01-AC03(범위·`전체 선택`), 임의 선택은 MOCK-01 문항 수 + seed(C03). |
 
 ## 레이아웃 및 컴포넌트
 - 상태별 Empty/Loading/Failure/Success UI, 반응형 Layout과 Floating Side Panel, 접근성 지원.
