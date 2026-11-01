@@ -100,6 +100,7 @@ RULES: dict[str, Rule | str] = {
     "publishQuestionGenerationDrafts": EDIT,
     "getQuestionImport": READ,
     "listQuestionImportDrafts": READ,
+    "listQuestionImportDraftSummaries": READ,
     "publishQuestionImportDrafts": EDIT,
     "retryQuestionImport": EDIT,
     "registerQuestionImportDrafts": EDIT,

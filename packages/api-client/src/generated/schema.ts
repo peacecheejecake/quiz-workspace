@@ -588,6 +588,29 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/question-imports/{import_id}/draft-summaries': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Question Import Draft Summaries
+     * @description Every draft of the run in source order without its content (QIMP-PAGING): the review
+     *     screen selects, counts and registers over all drafts from this and reads the content of the
+     *     page on screen through `GET /drafts?offset&limit`. Same audience as the drafts: no stem,
+     *     options, answers or explanation are listed here.
+     */
+    get: operations['listQuestionImportDraftSummaries'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/question-imports/{import_id}/drafts': {
     parameters: {
       query?: never;
@@ -598,7 +621,9 @@ export type paths = {
     /**
      * List Question Import Drafts
      * @description The run's drafts in source order, with validations, provenance pages and answer flags.
-     *     Drafts a failed job persisted are listed too (they are kept for the retry).
+     *     Drafts a failed job persisted are listed too (they are kept for the retry). Without
+     *     `offset`/`limit` every draft is listed; with them one page (QIMP-PAGING), `total` counting
+     *     all drafts of the run.
      */
     get: operations['listQuestionImportDrafts'];
     put?: never;
@@ -2267,6 +2292,17 @@ export type components = {
       /** Prompt Version */
       prompt_version: string;
     };
+    /** DraftIssue */
+    DraftIssue: {
+      /** Code */
+      code: string;
+      /**
+       * Severity
+       * @description `error` blocks approval.
+       * @enum {string}
+       */
+      severity: 'warning' | 'error';
+    };
     /** DraftLocation */
     DraftLocation: {
       bbox?: components['schemas']['DraftBBox'] | null;
@@ -2788,11 +2824,82 @@ export type components = {
     ImportDraftList: {
       /**
        * Chapters
-       * @description Import runs: the workspace's book chapters (current revisions), the choices for `chapter_id`.
+       * @description Import runs: the workspace's book chapters (current revisions), the choices for `chapter_id`. Empty with `include_chapters=false`.
        */
       chapters?: components['schemas']['BookChapterOption'][];
       /** Items */
       items: components['schemas']['ImportDraft'][];
+      /**
+       * Total
+       * @description All drafts of the run (more than `items` when one page was read).
+       */
+      total: number;
+    };
+    /**
+     * ImportDraftSummary
+     * @description A draft without its content (QIMP-PAGING): no stem, options, answers or explanation —
+     *     only what selecting, counting and registering it needs.
+     */
+    ImportDraftSummary: {
+      /** Answer Missing */
+      answer_missing: boolean;
+      /**
+       * Chapter Id
+       * @description Import drafts: the book chapter the draft is registered under (as `ImportDraft.chapter.id`, sent back as `chapter_id` when registering); null = none.
+       */
+      chapter_id?: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Position
+       * @description 0-based order in the source.
+       */
+      position: number;
+      /**
+       * Publishable
+       * @description Can be approved / confirmed as it is.
+       */
+      publishable: boolean;
+      /** Published Question Id */
+      published_question_id: string | null;
+      /** Question Number */
+      question_number: number | null;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * Review Status
+       * @enum {string}
+       */
+      review_status: 'pending' | 'approved' | 'rejected';
+      /**
+       * Validations
+       * @description Validation codes, without messages.
+       */
+      validations: components['schemas']['DraftIssue'][];
+      /**
+       * Version
+       * @description As `ImportDraft.version`.
+       */
+      version: string;
+    };
+    /** ImportDraftSummaryList */
+    ImportDraftSummaryList: {
+      /**
+       * Chapters
+       * @description As `ImportDraftList.chapters`.
+       */
+      chapters?: components['schemas']['BookChapterOption'][];
+      /**
+       * Items
+       * @description Every draft of the run, source order.
+       */
+      items: components['schemas']['ImportDraftSummary'][];
     };
     /** ImportPublishBody */
     ImportPublishBody: {
@@ -7574,9 +7681,83 @@ export interface operations {
       };
     };
   };
-  listQuestionImportDrafts: {
+  listQuestionImportDraftSummaries: {
     parameters: {
       query?: never;
+      header?: never;
+      path: {
+        import_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportDraftSummaryList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listQuestionImportDrafts: {
+    parameters: {
+      query?: {
+        /** @description List the workspace's book chapters (`chapters`). */
+        include_chapters?: boolean;
+        /** @description One page of at most this many drafts. */
+        limit?: number | null;
+        /** @description Skip this many drafts (source order). */
+        offset?: number;
+      };
       header?: never;
       path: {
         import_id: string;

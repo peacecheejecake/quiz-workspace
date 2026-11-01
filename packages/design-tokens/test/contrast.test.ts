@@ -108,6 +108,28 @@ describe.each(themeNames)('%s theme contrast', (theme) => {
     );
   });
 
+  // UX-GLASS (2026-11-01): floating glass is near-opaque so the layer below barely shows. The
+  // glass tint matches its solid fallback, and text stays AA even over a pure black or white
+  // backdrop (the translucent color composited over the worst case, blur ignored).
+  it('glass is near-opaque, tinted like its solid fallback, and keeps text AA over any backdrop', () => {
+    const t = themedTokens[theme];
+    const m = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(t['color-glass']);
+    if (!m) throw new Error(`color-glass must be rgba(), got "${t['color-glass']}"`);
+    const [r, g, b, a] = m.slice(1).map(Number) as [number, number, number, number];
+    expect(a).toBeGreaterThanOrEqual(0.97);
+    const hex = (c: number[]) =>
+      `#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+    expect(hex([r, g, b]).toLowerCase()).toBe(t['color-glass-solid'].toLowerCase());
+    for (const backdrop of [0, 255]) {
+      const composite = hex([r, g, b].map((c) => c * a + backdrop * (1 - a)));
+      for (const fg of ['color-text-primary', 'color-text-secondary'] as const) {
+        expect(contrastRatio(t[fg], composite), `${fg} over ${backdrop}`).toBeGreaterThanOrEqual(
+          TEXT_MIN,
+        );
+      }
+    }
+  });
+
   it('hover, pressed, selected and selected-hover backgrounds are all different', () => {
     const t = themedTokens[theme];
     const values = [

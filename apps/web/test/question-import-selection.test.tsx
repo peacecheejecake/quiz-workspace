@@ -8,7 +8,11 @@ import './dom-setup';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ImportDraft, ImportRun } from '../src/lib/questions/drafts';
+import {
+  reviewDraftFromImport,
+  type ImportDraft,
+  type ImportRun,
+} from '../src/lib/questions/drafts';
 import { DRAFT_PAGE_SIZE } from '../src/lib/questions/draft-pages';
 
 // Next's router is one object for the page's life, as here.
@@ -110,7 +114,7 @@ describe('QuestionImport selection with many drafts (UX6-SELECT)', { timeout: 30
         workspaceId={WS}
         readOnly={null}
         initialRun={RUN}
-        initialDrafts={Array.from({ length: COUNT }, (_, i) => draft(i))}
+        initialDrafts={Array.from({ length: COUNT }, (_, i) => reviewDraftFromImport(draft(i)))}
         loadFailed={false}
       />,
     );
@@ -172,7 +176,7 @@ describe('QuestionImport selection with many drafts (UX6-SELECT)', { timeout: 30
         workspaceId={WS}
         readOnly={null}
         initialRun={{ ...RUN, draft_count: TOTAL }}
-        initialDrafts={Array.from({ length: TOTAL }, (_, i) => draft(i))}
+        initialDrafts={Array.from({ length: TOTAL }, (_, i) => reviewDraftFromImport(draft(i)))}
         loadFailed={false}
       />,
     );

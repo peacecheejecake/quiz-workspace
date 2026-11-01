@@ -2,6 +2,7 @@
 // (src/app/api, `lib/documents/bff.ts`), which attach the session's access token server-side, so
 // browser code never holds a JWT. FastAPI stays the authority on every decision.
 import type { Problem } from '@quiz/api-client';
+import type { ImportDraftSummary } from './draft-pages';
 import type {
   BookChapterOption,
   DraftUpdateBody,
@@ -116,6 +117,7 @@ export const IMPORT_BFF_PATHS = {
   imports: (workspaceId: string) => `/api/workspaces/${enc(workspaceId)}/question-imports`,
   run: (importId: string) => `/api/question-imports/${enc(importId)}`,
   drafts: (importId: string) => `/api/question-imports/${enc(importId)}/drafts`,
+  draftSummaries: (importId: string) => `/api/question-imports/${enc(importId)}/draft-summaries`,
   publish: (importId: string) => `/api/question-imports/${enc(importId)}/publish`,
   retry: (importId: string) => `/api/question-imports/${enc(importId)}/retry`,
   registrations: (importId: string) => `/api/question-imports/${enc(importId)}/registrations`,
@@ -133,12 +135,21 @@ export interface ImportClient {
     documentId?: string,
   ): Promise<ImportRun | null>;
   getRun(importId: string, signal?: AbortSignal): Promise<ImportRun>;
-  listDrafts(importId: string, signal?: AbortSignal): Promise<ImportDraft[]>;
-  /** The drafts and the workspace's book chapters (the chapter picker, CHAPTER-MAP). */
-  draftList(
+  /**
+   * Every draft without its content, and the workspace's book chapters (the chapter picker,
+   * CHAPTER-MAP) (QIMP-PAGING).
+   */
+  draftSummaries(
     importId: string,
     signal?: AbortSignal,
-  ): Promise<{ items: ImportDraft[]; chapters: BookChapterOption[] }>;
+  ): Promise<{ items: ImportDraftSummary[]; chapters: BookChapterOption[] }>;
+  /** One page of drafts with their content (no chapter list); `total` counts the run's drafts. */
+  draftPage(
+    importId: string,
+    offset: number,
+    limit: number,
+    signal?: AbortSignal,
+  ): Promise<{ items: ImportDraft[]; total: number }>;
   retryImport(importId: string, idempotencyKey: string): Promise<ImportRun>;
   updateDraft(draftId: string, body: DraftUpdateBody): Promise<ImportDraft>;
   publish(
@@ -213,14 +224,19 @@ export function createImportClient(fetchImpl: FetchLike = (...a) => fetch(...a))
         idempotencyKey,
       }),
     getRun: (importId, signal) => call(IMPORT_BFF_PATHS.run(importId), { signal }),
-    listDrafts: async (importId, signal) =>
-      (await call<{ items: ImportDraft[] }>(IMPORT_BFF_PATHS.drafts(importId), { signal })).items,
-    draftList: async (importId, signal) => {
-      const body = await call<{ items: ImportDraft[]; chapters?: BookChapterOption[] }>(
-        IMPORT_BFF_PATHS.drafts(importId),
+    draftSummaries: async (importId, signal) => {
+      const body = await call<{ items: ImportDraftSummary[]; chapters?: BookChapterOption[] }>(
+        IMPORT_BFF_PATHS.draftSummaries(importId),
         { signal },
       );
       return { items: body.items, chapters: body.chapters ?? [] };
+    },
+    draftPage: async (importId, offset, limit, signal) => {
+      const body = await call<{ items: ImportDraft[]; total: number }>(
+        `${IMPORT_BFF_PATHS.drafts(importId)}?offset=${offset}&limit=${limit}&include_chapters=false`,
+        { signal },
+      );
+      return { items: body.items, total: body.total };
     },
     retryImport: (importId, idempotencyKey) =>
       call(IMPORT_BFF_PATHS.retry(importId), { method: 'POST', idempotencyKey }),

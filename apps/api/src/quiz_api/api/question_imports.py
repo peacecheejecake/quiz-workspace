@@ -16,7 +16,11 @@
     GET   /question-imports/{id}/drafts          any member; drafts in position order, each with
                                                  the book chapter it is registered under
                                                  (suggested or chosen, CHAPTER-MAP), plus the
-                                                 workspace's book chapters (picker)
+                                                 workspace's book chapters (picker); `offset`/
+                                                 `limit` read one page (QIMP-PAGING) with `total`
+    GET   /question-imports/{id}/draft-summaries any member; every draft without its content
+                                                 (no stem/options/answers/explanation): what the
+                                                 review screen selects, counts and registers by
     PATCH /question-drafts/{id}                  editor+; edit / approve / reject a draft
                                                  (`base_version` optimistic concurrency); also
                                                  generation drafts (M6.2, question_generations)
@@ -133,6 +137,8 @@ MAX_PUBLISH = 200
 # One registration request carries the whole selection (QIMP-JOB): far more than one real paper
 # (316 pages -> 750 drafts) while keeping the request body bounded (~100 bytes per item).
 MAX_REGISTRATION = 5000
+# One page of drafts with their content (QIMP-PAGING; the review screen shows 100 at a time).
+MAX_DRAFT_PAGE = 200
 DraftVariation = Literal["PARAPHRASE", "INVERT_POLARITY", "ANALOGOUS_CONCEPT"]
 INT4_MAX = 2147483647
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
@@ -328,7 +334,43 @@ class ImportDraftList(BaseModel):
     chapters: list[BookChapterOption] = Field(
         default_factory=list,
         description="Import runs: the workspace's book chapters (current revisions), the "
-        "choices for `chapter_id`.",
+        "choices for `chapter_id`. Empty with `include_chapters=false`.",
+    )
+    total: int = Field(
+        description="All drafts of the run (more than `items` when one page was read)."
+    )
+
+
+class DraftIssue(BaseModel):
+    code: str
+    severity: Literal["warning", "error"] = Field(description="`error` blocks approval.")
+
+
+class ImportDraftSummary(BaseModel):
+    """A draft without its content (QIMP-PAGING): no stem, options, answers or explanation —
+    only what selecting, counting and registering it needs."""
+
+    id: uuid.UUID
+    version: str = Field(description="As `ImportDraft.version`.")
+    position: int = Field(description="0-based order in the source.")
+    question_number: int | None
+    question_type: QuestionType
+    review_status: ReviewStatus
+    published_question_id: uuid.UUID | None
+    publishable: bool = Field(description="Can be approved / confirmed as it is.")
+    answer_missing: bool
+    validations: list[DraftIssue] = Field(description="Validation codes, without messages.")
+    chapter_id: uuid.UUID | None = Field(
+        default=None,
+        description="Import drafts: the book chapter the draft is registered under (as "
+        "`ImportDraft.chapter.id`, sent back as `chapter_id` when registering); null = none.",
+    )
+
+
+class ImportDraftSummaryList(BaseModel):
+    items: list[ImportDraftSummary] = Field(description="Every draft of the run, source order.")
+    chapters: list[BookChapterOption] = Field(
+        default_factory=list, description="As `ImportDraftList.chapters`."
     )
 
 
@@ -700,6 +742,37 @@ def _draft_out(record: DraftRecord, chapter: DraftChapter | None = None) -> Impo
     )
 
 
+def _summary_out(record: DraftRecord, chapter: DraftChapter | None = None) -> ImportDraftSummary:
+    draft = parse_payload(record.payload)
+    content = _content(record, draft)
+    return ImportDraftSummary(
+        id=record.id,
+        version=draft_version(record.updated_at),
+        position=record.position,
+        question_number=record.question_number,
+        question_type=draft.question_type.value,
+        review_status=record.review_status,
+        published_question_id=record.published_question_id,
+        publishable=not publish_issues(content, record.validations, prefix=()).items,
+        answer_missing=answer_missing(content),
+        validations=[DraftIssue.model_validate(v) for v in record.validations],
+        chapter_id=chapter.chapter.id if chapter and chapter.chapter else None,
+    )
+
+
+def _chapter_options(repo: QuestionImportRepository, run: RunRecord) -> list[BookChapterOption]:
+    return [
+        BookChapterOption(
+            id=c.id,
+            title=c.title,
+            document_id=c.document_id,
+            document_title=c.document_title,
+            level=c.level,
+        )
+        for c in DraftChapterRepository(repo.session).book_chapters(run.workspace_id)
+    ]
+
+
 def _reject_unstorable(body: BaseModel) -> None:
     bad = unstorable_strings(body.model_dump(mode="python"))
     if bad:
@@ -923,25 +996,52 @@ def retry_question_import(
 
 
 @router.get("/question-imports/{import_id}/drafts", operation_id="listQuestionImportDrafts")
-def list_question_import_drafts(access: ReadImport, repo: ImportRepo) -> ImportDraftList:
+def list_question_import_drafts(
+    access: ReadImport,
+    repo: ImportRepo,
+    offset: Annotated[
+        int, Query(ge=0, le=INT4_MAX, description="Skip this many drafts (source order).")
+    ] = 0,
+    limit: Annotated[
+        int | None,
+        Query(ge=1, le=MAX_DRAFT_PAGE, description="One page of at most this many drafts."),
+    ] = None,
+    include_chapters: Annotated[
+        bool, Query(description="List the workspace's book chapters (`chapters`).")
+    ] = True,
+) -> ImportDraftList:
     """The run's drafts in source order, with validations, provenance pages and answer flags.
-    Drafts a failed job persisted are listed too (they are kept for the retry)."""
+    Drafts a failed job persisted are listed too (they are kept for the retry). Without
+    `offset`/`limit` every draft is listed; with them one page (QIMP-PAGING), `total` counting
+    all drafts of the run."""
+    run = _load_run(repo, access.resource_id)
+    paged = offset > 0 or limit is not None
+    drafts = repo.list_drafts(access.resource_id, offset=offset, limit=limit)
+    chapters = _chapters_of(repo.session, run, drafts)
+    return ImportDraftList(
+        items=[_draft_out(d, chapters.get(d.id)) for d in drafts],
+        chapters=_chapter_options(repo, run) if include_chapters else [],
+        total=repo.count_drafts(access.resource_id) if paged else len(drafts),
+    )
+
+
+@router.get(
+    "/question-imports/{import_id}/draft-summaries",
+    operation_id="listQuestionImportDraftSummaries",
+)
+def list_question_import_draft_summaries(
+    access: ReadImport, repo: ImportRepo
+) -> ImportDraftSummaryList:
+    """Every draft of the run in source order without its content (QIMP-PAGING): the review
+    screen selects, counts and registers over all drafts from this and reads the content of the
+    page on screen through `GET /drafts?offset&limit`. Same audience as the drafts: no stem,
+    options, answers or explanation are listed here."""
     run = _load_run(repo, access.resource_id)
     drafts = repo.list_drafts(access.resource_id)
     chapters = _chapters_of(repo.session, run, drafts)
-    options = DraftChapterRepository(repo.session).book_chapters(run.workspace_id)
-    return ImportDraftList(
-        items=[_draft_out(d, chapters.get(d.id)) for d in drafts],
-        chapters=[
-            BookChapterOption(
-                id=c.id,
-                title=c.title,
-                document_id=c.document_id,
-                document_title=c.document_title,
-                level=c.level,
-            )
-            for c in options
-        ],
+    return ImportDraftSummaryList(
+        items=[_summary_out(d, chapters.get(d.id)) for d in drafts],
+        chapters=_chapter_options(repo, run),
     )
 
 

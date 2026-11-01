@@ -8,7 +8,11 @@ import './dom-setup';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ImportDraft, ImportRun } from '../src/lib/questions/drafts';
+import {
+  reviewDraftFromImport,
+  type ImportDraft,
+  type ImportRun,
+} from '../src/lib/questions/drafts';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
@@ -16,6 +20,9 @@ vi.mock('next/navigation', () => ({
 vi.mock('../src/components/questions/import/source-compare-panel', () => ({
   SourceComparePanel: () => null,
 }));
+
+/** The page hands the drafts over in the review shape (QIMP-PAYLOAD). */
+const reviewed = (list: readonly ImportDraft[]) => list.map(reviewDraftFromImport);
 
 const { QuestionImport } = await import('../src/components/questions/import/question-import');
 
@@ -104,6 +111,38 @@ function json(status: number, body: unknown): Response {
   });
 }
 
+/**
+ * The list reads of the screen (QIMP-PAGING): every draft's summary, and one page of drafts with
+ * their content; null for any other request.
+ */
+function listReply(url: string, items: readonly ImportDraft[]): Response | null {
+  const path = new URL(url, 'http://web.test');
+  if (path.pathname.endsWith('/draft-summaries')) {
+    return json(200, {
+      items: items.map((d) => ({
+        id: d.id,
+        version: d.version,
+        position: d.position,
+        question_number: d.question_number,
+        question_type: d.question_type,
+        review_status: d.review_status,
+        published_question_id: d.published_question_id,
+        publishable: d.publishable,
+        answer_missing: d.answer_missing,
+        validations: d.validations.map((v) => ({ code: v.code, severity: v.severity })),
+        chapter_id: d.chapter?.id ?? null,
+      })),
+      chapters: [],
+    });
+  }
+  if (path.pathname.endsWith('/drafts')) {
+    const offset = Number(path.searchParams.get('offset') ?? 0);
+    const limit = Number(path.searchParams.get('limit') ?? items.length);
+    return json(200, { items: items.slice(offset, offset + limit), total: items.length });
+  }
+  return null;
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -113,9 +152,8 @@ describe('QuestionImport', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/question-imports?limit=1')) return json(200, { items: [RUN] });
-      if (url.endsWith(`/question-imports/${RUN_ID}/drafts`)) {
-        return json(200, { items: [draft(0)] });
-      }
+      const listed = url.includes(`/question-imports/${RUN_ID}/`) && listReply(url, [draft(0)]);
+      if (listed) return listed;
       return json(404, {});
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -158,11 +196,11 @@ describe('QuestionImport', () => {
           polls < 2 ? registration('running', 200, 200) : registration('succeeded', 450, 450),
         );
       }
-      if (url.endsWith('/drafts')) {
-        return json(200, {
-          items: drafts.map((d) => ({ ...d, published_question_id: `q-${d.id}` })),
-        });
-      }
+      const listed = listReply(
+        url,
+        drafts.map((d) => ({ ...d, published_question_id: `q-${d.id}` })),
+      );
+      if (listed) return listed;
       return json(404, {});
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -171,7 +209,7 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly={null}
         initialRun={{ ...RUN, draft_count: 450 }}
-        initialDrafts={drafts}
+        initialDrafts={reviewed(drafts)}
         loadFailed={false}
         registrationPollMs={5}
       />,
@@ -210,14 +248,11 @@ describe('QuestionImport', () => {
           refused: [{ draft_id: 'd-1', reason: 'stale-draft', question_number: 2, position: 1 }],
         });
       }
-      if (url.endsWith('/drafts')) {
-        return json(200, {
-          items: [
-            { ...drafts[0], published_question_id: 'q-0' },
-            { ...draft(1), version: 'v-1b' },
-          ],
-        });
-      }
+      const listed = listReply(url, [
+        { ...draft(0, 'approved'), published_question_id: 'q-0' },
+        { ...draft(1), version: 'v-1b' },
+      ]);
+      if (listed) return listed;
       return json(404, {});
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -226,7 +261,7 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly={null}
         initialRun={{ ...RUN, draft_count: 2, registration_job_id: JOB }}
-        initialDrafts={drafts}
+        initialDrafts={reviewed(drafts)}
         loadFailed={false}
         registrationPollMs={20}
       />,
@@ -274,16 +309,13 @@ describe('QuestionImport', () => {
           refused: [{ draft_id: 'd-1', reason: 'stale-draft', question_number: 2, position: 1 }],
         });
       }
-      if (url.endsWith('/drafts')) {
-        return json(200, {
-          items: [
-            { ...draft(0, 'approved'), published_question_id: 'q-0' },
-            { ...draft(1), version: 'v-1b' },
-            blocked,
-            published,
-          ],
-        });
-      }
+      const listed = listReply(url, [
+        { ...draft(0, 'approved'), published_question_id: 'q-0' },
+        { ...draft(1), version: 'v-1b' },
+        blocked,
+        published,
+      ]);
+      if (listed) return listed;
       return json(404, {});
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -292,7 +324,7 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly={null}
         initialRun={{ ...RUN, draft_count: 4, published_count: 1 }}
-        initialDrafts={initial}
+        initialDrafts={reviewed(initial)}
         loadFailed={false}
         registrationPollMs={5}
       />,
@@ -387,7 +419,7 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly={null}
         initialRun={RUN}
-        initialDrafts={[suggested]}
+        initialDrafts={reviewed([suggested])}
         initialChapters={chapters}
         loadFailed={false}
       />,
@@ -415,7 +447,9 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly="viewer"
         initialRun={RUN}
-        initialDrafts={[{ ...draft(0), chapter_match: 'no_match', source_chapter_title: '제9장' }]}
+        initialDrafts={reviewed([
+          { ...draft(0), chapter_match: 'no_match', source_chapter_title: '제9장' },
+        ])}
         loadFailed={false}
       />,
     );
@@ -436,15 +470,12 @@ describe('QuestionImport', () => {
           refused: [{ draft_id: 'd-1', reason: 'stale-draft', question_number: 2, position: 1 }],
         });
       }
-      if (url.endsWith('/drafts')) {
-        draftLoads += 1;
-        return json(200, {
-          items: [
-            { ...drafts[0], published_question_id: 'q-0' },
-            { ...draft(1), version: 'v-1b' },
-          ],
-        });
-      }
+      if (url.endsWith('/draft-summaries')) draftLoads += 1;
+      const listed = listReply(url, [
+        { ...draft(0, 'approved'), published_question_id: 'q-0' },
+        { ...draft(1), version: 'v-1b' },
+      ]);
+      if (listed) return listed;
       return json(404, {});
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -453,7 +484,7 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly={null}
         initialRun={{ ...RUN, draft_count: 2, registration_job_id: JOB }}
-        initialDrafts={drafts}
+        initialDrafts={reviewed(drafts)}
         loadFailed={false}
         loadedAt="2026-10-18T00:01:00Z"
         registrationPollMs={5}
@@ -481,13 +512,15 @@ describe('QuestionImport', () => {
         workspaceId={WS}
         readOnly={null}
         initialRun={{ ...RUN, registration_job_id: JOB }}
-        initialDrafts={[draft(0)]}
+        initialDrafts={reviewed([draft(0)])}
         loadFailed={false}
         loadedAt="2026-10-18T00:01:00Z"
       />,
     );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith('/drafts'))).toBe(false);
+    expect(fetchMock.mock.calls.some(([u]) => /\/drafts|\/draft-summaries/.test(String(u)))).toBe(
+      false,
+    );
   });
 });

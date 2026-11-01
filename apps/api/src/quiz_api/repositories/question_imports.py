@@ -490,13 +490,26 @@ class QuestionImportRepository:
 
     # --- drafts ---------------------------------------------------------------------------------
 
-    def list_drafts(self, run_id: uuid.UUID) -> list[DraftRecord]:
-        rows = self._session.execute(
+    def list_drafts(
+        self, run_id: uuid.UUID, *, offset: int = 0, limit: int | None = None
+    ) -> list[DraftRecord]:
+        """The run's drafts in source order; `offset`/`limit` take one page of that order."""
+        stmt = (
             select(*_DRAFT_COLUMNS)
             .where(question_drafts.c.import_run_id == run_id)
             .order_by(question_drafts.c.position, question_drafts.c.id)
+            .offset(offset)
         )
-        return [_draft(r) for r in rows]
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return [_draft(r) for r in self._session.execute(stmt)]
+
+    def count_drafts(self, run_id: uuid.UUID) -> int:
+        return int(
+            self._session.execute(
+                select(func.count()).where(question_drafts.c.import_run_id == run_id)
+            ).scalar_one()
+        )
 
     def get_draft(self, draft_id: uuid.UUID, *, lock: bool = False) -> DraftRecord | None:
         stmt = select(*_DRAFT_COLUMNS).where(question_drafts.c.id == draft_id)
