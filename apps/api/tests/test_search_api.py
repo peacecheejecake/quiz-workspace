@@ -376,7 +376,7 @@ def test_stale_revisions_never_match_even_while_still_indexed(
         assert {h["revision_id"] for h in found} <= {str(en.revision_id)}, mode
 
 
-def test_search01_ac13_question_papers_are_never_searched(
+def test_search_01_ac13_question_papers_are_never_searched(
     world: World, caller: Callable[[], Caller]
 ) -> None:
     """UX7-SEARCH-2: papers are found by the 문제 search only, whatever the request names."""

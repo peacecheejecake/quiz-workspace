@@ -83,6 +83,7 @@ import {
   addressBarContentKey,
   hasSearchableBody,
   hasSearchableQuestions,
+  isSearchableBody,
 } from '@/lib/search/scope';
 import { CONTENT_QUERY_PARAM, MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
 import {
@@ -291,12 +292,8 @@ export function WorkspaceHome({
   // "문서를 찾을 수 없습니다." and is never loaded here (DOCSUM-01-AC07).
   const summaryDocument = ownSummaryDocument(summaryDocId, library.documents);
   const searchDocuments = library.documents
-    .filter((d) => d.active_revision_id !== null)
-    .map((d) => ({
-      id: d.id,
-      title: d.title,
-      isQuestionPaper: d.document_type === 'question_paper',
-    }));
+    .filter(isSearchableBody)
+    .map((d) => ({ id: d.id, title: d.title }));
 
   // --- heatmap filters ----------------------------------------------------------------------
   // Filters as last chosen: quick successive changes build on each other before the URL (and the
@@ -443,7 +440,7 @@ export function WorkspaceHome({
     let search: string;
     if (q && hasBody) {
       // Writes the search into the address bar at once (keeping Next's history state)…
-      content.search(q, { includeQuestionPapers: true });
+      content.search(q);
       search = window.location.search;
     } else {
       content.clear();

@@ -2,8 +2,8 @@
 // search lives in the workspace home URL (`?text=&mode=&document=&section=`, next to the home's
 // other keys) so returning from the PDF viewer with the browser's back button restores the same
 // results. `text` is the 본문 query (UX7-SEARCH; the home's `q` is the 문제 search) and `section`
-// the document chapter filter (the home's `chapter` is the heatmap's). Question papers are searched
-// too unless `papers=0` (UX7-SEARCH: no toggle, the old default).
+// the document chapter filter (the home's `chapter` is the heatmap's). Question papers are never
+// searched (UX7-SEARCH-2: the server leaves them out); a stale `papers` key is dropped.
 import {
   DEFAULT_MODE,
   SEARCH_MODES,
@@ -39,14 +39,13 @@ export function parseSearchParams(params: RawParams): SearchQuery {
     documentId: validDocument,
     // A chapter filter only makes sense inside its document.
     chapterId: validDocument && chapterId && UUID.test(chapterId) ? chapterId : null,
-    includeQuestionPapers: first(params.papers) !== '0',
   };
 }
 
 /** URL key of the 본문 query (the home's `q` is the 문제 search, UX7-SEARCH). */
 export const CONTENT_QUERY_PARAM = 'text';
 
-/** URL keys of a content search. */
+/** URL keys of a content search (`papers`: retired, only ever removed). */
 export const CONTENT_SEARCH_KEYS = [
   CONTENT_QUERY_PARAM,
   'mode',
@@ -62,7 +61,6 @@ export function searchParamsFor(q: SearchQuery): string {
   if (q.mode !== DEFAULT_MODE) out.set('mode', q.mode);
   if (q.documentId) out.set('document', q.documentId);
   if (q.documentId && q.chapterId) out.set('section', q.chapterId);
-  if (!q.includeQuestionPapers) out.set('papers', '0');
   return out.toString();
 }
 

@@ -7,8 +7,10 @@ deleted and missing workspaces, same body), then the *active published* revision
 non-deleted document of that workspace, read from the database. Qdrant is only ever queried with
 those revision ids (`SearchScope`), so drafts, superseded revisions, deleted documents and other
 workspaces can never match, whatever the index still holds. Question-paper documents
-(`document_type = question_paper`) are left out unless `include_question_papers` is set or the
-request names them in `document_ids` / `chapter_ids`.
+(`document_type = question_paper`) are never searched (UX7-SEARCH-2, SEARCH-01-AC13: papers are
+found by the 문제 search): a request naming one in `document_ids` / `chapter_ids` gets no hits of
+it, and the deprecated `include_question_papers` is accepted but ignored. A `mixed` document
+(book with questions, `document_type = book`) is searched as a book.
 
 Filters only narrow that scope:
   * `document_ids`: documents of this workspace (a deleted, missing or foreign id is 404
@@ -127,7 +129,9 @@ class SearchRequest(BaseModel):
     )
     include_question_papers: bool = Field(
         default=False,
-        description="Also search question-paper documents (left out of book search by default).",
+        deprecated=True,
+        description="Ignored: question papers are never searched (UX7-SEARCH-2). Accepted so "
+        "older clients keep working.",
     )
     limit: int = Field(default=DEFAULT_RESULTS, ge=1, le=MAX_RESULTS)
 
@@ -153,7 +157,9 @@ class HitLocation(BaseModel):
 class SearchItem(BaseModel):
     document_id: uuid.UUID
     document_title: str
-    document_type: str = Field(description="`book` or `question_paper`.")
+    document_type: str = Field(
+        description="`book` (question papers are never searched, so never `question_paper`)."
+    )
     revision_id: uuid.UUID = Field(description="The published revision the hit comes from.")
     chunk_id: str
     chapter_id: uuid.UUID | None = Field(
@@ -275,15 +281,18 @@ def build_scope(
 ) -> tuple[Scope, list[ChapterRow]]:
     """The documents and sections this request searches (see the module docstring), plus the
     chapters of their active revisions."""
-    searchable = {d.id: d for d in repo.searchable_documents(workspace_id)}
+    # Question papers are out of the scope from the start: named ones simply have no hits.
+    searchable = {
+        d.id: d
+        for d in repo.searchable_documents(workspace_id)
+        if d.document_type != QUESTION_PAPER
+    }
     selected: dict[uuid.UUID, SearchableDocument]
-    explicit = False
     if body.document_ids:
         wanted = list(dict.fromkeys(body.document_ids))
         if repo.existing_documents(workspace_id, wanted) != set(wanted):
             raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
         selected = {d: searchable[d] for d in wanted if d in searchable}
-        explicit = True
     else:
         selected = dict(searchable)
 
@@ -297,10 +306,6 @@ def build_scope(
             raise HTTPException(status_code=404, detail=CHAPTER_NOT_FOUND)
         chapter_documents = {c.document_id for c in requested_chapters}
         selected = {d: doc for d, doc in selected.items() if d in chapter_documents}
-        explicit = True
-
-    if not explicit and not body.include_question_papers:
-        selected = {d: doc for d, doc in selected.items() if doc.document_type != QUESTION_PAPER}
 
     active_chapters = repo.chapters_of([doc.revision_id for doc in selected.values()])
     if requested_chapters:

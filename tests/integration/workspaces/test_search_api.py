@@ -274,7 +274,7 @@ def test_m36a_stale_revision_is_never_returned_after_the_publish_switch(
     assert any(MARKER in h["text"] for h in _search(owner, ws, query=MARKER))
 
 
-def test_search01_ac13_question_papers_are_never_searched(seed: Any, worker: Worker) -> None:
+def test_search_01_ac13_question_papers_are_never_searched(seed: Any, worker: Worker) -> None:
     """UX7-SEARCH-2: the 본문 search leaves question papers out, even when the request names
     them; the deprecated `include_question_papers` is accepted and ignored."""
     owner = seed.client("m36a-papers")

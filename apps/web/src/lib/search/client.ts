@@ -22,7 +22,6 @@ export interface SearchQuery {
   readonly mode: SearchMode;
   readonly documentId: string | null;
   readonly chapterId: string | null;
-  readonly includeQuestionPapers: boolean;
 }
 
 /** Request body of `POST /workspaces/{id}/search` for `q` (filters only when set). */
@@ -31,7 +30,6 @@ export function searchBody(q: SearchQuery): Schemas['SearchRequest'] {
     query: q.query,
     mode: q.mode,
     limit: RESULT_LIMIT,
-    include_question_papers: q.includeQuestionPapers,
     ...(q.documentId ? { document_ids: [q.documentId] } : {}),
     ...(q.chapterId ? { chapter_ids: [q.chapterId] } : {}),
   };

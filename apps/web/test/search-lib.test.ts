@@ -158,15 +158,12 @@ describe('search address-bar state', () => {
       mode: 'semantic' as const,
       documentId: DOC,
       chapterId: CHAPTER,
-      includeQuestionPapers: true,
     };
     const params = Object.fromEntries(new URLSearchParams(searchParamsFor(q)));
+    expect(params.papers).toBeUndefined();
     expect(parseSearchParams(params)).toEqual(q);
-    // Without question papers (never written by the home since UX7-SEARCH, still parsed).
-    const books = { ...q, includeQuestionPapers: false };
-    const bookParams = Object.fromEntries(new URLSearchParams(searchParamsFor(books)));
-    expect(bookParams.papers).toBe('0');
-    expect(parseSearchParams(bookParams)).toEqual(books);
+    // The retired `papers` key (UX7-SEARCH-2: papers are never searched) changes nothing.
+    expect(parseSearchParams({ ...params, papers: '0' })).toEqual(q);
   });
 
   it('drops invalid values and a chapter without its document', () => {
@@ -177,7 +174,6 @@ describe('search address-bar state', () => {
       mode: 'hybrid',
       documentId: null,
       chapterId: null,
-      includeQuestionPapers: true,
     });
     expect(parseSearchParams({ text: 'x'.repeat(5000) }).query).toHaveLength(1000);
     // UX7-SEARCH: `q` is the 문제 search, not the 본문 query.
@@ -193,7 +189,6 @@ describe('search address-bar state', () => {
         mode: 'hybrid',
         documentId: DOC,
         chapterId: null,
-        includeQuestionPapers: true,
       },
     );
     const params = new URLSearchParams(merged);
@@ -206,6 +201,11 @@ describe('search address-bar state', () => {
     expect(params.get('document')).toBe(DOC);
     expect(params.has('section')).toBe(false);
     expect(params.has('papers')).toBe(false);
+    expect(
+      new URLSearchParams(
+        mergeContentSearch('?papers=0', { ...parseSearchParams({}), query: 'x' }),
+      ).has('papers'),
+    ).toBe(false);
     expect(mergeContentSearch('?text=x', { ...parseSearchParams({}) })).toBe('');
   });
 
@@ -230,16 +230,14 @@ describe('search address-bar state', () => {
         mode: 'keyword',
         documentId: null,
         chapterId: null,
-        includeQuestionPapers: false,
       }),
-    ).toEqual({ query: 'water', mode: 'keyword', limit: 20, include_question_papers: false });
+    ).toEqual({ query: 'water', mode: 'keyword', limit: 20 });
     expect(
       searchBody({
         query: 'water',
         mode: 'hybrid',
         documentId: DOC,
         chapterId: CHAPTER,
-        includeQuestionPapers: true,
       }),
     ).toMatchObject({ document_ids: [DOC], chapter_ids: [CHAPTER] });
   });
@@ -303,7 +301,6 @@ describe('search relay client', () => {
         mode: 'keyword',
         documentId: null,
         chapterId: null,
-        includeQuestionPapers: false,
       })
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(SearchApiError);

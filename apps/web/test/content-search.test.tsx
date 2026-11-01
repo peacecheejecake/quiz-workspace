@@ -48,7 +48,6 @@ function SearchScreen({
   initial,
   client,
   syncTo,
-  papers,
 }: {
   workspaceId: string;
   documents: readonly SearchDocumentOption[];
@@ -56,8 +55,6 @@ function SearchScreen({
   client: SearchClient;
   /** What the home hands to `sync` when the address bar changes (Back/Forward). */
   syncTo?: SearchQuery | null;
-  /** What the caller passes with each search for question papers (the home: always true). */
-  papers?: boolean;
 }) {
   const search = useContentSearch({ workspaceId, initial, runInitial: true, client });
   const [draft, setDraft] = useState(initial.query);
@@ -67,10 +64,7 @@ function SearchScreen({
         role="search"
         onSubmit={(event) => {
           event.preventDefault();
-          search.search(
-            draft,
-            papers === undefined ? undefined : { includeQuestionPapers: papers },
-          );
+          search.search(draft);
         }}
       >
         <input
@@ -101,7 +95,6 @@ const INITIAL: SearchQuery = {
   mode: 'hybrid',
   documentId: null,
   chapterId: null,
-  includeQuestionPapers: true,
 };
 
 const hit = (overrides: Partial<SearchItem> = {}): SearchItem =>
@@ -215,46 +208,21 @@ describe("content search (the home's 본문 search)", () => {
     expect(notice).toBeVisible();
   });
 
-  it('searches question papers unless the caller says otherwise, without a toggle (UX7-SEARCH)', async () => {
+  it('SEARCH-01-AC13 sends no question-paper choice and drops a stale papers key (UX7-SEARCH-2)', async () => {
     const user = userEvent.setup();
+    window.history.replaceState(null, '', '/?papers=0');
     const client = makeClient(async () => response([]));
-    const { unmount } = render(
-      <SearchScreen
-        workspaceId={WS}
-        documents={[]}
-        initial={{ ...INITIAL, includeQuestionPapers: false }}
-        client={client}
-        papers
-      />,
-    );
+    render(<SearchScreen workspaceId={WS} documents={[]} initial={INITIAL} client={client} />);
     expect(screen.queryByRole('checkbox', { name: /문제지/ })).toBeNull();
 
     await submit(user, 'water');
-    expect(client.search.mock.calls[0]?.[1]).toMatchObject({
+    expect(client.search.mock.calls[0]?.[1]).toEqual({
       query: 'water',
-      includeQuestionPapers: true,
+      mode: 'hybrid',
+      documentId: null,
+      chapterId: null,
     });
     expect(new URLSearchParams(window.location.search).has('papers')).toBe(false);
-    // An option change re-runs the search with the same choice.
-    await user.click(screen.getByRole('radio', { name: '의미' }));
-    expect(client.search.mock.calls[1]?.[1]).toMatchObject({
-      mode: 'semantic',
-      includeQuestionPapers: true,
-    });
-    unmount();
-
-    render(
-      <SearchScreen
-        workspaceId={WS}
-        documents={[]}
-        initial={{ ...INITIAL, includeQuestionPapers: true }}
-        client={client}
-        papers={false}
-      />,
-    );
-    await submit(user, 'water');
-    expect(client.search.mock.calls[2]?.[1]).toMatchObject({ includeQuestionPapers: false });
-    expect(new URLSearchParams(window.location.search).get('papers')).toBe('0');
   });
 
   it('re-runs the submitted query when the mode changes and ignores an overtaken answer', async () => {
@@ -390,7 +358,7 @@ describe("content search (the home's 본문 search)", () => {
     render(
       <SearchScreen
         workspaceId={WS}
-        documents={[{ id: DOC, title: 'Water Book', isQuestionPaper: false }]}
+        documents={[{ id: DOC, title: 'Water Book' }]}
         initial={{ ...INITIAL, query: 'water', documentId: DOC, chapterId: stale }}
         client={client}
       />,
@@ -412,7 +380,7 @@ describe("content search (the home's 본문 search)", () => {
     render(
       <SearchScreen
         workspaceId={WS}
-        documents={[{ id: DOC, title: 'Water Book', isQuestionPaper: false }]}
+        documents={[{ id: DOC, title: 'Water Book' }]}
         initial={{ ...INITIAL, query: 'water', documentId: DOC, chapterId: chapter }}
         client={client}
       />,
@@ -430,8 +398,8 @@ describe("content search (the home's 본문 search)", () => {
     const CHAPTER = '66666666-6666-4666-8666-666666666666';
     const OTHER = '88888888-8888-4888-8888-888888888888';
     const docs = [
-      { id: DOC, title: 'Water Book', isQuestionPaper: false },
-      { id: OTHER, title: 'Other Book', isQuestionPaper: false },
+      { id: DOC, title: 'Water Book' },
+      { id: OTHER, title: 'Other Book' },
     ];
 
     function deferredChapters() {
