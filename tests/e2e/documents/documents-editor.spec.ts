@@ -406,7 +406,8 @@ test(
     await setup(page, workspaceFactory, 'doc02-ac09');
     const starts = new Map<number, string[]>();
     for (const b of BOOK.blocks) {
-      if (b.type === 'image' || !b.text) continue;
+      // Tables render as cells (their truth text joins cells with `|`); images have no text.
+      if (b.type === 'image' || b.type === 'table' || !b.text) continue;
       const first = b.parts[0]?.page ?? 0;
       starts.set(first, [...(starts.get(first) ?? []), b.text]);
     }
