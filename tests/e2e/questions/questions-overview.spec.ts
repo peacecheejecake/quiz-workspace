@@ -577,7 +577,11 @@ test(
     await page.route(
       (url) => url.pathname.endsWith('/questions/generate'),
       async (route) => {
-        if (route.request().resourceType() === 'document') return route.fallback();
+        // Only the navigation's render is held: the document and the menu's prefetch (the loading
+        // boundary) go through.
+        const request = route.request();
+        if (request.resourceType() === 'document') return route.fallback();
+        if (request.headers()['next-router-prefetch'] !== undefined) return route.fallback();
         await pageGate;
         await route.fallback();
       },
