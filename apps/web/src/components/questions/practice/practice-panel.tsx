@@ -14,6 +14,8 @@
 // the screen invalidates that question (`invalidated`) and the panel, if it still shows it,
 // opens a session of the new revision
 // (the cached session of the old revision is dropped).
+// UX7-BANK-2: the header menu's 정답·해설 보기 opens a separate read-only dialog over the panel; the
+// session on screen (and an answer being chosen) stays as it is and nothing is recorded.
 import {
   Button,
   Checkbox,
@@ -97,7 +99,10 @@ export interface PracticePanelProps {
   readonly onGraded?: (questionId: string, result: AttemptResult) => void;
   /** Where focus goes when the panel closes (the opening dot). */
   readonly onCloseAutoFocus?: ComponentProps<typeof FloatingSidePanel>['onCloseAutoFocus'];
-  /** Header controls after the study toggles (UX7-BANK: the editors' 문제 관리 menu). */
+  /**
+   * Header controls after the study toggles (UX7-BANK: the editors' 문제 관리 menu; UX7-BANK-2:
+   * everyone else's 문제 정보 menu, shown in archived workspaces too).
+   */
   readonly headerExtra?: ReactNode;
   /**
    * UX7-BANK: a question whose cached session must never be shown again (edited or deleted);
@@ -400,6 +405,9 @@ export function PracticePanel({
             />
             {headerExtra}
           </>
+        ) : view ? (
+          // Archived: no study toggles, but the read-only 문제 정보 menu stays (UX7-BANK-2).
+          headerExtra
         ) : undefined
       }
     >

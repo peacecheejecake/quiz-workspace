@@ -1,6 +1,6 @@
 'use client';
 
-import { useId } from 'react';
+import { Fragment, useId } from 'react';
 import {
   Button,
   ChevronDownIcon,
@@ -8,6 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@quiz/ui';
 
@@ -24,6 +25,8 @@ interface QuestionMenuAction {
   readonly label: string;
   /** Editor-only actions stay listed but disabled, with the reason, for everyone else. */
   readonly requiresEdit: boolean;
+  /** Starts a new group (a separator above it). */
+  readonly separated?: boolean;
   readonly onSelect: () => void;
 }
 
@@ -35,22 +38,32 @@ interface QuestionMenuAction {
  * QOV-01-AC11): without edit rights the editor-only items are Radix-disabled (aria-disabled,
  * skipped by the arrow keys) and a text label says why, since a disabled item has no tooltip on
  * touch. A dialog opens once the menu has returned focus to its trigger, so closing the dialog
- * brings focus back there.
+ * brings focus back there. 보관·초안 문제 (UX7-BANK-2, QOV-01-AC15: the floating dialog of draft and
+ * archived questions, `?panel=inactive-questions`) is readable by every member, so it stays enabled.
  */
 export function QuestionMenu({
   readOnly,
   onCreate,
   onGenerate,
+  onInactive,
 }: {
   readonly readOnly: QuestionMenuReadOnly;
   readonly onCreate: () => void;
   readonly onGenerate: () => void;
+  readonly onInactive: () => void;
 }) {
   const reasonId = useId();
   const afterClose = (action: () => void) => () => window.setTimeout(action, 0);
   const actions: readonly QuestionMenuAction[] = [
     { key: 'create', label: '직접 추가', requiresEdit: true, onSelect: onCreate },
     { key: 'generate', label: '변형 출제', requiresEdit: true, onSelect: onGenerate },
+    {
+      key: 'inactive',
+      label: '보관·초안 문제',
+      requiresEdit: false,
+      separated: true,
+      onSelect: onInactive,
+    },
   ];
   const reason = readOnly ? READ_ONLY_REASONS[readOnly] : null;
   const anyDisabled = reason !== null && actions.some((a) => a.requiresEdit);
@@ -71,14 +84,16 @@ export function QuestionMenu({
         {actions.map((action) => {
           const disabled = action.requiresEdit && reason !== null;
           return (
-            <DropdownMenuItem
-              key={action.key}
-              disabled={disabled}
-              aria-describedby={disabled ? reasonId : undefined}
-              onSelect={afterClose(action.onSelect)}
-            >
-              {action.label}
-            </DropdownMenuItem>
+            <Fragment key={action.key}>
+              {action.separated ? <DropdownMenuSeparator /> : null}
+              <DropdownMenuItem
+                disabled={disabled}
+                aria-describedby={disabled ? reasonId : undefined}
+                onSelect={afterClose(action.onSelect)}
+              >
+                {action.label}
+              </DropdownMenuItem>
+            </Fragment>
           );
         })}
       </DropdownMenuContent>

@@ -20,6 +20,8 @@
 //                     on top (UX3b stacking).
 //   문제 등록 editor  `?panel=question-create` (문제 › 직접 추가 and the empty heatmap, UX7-BANK): the
 //                     modal question editor, rendered by QuestionsOverview; not a stacked panel.
+//   보관·초안 문제     `?panel=inactive-questions` (문제 › 보관·초안 문제, UX7-BANK-2, every member): a
+//                     stacked floating dialog of the draft and archived questions (QOV-01-AC15).
 //
 // State lives in the URL: heatmap filters (overview-filters.ts), the 문제 search `q`, the 본문
 // search `text` and its options (search/state.ts), `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
@@ -51,6 +53,7 @@ import { bodyDocumentCount } from '@/components/documents/labels';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
 import { GenerationDialog } from '@/components/questions/generate/generation-dialog';
+import { InactiveQuestions } from '@/components/questions/inactive/inactive-questions';
 import { ChapterNotePanel } from '@/components/questions/notes/chapter-note-panel';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
 import {
@@ -96,6 +99,7 @@ import {
   withChapterNote,
   summaryDocumentId,
   contentSearchParams,
+  INACTIVE_QUESTIONS_PANEL,
   isFloatingPanel,
   ownSummaryDocument,
   QUESTION_CREATE_PANEL,
@@ -294,6 +298,8 @@ export function WorkspaceHome({
   const searchDocuments = library.documents
     .filter(isSearchableBody)
     .map((d) => ({ id: d.id, title: d.title }));
+  // Source titles of the 문제 상세 dialog (UX7-BANK-2).
+  const documentTitles = library.documents.map((d) => ({ id: d.id, title: d.title }));
 
   // --- heatmap filters ----------------------------------------------------------------------
   // Filters as last chosen: quick successive changes build on each other before the URL (and the
@@ -521,6 +527,7 @@ export function WorkspaceHome({
               readOnly={readOnly}
               onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
               onGenerate={() => setPanel('generate', true)}
+              onInactive={() => setPanel(INACTIVE_QUESTIONS_PANEL, true)}
             />
           </div>
           <div className={styles.actionGroup} data-align="end">
@@ -582,6 +589,7 @@ export function WorkspaceHome({
         onQuestionChange={changeQuestion}
         createOpen={isOpen(QUESTION_CREATE_PANEL)}
         onCreateOpenChange={(open) => setPanel(QUESTION_CREATE_PANEL, open)}
+        documents={documentTitles}
         chapterActions={(chapter) =>
           chapter.id === NO_CHAPTER_KEY ? null : (
             <>
@@ -652,6 +660,22 @@ export function WorkspaceHome({
               />
             </FloatingSidePanel>
           ) : null}
+          <FloatingSidePanel
+            open={isOpen(INACTIVE_QUESTIONS_PANEL)}
+            onOpenChange={(open) => setPanel(INACTIVE_QUESTIONS_PANEL, open)}
+            raiseKey={raised[INACTIVE_QUESTIONS_PANEL]}
+            modal={false}
+            container={host}
+            title="보관·초안 문제"
+            closeLabel="보관·초안 문제 닫기"
+            mobileLayout="full"
+          >
+            <InactiveQuestions
+              workspaceId={workspace.id}
+              readOnly={readOnly}
+              documents={documentTitles}
+            />
+          </FloatingSidePanel>
           <FloatingSidePanel
             open={isOpen('history')}
             onOpenChange={(open) => setPanel('history', open)}

@@ -3,6 +3,7 @@
 // open question (`?question=`):
 //   ?panel=documents|generate|history|share                 open floating dialogs (repeatable, in
 //        |chapter-note|document-summary                      the order they were opened)
+//        |inactive-questions                                 (보관·초안 문제, UX7-BANK-2)
 //        |question-create                                    the modal 문제 등록 editor (UX7-BANK;
 //                                                            not stacked, see FLOATING_PANELS)
 //   ?chapter=<id> (with panel=chapter-note)                  the chapter of the 정리 노트 panel
@@ -25,11 +26,15 @@ export const HOME_PANELS = [
   'chapter-note',
   'document-summary',
   'question-create',
+  'inactive-questions',
 ] as const;
 export type HomePanel = (typeof HOME_PANELS)[number];
 
 /** UX7-BANK: `?panel=question-create` opens the modal 문제 등록 editor (QOV-01-AC12). */
 export const QUESTION_CREATE_PANEL = 'question-create' satisfies HomePanel;
+
+/** UX7-BANK-2: `?panel=inactive-questions` opens the 보관·초안 문제 dialog (QOV-01-AC15). */
+export const INACTIVE_QUESTIONS_PANEL = 'inactive-questions' satisfies HomePanel;
 
 /** The non-modal side panels: they stack and move the home content aside (UX3b). */
 export function isFloatingPanel(panel: HomePanel): boolean {
