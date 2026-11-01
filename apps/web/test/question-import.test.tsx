@@ -249,7 +249,7 @@ describe('QuestionImport', () => {
         });
       }
       const listed = listReply(url, [
-        { ...drafts[0], published_question_id: 'q-0' },
+        { ...draft(0, 'approved'), published_question_id: 'q-0' },
         { ...draft(1), version: 'v-1b' },
       ]);
       if (listed) return listed;
@@ -472,7 +472,7 @@ describe('QuestionImport', () => {
       }
       if (url.endsWith('/draft-summaries')) draftLoads += 1;
       const listed = listReply(url, [
-        { ...drafts[0], published_question_id: 'q-0' },
+        { ...draft(0, 'approved'), published_question_id: 'q-0' },
         { ...draft(1), version: 'v-1b' },
       ]);
       if (listed) return listed;
