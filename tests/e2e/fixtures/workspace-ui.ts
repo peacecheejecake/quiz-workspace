@@ -31,8 +31,10 @@
 //              current one aria-checked) on ready rows and a refusal as an alert in the row;
 //              question rows link "<title> 문제 검토" or offer the button "<title> 문제 추출".
 //   DOC-02     outline tree "목차" (treeitems), PDF viewer region with a "현재 페이지" field and a
-//              labelled source highlight, text editor region "원문" whose current block carries
-//              aria-current="true"; block "편집"/"저장", revision status "초안"/"발행됨", "발행".
+//              labelled source highlight, text editor region "변환본 텍스트" (DOCVIEW-01; any
+//              name with 원문/텍스트) whose current block carries aria-current="true"; block
+//              "편집"/"저장", revision status "초안"/"발행됨", "발행". The layout around them
+//              (settings bar, outline panel, splitter) is in fixtures/document-viewer.ts.
 //   SEARCH-01  the home's unified search: searchbox "검색어"; in the "본문 검색 설정" popover
 //              (portalled to <body>) radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes
 //              "문서"/"장"; in "문제 검색 설정" comboboxes "챕터"/"유형"; region "본문 검색 결과" with list "검색 결과" whose items quote the source text in a
@@ -352,10 +354,6 @@ export const editorUi = {
     editorUi.textPanel(page).getByRole('textbox', { name: /블록|원문|block|text/i }),
   saveButton: (page: Page) =>
     editorUi.textPanel(page).getByRole('button', { name: /^(저장|save)/i }),
-  /** DOCVIEW (AC06): the `목차` toggle in the PDF toolbar and the floating outline panel. */
-  outlineToggle: (page: Page) =>
-    editorUi.viewer(page).getByRole('button', { name: /^(목차|outline)$/i }),
-  outlinePanel: (page: Page) => page.getByRole('dialog', { name: /^(목차|outline)$/i }),
   /** The scrolling page area of the PDF viewer (continuous pages, AC07/AC08). */
   pdfPages: (page: Page) =>
     editorUi.viewer(page).getByRole('group', { name: /pdf 페이지 영역|pdf pages/i }),
@@ -371,8 +369,6 @@ export const editorUi = {
     editorUi
       .textPanel(page)
       .getByRole('heading', { name: new RegExp(`^(${n}쪽|page ${n})$`, 'i') }),
-  /** AC10: the PDF ↔ text width separator. */
-  splitter: (page: Page) => page.getByRole('separator', { name: /(pdf|원문).*(폭|너비)|resize/i }),
   /** AC11: an imported, confirmed question shown in question format. */
   questionCard: (page: Page, n: number) =>
     editorUi

@@ -249,9 +249,10 @@ test(
   },
 );
 
-// --- DOCVIEW (user feedback 2026-11-01): outline panel, paging, sync, page groups, splitter,
-// question format. book-ko: page 1 = title + TOC (no blocks), blocks start on pages 2 and 4, and
-// ch1-s2-p3 continues from page 2 onto page 3.
+// --- DOCVIEW (user feedback 2026-11-01): paging, sync, page groups, question format. The outline
+// panel (AC06) and the splitter (AC10) were retired by DOCVIEW-PORT (2026-11-02); the layout is
+// DOCVIEW-01 (documents-viewer-layout.spec.ts). book-ko: page 1 = title + TOC (no blocks), blocks
+// start on pages 2 and 4, and ch1-s2-p3 continues from page 2 onto page 3.
 
 const LAST_BODY_BLOCK = block(BOOK, 'ch1-s2-p3'); // pages 2 → 3
 
@@ -288,39 +289,6 @@ async function scrollPdfTo(page: Page, n: number): Promise<void> {
     await expect(editorUi.currentPage(page)).toHaveValue(String(n), { timeout: 300 });
   }).toPass({ timeout: 20_000 });
 }
-
-test(
-  'DOC-02-AC06 the outline is a floating panel that folds away and remembers its state',
-  { tag: '@infra' },
-  async ({ page, workspaceFactory }) => {
-    await setup(page, workspaceFactory, 'doc02-ac06');
-    const toggle = editorUi.outlineToggle(page);
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    await expect(editorUi.outlinePanel(page)).toBeVisible();
-    await expect(editorUi.outlinePanel(page).getByRole('tree')).toBeVisible();
-    const openWidth = (await editorUi.viewer(page).boundingBox())?.width ?? 0;
-
-    await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(editorUi.outline(page)).toBeHidden();
-    await expect
-      .poll(async () => (await editorUi.viewer(page).boundingBox())?.width ?? 0)
-      .toBeGreaterThan(openWidth + 100);
-
-    await page.reload();
-    await expect(editorUi.outlineToggle(page)).toHaveAttribute('aria-expanded', 'false');
-    await expect(editorUi.outline(page)).toBeHidden();
-
-    await editorUi.outlineToggle(page).click();
-    await expect(editorUi.outlineToggle(page)).toHaveAttribute('aria-expanded', 'true');
-    const target = section(BOOK, 'ch2-s2');
-    await editorUi.outlineItem(page, target.title).click();
-    await expect(editorUi.currentPage(page)).toHaveValue(String(target.page));
-    await expect(editorUi.currentBlock(page)).toContainText(snippet(block(BOOK, 'ch2-s2-p1').text));
-    await page.reload();
-    await expect(editorUi.outlineToggle(page)).toHaveAttribute('aria-expanded', 'true');
-  },
-);
 
 test(
   'DOC-02-AC07 page turns draw from the PDF already in memory, the next page is pre-drawn and no request is sent',
@@ -428,55 +396,6 @@ test(
     await editorUi.outlineItem(page, target.title).click();
     await expect(editorUi.pageHeading(page, target.page)).toHaveAttribute('aria-current', 'page');
     await expect(editorUi.pageHeading(page, 2)).not.toHaveAttribute('aria-current', 'page');
-  },
-);
-
-test(
-  'DOC-02-AC10 a separator resizes the PDF and text panes by pointer and keyboard and keeps the ratio',
-  { tag: '@infra' },
-  async ({ page, workspaceFactory }) => {
-    await setup(page, workspaceFactory, 'doc02-ac10');
-    const splitter = editorUi.splitter(page);
-    await expect(splitter).toBeVisible();
-    await expect(splitter).toHaveAttribute('aria-orientation', 'vertical');
-    await expect(splitter).toHaveAttribute('aria-valuemin', '25');
-    await expect(splitter).toHaveAttribute('aria-valuemax', '75');
-    const value = async () => Number(await splitter.getAttribute('aria-valuenow'));
-    const pdfWidth = async () => (await editorUi.viewer(page).boundingBox())?.width ?? 0;
-    const start = await value();
-    const startWidth = await pdfWidth();
-
-    await splitter.focus();
-    await page.keyboard.press('ArrowLeft');
-    await expect.poll(value).toBe(start - 5);
-    await expect.poll(pdfWidth).toBeLessThan(startWidth - 20);
-    await page.keyboard.press('End');
-    await expect.poll(value).toBe(75);
-    await page.keyboard.press('Home');
-    await expect.poll(value).toBe(25);
-
-    // Pointer drag to the right widens the PDF pane.
-    // Grab it near its top: the separator is as tall as the panes and may run below the viewport.
-    await splitter.scrollIntoViewIfNeeded();
-    const box = await splitter.boundingBox();
-    if (!box) throw new Error('separator has no box');
-    const before = await pdfWidth();
-    const y = Math.max(box.y, 0) + 24;
-    await page.mouse.move(box.x + box.width / 2, y);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 + 200, y, { steps: 5 });
-    await page.mouse.up();
-    await expect.poll(pdfWidth).toBeGreaterThan(before + 150);
-    const dragged = await value();
-    expect(dragged).toBeGreaterThan(25);
-    expect(dragged).toBeLessThanOrEqual(75);
-
-    await page.reload();
-    await expect(editorUi.splitter(page)).toHaveAttribute('aria-valuenow', String(dragged));
-
-    // Phones keep the PDF / 원문 view switch and have no separator.
-    await page.setViewportSize({ width: 375, height: 800 });
-    await expect(editorUi.splitter(page)).toBeHidden();
   },
 );
 
