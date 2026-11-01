@@ -220,6 +220,7 @@ describe('loadLatestImport (QIMP-PAYLOAD, QIMP-PAGING)', () => {
         answerMissing: full.answerMissing,
         issues: full.issues,
         chapter: { chapter: full.chapter?.chapter ? { id: full.chapter.chapter.id } : null },
+        duplicateOf: full.duplicateOf ?? null,
       });
     }
   });

@@ -31,6 +31,8 @@ const EVENT_LABELS: Readonly<Record<string, string>> = {
   'question.status_changed': '문제 상태 변경',
   'question.deleted': '문제 삭제',
   'question.study_state_changed': '내 학습 표시 변경',
+  // UX7-DEDUP: a duplicate archived into the question kept (ids only).
+  'question.merged': '중복 문제 정리',
   'question_import.started': '문제 가져오기 시작',
   'question_import.retried': '문제 가져오기 재시도',
   'question_import.published': '가져온 문제 게시',

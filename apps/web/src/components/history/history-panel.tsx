@@ -374,10 +374,11 @@ function AttemptItem({
   readonly attempt: WorkspaceAttempt;
   readonly workspaceId: string;
 }) {
-  // Opens the question's practice panel on the home, keeping the open dialogs.
+  // Opens the question's practice panel on the home, keeping the open dialogs; an attempt on a
+  // duplicate merged into another question opens that one (UX7-DEDUP: its history is there).
   const search = useSearchParams();
   const href = `/workspaces/${workspaceId}${patchSearch(search.toString(), {
-    question: attempt.question_id,
+    question: attempt.merged_into_question_id ?? attempt.question_id,
   })}`;
   return (
     <li className={styles.item} data-kind="attempt">

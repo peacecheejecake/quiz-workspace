@@ -4,6 +4,7 @@
 //   ?panel=documents|generate|history|share                 open floating dialogs (repeatable, in
 //        |chapter-note|document-summary                      the order they were opened)
 //        |inactive-questions                                 (보관·초안 문제, UX7-BANK-2)
+//        |question-duplicates                                (중복 문제 정리, editors, UX7-DEDUP)
 //        |question-create                                    the modal 문제 등록 editor (UX7-BANK;
 //                                                            not stacked, see FLOATING_PANELS)
 //   ?chapter=<id> (with panel=chapter-note)                  the chapter of the 정리 노트 panel
@@ -27,6 +28,7 @@ export const HOME_PANELS = [
   'document-summary',
   'question-create',
   'inactive-questions',
+  'question-duplicates',
 ] as const;
 export type HomePanel = (typeof HOME_PANELS)[number];
 
@@ -35,6 +37,9 @@ export const QUESTION_CREATE_PANEL = 'question-create' satisfies HomePanel;
 
 /** UX7-BANK-2: `?panel=inactive-questions` opens the 보관·초안 문제 dialog (QOV-01-AC15). */
 export const INACTIVE_QUESTIONS_PANEL = 'inactive-questions' satisfies HomePanel;
+
+/** UX7-DEDUP: `?panel=question-duplicates` opens the 중복 문제 정리 dialog (QOV-01-AC16). */
+export const DUPLICATES_PANEL = 'question-duplicates' satisfies HomePanel;
 
 /** The non-modal side panels: they stack and move the home content aside (UX3b). */
 export function isFloatingPanel(panel: HomePanel): boolean {

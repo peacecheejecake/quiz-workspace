@@ -40,6 +40,8 @@ interface QuestionMenuAction {
  * touch. A chosen action runs only once the menu has handed focus back to its trigger (in
  * onCloseAutoFocus, which Radix fires from a timer after the menu unmounts), so the dialog it
  * opens records the trigger as its opener and closing the dialog brings focus back there.
+ * 중복 문제 정리 (UX7-DEDUP, QOV-01-AC16: `?panel=question-duplicates`) merges questions, so it is
+ * editor-only like 직접 추가 and 변형 출제.
  * 보관·초안 문제 (UX7-BANK-2, QOV-01-AC15: the floating dialog of draft and archived questions,
  * `?panel=inactive-questions`) is readable by every member, so it stays enabled.
  */
@@ -47,11 +49,13 @@ export function QuestionMenu({
   readOnly,
   onCreate,
   onGenerate,
+  onDuplicates,
   onInactive,
 }: {
   readonly readOnly: QuestionMenuReadOnly;
   readonly onCreate: () => void;
   readonly onGenerate: () => void;
+  readonly onDuplicates: () => void;
   readonly onInactive: () => void;
 }) {
   const reasonId = useId();
@@ -63,6 +67,7 @@ export function QuestionMenu({
   const actions: readonly QuestionMenuAction[] = [
     { key: 'create', label: '직접 추가', requiresEdit: true, onSelect: onCreate },
     { key: 'generate', label: '변형 출제', requiresEdit: true, onSelect: onGenerate },
+    { key: 'duplicates', label: '중복 문제 정리', requiresEdit: true, onSelect: onDuplicates },
     {
       key: 'inactive',
       label: '보관·초안 문제',

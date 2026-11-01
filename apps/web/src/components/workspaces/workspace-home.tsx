@@ -20,6 +20,9 @@
 //                     on top (UX3b stacking).
 //   문제 등록 editor  `?panel=question-create` (문제 › 직접 추가 and the empty heatmap, UX7-BANK): the
 //                     modal question editor, rendered by QuestionsOverview; not a stacked panel.
+//   중복 문제 정리     `?panel=question-duplicates` (문제 › 중복 문제 정리, UX7-DEDUP, editors of an active
+//                     workspace): a stacked floating dialog that scans for identical confirmed
+//                     questions and merges each group into the question kept (QOV-01-AC16).
 //   보관·초안 문제     `?panel=inactive-questions` (문제 › 보관·초안 문제, UX7-BANK-2, every member): a
 //                     stacked floating dialog of the draft and archived questions (QOV-01-AC15).
 //
@@ -53,6 +56,7 @@ import { bodyDocumentCount } from '@/components/documents/labels';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
 import { GenerationDialog } from '@/components/questions/generate/generation-dialog';
+import { QuestionDuplicates } from '@/components/questions/duplicates/question-duplicates';
 import { InactiveQuestions } from '@/components/questions/inactive/inactive-questions';
 import { ChapterNotePanel } from '@/components/questions/notes/chapter-note-panel';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
@@ -99,6 +103,7 @@ import {
   withChapterNote,
   summaryDocumentId,
   contentSearchParams,
+  DUPLICATES_PANEL,
   INACTIVE_QUESTIONS_PANEL,
   isFloatingPanel,
   ownSummaryDocument,
@@ -181,7 +186,8 @@ export function WorkspaceHome({
   }
   const allowed = (panel: HomePanel) =>
     (panel !== 'share' || isOwner) &&
-    ((panel !== 'generate' && panel !== QUESTION_CREATE_PANEL) || canEdit);
+    ((panel !== 'generate' && panel !== QUESTION_CREATE_PANEL && panel !== DUPLICATES_PANEL) ||
+      canEdit);
   const panels = parsePanels(searchParams).filter(allowed);
   const isOpen = (panel: HomePanel) => panels.includes(panel);
   // Pressing the button of a dialog that is already open (maybe under another one) raises it.
@@ -529,6 +535,7 @@ export function WorkspaceHome({
               readOnly={readOnly}
               onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
               onGenerate={() => setPanel('generate', true)}
+              onDuplicates={() => setPanel(DUPLICATES_PANEL, true)}
               onInactive={() => setPanel(INACTIVE_QUESTIONS_PANEL, true)}
             />
           </div>
@@ -661,6 +668,25 @@ export function WorkspaceHome({
                   panelHistory.push(`${pathname}${search}`);
                 }}
               />
+            </FloatingSidePanel>
+          ) : null}
+          {canEdit ? (
+            <FloatingSidePanel
+              open={isOpen(DUPLICATES_PANEL)}
+              onOpenChange={(open) => setPanel(DUPLICATES_PANEL, open)}
+              raiseKey={raised[DUPLICATES_PANEL]}
+              modal={false}
+              container={host}
+              title="중복 문제 정리"
+              closeLabel="중복 문제 정리 닫기"
+              mobileLayout="full"
+            >
+              {isOpen(DUPLICATES_PANEL) ? (
+                <QuestionDuplicates
+                  workspaceId={workspace.id}
+                  onMerged={() => setQuestionsVersion((n) => n + 1)}
+                />
+              ) : null}
             </FloatingSidePanel>
           ) : null}
           <FloatingSidePanel
