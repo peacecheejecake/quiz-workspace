@@ -773,6 +773,91 @@ test(
 );
 
 test(
+  'SEARCH-01-AC12 a dialog opened while the filtered heatmap is still loading stays open (search and filter)',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('search01-ac12-race');
+    const ws = await workspaceFactory.create(owner);
+    for (const title of QUESTION_TITLES) {
+      await createQuestion(owner, ws.id, mcqInput(title, ['예', '아니오']));
+    }
+    await signInAs(page, owner.user);
+    await page.goto(homePath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    const home = `/workspaces/${ws.id}`;
+    // Hold every heatmap re-read for the searched query or the type filter until released.
+    let release: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let held = 0;
+    await page.route(
+      (url) =>
+        url.pathname === home &&
+        (url.searchParams.get('q') === 'search01-ac12 chlorine' || url.searchParams.has('type')),
+      async (route) => {
+        held += 1;
+        await released;
+        await route.continue().catch(() => undefined);
+      },
+    );
+
+    // The 문제 search commits, its re-read is held, and the 문서 dialog opens meanwhile.
+    await homeUi.questionSearch(page).fill('search01-ac12 chlorine');
+    await expect.poll(() => held).toBeGreaterThan(0);
+    await homeUi.documentsButton(page).click();
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
+    release();
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.get('q') === 'search01-ac12 chlorine' &&
+        url.searchParams.getAll('panel').includes('documents'),
+    );
+    await expect(homeUi.documentsDialog(page)).toBeVisible();
+    await homeUi
+      .documentsDialog(page)
+      .getByRole('button', { name: /문서 관리 닫기|close/i })
+      .click();
+    await expect(homeUi.documentsDialog(page)).toHaveCount(0);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+    // The same for the type filter of "문제 설정".
+    let releaseType: () => void = () => undefined;
+    const typeReleased = new Promise<void>((resolve) => (releaseType = resolve));
+    let typeHeld = 0;
+    await page.route(
+      (url) => url.pathname === home && url.searchParams.get('type') === 'MCQ',
+      async (route) => {
+        typeHeld += 1;
+        await typeReleased;
+        await route.continue().catch(() => undefined);
+      },
+    );
+    await openSearchOptions(page, 'questions');
+    await chooseFilter(
+      page,
+      homeUi.searchSettings(page, 'questions').getByRole('combobox', { name: /^(유형|type)$/i }),
+      /객관식|multiple choice|mcq/i,
+    );
+    await closeSearchOptions(page, 'questions');
+    await expect.poll(() => typeHeld).toBeGreaterThan(0);
+    await homeUi.historyButton(page).click();
+    const history = main(page).getByRole('dialog', { name: /^(이력|history)$/i });
+    await expect(history).toBeVisible();
+    releaseType();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.get('type') === 'MCQ' &&
+        url.searchParams.get('q') === 'search01-ac12 chlorine' &&
+        url.searchParams.getAll('panel').includes('history'),
+    );
+    await page.waitForTimeout(1_000); // the released re-read has landed by now
+    await expect(history).toBeVisible();
+    expect(new URL(page.url()).searchParams.getAll('panel')).toContain('history');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  },
+);
+
+test(
   'SEARCH-01-AC12 Korean IME composition does not filter until the composition ends',
   { tag: '@infra' },
   async ({ page, workspaceFactory, browserName }) => {
