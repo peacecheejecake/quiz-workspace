@@ -92,13 +92,16 @@ export function QuestionEditor({
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+  // Keyed on the open state, not on `target`: the home passes a fresh `{ mode: 'create' }` on
+  // every render, and re-reading the opener then would record the editor's own field.
+  const open = target !== null;
   useEffect(() => {
-    openRef.current = target !== null;
-    if (target !== null) {
+    openRef.current = open;
+    if (open) {
       opener.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
     }
-  }, [target]);
+  }, [open]);
 
   /** Runs one save for `forSession`; returns the result for the form when it is still current. */
   async function save(
