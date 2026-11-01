@@ -142,7 +142,7 @@ workspace
   - `mock_exam_questions(id, workspace_id, mock_exam_id, generation_id, position, question_type, active_revision_id, source_question_id, source_question_revision_id, variation_type, removed_at, removed_by, created_at)` — 원본 FK는 `on delete set null`(원본 삭제 후에도 풀 수 있음).
   - `mock_exam_question_revisions(id, mock_exam_question_id, workspace_id, version, stem, options, correct_answer, explanation, rubric, evidence jsonb, validation_issues jsonb, origin generated|edited, edited_by, created_at)` — append-only, 정답은 stable option ID.
   - `mock_exam_practice_sessions` / `mock_exam_attempts` — `practice_sessions`/`question_attempts`와 같은 모양·제약(표시 option ID, `pending` 자기평가 연결, immutable; FK는 `mock_exam_question_revisions`), `practice_run_id` 포함.
-- **범위 풀이 묶음 (QVIEW, [QVIEW-01](screens/question-viewer.md)):** `practice_runs(id, workspace_id, user_id, source bank|mock, mock_exam_id, mock_exam_generation_id, range jsonb, random_order, seed, item_ids uuid[](순서 고정), created_at, finished_at)` — 만든 사용자만 읽음. 기존 `practice_sessions`에 nullable `practice_run_id`·`run_position`을 더한다(additive). 문제마다 세션은 묶음 안에서 하나(partial unique `(practice_run_id, run_position)`).
+- **범위 풀이 묶음 (QVIEW, [QVIEW-01](screens/question-viewer.md)):** `practice_runs(id, workspace_id, user_id, source bank|mock, mock_exam_id, mock_exam_generation_id, range jsonb, random_order, seed, item_ids uuid[](순서 고정, 최대 5,000), created_at, finished_at)` — 만든 사용자만 읽음. 결과 집계는 세션 테이블의 `(practice_run_id, run_position)` index로 계산하고, 문제 내용은 위치별로만 읽는다. 기존 `practice_sessions`에 nullable `practice_run_id`·`run_position`을 더한다(additive). 문제마다 세션은 묶음 안에서 하나(partial unique `(practice_run_id, run_position)`).
 - **QGEN 폐지 (MOCK-SPEC):** `question_generation_runs`·생성 초안·`question_lineage`의 기존 행은 보존하고 drop하지 않는다(additive-first). 새 생성 run은 만들어지지 않는다.
 
 문제 상태는 독립 필드를 합성해 계산한다. 색상 규칙·열람 판정·변형 정책은 `docs/questions.md`가 단일 기준이다.
@@ -201,8 +201,8 @@ workspace
 | PATCH/DELETE | `/api/v1/mock-exam-questions/{id}` | 문제 편집(새 revision, `version` 낙관적 잠금) · 모의고사에서 빼기(`removed_at`) |
 | POST | `/api/v1/mock-exam-questions/{id}/practice-sessions` | 모의고사 문제 열기·보기 순서(정답 비노출) |
 | POST | `/api/v1/mock-practice-sessions/{id}/submit` · `/self-grade` | 모의고사 문제 제출·채점·자기평가(`mock_exam_attempts`만 기록) |
-| POST | `/api/v1/workspaces/{id}/practice-runs` | 범위 풀이 묶음 만들기(`source bank\|mock`, `range`, `random_order`, `seed`; 서버가 범위 확정, 최대 500; QVIEW-01) |
-| GET | `/api/v1/practice-runs/{id}` · `/items/{position}` | 묶음 진행·결과 요약 · 위치의 문제(정답 비노출, 이미 제출했으면 그 결과·정답·해설) |
+| POST | `/api/v1/workspaces/{id}/practice-runs` | 범위 풀이 묶음 만들기(`source bank\|mock`, `range`, `random_order`, `seed`; 서버가 범위 확정, 최대 5,000; QVIEW-01) |
+| GET | `/api/v1/practice-runs/{id}` · `/items/{position}` · `/results` | 묶음 진행·결과 집계(내용 없음) · 위치의 문제 하나(정답 비노출, 이미 제출했으면 그 결과·정답·해설) · 결과 목록 페이지(`offset`/`limit` ≤200) |
 | POST | `/api/v1/practice-runs/{id}/finish` | 묶음 끝내기(`finished_at`, 요약 고정) |
 | GET | `/api/v1/jobs/{id}` | 비동기 작업 상태 |
 | GET | `/api/v1/jobs/{id}/events` | SSE 진행 상황 |

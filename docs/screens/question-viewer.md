@@ -24,11 +24,11 @@ linked_tests: [QVIEW-01-AC01 … QVIEW-01-AC08]
   - `bank` 출처의 풀이는 지금처럼 `question_attempts`·`question_user_states`에 기록되어 Heatmap 상태(열람·정답·오답)에 반영된다. 문제가 화면에 보일 때(세션을 열 때) `viewed`를 기록한다(questions.md §2.1).
   - `mock` 출처의 풀이는 그 모의고사 문제에 기록되고(`mock_exam_attempts`) Heatmap·문제 상태·문제 수는 바뀌지 않는다.
 - **범위 풀이 (새 기능):** 시작 전에 범위를 고르고(`전체 선택` 포함) `무작위 순서` checkbox를 정한 뒤 `시작`. 서버가 범위를 확정 문제 목록으로 풀고(순서 = Heatmap 순서, `무작위 순서`면 서버가 seed로 섞음) 풀이 묶음(`practice_run`)으로 저장한다. 묶음은 한 번에 한 문제를 보이고 `이전`·`다음`으로 오간다. 새로 고침하면 같은 순서·같은 위치로 돌아온다.
-- **범위 단위 (제안 — 사용자 확인 필요):** 범위는 Heatmap과 같은 **챕터 그룹 → 문제** 두 단계 checkbox 목록이고, 위에 `전체 선택`이 있다. 목록을 좁히는 필터는 홈 상태 필터와 같은 항목(풀이 상태 `안 푼 문제`·`본 문제`·`틀린 문제`·`맞힌 문제`·`다시 풀기`, `즐겨찾기만`, 유형)이다. 문서 단위·쪽 단위 범위는 없다. 이 고르기 부품(`QuestionRangePicker`)은 MOCK-01의 출제 범위 고르기와 같은 컴포넌트다.
-- **한 묶음 크기:** 한 묶음은 최대 500문제(넘으면 `시작` 비활성 + "한 번에 500문제까지 풀 수 있습니다", 서버 422 `practice-run-too-large`) (제안 — 사용자 확인 필요).
-- **묶음 안 재풀이 (제안 — 사용자 확인 필요):** 한 묶음에서 문제마다 제출은 한 번이다. `이전`으로 돌아간 문제는 제출한 답·결과·정답·해설을 읽기 전용으로 보인다. 다시 풀려면 결과 화면의 `처음부터 다시`(새 묶음, 같은 범위·같은 무작위 설정)를 쓴다. 한 문제 보기(`?question=`)의 기존 다시 풀기 동작은 그대로다.
-- **끝과 결과 요약 (제안 — 사용자 확인 필요):** 마지막 문제 뒤 `결과 보기`는 같은 panel에 "맞음 x · 틀림 y · 채점 대기 z · 건너뜀 w"와 문제별 결과 목록(번호·발문 앞부분·결과 글자)을 보인다. 목록의 문제를 누르면 그 위치로 돌아가 읽기 전용 결과를 본다. 시간 제한은 없다 (제안 — 사용자 확인 필요).
-- **도중에 닫기 (제안 — 사용자 확인 필요):** 닫기·Escape는 확인 없이 닫는다(제출한 풀이는 이미 저장됨). 닫은 묶음은 URL(`?practice=<id>`)이나 이력에서 다시 열면 이어서 풀 수 있고, 새 `문제 풀기`는 새 묶음을 만든다. 끝나지 않은 묶음 목록·이어 풀기 메뉴는 v1에 없다.
+- **범위 단위 (사용자 결정 2026-11-01):** 범위는 Heatmap과 같은 **챕터 그룹 → 문제** 두 단계 checkbox 목록이고, 위에 `전체 선택`이 있다. 목록을 좁히는 필터는 홈 상태 필터와 같은 항목(풀이 상태 `안 푼 문제`·`본 문제`·`틀린 문제`·`맞힌 문제`·`다시 풀기`, `즐겨찾기만`, 유형)이다. 문서 단위·쪽 단위 범위는 없다. 이 고르기 부품(`QuestionRangePicker`)은 MOCK-01의 출제 범위 고르기와 같은 컴포넌트다.
+- **한 묶음 크기 (사용자 결정 2026-11-01):** 한 묶음은 최대 **5,000문제**다(실제 Workspace에 1,008문제짜리 책이 있음). 넘으면 `시작` 비활성 + "한 번에 5,000문제까지 풀 수 있습니다", 서버 422 `practice-run-too-large`. 이 크기에서도 화면은 한 번에 한 문제와 진행만 불러오고(묶음 전체 문제 내용을 받지 않음), 범위 고르기 목록은 장 단위로 접혀 있다가 펼친 장만 virtualized 목록으로 그리며, 결과 요약 목록은 페이지(200개씩)로 불러온다.
+- **묶음 안 재풀이 (사용자 결정 2026-11-01):** 한 묶음에서 문제마다 제출은 한 번이다. `이전`으로 돌아간 문제는 제출한 답·결과·정답·해설을 읽기 전용으로 보인다. 다시 풀려면 결과 화면의 `처음부터 다시`(새 묶음, 같은 범위·같은 무작위 설정)를 쓴다. 한 문제 보기(`?question=`)의 기존 다시 풀기 동작은 그대로다.
+- **끝과 결과 요약 (사용자 결정 2026-11-01):** 마지막 문제 뒤 `결과 보기`는 같은 panel에 "맞음 x · 틀림 y · 채점 대기 z · 건너뜀 w"와 문제별 결과 목록(번호·발문 앞부분·결과 글자)을 보인다. 목록의 문제를 누르면 그 위치로 돌아가 읽기 전용 결과를 본다. 시간 제한은 없다 (사용자 결정 2026-11-01).
+- **도중에 닫기 (사용자 결정 2026-11-01):** 닫기·Escape는 확인 없이 닫는다(제출한 풀이는 이미 저장됨). 닫은 묶음은 URL(`?practice=<id>`)이나 이력에서 다시 열면 이어서 풀 수 있고, 새 `문제 풀기`는 새 묶음을 만든다. 끝나지 않은 묶음 목록·이어 풀기 메뉴는 v1에 없다.
 
 ## 기존 호출 위치 (call sites)와 보기 방식
 
@@ -47,13 +47,13 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 | — | DOC-02·공유 문서 화면의 "가져온 문제 형식"(본문 안에 펼쳐 보이는 문제) | — | 범위 밖: popup이 아니라 본문 안 렌더링. 문제 본문 부품(`QuestionBody` — 발문·번호 붙은 보기·접힌 정답·해설)만 공유한다 | — | DOC-02-AC11 |
 | — | 문제 변형 출제의 보기 섞기 미리보기(QGEN-01) | — | 없앤다(QGEN-RM) | — | — |
 
-- **modal vs non-modal (열린 질문):** 새 범위 풀이(6·7)는 사용자 요청의 "팝업"에 맞춰 1과 같은 modal `FloatingSidePanel`(데스크톱 오른쪽 500px, 모바일 bottom sheet)로 제안한다 (제안 — 사용자 확인 필요; 대안은 화면 가운데 큰 `ModalDialog`). 게스트 미리보기(5)는 지금처럼 non-modal로 남긴다 — 공유 화면 AC가 문제 목록과 panel을 함께 쓰는 동작을 전제한다. 4의 방식은 UX7-BANK 결정을 따른다.
-- 방식마다 header 동작: `practice`·`sequence(bank)`는 즐겨찾기·다시 풀기 toggle(QPLAY), `sequence(mock)`는 없음(모의고사 문제는 개인 상태가 없음, 제안 — 사용자 확인 필요), `manage`는 편집·삭제(또는 빼기), `read-only`는 없음.
+- **modal vs non-modal:** 새 범위 풀이(6·7)는 사용자 요청의 "팝업"에 맞춰 1과 같은 modal `FloatingSidePanel`(데스크톱 오른쪽 500px, 모바일 bottom sheet)로 한다 (사용자 결정 2026-11-01). 게스트 미리보기(5)는 지금처럼 non-modal로 남긴다 — 공유 화면 AC가 문제 목록과 panel을 함께 쓰는 동작을 전제한다. 4의 방식은 UX7-BANK 결정을 따른다.
+- 방식마다 header 동작: `practice`·`sequence(bank)`는 즐겨찾기·다시 풀기 toggle(QPLAY), `sequence(mock)`는 없음(모의고사 문제는 개인 상태가 없음, 사용자 결정 2026-11-01), `manage`는 편집·삭제(또는 빼기), `read-only`는 없음.
 - 문제 본문 부품은 모든 방식이 같다: 번호, 장, 유형 badge, 발문, 번호 붙은 보기(`1.` `2.` … 표시용, `aria-hidden`), 답 입력, 결과 영역(`role="status"`, 글자로 "정답"·"오답"·"채점 대기"), 정답·해설.
 
 ## 레이아웃 및 컴포넌트
 
-- **진입 (bank):** Workspace header `문제` 메뉴에 `문제 풀기` 항목(모든 구성원; 보관된 Workspace에서도 보임) (제안 — 사용자 확인 필요; 대안은 Heatmap 도구 줄 버튼). 누르면 QuestionViewer가 범위 고르기 단계로 바로 열리고(`?practice=new&source=bank`) 목록을 불러오는 동안 skeleton(QOV-01-AC09 규칙).
+- **진입 (bank):** Workspace header `문제` 메뉴에 `문제 풀기` 항목(모든 구성원; 보관된 Workspace에서도 보임) (사용자 결정 2026-11-01). 누르면 QuestionViewer가 범위 고르기 단계로 바로 열리고(`?practice=new&source=bank`) 목록을 불러오는 동안 skeleton(QOV-01-AC09 규칙).
 - **진입 (mock):** 모의고사 행·상세의 `풀기`(MOCK-01). 범위 고르기 단계는 그 모의고사의 문제만 보이고(출처 장별 묶음) 처음에 모두 선택되어 있다.
 - **범위 고르기 단계:** 제목 "문제 풀기"(mock이면 "<모의고사 이름> 풀기").
   - 필터 줄(접힘 가능, 홈 상태 필터와 같은 칩) → `QuestionRangePicker`.
@@ -73,11 +73,11 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 | 필터에 맞는 문제 없음 | "조건에 맞는 문제가 없습니다." + `필터 초기화`, `시작` 비활성 |
 | 문제 불러오는 중 | 본문 skeleton, 진행 막대 유지 |
 | 묶음 도중 문제가 삭제·보관됨(bank) 또는 모의고사에서 빠짐(mock) | "이 문제는 더 이상 풀 수 없습니다." + `다음` (결과 요약에서 "건너뜀") |
-| 모의고사 삭제됨·다시 만들어 문제가 바뀜 | 묶음은 시작할 때의 문제로 계속 풀 수 있다(제안 — 사용자 확인 필요); 삭제된 모의고사의 묶음은 "모의고사를 찾을 수 없습니다."(404) |
+| 모의고사 삭제됨·다시 만들어 문제가 바뀜 | 묶음은 시작할 때의 문제로 계속 풀 수 있다(사용자 결정 2026-11-01); 삭제된 모의고사의 묶음은 "모의고사를 찾을 수 없습니다."(404) |
 | 제출 실패(네트워크) | 답 유지 + alert "제출하지 못했습니다. 다시 시도하세요." |
 | 보관된 Workspace | 범위 고르기·보기는 가능, `제출` 비활성 + "보관된 Workspace에서는 답안을 제출할 수 없습니다."(API 403 `workspace-archived`) |
 | 다른 Workspace·다른 사용자의 묶음 딥링크 | "풀이를 찾을 수 없습니다."(404; 묶음은 만든 사용자만) |
-| 공유 링크 게스트 | `문제 풀기`·`?practice=` 없음(제안 — 사용자 확인 필요), 게스트 미리보기(호출 위치 5)는 그대로 |
+| 공유 링크 게스트 | `문제 풀기`·`?practice=` 없음(사용자 결정 2026-11-01), 게스트 미리보기(호출 위치 5)는 그대로 |
 
 ## 접근성
 
@@ -142,8 +142,8 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 
 | ID | 요구사항 |
 |---|---|
-| QVIEW-01-C01 | **범위 확정:** `POST /workspaces/{id}/practice-runs`(`source=bank`, `range{all, chapter_ids[], question_ids[], excluded_question_ids[], filters}`, `random_order`, `Idempotency-Key`)는 서버에서 범위를 이 Workspace의 살아 있는 CONFIRMED 문제로만 푼다(필터의 풀이 상태·즐겨찾기는 요청한 사용자 기준, Heatmap과 같은 판정). 다른 Workspace·초안·보관·삭제 문제 id는 범위에서 조용히 빠지지 않고 422 `range-invalid`로 거절한다. 결과 0개면 409 `no-matching-questions`, 500개 초과 422 `practice-run-too-large`. client가 보낸 `workspace_id`·`user_id`는 쓰지 않는다. |
-| QVIEW-01-C02 | **순서:** `random_order=false`면 Heatmap 순서, `true`면 `random.Random(seed).shuffle`(seed 미지정 시 서버가 정해 저장). 같은 seed·같은 범위 → 같은 순서. 묶음의 `item_ids`·seed는 생성 후 바뀌지 않는다. |
+| QVIEW-01-C01 | **범위 확정:** `POST /workspaces/{id}/practice-runs`(`source=bank`, `range{all, chapter_ids[], question_ids[], excluded_question_ids[], filters}` — `전체 선택`·장 선택은 id 목록 대신 `all`·`chapter_ids`로 보내고 개별 id 목록은 각각 5,000개 이하, `random_order`, `Idempotency-Key`)는 서버에서 범위를 이 Workspace의 살아 있는 CONFIRMED 문제로만 푼다(필터의 풀이 상태·즐겨찾기는 요청한 사용자 기준, Heatmap과 같은 판정). 다른 Workspace·초안·보관·삭제 문제 id는 범위에서 조용히 빠지지 않고 422 `range-invalid`로 거절한다. 결과 0개면 409 `no-matching-questions`, 5,000개 초과 422 `practice-run-too-large`(5,000개는 허용 — 경계 test). client가 보낸 `workspace_id`·`user_id`는 쓰지 않는다. |
+| QVIEW-01-C02 | **순서·크기:** `random_order=false`면 Heatmap 순서, `true`면 `random.Random(seed).shuffle`(seed 미지정 시 서버가 정해 저장). 같은 seed·같은 범위 → 같은 순서. 묶음의 `item_ids`(순서 고정 uuid 배열, 5,000개 ≈ 80 KB)·seed는 생성 후 바뀌지 않는다. `GET /practice-runs/{id}`는 내용 없이 개수·진행·요약 집계만, `/items/{position}`은 한 문제만, `/results?offset&limit`(≤200)은 결과 목록 한 페이지를 돌려준다 — 5,000문제 묶음에서도 응답 크기가 문제 수에 비례하지 않는다(크기 test). 이어 풀기 URL은 `?practice=<id>&i=<position>`(1~5,000) 그대로다. |
 | QVIEW-01-C03 | **정답 비노출:** `GET /practice-runs/{id}`·`/items/{position}`과 묶음에서 여는 practice session은 제출 전 정답·허용 답안·채점 기준·해설을 보내지 않는다(응답 schema test + 항목마다 key 검사). 제출 응답에서만 그 문제의 정답·해설을 보낸다. |
 | QVIEW-01-C04 | **기록:** `bank` 묶음의 세션·풀이는 기존 `practice_sessions`·`question_attempts`에 `practice_run_id`와 함께 기록되어 `question_user_states`·Heatmap에 반영된다. `mock` 묶음은 `mock_exam_practice_sessions`·`mock_exam_attempts`에만 기록되고 `question_*` 테이블은 바뀌지 않는다(행 수 비교 test). 묶음 안 문제마다 제출 1회(두 번째 제출 409 `already-submitted`); 풀이 기록은 UPDATE·DELETE 불가(pgTAP). |
 | QVIEW-01-C05 | **인가 matrix:** 묶음은 만든 사용자만 읽고 쓴다(다른 사용자·다른 Workspace 404). 모든 구성원(viewer 포함)이 만들고 풀 수 있고, 보관 Workspace는 만들기·읽기 가능·제출 403 `workspace-archived`, 삭제 Workspace 404. 공유 세션(게스트)은 묶음 API에 접근할 수 없다(401/404). |

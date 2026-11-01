@@ -25,11 +25,11 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 - **옵션 = 지금의 변형 유형 (사용자 요청):** 만들기 화면의 옵션은 QGEN-01 생성 form과 같은 변형 유형이다: `보기 섞기`(`OPTION_SHUFFLE`, 원본 문제를 그대로 옮기고 보기 순서만 섞음 — LLM 없음), `문구 변형`(`PARAPHRASE`), `정오 반전`(`INVERT_POLARITY`), `유사 개념`(`ANALOGOUS_CONCEPT`). 하나 이상 고른다. 그 밖의 옵션:
   - `문항 수` 1~50(기본 20) (제안 — 사용자 확인 필요). 서버가 범위에서 원본을 `min(문항 수, 범위 문제 수)`개 고르고(범위가 문항 수보다 크면 seed로 임의 선택, 작으면 전부) 원본마다 문제 1개를 만든다. 원본마다 쓸 변형 유형은 고른 유형 중에서 seed로 고르게 돌려 정한다(제안 — 사용자 확인 필요). QGEN-01의 `후보 수`는 없다(원본 하나 = 문제 하나).
   - `난이도`(선택, `쉬움`·`보통`·`어려움`, 기본 "원본과 같게") — QGEN-01 form과 같다.
-- **범위 (제안 — 사용자 확인 필요):** QVIEW-01과 같은 `QuestionRangePicker`(장 그룹 → 문제 checkbox, 맨 위 `전체 선택`, 상태·즐겨찾기·유형 필터)로 이 Workspace의 확정 문제를 고른다. 저장되는 범위는 사람이 고른 의도(`전체 선택` 여부·장·개별 문제·제외 문제·필터)이고, 다시 만들 때 그 의도를 그때의 확정 문제로 다시 푼다(새로 등록된 문제는 `전체 선택`·장 선택이면 포함).
+- **범위 (사용자 결정 2026-11-01):** QVIEW-01과 같은 `QuestionRangePicker`(장 그룹 → 문제 checkbox, 맨 위 `전체 선택`, 상태·즐겨찾기·유형 필터)로 이 Workspace의 확정 문제를 고른다. 저장되는 범위는 사람이 고른 의도(`전체 선택` 여부·장·개별 문제·제외 문제·필터)이고, 다시 만들 때 그 의도를 그때의 확정 문제로 다시 푼다(새로 등록된 문제는 `전체 선택`·장 선택이면 포함).
 - **만든 직후 바로 사용:** 생성 결과 중 기계 검증(형식·정답 개수·중복·출처 근거 — 이전 QGEN의 승인 차단 검증)을 통과한 문제만 저장되고 곧바로 `풀기`에 쓰인다. 통과하지 못한 후보는 저장·표시하지 않는다(그 원본으로 한 번 다시 요청, 그래도 실패면 그 원본은 건너뜀). 승인을 막지 않는 경고(`warning`)는 편집 권한자에게 문제 행의 "확인 필요" 글자 badge와 편집 화면의 안내로만 보이고 풀이 화면에는 보이지 않는다.
-- **다시 만들기 (제안 — 사용자 확인 필요):** 설정(변형 유형·문항 수·난이도·범위)을 바꾸거나 그대로 `다시 만들기`하면 새 회차(generation)로 문제를 모두 새로 만들고, 성공하면 모의고사의 문제 목록을 새 회차로 **바꾼다**. 이전 회차 문제와 그 풀이 기록은 지우지 않고(풀이 기록 불변) 화면에서 숨긴다(v1에 이전 회차 열람 없음). 새 회차가 실패하면 이전 문제가 그대로 남는다. 사람이 편집한 문제도 다시 만들면 바뀐다(확인 dialog에서 알림).
-- **공유 범위 (제안 — 사용자 확인 필요):** 모의고사는 Workspace 단위다 — 모든 구성원이 목록을 보고 풀 수 있고(풀이 기록은 사람마다), 편집 권한자가 만들고 고친다. 공유 링크 게스트에게는 보이지 않고 Fork에 복제되지 않는다(v1; [공유 명세 §9](../workspace-sharing.md)).
-- **환경별 사용 여부:** LLM 변형 유형은 worker 설정 `WORKER_MOCK_EXAMS`와 LLM 설정이 있을 때만 고를 수 있다. 꺼진 환경에서도 `보기 섞기`만 고른 모의고사는 만들 수 있고(LLM 없음) 저장된 모의고사는 풀 수 있다 (제안 — 사용자 확인 필요).
+- **다시 만들기 (사용자 결정 2026-11-01):** 설정(변형 유형·문항 수·난이도·범위)을 바꾸거나 그대로 `다시 만들기`하면 새 회차(generation)로 문제를 모두 새로 만들고, 성공하면 모의고사의 문제 목록을 새 회차로 **바꾼다**. 이전 회차 문제와 그 풀이 기록은 지우지 않고(풀이 기록 불변) 화면에서 숨긴다(v1에 이전 회차 열람 없음). 새 회차가 실패하면 이전 문제가 그대로 남는다. 사람이 편집한 문제도 다시 만들면 바뀐다(확인 dialog에서 알림).
+- **공유 범위 (사용자 결정 2026-11-01):** 모의고사는 Workspace 단위다 — 모든 구성원이 목록을 보고 풀 수 있고(풀이 기록은 사람마다), 편집 권한자가 만들고 고친다. 공유 링크 게스트에게는 보이지 않고 Fork에 복제되지 않는다(v1; [공유 명세 §9](../workspace-sharing.md)).
+- **환경별 사용 여부:** LLM 변형 유형은 worker 설정 `WORKER_MOCK_EXAMS`와 LLM 설정이 있을 때만 고를 수 있다. 꺼진 환경에서도 `보기 섞기`만 고른 모의고사는 만들 수 있고(LLM 없음) 저장된 모의고사는 풀 수 있다 (사용자 결정 2026-11-01).
 
 ## 재사용과 폐지 (QGEN-01 생성 엔진)
 
@@ -39,14 +39,14 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 | `OPTION_SHUFFLE` 결정적 shuffle(M5.2) | **재사용**: 모의고사 문제는 원본 revision의 발문·보기·정답·해설을 복사하고 보기 순서를 seed로 섞어 저장한다(풀이 때 보기 섞기는 QVIEW-01 세션 규칙 그대로). |
 | fake LLM adapter·`tests/fixtures/llm/generation-scenarios.json` | **재사용**(E2E·계약 test). 모의고사용 시나리오(정상·정오 반전 복수 정답·전부 실패)를 같은 파일에 추가한다. |
 | worker `question.generate` job의 원본 읽기·근거 passage 검색·근거 좁히기(`source_question`, `build_passages`, `narrow_evidence`) | **재사용**: 공용 모듈로 옮겨 새 job `mock_exam.generate`가 쓴다. `question.generate` job 등록은 QGEN-RM에서 뺀다. |
-| `question_generation_runs`·생성 `question_drafts`·`question_lineage` 테이블과 기존 행 | **보존**(additive-first; 삭제 migration 없음). 새 행은 생기지 않는다. 승인되지 않은 기존 생성 초안은 검토 화면이 없어져 볼 수 없게 된다(열린 질문). 이미 등록된 변형 문제와 lineage는 그대로 확정 문제다. |
+| `question_generation_runs`·생성 `question_drafts`·`question_lineage` 테이블과 기존 행 | **보존**(additive-first; 삭제 migration 없음). 새 행은 생기지 않는다. 승인되지 않은 기존 생성 초안은 검토 화면이 없어져 볼 수 없게 된다 — 보존만 하고 지우지 않는다(사용자 결정 2026-11-01). 이미 등록된 변형 문제와 lineage는 그대로 확정 문제다. |
 | API `POST /questions/{id}/generations`, `/question-generations/*`, `/workspaces/{id}/question-generation-batches*` | **폐지**(QGEN-RM에서 router 제거 → 404). OpenAPI·api-client 재생성. |
 | 화면: `문제` 메뉴 `변형 출제`, "문제 생성" dialog(`?panel=generate`), 검토 페이지·묶음 결과 페이지(`/questions/generate?…`), 문제 상세의 `변형 출제` | **폐지**. 이전 URL은 홈으로 redirect(`?panel=generate` → `?panel=mock-exams`). |
 | 이력의 `question_generation.*` 활동·"문제 생성" 작업 label | **보존**(과거 기록 표시용). |
 
 ## 레이아웃 및 컴포넌트
 
-**레이아웃 패턴:** 문서 관리 dialog([DOC-01](documents-library.md))와 문제 PDF 관리 dialog(QIMPORT-01-AC05)의 목록 dialog 패턴을 따른다 — Workspace header에서 여는 non-modal `FloatingSidePanel`, 제목·설명 header 없음(접근성 이름 "모의고사"), 위쪽 동작 영역 + 행 목록, 행은 제목 · 글자 badge · 메타 줄 · 오른쪽 아이콘 동작, 즉시 열리고 skeleton(QOV-01-AC09), 다른 홈 dialog와 쌓기(QOV-01-AC10). 만들기·상세는 같은 dialog 안에서 목록을 대신하고 위에 `BackLink` "모의고사 목록"을 둔다(넓은 화면 전환 없음).
+**레이아웃 패턴 (floating dialog — 사용자 결정 2026-11-01):** 문서 관리 dialog([DOC-01](documents-library.md))와 문제 PDF 관리 dialog(QIMPORT-01-AC05)의 목록 dialog 패턴을 따른다 — Workspace header에서 여는 non-modal `FloatingSidePanel`, 제목·설명 header 없음(접근성 이름 "모의고사"), 위쪽 동작 영역 + 행 목록, 행은 제목 · 글자 badge · 메타 줄 · 오른쪽 아이콘 동작, 즉시 열리고 skeleton(QOV-01-AC09), 다른 홈 dialog와 쌓기(QOV-01-AC10). 만들기·상세는 같은 dialog 안에서 목록을 대신하고 위에 `BackLink` "모의고사 목록"을 둔다(넓은 화면 전환 없음).
 
 - **진입:** Workspace header `문제` 메뉴의 `모의고사` 항목(모든 구성원; 이전 `변형 출제` 자리). 메뉴 순서는 UX7-BANK 이후의 메뉴에 `모의고사`·`문제 풀기`(QVIEW-01)를 더한 것이다.
 - **목록 화면:**
