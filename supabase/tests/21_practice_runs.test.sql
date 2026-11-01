@@ -1,4 +1,4 @@
--- QVIEW-B (20261102120000_practice_runs.sql): practice runs, their grants and RLS, immutability
+-- QVIEW-B (20261102130000_practice_runs.sql): practice runs, their grants and RLS, immutability
 -- (only finished_at, once), the practice session run link (pair, range, one session per position,
 -- same user/workspace, the position's question, never re-linked) and immutable attempts
 -- (QVIEW-01-C04).
