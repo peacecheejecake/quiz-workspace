@@ -3589,6 +3589,13 @@ export type components = {
        */
       progress: number | null;
       /**
+       * Result
+       * @description Counts and code only, for `mock_exam.generate`: {created_count, skipped_count, usage: {llm_calls, batches, input_tokens, output_tokens}, error_code}; null for other job types.
+       */
+      result?: {
+        [key: string]: unknown;
+      } | null;
+      /**
        * Stage
        * @description Current step while running, e.g. `parsing`, `indexing`; null otherwise.
        */
@@ -6345,6 +6352,13 @@ export type components = {
        * @description 0-100 while running (100 once succeeded); null when unknown.
        */
       progress: number | null;
+      /**
+       * Result
+       * @description Counts and code only, for `mock_exam.generate`: {created_count, skipped_count, usage: {llm_calls, batches, input_tokens, output_tokens}, error_code}; null for other job types.
+       */
+      result?: {
+        [key: string]: unknown;
+      } | null;
       /**
        * Retryable
        * @description The caller can start this job again: `document` → POST /documents/{target_id}/publish, `question_import` → POST /question-imports/{target_id}/retry. The retry is a new job.

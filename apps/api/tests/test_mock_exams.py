@@ -20,6 +20,7 @@ from quiz_api.api.mock_exams import (
     question_out,
 )
 from quiz_api.errors import ProblemException, ProblemType
+from quiz_api.repositories.jobs import public_result
 from quiz_api.repositories.mock_exams import GenerationRecord, QuestionRecord
 from quiz_api.settings import Settings
 
@@ -136,3 +137,21 @@ def test_viewers_get_no_answers() -> None:
     editor = _question_json(question_out(q, ref, answers=True), answers=True)
     assert editor["correct_option_ids"] == ["opt-1"]
     assert editor["validation_issues"] == [{"code": "polarity_unchanged", "severity": "warning"}]
+
+
+def test_only_counts_of_a_mock_exam_job_result_are_public() -> None:
+    raw = {
+        "generation_id": "x",
+        "created_count": 2,
+        "skipped_count": 1,
+        "usage": {"llm_calls": 2, "batches": 1, "prompt": "leak"},
+        "error_code": "no_valid_questions",
+        "stem": "leak",
+    }
+    assert public_result("mock_exam.generate", raw) == {
+        "created_count": 2,
+        "skipped_count": 1,
+        "usage": {"llm_calls": 2, "batches": 1},
+        "error_code": "no_valid_questions",
+    }
+    assert public_result("question.generate", raw) is None

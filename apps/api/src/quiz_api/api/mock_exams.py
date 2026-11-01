@@ -538,8 +538,12 @@ def _start(
     config: MockExamConfig,
     range_: MockExamRange,
     seed: int | None,
+    *,
+    new_config: bool,
 ) -> uuid.UUID:
-    """Resolve, plan, enforce the start limits and queue the generation (no commit)."""
+    """Resolve, plan, enforce the start limits and queue the generation (no commit). A count
+    over the range is refused when the settings are new (create / 설정 바꾸기); a plain remake
+    of a range that shrank since makes `min(count, range)` like the AI types."""
     repo.lock_workspace_generations(exam.workspace_id)
     candidates = resolve_candidates(
         repo.session, exam.workspace_id, actor_id, range_.model_dump(mode="json")
@@ -552,7 +556,8 @@ def _start(
         )
     types = [VariationType(v) for v in config.variation_types]
     if (
-        not uses_llm(types)
+        new_config
+        and not uses_llm(types)
         and config.question_count is not None
         and config.question_count > len(candidates)
     ):
@@ -686,7 +691,9 @@ def create_mock_exam(
     )
     exam = repo.exam(exam_id)
     assert exam is not None  # noqa: S101 - inserted above
-    _start(repo, settings, limiter, exam, user_id, body.config, body.range, body.seed)
+    _start(
+        repo, settings, limiter, exam, user_id, body.config, body.range, body.seed, new_config=True
+    )
     return _accepted(
         repo, idempotency, jobs, publisher, exam_id, user_id, scope, idempotency_key, body_hash
     )
@@ -787,7 +794,17 @@ def create_mock_exam_generation(
             range_=range_.model_dump(mode="json"),
         )
         exam = _load(repo, access)
-    _start(repo, settings, limiter, exam, user_id, config, range_, body.seed)
+    _start(
+        repo,
+        settings,
+        limiter,
+        exam,
+        user_id,
+        config,
+        range_,
+        body.seed,
+        new_config=body.config is not None or body.range is not None,
+    )
     return _accepted(
         repo, idempotency, jobs, publisher, exam.id, user_id, scope, idempotency_key, body_hash
     )
