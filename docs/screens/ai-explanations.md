@@ -1,15 +1,15 @@
 # AIEXPL-01 — AI 문제 해설 (제출 후)
 
-**상태:** 화면 요구사항 초안 v0.1 · ASK-SPEC 신규 2026-11-01 (사용자 요청 "LLM 문제 해설 — 문제 제출 후 버튼 노출 -> 해당 버튼 누르면 하단에 llm이 생성한 해설 생성 — 같은 문제에 대한 답변은 캐싱"). [ASK-01](ask-llm.md)과 따로 켜고 끌 수 있는 별도 기능이며 LLM 호출 경로·fake·인용 검증·usage 기록을 ASK와 함께 쓴다. `(제안 — 사용자 확인 필요)` 표시는 implementation-plan §7의 ASK-SPEC 제안 행에 모여 있다.
+**상태:** 화면 요구사항 초안 v0.2 · ASK-SPEC 신규 2026-11-01 · 사용자 결정 반영 2026-11-01(공유 해설·모든 보기, 구성원 생성·편집 권한 다시 만들기, 공유 게스트 읽기·Fork 복제) (사용자 요청 "LLM 문제 해설 — 문제 제출 후 버튼 노출 -> 해당 버튼 누르면 하단에 llm이 생성한 해설 생성 — 같은 문제에 대한 답변은 캐싱"). [ASK-01](ask-llm.md)과 따로 켜고 끌 수 있는 별도 기능이며 LLM 호출 경로·fake·인용 검증·usage 기록을 ASK와 함께 쓴다. `(제안 — 사용자 확인 필요)` 표시는 implementation-plan §7의 ASK-SPEC 제안 행에 모여 있다.
 **Route:** 별도 route 없음 — 풀이 panel(QPLAY-01, `?question=:questionId`)의 결과 영역, "문제 상세" dialog, 이후 QuestionViewer(QVIEW-01) 결과 영역 안의 영역.
 **테스트:** `tests/e2e/questions/ai-explanations.spec.ts` (계약: `tests/integration/questions/ai_explanations/test_ai_explanations_contract.py`, `apps/worker` · `packages/core` unit test, `supabase/tests` pgTAP)
 **Phase:** EXPL.0 (RED) → EXPL-B (계약) → EXPL-W (AC01~AC06, CI phase 켬) → ASK-QM (모의고사 문제, C09)
-**연계:** [ASK-01](ask-llm.md), [QPLAY-01](questions-practice.md), [QVIEW-01 (MOCK-SPEC 브랜치)](question-viewer.md), [WS-VIEW-01](workspace-shared-view.md), [Questions 명세](../questions.md) §11, [공유 명세](../workspace-sharing.md) §10, [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
+**연계:** [ASK-01](ask-llm.md), [RELSRC-01](related-sources.md), [QPLAY-01](questions-practice.md), [QVIEW-01 (MOCK-SPEC 브랜치)](question-viewer.md), [WS-VIEW-01](workspace-shared-view.md), [Questions 명세](../questions.md) §11, [공유 명세](../workspace-sharing.md) §10, [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
 
 ```yaml
 id: AIEXPL-01
 route: /workspaces/:workspaceId?question=:questionId (결과 영역)
-actor: workspace_member (제출 후 보기·만들기) · editor/owner (다시 만들기) · share guest (있는 해설 읽기 — 제안)
+actor: workspace_member (제출 후 보기·만들기) · editor/owner (다시 만들기) · share guest (있는 해설 읽기)
 permission: read · personal attempt · edit (다시 만들기)
 status: draft
 api: [GET /api/v1/questions/:id/ai-explanation, POST /api/v1/questions/:id/ai-explanation, POST /api/v1/questions/:id/ai-explanation/regenerate, GET /api/v1/ai-explanations/:id/stream, GET /api/v1/shared/:shareId/questions/:questionId/ai-explanation]
@@ -21,19 +21,19 @@ linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC06]
 
 - **제출 후에만.** 풀이 결과(정답/오답/채점 대기 + 정답 + 해설)가 보인 뒤 결과 영역 아래에 `AI 해설` 버튼이 나온다. 누르면 그 아래에 LLM이 만든 해설이 나타난다. 제출 전에는 버튼이 없고, **서버도 거절한다:** 요청은 `practice_session_id`를 함께 보내야 하며 그 session에 그 사용자의 제출(attempt, 채점 대기 포함)이 없으면 409 `explanation-before-submit`이고 LLM을 부르지 않으며 저장된 해설도 주지 않는다(AGENTS.md §5 "Practice APIs never send correct answers or explanations before submission"). UX7-CACHE대로 제출한 문제를 다시 열면 새 session이므로 다시 제출해야 버튼이 보인다.
 - **LLM 입력 (제출 후라 정답 포함):** 문제 유형·발문·보기(원본 순서, option ID와 글)·정답·허용 답안·채점 기준·기존(사람이 쓴) 해설·출처 구절(`question_sources`의 발행 블록), 그리고 ASK와 같은 검색 파이프라인으로 찾은 교재 근거(검색어 = 발문 + 정답 보기 글, 상위 `AI_EXPLANATION_TOP_K` 기본 5개, 합계 8,000자, 문제지·`mixed` 문제 구간·요약·정리 노트 제외 — ASK-01 "검색 범위"와 같은 규칙). **사용자가 고른 답은 넣지 않는다**(아래 공유 해설). 모델은 근거를 `[S1]`…로 인용하고 ASK-01-C04와 같은 인용 검증을 거친다.
-- **해설 내용 (제안 — 사용자 확인 필요):** 공유 해설은 (1) 정답 이유, (2) **보기마다** 맞는/틀린 이유(객관식; 단답·서술형은 채점 기준의 핵심과 흔한 오답), (3) 관련 개념 한두 문단, (4) 출처. 문서에 근거가 없는 부분은 "문서에서 근거를 찾지 못했습니다"라고 적고 지어내지 않는다. 기존 해설과 다른 정답을 말하지 않는다 — 모델은 정답을 바꿀 수 없고, 서버의 정답이 기준이다(정답 option ID와 다른 결론이 나오면 `explanation_answer_mismatch`로 실패 처리, 아래 C04). 대안: 정답 이유만 짧게.
-- **"내 답은 왜 틀렸나" (제안 — 사용자 확인 필요):** 공유 해설에는 개인 내용이 없으므로 사용자별 부분은 v1에 두지 않는다. 대신 AI 해설 아래에 `이 문제로 질문하기`(ASK-01, `practice` 첨부 — 제출 후라 공개 수준 `full`이고 사용자의 답이 들어간다)를 둔다. 대안: 제출한 답에 대한 사용자별 짧은 덧붙임(사용자마다 생성 — 비용이 사용자 수만큼).
+- **해설 내용 (사용자 결정 2026-11-01: 모든 보기를 다룸):** 공유 해설은 (1) 정답 이유, (2) **보기마다** 맞는/틀린 이유(객관식; 단답·서술형은 채점 기준의 핵심과 흔한 오답), (3) 관련 개념 한두 문단, (4) 출처. 문서에 근거가 없는 부분은 "문서에서 근거를 찾지 못했습니다"라고 적고 지어내지 않는다. 기존 해설과 다른 정답을 말하지 않는다 — 모델은 정답을 바꿀 수 없고, 서버의 정답이 기준이다(정답 option ID와 다른 결론이 나오면 `explanation_answer_mismatch`로 실패 처리, 아래 C04).
+- **"내 답은 왜 틀렸나" (사용자 결정 2026-11-01: 공유 해설에는 없음):** 공유 해설에는 개인 내용이 없으므로 사용자별 부분은 v1에 두지 않는다. 대신 AI 해설 아래에 `이 문제로 질문하기`(ASK-01, `practice` 첨부 — 제출 후라 공개 수준 `full`이고 사용자의 답이 들어간다)를 둔다 — 이 버튼이 풀이 panel 안이라 ASK `질문하기` 위치 결정(문제 상세·모의고사에만)과 맞는지는 확인한다 (제안 — 사용자 확인 필요; 대안은 버튼 없이 AI 해설만).
 - **AI 생성 표시:** 해설은 사람의 승인 없이 바로 보이고 편집할 수 없다. `AI 생성` 글자 badge와 "AI가 만든 해설입니다. 정답과 기존 해설이 기준이며, 틀릴 수 있습니다." 안내. 사람이 쓴 해설(문제의 `explanation`)을 바꾸거나 대신하지 않는다 — 문제은행·정리 노트(CHNOTE 입력)·ASK 검색 근거에 들어가지 않는다.
 - **환경별 사용 여부 (제안 — 사용자 확인 필요):** 자기 플래그 `WORKER_AI_EXPLANATIONS`(api·worker 같은 값, 기본 꺼짐)와 LLM 설정이 있을 때만 만든다(ASK의 `WORKER_ASK_LLM`과 따로 켬). 꺼진 환경에서는 버튼 대신 "이 환경에서는 AI 해설을 사용할 수 없습니다."를 보이고 이미 만든 해설은 읽힌다. 대안: ASK와 플래그 하나. **staging·production에서 켜는 것은 ⛔ 사용자 승인 후**(runbook-deploy §10).
 
-### 캐싱 (제안 — 사용자 확인 필요)
+### 캐싱 (사용자 결정 2026-11-01: 문제 revision마다 Workspace 공유 하나)
 
 - **키:** `(question_revision_id, prompt_version, model)`. 문제를 고치면(새 question_revision) 키가 바뀌어 예전 해설은 그 문제에 더는 보이지 않고 다시 만들어야 한다(예전 행은 남음 — 이력). `LLM_MODEL`이나 prompt 버전이 바뀌어도 새 키다. 근거 문서가 새로 발행되어도 해설은 그대로이며, 출처 링크에 "이 출처는 이전 발행본입니다."가 붙는다(ASK와 같음).
-- **범위:** 문제 revision 하나에 Workspace 공유 해설 하나 — 한 구성원이 만들면 그 문제를 제출한 다른 구성원은 LLM 호출 없이 같은 해설을 본다(비용 1회). 대안: 사용자별 캐시(같은 사용자가 다시 볼 때만 재사용; 비용 = 사용자 수 × 문제 수).
+- **범위:** 문제 revision 하나에 Workspace 공유 해설 하나 — 한 구성원이 만들면 그 문제를 제출한 다른 구성원은 LLM 호출 없이 같은 해설을 본다(비용 1회). 구성원 누구나(보기 권한 포함) 처음 만들 수 있다.
 - **저장:** Postgres `question_ai_explanations`(이력 포함, 아래 architecture). 지우지 않는다(문제 삭제 시에만 함께 지움).
 - **동시 요청:** 두 사용자가 동시에 눌러도 생성은 하나다: 대기·실행·성공 상태의 행은 키마다 하나(partial unique)이고 `POST`는 `INSERT … ON CONFLICT DO NOTHING` 뒤 기존 행을 돌려준다(Workspace·revision advisory lock 안). 두 번째 요청은 같은 해설 id와 같은 stream을 받아 진행 중인 글자를 이어 본다. 실패한 행은 막지 않는다(다음 요청이 새 행으로 다시 만든다).
-- **다시 만들기 (제안 — 사용자 확인 필요):** 편집 권한(owner·editor)이고 활성 Workspace일 때만 성공한 해설에 `다시 만들기`가 있다. 새 버전 행을 만들고 이전 버전에 `superseded_at`을 적는다(구성원은 최신만 봄). 한도: 같은 문제 revision에 하루 3번, 사용자 분당 한도 공유. 대안: 다시 만들기 없음(문제를 고쳐야만 새 해설).
-- **공유·Fork (제안 — 사용자 확인 필요):** 공유 링크 게스트는 발행된 확정 문제의 **이미 만든** 최신 해설을 공유 문제 panel에서 읽기 전용으로 본다(게스트는 이미 정답·해설을 본다 — workspace-sharing §1). 게스트는 만들 수 없다(버튼 없음, 비용 없음). Fork는 snapshot의 문제 revision에 해당하는 최신 성공 해설을 새 id로 복제한다(출처 블록 id 재매핑, 이전 버전·실패·usage 제외). 대안: 게스트·Fork 모두 제외.
+- **다시 만들기 (사용자 결정 2026-11-01):** 편집 권한(owner·editor)이고 활성 Workspace일 때만 성공한 해설에 `다시 만들기`가 있다. 새 버전 행을 만들고 이전 버전에 `superseded_at`을 적는다(구성원은 최신만 봄). 한도: 같은 문제 revision에 하루 3번, 사용자 분당 한도 공유.
+- **공유·Fork (사용자 결정 2026-11-01):** 공유 링크 게스트는 발행된 확정 문제의 **이미 만든** 최신 해설을 공유 문제 panel에서 읽기 전용으로 본다(게스트는 이미 정답·해설을 본다 — workspace-sharing §1). 게스트는 만들 수 없다(버튼 없음, 비용 없음). Fork는 snapshot의 문제 revision에 해당하는 최신 성공 해설을 새 id로 복제한다(출처 블록 id 재매핑, 이전 버전·실패·usage 제외).
 
 ### 모의고사 문제 (ASK-QM)
 
@@ -57,7 +57,7 @@ linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC06]
 
 ## 레이아웃 및 컴포넌트
 
-- **위치:** 풀이 panel 결과 영역(결과 글자·정답 표시·해설) 바로 아래, footer(`다음` 등) 위. 영역 제목 `AI 해설`(`h3`). QuestionViewer가 풀이 panel을 대신하면(QVIEW-W) 결과 영역의 같은 자리로 옮긴다.
+- **위치:** 풀이 panel 결과 영역(결과 글자·정답 표시·해설) 바로 아래, footer(`다음` 등) 위. 그 아래에 [RELSRC-01](related-sources.md) "관련 본문". 영역 제목 `AI 해설`(`h3`). QuestionViewer가 풀이 panel을 대신하면(QVIEW-W) 결과 영역의 같은 자리로 옮긴다.
 - **상태:**
   - 만든 적 없음: 글자 버튼 `AI 해설 만들기`(접근성 이름 "AI 해설 만들기") + 작은 안내 "문제와 정답, 관련 교재 구절이 AI 서비스로 전송됩니다."
   - 이미 있음(캐시) (제안 — 사용자 확인 필요): 결과를 가리지 않도록 버튼 대신 접힌 disclosure `AI 해설 보기`(`aria-expanded`, 기본 접힘)로 보인다. 펼치면 생성 없이 저장된 해설을 불러온다. 대안: 캐시가 있으면 바로 펼쳐 보임.
@@ -67,16 +67,16 @@ linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC06]
   - 기능 꺼짐: 버튼 대신 "이 환경에서는 AI 해설을 사용할 수 없습니다."(이미 있는 해설은 보임).
   - 보관된 Workspace: 이미 있는 해설만, 만들기·다시 만들기 없음("보관된 Workspace에서는 새 AI 해설을 만들 수 없습니다.").
 - 해설 영역은 결과 영역과 같은 panel scroll 안에 있고, 만들기를 누르면 focus는 영역 제목으로 가고 완료되어도 이동하지 않는다. 키보드: 버튼 Enter/Space, 각주·출처 Tab, 발췌 panel Escape로 닫으면 focus는 누른 출처로. 모바일 bottom sheet에서도 같은 순서, 가로 스크롤 없음.
-- 공유 게스트(제안): 공유 문제 panel의 해설 아래 "AI 해설" disclosure(있을 때만). 만들기·다시 만들기·상태·오류·버전·비용 없음.
+- 공유 게스트: 공유 문제 panel의 해설 아래 "AI 해설" disclosure(있을 때만). 만들기·다시 만들기·상태·오류·버전·비용 없음.
 
 ## 화면 상태
 
 | 상태 | 편집 권한 | 보기 권한 | 공유 게스트 |
 |---|---|---|---|
-| 제출 전 | 없음(서버 409) | 없음 | (게스트는 제출이 없음 — 있는 해설만, 제안) |
+| 제출 전 | 없음(서버 409) | 없음 | (게스트는 제출이 없음 — 있는 해설만) |
 | 제출 후 · 없음 | `AI 해설 만들기` | `AI 해설 만들기` | 없음 |
 | 만드는 중 | 진행·글자(누가 시작했든) | 같음 | 없음(완료만) |
-| 완료 | 해설 + `다시 만들기` | 해설 | 읽기 전용 해설(제안) |
+| 완료 | 해설 + `다시 만들기` | 해설 | 읽기 전용 해설 |
 | 실패 | alert + `다시 시도` | 같음 | 없음 |
 | 문제가 수정됨(새 revision) | `AI 해설 만들기`(예전 해설은 안 보임) | 같음 | 새 revision 해설이 생길 때까지 없음 |
 | 기능 꺼짐 | 이유 문구, 있는 해설 읽기 | 같음 | 있는 해설 읽기 |
