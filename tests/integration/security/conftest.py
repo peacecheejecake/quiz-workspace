@@ -6,10 +6,11 @@ app with APP_ENV=test, local Auth users, the `quiz_api` DB role and the in-proce
 loaded by path because conftest modules are not importable under `--import-mode=importlib`.
 
 `World` is one fully populated workspace (a parsed and published book with revisions and blocks,
-a CONFIRMED question, a generation run, an import run with a draft, a practice session, a share
-link with Fork ON, a pending upload intent, a fork request of another user) plus an editor, a
-viewer and an outsider. Its ids feed the operation table of `test_authz_matrix.py`, which is
-generated from `contracts/openapi.json` so a new route cannot be left out.
+a CONFIRMED question, an import run with a draft, a practice session, a share
+link with Fork ON, a pending upload intent, a fork request of another user, a made mock exam)
+plus an editor, a viewer and an outsider. Its ids feed the operation table of
+`test_authz_matrix.py`, which is generated from `contracts/openapi.json` so a new route cannot be
+left out.
 """
 
 from __future__ import annotations
@@ -103,9 +104,8 @@ def random_ids() -> dict[str, str]:
         "job_id",
         "fork_id",
         "session_id",
+        "run_id",
         "draft_id",
-        "generation_id",
-        "batch_id",
         "import_id",
         "registration_id",
         "question_id",
@@ -115,9 +115,13 @@ def random_ids() -> dict[str, str]:
         "draft_version",
         "question_revision",
         "chapter_id",
+        "mock_exam_id",
+        "mock_exam_question_id",
+        "mock_practice_session_id",
     )
     out = {k: str(uuid.uuid4()) for k in keys}
     out["block_id"] = f"b-{uuid.uuid4().hex[:12]}"
+    out["position"] = "1"  # a run position, not an id (the run id is the random part)
     return out
 
 
@@ -187,18 +191,6 @@ def build_world(seed: Any, label: str) -> World:
     chapter_id = str(owner.ok("GET", f"/documents/{doc_id}/outline")["items"][0]["id"])
     question = owner.create_question(wid, f"S4 {label} 문제", answer=1)
     qid = str(question["id"])
-    generation = owner.ok(
-        "POST", f"/questions/{qid}/generations", {"variation_types": ["PARAPHRASE"]}, (202,)
-    )
-    batch = owner.ok(
-        "POST",
-        f"/workspaces/{wid}/question-generation-batches",
-        {
-            "selection": {"mode": "selected", "question_ids": [qid]},
-            "variation_types": ["PARAPHRASE"],
-        },
-        (202,),
-    )
     unpublished = seed.unpublished_questions(owner, wid)
     draft_id = unpublished["importDraft"]
     rows = seed._admin(
@@ -227,6 +219,12 @@ def build_world(seed: Any, label: str) -> World:
         (202,),
     )
     session = owner.ok("POST", f"/questions/{qid}/practice-sessions", None, (200, 201))
+    run = owner.ok(
+        "POST",
+        f"/workspaces/{wid}/practice-runs",
+        {"source": "bank", "range": {"all": True}},
+        (201,),
+    )
     link = owner.create_link(wid, allow_fork=True)
     intent = owner.upload_intent(wid)
     assert intent.status_code in (200, 201), f"upload-intent: HTTP {intent.status_code}"
@@ -236,6 +234,13 @@ def build_world(seed: Any, label: str) -> World:
     fork = forker.fork(str(link["id"]), cookie, f"S4 {label} fork")
     assert fork.status_code == 202, f"fork start: HTTP {fork.status_code}"
 
+    # MOCK-B: a made mock exam with one question (보기 섞기, no LLM).
+    mock_exam_id, mock_question_id = make_mock_exam(owner, wid, qid)
+    # MOCK-P: the owner's open practice session of that mock exam question.
+    mock_session = owner.ok(
+        "POST", f"/mock-exam-questions/{mock_question_id}/practice-sessions", None, (201,)
+    )
+
     # A second workspace of the same owner, for requests that mix ids of two workspaces.
     twin = owner.create_workspace(f"S4 {label} twin")
     tid = str(twin["id"])
@@ -244,15 +249,6 @@ def build_world(seed: Any, label: str) -> World:
     twin_doc = str(twin_done["document_id"])
     twin_question = owner.create_question(tid, f"S4 {label} twin 문제")
     twin_link = owner.create_link(tid)
-    twin_batch = owner.ok(
-        "POST",
-        f"/workspaces/{tid}/question-generation-batches",
-        {
-            "selection": {"mode": "selected", "question_ids": [str(twin_question["id"])]},
-            "variation_types": ["PARAPHRASE"],
-        },
-        (202,),
-    )
 
     ids = {
         "workspace_id": wid,
@@ -262,9 +258,9 @@ def build_world(seed: Any, label: str) -> World:
         "job_id": str(done["job_id"]),
         "fork_id": str(fork.json()["id"]),
         "session_id": str(session["id"]),
+        "run_id": str(run["id"]),
+        "position": "1",
         "draft_id": draft_id,
-        "generation_id": str(generation["id"]),
-        "batch_id": str(batch["id"]),
         "import_id": import_id,
         "registration_id": str(registration["job_id"]),
         "question_id": qid,
@@ -275,6 +271,9 @@ def build_world(seed: Any, label: str) -> World:
         "draft_version": "1",
         "question_revision": str(question["revision"]["id"]),
         "chapter_id": chapter_id,
+        "mock_exam_id": mock_exam_id,
+        "mock_exam_question_id": mock_question_id,
+        "mock_practice_session_id": str(mock_session["id"]),
     }
     twin_ids = {
         "workspace_id": tid,
@@ -289,10 +288,29 @@ def build_world(seed: Any, label: str) -> World:
         "revision_id@questions": str(twin_question["revision"]["id"]),
         "link_id": str(twin_link["id"]),
         "share_id": str(twin_link["id"]),
-        "batch_id": str(twin_batch["id"]),
         "chapter_id": str(owner.ok("GET", f"/documents/{twin_doc}/outline")["items"][0]["id"]),
     }
     return World(owner, editor, viewer, outsider, forker, ids, twin_ids, str(link["secret"]))
+
+
+def make_mock_exam(owner: Any, workspace_id: str, question_id: str) -> tuple[str, str]:
+    """A succeeded OPTION_SHUFFLE mock exam of one question, made through the API."""
+    made = owner.ok(
+        "POST",
+        f"/workspaces/{workspace_id}/mock-exams",
+        {
+            "title": "S4 모의고사",
+            "config": {"variation_types": ["OPTION_SHUFFLE"], "question_count": 1},
+            "range": {"question_ids": [question_id]},
+        },
+        (202,),
+    )
+    exam_id = str(made["id"])
+    owner.wait_for_job(str(made["latest_generation"]["job_id"]))
+    after = owner.ok("GET", f"/mock-exams/{exam_id}")
+    assert after["status"] == "ready", after["latest_generation"]
+    [item] = owner.ok("GET", f"/mock-exams/{exam_id}/questions")["items"]
+    return exam_id, str(item["id"])
 
 
 class LogCapture(logging.Handler):

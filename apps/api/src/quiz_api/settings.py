@@ -219,6 +219,20 @@ class Settings(BaseSettings):
     chapter_notes: bool = Field(default=False, validation_alias="WORKER_CHAPTER_NOTES")
     # LLM_MODEL (`llm_model`) is declared with the DOCSUM-B settings below; both features use it.
 
+    # Mock exams (MOCK-B): the AI variation types are offered (`llm_available`) and accepted only
+    # with the worker's switch on AND an LLM provider configured (LLM_MODEL, as chapter notes);
+    # 보기 섞기 mock exams and stored ones work either way.
+    mock_exams: bool = Field(default=False, validation_alias="WORKER_MOCK_EXAMS")
+    # Queued/running mock exam generations per workspace (409 generation-busy above it) and
+    # generation starts per minute per user (in-process token bucket, burst = rate; 429 +
+    # Retry-After; 0 disables it). MOCK-01-C06.
+    mock_exam_max_running_per_workspace: int = Field(
+        default=5, ge=1, le=100, validation_alias="MOCK_EXAM_MAX_RUNNING_PER_WORKSPACE"
+    )
+    mock_exam_generation_rate_per_minute: int = Field(
+        default=6, ge=0, le=600, validation_alias="MOCK_EXAM_GENERATION_RATE_LIMIT_PER_MINUTE"
+    )
+
     # Workspace search (M3.6a). The query embedder and the collection namespace must be the
     # worker's (same model key, same collections), so these read the worker's variables and
     # pick the embedder through the same `book_core.embedding.select_embedder`.
@@ -360,6 +374,11 @@ class Settings(BaseSettings):
         """Chapter notes can be created here (CHNOTE-01-AC06): the switch is on and a provider is
         configured (the worker's deterministic fake under APP_ENV=test)."""
         return self.chapter_notes and self.llm_provider_configured
+
+    @property
+    def mock_exam_llm_available(self) -> bool:
+        """Mock exams may use the AI variation types here (MOCK-01-AC08)."""
+        return self.mock_exams and self.llm_provider_configured
 
     @property
     def llm_provider_configured(self) -> bool:

@@ -11,12 +11,16 @@
 //   Home       (UX3c) `/workspaces/:id`: hidden h1 (workspace name), header with the unified
 //              search (searchbox "검색어", icon button "검색", under it checkboxes "문제"/"본문"
 //              each followed by a "설정" text button named "문제 설정"/"본문 설정" → popover
-//              "문제 검색 설정"/"본문 검색 설정", and a status message, UX6), buttons "문서 n", "문제" (menu button, UX4: menuitems "전체 문제" (a link
-//              to the bank that replaced the "문제은행" button, UX6-PROGRESS), "PDF 관리",
-//              "직접 추가", "변형 출제"; the last two for editors), then
+//              "문제 검색 설정"/"본문 검색 설정", and a status message, UX6), buttons "문서 n", "문제" (menu button, UX4; shown to everyone, UX7-DOCS-2: menuitems
+//              "직접 추가" (the modal "문제 등록" dialog, `?panel=question-create`, UX7-BANK) and
+//              "중복 문제 정리", aria-disabled without edit rights with the reason as menu text,
+//              then "보관·초안 문제" · "모의고사" · "문제 풀기" for every member; no "전체 문제"
+//              since UX7-BANK, no "PDF 관리" since UX7-DOCS, no "변형 출제" since QGEN-RM), then
 //              icon buttons "이력" and "공유하기" (owner); dialogs are non-modal
-//              FloatingSidePanels inside <main> named "문서 관리", "문제 PDF 관리", "문제 생성",
-//              "이력", "링크 공유" (`?panel=documents|question-pdfs|generate|history|share`).
+//              FloatingSidePanels inside <main> named "문서 관리", "모의고사", "이력", "링크 공유"
+//              (`?panel=documents|mock-exams|history|share`; the retired 문제 PDF 관리
+//              `?panel=question-pdfs` redirects to `documents`, UX7-DOCS, and the retired 문제 생성
+//              `?panel=generate` to `mock-exams`, QGEN-RM).
 //   DOC-01     "문서 관리" dialog: dashed Dropzone whose "PDF 업로드" button opens a file
 //              chooser (the only upload button); one list item per book document with an
 //              upload progressbar, processing status, "준비 완료"/"Ready"; "취소"/"다시 시도";
@@ -29,8 +33,10 @@
 //              current one aria-checked) on ready rows and a refusal as an alert in the row;
 //              question rows link "<title> 문제 검토" or offer the button "<title> 문제 추출".
 //   DOC-02     outline tree "목차" (treeitems), PDF viewer region with a "현재 페이지" field and a
-//              labelled source highlight, text editor region "원문" whose current block carries
-//              aria-current="true"; block "편집"/"저장", revision status "초안"/"발행됨", "발행".
+//              labelled source highlight, text editor region "변환본 텍스트" (DOCVIEW-01; any
+//              name with 원문/텍스트) whose current block carries aria-current="true"; block
+//              "편집"/"저장", revision status "초안"/"발행됨", "발행". The layout around them
+//              (settings bar, outline panel, splitter) is in fixtures/document-viewer.ts.
 //   SEARCH-01  the home's unified search: searchbox "검색어"; in the "본문 검색 설정" popover
 //              (portalled to <body>) radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes
 //              "문서"/"장"; in "문제 검색 설정" comboboxes "챕터"/"유형"; region "본문 검색 결과" with list "검색 결과" whose items quote the source text in a
@@ -64,13 +70,18 @@ export function documentsPath(workspaceId: string): string {
   return homePath(workspaceId, 'panel=documents');
 }
 
-/** The home with the unified search limited to 본문 (`/search` redirects here). */
+/**
+ * The home, where the 본문 search lives (UX7-SEARCH: collapsed until its "본문 검색" disclosure is
+ * opened; runSearch/openContentSearch open it). `/search?q=` redirects here with `text=`.
+ */
 export function searchPath(workspaceId: string): string {
-  return homePath(workspaceId, 'scope=content');
+  return homePath(workspaceId);
 }
 
 export const homeUi = {
-  header: (page: Page) => main(page).getByRole('search', { name: /통합 검색|search/i }),
+  /** The header's 문제 search (UX7-SEARCH; the unified search before). */
+  header: (page: Page) =>
+    main(page).getByRole('search', { name: /^(문제 검색|question search|search questions)$/i }),
   documentsButton: (page: Page) =>
     main(page).getByRole('button', { name: /^(문서|documents)\s*\d+$/i }),
   historyButton: (page: Page) => main(page).getByRole('button', { name: /^(이력|history)$/i }),
@@ -83,21 +94,31 @@ export const homeUi = {
     homeUi.questionMenu(page).getByRole('menuitem', { name: QUESTION_MENU_ITEMS[item] }),
   dialog: (page: Page, name: RegExp) => main(page).getByRole('dialog', { name }),
   documentsDialog: (page: Page) => homeUi.dialog(page, /^(문서 관리|documents)$/i),
+  /** The retired 문제 PDF 관리 dialog (UX7-DOCS): only ever expected to be absent. */
   questionPdfsDialog: (page: Page) => homeUi.dialog(page, /^(문제 pdf 관리|question pdfs?)$/i),
+  /** The retired 문제 생성 dialog (QGEN-RM): only ever expected to be absent. */
   generateDialog: (page: Page) => homeUi.dialog(page, /^(문제 생성|generate questions?)$/i),
   shareDialog: (page: Page) => homeUi.dialog(page, /^(링크 공유|share link)$/i),
-  /** The unified search's scope checkboxes, right under the search box (UX6). */
-  scopeQuestions: (page: Page) =>
-    homeUi.header(page).getByRole('checkbox', { name: /^(문제|questions)$/i }),
-  scopeContent: (page: Page) =>
-    homeUi.header(page).getByRole('checkbox', { name: /^(본문|body|content)$/i }),
-  /** The "설정" text button next to a scope checkbox; it opens that scope's settings popover. */
-  scopeSettingsButton: (page: Page, scope: SearchScopeName) =>
-    homeUi.header(page).getByRole('button', { name: SCOPE_SETTINGS_BUTTONS[scope] }),
-  scopeSettings: (page: Page, scope: SearchScopeName) =>
+  /** The 문제 search box: filters the heatmap as you type (SEARCH-01-AC12, no button). */
+  questionSearch: (page: Page) =>
+    homeUi.header(page).getByRole('searchbox', {
+      name: /^(문제 검색|question search|search questions)$/i,
+    }),
+  /** The status message under the 문제 search (why it is disabled). */
+  questionSearchMessage: (page: Page) => homeUi.header(page).getByRole('status'),
+  /** The "본문 검색" disclosure button (collapsed by default, SEARCH-01-AC10). */
+  contentSearchToggle: (page: Page) =>
+    main(page).getByRole('button', { name: /^(본문 검색|body search|content search)$/i }),
+  /** The 본문 search form inside the disclosure. */
+  contentSearch: (page: Page) =>
+    main(page).getByRole('search', { name: /^(본문 검색|body search|content search)$/i }),
+  /** The status message of the 본문 search (why its button is disabled). */
+  contentSearchMessage: (page: Page) => homeUi.contentSearch(page).getByRole('status'),
+  /** The "설정" text button of a search; it opens that search's settings popover. */
+  searchSettingsButton: (page: Page, scope: SearchScopeName) =>
+    main(page).getByRole('button', { name: SCOPE_SETTINGS_BUTTONS[scope] }),
+  searchSettings: (page: Page, scope: SearchScopeName) =>
     page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
-  /** The status message under the scope checkboxes (why the search button is disabled). */
-  searchMessage: (page: Page) => homeUi.header(page).getByRole('status'),
   statusFilterToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(상태 필터|status filter)$/i }),
   statusFilters: (page: Page) =>
@@ -114,13 +135,102 @@ const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
   body: /^(본문 검색 설정|body search settings|content search settings)$/i,
 };
 
-type QuestionMenuItem = 'bank' | 'pdfs' | 'create' | 'generate';
+type QuestionMenuItem =
+  'pdfs' | 'create' | 'generate' | 'duplicates' | 'inactive' | 'mockExams' | 'practice';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
-  bank: /^(전체 문제|all questions)$/i,
+  /** Retired by UX7-DOCS: only ever expected to be absent. */
   pdfs: /^(pdf 관리|manage pdfs?)$/i,
   create: /^(직접 추가|add question)$/i,
+  /** Retired by QGEN-RM (MOCK-01-AC01): only ever expected to be absent. */
   generate: /^(변형 출제|generate variants?)$/i,
+  /** UX7-DEDUP: the 중복 문제 정리 dialog, editors only (QOV-01-AC16). */
+  duplicates: /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
+  /** UX7-BANK-2: the 보관·초안 문제 dialog, usable by every member. */
+  inactive: /^(보관·초안 문제|archived and draft questions)$/i,
+  /** MOCK-01: the 모의고사 dialog, usable by every member. */
+  mockExams: /^(모의고사|mock exams?)$/i,
+  /** QVIEW-01: the range run (QuestionViewer sequence), usable by every member. */
+  practice: /^(문제 풀기|practice questions?|start practice)$/i,
 };
+
+/** The `문제` menu's editor-only items (UX7-DOCS-2, UX7-DEDUP; 변형 출제 retired by QGEN-RM). */
+const EDITOR_ITEMS = ['create', 'duplicates'] as const;
+
+/** Every `문제` menu item in order (MOCK-SYNC, QOV-01 7). */
+const QUESTION_MENU_ORDER = [
+  QUESTION_MENU_ITEMS.create,
+  QUESTION_MENU_ITEMS.duplicates,
+  QUESTION_MENU_ITEMS.inactive,
+  QUESTION_MENU_ITEMS.mockExams,
+  QUESTION_MENU_ITEMS.practice,
+] as const;
+
+/** Why the `문제` menu's editor-only items are disabled (UX7-DOCS-2, QOV-01-AC11). */
+export const QUESTION_MENU_REASONS = {
+  viewer: /^(편집 권한이 있어야 사용할 수 있습니다|you need edit rights to use these)\.?$/i,
+  archived: /^(보관된 workspace는 읽기 전용입니다|archived workspaces are read-only)\.?$/i,
+} as const;
+
+/**
+ * Without edit rights the `문제` button stays (UX7-DOCS-2, QOV-01-AC11): its menu shows 직접 추가
+ * and 중복 문제 정리 aria-disabled (보관·초안 문제 · 모의고사 · 문제 풀기 enabled, UX7-BANK-2,
+ * MOCK-SYNC), has no 변형 출제 (QGEN-RM), says why in text (described-by), skips them with the
+ * arrow keys and opens nothing when one is clicked. Leaves the menu closed, focus back on the button.
+ */
+export async function expectReadOnlyQuestionMenu(
+  page: Page,
+  reason: keyof typeof QUESTION_MENU_REASONS,
+): Promise<void> {
+  const button = homeUi.questionMenuButton(page);
+  await expect(button).toBeVisible();
+  await expect(button).toHaveAttribute('aria-haspopup', 'menu');
+  await button.focus();
+  await page.keyboard.press('Enter');
+  const menu = homeUi.questionMenu(page);
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem')).toHaveText([...QUESTION_MENU_ORDER]);
+  // UX7-BANK-2: 보관·초안 문제 is readable by everyone, so it stays enabled; so are 모의고사
+  // (MOCK-01, listing and practising mock exams) and 문제 풀기 (QVIEW-01, a personal practice run).
+  for (const item of ['inactive', 'mockExams', 'practice'] as const) {
+    await expect(homeUi.questionMenuItem(page, item)).not.toHaveAttribute('aria-disabled', 'true');
+  }
+  await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
+  await expect(homeUi.questionMenuItem(page, 'generate')).toHaveCount(0);
+  const text = QUESTION_MENU_REASONS[reason];
+  await expect(menu.getByText(text)).toBeVisible();
+  for (const item of EDITOR_ITEMS) {
+    const el = homeUi.questionMenuItem(page, item);
+    await expect(el).toHaveAttribute('aria-disabled', 'true');
+    await expect(el).toHaveAccessibleDescription(text);
+  }
+  await expect(menu).toHaveAccessibleDescription(text);
+  // The arrow keys skip the disabled items (landing on 보관·초안 문제); Escape returns to the button.
+  await page.keyboard.press('ArrowDown');
+  for (const item of EDITOR_ITEMS) {
+    await expect(homeUi.questionMenuItem(page, item)).not.toBeFocused();
+  }
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(button).toBeFocused();
+  // A click on a disabled item opens nothing.
+  const before = new URL(page.url()).searchParams.getAll('panel');
+  for (const item of EDITOR_ITEMS) {
+    await button.click();
+    const el = homeUi.questionMenuItem(page, item);
+    // Radix positions the menu after measuring: wait until it is placed before clicking.
+    await expect(el).toBeInViewport();
+    await el.click({ force: true });
+    await expect(
+      page.getByRole('dialog', { name: /^(중복 문제 정리|duplicate questions)$/i }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('dialog', { name: /문제 (등록|추가)|(new|add) question/i }),
+    ).toHaveCount(0);
+    expect(new URL(page.url()).searchParams.getAll('panel')).toEqual(before);
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+  }
+}
 
 /** Opens the header's `문제` menu and chooses `item` (UX4). */
 export async function chooseQuestionMenu(page: Page, item: QuestionMenuItem): Promise<void> {
@@ -128,14 +238,23 @@ export async function chooseQuestionMenu(page: Page, item: QuestionMenuItem): Pr
   await homeUi.questionMenuItem(page, item).click();
 }
 
-/** Opens a scope's settings popover ("본문 설정" by default; no-op when it is open). */
+/** Expands the collapsed 본문 search (SEARCH-01-AC10; no-op when it is open). */
+export async function openContentSearch(page: Page): Promise<void> {
+  const toggle = homeUi.contentSearchToggle(page);
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(searchUi.box(page)).toBeVisible();
+}
+
+/** Opens a search's settings popover ("본문 설정" by default; no-op when it is open). */
 export async function openSearchOptions(
   page: Page,
   scope: SearchScopeName = 'body',
 ): Promise<Locator> {
-  const button = homeUi.scopeSettingsButton(page, scope);
+  if (scope === 'body') await openContentSearch(page);
+  const button = homeUi.searchSettingsButton(page, scope);
   if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click();
-  const popover = homeUi.scopeSettings(page, scope);
+  const popover = homeUi.searchSettings(page, scope);
   await expect(popover).toBeVisible();
   return popover;
 }
@@ -145,9 +264,9 @@ export async function closeSearchOptions(
   page: Page,
   scope: SearchScopeName = 'body',
 ): Promise<void> {
-  const button = homeUi.scopeSettingsButton(page, scope);
+  const button = homeUi.searchSettingsButton(page, scope);
   if ((await button.getAttribute('aria-expanded')) !== 'true') return;
-  const popover = homeUi.scopeSettings(page, scope);
+  const popover = homeUi.searchSettings(page, scope);
   // Escape closes the innermost layer first: a search-mode description tooltip (shown on hover or
   // keyboard focus) takes one press before the popover does.
   await expect(async () => {
@@ -249,10 +368,6 @@ export const editorUi = {
     editorUi.textPanel(page).getByRole('textbox', { name: /블록|원문|block|text/i }),
   saveButton: (page: Page) =>
     editorUi.textPanel(page).getByRole('button', { name: /^(저장|save)/i }),
-  /** DOCVIEW (AC06): the `목차` toggle in the PDF toolbar and the floating outline panel. */
-  outlineToggle: (page: Page) =>
-    editorUi.viewer(page).getByRole('button', { name: /^(목차|outline)$/i }),
-  outlinePanel: (page: Page) => page.getByRole('dialog', { name: /^(목차|outline)$/i }),
   /** The scrolling page area of the PDF viewer (continuous pages, AC07/AC08). */
   pdfPages: (page: Page) =>
     editorUi.viewer(page).getByRole('group', { name: /pdf 페이지 영역|pdf pages/i }),
@@ -268,8 +383,6 @@ export const editorUi = {
     editorUi
       .textPanel(page)
       .getByRole('heading', { name: new RegExp(`^(${n}쪽|page ${n})$`, 'i') }),
-  /** AC10: the PDF ↔ text width separator. */
-  splitter: (page: Page) => page.getByRole('separator', { name: /(pdf|원문).*(폭|너비)|resize/i }),
   /** AC11: an imported, confirmed question shown in question format. */
   questionCard: (page: Page, n: number) =>
     editorUi
@@ -290,7 +403,9 @@ export const PUBLISHED = /발행(됨| 완료)|published/i;
 export const INDEX_FAILED = /색인.*실패|indexing failed|reindex(ing)? failed/i;
 
 export const searchUi = {
-  box: (page: Page) => main(page).getByRole('searchbox', { name: /검색|search/i }),
+  /** The 본문 search box (inside the "본문 검색" disclosure: openContentSearch). */
+  box: (page: Page) =>
+    main(page).getByRole('searchbox', { name: /^(본문 검색어|body search (query|text))$/i }),
   submit: (page: Page) => main(page).getByRole('button', { name: /^(검색|search)$/i }),
   /** Inside the "본문 검색 설정" popover (open it first: openSearchOptions). */
   modeGroup: (page: Page) =>
@@ -332,7 +447,7 @@ export function pageLabel(n: number): RegExp {
   );
 }
 
-/** Runs a search through the UI: mode first ("본문 설정"), then query + Enter. */
+/** Runs a 본문 search through the UI: mode first ("본문 설정", which opens the 본문 search), then query + Enter. */
 export async function runSearch(
   page: Page,
   query: string,

@@ -173,7 +173,8 @@ select is(
 -- questions (12_question_generation_worker.test.sql), S3a on workspace_forks
 -- (12_workspace_forks.test.sql), QIMP-JOB read-only on registration items
 -- (15_question_import_registration.test.sql), DOCSUM-B on the summary tables
--- (19_document_summaries.test.sql); nothing else.
+-- (19_document_summaries.test.sql), MOCK-B on the mock exam tables it writes
+-- (22_mock_exams.test.sql); nothing else.
 select is_empty(
   $$ select tablename from pg_policies
       where schemaname = 'public' and 'quiz_worker' = any(roles)
@@ -183,9 +184,12 @@ select is_empty(
                               'question_revisions', 'question_sources', 'workspace_forks',
                               'question_import_registration_items', 'document_summary_runs',
                               'document_summary_units', 'document_summary_run_units',
-                              'chapter_notes') $$,
+                              'chapter_notes', 'mock_exams', 'mock_exam_generations',
+                              'mock_exam_generation_items', 'mock_exam_questions',
+                              'mock_exam_question_revisions') $$,
   'quiz_worker has policies on async_jobs, the M3.2a document tables, M4.4a imports, M6.2 '
-    || 'generation, S3a forks, QIMP-JOB registration items (read) and DOCSUM-B summaries only');
+    || 'generation, S3a forks, QIMP-JOB registration items (read), DOCSUM-B summaries and MOCK-B '
+    || 'mock exams only');
 
 -- quiz_worker works within its grants -----------------------------------------------------------
 grant quiz_worker to postgres;

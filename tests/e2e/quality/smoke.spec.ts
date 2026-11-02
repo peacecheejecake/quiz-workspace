@@ -18,6 +18,7 @@ import {
   panelUi,
   PDF_DIR,
   RESULT_TEXT,
+  openContentSearch,
   runSearch,
   searchUi,
   signInAs,
@@ -81,7 +82,7 @@ test(
     await documents.getByRole('button', { name: /문서 관리 닫기|close/i }).tap();
     await expect(documents).toHaveCount(0);
 
-    await expect(searchUi.box(page)).toBeVisible();
+    await openContentSearch(page);
     const target = block(BOOK, 'ch1-s2-p1');
     await runSearch(page, snippet(target.text, 10), 'keyword');
     const hit = searchUi.resultItems(page).first();

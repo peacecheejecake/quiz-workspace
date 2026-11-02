@@ -524,3 +524,83 @@ describe('QuestionImport', () => {
     );
   });
 });
+
+describe('QuestionImport duplicate flags (UX7-DEDUP, QIMPORT-01-AC10)', () => {
+  it('Codex P2: saving a draft re-reads every draft summary, so later duplicates are re-flagged', async () => {
+    let edited = false;
+    const editedFirst: ImportDraft = {
+      ...draft(0),
+      version: 'v-0b',
+      payload: { ...draft(0).payload, stem: '문제 본문 1' },
+    };
+    const current = () => (edited ? [editedFirst, draft(1)] : [draft(0), draft(1)]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/question-drafts/d-0') && init?.method === 'PATCH') {
+        edited = true;
+        return json(200, editedFirst);
+      }
+      const path = new URL(url, 'http://web.test');
+      if (path.pathname.endsWith('/draft-summaries')) {
+        // After the edit, draft 2 repeats draft 1: the server flags it.
+        return json(200, {
+          items: current().map((d) => ({
+            id: d.id,
+            version: d.version,
+            position: d.position,
+            question_number: d.question_number,
+            question_type: d.question_type,
+            review_status: d.review_status,
+            published_question_id: d.published_question_id,
+            publishable: d.publishable,
+            answer_missing: d.answer_missing,
+            validations: [],
+            chapter_id: null,
+            duplicate_of:
+              edited && d.id === 'd-1'
+                ? { kind: 'draft', question_id: null, draft_id: 'd-0', number: 1 }
+                : null,
+          })),
+          chapters: [],
+        });
+      }
+      if (path.pathname.endsWith('/drafts')) {
+        return json(200, {
+          items: current().map((d) =>
+            edited && d.id === 'd-1'
+              ? {
+                  ...d,
+                  duplicate_of: { kind: 'draft', question_id: null, draft_id: 'd-0', number: 1 },
+                }
+              : d,
+          ),
+          total: 2,
+        });
+      }
+      return json(404, {});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <QuestionImport
+        workspaceId={WS}
+        readOnly={null}
+        initialRun={RUN}
+        initialDrafts={reviewed([draft(0), draft(1)])}
+        loadFailed={false}
+      />,
+    );
+    const user = userEvent.setup();
+    expect(screen.getByRole('checkbox', { name: '전체 선택 (2개)' })).toBeTruthy();
+    expect(screen.queryByText('이 PDF의 1번 초안과 같습니다')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: '편집: 1번 문제' }));
+    const editor = await screen.findByRole('dialog', { name: '문제 편집' });
+    const stem = within(editor).getByRole('textbox', { name: /문제 내용/ });
+    await user.clear(stem);
+    await user.type(stem, '문제 본문 1');
+    await user.click(within(editor).getByRole('button', { name: '저장' }));
+
+    expect(await screen.findByText('이 PDF의 1번 초안과 같습니다')).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: '전체 선택 (1개)' })).toBeTruthy();
+  });
+});

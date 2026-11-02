@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// QBANK-01 editor behaviour the E2E specs cannot observe: one Idempotency-Key per creation attempt
+// Question editor behaviour the E2E specs cannot observe: one Idempotency-Key per creation attempt
 // (reused for retries of the same content, new after a content change or a success), field errors
 // from client validation, and the stale-revision reload prompt on edit.
 import './dom-setup';
@@ -12,7 +12,7 @@ import type { ActionResult } from '../src/lib/questions/actions';
 import type { Question, QuestionDetail, QuestionFormValues } from '../src/lib/questions/form';
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/workspaces/x/questions/bank',
+  usePathname: () => '/workspaces/x',
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 

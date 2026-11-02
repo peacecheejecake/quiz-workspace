@@ -244,6 +244,37 @@ class WorkerSettings(BaseSettings):
         default=None, validation_alias="WORKER_CHAPTER_NOTE_HOLD_DIR"
     )
 
+    # -- mock_exam.generate (MOCK-B) -----------------------------------------------------------
+    # The AI variation types of mock exams send source questions, answers, explanations and
+    # their book passages to the LLM provider (needs LLM_API_KEY / LLM_MODEL outside
+    # APP_ENV=test). Off by default; 보기 섞기 (OPTION_SHUFFLE) mock exams work either way. The
+    # API reads the same variable (409 mock-llm-disabled). ⛔ staging/production need approval.
+    mock_exams: bool = Field(default=False, validation_alias="WORKER_MOCK_EXAMS")
+    # Batching budgets of one LLM call (MOCK-01 "LLM 호출 묶기"): input (instructions, sources and
+    # each passage once), output (~400 tokens per question) and the sources-per-call cap.
+    # prompt + output must fit the model context (LLM_CONTEXT_TOKENS) and the output budget the
+    # provider's LLM_MAX_TOKENS (checked below and by scripts/check_env.py).
+    mock_exam_max_prompt_tokens: int = Field(
+        default=60_000, ge=1_000, le=1_000_000, validation_alias="MOCK_EXAM_MAX_PROMPT_TOKENS"
+    )
+    mock_exam_max_output_tokens: int = Field(
+        default=16_000, ge=400, le=200_000, validation_alias="MOCK_EXAM_MAX_OUTPUT_TOKENS"
+    )
+    mock_exam_sources_per_call: int = Field(
+        default=40, ge=1, le=100, validation_alias="MOCK_EXAM_SOURCES_PER_CALL"
+    )
+    mock_exam_generation_concurrency: int = Field(
+        default=2, ge=1, le=16, validation_alias="MOCK_EXAM_GENERATION_CONCURRENCY"
+    )
+    # APP_ENV=test only: the K6 hold barrier and K7 crash fault directories of the batched fake
+    # (default: <system temp dir>/quiz-e2e-mock-exam-hold, …-faults). Ignored elsewhere.
+    mock_exam_hold_dir: str | None = Field(
+        default=None, validation_alias="WORKER_MOCK_EXAM_HOLD_DIR"
+    )
+    mock_exam_fault_dir: str | None = Field(
+        default=None, validation_alias="WORKER_MOCK_EXAM_FAULT_DIR"
+    )
+
     @model_validator(mode="after")
     def _check_limits(self) -> WorkerSettings:
         if self.task_soft_time_limit_seconds >= self.task_time_limit_seconds:
@@ -262,6 +293,25 @@ class WorkerSettings(BaseSettings):
             raise ValueError(
                 "WORKER_PARSE_PAGE_BATCH_SIZE must not exceed WORKER_PARSE_QUEUE_MAX_SIZE"
             )
+        # Only a worker that makes AI mock exams must fit the budgets (other workers, e.g. tests
+        # with tiny task limits, never run them).
+        problem = (
+            None
+            if not self.mock_exams
+            else mock_exam_budget_problem(
+                prompt_tokens=self.mock_exam_max_prompt_tokens,
+                output_tokens=self.mock_exam_max_output_tokens,
+                sources_per_call=self.mock_exam_sources_per_call,
+                concurrency=self.mock_exam_generation_concurrency,
+                context_tokens=_env_int("LLM_CONTEXT_TOKENS", DEFAULT_LLM_CONTEXT_TOKENS),
+                max_tokens=_env_int("LLM_MAX_TOKENS", DEFAULT_LLM_MAX_TOKENS),
+                call_timeout_seconds=_env_int("LLM_TIMEOUT_SECONDS", DEFAULT_LLM_TIMEOUT_SECONDS),
+                task_soft_time_limit_seconds=self.task_soft_time_limit_seconds
+                or self.task_time_limit_seconds,
+            )
+        )
+        if problem is not None:
+            raise ValueError(problem)
         deployed = self.app_env in {Environment.PREVIEW, Environment.PRODUCTION}
         if deployed and (self.parser is ParserMode.FAKE or self.embedder is EmbedderMode.FAKE):
             raise ValueError("fake parser/embedder adapters are for local and test runs only")
@@ -309,6 +359,53 @@ class WorkerSettings(BaseSettings):
     def broker_visibility_timeout_seconds(self) -> int:
         # Redis re-delivers unacked messages after this; keep it past any live lease.
         return self.max_lease_seconds + 60
+
+
+# Provider defaults (book_core.llm.LLMConfig) used by the mock exam budget check.
+DEFAULT_LLM_CONTEXT_TOKENS = 200_000
+DEFAULT_LLM_MAX_TOKENS = 16_000
+DEFAULT_LLM_TIMEOUT_SECONDS = 120
+MOCK_EXAM_MAX_QUESTIONS = 100
+MOCK_EXAM_OUTPUT_TOKENS_PER_ITEM = 400
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    try:
+        return int(float(raw)) if raw else default
+    except ValueError:
+        return default
+
+
+def mock_exam_budget_problem(
+    *,
+    prompt_tokens: int,
+    output_tokens: int,
+    sources_per_call: int,
+    concurrency: int,
+    context_tokens: int,
+    max_tokens: int,
+    call_timeout_seconds: int,
+    task_soft_time_limit_seconds: int,
+) -> str | None:
+    """Why the MOCK_EXAM_* budgets cannot run (a message naming variables only), or None.
+
+    The batches of a 100-question generation (`ceil(100 / items per call)`), run
+    `concurrency` at a time plus one round of re-requests, each taking at most one LLM call
+    timeout, must finish within the task's soft time limit (MOCK-01 "실행·checkpoint")."""
+    if prompt_tokens + output_tokens > context_tokens:
+        return "MOCK_EXAM_MAX_PROMPT_TOKENS + MOCK_EXAM_MAX_OUTPUT_TOKENS exceed LLM_CONTEXT_TOKENS"
+    if output_tokens > max_tokens:
+        return "MOCK_EXAM_MAX_OUTPUT_TOKENS exceeds LLM_MAX_TOKENS"
+    per_call = max(1, min(sources_per_call, output_tokens // MOCK_EXAM_OUTPUT_TOKENS_PER_ITEM))
+    batches = -(-MOCK_EXAM_MAX_QUESTIONS // per_call)
+    rounds = -(-batches // concurrency) + 1
+    if rounds * call_timeout_seconds > task_soft_time_limit_seconds:
+        return (
+            "a 100-question mock exam (MOCK_EXAM_* batches x LLM_TIMEOUT_SECONDS) does not fit "
+            "WORKER_TASK_SOFT_TIME_LIMIT_SECONDS"
+        )
+    return None
 
 
 @lru_cache(maxsize=1)

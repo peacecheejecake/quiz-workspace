@@ -274,20 +274,34 @@ def test_m36a_stale_revision_is_never_returned_after_the_publish_switch(
     assert any(MARKER in h["text"] for h in _search(owner, ws, query=MARKER))
 
 
-def test_m36a_question_papers_are_excluded_unless_requested(seed: Any, worker: Worker) -> None:
+def test_search_01_ac13_question_papers_are_never_searched(seed: Any, worker: Worker) -> None:
+    """UX7-SEARCH-2: the 본문 search leaves question papers out, even when the request names
+    them; the deprecated `include_question_papers` is accepted and ignored."""
     owner = seed.client("m36a-papers")
     ws = owner.create_workspace()["id"]
     book = _ready(owner, worker, ws, "book-ko.pdf")
     paper = _ready(owner, worker, ws, "book-en.pdf", "question_paper")
+    outline = owner.ok("GET", f"/documents/{paper}/outline")["items"]
+    assert outline, "the paper has a published outline"
 
     for mode in MODES:
         default = _search(owner, ws, query="chlorine 염소", mode=mode, limit=50)
         assert {h["document_id"] for h in default} == {book}, mode
-    both = _search(owner, ws, query="chlorine 염소", include_question_papers=True, limit=50)
-    assert {h["document_id"] for h in both} == {book, paper}
-    named = _search(owner, ws, query="chlorine", document_ids=[paper])
-    assert named
-    assert {(h["document_id"], h["document_type"]) for h in named} == {(paper, "question_paper")}
+        asked = _search(
+            owner, ws, query="chlorine 염소", mode=mode, include_question_papers=True, limit=50
+        )
+        assert [h["chunk_id"] for h in asked] == [h["chunk_id"] for h in default], mode
+        named = _search(
+            owner,
+            ws,
+            query="chlorine",
+            mode=mode,
+            document_ids=[paper],
+            include_question_papers=True,
+        )
+        assert named == [], mode
+        by_chapter = _search(owner, ws, query="chlorine", mode=mode, chapter_ids=[outline[0]["id"]])
+        assert by_chapter == [], mode
 
 
 def test_m36a_chapter_filter_includes_sub_sections_in_every_mode(seed: Any, worker: Worker) -> None:

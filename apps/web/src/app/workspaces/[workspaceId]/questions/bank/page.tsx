@@ -1,14 +1,8 @@
-// QBANK-01 전체 문제 — the question bank (docs/screens/questions-bank.md). The workspace layout already resolved access
-// (404 for unknown/foreign workspaces); this page loads the bank under the URL filters through the
-// server-side Bearer helper and hands it to the client screen.
-import type { Metadata } from 'next';
-import { QuestionBank } from '@/components/questions/question-bank';
-import { loadDocumentsOrFailure } from '@/lib/documents/data';
-import { loadBank } from '@/lib/questions/data';
-import { parseBankFilters, wantsCreate } from '@/lib/questions/filters';
-import { requireWorkspace } from '@/lib/workspaces/data';
-
-export const metadata: Metadata = { title: '전체 문제' };
+// Retired QBANK-01 전체 문제 route (UX7-BANK, docs/screens/questions-bank.md): old links and
+// bookmarks land on the workspace home, keeping only `?question=` (the practice panel). Access is
+// checked by the workspace layout (and again by the home).
+import { redirect } from 'next/navigation';
+import { legacyBankRedirect } from '@/lib/workspaces/home';
 
 export default async function Page({
   params,
@@ -18,31 +12,5 @@ export default async function Page({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) {
   const [{ workspaceId }, query] = await Promise.all([params, searchParams]);
-  const filters = parseBankFilters(query);
-  // The documents feed the 문제 PDF 관리 dialog behind "PDF 가져오기" (QBANK-01-AC06).
-  const [workspace, bank, docs] = await Promise.all([
-    requireWorkspace(workspaceId),
-    loadBank(workspaceId, filters),
-    loadDocumentsOrFailure(workspaceId),
-  ]);
-  const readOnly =
-    workspace.status === 'archived' ? 'archived' : workspace.role === 'viewer' ? 'viewer' : null;
-
-  return (
-    <div data-screen-id="QBANK-01">
-      <QuestionBank
-        workspaceId={workspace.id}
-        workspaceName={workspace.name}
-        readOnly={readOnly}
-        filters={filters}
-        items={bank.items}
-        nextCursor={bank.nextCursor}
-        failure={bank.failure}
-        chapters={bank.chapters}
-        documents={bank.documents}
-        openCreate={wantsCreate(query)}
-        questionPdfs={docs}
-      />
-    </div>
-  );
+  redirect(legacyBankRedirect(workspaceId, query));
 }

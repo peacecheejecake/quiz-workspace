@@ -10,6 +10,7 @@ import { Skeleton } from '../primitives/Skeleton';
 import { Surface } from '../primitives/Surface';
 import { Tooltip } from '../primitives/Tooltip';
 import { FloatingSidePanel, type FloatingSidePanelProps } from './FloatingSidePanel';
+import { SplitView } from './SplitView';
 
 const meta = {
   title: 'Layout/FloatingSidePanel',
@@ -253,3 +254,89 @@ export const Stacked: Story = {
     },
   },
 };
+
+/**
+ * DOCVIEW-01 목차 panel: `side="start"` `placement="docked"` inside the split area. The bar toggle
+ * (`aria-expanded`, `aria-controls`) is the handle while collapsed; mounting open (a restored
+ * state) does not move focus, opening from the toggle does; Escape collapses only while focus is
+ * inside and returns focus to the toggle.
+ */
+function DockedDemo({ dockMode, width }: { dockMode: 'inset' | 'overlay'; width?: number }) {
+  const [open, setOpen] = useState(true);
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  const [ratio, setRatio] = useState(50);
+  const pane = (label: string) => (
+    <section
+      aria-label={label}
+      style={{
+        boxSizing: 'border-box',
+        height: '100%',
+        padding: 'var(--space-4)',
+        background: 'var(--color-surface)',
+      }}
+    >
+      <h2 style={{ margin: 0, fontSize: 'var(--font-size-section-title)' }}>{label}</h2>
+      <p style={{ color: 'var(--color-text-secondary)' }}>
+        목차를 펼치면{' '}
+        {dockMode === 'inset' ? '이 영역이 panel 폭만큼 비켜섭니다' : 'panel이 위에 겹칩니다'}.
+      </p>
+    </section>
+  );
+  return (
+    <div style={{ display: 'grid', gap: 'var(--space-3)', padding: 'var(--space-4)', width }}>
+      <div role="group" aria-label="보기 설정" style={{ display: 'flex', gap: 'var(--space-2)' }}>
+        <Button
+          aria-expanded={open}
+          aria-controls="docked-outline"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? '목차 접기' : '목차 펼치기'}
+        </Button>
+      </div>
+      <div ref={setHost} style={{ position: 'relative', height: 520 }}>
+        <SplitView
+          style={{ height: '100%' }}
+          separatorLabel="원본과 변환본 크기 조절"
+          valueText={(r) => `원본 ${r}%, 변환본 ${100 - r}%`}
+          minSize={{ horizontal: 320, vertical: 200 }}
+          ratio={ratio}
+          onRatioChange={setRatio}
+        >
+          {pane('PDF 원본')}
+          {pane('변환본 텍스트')}
+        </SplitView>
+      </div>
+      <FloatingSidePanel
+        id="docked-outline"
+        side="start"
+        placement="docked"
+        dockMode={dockMode}
+        container={host}
+        open={open}
+        onOpenChange={setOpen}
+        title="목차"
+        closeLabel="목차 접기"
+      >
+        <ul role="tree" aria-label="문서 목차" style={{ margin: 0, paddingLeft: 'var(--space-4)' }}>
+          {Array.from({ length: 24 }, (_, i) => (
+            <li key={i} role="treeitem" aria-selected={i === 0} tabIndex={i === 0 ? 0 : -1}>
+              {i + 1}장 · 절 제목
+            </li>
+          ))}
+        </ul>
+      </FloatingSidePanel>
+    </div>
+  );
+}
+
+export const StartDocked: Story = {
+  name: 'Start docked (inset)',
+  render: () => <DockedDemo dockMode="inset" />,
+};
+
+export const StartDockedOverlay: Story = {
+  name: 'Start docked (overlay, tablet width)',
+  render: () => <DockedDemo dockMode="overlay" width={834} />,
+};
+
+export const StartDockedDark: Story = { ...StartDocked, globals: { theme: 'dark' } };

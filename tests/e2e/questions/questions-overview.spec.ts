@@ -11,30 +11,50 @@
 import type { Locator, Page } from '@playwright/test';
 import {
   answerCorrectly,
+  archiveQuestion,
+  createQuestion,
+  detailUi,
+  getQuestion,
+  INACTIVE_STATUS_OPTIONS,
+  inactiveUi,
+  numberedMcq,
+  book,
+  chooseFilter,
   chooseQuestionMenu,
   createNumberedQuestions,
+  dedupUi,
+  docUi,
   draftFor,
   expect,
+  expectReadOnlyQuestionMenu,
+  fillMcq,
   getOverview,
   homeUi,
   importPaperDrafts,
   JOB_TIMEOUT_MS,
   listAttempts,
+  listQuestions,
   main,
+  mcqInput,
   overviewItem,
+  outlineNodeId,
   overviewPath,
   overviewUi,
   panelUi,
+  PROBLEM_TYPES,
   publishDrafts,
   questionFormUi,
   questionPaper,
   scaleOf,
+  scanDuplicates,
   searchUi,
+  section,
   seedMembership,
   setMyState,
   signInAs,
   startPractice,
   statusColor,
+  submitPractice,
   test,
   truthQuestion,
   uploadPdf,
@@ -42,12 +62,15 @@ import {
   waitForJob,
   type E2EFixtures,
   type Member,
+  type Problem,
   type Question,
 } from '../fixtures/test.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
 const HOVER_SCALE = 1.18;
+const BOOK = book('book-ko');
+const CH1 = section(BOOK, 'ch1'); // "1장 물의 순환"
 
 interface Seeded {
   readonly owner: Member;
@@ -388,11 +411,13 @@ test(
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(main(page).getByText(/문제 하나가 점 하나입니다/)).toHaveCount(0);
 
-    // Header: unified search with an icon-only submit, then 문서 n · 문제 and the icon buttons
-    // 이력 · 공유하기 (UX4). No 문제은행 button: the bank is the 문제 menu's 전체 문제 (UX6-PROGRESS).
+    // Header: the 문제 search and the collapsed "본문 검색" disclosure (UX7-SEARCH), then 문서 n ·
+    // 문제 and the icon buttons 이력 · 공유하기 (UX4). No 문제은행 button (UX6-PROGRESS) and no
+    // 전체 문제 page (UX7-BANK).
     await expect(homeUi.header(page)).toBeVisible();
-    await expect(searchUi.box(page)).toBeVisible();
-    await expect(searchUi.submit(page)).toHaveText('');
+    await expect(homeUi.questionSearch(page)).toBeVisible();
+    await expect(homeUi.contentSearchToggle(page)).toHaveAttribute('aria-expanded', 'false');
+    await expect(searchUi.box(page)).toBeHidden();
     await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*1$/); // the book; not the paper
     await expect(main(page).getByRole('link', { name: /^(문제은행|question bank)$/i })).toHaveCount(
       0,
@@ -448,8 +473,9 @@ test(
     await expect(page).toHaveURL(
       (url) =>
         url.pathname === home &&
-        url.searchParams.get('scope') === 'content' &&
-        url.searchParams.get('q') === 'chlorine',
+        url.searchParams.get('text') === 'chlorine' &&
+        !url.searchParams.has('q') &&
+        !url.searchParams.has('scope'),
     );
     await expect(searchUi.resultsRegion(page)).toBeVisible();
 
@@ -462,17 +488,9 @@ test(
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await expect(homeUi.shareButton(page)).toHaveCount(0);
     await expect(homeUi.shareDialog(page)).toHaveCount(0);
-    await homeUi.questionMenuButton(page).click();
-    await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveCount(2);
-    await expect(homeUi.questionMenuItem(page, 'bank')).toBeVisible();
-    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeVisible();
-    // A viewer reaches the bank through 전체 문제 too (UX6-PROGRESS).
-    await homeUi.questionMenuItem(page, 'bank').click();
-    await expect(page).toHaveURL((url) => url.pathname === `${home}/questions/bank`);
-    await expect(
-      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
-    ).toBeVisible();
-    await page.goto(home);
+    // A viewer keeps the 문제 button (UX7-DOCS-2) with 직접 추가 / 중복 문제 정리 disabled; no
+    // 전체 문제 (UX7-BANK), no PDF 관리 (UX7-DOCS).
+    await expectReadOnlyQuestionMenu(page, 'viewer');
     const denied = await viewer.api.request('GET', `/workspaces/${s.workspaceId}/share-links`);
     expect(denied.status).toBe(403);
   },
@@ -541,7 +559,11 @@ test(
   'QOV-01-AC09 dialogs open at once with a skeleton while loading; sub-pages show their route skeleton',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
+    test.setTimeout(JOB_TIMEOUT_MS + 60_000);
     const s = await seed(workspaceFactory, 'qov01-ac09', 2);
+    // A question paper with an extraction, for the 문제 검토 sub-page link below (read with the
+    // home's document list, so it is made before the home loads).
+    await importPaperDrafts(s.owner, s.workspaceId);
     await openOverview(page, s);
 
     // Hold the history reads: the dialog is already open, busy, with a status text.
@@ -564,26 +586,51 @@ test(
     await expect(dialog.locator('[aria-busy="true"]')).toHaveCount(0);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
 
-    // 전체 문제 (the bank): the route skeleton shows while the page's server render is held back.
+    // A sub-page (문제 PDF 가져오기, from the 문서 관리 row's 문제 검토 link; QGEN-RM moved this
+    // off the retired 변형 출제 review page): the route skeleton shows while the page's server
+    // render is held back. The link prefetches the route once it is visible, and those prefetches
+    // carry the loading boundary. 문제 검토 is chosen only once every one of them has been
+    // delivered: a click before they land makes Next render the skeleton from the navigation's
+    // own streamed response, which the gate holds whole (the WebKit flake, UX7-FLAKE-AC09).
     let releasePage!: () => void;
     const pageGate = new Promise<void>((resolve) => (releasePage = resolve));
+    let prefetching = 0;
+    let prefetched = 0;
     await page.route(
-      (url) => url.pathname.endsWith('/questions/bank'),
+      (url) => url.pathname.endsWith('/questions/import'),
       async (route) => {
-        if (route.request().resourceType() === 'document') return route.fallback();
+        // Only the navigation's render is held: the document and the link's prefetches go through.
+        const request = route.request();
+        if (request.resourceType() === 'document') return route.fallback();
+        if (request.headers()['next-router-prefetch'] !== undefined) {
+          prefetching += 1;
+          try {
+            // Fulfilled whole, so "delivered" is observable (Response.finished() can hang on
+            // Chromium).
+            await route.fulfill({ response: await route.fetch() });
+            prefetched += 1;
+          } finally {
+            prefetching -= 1;
+          }
+          return;
+        }
         await pageGate;
         await route.fallback();
       },
     );
-    await chooseQuestionMenu(page, 'bank');
+    await homeUi.documentsButton(page).click();
+    const review = docUi.reviewLink(homeUi.documentsDialog(page));
+    await expect(review).toBeVisible({ timeout: JOB_TIMEOUT_MS });
+    await expect.poll(() => prefetched > 0 && prefetching === 0).toBe(true);
+    await review.click();
     await expect(
       main(page)
         .getByRole('status')
-        .filter({ hasText: /전체 문제를 불러오는 중|loading all questions/i }),
+        .filter({ hasText: /문제 pdf 가져오기를 불러오는 중|loading/i }),
     ).toBeVisible();
     releasePage();
     await expect(
-      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
+      page.getByRole('heading', { level: 1, name: /^(문제 pdf 가져오기|import)/i }),
     ).toBeVisible();
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   },
@@ -610,6 +657,17 @@ test(
     const z = (l: Locator) => l.evaluate((el) => Number(getComputedStyle(el).zIndex));
     expect(await z(history)).toBeGreaterThan(await z(documents));
 
+    // The `문제` menu's 모의고사 dialog (QGEN-RM: it replaced 변형 출제's 문제 생성) stacks on top too.
+    await chooseQuestionMenu(page, 'mockExams');
+    const mockExams = main(page).getByRole('dialog', { name: /^(모의고사|mock exams?)$/i });
+    await expect(mockExams).toBeVisible();
+    await expect(mockExams).not.toHaveAttribute('aria-modal', 'true');
+    await expect(page).toHaveURL(/panel=documents&panel=history&panel=mock-exams/);
+    expect(await z(mockExams)).toBeGreaterThan(await z(history));
+    await mockExams.getByRole('button', { name: /모의고사 닫기|close/i }).click();
+    await expect(mockExams).toBeHidden();
+    await expect(page).toHaveURL(/panel=documents&panel=history$/);
+
     // Pressing 문서 again brings its (covered) dialog back on top.
     await homeUi.documentsButton(page).click();
     await expect.poll(async () => (await z(documents)) > (await z(history))).toBe(true);
@@ -626,7 +684,7 @@ test(
 );
 
 test(
-  'QOV-01-AC11 the header 문제 menu opens 전체 문제, PDF 관리, 직접 추가 and 변형 출제 by mouse and keyboard',
+  'QOV-01-AC11 the header 문제 menu opens 직접 추가 and 모의고사 by mouse and keyboard, without 변형 출제, 전체 문제 or PDF 관리; viewers and archived workspaces keep the button with the editor items disabled and the reason',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac11', 1);
@@ -638,52 +696,902 @@ test(
     await page.keyboard.press('Enter');
     await expect(homeUi.questionMenu(page)).toBeVisible();
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
-      /^(전체 문제|all questions)$/i,
-      /^(pdf 관리|manage pdfs?)$/i,
       /^(직접 추가|add question)$/i,
-      /^(변형 출제|generate variants?)$/i,
+      /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
+      /^(보관·초안 문제|archived and draft questions)$/i,
+      // MOCK-01 (MOCK-W): mock exams; QVIEW-01 (QVIEW-W): the range run — both for every member.
+      /^(모의고사|mock exams?)$/i,
+      /^(문제 풀기|practice questions?|start practice)$/i,
     ]);
-    await expect(homeUi.questionMenuItem(page, 'bank')).toBeFocused();
+    await expect(
+      homeUi.questionMenu(page).getByRole('menuitem', { name: /^(전체 문제|all questions)$/i }),
+    ).toHaveCount(0);
+    // UX7-DOCS: PDF 관리 moved into 문서 관리 (DOC-01-AC09); QGEN-RM retired 변형 출제.
+    await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
+    await expect(homeUi.questionMenuItem(page, 'generate')).toHaveCount(0);
+    await expect(homeUi.questionMenuItem(page, 'create')).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(homeUi.questionMenuItem(page, 'duplicates')).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(homeUi.questionMenu(page)).toBeHidden();
     await expect(button).toBeFocused();
 
-    // PDF 관리 (Enter, then ArrowDown to the second item) → the 문제 PDF 관리 dialog.
+    // 모의고사 by keyboard (Enter opens the menu on 직접 추가; ArrowDown past 중복 문제 정리 and
+    // 보관·초안 문제; Enter).
     await page.keyboard.press('Enter');
-    await expect(homeUi.questionMenuItem(page, 'bank')).toBeFocused();
-    await page.keyboard.press('ArrowDown');
-    await expect(homeUi.questionMenuItem(page, 'pdfs')).toBeFocused();
+    await expect(homeUi.questionMenuItem(page, 'create')).toBeFocused();
+    for (const item of ['duplicates', 'inactive', 'mockExams'] as const) {
+      await page.keyboard.press('ArrowDown');
+      await expect(homeUi.questionMenuItem(page, item)).toBeFocused();
+    }
     await page.keyboard.press('Enter');
-    await expect(homeUi.questionPdfsDialog(page)).toBeVisible();
-    await expect(page).toHaveURL((url) =>
-      url.searchParams.getAll('panel').includes('question-pdfs'),
-    );
+    await expect(
+      main(page).getByRole('dialog', { name: /^(모의고사|mock exams?)$/i }),
+    ).toBeVisible();
+    await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').includes('mock-exams'));
+    await expect(homeUi.generateDialog(page)).toHaveCount(0);
 
-    // 변형 출제 → the 문제 생성 dialog, on top.
-    await chooseQuestionMenu(page, 'generate');
-    await expect(homeUi.generateDialog(page)).toBeVisible();
-    await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').includes('generate'));
-
-    // 직접 추가 → the bank with its 문제 등록 editor open; a reload does not reopen it.
+    // 직접 추가 by mouse → the 문제 등록 dialog on the home (UX7-BANK): same path, `?panel=question-create`,
+    // modal; closing it drops the panel value.
     await page.goto(overviewPath(s.workspaceId));
     await chooseQuestionMenu(page, 'create');
-    await expect(page).toHaveURL(new RegExp(`/workspaces/${s.workspaceId}/questions/bank`));
-    await expect(questionFormUi.form(page)).toBeVisible();
-    await expect(page).toHaveURL((url) => !url.searchParams.has('create'));
-    await page.reload();
-    await expect(
-      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
-    ).toBeVisible();
-    await expect(questionFormUi.form(page)).toHaveCount(0);
-
-    // 전체 문제 → the bank page, titled 전체 문제 too (UX6-PROGRESS, UX6-BANK).
-    await page.goto(overviewPath(s.workspaceId));
-    await chooseQuestionMenu(page, 'bank');
+    const form = questionFormUi.form(page);
+    await expect(form).toBeVisible();
     await expect(page).toHaveURL(
-      (url) => url.pathname === `/workspaces/${s.workspaceId}/questions/bank` && url.search === '',
+      (url) =>
+        url.pathname === `/workspaces/${s.workspaceId}` &&
+        url.searchParams.getAll('panel').includes('question-create'),
     );
+    await page.keyboard.press('Escape');
+    await expect(form).toBeHidden();
+    await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
+    await expect(homeUi.questionMenuButton(page)).toBeFocused();
+
+    // Without edit rights the button stays (UX7-DOCS-2): a viewer, then the archived workspace's
+    // owner, see the editor items (직접 추가, 중복 문제 정리) disabled with the reason in text.
+    const viewer = await workspaceFactory.member('qov01-ac11-viewer');
+    seedMembership(s.workspaceId, viewer.user.id, 'viewer');
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(overviewPath(s.workspaceId));
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expectReadOnlyQuestionMenu(page, 'viewer');
+
+    await workspaceFactory.archive(s.owner, s.workspaceId);
+    await page.context().clearCookies();
+    await openOverview(page, s);
+    await expectReadOnlyQuestionMenu(page, 'archived');
+  },
+);
+
+test(
+  'QOV-01-AC12 직접 추가 and the empty heatmap open the 문제 등록 dialog on the home; a saved MCQ becomes a dot in its chapter',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(JOB_TIMEOUT_MS + 90_000);
+    const owner = await workspaceFactory.member('qov01-ac12');
+    const ws = await workspaceFactory.create(owner);
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    const chapterId = await outlineNodeId(owner, documentId, CH1.title);
+    expect(await listQuestions(owner, ws.id)).toEqual([]);
+    const home = `/workspaces/${ws.id}`;
+    const onHomeWithEditor = (url: URL) =>
+      url.pathname === home && url.searchParams.getAll('panel').includes('question-create');
+
+    await signInAs(page, owner.user);
+    await page.goto(home);
+    // The empty heatmap's 문제 등록 opens the editor on the home, not another page.
+    const emptyCreate = main(page).getByRole('button', { name: /^(문제 등록|add question)$/i });
+    await expect(emptyCreate).toBeVisible();
+    await emptyCreate.click();
+    const form = questionFormUi.form(page);
+    await expect(form).toBeVisible();
+    await expect(page).toHaveURL(onHomeWithEditor);
+    await page.keyboard.press('Escape');
+    await expect(form).toBeHidden();
+    await expect(page).toHaveURL((url) => url.pathname === home && !url.searchParams.has('panel'));
+
+    // 문제 › 직접 추가: an MCQ without a correct option is refused and nothing is saved.
+    await chooseQuestionMenu(page, 'create');
+    await expect(page).toHaveURL(onHomeWithEditor);
+    const text = `물이 액체에서 기체로 변하는 과정은? [${ws.id.slice(0, 8)}]`;
+    const options = ['응결', '증발', '강수', '침전'];
+    await fillMcq(page, text, options, 0);
+    await questionFormUi.save(form).click();
+    await expect(questionFormUi.alert(form)).toContainText(/정답|correct/i);
+    expect(await listQuestions(owner, ws.id)).toEqual([]);
+
+    await questionFormUi.correct(form, 2).check();
+    await chooseFilter(page, questionFormUi.chapter(form), new RegExp(CH1.title));
+    await questionFormUi.save(form).click();
+    await expect(form).toBeHidden();
+    await expect(page).toHaveURL((url) => url.pathname === home && !url.searchParams.has('panel'));
+
+    // The heatmap re-reads: one dot in that chapter's group.
+    const group = overviewUi.heatmap(page).getByRole('region', { name: new RegExp(CH1.title) });
+    await expect(group.getByRole('button', { name: /\d+번 문제|question \d+/i })).toHaveCount(1);
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+
+    // Server: one CONFIRMED MCQ in that chapter, answered by the stable id of "증발".
+    const [saved, ...rest] = await listQuestions(owner, ws.id);
+    expect(rest).toEqual([]);
+    expect(saved).toMatchObject({
+      question_type: 'MCQ',
+      publication_status: 'CONFIRMED',
+      chapter_id: chapterId,
+    });
+    expect(saved?.revision.stem).toBe(text);
+    expect(saved?.revision.options.map((o) => o.text)).toEqual(options);
+    const evaporation = saved?.revision.options.find((o) => o.text === '증발');
+    expect(evaporation).toBeDefined();
+    expect(saved?.revision.correct_option_ids).toEqual([evaporation?.id]);
+
+    await page.reload();
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+
+    // Viewer: no 직접 추가, `?panel=question-create` opens nothing, the API refuses.
+    const viewer = await workspaceFactory.member('qov01-ac12-viewer');
+    seedMembership(ws.id, viewer.user.id, 'viewer');
+    const refused = await viewer.api.request(
+      'POST',
+      `/workspaces/${ws.id}/questions`,
+      mcqInput('viewer', ['a', 'b'], 0),
+    );
+    expect(refused.status).toBe(403);
+    expect((refused.body as Problem).type).toBe(PROBLEM_TYPES.insufficientRole);
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(`${home}?panel=question-create`);
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expect(questionFormUi.form(page)).toHaveCount(0);
+    // The 문제 button stays; 직접 추가 is disabled with the reason (UX7-DOCS-2).
+    await expectReadOnlyQuestionMenu(page, 'viewer');
+
+    // Archived: read-only for the owner too.
+    await workspaceFactory.archive(owner, ws.id);
+    const archived = await owner.api.request(
+      'POST',
+      `/workspaces/${ws.id}/questions`,
+      mcqInput('archived', ['a', 'b'], 0),
+    );
+    expect(archived.status).toBe(403);
+    expect((archived.body as Problem).type).toBe(PROBLEM_TYPES.workspaceArchived);
+    await page.context().clearCookies();
+    await signInAs(page, owner.user);
+    await page.goto(`${home}?panel=question-create`);
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expect(questionFormUi.form(page)).toHaveCount(0);
+    await expectReadOnlyQuestionMenu(page, 'archived');
+  },
+);
+
+test(
+  'QOV-01-AC13 sub-pages show a back link and a breadcrumb to the home; the retired /questions/bank and /questions/generate redirect home',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(JOB_TIMEOUT_MS + 60_000);
+    const owner = await workspaceFactory.member('qov01-ac13');
+    const ws = await workspaceFactory.create(owner);
+    const [question] = await createNumberedQuestions(owner, ws.id, 'qov01-ac13', 1);
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    const home = `/workspaces/${ws.id}`;
+    const nav = () => page.getByRole('navigation', { name: /^(위치|breadcrumb)$/i });
+    async function expectSubPageNav(current: RegExp, middle?: RegExp): Promise<void> {
+      await expect(nav()).toBeVisible();
+      await expect(nav().getByRole('link', { name: ws.name, exact: true })).toHaveAttribute(
+        'href',
+        home,
+      );
+      if (middle) await expect(nav().getByRole('link', { name: middle })).toBeVisible();
+      await expect(nav().locator('[aria-current="page"]')).toHaveText(current);
+      // The location row keeps 12px of space above the page title (UX5-UI).
+      const [navBox, titleBox] = await Promise.all([
+        nav().boundingBox(),
+        main(page).getByRole('heading', { level: 1 }).boundingBox(),
+      ]);
+      expect(navBox && titleBox && titleBox.y - (navBox.y + navBox.height)).toBeGreaterThanOrEqual(
+        12,
+      );
+      await expect(main(page).getByRole('link', { name: /workspace 홈|back/i })).toHaveAttribute(
+        'href',
+        home,
+      );
+      // No link to the retired 전체 문제 page (UX7-BANK).
+      await expect(
+        main(page).getByRole('link', { name: /^(전체 문제|all questions)$/i }),
+      ).toHaveCount(0);
+    }
+
+    await signInAs(page, owner.user);
+    await page.goto(`${home}/questions/import`);
+    await expectSubPageNav(/^(문제 pdf 가져오기|import)/i);
+    // The breadcrumb's workspace link and the back link both return home.
+    await nav().getByRole('link', { name: ws.name, exact: true }).click();
+    await expect(page).toHaveURL((url) => url.pathname === home);
+    await expect(homeUi.header(page)).toBeVisible();
+    await page.goto(`${home}/documents/${documentId}`);
+    await expectSubPageNav(/물의 순환과 정수 처리|book-ko/i, /^(문서 관리|documents)$/i);
+    await main(page)
+      .getByRole('link', { name: /workspace 홈|back/i })
+      .click();
+    await expect(page).toHaveURL((url) => url.pathname === home);
+    await expect(homeUi.header(page)).toBeVisible();
+
+    // The retired bank route: the home, keeping only `?question=` (its practice panel opens).
+    await page.goto(`${home}/questions/bank?status=ALL&create=1`);
+    await expect(page).toHaveURL((url) => url.pathname === home && url.search === '');
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expect(questionFormUi.form(page)).toHaveCount(0);
+    await page.goto(`${home}/questions/bank?question=${question?.id}`);
+    await expect(page).toHaveURL(
+      (url) => url.pathname === home && url.searchParams.get('question') === question?.id,
+    );
+    await expect(panelUi.numbered(page, 1)).toBeVisible();
+
+    // The retired 변형 출제 review and batch pages (QGEN-RM): the home with the 모의고사 dialog
+    // that replaced them; their query is dropped.
+    for (const query of [`source=${question?.id}`, 'batch=00000000-0000-4000-8000-000000000000']) {
+      await page.goto(`${home}/questions/generate?${query}`);
+      await expect(page).toHaveURL(
+        (url) =>
+          url.pathname === home &&
+          url.searchParams.getAll('panel').join() === 'mock-exams' &&
+          [...url.searchParams.keys()].join() === 'panel',
+      );
+      await expect(
+        main(page).getByRole('dialog', { name: /^(모의고사|mock exams?)$/i }),
+      ).toBeVisible();
+    }
+  },
+);
+
+test(
+  'QOV-01-AC14 browser Back or Forward after closing a dialog or the practice panel never reopens it',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(180_000);
+    const s = await seed(workspaceFactory, 'qov01-ac14', 2);
+    const home = overviewPath(s.workspaceId);
+    const onHome = (url: URL) => url.pathname === home;
+    const onList = (url: URL) => url.pathname === '/workspaces';
+    const noPanel = (url: URL) =>
+      onHome(url) && !url.searchParams.has('panel') && !url.searchParams.has('question');
+    const panels = (url: URL) => url.searchParams.getAll('panel').join();
+    const history = homeUi.dialog(page, /^(이력|history)$/i);
+    const documents = homeUi.documentsDialog(page);
+    const closeDocuments = /^(문서 관리 닫기|close)/i;
+    await signInAs(page, s.owner.user);
+
+    /** A history entry before the home (the workspace list), then the home itself. */
+    async function arrive(search = '', ready = overviewUi.heatmap(page)): Promise<void> {
+      await gotoAfterReload('/workspaces');
+      await expect(page).toHaveURL(onList);
+      await page.goto(`${home}${search}`);
+      await expect(ready).toBeVisible();
+    }
+    // A close may refresh the overview (the practice panel's study state): a cross-document
+    // traversal started under that router write is cancelled by WebKit, not by the feature.
+    async function back(): Promise<void> {
+      await page.waitForLoadState('networkidle');
+      await page.goBack();
+    }
+    async function forward(): Promise<void> {
+      await page.waitForLoadState('networkidle');
+      await page.goForward();
+    }
+    /** After a close, Back leaves the home for the page before it: the dialog never reopens. */
+    async function backLeavesHome(): Promise<void> {
+      await back();
+      await expect(page).toHaveURL(onList);
+    }
+    /** From the page before the home, Forward returns to the closed home and no further. */
+    async function forwardStaysClosed(closed: Locator): Promise<void> {
+      await forward();
+      await expect(page).toHaveURL(noPanel);
+      await expect(overviewUi.heatmap(page)).toBeVisible();
+      await forward();
+      await expect(page).toHaveURL(noPanel);
+      await expect(closed).toBeHidden();
+    }
+    /**
+     * WebKit loads the home afresh on the first Forward above; the second one restores an entry
+     * the previous document wrote, which Next may then load once more (the same closed address).
+     * A navigation the test starts meanwhile is interrupted by that reload: start it again.
+     */
+    async function gotoAfterReload(url: string): Promise<void> {
+      try {
+        await page.goto(url);
+      } catch (error) {
+        if (!String(error).includes('interrupted by another navigation')) throw error;
+        await expect(page).toHaveURL(noPanel);
+        await page.waitForLoadState('load');
+        await page.goto(url);
+      }
+    }
+
+    // 문서 관리 · 이력 · 링크 공유: open, close (button or Escape), Back, Forward.
+    const dialogs = [
+      {
+        open: () => homeUi.documentsButton(page).click(),
+        dialog: documents,
+        close: closeDocuments,
+      },
+      {
+        open: () => homeUi.historyButton(page).click(),
+        dialog: history,
+        close: /^(이력 닫기|close)/i,
+      },
+      {
+        open: () => homeUi.shareButton(page).click(),
+        dialog: homeUi.shareDialog(page),
+        close: /^(공유 관리 닫기|close)/i,
+      },
+    ];
+    for (const [i, { open, dialog, close }] of dialogs.entries()) {
+      await arrive();
+      await open();
+      await expect(dialog).toBeVisible();
+      await expect(page).toHaveURL((url) => url.searchParams.has('panel'));
+      const closeButton = dialog.getByRole('button', { name: close });
+      if (i % 2 === 0) {
+        await closeButton.click();
+      } else {
+        await closeButton.focus();
+        await page.keyboard.press('Escape');
+      }
+      await expect(dialog).toBeHidden();
+      await expect(page).toHaveURL(noPanel);
+      await backLeavesHome();
+      await forwardStaysClosed(dialog);
+    }
+
+    // A filter chosen while a dialog is open survives its close, by Back (UX7 확인 7) or by its
+    // close button; neither Back nor Forward reopens the dialog.
+    const unseen = (url: URL) => noPanel(url) && url.searchParams.get('status') === 'unseen';
+    /** Opens 문서 관리 and picks the 미열람 filter while it is open. */
+    async function openDocumentsAndFilter(): Promise<void> {
+      await arrive();
+      await homeUi.documentsButton(page).click();
+      await expect(documents).toBeVisible();
+      await homeUi.statusFilterToggle(page).click();
+      await homeUi.statusFilters(page).getByRole('button', { name: '미열람', exact: true }).click();
+      await expect(page).toHaveURL(/[?&]status=unseen(&|$)/);
+    }
+    // The close shows the filtered home over the entry before the open: Next reads it, and
+    // WebKit cancels a Back started before that read ends.
+    const closedRead = () =>
+      page.waitForResponse(
+        (r) =>
+          r.url().includes('_rsc=') &&
+          noPanel(new URL(r.url())) &&
+          new URL(r.url()).searchParams.get('status') === 'unseen',
+      );
+    await openDocumentsAndFilter();
+    let read = closedRead();
+    await back();
+    await expect(page).toHaveURL(unseen);
+    await expect(documents).toBeHidden();
+    await read;
+    await forward();
+    await expect(page).toHaveURL(unseen);
+    await expect(documents).toBeHidden();
+    await backLeavesHome();
+    await forwardStaysClosed(documents);
+    await openDocumentsAndFilter();
+    read = closedRead();
+    await documents.getByRole('button', { name: closeDocuments }).click();
+    await expect(documents).toBeHidden();
+    await expect(page).toHaveURL(unseen);
+    await read;
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    await backLeavesHome();
+    await forwardStaysClosed(documents);
+
+    // The 문제 등록 dialog (`?panel=question-create`).
+    await arrive();
+    await chooseQuestionMenu(page, 'create');
+    await expect(questionFormUi.form(page)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(questionFormUi.form(page)).toBeHidden();
+    await expect(page).toHaveURL(noPanel);
+    await backLeavesHome();
+    await forwardStaysClosed(questionFormUi.form(page));
+
+    // The practice panel: previous/next are question changes (Back/Forward move between the
+    // questions, QPLAY-01); Forward does not undo the Back that closed it.
+    const onQuestion = (n: number) => (url: URL) =>
+      onHome(url) && url.searchParams.get('question') === q(s, n).id;
+    await arrive();
+    await overviewUi.dot(page, 1).click();
+    await expect(panelUi.numbered(page, 1)).toBeVisible();
+    await panelUi.next(panelUi.numbered(page, 1)).click();
+    await expect(panelUi.numbered(page, 2)).toBeVisible();
+    await expect(page).toHaveURL(onQuestion(2));
+    await back();
+    await expect(page).toHaveURL(onQuestion(1));
+    await expect(panelUi.numbered(page, 1)).toBeVisible();
+    await forward();
+    await expect(page).toHaveURL(onQuestion(2));
+    await expect(panelUi.numbered(page, 2)).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(onQuestion(1));
+    await expect(panelUi.numbered(page, 1)).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(panelUi.panel(page)).toBeHidden();
+    await forward();
+    await expect(page).toHaveURL(noPanel);
+    await expect(panelUi.panel(page)).toBeHidden();
+    // Moved to the next question, then closed with its button.
+    await overviewUi.dot(page, 1).click();
+    await expect(panelUi.numbered(page, 1)).toBeVisible();
+    await panelUi.next(panelUi.numbered(page, 1)).click();
+    const second = panelUi.numbered(page, 2);
+    await expect(second).toBeVisible();
+    await expect(page).toHaveURL(onQuestion(2));
+    await panelUi.close(second).click();
+    await expect(panelUi.panel(page)).toBeHidden();
+    await expect(page).toHaveURL(noPanel);
+    await backLeavesHome();
+    await forwardStaysClosed(panelUi.panel(page));
+
+    // Two stacked dialogs (이력 over 문서 관리): each Back closes the top one only, and Forward
+    // reopens neither.
+    await arrive();
+    await homeUi.documentsButton(page).click();
+    await expect(documents).toBeVisible();
+    await homeUi.historyButton(page).click();
+    await expect(history).toBeVisible();
+    await back();
+    await expect(page).toHaveURL((url) => onHome(url) && panels(url) === 'documents');
+    await expect(history).toBeHidden();
+    await expect(documents).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(documents).toBeHidden();
+    await forward();
+    await expect(page).toHaveURL(noPanel);
+    await expect(documents).toBeHidden();
+    await expect(history).toBeHidden();
+    await backLeavesHome();
+
+    // Closing the lower one keeps the upper one open; the first Back closes it (the closed 문서
+    // 관리 stays closed), Forward reopens neither, the next Back leaves the home.
+    await arrive();
+    await homeUi.documentsButton(page).click();
+    await expect(documents).toBeVisible();
+    await homeUi.historyButton(page).click();
+    await expect(history).toBeVisible();
+    // 문서 관리 lies under 이력: its close button is pressed from the keyboard.
+    await documents.getByRole('button', { name: closeDocuments }).focus();
+    await page.keyboard.press('Enter');
+    await expect(documents).toBeHidden();
+    await expect(history).toBeVisible();
+    await expect(page).toHaveURL((url) => panels(url) === 'history');
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(history).toBeHidden();
+    await expect(documents).toBeHidden();
+    await forward();
+    await expect(page).toHaveURL(noPanel);
+    await expect(history).toBeHidden();
+    await expect(documents).toBeHidden();
+    await backLeavesHome();
+
+    // Deep links (UX7 확인 7): the dialogs a first load opens close one per Back, then Back
+    // leaves the home; closing one with its button stays on the home; Forward reopens nothing.
+    await arrive('?panel=history');
+    await expect(history).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(history).toBeHidden();
+    await backLeavesHome();
+    await forwardStaysClosed(history);
+    await arrive('?panel=documents&panel=history');
+    await expect(history).toBeVisible();
+    await expect(documents).toBeVisible();
+    await back();
+    await expect(page).toHaveURL((url) => onHome(url) && panels(url) === 'documents');
+    await expect(history).toBeHidden();
+    await expect(documents).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(documents).toBeHidden();
+    await backLeavesHome();
+    await forwardStaysClosed(documents);
+    await arrive(`?question=${q(s, 1).id}`, panelUi.numbered(page, 1));
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(panelUi.panel(page)).toBeHidden();
+    await backLeavesHome();
+    await arrive('?panel=history');
+    await expect(history).toBeVisible();
+    await history.getByRole('button', { name: /^(이력 닫기|close)/i }).click();
+    await expect(history).toBeHidden();
+    await expect(page).toHaveURL(noPanel);
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await backLeavesHome();
+    await forwardStaysClosed(history);
+    // Reloaded with the deep-linked dialog open: Back still closes it first.
+    await arrive('?panel=history');
+    await expect(history).toBeVisible();
+    await page.reload();
+    await expect(history).toBeVisible();
+    await back();
+    await expect(page).toHaveURL(noPanel);
+    await expect(history).toBeHidden();
+    await backLeavesHome();
+  },
+);
+
+test(
+  'QOV-01-AC15 the 보관·초안 문제 dialog lists drafts and archived questions with status filters and 더 보기; 보관 해제 and 확정 bring them back to the heatmap, read-only for viewers and archived workspaces',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(120_000);
+    const label = 'qov01-ac15';
+    const s = await seed(workspaceFactory, label, 2);
+    const draftExplanation = `${label} 초안 해설`;
+    const draft = await createQuestion(s.owner, s.workspaceId, {
+      ...numberedMcq(`${label}-draft`, 3, 1, { explanation: draftExplanation }),
+      publication_status: 'DRAFT',
+    });
+    const archived: Question[] = [];
+    for (let start = 10; start < 61; start += 10) {
+      const batch = Array.from({ length: Math.min(10, 61 - start) }, (_, i) => start + i);
+      archived.push(
+        ...(await Promise.all(
+          batch.map(async (n) =>
+            archiveQuestion(
+              s.owner,
+              await createQuestion(s.owner, s.workspaceId, numberedMcq(`${label}-arch`, n)),
+            ),
+          ),
+        )),
+      );
+    }
+    expect(archived).toHaveLength(51);
+    const restored = archived[0];
+    if (!restored) throw new Error('no archived question');
+    const viewer = await workspaceFactory.member(`${label}-viewer`);
+    seedMembership(s.workspaceId, viewer.user.id, 'viewer');
+
+    await openOverview(page, s);
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    await chooseQuestionMenu(page, 'inactive');
+    const dialog = inactiveUi.dialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === `/workspaces/${s.workspaceId}` &&
+        url.searchParams.getAll('panel').includes('inactive-questions'),
+    );
+    // 전체 (default): drafts and archived questions only, 50 at a time.
+    await expect(inactiveUi.rows(dialog)).toHaveCount(50);
+    await expect(dialog).not.toContainText(s.questions[0]?.revision.stem ?? '-');
+    await inactiveUi.more(dialog).click();
+    await expect(inactiveUi.rows(dialog)).toHaveCount(52);
+    await expect(inactiveUi.more(dialog)).toHaveCount(0);
+
+    // 초안: the draft alone, its state in text.
+    await chooseFilter(page, inactiveUi.status(dialog), INACTIVE_STATUS_OPTIONS.draft);
+    await expect(inactiveUi.rows(dialog)).toHaveCount(1);
+    await expect(inactiveUi.rows(dialog)).toContainText(draft.revision.stem);
+    await expect(inactiveUi.rows(dialog)).toContainText(/초안|draft/i);
+    // 보관됨: the archived ones, paged.
+    await chooseFilter(page, inactiveUi.status(dialog), INACTIVE_STATUS_OPTIONS.archived);
+    await expect(inactiveUi.rows(dialog)).toHaveCount(50);
+    await expect(dialog).not.toContainText(draft.revision.stem);
+    await inactiveUi.more(dialog).click();
+    await expect(inactiveUi.rows(dialog)).toHaveCount(51);
+    await expect(inactiveUi.rows(dialog).first()).toContainText(/보관됨|archived/i);
+
+    // A row opens the read-only detail with the answer, explanation and revisions.
+    await chooseFilter(page, inactiveUi.status(dialog), INACTIVE_STATUS_OPTIONS.draft);
+    await inactiveUi.open(inactiveUi.row(dialog, draft.revision.stem)).click();
+    let detail = detailUi.dialog(page);
+    await expect(detail).toBeVisible();
+    await expect(detail).toContainText(draftExplanation);
+    await expect(detailUi.historyHeading(detail)).toBeVisible();
+    await expect(inactiveUi.confirm(detail)).toBeVisible();
+    await expect(inactiveUi.edit(detail)).toBeVisible();
+    await expect(inactiveUi.remove(detail)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(detail).toBeHidden();
+
+    // 확정 the draft and 보관 해제 one archived question: both leave the list for the heatmap.
+    await inactiveUi.confirm(inactiveUi.row(dialog, draft.revision.stem)).click();
+    await expect(inactiveUi.rows(dialog)).toHaveCount(0);
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    await chooseFilter(page, inactiveUi.status(dialog), INACTIVE_STATUS_OPTIONS.archived);
+    const restoredRow = inactiveUi.row(dialog, restored.revision.stem);
+    await expect(restoredRow).toHaveCount(1);
+    await inactiveUi.restore(restoredRow).click();
+    await expect(restoredRow).toHaveCount(0);
+    await expect(overviewUi.dots(page)).toHaveCount(4);
+    await expect(overviewUi.dot(page, 10)).toBeVisible();
+    expect((await getQuestion(s.owner, restored.id)).publication_status).toBe('CONFIRMED');
+    expect((await getQuestion(s.owner, draft.id)).publication_status).toBe('CONFIRMED');
+
+    // Closing drops the panel; Back never reopens it (QOV-01-AC14).
+    await inactiveUi.close(dialog).click();
+    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
+    // As in AC14: WebKit cancels a cross-document Back started under a pending router refresh
+    // (here the status actions' revalidation), not because of the feature.
+    await page.waitForLoadState('networkidle');
+    await page.goBack();
+    await expect(page).toHaveURL(
+      (url) => !url.searchParams.getAll('panel').includes('inactive-questions'),
+    );
+    await page.goto(overviewPath(s.workspaceId));
+    await expect(overviewUi.dots(page)).toHaveCount(4);
+
+    // Viewer: the same list and detail, without write controls; the API refuses.
+    const other = archived[1];
+    if (!other) throw new Error('no archived question');
+    const refused = await viewer.api.request('PATCH', `/questions/${other.id}`, {
+      base_revision_id: other.revision.id,
+      publication_status: 'CONFIRMED',
+    });
+    expect(refused.status).toBe(403);
+    expect((refused.body as Problem).type).toBe(PROBLEM_TYPES.insufficientRole);
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(overviewPath(s.workspaceId));
+    await chooseQuestionMenu(page, 'inactive');
+    await expect(inactiveUi.rows(dialog)).toHaveCount(50);
+    await expect(inactiveUi.restore(dialog)).toHaveCount(0);
+    await expect(inactiveUi.confirm(dialog)).toHaveCount(0);
+    await inactiveUi.open(inactiveUi.row(dialog, other.revision.stem)).click();
+    detail = detailUi.dialog(page);
+    await expect(detail).toBeVisible();
+    await expect(detailUi.correctOptions(detail)).toHaveCount(1);
+    for (const control of [inactiveUi.restore, inactiveUi.edit, inactiveUi.remove]) {
+      await expect(control(detail)).toHaveCount(0);
+    }
+    await page.keyboard.press('Escape');
+
+    // Archived workspace: read-only for the owner too, and says so.
+    await workspaceFactory.archive(s.owner, s.workspaceId);
+    const blocked = await s.owner.api.request('PATCH', `/questions/${other.id}`, {
+      base_revision_id: other.revision.id,
+      publication_status: 'CONFIRMED',
+    });
+    expect(blocked.status).toBe(403);
+    expect((blocked.body as Problem).type).toBe(PROBLEM_TYPES.workspaceArchived);
+    await page.context().clearCookies();
+    await openOverview(page, s);
+    await chooseQuestionMenu(page, 'inactive');
+    await expect(inactiveUi.rows(dialog)).toHaveCount(50);
     await expect(
-      page.getByRole('heading', { level: 1, name: /^(전체 문제|all questions)$/i }),
+      dialog.getByText(/보관된 workspace는 읽기 전용입니다|archived workspaces are read-only/i),
     ).toBeVisible();
+    await expect(inactiveUi.restore(dialog)).toHaveCount(0);
+    expect((await getQuestion(s.owner, other.id)).publication_status).toBe('ARCHIVED');
+  },
+);
+
+// --- UX7-DEDUP 중복 문제 정리 (QOV-01-AC16/AC17, docs/questions.md §10) ---------------------------
+
+const DEDUP_STEM = (label: string) => `${label} 다음 중 물의 순환에 대한 설명으로 옳은 것은?`;
+const DEDUP_TEXTS = ['증발은 액체가 기체로 변한다', '응결은 기체가 고체로 변한다', '강수는 없다'];
+
+/** The same MCQ as `DEDUP_STEM(label)` / `DEDUP_TEXTS` (answer: the first text), restyled. */
+function dedupMcq(
+  label: string,
+  n: number,
+  style: 'plain' | 'circled' | 'spaced' = 'plain',
+): ReturnType<typeof mcqInput> & { question_number: number } {
+  const stem = DEDUP_STEM(label);
+  const texts =
+    style === 'circled'
+      ? [`③ ${DEDUP_TEXTS[2]}`, `① ${DEDUP_TEXTS[0]}`, `② ${DEDUP_TEXTS[1]}`]
+      : style === 'spaced'
+        ? DEDUP_TEXTS.map((t) => `${t.replace(/ /g, '  ')}.`)
+        : DEDUP_TEXTS;
+  const answer = style === 'circled' ? 1 : 0;
+  return {
+    ...mcqInput(style === 'spaced' ? `${stem.replace(/ /g, '  ')} ( )` : stem, texts, answer),
+    question_number: n,
+  };
+}
+
+/** Opens 문제 › 중복 문제 정리 and waits for the scan. */
+async function openDedup(page: Page): Promise<Locator> {
+  await chooseQuestionMenu(page, 'duplicates');
+  const dialog = dedupUi.dialog(page);
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('[aria-busy="true"]')).toHaveCount(0);
+  return dialog;
+}
+
+/** 선택한 묶음 정리 (k) → 보관 in the confirmation. */
+async function mergeSelected(page: Page, dialog: Locator, archived: number): Promise<void> {
+  await expect(dedupUi.merge(dialog)).toContainText(`(${archived})`);
+  await dedupUi.merge(dialog).click();
+  const confirm = dedupUi.confirm(page);
+  await expect(confirm).toBeVisible();
+  await expect(confirm).toHaveAccessibleName(new RegExp(`${archived}개|${archived} dup`));
+  await dedupUi.confirmButton(confirm).click();
+  await expect(confirm).toBeHidden();
+}
+
+test(
+  'QOV-01-AC16 중복 문제 정리 groups identical questions across option order, numbering and spacing; keeping one archives the rest, read-only for viewers and archived workspaces',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(120_000);
+    const label = 'qov01-ac16';
+    const owner = await workspaceFactory.member(label);
+    const ws = await workspaceFactory.create(owner);
+    const first = await createQuestion(owner, ws.id, dedupMcq(label, 1));
+    const second = await createQuestion(owner, ws.id, dedupMcq(label, 2, 'circled'));
+    const third = await createQuestion(owner, ws.id, dedupMcq(label, 3, 'spaced'));
+    await createQuestion(owner, ws.id, numberedMcq(label, 4));
+    await createQuestion(owner, ws.id, numberedMcq(label, 5));
+    const explanation = `${label} 해설 비밀`;
+    await owner.api.ok(
+      'PATCH',
+      `/questions/${first.id}`,
+      { base_revision_id: first.revision.id, explanation },
+      [200],
+    );
+    const viewer = await workspaceFactory.member(`${label}-viewer`);
+    seedMembership(ws.id, viewer.user.id, 'viewer');
+    // The third copy has the most graded attempts: it is the suggested keep (user decision).
+    await answerCorrectly(owner, third);
+
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(5);
+    const dialog = await openDedup(page);
+    await expect(page).toHaveURL(
+      (url) =>
+        url.pathname === `/workspaces/${ws.id}` &&
+        url.searchParams.getAll('panel').includes('question-duplicates'),
+    );
+    // One group of the three restyled copies; the most-practised one is kept by default (no
+    // counts shown); no answers shown.
+    const groups = dedupUi.groups(dialog);
+    await expect(groups).toHaveCount(1);
+    const group = groups.first();
+    await expect(dedupUi.keep(group)).toHaveCount(3);
+    await expect(dedupUi.keepNumber(group, 3)).toBeChecked();
+    await expect(dedupUi.include(group)).toBeChecked();
+    await expect(group).not.toContainText(/풀이 \d+|\d+ attempts?/i);
+    await expect(dedupUi.warning(group)).toHaveCount(0);
+    await expect(group).toContainText(`① ${DEDUP_TEXTS[0]}`);
+    await expect(dialog).not.toContainText(explanation);
+
+    // Keep the second, archive the other two.
+    await dedupUi.keepNumber(group, 2).check();
+    await expect(dedupUi.keepNumber(group, 2)).toBeChecked();
+    await mergeSelected(page, dialog, 2);
+    await expect(dedupUi.empty(dialog)).toBeVisible();
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    await expect(overviewUi.dot(page, 2)).toBeVisible();
+    await expect(overviewUi.dot(page, 1)).toHaveCount(0);
+    await expect(overviewUi.dot(page, 3)).toHaveCount(0);
+    expect((await getQuestion(owner, first.id)).publication_status).toBe('ARCHIVED');
+    expect((await getQuestion(owner, third.id)).publication_status).toBe('ARCHIVED');
+    expect((await getQuestion(owner, second.id)).publication_status).toBe('CONFIRMED');
+    // Scanning again finds nothing.
+    expect((await scanDuplicates(owner, ws.id)).groups).toEqual([]);
+
+    // The archived copies are in 보관·초안 문제 (보관됨).
+    await dedupUi.close(dialog).click();
+    await expect(dialog).toBeHidden();
+    await chooseQuestionMenu(page, 'inactive');
+    const inactive = inactiveUi.dialog(page);
+    await chooseFilter(page, inactiveUi.status(inactive), INACTIVE_STATUS_OPTIONS.archived);
+    await expect(inactiveUi.rows(inactive)).toHaveCount(2);
+    await page.reload();
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+
+    // Viewer: the item is disabled with the reason, the URL opens nothing, the API refuses.
+    for (const res of [
+      await viewer.api.request('GET', `/workspaces/${ws.id}/question-duplicates`),
+      await viewer.api.request('POST', `/workspaces/${ws.id}/question-duplicates/merge`, {
+        groups: [{ keep_question_id: second.id, duplicate_question_ids: [first.id] }],
+      }),
+    ]) {
+      expect(res.status).toBe(403);
+      expect((res.body as Problem).type).toBe(PROBLEM_TYPES.insufficientRole);
+    }
+    await page.context().clearCookies();
+    await signInAs(page, viewer.user);
+    await page.goto(`${overviewPath(ws.id)}?panel=question-duplicates`);
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expect(dedupUi.dialog(page)).toHaveCount(0);
+    await expectReadOnlyQuestionMenu(page, 'viewer');
+
+    // Archived workspace: the same for the owner.
+    await workspaceFactory.archive(owner, ws.id);
+    const blocked = await owner.api.request('GET', `/workspaces/${ws.id}/question-duplicates`);
+    expect(blocked.status).toBe(403);
+    expect((blocked.body as Problem).type).toBe(PROBLEM_TYPES.workspaceArchived);
+    await page.context().clearCookies();
+    await signInAs(page, owner.user);
+    await page.goto(`${overviewPath(ws.id)}?panel=question-duplicates`);
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    await expect(dedupUi.dialog(page)).toHaveCount(0);
+    await expectReadOnlyQuestionMenu(page, 'archived');
+  },
+);
+
+test(
+  'QOV-01-AC17 the kept question shows the archived duplicate history merged in (latest grade, favorite union); clearing the favorite and unarchiving the duplicate unmerge it',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(120_000);
+    const label = 'qov01-ac17';
+    const owner = await workspaceFactory.member(label);
+    const ws = await workspaceFactory.create(owner);
+    const kept = await createQuestion(owner, ws.id, dedupMcq(label, 1));
+    const dup = await createQuestion(owner, ws.id, dedupMcq(label, 2, 'circled'));
+    await answerCorrectly(owner, kept);
+    const session = await startPractice(owner, dup.id);
+    const correct = dup.revision.correct_option_ids ?? [];
+    const wrong = dup.revision.options.find((o) => !correct.includes(o.id));
+    if (!wrong) throw new Error('no wrong option');
+    const graded = await submitPractice(owner, session.id, { selected_option_ids: [wrong.id] });
+    expect(graded.result).toBe('incorrect');
+    await setMyState(owner, dup.id, { is_favorite: true });
+    const attemptsBefore = [
+      ...(await listAttempts(owner, kept.id)),
+      ...(await listAttempts(owner, dup.id)),
+    ].map((a) => a.id);
+
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'correct');
+    await expect(overviewUi.dot(page, 2)).toHaveAttribute('data-status', 'incorrect');
+    const dialog = await openDedup(page);
+    // One graded attempt each: the tie goes to the oldest (user decision 2026-11-01).
+    await expect(dedupUi.keepNumber(dedupUi.groups(dialog).first(), 1)).toBeChecked();
+    await mergeSelected(page, dialog, 1);
+    await dedupUi.close(dialog).click();
+
+    // One dot: the duplicate's later wrong answer and its favorite are the kept question's now.
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    const dot = overviewUi.dot(page, 1);
+    await expect(dot).toHaveAttribute('data-status', 'incorrect');
+    await expect(dot).toHaveAttribute('aria-label', /오답|incorrect/i);
+    await expect(dot).toHaveAttribute('aria-label', /즐겨찾기|favorite/i);
+    await expect(overviewUi.marker(dot)).toHaveAttribute('data-shape', 'star');
+    await expect(overviewUi.marker(dot)).toHaveCSS('color', await statusColor(page, 'incorrect'));
+    // Attempts are untouched: the kept question lists both, the same rows as before.
+    const merged = await listAttempts(owner, kept.id);
+    expect(merged.map((a) => a.id).sort()).toEqual([...attemptsBefore].sort());
+
+    // Clearing the favorite on the kept question clears the merged one.
+    await dot.click();
+    const panel = panelUi.numbered(page, 1);
+    await expect(panel).toBeVisible();
+    await panelUi.favoriteOff(panel).click();
+    await expect(panelUi.favoriteOn(panel)).toBeVisible();
+    await panelUi.close(panel).click();
+    await expect(overviewUi.marker(dot)).toHaveAttribute('data-shape', 'square');
+    await page.reload();
+    await expect(overviewUi.marker(overviewUi.dot(page, 1))).toHaveAttribute(
+      'data-shape',
+      'square',
+    );
+
+    // Unarchiving the duplicate unmerges it: each question shows its own record again.
+    await chooseQuestionMenu(page, 'inactive');
+    const inactive = inactiveUi.dialog(page);
+    await chooseFilter(page, inactiveUi.status(inactive), INACTIVE_STATUS_OPTIONS.archived);
+    await expect(inactiveUi.rows(inactive)).toHaveCount(1);
+    await inactiveUi.restore(inactiveUi.rows(inactive).first()).click();
+    await expect(overviewUi.dots(page)).toHaveCount(2);
+    await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'correct');
+    await expect(overviewUi.dot(page, 2)).toHaveAttribute('data-status', 'incorrect');
+    await expect(overviewUi.marker(overviewUi.dot(page, 2))).toHaveAttribute(
+      'data-shape',
+      'square',
+    );
+    expect(await listAttempts(owner, kept.id)).toHaveLength(1);
   },
 );

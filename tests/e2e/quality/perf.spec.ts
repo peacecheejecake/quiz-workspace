@@ -6,7 +6,6 @@
 // measurement is attached to the test (`perf.json`) and printed for the run log.
 import type { Page, TestInfo } from '@playwright/test';
 import {
-  bankPath,
   book,
   block,
   createNumberedQuestions,
@@ -30,7 +29,7 @@ test.describe.configure({ mode: 'serial', timeout: 4 * JOB_TIMEOUT_MS });
 /** Web Vitals "good" thresholds (web.dev) — local production build. */
 const PAGE_BUDGET = { lcpMs: 2_500, cls: 0.1, ttfbMs: 800, jsKiB: 1_024 } as const;
 /** p95 over SAMPLES sequential calls against the local API. */
-const API_P95_BUDGET_MS = { overview: 500, bank: 500, search: 1_000 } as const;
+const API_P95_BUDGET_MS = { overview: 500, questionList: 500, search: 1_000 } as const;
 const QUESTIONS = 300;
 const SAMPLES = 15;
 
@@ -126,9 +125,6 @@ test(
     await visit('questions overview', overviewPath(ws.id), () =>
       expect(overviewUi.dots(page)).toHaveCount(QUESTIONS),
     );
-    await visit('question bank', bankPath(ws.id), () =>
-      expect(page.getByRole('main').getByRole('listitem').first()).toBeVisible(),
-    );
     await visit('documents', documentsPath(ws.id), async () => undefined);
     await visit('document editor', `/workspaces/${ws.id}/documents/${documentId}`, () =>
       expect(page.getByRole('tree').first()).toBeVisible(),
@@ -149,7 +145,7 @@ test(
 );
 
 test(
-  'PERF-02 heavy API endpoints stay within latency budgets (overview, bank list, search)',
+  'PERF-02 heavy API endpoints stay within latency budgets (overview, question list, search)',
   { tag: '@infra' },
   async ({ workspaceFactory }, info) => {
     const owner = await workspaceFactory.member('perf02');
@@ -160,7 +156,7 @@ test(
 
     const results = {
       overview: await latency(owner, 'GET', `/workspaces/${ws.id}/questions/overview`),
-      bank: await latency(owner, 'GET', `/workspaces/${ws.id}/questions?limit=100`),
+      questionList: await latency(owner, 'GET', `/workspaces/${ws.id}/questions?limit=100`),
       search: await latency(owner, 'POST', `/workspaces/${ws.id}/search`, {
         query,
         mode: 'hybrid',

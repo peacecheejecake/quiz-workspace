@@ -42,7 +42,7 @@ import json
 import uuid
 from dataclasses import replace
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.exceptions import RequestValidationError
@@ -55,10 +55,17 @@ from pydantic import (
     TypeAdapter,
     ValidationError,
     field_validator,
+    model_validator,
 )
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
+from quiz_api.api.practice_runs import (
+    MAX_RUN,
+    already_submitted,
+    run_finished,
+    wrong_position,
+)
 from quiz_api.auth import CurrentUser
 from quiz_api.authz import (
     AccessRepository,
@@ -96,6 +103,7 @@ from quiz_api.repositories.practice import (
     SessionRecord,
     StateRecord,
 )
+from quiz_api.repositories.practice_runs import PracticeRunRepository
 from quiz_api.repositories.questions import QuestionRepository
 
 router = APIRouter(tags=["practice"], responses=problem_responses(503))
@@ -136,10 +144,26 @@ class PracticeSession(BaseModel):
     displayed_option_ids: list[str] = Field(description="The displayed order (MCQ), as ids.")
     state: SessionState
     opened_at: datetime
+    practice_run_id: uuid.UUID | None = Field(
+        default=None, description="The practice run this session practises a position of."
+    )
+    run_position: int | None = Field(default=None, description="That run position (1-based).")
 
 
 class PracticeSessionCreate(BaseModel):
+    """Empty for the practice panel; `practice_run_id` + `run_position` for a run position
+    (QVIEW-B): the position must hold this question; one session per position."""
+
     model_config = ConfigDict(extra="forbid")
+
+    practice_run_id: uuid.UUID | None = None
+    run_position: int | None = Field(default=None, ge=1, le=MAX_RUN)
+
+    @model_validator(mode="after")
+    def _run_pair(self) -> PracticeSessionCreate:
+        if (self.practice_run_id is None) != (self.run_position is None):
+            raise ValueError("practice_run_id and run_position go together.")
+        return self
 
 
 class SubmitBody(BaseModel):
@@ -222,6 +246,9 @@ class SubmittedAnswer(BaseModel):
 
 class Attempt(BaseModel):
     id: uuid.UUID
+    question_id: uuid.UUID = Field(
+        description="The question answered: this one, or a duplicate merged into it (UX7-DEDUP)."
+    )
     question_revision_id: uuid.UUID = Field(description="Graded against this revision.")
     revision_version: int
     practice_session_id: uuid.UUID
@@ -262,7 +289,14 @@ def get_idempotency_store(
     return IdempotencyStore(session)
 
 
+def get_run_repository(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> PracticeRunRepository:
+    return PracticeRunRepository(session)
+
+
 PracticeRepo = Annotated[PracticeRepository, Depends(get_practice_repository)]
+RunRepo = Annotated[PracticeRunRepository, Depends(get_run_repository)]
 QuestionRepo = Annotated[QuestionRepository, Depends(get_question_repository)]
 IdempotencyStoreDep = Annotated[IdempotencyStore, Depends(get_idempotency_store)]
 AccessRepo = Annotated[AccessRepository, Depends(get_access_repository)]
@@ -325,6 +359,8 @@ def _session_out(s: SessionRecord) -> PracticeSession:
         displayed_option_ids=s.displayed_option_ids,
         state=s.state,  # type: ignore[arg-type]
         opened_at=s.opened_at,
+        practice_run_id=s.practice_run_id,
+        run_position=s.run_position,
     )
 
 
@@ -346,6 +382,7 @@ def _result_out(s: SessionRecord, attempt_id: uuid.UUID, result: AttemptResult) 
 def _attempt_out(a: AttemptRecord) -> Attempt:
     return Attempt(
         id=a.id,
+        question_id=a.question_id,
         question_revision_id=a.question_revision_id,
         revision_version=a.revision_version,
         practice_session_id=a.practice_session_id,
@@ -375,7 +412,7 @@ def _my_state(question_id: uuid.UUID, s: StateRecord) -> MyState:
     )
 
 
-def _unstorable() -> RequestValidationError:
+def unstorable() -> RequestValidationError:
     return RequestValidationError(
         [
             {
@@ -387,12 +424,27 @@ def _unstorable() -> RequestValidationError:
     )
 
 
-def _answer(session: SessionRecord, body: SubmitBody) -> tuple[dict[str, Any], AttemptResult]:
-    """Validate the submission against the pinned revision; returns (stored answer, result).
-    Messages never mention which option is correct."""
+class GradableRevision(Protocol):
+    """What grading reads of a pinned revision (bank `RevisionRecord`, mock exam revision)."""
+
+    @property
+    def options(self) -> list[dict[str, str]]: ...
+    @property
+    def is_multi_answer(self) -> bool: ...
+    @property
+    def correct_option_ids(self) -> list[str] | None: ...
+    @property
+    def accepted_answers(self) -> list[str] | None: ...
+
+
+def grade_submission(
+    question_type: str, rev: GradableRevision, body: SubmitBody
+) -> tuple[dict[str, Any], AttemptResult]:
+    """Validate a submission against the pinned revision; returns (stored answer, result).
+    MCQs are graded by stable option ids, never positions. Messages never mention which option
+    is correct. Shared by bank and mock exam practice (MOCK-P)."""
     issues = Issues()
-    rev = session.revision
-    if session.question_type == "MCQ":
+    if question_type == "MCQ":
         ids = body.selected_option_ids
         if body.answer_text is not None:
             issues.add(("answer_text",), "A multiple-choice question takes selected_option_ids.")
@@ -420,7 +472,7 @@ def _answer(session: SessionRecord, body: SubmitBody) -> tuple[dict[str, Any], A
         issues.add(("answer_text",), "Text must not contain NUL characters or invalid code points.")
     issues.raise_if_any()
     assert text is not None  # noqa: S101 - checked above
-    if session.question_type == "SHORT_ANSWER":
+    if question_type == "SHORT_ANSWER":
         return {"answer_text": text}, grade_short_answer(text, rev.accepted_answers)
     return {"answer_text": text}, "pending"
 
@@ -458,20 +510,53 @@ def start_practice_session(
     access: PracticeQuestion,
     practice: PracticeRepo,
     questions: QuestionRepo,
+    runs: RunRepo,
     idempotency: IdempotencyStoreDep,
     user: CurrentUser,
     body: PracticeSessionCreate | None = None,
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
     """Open the practice panel on a CONFIRMED question: pins its active revision, shuffles MCQ
-    options, records the caller's view. No answers in the response."""
+    options, records the caller's view. No answers in the response. With a run position
+    (QVIEW-B) the caller's run of this workspace must hold this question there; the position's
+    open session is resumed (another view), a submitted one is 409 `already-submitted`."""
+    body = body or PracticeSessionCreate()
     scope = f"POST /questions/{access.resource_id}/practice-sessions"
-    body_hash = request_hash((body or PracticeSessionCreate()).model_dump(mode="json"))
+    body_hash = request_hash(body.model_dump(mode="json", exclude_none=True))
     if idempotency_key is not None:
         idempotency.lock(user.id, scope, idempotency_key)
         stored = idempotency.find(user.id, scope, idempotency_key)
         if stored is not None:
             return replay(stored, body_hash)
+
+    run_id, position = body.practice_run_id, body.run_position
+    if run_id is not None and position is not None:
+        run = runs.get_in_workspace(run_id, user.id, access.workspace.workspace_id)
+        if run is None:
+            raise _not_found()
+        if run.finished_at is not None:
+            raise run_finished()
+        if position > run.total or runs.question_at(run.id, position) != access.resource_id:
+            raise wrong_position()
+        existing = practice.run_session(run.id, position, user.id)
+        if existing is not None:
+            if existing.state != "open":
+                raise already_submitted()
+            practice.record_view(existing.workspace_id, existing.question_id, user.id)
+            resumed = _session_out(existing)
+            if idempotency_key is not None:
+                # Stored like a new session: a retry replays it (no second view, no 409 after
+                # the position is submitted) and the key stays bound to this body.
+                idempotency.save(
+                    user.id,
+                    scope,
+                    idempotency_key,
+                    body_hash,
+                    status.HTTP_201_CREATED,
+                    resumed.model_dump(mode="json"),
+                )
+            practice.commit()
+            return resumed
 
     question = questions.get(access.resource_id, with_sources=False)
     if question is None:  # soft-deleted after the authorization lookup
@@ -495,6 +580,8 @@ def start_practice_session(
         user_id=user.id,
         displayed_option_ids=displayed,
         shuffle_seed=seed,
+        practice_run_id=run_id,
+        run_position=position,
     )
     # The session pins the revision just read in this transaction: no re-read needed.
     result = _session_out(
@@ -512,6 +599,8 @@ def start_practice_session(
             submitted_at=None,
             graded_at=None,
             revision=question.revision,
+            practice_run_id=run_id,
+            run_position=position,
         )
     )
     if idempotency_key is not None:
@@ -558,17 +647,25 @@ def submit_practice_session(
     body: SubmitBody,
     user: CurrentUser,
     practice: PracticeRepo,
+    runs: RunRepo,
 ) -> SubmitResult:
     """Grade the answer on the server against the session's revision (option ids, never
-    positions); append the attempt; reveal answers and explanation. Once per session."""
+    positions); append the attempt; reveal answers and explanation. Once per session — for a
+    run position once per position (409 `already-submitted`), and not after the run finished."""
     _, found = _own_session(session_id, user.id, practice, Action.PRACTICE)
+    if found.practice_run_id is not None:
+        if found.state != "open":
+            raise already_submitted()
+        run = runs.get(found.practice_run_id, user.id, lock=True)
+        if run is None or run.finished_at is not None:
+            raise run_finished()
     if found.state != "open":
         raise ProblemException(
             409,
             ProblemType.PRACTICE_SESSION_SUBMITTED,
             detail="This practice session was already submitted. Start a new one to retry.",
         )
-    answer, result = _answer(found, body)
+    answer, result = grade_submission(found.question_type, found.revision, body)
     try:
         submitted = practice.submit(found, submitted_answer=answer, result=result)
         updated = replace(
@@ -581,7 +678,7 @@ def submit_practice_session(
         practice.commit()
     except (IntegrityError, DataError):
         practice.rollback()
-        raise _unstorable() from None
+        raise unstorable() from None
     return out
 
 
@@ -626,7 +723,9 @@ def self_grade_practice_session(
 def update_my_state(
     access: PracticeQuestion, body: MyStateUpdate, practice: PracticeRepo
 ) -> MyState:
-    """Toggle the caller's favorite / retry flags (independent of each other and of results)."""
+    """Toggle the caller's favorite / retry flags (independent of each other and of results).
+    The state answered is folded with the merged duplicates' (UX7-DEDUP): a flag set on any of
+    them is set, and turning one off turns it off on all of them."""
     flags = {
         k: v
         for k, v in body.model_dump(include={"is_favorite", "needs_retry"}).items()
@@ -657,8 +756,9 @@ def list_my_attempts(
     limit: Annotated[int, Query(ge=1, le=MAX_ATTEMPTS_PAGE)] = DEFAULT_ATTEMPTS_PAGE,
     cursor: Annotated[str | None, Query(max_length=MAX_CURSOR)] = None,
 ) -> AttemptList:
-    """The caller's own attempts on the question, newest first, each pinned to the revision it
-    was graded on (its content: GET /questions/{id}/revisions/{revision_id})."""
+    """The caller's own attempts on the question and on the duplicates merged into it
+    (UX7-DEDUP), newest first, each pinned to the revision it was graded on (its content:
+    GET /questions/{question_id}/revisions/{revision_id} of the item's `question_id`)."""
     after = _decode_cursor(cursor) if cursor else None
     items, next_cursor = practice.attempts(
         access.resource_id, access.workspace.user_id, limit=limit, after=after

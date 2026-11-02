@@ -76,6 +76,7 @@ export function summaryFromImport(draft: ImportDraftSummary): DraftSummary {
       .filter((v) => v.code !== 'answer_missing')
       .map((v) => ({ code: v.code, severity: v.severity })),
     chapter: { chapter: draft.chapter_id ? { id: draft.chapter_id } : null },
+    duplicateOf: draft.duplicate_of ?? null,
   };
 }
 
@@ -92,6 +93,7 @@ export function summaryOf(draft: DraftSummary): DraftSummary {
     publishable: draft.publishable,
     answerMissing: draft.answerMissing,
     issues: draft.issues,
+    ...(draft.duplicateOf !== undefined ? { duplicateOf: draft.duplicateOf } : {}),
     ...(draft.chapter
       ? { chapter: { chapter: draft.chapter.chapter ? { id: draft.chapter.chapter.id } : null } }
       : {}),

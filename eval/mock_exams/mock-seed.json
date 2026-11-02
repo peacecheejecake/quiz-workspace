@@ -1,0 +1,51 @@
+{
+  "description": "Mock exam validation evaluation (MOCK-X). Each case is one AI generation over named sources of the `mock_exam` block of tests/fixtures/llm/generation-scenarios.json (synthetic MCQs about the synthetic book-ko fixture), with their passages taken from the page of tests/fixtures/pdfs/book-ko.truth.json each source cites. The fake provider answers with the block's scripted items (deliberate faults: a multi-answer inversion that fails validation, a batch that is unreadable as a whole, an answer cut at the output budget, items whose quote or answer is wrong); the llm provider sends the same synthetic sources and passages to the real model.",
+  "scenarios": "tests/fixtures/llm/generation-scenarios.json",
+  "book": "tests/fixtures/pdfs/book-ko.truth.json",
+  "cases": [
+    {
+      "id": "paraphrase-6",
+      "variation_type": "PARAPHRASE",
+      "sources": [
+        "evaporation",
+        "condensation",
+        "precipitation",
+        "infiltration",
+        "flocculation",
+        "disinfection"
+      ]
+    },
+    {
+      "id": "invert-6",
+      "variation_type": "INVERT_POLARITY",
+      "sources": [
+        "evaporation",
+        "condensation",
+        "precipitation",
+        "infiltration",
+        "flocculation",
+        "disinfection"
+      ]
+    },
+    {
+      "id": "invert-faults",
+      "variation_type": "INVERT_POLARITY",
+      "sources": ["inv-runoff", "inv-filtration", "inv-multi"]
+    },
+    {
+      "id": "broken-batch",
+      "variation_type": "PARAPHRASE",
+      "sources": ["brk-sediment", "brk-backwash", "brk-cloud", "brk-snow"]
+    },
+    {
+      "id": "truncated-batch",
+      "variation_type": "PARAPHRASE",
+      "sources": ["trn-raw-water", "brk-backwash", "brk-cloud"]
+    },
+    {
+      "id": "all-fail",
+      "variation_type": "PARAPHRASE",
+      "sources": ["fail-quote", "fail-answer"]
+    }
+  ]
+}

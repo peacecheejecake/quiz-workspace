@@ -479,6 +479,53 @@ def check_captcha_pair(sources: Mapping[str, Mapping[str, str]], report: Report)
         )
 
 
+TRUTHY = frozenset({"true", "1", "yes"})
+MOCK_EXAM_DEFAULTS = {
+    "MOCK_EXAM_MAX_PROMPT_TOKENS": 60_000,
+    "MOCK_EXAM_MAX_OUTPUT_TOKENS": 16_000,
+    "MOCK_EXAM_SOURCES_PER_CALL": 40,
+    "MOCK_EXAM_GENERATION_CONCURRENCY": 2,
+    "LLM_CONTEXT_TOKENS": 200_000,
+    "LLM_MAX_TOKENS": 16_000,
+    "LLM_TIMEOUT_SECONDS": 120,
+    "WORKER_TASK_SOFT_TIME_LIMIT_SECONDS": 1500,
+}
+
+
+def check_mock_exam_budget(sources: Mapping[str, Mapping[str, str]], report: Report) -> None:
+    """With WORKER_MOCK_EXAMS on, the worker's MOCK_EXAM_* budgets fit the model (context,
+    LLM_MAX_TOKENS) and a 100-question generation fits the task soft time limit
+    (quiz_worker.settings, MOCK-B)."""
+    env = sources.get("worker")
+    # Like quiz_worker.settings: only a worker that makes AI mock exams must fit the budgets.
+    if env is None or env.get("WORKER_MOCK_EXAMS", "").strip().lower() not in TRUTHY:
+        return
+    values: dict[str, int] = {}
+    for name, default in MOCK_EXAM_DEFAULTS.items():
+        raw = env.get(name, "").strip()
+        try:
+            values[name] = int(float(raw)) if raw else default
+        except ValueError:
+            return  # the value rule already reports it
+    prompt = values["MOCK_EXAM_MAX_PROMPT_TOKENS"]
+    output = values["MOCK_EXAM_MAX_OUTPUT_TOKENS"]
+    if prompt + output > values["LLM_CONTEXT_TOKENS"]:
+        report.errors.append(
+            "worker MOCK_EXAM_MAX_PROMPT_TOKENS + MOCK_EXAM_MAX_OUTPUT_TOKENS: exceed "
+            "LLM_CONTEXT_TOKENS (the model context)"
+        )
+    if output > values["LLM_MAX_TOKENS"]:
+        report.errors.append("worker MOCK_EXAM_MAX_OUTPUT_TOKENS: exceeds LLM_MAX_TOKENS")
+    per_call = max(1, min(values["MOCK_EXAM_SOURCES_PER_CALL"], output // 400))
+    batches = -(-100 // per_call)
+    rounds = -(-batches // max(1, values["MOCK_EXAM_GENERATION_CONCURRENCY"])) + 1
+    if rounds * values["LLM_TIMEOUT_SECONDS"] > values["WORKER_TASK_SOFT_TIME_LIMIT_SECONDS"]:
+        report.errors.append(
+            "worker MOCK_EXAM_*: a 100-question mock exam (batches x LLM_TIMEOUT_SECONDS) does "
+            "not fit WORKER_TASK_SOFT_TIME_LIMIT_SECONDS"
+        )
+
+
 def run_checks(
     manifest: Manifest, environment: str, sources: Mapping[str, Mapping[str, str]]
 ) -> Report:
@@ -487,6 +534,7 @@ def run_checks(
         check_service(manifest, service, environment, env, report)
     check_same(manifest, sources, report)
     check_captcha_pair(sources, report)
+    check_mock_exam_budget(sources, report)
     return report
 
 

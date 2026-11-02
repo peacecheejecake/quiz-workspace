@@ -14,6 +14,12 @@ the caller's `user_id` (the verified JWT `sub`); nothing here reads another user
     attempt; a pending submission leaves them as they were.
   * `is_favorite`/`needs_retry` change only through my-state; grading never clears `needs_retry`.
 
+Merged duplicates (UX7-DEDUP, docs/questions.md §10.2): reads of a question's state and attempts
+include its actively merged (archived) duplicates — the state through the
+`question_merged_user_states` view, the attempts by question id. Writes go to the question's own
+rows, except that clearing a flag also clears it on the caller's merged duplicates (the merged
+flag is their OR). Attempts are never rewritten.
+
 Round trips (PERF-1): opening a session and submitting an answer each write several rows; every
 group of writes that belongs together is one statement (data-modifying CTEs), so the request
 costs one database round trip per step instead of one per row.
@@ -26,7 +32,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import and_, func, insert, literal, select, true, tuple_, update
+from sqlalchemy import and_, func, insert, literal, select, true, tuple_, union_all, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -40,6 +46,8 @@ from quiz_api.repositories.tables import (
     activity_events,
     practice_sessions,
     question_attempts,
+    question_merged_user_states,
+    question_merges,
     question_revisions,
     question_user_states,
     questions,
@@ -66,6 +74,9 @@ class SessionRecord:
     submitted_at: datetime | None
     graded_at: datetime | None
     revision: RevisionRecord
+    # QVIEW-B: the run position this session practises (None outside a run).
+    practice_run_id: uuid.UUID | None = None
+    run_position: int | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +97,7 @@ class SubmittedSession:
 @dataclass(frozen=True)
 class AttemptRecord:
     id: uuid.UUID
+    question_id: uuid.UUID
     question_revision_id: uuid.UUID
     revision_version: int
     practice_session_id: uuid.UUID
@@ -122,6 +134,8 @@ _SESSION_COLUMNS = (
     practice_sessions.c.opened_at,
     practice_sessions.c.submitted_at,
     practice_sessions.c.graded_at,
+    practice_sessions.c.practice_run_id,
+    practice_sessions.c.run_position,
     questions.c.question_type,
     questions.c.chapter_id,
     questions.c.question_number,
@@ -139,6 +153,7 @@ _SESSION_COLUMNS = (
 
 _ATTEMPT_COLUMNS = (
     question_attempts.c.id,
+    question_attempts.c.question_id,
     question_attempts.c.question_revision_id,
     question_revisions.c.version.label("revision_version"),
     question_attempts.c.practice_session_id,
@@ -182,12 +197,15 @@ def _session(row: Any) -> SessionRecord:
             rubric=row.rev_rubric,
             created_at=row.rev_created_at,
         ),
+        practice_run_id=row.practice_run_id,
+        run_position=row.run_position,
     )
 
 
 def _attempt(row: Any) -> AttemptRecord:
     return AttemptRecord(
         id=row.id,
+        question_id=row.question_id,
         question_revision_id=row.question_revision_id,
         revision_version=row.revision_version,
         practice_session_id=row.practice_session_id,
@@ -231,30 +249,49 @@ class PracticeRepository:
     ) -> SessionRecord | None:
         """The caller's session whose question is still live; `lock` = FOR UPDATE of the session
         row only (the submit/self-grade path)."""
-        stmt = (
-            select(*_SESSION_COLUMNS)
-            .select_from(
-                practice_sessions.join(
-                    questions,
-                    and_(
-                        questions.c.id == practice_sessions.c.question_id,
-                        questions.c.workspace_id == practice_sessions.c.workspace_id,
-                    ),
-                ).join(
-                    question_revisions,
-                    question_revisions.c.id == practice_sessions.c.question_revision_id,
-                )
-            )
-            .where(
-                practice_sessions.c.id == session_id,
-                practice_sessions.c.user_id == user_id,
-                questions.c.deleted_at.is_(None),
-            )
+        stmt = self._session_select().where(
+            practice_sessions.c.id == session_id,
+            practice_sessions.c.user_id == user_id,
+            questions.c.deleted_at.is_(None),
         )
         if lock:
             stmt = stmt.with_for_update(of=practice_sessions)
         row = self._session.execute(stmt).one_or_none()
         return _session(row) if row is not None else None
+
+    def run_session(
+        self, run_id: uuid.UUID, position: int, user_id: uuid.UUID
+    ) -> SessionRecord | None:
+        """The caller's session of a run position (at most one), whatever its question's state."""
+        row = self._session.execute(
+            self._session_select().where(
+                practice_sessions.c.practice_run_id == run_id,
+                practice_sessions.c.run_position == position,
+                practice_sessions.c.user_id == user_id,
+            )
+        ).one_or_none()
+        return _session(row) if row is not None else None
+
+    def record_view(
+        self, workspace_id: uuid.UUID, question_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        """Re-opening a run position's open session is a study view like opening one."""
+        self._session.execute(self._view_upsert(workspace_id, question_id, user_id))
+
+    @staticmethod
+    def _session_select() -> Any:
+        return select(*_SESSION_COLUMNS).select_from(
+            practice_sessions.join(
+                questions,
+                and_(
+                    questions.c.id == practice_sessions.c.question_id,
+                    questions.c.workspace_id == practice_sessions.c.workspace_id,
+                ),
+            ).join(
+                question_revisions,
+                question_revisions.c.id == practice_sessions.c.question_revision_id,
+            )
+        )
 
     def open_session(
         self,
@@ -265,6 +302,8 @@ class PracticeRepository:
         user_id: uuid.UUID,
         displayed_option_ids: list[str],
         shuffle_seed: int | None,
+        practice_run_id: uuid.UUID | None = None,
+        run_position: int | None = None,
     ) -> OpenedSession:
         """Insert the session and record the caller's view (`record_view`) in one statement."""
         opened = (
@@ -277,6 +316,8 @@ class PracticeRepository:
                 displayed_option_ids=displayed_option_ids,
                 shuffle_seed=shuffle_seed,
                 state="open",
+                practice_run_id=practice_run_id,
+                run_position=run_position,
             )
             .returning(
                 practice_sessions.c.id, practice_sessions.c.state, practice_sessions.c.opened_at
@@ -456,10 +497,11 @@ class PracticeRepository:
         limit: int,
         after: AttemptCursor | None = None,
     ) -> tuple[list[AttemptRecord], AttemptCursor | None]:
-        """The caller's attempts on a question, newest first (keyset on submitted_at, id)."""
+        """The caller's attempts on a question and on its merged duplicates (UX7-DEDUP), newest
+        first (keyset on submitted_at, id)."""
         stmt = self._attempt_select().where(
             question_attempts.c.user_id == user_id,
-            question_attempts.c.question_id == question_id,
+            question_attempts.c.question_id.in_(self._members(question_id)),
         )
         if after is not None:
             stmt = stmt.where(
@@ -477,6 +519,20 @@ class PracticeRepository:
         return items, cursor
 
     # --- study state -----------------------------------------------------------------------------
+
+    @staticmethod
+    def _merged_duplicates(question_id: uuid.UUID) -> Any:
+        return select(question_merges.c.duplicate_question_id).where(
+            question_merges.c.kept_question_id == question_id,
+            question_merges.c.ended_at.is_(None),
+        )
+
+    def _members(self, question_id: uuid.UUID) -> Any:
+        """The question and its actively merged duplicates (UX7-DEDUP)."""
+        return union_all(
+            select(literal(question_id, question_attempts.c.question_id.type)),
+            self._merged_duplicates(question_id),
+        )
 
     @staticmethod
     def _upsert(
@@ -537,7 +593,20 @@ class PracticeRepository:
         user_id: uuid.UUID,
         flags: dict[str, bool],
     ) -> None:
+        """Writes the flags on the question's own state row. A flag turned off is also turned off
+        on the caller's merged duplicates (UX7-DEDUP): the merged flag is their OR."""
         self._upsert_state(workspace_id, question_id, user_id, dict(flags), dict(flags))
+        cleared = {k: False for k, v in flags.items() if not v}
+        if cleared:
+            self._session.execute(
+                update(question_user_states)
+                .where(
+                    question_user_states.c.user_id == user_id,
+                    question_user_states.c.workspace_id == workspace_id,
+                    question_user_states.c.question_id.in_(self._merged_duplicates(question_id)),
+                )
+                .values(**cleared)
+            )
 
     def lock_state(
         self, workspace_id: uuid.UUID, question_id: uuid.UUID, user_id: uuid.UUID
@@ -554,30 +623,50 @@ class PracticeRepository:
                 index_elements=[question_user_states.c.user_id, question_user_states.c.question_id]
             )
         )
-        return self.get_state(question_id, user_id, lock=True)
+        return self.get_state(question_id, user_id, lock=True, workspace_id=workspace_id)
 
     def get_state(
-        self, question_id: uuid.UUID, user_id: uuid.UUID, *, lock: bool = False
+        self,
+        question_id: uuid.UUID,
+        user_id: uuid.UUID,
+        *,
+        lock: bool = False,
+        workspace_id: uuid.UUID | None = None,
     ) -> StateRecord:
-        stmt = select(
-            question_user_states.c.first_viewed_at,
-            question_user_states.c.last_graded_result,
-            question_user_states.c.is_favorite,
-            question_user_states.c.needs_retry,
-        ).where(
-            question_user_states.c.user_id == user_id,
-            question_user_states.c.question_id == question_id,
+        """The caller's state of the question folded with its merged duplicates' (UX7-DEDUP).
+        `lock` = FOR UPDATE of the question's own row (see lock_state), in the same statement
+        (PERF-1 round trips): the read hangs off the locked row."""
+        merged = question_merged_user_states
+        on = [merged.c.user_id == user_id, merged.c.question_id == question_id]
+        if workspace_id is not None:
+            on.append(merged.c.workspace_id == workspace_id)
+        columns = (
+            merged.c.first_viewed_at,
+            merged.c.last_graded_result,
+            merged.c.is_favorite,
+            merged.c.needs_retry,
         )
         if lock:
-            stmt = stmt.with_for_update()
+            own = (
+                select(question_user_states.c.user_id)
+                .where(
+                    question_user_states.c.user_id == user_id,
+                    question_user_states.c.question_id == question_id,
+                )
+                .with_for_update()
+                .cte("own")
+            )
+            stmt = select(*columns).select_from(own.outerjoin(merged, and_(*on)))
+        else:
+            stmt = select(*columns).where(*on)
         row = self._session.execute(stmt).one_or_none()
         if row is None:
             return StateRecord(None, None, False, False)
         return StateRecord(
             first_viewed_at=row.first_viewed_at,
             last_graded_result=cast("LastGradedResult | None", row.last_graded_result),
-            is_favorite=row.is_favorite,
-            needs_retry=row.needs_retry,
+            is_favorite=bool(row.is_favorite),
+            needs_retry=bool(row.needs_retry),
         )
 
     def record_activity(

@@ -41,7 +41,7 @@ import {
   type WorkspaceAttempt,
   type WorkspaceJob,
 } from '@/lib/history/model';
-import { patchSearch } from '@/lib/workspaces/home';
+import { withPracticeQuestion } from '@/lib/workspaces/home';
 import styles from './history.module.css';
 
 export interface HistoryPanelProps {
@@ -374,11 +374,14 @@ function AttemptItem({
   readonly attempt: WorkspaceAttempt;
   readonly workspaceId: string;
 }) {
-  // Opens the question's practice panel on the home, keeping the open dialogs.
+  // Opens the question's practice panel on the home, keeping the open dialogs; an attempt on a
+  // duplicate merged into another question opens that one (UX7-DEDUP: its history is there).
   const search = useSearchParams();
-  const href = `/workspaces/${workspaceId}${patchSearch(search.toString(), {
-    question: attempt.question_id,
-  })}`;
+  // Opening it closes a range run panel (QVIEW-01-AC09).
+  const href = `/workspaces/${workspaceId}${withPracticeQuestion(
+    search.toString(),
+    attempt.merged_into_question_id ?? attempt.question_id,
+  )}`;
   return (
     <li className={styles.item} data-kind="attempt">
       <div className={styles.itemMain}>

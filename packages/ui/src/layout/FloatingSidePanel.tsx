@@ -3,15 +3,18 @@
 import { Dialog } from 'radix-ui';
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type ComponentProps,
   type ReactElement,
   type ReactNode,
+  type Ref,
 } from 'react';
 import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
 import { LayerProvider, useFloatingLayer } from '../internal/layer';
+import { handlesOwnEscape } from '../internal/own-escape';
 import { ScrollRegion } from '../internal/scroll-region';
 import { handOffFocus } from '../internal/tabbable';
 import { IconButton } from '../primitives/IconButton';
@@ -21,6 +24,15 @@ type ContentProps = ComponentProps<typeof Dialog.Content>;
 
 /** Escape presses a non-modal panel declined because focus was outside it (see onKeyDown). */
 const declinedEscapes = new WeakSet<Event>();
+
+/** The element outside the panel that controls it (`aria-controls` lists the panel id). */
+function controllerOf(id: string | undefined): HTMLElement | null {
+  if (!id || typeof document === 'undefined') return null;
+  for (const el of document.querySelectorAll<HTMLElement>('[aria-controls]')) {
+    if (el.getAttribute('aria-controls')?.split(/\s+/).includes(id)) return el;
+  }
+  return null;
+}
 
 export interface FloatingSidePanelProps {
   open?: boolean;
@@ -39,6 +51,12 @@ export interface FloatingSidePanelProps {
   title: ReactNode;
   /** Optional description; linked via `aria-describedby`. */
   description?: ReactNode;
+  /**
+   * The title heading. Passing it makes the heading programmatically focusable (`tabIndex=-1`),
+   * for panels that move focus to their title when their content changes (QuestionViewer
+   * `sequence`: each new question).
+   */
+  titleRef?: Ref<HTMLHeadingElement>;
   /** Header slot between the title and the close button (e.g. favorite / retry toggles). */
   headerActions?: ReactNode;
   /** Footer slot (submit, self-grade, next/previous, loading/error status). */
@@ -49,11 +67,35 @@ export interface FloatingSidePanelProps {
   closeOnBackdropClick?: boolean;
   /**
    * `default` = min(500px, 100vw - 32px); `wide` for comparison drawers (≥ 600px); `narrow`
-   * (20rem) for navigation such as the DOC-02 목차.
+   * (`--outline-panel-width`) for navigation columns. Viewport placement only: a docked panel is
+   * always the narrow width.
    */
   size?: 'default' | 'wide' | 'narrow';
-  /** Desktop edge the panel floats at: `end` (default, right in LTR) or `start` (left). */
+  /** Edge the panel sits at: `end` (default, right in LTR) or `start` (left). */
   side?: 'end' | 'start';
+  /**
+   * `viewport` (default): fixed to the viewport with 16px margins.
+   * `docked` (DOCVIEW-01 목차 panel): a non-modal panel (`modal` is ignored) absolutely positioned
+   * at the top `side` corner of `container`, full container height, `--outline-panel-width` wide.
+   * `container` must be a positioned element (e.g. `position: relative`) wrapping the content
+   * next to the panel; without a container the docked panel is not rendered. When it mounts
+   * already open (a restored state) it does not move focus; only a later open does.
+   */
+  placement?: 'viewport' | 'docked';
+  /**
+   * Docked only. `inset` (default, wide containers): while open, the container gets
+   * `data-qz-dock-inset="<side>"`, which pads its `side` edge by the panel width so the content
+   * steps aside instead of being covered. `overlay` (narrow containers): the panel floats over
+   * the content.
+   */
+  dockMode?: 'inset' | 'overlay';
+  /**
+   * Id of the panel element. An outside toggle that is not a `trigger` points at it with
+   * `aria-controls`; that toggle then receives focus when the panel closes with no opener to
+   * return to (e.g. a docked panel restored open), and anchors Tab leaving a non-modal panel.
+   * With a `trigger`, the trigger's `aria-controls` points at this id too.
+   */
+  id?: string;
   /** Below the mobile breakpoint: bottom sheet (max 90dvh) or full-height panel. */
   mobileLayout?: 'sheet' | 'full';
   /**
@@ -81,24 +123,29 @@ export interface FloatingSidePanelProps {
 }
 
 /**
- * Shared right-side floating panel (docs/design-system.md §5.1): glass surface with 16px
- * viewport margins, radius 20px, independent body scroll, header/footer slots. Built on Radix
- * Dialog so focus management, Escape and focus return follow the WAI-ARIA dialog pattern.
+ * Shared floating side panel (docs/design-system.md §5.1): glass surface with 16px viewport
+ * margins, radius 20px, independent body scroll, header/footer slots; at the end (default) or
+ * start edge, or docked to a container (v1.2.7). Built on Radix Dialog so focus management,
+ * Escape and focus return follow the WAI-ARIA dialog pattern.
  */
 export function FloatingSidePanel({
   open,
   defaultOpen,
   onOpenChange,
-  modal = true,
+  modal: modalProp = true,
   trigger,
   title,
   description,
+  titleRef,
   headerActions,
   footer,
   closeLabel = '닫기',
   closeOnBackdropClick = true,
   size = 'default',
   side = 'end',
+  placement = 'viewport',
+  dockMode = 'inset',
+  id,
   mobileLayout = 'sheet',
   container,
   onOpenAutoFocus,
@@ -108,6 +155,8 @@ export function FloatingSidePanel({
   className,
   children,
 }: FloatingSidePanelProps) {
+  const docked = placement === 'docked';
+  const modal = docked ? false : modalProp;
   const contentRef = useRef<HTMLDivElement>(null);
   const animateHeight = useAnimatedHeight<HTMLDivElement>();
   // Stable, so the height observer is set up once per mounted panel (not on every render).
@@ -130,103 +179,147 @@ export function FloatingSidePanel({
   // most recently opened floating layer is on top (internal/layer.tsx).
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen ?? false);
   const isOpen = open ?? uncontrolledOpen;
+  // A docked panel mounted open restores a saved state: its first auto-focus is skipped.
+  const skipFirstAutoFocusRef = useRef(docked && isOpen);
   const handleOpenChange = (next: boolean) => {
     if (open === undefined) setUncontrolledOpen(next);
     onOpenChange?.(next);
   };
   const layer = useFloatingLayer(isOpen, raiseKey);
 
+  // Inset docking: the container pads the panel's edge so its content steps aside.
+  const insetHost = docked && dockMode === 'inset' && isOpen ? container : null;
+  useEffect(() => {
+    if (!insetHost) return undefined;
+    insetHost.setAttribute('data-qz-dock-inset', side);
+    return () => insetHost.removeAttribute('data-qz-dock-inset');
+  }, [insetHost, side]);
+
   return (
     <Dialog.Root open={isOpen} onOpenChange={handleOpenChange} modal={modal}>
-      {trigger ? <Dialog.Trigger asChild>{trigger}</Dialog.Trigger> : null}
-      <Dialog.Portal container={container}>
-        {modal ? (
-          <Dialog.Overlay
-            className="qz-backdrop"
-            data-layer="panel"
+      {trigger ? (
+        // An explicit id replaces Radix's content id, so the trigger must point at it too.
+        <Dialog.Trigger asChild {...(id ? { 'aria-controls': isOpen ? id : undefined } : {})}>
+          {trigger}
+        </Dialog.Trigger>
+      ) : null}
+      {docked && !container ? null : (
+        <Dialog.Portal container={container}>
+          {modal ? (
+            <Dialog.Overlay
+              className="qz-backdrop"
+              data-layer="panel"
+              style={{ zIndex: layer.zIndex }}
+            />
+          ) : null}
+          <Dialog.Content
+            ref={setContent}
+            // Radix hides the background from assistive technology but does not set aria-modal.
+            aria-modal={modal || undefined}
+            aria-live={!modal && staysExposedUnderModal ? 'off' : undefined}
+            data-modal={modal}
+            data-size={docked ? 'narrow' : size}
+            data-side={side}
+            data-placement={placement}
+            data-dock-mode={docked ? dockMode : undefined}
+            data-mobile-layout={mobileLayout}
+            // Only when given: an explicit undefined would replace Radix's own content id.
+            {...(id ? { id } : {})}
+            className={cx('qz-panel', 'glass-surface', className)}
+            data-layer-rank={layer.rank}
             style={{ zIndex: layer.zIndex }}
-          />
-        ) : null}
-        <Dialog.Content
-          ref={setContent}
-          // Radix hides the background from assistive technology but does not set aria-modal.
-          aria-modal={modal || undefined}
-          aria-live={!modal && staysExposedUnderModal ? 'off' : undefined}
-          data-modal={modal}
-          data-size={size}
-          data-side={side}
-          data-mobile-layout={mobileLayout}
-          className={cx('qz-panel', 'glass-surface', className)}
-          data-layer-rank={layer.rank}
-          style={{ zIndex: layer.zIndex }}
-          {...(description ? {} : { 'aria-describedby': undefined })}
-          onOpenAutoFocus={(event) => {
-            returnFocusRef.current =
-              document.activeElement instanceof HTMLElement ? document.activeElement : null;
-            onOpenAutoFocus?.(event);
-            if (event.defaultPrevented) return;
-            event.preventDefault();
-            contentRef.current?.focus();
-          }}
-          onCloseAutoFocus={(event) => {
-            onCloseAutoFocus?.(event);
-            if (event.defaultPrevented) return;
-            const target = returnFocusRef.current;
-            returnFocusRef.current = null;
-            const active = document.activeElement;
-            const focusLost =
-              !active || active === document.body || contentRef.current?.contains(active);
-            if (target?.isConnected && focusLost) {
+            {...(description ? {} : { 'aria-describedby': undefined })}
+            onOpenAutoFocus={(event) => {
+              if (skipFirstAutoFocusRef.current) {
+                skipFirstAutoFocusRef.current = false;
+                returnFocusRef.current = null;
+                event.preventDefault();
+                return;
+              }
+              returnFocusRef.current =
+                document.activeElement instanceof HTMLElement ? document.activeElement : null;
+              onOpenAutoFocus?.(event);
+              if (event.defaultPrevented) return;
               event.preventDefault();
-              target.focus();
-            }
-          }}
-          onPointerDownOutside={(event) => {
-            if (modal && !closeOnBackdropClick) event.preventDefault();
-          }}
-          onInteractOutside={(event) => {
-            // Non-modal panels sit next to the content they annotate (PDF, search results):
-            // working in the background must not dismiss them.
-            if (!modal) event.preventDefault();
-          }}
-          onKeyDown={(event) => {
-            if (!modal && contentRef.current) {
-              handOffFocus(event, contentRef.current, returnFocusRef.current);
-            }
-            // Radix lets only the layer it ranks highest handle Escape. When that is a non-modal
-            // panel without focus, its guard below declined, so the panel holding focus closes
-            // itself: another non-modal panel raised over it, or a modal panel opened on top
-            // whose layer Radix had not ranked highest yet (CHNOTE-01-AC02: the practice panel
-            // opened from a 정리 노트 footnote ignored Escape while the note panel held the rank).
-            if (event.key === 'Escape' && declinedEscapes.has(event.nativeEvent)) {
-              handleOpenChange(false);
-            }
-          }}
-          onEscapeKeyDown={(event) => {
-            if (!modal && !contentRef.current?.contains(document.activeElement)) {
-              event.preventDefault();
-              declinedEscapes.add(event);
-            }
-          }}
-        >
-          <LayerProvider value={layer.zIndex}>
-            <div className="header">
-              <div className="heading">
-                <Dialog.Title className="title">{title}</Dialog.Title>
-                {description ? (
-                  <Dialog.Description className="description">{description}</Dialog.Description>
-                ) : null}
+              contentRef.current?.focus();
+            }}
+            onCloseAutoFocus={(event) => {
+              onCloseAutoFocus?.(event);
+              if (event.defaultPrevented) return;
+              const target = returnFocusRef.current?.isConnected
+                ? returnFocusRef.current
+                : controllerOf(id);
+              returnFocusRef.current = null;
+              const active = document.activeElement;
+              const focusLost =
+                !active || active === document.body || contentRef.current?.contains(active);
+              if (target?.isConnected && focusLost) {
+                event.preventDefault();
+                target.focus();
+              }
+            }}
+            onPointerDownOutside={(event) => {
+              if (modal && !closeOnBackdropClick) event.preventDefault();
+            }}
+            onInteractOutside={(event) => {
+              // Non-modal panels sit next to the content they annotate (PDF, search results):
+              // working in the background must not dismiss them.
+              if (!modal) event.preventDefault();
+            }}
+            onKeyDown={(event) => {
+              if (!modal && contentRef.current) {
+                handOffFocus(event, contentRef.current, returnFocusRef.current ?? controllerOf(id));
+              }
+              // Radix lets only the layer it ranks highest handle Escape. When that is a non-modal
+              // panel without focus, its guard below declined, so the panel holding focus closes
+              // itself: another non-modal panel raised over it, or a modal panel opened on top
+              // whose layer Radix had not ranked highest yet (CHNOTE-01-AC02: the practice panel
+              // opened from a 정리 노트 footnote ignored Escape while the note panel held the rank).
+              if (
+                event.key === 'Escape' &&
+                declinedEscapes.has(event.nativeEvent) &&
+                !handlesOwnEscape(event.nativeEvent)
+              ) {
+                handleOpenChange(false);
+              }
+            }}
+            onEscapeKeyDown={(event) => {
+              // An inline edit (ownEscapeProps) cancels itself; the next Escape closes the panel.
+              if (handlesOwnEscape(event)) {
+                event.preventDefault();
+                return;
+              }
+              if (!modal && !contentRef.current?.contains(document.activeElement)) {
+                event.preventDefault();
+                declinedEscapes.add(event);
+              }
+            }}
+          >
+            <LayerProvider value={layer.zIndex}>
+              <div className="header">
+                <div className="heading">
+                  <Dialog.Title
+                    ref={titleRef}
+                    tabIndex={titleRef ? -1 : undefined}
+                    className="title"
+                  >
+                    {title}
+                  </Dialog.Title>
+                  {description ? (
+                    <Dialog.Description className="description">{description}</Dialog.Description>
+                  ) : null}
+                </div>
+                {headerActions ? <div className="actions">{headerActions}</div> : null}
+                <Dialog.Close asChild>
+                  <IconButton label={closeLabel} icon={<CloseIcon />} />
+                </Dialog.Close>
               </div>
-              {headerActions ? <div className="actions">{headerActions}</div> : null}
-              <Dialog.Close asChild>
-                <IconButton label={closeLabel} icon={<CloseIcon />} />
-              </Dialog.Close>
-            </div>
-            <ScrollRegion className="body">{children}</ScrollRegion>
-            {footer ? <div className="footer">{footer}</div> : null}
-          </LayerProvider>
-        </Dialog.Content>
-      </Dialog.Portal>
+              <ScrollRegion className="body">{children}</ScrollRegion>
+              {footer ? <div className="footer">{footer}</div> : null}
+            </LayerProvider>
+          </Dialog.Content>
+        </Dialog.Portal>
+      )}
     </Dialog.Root>
   );
 }

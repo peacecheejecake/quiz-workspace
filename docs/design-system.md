@@ -1,6 +1,6 @@
-# Design System v1.2.5 — Minimal Glass (Platform v1.2)
+# Design System v1.2.7 — Minimal Glass (Platform v1.2)
 
-**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19 · v1.2.1 버튼 hover 개정 2026-10-19 · v1.2.2 밀도(compact)·스위치·메뉴·Dropzone·Breadcrumb·패널 쌓기 개정 2026-10-20 · v1.2.5 floating glass 불투명도 개정 2026-11-01  
+**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19 · v1.2.1 버튼 hover 개정 2026-10-19 · v1.2.2 밀도(compact)·스위치·메뉴·Dropzone·Breadcrumb·패널 쌓기 개정 2026-10-20 · v1.2.5 floating glass 불투명도 개정 2026-11-01 · v1.2.6 Toast 왼쪽 bar 제거·CopyButton·객관식 채점 결과 테두리 2026-11-01 · v1.2.7 `SplitView`·docked `FloatingSidePanel`·`--outline-panel-width` 2026-11-02  
 **적용:** 전역 Workspace UI, 문서 뷰어, 검색, Questions heatmap, floating side panels  
 **키워드:** minimalism, restrained glassmorphism, readability, focus, consistent semantics
 
@@ -96,6 +96,8 @@
 **v1.2.2 (UX3b, 2026-10-20 사용자 피드백):** 스위치 track 테두리를 채움보다 연한 색으로 바꿨다. 꺼진 track은 옅은 회색 + 진한 테두리 대신 `--color-switch-track` 채움(표면·canvas·muted·glass 대비 3:1 이상)이 컨트롤 경계를 맡고, 테두리 `--color-switch-track-border`는 그 채움보다 밝다. 켜진 track은 accent 채움 + 더 밝은 `--color-switch-track-checked-border`. thumb은 두 상태 모두 `--color-on-accent`(track 대비 3:1 이상)이며 켜짐/꺼짐은 thumb 위치·`aria-checked`·상태 문구로 전달한다(색만으로 구분하지 않음). 꺼진 track hover는 테두리가 아니라 채움이 `--color-switch-track-hover`로 바뀐다(`contrast.test.ts`).
 
 **v1.2.5 (UX-GLASS, 2026-11-01 사용자 피드백):** floating 계층(side panel·popover·menu·select·toast·top bar)의 glass를 아래 내용이 거의 보이지 않을 만큼 더 불투명하게 했다(light·dark 모두 `.9`→`.97`). tint와 blur(`--glass-blur` 16px)는 그대로이고, reduced transparency·blur 미지원·모바일 sheet fallback은 계속 같은 색의 `--color-glass-solid`다. 대비: 반투명 glass를 가장 나쁜 배경(순흑·순백) 위에 합성해도 text-primary·text-secondary가 4.5:1 이상이다(light text-secondary 최저 4.59:1; `.96`은 4.47:1로 미달, `contrast.test.ts`).
+
+**v1.2.6 (UX7-QDISPLAY, 2026-11-01 사용자 피드백):** 객관식 제출 뒤 보기 행 테두리(§4.1 "채점 결과 테두리")는 새 토큰 없이 기존 의미 토큰을 쓴다: 맞힌 보기 `--color-success`, 오답일 때 고른 보기 `--color-border-strong`(회색), 오답일 때 정답 보기 `--color-danger`(사용자 결정: 정답 보기를 빨간 테두리로). 셋 모두 풀이 panel이 놓이는 표면(surface·canvas·surface-muted·glass-solid) 대비 비텍스트 3:1 이상이다(light/dark 최저: success 4.76/6.45, danger 5.03/5.84, border-strong 3.25/3.61 — muted 위; `contrast.test.ts`). 테두리 색은 의미를 보강할 뿐이고 각 행의 "정답"·"내 선택" 글자가 의미를 전달한다.
 
 **상태 점은 기본 표면과 충분히 구분되도록** 최소 얇은 outline을 갖고, 상태 필터(색 견본 + 상태 텍스트)가 범례 역할을 한다(UX3c 2026-10-20: 상시 범례·상태 요약 삭제, 사용자 결정). 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
 
@@ -214,6 +216,7 @@
   --breakpoint-md: 768px;
   --breakpoint-lg: 1024px;
   --floating-panel-width: 500px;
+  --outline-panel-width: 20rem; /* v1.2.7 (DOCVIEW-PORT): 탐색 panel(size="narrow")·docked 목차 panel 폭 */
   --heatmap-cell: 24px;        /* v1.2.3 (UX5-UI): 28px → 24px */
   --heatmap-cell-touch: 32px;
   --heatmap-gap: 0px;          /* v1.2.3 (UX5-UI): 4px → 0 */
@@ -236,10 +239,13 @@
 @media (prefers-reduced-transparency: reduce) {
   .glass-surface { background: var(--color-glass-solid); backdrop-filter: none; }
 }
+/* 짧은 duration이 아니라 끈다(UX7-CSS 2026-11-02): transition-property 기본값이 all이라 0.01ms는 모든 스타일 변경을 1 frame transition으로 만들어 computed style이 한 frame 동안 시작 값을 보였다. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
 ```
+
+reduced motion에서는 transition·animation이 전혀 실행되지 않으므로 상태 변화(색·테두리·크기)는 같은 frame에 computed style에 반영된다. 종료 animation에 기대는 overlay(Radix dialog·popover·menu·toast, `FloatingSidePanel`)는 `animation-name: none`이면 Radix presence가 바로 unmount하므로 그대로 닫히고, kit에서 `transitionend`를 기다리는 `useAnimatedHeight`는 reduced motion에서 전환을 시작하지 않는다. `transitionend`/`animationend`에 의존하는 새 코드는 reduced motion에서도 끝나는 경로(타이머 또는 즉시 완료)를 둔다. 품질 suite `A11Y-10`이 같은 frame 반영과 overlay 닫힘을 검사한다.
 
 ## 4. Typography / Layout / Elevation
 
@@ -269,6 +275,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - **버튼 문구는 줄바꿈하지 않는다 (UX4):** `Button`은 `white-space: nowrap`이고 줄어들지 않는다(`flex-shrink: 0`). 좁은 화면(375px)에서는 버튼 묶음이 버튼 단위로 다음 줄로 넘어가거나(flex-wrap) 묶음 안에서 가로 스크롤되며, 페이지 전체 가로 스크롤은 생기지 않게 한다.
 - **Toggle 버튼:** 꺼진 상태에 테두리·배경이 없다(ghost). 켜짐은 배경 채움 + `aria-pressed`(또는 바뀌는 label) + 굵기/아이콘으로 전달하며 색만으로 구분하지 않는다. `Button`/`IconButton` primitive가 `aria-pressed`/`data-state`를 보고 처리하므로 기능 코드는 테두리·배경을 따로 지정하지 않는다.
 - **테두리 최소화:** Badge·tab 수 표시에는 테두리·원형 배경을 두지 않는다. 구분선은 1px `--color-border`. 2px는 오류 입력(`aria-invalid`)과 focus ring에만 쓴다. 입력 필드·체크박스·라디오의 평소 경계는 `--color-border-strong`이고 스위치 track은 `--color-switch-track` 채움이 경계를 맡으며(테두리는 채움보다 연함, v1.2.2), focus 중에는 아래 규칙대로 focus 색으로 바뀐다.
+- **채점 결과 테두리 (v1.2.6, UX7-QDISPLAY 2026-11-01):** 풀이 panel(QPLAY-01)의 객관식 보기 행은 제출 전부터 2px 투명 테두리를 갖고, 제출 결과가 오면 테두리 색만 바뀐다(두께가 그대로라 레이아웃이 움직이지 않는다). 정답이면 고른 보기가 `--color-success`, 오답이면 고른 보기가 `--color-border-strong`(회색)이고 정답 보기가 `--color-danger`다(복수 정답 오답에서 고른 정답 보기도 정답 보기이므로 빨간 테두리). 각 표시 행에는 "정답"·"내 선택"·"정답 · 내 선택" 글자가 붙고 radio/checkbox의 `aria-describedby`로 읽힌다(색만으로 전달하지 않음). forced-colors에서는 표시 행 테두리가 `Highlight`(정답 보기·맞힌 보기)·`GrayText`(오답으로 고른 보기)이고 표시 없는 행은 `Canvas`로 보이지 않는다. 이 테두리는 "2px는 오류 입력과 focus ring에만" 규칙의 예외이며, 정답 보기 표시(문제 상세의 2px `--color-success` 정답 테두리)와 같은 두께다.
 - **Focus:** `:focus-visible` ring은 2px `--color-focus`(forced-colors에서는 `Highlight`)이며, 메뉴·Select 항목의 ring도 키보드 focus(`:focus-visible`)에서만 그린다(pointer hover는 배경만).
 - **Focus 경계는 하나:** 테두리가 있는 요소는 자기 테두리와 별도의 focus ring이 겹쳐 이중 테두리로 보이지 않게 한다. focus 중에는 테두리 색을 `--color-focus`로 바꾸고 ring을 그 위에 그린다. 테두리 두께는 바꾸지 않으므로 레이아웃 이동이 없다.
   - 입력 필드(`Input`·`Textarea`·`Select` trigger), secondary 버튼, tab, 테두리가 있는 카드·버튼·입력(기능 CSS 포함), heatmap 선택 dot: ring을 안쪽(`outline-offset: -2px`)에 그려 테두리를 덮는다. 테두리가 있는 그룹 안의 버튼(segmented view switch)도 그룹 테두리와 붙지 않게 안쪽 ring을 쓴다.
@@ -292,7 +299,8 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 
   hover는 `@media (hover: hover)` 안에서만 적용해 터치 후 hover가 남지 않게 하고, 비활성(`:disabled`)에는 적용하지 않는다. pressed는 모든 입력에 적용한다. focus 중인 테두리 컨트롤은 hover 중에도 focus 경계 하나를 유지한다(아래 "Focus 경계는 하나"). 기능 코드는 kit `Button`/`IconButton`을 쓰고, 부득이한 버튼형 클래스도 위 토큰만 쓴다.
 - **Dropdown 메뉴 (v1.2.2, UX3b):** 성격이 다른 항목은 `DropdownMenuGroup` + `DropdownMenuLabel`(그룹 이름, `aria-labelledby`로 연결)과 `DropdownMenuSeparator`로 나눈다(예: Workspace 전환 메뉴의 "내 Workspace" 목록과 "모든 Workspace 보기"). 링크로 렌더링되는 항목(`asChild` + `<a>`/Next `Link`)은 방문·hover·focus·누름 어느 상태에서도 밑줄이 없고 메뉴 글자색(`--color-text-primary`, danger 항목은 `--color-danger`)을 유지하며, kit의 항목 스타일이 이를 보장하므로 기능 코드는 따로 지정하지 않는다. 현재 항목(`aria-current`)은 굵기로 표시한다.
-- **전환:** 상태 전환은 `--duration-state`/`--easing-standard`(kit 변수 `--qz-transition-fast`), `prefers-reduced-motion: reduce`에서는 즉시(`@quiz/design-tokens/base.css`).
+- **열린 목록의 현재 항목은 닫기 (UX7-SELECT, 2026-11-01):** 열린 `Select` 목록이나 Dropdown 메뉴에서 현재 선택된(체크·`aria-current`) 항목을 누르면 값은 그대로 두고 목록이 닫히며 focus는 trigger로 돌아간다. 마우스 클릭, 터치 탭(iPhone Safari 포함), 키보드 Enter/Space 모두 첫 입력에 닫힌다. `Select`는 터치·펜으로 열 때 Radix의 "여는 동작의 pointerup 무시" 보호를 쓰지 않는다: 탭은 pointerup 뒤에 click으로 열리므로 그 보호가 다음 탭(목록 맨 위의 선택 항목)의 pointerup을 취소했고, iOS Safari는 취소된 터치 pointerup의 click을 보내지 않아 첫 탭이 무시됐다. 마우스로 열 때는 보호를 유지해 trigger를 누른 포인터가 떼어지는 순간 항목이 골라지지 않는다.
+- **전환:** 상태 전환은 `--duration-state`/`--easing-standard`(kit 변수 `--qz-transition-fast`), `prefers-reduced-motion: reduce`에서는 transition 없이 즉시(`@quiz/design-tokens/base.css`, §3.3).
 - **메뉴·선택 항목 설명은 Tooltip:** 선택지 옆 설명 문구는 항상 보이는 텍스트 대신 공통 `Tooltip`(hover·키보드 focus)으로 보여 주고(hover 지연: 일반 tooltip `TOOLTIP_DELAY_MS` 300ms, 선택지 설명 `TOOLTIP_DESCRIPTION_DELAY_MS` 700ms — 포인터가 선택지 목록을 지나갈 때 설명이 연달아 뜨지 않게 함. 키보드 focus는 지연 없이 즉시, v1.2.2), 같은 문구를 숨김 텍스트로 `aria-describedby`에 연결한다. hover가 없는 기기(`(hover: none)`)에서는 설명을 인라인 텍스트로 계속 표시한다. 오답·정답 표시, 비활성 사유처럼 필수 정보는 tooltip으로 옮기지 않는다.
 
 ## 5. Floating Side Panel
@@ -302,13 +310,22 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - Desktop right panel: width `min(500px, calc(100vw - 32px))`, top/right/bottom margin `16px`, rounded `20px`, glass surface, shadow, viewport 내부 독립 scroll.
 - `QuestionPracticePanel`: **modal** 기본. 정답을 제출하거나 뒤로/다음 이동하는 명확한 흐름. backdrop 클릭/ESC 처리 정책 정의, 닫을 때 trigger dot로 focus 복귀.
 - `DocumentExcerptPanel`: **non-modal** 기본. PDF·검색 결과와 동시에 볼 수 있음.
-- **왼쪽·좁은 panel (DOCVIEW, 2026-11-01):** `side="start"`(데스크톱에서 왼쪽 16px margin, 들어오고 나갈 때 왼쪽에서 움직임; 모바일은 같은 bottom sheet)와 `size="narrow"`(`min(20rem, 100vw - 32px)`)는 탐색용 panel이다. DOC-02 `목차`가 non-modal로 쓰며, 데스크톱(≥1024px)에서는 화면 내용이 panel 폭만큼 비켜서 PDF를 가리지 않고, 더 좁은 화면에서 PDF 위에 뜰 때는 불투명(`--color-glass-solid`, blur 없음)이다(DOC-02-AC06).
+- **`QuestionViewer` (MOCK-SPEC 2026-11-01):** 문제를 하나씩 보이는 모든 곳의 공통 컴포넌트. 방식 `practice`(위 `QuestionPracticePanel` 규칙: modal, 한 문제, 이전·다음) · `sequence`(범위 풀이: modal, 진행 `ProgressBar`·`이전`·`다음`·`건너뛰기`·결과 요약) · `manage`(정답·해설·출처·수정 이력과 호출 위치가 넘긴 동작; 풀이 panel 메뉴·보관·초안 문제 행에서는 UX7-BANK-2의 modal "문제 상세" `ModalDialog` 안) · `read-only`(공유 게스트, non-modal). 범위 고르기 부품 `QuestionRangePicker`(tri-state `전체 선택`·장·문제 checkbox)는 모의고사 만들기와 같이 쓴다. 호출 위치·동작·AC는 [QVIEW-01](screens/question-viewer.md).
+- **왼쪽·좁은·docked panel (DOCVIEW 2026-11-01, v1.2.7 DOCVIEW-PORT 2026-11-02 — API 하나로 정리):** `FloatingSidePanel`의 위치·크기 prop은 다음 넷뿐이다.
+  - `side`: `end`(기본, LTR 오른쪽) · `start`(왼쪽; 데스크톱에서 왼쪽 16px margin, 들어오고 나갈 때 왼쪽에서 움직임). 모바일(< 768px) viewport panel은 어느 쪽이든 같은 bottom sheet/full-height 레이아웃이다.
+  - `size`: `default`(`min(--floating-panel-width, 100vw - 32px)`) · `wide`(비교 drawer, ≥ 600px) · `narrow`(탐색용 열, `min(--outline-panel-width, 100vw - 32px)`).
+  - `placement`: `viewport`(기본; viewport에 고정, 16px margin) · `docked`(지정한 `container` — position이 있는 요소 — 의 `side` 쪽 위에 붙어 container 높이 전체를 쓰는 panel. 항상 non-modal(`modal`은 무시)이고 폭은 `narrow`와 같은 `--outline-panel-width`(docked에서는 `size`를 쓰지 않음), container가 없으면 렌더하지 않는다. 모든 폭에서 container 안에 붙으며 glass surface·`--shadow-floating`·radius·header/close·독립 scroll은 같다).
+  - `dockMode`(docked에서만): `inset`(기본, 넓은 container — 열린 동안 container에 `data-qz-dock-inset="start|end"`를 두어 그쪽 padding을 panel 폭만큼 늘려 옆 내용이 비켜선다) · `overlay`(좁은 container — 내용 위에 겹쳐 뜬다. 읽기 영역(PDF·텍스트)을 가리므로 화면 쪽에서 불투명 `--color-glass-solid`, blur 없음).
+  - `id`: panel 요소 id. Radix `trigger`가 아닌 panel 밖 toggle은 `aria-expanded` + `aria-controls`로 이 id를 가리키고, 그 toggle은 돌아갈 opener가 없을 때(저장된 상태로 열린 채 mount된 panel) 닫힘 뒤 focus를 받으며 non-modal panel에서 Tab이 나갈 기준이 된다. `trigger`가 있고 `id`를 주면 trigger의 `aria-controls`도 같은 id를 가리킨다.
+  - docked panel이 열린 채 mount되면(저장된 상태 복원) focus를 옮기지 않고, 사용자가 열 때만 안으로 옮긴다. Escape는 focus가 panel 안에 있을 때만 닫는다(non-modal 규칙).
+  - 쓰는 곳: DOCVIEW-01 목차 panel — 데스크톱 `side="start" placement="docked" dockMode="inset"`, 태블릿 `dockMode="overlay"`, 좁은 화면 `placement="viewport" mobileLayout="full"`. DOC-02 v1.4의 PDF 도구 막대 목차(viewport `side="start" size="narrow"`)는 DOCVIEW-PORT에서 이것으로 바뀌었다(DOC-02-AC06 폐기). 이전 브랜치의 `side="left"/"right"` 이름은 쓰지 않는다(`start`/`end`가 같은 뜻).
 - `QuestionGenerationReviewPanel`: 충분한 공간이 필요하므로 desktop에서는 600px 이상 비교 drawer 또는 전체 page 모드 제공(500px 강제 금지).
 - Mobile: full width bottom sheet 또는 full-height panel, safe-area inset, `max-height: 90dvh`; 화면이 좁다면 문제 상세 전체 페이지로 전환 가능.
-- URL query: `?question=<id>` 또는 `?panel=...`로 열림 상태/딥링크 복원. 뒤로가기와 동기화.
+- URL query: `?question=<id>` 또는 `?panel=...`로 열림 상태/딥링크 복원. 뒤로가기와 동기화(열면 기록 항목 하나, 열린 동안 뒤로가기는 닫기). 닫기 버튼·Escape로 닫으면 연 기록 항목을 되돌려 닫은 뒤 뒤로가기가 그 panel을 다시 열지 않는다(UX7-BACK, Workspace 홈 규칙은 [QOV-01](screens/questions-overview.md) "뒤로가기"·AC14).
 - Panel Header: title / breadcrumb / action icons(즐겨찾기·다시 풀기) / close.
 - Panel Footer: submit, self-grade, next/previous, loading/error 상태.
 - Modal focus trap, title/description, Escape and focus restore는 Radix 기반으로 구성. Non-modal은 배경과 panel 간 키보드 이동을 허용.
+- **인라인 편집 안의 Escape (MOCK-ESC, 2026-11-02):** `FloatingSidePanel`·`ModalDialog` 안의 인라인 편집 컨트롤(이름 바꾸기 입력, 행 안의 편집 form)에서 누른 Escape는 그 편집만 취소하고 focus를 편집을 시작한 컨트롤로 돌려보낸다. dialog는 열린 채로 남고, 그다음 Escape가 평소처럼 dialog를 닫는다. Radix는 Escape를 document capture 단계에서 먼저 처리하므로, 자기 Escape를 처리하는 컨트롤(keydown handler가 있는 요소)에 kit의 `ownEscapeProps`(`data-own-escape`)를 붙인다. 두 컴포넌트는 그 안에서 시작된 Escape를 닫기에 쓰지 않는다. 표시 없는 일반 입력란(dialog 전체가 하나의 form인 문제 편집 등)의 Escape는 그대로 dialog를 닫는다.
 - **높이 변화 (v1.2.3, UX5-UI):** 내용에 따라 높이가 정해지는 overlay(ModalDialog·ConfirmDialog, 모바일 bottom sheet)는 내용이 늘거나 줄면(경고·결과가 나타남, 로딩 → 내용) 이전 높이에서 새 높이로 `--duration-panel-enter` `--easing-standard`로 부드럽게 바뀐다(공통 `useAnimatedHeight`: ResizeObserver로 재고 전환 중에만 inline 높이, 끝나면 CSS가 다시 높이를 정함). 높이가 고정된 데스크톱 side panel과 모바일 full 레이아웃은 그대로다. 전환 중 body에 스크롤바를 보이지 않고 focus·스크롤 위치는 유지하며, `prefers-reduced-motion`에서는 즉시 바뀐다.
 - **여러 패널 쌓기 (v1.2.2, UX3b):** floating panel·dialog가 여러 개 열려 있으면 **나중에 연 것이 위**에 온다(portal DOM 순서와 무관). 열린 순서의 rank r에 대해 z-index는 `min(--z-side-panel + 2r, --z-modal - 2)`이고, 그 안에서 portal로 뜨는 popover·tooltip·menu는 +1(`LayerProvider`/`useLayerStyle`)이다. 닫았다가 다시 연 패널은 맨 위로 올라온다. 가운데 modal dialog(`--z-modal`)는 항상 모든 패널 위다. 사이드 패널이 아닌 floating dialog도 kit 내부 `useFloatingLayer(open)`을 써서 같은 순서에 참여한다.
 
@@ -386,19 +403,25 @@ function Marker({ favorite }: { favorite: boolean }) {
 
 `StepProgress` (v1.2.4, UX6-PROGRESS 2026-10-28): 여러 단계를 차례로 거치는 작업(문서 업로드·처리 `업로드 → 분석 → 색인`, 문제 PDF 가져오기 `업로드 → PDF 분석 → 문제 추출`)의 진행 표시. 순서 목록(`<ol>`, 이름 "<label> 단계")의 각 단계는 완료(체크 아이콘)·진행 중(단계 번호, 굵은 글씨, `aria-current="step"`)·대기(단계 번호, 보조 텍스트 색)이고 상태를 시각적으로 숨긴 텍스트("완료"/"진행 중"/"대기")로도 읽어 색만으로 구분하지 않는다. 그 아래 하나의 `role="progressbar"`가 단계 수만큼 같은 폭의 칸으로 나뉜다: 완료 칸은 가득, 현재 칸은 그 단계의 진행률(`value`, 없으면 indeterminate 줄무늬), 대기 칸은 빈 칸. 결정: 단계마다 0→100%를 다시 채우는 막대 대신 칸으로 나눈 전체 막대를 쓴다 — 전체 막대는 뒤로 가지 않고(이전 피드백: "다 찼다가 줄어들었다"), 현재 단계의 진행도 그 칸에서 그대로 보인다. `aria-valuenow`는 전체 진행률((완료 단계 수 + 현재 단계 비율) / 단계 수), `aria-valuetext`는 "2/3단계: 분석 중, 30%". 칸 fill은 `transform: scaleX`를 `--duration-progress` `--easing-standard`로 전환하고 `prefers-reduced-motion`에서는 전환·줄무늬 움직임이 없다. 단계가 하나뿐인 작업(Fork·변형 생성·묶음 생성·등록)은 `ProgressBar`를 그대로 쓴다.
 
+`Toast` (v1.2.6, UX7-SHARE-EXPIRY 2026-11-01): glass 표면 + 제목/설명 + 닫기 버튼. 왼쪽 accent 테두리(UX1의 3px 색 bar)는 없앴다 — "선택 표시 bar 없음"(§4.1)과 같은 이유로 색 bar로 상태를 전하지 않는다. 종류는 색이 아니라 맨 앞 아이콘과 숨김 텍스트로 구분한다: `success` 체크 아이콘(`--color-success`) + "성공", `error` 경고 아이콘(`--color-danger`) + "오류", `neutral` 아이콘 없음. 숨김 텍스트는 제목 앞에 붙어 함께 읽힌다(`role="status"`/assertive 안내 그대로).
+
+`CopyButton` (v1.2.6, UX7-SHARE-EXPIRY): 클립보드 복사 버튼의 공통 패턴. `onCopy`가 성공하면 버튼 안 복사 아이콘이 체크 아이콘으로, 이름이 `copiedLabel`(기본 "복사 완료", UX7-COPY-LABEL 사용자 결정 2026-11-02)로 바뀌고, 버튼 안의 시각적으로 숨긴 polite live region이 `announcement`를 한 번 알린다(성공 toast를 따로 띄우지 않아 두 번 읽히지 않음). 약 2초(`COPY_FEEDBACK_MS`) 뒤 돌아온다. 두 이름·두 아이콘을 같은 grid 칸에 겹쳐 두고 보이지 않는 쪽은 `visibility: hidden`이라 바뀌어도 버튼 크기·위치가 변하지 않는다. 교체는 애니메이션 없이 즉시다. 실패(`onCopy`가 reject 또는 `false`)하면 체크를 표시하지 않고 오류 안내는 호출한 화면이 한다(링크 공유: 링크 칸 선택 + 오류 toast). 사용처: 링크 공유 dialog의 `링크 복사`(WS-SHARE-01-AC08). DOC-02 `전체 복사`는 버튼이 아니라 메뉴 항목이라 기존 상태 문구("복사했습니다")를 유지한다.
+
 `Dropzone` (v1.2.2, UX3b): 파일을 끌어다 놓는 영역. 2px 점선 `--color-border-strong` 테두리, drag-over(`data-dragging`)는 실선 accent 테두리 + `--color-state-selected` 배경 + accent 아이콘(테두리 모양도 바뀌어 색만으로 구분하지 않음). 끌어다 놓기와 별개로 항상 실제 "파일 선택" 버튼(키보드·터치·스크린 리더 경로, 설명 문구는 `aria-describedby`)을 둔다. `accept`·`multiple`·`disabled`를 받고, 선택·드롭한 파일은 `onFiles`, `accept`에 맞지 않는 드롭은 `onReject`로 전달한다.
 
 ### Layout
 
-`AppShell`(UX3c: Workspace 화면은 sidebar 없이 header만), `WorkspaceSwitcher`, `SidebarNav`, `PageHeader`, `Breadcrumb`, `BackLink`, `ContentContainer`, `SplitView`, `ResizablePanel`, `FloatingSidePanel`, `ModalDialog`, `EmptyState`, `StatusSummary`.
+`AppShell`(UX3c: Workspace 화면은 sidebar 없이 header만), `WorkspaceSwitcher`, `SidebarNav`, `PageHeader`, `Breadcrumb`, `BackLink`, `ContentContainer`, `SplitView`, `FloatingSidePanel`, `ModalDialog`, `EmptyState`, `StatusSummary`.
 
-Workspace 홈(UX3c, 2026-10-20): Workspace 안에는 sidebar가 없다. 홈의 Workspace header(통합 검색 + `문서 n`·`문제`(DropdownMenu: 전체 문제·PDF 관리·직접 추가·변형 출제; `전체 문제`는 QBANK-01 페이지 링크로 UX6-PROGRESS에서 별도 `문제은행` 버튼을 대신하고, UX6-BANK에서 그 페이지 제목도 `전체 문제`가 됨) 묶음과 오른쪽 정렬된 `이력`·`공유하기` secondary `IconButton` 묶음, UX4)가 진입점이며, 문서 관리·문제 PDF 관리·문제 생성·이력·링크 공유는 모두 non-modal `FloatingSidePanel`(§5.1 stacking: 나중에 연 것이 위, 열린 dialog의 버튼을 다시 누르면 `raiseKey`로 다시 위로)로 홈의 `<main>` 안에 portal하고, 데스크톱에서는 dialog가 열린 동안 홈 내용이 dialog 폭만큼 비켜선다. 홈과 dialog에는 `PageHeader` 제목·설명이 없고 `h1`은 시각적으로 숨긴다. 통합 검색 옵션은 "검색 옵션" 텍스트 버튼이 여는 `Popover`다. 새 icon: `SearchIcon`, `TrashIcon`, `HistoryIcon`, `ChevronUpIcon`, `ShareIcon`.
+`SplitView` (v1.2.7, DOCVIEW-SPEC 2026-10-29 · DOCVIEW-PORT 2026-11-02; 첫 사용 DOCVIEW-01): 두 pane과 그 사이 크기 조절 막대. props: `orientation`(`horizontal` = 좌우, `vertical` = 상하), `ratio`(앞 pane %, 제어형)·`onRatioChange`(끄는 동안)·`onRatioCommit`(놓을 때·키 입력 때), `minRatio`(기본 20)·`minSize`(px, 축별), `defaultRatio`(Enter·더블클릭 reset, 기본 50), `visible`(`both` · `first` · `second`: 한쪽만 보일 때 다른 pane은 unmount하지 않고 `hidden`, 막대도 숨김), `separatorLabel`, `valueText(ratio)`. 막대는 `role="separator"`·focus 가능·`aria-orientation`(좌우 분할 = `vertical`)·`aria-valuenow/min/max/text`·`aria-controls`(앞 pane); 키보드는 분할 축 화살표 ±5, Home/End = 최소/최대, Enter = reset, 반대 축 화살표 무시. Pointer Events(mouse·touch·pen, `touch-action: none`, pointer capture), 끄는 동안 text 선택 막음. 시각 선 1px `--color-border`, hit 영역 ≥ 24px(coarse pointer 44px), hover·focus-visible·drag 중 굵기·grip으로 강조(색만이 아님), 상태 전환 `--duration-state`·reduced-motion 즉시. 컨테이너가 두 최소 크기 합보다 작으면 50:50 고정(min = max = 50). pane wrapper는 child의 `key`로 keyed라 호출자가 children 순서를 바꾸면(위치 바꾸기) pane이 다시 mount되지 않고 DOM만 옮겨진다; pane header 끌기는 화면 쪽 구현이다. 인벤토리의 `ResizablePanel`은 `SplitView`로 대신한다(별도 컴포넌트 두지 않음; DOC-02 v1.4의 화면 전용 `PaneSplitter`도 DOCVIEW-PORT에서 없앰). Storybook: 좌우·상하, 최소 크기, 키보드, 좁은 컨테이너, 한쪽만 보기.
+
+Workspace 홈(UX3c, 2026-10-20): Workspace 안에는 sidebar가 없다. 홈의 Workspace header(통합 검색 + `문서 n`·`문제`(DropdownMenu: 직접 추가·변형 출제 — `PDF 관리`와 문제 PDF 관리 dialog는 UX7-DOCS에서 문서 관리로 통합; UX6-PROGRESS~UX6-BANK의 `전체 문제` 항목은 그 페이지(QBANK-01)와 함께 UX7-BANK에서 없어졌고, `직접 추가`는 홈 위에 modal "문제 등록" dialog를 연다) 묶음과 오른쪽 정렬된 `이력`·`공유하기` secondary `IconButton` 묶음, UX4)가 진입점이며, 문서 관리·문제 생성·이력·링크 공유는 모두 non-modal `FloatingSidePanel`(§5.1 stacking: 나중에 연 것이 위, 열린 dialog의 버튼을 다시 누르면 `raiseKey`로 다시 위로)로 홈의 `<main>` 안에 portal하고, 데스크톱에서는 dialog가 열린 동안 홈 내용이 dialog 폭만큼 비켜선다. 홈과 dialog에는 `PageHeader` 제목·설명이 없고 `h1`은 시각적으로 숨긴다. 통합 검색 옵션은 "검색 옵션" 텍스트 버튼이 여는 `Popover`다. 새 icon: `SearchIcon`, `TrashIcon`, `HistoryIcon`, `ChevronUpIcon`, `ShareIcon`.
 
 `Breadcrumb`·`BackLink` (v1.2.2, UX3b): 버튼으로 이동한 페이지는 `PageHeader`의 `back` 슬롯에 뒤로가기(`BackLink`: 화살표 + label, `href`가 있으면 링크, 없으면 `onClick`으로 되돌아가는 버튼, `hideLabel`이면 label은 접근 가능한 이름으로만 남음), `breadcrumb` 슬롯에 위치(`Breadcrumb`: `<nav aria-label="위치">` + `<ol>`, 장식용 chevron 구분자, 마지막 항목은 현재 페이지로 링크가 아니며 `aria-current="page"` + 굵기)를 둔다. Next.js에서는 `linkComponent={Link}`를 넘긴다. 링크 hit 영역은 24px 이상이다. 뒤로가기·breadcrumb 줄 아래는 제목과 12px 띄운다(줄 간격 `--space-1` + 아래 여백 `--space-2`, v1.2.3 UX5-UI).
 
 ### Domain components
 
-`AuthLayout`, `SignInForm`, `SignUpForm`, `PasswordResetForm`, `VerificationNotice`, `SessionExpiredDialog`, `DocumentOutlineTree`, `PdfViewer`, `TextBlockEditor`, `SearchResultList`, `SearchExcerpt`, `QuestionMarker`, `QuestionDot`, `QuestionHeatmap`, `HeatmapLegend`, `QuestionPreviewPopover`, `QuestionPracticePanel`, `QuestionOptionList`, `QuestionAnswerField`, `FavoriteToggle`, `RetryToggle`, `QuestionGenerationForm`, `VariationDiffViewer`, `QuestionDraftReview`, `ImportJobProgress`.
+`AuthLayout`, `SignInForm`, `SignUpForm`, `PasswordResetForm`, `VerificationNotice`, `SessionExpiredDialog`, `DocumentOutlineTree`, `PdfViewer`, `TextBlockEditor`, `SearchResultList`, `SearchExcerpt`, `QuestionMarker`, `QuestionDot`, `QuestionHeatmap`, `HeatmapLegend`, `QuestionPreviewPopover`, `QuestionPracticePanel`(→ `QuestionViewer` `practice` 방식, MOCK-SPEC), `QuestionViewer`, `QuestionRangePicker`, `QuestionOptionList`, `QuestionAnswerField`, `FavoriteToggle`, `RetryToggle`, `QuestionGenerationForm`, `VariationDiffViewer`, `QuestionDraftReview`, `ImportJobProgress`.
 
 ## 8. 컴포넌트 상태·문서화 규칙
 

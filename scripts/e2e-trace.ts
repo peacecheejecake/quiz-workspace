@@ -77,15 +77,22 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
     API_SCREEN_ID,
   ],
   'M3.0': ['WS-01', 'DOC-01', 'DOC-02', 'SEARCH-01'],
-  'M4.0': ['QBANK-01', 'QIMPORT-01'],
+  // QBANK-01 (M4.0) was retired by UX7-BANK (2026-11-01): docs/screens/questions-bank.md.
+  'M4.0': ['QIMPORT-01'],
   'M5.0': ['QOV-01', 'QPLAY-01'],
-  'M6.0': ['QGEN-01'],
+  // QGEN-01 (M6.0) was retired by QGEN-RM (2026-11-02): docs/screens/questions-generation.md.
   'M7.0': ['HISTORY-01'],
   S0: ['WS-SHARE-01', 'WS-VIEW-01', 'WS-FORK-01'],
   // DOCSUM-SPEC (2026-10-29): full-text export, document summary, chapter notes.
   'DOCTXT.0': ['DOC-03'],
   'DOCSUM.0': ['DOCSUM-01'],
   'CHNOTE.0': ['CHNOTE-01'],
+  // DOCVIEW-SPEC (2026-10-29) / DOCVIEW-PORT (2026-11-02): the DOC-02 / WS-VIEW-01 viewer layout —
+  // docked outline panel, view modes, resizable and swappable split. It replaced DOC-02-AC06/AC10.
+  'DOCVIEW.0': ['DOCVIEW-01'],
+  // MOCK-SPEC (2026-11-01): mock exams, unified QuestionViewer range practice.
+  'MOCK.0': ['MOCK-01'],
+  'QVIEW.0': ['QVIEW-01'],
 };
 
 const LEADING_ID = new RegExp(

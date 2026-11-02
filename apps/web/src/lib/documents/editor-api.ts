@@ -209,6 +209,9 @@ export function createEditorClient(fetchImpl: FetchLike = (...a) => fetch(...a))
     signal?: AbortSignal,
   ): Promise<{ content: DocumentContent; consistent: boolean }> {
     const outlinePromise = call<Outline>(EDITOR_PATHS.outline(id, revision), { signal });
+    // Awaited below; until then a failure must not surface as an unhandled rejection when the
+    // block reads fail first (e.g. both cancelled by a reload).
+    outlinePromise.catch(() => undefined);
     const blocks: ContentBlock[] = [];
     let after: number | undefined;
     let blockRevision: RevisionInfo | null = null;

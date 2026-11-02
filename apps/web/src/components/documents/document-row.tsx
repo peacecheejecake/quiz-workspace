@@ -1,6 +1,6 @@
 'use client';
 
-// One document row (DOC-01 문서 관리 and the question-PDF list, UX3c): the title (a DOC-02 link once
+// One document row (DOC-01 문서 관리, UX3c; the only PDF list since UX7-DOCS): the title (a DOC-02 link once
 // ready; the file name in its tooltip) with the kind badge (교재 / 문제지 / 교재+문제, "분석 중"
 // until classified, UX6-UPLOAD) and the status badge right next to it, a meta line
 // "<date time> · <size>", the live progress — upload progress with cancel, parse/index progress,

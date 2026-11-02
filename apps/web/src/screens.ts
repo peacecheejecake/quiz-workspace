@@ -42,12 +42,11 @@ export const SCREENS = [
   },
   {
     id: 'SEARCH-01',
-    name: '통합 검색 (문제·본문)',
+    name: '문제 검색·본문 검색',
     path: '/workspaces/[workspaceId]',
     query: { param: 'q' },
   },
   { id: 'QOV-01', name: 'Workspace 홈 (문제 Heatmap)', path: '/workspaces/[workspaceId]' },
-  { id: 'QBANK-01', name: '전체 문제 목록·편집', path: '/workspaces/[workspaceId]/questions/bank' },
   {
     id: 'QPLAY-01',
     name: '문제 풀이 Floating Side Panel',
@@ -65,7 +64,12 @@ export const SCREENS = [
     name: '문제 PDF 가져오기',
     path: '/workspaces/[workspaceId]/questions/import',
   },
-  { id: 'QGEN-01', name: '문제 변형 출제', path: '/workspaces/[workspaceId]/questions/generate' },
+  {
+    id: 'MOCK-01',
+    name: '모의고사 목록·만들기·편집 Floating Dialog',
+    path: '/workspaces/[workspaceId]',
+    query: { param: 'panel', value: 'mock-exams' },
+  },
   {
     id: 'HISTORY-01',
     name: '이력 Floating Dialog',

@@ -52,6 +52,9 @@ UPLOADER = Rule(EDITORS, writes=True, personal=True)
 OWNER_WRITE = Rule(OWNERS, writes=True)
 OWNER_LIFECYCLE = Rule(OWNERS, writes=True, archived_ok=True)
 OWNER_READ = Rule(OWNERS, writes=False)
+# QVIEW-B practice runs: personal, so creating and finishing one is allowed when archived.
+RUN_CREATE = Rule(ALL, writes=True, archived_ok=True)
+OWN_RUN_WRITE = Rule(ALL, writes=True, archived_ok=True, personal=True)
 
 # Not workspace-scoped: the caller's own account data, the guest share API, health probes.
 ME = "me"  # any signed-in user, own data only
@@ -93,11 +96,14 @@ RULES: dict[str, Rule | str] = {
     "updateMyQuestionState": PRACTICE,
     "startPracticeSession": PRACTICE,
     "listMyWorkspaceAttempts": READ,
-    # questions, drafts, generation, import
+    # QVIEW-B range practice runs (QVIEW-01-C05): the creator's only
+    "createPracticeRun": RUN_CREATE,
+    "getPracticeRun": OWN_READ,
+    "getPracticeRunItem": OWN_READ,
+    "listPracticeRunResults": OWN_READ,
+    "finishPracticeRun": OWN_RUN_WRITE,
+    # questions, drafts, import (the QGEN generation routes were retired by QGEN-RM)
     "updateQuestionDraft": EDIT,
-    "getQuestionGeneration": READ,
-    "listQuestionGenerationDrafts": READ,
-    "publishQuestionGenerationDrafts": EDIT,
     "getQuestionImport": READ,
     "listQuestionImportDrafts": READ,
     "listQuestionImportDraftSummaries": READ,
@@ -108,11 +114,10 @@ RULES: dict[str, Rule | str] = {
     "deleteQuestion": EDIT,
     "getQuestion": READ,
     "updateQuestion": EDIT,
-    "createQuestionGeneration": EDIT,
-    "createQuestionGenerationBatch": EDIT,
-    "getQuestionGenerationBatch": READ,
+    # UX7-DEDUP: the scan only serves the merge, so both are question edits (archived 403).
+    "listQuestionDuplicates": EDIT,
+    "mergeQuestionDuplicates": EDIT,
     "getQuestionRevision": READ,
-    "listQuestionGenerations": READ,
     "listQuestionImports": READ,
     "createQuestionImport": EDIT,
     "listQuestions": READ,
@@ -123,6 +128,20 @@ RULES: dict[str, Rule | str] = {
     "listChapterNotes": READ,
     "getChapterNote": READ,
     "createChapterNote": EDIT,
+    # mock exams (MOCK-01-C05)
+    "listMockExams": READ,
+    "createMockExam": EDIT,
+    "getMockExam": READ,
+    "renameMockExam": EDIT,
+    "deleteMockExam": EDIT,
+    "createMockExamGeneration": EDIT,
+    "listMockExamQuestions": READ,
+    "updateMockExamQuestion": EDIT,
+    "removeMockExamQuestion": EDIT,
+    # MOCK-P mock exam practice: personal like bank practice
+    "startMockPracticeSession": PRACTICE,
+    "submitMockPracticeSession": OWN_WRITE,
+    "selfGradeMockPracticeSession": OWN_WRITE,
     # workspace lifecycle and sharing
     "getWorkspace": READ,
     "listWorkspaceActivities": READ,
@@ -198,6 +217,16 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
             "variation_types": ["PARAPHRASE"],
         },
         "updateMyQuestionState": {"is_favorite": True},
+        "createPracticeRun": {"source": "bank", "range": {"all": True}},
+        "finishPracticeRun": {},
+        "mergeQuestionDuplicates": {
+            "groups": [
+                {
+                    "keep_question_id": ids["question_id"],
+                    "duplicate_question_ids": [str(uuid.UUID(int=1))],
+                }
+            ]
+        },
         "startWorkspaceFork": {"name": "S4 fork"},
         "searchSharedWorkspace": {"query": "S4"},
         "searchWorkspace": {"query": "S4"},
@@ -213,6 +242,16 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "createQuestionImport": {"document_id": ids["document_id"]},
         "createQuestion": mcq,
         "createShareLink": {},
+        "createMockExam": {
+            "title": "S4 모의고사",
+            "config": {"variation_types": ["OPTION_SHUFFLE"], "question_count": 1},
+            "range": {"all": True},
+        },
+        "renameMockExam": {"title": "S4 이름"},
+        "createMockExamGeneration": {},
+        "updateMockExamQuestion": {"base_revision_id": str(uuid.UUID(int=1)), "stem": "S4"},
+        "submitMockPracticeSession": {"selected_option_ids": ["opt-1"]},
+        "selfGradeMockPracticeSession": {"result": "correct"},
         "updateShareLink": {"allow_fork": False},
     }
     return bodies.get(op_id)
@@ -335,13 +374,13 @@ def test_member_role_matrix(op_id: str, role: str, s4: Any, world: Any, app_clie
 
 def _multi_id_ops() -> list[str]:
     """Operations whose path names a parent and a child id. Block ids are structural and local to
-    a document revision (`p1-b0` exists in every book), so they cannot belong to "another
-    workspace" and are left out."""
+    a document revision (`p1-b0` exists in every book), and run positions index one run, so
+    neither can belong to "another workspace"; both are left out."""
     spec = json.loads(OPENAPI.read_text())
     out = []
     for path, methods in spec["paths"].items():
         params = [p for p in path.split("/") if p.startswith("{")]
-        if len(params) >= 2 and params[-1] != "{block_id}":
+        if len(params) >= 2 and params[-1] not in ("{block_id}", "{position}"):
             out += [op["operationId"] for op in methods.values()]
     return [o for o in out if isinstance(RULES.get(o), Rule)]
 
@@ -383,18 +422,20 @@ def test_body_ids_of_another_workspace_answer_like_unknown_ids(
         ("POST", f"/workspaces/{wid}/search", lambda d: {"query": "S4", "document_ids": [d]}),
     ]
     foreign_question = world.twin_ids["question_id"]
-    batch_path = f"/workspaces/{wid}/question-generation-batches"
+    # A range id of another workspace (QGEN-RM moved this check off the retired batch route).
+    mock_path = f"/workspaces/{wid}/mock-exams"
 
-    def batch_body(q: str) -> dict[str, Any]:
+    def mock_body(q: str) -> dict[str, Any]:
         return {
-            "selection": {"mode": "selected", "question_ids": [q]},
-            "variation_types": ["PARAPHRASE"],
+            "title": "S4 범위",
+            "config": {"variation_types": ["OPTION_SHUFFLE"], "question_count": 1},
+            "range": {"question_ids": [q]},
         }
 
-    foreign_batch = owner.call("POST", batch_path, batch_body(foreign_question))
-    unknown_batch = owner.call("POST", batch_path, batch_body(str(uuid.uuid4())))
-    assert foreign_batch.status_code == 404, f"batch accepted a foreign question: {foreign_batch}"
-    assert s4.problem_key(foreign_batch) == s4.problem_key(unknown_batch), "batch: oracle"
+    foreign_mock = owner.call("POST", mock_path, mock_body(foreign_question))
+    unknown_mock = owner.call("POST", mock_path, mock_body(str(uuid.uuid4())))
+    assert foreign_mock.status_code >= 400, f"mock exam accepted a foreign question: {foreign_mock}"
+    assert s4.problem_key(foreign_mock) == s4.problem_key(unknown_mock), "mock exam: oracle"
     for method, path, body in cases:
         foreign = owner.call(method, path, body(foreign_doc))
         unknown = owner.call(method, path, body(unknown_doc))
@@ -569,6 +610,12 @@ def test_practice_routes_never_reveal_answers_before_submission(world: Any) -> N
             learner.call("GET", f"/questions/{qid}/attempts"),
             learner.call("GET", f"/workspaces/{wid}/activities"),
             learner.call("PATCH", f"/questions/{qid}/my-state", {"needs_retry": True}),
+            # MOCK-P: the mock exam copy of the question (보기 섞기 keeps its explanation).
+            learner.call(
+                "POST",
+                f"/mock-exam-questions/{world.ids['mock_exam_question_id']}/practice-sessions",
+                None,
+            ),
         ]
         for res in responses:
             path = res.request.url.path

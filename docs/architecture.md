@@ -59,6 +59,7 @@ book_core/
   search/ reranker/ extractor/ question/
   generation/ llm/ evaluation/
   export/ summary/ notes/        # DOCSUM-SPEC 2026-10-29
+  mock_exam/                     # MOCK-SPEC 2026-11-01
 ```
 
 핵심 계약:
@@ -71,6 +72,7 @@ book_core/
 - `export.render_revision(revision, md|txt, *, title)`(`markdown`·`plain` 별칭 허용): 발행·초안 revision의 canonical blocks → Markdown/텍스트(heading 깊이, GFM 표, `[그림 p.N]`, 쪽 marker), 결정적 순수 함수(DOC-03).
 - `summary`: 장 입력(정규화 블록 텍스트 + 쪽) → `SummaryUnit{title, summary_md, key_points[{text, pages}]}`(map), 장 unit들 → 문서 요약(reduce); 큰 장 분할·병합, 쪽 범위 검증, 테스트용 결정적 추출 fake(DOCSUM-01).
 - `notes`: 장의 확정 문제(`Q1…Qn`: 발문·보기·정답·해설) + 참고 본문 → `ChapterNote{sections[{heading, items[{text, q[tags], p[{block_id, quote, pages}]}]}]}`; 모든 항목 문제 tag 필수, 모르는 tag·인용 불일치 거절(1회 재요청)·tag 없는 항목 제거, 큰 장 묶음 생성·병합(CHNOTE-01).
+- `mock_exam`(MOCK-SPEC 2026-11-01, [MOCK-01](screens/mock-exams.md)): 범위 후보(Heatmap 순서의 확정 문제) + 문항 수 + 변형 유형 + seed → `MockExamPlan[{source_question_id, variation_type}]`(결정적 원본 선택·유형 배정), `OPTION_SHUFFLE` 복사본(원본 revision 내용 + seed 보기 순서). LLM 유형은 묶음 생성: `pack_batches(plan, passages, budget)`(token 예산·`sources_per_call` 상한·passage 공유 원본끼리, 결정적) → 묶음 prompt `mock_exam.generate/v1`(원본 `S1…`, 묶음 안에서 한 번만 실린 passage `P1…`, 항목마다 변형 유형 지시) → 항목별로 `generation.validation`의 승인 차단 검증(`accept_for_mock_exam`), 실패 항목 모아 재요청 1회, 해석 불가 묶음은 반으로 나눔. 결정적 fake LLM은 묶음 응답·항목 하나 실패·깨진 묶음·잘린 응답 시나리오와 호출 수 기록을 지원한다.
 
 CLI: `core parse`, `core chunk`, `core index`, `core search`, `core excerpt`, `core questions extract`, `core questions generate`, `core eval`.
 
@@ -105,7 +107,12 @@ workspace
  │             ├── question_user_state  (user별 학습 상태·플래그)
  │             ├── question_attempt     (채점 이력)
  │             └── question_lineage     (변형 관계)
- ├── question_draft ── generation_run / pdf_import_run
+ ├── question_draft ── generation_run(QGEN, MOCK-SPEC부터 새 행 없음) / pdf_import_run
+ ├── mock_exam ── mock_exam_revision (이름·설정·범위 이력)
+ │             └── mock_exam_generation (회차) ── mock_exam_question ── mock_exam_question_revision
+ │                                                              ├── mock_exam_practice_session
+ │                                                              └── mock_exam_attempt (모의고사 풀이, Heatmap과 무관)
+ ├── practice_run (사용자별 범위 풀이 묶음, bank|mock; QVIEW)
  ├── activity_event
  └── async_job
 ```
@@ -121,6 +128,7 @@ workspace
 - `question_attempts(id, question_id, question_revision_id, user_id, displayed_option_ids, submitted_answer, result, grading_method, submitted_at, graded_at)`.
 - `question_lineage(parent_question_id, child_question_id, variation_type, source_revision_id)`.
 - `question_generation_runs` / `question_import_runs`; `question_drafts` (approval 전 격리); `question_import_registration_items` (서버 측 등록 job의 항목·진행, QIMP-JOB).
+- `question_merges(id, workspace_id, duplicate_question_id, kept_question_id, created_by, created_at, ended_at, ended_by, end_reason)` (UX7-DEDUP, questions.md §10): 보관된 중복 → 남길 문제 연결의 이력. 연결 중(`ended_at is null`)인 행은 중복마다 하나(partial unique), 한 단계만(남길 문제는 연결 중인 중복이 아니고 중복은 연결 중인 남길 문제가 아님 — trigger), 중복을 보관 해제하면 trigger가 끝낸다(`end_reason = unarchived`), 옮김은 끝내고 새 행(`repointed`). quiz_api는 insert와 `ended_*` 열 update만. view `question_merged_user_states`(security_invoker): 사용자·남길 문제별로 자신과 연결 중인 중복의 `question_user_states`를 합친 상태(최초·최근 열람, 마지막 채점 결과(`graded_at` 최신), 즐겨찾기·다시 풀기 합집합). attempt·session은 그대로다.
 - `activity_events` (변경 감사), `async_jobs` (재시도/상태).
 - **문서 요약 (DOCSUM-SPEC 2026-10-29, [DOCSUM-01](screens/documents-summary.md)):** `documents.summary_enabled_at`·`summary_enabled_by`(opt-in·자동 갱신 켜짐; `요약 만들기`에서 기록, 켜져 있는 동안 모든 발행에서 자동 재생성; null = 꺼짐), `summary_disabled_at`·`summary_disabled_by`(마지막 `자동 갱신 끄기`).
   - `document_summary_runs(id, workspace_id, document_id, document_revision_id, status queued|running|succeeded|failed|superseded, trigger manual|publish|retry, job_id, prompt_version, model, error_code, usage jsonb(tokens·cost_usd·reused_units·generated_units), progress jsonb(chapters_done·chapters_total), created_by, created_at, started_at, finished_at)` — revision마다 살아 있는 run 하나(partial unique; `retry`는 같은 revision의 새 run, 이전 실패 run은 남김). 더 새 revision의 run이 생기면 이전 대기·실행 run은 `superseded`.
@@ -128,6 +136,16 @@ workspace
   - 시작: 발행 트랜잭션의 SECURITY DEFINER `public.worker_start_document_summary(document_id, revision_id, publisher_user_id, enabled)`(run·job은 발행한 사용자에게 귀속)(QIMP-AUTO의 `worker_start_question_import`와 같은 follow-up 방식) 또는 `POST /documents/{id}/summary`. 문서·요약 본문은 로그·job 결과·활동 기록에 넣지 않는다.
 - **챕터 정리 노트 (CHNOTE, [CHNOTE-01](screens/chapter-notes.md)):** `chapter_notes(id, workspace_id, document_id, section_key, version, status queued|running|succeeded|failed, job_id, input_fingerprint, question_refs jsonb[{tag, question_id, question_revision_id, number_label}], body jsonb{sections[...]}, dropped_items, prompt_version, model, error_code, usage, created_by, created_at, finished_at, superseded_at)` unique `(document_id, section_key, version)`, 장마다 대기·실행 중 하나(partial unique). 장은 revision이 바뀌어도 같은 `section_key`로 이어진다(`documents_remap_question_chapters`와 같은 규칙). stale은 읽을 때 현재 확정 문제 fingerprint와 비교해 계산한다. 이전 버전은 지우지 않는다.
 - Fork는 snapshot revision의 성공한 요약(run·unit·`summary_enabled_at`)과 장마다 최신 성공 정리 노트 중 snapshot 기준 출처 일치(인용 문제가 모두 CONFIRMED이고 active revision = 고정 revision)인 것(`question_refs` 재매핑)을 새 id로 복제한다. 공유 노트 API도 같은 출처 일치 조건을 쓴다. 실패·이전 기록과 usage는 복제하지 않는다.
+- **모의고사 (MOCK-SPEC 2026-11-01, [MOCK-01](screens/mock-exams.md)):** 은행과 분리된 테이블이다 — 모의고사 문제는 `questions`·`question_drafts`·`question_lineage`·`question_attempts`·`question_user_states`에 들어가지 않는다(questions.md §11, 사용자 결정 2).
+  - `mock_exams(id, workspace_id, title, config jsonb{variation_types[], question_count, difficulty}, range jsonb{all, chapter_ids[], question_ids[], excluded_question_ids[], filters}, current_generation_id, created_by, created_at, updated_at, deleted_at, deleted_by)` — soft delete.
+  - `mock_exam_revisions(id, mock_exam_id, workspace_id, version, title, config, range, edited_by, created_at)` unique `(mock_exam_id, version)` — 만들기·이름·설정 변경마다 한 행(append-only).
+  - `mock_exam_generations(id, mock_exam_id, workspace_id, version, status queued|running|succeeded|partial|failed|cancelled, job_id, config, range_resolved jsonb[{question_id, question_revision_id}], plan jsonb[{question_id, question_revision_id, variation_type}], seed, prompt_version, model, created_count, skipped_count, error_code, usage jsonb, progress jsonb{done,total}, created_by, created_at, started_at, finished_at)` unique `(mock_exam_id, version)`, 모의고사마다 대기·실행 중 하나(partial unique). 성공·부분 성공이면 같은 트랜잭션에서 `mock_exams.current_generation_id`를 바꾼다(실패면 그대로).
+  - `mock_exam_generation_items(generation_id, position, source_question_id, source_question_revision_id, variation_type, batch_no, status pending|done|failed|retried|skipped, skip_reason, mock_exam_question_id)` — 묶음별 checkpoint(묶음 하나가 끝날 때 한 트랜잭션으로 갱신; 재실행은 `pending`만 다시 묶음). 회차에는 `llm_calls`·`batches_total`·`batches_done`도 기록한다.
+  - `mock_exam_questions(id, workspace_id, mock_exam_id, generation_id, position, question_type, active_revision_id, source_question_id, source_question_revision_id, variation_type, removed_at, removed_by, created_at)` — 원본 FK는 `on delete set null`(원본 삭제 후에도 풀 수 있음).
+  - `mock_exam_question_revisions(id, mock_exam_question_id, workspace_id, version, stem, options, correct_answer, explanation, rubric, evidence jsonb, validation_issues jsonb, origin generated|edited, edited_by, created_at)` — append-only, 정답은 stable option ID.
+  - `mock_exam_practice_sessions` / `mock_exam_attempts` — `practice_sessions`/`question_attempts`와 같은 모양·제약(표시 option ID, `pending` 자기평가 연결, immutable; FK는 `mock_exam_question_revisions`), `practice_run_id` 포함.
+- **범위 풀이 묶음 (QVIEW, [QVIEW-01](screens/question-viewer.md)):** `practice_runs(id, workspace_id, user_id, source bank|mock, mock_exam_id, mock_exam_generation_id, range jsonb, random_order, seed, item_ids uuid[](순서 고정, 최대 5,000), created_at, finished_at)` — 만든 사용자만 읽음. 결과 집계는 세션 테이블의 `(practice_run_id, run_position)` index로 계산하고, 문제 내용은 위치별로만 읽는다. 기존 `practice_sessions`에 nullable `practice_run_id`·`run_position`을 더한다(additive). 문제마다 세션은 묶음 안에서 하나(partial unique `(practice_run_id, run_position)`).
+- **QGEN 폐지 (MOCK-SPEC, QGEN-RM 2026-11-02):** `question_generation_runs`·생성 초안·`question_lineage`의 기존 행은 보존하고 drop하지 않는다(additive-first). 새 생성 run은 만들어지지 않는다(router 404, worker에 `question.generate` 등록 없음; 대기열에 남은 `question.generate` job은 reconciler가 `failed`/`job_retired`로 끝낸다).
 
 문제 상태는 독립 필드를 합성해 계산한다. 색상 규칙·열람 판정·변형 정책은 `docs/questions.md`가 단일 기준이다.
 
@@ -162,21 +180,34 @@ workspace
 | POST | `/api/v1/questions/{id}/practice-sessions` | 문제 열람·보기 순서 생성(정답 비노출) |
 | POST | `/api/v1/practice-sessions/{id}/submit` | 답변 제출·채점 |
 | POST | `/api/v1/practice-sessions/{id}/self-grade` | 주관식·서술형 자기평가 |
-| GET | `/api/v1/questions/{id}/attempts` | 풀이 이력 |
-| POST | `/api/v1/questions/{id}/generations` | 변형 문제 생성 작업 |
-| GET | `/api/v1/question-generations/{id}/drafts` | 생성 문제 검토 |
-| POST | `/api/v1/question-generations/{id}/publish` | 승인한 문제만 등록 |
-| POST | `/api/v1/workspaces/{id}/question-generation-batches` | 여러 문제·임의 선택 묶음 변형 출제(원본마다 `question.generate` run; QGEN-MULTI) |
-| GET | `/api/v1/workspaces/{id}/question-generation-batches/{batch_id}` | 묶음의 원본별 run·진행 상태 |
+| GET | `/api/v1/questions/{id}/attempts` | 풀이 이력(합쳐진 중복의 attempt 포함, 항목별 `question_id`, UX7-DEDUP) |
+| GET | `/api/v1/workspaces/{id}/question-duplicates` | 중복 확정 문제 묶음(편집 권한, 정답 없음; UX7-DEDUP) |
+| POST | `/api/v1/workspaces/{id}/question-duplicates/merge` | 묶음마다 남길 문제 하나, 나머지 보관 + 기록 합침(편집 권한, 멱등; UX7-DEDUP) |
+| POST | `/api/v1/questions/{id}/generations` | 변형 문제 생성 작업 (**폐지** — QGEN-RM 2026-11-02, 404) |
+| GET | `/api/v1/question-generations/{id}/drafts` | 생성 문제 검토 (폐지 — QGEN-RM, 404) |
+| POST | `/api/v1/question-generations/{id}/publish` | 승인한 문제만 등록 (폐지 — QGEN-RM, 404) |
+| POST | `/api/v1/workspaces/{id}/question-generation-batches` | 여러 문제·임의 선택 묶음 변형 출제(원본마다 `question.generate` run; QGEN-MULTI) (폐지 — QGEN-RM, 404) |
+| GET | `/api/v1/workspaces/{id}/question-generation-batches/{batch_id}` | 묶음의 원본별 run·진행 상태 (폐지 — QGEN-RM, 404) |
 | POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기(준비 완료된 모든 PDF, UX6-UPLOAD) |
 | GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토(초안별 등록 챕터 추천·선택, 교재 챕터 목록 — CHAPTER-MAP; `offset`/`limit`(≤200)이면 한 페이지와 `total`, `include_chapters=false`이면 챕터 목록 생략 — QIMP-PAGING) |
-| GET | `/api/v1/question-imports/{id}/draft-summaries` | 모든 초안의 요약(본문·보기·정답·해설 없음: id·version·순서·번호·유형·검토 상태·등록 여부·승인 가능·정답 없음·검증 코드·등록 챕터 id)과 교재 챕터 목록 — 검토 화면의 선택·개수·등록용(QIMP-PAGING) |
+| GET | `/api/v1/question-imports/{id}/draft-summaries` | 모든 초안의 요약(본문·보기·정답·해설 없음: id·version·순서·번호·유형·검토 상태·등록 여부·승인 가능·정답 없음·검증 코드·등록 챕터 id·중복 `duplicate_of`(UX7-DEDUP))과 교재 챕터 목록 — 검토 화면의 선택·개수·등록용(QIMP-PAGING) |
 | POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록(`approve: true`면 선택한 초안을 승인과 함께 등록, 거절 목록 반환) |
 | POST | `/api/v1/question-imports/{id}/registrations` | 선택한 초안 전체를 서버에서 승인·등록(`question.import_register` job, QIMP-JOB) |
 | GET | `/api/v1/question-imports/{id}/registrations/{registration_id}` | 서버 측 등록 진행(처리/전체)·거절 목록 |
 | GET | `/api/v1/workspaces/{id}/chapter-notes` | 장별 최신 정리 노트 상태(진행·stale·버전 수; Heatmap header 표시, CHNOTE-01) |
 | GET | `/api/v1/chapters/{chapterId}/note` | 장 정리 노트(`version=` 이전 버전, `question_refs` 각주, `stale`) |
 | POST | `/api/v1/chapters/{chapterId}/note` | 정리 노트 만들기·다시 만들기(새 버전, 편집 권한, `Idempotency-Key`; 확정 문제 없음 409 `no-chapter-questions`, 진행 중 409 `note-generation-running`, 꺼짐 409 `note-generation-disabled`) |
+| GET | `/api/v1/workspaces/{id}/mock-exams` | 모의고사 목록(이름·상태·문제 수·설정 요약·현재 회차 진행; MOCK-01) |
+| POST | `/api/v1/workspaces/{id}/mock-exams` | 모의고사 만들기(이름·`config`·`range`, 첫 회차 생성 시작, 편집 권한, `Idempotency-Key`; 범위 0개 409 `no-matching-questions`, 진행 한도 409 `generation-busy`, 429) |
+| GET/PATCH/DELETE | `/api/v1/mock-exams/{id}` | 상세(설정·회차 상태·진행) · 이름/설정 변경(`mock_exam_revisions`) · soft delete(생성 중이면 job 취소) |
+| POST | `/api/v1/mock-exams/{id}/generations` | 다시 만들기·다시 시도(새 회차, 편집 권한, `Idempotency-Key`; 진행 중 409 `mock-generation-running`; LLM 꺼짐에서 LLM 유형 409 `mock-llm-disabled`) |
+| GET | `/api/v1/mock-exams/{id}/questions` | 현재 회차 문제 목록(번호·발문 앞부분·유형·변형 유형·출처 번호; 편집 권한자의 `include=answers`만 정답·해설·검증 경고) |
+| PATCH/DELETE | `/api/v1/mock-exam-questions/{id}` | 문제 편집(새 revision, `version` 낙관적 잠금) · 모의고사에서 빼기(`removed_at`) |
+| POST | `/api/v1/mock-exam-questions/{id}/practice-sessions` | 모의고사 문제 열기·보기 순서(정답 비노출) |
+| POST | `/api/v1/mock-practice-sessions/{id}/submit` · `/self-grade` | 모의고사 문제 제출·채점·자기평가(`mock_exam_attempts`만 기록) |
+| POST | `/api/v1/workspaces/{id}/practice-runs` | 범위 풀이 묶음 만들기(`source bank\|mock`, `range`, `random_order`, `seed`; 서버가 범위 확정, 최대 5,000; QVIEW-01) |
+| GET | `/api/v1/practice-runs/{id}` · `/items/{position}` · `/results` | 묶음 진행·결과 집계(내용 없음) · 위치의 문제 하나(정답 비노출, 이미 제출했으면 그 결과·정답·해설) · 결과 목록 페이지(`offset`/`limit` ≤200) |
+| POST | `/api/v1/practice-runs/{id}/finish` | 묶음 끝내기(`finished_at`, 요약 고정) |
 | GET | `/api/v1/jobs/{id}` | 비동기 작업 상태 |
 | GET | `/api/v1/jobs/{id}/events` | SSE 진행 상황 |
 | GET | `/api/v1/workspaces/{id}/activities` | 변경 이력 |
@@ -184,6 +215,8 @@ workspace
 인가·workspace filter를 서버에서 강제한다. 문제 풀이 조회 API는 정답/해설을 제출 전까지 전송하지 않는다. POST 작업에는 멱등 키를 지원한다.
 
 Worker job(DOCSUM-SPEC 2026-10-29): `document.summarize {run_id}` — 문서별 advisory lock, 장 map(입력 hash가 같은 unit 재사용)·문서 reduce, 결과 쓰기 직전 run·현재 발행 revision 재확인(대체되면 쓰지 않음), 결과는 개수·usage·오류 코드(`llm_unavailable`·`llm_timeout`·`llm_invalid_output`·`summary_too_large`·`document_unavailable`)만. `chapter_note.generate {note_id}` — 노트 행에 고정된 `question_refs`만 읽고 인용 검증(1회 재요청), 큰 장은 묶음 생성·병합, 결과는 항목 수·버린 항목 수·usage·오류 코드(`note_citation_invalid` 포함)만. 둘 다 `WORKER_DOCUMENT_SUMMARY`·`WORKER_CHAPTER_NOTES`와 LLM 설정(`LLM_API_KEY`·`LLM_MODEL`)이 있을 때만 시작하며, 테스트(`APP_ENV=test`)는 결정적 fake/scenario LLM을 쓴다. 공유 게스트용 읽기 API는 [workspace-sharing.md](workspace-sharing.md) §5·§8.
+
+Worker job(MOCK-SPEC 2026-11-01): `mock_exam.generate {generation_id}` — 모의고사별 advisory lock, 회차에 고정된 `plan`만 읽음(원본 revision 고정), `OPTION_SHUFFLE`은 LLM 없이 복사·섞기, LLM 유형은 기존 `question.generate`의 원본 읽기·근거 passage 검색·근거 좁히기 helper(공용 모듈로 이동)로 passage를 모은 뒤 `book_core.mock_exam.pack_batches`로 **호출 수가 최소가 되게** 묶어(`MOCK_EXAM_MAX_PROMPT_TOKENS` 기본 60,000·`MOCK_EXAM_MAX_OUTPUT_TOKENS` 기본 16,000·상한 `MOCK_EXAM_SOURCES_PER_CALL` 기본 40) `MOCK_EXAM_GENERATION_CONCURRENCY`(기본 2)개까지 동시에 부르고, 항목별 검증 통과분만 저장, 실패 항목은 모아 재요청 1회, 해석 불가 묶음은 반으로 나눔, 묶음마다 checkpoint(`mock_exam_generation_items`) — 재전달·시간 한도 뒤 재시작해도 끝난 묶음은 다시 부르지 않음, 진행(`progress` 원본 수·묶음 수)과 결과 쓰기 직전 회차·모의고사 상태 재확인(삭제·취소되면 쓰지 않음). 결과는 개수·usage·오류 코드(`llm_unavailable`·`llm_timeout`·`no_valid_questions`·`mock_exam_unavailable`)만. `WORKER_MOCK_EXAMS`와 LLM 설정이 있을 때만 LLM 유형을 시작하며 테스트(`APP_ENV=test`)는 결정적 fake/scenario LLM을 쓴다. `question.generate` job 등록은 QGEN-RM에서 뺀다.
 
 ## 7. Frontend 기능 범위
 
@@ -194,7 +227,9 @@ Worker job(DOCSUM-SPEC 2026-10-29): `document.summarize {run_id}` — 문서별 
 - Questions Home(= Workspace 홈, UX3c): 챕터별 문제 heatmap(확정 문제 하나=marker 하나), 상태별 색상, 즐겨찾기 시 **둥근 별 모양**, hover/focus 확대, 접을 수 있는 상태 필터·정렬, hover preview, 클릭 시 Floating Question Player. Workspace header의 통합 검색과 문서·이력·공유·문제 생성 floating dialog.
 - Questions Bank: 유형별 CRUD, 목록·검색·챕터 연결·출처 관리.
 - Questions Import: PDF 추출 검토, 미완성 초안 수정, 확인/등록.
-- Question Generation: 원본 선택(한 문제·여러 문제·서버 임의 선택 묶음), 변형 유형 지정, LLM 또는 deterministic 변형, diff/정답 검증, 승인.
+- ~~Question Generation: 원본 선택(한 문제·여러 문제·서버 임의 선택 묶음), 변형 유형 지정, LLM 또는 deterministic 변형, diff/정답 검증, 승인.~~ (MOCK-SPEC 2026-11-01 폐지 — QGEN-RM)
+- 모의고사(MOCK-SPEC 2026-11-01): `문제` 메뉴 › `모의고사` 목록 dialog, 변형 유형 옵션·범위(`전체 선택`)로 만들기, 저장·편집·다시 만들기·삭제(MOCK-01). 모의고사 문제는 은행·Heatmap 밖.
+- 통합 `QuestionViewer`(MOCK-SPEC 2026-11-01): 문제를 하나씩 보이는 모든 곳의 공통 컴포넌트(풀이·관리·읽기 전용·범위 풀이 방식), `문제` 메뉴 › `문제 풀기`와 모의고사 `풀기`의 범위 풀이(QVIEW-01).
 - History: 수정·생성·풀이 이력, Job 로그.
 - 문서 전문·요약·정리 노트(DOCSUM-SPEC 2026-10-29): 문서 관리 행·DOC-02의 텍스트 내보내기(DOC-03), 홈의 문서 요약 panel(DOCSUM-01), Heatmap 챕터 header의 정리 노트 panel(CHNOTE-01).
 - Design system 기반 일관된 modal/non-modal floating side panel 제공.

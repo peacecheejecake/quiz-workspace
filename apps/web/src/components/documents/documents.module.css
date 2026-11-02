@@ -161,15 +161,6 @@ a.title:hover {
   font-size: var(--font-size-label);
 }
 
-/* 문제 PDF 관리: where PDFs are uploaded instead (UX6-UPLOAD). */
-.uploadNote {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
 /* While a 종류 변경 is saved: looks and acts disabled but keeps focus (aria-disabled). */
 .kindTrigger[data-busy] {
   cursor: progress;

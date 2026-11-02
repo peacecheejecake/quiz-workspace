@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Button } from './Button';
+import { CopyButton } from './CopyButton';
 import { IconButton } from './IconButton';
 import { CloseIcon, MenuIcon } from './icons';
 
@@ -125,5 +126,29 @@ export const IconButtonsHover: StoryObj<typeof IconButton> = {
 
 export const IconButtonsHoverDark: StoryObj<typeof IconButton> = {
   ...IconButtonsHover,
+  globals: { theme: 'dark' },
+};
+
+export const CopyButtons: StoryObj<typeof CopyButton> = {
+  render: () => (
+    <div style={row}>
+      <CopyButton label="링크 복사" announcement="링크를 복사했습니다." onCopy={async () => true} />
+      <CopyButton label="실패하는 복사" announcement="복사했습니다." onCopy={async () => false} />
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'CopyButton (UX7-SHARE-EXPIRY): after a successful copy the icon becomes a check and ' +
+          'the label "복사 완료" for 2 s, announced once by a polite live region; both states share ' +
+          'one grid cell so the button never resizes. A failed copy shows no check.',
+      },
+    },
+  },
+};
+
+export const CopyButtonsDark: StoryObj<typeof CopyButton> = {
+  ...CopyButtons,
   globals: { theme: 'dark' },
 };

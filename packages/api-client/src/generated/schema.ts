@@ -420,6 +420,251 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/mock-exam-questions/{mock_exam_question_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * Remove Mock Exam Question
+     * @description 이 모의고사에서 빼기: the question leaves the list and later 풀기 (attempts stay).
+     */
+    delete: operations['removeMockExamQuestion'];
+    options?: never;
+    head?: never;
+    /**
+     * Update Mock Exam Question
+     * @description Edit (a new revision; earlier attempts keep pointing at theirs). A stale
+     *     `base_revision_id` is 409 `stale-revision`.
+     */
+    patch: operations['updateMockExamQuestion'];
+    trace?: never;
+  };
+  '/api/v1/mock-exam-questions/{mock_exam_question_id}/practice-sessions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start Mock Practice Session
+     * @description Open a mock exam question: pins its active revision and shuffles MCQ options. No answers
+     *     in the response, nothing recorded outside the mock exam tables. With a run position the
+     *     caller's mock run of this workspace must hold this question there; the position's open
+     *     session is resumed, a submitted one is 409 `already-submitted`.
+     */
+    post: operations['startMockPracticeSession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/mock-exams/{mock_exam_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Mock Exam
+     * @description Settings, current and newest generation (status, progress, counts).
+     */
+    get: operations['getMockExam'];
+    put?: never;
+    post?: never;
+    /**
+     * Delete Mock Exam
+     * @description Soft delete: the mock exam leaves the list (attempts stay); a running generation is
+     *     cancelled.
+     */
+    delete: operations['deleteMockExam'];
+    options?: never;
+    head?: never;
+    /**
+     * Rename Mock Exam
+     * @description 이름 바꾸기 (1-100 characters; names may repeat in a workspace).
+     */
+    patch: operations['renameMockExam'];
+    trace?: never;
+  };
+  '/api/v1/mock-exams/{mock_exam_id}/generations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Mock Exam Generation
+     * @description 다시 만들기 (empty body), 설정 바꾸기 (`config` / `range`: saved as a new revision) or
+     *     다시 시도: a new generation; on success it replaces the shown questions (earlier ones and
+     *     their attempts are kept).
+     */
+    post: operations['createMockExamGeneration'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/mock-exams/{mock_exam_id}/questions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Mock Exam Questions
+     * @description The shown generation's questions by position (removed ones excluded). Viewers never get
+     *     answers or explanations, also with `include=answers`.
+     */
+    get: operations['listMockExamQuestions'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/mock-practice-sessions/{mock_practice_session_id}/self-grade': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Self Grade Mock Practice Session
+     * @description The user's own grade of a pending (essay / ungradable short answer) submission: appends a
+     *     grade attempt referencing the pending one; the session becomes graded. Once.
+     */
+    post: operations['selfGradeMockPracticeSession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/mock-practice-sessions/{mock_practice_session_id}/submit': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Submit Mock Practice Session
+     * @description Grade the answer on the server against the session's revision (option ids, never
+     *     positions); append the attempt; reveal answers and explanation. Once per session — for a run
+     *     position once per position (409 `already-submitted`), and not after the run finished.
+     */
+    post: operations['submitMockPracticeSession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/practice-runs/{run_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Practice Run
+     * @description The run's counts, progress and summary (no items, no content).
+     */
+    get: operations['getPracticeRun'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/practice-runs/{run_id}/finish': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Finish Practice Run
+     * @description End the run: unsubmitted positions count as skipped and no position can be submitted
+     *     any more. Finishing a finished run returns it unchanged.
+     */
+    post: operations['finishPracticeRun'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/practice-runs/{run_id}/items/{position}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Practice Run Item
+     * @description One position of the run: the question without answers, or — once submitted — the
+     *     submitted answer, its result and the answers (`attempt`).
+     */
+    get: operations['getPracticeRunItem'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/practice-runs/{run_id}/results': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Practice Run Results
+     * @description Positions offset+1 .. offset+limit with their result (no answers).
+     */
+    get: operations['listPracticeRunResults'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/practice-sessions/{session_id}': {
     parameters: {
       query?: never;
@@ -473,7 +718,8 @@ export type paths = {
     /**
      * Submit Practice Session
      * @description Grade the answer on the server against the session's revision (option ids, never
-     *     positions); append the attempt; reveal answers and explanation. Once per session.
+     *     positions); append the attempt; reveal answers and explanation. Once per session — for a
+     *     run position once per position (409 `already-submitted`), and not after the run finished.
      */
     post: operations['submitPracticeSession'];
     delete?: never;
@@ -505,70 +751,6 @@ export type paths = {
      *     confirms a changed answer count and `question_type` a changed type (`acknowledged_codes`).
      */
     patch: operations['updateQuestionDraft'];
-    trace?: never;
-  };
-  '/api/v1/question-generations/{generation_id}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Get Question Generation */
-    get: operations['getQuestionGeneration'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/question-generations/{generation_id}/drafts': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * List Question Generation Drafts
-     * @description The run's drafts in generation order with diff original (the run's source revision),
-     *     justification, cited passages and validations. Review them with PATCH /question-drafts/{id}.
-     */
-    get: operations['listQuestionGenerationDrafts'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/question-generations/{generation_id}/publish': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Publish Question Generation Drafts
-     * @description Register exactly these approved drafts as CONFIRMED questions with lineage
-     *     (QGEN-01-AC04). Same contract as the import publish: all or nothing; 404 for an id that is
-     *     not a draft of this run, 409 `stale-draft` for a draft changed since review, 409
-     *     `draft-not-approved` for a pending/rejected draft, 422 when a draft cannot be confirmed,
-     *     409 `duplicate-question` when a draft duplicates a current question of the workspace or
-     *     another draft of the request; already published drafts return their question (idempotent
-     *     replay).
-     */
-    post: operations['publishQuestionGenerationDrafts'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
     trace?: never;
   };
   '/api/v1/question-imports/{import_id}': {
@@ -779,35 +961,13 @@ export type paths = {
     };
     /**
      * List My Attempts
-     * @description The caller's own attempts on the question, newest first, each pinned to the revision it
-     *     was graded on (its content: GET /questions/{id}/revisions/{revision_id}).
+     * @description The caller's own attempts on the question and on the duplicates merged into it
+     *     (UX7-DEDUP), newest first, each pinned to the revision it was graded on (its content:
+     *     GET /questions/{question_id}/revisions/{revision_id} of the item's `question_id`).
      */
     get: operations['listMyQuestionAttempts'];
     put?: never;
     post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/questions/{question_id}/generations': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Create Question Generation
-     * @description Start generating variant drafts of a CONFIRMED question (QGEN-01-AC02..AC04). 409
-     *     `question-not-confirmed` for a draft/archived question. ANALOGOUS_CONCEPT passages are the
-     *     source's cited pages plus related passages from a search of the workspace's published
-     *     documents; with neither, the job fails `source_passages_missing`.
-     */
-    post: operations['createQuestionGeneration'];
     delete?: never;
     options?: never;
     head?: never;
@@ -830,6 +990,8 @@ export type paths = {
     /**
      * Update My State
      * @description Toggle the caller's favorite / retry flags (independent of each other and of results).
+     *     The state answered is folded with the merged duplicates' (UX7-DEDUP): a flag set on any of
+     *     them is set, and turning one off turns it off on all of them.
      */
     patch: operations['updateMyQuestionState'];
     trace?: never;
@@ -846,7 +1008,9 @@ export type paths = {
     /**
      * Start Practice Session
      * @description Open the practice panel on a CONFIRMED question: pins its active revision, shuffles MCQ
-     *     options, records the caller's view. No answers in the response.
+     *     options, records the caller's view. No answers in the response. With a run position
+     *     (QVIEW-B) the caller's run of this workspace must hold this question there; the position's
+     *     open session is resumed (another view), a submitted one is 409 `already-submitted`.
      */
     post: operations['startPracticeSession'];
     delete?: never;
@@ -1316,7 +1480,32 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/workspaces/{workspace_id}/question-generation-batches': {
+  '/api/v1/workspaces/{workspace_id}/mock-exams': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Mock Exams
+     * @description The workspace's mock exams, newest first, with their generation state.
+     */
+    get: operations['listMockExams'];
+    put?: never;
+    /**
+     * Create Mock Exam
+     * @description Save a mock exam and start its first generation. With an AI variation type the range's
+     *     questions, answers, explanations and related book text are sent to the LLM provider.
+     */
+    post: operations['createMockExam'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/practice-runs': {
     parameters: {
       query?: never;
       header?: never;
@@ -1326,18 +1515,18 @@ export type paths = {
     get?: never;
     put?: never;
     /**
-     * Create Question Generation Batch
-     * @description Start variant generation for several CONFIRMED questions at once (QGEN-01-AC06/AC07):
-     *     one run per source, reviewed and registered per run like a single generation.
+     * Create Practice Run
+     * @description Resolve the range on the server into a fixed, ordered run of at most 5,000 questions.
+     *     The response carries counts only (read positions through /items/{position}).
      */
-    post: operations['createQuestionGenerationBatch'];
+    post: operations['createPracticeRun'];
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  '/api/v1/workspaces/{workspace_id}/question-generation-batches/{batch_id}': {
+  '/api/v1/workspaces/{workspace_id}/question-duplicates': {
     parameters: {
       query?: never;
       header?: never;
@@ -1345,10 +1534,11 @@ export type paths = {
       cookie?: never;
     };
     /**
-     * Get Question Generation Batch
-     * @description The batch's runs, one per source in batch order, with their progress and draft counts.
+     * List Question Duplicates
+     * @description Groups of identical CONFIRMED questions (same normalised stem and options, any option
+     *     order). A read: scanning again gives the same groups until questions change.
      */
-    get: operations['getQuestionGenerationBatch'];
+    get: operations['listQuestionDuplicates'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1357,20 +1547,22 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/workspaces/{workspace_id}/question-generations': {
+  '/api/v1/workspaces/{workspace_id}/question-duplicates/merge': {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /**
-     * List Question Generations
-     * @description The workspace's generation runs, newest first (optionally of one source question).
-     */
-    get: operations['listQuestionGenerations'];
+    get?: never;
     put?: never;
-    post?: never;
+    /**
+     * Merge Question Duplicates
+     * @description Keep one question per group, archive the others and merge their study history into it
+     *     (the kept question's state, favorite and retry marks include theirs; attempts unchanged).
+     *     Repeating a merge changes nothing. Unarchiving a duplicate later unmerges it.
+     */
+    post: operations['mergeQuestionDuplicates'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1728,6 +1920,12 @@ export type components = {
        * Format: uuid
        */
       practice_session_id: string;
+      /**
+       * Question Id
+       * Format: uuid
+       * @description The question answered: this one, or a duplicate merged into it (UX7-DEDUP).
+       */
+      question_id: string;
       /**
        * Question Revision Id
        * Format: uuid
@@ -2269,6 +2467,34 @@ export type components = {
       /** Title */
       title: string;
     };
+    /**
+     * DraftDuplicate
+     * @description Why an unregistered import draft looks like a duplicate (UX7-DEDUP, QIMPORT-01-AC10):
+     *     the same question (docs/questions.md §10.1) as a CONFIRMED question of the workspace or as
+     *     an earlier draft of the same import. A hint only: the draft can still be registered.
+     */
+    DraftDuplicate: {
+      /**
+       * Draft Id
+       * @description `draft`: the earlier draft of this import.
+       */
+      draft_id: string | null;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: 'question' | 'draft';
+      /**
+       * Number
+       * @description `question`: its number (null if none); `draft`: its N번 (printed number, else position + 1).
+       */
+      number: number | null;
+      /**
+       * Question Id
+       * @description `question`: the confirmed question.
+       */
+      question_id: string | null;
+    };
     /** DraftEvidence */
     DraftEvidence: {
       /** Block Ids */
@@ -2405,6 +2631,78 @@ export type components = {
        */
       severity: 'warning' | 'error';
     };
+    /** DuplicateGroup */
+    DuplicateGroup: {
+      /**
+       * Answers Differ
+       * @description The questions' answers (correct option texts / accepted answers) differ.
+       */
+      answers_differ: boolean;
+      /** Fingerprint */
+      fingerprint: string;
+      /**
+       * Questions
+       * @description Registration order, oldest first.
+       */
+      questions: components['schemas']['DuplicateQuestion'][];
+      /**
+       * Suggested Keep Question Id
+       * Format: uuid
+       * @description The question with the most graded attempts by the workspace's members (its merged duplicates' included), ties to the oldest. Counts are not returned.
+       */
+      suggested_keep_question_id: string;
+    };
+    /** DuplicateOption */
+    DuplicateOption: {
+      /** Id */
+      id: string;
+      /** Text */
+      text: string;
+    };
+    /** DuplicateQuestion */
+    DuplicateQuestion: {
+      /** Chapter Id */
+      chapter_id: string | null;
+      /** Chapter Title */
+      chapter_title: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Options
+       * @description Authored order; no answer marks.
+       */
+      options: components['schemas']['DuplicateOption'][];
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /** Question Number */
+      question_number: number | null;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /** Stem */
+      stem: string;
+    };
+    /** DuplicateScan */
+    DuplicateScan: {
+      /**
+       * Groups
+       * @description Heatmap order of each group's first member.
+       */
+      groups: components['schemas']['DuplicateGroup'][];
+      /**
+       * Question Count
+       * @description Confirmed questions scanned.
+       */
+      question_count: number;
+    };
     /**
      * Fork
      * @description A fork request of the caller (never the source owner, manifest or link).
@@ -2466,211 +2764,6 @@ export type components = {
        * @description Name of the new workspace.
        */
       name: string;
-    };
-    /** GenerationBatch */
-    GenerationBatch: {
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /** Draft Count */
-      draft_count: number;
-      /** Finished Run Count */
-      finished_run_count: number;
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /**
-       * Items
-       * @description One per source, in batch order.
-       */
-      items: components['schemas']['GenerationBatchItem'][];
-      /**
-       * Mode
-       * @enum {string}
-       */
-      mode: 'selected' | 'random';
-      /** Published Count */
-      published_count: number;
-      /**
-       * Requested Count
-       * @description Sources asked for (a random pick may find fewer).
-       */
-      requested_count: number;
-      /** Run Count */
-      run_count: number;
-      /**
-       * Seed
-       * @description The random pick's seed (null for `selected`).
-       */
-      seed: number | null;
-      /**
-       * Status
-       * @description `working` while any run is queued or running.
-       * @enum {string}
-       */
-      status: 'working' | 'finished';
-      /**
-       * Workspace Id
-       * Format: uuid
-       */
-      workspace_id: string;
-    };
-    /** GenerationBatchCreate */
-    GenerationBatchCreate: {
-      /**
-       * Candidate Count
-       * @description Candidates per variation and source; sources x variations x candidates <= 60.
-       * @default 1
-       */
-      candidate_count?: number;
-      /** Difficulty */
-      difficulty?: ('easier' | 'same' | 'harder') | null;
-      /** Selection */
-      selection: components['schemas']['SelectedSources'] | components['schemas']['RandomSources'];
-      /**
-       * Variation Types
-       * @description Distinct variations for every source. OPTION_SHUFFLE is refused (422).
-       */
-      variation_types: (
-        'OPTION_SHUFFLE' | 'PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT'
-      )[];
-    };
-    /** GenerationBatchItem */
-    GenerationBatchItem: {
-      /** Position */
-      position: number;
-      run: components['schemas']['GenerationRun'];
-      source: components['schemas']['GenerationBatchSource'];
-    };
-    /** GenerationBatchSource */
-    GenerationBatchSource: {
-      /**
-       * Preview
-       * @description First lines of the pinned source stem; never the answer.
-       */
-      preview: string;
-      /**
-       * Question Id
-       * Format: uuid
-       */
-      question_id: string;
-      /** Question Number */
-      question_number: number | null;
-    };
-    /** GenerationCreate */
-    GenerationCreate: {
-      /**
-       * Candidate Count
-       * @description Candidates per variation.
-       * @default 1
-       */
-      candidate_count?: number;
-      /**
-       * Difficulty
-       * @description Optional target difficulty relative to the source.
-       */
-      difficulty?: ('easier' | 'same' | 'harder') | null;
-      /**
-       * Variation Types
-       * @description Distinct variations. OPTION_SHUFFLE is refused (422): it is a practice order (POST /questions/{id}/practice-sessions), never a generation.
-       */
-      variation_types: (
-        'OPTION_SHUFFLE' | 'PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT'
-      )[];
-    };
-    /** GenerationDraftList */
-    GenerationDraftList: {
-      /**
-       * Items
-       * @description Generation drafts (`run_id` set).
-       */
-      items: components['schemas']['ImportDraft'][];
-    };
-    /** GenerationRun */
-    GenerationRun: {
-      /**
-       * Batch Id
-       * @description The batch the run belongs to (POST /workspaces/{id}/question-generation-batches), or null.
-       */
-      batch_id?: string | null;
-      /** Candidate Count */
-      candidate_count: number;
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /** Difficulty */
-      difficulty: ('easier' | 'same' | 'harder') | null;
-      /** Draft Count */
-      draft_count: number;
-      /**
-       * Error Code
-       * @description Why the job failed (stable code), e.g. `llm_output_invalid`, `no_valid_candidates`, `llm_unavailable`, `llm_not_configured`.
-       */
-      error_code: string | null;
-      /** Finished At */
-      finished_at: string | null;
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /**
-       * Job Id
-       * @description Poll `GET /jobs/{id}` (job `question.generate`).
-       */
-      job_id: string | null;
-      /**
-       * Llm Model
-       * @description Set when the run succeeded.
-       */
-      llm_model: string | null;
-      /**
-       * Prompt Version
-       * @description Set when the run succeeded.
-       */
-      prompt_version: string | null;
-      /** Published Count */
-      published_count: number;
-      /**
-       * Source Question Id
-       * Format: uuid
-       */
-      source_question_id: string;
-      /**
-       * Source Question Revision Id
-       * Format: uuid
-       * @description The revision the variants are generated from (the diff original).
-       */
-      source_question_revision_id: string;
-      /**
-       * Status
-       * @description queued | running | succeeded | failed | cancelled
-       * @enum {string}
-       */
-      status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
-      /**
-       * Updated At
-       * Format: date-time
-       */
-      updated_at: string;
-      /** Variation Types */
-      variation_types: ('PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT')[];
-      /**
-       * Workspace Id
-       * Format: uuid
-       */
-      workspace_id: string;
-    };
-    /** GenerationRunList */
-    GenerationRunList: {
-      /** Items */
-      items: components['schemas']['GenerationRun'][];
     };
     /** HitBoundingBox */
     HitBoundingBox: {
@@ -2735,6 +2828,8 @@ export type components = {
        * Format: date-time
        */
       created_at: string;
+      /** @description Import drafts not registered yet: the same question exists. */
+      duplicate_of?: components['schemas']['DraftDuplicate'] | null;
       /**
        * Id
        * Format: uuid
@@ -2848,6 +2943,8 @@ export type components = {
        * @description Import drafts: the book chapter the draft is registered under (as `ImportDraft.chapter.id`, sent back as `chapter_id` when registering); null = none.
        */
       chapter_id?: string | null;
+      /** @description As `ImportDraft.duplicate_of` (UX7-DEDUP). */
+      duplicate_of?: components['schemas']['DraftDuplicate'] | null;
       /**
        * Id
        * Format: uuid
@@ -2937,19 +3034,6 @@ export type components = {
        * @description `approve` requests only (else empty): listed drafts left as they were, in request order.
        */
       refused: components['schemas']['ImportRefusedDraft'][];
-    };
-    /** ImportPublishRequest */
-    ImportPublishRequest: {
-      /** Drafts */
-      drafts: components['schemas']['ReviewedDraft'][];
-    };
-    /** ImportPublishResult */
-    ImportPublishResult: {
-      /**
-       * Items
-       * @description In request order.
-       */
-      items: components['schemas']['ImportPublishedDraft'][];
     };
     /** ImportRefusedDraft */
     ImportRefusedDraft: {
@@ -3219,6 +3303,13 @@ export type components = {
        */
       progress: number | null;
       /**
+       * Result
+       * @description Counts and code only, for `mock_exam.generate`: {created_count, skipped_count, usage: {llm_calls, batches, input_tokens, output_tokens}, error_code}; null for other job types.
+       */
+      result?: {
+        [key: string]: unknown;
+      } | null;
+      /**
        * Stage
        * @description Current step while running, e.g. `parsing`, `indexing`; null otherwise.
        */
@@ -3255,6 +3346,428 @@ export type components = {
       id: string;
       /** @description Created on the first authenticated `/me` call. */
       profile: components['schemas']['Profile'];
+    };
+    /** MergedGroup */
+    MergedGroup: {
+      /**
+       * Already Merged Question Ids
+       * @description Already archived and merged into this question (left as they were).
+       */
+      already_merged_question_ids: string[];
+      /**
+       * Archived Question Ids
+       * @description Archived and merged now.
+       */
+      archived_question_ids: string[];
+      /**
+       * Keep Question Id
+       * Format: uuid
+       */
+      keep_question_id: string;
+    };
+    /** MergeGroup */
+    MergeGroup: {
+      /** Duplicate Question Ids */
+      duplicate_question_ids: string[];
+      /**
+       * Keep Question Id
+       * Format: uuid
+       */
+      keep_question_id: string;
+    };
+    /** MergeRequest */
+    MergeRequest: {
+      /** Groups */
+      groups: components['schemas']['MergeGroup'][];
+    };
+    /** MergeResult */
+    MergeResult: {
+      /** Groups */
+      groups: components['schemas']['MergedGroup'][];
+    };
+    /** MockExam */
+    MockExam: {
+      config: components['schemas']['MockExamConfig'];
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** @description The generation whose questions are shown. */
+      current_generation: components['schemas']['MockExamGeneration'] | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      latest_generation: components['schemas']['MockExamGeneration'] | null;
+      /** Question Count Current */
+      question_count_current: number;
+      range: components['schemas']['QuestionRange'];
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'generating' | 'ready' | 'partial' | 'failed';
+      /** Title */
+      title: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      /** Version */
+      version: number;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /** MockExamConfig */
+    MockExamConfig: {
+      /**
+       * Difficulty
+       * @description null = like the source.
+       */
+      difficulty?: ('easy' | 'medium' | 'hard') | null;
+      /**
+       * Question Count
+       * @description Questions to make: 1..100 with an AI type; with 보기 섞기 only 1..range (null = the whole range).
+       */
+      question_count: number | null;
+      /**
+       * Variation Types
+       * @description Distinct variation types (one or more).
+       */
+      variation_types: (
+        'OPTION_SHUFFLE' | 'PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT'
+      )[];
+    };
+    /** MockExamCreate */
+    MockExamCreate: {
+      config: components['schemas']['MockExamConfig'];
+      range: components['schemas']['QuestionRange'];
+      /** Seed */
+      seed?: number | null;
+      /** Title */
+      title: string;
+    };
+    /** MockExamGeneration */
+    MockExamGeneration: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Created Count */
+      created_count: number;
+      /**
+       * Error Code
+       * @description `llm_unavailable`, `llm_timeout`, `no_valid_questions`, `mock_exam_unavailable`, ...
+       */
+      error_code: string | null;
+      /** Finished At */
+      finished_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Job Id
+       * @description Job `mock_exam.generate`.
+       */
+      job_id: string | null;
+      /** @description While queued or running. */
+      progress: components['schemas']['MockExamProgress'] | null;
+      /** Requested Count */
+      requested_count: number;
+      /** Seed */
+      seed: number;
+      /** Skipped Count */
+      skipped_count: number;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'queued' | 'running' | 'succeeded' | 'partial' | 'failed' | 'cancelled';
+      /** Version */
+      version: number;
+    };
+    /** MockExamGenerationCreate */
+    MockExamGenerationCreate: {
+      /** @description 설정 바꾸기: new settings. */
+      config?: components['schemas']['MockExamConfig'] | null;
+      range?: components['schemas']['QuestionRange'] | null;
+      /** Seed */
+      seed?: number | null;
+    };
+    /** MockExamList */
+    MockExamList: {
+      /** Items */
+      items: components['schemas']['MockExam'][];
+      /**
+       * Llm Available
+       * @description This environment can use the AI variation types.
+       */
+      llm_available: boolean;
+    };
+    /** MockExamOption */
+    MockExamOption: {
+      /** Id */
+      id: string;
+      /** Text */
+      text: string;
+    };
+    /** MockExamProgress */
+    MockExamProgress: {
+      /** Done */
+      done: number;
+      /** Total */
+      total: number;
+    };
+    /** MockExamQuestion */
+    MockExamQuestion: {
+      /** Accepted Answers */
+      accepted_answers?: string[] | null;
+      /** Correct Option Ids */
+      correct_option_ids?: string[] | null;
+      /** Edited */
+      edited: boolean;
+      /** Explanation */
+      explanation?: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Is Multi Answer */
+      is_multi_answer: boolean;
+      /** Options */
+      options: components['schemas']['MockExamOption'][];
+      /** Position */
+      position: number;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      revision: components['schemas']['MockExamRevisionRef'];
+      /** Rubric */
+      rubric?: string | null;
+      source: components['schemas']['MockExamSourceRef'];
+      /** Stem */
+      stem: string;
+      /** Validation Issues */
+      validation_issues?: components['schemas']['MockExamValidationNote'][] | null;
+      /**
+       * Variation Type
+       * @enum {string}
+       */
+      variation_type: 'OPTION_SHUFFLE' | 'PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT';
+    };
+    /** MockExamQuestionUpdate */
+    MockExamQuestionUpdate: {
+      /** Accepted Answers */
+      accepted_answers?: string[] | null;
+      /**
+       * Base Revision Id
+       * Format: uuid
+       */
+      base_revision_id: string;
+      /** Correct Option Ids */
+      correct_option_ids?: string[] | null;
+      /** Explanation */
+      explanation?: string | null;
+      /** Is Multi Answer */
+      is_multi_answer?: boolean | null;
+      /** Options */
+      options?: components['schemas']['MockExamOption'][] | null;
+      /** Rubric */
+      rubric?: string | null;
+      /** Stem */
+      stem?: string | null;
+    };
+    /** MockExamRevisionRef */
+    MockExamRevisionRef: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Version */
+      version: number;
+    };
+    /**
+     * MockExamSourceChapter
+     * @description The source question's chapter (MOCK-01-C10): the range step groups by it.
+     */
+    MockExamSourceChapter: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Number
+       * @description Leading chapter number of the outline path (as the Heatmap's), or null.
+       */
+      number: number | null;
+      /**
+       * Rank
+       * @description The generation plan's `chapter_rank` (Heatmap order of the range's chapters): groups sort by it.
+       */
+      rank: number;
+      /** Title */
+      title: string;
+    };
+    /** MockExamSourceRef */
+    MockExamSourceRef: {
+      /** @description null: the source was deleted or has no chapter (the 'none' group, last). */
+      chapter?: components['schemas']['MockExamSourceChapter'] | null;
+      /**
+       * Label
+       * @description "<n>장 <m>번", "<m>번" or "원본 삭제됨".
+       */
+      label: string;
+      /**
+       * Question Id
+       * @description null: the source was deleted.
+       */
+      question_id: string | null;
+    };
+    /** MockExamUpdate */
+    MockExamUpdate: {
+      /** Title */
+      title: string;
+    };
+    /** MockExamValidationNote */
+    MockExamValidationNote: {
+      /** Code */
+      code: string;
+      /**
+       * Severity
+       * @enum {string}
+       */
+      severity: 'error' | 'warning';
+    };
+    /**
+     * MockPracticeSession
+     * @description What a viewer needs to show a mock exam question. Never carries answers, explanations,
+     *     rubrics or accepted answers (a new field here is a reviewed change).
+     */
+    MockPracticeSession: {
+      /**
+       * Displayed Option Ids
+       * @description The displayed order (MCQ), as ids.
+       */
+      displayed_option_ids: string[];
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Is Multi Answer */
+      is_multi_answer: boolean;
+      /**
+       * Mock Exam Id
+       * Format: uuid
+       */
+      mock_exam_id: string;
+      /**
+       * Mock Exam Question Id
+       * Format: uuid
+       */
+      mock_exam_question_id: string;
+      /**
+       * Opened At
+       * Format: date-time
+       */
+      opened_at: string;
+      /**
+       * Options
+       * @description MCQ options in displayed order.
+       */
+      options: components['schemas']['PracticeOption'][];
+      /**
+       * Practice Run Id
+       * @description The practice run this session practises a position of.
+       */
+      practice_run_id?: string | null;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * Revision Id
+       * Format: uuid
+       * @description The mock exam question revision graded on.
+       */
+      revision_id: string;
+      /**
+       * Run Position
+       * @description That run position (1-based).
+       */
+      run_position?: number | null;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: 'open' | 'pending_grade' | 'graded';
+      /** Stem */
+      stem: string;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /**
+     * MockSubmitResult
+     * @description The graded (or pending) submission with the pinned revision's answers revealed.
+     */
+    MockSubmitResult: {
+      /** Accepted Answers */
+      accepted_answers: string[] | null;
+      /**
+       * Attempt Id
+       * Format: uuid
+       * @description The attempt that holds the current result.
+       */
+      attempt_id: string;
+      /** Correct Option Ids */
+      correct_option_ids: string[] | null;
+      /** Explanation */
+      explanation: string | null;
+      /**
+       * Mock Exam Question Id
+       * Format: uuid
+       */
+      mock_exam_question_id: string;
+      /**
+       * Practice Session Id
+       * Format: uuid
+       */
+      practice_session_id: string;
+      /**
+       * Result
+       * @enum {string}
+       */
+      result: 'correct' | 'incorrect' | 'pending';
+      /**
+       * Revision Id
+       * Format: uuid
+       */
+      revision_id: string;
+      /** Rubric */
+      rubric: string | null;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: 'open' | 'pending_grade' | 'graded';
     };
     /** MyState */
     MyState: {
@@ -3596,6 +4109,82 @@ export type components = {
       text: string;
     };
     /**
+     * PracticeRun
+     * @description Counts, progress and summary only: never the item list or question content.
+     */
+    PracticeRun: {
+      /**
+       * Answered
+       * @description Positions submitted.
+       */
+      answered: number;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Finished At */
+      finished_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Mock Exam Id */
+      mock_exam_id: string | null;
+      /** Random Order */
+      random_order: boolean;
+      /**
+       * Reached
+       * @description The furthest position opened (0: none yet).
+       */
+      reached: number;
+      /** Seed */
+      seed: number;
+      /**
+       * Source
+       * @enum {string}
+       */
+      source: 'bank' | 'mock';
+      summary: components['schemas']['RunSummary'];
+      /**
+       * Total
+       * @description Positions 1..total.
+       */
+      total: number;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /**
+     * PracticeRunCreate
+     * @description `source=bank`: the workspace's questions. `source=mock` (with `mock_exam_id`): the
+     *     questions the mock exam lists now. Unknown body fields are ignored (never a workspace or user
+     *     override).
+     */
+    PracticeRunCreate: {
+      /** Mock Exam Id */
+      mock_exam_id?: string | null;
+      /**
+       * Random Order
+       * @default false
+       */
+      random_order?: boolean;
+      range: components['schemas']['QuestionRange'];
+      /**
+       * Seed
+       * @description Shuffle seed; the server picks one if absent.
+       */
+      seed?: number | null;
+      /**
+       * Source
+       * @enum {string}
+       */
+      source: 'bank' | 'mock';
+    };
+    /**
      * PracticeSession
      * @description What the practice panel needs to show a question. Never carries answers, explanations,
      *     rubrics or accepted answers (a new field here is a reviewed change).
@@ -3626,6 +4215,11 @@ export type components = {
        */
       options: components['schemas']['PracticeOption'][];
       /**
+       * Practice Run Id
+       * @description The practice run this session practises a position of.
+       */
+      practice_run_id?: string | null;
+      /**
        * Question Id
        * Format: uuid
        */
@@ -3644,6 +4238,11 @@ export type components = {
        */
       question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
       /**
+       * Run Position
+       * @description That run position (1-based).
+       */
+      run_position?: number | null;
+      /**
        * State
        * @enum {string}
        */
@@ -3656,8 +4255,17 @@ export type components = {
        */
       workspace_id: string;
     };
-    /** PracticeSessionCreate */
-    PracticeSessionCreate: Record<string, never>;
+    /**
+     * PracticeSessionCreate
+     * @description Empty for the practice panel; `practice_run_id` + `run_position` for a run position
+     *     (QVIEW-B): the position must hold this question; one session per position.
+     */
+    PracticeSessionCreate: {
+      /** Practice Run Id */
+      practice_run_id?: string | null;
+      /** Run Position */
+      run_position?: number | null;
+    };
     /** PracticeSessionDetail */
     PracticeSessionDetail: {
       /** Chapter Id */
@@ -3689,6 +4297,11 @@ export type components = {
       /** @description null while the session is open (no answers before submission). */
       outcome: components['schemas']['SubmitResult'] | null;
       /**
+       * Practice Run Id
+       * @description The practice run this session practises a position of.
+       */
+      practice_run_id?: string | null;
+      /**
        * Question Id
        * Format: uuid
        */
@@ -3706,6 +4319,11 @@ export type components = {
        * @enum {string}
        */
       question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * Run Position
+       * @description That run position (1-based).
+       */
+      run_position?: number | null;
       /**
        * State
        * @enum {string}
@@ -4050,6 +4668,26 @@ export type components = {
       /** Items */
       items: components['schemas']['OverviewItem'][];
     };
+    /**
+     * QuestionRange
+     * @description Whole groups (`all`, `chapter_ids`) plus single questions, minus exclusions, narrowed by
+     *     `filters`. Id lists are capped at 5,000 entries each.
+     */
+    QuestionRange: {
+      /**
+       * All
+       * @description Every question of the Heatmap.
+       * @default false
+       */
+      all?: boolean;
+      /** Chapter Ids */
+      chapter_ids?: (string | 'none')[];
+      /** Excluded Question Ids */
+      excluded_question_ids?: string[];
+      filters?: components['schemas']['RangeFilters'];
+      /** Question Ids */
+      question_ids?: string[];
+    };
     /** QuestionRevision */
     QuestionRevision: {
       /**
@@ -4197,40 +4835,25 @@ export type components = {
       /** Version */
       version: number;
     };
-    /** RandomSources */
-    RandomSources: {
-      /**
-       * Chapter
-       * @description A chapter id, or `none` for the questions without a chapter.
-       */
-      chapter?: string | null;
-      /**
-       * Count
-       * @description How many sources to pick.
-       */
-      count: number;
-      /**
-       * Favorite
-       * @description true: the caller's favorites only; false: no favorites.
-       */
+    /**
+     * RangeFilters
+     * @description The overview's state/type filters (GET /workspaces/{id}/questions/overview).
+     */
+    RangeFilters: {
+      /** Favorite */
       favorite?: boolean | null;
       /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
+       * Retry
+       * @description The `needs_retry` flag.
        */
-      mode: 'random';
-      /** Question Type */
-      question_type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      retry?: boolean | null;
       /**
-       * Seed
-       * @description Same seed and same candidates -> same pick. Omitted: the server draws one.
+       * Status
+       * @description Keep these dot statuses.
        */
-      seed?: number | null;
-      /**
-       * Statuses
-       * @description Heatmap statuses of the caller's study state (any of them); empty = all.
-       */
-      statuses?: ('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry')[];
+      status?: ('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry')[] | null;
+      /** Type */
+      type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
     };
     /** ReadinessReport */
     ReadinessReport: {
@@ -4278,19 +4901,6 @@ export type components = {
       metadata: {
         [key: string]: string;
       };
-    };
-    /** ReviewedDraft */
-    ReviewedDraft: {
-      /**
-       * Draft Id
-       * Format: uuid
-       */
-      draft_id: string;
-      /**
-       * Version
-       * @description The `version` of the draft that was approved.
-       */
-      version: string;
     };
     /** ReviewedImportDraft */
     ReviewedImportDraft: {
@@ -4393,6 +5003,144 @@ export type components = {
        */
       status: string;
     };
+    /**
+     * RunAttempt
+     * @description The submitted position's result with its answers (present only after submission).
+     */
+    RunAttempt: {
+      /** Accepted Answers */
+      accepted_answers: string[] | null;
+      /**
+       * Attempt Id
+       * Format: uuid
+       */
+      attempt_id: string;
+      /** Correct Option Ids */
+      correct_option_ids: string[] | null;
+      /** Explanation */
+      explanation: string | null;
+      /**
+       * Result
+       * @enum {string}
+       */
+      result: 'correct' | 'incorrect' | 'pending';
+      /** Rubric */
+      rubric: string | null;
+      submitted_answer: components['schemas']['RunSubmittedAnswer'];
+    };
+    /**
+     * RunItem
+     * @description One position. `available=false` (deleted or archived since the run started): no content.
+     *     Before submission no answer field exists anywhere outside `attempt` (null).
+     */
+    RunItem: {
+      attempt: components['schemas']['RunAttempt'] | null;
+      /** Available */
+      available: boolean;
+      /** Chapter Id */
+      chapter_id: string | null;
+      /**
+       * Chapter Number
+       * @description For `3장 12번` labels, if known.
+       */
+      chapter_number: number | null;
+      /** Chapter Title */
+      chapter_title: string | null;
+      /** Is Multi Answer */
+      is_multi_answer: boolean | null;
+      /**
+       * Options
+       * @description MCQ options; in the session's displayed order once a session is open.
+       */
+      options: components['schemas']['RunOption'][];
+      /** Position */
+      position: number;
+      /**
+       * Practice Session Id
+       * @description This position's session, if any.
+       */
+      practice_session_id: string | null;
+      /** Question Id */
+      question_id: string | null;
+      /** Question Number */
+      question_number: number | null;
+      /** Question Type */
+      question_type: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      /** Session State */
+      session_state: ('open' | 'pending_grade' | 'graded') | null;
+      /** Stem */
+      stem: string | null;
+      /** Total */
+      total: number;
+    };
+    /** RunOption */
+    RunOption: {
+      /**
+       * Id
+       * @description Stable option id; submit it, never a position.
+       */
+      id: string;
+      /** Text */
+      text: string;
+    };
+    /** RunResultItem */
+    RunResultItem: {
+      /** Available */
+      available: boolean;
+      /** Chapter Id */
+      chapter_id: string | null;
+      /** Chapter Number */
+      chapter_number: number | null;
+      /** Chapter Title */
+      chapter_title: string | null;
+      /** Position */
+      position: number;
+      /**
+       * Preview
+       * @description First lines of the stem; never the answer.
+       */
+      preview: string | null;
+      /** Question Id */
+      question_id: string | null;
+      /** Question Number */
+      question_number: number | null;
+      /** Question Type */
+      question_type: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      /**
+       * Result
+       * @description null: not reached yet (open run).
+       */
+      result: ('correct' | 'incorrect' | 'pending' | 'skipped') | null;
+    };
+    /** RunResults */
+    RunResults: {
+      /** Items */
+      items: components['schemas']['RunResultItem'][];
+      /** Limit */
+      limit: number;
+      /** Offset */
+      offset: number;
+      /** Total */
+      total: number;
+    };
+    /** RunSubmittedAnswer */
+    RunSubmittedAnswer: {
+      /** Answer Text */
+      answer_text?: string | null;
+      /** Selected Option Ids */
+      selected_option_ids?: string[] | null;
+    };
+    /** RunSummary */
+    RunSummary: {
+      /** Correct */
+      correct: number;
+      /** Incorrect */
+      incorrect: number;
+      /** Pending */
+      pending: number;
+      /** Skipped */
+      skipped: number;
+    };
     /** SearchItem */
     SearchItem: {
       /** @description Box of `block_id` on `page`. */
@@ -4433,7 +5181,7 @@ export type components = {
       document_title: string;
       /**
        * Document Type
-       * @description `book` or `question_paper`.
+       * @description `book` (question papers are never searched, so never `question_paper`).
        */
       document_type: string;
       /**
@@ -4502,7 +5250,8 @@ export type components = {
       document_ids?: string[] | null;
       /**
        * Include Question Papers
-       * @description Also search question-paper documents (left out of book search by default).
+       * @deprecated
+       * @description Ignored: question papers are never searched (UX7-SEARCH-2). Accepted so older clients keep working.
        * @default false
        */
       include_question_papers?: boolean;
@@ -4560,19 +5309,6 @@ export type components = {
       truncated: boolean;
       /** Warnings */
       warnings: string[];
-    };
-    /** SelectedSources */
-    SelectedSources: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      mode: 'selected';
-      /**
-       * Question Ids
-       * @description Distinct CONFIRMED questions of this workspace, in the batch's order.
-       */
-      question_ids: string[];
     };
     /** SelfGradeBody */
     SelfGradeBody: {
@@ -5288,6 +6024,11 @@ export type components = {
        * Format: uuid
        */
       id: string;
+      /**
+       * Merged Into Question Id
+       * @description The question was archived as a duplicate of this one (UX7-DEDUP): its history shows there, so links open it.
+       */
+      merged_into_question_id?: string | null;
       /**
        * Practice Session Id
        * Format: uuid
@@ -7104,6 +7845,1032 @@ export interface operations {
       };
     };
   };
+  removeMockExamQuestion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mock_exam_question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  updateMockExamQuestion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mock_exam_question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MockExamQuestionUpdate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockExamQuestion'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  startMockPracticeSession: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        mock_exam_question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PracticeSessionCreate'] | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockPracticeSession'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getMockExam: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mock_exam_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockExam'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  deleteMockExam: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mock_exam_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  renameMockExam: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mock_exam_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MockExamUpdate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockExam'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createMockExamGeneration: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        mock_exam_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MockExamGenerationCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockExam'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listMockExamQuestions: {
+    parameters: {
+      query?: {
+        /** @description `answers`: answers, explanations and checks (editors only). */
+        include?: 'answers' | null;
+      };
+      header?: never;
+      path: {
+        mock_exam_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': unknown;
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  selfGradeMockPracticeSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mock_practice_session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SelfGradeBody'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SelfGradeResult'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  submitMockPracticeSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mock_practice_session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SubmitBody'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockSubmitResult'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getPracticeRun: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PracticeRun'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  finishPracticeRun: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PracticeRun'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getPracticeRunItem: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description 1-based; past the end is 404. */
+        position: number;
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RunItem'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listPracticeRunResults: {
+    parameters: {
+      query?: {
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RunResults'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getPracticeSession: {
     parameters: {
       query?: never;
@@ -7353,220 +9120,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ImportDraft'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Conflict */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  getQuestionGeneration: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        generation_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['GenerationRun'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  listQuestionGenerationDrafts: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        generation_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['GenerationDraftList'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  publishQuestionGenerationDrafts: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        generation_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ImportPublishRequest'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ImportPublishResult'];
         };
       };
       /** @description Unauthorized */
@@ -8398,89 +9951,6 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  createQuestionGeneration: {
-    parameters: {
-      query?: never;
-      header?: {
-        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
-        'Idempotency-Key'?: string | null;
-      };
-      path: {
-        question_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['GenerationCreate'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      202: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['GenerationRun'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Conflict */
-      409: {
         headers: {
           [name: string]: unknown;
         };
@@ -10385,7 +11855,74 @@ export interface operations {
       };
     };
   };
-  createQuestionGenerationBatch: {
+  listMockExams: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockExamList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createMockExam: {
     parameters: {
       query?: never;
       header?: {
@@ -10399,7 +11936,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['GenerationBatchCreate'];
+        'application/json': components['schemas']['MockExamCreate'];
       };
     };
     responses: {
@@ -10409,7 +11946,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['GenerationBatch'];
+          'application/json': components['schemas']['MockExam'];
         };
       };
       /** @description Unauthorized */
@@ -10477,12 +12014,94 @@ export interface operations {
       };
     };
   };
-  getQuestionGenerationBatch: {
+  createPracticeRun: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PracticeRunCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PracticeRun'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listQuestionDuplicates: {
     parameters: {
       query?: never;
       header?: never;
       path: {
-        batch_id: string;
         workspace_id: string;
       };
       cookie?: never;
@@ -10495,7 +12114,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['GenerationBatch'];
+          'application/json': components['schemas']['DuplicateScan'];
         };
       };
       /** @description Unauthorized */
@@ -10545,19 +12164,20 @@ export interface operations {
       };
     };
   };
-  listQuestionGenerations: {
+  mergeQuestionDuplicates: {
     parameters: {
-      query?: {
-        limit?: number;
-        source_question_id?: string | null;
-      };
+      query?: never;
       header?: never;
       path: {
         workspace_id: string;
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MergeRequest'];
+      };
+    };
     responses: {
       /** @description Successful Response */
       200: {
@@ -10565,7 +12185,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['GenerationRunList'];
+          'application/json': components['schemas']['MergeResult'];
         };
       };
       /** @description Unauthorized */
@@ -10588,6 +12208,15 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };

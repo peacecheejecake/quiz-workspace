@@ -94,15 +94,16 @@ linked_tests: [QOV-AC01, QOV-AC02]
 | DOC-01 | DOC-01-AC01~03 | `documents/library.spec.ts` | M3 |
 | DOC-02 | DOC-02-AC01~04 | `documents/editor.spec.ts` | M3 |
 | SEARCH-01 | SEARCH-01-AC01~04 | `search/search.spec.ts` | M3 |
-| QOV-01 | QOV-01-AC01~06 | `questions/overview.spec.ts` | M5 |
-| QBANK-01 | QBANK-01-AC01~03 | `questions/bank.spec.ts` | M4 |
-| QPLAY-01 | QPLAY-01-AC01~05 | `questions/practice.spec.ts` | M5 |
+| QOV-01 | QOV-01-AC01~13 | `questions/overview.spec.ts` | M5 (AC12·AC13: UX7-BANK, QBANK-01-AC01·02·05에서 옮김) |
+| QPLAY-01 | QPLAY-01-AC01~08 | `questions/practice.spec.ts` | M5 (AC07·AC08: UX7-BANK; AC06 UX7-CACHE, QBANK-01-AC03·04에서 옮김) |
 | QIMPORT-01 | QIMPORT-01-AC01~03 | `questions/import.spec.ts` | M4 |
-| QGEN-01 | QGEN-01-AC01~08 | `questions/generation.spec.ts` | M6 |
+| ~~QGEN-01~~ | 폐지 — QGEN-RM 2026-11-02 (spec 삭제, [폐지 기록](screens/questions-generation.md)) | — | M6 |
 | HISTORY-01 | HISTORY-01-AC01~03 | `history/history.spec.ts` | M7 |
 | DOC-03 | DOC-03-AC01~03 | `documents/documents-export.spec.ts` | DOCTXT |
 | DOCSUM-01 | DOCSUM-01-AC01~08 | `documents/documents-summary.spec.ts` | DOCSUM |
 | CHNOTE-01 | CHNOTE-01-AC01~06 | `questions/chapter-notes.spec.ts` | CHNOTE |
+| MOCK-01 | MOCK-01-AC01~08 | `questions/mock-exams.spec.ts` | MOCK |
+| QVIEW-01 | QVIEW-01-AC01~08 | `questions/question-viewer.spec.ts` | QVIEW |
 
 각 문서의 요구사항 ID와 테스트 title은 `e2e:trace` 검사 스크립트가 대조한다. CI는 orphan AC(테스트 없음) 또는 orphan test(ID를 참조하는 요구사항 없음)를 릴리즈 게이트에서 차단한다. **시나리오 수와 범위는 구현 단계별로 점진적으로 확대**한다.
 

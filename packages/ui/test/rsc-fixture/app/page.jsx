@@ -18,9 +18,13 @@ import {
   HistoryIcon,
   SearchIcon,
   ShareIcon,
+  SplitView,
   TrashIcon,
   CloseIcon,
   ConfirmDialog,
+  COPY_FEEDBACK_MS,
+  CopyButton,
+  CopyIcon,
   DialogClose,
   Dropzone,
   DropdownMenu,
@@ -42,6 +46,7 @@ import {
   MinusIcon,
   MoreIcon,
   ModalDialog,
+  ownEscapeProps,
   PageHeader,
   Popover,
   PopoverAnchor,
@@ -94,7 +99,9 @@ const interactive = [
   RetryToggle,
   ConfirmDialog,
   Dropzone,
+  CopyButton,
 ];
+const copyFeedbackMs = COPY_FEEDBACK_MS;
 
 // The status helpers are plain functions and must be callable on the server.
 const questions = QUESTION_DOT_STATUSES.map((status, index) => ({
@@ -169,6 +176,7 @@ export default function Page() {
             />
             <AlertIcon />
             <CheckIcon />
+            <CopyIcon data-ms={copyFeedbackMs} />
             <ChevronDownIcon />
             <MenuIcon />
             <MinusIcon />
@@ -198,8 +206,14 @@ export default function Page() {
             <DialogClose>닫기</DialogClose>
           </ModalDialog>
           <FloatingSidePanel title="패널" modal={false} trigger={<Button>패널</Button>}>
-            본문
+            <div {...ownEscapeProps}>본문</div>
           </FloatingSidePanel>
+          <div style={{ height: '200px' }}>
+            <SplitView separatorLabel="크기 조절" orientation="vertical" visible="both">
+              <p>앞</p>
+              <p>뒤</p>
+            </SplitView>
+          </div>
           <EmptyState title="비어 있음" />
           <Tabs defaultValue="a">
             <TabsList aria-label="탭">

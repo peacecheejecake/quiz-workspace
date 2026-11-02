@@ -1,0 +1,297 @@
+/* DOCVIEW-01 document viewer layout: the "보기 설정" bar, the split area with its docked outline
+ * panel, and the 원본 / 변환본 panes. Semantic tokens only; the reading panes are opaque surfaces
+ * (no glass over the PDF or the text, design-system §1). */
+
+.viewer {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* --- settings bar ------------------------------------------------------------------------- */
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+
+.barButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--duration-state) var(--easing-standard);
+}
+
+@media (hover: hover) {
+  .barButton:hover {
+    background: var(--color-state-hover);
+  }
+}
+
+.barButton:active {
+  background: var(--color-state-pressed);
+}
+
+.barButton[aria-expanded='true'] {
+  background: var(--color-surface-muted);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Outline toggle glyph: a sidebar box whose left column is filled while the panel is open. */
+.outlineIcon {
+  box-sizing: border-box;
+  display: inline-block;
+  width: 1rem;
+  height: 0.875rem;
+  border: 1.5px solid currentcolor;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(to right, currentcolor 0 35%, transparent 35%);
+  background-size: 100% 100%;
+  opacity: 0.85;
+}
+
+.outlineIcon[data-open='false'] {
+  background: linear-gradient(to right, transparent 0 33%, currentcolor 33% 40%, transparent 40%);
+}
+
+.swapIcon {
+  display: inline-block;
+  line-height: 1;
+}
+
+.swapIcon[data-orientation='vertical'] {
+  transform: rotate(90deg);
+}
+
+.segmented {
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.segment {
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-state) var(--easing-standard),
+    color var(--duration-state) var(--easing-standard);
+}
+
+@media (hover: hover) {
+  .segment:not([aria-checked='true'], [aria-pressed='true']):hover {
+    background: var(--color-state-hover);
+    color: var(--color-text-primary);
+  }
+}
+
+.segment:not([aria-checked='true'], [aria-pressed='true']):active {
+  background: var(--color-state-pressed);
+  color: var(--color-text-primary);
+}
+
+/* Selected: surface background + bold text (never color alone, design-system §4.1). */
+.segment:is([aria-checked='true'], [aria-pressed='true']) {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Inset ring: an outset one would touch the group's border (one boundary). */
+button.segment:focus-visible {
+  outline-offset: -2px;
+}
+
+/* --- split area ---------------------------------------------------------------------------- */
+
+/* The area's height is the viewport minus the page around it, measured by viewer-fit.ts into
+   --viewer-area-chrome; the rem estimate only covers the server render and the first frame. */
+.area,
+.skeleton {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  height: calc(100dvh - var(--viewer-area-chrome, calc(var(--app-header-height) + 17rem)));
+  min-height: 28rem;
+}
+
+.skeleton {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+@media (width < 768px) {
+  .area,
+  .skeleton {
+    height: calc(100dvh - var(--viewer-area-chrome, calc(var(--app-header-height) + 12rem)));
+    min-height: 24rem;
+  }
+
+  .viewer[data-width='narrow'] .bar {
+    justify-content: space-between;
+  }
+}
+
+/* The panes step aside for the outline panel and follow the splitter at once: no layout
+   transition (the reduced-motion reset would otherwise animate these for a frame). */
+.area,
+.split {
+  transition: none;
+}
+
+.split {
+  height: 100%;
+}
+
+.pane {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow: hidden;
+  transition: opacity var(--duration-state) var(--easing-standard);
+}
+
+.pane[data-dragged] {
+  opacity: 0.6;
+}
+
+.paneHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.paneTitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.paneHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@media (hover: hover) {
+  .paneHandle:hover {
+    background: var(--color-state-hover);
+    color: var(--color-text-primary);
+  }
+}
+
+.pane[data-dragged] .paneHandle {
+  cursor: grabbing;
+}
+
+@media (pointer: coarse) {
+  .paneHandle {
+    width: calc(var(--space-8) + var(--space-3));
+    height: calc(var(--space-8) + var(--space-3));
+  }
+}
+
+/* Six-dot grip drawn with two dotted columns. */
+.grip {
+  width: 0.625rem;
+  height: 1rem;
+  background-image: radial-gradient(currentcolor 1.5px, transparent 1.6px);
+  background-size: 5px 5px;
+  background-position: 0 0;
+}
+
+.dropTarget {
+  position: absolute;
+  z-index: var(--z-raised);
+  inset: var(--space-2);
+  display: grid;
+  place-items: center;
+  border: 3px dashed var(--color-accent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  pointer-events: none;
+}
+
+.dropHint {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* --- outline panel ------------------------------------------------------------------------- */
+
+/* Tablets: the panel floats over the PDF and the text, so it is opaque there (no glass over the
+   reading area, design-system §1 checklist). Desktop docks it beside the panes (inset). */
+.outlinePanel:global(.qz-panel)[data-dock-mode='overlay'] {
+  background: var(--color-glass-solid);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Reduced motion: the outline panel opens and folds at once (DOCVIEW-01-AC02). The global reset
+   only shortens animations to 0.01ms; the extra class beats the kit's .qz-panel rules. */
+@media (prefers-reduced-motion: reduce) {
+  .outlinePanel:global(.qz-panel) {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane,
+  .barButton,
+  .segment {
+    transition: none;
+  }
+}

@@ -40,6 +40,7 @@ import {
 } from '@/lib/questions/drafts';
 import { QUESTION_TYPE_LABELS } from '@/lib/questions/form';
 import styles from './question-draft-review.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export interface DraftReviewState {
   /** Approval shown while the request is in flight (optimistic). */
@@ -188,7 +189,7 @@ const DraftItem = memo(function DraftItem({
         {draft.answerMissing ? <Badge tone="warning">정답 없음</Badge> : null}
       </div>
 
-      <p className={styles.stem}>{draft.stem}</p>
+      <p className={styles.stem}>{displayStem(draft.stem)}</p>
 
       {draft.type === 'MCQ' ? (
         <div className={styles.options}>

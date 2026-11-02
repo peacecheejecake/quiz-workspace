@@ -1,5 +1,5 @@
 // Content fields of a question (type, stem, options and answers, explanation), shared by the
-// QBANK-01 question editor and the draft editor of QuestionDraftReview (QIMPORT-01, QGEN-01) so
+// home question editor and the draft editor of QuestionDraftReview (QIMPORT-01, QGEN-01) so
 // both edit questions the same way: stable option ids, single/multi answer, one accepted answer
 // per line for short answers, a rubric for essays.
 import {

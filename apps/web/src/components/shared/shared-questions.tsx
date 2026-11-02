@@ -1,14 +1,15 @@
 'use client';
 
 // WS-VIEW-01 published questions: one list item per CONFIRMED question; a click opens the
-// read-only preview in a non-modal FloatingSidePanel with the options, the correct answer, the
-// explanation and the source pages. There is no answer input, favourite, retry or edit control,
-// and opening a question records nothing (the shared API has no write route at all).
-import { Badge, Button, FloatingSidePanel } from '@quiz/ui';
+// read-only preview (QuestionViewer `read-only`, QVIEW-01 call site 6) in a non-modal
+// FloatingSidePanel with the options, the correct answer, the explanation and the source pages.
+// There is no answer input, favourite, retry or edit control, and opening a question records
+// nothing (the shared API has no write route at all).
+import { Button } from '@quiz/ui';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { RevisionView } from '@/components/questions/question-detail';
 import { NO_CHAPTER_TITLE, pageText } from '@/components/questions/labels';
+import { QuestionViewer } from '@/components/questions/viewer/question-viewer';
 import { QUESTION_TYPE_LABELS } from '@/lib/questions/form';
 import type {
   SharedClient,
@@ -19,6 +20,7 @@ import type {
 import { endsShareView, sharedFailureMessage } from '@/lib/shared/messages';
 import { sharedDocumentHref } from '@/lib/shared/view-state';
 import styles from './shared.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export interface SharedQuestionsProps {
   readonly shareId: string;
@@ -123,7 +125,7 @@ export function SharedQuestions({
                 onClick={() => setOpenId(q.id)}
               >
                 <span className={styles.questionNumber}>{q.question_number ?? index + 1}</span>
-                <span className={styles.questionStem}>{q.revision.stem}</span>
+                <span className={styles.questionStem}>{displayStem(q.revision.stem)}</span>
                 <span className={styles.questionMeta}>
                   {QUESTION_TYPE_LABELS[q.question_type]} · {q.chapter?.title ?? NO_CHAPTER_TITLE}
                 </span>
@@ -164,27 +166,21 @@ export function SharedQuestionPanel({
   readonly onClose: () => void;
 }) {
   return (
-    <FloatingSidePanel
-      modal={false}
-      open={question !== null}
-      onOpenChange={(next) => {
-        if (!next) onClose();
-      }}
-      title={question?.question_number ? `${question.question_number}번 문제` : '문제 미리보기'}
-      description={
-        question
-          ? `${QUESTION_TYPE_LABELS[question.question_type]} · ${question.chapter?.title ?? NO_CHAPTER_TITLE} · 조회 전용`
-          : undefined
+    <QuestionViewer
+      mode="read-only"
+      question={
+        question ? { questionType: question.question_type, revision: question.revision } : null
       }
-      closeLabel="패널 닫기"
-      mobileLayout="full"
-    >
-      {question ? (
-        <div className={styles.panelBody}>
-          <div className={styles.panelMeta}>
-            <Badge>{QUESTION_TYPE_LABELS[question.question_type]}</Badge>
-          </div>
-          <RevisionView revision={question.revision} type={question.question_type} heading="문제" />
+      title={question?.question_number ? `${question.question_number}번 문제` : '문제 미리보기'}
+      {...(question
+        ? {
+            description: `${QUESTION_TYPE_LABELS[question.question_type]} · ${question.chapter?.title ?? NO_CHAPTER_TITLE} · 조회 전용`,
+          }
+        : {})}
+      onClose={onClose}
+      className={styles.panelBody}
+      sources={
+        question ? (
           <section className={styles.panelSection} aria-labelledby="shared-question-sources">
             <h3 id="shared-question-sources" className={styles.panelHeading}>
               출처
@@ -214,8 +210,8 @@ export function SharedQuestionPanel({
               </ul>
             )}
           </section>
-        </div>
-      ) : null}
-    </FloatingSidePanel>
+        ) : null
+      }
+    />
   );
 }

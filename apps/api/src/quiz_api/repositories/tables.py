@@ -186,6 +186,37 @@ question_user_states = Table(
     _ts("updated_at", nullable=False),
 )
 
+# UX7-DEDUP (20261101120000_question_merges.sql): duplicate -> kept links (history).
+question_merges = Table(
+    "question_merges",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=FetchedValue()),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("duplicate_question_id", Uuid, nullable=False),
+    Column("kept_question_id", Uuid, nullable=False),
+    Column("created_by", Uuid),
+    _ts("created_at", nullable=False),
+    _ts("ended_at"),
+    Column("ended_by", Uuid),
+    Column("end_reason", Text),
+)
+
+# The per-user study state of a question folded with its merged duplicates' (a view).
+question_merged_user_states = Table(
+    "question_merged_user_states",
+    metadata,
+    Column("user_id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("question_id", Uuid, primary_key=True),
+    _ts("first_viewed_at"),
+    _ts("last_viewed_at"),
+    Column("last_graded_result", Text),
+    Column("last_graded_attempt_id", Uuid),
+    Column("is_favorite", Boolean, nullable=False),
+    Column("needs_retry", Boolean, nullable=False),
+    Column("merged_states", BigInteger, nullable=False),
+)
+
 practice_sessions = Table(
     "practice_sessions",
     metadata,
@@ -202,6 +233,27 @@ practice_sessions = Table(
     _ts("graded_at"),
     _ts("created_at", nullable=False),
     _ts("updated_at", nullable=False),
+    # QVIEW-B: the run position this session practises (both null outside a run).
+    Column("practice_run_id", Uuid),
+    Column("run_position", Integer),
+)
+
+# QVIEW-B range practice runs (one user's fixed, ordered questions; only finished_at changes).
+practice_runs = Table(
+    "practice_runs",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=FetchedValue()),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("user_id", Uuid, nullable=False),
+    Column("source", Text, nullable=False),
+    Column("mock_exam_id", Uuid),
+    Column("mock_exam_generation_id", Uuid),
+    Column("range", JSONB, nullable=False),
+    Column("random_order", Boolean, nullable=False),
+    Column("seed", BigInteger, nullable=False),
+    Column("item_ids", ARRAY(Uuid), nullable=False),
+    _ts("created_at", nullable=False),
+    _ts("finished_at"),
 )
 
 question_attempts = Table(
@@ -519,4 +571,36 @@ chapter_notes = Table(
     _ts("updated_at", nullable=False),
     _ts("finished_at"),
     _ts("superseded_at"),
+)
+
+
+# --- MOCK-B mock exams (20261102140000_mock_exams.sql) -------------------------------------
+# Only the columns the authorization registry needs; quiz_api.repositories.mock_exams reads and
+# writes the mock exam tables with SQL text.
+
+mock_exams = Table(
+    "mock_exams",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    _ts("deleted_at"),
+)
+
+mock_exam_questions = Table(
+    "mock_exam_questions",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("mock_exam_id", Uuid, nullable=False),
+    _ts("removed_at"),
+)
+
+# MOCK-P: the ownership lookup of a mock practice session (quiz_api.repositories.mock_practice
+# reads and writes the rest with SQL text).
+mock_exam_practice_sessions = Table(
+    "mock_exam_practice_sessions",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("user_id", Uuid, nullable=False),
 )

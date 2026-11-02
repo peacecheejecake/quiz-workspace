@@ -108,6 +108,22 @@ class ProblemType(StrEnum):
     # 409: chapter notes are off in this environment (WORKER_CHAPTER_NOTES); stored notes stay
     # readable.
     NOTE_GENERATION_DISABLED = "urn:quiz-workspace:problem:note-generation-disabled"
+    # 409: a merge named questions whose content is not the same question (UX7-DEDUP).
+    NOT_DUPLICATES = "urn:quiz-workspace:problem:not-duplicates"
+    # 422: a range names a question that is not a live CONFIRMED question of the workspace (a
+    # draft, archived, deleted or foreign id) or a chapter of another workspace (QVIEW-01-C01).
+    RANGE_INVALID = "urn:quiz-workspace:problem:range-invalid"
+    # 422: a range resolves to more questions than one practice run holds (5,000).
+    PRACTICE_RUN_TOO_LARGE = "urn:quiz-workspace:problem:practice-run-too-large"
+    # 409: this practice run position was already submitted (one submission per position).
+    ALREADY_SUBMITTED = "urn:quiz-workspace:problem:already-submitted"
+    # 409: the practice run is finished; its summary is fixed (start a new run to practise).
+    PRACTICE_RUN_FINISHED = "urn:quiz-workspace:problem:practice-run-finished"
+    # 409: the mock exam already has a queued or running generation (MOCK-01-C04).
+    MOCK_GENERATION_RUNNING = "urn:quiz-workspace:problem:mock-generation-running"
+    # 409: AI variation types are off in this environment (WORKER_MOCK_EXAMS / no LLM);
+    # 보기 섞기 still works and stored mock exams stay readable.
+    MOCK_LLM_DISABLED = "urn:quiz-workspace:problem:mock-llm-disabled"
 
 
 class ProblemException(StarletteHTTPException):

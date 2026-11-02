@@ -1,5 +1,5 @@
 /* State transitions (hover/active/selected/focus) from the motion tokens (design-system.md §4.1);
-   reduced motion collapses every transition in @quiz/design-tokens/base.css. */
+   reduced motion turns every transition off in @quiz/design-tokens/base.css. */
 :root {
   --qz-transition-fast: var(--duration-state) var(--easing-standard);
 }
@@ -315,7 +315,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* !important beats the global 0.01ms reset: the fill jumps straight to the new value. */
+  /* The fill jumps straight to the new value (also covered by the global base.css rule). */
   .qz-progress > .fill {
     transition: none !important;
   }

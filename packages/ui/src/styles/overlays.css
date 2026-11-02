@@ -1,7 +1,8 @@
 /*
  * Floating layers. z-index and motion come from tokens (docs/design-system.md §4):
  * popover 20, side panel 40, modal 60, toast 70; panel enter 240ms / exit 180ms using
- * transform + opacity only. Reduced motion collapses the animations (base.css + below).
+ * transform + opacity only. Reduced motion turns the animations off (base.css): Radix presence
+ * then mounts and unmounts at once.
  */
 
 /* Backdrop shared by modal side panels, the mobile nav drawer and modal dialogs. */
@@ -44,9 +45,9 @@
     width: min(720px, calc(100vw - 2 * var(--space-4)));
   }
 
-  /* Navigation panels (DOC-02 목차): a narrow column. */
+  /* Navigation columns (size="narrow"; the docked DOCVIEW-01 목차 panel has the same width). */
   &[data-size='narrow'] {
-    width: min(20rem, calc(100vw - 2 * var(--space-4)));
+    width: min(var(--outline-panel-width), calc(100vw - 2 * var(--space-4)));
   }
 
   /* `side="start"`: the panel floats at the inline start (left in LTR) edge. */
@@ -118,6 +119,11 @@
     font-size: var(--font-size-section-title);
     font-weight: var(--font-weight-semibold);
     line-height: var(--line-height-snug);
+  }
+
+  /* A focusable title (titleRef) takes focus programmatically: no ring, like the panel itself. */
+  > .header > .heading > .title:focus {
+    outline: none;
   }
 
   > .header > .heading > .description {
@@ -220,6 +226,56 @@
       padding-inline: var(--space-4);
     }
   }
+}
+
+/*
+ * Docked panels (placement="docked", design-system §5.1 v1.2.7) sit inside their positioned
+ * container instead of the viewport, at every width: full container height at the `side` edge,
+ * --outline-panel-width wide. Declared after the mobile rules so they win there too (narrow
+ * screens keep the opaque surface of the mobile rules).
+ */
+.qz-panel[data-placement='docked'] {
+  position: absolute;
+  top: 0;
+  right: auto;
+  bottom: 0;
+  left: 0;
+  width: min(var(--outline-panel-width), 100%);
+  height: auto;
+  max-height: none;
+  border-radius: var(--radius-xl);
+  padding-top: 0;
+  padding-bottom: 0;
+
+  &[data-side='end'] {
+    right: 0;
+    left: auto;
+  }
+
+  &[data-side='start'][data-state='open'] {
+    animation-name: qz-panel-in-start;
+  }
+
+  &[data-side='start'][data-state='closed'] {
+    animation-name: qz-panel-out-start;
+  }
+
+  &[data-side='end'][data-state='open'] {
+    animation-name: qz-panel-in;
+  }
+
+  &[data-side='end'][data-state='closed'] {
+    animation-name: qz-panel-out;
+  }
+}
+
+/* Inset docking: the panel's container makes room for it (set by FloatingSidePanel while open). */
+[data-qz-dock-inset='start'] {
+  padding-inline-start: calc(var(--outline-panel-width) + var(--space-3));
+}
+
+[data-qz-dock-inset='end'] {
+  padding-inline-end: calc(var(--outline-panel-width) + var(--space-3));
 }
 
 /* ModalDialog */
@@ -337,17 +393,23 @@
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
-  border-left-width: 3px;
   border-radius: var(--radius-lg);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
 
-  &[data-tone='success'] {
-    border-left-color: var(--color-success);
+  /* The tone is this icon plus a hidden word, never a coloured bar (UX7-SHARE-EXPIRY). */
+  > .tone-icon {
+    display: inline-flex;
+    flex: none;
+    padding-top: 6px;
   }
 
-  &[data-tone='error'] {
-    border-left-color: var(--color-danger);
+  &[data-tone='success'] > .tone-icon {
+    color: var(--color-success);
+  }
+
+  &[data-tone='error'] > .tone-icon {
+    color: var(--color-danger);
   }
 
   > .body {
@@ -524,19 +586,6 @@
   to {
     opacity: 0;
     transform: translateX(-100%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .qz-backdrop,
-  .qz-panel,
-  .qz-modal,
-  .qz-popover,
-  .qz-tooltip,
-  .qz-toast,
-  .qz-drawer,
-  .qz-menu {
-    animation-duration: 0.01ms !important;
   }
 }
 

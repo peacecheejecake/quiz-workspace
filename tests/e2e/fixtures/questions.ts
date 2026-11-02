@@ -1,4 +1,4 @@
-// Question bank (QBANK-01) and question PDF import (QIMPORT-01) fixtures: public-API factories,
+// Question (editor; QBANK-01 retired by UX7-BANK) and question PDF import (QIMPORT-01) fixtures: public-API factories,
 // the synthetic question paper, and the role/label UI contract. M4.0 keeps every assumption about
 // M4.2a/M4.2b/M4.4a/M4.4b in this header; a deliberate change is a one-place edit here (and in
 // tests/integration/questions/conftest.py, which mirrors the API half).
@@ -134,19 +134,12 @@
 //      exactly +3 markers (questions.md §8: "그중 3개 승인하면 점 103개").
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
-//   QBANK-01  h1 "전체 문제" (UX6-BANK; was "문제은행"); empty-state heading "등록된 문제가 없습니다" with a "문제 직접 등록" button
-//             and a "PDF 가져오기" button; header "PDF 가져오기"/"문제 등록" buttons only while the bank
-//             has questions (UX4); "PDF 가져오기" opens the non-modal dialog "문제 PDF 관리" (same as
-//             the home's); toggle button "검색·필터" (collapsed by default, UX4) controlling a group
-//             "검색·필터" with searchbox "문제 검색" and comboboxes "유형", "챕터", "상태"; `?create=1`
-//             opens the "문제 등록" editor once; one region per chapter named by the chapter
-//             title (questions without one under "챕터 없음"), one listitem per question with
-//             "편집" and a source link (pageLabel) into the document viewer. The editor is a
-//             dialog "문제 등록"/"문제 편집" with radiogroup "문제 유형" (객관식/단답형/서술형),
-//             textbox "문제 내용", textboxes "보기 N" + "보기 추가", per-option checkbox
-//             "보기 N 정답", textbox "허용 답안" (short), "채점 기준" (essay), combobox "챕터",
-//             button "저장"; errors in role=alert. Viewer / archived: no create/edit controls and
-//             a "읽기 전용" notice.
+//   Question editor (QBANK-01 retired by UX7-BANK; its editor opens on the home): a modal dialog
+//             "문제 등록" (home 문제 › 직접 추가 and the empty heatmap's "문제 등록",
+//             `?panel=question-create`) or "문제 편집" (practice panel 문제 관리 › 편집) with
+//             radiogroup "문제 유형" (객관식/단답형/서술형), textbox "문제 내용", textboxes "보기 N" +
+//             "보기 추가", per-option checkbox "보기 N 정답", textbox "허용 답안" (short), "채점
+//             기준" (essay), combobox "챕터", button "저장"; errors in role=alert.
 //   QIMPORT-01 h1 "문제 PDF 가져오기"; no upload since UX6-UPLOAD (PDFs are uploaded in 문서 관리;
 //             combobox "검토할 PDF" with two or more extracted PDFs; "문서 관리 열기" when none);
 //             progressbar "가져오기" while the job runs; list "가져온 초안" with one listitem per draft showing "N번",
@@ -167,6 +160,10 @@
 //             graded result as text 정답/오답/채점 대기 (role=status); the explanation only after
 //             submit; self-grade buttons "맞음"/"틀림"; "이전 문제"/"다음 문제". While open the URL
 //             carries ?question=<id>; closing removes it and returns focus to the trigger dot.
+//             UX7-BANK: editors of a non-archived workspace get a menu button "문제 관리" in the
+//             panel header with menuitems "편집" (the "문제 편집" dialog), "보관" and "삭제"
+//             (alertdialog "문제를 삭제할까요?" with "삭제"); none for viewers or archived
+//             workspaces. Its "변형 출제" link went with QGEN-01 (QGEN-RM).
 import { copyFileSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
@@ -258,6 +255,8 @@ export interface QuestionInput {
   readonly sources?: readonly QuestionSource[];
   /** A9 (M5.0): the heatmap label number (`12번 문제`). */
   readonly question_number?: number;
+  /** Default CONFIRMED; a DRAFT may be incomplete (UX7-BANK-2 seeds manual drafts). */
+  readonly publication_status?: 'DRAFT' | 'CONFIRMED';
 }
 
 export interface QuestionRevision {
@@ -450,10 +449,6 @@ export function draftFor(drafts: readonly Draft[], q: TruthQuestion): Draft {
 // UI
 // ---------------------------------------------------------------------------------------------
 
-export function bankPath(workspaceId: string): string {
-  return `/workspaces/${workspaceId}/questions/bank`;
-}
-
 export function importPath(workspaceId: string): string {
   return `/workspaces/${workspaceId}/questions/import`;
 }
@@ -461,47 +456,6 @@ export function importPath(workspaceId: string): string {
 const button = (scope: Page | Locator, name: RegExp) => scope.getByRole('button', { name });
 const buttonOrLink = (scope: Page | Locator, name: RegExp) =>
   scope.getByRole('button', { name }).or(scope.getByRole('link', { name }));
-
-export const bankUi = {
-  heading: (page: Page) => page.getByRole('heading', { level: 1 }),
-  emptyState: (page: Page) =>
-    main(page).getByRole('heading', { name: /등록된 문제가 없|문제가 없|no questions/i }),
-  createButton: (page: Page) =>
-    button(main(page), /문제 (직접 )?(등록|추가)|새 문제|(add|new|create) question/i).first(),
-  importButtons: (page: Page) => buttonOrLink(main(page), /^(pdf 가져오기|import pdf)$/i),
-  importLink: (page: Page) => bankUi.importButtons(page).first(),
-  /** "검색·필터" toggle (UX4: collapsed by default) and the group it controls. */
-  filterToggle: (page: Page) =>
-    main(page).getByRole('button', { name: /^(검색·필터|search (and|&) filters?)$/i }),
-  filterGroup: (page: Page) =>
-    main(page).getByRole('group', { name: /^(검색·필터|search (and|&) filters?)$/i }),
-  pdfsDialog: (page: Page) =>
-    page.getByRole('dialog', { name: /^(문제 pdf 관리|question pdfs?)$/i }),
-  search: (page: Page) => main(page).getByRole('searchbox', { name: /문제 검색|검색|search/i }),
-  typeFilter: (page: Page) => main(page).getByRole('combobox', { name: /^(문제 )?(유형|type)/i }),
-  chapterFilter: (page: Page) => main(page).getByRole('combobox', { name: /^(장|챕터|chapter)/i }),
-  chapterGroup: (page: Page, title: string | RegExp) =>
-    main(page).getByRole('region', { name: title }),
-  noChapterGroup: (page: Page) =>
-    main(page).getByRole('region', { name: /챕터 없음|미분류|장 없음|no chapter|unassigned/i }),
-  /** Question rows (inside the chapter groups; the page's breadcrumb is a list too). */
-  items: (page: Page) => main(page).getByRole('region').getByRole('listitem'),
-  item: (page: Page, stem: string) =>
-    main(page).getByRole('region').getByRole('listitem').filter({ hasText: stem }),
-  editButton: (item: Locator) => item.getByRole('button', { name: /^(편집|수정|edit)/i }),
-  readOnlyNotice: (page: Page) =>
-    main(page)
-      .getByText(/읽기 전용|보관된 workspace|read-only|archived/i)
-      .first(),
-  alert: (page: Page) => main(page).getByRole('alert').or(page.getByRole('alert')).first(),
-};
-
-/** Opens the bank's "검색·필터" (no-op when it is open; UX4 collapses it by default). */
-export async function openBankFilters(page: Page): Promise<void> {
-  const toggle = bankUi.filterToggle(page);
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
-  await expect(bankUi.filterGroup(page)).toBeVisible();
-}
 
 export const questionFormUi = {
   form: (page: Page) =>
@@ -539,13 +493,15 @@ export const importUi = {
   /** UX6-UPLOAD: `검토할 PDF` (one review per PDF; shown with two or more extracted PDFs). */
   pdfSwitcher: (page: Page) =>
     main(page).getByRole('combobox', { name: /검토할 pdf|pdf to review/i }),
-  /** UX6-UPLOAD: "문서 관리 열기" (empty import page and 문제 PDF 관리). */
+  /** UX6-UPLOAD: "문서 관리 열기" (the empty import page). */
   openDocuments: (scope: Locator) => buttonOrLink(scope, /문서 관리 열기|open documents/i),
   drafts: (page: Page) =>
     main(page).getByRole('list', { name: /가져온 (초안|문제)|초안|drafts?|imported questions/i }),
   draftItems: (page: Page) => importUi.drafts(page).getByRole('listitem'),
   draft: (page: Page, stem: string) => importUi.draftItems(page).filter({ hasText: stem }),
   number: (n: number) => new RegExp(`(?<!\\d)${n}\\s*번|(question|q)\\s*${n}(?!\\d)`, 'i'),
+  /** UX7-DEDUP (QIMPORT-01-AC10): the `중복` badge of a draft that repeats a question. */
+  duplicate: (draft: Locator) => draft.getByText(/^(중복|duplicate)$/i),
   noAnswer: (draft: Locator) => draft.getByText(/정답 없음|정답 미확인|정답 미지정|no answer/i),
   compare: (draft: Locator) =>
     buttonOrLink(draft, /원본 (비교|보기)|원문 (비교|보기)|compare|view source/i),
@@ -789,18 +745,20 @@ export function numberedMcq(
   };
 }
 
-/** Creates numbered MCQs 1..count in parallel batches of 10; returns them in number order. */
+/** Creates numbered MCQs 1..count in parallel batches of 10; returns them in number order.
+ *  `input` replaces the default `numberedMcq(label, n)` for chosen numbers. */
 export async function createNumberedQuestions(
   owner: Member,
   workspaceId: string,
   label: string,
   count: number,
+  input: (n: number) => QuestionInput = (n) => numberedMcq(label, n),
 ): Promise<Question[]> {
   const out: Question[] = [];
   for (let start = 1; start <= count; start += 10) {
     const batch = Array.from({ length: Math.min(10, count - start + 1) }, (_, i) => start + i);
     const created = await Promise.all(
-      batch.map((n) => createQuestion(owner, workspaceId, numberedMcq(label, n))),
+      batch.map((n) => createQuestion(owner, workspaceId, input(n))),
     );
     out.push(...created);
   }
@@ -874,6 +832,9 @@ export const overviewUi = {
   markers: (page: Page) => overviewUi.heatmap(page).getByTestId('question-marker'),
   marker: (dot: Locator) => dot.getByTestId('question-marker'),
   tooltip: (page: Page) => page.getByRole('tooltip'),
+  /** The empty heatmap ("확정된 문제가 없습니다"; editors get its "문제 등록" button). */
+  empty: (page: Page) =>
+    main(page).getByRole('heading', { name: /확정된 문제가 없|no confirmed questions/i }),
   /** The removed count line "현재 필터의 문제 n개" (UX4): must not come back. */
   inFilter: (page: Page) =>
     main(page).getByText(/현재 필터의 문제 \d+개|\d+ questions in (the )?filter/i),
@@ -904,7 +865,142 @@ export const panelUi = {
     panel.getByRole('button', { name: /^(틀림|틀렸|오답으로|incorrect)/i }),
   next: (panel: Locator) => panel.getByRole('button', { name: /다음 문제|^next/i }),
   previous: (panel: Locator) => panel.getByRole('button', { name: /이전 문제|^previous/i }),
+  /** UX7-BANK: the editors' "문제 관리" menu button in the panel header. */
+  manage: (panel: Locator) => panel.getByRole('button', { name: /^(문제 관리|manage question)$/i }),
+  /** UX7-BANK-2: the read-only "문제 정보" menu button of viewers and archived workspaces. */
+  info: (panel: Locator) => panel.getByRole('button', { name: /^(문제 정보|question info)$/i }),
+  archiveConfirm: (page: Page) =>
+    page.getByRole('alertdialog', { name: /문제를 보관할까요|archive (this )?question/i }),
+  manageItem: (page: Page, item: PanelManageItem) =>
+    page.getByRole('menu').getByRole('menuitem', { name: PANEL_MANAGE_ITEMS[item] }),
+  deleteConfirm: (page: Page) =>
+    page.getByRole('alertdialog', { name: /문제를 삭제할까요|delete (this )?question/i }),
 };
+
+type PanelManageItem = 'answers' | 'history' | 'edit' | 'generate' | 'archive' | 'delete';
+export const PANEL_MANAGE_ITEMS: Readonly<Record<PanelManageItem, RegExp>> = {
+  /** UX7-BANK-2: the read items of both menus (문제 관리 and 문제 정보). */
+  answers: /^(정답·해설 보기|show answers?( and explanation)?)$/i,
+  history: /^(수정 이력·출처|revisions and sources)$/i,
+  edit: /^(편집|edit)$/i,
+  /** Retired by QGEN-RM: only ever expected to be absent. */
+  generate: /^(변형 출제|generate variants?)$/i,
+  archive: /^(보관|archive)$/i,
+  delete: /^(삭제|delete)$/i,
+};
+
+/** Opens the practice panel's "문제 관리" menu and chooses `item` (UX7-BANK). */
+export async function choosePanelManage(
+  page: Page,
+  panel: Locator,
+  item: PanelManageItem,
+): Promise<void> {
+  await panelUi.manage(panel).click();
+  await panelUi.manageItem(page, item).click();
+}
+
+/**
+ * Opens the practice panel's header menu — 문제 관리 (editors) or 문제 정보 (viewers, archived
+ * workspaces; UX7-BANK-2) — and chooses `item`.
+ */
+export async function choosePanelMenu(
+  page: Page,
+  panel: Locator,
+  item: PanelManageItem,
+): Promise<void> {
+  await panelUi.manage(panel).or(panelUi.info(panel)).click();
+  await panelUi.manageItem(page, item).click();
+}
+
+/** UX7-BANK-2: the read-only "문제 상세" dialog (answers, explanation, sources, revisions). */
+export const detailUi = {
+  dialog: (page: Page) => page.getByRole('dialog', { name: /^(문제 상세|question details?)$/i }),
+  /** The options marked correct (border + icon + the text "정답"). */
+  correctOptions: (dialog: Locator) =>
+    dialog.getByRole('listitem').filter({ hasText: /정답$|correct$/i }),
+  historyHeading: (dialog: Locator) =>
+    dialog.getByRole('heading', { name: /^(수정 이력|revisions?|history)$/i }),
+  revision: (dialog: Locator, version: number) =>
+    dialog.getByRole('button', { name: new RegExp(`^(버전|version) ${version}(?!\\d)`, 'i') }),
+  revisions: (dialog: Locator) => dialog.getByRole('button', { name: /^(버전|version) \d+/i }),
+  sourcesHeading: (dialog: Locator) => dialog.getByRole('heading', { name: /^(출처|sources?)$/i }),
+  close: (dialog: Locator) => dialog.getByRole('button', { name: /^(닫기|close)$/i }),
+};
+
+/** UX7-BANK-2: the home's "보관·초안 문제" floating dialog (`?panel=inactive-questions`). */
+export const inactiveUi = {
+  dialog: (page: Page) =>
+    main(page).getByRole('dialog', { name: /^(보관·초안 문제|archived and draft questions)$/i }),
+  status: (dialog: Locator) => dialog.getByRole('combobox', { name: /^(상태|status)$/i }),
+  rows: (dialog: Locator) =>
+    dialog.getByRole('list', { name: /문제 목록|questions/i }).getByRole('listitem'),
+  row: (dialog: Locator, text: string) => inactiveUi.rows(dialog).filter({ hasText: text }),
+  open: (row: Locator) => row.getByRole('button', { name: /문제|question/i }).first(),
+  more: (dialog: Locator) => dialog.getByRole('button', { name: /^(더 보기|load more|more)$/i }),
+  restore: (scope: Locator) =>
+    scope.getByRole('button', { name: /^(보관 해제|unarchive|restore)$/i }),
+  confirm: (scope: Locator) => scope.getByRole('button', { name: /^(확정|confirm)$/i }),
+  edit: (scope: Locator) => scope.getByRole('button', { name: /^(편집|edit)$/i }),
+  remove: (scope: Locator) => scope.getByRole('button', { name: /^(삭제|delete)$/i }),
+  close: (dialog: Locator) =>
+    dialog.getByRole('button', { name: /^(보관·초안 문제 닫기|close)$/i }),
+};
+
+/**
+ * UX7-DEDUP 중복 문제 정리 (QOV-01-AC16): a non-modal dialog; one `group` per duplicate group
+ * ("중복 묶음 n · 문제 k개") holding a `이 묶음 정리` checkbox and a radiogroup "중복 묶음 n 남길 문제"
+ * whose radios are named after their question ("n번 문제 …"); `선택한 묶음 정리 (k)` asks in an
+ * alertdialog "중복 문제 k개를 보관할까요?" whose `보관` button merges.
+ */
+export const dedupUi = {
+  dialog: (page: Page) =>
+    main(page).getByRole('dialog', { name: /^(중복 문제 정리|duplicate questions)$/i }),
+  groups: (dialog: Locator) =>
+    dialog.getByRole('group', { name: /중복 묶음 \d+|duplicate group \d+/i }),
+  keep: (group: Locator) =>
+    group.getByRole('radiogroup', { name: /남길 문제|question to keep/i }).getByRole('radio'),
+  keepNumber: (group: Locator, n: number) =>
+    group
+      .getByRole('radiogroup', { name: /남길 문제|question to keep/i })
+      .getByRole('radio', { name: questionNumberName(n) }),
+  include: (group: Locator) =>
+    group.getByRole('checkbox', { name: /이 묶음 정리|merge this group/i }),
+  merge: (dialog: Locator) =>
+    dialog.getByRole('button', { name: /^(선택한 묶음 정리|merge selected groups?)/i }),
+  confirm: (page: Page) =>
+    page.getByRole('alertdialog', {
+      name: /중복 문제 \d+개를 보관할까요|archive \d+ duplicates?/i,
+    }),
+  confirmButton: (confirm: Locator) => confirm.getByRole('button', { name: /^(보관|archive)$/i }),
+  empty: (dialog: Locator) => dialog.getByText(/중복 문제가 없습니다|no duplicate questions/i),
+  warning: (group: Locator) => group.getByText(/정답이 서로 다릅니다|answers differ/i),
+  close: (dialog: Locator) =>
+    dialog.getByRole('button', { name: /^(중복 문제 정리 닫기|close)$/i }),
+};
+
+/** UX7-DEDUP: the duplicate scan through the API (editors only). */
+export async function scanDuplicates(
+  member: Member,
+  workspaceId: string,
+): Promise<{ groups: { questions: { question_id: string }[] }[] }> {
+  return member.api.ok('GET', `/workspaces/${workspaceId}/question-duplicates`, undefined, [200]);
+}
+
+export const INACTIVE_STATUS_OPTIONS = {
+  all: /^(전체|all)$/i,
+  draft: /^(초안|drafts?)$/i,
+  archived: /^(보관됨|archived)$/i,
+} as const;
+
+/** Archives `question` through the public API (CONFIRMED → ARCHIVED, A1). */
+export async function archiveQuestion(member: Member, question: Question): Promise<Question> {
+  return (await member.api.ok(
+    'PATCH',
+    `/questions/${question.id}`,
+    { base_revision_id: question.revision.id, publication_status: 'ARCHIVED' },
+    [200],
+  )) as Question;
+}
 
 export const RESULT_TEXT = {
   correct: /정답|(?<!in)correct/i,
@@ -923,6 +1019,64 @@ export async function statusColor(page: Page, status: DotStatus): Promise<string
     return color;
   }, status);
 }
+
+/** Computed `color` of a `--<token>` semantic color token as the browser resolves it. */
+export async function tokenColor(page: Page, token: string): Promise<string> {
+  return page.evaluate((t) => {
+    const probe = document.createElement('span');
+    probe.style.color = `var(--${t})`;
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }, token);
+}
+
+/** UX7-QDISPLAY (QPLAY-01-AC12): the four border sides of an option row. */
+export interface RowBorder {
+  readonly color: string;
+  readonly width: string;
+  readonly style: string;
+  /** All four sides share the same color, width and style. */
+  readonly uniform: boolean;
+}
+
+/**
+ * The border of a practice option's row: the radio/checkbox with its label and result mark. The
+ * row is the control's parent element (kit `RadioGroup` option / `Checkbox`).
+ */
+export async function optionRowBorder(option: Locator): Promise<RowBorder> {
+  return option.evaluate((el) => {
+    const row = el.parentElement;
+    if (!row) throw new Error('option without a row');
+    const cs = getComputedStyle(row);
+    const sides = ['top', 'right', 'bottom', 'left'].map((side) => [
+      cs.getPropertyValue(`border-${side}-color`),
+      cs.getPropertyValue(`border-${side}-width`),
+      cs.getPropertyValue(`border-${side}-style`),
+    ]);
+    const [first] = sides;
+    return {
+      color: first?.[0] ?? '',
+      width: first?.[1] ?? '',
+      style: first?.[2] ?? '',
+      uniform: sides.every((s) => s.join() === first?.join()),
+    };
+  });
+}
+
+/** Box (x, y, width) of an option's row, to check a result border does not move it. */
+export async function optionRowBox(
+  option: Locator,
+): Promise<{ x: number; y: number; width: number }> {
+  return option.evaluate((el) => {
+    const r = (el.parentElement ?? el).getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width };
+  });
+}
+
+/** Transparent as `getComputedStyle` reports it. */
+export const TRANSPARENT = 'rgba(0, 0, 0, 0)';
 
 /** Uniform scale factor of an element's computed transform (1 when none). */
 export async function scaleOf(locator: Locator): Promise<number> {

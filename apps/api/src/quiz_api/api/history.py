@@ -31,7 +31,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import AwareDatetime, BaseModel, Field, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
-from quiz_api.api.jobs import Job, _job
+from quiz_api.api.jobs import JobBase, _job_base
 from quiz_api.api.practice import Attempt, SubmittedAnswer
 from quiz_api.authz import Action, WorkspaceAccess, require_workspace_access
 from quiz_api.authz.permissions import policy_for
@@ -87,7 +87,7 @@ class ActivityPage(BaseModel):
     next_cursor: str | None = Field(description="Pass as `cursor` for older events.")
 
 
-class WorkspaceJob(Job):
+class WorkspaceJob(JobBase):
     target_type: JobTargetType | None = Field(description="What the job works on.")
     target_id: uuid.UUID | None
     target_label: str | None = Field(description="Document or question paper title.")
@@ -113,6 +113,11 @@ class WorkspaceAttempt(Attempt):
     question_id: uuid.UUID
     question_number: int | None
     question_type: str
+    merged_into_question_id: uuid.UUID | None = Field(
+        default=None,
+        description="The question was archived as a duplicate of this one (UX7-DEDUP): its "
+        "history shows there, so links open it.",
+    )
 
 
 class WorkspaceAttemptPage(BaseModel):
@@ -195,7 +200,7 @@ def _activity(a: ActivityRecord) -> Activity:
 def _workspace_job(record: WorkspaceJobRecord) -> WorkspaceJob:
     t = record.target
     return WorkspaceJob(
-        **_job(record.job).model_dump(),
+        **_job_base(record.job),
         target_type=t.target_type,  # type: ignore[arg-type]
         target_id=t.target_id,
         target_label=t.target_label,
@@ -210,6 +215,7 @@ def _workspace_attempt(a: WorkspaceAttemptRecord) -> WorkspaceAttempt:
         question_id=a.question_id,
         question_number=a.question_number,
         question_type=a.question_type,
+        merged_into_question_id=a.merged_into_question_id,
         question_revision_id=a.question_revision_id,
         revision_version=a.revision_version,
         practice_session_id=a.practice_session_id,

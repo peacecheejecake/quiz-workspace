@@ -44,36 +44,28 @@ from __future__ import annotations
 import logging
 import threading
 import uuid
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from book_core.contracts import (
-    BlockType,
     DocumentRevision,
     Excerpt,
     QuestionDraft,
-    QuestionOption,
     QuestionType,
     SearchMode,
-    SourceEvidence,
     VariationType,
 )
 from book_core.generation import (
     MAX_PASSAGES,
-    MAX_SOURCE_PAGES,
     PROMPT_VERSIONS,
     Difficulty,
-    SourceQuestion,
     VariantGenerationResult,
     VariantGenerator,
     VariantRequest,
-    stored_source_evidence,
 )
 from book_core.indexing import SearchScope
 from book_core.llm import LLMClient
-from book_core.question import normalize_text, question_fingerprint
 from book_core.search import RerankMode, SearchLimits, SearchService
 from book_core.search.excerpt import ExcerptConfig, ExcerptError, ExcerptResolver
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -93,6 +85,15 @@ from quiz_worker.question_generation_store import (
     SourceQuestionRow,
     TerminalRunStatus,
 )
+from quiz_worker.question_sources import (
+    PASSAGE_MAX_CHARS,
+    PublishedContents,
+    build_passages,
+    narrow_evidence,
+    source_pages,
+    source_question,
+    workspace_fingerprints,
+)
 from quiz_worker.retry import RetryPolicy
 from quiz_worker.runner import JobContext, JobDefinition, JobResult, TerminalReason
 from quiz_worker.settings import WorkerSettings
@@ -102,8 +103,6 @@ logger = logging.getLogger(__name__)
 _REPO_SCENARIOS = (
     Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "llm" / "generation-scenarios.json"
 )
-# One passage is a section's text on the source pages; generous so a page is rarely cut.
-PASSAGE_MAX_CHARS = 6000
 # Search hits considered for ANALOGOUS_CONCEPT related passages (overlaps are skipped).
 RELATED_HITS = 2 * MAX_PASSAGES
 
@@ -166,110 +165,6 @@ class GenerationJobDeps:
 # --------------------------------------------------------------------------------------------
 
 
-def source_question(row: SourceQuestionRow) -> SourceQuestion:
-    """The core view of the pinned source revision, with its sources as page provenance."""
-    question_type = QuestionType(row.question_type)
-    return SourceQuestion(
-        question_id=str(row.question_id),
-        revision_id=str(row.revision_id),
-        question_type=question_type,
-        stem=row.stem,
-        options=tuple(QuestionOption(id=o["id"], text=o["text"]) for o in row.options),
-        correct_option_ids=tuple(row.correct_option_ids)
-        if row.correct_option_ids is not None
-        else None,
-        accepted_answers=tuple(a for a in row.accepted_answers if a.strip())
-        if row.accepted_answers
-        else None,
-        is_multi_answer=row.is_multi_answer,
-        explanation=row.explanation,
-        evidence=tuple(_source_evidence(row)),
-    )
-
-
-def _source_evidence(row: SourceQuestionRow) -> Iterable[SourceEvidence]:
-    for source in row.sources:
-        if source.document_id is None:
-            continue
-        evidence = stored_source_evidence(
-            document_id=str(source.document_id),
-            revision_id=str(source.document_revision_id) if source.document_revision_id else None,
-            page_start=source.page_start,
-            page_end=source.page_end,
-            block_ids=source.block_ids,
-            locations=source.locations,
-        )
-        if evidence is not None:
-            yield evidence
-
-
-def source_pages(row: SourceQuestionRow) -> dict[uuid.UUID, set[int]]:
-    """document id -> pages the source question cites (page ranges and located blocks)."""
-    pages: dict[uuid.UUID, set[int]] = {}
-    for source in row.sources:
-        if source.document_id is None:
-            continue
-        found = pages.setdefault(source.document_id, set())
-        if source.page_start is not None:
-            end = min(source.page_end or source.page_start, source.page_start + MAX_SOURCE_PAGES)
-            found.update(range(source.page_start, end + 1))
-        for raw in source.locations:
-            page = raw.get("page") if isinstance(raw, dict) else None
-            if isinstance(page, int) and page > 0:
-                found.add(page)
-    return {doc: p for doc, p in pages.items() if p}
-
-
-def build_passages(
-    revision: DocumentRevision, pages: set[int], *, title: str | None = None
-) -> list[Excerpt]:
-    """One excerpt per section on `pages`, in reading order: the section's non-heading blocks
-    located on those pages (a table/figure travels with its caption)."""
-    resolver = ExcerptResolver(revision, document_title=title)
-    config = ExcerptConfig(context_before=0, context_after=0, max_chars=PASSAGE_MAX_CHARS)
-    groups: list[list[str]] = []
-    last_section: object = object()
-    for block in revision.blocks:
-        if block.type is BlockType.HEADING:
-            continue
-        if not block.text.strip() and block.caption_block_id is None:
-            continue
-        if not any(loc.page in pages for loc in block.locations):
-            continue
-        if block.section_id != last_section or not groups:
-            groups.append([])
-            last_section = block.section_id
-        groups[-1].append(block.id)
-    passages: list[Excerpt] = []
-    for ids in groups:
-        try:
-            passages.append(resolver.resolve(ids, config=config))
-        except ExcerptError:
-            continue
-    return passages
-
-
-def narrow_evidence(draft: QuestionDraft, revisions: dict[str, DocumentRevision]) -> QuestionDraft:
-    """Each quoted evidence points at the block(s) of its passage that contain the quote."""
-    narrowed: list[SourceEvidence] = []
-    for evidence in draft.evidence:
-        revision = revisions.get(f"{evidence.document_id}:{evidence.revision_id}")
-        if evidence.quote is None or revision is None:
-            narrowed.append(evidence)
-            continue
-        needle = normalize_text(evidence.quote)
-        texts = {b.id: b.text for b in revision.blocks}
-        hits = tuple(b for b in evidence.block_ids if needle in normalize_text(texts.get(b, "")))
-        locations = tuple(loc for loc in evidence.locations if loc.block_id in hits)
-        if not hits or not locations:
-            narrowed.append(evidence)
-            continue
-        narrowed.append(evidence.model_copy(update={"block_ids": hits, "locations": locations}))
-    return QuestionDraft.model_validate(
-        {**draft.model_dump(), "evidence": [e.model_dump() for e in narrowed]}
-    )
-
-
 def draft_row(position: int, draft: QuestionDraft) -> GenerationDraftRow:
     multi = draft.question_type is QuestionType.MCQ and len(draft.correct_option_ids or ()) > 1
     return GenerationDraftRow(
@@ -305,24 +200,6 @@ def failure_for(result: VariantGenerationResult) -> JobError:
     if found and found <= {"llm_unavailable"}:
         return LLMUnavailableError("the LLM provider call failed")
     return NoValidCandidatesError("no candidate passed validation")
-
-
-def workspace_fingerprints(rows: Iterable[Any]) -> frozenset[str]:
-    out: set[str] = set()
-    for row in rows:
-        try:
-            out.add(
-                question_fingerprint(
-                    question_type=QuestionType(row.question_type),
-                    stem=row.stem,
-                    options=[QuestionOption(id=o["id"], text=o["text"]) for o in row.options],
-                    correct_option_ids=row.correct_option_ids,
-                    accepted_answers=row.accepted_answers,
-                )
-            )
-        except (ValidationError, ValueError, KeyError, TypeError):
-            continue
-    return frozenset(out)
 
 
 # --------------------------------------------------------------------------------------------
@@ -444,7 +321,7 @@ def _passages(
     passages found by a hybrid search of the workspace's published documents."""
     pages = source_pages(source)
     passages: list[Excerpt] = []
-    contents = _Contents(deps, ctx.workspace_id)
+    contents = PublishedContents(deps.documents, ctx.workspace_id)
     for document in deps.generations.live_documents(ctx.workspace_id, list(pages)):
         if document.active_revision_id is None or len(passages) >= MAX_PASSAGES:
             continue
@@ -467,33 +344,6 @@ def _passages(
     return passages[:MAX_PASSAGES], contents.revisions
 
 
-class _Contents:
-    """Published active revisions loaded once per job (`document:revision` -> content)."""
-
-    def __init__(self, deps: GenerationJobDeps, workspace_id: uuid.UUID) -> None:
-        self._deps = deps
-        self._workspace_id = workspace_id
-        self.revisions: dict[str, DocumentRevision] = {}
-        self._titles: dict[str, str] = {}
-
-    def get(
-        self, document_id: uuid.UUID, revision_id: uuid.UUID
-    ) -> tuple[DocumentRevision, str] | None:
-        key = f"{document_id}:{revision_id}"
-        if key not in self.revisions:
-            found = self._deps.documents.load(self._workspace_id, document_id, revision_id)
-            if found is None:
-                return None
-            row, revision = found
-            if row.deleted or not revision.published or revision.content_hash is None:
-                return None
-            if row.active_revision_id != revision.id:
-                return None
-            self.revisions[key] = self._deps.documents.load_content(row, revision)
-            self._titles[key] = row.title
-        return self.revisions[key], self._titles[key]
-
-
 def related_query(source: SourceQuestionRow) -> str:
     """What the source question is about: its stem and correct answer(s)."""
     correct = set(source.correct_option_ids or ())
@@ -509,7 +359,7 @@ def _related_passages(
     ctx: JobContext,
     source: SourceQuestionRow,
     existing: Sequence[Excerpt],
-    contents: _Contents,
+    contents: PublishedContents,
 ) -> list[Excerpt]:
     """Hybrid search over the workspace's published active revisions (books, never question
     papers), scope built from the database like M3.6a; each hit becomes a paragraph-complete

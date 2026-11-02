@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Button, FloatingSidePanel, Input, ModalDialog } from '../src';
 
@@ -412,5 +412,347 @@ describe('overlay body scroll region (axe scrollable-region-focusable)', () => {
     const dialog = await screen.findByRole('dialog', { name: '안내' });
     await waitFor(() => expect(bodyOf(dialog)).toHaveAttribute('tabindex', '0'));
     expect(screen.getByRole('group', { name: '안내' })).toBe(bodyOf(dialog));
+  });
+});
+
+/** DOC-02-like host: a bar toggle outside the panel and a positioned split container. */
+function DockedOutline(props: {
+  initialOpen: boolean;
+  dockMode?: 'inset' | 'overlay';
+  modal?: boolean;
+  focusTreeOnOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(props.initialOpen);
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  return (
+    <main>
+      <div role="group" aria-label="보기 설정">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls="outline-panel"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? '목차 접기' : '목차 펼치기'}
+        </button>
+      </div>
+      <div ref={setHost} data-testid="split-host" style={{ position: 'relative' }}>
+        <button type="button">원본 내용</button>
+      </div>
+      <FloatingSidePanel
+        id="outline-panel"
+        side="start"
+        placement="docked"
+        dockMode={props.dockMode}
+        modal={props.modal}
+        container={host}
+        open={open}
+        onOpenChange={setOpen}
+        title="목차"
+        closeLabel="목차 접기"
+        onOpenAutoFocus={
+          props.focusTreeOnOpen
+            ? (event) => {
+                event.preventDefault();
+                document.getElementById('first-item')?.focus();
+              }
+            : undefined
+        }
+      >
+        <ul role="tree" aria-label="문서 목차">
+          <li role="treeitem" id="first-item" tabIndex={0} aria-selected="false">
+            1장
+          </li>
+        </ul>
+      </FloatingSidePanel>
+    </main>
+  );
+}
+
+describe('FloatingSidePanel side="start" placement="docked"', () => {
+  it('docks non-modally inside the container and makes room for itself (inset)', async () => {
+    render(<DockedOutline initialOpen modal />);
+    const dialog = await screen.findByRole('dialog', { name: '목차' });
+    const host = screen.getByTestId('split-host');
+    expect(host).toContainElement(dialog);
+    expect(dialog).toHaveAttribute('data-side', 'start');
+    expect(dialog).toHaveAttribute('data-placement', 'docked');
+    expect(dialog).toHaveAttribute('data-dock-mode', 'inset');
+    // A docked panel is always the narrow navigation column (--outline-panel-width).
+    expect(dialog).toHaveAttribute('data-size', 'narrow');
+    expect(dialog).toHaveAttribute('id', 'outline-panel');
+    // `modal` is ignored for docked panels: no aria-modal, no backdrop, background reachable.
+    expect(dialog).not.toHaveAttribute('aria-modal');
+    expect(document.querySelector('.qz-backdrop')).toBeNull();
+    expect(screen.getByRole('button', { name: '원본 내용' })).toBeVisible();
+    expect(host).toHaveAttribute('data-qz-dock-inset', 'start');
+
+    await userEvent.click(screen.getByRole('button', { name: '목차 접기', expanded: true }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(host).not.toHaveAttribute('data-qz-dock-inset');
+  });
+
+  it('overlay mode leaves the container untouched', async () => {
+    render(<DockedOutline initialOpen dockMode="overlay" />);
+    const dialog = await screen.findByRole('dialog', { name: '목차' });
+    expect(dialog).toHaveAttribute('data-dock-mode', 'overlay');
+    expect(screen.getByTestId('split-host')).not.toHaveAttribute('data-qz-dock-inset');
+  });
+
+  it('does not move focus when it mounts open (restored state)', async () => {
+    const before = document.createElement('button');
+    before.textContent = '이전 focus';
+    document.body.append(before);
+    before.focus();
+    render(<DockedOutline initialOpen focusTreeOnOpen />);
+    await screen.findByRole('dialog', { name: '목차' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(before).toHaveFocus();
+    before.remove();
+  });
+
+  it('moves focus in when the user opens it, and Escape inside collapses back to the toggle', async () => {
+    const user = userEvent.setup();
+    render(<DockedOutline initialOpen={false} focusTreeOnOpen />);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await user.click(screen.getByRole('button', { name: '목차 펼치기' }));
+    await screen.findByRole('dialog', { name: '목차' });
+    await waitFor(() => expect(screen.getByRole('treeitem', { name: '1장' })).toHaveFocus());
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('button', { name: '목차 펼치기' })).toHaveFocus();
+  });
+
+  it('Escape with focus outside the panel keeps it open', async () => {
+    const user = userEvent.setup();
+    render(<DockedOutline initialOpen />);
+    await screen.findByRole('dialog', { name: '목차' });
+    screen.getByRole('button', { name: '원본 내용' }).focus();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: '목차' })).toBeInTheDocument();
+  });
+
+  it('restored open: Escape inside returns focus to the aria-controls toggle', async () => {
+    const user = userEvent.setup();
+    render(<DockedOutline initialOpen />);
+    await screen.findByRole('dialog', { name: '목차' });
+    screen.getByRole('treeitem', { name: '1장' }).focus();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('button', { name: '목차 펼치기' })).toHaveFocus();
+  });
+
+  it('is not rendered until its container exists', () => {
+    render(
+      <FloatingSidePanel open placement="docked" side="start" container={null} title="목차">
+        내용
+      </FloatingSidePanel>,
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('defaults stay end / viewport', async () => {
+    render(
+      <FloatingSidePanel defaultOpen modal={false} title="발췌">
+        본문
+      </FloatingSidePanel>,
+    );
+    const dialog = await screen.findByRole('dialog', { name: '발췌' });
+    expect(dialog).toHaveAttribute('data-side', 'end');
+    expect(dialog).toHaveAttribute('data-placement', 'viewport');
+    expect(dialog).not.toHaveAttribute('data-dock-mode');
+    expect(document.body).toContainElement(dialog);
+  });
+});
+
+describe('FloatingSidePanel id', () => {
+  it('keeps the Radix content id (trigger aria-controls) when no id is given', async () => {
+    render(
+      <FloatingSidePanel modal={false} title="발췌" trigger={<Button>발췌 열기</Button>}>
+        본문
+      </FloatingSidePanel>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: '발췌 열기' }));
+    const dialog = await screen.findByRole('dialog', { name: '발췌' });
+    expect(dialog.id).not.toBe('');
+    expect(screen.getByRole('button', { name: '발췌 열기' })).toHaveAttribute(
+      'aria-controls',
+      dialog.id,
+    );
+  });
+});
+
+describe('FloatingSidePanel id with a trigger', () => {
+  it('points the trigger aria-controls at the explicit id', async () => {
+    render(
+      <FloatingSidePanel
+        id="excerpt-panel"
+        modal={false}
+        title="발췌"
+        trigger={<Button>발췌 열기</Button>}
+      >
+        본문
+      </FloatingSidePanel>,
+    );
+    const trigger = screen.getByRole('button', { name: '발췌 열기' });
+    expect(trigger).not.toHaveAttribute('aria-controls');
+    await userEvent.click(trigger);
+    const dialog = await screen.findByRole('dialog', { name: '발췌' });
+    expect(dialog).toHaveAttribute('id', 'excerpt-panel');
+    expect(trigger).toHaveAttribute('aria-controls', 'excerpt-panel');
+  });
+});
+
+describe('Escape inside an inline edit control marked data-own-escape (MOCK-ESC)', () => {
+  // An inline rename inside a dialog: Escape cancels the rename and returns focus to the
+  // button that started it; only the next Escape closes the dialog. Radix handles Escape on the
+  // document in the capture phase, before the field's own keydown handler runs.
+  function InlineRename() {
+    const [editing, setEditing] = useState(false);
+    const [name, setName] = useState('중간 점검');
+    const [draft, setDraft] = useState(name);
+    const start = useRef<HTMLButtonElement>(null);
+    const stopped = useRef(false);
+    const field = useRef<HTMLInputElement>(null);
+    useEffect(() => {
+      if (editing) field.current?.focus();
+      else if (stopped.current) start.current?.focus();
+    }, [editing]);
+    const stop = () => {
+      stopped.current = true;
+      setEditing(false);
+    };
+    return editing ? (
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          setName(draft);
+          stop();
+        }}
+      >
+        <input
+          ref={field}
+          aria-label="이름"
+          data-own-escape=""
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            event.stopPropagation();
+            setDraft(name);
+            stop();
+          }}
+        />
+        <button type="submit">저장</button>
+      </form>
+    ) : (
+      <>
+        <p>{name}</p>
+        <button ref={start} type="button" onClick={() => setEditing(true)}>
+          이름 바꾸기
+        </button>
+      </>
+    );
+  }
+
+  async function cancelThenClose(user: ReturnType<typeof userEvent.setup>, name: string) {
+    await user.click(screen.getByRole('button', { name: '이름 바꾸기' }));
+    const field = screen.getByRole('textbox', { name: '이름' });
+    expect(field).toHaveFocus();
+    await user.clear(field);
+    await user.type(field, '기말 대비');
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('textbox', { name: '이름' })).not.toBeInTheDocument();
+    expect(screen.getByText('중간 점검')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '이름 바꾸기' })).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name })).not.toBeInTheDocument());
+  }
+
+  it('cancels only the edit in a non-modal FloatingSidePanel; the next Escape closes it', async () => {
+    const user = userEvent.setup();
+    render(
+      <FloatingSidePanel defaultOpen modal={false} title="모의고사">
+        <InlineRename />
+      </FloatingSidePanel>,
+    );
+    await screen.findByRole('dialog', { name: '모의고사' });
+    await cancelThenClose(user, '모의고사');
+  });
+
+  it('cancels only the edit in a modal FloatingSidePanel; the next Escape closes it', async () => {
+    const user = userEvent.setup();
+    render(
+      <FloatingSidePanel defaultOpen title="모의고사">
+        <InlineRename />
+      </FloatingSidePanel>,
+    );
+    await screen.findByRole('dialog', { name: '모의고사' });
+    await cancelThenClose(user, '모의고사');
+  });
+
+  it('cancels only the edit in a ModalDialog; the next Escape closes it', async () => {
+    const user = userEvent.setup();
+    render(
+      <ModalDialog defaultOpen title="문제 편집">
+        <InlineRename />
+      </ModalDialog>,
+    );
+    await screen.findByRole('dialog', { name: '문제 편집' });
+    await cancelThenClose(user, '문제 편집');
+  });
+
+  it('keeps a modal panel open under a non-modal panel ranked above it', async () => {
+    // The non-modal panel declines Escape (focus is not inside it) and the focused modal panel
+    // closes itself for declined presses, except when the press belongs to an inline edit.
+    function Stacked() {
+      const [noteOpen, setNoteOpen] = useState(false);
+      return (
+        <>
+          <FloatingSidePanel defaultOpen title="2번 문제">
+            <Button onClick={() => setNoteOpen(true)}>노트 열기</Button>
+            <InlineEditWithoutStop />
+          </FloatingSidePanel>
+          <FloatingSidePanel
+            open={noteOpen}
+            onOpenChange={setNoteOpen}
+            modal={false}
+            title="정리 노트"
+            onOpenAutoFocus={(event) => event.preventDefault()}
+          >
+            본문
+          </FloatingSidePanel>
+        </>
+      );
+    }
+    /** An inline edit whose Escape handler does not stop propagation. */
+    function InlineEditWithoutStop() {
+      const [editing, setEditing] = useState(true);
+      return editing ? (
+        <input
+          aria-label="이름"
+          data-own-escape=""
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setEditing(false);
+          }}
+        />
+      ) : (
+        <p>편집 취소됨</p>
+      );
+    }
+    const user = userEvent.setup();
+    render(<Stacked />);
+    await screen.findByRole('dialog', { name: '2번 문제' });
+    await user.click(screen.getByRole('button', { name: '노트 열기' }));
+    await screen.findByRole('dialog', { name: '정리 노트', hidden: true });
+    await user.click(screen.getByRole('textbox', { name: '이름', hidden: true }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByText('편집 취소됨')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '2번 문제', hidden: true })).toBeInTheDocument();
   });
 });

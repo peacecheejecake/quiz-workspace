@@ -1,7 +1,7 @@
 'use client';
 
 import { Select as RadixSelect } from 'radix-ui';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { cx } from '../internal/cx';
 import { useLayerStyle } from '../internal/layer';
 import { FieldFrame, useFieldIds, type FieldOwnProps } from './Field';
@@ -46,6 +46,14 @@ export interface SelectProps extends FieldOwnProps {
  * Labelled single-choice picker on Radix Select: the trigger is a `combobox` named by the visible
  * label, the popup a `listbox` of `option`s (Arrow keys, typeahead, Escape returns focus). Use it
  * for filters and form fields with a short, known list of choices.
+ *
+ * Touch and pen open the list on the trigger's click, here rather than in Radix (UX7-SELECT).
+ * Radix records that click's position and cancels the next `pointerup` that has not moved 10px
+ * from it, a guard against the mouse press that opened the list selecting the option under it.
+ * A tap's pointerup comes before its click, so for a tap the guard instead hit the next tap (on
+ * an option, without a pointermove), and iOS Safari drops the click of a cancelled touch pointerup:
+ * the first tap on the open list (typically the selected option on top) did nothing. Mouse opening
+ * keeps Radix's guard.
  */
 export function Select({
   label,
@@ -67,6 +75,7 @@ export function Select({
   lazyOptions = false,
 }: SelectProps) {
   const [open, setOpen] = useState(false);
+  const pointerTypeRef = useRef('touch');
   const [innerValue, setInnerValue] = useState(defaultValue);
   const current = value ?? innerValue;
   const selectedLabel = lazyOptions
@@ -89,10 +98,10 @@ export function Select({
       <RadixSelect.Root
         {...(value !== undefined ? { value } : {})}
         {...(defaultValue !== undefined ? { defaultValue } : {})}
+        open={open}
+        onOpenChange={setOpen}
         {...(lazyOptions
           ? {
-              open,
-              onOpenChange: setOpen,
               onValueChange: (next: string) => {
                 setInnerValue(next);
                 onValueChange?.(next);
@@ -112,6 +121,17 @@ export function Select({
           aria-invalid={ids.hasError || undefined}
           aria-errormessage={ids.hasError ? ids.errorId : undefined}
           className={cx('qz-control', 'qz-select', 'qz-focus-ring', className)}
+          onPointerDown={(event) => {
+            pointerTypeRef.current = event.pointerType;
+          }}
+          onClick={(event) => {
+            // Same as Radix's touch/pen path minus the recorded position (see above); the
+            // prevented click skips Radix's handler. Keyboard opens on keydown, not here.
+            if (pointerTypeRef.current === 'mouse') return;
+            event.preventDefault();
+            event.currentTarget.focus();
+            if (!disabled) setOpen(true);
+          }}
         >
           <span className="value">
             <RadixSelect.Value placeholder={placeholder}>

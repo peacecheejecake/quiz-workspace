@@ -1,0 +1,215 @@
+# PR preview (PR-PREVIEW, docs/deployment.md §5.1): every same-repository pull request into
+# `develop` that touches the web image gets a Vercel preview of apps/web, built from the PR merge
+# commit against the STAGING backend (Railway staging API/worker, staging Supabase). The newest
+# URL is posted in one sticky PR comment and as the `pr-preview` GitHub deployment; older
+# deployments of the PR are deleted, and all of them when the PR closes.
+#
+#   changes (path filter, no secrets) → deploy (GitHub Environment `pr-preview`) → comment
+#   closed → cleanup (`pr-preview`) → comment
+#
+# Separate from deploy.yml on purpose: no migrations, no Railway rollout, no smoke, no
+# staging/production environment, and deploy.yml's preflight still refuses PR refs. API/worker
+# changes of the PR are NOT previewed: the preview's BFF relays call the staging API.
+#
+# Trust: `pull_request` (never `pull_request_target`), same-repository head only (fork PRs get no
+# secrets and are skipped), Dependabot skipped. The token-holding jobs have `contents: read`
+# only; the comment job holds `pull-requests: write` but runs no repository code. Off until the
+# operator sets the repository variable PR_PREVIEW_ENABLED=true (runbook-deploy.md §10).
+name: Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [develop]
+
+permissions: {}
+
+# One run per PR; a newer push or the close cancels the older run (cleanup then deletes whatever
+# that run may have deployed).
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: '1'
+
+jobs:
+  changes:
+    name: preview · changes
+    if: >-
+      vars.PR_PREVIEW_ENABLED == 'true'
+      && github.event.action != 'closed'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      # Same classifier as ci.yml (merge commit ↔ base tip): only a change the web image is built
+      # from (or a conservative "run everything" path) deploys a preview.
+      - name: Web image changed?
+        id: filter
+        run: |
+          set -euo pipefail
+          git diff --name-only --no-renames HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+          images="$(python3 -I scripts/ci_changes.py < "$RUNNER_TEMP/changed.txt" | sed -n 's/^images=//p')"
+          web="$(jq -r 'any(. == "web")' <<<"$images")"
+          echo "web=$web" | tee -a "$GITHUB_OUTPUT"
+
+  deploy:
+    name: preview · deploy
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: pr-preview
+      url: ${{ steps.web.outputs.url }}
+    permissions:
+      contents: read
+    outputs:
+      url: ${{ steps.web.outputs.url }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_CLI_VERSION: ${{ vars.VERCEL_CLI_VERSION }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Preflight (preview environment values)
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_CLI_VERSION; do
+            [[ -n "${!name:-}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} )); then
+            echo "::error::GitHub Environment 'pr-preview' lacks: ${missing[*]} (docs/runbook-deploy.md §10)"
+            exit 1
+          fi
+          [[ $VERCEL_CLI_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo '::error::VERCEL_CLI_VERSION must be an exact x.y.z version'; exit 1; }
+          [[ $PR =~ ^[1-9][0-9]*$ ]] || { echo '::error::no pull request number'; exit 1; }
+          echo "preflight: preview of PR #$PR"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      # Project settings (Root Directory apps/web) and the Preview env values (staging public
+      # values, docs/deployment.md §5.1) live in the preview Vercel project. Never `--prod`, never
+      # an alias: the preview project owns no shared domain.
+      - name: Deploy web preview (Vercel)
+        id: web
+        run: |
+          set -euo pipefail
+          vercel=(npx --yes "vercel@$VERCEL_CLI_VERSION")
+          "${vercel[@]}" pull --yes --environment=preview --token="$VERCEL_TOKEN"
+          "${vercel[@]}" build --token="$VERCEL_TOKEN"
+          url="$("${vercel[@]}" deploy --prebuilt --meta "previewPr=$PR" --meta "previewSha=$HEAD_SHA" \
+            --token="$VERCEL_TOKEN")"
+          [[ $url =~ ^https://[a-z0-9][a-z0-9.-]*$ ]] \
+            || { echo '::error::vercel deploy printed no deployment URL'; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "deployment: $url"
+      # Best effort: a failure leaves an older preview of this PR behind until the PR closes.
+      - name: Delete older previews of this PR
+        continue-on-error: true
+        env:
+          URL: ${{ steps.web.outputs.url }}
+        run: python3 -I scripts/deploy/vercel_preview.py prune --pr "$PR" --keep "$URL"
+
+  cleanup:
+    name: preview · cleanup
+    if: >-
+      vars.PR_PREVIEW_ENABLED == 'true'
+      && github.event.action == 'closed'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: pr-preview
+    permissions:
+      contents: read
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      # Only the helper, from the base branch tip: a closed PR may have no merge ref, a branch cut
+      # before PR-PREVIEW has no helper at its head, and this job then runs no PR code at all.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          persist-credentials: false
+          sparse-checkout: scripts/deploy/vercel_preview.py
+          sparse-checkout-cone-mode: false
+      - name: Delete every preview of this PR
+        run: python3 -I scripts/deploy/vercel_preview.py prune --pr "$PR"
+
+  # Sticky comment: one per PR, found by its marker and author, edited in place. No checkout and
+  # no secrets here; the URL was validated by the deploy step.
+  comment:
+    name: preview · comment
+    needs: [deploy, cleanup]
+    if: >-
+      always()
+      && (needs.deploy.result == 'success' || needs.deploy.result == 'failure'
+          || needs.cleanup.result == 'success')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      URL: ${{ needs.deploy.outputs.url }}
+      DEPLOY: ${{ needs.deploy.result }}
+      CLEANUP: ${{ needs.cleanup.result }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Upsert the preview comment
+        run: |
+          set -euo pipefail
+          marker='<!-- quiz-pr-preview -->'
+          short="${HEAD_SHA:0:7}"
+          if [[ $CLEANUP == success ]]; then
+            body="$marker
+          **PR preview** — 삭제됨 / removed (PR closed)."
+          elif [[ $DEPLOY == success && $URL =~ ^https://[a-z0-9][a-z0-9.-]*$ ]]; then
+            body="$marker
+          **PR preview** ($short): $URL
+
+          - 웹만 미리보기 / web only: API·worker·DB는 **staging**을 쓴다 (이 PR의 API/worker/migration 변경은 반영되지 않음).
+          - Vercel 로그인이 필요할 수 있다 (Deployment Protection). 가입·재설정 메일 링크는 staging 웹으로 열린다."
+          else
+            body="$marker
+          **PR preview** ($short): 배포 실패 / deploy failed — $RUN_URL"
+          fi
+          existing="$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" \
+            | head -n 1)"
+          if [[ -n $existing ]]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$existing" -f body="$body" > /dev/null
+            echo "updated comment $existing"
+          elif [[ $CLEANUP == success ]]; then
+            echo 'no preview comment to update'
+          else
+            gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="$body" > /dev/null
+            echo 'created comment'
+          fi

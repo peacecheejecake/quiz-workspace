@@ -51,7 +51,53 @@
 
 .policy {
   display: grid;
+  /* A column that can shrink below its content's intrinsic width (UX7-SHARE-EXPIRY, AC07). */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
+}
+
+/*
+ * Expiry (WS-SHARE-01-AC06/AC07): the kit field's label, date input, help and error become items
+ * of this grid (display: contents), so `만료일 삭제` sits on the input's row and the input takes
+ * the rest of the width; nothing has a fixed width, so the row fits any dialog width.
+ */
+.expiry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
+  align-items: center;
+}
+
+.expiry > :global(.qz-field) {
+  display: contents;
+}
+
+.expiry > :global(.qz-field) > * {
+  grid-column: 1 / -1;
+}
+
+.expiry > :global(.qz-field) > :global(.label) {
+  grid-row: 1;
+}
+
+.expiry[data-clearable] > :global(.qz-field) > input {
+  grid-row: 2;
+  grid-column: 1;
+}
+
+.clearExpiry {
+  grid-row: 2;
+  grid-column: 2;
+}
+
+.noExpiry {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-normal);
 }
 
 .notices {

@@ -32,7 +32,7 @@ export async function loadDocuments(workspaceId: string): Promise<DocumentSummar
 
 /**
  * `loadDocuments` for a page that still renders without its documents (the home's 문서 n and
- * dialogs, the bank's 문제 PDF 관리): a failure becomes `failed: true`; redirects still apply.
+ * 문서 관리 dialog): a failure becomes `failed: true`; redirects still apply.
  */
 export async function loadDocumentsOrFailure(
   workspaceId: string,

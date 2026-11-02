@@ -10,11 +10,10 @@
 //   - documents.ts (M3.0): synthetic PDFs from tests/fixtures/pdfs through the public upload flow
 //     (upload-intent → direct Storage upload → complete-upload), job polling, search.
 //   - questions.ts (M4.0): questions, question-PDF imports and drafts through the public API,
-//     the questions-ko paper truth, and the QBANK-01/QIMPORT-01 UI label contract; M5.0 adds the
+//     the questions-ko paper truth, and the QIMPORT-01 UI label contract (QBANK-01 retired, UX7-BANK); M5.0 adds the
 //     overview/practice/my-state/attempts API helpers and the QOV-01/QPLAY-01 UI contract.
 //   - S0: owner/guest/recipient share fixtures on top of the two above.
-//   - generation.ts (M6.0): scenario-driven source questions (fake LLM markers, G1), generation
-//     run API helpers and the QGEN-01 UI contract.
+//   - (generation.ts, M6.0, went with QGEN-01: QGEN-RM.)
 //   - history.ts (M7.0): activities/jobs/attempts read-API helpers, document corrections that
 //     produce history, and the HISTORY-01 UI contract.
 //   - summary.ts (DOCSUM.0): document summary API helpers, the APP_ENV=test fake summarizer's
@@ -23,6 +22,9 @@
 //   - chapter-notes.ts (CHNOTE.0): chapter note API helpers, the APP_ENV=test scenario LLM markers
 //     and hold barrier, the feature-off stack (summary.ts) and the CHNOTE-01 UI contract; import it
 //     directly (not re-exported here).
+//   - mock-exams.ts (MOCK.0): mock exam API helpers, the APP_ENV=test batched scenario LLM
+//     (sources, hold barrier, call counts), the LLM-off stack (summary.ts) and the MOCK-01 UI
+//     contract; import it directly (not re-exported here).
 // Never add test-only seed/reset endpoints to the production app (AGENTS.md §5).
 import { test as base, expect } from '@playwright/test';
 import { UserFactory } from './auth.ts';
@@ -90,7 +92,6 @@ export * from './auth-ui.ts';
 export * from './turnstile.ts';
 export { ApiClient, PROBLEM_TYPES, type ApiResponse, type Problem } from './api.ts';
 export * from './documents.ts';
-export * from './generation.ts';
 export * from './history.ts';
 export {
   attemptRevision,

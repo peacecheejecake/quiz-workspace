@@ -33,6 +33,7 @@ export {
   AlertIcon,
   ArrowLeftIcon,
   CheckIcon,
+  CopyIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   ChevronUpIcon,
@@ -46,6 +47,8 @@ export {
   TrashIcon,
   UploadIcon,
 } from './primitives/icons';
+export { COPY_FEEDBACK_MS, CopyButton } from './primitives/CopyButton';
+export type { CopyButtonProps } from './primitives/CopyButton';
 export { Input } from './primitives/Input';
 export type { InputProps } from './primitives/Input';
 export {
@@ -102,9 +105,12 @@ export type { ConfirmDialogProps } from './layout/ConfirmDialog';
 export { FloatingSidePanel } from './layout/FloatingSidePanel';
 export type { FloatingSidePanelProps } from './layout/FloatingSidePanel';
 export { DialogClose, ModalDialog } from './layout/ModalDialog';
+export { ownEscapeProps } from './internal/own-escape';
 export type { ModalDialogProps } from './layout/ModalDialog';
 export { PageHeader } from './layout/PageHeader';
 export type { PageHeaderProps } from './layout/PageHeader';
+export { SplitView } from './layout/SplitView';
+export type { SplitViewOrientation, SplitViewProps } from './layout/SplitView';
 
 export {
   QUESTION_DOT_STATUSES,

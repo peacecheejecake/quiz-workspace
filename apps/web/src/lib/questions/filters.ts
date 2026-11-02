@@ -1,5 +1,7 @@
-// QBANK-01 list filters as URL query state (`?q=&type=&chapter=&status=`), shareable and restored
-// on reload (docs/questions.md §7). Pure parse/serialize; unknown values fall back to defaults.
+// Question list filters (`q`, `type`, `chapter`, `status`) of the list API, as the retired QBANK-01
+// page kept them in its URL (UX7-BANK); the 문제 생성 dialog lists with DEFAULT_FILTERS and
+// listQuestionsAction re-parses untrusted filters with parseBankFilters. Pure parse/serialize;
+// unknown values fall back to defaults.
 import type { PublicationStatus, QuestionType } from './form';
 
 export type StatusFilter = PublicationStatus | 'ALL';
@@ -57,22 +59,7 @@ export function serializeBankFilters(filters: BankFilters): string {
   return query ? `?${query}` : '';
 }
 
-export function isFiltered(filters: BankFilters): boolean {
-  return serializeBankFilters(filters) !== '';
-}
-
 /** `publication_status` query values for the list API. */
 export function statusQuery(status: StatusFilter): PublicationStatus[] {
   return status === 'ALL' ? ['CONFIRMED', 'DRAFT', 'ARCHIVED'] : [status];
-}
-
-/** `?create=1`: the bank opens the 문제 등록 editor on arrival (the home's 문제 › 직접 추가, UX4). */
-export const CREATE_PARAM = 'create';
-
-export function bankCreatePath(workspaceId: string): string {
-  return `/workspaces/${encodeURIComponent(workspaceId)}/questions/bank?${CREATE_PARAM}=1`;
-}
-
-export function wantsCreate(params: Params): boolean {
-  return first(params, CREATE_PARAM) === '1';
 }

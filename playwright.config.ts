@@ -39,6 +39,8 @@ const apiEnv = {
   CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS || BASE_URL,
   // CHNOTE-01: the main E2E stack creates chapter notes (the feature-off stack sets it false).
   WORKER_CHAPTER_NOTES: process.env.WORKER_CHAPTER_NOTES || 'true',
+  // MOCK-01: the main E2E stack makes AI mock exams (the feature-off stack sets it false).
+  WORKER_MOCK_EXAMS: process.env.WORKER_MOCK_EXAMS?.trim() || 'true',
   // DOCSUM-01: the E2E stack summarizes (APP_ENV=test fake); AC05 starts its own feature-off stack.
   WORKER_DOCUMENT_SUMMARY: process.env.WORKER_DOCUMENT_SUMMARY?.trim() || 'true',
 };
@@ -116,9 +118,11 @@ export default defineConfig({
   timeout: 45_000,
   expect: {
     timeout: 10_000,
-    // Visual baselines (quality/visual.spec.ts): same renderer, so only antialiasing noise.
+    // Visual baselines (quality/visual.spec.ts): same renderer and content that does not vary per
+    // run (the spec masks or equalizes what does), so no pixel may differ beyond the per-pixel
+    // color threshold (Playwright's default 0.2). UX7-VISUAL: a ratio allowance hid real drift.
     toHaveScreenshot: {
-      maxDiffPixelRatio: 0.002,
+      maxDiffPixels: 0,
       animations: 'disabled',
       caret: 'hide',
       scale: 'css',

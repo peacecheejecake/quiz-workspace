@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { IconButton } from '../primitives/IconButton';
-import { CloseIcon } from '../primitives/icons';
+import { AlertIcon, CheckIcon, CloseIcon } from '../primitives/icons';
 
 export type ToastTone = 'neutral' | 'success' | 'error';
 
@@ -46,18 +46,25 @@ export interface ToastProviderProps {
   /** Accessible name of each toast's close button. */
   closeLabel?: string;
   duration?: number;
+  /** Hidden word read before a success / error toast's title (the icon is decorative). */
+  toneLabels?: Readonly<Record<'success' | 'error', string>>;
 }
+
+const TONE_LABELS = { success: '성공', error: '오류' } as const;
 
 /**
  * Provides `useToast()` and renders the toast viewport (z-index `--z-toast`). Toasts are
  * announced politely by Radix, can be swiped/Escape-dismissed and are reachable with F8.
  * Never put share tokens or other secrets in toast text other than the explicit copy success.
+ * The tone is shown by a leading icon plus a hidden word (UX7: no coloured left bar), never by
+ * colour alone.
  */
 export function ToastProvider({
   children,
   label = '알림',
   closeLabel = '닫기',
   duration = 5000,
+  toneLabels = TONE_LABELS,
 }: ToastProviderProps) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const nextId = useRef(1);
@@ -92,7 +99,15 @@ export function ToastProvider({
               if (!open) dismiss(item.id);
             }}
           >
+            {item.tone === 'success' || item.tone === 'error' ? (
+              <span className="tone-icon" aria-hidden="true">
+                {item.tone === 'success' ? <CheckIcon /> : <AlertIcon />}
+              </span>
+            ) : null}
             <div className="body">
+              {item.tone === 'success' || item.tone === 'error' ? (
+                <span className="qz-visually-hidden">{`${toneLabels[item.tone]}: `}</span>
+              ) : null}
               <RadixToast.Title className="title">{item.title}</RadixToast.Title>
               {item.description ? (
                 <RadixToast.Description className="description">

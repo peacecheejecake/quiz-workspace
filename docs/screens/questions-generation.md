@@ -1,71 +1,26 @@
-# QGEN-01 — 문제 변형 출제
+# 폐지된 화면 QGEN-01 — 문제 변형 출제
 
-**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (문제 생성 dialog) · UX4 개정 2026-10-21 (`문제` 메뉴의 변형 출제)
-**Route:** 검토 페이지 `/workspaces/:workspaceId/questions/generate?source=&run=` (뒤로가기·breadcrumb `Workspace 이름 › 문제 변형 출제`) · 묶음 결과 페이지 `/workspaces/:workspaceId/questions/generate?batch=` · 문제 생성 dialog `/workspaces/:workspaceId?panel=generate`
-**테스트:** `tests/e2e/questions/questions-generation.spec.ts`
-**연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
+**상태:** 폐지 — QGEN-RM 2026-11-02 (MOCK-SPEC 2026-11-01 사용자 결정 1: 변형 출제·"문제 생성" dialog 삭제, 대신 [모의고사 MOCK-01](mock-exams.md)). 이 문서는 화면 요구사항이 아니라 폐지 기록이다(화면 표 `index.md`와 `e2e:trace` 대상에서 빠짐 — 제목이 화면 ID로 시작하지 않는다). 이전 판: 확정 화면 요구사항 v1.3 · UX3c 2026-10-20 (문제 생성 dialog) · UX4 2026-10-21 (`문제` 메뉴의 변형 출제) · QGEN-MULTI 2026-10-23 (묶음 변형 출제) · UX7-BANK 2026-11-01.
+**이전 Route:** 검토 페이지 `/workspaces/:workspaceId/questions/generate?source=&run=` · 묶음 결과 페이지 `/workspaces/:workspaceId/questions/generate?batch=` · 문제 생성 dialog `/workspaces/:workspaceId?panel=generate`
+**연계:** [모의고사 MOCK-01](mock-exams.md), [Workspace 홈](questions-overview.md), [문제 풀이 panel](questions-practice.md)
 
-## 레이아웃 및 컴포넌트
-- 상태별 Empty/Loading/Failure/Success UI, 반응형 Layout과 Floating Side Panel, 접근성 지원.
-- API와 화면은 owner / viewer / 로그인 상태에 따라 기능과 데이터 표시 범위를 구분한다.
-- 모든 편집·상태 변경은 서버 측 인가·revision 일관성을 검증한다.
-- **문제 생성 dialog (UX3c 2026-10-20):** Workspace 홈 header의 `문제` 메뉴 › `변형 출제`(UX4 2026-10-21; 이전 `문제 생성` 버튼)는 non-modal floating dialog "문제 생성"을 바로 열고(목록을 불러오는 동안 skeleton) 변형할 확정 문제를 고른 뒤 같은 dialog에서 생성 form(변형 유형·후보 수·난이도)을 제출한다. 생성을 시작하면 검토 페이지(`?source=&run=`)로 이동해 진행률, 원본 diff·근거·검증 상태, 승인·등록을 이어간다 — 초안 비교 drawer와 편집기를 겹쳐 쓰는 검토는 dialog보다 페이지가 맞아서 남긴다. 보기 섞기는 run 없이 홈에서 원본의 풀이 panel(`?question=`)을 연다. 전체 문제 페이지(QBANK-01) 상세의 '변형 출제'는 검토 페이지를 바로 연다.
-- **묶음 변형 출제 (QGEN-MULTI 2026-10-23):** 원본 여러 개를 한 번에 변형한다. 묶음(batch)은 원본마다 하나씩 만든 보통의 generation run 묶음이고(같은 변형 유형·후보 수·난이도), 초안 검토·승인·등록은 원본별 run의 기존 검토 페이지에서 그대로 한다 — 승인 전에는 아무것도 문제은행·Heatmap에 등록되지 않는다.
-  - 원본 고르기 두 가지: **여러 문제 선택**(사람이 고른 확정 문제, 최대 20개)과 **임의 선택**(개수 1~20개 + 선택 필터: 챕터, 풀이 상태 `안 푼 문제`·`본 문제`·`틀린 문제`·`맞힌 문제`·`다시 풀기`, `즐겨찾기만`, 유형). 임의 선택은 서버가 이 Workspace의 확정 문제 중 필터에 맞는 문제(풀이 상태·즐겨찾기는 요청한 사용자 기준, 홈 Heatmap과 같은 판정)에서 개수만큼 고른다. 맞는 문제가 개수보다 적으면 맞는 문제 전부를, 하나도 없으면 run을 만들지 않고 "조건에 맞는 확정 문제가 없습니다"를 알린다. 고른 결과는 seed로 재현할 수 있다(seed를 보내지 않으면 서버가 정해 묶음에 기록).
-  - 진입점: 전체 문제 페이지(QBANK-01) 목록의 문제마다 있는 선택 checkbox(확정 문제만; 편집 권한·보관되지 않은 Workspace에서만 보임)와 선택 막대의 `선택한 문제 변형 출제 (n)`(같은 화면 위에 생성 form dialog를 연다), 그리고 홈 `문제` 메뉴 › `변형 출제` dialog 위쪽의 tab `한 문제`·`여러 문제`·`임의 선택`(기본 `한 문제` = 기존 흐름). 묶음에는 보기 섞기가 없다(풀이 순서일 뿐 생성이 아니므로).
-  - 한도(비용 보호): 원본 ≤ 20개, 원본 수 × 변형 유형 수 × 후보 수 ≤ 60, Workspace에서 진행 중(대기·생성 중) run이 40개를 넘으면 새 묶음을 거절하고, 사용자별 묶음 시작은 분당 횟수 제한(초과 시 429 + Retry-After)을 둔다. `Idempotency-Key`로 같은 요청을 재시도하면 같은 묶음을 돌려준다.
-  - 묶음 결과 페이지(`?batch=`): 전체 진행률(`@quiz/ui` ProgressBar, 끝난 원본 수 / 전체)과 원본별 그룹(원본 번호·문제 앞부분, 상태 `대기 중`·`생성 중`·`초안 n개`·실패 이유, 등록된 수, `초안 검토` 링크)을 보인다. `초안 검토`는 그 원본의 검토 페이지(`?source=&run=&batch=`)를 열고, 그 페이지에는 `묶음 결과로` 링크가 있다.
+## 폐지 (MOCK-SPEC 2026-11-01 → QGEN-RM 2026-11-02)
 
-## 수용 기준
+사용자 요청 "변형 출제 -> '문제 생성' 삭제 / 대신 '모의고사' 기능 추가". 이 화면의 모든 진입점과 묶음 변형 출제(QGEN-MULTI)는 Task **QGEN-RM**에서 없어졌다. 생성 엔진의 재사용·폐지 목록은 [MOCK-01 "재사용과 폐지"](mock-exams.md)가 기준이다.
 
-### QGEN-01-AC01
+- **없어진 것 (화면):** Workspace header `문제` 메뉴의 `변형 출제`, 풀이 panel `문제 관리` 메뉴의 `변형 출제`(UX7-BANK — 지금 메뉴는 `정답·해설 보기`·`수정 이력·출처` | `편집`·`보관` | `삭제`, QPLAY-01), "문제 생성" non-modal dialog(`한 문제`·`여러 문제`·`임의 선택` tab, 보기 섞기 미리보기), 검토 페이지(원본 diff·근거·검증 상태·승인·등록), 묶음 결과 페이지, 그 BFF route.
+- **없어진 것 (API·worker):** `POST /questions/{id}/generations`, `GET /workspaces/{id}/question-generations`, `/question-generations/{id}`(·`/drafts`·`/publish`), `/workspaces/{id}/question-generation-batches`(·`/{batch_id}`) — 모두 404. worker의 `question.generate` job 등록. 이미 대기열에 남은 `question.generate` job은 reconciler가 `failed`(`job_retired`)로 끝낸다(이력에는 실패한 작업으로 남는다).
+- **남는 것:** 테이블과 기존 행(`question_generation_runs`·`question_generation_batches`·`source_type = generation` 초안, 이미 등록된 변형 문제와 lineage) — drop migration 없음. 원본·passage·근거 helper(`quiz_worker.question_sources`)와 `book_core.generation` 검증은 모의고사 생성(`mock_exam.generate`)이 쓴다. 이력의 지난 `question.generate` 작업 label("변형 문제 생성")도 남는다.
+- **이전 URL (한 번의 redirect):** `?panel=generate` → `?panel=mock-exams`(다른 query는 유지; 모의고사 dialog가 이미 열려 있으면 한 번만), `/workspaces/:workspaceId/questions/generate?…` → `/workspaces/:workspaceId?panel=mock-exams`(이전 query는 버린다). Workspace 접근 확인은 홈과 같다(비구성원·삭제된 Workspace는 404).
+- **테스트:** `tests/e2e/questions/questions-generation.spec.ts`, `tests/e2e/fixtures/generation.ts`, QGEN 계약·통합 test(`tests/integration/questions/test_generation_*.py`), web 단위 test를 지웠다. `scripts/e2e-trace.ts` PHASES와 CI `E2E_PHASES`에서 `M6.0`을 뺐다. 메뉴·redirect의 확인은 MOCK-01-AC01과 QOV-01-AC09·AC10·AC11·AC13이 맡는다.
 
-- **Given:** 해당 화면과 테스트용 데이터 및 권한이 주어진 상태
-- **When:** 관련 조작/네트워크 요청을 수행
-- **Then:** 확정 객관식 문제의 보기만 섞을 때 원본 문제의 연습 세션에 순서만 저장하고 신규 문제나 Heatmap 점을 생성하지 않는다.
+## AC별 처리
 
-### QGEN-01-AC02
-
-- **Given:** 해당 화면과 테스트용 데이터 및 권한이 주어진 상태
-- **When:** 관련 조작/네트워크 요청을 수행
-- **Then:** 문구 변형 초안 생성 후 원본과 diff, 근거 출처, 정답 검증 상태를 표시한다.
-
-### QGEN-01-AC03
-
-- **Given:** 해당 화면과 테스트용 데이터 및 권한이 주어진 상태
-- **When:** 관련 조작/네트워크 요청을 수행
-- **Then:** '틀린 것'을 '맞는 것'으로 바꿔 복수 정답이 생기면 경고하고 검증 통과 전 승인을 차단한다.
-
-### QGEN-01-AC04
-
-- **Given:** 해당 화면과 테스트용 데이터 및 권한이 주어진 상태
-- **When:** 관련 조작/네트워크 요청을 수행
-- **Then:** 유사 개념 변형을 승인하면 원본 lineage와 문서 근거를 가진 새로운 확정 문제를 만든다.
-
-### QGEN-01-AC05
-
-- **Given:** 확정 문제가 있는 Workspace 홈(편집 권한)
-- **When:** header의 `문제` 메뉴에서 `변형 출제`를 고르고(UX4) 원본 문제를 고른 뒤 변형 유형을 골라 "생성"
-- **Then:** "문제 생성" floating dialog(`?panel=generate`)가 즉시 열려 확정 문제 목록을 보이고, 고른 문제의 생성 form을 같은 dialog에서 보인다. "생성"하면 run을 시작하고 검토 페이지(`/questions/generate?source=<id>&run=<id>`)로 이동해 그 run의 진행·초안을 보인다. 보기 섞기를 고르면 run 없이 홈에서 원본 문제의 풀이 panel이 열린다. 보기 권한(viewer)에게는 `변형 출제` 메뉴 항목이 없다(UX3c, UX4).
-
-### QGEN-01-AC06
-
-- **Given:** 확정 문제가 둘 이상 있는 전체 문제 페이지(편집 권한)
-- **When:** 문제 두 개의 선택 checkbox를 고르고 선택 막대의 `선택한 문제 변형 출제 (2)` → 변형 유형 → "생성"
-- **Then:** 한 번의 요청으로 고른 원본마다 run을 하나씩 가진 묶음을 만들고 묶음 결과 페이지(`/questions/generate?batch=<id>`)로 이동해 전체 진행률과 원본별 그룹(원본 문제 앞부분, 초안 수)을 보인다. 초안은 승인 전이라 문제 수와 Heatmap 점 수가 그대로다. 확정이 아닌 문제에는 선택 checkbox가 없고, 보기 권한(viewer)과 보관된 Workspace에는 선택 checkbox와 선택 막대가 없다(QGEN-MULTI).
-
-### QGEN-01-AC07
-
-- **Given:** 확정 문제 여러 개(일부는 즐겨찾기)가 있는 Workspace 홈(편집 권한)
-- **When:** `문제` 메뉴 › `변형 출제` dialog의 `임의 선택` tab에서 개수와 필터(`즐겨찾기만` 등)를 정하고 "생성"
-- **Then:** 서버가 필터에 맞는 이 Workspace의 확정 문제 중에서 개수만큼 임의로 고른 원본으로 묶음을 만들고 묶음 결과 페이지로 이동한다(필터 밖 문제나 다른 Workspace의 문제는 고르지 않는다). 맞는 문제가 없으면 run을 만들지 않고 dialog에 "조건에 맞는 확정 문제가 없습니다"를 알린다. `여러 문제` tab은 확정 문제 목록에서 여러 개를 골라 같은 묶음을 시작한다(QGEN-MULTI).
-
-### QGEN-01-AC08
-
-- **Given:** 두 원본의 초안이 만들어진 묶음 결과 페이지
-- **When:** 한 원본 그룹의 `초안 검토`로 검토 페이지를 열어 초안을 승인하고 "승인한 문제 등록"
-- **Then:** 검토 페이지는 그 원본과 그 원본의 run 초안만 보이고 `묶음 결과로` 링크로 돌아갈 수 있다. 등록하면 그 원본을 부모(lineage)로 하는 새 확정 문제가 하나 생기고, 묶음 결과 페이지는 그 그룹의 등록 수를 보이며 다른 원본의 초안은 초안으로 남는다(QGEN-MULTI).
-
-## Test-first 규칙
-- 위 AC ID를 Playwright test title에 포함하고 RED를 확인한 다음 API/UI를 구현한다.
-- 단위·통합 테스트는 source page mapping, auth denial, revision consistency 등 화면으로 확인하기 어려운 경계 검증을 보완한다.
+| AC | 처리 | 이어받는 곳 |
+|---|---|---|
+| QGEN-01-AC01 (보기 섞기는 새 문제·Heatmap 점을 만들지 않음) | 폐지(보기 섞기 생성 진입점이 없어짐) | 불변식은 QOV-01-AC01("보기 셔플로 점 개수가 증가하지 않는다")과 QPLAY-01-AC02가 계속 검증한다. 모의고사의 `보기 섞기`는 MOCK-01-AC06. |
+| QGEN-01-AC02 (문구 변형 diff·근거·정답 검증 표시) | 폐지(사람 검토 화면 없음) | 검증은 MOCK-01-C02의 저장 조건으로, 결과는 MOCK-01-AC02(출처 표시). |
+| QGEN-01-AC03 (정오 반전 복수 정답 경고·승인 차단) | 폐지(승인 단계 없음) | MOCK-01-AC08·C02: 복수 정답 후보는 저장·표시되지 않는다. |
+| QGEN-01-AC04 (유사 개념 승인 → lineage 있는 새 확정 문제) | 폐지(은행 등록 경로 없음 — 사용자 결정 2) | MOCK-01-C01(은행 격리). 이미 등록된 변형 문제·lineage는 그대로. |
+| QGEN-01-AC05 (`문제` 메뉴 `변형 출제` → "문제 생성" dialog) | 폐지 | MOCK-01-AC01(`모의고사` 메뉴·dialog, `?panel=generate` redirect), QOV-01-AC10·AC11 문구는 QGEN-RM에서 `변형 출제` → `모의고사`로 고쳤다. |
+| QGEN-01-AC06~AC08 (QGEN-MULTI 묶음: 여러 문제 선택·임의 선택·묶음 결과) | 폐지 | 여러 원본 고르기는 MOCK-01-AC03(범위·`전체 선택`), 임의 선택은 MOCK-01 문항 수 + seed(C03). |

@@ -12,6 +12,7 @@ import { createEditorClient } from '@/lib/documents/editor-api';
 import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
 import { draftNumber, type ReviewDraft } from '@/lib/questions/drafts';
 import styles from './question-import.module.css';
+import { displayStem } from '@/lib/questions/display-stem';
 
 export interface SourceComparePanelProps {
   /** Null while closed. */
@@ -57,7 +58,7 @@ function ComparePages({ draft, documentId }: { draft: ReviewDraft; documentId: s
         <p className={styles.comparePage}>
           원본 {draft.pages.map((p) => `${p}쪽`).join(', ')} · 지금 보는 쪽: {page}쪽
         </p>
-        <p className={styles.compareStem}>{draft.stem}</p>
+        <p className={styles.compareStem}>{displayStem(draft.stem)}</p>
         {draft.options.length > 0 ? (
           <ol className={styles.compareOptions}>
             {draft.options.map((o) => (

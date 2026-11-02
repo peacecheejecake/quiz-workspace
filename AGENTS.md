@@ -10,7 +10,7 @@ summary of the rules for carrying out the implementation plan.
 |---|---|
 | Task hierarchy, dependency graph, waves, progress | `docs/implementation-plan.md` |
 | System architecture, DB model, API list, milestones | `docs/architecture.md` |
-| Screen behaviour and acceptance criteria (135 ACs) | `docs/screens/*.md` (index: `docs/screens/index.md`) |
+| Screen behaviour and acceptance criteria (169 ACs) | `docs/screens/*.md` (index: `docs/screens/index.md`) |
 | Auth / authorization | `docs/auth.md` |
 | Sharing and fork | `docs/workspace-sharing.md` |
 | Question state, heatmap, variants | `docs/questions.md` |
@@ -149,7 +149,13 @@ OpenAPI — never hand-edit it; run `make contracts` after API changes.
 - `supabase/migrations` is the only migration owner (no Alembic). Migrations are additive-first.
 - PostgreSQL is canonical; Qdrant is a rebuildable index. History tables exist from the start.
 - Grade by stable option IDs, never by display position. Attempts are immutable.
-- Generated or imported questions stay in drafts until a human approves them.
+- Generated or imported questions stay in drafts until a human approves them; nothing generated
+  enters the question bank without that approval. The one exception is mock exam questions
+  (MOCK-01): they live only inside their mock exam (never in the bank, Heatmap, home counts,
+  search or chapter-note inputs), are stored without human approval only when they pass every
+  blocking (`error`) issue of `book_core.generation.validation` (MOCK-01-C02), stay editable and
+  removable by editors, and their attempts (`mock_exam_attempts`) never touch `question_attempts`
+  or `question_user_states`.
 
 **Frontend**
 - Semantic design tokens only: no raw hex, ad-hoc shadows or radii in feature code.
