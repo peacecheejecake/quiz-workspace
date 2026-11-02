@@ -35,7 +35,7 @@ from urllib.parse import urlsplit
 import httpx
 import pytest
 
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = [pytest.mark.infra]
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PDF_DIR = REPO_ROOT / "tests" / "fixtures" / "pdfs"
@@ -49,6 +49,8 @@ PAPER_PASSAGE = "라마바 정답표"
 MIXED_PASSAGE = "사아자 해설"
 NOWHERE = "차카타파"
 QUESTION = "가나다 원리를 설명해 줘"
+# A second question that has evidence too (an answer without evidence makes no LLM call).
+SECOND = "물의 순환은?"
 EXPLANATION = "E2E-EXPLANATION-SECRET"
 CORRECT = "E2E-CORRECT-OPTION"
 RUBRIC = "E2E-RUBRIC-SECRET"
@@ -864,7 +866,7 @@ def test_ask_01_c06_limits_idempotency_and_usage(seed: Any, limits_app: Any, db:
     )
     assert sent.status_code == 202
     running = via(
-        limits_app, owner, "POST", f"/ask/conversations/{cid}/messages", {"question": "두 번째"}
+        limits_app, owner, "POST", f"/ask/conversations/{cid}/messages", {"question": SECOND}
     )
     assert (running.status_code, problem_type(running)) == (409, P + "ask-answer-running")
     again = limits_app.request(
@@ -878,9 +880,7 @@ def test_ask_01_c06_limits_idempotency_and_usage(seed: Any, limits_app: Any, db:
     finish(owner, sent)
     second = finish(
         owner,
-        via(
-            limits_app, owner, "POST", f"/ask/conversations/{cid}/messages", {"question": "두 번째"}
-        ),
+        via(limits_app, owner, "POST", f"/ask/conversations/{cid}/messages", {"question": SECOND}),
     )
     turn = via(
         limits_app, owner, "POST", f"/ask/conversations/{cid}/messages", {"question": "세 번째"}
@@ -1156,8 +1156,14 @@ def test_ask_01_c09_the_worker_rechecks_runs_once_and_retries_only_before_the_fi
         (fail.json()["answer"]["id"],),
     )
     assert usage_rows >= 1
-    [[queue]] = db("select queue from public.jobs where id = %s", (job_id,))
-    assert queue == "interactive"
+    # The answer job runs on the `interactive` queue (its own worker process): the API publishes it
+    # there and the worker routes its task there (Q4: the queue follows the job type; async_jobs
+    # has no queue column).
+    from quiz_api.jobs import queue_for as api_queue
+    from quiz_worker.celery_app import queue_for as worker_queue
+
+    [[job_type]] = db("select job_type from public.async_jobs where id = %s", (job_id,))
+    assert api_queue(job_type) == worker_queue(job_type) == "interactive"
 
 
 # ---------------------------------------------------------------------------------------------

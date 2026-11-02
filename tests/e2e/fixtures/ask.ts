@@ -49,7 +49,9 @@
 //   Q4 POST /ask/conversations/{id}/messages {question, scope?, selected_option_ids?} (optional
 //      `Idempotency-Key`; the same key → the same two messages) → 202 {user_message: Message,
 //      answer: Message, stream_url: "/api/v1/ask/messages/<id>/stream", job_id} (the
-//      `ask.answer` job: its owner may read GET /jobs/{id}, nobody else; it is in no job list).
+//      `ask.answer` job: its owner may read GET /jobs/{id}, nobody else; it is in no job list;
+//      it runs on the Celery queue `interactive`, which follows the job type — ASK-B:
+//      quiz_api.jobs.queue_for / quiz_worker.celery_app.queue_for, no queue column on jobs).
 //      Message = {id, conversation_id, role: "user" | "assistant", status: "queued" |
 //      "retrieving" | "streaming" | "succeeded" | "no_sources" | "stopped" | "failed", text
 //      (Markdown; the finished, validated answer, or the text so far while streaming), sources:
@@ -67,7 +69,10 @@
 //      (`retry_of_message_id` / `regenerated_from_message_id`); PUT …/feedback {reason:
 //      "source_mismatch" | "made_up" | "revealed_answer" | "other"} → 200; DELETE conversation →
 //      204; DELETE …/attachment → 200 Conversation (attachment null).
-//   Q7 Fake answerer (APP_ENV=test only, ASK-01-C11). Normal answer: the first sentence of each
+//   Q7 Fake answerer (APP_ENV=test only, ASK-01-C11). Evidence under APP_ENV=test (ASK-B): a
+//      passage counts only when the deterministic relevance (share of the question's word and
+//      bigram features found in it, E2E-* markers ignored) is at least ASK_MIN_RELEVANCE (0.3),
+//      so a question needs words of the passage to get sources (e.g. "가나다 원리를 설명해 줘"). Normal answer: the first sentence of each
 //      of the top two sources as "<sentence> [S1]" / "<sentence> [S2]" in at least three deltas
 //      ~150 ms apart, then a last line "이전 턴 <n>개" (the history turns it received; AC06).
 //      Markers in the user's question:

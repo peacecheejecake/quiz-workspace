@@ -55,10 +55,9 @@ OWNER_READ = Rule(OWNERS, writes=False)
 # QVIEW-B practice runs: personal, so creating and finishing one is allowed when archived.
 RUN_CREATE = Rule(ALL, writes=True, archived_ok=True)
 OWN_RUN_WRITE = Rule(ALL, writes=True, archived_ok=True, personal=True)
-# UX9-HL-B highlights: personal and the one write an archived workspace allows
-# (HILITE-01-C01).
-HIGHLIGHT_CREATE = Rule(ALL, writes=True, archived_ok=True)
-OWN_HIGHLIGHT = Rule(ALL, writes=True, archived_ok=True, personal=True)
+# ASK-B AI question conversations: the creator's only; deleting, detaching, stopping and feedback
+# are allowed on an archived workspace (ASK-01-C01).
+OWN_ARCHIVED_WRITE = Rule(ALL, writes=True, archived_ok=True, personal=True)
 
 # Not workspace-scoped: the caller's own account data, the guest share API, health probes.
 ME = "me"  # any signed-in user, own data only
@@ -121,10 +120,6 @@ RULES: dict[str, Rule | str] = {
     # UX7-DEDUP: the scan only serves the merge, so both are question edits (archived 403).
     "listQuestionDuplicates": EDIT,
     "mergeQuestionDuplicates": EDIT,
-    # UX9-REDIST-B: the list and preview only serve the move, so all three are question edits.
-    "listChapterRedistributionQuestions": EDIT,
-    "previewChapterRedistribution": EDIT,
-    "assignQuestionChapters": EDIT,
     "getQuestionRevision": READ,
     "listQuestionImports": READ,
     "createQuestionImport": EDIT,
@@ -136,8 +131,6 @@ RULES: dict[str, Rule | str] = {
     "listChapterNotes": READ,
     "getChapterNote": READ,
     "createChapterNote": EDIT,
-    # footnote previews (CHNOTE-02-C01)
-    "getQuestionPreview": READ,
     # mock exams (MOCK-01-C05)
     "listMockExams": READ,
     "createMockExam": EDIT,
@@ -151,15 +144,21 @@ RULES: dict[str, Rule | str] = {
     # MOCK-P mock exam practice: personal like bank practice
     "startMockPracticeSession": PRACTICE,
     "submitMockPracticeSession": OWN_WRITE,
+    # ASK-B AI questions (ASK-01-C01): members create, the creator alone reaches a conversation
+    "getAskState": READ,
+    "listAskConversations": READ,
+    "createAskConversation": PRACTICE,
+    "getAskConversation": OWN_READ,
+    "deleteAskConversation": OWN_ARCHIVED_WRITE,
+    "detachAskQuestion": OWN_ARCHIVED_WRITE,
+    "askQuestion": OWN_WRITE,
+    "getAskMessage": OWN_READ,
+    "streamAskAnswer": OWN_READ,
+    "cancelAskAnswer": OWN_ARCHIVED_WRITE,
+    "retryAskAnswer": OWN_WRITE,
+    "regenerateAskAnswer": OWN_WRITE,
+    "setAskFeedback": OWN_ARCHIVED_WRITE,
     "selfGradeMockPracticeSession": OWN_WRITE,
-    # UX9-HL-B personal highlights (reads are the caller's rows only; HILITE-01-C01)
-    "listChapterHighlights": READ,
-    "listChapterlessHighlights": READ,
-    "listQuestionHighlights": READ,
-    "createHighlight": HIGHLIGHT_CREATE,
-    "updateHighlight": OWN_HIGHLIGHT,
-    "deleteHighlight": OWN_HIGHLIGHT,
-    "restoreHighlight": OWN_HIGHLIGHT,
     # workspace lifecycle and sharing
     "getWorkspace": READ,
     "listWorkspaceActivities": READ,
@@ -189,7 +188,6 @@ RULES: dict[str, Rule | str] = {
     "searchSharedWorkspace": SHARED,
     "listSharedChapterNotes": SHARED,
     "getSharedChapterNote": SHARED,
-    "getSharedQuestionPreview": SHARED,
     "createSharedSession": SHARED,
     # health
     "getLiveness": PUBLIC,
@@ -246,17 +244,6 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
                 }
             ]
         },
-        "previewChapterRedistribution": {"all": True},
-        "assignQuestionChapters": {
-            "source": "manual",
-            "items": [
-                {
-                    "question_id": ids["question_id"],
-                    "chapter_id": None,
-                    "expected_chapter_id": None,
-                }
-            ],
-        },
         "startWorkspaceFork": {"name": "S4 fork"},
         "searchSharedWorkspace": {"query": "S4"},
         "searchWorkspace": {"query": "S4"},
@@ -283,18 +270,11 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "submitMockPracticeSession": {"selected_option_ids": ["opt-1"]},
         "selfGradeMockPracticeSession": {"result": "correct"},
         "updateShareLink": {"allow_fork": False},
-        "createHighlight": {
-            "target": {"kind": "explanation", "question_id": ids["question_id"]},
-            "anchor": {"block": "p0", "start": 0, "end": 1},
-            "color": "yellow",
-        },
-        "updateHighlight": {"color": "blue", "version": 1},
+        "createAskConversation": {},
+        "askQuestion": {"question": "S4 질문"},
+        "setAskFeedback": {"reason": "other"},
     }
     return bodies.get(op_id)
-
-
-# Required query strings (the path alone would be 422).
-QUERIES: dict[str, str] = {"listChapterlessHighlights": "?chapter=none"}
 
 
 def _op(s4: Any, op_id: str) -> Any:
@@ -317,10 +297,7 @@ def call(
         headers["Cookie"] = cookie
     body = body_for(op.operation_id, ids)
     res: httpx.Response = http.request(
-        op.method,
-        f"{s4.API}{op.url(ids)}{QUERIES.get(op.operation_id, '')}",
-        json=body,
-        headers=headers,
+        op.method, f"{s4.API}{op.url(ids)}", json=body, headers=headers
     )
     http.cookies.clear()
     return res

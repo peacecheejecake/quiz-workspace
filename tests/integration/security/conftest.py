@@ -118,7 +118,8 @@ def random_ids() -> dict[str, str]:
         "mock_exam_id",
         "mock_exam_question_id",
         "mock_practice_session_id",
-        "highlight_id",
+        "conversation_id",
+        "message_id",
     )
     out = {k: str(uuid.uuid4()) for k in keys}
     out["block_id"] = f"b-{uuid.uuid4().hex[:12]}"
@@ -242,17 +243,20 @@ def build_world(seed: Any, label: str) -> World:
         "POST", f"/mock-exam-questions/{mock_question_id}/practice-sessions", None, (201,)
     )
 
-    # UX9-HL-B: the owner's highlight of the question's explanation (personal: other
-    # members get the unknown-id 404).
-    highlight = owner.ok(
-        "POST",
-        "/my-highlights",
-        {
-            "target": {"kind": "explanation", "question_id": qid},
-            "anchor": {"block": "p0", "start": 0, "end": 1},
-            "color": "yellow",
-        },
-        (201,),
+    # ASK-B: the owner's conversation with one finished answer (direct seed: asking needs the
+    # feature on, which this stack leaves off; the routes check ownership before the switch).
+    conversation = owner.ok("POST", f"/workspaces/{wid}/ask/conversations", {}, (201,))
+    question_message, answer_message = (str(uuid.uuid4()) for _ in range(2))
+    seed._admin(
+        "insert into public.ask_messages (id, conversation_id, workspace_id, user_id, role, "
+        "status, text) values (%s, %s, %s, %s, 'user', 'succeeded', 'S4 질문')",
+        (question_message, conversation["id"], wid, owner.user.id),
+    )
+    seed._admin(
+        "insert into public.ask_messages (id, conversation_id, workspace_id, user_id, role, "
+        "status, question_message_id, text, finished_at) values (%s, %s, %s, %s, 'assistant', "
+        "'succeeded', %s, 'S4 답', now())",
+        (answer_message, conversation["id"], wid, owner.user.id, question_message),
     )
 
     # A second workspace of the same owner, for requests that mix ids of two workspaces.
@@ -288,7 +292,8 @@ def build_world(seed: Any, label: str) -> World:
         "mock_exam_id": mock_exam_id,
         "mock_exam_question_id": mock_question_id,
         "mock_practice_session_id": str(mock_session["id"]),
-        "highlight_id": str(highlight["id"]),
+        "conversation_id": str(conversation["id"]),
+        "message_id": answer_message,
     }
     twin_ids = {
         "workspace_id": tid,
