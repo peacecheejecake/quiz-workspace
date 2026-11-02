@@ -1017,6 +1017,27 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/questions/{question_id}/preview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Question Preview
+     * @description A chapter-note footnote preview (CHNOTE-02-C01): stem and options of a live CONFIRMED
+     *     question, no answer or explanation. Records no view.
+     */
+    get: operations['getQuestionPreview'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/questions/{question_id}/revisions/{revision_id}': {
     parameters: {
       query?: never;
@@ -1224,6 +1245,27 @@ export type paths = {
      * @description One CONFIRMED question of the shared workspace; anything else is the same 404.
      */
     get: operations['getSharedQuestion'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/questions/{question_id}/preview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Shared Question Preview
+     * @description The member preview's DTO for a question in the share's published scope (CHNOTE-02-C02);
+     *     anything else is the same 404.
+     */
+    get: operations['getSharedQuestionPreview'];
     put?: never;
     post?: never;
     delete?: never;
@@ -4337,6 +4379,13 @@ export type components = {
        */
       workspace_id: string;
     };
+    /** PreviewOption */
+    PreviewOption: {
+      /** Id */
+      id: string;
+      /** Text */
+      text: string;
+    };
     /** Problem */
     Problem: {
       /**
@@ -4665,6 +4714,39 @@ export type components = {
       counts: components['schemas']['OverviewCounts'];
       /** Items */
       items: components['schemas']['OverviewItem'][];
+    };
+    /**
+     * QuestionPreview
+     * @description Stem and options only: no answer, explanation, rubric, source or per-user field.
+     */
+    QuestionPreview: {
+      /** Chapter Title */
+      chapter_title: string | null;
+      /**
+       * Number Label
+       * @description "<n>장 <번호>번" like the Heatmap, or "<번호>번".
+       */
+      number_label: string;
+      /**
+       * Options
+       * @description Original order; empty for text answers.
+       */
+      options: components['schemas']['PreviewOption'][];
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * Stem
+       * @description The active revision's stem, unaltered.
+       */
+      stem: string;
     };
     /**
      * QuestionRange
@@ -10130,6 +10212,73 @@ export interface operations {
       };
     };
   };
+  getQuestionPreview: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QuestionPreview'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getQuestionRevision: {
     parameters: {
       query?: never;
@@ -10804,6 +10953,75 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SharedQuestion'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getSharedQuestionPreview: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QuestionPreview'];
         };
       };
       /** @description Unauthorized */

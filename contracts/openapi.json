@@ -5778,6 +5778,25 @@
         "title": "PracticeSessionDetail",
         "type": "object"
       },
+      "PreviewOption": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "PreviewOption",
+        "type": "object"
+      },
       "Problem": {
         "properties": {
           "detail": {
@@ -6594,6 +6613,65 @@
           "items"
         ],
         "title": "QuestionOverview",
+        "type": "object"
+      },
+      "QuestionPreview": {
+        "additionalProperties": false,
+        "description": "Stem and options only: no answer, explanation, rubric, source or per-user field.",
+        "properties": {
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title"
+          },
+          "number_label": {
+            "description": "\"<n>장 <번호>번\" like the Heatmap, or \"<번호>번\".",
+            "title": "Number Label",
+            "type": "string"
+          },
+          "options": {
+            "description": "Original order; empty for text answers.",
+            "items": {
+              "$ref": "#/components/schemas/PreviewOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "question_type": {
+            "enum": [
+              "MCQ",
+              "SHORT_ANSWER",
+              "ESSAY"
+            ],
+            "title": "Question Type",
+            "type": "string"
+          },
+          "stem": {
+            "description": "The active revision's stem, unaltered.",
+            "title": "Stem",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "number_label",
+          "chapter_title",
+          "question_type",
+          "stem",
+          "options"
+        ],
+        "title": "QuestionPreview",
         "type": "object"
       },
       "QuestionRange": {
@@ -15948,6 +16026,95 @@
         ]
       }
     },
+    "/api/v1/questions/{question_id}/preview": {
+      "get": {
+        "description": "A chapter-note footnote preview (CHNOTE-02-C01): stem and options of a live CONFIRMED\nquestion, no answer or explanation. Records no view.",
+        "operationId": "getQuestionPreview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Question Preview",
+        "tags": [
+          "questions"
+        ]
+      }
+    },
     "/api/v1/questions/{question_id}/revisions/{revision_id}": {
       "get": {
         "description": "One immutable revision of the question (history; attempts point at these).",
@@ -17052,6 +17219,102 @@
           }
         },
         "summary": "Get Shared Question",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/questions/{question_id}/preview": {
+      "get": {
+        "description": "The member preview's DTO for a question in the share's published scope (CHNOTE-02-C02);\nanything else is the same 404.",
+        "operationId": "getSharedQuestionPreview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Shared Question Preview",
         "tags": [
           "shared"
         ]

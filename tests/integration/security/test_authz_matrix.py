@@ -128,6 +128,8 @@ RULES: dict[str, Rule | str] = {
     "listChapterNotes": READ,
     "getChapterNote": READ,
     "createChapterNote": EDIT,
+    # footnote previews (CHNOTE-02-C01)
+    "getQuestionPreview": READ,
     # mock exams (MOCK-01-C05)
     "listMockExams": READ,
     "createMockExam": EDIT,
@@ -171,6 +173,7 @@ RULES: dict[str, Rule | str] = {
     "searchSharedWorkspace": SHARED,
     "listSharedChapterNotes": SHARED,
     "getSharedChapterNote": SHARED,
+    "getSharedQuestionPreview": SHARED,
     "createSharedSession": SHARED,
     # health
     "getLiveness": PUBLIC,
