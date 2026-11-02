@@ -392,6 +392,13 @@ class ExplanationRepository:
         ).one_or_none()
         return _row(kind, row) if row is not None else None
 
+    def lock_user(self, user_id: uuid.UUID) -> None:
+        """Serializes the user's new explanations (the daily count) until the transaction ends."""
+        self._session.execute(
+            text("select pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+            {"k": f"ai_explanation_user:{user_id}"},
+        )
+
     def lock_key(self, kind: str, revision_id: uuid.UUID) -> None:
         """Serializes creating explanations of one revision (until the transaction ends)."""
         self._session.execute(

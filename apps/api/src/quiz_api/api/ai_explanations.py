@@ -426,6 +426,19 @@ def _start_of_day(now: datetime) -> datetime:
     return now.astimezone(SEOUL).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+def _check_daily(repo: ExplanationRepository, settings: Settings, user_id: uuid.UUID) -> None:
+    now = datetime.now(UTC)
+    today = _start_of_day(now)
+    if repo.created_since(user_id, today) >= settings.ai_explanation_daily_limit_per_user:
+        tomorrow = today + timedelta(days=1)
+        raise ProblemException(
+            429,
+            ProblemType.EXPLANATION_DAILY_LIMIT,
+            detail="Today's new AI explanations are used up.",
+            headers={"Retry-After": retry_after_header((tomorrow - now).total_seconds())},
+        )
+
+
 def _check_limits(repo: ExplanationRepository, deps: ExplainDeps, user_id: uuid.UUID) -> None:
     settings = deps.settings
     now = datetime.now(UTC)
@@ -436,15 +449,7 @@ def _check_limits(repo: ExplanationRepository, deps: ExplainDeps, user_id: uuid.
             ProblemType.EXPLANATION_BUDGET_EXCEEDED,
             detail="This month's AI explanation usage is used up.",
         )
-    today = _start_of_day(now)
-    if repo.created_since(user_id, today) >= settings.ai_explanation_daily_limit_per_user:
-        tomorrow = today + timedelta(days=1)
-        raise ProblemException(
-            429,
-            ProblemType.EXPLANATION_DAILY_LIMIT,
-            detail="Today's new AI explanations are used up.",
-            headers={"Retry-After": retry_after_header((tomorrow - now).total_seconds())},
-        )
+    _check_daily(repo, settings, user_id)
     wait = deps.limiter.acquire(f"explain:{user_id}")
     if wait is not None:
         raise ProblemException(
@@ -630,6 +635,8 @@ def _create(
     # The write transaction: re-authorize under the row locks, then one row per key.
     write = Action.QUESTION_EDIT if regenerate else Action.PRACTICE
     access = _authorize(repo, user_id, kind, target_id, write, LockMode.SHARE)
+    # Lock order everywhere: the user (daily count), then the revision (one row per key).
+    repo.lock_user(user_id)
     repo.lock_key(kind.name, revision_id)
     live = repo.live(kind.name, revision_id, PROMPT_VERSION, model)
     now_current = repo.current(kind.name, revision_id, PROMPT_VERSION, model)
@@ -639,6 +646,13 @@ def _create(
         not regenerating or current is None or now_current.id != current.id
     ):
         return _answer(repo, settings, kind, access, revision_id, 200)
+    # The daily count again, atomically with the insert: concurrent requests of the same user on
+    # other questions wait on the user lock and see this row once it commits.
+    try:
+        _check_daily(repo, settings, user_id)
+    except ProblemException:
+        repo.rollback()
+        raise
     inserted = repo.insert(
         kind.name,
         workspace_id=target.workspace_id,

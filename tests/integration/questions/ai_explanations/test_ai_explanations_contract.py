@@ -595,6 +595,33 @@ def test_c03_a_failed_regeneration_never_hides_the_current_success(seed: Any, db
     assert hit["explanation"]["id"] == good["id"]
 
 
+def test_c03_the_daily_limit_holds_under_concurrent_posts_across_questions(
+    seed: Any, db: Any, daily_app: Any
+) -> None:
+    """Concurrent new explanations of different questions never exceed the user's daily limit
+    (the count is re-checked under a per-user lock in the inserting transaction)."""
+    owner = seed.client("expl-c03d-owner")
+    book = Book(owner)
+    questions = [book.mcq() for _ in range(6)]
+    limited = type(owner)(daily_app, owner.user)
+    results = race(
+        [
+            lambda qid=q["id"]: limited.call("POST", base("question", qid), {"view": "detail"})
+            for q in questions
+        ]
+    )
+    made = db(
+        "select count(*) from public.question_ai_explanations where created_by = %s",
+        (owner.user.id,),
+    )[0][0]
+    assert made == 2
+    codes = sorted(r.status_code for r in results)
+    assert codes == [202, 202, 429, 429, 429, 429]
+    for res in results:
+        if res.status_code == 429:
+            assert res.json()["type"] == P + "explanation-daily-limit"
+
+
 # ---------------------------------------------------------------------------------------------
 # C04 input and validation
 # ---------------------------------------------------------------------------------------------

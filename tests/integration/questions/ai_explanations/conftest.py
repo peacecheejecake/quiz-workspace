@@ -118,6 +118,16 @@ def off_app(stack: Any, job_worker: Any) -> Iterator[TestClient]:
         yield client
 
 
+@pytest.fixture(scope="module")
+def daily_app(stack: Any, job_worker: Any) -> Iterator[TestClient]:
+    """The same app with a daily limit of 2 new explanations per user (C03 quota race)."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("AI_EXPLANATION_DAILY_LIMIT_PER_USER", "2")
+        client = _app(job_worker._names.prefix)
+    with client:
+        yield client
+
+
 @pytest.fixture
 def calls() -> Callable[[str], int]:
     """LLM calls the fake explainer answered for a question / mock exam question id (E6)."""
