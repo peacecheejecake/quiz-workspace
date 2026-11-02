@@ -10,7 +10,7 @@
 //              progress, results (QVIEW-01)
 //   manage     the 문제 상세 dialog over the practice panel or a 보관·초안 문제 row: answers,
 //              sources and revision history, the opener's actions; no submit UI (UX7-BANK-2)
-//   read-only  a share-link guest's preview: non-modal panel, answers shown, nothing recorded
+//   read-only  a share-link guest's preview: modal panel (UX9), answers shown, nothing recorded
 // Every mode renders its question through QuestionBody (`displayStem`, the hidden 보기 label, the
 // grading border of an answered MCQ — QPLAY-01-AC12/AC13).
 import { ManageViewer, type ManageViewerProps } from './manage-viewer';

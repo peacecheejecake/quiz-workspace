@@ -71,7 +71,6 @@ export function SharedSummaryPanel({
 }: SharedSummaryPanelProps) {
   return (
     <FloatingSidePanel
-      modal={false}
       open={open}
       onOpenChange={(next) => {
         if (!next) onClose();

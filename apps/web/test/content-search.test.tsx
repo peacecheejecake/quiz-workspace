@@ -3,7 +3,7 @@
 // composed here like the home's unified search does): behaviour the E2E specs cannot force — 429
 // with Retry-After and 503 states, an older answer never replacing a newer search, option changes
 // re-running the submitted query, the home URL mirroring the search next to its other keys, and
-// the non-modal excerpt panel's refined PDF jump.
+// the modal excerpt panel's refined PDF jump (modal since UX9, HOMEDLG-01).
 import './dom-setup';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -315,7 +315,7 @@ describe("content search (the home's 본문 search)", () => {
     expect(client.search.mock.calls[0]?.[1]).toMatchObject({ query: 'chlorine', mode: 'keyword' });
   });
 
-  it('opens the excerpt in a non-modal panel whose PDF link targets the matching block', async () => {
+  it('opens the excerpt in a modal panel whose PDF link targets the matching block', async () => {
     const user = userEvent.setup();
     const client = makeClient(async () => response([hit()]));
     render(<SearchScreen workspaceId={WS} documents={[]} initial={INITIAL} client={client} />);
@@ -327,7 +327,7 @@ describe("content search (the home's 본문 search)", () => {
     await user.click(within(item).getByRole('button', { name: 'Water Book' }));
 
     const panel = await screen.findByRole('dialog', { name: '본문 발췌' });
-    expect(panel).not.toHaveAttribute('aria-modal');
+    expect(panel).toHaveAttribute('aria-modal', 'true');
     const link = within(panel).getByRole('link', { name: 'PDF에서 보기' });
     await waitFor(() =>
       expect(link).toHaveAttribute(
@@ -338,9 +338,11 @@ describe("content search (the home's 본문 search)", () => {
     expect(panel).toHaveTextContent('5쪽');
     expect(client.block).toHaveBeenCalledWith(DOC, 'p2', REV, expect.anything());
 
-    // The background stays usable: focusing the search box keeps the panel open.
-    await user.click(screen.getByRole('searchbox', { name: /검색/ }));
-    expect(screen.getByRole('dialog', { name: '본문 발췌' })).toBeVisible();
+    // Modal (UX9): the search behind it is hidden from assistive technology; 이전/다음 결과
+    // have no neighbour for a single hit.
+    expect(screen.queryByRole('searchbox', { name: /검색/ })).toBeNull();
+    expect(within(panel).getByRole('button', { name: '이전 결과' })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: '다음 결과' })).toBeDisabled();
   });
 
   it('clears a bookmarked chapter of an older revision before searching, in the URL too', async () => {

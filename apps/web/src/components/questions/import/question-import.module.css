@@ -163,6 +163,28 @@
   padding-inline-start: var(--space-5);
 }
 
+/* The answer is marked by text and an icon, never by color alone. */
+.compareCorrect {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-inline-start: var(--space-2);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.compareNote {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.compareLabel {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
 .compareViewer {
   min-height: 24rem;
 }

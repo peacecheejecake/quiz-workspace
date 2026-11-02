@@ -228,7 +228,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     expect(within(dialog).queryByRole('button', { name: /즐겨찾기|다시 풀기/ })).toBeNull();
   });
 
-  it('read-only: a non-modal preview with the answers, no submit UI and no toggles', () => {
+  it('read-only: a modal preview (UX9) with the answers, no submit UI and no toggles', () => {
     render(
       <QuestionViewer
         mode="read-only"
@@ -239,7 +239,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
       />,
     );
     const panel = screen.getByRole('dialog', { name: '1번 문제' });
-    expect(panel).not.toHaveAttribute('aria-modal', 'true');
+    expect(panel).toHaveAttribute('aria-modal', 'true');
     expect(within(panel).getByText(SHOWN_STEM)).toBeInTheDocument();
     expect(within(panel).getByText(REVISION.explanation)).toBeInTheDocument();
     expect(within(panel).queryByRole('radio')).toBeNull();

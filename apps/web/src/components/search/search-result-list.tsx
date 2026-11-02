@@ -2,7 +2,7 @@
 
 // `SearchResultList` (SEARCH-01): one list item per hit with its document, section path, page and
 // excerpt. SEARCH-01-AC11 (UX7-SEARCH): a click or tap anywhere on the item opens the hit in the
-// non-modal DocumentExcerptPanel (its text around the keyword, and the jump into the DOC-02
+// modal DocumentExcerptPanel (UX9; its text around the keyword, and the jump into the DOC-02
 // viewer); the title button is the same action for the keyboard and assistive technology.
 import type { MouseEvent } from 'react';
 import type { SearchItem } from '@/lib/search/client';
@@ -54,6 +54,7 @@ export function SearchResultList({ items, selectedKey, onOpen, busy }: SearchRes
               <button
                 type="button"
                 className={styles.hitTitle}
+                data-hit-key={key}
                 aria-haspopup="dialog"
                 aria-current={selected || undefined}
               >

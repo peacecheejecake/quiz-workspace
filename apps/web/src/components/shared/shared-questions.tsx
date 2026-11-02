@@ -1,11 +1,12 @@
 'use client';
 
 // WS-VIEW-01 published questions: one list item per CONFIRMED question; a click opens the
-// read-only preview (QuestionViewer `read-only`, QVIEW-01 call site 6) in a non-modal
-// FloatingSidePanel with the options, the correct answer, the explanation and the source pages.
+// read-only preview (QuestionViewer `read-only`, QVIEW-01 call site 6) in a modal FloatingSidePanel
+// (UX9, HOMEDLG-01: the list behind it is inert; `이전 문제`/`다음 문제` move along it) with the
+// options, the correct answer, the explanation and the source pages.
 // There is no answer input, favourite, retry or edit control, and opening a question records
 // nothing (the shared API has no write route at all).
-import { Button } from '@quiz/ui';
+import { Button, type FloatingSidePanelProps, type PanelSteps } from '@quiz/ui';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { NO_CHAPTER_TITLE, pageText } from '@/components/questions/labels';
@@ -84,7 +85,13 @@ export function SharedQuestions({
   };
 
   const items = list.status === 'ready' ? list.items : [];
-  const open = items.find((q) => q.id === openId) ?? null;
+  const at = items.findIndex((q) => q.id === openId);
+  const open = items[at] ?? null;
+  const previous = at > 0 ? items[at - 1] : undefined;
+  const next = at >= 0 ? items[at + 1] : undefined;
+  // The question last shown: focus returns to its list button once the panel has closed.
+  const [shown, setShown] = useState<string | null>(null);
+  if (openId !== null && openId !== shown) setShown(openId);
 
   return (
     <section className={styles.card} aria-labelledby="shared-questions-title">
@@ -121,6 +128,7 @@ export function SharedQuestions({
                 type="button"
                 className={`${styles.questionButton} qz-focus-ring`}
                 aria-haspopup="dialog"
+                data-shared-question={q.id}
                 aria-current={q.id === openId || undefined}
                 onClick={() => setOpenId(q.id)}
               >
@@ -148,6 +156,21 @@ export function SharedQuestions({
         question={open}
         documents={documents}
         onClose={() => setOpenId(null)}
+        steps={{
+          previousLabel: '이전 문제',
+          nextLabel: '다음 문제',
+          onPrevious: previous ? () => setOpenId(previous.id) : undefined,
+          onNext: next ? () => setOpenId(next.id) : undefined,
+        }}
+        onCloseAutoFocus={(event) => {
+          if (!shown) return;
+          const button = document.querySelector<HTMLElement>(
+            `button[data-shared-question="${CSS.escape(shown)}"]`,
+          );
+          if (!button) return;
+          event.preventDefault();
+          button.focus();
+        }}
       />
     </section>
   );
@@ -159,11 +182,16 @@ export function SharedQuestionPanel({
   question,
   documents,
   onClose,
+  steps,
+  onCloseAutoFocus,
 }: {
   readonly shareId: string;
   readonly question: SharedQuestion | null;
   readonly documents: readonly SharedDocumentSummary[];
   readonly onClose: () => void;
+  /** The list's 이전 문제 / 다음 문제 (a footnote's panel has none). */
+  readonly steps?: PanelSteps;
+  readonly onCloseAutoFocus?: FloatingSidePanelProps['onCloseAutoFocus'];
 }) {
   return (
     <QuestionViewer
@@ -178,6 +206,8 @@ export function SharedQuestionPanel({
           }
         : {})}
       onClose={onClose}
+      {...(steps ? { steps } : {})}
+      {...(onCloseAutoFocus ? { onCloseAutoFocus } : {})}
       className={styles.panelBody}
       sources={
         question ? (
