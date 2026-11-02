@@ -1,7 +1,7 @@
 // UX9-SCROLL — swiping or wheeling over an open overlay never scrolls the page underneath
 // (user report 2026-11-02, iOS Safari). Overlays: a centered modal dialog (workspace 만들기), a
 // floating dialog (문서 관리 — modal since UX9-MODAL, HOMEDLG-01) and a modal side panel (the question
-// viewer). A modal holds the page where it was while it is open, so the page is made scrollable
+// viewer). A modal locks the page while it is open, so the page is made scrollable
 // (and scrolled) before the overlay opens.
 //
 // Touch: Playwright has no swipe API. Every swipe is dispatched twice:

@@ -531,7 +531,12 @@ async function expectStableLayout(
     await expect(dialog, `${d.name} is modal`).toHaveAttribute('aria-modal', 'true');
     await settleAnimations(page);
     const during = await measure(page, parts);
-    expect(during, `${d.name}: layout while open`).toEqual(before);
+    // The scrollbar is hidden while a modal is open (user decision 2026-11-02); its gutter keeps
+    // the room, so every box stays put, but Chromium reports the root's clientWidth without the
+    // reserved gutter then. The home content's geometry is what must not move.
+    expect({ ...during, clientWidth: before.clientWidth }, `${d.name}: layout while open`).toEqual(
+      before,
+    );
 
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);

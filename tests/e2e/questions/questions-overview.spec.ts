@@ -1621,8 +1621,9 @@ test(
     await expect(inactiveUi.rows(inactive)).toHaveCount(1);
     await inactiveUi.restore(inactiveUi.rows(inactive).first()).click();
     await expect(homeBackgroundUi.dots(page)).toHaveCount(2);
-    // UX9: the Heatmap is read once the modal dialog is closed.
-    await inactiveUi.close(inactive).click();
+    // UX9: the Heatmap is read once the modal dialog is closed — Escape closes it even with the
+    // 보관 해제 toast shown (the top dialog first; the toast stays).
+    await page.keyboard.press('Escape');
     await expect(inactive).toBeHidden();
     await expect(overviewUi.dots(page)).toHaveCount(2);
     await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'correct');
