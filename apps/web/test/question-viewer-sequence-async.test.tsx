@@ -329,4 +329,82 @@ describe('sequence viewer async edges (QVIEW-W review)', () => {
     expect(within(panel).getByRole('radio', { name: '응결' })).toBeChecked();
     expect(within(panel).getByRole('button', { name: SUBMIT })).toBeEnabled();
   });
+
+  it('a run created after the picker closed retires its key: the next opening starts a new run', async () => {
+    const user = userEvent.setup();
+    const first = deferred<RunActionResult<PracticeRun>>();
+    const create = vi
+      .fn<RunClient['create']>()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue({ ok: true, data: run({ id: NEW_RUN }) });
+    const c = client({ create });
+    const onNavigate = vi.fn();
+    const view = render(viewer(PICKER, c, onNavigate));
+    let panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('checkbox', { name: '전체 선택' }));
+    await user.click(within(panel).getByRole('button', { name: '시작' }));
+    view.rerender(viewer(null, c, onNavigate));
+    await act(async () => first.resolve({ ok: true, data: run() }));
+    view.rerender(viewer(PICKER, c, onNavigate));
+    panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('checkbox', { name: '전체 선택' }));
+    await user.click(within(panel).getByRole('button', { name: '시작' }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+    expect(create.mock.calls[1]?.[2]).not.toBe(create.mock.calls[0]?.[2]);
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith(
+      { step: 'solve', runId: NEW_RUN, position: 1 },
+      'replace',
+    );
+  });
+
+  it('an older success never retires a newer request’s key', async () => {
+    const user = userEvent.setup();
+    const first = deferred<RunActionResult<PracticeRun>>();
+    const create = vi
+      .fn<RunClient['create']>()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(UNAVAILABLE)
+      .mockResolvedValue({ ok: true, data: run({ id: NEW_RUN }) });
+    const c = client({ create });
+    const view = render(viewer(PICKER, c));
+    let panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('checkbox', { name: '전체 선택' }));
+    await user.click(within(panel).getByRole('button', { name: '시작' }));
+    view.rerender(viewer(null, c));
+    view.rerender(viewer(PICKER, c));
+    panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('checkbox', { name: '전체 선택' }));
+    await user.click(within(panel).getByRole('button', { name: '시작' }));
+    await within(panel).findByText('일시적인 오류');
+    // The first opening's run arrives late: the second opening's key must survive it.
+    await act(async () => first.resolve({ ok: true, data: run() }));
+    await user.click(within(panel).getByRole('button', { name: '시작' }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(3));
+    expect(create.mock.calls[2]?.[2]).toBe(create.mock.calls[1]?.[2]);
+  });
+
+  it('a 처음부터 다시 run created after the panel closed retires its key', async () => {
+    const user = userEvent.setup();
+    const first = deferred<RunActionResult<PracticeRun>>();
+    const create = vi
+      .fn<RunClient['create']>()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue({ ok: true, data: run({ id: NEW_RUN }) });
+    const c = client({ create });
+    const results: RunUrlState = { step: 'results', runId: RUN };
+    const view = render(viewer(results, c));
+    let panel = screen.getByRole('dialog');
+    await within(panel).findByRole('list', { name: '문제별 결과' });
+    await user.click(within(panel).getByRole('button', { name: '처음부터 다시' }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    view.rerender(viewer(null, c));
+    await act(async () => first.resolve({ ok: true, data: run() }));
+    view.rerender(viewer(results, c));
+    panel = screen.getByRole('dialog');
+    await within(panel).findByRole('list', { name: '문제별 결과' });
+    await user.click(within(panel).getByRole('button', { name: '처음부터 다시' }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+    expect(create.mock.calls[1]?.[2]).not.toBe(create.mock.calls[0]?.[2]);
+  });
 });

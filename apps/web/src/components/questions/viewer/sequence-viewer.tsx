@@ -232,7 +232,8 @@ function useKeyedLoad<T>(
 /**
  * The Idempotency-Key of one creation request (QVIEW-01-C01): kept while the same payload is
  * retried — a failure may be a lost response of a run the server created, which a retry with the
- * same key recovers — and new for another payload or after a confirmed success.
+ * same key recovers — and new for another payload or after a confirmed success. A success retires
+ * only its own key (a newer request's stays), also when its answer is no longer shown.
  */
 function useRequestKey() {
   const ref = useRef<{ readonly payload: string; readonly key: string } | null>(null);
@@ -241,8 +242,8 @@ function useRequestKey() {
       if (ref.current?.payload !== payload) ref.current = { payload, key: newKey() };
       return ref.current.key;
     },
-    succeeded(): void {
-      ref.current = null;
+    succeeded(key: string): void {
+      if (ref.current?.key === key) ref.current = null;
     },
   };
 }
@@ -463,7 +464,8 @@ function usePickerStep({
   async function start() {
     if (!request || tooLarge || starting || busy) return;
     const token = opening;
-    const key = startKey.keyFor(JSON.stringify([request, random]));
+    // A new opening is a new 문제 풀기 (a new run, QVIEW-01 "도중에 닫기"): its own key.
+    const key = startKey.keyFor(JSON.stringify([token, request, random]));
     setStarting(true);
     setStartError(null);
     let result: RunActionResult<PracticeRun>;
@@ -472,10 +474,10 @@ function usePickerStep({
     } catch {
       result = { ok: false, kind: 'unavailable', message: RUN_FAILURE_MESSAGES.unavailable };
     }
+    if (result.ok) startKey.succeeded(key);
     if (liveOpening.current !== token) return;
     setStarting(false);
     if (result.ok) {
-      startKey.succeeded();
       onStarted(result.data.id);
     } else {
       setStartError(result.message);
@@ -1089,10 +1091,10 @@ function useResultsStep({
         all.push(...page.data.items);
       }
       const range = restartRange(all);
-      const key = restartKey.keyFor(JSON.stringify([range, data.run.random_order]));
+      const key = restartKey.keyFor(JSON.stringify([token, range, data.run.random_order]));
       const created = await client.create(range, data.run.random_order, key);
       if (created.ok) {
-        restartKey.succeeded();
+        restartKey.succeeded(key);
         started = created.data.id;
       } else {
         failure = created.message;
