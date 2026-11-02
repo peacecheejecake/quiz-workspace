@@ -24,7 +24,7 @@ import {
   Skeleton,
   useUnsavedChanges,
 } from '@quiz/ui';
-import { useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react';
 import { newIdempotencyKey } from '@/lib/workspaces/idempotency';
 import {
   applyItems,
@@ -68,17 +68,34 @@ export function ChapterRedistributionDialog({
   onChanged,
   screenId,
 }: ChapterRedistributionDialogProps) {
+  // While the confirmation is open (and in the task it closes in), a close request of the panel
+  // is an Escape meant for the confirmation: it closes the confirmation, never the panel. At 375px
+  // Chromium intermittently ranked the panel's Radix layer above the confirmation's, so the panel
+  // took that Escape (and before the guard closed itself, with the move half done).
+  const holdRef = useRef<(() => void) | null>(null);
+  const onHold = useCallback((closeConfirm: (() => void) | null) => {
+    if (closeConfirm) holdRef.current = closeConfirm;
+    else window.setTimeout(() => (holdRef.current = null), 0);
+  }, []);
   return (
     <FloatingSidePanel
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        if (!next && holdRef.current) {
+          holdRef.current();
+          return;
+        }
+        onOpenChange(next);
+      }}
       container={container}
       title="챕터 재분배"
       closeLabel="챕터 재분배 닫기"
       mobileLayout="full"
     >
       <div data-screen-id={screenId}>
-        {open ? <RedistributionContent workspaceId={workspaceId} onChanged={onChanged} /> : null}
+        {open ? (
+          <RedistributionContent workspaceId={workspaceId} onChanged={onChanged} onHold={onHold} />
+        ) : null}
       </div>
     </FloatingSidePanel>
   );
@@ -137,9 +154,11 @@ function sameItems(a: readonly AssignmentItem[], b: readonly AssignmentItem[]): 
 function RedistributionContent({
   workspaceId,
   onChanged,
+  onHold,
 }: {
   readonly workspaceId: string;
   readonly onChanged: () => void;
+  readonly onHold: (closeConfirm: (() => void) | null) => void;
 }) {
   const api = useMemo<RedistributionApi>(() => createRedistributionApi(workspaceId), [workspaceId]);
   const [list, setList] = useState<Load<RedistributionList>>({ status: 'loading' });
@@ -154,6 +173,12 @@ function RedistributionContent({
   const [applyChecked, setApplyChecked] = useState<ReadonlySet<string>>(() => new Set());
   const [confirm, setConfirm] = useState<PendingMove | null>(null);
   const [busy, setBusy] = useState(false);
+  const confirming = confirm !== null;
+  useEffect(() => {
+    // While the move is in flight the confirmation stays (and so does the panel).
+    onHold(confirming ? () => (busy ? undefined : setConfirm(null)) : null);
+  }, [confirming, busy, onHold]);
+  useEffect(() => () => onHold(null), [onHold]);
   const [notice, setNotice] = useState<Notice>(null);
   const busyRef = useRef(false);
   /** The last move that failed on the network: the same move again reuses its key. */
