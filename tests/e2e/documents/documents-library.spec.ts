@@ -570,6 +570,8 @@ test(
       /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
       // UX7-BANK-2 (QOV-01-AC15).
       /^(보관·초안 문제|archived and draft questions)$/i,
+      // QVIEW-01 (QVIEW-W).
+      /^(문제 풀기|practice questions?|start practice)$/i,
     ]);
     await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
     await page.keyboard.press('Escape');

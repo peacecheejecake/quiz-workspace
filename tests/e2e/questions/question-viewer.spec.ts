@@ -246,11 +246,15 @@ test(
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     const isApi = (url: URL) => url.pathname.includes('/api/');
+    // The held reads continue before the route goes: unrouting while a handler still waits lets
+    // Playwright drop the interception under it ("Route is already handled").
+    const held: Promise<void>[] = [];
     await page.route(
       isApi, // the same function instance unroutes it below
-      async (route) => {
-        await gate;
-        await route.continue();
+      (route) => {
+        const continued = gate.then(() => route.continue());
+        held.push(continued);
+        return continued;
       },
     );
     await openQuestionMenuWithPractice(page);
@@ -262,6 +266,7 @@ test(
     await expect(page).toHaveURL(/[?&]practice=new(&|$)/);
     await expect(page).toHaveURL(/[?&]source=bank(&|$)/);
     release();
+    await Promise.all(held);
     await page.unroute(isApi);
 
     await expect(runUi.chapters(panel)).toHaveCount(2);

@@ -590,13 +590,17 @@ export async function openQuestionMenuWithPractice(page: Page): Promise<void> {
   await expect(runUi.menuItem(page), '`문제` menu has a 문제 풀기 item').toBeVisible();
 }
 
-/** Opens `문제` › `문제 풀기` and waits for the range step's panel. */
+/**
+ * Opens `문제` › `문제 풀기` and waits for the range step's panel and its list (the panel opens
+ * busy before the data arrives, QVIEW-01-AC01: callers then expand or count the groups).
+ */
 export async function openRangePicker(page: Page): Promise<Locator> {
   await openQuestionMenuWithPractice(page);
   await runUi.menuItem(page).click();
   const panel = runUi.panel(page);
   await expect(panel).toBeVisible();
   await expect(runUi.pickerTitle(panel)).toBeVisible();
+  await expect(runUi.busy(panel)).toHaveCount(0);
   return panel;
 }
 

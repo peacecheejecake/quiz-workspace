@@ -132,7 +132,7 @@ const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
   body: /^(본문 검색 설정|body search settings|content search settings)$/i,
 };
 
-type QuestionMenuItem = 'pdfs' | 'create' | 'generate' | 'duplicates' | 'inactive';
+type QuestionMenuItem = 'pdfs' | 'create' | 'generate' | 'duplicates' | 'inactive' | 'practice';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   /** Retired by UX7-DOCS: only ever expected to be absent. */
   pdfs: /^(pdf 관리|manage pdfs?)$/i,
@@ -142,6 +142,8 @@ const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   duplicates: /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
   /** UX7-BANK-2: the 보관·초안 문제 dialog, usable by every member. */
   inactive: /^(보관·초안 문제|archived and draft questions)$/i,
+  /** QVIEW-01: the range run (QuestionViewer sequence), usable by every member. */
+  practice: /^(문제 풀기|practice questions?|start practice)$/i,
 };
 
 /** The `문제` menu's editor-only items (UX7-DOCS-2; 중복 문제 정리 since UX7-DEDUP). */
@@ -174,12 +176,13 @@ export async function expectReadOnlyQuestionMenu(
     QUESTION_MENU_ITEMS.generate,
     QUESTION_MENU_ITEMS.duplicates,
     QUESTION_MENU_ITEMS.inactive,
+    QUESTION_MENU_ITEMS.practice,
   ]);
-  // UX7-BANK-2: 보관·초안 문제 is readable by everyone, so it stays enabled.
-  await expect(homeUi.questionMenuItem(page, 'inactive')).not.toHaveAttribute(
-    'aria-disabled',
-    'true',
-  );
+  // UX7-BANK-2: 보관·초안 문제 is readable by everyone, so it stays enabled; so is 문제 풀기
+  // (QVIEW-01, a personal practice run).
+  for (const item of ['inactive', 'practice'] as const) {
+    await expect(homeUi.questionMenuItem(page, item)).not.toHaveAttribute('aria-disabled', 'true');
+  }
   await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
   const text = QUESTION_MENU_REASONS[reason];
   await expect(menu.getByText(text)).toBeVisible();
