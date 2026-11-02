@@ -5,8 +5,9 @@
 // macOS and CI, see tests/e2e/README.md "Visual baselines"); locale ko-KR, Asia/Seoul, reduced
 // motion, animations disabled, caret hidden, web fonts awaited. Data is per-test but its visible
 // text is fixed (workspace names, question labels, synthetic PDFs); what still varies (dates and
-// times, ids) is masked, the account mask at a fixed width. An MCQ the practice panel shows in its
-// per-session shuffled order has one text for every option, so any order renders the same pixels.
+// times, ids) is masked, the account and `<time>` masks at fixed widths. An MCQ the practice
+// panel shows in its per-session shuffled order has one text for every option, so any order
+// renders the same pixels.
 // Share secrets never appear in a screenshot: the shared view is captured after the fragment
 // exchange, the owner's one-time link field is not captured.
 import type { Locator, Page } from '@playwright/test';
@@ -78,6 +79,12 @@ const ACCOUNT_BUTTON = 'button[aria-label^="계정 "][title]';
  *  else in the header moves; narrow, so the mask covers less of a side panel drawn over it). A page
  *  style: the screenshot `style` option left the mask boxes at the unstyled width. */
 const FIXED_ACCOUNT_WIDTH = `${ACCOUNT_BUTTON} { width: 12rem !important; }`;
+/** A timestamp's text width depends on the date ("10. 29." vs "11. 2."), and so would its mask box
+ *  and the inline text after it (the documents row's "· 56.3 KB"): every `<time>` gets one fixed
+ *  width, wider than any "yyyy. m. d. 오후 h:mm", on one line (anything longer is clipped, under
+ *  the mask). */
+const FIXED_TIME_WIDTH =
+  'time { display: inline-block !important; width: 10rem !important; overflow: hidden !important; white-space: nowrap !important; vertical-align: top !important; }';
 
 /** Dynamic regions: timestamps (server dates, relative times) and the account button's email. */
 function dynamic(page: Page): Locator[] {
@@ -95,7 +102,7 @@ async function ready(page: Page): Promise<void> {
 
 /** Full-page screenshot of the current state in every color scheme: `<name>-<scheme>.png`. */
 async function snap(page: Page, name: string, extraMask: Locator[] = []): Promise<void> {
-  await page.addStyleTag({ content: FIXED_ACCOUNT_WIDTH });
+  await page.addStyleTag({ content: `${FIXED_ACCOUNT_WIDTH}\n${FIXED_TIME_WIDTH}` });
   for (const scheme of COLOR_SCHEMES) {
     await page.emulateMedia({ colorScheme: scheme });
     await ready(page);
