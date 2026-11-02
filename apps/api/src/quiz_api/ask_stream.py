@@ -58,18 +58,23 @@ def _entry(stream_id: Any, fields: dict[Any, Any]) -> StreamEntry | None:
 
 
 class AskStreamReader:
-    def __init__(self, client: RedisLike) -> None:
+    def __init__(self, client: RedisLike, *, key_prefix: str = STREAM_KEY_PREFIX) -> None:
         self._client = client
+        # EXPL-B: AI explanations use the same layout under `explain:<id>`.
+        self._prefix = key_prefix
+
+    def _key(self, message_id: uuid.UUID) -> str:
+        return f"{self._prefix}{message_id}"
 
     def entries(self, message_id: uuid.UUID) -> list[StreamEntry]:
-        raw = self._client.xrange(stream_key(message_id))
+        raw = self._client.xrange(self._key(message_id))
         return [e for sid, fields in raw or [] if (e := _entry(sid, fields)) is not None]
 
     def read_after(
         self, message_id: uuid.UUID, stream_id: str, *, block_ms: int
     ) -> list[StreamEntry]:
         """Entries after `stream_id`, waiting up to `block_ms` for the first one."""
-        raw = self._client.xread({stream_key(message_id): stream_id}, count=200, block=block_ms)
+        raw = self._client.xread({self._key(message_id): stream_id}, count=200, block=block_ms)
         out: list[StreamEntry] = []
         for _key, items in raw or []:
             for sid, fields in items:

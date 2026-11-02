@@ -163,6 +163,23 @@ class ProblemType(StrEnum):
     # 429: the user's AI questions of today (Asia/Seoul) are used up.
     ASK_DAILY_LIMIT = "urn:quiz-workspace:problem:ask-daily-limit"
 
+    # AIEXPL-01 (AI explanations). 409: no submitted attempt of the caller in the given practice
+    # session (or no session / view given); nothing is created or returned.
+    EXPLANATION_BEFORE_SUBMIT = "urn:quiz-workspace:problem:explanation-before-submit"
+    # 409: the question has no AI explanation area (a DRAFT question's detail view).
+    EXPLANATION_UNAVAILABLE = "urn:quiz-workspace:problem:explanation-unavailable"
+    # 409: AI explanations are off in this environment (WORKER_AI_EXPLANATIONS / no LLM);
+    # existing explanations stay readable.
+    EXPLANATION_DISABLED = "urn:quiz-workspace:problem:explanation-disabled"
+    # 409: this question revision was regenerated 3 times today (Asia/Seoul).
+    EXPLANATION_REGENERATE_LIMIT = "urn:quiz-workspace:problem:explanation-regenerate-limit"
+    # 429: the user's new AI explanations of today (Asia/Seoul) are used up.
+    EXPLANATION_DAILY_LIMIT = "urn:quiz-workspace:problem:explanation-daily-limit"
+    # 409: the environment's monthly AI explanation token cap is used up.
+    EXPLANATION_BUDGET_EXCEEDED = "urn:quiz-workspace:problem:explanation-budget-exceeded"
+    # 429 + Retry-After: too many new AI explanations per minute (AI_EXPLANATION_RATE_LIMIT_*).
+    RATE_LIMITED = "urn:quiz-workspace:problem:rate-limited"
+
 
 class ProblemException(StarletteHTTPException):
     """An HTTP error rendered with a specific problem `type`."""

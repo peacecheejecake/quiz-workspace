@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from quiz_api.api import (
+    ai_explanations,
     ask,
     chapter_notes,
     document_export,
@@ -29,6 +30,7 @@ from quiz_api.api import (
     search,
     share_links,
     shared,
+    shared_ai_explanations,
     shared_chapter_notes,
     workspaces,
 )
@@ -61,3 +63,5 @@ api_router.include_router(shared_chapter_notes.router)
 api_router.include_router(mock_exams.router)
 api_router.include_router(mock_practice.router)
 api_router.include_router(ask.router)
+api_router.include_router(ai_explanations.router)
+api_router.include_router(shared_ai_explanations.router)

@@ -301,6 +301,28 @@ class Settings(BaseSettings):
         default=5, ge=1, le=50, validation_alias="ASK_MAX_REGENERATIONS"
     )
 
+    # AI explanations (EXPL-B, AIEXPL-01): created (`available`) only with the worker's switch on
+    # AND an LLM provider configured (LLM_MODEL; the API never holds LLM_API_KEY); separate from
+    # WORKER_ASK_LLM. Stored explanations stay readable either way. ⛔ staging/production need
+    # approval (questions with their answers and passages go to the LLM provider).
+    ai_explanations: bool = Field(default=False, validation_alias="WORKER_AI_EXPLANATIONS")
+    # Evidence passages per explanation (after the question's own sources), within 8,000 chars.
+    ai_explanation_top_k: int = Field(
+        default=5, ge=1, le=30, validation_alias="AI_EXPLANATION_TOP_K"
+    )
+    # New explanations (create, regenerate; cache hits are free) per minute per user (in-process
+    # token bucket, burst = rate; 429 + Retry-After; 0 disables it), per Asia/Seoul day per user
+    # (DB count) and the environment-wide monthly token cap (0 = off).
+    ai_explanation_rate_per_minute: int = Field(
+        default=6, ge=0, le=600, validation_alias="AI_EXPLANATION_RATE_LIMIT_PER_MINUTE"
+    )
+    ai_explanation_daily_limit_per_user: int = Field(
+        default=30, ge=1, le=100_000, validation_alias="AI_EXPLANATION_DAILY_LIMIT_PER_USER"
+    )
+    ai_explanation_monthly_token_cap: int = Field(
+        default=0, ge=0, validation_alias="AI_EXPLANATION_MONTHLY_TOKEN_CAP"
+    )
+
     db_pool_size: int = Field(default=5, ge=1, validation_alias="DB_POOL_SIZE")
     db_connect_timeout_seconds: float = Field(
         default=3.0, gt=0, validation_alias="DB_CONNECT_TIMEOUT_SECONDS"
@@ -412,6 +434,25 @@ class Settings(BaseSettings):
         """New AI questions can be asked here (ASK-01-AC08): the switch is on and a provider is
         configured (the worker's deterministic fake under APP_ENV=test)."""
         return self.ask_llm and self.llm_provider_configured
+
+    @property
+    def ai_explanations_available(self) -> bool:
+        """New AI explanations can be made here (AIEXPL-01-AC05): the switch is on and a provider
+        is configured (the worker's deterministic fake under APP_ENV=test)."""
+        return self.ai_explanations and self.llm_provider_configured
+
+    @property
+    def ai_explanation_model(self) -> str | None:
+        """The `model` of the explanation cache key: LLM_MODEL, else the worker's fake under
+        APP_ENV=test; None when no provider is configured (reads then match any model)."""
+        configured = (self.llm_model or "").strip()
+        if configured:
+            return configured
+        if self.app_env is Environment.TEST:
+            from book_core.explain import FAKE_MODEL
+
+            return FAKE_MODEL
+        return None
 
     @property
     def llm_provider_configured(self) -> bool:
