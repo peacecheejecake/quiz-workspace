@@ -786,3 +786,73 @@ test(
     expect(practiceRunCount(s.owner.user.id)).toBe(runs);
   },
 );
+
+/**
+ * Every rendered modal panel: CSS, not role, so a panel Radix hid under another modal (aria-hidden)
+ * still counts. The practice panel (`?question=`) and the run panel are the home's modal panels.
+ */
+function modalPanels(page: Page): Locator {
+  return page.locator('[role="dialog"][aria-modal="true"]');
+}
+
+function questionParam(page: Page): string | null {
+  return new URL(page.url()).searchParams.get('question');
+}
+
+test(
+  'QVIEW-01-AC09 the practice panel and range practice are never open together; a link with both opens the run',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const label = unique('qview01-ac09');
+    const s = await seedFlat(workspaceFactory, 'qview01-ac09', [
+      flatMcq(label, 1),
+      flatMcq(label, 2),
+    ]);
+    const [q1, q2] = [nth(s.questions, 0), nth(s.questions, 1)];
+    const run = await createPracticeRun(s.owner, s.workspaceId, {
+      source: 'bank',
+      range: { all: true },
+      random_order: false,
+    });
+    await signInAs(page, s.owner.user);
+    await page.goto('/workspaces');
+
+    // A link carrying both opens only the run (the later intent); `question` leaves the URL.
+    await page.goto(`${practiceRunPath(s.workspaceId, run.id, 2)}&question=${q1.id}`);
+    let panel = runUi.panel(page);
+    await expect(modalPanels(page)).toHaveCount(1);
+    await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(2, 2));
+    expect(questionParam(page)).toBeNull();
+    expect(practiceParam(page)).toBe(run.id);
+    // One Back closes the run and nothing else is left open; Forward reopens neither panel.
+    await page.goBack();
+    await expect(modalPanels(page)).toHaveCount(0);
+    expect(practiceParam(page)).toBeNull();
+    expect(questionParam(page)).toBeNull();
+    await page.goForward();
+    await expect(modalPanels(page)).toHaveCount(0);
+    expect(practiceParam(page)).toBeNull();
+    expect(questionParam(page)).toBeNull();
+
+    // The same for the range step.
+    await page.goto(`${overviewPath(s.workspaceId)}?question=${q2.id}&practice=new&source=bank`);
+    panel = runUi.panel(page);
+    await expect(runUi.pickerTitle(panel)).toBeVisible();
+    await expect(modalPanels(page)).toHaveCount(1);
+    expect(questionParam(page)).toBeNull();
+
+    // Inside a run, a 문제별 결과 row reopens a position of the run, never `?question=`.
+    await runUi.selectAll(panel).check();
+    await runUi.start(panel).click();
+    await expect(page).toHaveURL(/[?&]i=1(&|$)/);
+    panel = runUi.panel(page);
+    await runUi.skip(panel).click();
+    await runUi.showResults(panel).click();
+    await expect(runUi.resultRows(panel)).toHaveCount(2);
+    await runUi.resultRows(panel).nth(0).getByRole('button').first().click();
+    await expect(page).toHaveURL(/[?&]i=1(&|$)/);
+    await expect(modalPanels(page)).toHaveCount(1);
+    expect(questionParam(page)).toBeNull();
+    await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(1, 2));
+  },
+);
