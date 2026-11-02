@@ -473,6 +473,8 @@ def test_relsrc_01_c01_submission_proof_authorization_and_drafts(seed: Any) -> N
     other_session = submit(other, q)
     open_session = session(member, q["id"])
     rev = q["revision"]["id"]
+    neighbour = rig.question("c01-neighbour")
+    own_elsewhere = submit(member, neighbour)
 
     # Before a submission, without proof, with a client workspace_id: 409; nothing computed.
     body = refused(read(member, q["id"], practice_session_id=open_session), 409, BEFORE_SUBMIT)
@@ -483,10 +485,14 @@ def test_relsrc_01_c01_submission_proof_authorization_and_drafts(seed: Any) -> N
     unknown = refused(read(member, q["id"], practice_session_id=str(uuid.uuid4())), 404)
     foreign = refused(read(member, q["id"], practice_session_id=other_session), 404)
     outsider = refused(read(stranger, q["id"], view="detail"), 404)
+    # The caller's own submitted session of ANOTHER question proves nothing for this one.
+    elsewhere = refused(read(member, q["id"], practice_session_id=own_elsewhere), 404)
+    assert calls(neighbour["revision"]["id"]) == 0
+    assert rows(neighbour["id"]) == []
     assert {k: v for k, v in foreign.items() if k not in {"instance", "request_id"}} == {
         k: v for k, v in unknown.items() if k not in {"instance", "request_id"}
     }
-    for problem in (unknown, foreign, outsider):
+    for problem in (unknown, foreign, outsider, elsewhere):
         text = json.dumps(problem, ensure_ascii=False)
         assert rig.doc not in text
         assert ANSWER not in text
@@ -558,6 +564,34 @@ def test_relsrc_01_c01_shared_api_reads_stored_lists_only(seed: Any) -> None:
         assert res.status_code == 404
     assert calls(unstored["revision"]["id"]) == 0, "a guest request never computes"
     assert rows(unstored["id"]) == []
+
+    def guest_status(question_id: str) -> int:
+        path = f"/questions/{question_id}/related-sources"
+        return int(guest.read(link["id"], cookie, path).status_code)
+
+    # (a) A book correction changes the corpus fingerprint: the stored list is stale, guests get
+    # 404 (no compute) until a member reads it again.
+    rev = stored["revision"]["id"]
+    before = calls(rev)
+    publish(rig.owner, rig.doc, {rig.block["ch2-s1-p1"]: APPLIED_REMOVED})
+    assert guest_status(stored["id"]) == 404, "a stale list is not served to guests"
+    assert calls(rev) == before, "a guest request never recomputes a stale list"
+    ok(read(rig.owner, stored["id"], view="detail"))
+    assert calls(rev) == before + 1
+    assert guest_status(stored["id"]) == 200
+    # (b) A question edit makes a new active revision: 404 for guests until a member reads it.
+    edited = rig.owner.ok(
+        "PATCH",
+        f"/questions/{stored['id']}",
+        {"base_revision_id": rev, "stem": "RELSRC c01-share 수정: 수증기가 되는 과정의 개념은?"},
+    )
+    new_rev = edited["revision"]["id"]
+    assert guest_status(stored["id"]) == 404, "the old revision's list is not served"
+    assert calls(new_rev) == 0
+    assert calls(rev) == before + 1
+    ok(read(rig.owner, stored["id"], view="detail"))
+    assert calls(new_rev) == 1
+    assert guest_status(stored["id"]) == 200
     # The link is re-validated on every request.
     seed.assert_status(rig.owner.revoke(rig.ws, link["id"]), {200, 204}, "revoke")
     res = guest.read(link["id"], cookie, f"/questions/{stored['id']}/related-sources")
@@ -929,6 +963,11 @@ def test_relsrc_01_c07_mock_questions_proof_evidence_own_table_and_concurrency(
         refused(read_mock(member, mq["id"]), 409, BEFORE_SUBMIT)
         other_session = mock_submit(other, mq)
         refused(read_mock(member, mq["id"], mock_practice_session_id=other_session), 404)
+        # The caller's own submitted session of ANOTHER mock question: 404, nothing computed.
+        own_elsewhere = mock_submit(member, mq_held)
+        refused(read_mock(member, mq["id"], mock_practice_session_id=own_elsewhere), 404)
+        assert calls(mq_held["revision"]["id"]) == 0
+        assert mock_rows(mq_held["id"]) == []
         refused(read_mock(stranger, mq["id"], view="manage"), 404)
         viewer_manage = read_mock(member, mq["id"], view="manage")
         assert viewer_manage.status_code in {403, 404, 409}, "view: manage needs the edit right"
