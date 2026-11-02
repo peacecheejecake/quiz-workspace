@@ -2,8 +2,8 @@ import { fileURLToPath } from 'node:url';
 import type { StorybookConfig } from '@storybook/react-vite';
 
 /**
- * The web app's QuestionViewer stories (QVIEW-01: every mode, light and dark) live next to the
- * component in apps/web and are built here, the repo's one Storybook. Their server actions and
+ * The web app's QuestionViewer stories (QVIEW-01: every mode, light and dark) and the 모의고사 dialog's
+ * (MOCK-01) live next to the components in apps/web and are built here, the repo's one Storybook. Their server actions and
  * next/link resolve to story stand-ins (apps/web/.../viewer/stories); `@/` is the web app's src.
  */
 const WEB_SRC = fileURLToPath(new URL('../../../apps/web/src', import.meta.url));
@@ -13,6 +13,7 @@ const config: StorybookConfig = {
   stories: [
     '../src/**/*.stories.@(ts|tsx)',
     '../../../apps/web/src/components/questions/viewer/*.stories.tsx',
+    '../../../apps/web/src/components/questions/mock-exams/*.stories.tsx',
   ],
   addons: ['@storybook/addon-docs', '@storybook/addon-a11y', 'storybook-addon-pseudo-states'],
   framework: { name: '@storybook/react-vite', options: {} },
