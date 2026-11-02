@@ -5,7 +5,8 @@
 // (DOC-01-AC09). UX7-DOCS-2 keeps the button for viewers and archived workspaces, with both items
 // disabled and the reason in text. UX7-BANK-2 adds 보관·초안 문제, enabled for every member.
 // UX7-DEDUP adds 중복 문제 정리, editor-only like 직접 추가 and 변형 출제 (QOV-01-AC16). QVIEW-W adds
-// 문제 풀기 (the range run, QVIEW-01), enabled for every member like 보관·초안 문제.
+// 문제 풀기 (the range run, QVIEW-01), enabled for every member like 보관·초안 문제. MOCK-W adds
+// 모의고사 (MOCK-01) between them, enabled for every member too.
 import './dom-setup';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -20,6 +21,7 @@ function menu(readOnly: QuestionMenuReadOnly) {
     onGenerate: vi.fn(),
     onDuplicates: vi.fn(),
     onInactive: vi.fn(),
+    onMockExams: vi.fn(),
     onPractice: vi.fn(),
   };
   render(<QuestionMenu readOnly={readOnly} {...handlers} />);
@@ -40,6 +42,7 @@ describe('home `문제` menu', () => {
       '변형 출제',
       '중복 문제 정리',
       '보관·초안 문제',
+      '모의고사',
       '문제 풀기',
     ]);
     await user.click(screen.getByRole('menuitem', { name: '직접 추가' }));
@@ -63,6 +66,10 @@ describe('home `문제` menu', () => {
     await user.click(trigger);
     await user.click(screen.getByRole('menuitem', { name: '중복 문제 정리' }));
     await waitFor(() => expect(handlers.onDuplicates).toHaveBeenCalledTimes(1));
+
+    await user.click(trigger);
+    await user.click(screen.getByRole('menuitem', { name: '모의고사' }));
+    await waitFor(() => expect(handlers.onMockExams).toHaveBeenCalledTimes(1));
 
     await user.click(trigger);
     await user.click(screen.getByRole('menuitem', { name: '문제 풀기' }));
@@ -89,6 +96,7 @@ describe('home `문제` menu', () => {
         '변형 출제',
         '중복 문제 정리',
         '보관·초안 문제',
+        '모의고사',
         '문제 풀기',
       ]);
       const items = all.slice(0, 3);
@@ -114,6 +122,13 @@ describe('home `문제` menu', () => {
       expect(practice).not.toHaveAccessibleDescription(reason);
       await user.click(practice);
       await waitFor(() => expect(handlers.onPractice).toHaveBeenCalledTimes(1));
+      // MOCK-01: every member lists and practises mock exams.
+      await user.click(trigger);
+      const mock = screen.getByRole('menuitem', { name: '모의고사' });
+      expect(mock).not.toHaveAttribute('aria-disabled');
+      expect(mock).not.toHaveAccessibleDescription(reason);
+      await user.click(mock);
+      await waitFor(() => expect(handlers.onMockExams).toHaveBeenCalledTimes(1));
     },
   );
 });

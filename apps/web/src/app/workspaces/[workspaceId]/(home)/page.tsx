@@ -70,6 +70,7 @@ export default async function Page({
           share: 'WS-SHARE-01',
           chapterNote: 'CHNOTE-01',
           summary: 'DOCSUM-01',
+          mockExams: 'MOCK-01',
         }}
       />
     </div>

@@ -119,7 +119,8 @@
 //   answer-free preview. Confirm dialogs are alertdialogs ("…삭제할까요?", "…바꿉니다…",
 //   "…빼기…") with a confirm button. Not found: "모의고사를 찾을 수 없습니다.".
 //   풀기 opens QuestionViewer `sequence(mock)` (`?practice=new&source=mock&mock=<id>`, a modal
-//   dialog titled "<이름> 풀기"; QVIEW-01).
+//   dialog whose range step is titled "<이름> 풀기" and whose positions are titled "문제 k" —
+//   QVIEW-01 "the title names the question"; MOCK-W corrected the MOCK.0 assumption of one title).
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -637,9 +638,13 @@ export const mockUi = {
   /** QuestionViewer `manage` of a mock exam question (modal). */
   viewer: (page: Page, k: number) =>
     page.getByRole('dialog', { name: new RegExp(`^(문제 ${k}|question ${k})(?!\\d)`, 'i') }),
-  /** QuestionViewer `sequence(mock)` (QVIEW-01): "<이름> 풀기". */
-  practicePanel: (page: Page, title: string) =>
-    page.getByRole('dialog', { name: new RegExp(`${escape(title)} (풀기|practi[cs]e)`, 'i') }),
+  /**
+   * QuestionViewer `sequence(mock)` (QVIEW-01): the modal run panel. Only its range step is
+   * titled "<이름> 풀기" (practiceTitle); a position's title names the question ("문제 k").
+   */
+  practicePanel: (page: Page) => page.getByRole('dialog').and(page.locator('[aria-modal="true"]')),
+  practiceTitle: (panel: Locator, title: string) =>
+    panel.getByRole('heading', { name: new RegExp(`${escape(title)} (풀기|practi[cs]e)`, 'i') }),
 };
 
 function escape(text: string): string {
