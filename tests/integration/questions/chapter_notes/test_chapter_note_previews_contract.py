@@ -6,8 +6,8 @@ only (C02); the note APIs and the practice responses are unchanged by UX9 (C03, 
 that is GREEN before UX9-NOTE-B, so it carries no `red` marker).
 
 Shapes are assumption P1 in tests/e2e/fixtures/highlights.ts; the note shapes are N1-N5 in
-tests/e2e/fixtures/chapter-notes.ts. Jobs run in this process (conftest.py). RED (UX9.0): C01 and
-C02 carry the `red` marker until UX9-NOTE-B. The search function and the stacking rule
+tests/e2e/fixtures/chapter-notes.ts. Jobs run in this process (conftest.py). C01 and C02
+lost their `red` marker in UX9-NOTE-B. The search function and the stacking rule
 (C04, C05) are Vitest contracts written by UX9-NOTE-W.
 """
 
@@ -79,7 +79,6 @@ class Space:
         self.token = t
 
 
-@pytest.mark.red
 def test_chnote_02_c01_member_preview_is_stem_and_options_only_and_records_nothing(
     seed: Any, db: Any
 ) -> None:
@@ -126,7 +125,6 @@ def test_chnote_02_c01_member_preview_is_stem_and_options_only_and_records_nothi
     seed.assert_status(viewer.call("GET", f"/questions/{q['id']}/preview"), 200, "archived")
 
 
-@pytest.mark.red
 def test_chnote_02_c02_shared_preview_serves_published_questions_only(seed: Any) -> None:
     s = Space(seed, "chnote02-c02")
     link = s.owner.create_link(s.ws)
