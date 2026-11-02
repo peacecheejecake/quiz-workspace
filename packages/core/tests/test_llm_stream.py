@@ -90,7 +90,10 @@ def test_streams_text_deltas_then_usage_and_stop_reason() -> None:
         (
             httpx.Response(
                 200,
-                content=_sse({"type": "message_delta", "delta": {"stop_reason": "refusal"}}),
+                content=_sse(
+                    {"type": "message_delta", "delta": {"stop_reason": "refusal"}},
+                    {"type": "message_stop"},
+                ),
             ),
             "refusal",
         ),
@@ -126,3 +129,17 @@ def test_fake_text_stream_client() -> None:
     assert fake.calls == [REQUEST]
     with pytest.raises(ValueError, match="ends with a user message"):
         TextStreamRequest("t", "v", "s", (TextMessage("assistant", "x"),), 1)
+
+
+def test_a_stream_cut_before_message_stop_is_an_error_without_its_text() -> None:
+    body = _sse(
+        {"type": "message_start", "message": {"id": "msg_1", "usage": {"input_tokens": 3}}},
+        {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "PARTIAL-TEXT"}},
+    )
+    client = _client(httpx.MockTransport(lambda _r: httpx.Response(200, content=body)))
+    events = client.stream_text(REQUEST)
+    assert isinstance(next(events), TextDelta)
+    with pytest.raises(LLMProviderError) as caught:
+        list(events)
+    assert caught.value.kind == "incomplete_stream"
+    assert "PARTIAL-TEXT" not in str(caught.value)

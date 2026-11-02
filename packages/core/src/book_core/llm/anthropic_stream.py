@@ -7,7 +7,8 @@ input/cache token counts and ``message_delta`` the stop reason and output tokens
 
 No retries here (see ``book_core.llm.streaming``): a failure before or during the stream raises
 :class:`LLMProviderError` (kinds ``timeout``, ``connection``, ``http_status``, ``stream_error``,
-``bad_response``, ``refusal``) whose message holds status codes, error types and the request id
+``bad_response``, ``refusal``, ``incomplete_stream`` — the connection ended before
+``message_stop``) whose message holds status codes, error types and the request id
 only. Logs carry metadata (task, prompt version, model, tokens, latency, stop reason).
 """
 
@@ -108,6 +109,7 @@ class AnthropicTextStreamClient:
         model = self._config.model
         usage = LLMUsage()
         stop_reason: str | None = None
+        complete = False
         for data in _sse_data(response.iter_lines()):
             try:
                 event = json.loads(data)
@@ -153,7 +155,16 @@ class AnthropicTextStreamClient:
                     provider_request_id=request_id,
                 )
             elif kind == "message_stop":
+                complete = True
                 break
+        if not complete:
+            # The connection ended without the provider's terminal event: a partial answer is
+            # no answer (the caller fails it; nothing of the text goes into the message).
+            raise LLMProviderError(
+                "provider stream ended before message_stop",
+                kind="incomplete_stream",
+                provider_request_id=request_id,
+            )
         if self._config.pricing is not None:
             usage = usage.model_copy(update={"cost_usd": self._config.pricing.cost_usd(usage)})
         latency_ms = max(0, round((self._clock() - started) * 1000))
