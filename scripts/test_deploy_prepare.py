@@ -394,6 +394,16 @@ def test_replaceable_drops_are_notes() -> None:
     assert [f.kind for f in schema] == ["DROP TRIGGER", "DROP CONSTRAINT", "DROP POLICY"]
 
 
+def test_function_bodies_are_not_migration_statements_but_do_blocks_are() -> None:
+    sql = (
+        "create function public.f() returns trigger language plpgsql as $$\n"
+        "begin delete from public.t where id = new.id; return null; end;\n$$;\n"
+        "do $$ begin delete from public.u; end $$;\n"
+    )
+    destructive, _ = dp.destructive_findings(sql)
+    assert [(f.line, f.kind) for f in destructive] == [(4, "DELETE")]
+
+
 def test_existing_migrations_flag_no_destructive_statements() -> None:
     for path in sorted((ROOT / "supabase/migrations").glob("*.sql")):
         destructive, _ = dp.destructive_findings(path.read_text(encoding="utf-8"))

@@ -666,9 +666,26 @@ _SCHEMA_DROP = re.compile(
 )
 
 
+# The dollar-quoted body of a `create function` runs when the function is called, not when the
+# migration runs (a trigger's DELETE is not a destructive migration statement); `do $$ … $$`
+# blocks do run and stay checked.
+_FUNCTION_BODY = re.compile(
+    r"(\bcreate\s+(?:or\s+replace\s+)?function\b[^$]*?\bas\s+)(\$(?P<tag>\w*)\$)(?P<body>.*?)\2",
+    re.I | re.S,
+)
+
+
 def _blank_comments(sql: str) -> str:
-    """Comments replaced by spaces, newlines kept, so offsets map to the original lines."""
-    return _COMMENTS.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), sql)
+    """Comments (and function bodies) replaced by spaces, newlines kept, so offsets map to the
+    original lines."""
+
+    def blank(text: str) -> str:
+        return re.sub(r"[^\n]", " ", text)
+
+    code = _COMMENTS.sub(lambda m: blank(m.group(0)), sql)
+    return _FUNCTION_BODY.sub(
+        lambda m: m.group(1) + m.group(2) + blank(m.group("body")) + m.group(2), code
+    )
 
 
 @dataclass(frozen=True)

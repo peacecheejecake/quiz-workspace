@@ -191,6 +191,8 @@ def test_test_only_switches_are_forbidden() -> None:
         "WORKER_CHAPTER_NOTE_HOLD_DIR",
         "WORKER_MOCK_EXAM_HOLD_DIR",
         "WORKER_MOCK_EXAM_FAULT_DIR",
+        "WORKER_ASK_FAKE_LOG_DIR",
+        "WORKER_ASK_HOLD_DIR",
         "FORWARDED_ALLOW_IPS",
         "RAILWAY_RUN_UID",
     } <= forbidden
@@ -253,7 +255,8 @@ def test_conditional_requirement_and_fake_adapters() -> None:
 
 
 @pytest.mark.parametrize(
-    "switch", ["WORKER_DOCUMENT_SUMMARY", "WORKER_CHAPTER_NOTES", "WORKER_MOCK_EXAMS"]
+    "switch",
+    ["WORKER_DOCUMENT_SUMMARY", "WORKER_CHAPTER_NOTES", "WORKER_MOCK_EXAMS", "WORKER_ASK_LLM"],
 )
 def test_llm_features_need_the_llm_on_worker_and_api(switch: str) -> None:
     """DOCSUM-B summaries and CHNOTE-B chapter notes: either switch requires the worker's key and
@@ -281,6 +284,7 @@ def test_required_when_accepts_one_condition_or_a_list() -> None:
         ("WORKER_DOCUMENT_SUMMARY", "true"),
         ("WORKER_CHAPTER_NOTES", "true"),
         ("WORKER_MOCK_EXAMS", "true"),
+        ("WORKER_ASK_LLM", "true"),
     )
     assert by_name["LLM_MODEL"].required_when == both
     assert by_name["LLM_API_KEY"].required_when == both
