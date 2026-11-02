@@ -29,7 +29,7 @@ from sqlalchemy import Connection, Engine, text
 
 from quiz_worker.document_store import WorkspaceUnavailableError
 from quiz_worker.errors import NonRetryableJobError
-from quiz_worker.question_generation_store import QuestionContentRow, SourceQuestionRow, SourceRow
+from quiz_worker.question_sources import QuestionContentRow, SourceQuestionRow, SourceRow
 from quiz_worker.run_lock import advisory_run_lock
 
 JOB_TYPE = "mock_exam.generate"

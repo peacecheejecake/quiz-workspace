@@ -14448,7 +14448,7 @@
     },
     "/api/v1/question-drafts/{draft_id}": {
       "patch": {
-        "description": "Edit a draft (e.g. enter the answer the source did not give), approve or reject it.\n409 `stale-draft` when `base_version` is outdated, 409 `draft-published` once published.\n\nImport and generation drafts share this route. A generation draft (M6.2) is re-validated\nagainst its run's source revision and passages on every request; `is_multi_answer: true`\nconfirms a changed answer count and `question_type` a changed type (`acknowledged_codes`).",
+        "description": "Edit a draft (e.g. enter the answer the source did not give), approve or reject it.\n409 `stale-draft` when `base_version` is outdated, 409 `draft-published` once published.\n\nImport drafts only: a generation draft of the retired 변형 출제 (QGEN-RM) answers 404.",
         "operationId": "updateQuestionDraft",
         "parameters": [
           {
