@@ -17,13 +17,14 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol
 
-from sqlalchemy import Column, ColumnElement, Select, Table, exists, select
+from sqlalchemy import Column, ColumnElement, Select, Table, exists, or_, select
 from sqlalchemy.orm import Session
 
 from quiz_api.authz.permissions import LockMode, Role
 from quiz_api.repositories.forks import FORK_JOB_TYPE
 from quiz_api.repositories.tables import (
     async_jobs,
+    chapter_notes,
     chapters,
     document_revisions,
     document_uploads,
@@ -34,6 +35,7 @@ from quiz_api.repositories.tables import (
     question_drafts,
     question_import_runs,
     questions,
+    user_highlights,
     workspace_memberships,
     workspace_share_links,
     workspaces,
@@ -68,6 +70,11 @@ class ResourceType(StrEnum):
     # out of its mock exam (`removed_at`).
     MOCK_EXAM = "mock_exam"
     MOCK_EXAM_QUESTION = "mock_exam_question"
+    # UX9-HL-B: a chapter note row (any status) of a live document.
+    CHAPTER_NOTE = "chapter_note"
+    # UX9-HL-B; per-user: the route must additionally check `user_highlights.user_id` is the
+    # caller. Invisible once its question is soft-deleted or its note's document is.
+    HIGHLIGHT = "highlight"
 
 
 @dataclass(frozen=True)
@@ -127,6 +134,31 @@ RESOURCES: dict[ResourceType, ResourceBinding] = {
             mock_exams.c.id == mock_exam_questions.c.mock_exam_id,
             mock_exams.c.workspace_id == mock_exam_questions.c.workspace_id,
             mock_exams.c.deleted_at.is_(None),
+        ),
+    ),
+    ResourceType.CHAPTER_NOTE: ResourceBinding(
+        chapter_notes,
+        visible_when=exists().where(
+            documents.c.id == chapter_notes.c.document_id,
+            documents.c.workspace_id == chapter_notes.c.workspace_id,
+            documents.c.deleted_at.is_(None),
+        ),
+    ),
+    ResourceType.HIGHLIGHT: ResourceBinding(
+        user_highlights,
+        visible_when=or_(
+            exists().where(
+                questions.c.id == user_highlights.c.question_id,
+                questions.c.workspace_id == user_highlights.c.workspace_id,
+                questions.c.deleted_at.is_(None),
+            ),
+            exists().where(
+                chapter_notes.c.id == user_highlights.c.chapter_note_id,
+                chapter_notes.c.workspace_id == user_highlights.c.workspace_id,
+                documents.c.id == chapter_notes.c.document_id,
+                documents.c.workspace_id == chapter_notes.c.workspace_id,
+                documents.c.deleted_at.is_(None),
+            ),
         ),
     ),
 }

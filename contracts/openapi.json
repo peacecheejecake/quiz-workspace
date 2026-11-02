@@ -173,6 +173,53 @@
         "title": "ActivityRevision",
         "type": "object"
       },
+      "AiExplanationHighlightTarget": {
+        "properties": {
+          "ai_explanation_id": {
+            "format": "uuid",
+            "title": "Ai Explanation Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "ai_explanation",
+            "title": "Kind",
+            "type": "string"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "ai_explanation_id",
+          "question_id"
+        ],
+        "title": "AiExplanationHighlightTarget",
+        "type": "object"
+      },
+      "AiExplanationTargetIn": {
+        "properties": {
+          "ai_explanation_id": {
+            "description": "AIEXPL-01 (not available yet: 404).",
+            "format": "uuid",
+            "title": "Ai Explanation Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "ai_explanation",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "ai_explanation_id"
+        ],
+        "title": "AiExplanationTargetIn",
+        "type": "object"
+      },
       "Attempt": {
         "properties": {
           "displayed_option_ids": {
@@ -2044,6 +2091,67 @@
         "title": "DuplicateScan",
         "type": "object"
       },
+      "ExplanationHighlightTarget": {
+        "properties": {
+          "kind": {
+            "const": "explanation",
+            "title": "Kind",
+            "type": "string"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "question_revision_id": {
+            "description": "The revision it was made on.",
+            "format": "uuid",
+            "title": "Question Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "question_id",
+          "question_revision_id"
+        ],
+        "title": "ExplanationHighlightTarget",
+        "type": "object"
+      },
+      "ExplanationTargetIn": {
+        "properties": {
+          "kind": {
+            "const": "explanation",
+            "title": "Kind",
+            "type": "string"
+          },
+          "question_id": {
+            "description": "The question's current revision's explanation.",
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "question_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The revision whose explanation the client showed (recommended): 409 `stale-revision` when it is no longer the current one, so the anchor is never applied to a different text.",
+            "title": "Question Revision Id"
+          }
+        },
+        "required": [
+          "kind",
+          "question_id"
+        ],
+        "title": "ExplanationTargetIn",
+        "type": "object"
+      },
       "Fork": {
         "description": "A fork request of the caller (never the source owner, manifest or link).",
         "properties": {
@@ -2168,6 +2276,277 @@
           "name"
         ],
         "title": "ForkCreate",
+        "type": "object"
+      },
+      "Highlight": {
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/HighlightAnchor",
+            "description": "Where it was made (in its note version/revision)."
+          },
+          "anchor_current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HighlightAnchor"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Position in the current text; null when missing."
+          },
+          "anchor_status": {
+            "description": "`exact`: same text; `relocated`: found again in the current revision; `missing`: the current explanation no longer contains the quote.",
+            "enum": [
+              "exact",
+              "relocated",
+              "missing"
+            ],
+            "title": "Anchor Status",
+            "type": "string"
+          },
+          "color": {
+            "enum": [
+              "yellow",
+              "blue",
+              "pink"
+            ],
+            "title": "Color",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HighlightQuestion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explanation highlights only."
+          },
+          "quote": {
+            "description": "The highlighted text, cut by the server.",
+            "title": "Quote",
+            "type": "string"
+          },
+          "target": {
+            "discriminator": {
+              "mapping": {
+                "ai_explanation": "#/components/schemas/AiExplanationHighlightTarget",
+                "explanation": "#/components/schemas/ExplanationHighlightTarget",
+                "note": "#/components/schemas/NoteHighlightTarget"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NoteHighlightTarget"
+              },
+              {
+                "$ref": "#/components/schemas/ExplanationHighlightTarget"
+              },
+              {
+                "$ref": "#/components/schemas/AiExplanationHighlightTarget"
+              }
+            ],
+            "title": "Target"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "color",
+          "version",
+          "target",
+          "anchor",
+          "quote",
+          "anchor_status",
+          "anchor_current",
+          "question",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Highlight",
+        "type": "object"
+      },
+      "HighlightAnchor": {
+        "properties": {
+          "block": {
+            "description": "`s<i>.i<j>` (note item `sections[i].items[j]`) or `p<i>` (explanation paragraph, blank-line separated, 0-based).",
+            "maxLength": 16,
+            "title": "Block",
+            "type": "string"
+          },
+          "end": {
+            "description": "UTF-16 offset, exclusive.",
+            "maximum": 10000000.0,
+            "minimum": 0.0,
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "description": "UTF-16 offset in the block.",
+            "maximum": 10000000.0,
+            "minimum": 0.0,
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "block",
+          "start",
+          "end"
+        ],
+        "title": "HighlightAnchor",
+        "type": "object"
+      },
+      "HighlightCreate": {
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/HighlightAnchor"
+          },
+          "color": {
+            "enum": [
+              "yellow",
+              "blue",
+              "pink"
+            ],
+            "title": "Color",
+            "type": "string"
+          },
+          "replace_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The caller's live highlights of the same target that overlap `anchor`: removed in the same transaction (merge). They cannot be restored.",
+            "title": "Replace Ids"
+          },
+          "target": {
+            "discriminator": {
+              "mapping": {
+                "ai_explanation": "#/components/schemas/AiExplanationTargetIn",
+                "explanation": "#/components/schemas/ExplanationTargetIn",
+                "note": "#/components/schemas/NoteTargetIn"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NoteTargetIn"
+              },
+              {
+                "$ref": "#/components/schemas/ExplanationTargetIn"
+              },
+              {
+                "$ref": "#/components/schemas/AiExplanationTargetIn"
+              }
+            ],
+            "title": "Target"
+          }
+        },
+        "required": [
+          "target",
+          "anchor",
+          "color"
+        ],
+        "title": "HighlightCreate",
+        "type": "object"
+      },
+      "HighlightList": {
+        "properties": {
+          "items": {
+            "description": "Display order: note highlights (newest version first, body order), then explanation highlights (Heatmap order, position in the explanation).",
+            "items": {
+              "$ref": "#/components/schemas/Highlight"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "HighlightList",
+        "type": "object"
+      },
+      "HighlightQuestion": {
+        "properties": {
+          "number_label": {
+            "description": "`<n>장 <번호>번` (the Heatmap's numbering).",
+            "title": "Number Label",
+            "type": "string"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "stem_preview": {
+            "description": "First 40 characters of the current stem.",
+            "title": "Stem Preview",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "number_label",
+          "stem_preview"
+        ],
+        "title": "HighlightQuestion",
+        "type": "object"
+      },
+      "HighlightUpdate": {
+        "properties": {
+          "color": {
+            "enum": [
+              "yellow",
+              "blue",
+              "pink"
+            ],
+            "title": "Color",
+            "type": "string"
+          },
+          "version": {
+            "description": "The `version` the client read (optimistic lock).",
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "color",
+          "version"
+        ],
+        "title": "HighlightUpdate",
         "type": "object"
       },
       "HitBoundingBox": {
@@ -4782,6 +5161,31 @@
         "title": "NoteGeneration",
         "type": "object"
       },
+      "NoteHighlightTarget": {
+        "properties": {
+          "chapter_note_id": {
+            "format": "uuid",
+            "title": "Chapter Note Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "note",
+            "title": "Kind",
+            "type": "string"
+          },
+          "note_version": {
+            "title": "Note Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "chapter_note_id",
+          "note_version"
+        ],
+        "title": "NoteHighlightTarget",
+        "type": "object"
+      },
       "NoteItem": {
         "properties": {
           "footnotes": {
@@ -4874,6 +5278,27 @@
           "items"
         ],
         "title": "NoteSection",
+        "type": "object"
+      },
+      "NoteTargetIn": {
+        "properties": {
+          "chapter_note_id": {
+            "description": "A succeeded chapter note version.",
+            "format": "uuid",
+            "title": "Chapter Note Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "note",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "chapter_note_id"
+        ],
+        "title": "NoteTargetIn",
         "type": "object"
       },
       "NoteUsage": {
@@ -10381,6 +10806,85 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/chapters/{chapter_id}/my-highlights": {
+      "get": {
+        "description": "The caller's highlights of the chapter: those of every note version of the chapter (version\nnumber included) and the explanation highlights of the questions now in it (live CONFIRMED;\narchived, deleted, draft and moved-away questions are left out).",
+        "operationId": "listChapterHighlights",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chapter_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Chapter Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HighlightList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Chapter Highlights",
+        "tags": [
+          "highlights"
+        ]
+      }
+    },
     "/api/v1/chapters/{chapter_id}/note": {
       "get": {
         "description": "The chapter's note (newest version or `version=k`), its versions, newest generation and\nwhether it is stale. Read-only: never records a view.",
@@ -13825,6 +14329,372 @@
         ]
       }
     },
+    "/api/v1/my-highlights": {
+      "post": {
+        "description": "Highlight a range of a note version or of a question's current explanation. Overlapping\nhighlights of the caller must be named in `replace_ids` (they are replaced by this one in the\nsame transaction); allowed for every member, also in an archived workspace.",
+        "operationId": "createHighlight",
+        "parameters": [
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HighlightCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Highlight"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Highlight",
+        "tags": [
+          "highlights"
+        ]
+      }
+    },
+    "/api/v1/my-highlights/{highlight_id}": {
+      "delete": {
+        "description": "Remove one of the caller's highlights (idempotent; it can be restored for 10 minutes).",
+        "operationId": "deleteHighlight",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "highlight_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Highlight Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Delete Highlight",
+        "tags": [
+          "highlights"
+        ]
+      },
+      "patch": {
+        "description": "Change the color of one of the caller's live highlights (`version` must match).",
+        "operationId": "updateHighlight",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "highlight_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Highlight Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HighlightUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Highlight"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Update Highlight",
+        "tags": [
+          "highlights"
+        ]
+      }
+    },
+    "/api/v1/my-highlights/{highlight_id}/restore": {
+      "post": {
+        "description": "Undo the deletion of one of the caller's highlights within 10 minutes: the same id,\ntarget, anchor and color (`version` + 1). Merged-away highlights are not restorable.",
+        "operationId": "restoreHighlight",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "highlight_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Highlight Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Highlight"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Restore Highlight",
+        "tags": [
+          "highlights"
+        ]
+      }
+    },
     "/api/v1/practice-runs/{run_id}": {
       "get": {
         "description": "The run's counts, progress and summary (no items, no content).",
@@ -15789,6 +16659,85 @@
         "summary": "List My Attempts",
         "tags": [
           "practice"
+        ]
+      }
+    },
+    "/api/v1/questions/{question_id}/my-highlights": {
+      "get": {
+        "description": "The caller's highlights of the question's explanation (same access as GET /questions/{id};\nthe response holds the caller's quotes only, never the explanation).",
+        "operationId": "listQuestionHighlights",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HighlightList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Question Highlights",
+        "tags": [
+          "highlights"
         ]
       }
     },
@@ -18984,6 +19933,97 @@
         "summary": "Create Mock Exam",
         "tags": [
           "mock-exams"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/my-highlights": {
+      "get": {
+        "description": "The caller's explanation highlights of the \"챕터 없음\" Heatmap group.",
+        "operationId": "listChapterlessHighlights",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only `none`: the \"챕터 없음\" group (no workspace-wide list).",
+            "in": "query",
+            "name": "chapter",
+            "required": true,
+            "schema": {
+              "const": "none",
+              "description": "Only `none`: the \"챕터 없음\" group (no workspace-wide list).",
+              "title": "Chapter",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HighlightList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Chapterless Highlights",
+        "tags": [
+          "highlights"
         ]
       }
     },

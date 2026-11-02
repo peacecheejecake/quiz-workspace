@@ -3,6 +3,28 @@
 /* eslint-disable */
 
 export type paths = {
+  '/api/v1/chapters/{chapter_id}/my-highlights': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Chapter Highlights
+     * @description The caller's highlights of the chapter: those of every note version of the chapter (version
+     *     number included) and the explanation highlights of the questions now in it (live CONFIRMED;
+     *     archived, deleted, draft and moved-away questions are left out).
+     */
+    get: operations['listChapterHighlights'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/chapters/{chapter_id}/note': {
     parameters: {
       query?: never;
@@ -583,6 +605,73 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/my-highlights': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Highlight
+     * @description Highlight a range of a note version or of a question's current explanation. Overlapping
+     *     highlights of the caller must be named in `replace_ids` (they are replaced by this one in the
+     *     same transaction); allowed for every member, also in an archived workspace.
+     */
+    post: operations['createHighlight'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/my-highlights/{highlight_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * Delete Highlight
+     * @description Remove one of the caller's highlights (idempotent; it can be restored for 10 minutes).
+     */
+    delete: operations['deleteHighlight'];
+    options?: never;
+    head?: never;
+    /**
+     * Update Highlight
+     * @description Change the color of one of the caller's live highlights (`version` must match).
+     */
+    patch: operations['updateHighlight'];
+    trace?: never;
+  };
+  '/api/v1/my-highlights/{highlight_id}/restore': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Restore Highlight
+     * @description Undo the deletion of one of the caller's highlights within 10 minutes: the same id,
+     *     target, anchor and color (`version` + 1). Merged-away highlights are not restorable.
+     */
+    post: operations['restoreHighlight'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/practice-runs/{run_id}': {
     parameters: {
       query?: never;
@@ -964,6 +1053,27 @@ export type paths = {
      *     GET /questions/{question_id}/revisions/{revision_id} of the item's `question_id`).
      */
     get: operations['listMyQuestionAttempts'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/my-highlights': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Question Highlights
+     * @description The caller's highlights of the question's explanation (same access as GET /questions/{id};
+     *     the response holds the caller's quotes only, never the explanation).
+     */
+    get: operations['listQuestionHighlights'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1545,6 +1655,26 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspace_id}/my-highlights': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Chapterless Highlights
+     * @description The caller's explanation highlights of the "챕터 없음" Heatmap group.
+     */
+    get: operations['listChapterlessHighlights'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspace_id}/practice-runs': {
     parameters: {
       query?: never;
@@ -1930,6 +2060,38 @@ export type components = {
        * @description Document `revision_number` or question `version` the event produced.
        */
       number: number | null;
+    };
+    /** AiExplanationHighlightTarget */
+    AiExplanationHighlightTarget: {
+      /**
+       * Ai Explanation Id
+       * Format: uuid
+       */
+      ai_explanation_id: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: 'ai_explanation';
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+    };
+    /** AiExplanationTargetIn */
+    AiExplanationTargetIn: {
+      /**
+       * Ai Explanation Id
+       * Format: uuid
+       * @description AIEXPL-01 (not available yet: 404).
+       */
+      ai_explanation_id: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: 'ai_explanation';
     };
     /** Attempt */
     Attempt: {
@@ -2743,6 +2905,44 @@ export type components = {
        */
       question_count: number;
     };
+    /** ExplanationHighlightTarget */
+    ExplanationHighlightTarget: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: 'explanation';
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /**
+       * Question Revision Id
+       * Format: uuid
+       * @description The revision it was made on.
+       */
+      question_revision_id: string;
+    };
+    /** ExplanationTargetIn */
+    ExplanationTargetIn: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: 'explanation';
+      /**
+       * Question Id
+       * Format: uuid
+       * @description The question's current revision's explanation.
+       */
+      question_id: string;
+      /**
+       * Question Revision Id
+       * @description The revision whose explanation the client showed (recommended): 409 `stale-revision` when it is no longer the current one, so the anchor is never applied to a different text.
+       */
+      question_revision_id?: string | null;
+    };
     /**
      * Fork
      * @description A fork request of the caller (never the source owner, manifest or link).
@@ -2804,6 +3004,129 @@ export type components = {
        * @description Name of the new workspace.
        */
       name: string;
+    };
+    /** Highlight */
+    Highlight: {
+      /** @description Where it was made (in its note version/revision). */
+      anchor: components['schemas']['HighlightAnchor'];
+      /** @description Position in the current text; null when missing. */
+      anchor_current: components['schemas']['HighlightAnchor'] | null;
+      /**
+       * Anchor Status
+       * @description `exact`: same text; `relocated`: found again in the current revision; `missing`: the current explanation no longer contains the quote.
+       * @enum {string}
+       */
+      anchor_status: 'exact' | 'relocated' | 'missing';
+      /**
+       * Color
+       * @enum {string}
+       */
+      color: 'yellow' | 'blue' | 'pink';
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** @description Explanation highlights only. */
+      question: components['schemas']['HighlightQuestion'] | null;
+      /**
+       * Quote
+       * @description The highlighted text, cut by the server.
+       */
+      quote: string;
+      /** Target */
+      target:
+        | components['schemas']['NoteHighlightTarget']
+        | components['schemas']['ExplanationHighlightTarget']
+        | components['schemas']['AiExplanationHighlightTarget'];
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      /** Version */
+      version: number;
+    };
+    /** HighlightAnchor */
+    HighlightAnchor: {
+      /**
+       * Block
+       * @description `s<i>.i<j>` (note item `sections[i].items[j]`) or `p<i>` (explanation paragraph, blank-line separated, 0-based).
+       */
+      block: string;
+      /**
+       * End
+       * @description UTF-16 offset, exclusive.
+       */
+      end: number;
+      /**
+       * Start
+       * @description UTF-16 offset in the block.
+       */
+      start: number;
+    };
+    /** HighlightCreate */
+    HighlightCreate: {
+      anchor: components['schemas']['HighlightAnchor'];
+      /**
+       * Color
+       * @enum {string}
+       */
+      color: 'yellow' | 'blue' | 'pink';
+      /**
+       * Replace Ids
+       * @description The caller's live highlights of the same target that overlap `anchor`: removed in the same transaction (merge). They cannot be restored.
+       */
+      replace_ids?: string[] | null;
+      /** Target */
+      target:
+        | components['schemas']['NoteTargetIn']
+        | components['schemas']['ExplanationTargetIn']
+        | components['schemas']['AiExplanationTargetIn'];
+    };
+    /** HighlightList */
+    HighlightList: {
+      /**
+       * Items
+       * @description Display order: note highlights (newest version first, body order), then explanation highlights (Heatmap order, position in the explanation).
+       */
+      items: components['schemas']['Highlight'][];
+    };
+    /** HighlightQuestion */
+    HighlightQuestion: {
+      /**
+       * Number Label
+       * @description `<n>장 <번호>번` (the Heatmap's numbering).
+       */
+      number_label: string;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /**
+       * Stem Preview
+       * @description First 40 characters of the current stem.
+       */
+      stem_preview: string;
+    };
+    /** HighlightUpdate */
+    HighlightUpdate: {
+      /**
+       * Color
+       * @enum {string}
+       */
+      color: 'yellow' | 'blue' | 'pink';
+      /**
+       * Version
+       * @description The `version` the client read (optimistic lock).
+       */
+      version: number;
     };
     /** HitBoundingBox */
     HitBoundingBox: {
@@ -3922,6 +4245,21 @@ export type components = {
        */
       status: 'queued' | 'running' | 'succeeded' | 'failed';
     };
+    /** NoteHighlightTarget */
+    NoteHighlightTarget: {
+      /**
+       * Chapter Note Id
+       * Format: uuid
+       */
+      chapter_note_id: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: 'note';
+      /** Note Version */
+      note_version: number;
+    };
     /** NoteItem */
     NoteItem: {
       /**
@@ -3969,6 +4307,20 @@ export type components = {
       heading: string;
       /** Items */
       items: components['schemas']['NoteItem'][];
+    };
+    /** NoteTargetIn */
+    NoteTargetIn: {
+      /**
+       * Chapter Note Id
+       * Format: uuid
+       * @description A succeeded chapter note version.
+       */
+      chapter_note_id: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: 'note';
     };
     /** NoteUsage */
     NoteUsage: {
@@ -6263,6 +6615,64 @@ export type components = {
 };
 export type $defs = Record<string, never>;
 export interface operations {
+  listChapterHighlights: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        chapter_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HighlightList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getChapterNote: {
     parameters: {
       query?: {
@@ -8678,6 +9088,272 @@ export interface operations {
       };
     };
   };
+  createHighlight: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['HighlightCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Highlight'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  deleteHighlight: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        highlight_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  updateHighlight: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        highlight_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['HighlightUpdate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Highlight'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  restoreHighlight: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        highlight_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Highlight'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getPracticeRun: {
     parameters: {
       query?: never;
@@ -10049,6 +10725,64 @@ export interface operations {
       };
       /** @description Service Unavailable */
       503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listQuestionHighlights: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HighlightList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
         headers: {
           [name: string]: unknown;
         };
@@ -12221,6 +12955,67 @@ export interface operations {
       };
       /** @description Service Unavailable */
       503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listChapterlessHighlights: {
+    parameters: {
+      query: {
+        /** @description Only `none`: the "챕터 없음" group (no workspace-wide list). */
+        chapter: 'none';
+      };
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HighlightList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
         headers: {
           [name: string]: unknown;
         };

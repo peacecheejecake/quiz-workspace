@@ -124,6 +124,21 @@ class ProblemType(StrEnum):
     # 409: AI variation types are off in this environment (WORKER_MOCK_EXAMS / no LLM);
     # 보기 섞기 still works and stored mock exams stay readable.
     MOCK_LLM_DISABLED = "urn:quiz-workspace:problem:mock-llm-disabled"
+    # 409: the highlight target cannot carry highlights: a note generation that did not succeed,
+    # a draft question or a question without an explanation (HILITE-01-C03).
+    HIGHLIGHT_TARGET_UNAVAILABLE = "urn:quiz-workspace:problem:highlight-target-unavailable"
+    # 422: the anchor is not a non-empty range inside one block of the target text, the quote is
+    # longer than 2,000 characters, or `replace_ids` are not the caller's overlapping highlights.
+    HIGHLIGHT_ANCHOR_INVALID = "urn:quiz-workspace:problem:highlight-anchor-invalid"
+    # 409: the caller already has 500 live highlights on this target.
+    HIGHLIGHT_LIMIT = "urn:quiz-workspace:problem:highlight-limit"
+    # 409: the highlight changed since it was read (`version`); reload it.
+    HIGHLIGHT_CHANGED = "urn:quiz-workspace:problem:highlight-changed"
+    # 409: restore of a highlight that is not deleted, was merged away or was deleted more than
+    # 10 minutes ago.
+    HIGHLIGHT_NOT_RESTORABLE = "urn:quiz-workspace:problem:highlight-not-restorable"
+    # 409: the range overlaps a live highlight of the caller (merge it with `replace_ids`).
+    HIGHLIGHT_OVERLAP = "urn:quiz-workspace:problem:highlight-overlap"
 
 
 class ProblemException(StarletteHTTPException):

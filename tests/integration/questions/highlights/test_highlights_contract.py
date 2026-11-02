@@ -9,11 +9,10 @@ restore (C04); explanation highlights are found again in a new revision or repor
 highlight and the question read shows only the user's quotes (C07); no quote in logs or
 activities (C08).
 
-Shapes are assumptions H1-H5 in tests/e2e/fixtures/highlights.ts. Jobs run in this process
-(conftest.py). RED (UX9.0): every test carries the `red` marker until UX9-HL-B. The grant/RLS
-checks of C01 read the catalog as the superuser here; UX9-HL-B adds the pgTAP file under
-supabase/tests. The HighlightableText/HighlightMenu component contract (C09) is Vitest, written by
-UX9-HL-UI.
+Shapes are assumptions H1-H5 in tests/e2e/fixtures/highlights.ts (implemented as written by
+UX9-HL-B). Jobs run in this process (conftest.py). The grant/RLS checks of C01 read the catalog as
+the superuser here; supabase/tests/24_user_highlights.test.sql holds the pgTAP side. The
+HighlightableText/HighlightMenu component contract (C09) is Vitest, written by UX9-HL-UI.
 """
 
 from __future__ import annotations
@@ -26,7 +25,7 @@ from typing import Any
 
 import pytest
 
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = pytest.mark.infra
 
 _NOTES = Path(__file__).resolve().parents[1] / "chapter_notes" / "test_chapter_notes_contract.py"
 _spec = importlib.util.spec_from_file_location("_chnote_contract_helpers_hilite", _NOTES)
@@ -191,7 +190,7 @@ def test_hilite_01_c01_rows_of_the_caller_only_every_role_and_archived_workspace
     assert s.owner.call("DELETE", f"/workspaces/{s.ws}").status_code in (200, 202, 204)
     assert s.owner.call("GET", f"/chapters/{s.ch[CH1]}/my-highlights").status_code == 404
 
-    # Catalog (pgTAP in UX9-HL-B): quiz_api may not DELETE, browser roles nothing, RLS on.
+    # Catalog (also pgTAP): quiz_api may not DELETE, browser roles nothing, RLS on.
     [(rls,)] = db(
         "select relrowsecurity from pg_class where oid = 'public.user_highlights'::regclass"
     )
