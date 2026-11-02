@@ -478,6 +478,38 @@ describe('PanelHistory', () => {
     expect(fake.rendered[0]).toBe('/workspaces');
   });
 
+  it('the range run (QVIEW-01): its steps replace the entry, positions are steps, closing drops all', () => {
+    const run = '33333333-3333-4333-8333-000000000001';
+    const again = '33333333-3333-4333-8333-000000000002';
+    const { fake, history } = controller();
+    history.push('/w?practice=new&source=bank');
+    // 시작 rewrites the entry that opened the panel: Back from the run closes it.
+    history.replace(`/w?practice=${run}&i=1`);
+    history.push(`/w?practice=${run}&i=2`);
+    fake.back();
+    expect(fake.url()).toBe(`/w?practice=${run}&i=1`);
+    fake.forward();
+    expect(fake.url()).toBe(`/w?practice=${run}&i=2`);
+    // 결과 보기 and 처음부터 다시 rewrite the entry too.
+    history.replace(`/w?practice=${run}&view=results`);
+    history.replace(`/w?practice=${again}&i=1`);
+    fake.back();
+    expect(fake.url()).toBe(`/w?practice=${run}&i=1`);
+    fake.back();
+    expect(fake.url()).toBe('/w');
+    expect(openDialogs(new URL(fake.url(), ORIGIN).search)).toEqual([]);
+    fake.forward();
+    expect(fake.url()).toBe('/w');
+    // Reopened, started, moved, then closed with its button (Escape): nothing to reopen.
+    history.push('/w?practice=new&source=bank');
+    history.replace(`/w?practice=${run}&i=1`);
+    history.push(`/w?practice=${run}&i=2`);
+    history.close('/w');
+    fake.traverse();
+    expect(fake.url()).toBe('/w');
+    expectBackLeavesForwardStaysClosed(fake);
+  });
+
   it('reads a closed URL with another page (filters) through the router first', () => {
     const { fake, history, reads, commit } = routedController();
     history.push('/w?panel=documents');

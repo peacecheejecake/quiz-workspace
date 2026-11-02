@@ -397,6 +397,14 @@ test(
         .first(),
     ).toBeAttached();
 
+    // Positions are Back/Forward steps inside the open panel (QOV-01-AC14 rules).
+    await page.goBack();
+    await expect(page).toHaveURL(/[?&]i=1(&|$)/);
+    await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(1, 5));
+    await page.goForward();
+    await expect(page).toHaveURL(/[?&]i=2(&|$)/);
+    await expect(runUi.title(panel, 1, 2)).toBeVisible();
+
     await page.reload();
     panel = runUi.panel(page);
     await expect(runUi.title(panel, 1, 2)).toBeVisible();
@@ -424,6 +432,15 @@ test(
     await page.reload();
     await expect(runUi.title(runUi.panel(page), 1, 3)).toBeVisible();
     expect(await runOrder(s.viewer, shuffled, 5)).toEqual(order);
+
+    // 시작 replaced the range step's entry (user decision 2026-11-02): one Back closes the panel,
+    // and Forward never reopens it.
+    await page.goBack();
+    await expect(runUi.panel(page)).toBeHidden();
+    expect(practiceParam(page)).toBeNull();
+    await page.goForward();
+    await expect(runUi.panel(page)).toBeHidden();
+    expect(practiceParam(page)).toBeNull();
   },
 );
 
