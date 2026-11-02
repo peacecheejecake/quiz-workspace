@@ -258,3 +258,171 @@
     color: var(--color-text-primary);
   }
 }
+
+/*
+ * SplitView (docs/design-system.md §7): two panes on a grid with a gutter track for the
+ * separator. The visible line is 1px --color-border; the bar's hit area overhangs the gutter to
+ * 24px (44px for coarse pointers). Hover (hover-capable pointers), focus-visible and dragging
+ * thicken the line and show the grip, so the state is not conveyed by color alone.
+ */
+.qz-split {
+  --qz-split-gutter: var(--space-3);
+  --qz-split-hit: var(--space-6);
+
+  display: grid;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+
+  > [hidden] {
+    display: none !important;
+  }
+
+  > .pane {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  > .separator {
+    position: relative;
+    z-index: var(--z-raised);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  &[data-orientation='horizontal'] > .separator {
+    flex-direction: column;
+    margin-inline: calc((var(--qz-split-gutter) - var(--qz-split-hit)) / 2);
+    cursor: col-resize;
+  }
+
+  &[data-orientation='vertical'] > .separator {
+    flex-direction: row;
+    margin-block: calc((var(--qz-split-gutter) - var(--qz-split-hit)) / 2);
+    cursor: row-resize;
+  }
+
+  > .separator > .line {
+    position: absolute;
+    background: var(--color-border);
+    transition:
+      width var(--duration-state) var(--easing-standard),
+      height var(--duration-state) var(--easing-standard),
+      background-color var(--duration-state) var(--easing-standard);
+  }
+
+  &[data-orientation='horizontal'] > .separator > .line {
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    transform: translateX(-50%);
+  }
+
+  &[data-orientation='vertical'] > .separator > .line {
+    right: 0;
+    left: 0;
+    top: 50%;
+    height: 1px;
+    transform: translateY(-50%);
+  }
+
+  > .separator > .grip {
+    position: relative;
+    border-radius: var(--radius-pill);
+    background: var(--color-border-strong);
+    opacity: 0;
+    transition: opacity var(--duration-state) var(--easing-standard);
+  }
+
+  &[data-orientation='horizontal'] > .separator > .grip {
+    width: var(--space-1);
+    height: var(--space-6);
+  }
+
+  &[data-orientation='vertical'] > .separator > .grip {
+    width: var(--space-6);
+    height: var(--space-1);
+  }
+
+  /* While dragging, nothing in the split selects text and the cursor stays the resize cursor. */
+  &[data-dragging] {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  &[data-orientation='horizontal'][data-dragging] {
+    cursor: col-resize;
+  }
+
+  &[data-orientation='vertical'][data-dragging] {
+    cursor: row-resize;
+  }
+}
+
+/* Emphasis: thicker line in the strong border color + visible grip. */
+.qz-split > .separator:is(:focus-visible, [data-dragging]) > .line {
+  background: var(--color-border-strong);
+}
+
+.qz-split[data-orientation='horizontal'] > .separator:is(:focus-visible, [data-dragging]) > .line {
+  width: 3px;
+}
+
+.qz-split[data-orientation='vertical'] > .separator:is(:focus-visible, [data-dragging]) > .line {
+  height: 3px;
+}
+
+.qz-split > .separator:is(:focus-visible, [data-dragging]) > .grip {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .qz-split > .separator:hover > .line {
+    background: var(--color-border-strong);
+  }
+
+  .qz-split[data-orientation='horizontal'] > .separator:hover > .line {
+    width: 3px;
+  }
+
+  .qz-split[data-orientation='vertical'] > .separator:hover > .line {
+    height: 3px;
+  }
+
+  .qz-split > .separator:hover > .grip {
+    opacity: 1;
+  }
+}
+
+/* Touch screens have no hover to reveal the handle: the grip is always shown. */
+@media (hover: none) {
+  .qz-split > .separator > .grip {
+    opacity: 1;
+  }
+}
+
+@media (pointer: coarse) {
+  .qz-split {
+    --qz-split-hit: calc(var(--space-8) + var(--space-3));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qz-split > .separator > :is(.line, .grip) {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .qz-split > .separator > :is(.line, .grip) {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+}

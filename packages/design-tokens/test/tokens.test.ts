@@ -87,8 +87,8 @@ describe('spec extraction (guards against a vacuous comparison)', () => {
     expect(Object.keys(docLight)).toHaveLength(32);
     expect(Object.keys(docDark)).toHaveLength(32);
     // 32 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 12 typography
-    // + 2 breakpoints + color-scheme.
-    expect(Object.keys(docRoot)).toHaveLength(73);
+    // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width.
+    expect(Object.keys(docRoot)).toHaveLength(74);
   });
 });
 

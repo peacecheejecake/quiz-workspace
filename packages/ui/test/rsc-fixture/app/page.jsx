@@ -18,6 +18,7 @@ import {
   HistoryIcon,
   SearchIcon,
   ShareIcon,
+  SplitView,
   TrashIcon,
   CloseIcon,
   ConfirmDialog,
@@ -206,6 +207,12 @@ export default function Page() {
           <FloatingSidePanel title="패널" modal={false} trigger={<Button>패널</Button>}>
             본문
           </FloatingSidePanel>
+          <div style={{ height: '200px' }}>
+            <SplitView separatorLabel="크기 조절" orientation="vertical" visible="both">
+              <p>앞</p>
+              <p>뒤</p>
+            </SplitView>
+          </div>
           <EmptyState title="비어 있음" />
           <Tabs defaultValue="a">
             <TabsList aria-label="탭">

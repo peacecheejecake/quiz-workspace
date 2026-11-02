@@ -5,8 +5,9 @@
 // macOS and CI, see tests/e2e/README.md "Visual baselines"); locale ko-KR, Asia/Seoul, reduced
 // motion, animations disabled, caret hidden, web fonts awaited. Data is per-test but its visible
 // text is fixed (workspace names, question labels, synthetic PDFs); what still varies (dates and
-// times, ids) is masked, the account mask at a fixed width. An MCQ the practice panel shows in its
-// per-session shuffled order has one text for every option, so any order renders the same pixels.
+// times, ids) is masked, the account and `<time>` masks at fixed widths. An MCQ the practice
+// panel shows in its per-session shuffled order has one text for every option, so any order
+// renders the same pixels.
 // Share secrets never appear in a screenshot: the shared view is captured after the fragment
 // exchange, the owner's one-time link field is not captured.
 import type { Locator, Page } from '@playwright/test';
@@ -54,6 +55,7 @@ import {
 } from '../fixtures/sharing.ts';
 import { generateNote, notePanelPath, noteQuestion, noteUi } from '../fixtures/chapter-notes.ts';
 import { exportUi } from '../fixtures/export.ts';
+import { expectFitsViewport, expectSplit, viewerUi } from '../fixtures/document-viewer.ts';
 import {
   startSummary,
   summaryPanelPath,
@@ -77,6 +79,12 @@ const ACCOUNT_BUTTON = 'button[aria-label^="계정 "][title]';
  *  else in the header moves; narrow, so the mask covers less of a side panel drawn over it). A page
  *  style: the screenshot `style` option left the mask boxes at the unstyled width. */
 const FIXED_ACCOUNT_WIDTH = `${ACCOUNT_BUTTON} { width: 12rem !important; }`;
+/** A timestamp's text width depends on the date ("10. 29." vs "11. 2."), and so would its mask box
+ *  and the inline text after it (the documents row's "· 56.3 KB"): every `<time>` gets one fixed
+ *  width, wider than any "yyyy. m. d. 오후 h:mm", on one line (anything longer is clipped, under
+ *  the mask). */
+const FIXED_TIME_WIDTH =
+  'time { display: inline-block !important; width: 10rem !important; overflow: hidden !important; white-space: nowrap !important; vertical-align: top !important; }';
 
 /** Dynamic regions: timestamps (server dates, relative times) and the account button's email. */
 function dynamic(page: Page): Locator[] {
@@ -94,7 +102,7 @@ async function ready(page: Page): Promise<void> {
 
 /** Full-page screenshot of the current state in every color scheme: `<name>-<scheme>.png`. */
 async function snap(page: Page, name: string, extraMask: Locator[] = []): Promise<void> {
-  await page.addStyleTag({ content: FIXED_ACCOUNT_WIDTH });
+  await page.addStyleTag({ content: `${FIXED_ACCOUNT_WIDTH}\n${FIXED_TIME_WIDTH}` });
   for (const scheme of COLOR_SCHEMES) {
     await page.emulateMedia({ colorScheme: scheme });
     await ready(page);
@@ -209,9 +217,12 @@ test(
     await page.mouse.move(0, 0);
     await snap(page, 'search-excerpt');
 
+    // DOCVIEW-01 default layout (함께 보기 · 좌우; docked outline on desktop, collapsed on iPad).
     await page.goto(`/workspaces/${ws.id}/documents/${documentId}`);
+    await expect(viewerUi.settingsBar(page)).toBeVisible();
     await expect(editorUi.textPanel(page)).toBeVisible();
     await expect(editorUi.viewer(page).locator('canvas').first()).toBeVisible();
+    await expectFitsViewport(page);
     await snap(page, 'document-editor');
   },
 );
@@ -287,5 +298,46 @@ test(
     await expect(noteUi.disclosure(note)).toHaveAttribute('aria-expanded', 'false');
     await page.mouse.move(0, 0);
     await snap(page, 'chapter-note', [noteUi.meta(note)]);
+  },
+);
+
+test(
+  'VISUAL-08 document viewer layout: outline open, outline collapsed, 상하 with 변환본 first',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('visual08');
+    const ws = await workspaceFactory.create(owner, '보기 설정');
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    await signInAs(page, owner.user);
+    await page.goto(`/workspaces/${ws.id}/documents/${documentId}`);
+    await expect(viewerUi.settingsBar(page)).toBeVisible();
+    const pdfReady = async () => {
+      await expect(editorUi.textPanel(page)).toBeVisible();
+      await expect(editorUi.viewer(page).locator('canvas').first()).toBeVisible();
+      await expectFitsViewport(page);
+      await page.mouse.move(0, 0);
+    };
+
+    // Default layout (함께 보기 · 좌우 · 원본 먼저) with the outline open: docked beside the panes
+    // on desktop; on the iPad (tablet width) it starts collapsed and opens as an opaque overlay.
+    const toggle = viewerUi.outlineToggle(page);
+    if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+    await expect(viewerUi.outlinePanel(page)).toBeVisible();
+    await expectSplit(page, { orientation: 'horizontal', first: 'pdf', pdfRatio: 50 });
+    await pdfReady();
+    await snap(page, 'document-viewer-outline-open');
+
+    await viewerUi.collapseOutline(page).click();
+    await expect(viewerUi.outlinePanel(page)).toBeHidden();
+    await expect(viewerUi.expandOutline(page)).toHaveAttribute('aria-expanded', 'false');
+    await pdfReady();
+    await snap(page, 'document-viewer-outline-collapsed');
+
+    // 상하 with 변환본 on top (위치 바꾸기), outline still collapsed.
+    await viewerUi.orientation(page, 'vertical').click();
+    await viewerUi.swapButton(page).click();
+    await expectSplit(page, { orientation: 'vertical', first: 'text', pdfRatio: 50 });
+    await pdfReady();
+    await snap(page, 'document-viewer-vertical-text-first');
   },
 );

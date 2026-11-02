@@ -87,6 +87,9 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'DOCTXT.0': ['DOC-03'],
   'DOCSUM.0': ['DOCSUM-01'],
   'CHNOTE.0': ['CHNOTE-01'],
+  // DOCVIEW-SPEC (2026-10-29) / DOCVIEW-PORT (2026-11-02): the DOC-02 / WS-VIEW-01 viewer layout —
+  // docked outline panel, view modes, resizable and swappable split. It replaced DOC-02-AC06/AC10.
+  'DOCVIEW.0': ['DOCVIEW-01'],
 };
 
 const LEADING_ID = new RegExp(

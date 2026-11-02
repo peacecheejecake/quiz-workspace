@@ -1,16 +1,17 @@
 'use client';
 
 // DOC-02 PDF 열람·원문 교정 (docs/screens/documents-editor.md): outline tree · PDF.js viewer ·
-// canonical text pane side by side (tabs on mobile). Readers (viewer role, archived workspace)
-// see the active published revision without edit controls; editors see the latest revision (the
-// correction draft when there is one), correct blocks inline, publish the draft (index job
-// followed live) and roll back from the revision history. The header's `텍스트 내보내기` menu
-// (DOC-03) saves or copies the text; its `요약` link (a ready 교재 / 교재+문제) opens the workspace
-// home's 문서 요약 panel (DOCSUM-01). FastAPI decides every write.
+// canonical text pane, laid out by DOCVIEW-01 (document-viewer-layout.tsx: docked outline panel,
+// 보기 방식, resizable/swappable split, one pane at a time on narrow screens). Readers (viewer
+// role, archived workspace) see the active published revision without edit controls; editors see
+// the latest revision (the correction draft when there is one), correct blocks inline, publish the
+// draft (index job followed live) and roll back from the revision history. The header's `텍스트
+// 내보내기` menu (DOC-03) saves or copies the text; its `요약` link (a ready 교재 / 교재+문제) opens
+// the workspace home's 문서 요약 panel (DOCSUM-01). FastAPI decides every write.
 import { Button, PageHeader } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import { blockEditReducer, IDLE, type BlockEditState } from '@/lib/documents/block-edit';
 import {
@@ -50,14 +51,13 @@ import {
 import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import { summaryPanelPath, workspaceHomePath } from '@/lib/workspaces/home';
 import { TextExportMenu } from '../text-export-menu';
+import { DocumentViewerLayout, useDocumentViewer } from './document-viewer-layout';
 import styles from './editor.module.css';
-import { OutlinePanel, outlineLayout, useOutlinePanel } from './outline-panel';
 import { OutlineTree } from './outline-tree';
-import { PaneSplitter, splitStyle, useSplitRatio } from './pane-splitter';
 import { PdfViewer, type PageChangeReason } from './pdf-viewer';
 import { PublishBar } from './publish-bar';
 import { TextBlockEditor } from './text-block-editor';
-import { blockElement, scrollTextTo } from './text-sync';
+import { blockElement, scrollTextTo, useWhenShown } from './text-sync';
 
 export interface DocumentEditorProps {
   readonly workspaceId: string;
@@ -79,16 +79,8 @@ export interface DocumentEditorProps {
   readonly pinnedRevisionId?: string | null;
 }
 
-type MobileView = 'pdf' | 'text';
-
 /** Reloads overtaken by newer saves before the screen asks the user to reload. */
 const MAX_SUPERSEDED_RELOADS = 3;
-
-/** Phones show one pane at a time; the outline is the 목차 panel (a bottom sheet there). */
-const MOBILE_VIEWS: readonly { id: MobileView; label: string }[] = [
-  { id: 'pdf', label: 'PDF' },
-  { id: 'text', label: '원문' },
-];
 
 type ContentState =
   | { readonly status: 'loading' }
@@ -141,13 +133,8 @@ export function DocumentEditor({
   const [restoring, setRestoring] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
-  const [mobileView, setMobileView] = useState<MobileView>('pdf');
-  const [splitShare, setSplitShare, commitSplitShare] = useSplitRatio();
-  const splitRef = useRef<HTMLDivElement>(null);
-  const pdfPaneId = useId();
-  const outlinePanel = useOutlinePanel();
-  const { beside: outlineBeside, dismiss: dismissOutline } = outlinePanel;
-  const [panelHost, setPanelHost] = useState<HTMLDivElement | null>(null);
+  const viewer = useDocumentViewer();
+  const { blockChosen, outlineChosen, textVisible } = viewer;
   const deepLinkApplied = useRef(false);
   const watchController = useRef<AbortController | null>(null);
   const editStateRef = useRef<BlockEditState>(editState);
@@ -301,16 +288,12 @@ export function DocumentEditor({
   // --- selection & navigation ------------------------------------------------------------------
 
   const selectBlock = useCallback(
-    (
-      block: ContentBlock,
-      { view, scrollText = false }: { view?: MobileView; scrollText?: boolean } = {},
-    ) => {
+    (block: ContentBlock, { scrollText = false }: { scrollText?: boolean } = {}) => {
       scrollTextOnSelect.current = scrollText;
       setCurrentBlockId(block.block_id);
       setLinkedBlockId(block.block_id);
       setPage(blockPage(block));
       setHighlightKey((k) => k + 1);
-      if (view) setMobileView(view);
     },
     [],
   );
@@ -319,17 +302,16 @@ export function DocumentEditor({
     (node: OutlineItem) => {
       const target = targetBlockFor(node, blocks);
       setOutlineJump(target ? { node, blockId: target.block_id } : null);
-      if (target) selectBlock(target, { view: 'pdf', scrollText: true });
+      if (target) selectBlock(target, { scrollText: true });
       else if (node.page != null) {
         setPage(node.page);
         setLinkedBlockId(null);
-        setMobileView('pdf');
       }
+      // Tablets fold the panel that covers the panes; narrow screens close it and show 원본.
+      outlineChosen();
       setAnnouncement(`${node.title}${node.page != null ? ` · ${node.page}쪽` : ''}`);
-      // Where the panel covers the PDF (narrow screens), get it out of the way after the jump.
-      if (outlineBeside === false) dismissOutline();
     },
-    [blocks, dismissOutline, outlineBeside, selectBlock],
+    [blocks, outlineChosen, selectBlock],
   );
 
   // Keep `?page=` and `?block=` in the address bar (reload and sharing reopen the same view).
@@ -597,10 +579,28 @@ export function DocumentEditor({
     scrollTextTo(textScrollRef.current, textTargetForPage(groups, target));
   }, [groups, page]);
 
+  // DOCVIEW-01: a text pane shown again (view mode, narrow-screen switch) catches up with what
+  // happened while it was hidden: the block being edited or the selected block, otherwise the
+  // current page's group (DOC-02-AC08).
+  const resyncText = useCallback(() => {
+    const scroller = textScrollRef.current;
+    const blockId =
+      editStateRef.current.phase !== 'idle' ? editStateRef.current.blockId : linkedBlockId;
+    if (scroller && blockId) {
+      scrollTextTo(scroller, { kind: 'block', blockId });
+      return;
+    }
+    scrollTextTo(scroller, textTargetForPage(groups, page));
+  }, [groups, linkedBlockId, page]);
+  useWhenShown(textVisible, resyncText);
+
   // Stable, so a page change (scrolling the PDF) does not re-render the text pane (DOCVIEW).
   const onTextSelect = useCallback(
-    (block: ContentBlock) => selectBlock(block, { view: 'pdf' }),
-    [selectBlock],
+    (block: ContentBlock) => {
+      selectBlock(block);
+      blockChosen();
+    },
+    [blockChosen, selectBlock],
   );
   const onSaveClick = useCallback(() => void onSave(), [onSave]);
 
@@ -662,7 +662,7 @@ export function DocumentEditor({
   const currentSection = sectionOf(currentBlock, outline);
 
   return (
-    <div className={styles.screen} data-outline={outlineLayout(outlinePanel.open)}>
+    <div className={styles.screen}>
       <PageHeader
         title={document.title}
         back={<WorkspaceBackLink workspaceId={workspaceId} />}
@@ -740,61 +740,38 @@ export function DocumentEditor({
         </p>
       ) : null}
 
-      <div className={styles.viewSwitch} role="group" aria-label="보기 선택">
-        {MOBILE_VIEWS.map((view) => (
-          <button
-            key={view.id}
-            type="button"
-            className={`${styles.viewSwitchButton} qz-focus-ring`}
-            aria-pressed={mobileView === view.id}
-            onClick={() => setMobileView(view.id)}
-          >
-            {view.label}
-          </button>
-        ))}
-      </div>
-
-      <div
-        ref={splitRef}
-        className={styles.split}
-        data-view={mobileView}
-        style={splitStyle(splitShare)}
-      >
-        <section id={pdfPaneId} aria-label="PDF 원본" className={styles.pdfPane} data-pane="pdf">
+      <DocumentViewerLayout
+        viewer={viewer}
+        outline={
+          contentState.status === 'ready' ? (
+            <OutlineTree
+              items={outline}
+              currentId={currentSection}
+              onNavigate={onOutlineNavigate}
+            />
+          ) : contentState.status === 'loading' && ready ? (
+            <p className={styles.paneNote}>목차를 불러오는 중입니다…</p>
+          ) : !ready ? (
+            <p className={styles.paneNote}>처리가 끝나면 목차가 표시됩니다.</p>
+          ) : (
+            <p className={styles.paneNote}>이 문서에는 목차가 없습니다.</p>
+          )
+        }
+        pdf={
           <PdfViewer
             source={pdfSource}
             page={page}
             onPageChange={onViewerPage}
             highlights={highlights}
             highlightKey={`${currentBlockId ?? ''}:${highlightKey}`}
-            toolbarStart={
-              <OutlinePanel state={outlinePanel} container={panelHost}>
-                {contentState.status === 'ready' ? (
-                  <OutlineTree
-                    items={outline}
-                    currentId={currentSection}
-                    onNavigate={onOutlineNavigate}
-                  />
-                ) : contentState.status === 'loading' && ready ? (
-                  <p className={styles.paneNote}>목차를 불러오는 중입니다…</p>
-                ) : (
-                  <p className={styles.paneNote}>이 문서에는 목차가 없습니다.</p>
-                )}
-              </OutlinePanel>
-            }
+            deferResize={viewer.resizing}
           />
-        </section>
-
-        <PaneSplitter
-          value={splitShare}
-          onChange={setSplitShare}
-          onCommit={commitSplitShare}
-          containerRef={splitRef}
-          controls={pdfPaneId}
-        />
-
-        <section aria-label="원문 텍스트" className={styles.textPane} data-pane="text">
+        }
+        text={
           <div className={styles.textScroller} ref={textScrollRef}>
+            {!ready ? (
+              <p className={styles.paneNote}>처리가 끝나면 변환본 텍스트가 표시됩니다.</p>
+            ) : null}
             {contentState.status === 'loading' && ready ? (
               <p className={styles.paneNote} aria-busy="true">
                 원문 텍스트를 불러오는 중입니다…
@@ -831,11 +808,9 @@ export function DocumentEditor({
               />
             ) : null}
           </div>
-        </section>
-      </div>
+        }
+      />
 
-      {/* The 목차 panel is portalled here so it stays inside the main landmark. */}
-      <div ref={setPanelHost} className={styles.panelHost} />
       <p className="qz-visually-hidden" aria-live="polite">
         {announcement}
       </p>

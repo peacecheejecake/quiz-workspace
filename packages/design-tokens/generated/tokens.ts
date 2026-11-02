@@ -105,6 +105,7 @@ export const staticTokens = {
   'breakpoint-md': '768px',
   'breakpoint-lg': '1024px',
   'floating-panel-width': '500px',
+  'outline-panel-width': '20rem',
   'heatmap-cell': '24px',
   'heatmap-cell-touch': '32px',
   'heatmap-gap': '0px',

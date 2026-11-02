@@ -108,6 +108,8 @@ export { DialogClose, ModalDialog } from './layout/ModalDialog';
 export type { ModalDialogProps } from './layout/ModalDialog';
 export { PageHeader } from './layout/PageHeader';
 export type { PageHeaderProps } from './layout/PageHeader';
+export { SplitView } from './layout/SplitView';
+export type { SplitViewOrientation, SplitViewProps } from './layout/SplitView';
 
 export {
   QUESTION_DOT_STATUSES,
