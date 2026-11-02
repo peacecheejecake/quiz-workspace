@@ -168,7 +168,10 @@ def test_get_job_returns_presentable_status(world: World, api: TestClient, beare
         "updated_at",
         "started_at",
         "finished_at",
+        # MOCK-B: counts-only results of allow-listed job types (null here).
+        "result",
     }
+    assert body["result"] is None
     assert res.headers["cache-control"] == "no-store"
 
 

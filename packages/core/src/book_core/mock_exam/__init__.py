@@ -1,0 +1,87 @@
+"""Mock exams (MOCK-01, questions.md §11): the seeded plan, `OPTION_SHUFFLE` copies, batched
+LLM generation (`pack_batches`, the `mock_exam.generate/v1` prompt) and the per-item storage
+condition (the reused `book_core.generation.validation`, every error blocking)."""
+
+from book_core.mock_exam.packing import (
+    DEFAULT_MAX_OUTPUT_TOKENS,
+    DEFAULT_MAX_PROMPT_TOKENS,
+    DEFAULT_SOURCES_PER_CALL,
+    OUTPUT_TOKENS_PER_ITEM,
+    SOURCE_TOO_LARGE,
+    Budget,
+    PackedBatch,
+    PackResult,
+    PackSource,
+    estimate_tokens,
+    halves,
+    pack_batches,
+)
+from book_core.mock_exam.plan import (
+    AI_VARIATION_TYPES,
+    DEFAULT_QUESTION_COUNT,
+    MAX_AI_QUESTIONS,
+    MAX_RANGE_QUESTIONS,
+    MAX_SEED,
+    PlanCandidate,
+    PlanItem,
+    make_plan,
+    uses_llm,
+)
+from book_core.mock_exam.prompts import (
+    PROMPT_VERSION,
+    TASK,
+    BatchSource,
+    LLMMockBatch,
+    LLMMockItem,
+    base_prompt_text,
+    batch_passage_tag,
+    build_batch_request,
+    source_block,
+    source_tag,
+)
+from book_core.mock_exam.shuffle import shuffled_options
+from book_core.mock_exam.validation import (
+    ItemOutcome,
+    accept_for_mock_exam,
+    blocking,
+    check_batch,
+)
+
+__all__ = [
+    "AI_VARIATION_TYPES",
+    "DEFAULT_MAX_OUTPUT_TOKENS",
+    "DEFAULT_MAX_PROMPT_TOKENS",
+    "DEFAULT_QUESTION_COUNT",
+    "DEFAULT_SOURCES_PER_CALL",
+    "MAX_AI_QUESTIONS",
+    "MAX_RANGE_QUESTIONS",
+    "MAX_SEED",
+    "OUTPUT_TOKENS_PER_ITEM",
+    "PROMPT_VERSION",
+    "SOURCE_TOO_LARGE",
+    "TASK",
+    "BatchSource",
+    "Budget",
+    "ItemOutcome",
+    "LLMMockBatch",
+    "LLMMockItem",
+    "PackResult",
+    "PackSource",
+    "PackedBatch",
+    "PlanCandidate",
+    "PlanItem",
+    "accept_for_mock_exam",
+    "base_prompt_text",
+    "batch_passage_tag",
+    "blocking",
+    "build_batch_request",
+    "check_batch",
+    "estimate_tokens",
+    "halves",
+    "make_plan",
+    "pack_batches",
+    "shuffled_options",
+    "source_block",
+    "source_tag",
+    "uses_llm",
+]

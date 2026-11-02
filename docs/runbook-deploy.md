@@ -250,7 +250,7 @@ make deploy-prepare REF=main ENV=production ARGS="--db-url-env SUPABASE_DB_URL -
 - api 도메인(현재 Railway 기본 domain). (지역 Singapore, production web `quiz.red-10-proto.xyz`, SMTP Resend `mail.red-10-proto.xyz`는 결정됨.)
 - GHCR 이미지 공개 여부 vs Railway registry credential.
 - staging 도메인의 Vercel Deployment Protection.
-- LLM 사용 여부·모델·예산(`LLM_API_KEY`/`LLM_MODEL`; 미설정 시 문제 생성 비활성). 문서 요약·챕터 정리 노트(`WORKER_DOCUMENT_SUMMARY`·`WORKER_CHAPTER_NOTES`)를 staging·production에서 켤지와 그 예산(9장, ⛔ 사용자 승인).
+- LLM 사용 여부·모델·예산(`LLM_API_KEY`/`LLM_MODEL`; 미설정 시 문제 생성 비활성). 문서 요약·챕터 정리 노트(`WORKER_DOCUMENT_SUMMARY`·`WORKER_CHAPTER_NOTES`)를 staging·production에서 켤지와 그 예산(9장, ⛔ 사용자 승인). AI 모의고사(`WORKER_MOCK_EXAMS`)를 켤지와 그 예산·`MOCK_EXAM_*` 조정(11장, ⛔ 사용자 승인).
 - `/terms`, `/privacy` 실제 문구(현재 placeholder).
 - CAPTCHA(A4 구현 완료): staging을 기본값인 Turnstile 테스트 키 쌍으로 둘지, staging 전용 실제 widget을 쓸지(그 경우 DEP smoke 로그인 단계는 수동). production은 실제 widget 필수.
 - PR preview(10장): 켤지(`PR_PREVIEW_ENABLED`), preview project에 `RELAY_CLIENT_SECRET`을 넣을지(공유 링크 preview), staging이 실제 Turnstile widget을 쓸 때 preview 로그인을 어떻게 할지.
@@ -327,3 +327,57 @@ make deploy-prepare REF=main ENV=production ARGS="--db-url-env SUPABASE_DB_URL -
 **메일 링크.** preview에서 가입·재설정을 요청하면 메일 링크는 staging 웹(`site_url`)으로 열린다(template이 `{{ .SiteURL }}`). staging Supabase의 redirect allowlist에 preview host를 넣지 않는다(wildcard 금지).
 
 **첫 PR preview에서 확인할 가정.** `vercel deploy --prebuilt --meta`가 meta를 붙이는지, REST `GET /v6/deployments`(projectId, `meta-previewPr` filter)와 `DELETE /v13/deployments/{id}`가 team token으로 동작하는지 — `vercel_preview.py`는 응답의 `meta.previewPr`를 직접 비교하므로 server-side filter가 무시돼도 다른 배포를 지우지 않는다. 실패는 `vercel_preview: …: HTTP <status>`로 보인다.
+
+## 11. AI 모의고사 켜기 (`WORKER_MOCK_EXAMS`, MOCK-X) — ⛔ 사용자 승인 후
+
+모의고사(MOCK-01)의 AI 변형 유형(`문구 변형`·`정오 반전`·`유사 개념`)은 모든 환경에서 **기본 꺼짐**이다. `보기 섞기`만 고른 모의고사는 LLM 없이 만들어지고(호출 0번) 저장된 모의고사는 플래그와 무관하게 풀 수 있다. staging·production에서 켜는 일(기능 플래그, LLM 키, 비용)은 **사용자 승인 후에만** 한다: 이 장은 방법만 적고, 저장소·CI·배포 workflow는 어떤 배포 환경에서도 이 값을 켜지 않는다(CI·E2E의 `WORKER_MOCK_EXAMS=true`는 `APP_ENV=test`의 결정적 fake만 부른다). 승인(환경, 모델, 월 예산, 데이터 정책 동의)은 `docs/implementation-plan.md` §7 결정 기록에 남긴 뒤 시작한다.
+
+**무엇이 켜지나**
+
+| 변수 | 서비스 | 켜면 |
+|---|---|---|
+| `WORKER_MOCK_EXAMS=true` | `api`·`worker` **같은 값**(check-env `same`) | API가 `llm_available: true`를 주고(`LLM_MODEL`도 있을 때) AI 변형 유형 checkbox가 활성이 된다. 편집자가 `만들기`·`다시 만들기`·`다시 시도`를 누를 때마다 worker가 `mock_exam.generate`로 문제를 만든다. **고른 확정 문제의 발문·보기·정답·해설과 그 출처 쪽의 교재 본문 passage가 LLM 제공자로 전송된다.** 만들어진 문제는 기계 검증(형식·정답 개수·정오 반전 정답·중복·출처 인용)을 통과한 것만 사람 승인 없이 바로 `풀기`에 쓰인다. |
+
+한쪽만 켜면 안 된다: `api`만 켜면 생성 요청이 worker에서 `mock_llm_disabled`로 실패하고, `worker`만 켜면 API가 AI 유형을 409 `mock-llm-disabled`로 거절한다. 플래그만 켜고 worker에 `LLM_API_KEY`가 없으면 생성이 `mock_llm_disabled`(job 실패, 이전 회차 문제는 그대로)로 끝난다.
+
+**필요한 변수**(manifest `infra/deploy/env-manifest.toml`가 기준; 플래그가 `true`면 `make check-env`가 필수로 검사)
+
+- `worker`: `LLM_API_KEY`(secret, password manager → Railway에 직접), `LLM_MODEL`(승인된 모델 id, 기본값 없음), (선택) `LLM_PRICE_*`(9장과 같음 — 넣으면 job 결과 `usage`에 `cost_usd`).
+- `api`: 같은 `WORKER_MOCK_EXAMS`와 **worker와 글자까지 같은** `LLM_MODEL`(check-env `same`). API는 비밀 키를 받지 않는다.
+- 호출 묶기 예산(`worker`, 기본값 유지 권장 — 바꾸면 `make check-env`가 model context·`LLM_MAX_TOKENS`·job 시간 한도에 맞는지 검사한다):
+
+  | 변수 | 기본 | 뜻 |
+  |---|---|---|
+  | `MOCK_EXAM_MAX_PROMPT_TOKENS` | 60,000 | 호출 하나의 입력 예산(지시문·원본·passage 한 번씩) |
+  | `MOCK_EXAM_MAX_OUTPUT_TOKENS` | 16,000 | 호출 하나의 출력 예산(문제 하나 ≈ 400 token), `LLM_MAX_TOKENS` 이하 |
+  | `MOCK_EXAM_SOURCES_PER_CALL` | 40 | 호출 하나에 넣는 원본 수 상한 |
+  | `MOCK_EXAM_GENERATION_CONCURRENCY` | 2 | 한 생성에서 동시에 부르는 호출 수 |
+  | `LLM_CONTEXT_TOKENS` | 200,000 | model context — 입력 + 출력 예산이 넘으면 check-env·worker 시작 실패 |
+  | `LLM_TIMEOUT_SECONDS` · `WORKER_TASK_SOFT_TIME_LIMIT_SECONDS` | 120 · 1500 | 100문항 생성(`ceil(묶음 수 / 동시 수) + 재요청 1번` × timeout)이 job 시간 한도 안에 들어야 한다 |
+
+- 남용 한도(`api`): `MOCK_EXAM_MAX_RUNNING_PER_WORKSPACE`(5, Workspace마다 대기·진행 중 생성 수, 넘으면 409 `generation-busy`), `MOCK_EXAM_GENERATION_RATE_LIMIT_PER_MINUTE`(6, 사용자마다 분당 생성 시작 수, 429 + `Retry-After`). 문항 수는 AI 유형에서 1~100(기본 20)이다. 이 한도와 `보기 섞기` 경로가 비용 상한이다.
+
+**비용 가늠**(호출 수는 MOCK-01 "LLM 호출 묶기"의 추정; 비용 ≈ (input token × 입력 단가 + output token × 출력 단가) / 1,000,000)
+
+| 생성 | LLM 호출 | input token(대략) | output token(대략) |
+|---|---|---|---|
+| `보기 섞기`만 | 0 | 0 | 0 |
+| 20문항(원본 ≈ 300 · passage 원본당 ≈ 1,200 token, 같은 장끼리 일부 공유) | 1 (+ 실패 항목이 있으면 재요청 1) | 1만~3만 | ≈ 8,000 (20 × 400) |
+| 100문항(같은 조건) | 3 (40·40·20) + 재요청 1 ≈ 3~4 | 10만~18만 (호출마다 ≤ 60,000) | ≈ 4만 (100 × 400) |
+| 100문항, passage가 큰 교재(원본당 ≈ 3,000 token, 공유 없음) | 6 + 재요청 1 ≈ 7 | ≤ 36만 (6 × 60,000) | ≈ 4만 |
+| 해석할 수 없는(잘린) 응답 하나마다 | +2 (반으로 나눔) | 그 묶음의 입력만큼 다시 | 그 묶음만큼 |
+
+- 상한: 한 생성의 input ≤ 호출 수 × `MOCK_EXAM_MAX_PROMPT_TOKENS`, output ≤ 호출 수 × `MOCK_EXAM_MAX_OUTPUT_TOKENS`. 잘린 응답은 출력 예산 전체(16,000 token)가 청구된다.
+- `다시 만들기`·`설정 바꾸기`·`다시 시도`는 매번 새 생성이다(이전 회차를 재사용하지 않는다). 실패한 생성의 재시도(job retry)는 checkpoint로 끝난 묶음을 다시 부르지 않는다.
+- 한국어 원본·본문은 같은 글자 수의 영어보다 token이 많다(`estimate_tokens`는 비 ASCII 글자 하나를 token 하나로 보수적으로 센다).
+- 켜기 전 측정: 승인된 모델로 `make eval-mock-exams-llm`(합성 fixture만 전송, `eval/reports/mock-exams-llm.{json,md}`에 검증 통과율·첫 시도 통과율·실패 코드·호출 수·token·`cost_usd`; fake 기준은 `eval/reports/sample-mock-exams-fake.md`). provider 연결만 확인할 때는 `make test-llm`(합성 텍스트 smoke, 모의고사 묶음 호출 포함). 통과율이 낮으면 예산·모델을 조정하는 결정을 §7에 남긴다.
+
+**켜는 순서**(환경마다, staging 먼저)
+
+1. 사용자 승인 기록(위). LLM 제공자 console에서 예산 한도·사용량 알림을 먼저 건다.
+2. env 파일(저장소 밖)에 값을 넣고 검증한다: `worker`에 `LLM_API_KEY`·`LLM_MODEL`·(`LLM_PRICE_*`)·`WORKER_MOCK_EXAMS=true`(예산을 바꿨다면 `MOCK_EXAM_*`도), `api`에 같은 `LLM_MODEL`·`WORKER_MOCK_EXAMS=true` → `make check-env ENV=<staging|production> ARGS="--check api=… --check worker=…"`.
+3. Railway `worker`에 변수를 넣고 Restart, 이어서 `api`에 넣고 Restart(worker가 먼저 준비돼야 API가 받은 생성 요청이 바로 처리된다).
+4. 확인: 작은 Workspace에서 `문제` › `모의고사` › `추가` → AI 유형 checkbox가 활성인지, 5문항 이하로 `만들기` → 상세가 "만드는 중"을 거쳐 `준비됨`/`일부만 만듦`이 되는지, Workspace 이력의 "모의고사 생성" 작업과 job 결과 `usage`(`llm_calls`·`batches`·token·`cost_usd`). worker 로그에는 문제·본문·프롬프트·출력이 없고 id·개수·오류 코드만 남는다(필요하면 `pnpm e2e:log-audit --scan worker.log`).
+5. 첫 주에는 provider 사용량과 job `usage` 합계를 예산과 비교한다.
+
+**끄기·롤백**: `api`·`worker`의 `WORKER_MOCK_EXAMS`를 `false`로(같은 값) 바꾸고 worker → api 순으로 Restart. AI 유형 checkbox가 이유 글자와 함께 비활성이 되고 새 AI 생성은 409로 거절된다. 이미 만든 모의고사와 그 풀이 기록은 그대로 보이고 풀 수 있으며, `보기 섞기` 모의고사는 계속 만들 수 있다. Restart로 중단된 진행 중 생성은 다시 전달될 때 `mock_llm_disabled`로 끝나고(이전 회차 문제는 남음) 다시 켠 뒤 사용자가 `다시 시도`할 수 있다. LLM 사용 자체를 끊으려면 worker의 `LLM_API_KEY`도 지운다(요약·정리 노트도 함께 꺼짐, 9장). 코드 롤백은 5장과 같다 — 모의고사 테이블은 additive라 이전 코드에서 그대로 남는다(drop migration 없음).

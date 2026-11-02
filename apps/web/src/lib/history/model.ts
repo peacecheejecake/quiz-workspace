@@ -48,6 +48,14 @@ const EVENT_LABELS: Readonly<Record<string, string>> = {
   'share_link.revoked': '공유 링크 철회',
   'chapter_note.requested': '정리 노트 만들기 요청',
   'chapter_note.generated': '정리 노트 생성',
+  // MOCK-01: mock exam activity (ids and counts only, MOCK-01-C07).
+  'mock_exam.created': '모의고사 만들기',
+  'mock_exam.renamed': '모의고사 이름 변경',
+  'mock_exam.settings_changed': '모의고사 설정 변경',
+  'mock_exam.generation_requested': '모의고사 다시 만들기',
+  'mock_exam.deleted': '모의고사 삭제',
+  'mock_exam.question_edited': '모의고사 문제 편집',
+  'mock_exam.question_removed': '모의고사 문제 빼기',
 };
 
 export function eventLabel(eventType: string): string {
@@ -62,6 +70,8 @@ const TARGET_FALLBACK: Readonly<Record<string, string>> = {
   workspace: 'Workspace',
   share_link: '공유 링크',
   chapter_note: '정리 노트',
+  mock_exam: '모의고사',
+  mock_exam_question: '모의고사 문제',
 };
 
 export function targetLabel(targetType: string | null, label: string | null): string {
@@ -91,6 +101,7 @@ const JOB_TYPE_LABELS: Readonly<Record<string, string>> = {
   'question.import_register': '가져온 문제 등록',
   'question.generate': '변형 문제 생성',
   'chapter_note.generate': '정리 노트',
+  'mock_exam.generate': '모의고사 생성',
 };
 
 export function jobTypeLabel(jobType: string): string {

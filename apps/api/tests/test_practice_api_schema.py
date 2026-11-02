@@ -36,6 +36,9 @@ SESSION_FIELDS = {
     "displayed_option_ids",
     "state",
     "opened_at",
+    # QVIEW-B run link
+    "practice_run_id",
+    "run_position",
 }
 
 

@@ -17,10 +17,11 @@ from quiz_api.api import (
     history,
     jobs,
     me,
+    mock_exams,
+    mock_practice,
     practice,
+    practice_runs,
     question_duplicates,
-    question_generation_batches,
-    question_generations,
     question_imports,
     question_overview,
     questions,
@@ -47,9 +48,8 @@ api_router.include_router(questions.router)
 api_router.include_router(question_overview.router)
 api_router.include_router(question_duplicates.router)
 api_router.include_router(question_imports.router)
-api_router.include_router(question_generations.router)
-api_router.include_router(question_generation_batches.router)
 api_router.include_router(practice.router)
+api_router.include_router(practice_runs.router)
 api_router.include_router(share_links.router)
 api_router.include_router(shared.router)
 api_router.include_router(forks.router)
@@ -57,3 +57,5 @@ api_router.include_router(jobs.router)
 api_router.include_router(history.router)
 api_router.include_router(chapter_notes.router)
 api_router.include_router(shared_chapter_notes.router)
+api_router.include_router(mock_exams.router)
+api_router.include_router(mock_practice.router)

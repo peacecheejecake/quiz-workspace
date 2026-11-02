@@ -64,7 +64,12 @@ export const SCREENS = [
     name: '문제 PDF 가져오기',
     path: '/workspaces/[workspaceId]/questions/import',
   },
-  { id: 'QGEN-01', name: '문제 변형 출제', path: '/workspaces/[workspaceId]/questions/generate' },
+  {
+    id: 'MOCK-01',
+    name: '모의고사 목록·만들기·편집 Floating Dialog',
+    path: '/workspaces/[workspaceId]',
+    query: { param: 'panel', value: 'mock-exams' },
+  },
   {
     id: 'HISTORY-01',
     name: '이력 Floating Dialog',

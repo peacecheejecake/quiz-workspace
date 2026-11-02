@@ -1,31 +1,17 @@
 'use client';
 
 // UX7-BANK-2 "문제 상세" (docs/screens/questions-practice.md "정답·해설·이력 보기", QPLAY-01-AC09/AC10,
-// QOV-01-AC15): the retired QBANK-01 detail panel's read view as a modal dialog — type, status,
-// version, the active revision with its correct options, accepted answers, rubric and
-// explanation, the source links into the PDF viewer and the revision history with a preview of
-// an older revision. It reads the full question (answers included) only when it opens, through
-// the same read API the bank used (any member, archived workspaces too); the practice session
-// never carries it. Read-only: an opener may add its own actions in `footer`.
-import { Badge, Button, ModalDialog } from '@quiz/ui';
-import Link from 'next/link';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import {
-  getQuestionAction,
-  getQuestionRevisionAction,
-  type QuestionRevision,
-} from '@/lib/questions/actions';
-import {
-  PUBLICATION_STATUS_LABELS,
-  QUESTION_TYPE_LABELS,
-  type QuestionDetail,
-} from '@/lib/questions/form';
-import { documentTitle, formatDateTime, pageText, sourceHref } from '../labels';
-import { RevisionView } from '../question-detail';
-import styles from './question-detail-dialog.module.css';
+// QOV-01-AC15; QVIEW-01 call sites 4–5): the practice panel menu's 정답·해설 보기 / 수정 이력·출처 and
+// the 보관·초안 문제 rows open one question in QuestionViewer `manage` mode. This opener reads the
+// full question (answers included) only when the dialog opens, through the same read API the bank
+// used (any member, archived workspaces too); the practice session never carries it. Read-only:
+// an opener may add its own actions in `footer`.
+import { useEffect, useState, type ReactNode } from 'react';
+import { getQuestionAction } from '@/lib/questions/actions';
+import type { QuestionDetail } from '@/lib/questions/form';
+import { QuestionViewer, type DetailFocus, type ManageLoad } from '../viewer/question-viewer';
 
-/** Which part of the detail the opener asked for: focus goes to its heading. */
-export type DetailFocus = 'answers' | 'history';
+export type { DetailFocus };
 
 export interface DetailTarget {
   readonly questionId: string;
@@ -49,11 +35,6 @@ export interface QuestionDetailDialogProps {
   readonly reloadKey?: number;
 }
 
-type Load =
-  | { readonly status: 'loading' }
-  | { readonly status: 'ready'; readonly question: QuestionDetail }
-  | { readonly status: 'error'; readonly message: string };
-
 export function QuestionDetailDialog({
   workspaceId,
   target,
@@ -70,8 +51,7 @@ export function QuestionDetailDialog({
     setShown(target);
     setAttempt((n) => n + 1);
   }
-  const historyRef = useRef<HTMLHeadingElement>(null);
-  const [load, setLoad] = useState<Load & { readonly key: string | null }>({
+  const [load, setLoad] = useState<ManageLoad & { readonly key: string | null }>({
     status: 'loading',
     key: null,
   });
@@ -103,183 +83,26 @@ export function QuestionDetailDialog({
   // A re-read (reloadKey) keeps showing the last question until the new one arrives.
   const [lastReady, setLastReady] = useState<QuestionDetail | null>(null);
   if (load.status === 'ready' && load.question !== lastReady) setLastReady(load.question);
-  const current: Load =
+  const current: ManageLoad =
     load.key === loadKey
       ? load
       : lastReady && lastReady.id === questionId
         ? { status: 'ready', question: lastReady }
         : { status: 'loading' };
-  const question = current.status === 'ready' ? current.question : null;
 
   return (
-    <ModalDialog
+    <QuestionViewer
+      mode="manage"
+      workspaceId={workspaceId}
       open={target !== null}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      title="문제 상세"
+      onClose={onClose}
       description={shown?.description}
-      onOpenAutoFocus={(event) => {
-        if (target?.focus !== 'history') return;
-        event.preventDefault();
-        historyRef.current?.focus();
-      }}
-      onCloseAutoFocus={(event) => {
-        const back = shown?.returnFocus;
-        if (back?.isConnected) {
-          event.preventDefault();
-          back.focus();
-        }
-      }}
-      footer={question && footer ? footer(question) : undefined}
-    >
-      <div className={styles.detail}>
-        {current.status === 'error' ? (
-          <div role="alert" className={styles.alert}>
-            <p>{current.message}</p>
-            <Button onClick={() => setAttempt((n) => n + 1)}>다시 시도</Button>
-          </div>
-        ) : question ? (
-          <>
-            <div className={styles.meta}>
-              <Badge>{QUESTION_TYPE_LABELS[question.question_type]}</Badge>
-              <Badge tone={question.publication_status === 'CONFIRMED' ? 'success' : 'warning'}>
-                {PUBLICATION_STATUS_LABELS[question.publication_status]}
-              </Badge>
-              <span>버전 {question.revision.version}</span>
-            </div>
-            <RevisionView
-              revision={question.revision}
-              type={question.question_type}
-              heading="문제"
-            />
-          </>
-        ) : (
-          <p className={styles.text} role="status">
-            문제를 불러오는 중입니다.
-          </p>
-        )}
-
-        <section className={styles.section} aria-labelledby="question-detail-sources">
-          <h3 id="question-detail-sources" className={styles.heading}>
-            출처
-          </h3>
-          {question ? (
-            <Sources workspaceId={workspaceId} question={question} documents={documents} />
-          ) : null}
-        </section>
-
-        <section className={styles.section} aria-labelledby="question-detail-history">
-          <h3
-            id="question-detail-history"
-            ref={historyRef}
-            tabIndex={-1}
-            className={styles.heading}
-          >
-            수정 이력
-          </h3>
-          {question ? (
-            <History
-              key={`${question.id}:${question.revision.id}`}
-              workspaceId={workspaceId}
-              question={question}
-            />
-          ) : null}
-        </section>
-      </div>
-    </ModalDialog>
-  );
-}
-
-function Sources({
-  workspaceId,
-  question,
-  documents,
-}: {
-  readonly workspaceId: string;
-  readonly question: QuestionDetail;
-  readonly documents: readonly { readonly id: string; readonly title: string }[];
-}) {
-  if (question.sources.length === 0) {
-    return <p className={styles.text}>연결된 출처가 없습니다.</p>;
-  }
-  return (
-    <ul className={styles.plainList}>
-      {question.sources.map((source, i) => {
-        const href = sourceHref(workspaceId, source);
-        const text =
-          `${documentTitle(documents, source.document_id)} ${pageText(source) ?? ''}`.trim();
-        return (
-          <li key={`${source.document_id ?? 'none'}-${i}`}>
-            {href ? (
-              <Link href={href} className={styles.sourceLink}>
-                {text}
-              </Link>
-            ) : (
-              text
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function History({
-  workspaceId,
-  question,
-}: {
-  readonly workspaceId: string;
-  readonly question: QuestionDetail;
-}) {
-  const [selected, setSelected] = useState(question.revision.id);
-  // Past revisions are immutable: cache each one by id. Only the latest selection's failure shows,
-  // so a late response of an earlier click never replaces the preview or its error.
-  const [loaded, setLoaded] = useState<ReadonlyMap<string, QuestionRevision>>(() => new Map());
-  const [pastError, setPastError] = useState<{ id: string; message: string } | null>(null);
-  const latest = useRef(selected);
-
-  async function show(revisionId: string) {
-    latest.current = revisionId;
-    setSelected(revisionId);
-    setPastError(null);
-    if (revisionId === question.revision.id || loaded.has(revisionId)) return;
-    const result = await getQuestionRevisionAction(workspaceId, question.id, revisionId);
-    if (result.ok) {
-      setLoaded((prev) => new Map(prev).set(revisionId, result.data));
-    } else if (latest.current === revisionId) {
-      setPastError({ id: revisionId, message: result.message });
-    }
-  }
-
-  const past = selected === question.revision.id ? undefined : loaded.get(selected);
-  return (
-    <>
-      <ul className={styles.plainList}>
-        {question.revisions.map((r) => (
-          <li key={r.id}>
-            <Button
-              size="sm"
-              className={styles.revisionButton}
-              aria-pressed={selected === r.id}
-              onClick={() => void show(r.id)}
-            >
-              버전 {r.version}
-              {r.id === question.revision.id ? ' (현재)' : ''} · {formatDateTime(r.created_at)}
-            </Button>
-          </li>
-        ))}
-      </ul>
-      {pastError && pastError.id === selected ? <p role="alert">{pastError.message}</p> : null}
-      {past ? (
-        <div className={styles.revisionPreview}>
-          <RevisionView
-            revision={past}
-            type={question.question_type}
-            heading={`버전 ${past.version} 내용`}
-          />
-        </div>
-      ) : null}
-    </>
+      focus={target?.focus ?? shown?.focus ?? 'answers'}
+      returnFocus={shown?.returnFocus ?? null}
+      load={current}
+      onRetry={() => setAttempt((n) => n + 1)}
+      documents={documents}
+      {...(footer ? { footer } : {})}
+    />
   );
 }

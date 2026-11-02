@@ -32,7 +32,8 @@ interface QuestionMenuAction {
 
 /**
  * The header's `문제` menu (UX4): 직접 추가 (the 문제 등록 editor on the home,
- * `?panel=question-create`, UX7-BANK) and 변형 출제 (the 문제 생성 dialog). The 전체 문제 link
+ * `?panel=question-create`, UX7-BANK). 변형 출제 and its 문제 생성 dialog were retired with QGEN-01
+ * (QGEN-RM; 모의고사 replaces them, MOCK-01-AC01). The 전체 문제 link
  * (UX6-PROGRESS) went with its page (UX7-BANK) and PDF 관리 with the 문제 PDF 관리 dialog, merged
  * into 문서 관리 (UX7-DOCS, DOC-01-AC09). The button is shown to everyone (UX7-DOCS-2,
  * QOV-01-AC11): without edit rights the editor-only items are Radix-disabled (aria-disabled,
@@ -41,22 +42,29 @@ interface QuestionMenuAction {
  * onCloseAutoFocus, which Radix fires from a timer after the menu unmounts), so the dialog it
  * opens records the trigger as its opener and closing the dialog brings focus back there.
  * 중복 문제 정리 (UX7-DEDUP, QOV-01-AC16: `?panel=question-duplicates`) merges questions, so it is
- * editor-only like 직접 추가 and 변형 출제.
+ * editor-only like 직접 추가.
  * 보관·초안 문제 (UX7-BANK-2, QOV-01-AC15: the floating dialog of draft and archived questions,
  * `?panel=inactive-questions`) is readable by every member, so it stays enabled.
+ * 문제 풀기 (QVIEW-01: the range run panel, `?practice=new&source=bank`) is a personal practice
+ * every member may start, archived workspaces included, so it is enabled too and follows
+ * 보관·초안 문제 in the same group (MOCK-SYNC).
+ * 모의고사 (MOCK-01: the 모의고사 dialog, `?panel=mock-exams`) lists and practises mock exams, which
+ * every member may do, so it is enabled too and sits between 보관·초안 문제 and 문제 풀기 (MOCK-SYNC).
  */
 export function QuestionMenu({
   readOnly,
   onCreate,
-  onGenerate,
   onDuplicates,
   onInactive,
+  onMockExams,
+  onPractice,
 }: {
   readonly readOnly: QuestionMenuReadOnly;
   readonly onCreate: () => void;
-  readonly onGenerate: () => void;
   readonly onDuplicates: () => void;
   readonly onInactive: () => void;
+  readonly onMockExams: () => void;
+  readonly onPractice: () => void;
 }) {
   const reasonId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -66,7 +74,6 @@ export function QuestionMenu({
   };
   const actions: readonly QuestionMenuAction[] = [
     { key: 'create', label: '직접 추가', requiresEdit: true, onSelect: onCreate },
-    { key: 'generate', label: '변형 출제', requiresEdit: true, onSelect: onGenerate },
     { key: 'duplicates', label: '중복 문제 정리', requiresEdit: true, onSelect: onDuplicates },
     {
       key: 'inactive',
@@ -75,6 +82,8 @@ export function QuestionMenu({
       separated: true,
       onSelect: onInactive,
     },
+    { key: 'mock-exams', label: '모의고사', requiresEdit: false, onSelect: onMockExams },
+    { key: 'practice', label: '문제 풀기', requiresEdit: false, onSelect: onPractice },
   ];
   const reason = readOnly ? READ_ONLY_REASONS[readOnly] : null;
   const anyDisabled = reason !== null && actions.some((a) => a.requiresEdit);

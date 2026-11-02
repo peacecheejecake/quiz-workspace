@@ -8,7 +8,7 @@ both in sync). The `postgres` superuser is used for teardown and two documented 
 `viewer` membership (no membership API before S1/S2) and seeding/reading a graded attempt on a
 question revision (practice API arrives in M5).
 
-Jobs (`document.parse` for the uploaded paper, `question.import`, `question.generate` with the
+Jobs (`document.parse` for the uploaded paper, `question.import`, `mock_exam.generate` with the
 APP_ENV=test ScenarioLLMClient) run in this process (`JobWorker`, M4.4a): `wait_for_job` drives
 the job with the worker's `JobRunner` and real dependencies (Postgres as the least-privilege
 `quiz_worker` role from WORKER_DATABASE_URL, Supabase Storage, Qdrant under a per-module
@@ -35,7 +35,6 @@ import psycopg
 import pytest
 from book_core.embedding import FakeEmbedder
 from book_core.indexing import CollectionNames, QdrantIndexStore
-from book_core.search import SearchService
 from fastapi.testclient import TestClient
 from qdrant_client import QdrantClient
 from qdrant_client import models as qm
@@ -53,13 +52,8 @@ from quiz_worker.document_job import (
     index_sync_definition,
 )
 from quiz_worker.document_store import PostgresDocumentStore
+from quiz_worker.mock_exam_job import MockExamJobDeps, mock_exam_deps, mock_exam_generate_definition
 from quiz_worker.pg_store import PostgresJobStore, create_job_store_engine
-from quiz_worker.question_generation_job import (
-    GenerationJobDeps,
-    build_generation_llm,
-    question_generate_definition,
-)
-from quiz_worker.question_generation_store import PostgresGenerationStore
 from quiz_worker.question_import_job import ImportJobDeps, question_import_definition
 from quiz_worker.question_import_store import PostgresImportStore
 from quiz_worker.question_register_job import (
@@ -120,10 +114,10 @@ class JobWorker:
         self._closers: list[Any] = []
         self._names = CollectionNames(prefix=f"it_m44a_{uuid.uuid4().hex[:8]}_")
         self._qdrant: QdrantClient | None = None
-        self.generation_deps: GenerationJobDeps | None = None
         self.register_deps: RegisterJobDeps | None = None
         self.summary_deps: SummaryJobDeps | None = None
         self.chapter_note_deps: ChapterNoteJobDeps | None = None
+        self.mock_exam_deps: MockExamJobDeps | None = None
 
     def _build(self) -> tuple[PostgresJobStore, JobRunner, dict[str, JobDefinition[Any]]]:
         if self._built is not None:
@@ -161,17 +155,6 @@ class JobWorker:
             inject_failures=True,
             lock_wait_seconds=30,
         )
-        # APP_ENV=test: the ScenarioLLMClient over tests/fixtures/llm/generation-scenarios.json
-        # (tests/e2e/fixtures/generation.ts G1).
-        generation_deps = GenerationJobDeps(
-            generations=PostgresGenerationStore(engine),
-            documents=documents,
-            llm=build_generation_llm(env),
-            lock_wait_seconds=30,
-            # ANALOGOUS_CONCEPT related passages from this suite's index (fake embedder).
-            search=SearchService(document_deps.index),
-        )
-        self.generation_deps = generation_deps
         # QIMP-JOB: small batches, so a two-batch registration is easy to interrupt in tests.
         self.register_deps = RegisterJobDeps(
             store=PostgresRegisterStore(engine), batch_size=3, lock_wait_seconds=30
@@ -193,14 +176,20 @@ class JobWorker:
             lock_wait_seconds=30,
         )
         chapter_note_deps = self.chapter_note_deps
+        # MOCK-B: `mock_exam.generate` with the APP_ENV=test batched scenario fake (K5) and the
+        # WORKER_MOCK_EXAMS / MOCK_EXAM_* settings of the environment this worker is built in
+        # (on only in tests/integration/questions/mock_exams/).
+        built = mock_exam_deps(env, engine)
+        built.lock_wait_seconds = 30
+        self.mock_exam_deps = built
         definitions: list[JobDefinition[Any]] = [
             document_parse_definition(lambda: document_deps),
             index_sync_definition(lambda: document_deps),
             question_import_definition(lambda: import_deps),
-            question_generate_definition(lambda: generation_deps),
             question_register_definition(lambda: register_deps),
             document_summarize_definition(lambda: summary),
             chapter_note_definition(lambda: chapter_note_deps),
+            mock_exam_generate_definition(lambda: built),
         ]
         jobs = PostgresJobStore(engine)
         runner = JobRunner(jobs, worker_id="it-m44a", lease_seconds=600)

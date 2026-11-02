@@ -310,6 +310,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - Desktop right panel: width `min(500px, calc(100vw - 32px))`, top/right/bottom margin `16px`, rounded `20px`, glass surface, shadow, viewport 내부 독립 scroll.
 - `QuestionPracticePanel`: **modal** 기본. 정답을 제출하거나 뒤로/다음 이동하는 명확한 흐름. backdrop 클릭/ESC 처리 정책 정의, 닫을 때 trigger dot로 focus 복귀.
 - `DocumentExcerptPanel`: **non-modal** 기본. PDF·검색 결과와 동시에 볼 수 있음.
+- **`QuestionViewer` (MOCK-SPEC 2026-11-01):** 문제를 하나씩 보이는 모든 곳의 공통 컴포넌트. 방식 `practice`(위 `QuestionPracticePanel` 규칙: modal, 한 문제, 이전·다음) · `sequence`(범위 풀이: modal, 진행 `ProgressBar`·`이전`·`다음`·`건너뛰기`·결과 요약) · `manage`(정답·해설·출처·수정 이력과 호출 위치가 넘긴 동작; 풀이 panel 메뉴·보관·초안 문제 행에서는 UX7-BANK-2의 modal "문제 상세" `ModalDialog` 안) · `read-only`(공유 게스트, non-modal). 범위 고르기 부품 `QuestionRangePicker`(tri-state `전체 선택`·장·문제 checkbox)는 모의고사 만들기와 같이 쓴다. 호출 위치·동작·AC는 [QVIEW-01](screens/question-viewer.md).
 - **왼쪽·좁은·docked panel (DOCVIEW 2026-11-01, v1.2.7 DOCVIEW-PORT 2026-11-02 — API 하나로 정리):** `FloatingSidePanel`의 위치·크기 prop은 다음 넷뿐이다.
   - `side`: `end`(기본, LTR 오른쪽) · `start`(왼쪽; 데스크톱에서 왼쪽 16px margin, 들어오고 나갈 때 왼쪽에서 움직임). 모바일(< 768px) viewport panel은 어느 쪽이든 같은 bottom sheet/full-height 레이아웃이다.
   - `size`: `default`(`min(--floating-panel-width, 100vw - 32px)`) · `wide`(비교 drawer, ≥ 600px) · `narrow`(탐색용 열, `min(--outline-panel-width, 100vw - 32px)`).
@@ -324,6 +325,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - Panel Header: title / breadcrumb / action icons(즐겨찾기·다시 풀기) / close.
 - Panel Footer: submit, self-grade, next/previous, loading/error 상태.
 - Modal focus trap, title/description, Escape and focus restore는 Radix 기반으로 구성. Non-modal은 배경과 panel 간 키보드 이동을 허용.
+- **인라인 편집 안의 Escape (MOCK-ESC, 2026-11-02):** `FloatingSidePanel`·`ModalDialog` 안의 인라인 편집 컨트롤(이름 바꾸기 입력, 행 안의 편집 form)에서 누른 Escape는 그 편집만 취소하고 focus를 편집을 시작한 컨트롤로 돌려보낸다. dialog는 열린 채로 남고, 그다음 Escape가 평소처럼 dialog를 닫는다. Radix는 Escape를 document capture 단계에서 먼저 처리하므로, 자기 Escape를 처리하는 컨트롤(keydown handler가 있는 요소)에 kit의 `ownEscapeProps`(`data-own-escape`)를 붙인다. 두 컴포넌트는 그 안에서 시작된 Escape를 닫기에 쓰지 않는다. 표시 없는 일반 입력란(dialog 전체가 하나의 form인 문제 편집 등)의 Escape는 그대로 dialog를 닫는다.
 - **높이 변화 (v1.2.3, UX5-UI):** 내용에 따라 높이가 정해지는 overlay(ModalDialog·ConfirmDialog, 모바일 bottom sheet)는 내용이 늘거나 줄면(경고·결과가 나타남, 로딩 → 내용) 이전 높이에서 새 높이로 `--duration-panel-enter` `--easing-standard`로 부드럽게 바뀐다(공통 `useAnimatedHeight`: ResizeObserver로 재고 전환 중에만 inline 높이, 끝나면 CSS가 다시 높이를 정함). 높이가 고정된 데스크톱 side panel과 모바일 full 레이아웃은 그대로다. 전환 중 body에 스크롤바를 보이지 않고 focus·스크롤 위치는 유지하며, `prefers-reduced-motion`에서는 즉시 바뀐다.
 - **여러 패널 쌓기 (v1.2.2, UX3b):** floating panel·dialog가 여러 개 열려 있으면 **나중에 연 것이 위**에 온다(portal DOM 순서와 무관). 열린 순서의 rank r에 대해 z-index는 `min(--z-side-panel + 2r, --z-modal - 2)`이고, 그 안에서 portal로 뜨는 popover·tooltip·menu는 +1(`LayerProvider`/`useLayerStyle`)이다. 닫았다가 다시 연 패널은 맨 위로 올라온다. 가운데 modal dialog(`--z-modal`)는 항상 모든 패널 위다. 사이드 패널이 아닌 floating dialog도 kit 내부 `useFloatingLayer(open)`을 써서 같은 순서에 참여한다.
 
@@ -419,7 +421,7 @@ Workspace 홈(UX3c, 2026-10-20): Workspace 안에는 sidebar가 없다. 홈의 W
 
 ### Domain components
 
-`AuthLayout`, `SignInForm`, `SignUpForm`, `PasswordResetForm`, `VerificationNotice`, `SessionExpiredDialog`, `DocumentOutlineTree`, `PdfViewer`, `TextBlockEditor`, `SearchResultList`, `SearchExcerpt`, `QuestionMarker`, `QuestionDot`, `QuestionHeatmap`, `HeatmapLegend`, `QuestionPreviewPopover`, `QuestionPracticePanel`, `QuestionOptionList`, `QuestionAnswerField`, `FavoriteToggle`, `RetryToggle`, `QuestionGenerationForm`, `VariationDiffViewer`, `QuestionDraftReview`, `ImportJobProgress`.
+`AuthLayout`, `SignInForm`, `SignUpForm`, `PasswordResetForm`, `VerificationNotice`, `SessionExpiredDialog`, `DocumentOutlineTree`, `PdfViewer`, `TextBlockEditor`, `SearchResultList`, `SearchExcerpt`, `QuestionMarker`, `QuestionDot`, `QuestionHeatmap`, `HeatmapLegend`, `QuestionPreviewPopover`, `QuestionPracticePanel`(→ `QuestionViewer` `practice` 방식, MOCK-SPEC), `QuestionViewer`, `QuestionRangePicker`, `QuestionOptionList`, `QuestionAnswerField`, `FavoriteToggle`, `RetryToggle`, `QuestionGenerationForm`, `VariationDiffViewer`, `QuestionDraftReview`, `ImportJobProgress`.
 
 ## 8. 컴포넌트 상태·문서화 규칙
 

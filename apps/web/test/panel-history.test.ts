@@ -2,7 +2,14 @@
 // entry; every close (button or Back) drops the closed dialog's entries, so neither Back nor
 // Forward reopens it.
 import { describe, expect, it } from 'vitest';
-import { closeDialog, openDialogs, withoutPanels } from '../src/lib/workspaces/home';
+import {
+  closeDialog,
+  openDialogs,
+  RUN_DIALOG,
+  withMockRun,
+  withoutPanels,
+  withShownMockView,
+} from '../src/lib/workspaces/home';
 import {
   DEFAULT_DIALOG_URLS,
   markState,
@@ -478,6 +485,38 @@ describe('PanelHistory', () => {
     expect(fake.rendered[0]).toBe('/workspaces');
   });
 
+  it('the range run (QVIEW-01): its steps replace the entry, positions are steps, closing drops all', () => {
+    const run = '33333333-3333-4333-8333-000000000001';
+    const again = '33333333-3333-4333-8333-000000000002';
+    const { fake, history } = controller();
+    history.push('/w?practice=new&source=bank');
+    // 시작 rewrites the entry that opened the panel: Back from the run closes it.
+    history.replace(`/w?practice=${run}&i=1`);
+    history.push(`/w?practice=${run}&i=2`);
+    fake.back();
+    expect(fake.url()).toBe(`/w?practice=${run}&i=1`);
+    fake.forward();
+    expect(fake.url()).toBe(`/w?practice=${run}&i=2`);
+    // 결과 보기 and 처음부터 다시 rewrite the entry too.
+    history.replace(`/w?practice=${run}&view=results`);
+    history.replace(`/w?practice=${again}&i=1`);
+    fake.back();
+    expect(fake.url()).toBe(`/w?practice=${run}&i=1`);
+    fake.back();
+    expect(fake.url()).toBe('/w');
+    expect(openDialogs(new URL(fake.url(), ORIGIN).search)).toEqual([]);
+    fake.forward();
+    expect(fake.url()).toBe('/w');
+    // Reopened, started, moved, then closed with its button (Escape): nothing to reopen.
+    history.push('/w?practice=new&source=bank');
+    history.replace(`/w?practice=${run}&i=1`);
+    history.push(`/w?practice=${run}&i=2`);
+    history.close('/w');
+    fake.traverse();
+    expect(fake.url()).toBe('/w');
+    expectBackLeavesForwardStaysClosed(fake);
+  });
+
   it('reads a closed URL with another page (filters) through the router first', () => {
     const { fake, history, reads, commit } = routedController();
     history.push('/w?panel=documents');
@@ -748,5 +787,142 @@ describe('PanelHistory', () => {
     fake.fireTimers();
     expect(fake.url()).toBe('/w');
     expect(fake.index()).toBe(2);
+  });
+
+  // QVIEW-01-AC09 (user decision 2026-11-02): the practice panel and the range run panel are
+  // exclusive. Opening one over the other is a close of the other followed by an open: the
+  // closed panel is in neither direction of the history and each Back closes one panel.
+  describe('a close followed by an open (exclusive panels)', () => {
+    const run = '33333333-3333-4333-8333-000000000001';
+    const picker = '/w?practice=new&source=bank';
+
+    function noDialogs(fake: Fake): void {
+      expect(openDialogs(new URL(fake.url(), ORIGIN).search)).toEqual([]);
+    }
+
+    it('the run over a moved practice panel: Back closes the run, nothing reopens', () => {
+      const { fake, history } = controller();
+      history.push('/w?question=1');
+      history.push('/w?question=2');
+      history.close('/w', picker);
+      expect(fake.url()).toBe('/w?question=2'); // waits for the traversal
+      fake.traverse();
+      expect(fake.url()).toBe(picker);
+      expect(fake.urls()).toEqual(['/workspaces', '/w', picker]);
+      // Back closes the run, Forward reopens neither panel.
+      fake.back();
+      expect(fake.url()).toBe('/w');
+      fake.forward();
+      noDialogs(fake);
+      expectBackLeavesForwardStaysClosed(fake);
+    });
+
+    it('a question over the run (its positions and steps) closes the run first', () => {
+      const { fake, history } = controller();
+      history.push(picker);
+      history.replace(`/w?practice=${run}&i=1`);
+      history.push(`/w?practice=${run}&i=2`);
+      history.close('/w', '/w?question=1');
+      fake.traverse();
+      expect(fake.url()).toBe('/w?question=1');
+      fake.back();
+      expect(fake.url()).toBe('/w');
+      fake.forward();
+      noDialogs(fake);
+      expectBackLeavesForwardStaysClosed(fake);
+    });
+
+    it('a dialog under the closed panel stays: each Back closes one panel', () => {
+      const { fake, history } = controller();
+      history.push('/w?panel=history');
+      history.push('/w?panel=history&question=1');
+      history.close('/w?panel=history', '/w?panel=history&practice=new&source=bank');
+      fake.traverse();
+      expect(fake.url()).toBe('/w?panel=history&practice=new&source=bank');
+      fake.back();
+      expect(fake.url()).toBe('/w?panel=history');
+      fake.forward();
+      expect(fake.url()).toBe('/w?panel=history');
+      fake.back();
+      expect(fake.url()).toBe('/w');
+      fake.forward();
+      noDialogs(fake);
+      expectBackLeavesForwardStaysClosed(fake);
+    });
+
+    it('a mock exam run over the practice panel: the 모의고사 dialog stays, nothing reopens', () => {
+      // MOCK-W-2: the dialog's 풀기 opens the run panel the same exclusive way.
+      const exam = '44444444-4444-4444-8444-000000000001';
+      const dialog = `/w?panel=mock-exams&mock=${exam}`;
+      // The home's close of the run hands `mock` back to the dialog's shown view (keepMockView).
+      const fake = fakeWindow('/w');
+      const history = new PanelHistory(
+        () => fake.win,
+        () => ({
+          ...DEFAULT_DIALOG_URLS,
+          close: (search, d) => {
+            const closed = closeDialog(search, d);
+            return d === RUN_DIALOG
+              ? withShownMockView(closed, { view: 'detail', mockExamId: exam })
+              : closed;
+          },
+        }),
+      );
+      history.attach();
+      history.stamp();
+      history.push(dialog);
+      history.push(`${dialog}&question=1`);
+      const target = `/w${withMockRun(new URL(fake.url(), ORIGIN).search, exam)}`;
+      history.close(dialog, target);
+      fake.traverse();
+      expect(fake.url()).toBe(target);
+      expect(openDialogs(new URL(target, ORIGIN).search)).toEqual(['mock-exams', 'practice']);
+      // Back closes the run onto the dialog; Forward never brings the practice panel back.
+      fake.back();
+      expect(fake.url()).toBe(dialog);
+      fake.forward();
+      expect(fake.url()).toBe(dialog);
+      fake.back();
+      expect(fake.url()).toBe('/w');
+      fake.forward();
+      noDialogs(fake);
+      expectBackLeavesForwardStaysClosed(fake);
+    });
+
+    it('a first-loaded practice panel replaced by the run', () => {
+      const { fake, history } = controller('/w?question=1');
+      history.close('/w', picker);
+      fake.traverse();
+      expect(fake.url()).toBe(picker);
+      fake.back();
+      expect(fake.url()).toBe('/w');
+      expectBackLeavesForwardStaysClosed(fake);
+    });
+
+    it('opens after the close even when the traversal never comes', () => {
+      const { fake, history } = controller();
+      history.push('/w?question=1');
+      history.close('/w', picker);
+      fake.fireTimers();
+      expect(fake.url()).toBe(picker);
+      fake.back();
+      expect(fake.url()).toBe('/w');
+    });
+
+    it('finishes the open in the document a reload rewind loaded', () => {
+      const { fake, history } = controller();
+      history.push('/w?question=1');
+      // Reloaded with the panel open: the base belongs to the previous document now.
+      const reloaded = new PanelHistory(() => fake.win);
+      reloaded.attach();
+      reloaded.close('/w', picker);
+      fake.traverseToDocument();
+      new PanelHistory(() => fake.win).attach();
+      expect(fake.url()).toBe(picker);
+      expect(fake.storage.size).toBe(0);
+      fake.back();
+      expect(fake.url()).toBe('/w');
+      expectBackLeavesForwardStaysClosed(fake);
+    });
   });
 });

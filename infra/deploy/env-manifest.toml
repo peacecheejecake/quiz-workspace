@@ -748,11 +748,76 @@ provider = "operator (⛔ user approval: sends questions, answers and explanatio
 note = "false; true enables chapter notes (CHNOTE-01): needs LLM_API_KEY on the worker and LLM_MODEL on both (identical); the API offers notes (available, POST) only with the switch on and LLM_MODEL set"
 
 [[var]]
+name = "WORKER_MOCK_EXAMS"
+services = ["api", "worker"]
+kind = "config"
+check = "bool"
+same = true
+provider = "operator (⛔ user approval: sends source questions, answers, explanations and book passages to the LLM provider)"
+note = "false; true enables the AI variation types of mock exams (MOCK-01): needs LLM_API_KEY on the worker and LLM_MODEL on both (identical); 보기 섞기 mock exams work either way"
+
+[[var]]
+name = "MOCK_EXAM_MAX_PROMPT_TOKENS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "60000; input budget of one batched call (instructions, sources, each passage once); with MOCK_EXAM_MAX_OUTPUT_TOKENS within LLM_CONTEXT_TOKENS"
+
+[[var]]
+name = "MOCK_EXAM_MAX_OUTPUT_TOKENS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "16000; output budget of one batched call (~400 tokens per question), at most LLM_MAX_TOKENS"
+
+[[var]]
+name = "MOCK_EXAM_SOURCES_PER_CALL"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "40; cap on sources per batched call"
+
+[[var]]
+name = "MOCK_EXAM_GENERATION_CONCURRENCY"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "2; batched calls of one generation in flight at once"
+
+[[var]]
+name = "MOCK_EXAM_MAX_RUNNING_PER_WORKSPACE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "5; queued/running mock exam generations per workspace (409 generation-busy above it)"
+
+[[var]]
+name = "MOCK_EXAM_GENERATION_RATE_LIMIT_PER_MINUTE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "6; mock exam generation starts per user and minute (429 + Retry-After; 0 disables)"
+
+[[var]]
+name = "LLM_CONTEXT_TOKENS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "200000; the model's context window (MOCK_EXAM_* budget check)"
+
+[[var]]
 name = "LLM_API_KEY"
 services = ["worker"]
 kind = "secret"
 check = "nonempty"
-required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true"]
+required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true", "WORKER_MOCK_EXAMS=true"]
 provider = "LLM provider console (Anthropic)"
 note = "optional; unset disables question generation (QGEN) — a user decision (cost, data policy)"
 
@@ -761,7 +826,7 @@ name = "LLM_MODEL"
 services = ["api", "worker"]
 kind = "config"
 requires = "LLM_API_KEY"
-required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true"]
+required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true", "WORKER_MOCK_EXAMS=true"]
 same = true
 provider = "operator: the approved model id (no default)"
 note = "required whenever LLM_API_KEY is set; with WORKER_DOCUMENT_SUMMARY=true or WORKER_CHAPTER_NOTES=true also on the API (identical), which offers summaries / chapter notes only when it is set (DOCSUM-01-AC05, CHNOTE-01-AC06; the API never gets LLM_API_KEY)"
@@ -892,6 +957,20 @@ services = ["worker"]
 kind = "config"
 forbidden = true
 note = "APP_ENV=test E2E hold barrier of the chapter note fake"
+
+[[var]]
+name = "WORKER_MOCK_EXAM_HOLD_DIR"
+services = ["worker"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test E2E hold barrier of the batched mock exam fake (K6)"
+
+[[var]]
+name = "WORKER_MOCK_EXAM_FAULT_DIR"
+services = ["worker"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test crash fault of the batched mock exam fake (K7, MockExamSimulatedCrash)"
 
 [[var]]
 name = "FORWARDED_ALLOW_IPS"

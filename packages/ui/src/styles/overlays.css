@@ -121,6 +121,11 @@
     line-height: var(--line-height-snug);
   }
 
+  /* A focusable title (titleRef) takes focus programmatically: no ring, like the panel itself. */
+  > .header > .heading > .title:focus {
+    outline: none;
+  }
+
   > .header > .heading > .description {
     margin: var(--space-1) 0 0;
     color: var(--color-text-secondary);

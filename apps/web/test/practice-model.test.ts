@@ -12,7 +12,7 @@ import {
   resultMessage,
   submitBody,
   toggleOption,
-} from '../src/components/questions/practice/practice-model';
+} from '../src/components/questions/viewer/practice-model';
 import type { OverviewItem } from '../src/lib/questions/overview-data';
 
 const single = {

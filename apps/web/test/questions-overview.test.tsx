@@ -897,7 +897,7 @@ describe('UX7-BANK-2 정답·해설 보기 and 보관 in the practice panel', { 
       expect(items).toEqual(
         readOnly
           ? ['정답·해설 보기', '수정 이력·출처']
-          : ['정답·해설 보기', '수정 이력·출처', '편집', '변형 출제', '보관', '삭제'],
+          : ['정답·해설 보기', '수정 이력·출처', '편집', '보관', '삭제'],
       );
       await user.click(screen.getByRole('menuitem', { name: '정답·해설 보기' }));
       const detail = await screen.findByRole('dialog', { name: '문제 상세' });

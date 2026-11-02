@@ -71,6 +71,8 @@ LEASE_EXPIRED_ERROR = "worker_lost: lease expired"
 # last_error written when the worker saw its child die mid-attempt (SIGKILL / OOM kill) and
 # handed the attempt back at once instead of waiting for the lease (M7.4c).
 WORKER_KILLED_ERROR = "worker_lost: worker process killed (out of memory?)"
+# last_error of a queued job whose job type the worker no longer runs (reconcile.RETIRED_JOB_TYPES).
+JOB_RETIRED_ERROR = "job_retired"
 
 
 @dataclass(frozen=True, slots=True)
@@ -208,6 +210,11 @@ class JobStore(Protocol):
 
     def find_expired_leases(self, *, limit: int) -> list[JobRecord]:
         """`running` jobs whose lease has expired (their worker is gone)."""
+        ...
+
+    def retire(self, job_id: UUID, *, error: str) -> JobRecord | None:
+        """queued -> failed with `error` and no cleanup: its job type is no longer run, so nothing
+        will ever claim it. None unless the job is still queued."""
         ...
 
     def recover_expired(self, job_id: UUID, *, attempt: int) -> JobRecord | None:
@@ -515,6 +522,15 @@ class TransactionalJobStore:
     def is_cancel_requested(self, job_id: UUID) -> bool:
         record = self.get(job_id)
         return record is not None and record.cancel_requested_at is not None
+
+    def retire(self, job_id: UUID, *, error: str) -> JobRecord | None:
+        def mutate(r: JobRecord | None, now: datetime) -> tuple[JobRecord | None, JobRecord | None]:
+            if r is None or r.status is not JobStatus.QUEUED:
+                return None, None
+            retired = _finish(r, JobStatus.FAILED, now, error=error, cleanup=False)
+            return retired, retired
+
+        return self._atomic(job_id, mutate)
 
     def find_expired_leases(self, *, limit: int) -> list[JobRecord]:
         now = self._clock()

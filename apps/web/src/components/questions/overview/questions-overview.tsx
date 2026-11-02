@@ -17,6 +17,9 @@
 // / 수정 이력·출처: the 문제 상세 dialog over the panel; the practice session stays answer-free), and
 // editors archive the open question (보관, after a confirmation; the panel closes and the dot
 // leaves; it comes back from the home's 보관·초안 문제 dialog).
+// QVIEW-W: the practice panel is QuestionViewer `practice`; the home's 문제 › 문제 풀기 run
+// (`?practice=`, QVIEW-01) is QuestionViewer `sequence`, rendered here so it shares the panel's
+// 문제 관리 / 문제 정보 menu, its dialogs and the Heatmap refresh after studying.
 import {
   Button,
   ChevronDownIcon,
@@ -57,17 +60,19 @@ import {
   type OverviewFilters,
 } from '@/lib/questions/overview-filters';
 import { lookupOverviewQuestionAction, setMyStateAction } from '@/lib/questions/practice-actions';
+import { parseRunState, type RunUrlState } from '@/lib/questions/practice-runs';
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from '@/lib/questions/problems';
 import { QuestionDetailDialog, type DetailTarget } from '../detail/question-detail-dialog';
 import { HomeQuestionEditor } from '../home-question-editor';
+import { QuestionManageMenu } from '../practice/question-manage-menu';
+import { useHomeRun } from '../mock-exams/mock-run';
+import type { EditorTarget } from '../question-editor';
+import { neighbors, type AttemptResult } from '../viewer/practice-model';
 import {
-  PracticePanel,
+  QuestionViewer,
   type Invalidation,
   type PracticeQuestion,
-} from '../practice/practice-panel';
-import { QuestionManageMenu } from '../practice/question-manage-menu';
-import type { EditorTarget } from '../question-editor';
-import { neighbors, type AttemptResult } from '../practice/practice-model';
+} from '../viewer/question-viewer';
 import {
   applyOverrides,
   flagsPatch,
@@ -87,7 +92,7 @@ export type OverviewReadOnly = 'viewer' | 'archived' | null;
 
 export interface QuestionsOverviewProps {
   readonly workspaceId: string;
-  /** `viewer`: no import/generate links, practice allowed. `archived`: read-only panel. */
+  /** `viewer`: no import links, practice allowed. `archived`: read-only panel. */
   readonly readOnly: OverviewReadOnly;
   /** The filters the server rendered `overview` with. */
   readonly filters: OverviewFilters;
@@ -123,6 +128,12 @@ export interface QuestionsOverviewProps {
   readonly documents?: readonly { readonly id: string; readonly title: string }[];
   /** A question was archived, deleted or edited here (the home re-reads open lists, UX7-BANK-2). */
   readonly onQuestionsChanged?: () => void;
+  /**
+   * The range run panel (`?practice=`, QVIEW-01) moves to another step or position; the home
+   * keeps its dialog history consistent. Without it (and onRunClose) there is no run panel.
+   */
+  readonly onRunNavigate?: (state: RunUrlState, how: 'push' | 'replace') => void;
+  readonly onRunClose?: () => void;
 }
 
 const NO_DOCUMENTS: readonly { readonly id: string; readonly title: string }[] = [];
@@ -199,6 +210,8 @@ export function QuestionsOverview({
   onCreateOpenChange,
   documents = NO_DOCUMENTS,
   onQuestionsChanged,
+  onRunNavigate,
+  onRunClose,
 }: QuestionsOverviewProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -499,6 +512,19 @@ export function QuestionsOverview({
     wasOpen.current = open;
   }, [openId, router]);
 
+  // The range run panel (QVIEW-01): its positions record views and attempts like the practice
+  // panel, so the Heatmap is read again once it closes.
+  const runState = onRunNavigate && onRunClose ? parseRunState(searchParams) : null;
+  const runOpen = runState !== null;
+  // A mock exam's 풀기 (MOCK-01) runs in the same panel with its own source (mock-run.ts).
+  const homeRun = useHomeRun(workspaceId, runState);
+  const bankRun = homeRun.source === 'bank';
+  const wasRunOpen = useRef(runOpen);
+  useEffect(() => {
+    if (wasRunOpen.current && !runOpen && staleOverview.current) router.refresh();
+    wasRunOpen.current = runOpen;
+  }, [runOpen, router]);
+
   // --- 문제 등록 / 편집 / 삭제 (UX7-BANK) ----------------------------------------------------------
   const [editing, setEditing] = useState<Extract<EditorTarget, { mode: 'edit' }> | null>(null);
   const [editorSession, setEditorSession] = useState(0);
@@ -730,7 +756,8 @@ export function QuestionsOverview({
         </div>
       )}
 
-      <PracticePanel
+      <QuestionViewer
+        mode="practice"
         workspaceId={workspaceId}
         question={panelQuestion}
         readOnly={readOnly === 'archived'}
@@ -745,8 +772,6 @@ export function QuestionsOverview({
         headerExtra={
           panelQuestion ? (
             <QuestionManageMenu
-              workspaceId={workspaceId}
-              questionId={panelQuestion.id}
               busy={loadingEdit || deleting || archiving}
               onShowDetail={(focus, trigger) =>
                 setDetail({
@@ -785,6 +810,56 @@ export function QuestionsOverview({
           }
         }}
       />
+
+      {onRunNavigate && onRunClose ? (
+        <QuestionViewer
+          mode="sequence"
+          workspaceId={workspaceId}
+          state={runState}
+          archived={readOnly === 'archived'}
+          onNavigate={onRunNavigate}
+          onClose={onRunClose}
+          source={homeRun.source}
+          client={homeRun.client}
+          {...(homeRun.pickerTitle ? { pickerTitle: homeRun.pickerTitle } : {})}
+          onViewed={(questionId) => {
+            if (!bankRun) return;
+            staleOverview.current = true;
+            markViewed(questionId);
+          }}
+          onGraded={(questionId, result) => {
+            if (!bankRun) return;
+            staleOverview.current = true;
+            markGraded(questionId, result);
+          }}
+          onFlagsSaved={() => {
+            staleOverview.current = true;
+          }}
+          invalidated={invalidated}
+          headerExtra={(q) => (
+            <QuestionManageMenu
+              busy={loadingEdit || deleting || archiving}
+              onShowDetail={(focus, trigger) =>
+                setDetail({
+                  questionId: q.questionId,
+                  focus,
+                  returnFocus: trigger,
+                  description: `${q.title} · ${questionTypeLabels[q.questionType]} · ${q.chapterTitle}`,
+                })
+              }
+              manage={
+                canAuthor
+                  ? {
+                      onEdit: () => void startEdit(q.questionId),
+                      onArchive: () => setConfirmArchive(q.questionId),
+                      onDelete: () => setConfirmDelete(q.questionId),
+                    }
+                  : null
+              }
+            />
+          )}
+        />
+      ) : null}
 
       <QuestionDetailDialog
         workspaceId={workspaceId}

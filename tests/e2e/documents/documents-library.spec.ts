@@ -565,11 +565,13 @@ test(
     await homeUi.questionMenuButton(page).click();
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
       /^(직접 추가|add question)$/i,
-      /^(변형 출제|generate variants?)$/i,
       // UX7-DEDUP (QOV-01-AC16).
       /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
       // UX7-BANK-2 (QOV-01-AC15).
       /^(보관·초안 문제|archived and draft questions)$/i,
+      // MOCK-01 (MOCK-W) and QVIEW-01 (QVIEW-W).
+      /^(모의고사|mock exams?)$/i,
+      /^(문제 풀기|practice questions?|start practice)$/i,
     ]);
     await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
     await page.keyboard.press('Escape');

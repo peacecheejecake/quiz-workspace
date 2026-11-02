@@ -1,10 +1,11 @@
 // Workspace home URL state (docs/screens/questions-overview.md "Workspace 홈 레이아웃", UX3c).
 // The home `/workspaces/:id` carries, besides the heatmap filters (overview-filters.ts) and the
 // open question (`?question=`):
-//   ?panel=documents|generate|history|share                 open floating dialogs (repeatable, in
+//   ?panel=documents|history|share                          open floating dialogs (repeatable, in
 //        |chapter-note|document-summary                      the order they were opened)
 //        |inactive-questions                                 (보관·초안 문제, UX7-BANK-2)
 //        |question-duplicates                                (중복 문제 정리, editors, UX7-DEDUP)
+//        |mock-exams                                         (모의고사, every member, MOCK-01)
 //        |question-create                                    the modal 문제 등록 editor (UX7-BANK;
 //                                                            not stacked, see FLOATING_PANELS)
 //   ?chapter=<id> (with panel=chapter-note)                  the chapter of the 정리 노트 panel
@@ -12,16 +13,28 @@
 //   &document=<id> (with panel=document-summary)             the summary panel's document (DOCSUM-01;
 //                                                            while that panel is open the key is
 //                                                            the panel's, not the content search's)
+//   &mock=new|<id> (with panel=mock-exams)                   the 모의고사 dialog's 만들기 / detail view
+//                                                            (MOCK-01; see mockViewOf)
+//   ?practice=new&source=bank | ?practice=<run id>&i=<n>     the range run panel (QVIEW-01,
+//                                                            QuestionViewer sequence; keys in
+//                                                            lib/questions/practice-runs.ts)
 //   ?q=<text>                                               the 문제 search (heatmap, UX7-SEARCH)
 //   ?text=<text>&mode=&document=&section=                    the 본문 search and its options
 //                                                            (search/state.ts); the UX6 `scope`
 //                                                            key is migrated by legacyScopeRedirect
 // Pure helpers, plus the redirects of the pre-UX3c routes onto the home and of retired URL
-// state (`scope`, UX7-SEARCH; `question-pdfs` → `documents`, UX7-DOCS): homeRedirect.
+// state (`scope`, UX7-SEARCH; `question-pdfs` → `documents`, UX7-DOCS; `generate` → `mock-exams`,
+// QGEN-RM): homeRedirect.
+import {
+  RUN_MOCK_PARAM,
+  RUN_PARAM,
+  RUN_SOURCE_PARAM,
+  withRunState,
+  type RunUrlState,
+} from '@/lib/questions/practice-runs';
 
 export const HOME_PANELS = [
   'documents',
-  'generate',
   'history',
   'share',
   'chapter-note',
@@ -29,6 +42,7 @@ export const HOME_PANELS = [
   'question-create',
   'inactive-questions',
   'question-duplicates',
+  'mock-exams',
 ] as const;
 export type HomePanel = (typeof HOME_PANELS)[number];
 
@@ -40,6 +54,9 @@ export const INACTIVE_QUESTIONS_PANEL = 'inactive-questions' satisfies HomePanel
 
 /** UX7-DEDUP: `?panel=question-duplicates` opens the 중복 문제 정리 dialog (QOV-01-AC16). */
 export const DUPLICATES_PANEL = 'question-duplicates' satisfies HomePanel;
+
+/** MOCK-01: `?panel=mock-exams` opens the 모의고사 dialog (every member). */
+export const MOCK_EXAMS_PANEL = 'mock-exams' satisfies HomePanel;
 
 /** The non-modal side panels: they stack and move the home content aside (UX3b). */
 export function isFloatingPanel(panel: HomePanel): boolean {
@@ -184,8 +201,72 @@ export function withSummaryPanel(
   });
 }
 
+// --- 모의고사 dialog (MOCK-01) ------------------------------------------------------------------
+// `?panel=mock-exams` is the list, `&mock=new` the 만들기 view and `&mock=<id>` a mock exam's
+// detail. A mock exam's 풀기 opens the run panel on `?practice=new&source=mock&mock=<id>`: while
+// that range step is open `mock` is the run's (practice-runs.ts), so the dialog keeps the view
+// it showed (the home remembers it, workspace-home.tsx).
+
+/** The 모의고사 dialog's view key (also the run panel's mock exam while it starts one). */
+export const MOCK_PARAM = RUN_MOCK_PARAM;
+
+export type MockView =
+  | { readonly view: 'list' }
+  | { readonly view: 'create' }
+  | { readonly view: 'detail'; readonly mockExamId: string }
+  /** `mock=` with a value that names no mock exam: "모의고사를 찾을 수 없습니다." */
+  | { readonly view: 'missing' };
+
+/** Whether `mock` belongs to the run panel's range step of a mock exam now. */
+export function runOwnsMockParam(params: Params): boolean {
+  return all(params, RUN_PARAM)[0] === 'new' && all(params, RUN_SOURCE_PARAM)[0] === 'mock';
+}
+
+/** The 모의고사 dialog's view in `params` (as the URL says; see runOwnsMockParam). */
+export function mockViewOf(params: Params): MockView {
+  const value = all(params, MOCK_PARAM)[0];
+  if (!value) return { view: 'list' };
+  if (value === 'new') return { view: 'create' };
+  return UUID.test(value)
+    ? { view: 'detail', mockExamId: value.toLowerCase() }
+    : { view: 'missing' };
+}
+
+/** The `mock` value of a view (null: the list). */
+export function mockParamOf(view: MockView): string | null {
+  if (view.view === 'create') return 'new';
+  if (view.view === 'detail') return view.mockExamId;
+  return null;
+}
+
+/** `search` with the 모의고사 dialog open on `view` (on top). */
+export function withMockView(search: string, view: MockView): string {
+  return patchSearch(withPanel(search, MOCK_EXAMS_PANEL, true), {
+    [MOCK_PARAM]: mockParamOf(view),
+  });
+}
+
 /**
- * `search` with every dialog and the practice panel closed (UX7-BACK: what the entry before the
+ * `search` with the 모의고사 dialog (when open there) back on `shown`, the view it showed while a
+ * run's range step borrowed `mock` (runOwnsMockParam): what closing that step or moving the run
+ * on hands back. Unchanged while the range step still owns `mock`.
+ */
+export function withShownMockView(search: string, shown: MockView): string {
+  const params = new URLSearchParams(search);
+  if (!parsePanels(params).includes(MOCK_EXAMS_PANEL) || runOwnsMockParam(params)) return search;
+  return patchSearch(search, { [MOCK_PARAM]: mockParamOf(shown) });
+}
+
+/** `search` with the 모의고사 dialog closed: its view goes with it (not a run's mock exam). */
+export function withoutMockExams(search: string): string {
+  const closed = withPanel(search, MOCK_EXAMS_PANEL, false);
+  return runOwnsMockParam(new URLSearchParams(search))
+    ? closed
+    : patchSearch(closed, { [MOCK_PARAM]: null });
+}
+
+/**
+ * `search` with every dialog, the practice panel and the run panel closed (UX7-BACK: what the entry before the
  * first open gets when a dialog closes, panel-history.ts). The summary panel hands `document` and
  * `section` back to the content search (`restore`, see withSummaryPanel); the 정리 노트 panel
  * takes its `chapter` with it.
@@ -198,11 +279,19 @@ export function withoutPanels(
   let out = search;
   if (panels.includes(SUMMARY_PANEL)) out = withSummaryPanel(out, null, restore);
   if (panels.includes(CHAPTER_NOTE_PANEL)) out = withChapterNote(out, null);
+  if (panels.includes(MOCK_EXAMS_PANEL)) out = withoutMockExams(out);
+  out = withRunState(out, null);
   return patchSearch(out, { [PANEL_PARAM]: null, [QUESTION_PARAM]: null });
 }
 
 /** The practice panel's name among the open dialogs (openDialogs). */
 export const PRACTICE_DIALOG = 'question';
+
+/**
+ * The range run panel's name among the open dialogs (QVIEW-01 `?practice=`). Its steps (range,
+ * positions, results) and which run it shows are not part of it: changing them is not a close.
+ */
+export const RUN_DIALOG = 'practice';
 
 /**
  * What is open in `search` (UX7-BACK-2, panel-history.ts): the dialogs in opening order, then
@@ -213,7 +302,45 @@ export function openDialogs(search: string): string[] {
   const params = new URLSearchParams(search);
   const out: string[] = parsePanels(params);
   if (params.get(QUESTION_PARAM)) out.push(PRACTICE_DIALOG);
+  if (params.get(RUN_PARAM)) out.push(RUN_DIALOG);
   return out;
+}
+
+// The practice panel and the range run panel are never open together (QVIEW-01-AC09, user
+// decision 2026-11-02): both are modal, and opening one closes the other first.
+
+/** `search` with the practice panel on `questionId` and the run panel closed. */
+export function withPracticeQuestion(search: string, questionId: string): string {
+  return patchSearch(withRunState(search, null), { [QUESTION_PARAM]: questionId });
+}
+
+/** `search` with the run panel on `state` and the practice panel closed. */
+export function withRunPanel(search: string, state: RunUrlState): string {
+  return withRunState(patchSearch(search, { [QUESTION_PARAM]: null }), state);
+}
+
+/** `search` with a mock exam's 풀기: the run panel's range step on it, the practice panel closed. */
+export function withMockRun(search: string, mockExamId: string): string {
+  return withRunPanel(search, { step: 'picker', source: 'mock', mockExamId });
+}
+
+/**
+ * When going from `current` to `target` opens the practice panel or the run panel while the other
+ * one is open: `current` with that other one closed (the open is then a close followed by an open,
+ * panel-history.ts). Null when the move closes nothing.
+ */
+export function exclusiveClose(current: string, target: string): string | null {
+  const now = openDialogs(current);
+  const next = openDialogs(target);
+  for (const [opens, closes] of [
+    [RUN_DIALOG, PRACTICE_DIALOG],
+    [PRACTICE_DIALOG, RUN_DIALOG],
+  ] as const) {
+    if (next.includes(opens) && !now.includes(opens) && now.includes(closes)) {
+      return closeDialog(current, closes);
+    }
+  }
+  return null;
 }
 
 /** `search` with one dialog of openDialogs closed, as its close button does it. */
@@ -223,8 +350,10 @@ export function closeDialog(
   restore: ContentDocumentFilter | null = null,
 ): string {
   if (dialog === PRACTICE_DIALOG) return patchSearch(search, { [QUESTION_PARAM]: null });
+  if (dialog === RUN_DIALOG) return withRunState(search, null);
   if (dialog === SUMMARY_PANEL) return withSummaryPanel(search, null, restore);
   if (dialog === CHAPTER_NOTE_PANEL) return withChapterNote(search, null);
+  if (dialog === MOCK_EXAMS_PANEL) return withoutMockExams(search);
   return isHomePanel(dialog) ? withPanel(search, dialog, false) : search;
 }
 
@@ -396,9 +525,13 @@ export function legacyBankRedirect(workspaceId: string, params: RawParams): stri
 
 /**
  * Retired `?panel=` values and the dialog that replaced them: 문제 PDF 관리 was merged into
- * 문서 관리 (UX7-DOCS, DOC-01-AC09).
+ * 문서 관리 (UX7-DOCS, DOC-01-AC09), and the 문제 생성 dialog of the retired 변형 출제 gave way to
+ * 모의고사 (QGEN-RM, MOCK-01-AC01).
  */
-const RETIRED_PANELS: Readonly<Record<string, HomePanel>> = { 'question-pdfs': 'documents' };
+const RETIRED_PANELS: Readonly<Record<string, HomePanel>> = {
+  'question-pdfs': 'documents',
+  generate: MOCK_EXAMS_PANEL,
+};
 
 /**
  * The home URL with every retired `?panel=` value replaced by its successor (in place; a panel
@@ -420,18 +553,45 @@ export function retiredPanelRedirect(workspaceId: string, params: RawParams): st
 }
 
 /**
- * Every migration of retired home URL state, applied together so an old link takes a single
- * redirect: the UX6 search `scope` (legacyScopeRedirect, UX7-SEARCH), then retired `?panel=`
- * values (retiredPanelRedirect, UX7-DOCS). Null when the URL is current.
+ * A link that opens both the practice panel and the run panel (QVIEW-01-AC09): the home URL
+ * without `question`, so only the run opens (proposal: the run is the later intent). Null when
+ * the URL does not carry both.
+ */
+export function exclusivePanelRedirect(workspaceId: string, params: RawParams): string | null {
+  const source = toSearchParams(params);
+  if (!source.get(QUESTION_PARAM) || !source.get(RUN_PARAM)) return null;
+  source.delete(QUESTION_PARAM);
+  return workspaceHomePath(workspaceId, source.toString());
+}
+
+/**
+ * Every migration of retired or conflicting home URL state, applied together so a link takes a
+ * single redirect: the UX6 search `scope` (legacyScopeRedirect, UX7-SEARCH), retired `?panel=`
+ * values (retiredPanelRedirect, UX7-DOCS and QGEN-RM), then a practice panel beside a run
+ * (exclusivePanelRedirect, QVIEW-01-AC09). Null when the URL is current.
  */
 export function homeRedirect(workspaceId: string, params: RawParams): string | null {
-  const scoped = legacyScopeRedirect(workspaceId, params);
-  if (scoped === null) return retiredPanelRedirect(workspaceId, params);
-  const next: Record<string, string[]> = {};
-  for (const [key, value] of new URL(scoped, 'http://home').searchParams) {
-    (next[key] ??= []).push(value);
+  let current = params;
+  let out: string | null = null;
+  for (const step of [legacyScopeRedirect, retiredPanelRedirect, exclusivePanelRedirect]) {
+    const next = step(workspaceId, current);
+    if (next === null) continue;
+    out = next;
+    const parsed: Record<string, string[]> = {};
+    for (const [key, value] of new URL(next, 'http://home').searchParams) {
+      (parsed[key] ??= []).push(value);
+    }
+    current = parsed;
   }
-  return retiredPanelRedirect(workspaceId, next) ?? scoped;
+  return out;
+}
+
+/**
+ * The retired 변형 출제 review and batch pages (`/questions/generate?source=&run=` · `?batch=`,
+ * QGEN-RM): the home with the 모의고사 dialog that replaced them; their query means nothing there.
+ */
+export function legacyGenerateRedirect(workspaceId: string): string {
+  return legacyPanelRedirect(workspaceId, MOCK_EXAMS_PANEL);
 }
 
 /** A pre-UX3c section page (`/documents`, `/history`, `/settings/sharing`): its dialog. */

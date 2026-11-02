@@ -1,71 +1,5 @@
-/* Question editor (home, UX7-BANK) and revision view (shared workspace). Semantic tokens only. */
-
-/* Revision view */
-.detailSection {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.detailHeading {
-  margin: 0;
-  font-size: var(--font-size-label);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
-}
-
-.detailText {
-  margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  line-height: var(--line-height-relaxed);
-}
-
-.optionList {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.optionRow {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-/* Correct options: border + check icon + "정답" text, not color alone. */
-.optionRow[data-correct='true'] {
-  border: 2px solid var(--color-success);
-}
-
-.optionLabel {
-  flex: none;
-  font-weight: var(--font-weight-semibold);
-}
-
-.optionText {
-  flex: 1;
-  min-width: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.correctMark {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--font-size-label);
-  font-weight: var(--font-weight-semibold);
-}
-
-.correctMark svg {
-  color: var(--color-success);
-}
+/* Question editor (home, UX7-BANK). Semantic tokens only. The revision view moved to
+   viewer/question-viewer.module.css (QuestionBody, QVIEW-W). */
 
 /* Editor */
 .form {
@@ -168,11 +102,5 @@
 
   .sourceRow > :first-child {
     grid-column: 1 / -1;
-  }
-}
-
-@media (forced-colors: active) {
-  .optionRow[data-correct='true'] {
-    border-color: Highlight;
   }
 }

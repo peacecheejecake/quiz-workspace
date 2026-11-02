@@ -20,7 +20,7 @@ from quiz_worker.celery_app import (
     submit_job,
     worker_id_for,
 )
-from quiz_worker.reconcile import ReconcileReport, reconcile_jobs
+from quiz_worker.reconcile import RETIRED_JOB_TYPES, ReconcileReport, reconcile_jobs
 from quiz_worker.retry import RetryPolicy
 from quiz_worker.runner import (
     JobContext,
@@ -32,6 +32,7 @@ from quiz_worker.runner import (
 )
 from quiz_worker.settings import WorkerSettings
 from quiz_worker.store import (
+    JOB_RETIRED_ERROR,
     LEASE_EXPIRED_ERROR,
     WORKER_KILLED_ERROR,
     WORKER_LOST_ERROR,
@@ -465,6 +466,112 @@ def test_unknown_job_type_is_not_republished(make_envelope: EnvelopeFactory) -> 
 
     assert (report.republished, report.publish_errors) == (0, 1)
     assert recorder.published == []
+
+
+# -- Retired job types (QGEN-RM: `question.generate`) -----------------------------------------
+
+RETIRED = "question.generate"
+
+
+def test_question_generate_is_a_retired_job_type_the_worker_no_longer_runs(
+    eager_settings: WorkerSettings,
+) -> None:
+    assert RETIRED in RETIRED_JOB_TYPES
+    app = create_celery_app(eager_settings, job_store=InMemoryJobStore())
+    assert RETIRED not in app.job_definitions
+    assert all(job_type not in app.job_definitions for job_type in RETIRED_JOB_TYPES)
+
+
+def test_queued_job_of_a_retired_type_is_failed_as_job_retired(
+    store: TransactionalJobStore, make_envelope: EnvelopeFactory, clock: FakeClock
+) -> None:
+    recorder = Recorder()
+    job = definition(recorder)
+    unpublished = make_envelope(RETIRED, {"generation_id": str(uuid4())})
+    store.create(unpublished, max_attempts=3)
+    published = make_envelope(RETIRED, {"generation_id": str(uuid4())})
+    store.create(published, max_attempts=3)
+    store.mark_published(published.job_id)  # its message is dropped: no task takes it
+    live = make_envelope()
+    store.create(live, max_attempts=3)
+
+    clock.advance(GRACE)
+    first = reconcile(store, recorder, job)
+    assert (first.retired, first.republished, first.publish_errors) == (1, 1, 0)
+    assert [r.job_id for r in recorder.published] == [live.job_id]  # only the live type
+    clock.advance(STALE)
+    second = reconcile(store, recorder, job)
+    assert second.retired == 1
+
+    for envelope in (unpublished, published):
+        record = store.get(envelope.job_id)
+        assert record is not None
+        assert record.status is JobStatus.FAILED
+        assert record.last_error == JOB_RETIRED_ERROR
+        assert record.finished_at == record.updated_at
+        assert not record.cleanup_pending
+    assert recorder.calls == 0
+    assert recorder.cleanups == []
+    # Terminal now: later passes leave them alone.
+    clock.advance(STALE)
+    assert reconcile(store, recorder, job).retired == 0
+    assert store.retire(unpublished.job_id, error=JOB_RETIRED_ERROR) is None
+
+
+def test_lost_running_job_of_a_retired_type_is_retired_and_its_cleanup_dropped(
+    store: TransactionalJobStore, make_envelope: EnvelopeFactory, clock: FakeClock
+) -> None:
+    recorder = Recorder()
+    job = definition(recorder)
+    # Attempts left: the expired lease requeues it, then it is retired in the same pass.
+    requeued = make_envelope(RETIRED, {"generation_id": str(uuid4())})
+    store.create(requeued, max_attempts=3)
+    store.claim(requeued, worker_id="dead", lease_seconds=LEASE)
+    # Final attempt: the expired lease fails it with a pending cleanup nobody can run any more.
+    exhausted = make_envelope(RETIRED, {"generation_id": str(uuid4())})
+    store.create(exhausted, max_attempts=1)
+    store.claim(exhausted, worker_id="dead", lease_seconds=LEASE)
+    clock.advance(LEASE + 1)
+
+    report = reconcile(store, recorder, job)
+
+    assert (report.requeued, report.failed, report.retired) == (1, 1, 1)
+    assert (report.republished, report.publish_errors) == (0, 0)
+    assert report.cleaned == 1
+    retired = store.get(requeued.job_id)
+    assert retired is not None
+    assert (retired.status, retired.last_error) == (JobStatus.FAILED, JOB_RETIRED_ERROR)
+    assert not retired.cleanup_pending
+    failed = store.get(exhausted.job_id)
+    assert failed is not None
+    assert (failed.status, failed.last_error) == (JobStatus.FAILED, WORKER_LOST_ERROR)
+    assert not failed.cleanup_pending
+    assert recorder.cleanups == []
+
+
+def test_a_job_type_is_retired_only_without_a_task(
+    store: TransactionalJobStore, make_envelope: EnvelopeFactory, clock: FakeClock
+) -> None:
+    """A registered definition wins: listing a type as retired never fails jobs it still runs."""
+    recorder = Recorder()
+    job = definition(recorder)
+    envelope = make_envelope()
+    store.create(envelope, max_attempts=3)
+    clock.advance(GRACE)
+
+    report = reconcile_jobs(
+        store,
+        recorder.publish,
+        {job.job_type: job},
+        unpublished_grace_seconds=GRACE,
+        stale_after_seconds=STALE,
+        retired_job_types={job.job_type},
+    )
+
+    assert (report.retired, report.republished) == (0, 1)
+    record = store.get(envelope.job_id)
+    assert record is not None
+    assert record.status is JobStatus.QUEUED
 
 
 # -- A worker process that died mid-attempt (M7.4c) ------------------------------------------

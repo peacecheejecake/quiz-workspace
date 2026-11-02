@@ -224,6 +224,9 @@ def test_job_retry_is_offered_to_editors_of_an_active_workspace_only(
     for job in as_owner.values():
         assert "payload" not in job
         assert "result" not in job
+    # GET /jobs/{id} carries counts-only `result` for `mock_exam.generate` alone (MOCK-B K5).
+    for job_id in (failed, upload_job):
+        assert owner.ok("GET", f"/jobs/{job_id}")["result"] is None
 
     # Archived: still readable, nothing retryable.
     owner.ok("POST", f"/workspaces/{ws['id']}/archive", {}, (200,))

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Button, FloatingSidePanel, Input, ModalDialog } from '../src';
 
@@ -601,5 +601,158 @@ describe('FloatingSidePanel id with a trigger', () => {
     const dialog = await screen.findByRole('dialog', { name: '발췌' });
     expect(dialog).toHaveAttribute('id', 'excerpt-panel');
     expect(trigger).toHaveAttribute('aria-controls', 'excerpt-panel');
+  });
+});
+
+describe('Escape inside an inline edit control marked data-own-escape (MOCK-ESC)', () => {
+  // An inline rename inside a dialog: Escape cancels the rename and returns focus to the
+  // button that started it; only the next Escape closes the dialog. Radix handles Escape on the
+  // document in the capture phase, before the field's own keydown handler runs.
+  function InlineRename() {
+    const [editing, setEditing] = useState(false);
+    const [name, setName] = useState('중간 점검');
+    const [draft, setDraft] = useState(name);
+    const start = useRef<HTMLButtonElement>(null);
+    const stopped = useRef(false);
+    const field = useRef<HTMLInputElement>(null);
+    useEffect(() => {
+      if (editing) field.current?.focus();
+      else if (stopped.current) start.current?.focus();
+    }, [editing]);
+    const stop = () => {
+      stopped.current = true;
+      setEditing(false);
+    };
+    return editing ? (
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          setName(draft);
+          stop();
+        }}
+      >
+        <input
+          ref={field}
+          aria-label="이름"
+          data-own-escape=""
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            event.stopPropagation();
+            setDraft(name);
+            stop();
+          }}
+        />
+        <button type="submit">저장</button>
+      </form>
+    ) : (
+      <>
+        <p>{name}</p>
+        <button ref={start} type="button" onClick={() => setEditing(true)}>
+          이름 바꾸기
+        </button>
+      </>
+    );
+  }
+
+  async function cancelThenClose(user: ReturnType<typeof userEvent.setup>, name: string) {
+    await user.click(screen.getByRole('button', { name: '이름 바꾸기' }));
+    const field = screen.getByRole('textbox', { name: '이름' });
+    expect(field).toHaveFocus();
+    await user.clear(field);
+    await user.type(field, '기말 대비');
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('textbox', { name: '이름' })).not.toBeInTheDocument();
+    expect(screen.getByText('중간 점검')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '이름 바꾸기' })).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name })).not.toBeInTheDocument());
+  }
+
+  it('cancels only the edit in a non-modal FloatingSidePanel; the next Escape closes it', async () => {
+    const user = userEvent.setup();
+    render(
+      <FloatingSidePanel defaultOpen modal={false} title="모의고사">
+        <InlineRename />
+      </FloatingSidePanel>,
+    );
+    await screen.findByRole('dialog', { name: '모의고사' });
+    await cancelThenClose(user, '모의고사');
+  });
+
+  it('cancels only the edit in a modal FloatingSidePanel; the next Escape closes it', async () => {
+    const user = userEvent.setup();
+    render(
+      <FloatingSidePanel defaultOpen title="모의고사">
+        <InlineRename />
+      </FloatingSidePanel>,
+    );
+    await screen.findByRole('dialog', { name: '모의고사' });
+    await cancelThenClose(user, '모의고사');
+  });
+
+  it('cancels only the edit in a ModalDialog; the next Escape closes it', async () => {
+    const user = userEvent.setup();
+    render(
+      <ModalDialog defaultOpen title="문제 편집">
+        <InlineRename />
+      </ModalDialog>,
+    );
+    await screen.findByRole('dialog', { name: '문제 편집' });
+    await cancelThenClose(user, '문제 편집');
+  });
+
+  it('keeps a modal panel open under a non-modal panel ranked above it', async () => {
+    // The non-modal panel declines Escape (focus is not inside it) and the focused modal panel
+    // closes itself for declined presses, except when the press belongs to an inline edit.
+    function Stacked() {
+      const [noteOpen, setNoteOpen] = useState(false);
+      return (
+        <>
+          <FloatingSidePanel defaultOpen title="2번 문제">
+            <Button onClick={() => setNoteOpen(true)}>노트 열기</Button>
+            <InlineEditWithoutStop />
+          </FloatingSidePanel>
+          <FloatingSidePanel
+            open={noteOpen}
+            onOpenChange={setNoteOpen}
+            modal={false}
+            title="정리 노트"
+            onOpenAutoFocus={(event) => event.preventDefault()}
+          >
+            본문
+          </FloatingSidePanel>
+        </>
+      );
+    }
+    /** An inline edit whose Escape handler does not stop propagation. */
+    function InlineEditWithoutStop() {
+      const [editing, setEditing] = useState(true);
+      return editing ? (
+        <input
+          aria-label="이름"
+          data-own-escape=""
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setEditing(false);
+          }}
+        />
+      ) : (
+        <p>편집 취소됨</p>
+      );
+    }
+    const user = userEvent.setup();
+    render(<Stacked />);
+    await screen.findByRole('dialog', { name: '2번 문제' });
+    await user.click(screen.getByRole('button', { name: '노트 열기' }));
+    await screen.findByRole('dialog', { name: '정리 노트', hidden: true });
+    await user.click(screen.getByRole('textbox', { name: '이름', hidden: true }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByText('편집 취소됨')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '2번 문제', hidden: true })).toBeInTheDocument();
   });
 });

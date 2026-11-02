@@ -9,10 +9,12 @@ import {
   type ComponentProps,
   type ReactElement,
   type ReactNode,
+  type Ref,
 } from 'react';
 import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
 import { LayerProvider, useFloatingLayer } from '../internal/layer';
+import { handlesOwnEscape } from '../internal/own-escape';
 import { ScrollRegion } from '../internal/scroll-region';
 import { handOffFocus } from '../internal/tabbable';
 import { IconButton } from '../primitives/IconButton';
@@ -49,6 +51,12 @@ export interface FloatingSidePanelProps {
   title: ReactNode;
   /** Optional description; linked via `aria-describedby`. */
   description?: ReactNode;
+  /**
+   * The title heading. Passing it makes the heading programmatically focusable (`tabIndex=-1`),
+   * for panels that move focus to their title when their content changes (QuestionViewer
+   * `sequence`: each new question).
+   */
+  titleRef?: Ref<HTMLHeadingElement>;
   /** Header slot between the title and the close button (e.g. favorite / retry toggles). */
   headerActions?: ReactNode;
   /** Footer slot (submit, self-grade, next/previous, loading/error status). */
@@ -128,6 +136,7 @@ export function FloatingSidePanel({
   trigger,
   title,
   description,
+  titleRef,
   headerActions,
   footer,
   closeLabel = '닫기',
@@ -266,11 +275,20 @@ export function FloatingSidePanel({
               // itself: another non-modal panel raised over it, or a modal panel opened on top
               // whose layer Radix had not ranked highest yet (CHNOTE-01-AC02: the practice panel
               // opened from a 정리 노트 footnote ignored Escape while the note panel held the rank).
-              if (event.key === 'Escape' && declinedEscapes.has(event.nativeEvent)) {
+              if (
+                event.key === 'Escape' &&
+                declinedEscapes.has(event.nativeEvent) &&
+                !handlesOwnEscape(event.nativeEvent)
+              ) {
                 handleOpenChange(false);
               }
             }}
             onEscapeKeyDown={(event) => {
+              // An inline edit (ownEscapeProps) cancels itself; the next Escape closes the panel.
+              if (handlesOwnEscape(event)) {
+                event.preventDefault();
+                return;
+              }
               if (!modal && !contentRef.current?.contains(document.activeElement)) {
                 event.preventDefault();
                 declinedEscapes.add(event);
@@ -280,7 +298,13 @@ export function FloatingSidePanel({
             <LayerProvider value={layer.zIndex}>
               <div className="header">
                 <div className="heading">
-                  <Dialog.Title className="title">{title}</Dialog.Title>
+                  <Dialog.Title
+                    ref={titleRef}
+                    tabIndex={titleRef ? -1 : undefined}
+                    className="title"
+                  >
+                    {title}
+                  </Dialog.Title>
                   {description ? (
                     <Dialog.Description className="description">{description}</Dialog.Description>
                   ) : null}

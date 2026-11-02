@@ -6,14 +6,15 @@
 //   Workspace header  the 문제 search (SEARCH-01-AC12: filters the heatmap as you type, no button;
 //                     its "설정" popover holds the heatmap's chapter/type filters) with the
 //                     "본문 검색" disclosure under it (AC10, collapsed by default), then two
-//                     button groups: `문서 n` · `문제` (editors' menu: 직접 추가 / 변형 출제, UX4;
+//                     button groups: `문서 n` · `문제` (직접 추가 / 중복 문제 정리 | 보관·초안 문제 /
+//                     모의고사 / 문제 풀기, UX4, MOCK-SYNC;
 //                     no 전체 문제 since UX7-BANK, no PDF 관리 since UX7-DOCS), and, aligned right,
 //                     `이력` · `공유하기` (icon
 //                     buttons; share for the owner only)
 //   본문 search       when expanded: its form (box, icon submit, "본문 설정") and the results
 //                     (AC09; clicking a result opens the excerpt panel, AC11)
 //   문제 영역         the heatmap (QuestionsOverview)
-//   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 문제 생성 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
+//   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 모의고사 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
 //                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): non-modal
 //                     FloatingSidePanels portalled into this page (inside <main>), opened at once
 //                     and listed in the URL (`?panel=`, repeatable); the most recently opened is
@@ -25,6 +26,12 @@
 //                     questions and merges each group into the question kept (QOV-01-AC16).
 //   보관·초안 문제     `?panel=inactive-questions` (문제 › 보관·초안 문제, UX7-BANK-2, every member): a
 //                     stacked floating dialog of the draft and archived questions (QOV-01-AC15).
+//   문제 풀기          `?practice=new&source=bank` → `?practice=<run>&i=<n>` (문제 › 문제 풀기, QVIEW-01,
+//                     every member): the modal range run (QuestionViewer sequence, rendered by
+//                     QuestionsOverview). Its steps replace the entry; positions push one.
+//   모의고사           `?panel=mock-exams[&mock=new|<id>]` (문제 › 모의고사, MOCK-01, every member): a
+//                     stacked floating dialog of the workspace's mock exams; list → 만들기 / 상세
+//                     pushes an entry. A mock exam's 풀기 opens the run panel with `source=mock`.
 //
 // State lives in the URL: heatmap filters (overview-filters.ts), the 문제 search `q`, the 본문
 // search `text` and its options (search/state.ts), `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
@@ -55,9 +62,9 @@ import { useSummaryActivity } from '@/components/documents/summary/use-summary-a
 import { bodyDocumentCount } from '@/components/documents/labels';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
-import { GenerationDialog } from '@/components/questions/generate/generation-dialog';
 import { QuestionDuplicates } from '@/components/questions/duplicates/question-duplicates';
 import { InactiveQuestions } from '@/components/questions/inactive/inactive-questions';
+import { MockExamsPanel } from '@/components/questions/mock-exams/mock-exams-panel';
 import { ChapterNotePanel } from '@/components/questions/notes/chapter-note-panel';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
 import {
@@ -106,6 +113,13 @@ import {
   DUPLICATES_PANEL,
   INACTIVE_QUESTIONS_PANEL,
   isFloatingPanel,
+  MOCK_EXAMS_PANEL,
+  mockParamOf,
+  mockViewOf,
+  runOwnsMockParam,
+  withMockView,
+  withoutMockExams,
+  type MockView,
   ownSummaryDocument,
   QUESTION_CREATE_PANEL,
   type ContentDocumentFilter,
@@ -114,8 +128,15 @@ import {
   withoutPanels,
   openDialogs,
   closeDialog,
+  exclusiveClose,
+  withMockRun,
+  withShownMockView,
+  RUN_DIALOG,
+  withPracticeQuestion,
+  withRunPanel,
   type HomePanel,
 } from '@/lib/workspaces/home';
+import { withRunState, type RunUrlState } from '@/lib/questions/practice-runs';
 import { usePanelHistory } from './use-panel-history';
 import styles from './workspace-home.module.css';
 
@@ -154,6 +175,7 @@ export interface WorkspaceHomeProps {
     readonly share: string;
     readonly chapterNote: string;
     readonly summary: string;
+    readonly mockExams: string;
   };
 }
 
@@ -184,17 +206,28 @@ export function WorkspaceHome({
   // Forward reopens it (UX7-BACK, UX7-BACK-2); what changed meanwhile (filters) is kept.
   const panelHistory = usePanelHistory({
     open: openDialogs,
-    close: (search, dialog) => closeDialog(search, dialog, executedFilter()),
+    // Closing the run (its button or Back) hands `mock` back to the 모의고사 dialog's view.
+    close: (search, dialog) => {
+      const closed = closeDialog(search, dialog, executedFilter());
+      return dialog === RUN_DIALOG ? keepMockView(closed) : closed;
+    },
     closeAll: (search) => withoutPanels(search, executedFilter()),
     read: (url) => router.replace(url, { scroll: false }),
   });
   function closeTo(url: string) {
     panelHistory.close(url);
   }
+  // The practice panel and the run panel are never open together (QVIEW-01-AC09): opening one
+  // over the other closes that one first (neither Back nor Forward brings it back), then opens.
+  function openPanelAt(target: string) {
+    const search = new URL(target, window.location.href).search;
+    const closed = exclusiveClose(window.location.search, search);
+    if (closed === null) panelHistory.push(target);
+    else panelHistory.close(`${pathname}${closed}`, target);
+  }
   const allowed = (panel: HomePanel) =>
     (panel !== 'share' || isOwner) &&
-    ((panel !== 'generate' && panel !== QUESTION_CREATE_PANEL && panel !== DUPLICATES_PANEL) ||
-      canEdit);
+    ((panel !== QUESTION_CREATE_PANEL && panel !== DUPLICATES_PANEL) || canEdit);
   const panels = parsePanels(searchParams).filter(allowed);
   const isOpen = (panel: HomePanel) => panels.includes(panel);
   // Pressing the button of a dialog that is already open (maybe under another one) raises it.
@@ -212,7 +245,9 @@ export function WorkspaceHome({
     const search =
       panel === 'document-summary'
         ? withSummaryPanel(window.location.search, null, executedFilter())
-        : withPanel(window.location.search, panel, false);
+        : panel === MOCK_EXAMS_PANEL
+          ? withoutMockExams(window.location.search)
+          : withPanel(window.location.search, panel, false);
     closeTo(`${pathname}${search}`);
   };
   // DOCSUM-01: one summary panel; another row's 요약 switches its document (and raises it).
@@ -252,15 +287,53 @@ export function WorkspaceHome({
   const practiceReturnFocusRef = useRef<HTMLElement | null>(null);
   function openNoteQuestion(questionId: string, returnFocus: HTMLElement | null) {
     practiceReturnFocusRef.current = returnFocus;
-    panelHistory.push(
-      `${pathname}${patchSearch(window.location.search, { question: questionId })}`,
-    );
+    openPanelAt(`${pathname}${withPracticeQuestion(window.location.search, questionId)}`);
+  }
+  // The range run panel (QVIEW-01): opened from the 문제 menu on a new entry; its range → run →
+  // results steps rewrite that entry, its positions push entries, closing drops them (QOV-01-AC14).
+  function openRun() {
+    const picker: RunUrlState = { step: 'picker', source: 'bank', mockExamId: null };
+    openPanelAt(`${pathname}${withRunPanel(window.location.search, picker)}`);
+  }
+  function navigateRun(state: RunUrlState, how: 'push' | 'replace') {
+    const target = `${pathname}${keepMockView(withRunState(window.location.search, state))}`;
+    if (how === 'push') panelHistory.push(target);
+    else panelHistory.replace(target);
+  }
+  function closeRun() {
+    closeTo(`${pathname}${keepMockView(withRunState(window.location.search, null))}`);
+  }
+
+  // --- 모의고사 (MOCK-01) ---------------------------------------------------------------------------
+  // The dialog's view is `mock`, which a mock exam run's range step borrows for its mock exam
+  // (home.ts runOwnsMockParam): meanwhile the dialog keeps the view it last showed, and the run's
+  // later steps hand `mock` back to it.
+  const urlMockView = mockViewOf(searchParams);
+  const borrowed = runOwnsMockParam(searchParams);
+  const [shownMockView, setShownMockView] = useState<MockView>(urlMockView);
+  if (!borrowed && mockParamOf(urlMockView) !== mockParamOf(shownMockView)) {
+    setShownMockView(urlMockView);
+  }
+  const mockView = borrowed ? shownMockView : urlMockView;
+  function keepMockView(search: string): string {
+    return withShownMockView(search, shownMockView);
+  }
+  function changeMockView(view: MockView, how: 'push' | 'replace') {
+    const target = `${pathname}${withMockView(window.location.search, view)}`;
+    if (how === 'push') panelHistory.push(target);
+    else panelHistory.replace(target);
+  }
+  /** A mock exam's 풀기: the run panel's range step on it (QVIEW-01 `sequence(mock)`). */
+  function openMockRun(mockExamId: string) {
+    openPanelAt(`${pathname}${withMockRun(window.location.search, mockExamId)}`);
   }
   // The practice panel's open, previous/next (new entries) and close (QPLAY-01-AC05, UX7-BACK).
   function changeQuestion(questionId: string | null) {
-    const target = `${pathname}${patchSearch(window.location.search, { question: questionId })}`;
-    if (questionId) panelHistory.push(target);
-    else closeTo(target);
+    if (questionId) {
+      openPanelAt(`${pathname}${withPracticeQuestion(window.location.search, questionId)}`);
+      return;
+    }
+    closeTo(`${pathname}${patchSearch(window.location.search, { question: null })}`);
   }
   // The Heatmap headers' "만드는 중": the workspace's note list, re-read while one is generating,
   // and what an open note panel last saw.
@@ -541,9 +614,10 @@ export function WorkspaceHome({
             <QuestionMenu
               readOnly={readOnly}
               onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
-              onGenerate={() => setPanel('generate', true)}
               onDuplicates={() => setPanel(DUPLICATES_PANEL, true)}
               onInactive={() => setPanel(INACTIVE_QUESTIONS_PANEL, true)}
+              onMockExams={() => setPanel(MOCK_EXAMS_PANEL, true)}
+              onPractice={openRun}
             />
           </div>
           <div className={styles.actionGroup} data-align="end">
@@ -603,6 +677,8 @@ export function WorkspaceHome({
         panelScreenId={screenIds.practice}
         practiceReturnFocusRef={practiceReturnFocusRef}
         onQuestionChange={changeQuestion}
+        onRunNavigate={navigateRun}
+        onRunClose={closeRun}
         createOpen={isOpen(QUESTION_CREATE_PANEL)}
         onCreateOpenChange={(open) => setPanel(QUESTION_CREATE_PANEL, open)}
         documents={documentTitles}
@@ -655,30 +731,6 @@ export function WorkspaceHome({
           </FloatingSidePanel>
           {canEdit ? (
             <FloatingSidePanel
-              open={isOpen('generate')}
-              onOpenChange={(open) => setPanel('generate', open)}
-              raiseKey={raised.generate}
-              modal={false}
-              container={host}
-              title="문제 생성"
-              closeLabel="문제 생성 닫기"
-              mobileLayout="full"
-            >
-              <GenerationDialog
-                workspaceId={workspace.id}
-                archived={workspace.archived}
-                chapters={chapterChoices}
-                onShuffle={(questionId) => {
-                  const search = patchSearch(withPanel(window.location.search, 'generate', false), {
-                    question: questionId,
-                  });
-                  panelHistory.push(`${pathname}${search}`);
-                }}
-              />
-            </FloatingSidePanel>
-          ) : null}
-          {canEdit ? (
-            <FloatingSidePanel
               open={isOpen(DUPLICATES_PANEL)}
               onOpenChange={(open) => setPanel(DUPLICATES_PANEL, open)}
               raiseKey={raised[DUPLICATES_PANEL]}
@@ -713,6 +765,18 @@ export function WorkspaceHome({
               refreshKey={questionsVersion}
             />
           </FloatingSidePanel>
+          <MockExamsPanel
+            open={isOpen(MOCK_EXAMS_PANEL)}
+            onOpenChange={(open) => setPanel(MOCK_EXAMS_PANEL, open)}
+            raiseKey={raised[MOCK_EXAMS_PANEL]}
+            container={host}
+            workspaceId={workspace.id}
+            canEdit={canEdit}
+            view={mockView}
+            onViewChange={changeMockView}
+            onPractise={(exam) => openMockRun(exam.id)}
+            screenId={screenIds.mockExams}
+          />
           <FloatingSidePanel
             open={isOpen('history')}
             onOpenChange={(open) => setPanel('history', open)}

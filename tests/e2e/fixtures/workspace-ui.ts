@@ -13,12 +13,14 @@
 //              each followed by a "설정" text button named "문제 설정"/"본문 설정" → popover
 //              "문제 검색 설정"/"본문 검색 설정", and a status message, UX6), buttons "문서 n", "문제" (menu button, UX4; shown to everyone, UX7-DOCS-2: menuitems
 //              "직접 추가" (the modal "문제 등록" dialog, `?panel=question-create`, UX7-BANK) and
-//              "변형 출제", aria-disabled without edit rights with the reason as menu text;
-//              no "전체 문제" since UX7-BANK, no "PDF 관리" since UX7-DOCS), then
+//              "중복 문제 정리", aria-disabled without edit rights with the reason as menu text,
+//              then "보관·초안 문제" · "모의고사" · "문제 풀기" for every member; no "전체 문제"
+//              since UX7-BANK, no "PDF 관리" since UX7-DOCS, no "변형 출제" since QGEN-RM), then
 //              icon buttons "이력" and "공유하기" (owner); dialogs are non-modal
-//              FloatingSidePanels inside <main> named "문서 관리", "문제 생성", "이력", "링크 공유"
-//              (`?panel=documents|generate|history|share`; the retired 문제 PDF 관리
-//              `?panel=question-pdfs` redirects to `documents`, UX7-DOCS).
+//              FloatingSidePanels inside <main> named "문서 관리", "모의고사", "이력", "링크 공유"
+//              (`?panel=documents|mock-exams|history|share`; the retired 문제 PDF 관리
+//              `?panel=question-pdfs` redirects to `documents`, UX7-DOCS, and the retired 문제 생성
+//              `?panel=generate` to `mock-exams`, QGEN-RM).
 //   DOC-01     "문서 관리" dialog: dashed Dropzone whose "PDF 업로드" button opens a file
 //              chooser (the only upload button); one list item per book document with an
 //              upload progressbar, processing status, "준비 완료"/"Ready"; "취소"/"다시 시도";
@@ -94,6 +96,7 @@ export const homeUi = {
   documentsDialog: (page: Page) => homeUi.dialog(page, /^(문서 관리|documents)$/i),
   /** The retired 문제 PDF 관리 dialog (UX7-DOCS): only ever expected to be absent. */
   questionPdfsDialog: (page: Page) => homeUi.dialog(page, /^(문제 pdf 관리|question pdfs?)$/i),
+  /** The retired 문제 생성 dialog (QGEN-RM): only ever expected to be absent. */
   generateDialog: (page: Page) => homeUi.dialog(page, /^(문제 생성|generate questions?)$/i),
   shareDialog: (page: Page) => homeUi.dialog(page, /^(링크 공유|share link)$/i),
   /** The 문제 search box: filters the heatmap as you type (SEARCH-01-AC12, no button). */
@@ -132,20 +135,35 @@ const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
   body: /^(본문 검색 설정|body search settings|content search settings)$/i,
 };
 
-type QuestionMenuItem = 'pdfs' | 'create' | 'generate' | 'duplicates' | 'inactive';
+type QuestionMenuItem =
+  'pdfs' | 'create' | 'generate' | 'duplicates' | 'inactive' | 'mockExams' | 'practice';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   /** Retired by UX7-DOCS: only ever expected to be absent. */
   pdfs: /^(pdf 관리|manage pdfs?)$/i,
   create: /^(직접 추가|add question)$/i,
+  /** Retired by QGEN-RM (MOCK-01-AC01): only ever expected to be absent. */
   generate: /^(변형 출제|generate variants?)$/i,
   /** UX7-DEDUP: the 중복 문제 정리 dialog, editors only (QOV-01-AC16). */
   duplicates: /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
   /** UX7-BANK-2: the 보관·초안 문제 dialog, usable by every member. */
   inactive: /^(보관·초안 문제|archived and draft questions)$/i,
+  /** MOCK-01: the 모의고사 dialog, usable by every member. */
+  mockExams: /^(모의고사|mock exams?)$/i,
+  /** QVIEW-01: the range run (QuestionViewer sequence), usable by every member. */
+  practice: /^(문제 풀기|practice questions?|start practice)$/i,
 };
 
-/** The `문제` menu's editor-only items (UX7-DOCS-2; 중복 문제 정리 since UX7-DEDUP). */
-const EDITOR_ITEMS = ['create', 'generate', 'duplicates'] as const;
+/** The `문제` menu's editor-only items (UX7-DOCS-2, UX7-DEDUP; 변형 출제 retired by QGEN-RM). */
+const EDITOR_ITEMS = ['create', 'duplicates'] as const;
+
+/** Every `문제` menu item in order (MOCK-SYNC, QOV-01 7). */
+const QUESTION_MENU_ORDER = [
+  QUESTION_MENU_ITEMS.create,
+  QUESTION_MENU_ITEMS.duplicates,
+  QUESTION_MENU_ITEMS.inactive,
+  QUESTION_MENU_ITEMS.mockExams,
+  QUESTION_MENU_ITEMS.practice,
+] as const;
 
 /** Why the `문제` menu's editor-only items are disabled (UX7-DOCS-2, QOV-01-AC11). */
 export const QUESTION_MENU_REASONS = {
@@ -155,8 +173,9 @@ export const QUESTION_MENU_REASONS = {
 
 /**
  * Without edit rights the `문제` button stays (UX7-DOCS-2, QOV-01-AC11): its menu shows 직접 추가
- * and 변형 출제 aria-disabled (보관·초안 문제 enabled, UX7-BANK-2), says why in text (described-by), skips them with the arrow keys
- * and opens nothing when one is clicked. Leaves the menu closed, focus back on the button.
+ * and 중복 문제 정리 aria-disabled (보관·초안 문제 · 모의고사 · 문제 풀기 enabled, UX7-BANK-2,
+ * MOCK-SYNC), has no 변형 출제 (QGEN-RM), says why in text (described-by), skips them with the
+ * arrow keys and opens nothing when one is clicked. Leaves the menu closed, focus back on the button.
  */
 export async function expectReadOnlyQuestionMenu(
   page: Page,
@@ -169,18 +188,14 @@ export async function expectReadOnlyQuestionMenu(
   await page.keyboard.press('Enter');
   const menu = homeUi.questionMenu(page);
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem')).toHaveText([
-    QUESTION_MENU_ITEMS.create,
-    QUESTION_MENU_ITEMS.generate,
-    QUESTION_MENU_ITEMS.duplicates,
-    QUESTION_MENU_ITEMS.inactive,
-  ]);
-  // UX7-BANK-2: 보관·초안 문제 is readable by everyone, so it stays enabled.
-  await expect(homeUi.questionMenuItem(page, 'inactive')).not.toHaveAttribute(
-    'aria-disabled',
-    'true',
-  );
+  await expect(menu.getByRole('menuitem')).toHaveText([...QUESTION_MENU_ORDER]);
+  // UX7-BANK-2: 보관·초안 문제 is readable by everyone, so it stays enabled; so are 모의고사
+  // (MOCK-01, listing and practising mock exams) and 문제 풀기 (QVIEW-01, a personal practice run).
+  for (const item of ['inactive', 'mockExams', 'practice'] as const) {
+    await expect(homeUi.questionMenuItem(page, item)).not.toHaveAttribute('aria-disabled', 'true');
+  }
   await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
+  await expect(homeUi.questionMenuItem(page, 'generate')).toHaveCount(0);
   const text = QUESTION_MENU_REASONS[reason];
   await expect(menu.getByText(text)).toBeVisible();
   for (const item of EDITOR_ITEMS) {
@@ -205,7 +220,6 @@ export async function expectReadOnlyQuestionMenu(
     // Radix positions the menu after measuring: wait until it is placed before clicking.
     await expect(el).toBeInViewport();
     await el.click({ force: true });
-    await expect(homeUi.generateDialog(page)).toHaveCount(0);
     await expect(
       page.getByRole('dialog', { name: /^(중복 문제 정리|duplicate questions)$/i }),
     ).toHaveCount(0);

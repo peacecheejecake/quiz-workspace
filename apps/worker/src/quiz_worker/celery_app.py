@@ -46,14 +46,11 @@ from quiz_worker.errors import JobOutcomeError, JobRetryError, sanitize_error
 from quiz_worker.fork_job import LazyForkDeps, workspace_fork_definition
 from quiz_worker.jobs import ECHO_JOB
 from quiz_worker.logging_config import configure_logging, job_id_var
+from quiz_worker.mock_exam_job import LazyMockExamDeps, mock_exam_generate_definition
 from quiz_worker.pg_store import (
     PostgresJobStore,
     create_job_store_engine,
     dispose_inherited_engines,
-)
-from quiz_worker.question_generation_job import (
-    LazyGenerationDeps,
-    question_generate_definition,
 )
 from quiz_worker.question_import_job import LazyImportDeps, question_import_definition
 from quiz_worker.question_register_job import LazyRegisterDeps, question_register_definition
@@ -541,7 +538,8 @@ def install_parser_warm_up(settings: WorkerSettings, deps: LazyDeps) -> bool:
 def default_definitions(
     settings: WorkerSettings, deps: LazyDeps | None = None
 ) -> list[JobDefinition[Any]]:
-    """Every job type the worker runs. Dependencies of the document, import, generation, fork and
+    """Every job type the worker runs. `question.generate` is retired (QGEN-RM; see
+    reconcile.RETIRED_JOB_TYPES). Dependencies of the document, import, mock exam, fork and
     summary jobs (DB, Storage, Qdrant, models, LLM) are built on their first run, so a worker
     without that configuration still starts (those jobs then fail as `worker_not_configured`)."""
     deps = deps if deps is not None else LazyDeps(settings)
@@ -551,8 +549,8 @@ def default_definitions(
         index_sync_definition(deps),
         question_import_definition(LazyImportDeps(settings)),
         question_register_definition(LazyRegisterDeps(settings)),
-        question_generate_definition(LazyGenerationDeps(settings)),
         workspace_fork_definition(LazyForkDeps(settings)),
         document_summarize_definition(LazySummaryDeps(settings)),
         chapter_note_definition(LazyChapterNoteDeps(settings)),
+        mock_exam_generate_definition(LazyMockExamDeps(settings)),
     ]

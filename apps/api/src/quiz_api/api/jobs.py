@@ -56,7 +56,9 @@ router = APIRouter(tags=["jobs"])
 JOB_NOT_FOUND = "Job not found."
 
 
-class Job(BaseModel):
+class JobBase(BaseModel):
+    """Job fields every job surface shares; never the worker's result (see `Job.result`)."""
+
     id: uuid.UUID
     job_type: str = Field(description="e.g. `document.parse`.")
     status: JobStatus = Field(description="queued | running | succeeded | failed | cancelled")
@@ -78,22 +80,35 @@ class Job(BaseModel):
     finished_at: datetime | None
 
 
-def _job(view: JobView) -> Job:
-    return Job(
-        id=view.id,
-        job_type=view.job_type,
-        status=view.status,
-        progress=view.progress,
-        stage=view.stage,
-        error_code=view.error_code,
-        attempts=view.attempts,
-        max_attempts=view.max_attempts,
-        cancel_requested=view.cancel_requested,
-        created_at=view.created_at,
-        updated_at=view.updated_at,
-        started_at=view.started_at,
-        finished_at=view.finished_at,
+class Job(JobBase):
+    result: dict[str, Any] | None = Field(
+        default=None,
+        description="Counts and code only, for `mock_exam.generate`: {created_count, "
+        "skipped_count, usage: {llm_calls, batches, input_tokens, output_tokens}, error_code}; "
+        "null for other job types.",
     )
+
+
+def _job_base(view: JobView) -> dict[str, Any]:
+    return {
+        "id": view.id,
+        "job_type": view.job_type,
+        "status": view.status,
+        "progress": view.progress,
+        "stage": view.stage,
+        "error_code": view.error_code,
+        "attempts": view.attempts,
+        "max_attempts": view.max_attempts,
+        "cancel_requested": view.cancel_requested,
+        "created_at": view.created_at,
+        "updated_at": view.updated_at,
+        "started_at": view.started_at,
+        "finished_at": view.finished_at,
+    }
+
+
+def _job(view: JobView) -> Job:
+    return Job(**_job_base(view), result=view.result)
 
 
 # --- dependencies -------------------------------------------------------------------------------

@@ -23,6 +23,7 @@ import {
   chooseQuestionMenu,
   createNumberedQuestions,
   dedupUi,
+  docUi,
   draftFor,
   expect,
   expectReadOnlyQuestionMenu,
@@ -39,7 +40,6 @@ import {
   outlineNodeId,
   overviewPath,
   overviewUi,
-  choosePanelManage,
   panelUi,
   PROBLEM_TYPES,
   publishDrafts,
@@ -488,7 +488,7 @@ test(
     await expect(overviewUi.heatmap(page)).toBeVisible();
     await expect(homeUi.shareButton(page)).toHaveCount(0);
     await expect(homeUi.shareDialog(page)).toHaveCount(0);
-    // A viewer keeps the 문제 button (UX7-DOCS-2) with 직접 추가 / 변형 출제 disabled; no
+    // A viewer keeps the 문제 button (UX7-DOCS-2) with 직접 추가 / 중복 문제 정리 disabled; no
     // 전체 문제 (UX7-BANK), no PDF 관리 (UX7-DOCS).
     await expectReadOnlyQuestionMenu(page, 'viewer');
     const denied = await viewer.api.request('GET', `/workspaces/${s.workspaceId}/share-links`);
@@ -559,7 +559,11 @@ test(
   'QOV-01-AC09 dialogs open at once with a skeleton while loading; sub-pages show their route skeleton',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
+    test.setTimeout(JOB_TIMEOUT_MS + 60_000);
     const s = await seed(workspaceFactory, 'qov01-ac09', 2);
+    // A question paper with an extraction, for the 문제 검토 sub-page link below (read with the
+    // home's document list, so it is made before the home loads).
+    await importPaperDrafts(s.owner, s.workspaceId);
     await openOverview(page, s);
 
     // Hold the history reads: the dialog is already open, busy, with a status text.
@@ -582,49 +586,51 @@ test(
     await expect(dialog.locator('[aria-busy="true"]')).toHaveCount(0);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
 
-    // A sub-page (문제 변형 출제, from the practice panel's 문제 관리 › 변형 출제, UX7-BANK): the
-    // route skeleton shows while the page's server render is held back.
-    // The menu prefetches the route when the panel mounts; its non-segment prefetch carries the
-    // loading boundary. 변형 출제 is chosen only once that prefetch has been delivered: a click
-    // before it lands makes Next render the skeleton from the navigation's own streamed response,
-    // which the gate holds whole (the WebKit flake, UX7-FLAKE-AC09).
+    // A sub-page (문제 PDF 가져오기, from the 문서 관리 row's 문제 검토 link; QGEN-RM moved this
+    // off the retired 변형 출제 review page): the route skeleton shows while the page's server
+    // render is held back. The link prefetches the route once it is visible, and those prefetches
+    // carry the loading boundary. 문제 검토 is chosen only once every one of them has been
+    // delivered: a click before they land makes Next render the skeleton from the navigation's
+    // own streamed response, which the gate holds whole (the WebKit flake, UX7-FLAKE-AC09).
     let releasePage!: () => void;
     const pageGate = new Promise<void>((resolve) => (releasePage = resolve));
-    let boundaryPrefetched = false;
+    let prefetching = 0;
+    let prefetched = 0;
     await page.route(
-      (url) => url.pathname.endsWith('/questions/generate'),
+      (url) => url.pathname.endsWith('/questions/import'),
       async (route) => {
-        // Only the navigation's render is held: the document and the menu's prefetches go through.
+        // Only the navigation's render is held: the document and the link's prefetches go through.
         const request = route.request();
         if (request.resourceType() === 'document') return route.fallback();
-        const headers = request.headers();
-        if (headers['next-router-prefetch'] !== undefined) {
-          const boundary =
-            headers['next-router-segment-prefetch'] === undefined &&
-            new URL(request.url()).searchParams.has('source');
-          if (!boundary) return route.fallback();
-          // Fulfilled whole, so "delivered" is observable (Response.finished() can hang on Chromium).
-          await route.fulfill({ response: await route.fetch() });
-          boundaryPrefetched = true;
+        if (request.headers()['next-router-prefetch'] !== undefined) {
+          prefetching += 1;
+          try {
+            // Fulfilled whole, so "delivered" is observable (Response.finished() can hang on
+            // Chromium).
+            await route.fulfill({ response: await route.fetch() });
+            prefetched += 1;
+          } finally {
+            prefetching -= 1;
+          }
           return;
         }
         await pageGate;
         await route.fallback();
       },
     );
-    await overviewUi.dot(page, 1).click();
-    const panel = panelUi.numbered(page, 1);
-    await expect(panel).toBeVisible();
-    await expect.poll(() => boundaryPrefetched).toBe(true);
-    await choosePanelManage(page, panel, 'generate');
+    await homeUi.documentsButton(page).click();
+    const review = docUi.reviewLink(homeUi.documentsDialog(page));
+    await expect(review).toBeVisible({ timeout: JOB_TIMEOUT_MS });
+    await expect.poll(() => prefetched > 0 && prefetching === 0).toBe(true);
+    await review.click();
     await expect(
       main(page)
         .getByRole('status')
-        .filter({ hasText: /문제 변형 출제를 불러오는 중|loading/i }),
+        .filter({ hasText: /문제 pdf 가져오기를 불러오는 중|loading/i }),
     ).toBeVisible();
     releasePage();
     await expect(
-      page.getByRole('heading', { level: 1, name: /^(문제 변형 출제|generate)/i }),
+      page.getByRole('heading', { level: 1, name: /^(문제 pdf 가져오기|import)/i }),
     ).toBeVisible();
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   },
@@ -651,6 +657,17 @@ test(
     const z = (l: Locator) => l.evaluate((el) => Number(getComputedStyle(el).zIndex));
     expect(await z(history)).toBeGreaterThan(await z(documents));
 
+    // The `문제` menu's 모의고사 dialog (QGEN-RM: it replaced 변형 출제's 문제 생성) stacks on top too.
+    await chooseQuestionMenu(page, 'mockExams');
+    const mockExams = main(page).getByRole('dialog', { name: /^(모의고사|mock exams?)$/i });
+    await expect(mockExams).toBeVisible();
+    await expect(mockExams).not.toHaveAttribute('aria-modal', 'true');
+    await expect(page).toHaveURL(/panel=documents&panel=history&panel=mock-exams/);
+    expect(await z(mockExams)).toBeGreaterThan(await z(history));
+    await mockExams.getByRole('button', { name: /모의고사 닫기|close/i }).click();
+    await expect(mockExams).toBeHidden();
+    await expect(page).toHaveURL(/panel=documents&panel=history$/);
+
     // Pressing 문서 again brings its (covered) dialog back on top.
     await homeUi.documentsButton(page).click();
     await expect.poll(async () => (await z(documents)) > (await z(history))).toBe(true);
@@ -667,7 +684,7 @@ test(
 );
 
 test(
-  'QOV-01-AC11 the header 문제 menu opens 직접 추가 and 변형 출제 by mouse and keyboard, without 전체 문제 or PDF 관리; viewers and archived workspaces keep the button with both items disabled and the reason',
+  'QOV-01-AC11 the header 문제 menu opens 직접 추가 and 모의고사 by mouse and keyboard, without 변형 출제, 전체 문제 or PDF 관리; viewers and archived workspaces keep the button with the editor items disabled and the reason',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac11', 1);
@@ -680,30 +697,39 @@ test(
     await expect(homeUi.questionMenu(page)).toBeVisible();
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
       /^(직접 추가|add question)$/i,
-      /^(변형 출제|generate variants?)$/i,
       /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
       /^(보관·초안 문제|archived and draft questions)$/i,
+      // MOCK-01 (MOCK-W): mock exams; QVIEW-01 (QVIEW-W): the range run — both for every member.
+      /^(모의고사|mock exams?)$/i,
+      /^(문제 풀기|practice questions?|start practice)$/i,
     ]);
     await expect(
       homeUi.questionMenu(page).getByRole('menuitem', { name: /^(전체 문제|all questions)$/i }),
     ).toHaveCount(0);
-    // UX7-DOCS: PDF 관리 moved into 문서 관리 (DOC-01-AC09).
+    // UX7-DOCS: PDF 관리 moved into 문서 관리 (DOC-01-AC09); QGEN-RM retired 변형 출제.
     await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
+    await expect(homeUi.questionMenuItem(page, 'generate')).toHaveCount(0);
     await expect(homeUi.questionMenuItem(page, 'create')).toBeFocused();
     await page.keyboard.press('ArrowDown');
-    await expect(homeUi.questionMenuItem(page, 'generate')).toBeFocused();
+    await expect(homeUi.questionMenuItem(page, 'duplicates')).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(homeUi.questionMenu(page)).toBeHidden();
     await expect(button).toBeFocused();
 
-    // 변형 출제 by keyboard (Enter opens the menu on 직접 추가, ArrowDown, Enter).
+    // 모의고사 by keyboard (Enter opens the menu on 직접 추가; ArrowDown past 중복 문제 정리 and
+    // 보관·초안 문제; Enter).
     await page.keyboard.press('Enter');
     await expect(homeUi.questionMenuItem(page, 'create')).toBeFocused();
-    await page.keyboard.press('ArrowDown');
-    await expect(homeUi.questionMenuItem(page, 'generate')).toBeFocused();
+    for (const item of ['duplicates', 'inactive', 'mockExams'] as const) {
+      await page.keyboard.press('ArrowDown');
+      await expect(homeUi.questionMenuItem(page, item)).toBeFocused();
+    }
     await page.keyboard.press('Enter');
-    await expect(homeUi.generateDialog(page)).toBeVisible();
-    await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').includes('generate'));
+    await expect(
+      main(page).getByRole('dialog', { name: /^(모의고사|mock exams?)$/i }),
+    ).toBeVisible();
+    await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').includes('mock-exams'));
+    await expect(homeUi.generateDialog(page)).toHaveCount(0);
 
     // 직접 추가 by mouse → the 문제 등록 dialog on the home (UX7-BANK): same path, `?panel=question-create`,
     // modal; closing it drops the panel value.
@@ -722,7 +748,7 @@ test(
     await expect(homeUi.questionMenuButton(page)).toBeFocused();
 
     // Without edit rights the button stays (UX7-DOCS-2): a viewer, then the archived workspace's
-    // owner, see both items disabled with the reason in text.
+    // owner, see the editor items (직접 추가, 중복 문제 정리) disabled with the reason in text.
     const viewer = await workspaceFactory.member('qov01-ac11-viewer');
     seedMembership(s.workspaceId, viewer.user.id, 'viewer');
     await page.context().clearCookies();
@@ -840,7 +866,7 @@ test(
 );
 
 test(
-  'QOV-01-AC13 sub-pages show a back link and a breadcrumb to the home; the retired /questions/bank redirects home',
+  'QOV-01-AC13 sub-pages show a back link and a breadcrumb to the home; the retired /questions/bank and /questions/generate redirect home',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     test.setTimeout(JOB_TIMEOUT_MS + 60_000);
@@ -883,15 +909,13 @@ test(
     await nav().getByRole('link', { name: ws.name, exact: true }).click();
     await expect(page).toHaveURL((url) => url.pathname === home);
     await expect(homeUi.header(page)).toBeVisible();
-    await page.goto(`${home}/questions/generate`);
-    await expectSubPageNav(/^(문제 변형 출제|generate)/i);
+    await page.goto(`${home}/documents/${documentId}`);
+    await expectSubPageNav(/물의 순환과 정수 처리|book-ko/i, /^(문서 관리|documents)$/i);
     await main(page)
       .getByRole('link', { name: /workspace 홈|back/i })
       .click();
     await expect(page).toHaveURL((url) => url.pathname === home);
     await expect(homeUi.header(page)).toBeVisible();
-    await page.goto(`${home}/documents/${documentId}`);
-    await expectSubPageNav(/물의 순환과 정수 처리|book-ko/i, /^(문서 관리|documents)$/i);
 
     // The retired bank route: the home, keeping only `?question=` (its practice panel opens).
     await page.goto(`${home}/questions/bank?status=ALL&create=1`);
@@ -903,6 +927,21 @@ test(
       (url) => url.pathname === home && url.searchParams.get('question') === question?.id,
     );
     await expect(panelUi.numbered(page, 1)).toBeVisible();
+
+    // The retired 변형 출제 review and batch pages (QGEN-RM): the home with the 모의고사 dialog
+    // that replaced them; their query is dropped.
+    for (const query of [`source=${question?.id}`, 'batch=00000000-0000-4000-8000-000000000000']) {
+      await page.goto(`${home}/questions/generate?${query}`);
+      await expect(page).toHaveURL(
+        (url) =>
+          url.pathname === home &&
+          url.searchParams.getAll('panel').join() === 'mock-exams' &&
+          [...url.searchParams.keys()].join() === 'panel',
+      );
+      await expect(
+        main(page).getByRole('dialog', { name: /^(모의고사|mock exams?)$/i }),
+      ).toBeVisible();
+    }
   },
 );
 
