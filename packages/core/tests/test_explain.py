@@ -209,3 +209,24 @@ def test_aiexpl_01_c08_hold_and_mid_stream_barriers(fake: FakeExplainer, tmp_pat
     (hold / "tok1.resume").write_text("")
     worker.join(10)
     assert len(chunks) >= 3
+
+
+def test_aiexpl_01_c04_a_duplicate_option_section_fails_coverage_even_when_empty() -> None:
+    """A later, empty `[[OPTION X]]` must not overwrite the valid one and pass (Codex P2)."""
+    question = mcq()
+    good = "\n".join(
+        [
+            "[[ANSWER]] opt-1",
+            "[[SUMMARY]]",
+            "정답은 증발",
+            *[f"[[OPTION {o['id']}]]\n{o['text']} 설명" for o in OPTIONS],
+            "[[CONCEPTS]]",
+            "개념",
+        ]
+    )
+    for tail in ("\n[[OPTION opt-2]]\n", "\n[[OPTION opt-2]]\n   \n", "\n[[OPTION opt-9]]\n"):
+        done = finish_explanation(good + tail, question, [])
+        assert done.body is None, tail
+        assert done.error_code == INCOMPLETE
+    empty = good.replace("[[OPTION opt-3]]\n강수 설명", "[[OPTION opt-3]]")
+    assert finish_explanation(empty, question, []).missing_option_ids == ("opt-3",)

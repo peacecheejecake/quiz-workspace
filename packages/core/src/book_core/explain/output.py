@@ -199,8 +199,11 @@ def finish_explanation(
         ):
             return FinishedExplanation(None, ANSWER_MISMATCH)
         expected = question.option_ids
-        seen = [option_id for option_id, why in parsed.options if why]
-        missing = tuple(o for o in expected if seen.count(o) != 1)
+        # Every section counts, empty ones included: a second (even empty) section of an option
+        # is a duplicate, and an option whose only section is empty is missing.
+        seen = [option_id for option_id, _why in parsed.options]
+        filled = {option_id for option_id, why in parsed.options if why.strip()}
+        missing = tuple(o for o in expected if seen.count(o) != 1 or o not in filled)
         unknown = [o for o in seen if o not in expected]
         if parsed.correct_option_ids is None or missing or unknown or not parsed.summary:
             return FinishedExplanation(
