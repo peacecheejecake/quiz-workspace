@@ -549,6 +549,97 @@
         "title": "BoundingBox",
         "type": "object"
       },
+      "ChapterAssignmentItem": {
+        "additionalProperties": false,
+        "properties": {
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Target; null = \"챕터 없음\".",
+            "title": "Chapter Id"
+          },
+          "expected_chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The chapter the client showed (the current one); a different current chapter refuses the whole request (409 `chapter-changed`).",
+            "title": "Expected Chapter Id"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "chapter_id",
+          "expected_chapter_id"
+        ],
+        "title": "ChapterAssignmentItem",
+        "type": "object"
+      },
+      "ChapterAssignmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChapterAssignmentItem"
+            },
+            "maxItems": 5000,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "source": {
+            "description": "manual (직접 옮기기 -> `manual`) | recommendation (applied -> `auto`).",
+            "enum": [
+              "manual",
+              "recommendation"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "items"
+        ],
+        "title": "ChapterAssignmentRequest",
+        "type": "object"
+      },
+      "ChapterAssignmentResult": {
+        "properties": {
+          "moved": {
+            "title": "Moved",
+            "type": "integer"
+          },
+          "unchanged": {
+            "description": "Already in the target chapter (as expected).",
+            "title": "Unchanged",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "moved",
+          "unchanged"
+        ],
+        "title": "ChapterAssignmentResult",
+        "type": "object"
+      },
       "ChapterNote": {
         "properties": {
           "created_at": {
@@ -6265,6 +6356,22 @@
             "description": "Request path.",
             "title": "Instance"
           },
+          "question_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "409 `chapter-changed` of a chapter assignment: the questions whose chapter is no longer the expected one.",
+            "title": "Question Ids"
+          },
           "request_id": {
             "anyOf": [
               {
@@ -6398,6 +6505,15 @@
             "description": "Document outline node (`chapters.id`).",
             "title": "Chapter Id"
           },
+          "chapter_source": {
+            "description": "How the chapter was decided: `manual` (a person chose it: registration, edit, a move) or `auto` (a CHAPTER-MAP suggestion: import registration, an applied recommendation).",
+            "enum": [
+              "manual",
+              "auto"
+            ],
+            "title": "Chapter Source",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -6473,6 +6589,7 @@
           "origin",
           "chapter_id",
           "chapter",
+          "chapter_source",
           "question_number",
           "revision",
           "sources",
@@ -6646,6 +6763,15 @@
             "description": "Document outline node (`chapters.id`).",
             "title": "Chapter Id"
           },
+          "chapter_source": {
+            "description": "How the chapter was decided: `manual` (a person chose it: registration, edit, a move) or `auto` (a CHAPTER-MAP suggestion: import registration, an applied recommendation).",
+            "enum": [
+              "manual",
+              "auto"
+            ],
+            "title": "Chapter Source",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -6740,6 +6866,7 @@
           "origin",
           "chapter_id",
           "chapter",
+          "chapter_source",
           "question_number",
           "revision",
           "sources",
@@ -7642,6 +7769,387 @@
           "checks"
         ],
         "title": "ReadinessReport",
+        "type": "object"
+      },
+      "RedistributionChapter": {
+        "properties": {
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "RedistributionChapter",
+        "type": "object"
+      },
+      "RedistributionGroup": {
+        "properties": {
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = \"챕터 없음\" (always last).",
+            "title": "Id"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Chapter number for labels, if known.",
+            "title": "Number"
+          },
+          "question_count": {
+            "title": "Question Count",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "title",
+          "document_id",
+          "question_count"
+        ],
+        "title": "RedistributionGroup",
+        "type": "object"
+      },
+      "RedistributionList": {
+        "properties": {
+          "chapters": {
+            "description": "Groups of `items`, Heatmap order.",
+            "items": {
+              "$ref": "#/components/schemas/RedistributionGroup"
+            },
+            "title": "Chapters",
+            "type": "array"
+          },
+          "items": {
+            "description": "Heatmap order.",
+            "items": {
+              "$ref": "#/components/schemas/RedistributionQuestion"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "targets": {
+            "description": "Chapters a question may move to (live books' current revisions; \"챕터 없음\" = `chapter_id: null` is always allowed).",
+            "items": {
+              "$ref": "#/components/schemas/RedistributionTargetDocument"
+            },
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "chapters",
+          "targets"
+        ],
+        "title": "RedistributionList",
+        "type": "object"
+      },
+      "RedistributionPreview": {
+        "properties": {
+          "items": {
+            "description": "Only questions whose chapter would change.",
+            "items": {
+              "$ref": "#/components/schemas/RedistributionPreviewItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "no_recommendation": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Questions without a recommendation, by reason (non-zero only).",
+            "propertyNames": {
+              "enum": [
+                "no_source",
+                "no_source_chapter",
+                "no_match",
+                "ambiguous"
+              ]
+            },
+            "title": "No Recommendation",
+            "type": "object"
+          },
+          "skipped_manual": {
+            "description": "`manual` questions not computed (include_manual).",
+            "title": "Skipped Manual",
+            "type": "integer"
+          },
+          "unchanged": {
+            "description": "Recommended chapter = current chapter.",
+            "title": "Unchanged",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "unchanged",
+          "no_recommendation",
+          "skipped_manual"
+        ],
+        "title": "RedistributionPreview",
+        "type": "object"
+      },
+      "RedistributionPreviewItem": {
+        "properties": {
+          "current_chapter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RedistributionChapter"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = \"챕터 없음\"."
+          },
+          "number_label": {
+            "title": "Number Label",
+            "type": "string"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "reason": {
+            "description": "source_in_book (출처 교재의 장) | matched (문제지 장 제목과 일치).",
+            "enum": [
+              "source_in_book",
+              "matched"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "recommended_chapter": {
+            "$ref": "#/components/schemas/RedistributionChapter"
+          },
+          "stem_preview": {
+            "title": "Stem Preview",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "number_label",
+          "stem_preview",
+          "current_chapter",
+          "recommended_chapter",
+          "reason"
+        ],
+        "title": "RedistributionPreviewItem",
+        "type": "object"
+      },
+      "RedistributionPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "all": {
+            "default": false,
+            "description": "Every confirmed question (nothing selected).",
+            "title": "All",
+            "type": "boolean"
+          },
+          "include_manual": {
+            "default": false,
+            "description": "Also recommend for chapters a person chose (`manual`).",
+            "title": "Include Manual",
+            "type": "boolean"
+          },
+          "question_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 5000,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The selected questions (ids that are not confirmed questions here are ignored).",
+            "title": "Question Ids"
+          }
+        },
+        "title": "RedistributionPreviewRequest",
+        "type": "object"
+      },
+      "RedistributionQuestion": {
+        "properties": {
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Id"
+          },
+          "chapter_source": {
+            "description": "`manual` rows show 직접 정함.",
+            "enum": [
+              "manual",
+              "auto"
+            ],
+            "title": "Chapter Source",
+            "type": "string"
+          },
+          "label": {
+            "description": "Display label, e.g. \"1장 3번\" (chapter number, number).",
+            "title": "Label",
+            "type": "string"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "question_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Number"
+          },
+          "question_type": {
+            "enum": [
+              "MCQ",
+              "SHORT_ANSWER",
+              "ESSAY"
+            ],
+            "title": "Question Type",
+            "type": "string"
+          },
+          "stem_preview": {
+            "description": "The stem's first 40 characters.",
+            "title": "Stem Preview",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "chapter_id",
+          "question_number",
+          "question_type",
+          "label",
+          "stem_preview",
+          "chapter_source"
+        ],
+        "title": "RedistributionQuestion",
+        "type": "object"
+      },
+      "RedistributionTargetChapter": {
+        "properties": {
+          "depth": {
+            "description": "Outline level (1 = top level).",
+            "title": "Depth",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "depth"
+        ],
+        "title": "RedistributionTargetChapter",
+        "type": "object"
+      },
+      "RedistributionTargetDocument": {
+        "properties": {
+          "chapters": {
+            "description": "Outline order.",
+            "items": {
+              "$ref": "#/components/schemas/RedistributionTargetChapter"
+            },
+            "title": "Chapters",
+            "type": "array"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "document_title",
+          "chapters"
+        ],
+        "title": "RedistributionTargetDocument",
         "type": "object"
       },
       "RestoredDraft": {
@@ -19373,6 +19881,194 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/chapter-redistribution/preview": {
+      "post": {
+        "description": "Recommend chapters again (CHAPTER-MAP on each question's first source block) and list the\nquestions whose chapter would change. Read-only: computed on every request, nothing stored.",
+        "operationId": "previewChapterRedistribution",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedistributionPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedistributionPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Preview Redistribution",
+        "tags": [
+          "questions"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/chapter-redistribution/questions": {
+      "get": {
+        "description": "The workspace's confirmed questions by chapter group (Heatmap order) with how each chapter\nwas decided, and the book chapters they can move to. No answers.",
+        "operationId": "listChapterRedistributionQuestions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedistributionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Redistribution Questions",
+        "tags": [
+          "questions"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/documents": {
       "get": {
         "description": "The workspace's documents (not soft-deleted), newest first, each with its queued or\nrunning parse job.",
@@ -20940,6 +21636,134 @@
           }
         ],
         "summary": "Create Question",
+        "tags": [
+          "questions"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/questions/chapter-assignments": {
+      "post": {
+        "description": "Move questions to chapters in one transaction (all or nothing). Each item carries the\nchapter the client showed; any difference refuses the whole request. Moving never creates a\nquestion revision and keeps attempts and study state.",
+        "operationId": "assignQuestionChapters",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChapterAssignmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterAssignmentResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Assign Question Chapters",
         "tags": [
           "questions"
         ]

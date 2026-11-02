@@ -9,6 +9,7 @@ from fastapi import APIRouter
 
 from quiz_api.api import (
     chapter_notes,
+    chapter_redistribution,
     document_export,
     document_revisions,
     document_summaries,
@@ -49,6 +50,7 @@ api_router.include_router(search.router)
 api_router.include_router(questions.router)
 api_router.include_router(question_overview.router)
 api_router.include_router(question_duplicates.router)
+api_router.include_router(chapter_redistribution.router)
 api_router.include_router(question_imports.router)
 api_router.include_router(practice.router)
 api_router.include_router(practice_runs.router)

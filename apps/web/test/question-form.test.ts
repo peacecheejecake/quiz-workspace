@@ -63,6 +63,7 @@ const QUESTION: Question = {
   origin: 'manual',
   chapter_id: CHAPTER,
   chapter: { id: CHAPTER, document_id: DOC, title: '1장 물의 순환' },
+  chapter_source: 'manual',
   question_number: 3,
   revision: {
     id: REV,

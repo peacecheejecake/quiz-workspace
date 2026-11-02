@@ -14,6 +14,12 @@ the question's chain whose key is non-empty and found among the book chapters de
 book chapter with that key is the suggestion; several are narrowed by the chapter number (`제1장`
 vs `제3장`), and still several is `ambiguous` (no suggestion: never a guess). No node found is
 `no_match`; a question whose source block has no chapter is `no_source_chapter`.
+
+Registered questions (chapter redistribution, docs/questions.md §14.2) use the same matcher on
+their first source block (`recommend`): a block of a book is already in a book chapter
+(`source_in_book`: that section in the book's current revision); a block of a question paper (or
+of the question part of a `mixed` document) is matched by title exactly like an import draft; a
+question without a source is `no_source`.
 """
 
 from __future__ import annotations
@@ -103,3 +109,41 @@ class ChapterMatcher:
                 return Suggestion(candidates[0][0], "matched", title)
             return Suggestion(None, "ambiguous", title)
         return Suggestion(None, "no_match", chain[0])
+
+
+RecommendationReason = Literal["source_in_book", "matched"]
+NoRecommendation = Literal["no_source", "no_source_chapter", "no_match", "ambiguous"]
+
+
+@dataclass(frozen=True)
+class StartBlock:
+    """Where a registered question starts (its first source block, §14.2).
+
+    `in_book`: the block's document is a book (not `mixed`); `book_chapter` is then the block's
+    section in that book's current revision (None when the block has no chapter, the section is
+    gone or the book was deleted). Otherwise `chain` holds the block's outline titles in its
+    document revision, deepest first (as for an import draft).
+    """
+
+    in_book: bool
+    book_chapter: BookChapter | None = None
+    chain: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Recommendation:
+    chapter: BookChapter | None
+    reason: RecommendationReason | NoRecommendation
+
+
+def recommend(start: StartBlock | None, matcher: ChapterMatcher) -> Recommendation:
+    """The chapter suggested for a registered question (None with the reason when there is no
+    suggestion: never a guess)."""
+    if start is None:
+        return Recommendation(None, "no_source")
+    if start.in_book:
+        if start.book_chapter is None:
+            return Recommendation(None, "no_source_chapter")
+        return Recommendation(start.book_chapter, "source_in_book")
+    found = matcher.suggest(start.chain)
+    return Recommendation(found.chapter, found.match)

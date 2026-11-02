@@ -35,7 +35,9 @@ select tables_are(
         'mock_exam_generation_items', 'mock_exam_questions', 'mock_exam_question_revisions',
         'mock_exam_practice_sessions', 'mock_exam_attempts',
         -- UX9-HL-B personal highlights
-        'user_highlights'],
+        'user_highlights',
+        -- UX9-REDIST-B chapter history
+        'question_chapter_changes'],
   'public schema contains exactly the expected tables'
 );
 

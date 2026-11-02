@@ -108,6 +108,9 @@ class ProblemType(StrEnum):
     # 409: chapter notes are off in this environment (WORKER_CHAPTER_NOTES); stored notes stay
     # readable.
     NOTE_GENERATION_DISABLED = "urn:quiz-workspace:problem:note-generation-disabled"
+    # 422: a chapter redistribution target is not a chapter of the current revision of a live
+    # book of the workspace (a question paper's chapter, an old revision's, a deleted book's).
+    CHAPTER_INVALID = "urn:quiz-workspace:problem:chapter-invalid"
     # 409: a merge named questions whose content is not the same question (UX7-DEDUP).
     NOT_DUPLICATES = "urn:quiz-workspace:problem:not-duplicates"
     # 422: a range names a question that is not a live CONFIRMED question of the workspace (a
@@ -150,9 +153,11 @@ class ProblemException(StarletteHTTPException):
         problem_type: ProblemType,
         detail: str | None = None,
         headers: dict[str, str] | None = None,
+        question_ids: list[str] | None = None,
     ) -> None:
         super().__init__(status_code=status_code, detail=detail, headers=headers)
         self.problem_type = problem_type
+        self.question_ids = question_ids
 
 
 class ValidationIssue(BaseModel):
@@ -170,6 +175,11 @@ class Problem(BaseModel):
     request_id: str | None = None
     errors: list[ValidationIssue] | None = Field(
         default=None, description="Field-level issues (422 only)."
+    )
+    question_ids: list[str] | None = Field(
+        default=None,
+        description="409 `chapter-changed` of a chapter assignment: the questions whose chapter "
+        "is no longer the expected one.",
     )
 
 
@@ -208,6 +218,7 @@ def problem_response(
     detail: str | None = None,
     errors: list[ValidationIssue] | None = None,
     headers: dict[str, str] | None = None,
+    question_ids: list[str] | None = None,
 ) -> JSONResponse:
     problem = Problem(
         type=problem_type,
@@ -217,6 +228,7 @@ def problem_response(
         instance=request.url.path,
         request_id=getattr(request.state, "request_id", None),
         errors=errors,
+        question_ids=question_ids,
     )
     response_headers = dict(headers or {})
     if problem.request_id:
@@ -239,7 +251,12 @@ async def _http_exception_handler(request: Request, exc: StarletteHTTPException)
         headers = {"WWW-Authenticate": "Bearer", **(headers or {})}
     problem_type = getattr(exc, "problem_type", "about:blank")
     return problem_response(
-        request, exc.status_code, problem_type=problem_type, detail=detail, headers=headers
+        request,
+        exc.status_code,
+        problem_type=problem_type,
+        detail=detail,
+        headers=headers,
+        question_ids=getattr(exc, "question_ids", None),
     )
 
 

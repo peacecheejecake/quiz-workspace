@@ -70,14 +70,15 @@ class DraftChapterRepository:
             BookChapter(r.id, r.title, r.document_id, r.document_title, int(r.level)) for r in rows
         ]
 
-    def source_chains(
+    def source_chapters(
         self,
         workspace_id: uuid.UUID,
         revision_id: uuid.UUID,
         refs: Mapping[uuid.UUID, SourceRef],
-    ) -> dict[uuid.UUID, list[str]]:
-        """Per draft: the outline titles of its first source block in the question PDF revision,
-        deepest first (empty when the block has no chapter)."""
+    ) -> dict[uuid.UUID, uuid.UUID | None]:
+        """Per key: the outline node (`content_blocks.chapter_id`) of its first source block in
+        this document revision, else of the first block (reading order) of its first page; None
+        when neither is found or the block has no chapter."""
         if not refs:
             return {}
         block_ids = sorted({r.block_id for r in refs.values() if r.block_id})
@@ -112,6 +113,27 @@ class DraftChapterRepository:
                     .distinct(content_blocks.c.page)
                 )
             }
+        out: dict[uuid.UUID, uuid.UUID | None] = {}
+        for key, ref in refs.items():
+            if ref.block_id is not None and ref.block_id in by_block:
+                out[key] = by_block[ref.block_id]
+            elif ref.page is not None:
+                out[key] = by_page.get(ref.page)
+            else:
+                out[key] = None
+        return out
+
+    def source_chains(
+        self,
+        workspace_id: uuid.UUID,
+        revision_id: uuid.UUID,
+        refs: Mapping[uuid.UUID, SourceRef],
+    ) -> dict[uuid.UUID, list[str]]:
+        """Per draft: the outline titles of its first source block in the question PDF revision,
+        deepest first (empty when the block has no chapter)."""
+        if not refs:
+            return {}
+        nodes = self.source_chapters(workspace_id, revision_id, refs)
         outline = {
             row.id: (row.parent_id, row.title)
             for row in self._session.execute(
@@ -132,15 +154,7 @@ class DraftChapterRepository:
                 node = parent
             return titles
 
-        out: dict[uuid.UUID, list[str]] = {}
-        for draft_id, ref in refs.items():
-            if ref.block_id is not None and ref.block_id in by_block:
-                out[draft_id] = chain(by_block[ref.block_id])
-            elif ref.page is not None:
-                out[draft_id] = chain(by_page.get(ref.page))
-            else:
-                out[draft_id] = []
-        return out
+        return {key: chain(node) for key, node in nodes.items()}
 
     def current_book_chapters(
         self, workspace_id: uuid.UUID, chapter_ids: Iterable[uuid.UUID]

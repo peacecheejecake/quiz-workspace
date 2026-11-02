@@ -104,6 +104,7 @@ from quiz_api.question_rules import (
 )
 from quiz_api.repositories.idempotency import IdempotencyStore
 from quiz_api.repositories.questions import (
+    ChapterSource,
     ListCursor,
     QuestionFilter,
     QuestionRecord,
@@ -205,6 +206,11 @@ class Question(BaseModel):
     origin: str = Field(description="manual | import | generation")
     chapter_id: uuid.UUID | None = Field(description="Document outline node (`chapters.id`).")
     chapter: ChapterRef | None
+    chapter_source: ChapterSource = Field(
+        description="How the chapter was decided: `manual` (a person chose it: registration, "
+        "edit, a move) or `auto` (a CHAPTER-MAP suggestion: import registration, an applied "
+        "recommendation)."
+    )
     question_number: int | None = Field(description="Display number (`12번`), not unique.")
     revision: QuestionRevision = Field(description="The active revision.")
     sources: list[QuestionSource]
@@ -392,6 +398,7 @@ def _out(q: QuestionRecord) -> Question:
         )
         if q.chapter
         else None,
+        chapter_source=q.chapter_source,
         question_number=q.question_number,
         revision=_revision_out(q.revision),
         sources=[source_out(s) for s in q.sources],
@@ -815,7 +822,16 @@ def update_question(access: EditQuestion, body: QuestionUpdate, repo: QuestionRe
         if content_changed:
             version = repo.append_revision(current, content, access.workspace.user_id)
             changed.append("content")
-        repo.update_metadata(current.id, **metadata)
+        repo.update_metadata(current.id, **{k: v for k, v in metadata.items() if k != "chapter_id"})
+        if "chapter_id" in metadata:
+            # A person chose the chapter (docs/questions.md §14.1): `manual`, history `edit`.
+            repo.set_chapter(
+                current.workspace_id,
+                [(current.id, current.chapter_id, metadata["chapter_id"])],
+                chapter_source="manual",
+                change_source="edit",
+                actor_id=access.workspace.user_id,
+            )
         if new_sources is not None:
             repo.replace_sources(current.workspace_id, current.id, new_sources, source_revisions)
             changed.append("sources")
