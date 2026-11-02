@@ -2423,6 +2423,291 @@
         "title": "DuplicateScan",
         "type": "object"
       },
+      "Explanation": {
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExplanationBody"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Succeeded only."
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "question_revision_id": {
+            "format": "uuid",
+            "title": "Question Revision Id",
+            "type": "string"
+          },
+          "sources": {
+            "description": "The cited sources (succeeded only).",
+            "items": {
+              "$ref": "#/components/schemas/ExplanationSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "job_id",
+          "status",
+          "version",
+          "error_code",
+          "created_at",
+          "finished_at",
+          "body",
+          "sources",
+          "truncated",
+          "question_revision_id"
+        ],
+        "title": "Explanation",
+        "type": "object"
+      },
+      "ExplanationBody": {
+        "properties": {
+          "concepts_md": {
+            "title": "Concepts Md",
+            "type": "string"
+          },
+          "correct_option_ids": {
+            "description": "The server's answer (MCQ); [] otherwise.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Correct Option Ids",
+            "type": "array"
+          },
+          "options": {
+            "description": "Every option exactly once, in stored order.",
+            "items": {
+              "$ref": "#/components/schemas/OptionWhy"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "points_md": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Short answer / essay: the rubric's core, common wrong answers.",
+            "title": "Points Md"
+          },
+          "summary_md": {
+            "title": "Summary Md",
+            "type": "string"
+          }
+        },
+        "required": [
+          "correct_option_ids",
+          "summary_md",
+          "options",
+          "concepts_md"
+        ],
+        "title": "ExplanationBody",
+        "type": "object"
+      },
+      "ExplanationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "practice_session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The caller's submitted practice session of this question.",
+            "title": "Practice Session Id"
+          },
+          "view": {
+            "anyOf": [
+              {
+                "const": "detail",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`detail`: the 문제 상세 dialog (no submission needed).",
+            "title": "View"
+          }
+        },
+        "title": "ExplanationRequest",
+        "type": "object"
+      },
+      "ExplanationSource": {
+        "properties": {
+          "block_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Id"
+          },
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "n": {
+            "description": "The footnote number `[n]` in the body.",
+            "title": "N",
+            "type": "integer"
+          },
+          "outdated": {
+            "description": "The document was published again since.",
+            "title": "Outdated",
+            "type": "boolean"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n",
+          "document_id",
+          "document_title",
+          "chapter_title",
+          "page",
+          "block_id",
+          "outdated"
+        ],
+        "title": "ExplanationSource",
+        "type": "object"
+      },
+      "ExplanationState": {
+        "properties": {
+          "available": {
+            "description": "This environment can make AI explanations.",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "can_create": {
+            "description": "available, active workspace, none for this revision.",
+            "title": "Can Create",
+            "type": "boolean"
+          },
+          "can_regenerate": {
+            "description": "An owner/editor of an active workspace, a success.",
+            "title": "Can Regenerate",
+            "type": "boolean"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Explanation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest explanation of this revision that is not superseded, or null."
+          }
+        },
+        "required": [
+          "available",
+          "can_create",
+          "can_regenerate",
+          "explanation"
+        ],
+        "title": "ExplanationState",
+        "type": "object"
+      },
       "Feedback": {
         "properties": {
           "message_id": {
@@ -4946,6 +5231,182 @@
         "title": "MockExamValidationNote",
         "type": "object"
       },
+      "MockExplanation": {
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExplanationBody"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Succeeded only."
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "mock_exam_question_revision_id": {
+            "format": "uuid",
+            "title": "Mock Exam Question Revision Id",
+            "type": "string"
+          },
+          "sources": {
+            "description": "The cited sources (succeeded only).",
+            "items": {
+              "$ref": "#/components/schemas/ExplanationSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "job_id",
+          "status",
+          "version",
+          "error_code",
+          "created_at",
+          "finished_at",
+          "body",
+          "sources",
+          "truncated",
+          "mock_exam_question_revision_id"
+        ],
+        "title": "MockExplanation",
+        "type": "object"
+      },
+      "MockExplanationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mock_practice_session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The caller's submitted mock practice session of this question.",
+            "title": "Mock Practice Session Id"
+          },
+          "view": {
+            "anyOf": [
+              {
+                "const": "manage",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`manage`: 모의고사 문제 관리 (owner/editor, no submission).",
+            "title": "View"
+          }
+        },
+        "title": "MockExplanationRequest",
+        "type": "object"
+      },
+      "MockExplanationState": {
+        "properties": {
+          "available": {
+            "description": "This environment can make AI explanations.",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "can_create": {
+            "description": "available, active workspace, none for this revision.",
+            "title": "Can Create",
+            "type": "boolean"
+          },
+          "can_regenerate": {
+            "description": "An owner/editor of an active workspace, a success.",
+            "title": "Can Regenerate",
+            "type": "boolean"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MockExplanation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "available",
+          "can_create",
+          "can_regenerate",
+          "explanation"
+        ],
+        "title": "MockExplanationState",
+        "type": "object"
+      },
       "MockPracticeSession": {
         "description": "What a viewer needs to show a mock exam question. Never carries answers, explanations,\nrubrics or accepted answers (a new field here is a reviewed change).",
         "properties": {
@@ -5627,6 +6088,24 @@
           "question_count"
         ],
         "title": "NoteVersion",
+        "type": "object"
+      },
+      "OptionWhy": {
+        "properties": {
+          "option_id": {
+            "title": "Option Id",
+            "type": "string"
+          },
+          "why_md": {
+            "title": "Why Md",
+            "type": "string"
+          }
+        },
+        "required": [
+          "option_id",
+          "why_md"
+        ],
+        "title": "OptionWhy",
         "type": "object"
       },
       "Outline": {
@@ -9349,6 +9828,32 @@
         "title": "SharedDocumentSummary",
         "type": "object"
       },
+      "SharedExplanation": {
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/ExplanationBody"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ExplanationSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "body",
+          "sources",
+          "created_at"
+        ],
+        "title": "SharedExplanation",
+        "type": "object"
+      },
       "SharedQuestion": {
         "description": "A published question with its answer and explanation; no per-user or owner fields.",
         "properties": {
@@ -11053,6 +11558,129 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/ai-explanations/{explanation_id}/stream": {
+      "get": {
+        "description": "The explanation's text as it is written (same gate as GET …/ai-explanation).",
+        "operationId": "streamQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "explanation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Explanation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "practice_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Practice Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "detail",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Server-Sent Events: `delta {seq, text}` (seq counts deltas from 0, again from 0 after a `reset`; the SSE `id` is the event number: send `Last-Event-ID` to resume), `reset` (drop the text received so far), then one `done {explanation}` or `error {code}`. A finished explanation is a single `done`/`error`. Send the Bearer token in the Authorization header, never in the URL."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Stream Question Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      }
+    },
     "/api/v1/ask/conversations/{conversation_id}": {
       "delete": {
         "description": "Deletes the conversation with its messages, sources and feedback (usage counts stay).",
@@ -14390,6 +15018,128 @@
         ]
       }
     },
+    "/api/v1/mock-ai-explanations/{mock_explanation_id}/stream": {
+      "get": {
+        "operationId": "streamMockExamQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_explanation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Explanation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mock_practice_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mock Practice Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "manage",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Server-Sent Events: `delta {seq, text}` (seq counts deltas from 0, again from 0 after a `reset`; the SSE `id` is the event number: send `Last-Event-ID` to resume), `reset` (drop the text received so far), then one `done {explanation}` or `error {code}`. A finished explanation is a single `done`/`error`. Send the Bearer token in the Authorization header, never in the URL."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Stream Mock Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      }
+    },
     "/api/v1/mock-exam-questions/{mock_exam_question_id}": {
       "delete": {
         "description": "이 모의고사에서 빼기: the question leaves the list and later 풀기 (attempts stay).",
@@ -14576,6 +15326,349 @@
         "summary": "Update Mock Exam Question",
         "tags": [
           "mock-exams"
+        ]
+      }
+    },
+    "/api/v1/mock-exam-questions/{mock_exam_question_id}/ai-explanation": {
+      "get": {
+        "description": "The AI explanation of this mock exam question's revision (its own, never the source's).",
+        "operationId": "getMockExamQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mock_practice_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mock Practice Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "manage",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Mock Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      },
+      "post": {
+        "operationId": "createMockExamQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockExplanationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "description": "Accepted: the explanation is being made (stream it)."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Mock Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      }
+    },
+    "/api/v1/mock-exam-questions/{mock_exam_question_id}/ai-explanation/regenerate": {
+      "post": {
+        "operationId": "regenerateMockExamQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockExplanationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "description": "Accepted: the explanation is being made (stream it)."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Regenerate Mock Explanation",
+        "tags": [
+          "ai-explanations"
         ]
       }
     },
@@ -17293,6 +18386,351 @@
         ]
       }
     },
+    "/api/v1/questions/{question_id}/ai-explanation": {
+      "get": {
+        "description": "The AI explanation of this question's revision for a submitted session or `view=detail`.",
+        "operationId": "getQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "practice_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Practice Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "detail",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Question Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      },
+      "post": {
+        "description": "Make the explanation (202), or return the cached one (200) / the one being made (202).",
+        "operationId": "createQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplanationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "description": "Accepted: the explanation is being made (stream it)."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Question Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      }
+    },
+    "/api/v1/questions/{question_id}/ai-explanation/regenerate": {
+      "post": {
+        "description": "A new version of the explanation (owner/editor; 3 per revision per day).",
+        "operationId": "regenerateQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplanationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "description": "Accepted: the explanation is being made (stream it)."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Regenerate Question Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      }
+    },
     "/api/v1/questions/{question_id}/attempts": {
       "get": {
         "description": "The caller's own attempts on the question and on the duplicates merged into it\n(UX7-DEDUP), newest first, each pinned to the revision it was graded on (its content:\nGET /questions/{question_id}/revisions/{revision_id} of the item's `question_id`).",
@@ -18749,6 +20187,102 @@
           }
         },
         "summary": "Get Shared Question",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/questions/{question_id}/ai-explanation": {
+      "get": {
+        "description": "The AI explanation of one published question, as members see it (read-only).",
+        "operationId": "getSharedQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedExplanation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Shared Question Explanation",
         "tags": [
           "shared"
         ]

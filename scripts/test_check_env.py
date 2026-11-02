@@ -256,7 +256,13 @@ def test_conditional_requirement_and_fake_adapters() -> None:
 
 @pytest.mark.parametrize(
     "switch",
-    ["WORKER_DOCUMENT_SUMMARY", "WORKER_CHAPTER_NOTES", "WORKER_MOCK_EXAMS", "WORKER_ASK_LLM"],
+    [
+        "WORKER_DOCUMENT_SUMMARY",
+        "WORKER_CHAPTER_NOTES",
+        "WORKER_MOCK_EXAMS",
+        "WORKER_ASK_LLM",
+        "WORKER_AI_EXPLANATIONS",
+    ],
 )
 def test_llm_features_need_the_llm_on_worker_and_api(switch: str) -> None:
     """DOCSUM-B summaries and CHNOTE-B chapter notes: either switch requires the worker's key and
@@ -285,6 +291,7 @@ def test_required_when_accepts_one_condition_or_a_list() -> None:
         ("WORKER_CHAPTER_NOTES", "true"),
         ("WORKER_MOCK_EXAMS", "true"),
         ("WORKER_ASK_LLM", "true"),
+        ("WORKER_AI_EXPLANATIONS", "true"),
     )
     assert by_name["LLM_MODEL"].required_when == both
     assert by_name["LLM_API_KEY"].required_when == both

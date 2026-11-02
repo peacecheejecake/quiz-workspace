@@ -876,6 +876,55 @@ provider = "default"
 note = "90; ask.purge deletes conversations idle this long (usage counts: 13 months)"
 
 [[var]]
+name = "WORKER_AI_EXPLANATIONS"
+services = ["api", "worker"]
+kind = "config"
+check = "bool"
+same = true
+provider = "operator (⛔ user approval: sends questions with their answers, explanations and published passages to the LLM provider)"
+note = "false; true enables AI explanations (AIEXPL-01), separate from WORKER_ASK_LLM: needs LLM_API_KEY on the worker and LLM_MODEL on both (identical); question.ai_explain runs on the interactive worker; stored explanations stay readable"
+
+[[var]]
+name = "AI_EXPLANATION_TOP_K"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "5; evidence passages pinned per explanation after the question's own sources (8,000 characters together)"
+
+[[var]]
+name = "AI_EXPLANATION_MAX_OUTPUT_TOKENS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "1500; output ceiling of one explanation (cut ones end with a notice)"
+
+[[var]]
+name = "AI_EXPLANATION_RATE_LIMIT_PER_MINUTE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "6; new explanations (create, regenerate; cached ones are free) per user and minute (429 + Retry-After; 0 disables)"
+
+[[var]]
+name = "AI_EXPLANATION_DAILY_LIMIT_PER_USER"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "30; new explanations per user and Asia/Seoul day (429 explanation-daily-limit)"
+
+[[var]]
+name = "AI_EXPLANATION_MONTHLY_TOKEN_CAP"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "operator"
+note = "0 = off; environment-wide AI explanation tokens per month (409 explanation-budget-exceeded)"
+
+[[var]]
 name = "MOCK_EXAM_MAX_PROMPT_TOKENS"
 services = ["worker"]
 kind = "config"
@@ -936,7 +985,7 @@ name = "LLM_API_KEY"
 services = ["worker"]
 kind = "secret"
 check = "nonempty"
-required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true", "WORKER_MOCK_EXAMS=true", "WORKER_ASK_LLM=true"]
+required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true", "WORKER_MOCK_EXAMS=true", "WORKER_ASK_LLM=true", "WORKER_AI_EXPLANATIONS=true"]
 provider = "LLM provider console (Anthropic)"
 note = "optional; unset disables the LLM features (summaries, chapter notes, mock exam AI types) — a user decision (cost, data policy)"
 
@@ -945,7 +994,7 @@ name = "LLM_MODEL"
 services = ["api", "worker"]
 kind = "config"
 requires = "LLM_API_KEY"
-required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true", "WORKER_MOCK_EXAMS=true", "WORKER_ASK_LLM=true"]
+required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true", "WORKER_MOCK_EXAMS=true", "WORKER_ASK_LLM=true", "WORKER_AI_EXPLANATIONS=true"]
 same = true
 provider = "operator: the approved model id (no default)"
 note = "required whenever LLM_API_KEY is set; with WORKER_DOCUMENT_SUMMARY=true or WORKER_CHAPTER_NOTES=true also on the API (identical), which offers summaries / chapter notes only when it is set (DOCSUM-01-AC05, CHNOTE-01-AC06; the API never gets LLM_API_KEY)"
