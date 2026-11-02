@@ -18,8 +18,8 @@ const meta = {
     docs: {
       description: {
         component:
-          'Chapter-grouped grid of QuestionDots (one per CONFIRMED question). Fixed 28px cells ' +
-          '(32px on mobile/coarse pointers), 4px gap, columns follow the width. Keyboard: a ' +
+          'Chapter-grouped grid of QuestionDots (one per CONFIRMED question). Fixed 24px cells ' +
+          '(mobile/coarse pointers too), grid gap 0, columns follow the width. Keyboard: a ' +
           'single roving tab stop; Arrow keys move between dots (Up/Down by visual row, across ' +
           'chapters), Home/End = first/last in the chapter, Ctrl+Home/End = whole heatmap, ' +
           'Enter/Space open. Hover/focus opens the preview after ~200ms; `onPreview` is ' +

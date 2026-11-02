@@ -25,11 +25,11 @@ const meta = {
     docs: {
       description: {
         component:
-          'One CONFIRMED question: a 28×28px `<button>` (32px on mobile/coarse pointers) ' +
-          'centering a 16px QuestionMarker. Favorite swaps the rounded square for a rounded star ' +
+          'One CONFIRMED question: a 24×24px `<button>` (mobile/coarse pointers too) ' +
+          'drawing its QuestionMarker at the cell size (18px square). Favorite swaps the rounded square for a rounded star ' +
           'of the same size and color. Only the marker scales (`--heatmap-marker-hover-scale`) on ' +
           'hover (hover-capable pointers only) and `:focus-visible`; the cell never moves. ' +
-          'Selected = accent ring, color unchanged. Keyboard: Enter/Space open (`onOpen`), focus ' +
+          'Current = near-black ring hugging the square, color unchanged. Keyboard: Enter/Space open (`onOpen`), focus ' +
           'shows the preview, Escape closes it. Hover/focus preview never marks the question ' +
           'viewed. Label: `3장 12번 문제, 객관식, 마지막 결과 오답, 다시 풀기 표시됨, 즐겨찾기`. ' +
           'Tokens: --question-status-*, --color-text-primary (outline mix), --color-focus, ' +

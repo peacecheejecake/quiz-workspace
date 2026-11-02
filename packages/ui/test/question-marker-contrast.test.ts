@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 const CSS = readFileSync(resolve(import.meta.dirname, '../src/styles/questions.css'), 'utf8');
 const OUTLINE =
-  /\.qz-question-marker > \.shape\s*\{[^}]*stroke:\s*color-mix\(in srgb, currentColor (\d+)%, var\(--(color-[a-z-]+)\)\)/;
+  /\.qz-question-marker > \.shape\s*\{[^}]*stroke:\s*color-mix\(\s*in srgb,\s*currentColor var\(--([a-z-]+)\),\s*var\(--(color-[a-z-]+)\)\s*\)/;
 
 function channels(hex: string): number[] {
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
@@ -33,13 +33,27 @@ function mix(a: number[], b: number[], p: number): number[] {
   return a.map((v, i) => Math.round(v * p + (b[i] ?? 0) * (1 - p)));
 }
 
-const [, percent = '0', mixWith = ''] = OUTLINE.exec(CSS) ?? [];
+const [, mixToken = '', mixWith = ''] = OUTLINE.exec(CSS) ?? [];
+
+/** The themed status-color share of the outline, e.g. `57%` → 0.57. */
+function share(theme: (typeof themeNames)[number]): number {
+  const value = (themedTokens[theme] as Record<string, string>)[mixToken] ?? '';
+  const m = /^(\d+(?:\.\d+)?)%$/.exec(value);
+  if (!m) throw new Error(`expected a percentage for ${mixToken}, got ${value}`);
+  return Number(m[1]) / 100;
+}
 const BACKGROUNDS = ['color-surface', 'color-canvas', 'color-surface-muted'] as const;
 
 describe('question marker outline contrast', () => {
   it('questions.css declares the outline as a color-mix of the status color', () => {
     expect(mixWith).toBe('color-text-primary');
-    expect(Number(percent)).toBeGreaterThan(0);
+    expect(mixToken).toBe('heatmap-marker-stroke-mix');
+    for (const theme of themeNames) expect(share(theme)).toBeGreaterThan(0);
+  });
+
+  it('keeps the UX9-STROKE lighter dark-theme outline (lightest mix that still passes)', () => {
+    expect(share('light')).toBe(0.57);
+    expect(share('dark')).toBe(0.79);
   });
 
   it('draws a 0.5 CSS px outline at every marker size (UX9-STROKE)', () => {
@@ -56,7 +70,7 @@ describe('question marker outline contrast', () => {
   it.each(cases)('%s %s outline vs %s ≥ 3:1', (theme, status, bg) => {
     const t = themedTokens[theme] as Record<string, string>;
     const fill = channels(t[`question-status-${status}`] ?? '');
-    const outline = mix(fill, channels(t[mixWith] ?? ''), Number(percent) / 100);
+    const outline = mix(fill, channels(t[mixWith] ?? ''), share(theme));
     expect(contrast(outline, channels(t[bg] ?? ''))).toBeGreaterThanOrEqual(3);
   });
 });

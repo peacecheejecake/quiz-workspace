@@ -33,6 +33,7 @@ export const themedTokens = {
     'question-status-incorrect': '#E0525E',
     'question-status-correct': '#26865C',
     'question-status-retry': '#E9B447',
+    'heatmap-marker-stroke-mix': '57%',
   },
   dark: {
     'color-canvas': '#11151D',
@@ -67,6 +68,7 @@ export const themedTokens = {
     'question-status-incorrect': '#F17B84',
     'question-status-correct': '#4BC68E',
     'question-status-retry': '#F4C763',
+    'heatmap-marker-stroke-mix': '79%',
   },
 } as const;
 export const staticTokens = {
@@ -107,7 +109,7 @@ export const staticTokens = {
   'floating-panel-width': '500px',
   'outline-panel-width': '20rem',
   'heatmap-cell': '24px',
-  'heatmap-cell-touch': '32px',
+  'heatmap-cell-touch': '24px',
   'heatmap-gap': '0px',
   'heatmap-dot': '16px',
   'heatmap-marker-hover-scale': '1.18',

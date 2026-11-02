@@ -33,6 +33,7 @@
   --question-status-incorrect: #e0525e;
   --question-status-correct: #26865c;
   --question-status-retry: #e9b447;
+  --heatmap-marker-stroke-mix: 57%;
   --font-sans: 'Pretendard', 'Inter', system-ui, -apple-system, sans-serif;
   --font-size-label-sm: 12px;
   --font-size-label: 13px;
@@ -70,7 +71,7 @@
   --floating-panel-width: 500px;
   --outline-panel-width: 20rem;
   --heatmap-cell: 24px;
-  --heatmap-cell-touch: 32px;
+  --heatmap-cell-touch: 24px;
   --heatmap-gap: 0px;
   --heatmap-dot: 16px;
   --heatmap-marker-hover-scale: 1.18;
@@ -123,6 +124,7 @@
   --question-status-incorrect: #f17b84;
   --question-status-correct: #4bc68e;
   --question-status-retry: #f4c763;
+  --heatmap-marker-stroke-mix: 79%;
 }
 
 [data-theme='light'] {
@@ -159,6 +161,7 @@
   --question-status-incorrect: #e0525e;
   --question-status-correct: #26865c;
   --question-status-retry: #e9b447;
+  --heatmap-marker-stroke-mix: 57%;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -196,5 +199,6 @@
     --question-status-incorrect: #f17b84;
     --question-status-correct: #4bc68e;
     --question-status-retry: #f4c763;
+    --heatmap-marker-stroke-mix: 79%;
   }
 }
