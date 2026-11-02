@@ -672,40 +672,43 @@ def test_c05_a_second_reader_gets_the_stream_from_seq_zero_and_each_connection_i
     owner = seed.client("expl-c05-owner")
     book = Book(owner)
     token = uuid.uuid4().hex[:16]
-    q = book.mcq(f"E2E-EXPL-HOLD-{token}")
+    q = book.mcq(f"E2E-EXPL-HOLDMID-{token}")
     reader = member(seed, book.ws, "expl-c05-reader", "viewer")
     outsider = seed.client("expl-c05-outsider")
     session = submitted(reader, q)
     explanation = state(post(owner, q["id"], view="detail"), (202,))["explanation"]
     worker = threading.Thread(target=drain, args=(owner, explanation), daemon=True)
-    worker.start()
     streams: dict[str, list[tuple[str, dict[str, Any]]]] = {}
 
     def read(who: str, client: Any, **gate: str) -> None:
         streams[who] = _events(client, explanation["id"], **gate)
 
-    readers = [
-        threading.Thread(target=read, args=("owner", owner), kwargs={"view": "detail"}),
-        threading.Thread(
-            target=read, args=("reader", reader), kwargs={"practice_session_id": session}
-        ),
-    ]
+    first = threading.Thread(
+        target=read, args=("owner", owner), kwargs={"view": "detail"}, daemon=True
+    )
+    second = threading.Thread(
+        target=read, args=("reader", reader), kwargs={"practice_session_id": session}, daemon=True
+    )
+    mid = hold_dir / f"{token}.mid"
     try:
+        first.start()  # connected from the start
+        worker.start()
+        # The fake has published its first chunk (seq 0) and waits mid-stream (E7 HOLDMID).
         for _ in range(240):
-            if (hold_dir / f"{token}.held").exists():
+            if mid.exists():
                 break
             worker.join(0.5)
-        assert (hold_dir / f"{token}.held").exists(), "the explanation reaches the hold barrier"
+        assert mid.exists(), "the explanation reaches the mid-stream barrier after one delta"
+        assert worker.is_alive(), "the explanation is still running"
         res = outsider.call("GET", f"/ai-explanations/{explanation['id']}/stream?view=detail")
         implemented(res)
         assert res.status_code == 404
-        for t in readers:  # both connect while it runs (held before the first delta)
-            t.daemon = True
-            t.start()
-        readers[0].join(1)
+        second.start()  # connects after seq 0 was published, while it still runs
+        second.join(2)
+        assert "reader" not in streams, "the second reader's stream is still open (running)"
     finally:
-        (hold_dir / f"{token}.release").write_text("")
-    for t in [worker, *readers]:
+        (hold_dir / f"{token}.resume").write_text("")
+    for t in (worker, first, second):
         t.join(120)
     assert set(streams) == {"owner", "reader"}
     deltas = {who: [d for e, d in events if e == "delta"] for who, events in streams.items()}
@@ -713,6 +716,8 @@ def test_c05_a_second_reader_gets_the_stream_from_seq_zero_and_each_connection_i
         assert [d["seq"] for d in deltas[who]] == list(range(len(deltas[who]))), who
         assert len(deltas[who]) >= 2, who
         assert events[-1][0] == "done", who
+    # The late reader also got the delta published before it connected (replay from seq 0).
+    assert deltas["reader"][0]["seq"] == 0
     assert deltas["owner"] == deltas["reader"]
 
 

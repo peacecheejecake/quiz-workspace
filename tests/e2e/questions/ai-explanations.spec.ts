@@ -475,6 +475,8 @@ test(
     const s = await seedBook(workspaceFactory, 'aiexpl01-ac04');
     const withExpl = await addQuestion(s, label, 1);
     const withoutExpl = await addQuestion(s, label, 2);
+    // Never explained by anyone: the guest's absence checks (withoutExpl gets one from the viewer).
+    const unexplained = await addQuestion(s, label, 3);
     await seedExplanation(s.owner, bank(withExpl.id));
     const viewer = await viewerOf(workspaceFactory, s, 'aiexpl01-ac04-viewer');
     const outsider = await workspaceFactory.member('aiexpl01-ac04-outsider');
@@ -593,9 +595,9 @@ test(
         await expect(absent).toHaveCount(0);
       }
       await guest.page.keyboard.press('Escape');
-      await sharedUi.question(guest.page, withoutExpl.revision.stem).click();
+      await sharedUi.question(guest.page, unexplained.revision.stem).click();
       shared = sharedUi.questionPanel(guest.page);
-      await expect(shared).toContainText(withoutExpl.revision.stem);
+      await expect(shared).toContainText(unexplained.revision.stem);
       await expect(explUi.area(shared)).toHaveCount(0);
     } finally {
       await guest.context.close();
@@ -608,7 +610,9 @@ test(
     for (const key of ['status', 'version', 'error_code', 'usage']) {
       expect(Object.keys(sharedRead.body ?? {})).not.toContain(key);
     }
-    expect((await share.get(`/questions/${withoutExpl.id}/ai-explanation`)).status).toBe(404);
+    expect((await share.get(`/questions/${unexplained.id}/ai-explanation`)).status).toBe(404);
+    // The viewer's explanation of withoutExpl is shared too (the latest succeeded one).
+    expect((await share.get(`/questions/${withoutExpl.id}/ai-explanation`)).status).toBe(200);
   },
 );
 

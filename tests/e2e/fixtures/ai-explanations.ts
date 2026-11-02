@@ -71,7 +71,10 @@
 //   E7 Hold barrier: E2E-EXPL-HOLD-<token> makes the fake create `<hold dir>/<token>.held` when
 //      it is called, then wait (≤ 120 s) until `<token>.release` exists. Hold dir =
 //      WORKER_ASK_HOLD_DIR, default `<system temp dir>/quiz-e2e-ask-hold`. The explanation is
-//      `running` with no delta while held.
+//      `running` with no delta while held. Contract-only mid-stream barrier
+//      E2E-EXPL-HOLDMID-<token>: the fake publishes its first chunk (the delta seq 0 is in the
+//      Redis Stream), then creates `<token>.mid` and waits (≤ 120 s) for `<token>.resume` before
+//      the rest (C05 replay from seq 0 to a reader that connects mid-stream).
 //   E8 Stacks: the main E2E stack runs with WORKER_AI_EXPLANATIONS=true (API and worker; export
 //      it before `pnpm e2e:log-audit`, EXPL-W adds the default to playwright.config.ts / CI).
 //      AC05 starts two more through summary.ts startSummaryOffStack: feature off
