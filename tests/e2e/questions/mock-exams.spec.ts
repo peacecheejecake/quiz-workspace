@@ -693,8 +693,8 @@ test(
       await expect(control).toHaveCount(0);
     }
     await mockUi.practise(dialog).click();
-    const practice = mockUi.practicePanel(page, '권한 점검');
-    await expect(practice).toBeVisible();
+    const practice = mockUi.practicePanel(page);
+    await expect(mockUi.practiceTitle(practice, '권한 점검')).toBeVisible();
     await practice.getByRole('button', { name: /^(시작|start)$/i }).click();
     await practice.getByRole('radio').first().check();
     await expect(practice.getByRole('button', { name: /^(제출|submit)/i })).toBeDisabled();

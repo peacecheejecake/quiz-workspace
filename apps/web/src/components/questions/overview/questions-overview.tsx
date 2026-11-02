@@ -65,6 +65,7 @@ import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from '@/lib/quest
 import { QuestionDetailDialog, type DetailTarget } from '../detail/question-detail-dialog';
 import { HomeQuestionEditor } from '../home-question-editor';
 import { QuestionManageMenu } from '../practice/question-manage-menu';
+import { useHomeRun } from '../mock-exams/mock-run';
 import type { EditorTarget } from '../question-editor';
 import { neighbors, type AttemptResult } from '../viewer/practice-model';
 import {
@@ -515,6 +516,9 @@ export function QuestionsOverview({
   // panel, so the Heatmap is read again once it closes.
   const runState = onRunNavigate && onRunClose ? parseRunState(searchParams) : null;
   const runOpen = runState !== null;
+  // A mock exam's 풀기 (MOCK-01) runs in the same panel with its own source (mock-run.ts).
+  const homeRun = useHomeRun(workspaceId, runState);
+  const bankRun = homeRun.source === 'bank';
   const wasRunOpen = useRef(runOpen);
   useEffect(() => {
     if (wasRunOpen.current && !runOpen && staleOverview.current) router.refresh();
@@ -817,11 +821,16 @@ export function QuestionsOverview({
           archived={readOnly === 'archived'}
           onNavigate={onRunNavigate}
           onClose={onRunClose}
+          source={homeRun.source}
+          client={homeRun.client}
+          {...(homeRun.pickerTitle ? { pickerTitle: homeRun.pickerTitle } : {})}
           onViewed={(questionId) => {
+            if (!bankRun) return;
             staleOverview.current = true;
             markViewed(questionId);
           }}
           onGraded={(questionId, result) => {
+            if (!bankRun) return;
             staleOverview.current = true;
             markGraded(questionId, result);
           }}

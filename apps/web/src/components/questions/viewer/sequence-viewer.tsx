@@ -497,6 +497,7 @@ function usePickerStep({
           setSelected(next);
           setStartError(null);
         }}
+        flat={source === 'mock'}
         {...(source === 'bank'
           ? {
               filters,

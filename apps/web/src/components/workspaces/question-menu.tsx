@@ -47,6 +47,8 @@ interface QuestionMenuAction {
  * 문제 풀기 (QVIEW-01: the range run panel, `?practice=new&source=bank`) is a personal practice
  * every member may start, archived workspaces included, so it is enabled too and follows
  * 보관·초안 문제 in the same group (MOCK-SYNC).
+ * 모의고사 (MOCK-01: the 모의고사 dialog, `?panel=mock-exams`) lists and practises mock exams, which
+ * every member may do, so it is enabled too and sits between 보관·초안 문제 and 문제 풀기 (MOCK-SYNC).
  */
 export function QuestionMenu({
   readOnly,
@@ -54,6 +56,7 @@ export function QuestionMenu({
   onGenerate,
   onDuplicates,
   onInactive,
+  onMockExams,
   onPractice,
 }: {
   readonly readOnly: QuestionMenuReadOnly;
@@ -61,6 +64,7 @@ export function QuestionMenu({
   readonly onGenerate: () => void;
   readonly onDuplicates: () => void;
   readonly onInactive: () => void;
+  readonly onMockExams: () => void;
   readonly onPractice: () => void;
 }) {
   const reasonId = useId();
@@ -80,6 +84,7 @@ export function QuestionMenu({
       separated: true,
       onSelect: onInactive,
     },
+    { key: 'mock-exams', label: '모의고사', requiresEdit: false, onSelect: onMockExams },
     { key: 'practice', label: '문제 풀기', requiresEdit: false, onSelect: onPractice },
   ];
   const reason = readOnly ? READ_ONLY_REASONS[readOnly] : null;

@@ -5,6 +5,7 @@
 //        |chapter-note|document-summary                      the order they were opened)
 //        |inactive-questions                                 (보관·초안 문제, UX7-BANK-2)
 //        |question-duplicates                                (중복 문제 정리, editors, UX7-DEDUP)
+//        |mock-exams                                         (모의고사, every member, MOCK-01)
 //        |question-create                                    the modal 문제 등록 editor (UX7-BANK;
 //                                                            not stacked, see FLOATING_PANELS)
 //   ?chapter=<id> (with panel=chapter-note)                  the chapter of the 정리 노트 panel
@@ -12,6 +13,8 @@
 //   &document=<id> (with panel=document-summary)             the summary panel's document (DOCSUM-01;
 //                                                            while that panel is open the key is
 //                                                            the panel's, not the content search's)
+//   &mock=new|<id> (with panel=mock-exams)                   the 모의고사 dialog's 만들기 / detail view
+//                                                            (MOCK-01; see mockViewOf)
 //   ?practice=new&source=bank | ?practice=<run id>&i=<n>     the range run panel (QVIEW-01,
 //                                                            QuestionViewer sequence; keys in
 //                                                            lib/questions/practice-runs.ts)
@@ -21,7 +24,12 @@
 //                                                            key is migrated by legacyScopeRedirect
 // Pure helpers, plus the redirects of the pre-UX3c routes onto the home and of retired URL
 // state (`scope`, UX7-SEARCH; `question-pdfs` → `documents`, UX7-DOCS): homeRedirect.
-import { RUN_PARAM, withRunState } from '@/lib/questions/practice-runs';
+import {
+  RUN_MOCK_PARAM,
+  RUN_PARAM,
+  RUN_SOURCE_PARAM,
+  withRunState,
+} from '@/lib/questions/practice-runs';
 
 export const HOME_PANELS = [
   'documents',
@@ -33,6 +41,7 @@ export const HOME_PANELS = [
   'question-create',
   'inactive-questions',
   'question-duplicates',
+  'mock-exams',
 ] as const;
 export type HomePanel = (typeof HOME_PANELS)[number];
 
@@ -44,6 +53,9 @@ export const INACTIVE_QUESTIONS_PANEL = 'inactive-questions' satisfies HomePanel
 
 /** UX7-DEDUP: `?panel=question-duplicates` opens the 중복 문제 정리 dialog (QOV-01-AC16). */
 export const DUPLICATES_PANEL = 'question-duplicates' satisfies HomePanel;
+
+/** MOCK-01: `?panel=mock-exams` opens the 모의고사 dialog (every member). */
+export const MOCK_EXAMS_PANEL = 'mock-exams' satisfies HomePanel;
 
 /** The non-modal side panels: they stack and move the home content aside (UX3b). */
 export function isFloatingPanel(panel: HomePanel): boolean {
@@ -188,6 +200,59 @@ export function withSummaryPanel(
   });
 }
 
+// --- 모의고사 dialog (MOCK-01) ------------------------------------------------------------------
+// `?panel=mock-exams` is the list, `&mock=new` the 만들기 view and `&mock=<id>` a mock exam's
+// detail. A mock exam's 풀기 opens the run panel on `?practice=new&source=mock&mock=<id>`: while
+// that range step is open `mock` is the run's (practice-runs.ts), so the dialog keeps the view
+// it showed (the home remembers it, workspace-home.tsx).
+
+/** The 모의고사 dialog's view key (also the run panel's mock exam while it starts one). */
+export const MOCK_PARAM = RUN_MOCK_PARAM;
+
+export type MockView =
+  | { readonly view: 'list' }
+  | { readonly view: 'create' }
+  | { readonly view: 'detail'; readonly mockExamId: string }
+  /** `mock=` with a value that names no mock exam: "모의고사를 찾을 수 없습니다." */
+  | { readonly view: 'missing' };
+
+/** Whether `mock` belongs to the run panel's range step of a mock exam now. */
+export function runOwnsMockParam(params: Params): boolean {
+  return all(params, RUN_PARAM)[0] === 'new' && all(params, RUN_SOURCE_PARAM)[0] === 'mock';
+}
+
+/** The 모의고사 dialog's view in `params` (as the URL says; see runOwnsMockParam). */
+export function mockViewOf(params: Params): MockView {
+  const value = all(params, MOCK_PARAM)[0];
+  if (!value) return { view: 'list' };
+  if (value === 'new') return { view: 'create' };
+  return UUID.test(value)
+    ? { view: 'detail', mockExamId: value.toLowerCase() }
+    : { view: 'missing' };
+}
+
+/** The `mock` value of a view (null: the list). */
+export function mockParamOf(view: MockView): string | null {
+  if (view.view === 'create') return 'new';
+  if (view.view === 'detail') return view.mockExamId;
+  return null;
+}
+
+/** `search` with the 모의고사 dialog open on `view` (on top). */
+export function withMockView(search: string, view: MockView): string {
+  return patchSearch(withPanel(search, MOCK_EXAMS_PANEL, true), {
+    [MOCK_PARAM]: mockParamOf(view),
+  });
+}
+
+/** `search` with the 모의고사 dialog closed: its view goes with it (not a run's mock exam). */
+export function withoutMockExams(search: string): string {
+  const closed = withPanel(search, MOCK_EXAMS_PANEL, false);
+  return runOwnsMockParam(new URLSearchParams(search))
+    ? closed
+    : patchSearch(closed, { [MOCK_PARAM]: null });
+}
+
 /**
  * `search` with every dialog, the practice panel and the run panel closed (UX7-BACK: what the entry before the
  * first open gets when a dialog closes, panel-history.ts). The summary panel hands `document` and
@@ -202,6 +267,7 @@ export function withoutPanels(
   let out = search;
   if (panels.includes(SUMMARY_PANEL)) out = withSummaryPanel(out, null, restore);
   if (panels.includes(CHAPTER_NOTE_PANEL)) out = withChapterNote(out, null);
+  if (panels.includes(MOCK_EXAMS_PANEL)) out = withoutMockExams(out);
   out = withRunState(out, null);
   return patchSearch(out, { [PANEL_PARAM]: null, [QUESTION_PARAM]: null });
 }
@@ -238,6 +304,7 @@ export function closeDialog(
   if (dialog === RUN_DIALOG) return withRunState(search, null);
   if (dialog === SUMMARY_PANEL) return withSummaryPanel(search, null, restore);
   if (dialog === CHAPTER_NOTE_PANEL) return withChapterNote(search, null);
+  if (dialog === MOCK_EXAMS_PANEL) return withoutMockExams(search);
   return isHomePanel(dialog) ? withPanel(search, dialog, false) : search;
 }
 
