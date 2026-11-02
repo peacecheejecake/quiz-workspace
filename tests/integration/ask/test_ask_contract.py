@@ -23,7 +23,6 @@ import importlib
 import itertools
 import json
 import logging
-import os
 import random
 import threading
 import time
@@ -846,18 +845,23 @@ def test_ask_01_c05_sse_resumes_without_gaps_and_finished_messages_answer_from_p
         target=owner.worker.drain, args=(str(sent.json()["job_id"]),), daemon=True
     )
     runner.start()
-    # Polling while streaming returns the text so far.
-    deadline = time.monotonic() + 60
-    partial = message(owner, answer_id)
-    while not partial["text"] and time.monotonic() < deadline:
-        time.sleep(0.2)
+    try:
+        # Polling while streaming returns the text so far.
+        deadline = time.monotonic() + 60
         partial = message(owner, answer_id)
-    assert partial["status"] == "streaming"
-    assert partial["text"]
-    url = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
-    ttl = redis.Redis.from_url(url).ttl(f"ask:msg:{answer_id}")
-    assert 0 < ttl <= 600
-    runner.join(120)
+        while not partial["text"] and time.monotonic() < deadline:
+            time.sleep(0.2)
+            partial = message(owner, answer_id)
+        assert partial["status"] == "streaming"
+        assert partial["text"]
+        # The Redis the worker streams to: REDIS_URL from the environment or the repo's .env,
+        # exactly as conftest's JobWorker reads it (a bare os.environ lookup misses a .env-only
+        # REDIS_URL and checks another DB).
+        ttl = redis.Redis.from_url(_worker_redis_url()).ttl(f"ask:msg:{answer_id}")
+        assert 0 < ttl <= 600
+    finally:
+        # Never leave the drain running into `seed` teardown, which removes its users.
+        runner.join(120)
     status, events = sse(owner, answer_id)
     assert status == 200
     assert [e[0] for e in events] == ["done"], "finished: one done from Postgres"
@@ -870,6 +874,22 @@ def test_ask_01_c05_sse_resumes_without_gaps_and_finished_messages_answer_from_p
         target=owner.worker.drain, args=(str(sent.json()["job_id"]),), daemon=True
     )
     runner.start()
+    try:
+        _resume_without_gaps(owner, live_api, answer_id)
+    finally:
+        runner.join(120)
+    assert message(owner, answer_id)["status"] == "succeeded"
+
+
+def _worker_redis_url() -> str:
+    from quiz_worker.settings import WorkerSettings
+
+    settings = WorkerSettings(_env_file=str(REPO_ROOT / ".env"))  # type: ignore[call-arg]
+    assert settings.redis_url is not None, "REDIS_URL missing (environment or .env)"
+    return settings.redis_url.get_secret_value()
+
+
+def _resume_without_gaps(owner: Any, live_api: str, answer_id: str) -> None:
     url = f"{live_api}{API}/ask/messages/{answer_id}/stream"
     headers = {"Authorization": f"Bearer {owner.user.token}", "Accept": "text/event-stream"}
     first: list[tuple[int, str]] = []
@@ -897,13 +917,11 @@ def test_ask_01_c05_sse_resumes_without_gaps_and_finished_messages_answer_from_p
                 last = line[6:].strip()
             elif line.startswith("data:") and '"seq"' in line and last == "delta":
                 resumed.append(int(json.loads(line[5:])["seq"]))
-    runner.join(120)
     assert resumed, "deltas arrived after the resume"
     assert resumed[0] == first[-1][0] + 1, "resumes right after Last-Event-ID"
     seqs = [seq for seq, _ in first] + resumed
     assert seqs == list(range(seqs[0], seqs[0] + len(seqs))), "contiguous, no duplicate"
     assert last == "done"
-    assert message(owner, answer_id)["status"] == "succeeded"
 
 
 def test_ask_01_c05_cancel_is_idempotent_and_a_deleted_conversation_ends_the_stream(
