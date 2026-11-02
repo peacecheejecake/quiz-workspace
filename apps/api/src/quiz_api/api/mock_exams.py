@@ -211,9 +211,27 @@ class MockExamRevisionRef(BaseModel):
     version: int
 
 
+class MockExamSourceChapter(BaseModel):
+    """The source question's chapter (MOCK-01-C10): the range step groups by it."""
+
+    id: uuid.UUID
+    number: int | None = Field(
+        description="Leading chapter number of the outline path (as the Heatmap's), or null."
+    )
+    title: str
+    rank: int = Field(
+        description="The generation plan's `chapter_rank` (Heatmap order of the range's "
+        "chapters): groups sort by it."
+    )
+
+
 class MockExamSourceRef(BaseModel):
     question_id: uuid.UUID | None = Field(description="null: the source was deleted.")
     label: str = Field(description='"<n>장 <m>번", "<m>번" or "원본 삭제됨".')
+    chapter: MockExamSourceChapter | None = Field(
+        default=None,
+        description="null: the source was deleted or has no chapter (the 'none' group, last).",
+    )
 
 
 class MockExamValidationNote(BaseModel):
@@ -432,19 +450,29 @@ def source_labels(
 ) -> dict[uuid.UUID, MockExamSourceRef]:
     chapters = {q.source_chapter_id for q in questions if q.source_chapter_id is not None}
     lineage = QuestionOverviewRepository(repo.session).chapter_lineage(chapters)
+    ranks = repo.plan_chapter_ranks(q.generation_id for q in questions)
     out: dict[uuid.UUID, MockExamSourceRef] = {}
     for q in questions:
         if q.source_question_id is None or q.source_deleted:
             out[q.id] = MockExamSourceRef(question_id=None, label=DELETED_SOURCE)
             continue
-        number = (
-            chapter_number(lineage.get(q.source_chapter_id, []))
-            if q.source_chapter_id is not None
-            else None
-        )
+        path = lineage.get(q.source_chapter_id, []) if q.source_chapter_id is not None else []
+        number = chapter_number(path) if path else None
         tail = f"{q.source_number}번" if q.source_number is not None else "번호 없음"
         label = f"{number}장 {tail}" if number is not None else tail
-        out[q.id] = MockExamSourceRef(question_id=q.source_question_id, label=label)
+        chapter = (
+            MockExamSourceChapter(
+                id=q.source_chapter_id,
+                number=number,
+                title=path[-1],
+                rank=ranks.get((q.generation_id, q.position), 0),
+            )
+            if q.source_chapter_id is not None and path
+            else None
+        )
+        out[q.id] = MockExamSourceRef(
+            question_id=q.source_question_id, label=label, chapter=chapter
+        )
     return out
 
 

@@ -3599,8 +3599,33 @@ export type components = {
       /** Version */
       version: number;
     };
+    /**
+     * MockExamSourceChapter
+     * @description The source question's chapter (MOCK-01-C10): the range step groups by it.
+     */
+    MockExamSourceChapter: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Number
+       * @description Leading chapter number of the outline path (as the Heatmap's), or null.
+       */
+      number: number | null;
+      /**
+       * Rank
+       * @description The generation plan's `chapter_rank` (Heatmap order of the range's chapters): groups sort by it.
+       */
+      rank: number;
+      /** Title */
+      title: string;
+    };
     /** MockExamSourceRef */
     MockExamSourceRef: {
+      /** @description null: the source was deleted or has no chapter (the 'none' group, last). */
+      chapter?: components['schemas']['MockExamSourceChapter'] | null;
       /**
        * Label
        * @description "<n>장 <m>번", "<m>번" or "원본 삭제됨".

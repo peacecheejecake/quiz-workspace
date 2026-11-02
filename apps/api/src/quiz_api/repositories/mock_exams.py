@@ -275,6 +275,24 @@ class MockExamRepository:
         )
         return {r.generation_id: int(r.n) for r in rows}
 
+    def plan_chapter_ranks(
+        self, generation_ids: Iterable[uuid.UUID]
+    ) -> dict[tuple[uuid.UUID, int], int]:
+        """(generation id, position) -> the plan item's `chapter_rank` (MOCK-01-C10)."""
+        ids = list(set(generation_ids))
+        if not ids:
+            return {}
+        rows = self._session.execute(
+            text(
+                "select g.id, (p->>'position')::int as position, "
+                "coalesce((p->>'chapter_rank')::int, 0) as chapter_rank "
+                "from public.mock_exam_generations g "
+                "cross join lateral jsonb_array_elements(g.plan) p where g.id = any(:ids)"
+            ),
+            {"ids": ids},
+        )
+        return {(r.id, int(r.position)): int(r.chapter_rank) for r in rows}
+
     def questions(self, generation_id: uuid.UUID) -> list[QuestionRecord]:
         rows = self._session.execute(
             text(

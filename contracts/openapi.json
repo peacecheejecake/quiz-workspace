@@ -4166,8 +4166,58 @@
         "title": "MockExamRevisionRef",
         "type": "object"
       },
+      "MockExamSourceChapter": {
+        "description": "The source question's chapter (MOCK-01-C10): the range step groups by it.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Leading chapter number of the outline path (as the Heatmap's), or null.",
+            "title": "Number"
+          },
+          "rank": {
+            "description": "The generation plan's `chapter_rank` (Heatmap order of the range's chapters): groups sort by it.",
+            "title": "Rank",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "title",
+          "rank"
+        ],
+        "title": "MockExamSourceChapter",
+        "type": "object"
+      },
       "MockExamSourceRef": {
         "properties": {
+          "chapter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MockExamSourceChapter"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: the source was deleted or has no chapter (the 'none' group, last)."
+          },
           "label": {
             "description": "\"<n>장 <m>번\", \"<m>번\" or \"원본 삭제됨\".",
             "title": "Label",
