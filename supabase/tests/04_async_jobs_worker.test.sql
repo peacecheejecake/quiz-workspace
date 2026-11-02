@@ -188,7 +188,7 @@ select is_empty(
                               'mock_exam_generation_items', 'mock_exam_questions',
                               'mock_exam_question_revisions',
                               'ask_conversations', 'ask_messages', 'ask_message_sources',
-                              'llm_feature_usage') $$,
+                              'llm_feature_usage', 'ask_daily_counts') $$,
   'quiz_worker has policies on async_jobs, the M3.2a document tables, M4.4a imports, M6.2 '
     || 'generation, S3a forks, QIMP-JOB registration items (read), DOCSUM-B summaries, MOCK-B and ASK-B '
     || 'mock exams only');
