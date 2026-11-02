@@ -419,8 +419,23 @@ test(
         url.searchParams.getAll('panel').includes('chapter-note') &&
         url.searchParams.get('question') === q(s, 1).id,
     );
-    await expect(noteUi.panel(page)).toBeAttached();
-    for (const part of [body(panel), noteUi.footnoteList(panel), highlightUi.section(panel)]) {
+    // Hidden-inclusive locators: the masked content (visibility: hidden + inert) must still
+    // resolve, so the checks below cannot pass vacuously.
+    const note = page.getByRole('dialog', {
+      name: /^(정리 노트|chapter notes?)$/i,
+      includeHidden: true,
+    });
+    await expect(note).toHaveCount(1);
+    const masked = [
+      note.getByRole('group', {
+        name: /^(정리 노트 본문|chapter note body|note body)$/i,
+        includeHidden: true,
+      }),
+      note.getByRole('list', { name: /^(각주|footnotes)$/i, includeHidden: true }),
+      note.getByRole('region', { name: /^(내 하이라이트|my highlights)/i, includeHidden: true }),
+    ];
+    for (const part of masked) {
+      await expect(part).toHaveCount(1);
       await expect(part).toBeHidden();
       expect(
         await part.evaluate((el) => {

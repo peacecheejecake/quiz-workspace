@@ -394,6 +394,10 @@ test(
     await expect(confirm).toContainText(/정리 노트가 최신이 아니게 됩니다/);
     await redistUi.confirmMove(confirm).click();
     await expect(redistUi.moved(page)).toContainText(/문제 3개를 .*옮겼습니다/);
+    // The dialog stays open (refreshed); close it before reading the background Heatmap.
+    await redistUi.close(dialog).click();
+    await expect(redistUi.dialog(page)).toHaveCount(0);
+    await expect(page).toHaveURL((url) => !url.searchParams.getAll('panel').includes(REDIST_PANEL));
 
     // Heatmap: 1장 keeps q3, 2장 has four, the 챕터 없음 group is gone — also after a reload.
     for (const reload of [false, true]) {
