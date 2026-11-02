@@ -70,7 +70,12 @@ import {
   type PracticeAnswer,
 } from './practice-model';
 import { SelfGradeButtons, StudyToggles, type Invalidation } from './practice-viewer';
-import { QuestionBody, type AnswerQuestion, type RevealedAnswers } from './question-body';
+import {
+  QuestionBody,
+  QuestionStem,
+  type AnswerQuestion,
+  type RevealedAnswers,
+} from './question-body';
 import { QuestionRangePicker } from './question-range-picker';
 import {
   EMPTY_RANGE_FILTERS,
@@ -882,7 +887,7 @@ function useSolveStep({
   } else if (!shownQuestion || (sessionWanted && !session && sessionLoad?.status !== 'error')) {
     content = (
       <div aria-busy="true">
-        <p className={styles.stem}>{displayStem(item.stem ?? '')}</p>
+        <QuestionStem stem={item.stem ?? ''} />
         <p className={styles.loading}>문제를 불러오는 중입니다…</p>
       </div>
     );

@@ -42,7 +42,6 @@ import {
   type SubmitResult,
 } from '@/lib/questions/practice-actions';
 import { PracticeSessionCache } from '@/lib/questions/practice-cache';
-import { displayStem } from '@/lib/questions/display-stem';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 import {
   canSubmit,
@@ -53,7 +52,7 @@ import {
   type Neighbors,
   type PracticeAnswer,
 } from './practice-model';
-import { QuestionBody } from './question-body';
+import { QuestionBody, QuestionStem } from './question-body';
 import styles from './question-viewer.module.css';
 
 export interface PracticeQuestion {
@@ -397,7 +396,7 @@ export function PracticeViewer({
               <p className={styles.notice}>
                 보관된 Workspace는 읽기 전용입니다. 문제를 풀거나 학습 상태를 바꿀 수 없습니다.
               </p>
-              <p className={styles.stem}>{displayStem(view.preview)}</p>
+              <QuestionStem stem={view.preview} />
             </>
           ) : ready ? (
             <form
@@ -431,7 +430,7 @@ export function PracticeViewer({
             </div>
           ) : (
             <div aria-busy="true">
-              <p className={styles.stem}>{displayStem(view.preview)}</p>
+              <QuestionStem stem={view.preview} />
               <p className={styles.loading}>문제를 불러오는 중입니다…</p>
             </div>
           )}

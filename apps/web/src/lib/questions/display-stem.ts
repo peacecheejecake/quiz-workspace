@@ -34,3 +34,17 @@ export function displayStem(stem: string): string {
   while (keep > 0 && isBlank(stem[keep - 1] as string)) keep -= 1;
   return keep === 0 ? stem : stem.slice(0, keep);
 }
+
+/** A line break followed by one or more blank (whitespace-only) lines. */
+const PARAGRAPH_BREAK = /\r?\n(?:[^\S\r\n]*\r?\n)+/u;
+
+/**
+ * UX9-QTYPE: a displayed stem split into paragraphs at blank lines, so the screen sets the gap
+ * between paragraphs instead of drawing a full empty line. Single line breaks stay inside their
+ * paragraph; empty paragraphs (leading/trailing blank lines) are dropped. A stem without any text
+ * comes back as itself.
+ */
+export function stemParagraphs(stem: string): string[] {
+  const paragraphs = stem.split(PARAGRAPH_BREAK).filter((p) => p.trim() !== '');
+  return paragraphs.length > 0 ? paragraphs : [stem];
+}
