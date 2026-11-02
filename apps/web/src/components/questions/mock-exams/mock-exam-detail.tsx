@@ -348,7 +348,8 @@ export function MockExamDetail({
           <span>문제 {shown.question_count_current}개</span>
         </div>
         <p className={styles.meta}>
-          {settingsText(shown)} · {formatDateTime(shown.created_at)}
+          {settingsText(shown)} ·{' '}
+          <time dateTime={shown.created_at}>{formatDateTime(shown.created_at)}</time>
         </p>
         {mode === 'view' ? (
           <div className={styles.actions}>

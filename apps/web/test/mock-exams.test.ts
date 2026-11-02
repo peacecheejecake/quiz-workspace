@@ -26,6 +26,7 @@ import {
   type MockExamQuestion,
   type OptionValues,
 } from '../src/components/questions/mock-exams/mock-exam-model';
+import { formatDateTime } from '../src/components/questions/labels';
 import { mockRangeOverview } from '../src/components/questions/mock-exams/mock-run';
 import {
   allIds,
@@ -217,9 +218,10 @@ describe('labels', () => {
       metaText({
         question_count_current: 18,
         config: { variation_types: ['INVERT_POLARITY', 'PARAPHRASE'], question_count: 18 },
-        created_at: '2026-11-01T06:28:00Z',
       }),
-    ).toBe('문제 18개 · 문구 변형, 정오 반전 · 2026. 11. 1. 오후 3:28');
+    ).toBe('문제 18개 · 문구 변형, 정오 반전');
+    // The row then adds " · " and a <time> with the creation time.
+    expect(formatDateTime('2026-11-01T06:28:00Z')).toBe('2026. 11. 1. 오후 3:28');
     const generation = {
       requested_count: 20,
       created_count: 17,

@@ -7,7 +7,6 @@ import type { QuestionDotStatus } from '@quiz/ui';
 import type { RangeFilterState, RangeGroup } from '../viewer/range-model';
 import { EMPTY_RANGE_FILTERS } from '../viewer/range-model';
 import { displayStem } from '@/lib/questions/display-stem';
-import { formatDateTime } from '../labels';
 
 export type MockExam = Schemas['MockExam'];
 export type MockExamList = Schemas['MockExamList'];
@@ -97,13 +96,12 @@ export function variationText(types: readonly VariationType[]): string {
     .join(', ');
 }
 
-/** The list row's meta line: "문제 18개 · 문구 변형, 정오 반전 · 2026. 11. 1. 오후 3:28". */
-export function metaText(exam: Pick<MockExam, 'question_count_current' | 'config' | 'created_at'>) {
-  return [
-    `문제 ${exam.question_count_current}개`,
-    variationText(exam.config.variation_types),
-    formatDateTime(exam.created_at),
-  ].join(' · ');
+/** The list row's meta line before its timestamp: "문제 18개 · 문구 변형, 정오 반전" (the row
+ *  adds " · " and a `<time>` with "2026. 11. 1. 오후 3:28"). */
+export function metaText(exam: Pick<MockExam, 'question_count_current' | 'config'>) {
+  return [`문제 ${exam.question_count_current}개`, variationText(exam.config.variation_types)].join(
+    ' · ',
+  );
 }
 
 /** "2회차": the round whose questions are shown (null before the first one finished). */

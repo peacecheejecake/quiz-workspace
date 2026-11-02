@@ -349,37 +349,7 @@ test(
   },
 );
 
-/** VISUAL-07: the mock exam list and detail print their server timestamps inside the meta line as
- *  plain text (no `<time>`), so a mask would not hold them still: the API answers of those reads
- *  get one fixed instant instead (rendered "2026. 11. 1. 오후 3:28"). */
-const PINNED_INSTANT = '2026-11-01T06:28:00Z';
-const TIMESTAMP_KEYS = new Set(['created_at', 'updated_at', 'finished_at', 'started_at']);
 const PHONE = { width: 375, height: 812 };
-
-function pinTimestamps(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(pinTimestamps);
-  if (value === null || typeof value !== 'object') return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([k, v]) => [
-      k,
-      TIMESTAMP_KEYS.has(k) && typeof v === 'string' ? PINNED_INSTANT : pinTimestamps(v),
-    ]),
-  );
-}
-
-async function pinMockExamTimes(page: Page): Promise<void> {
-  await page.route(
-    (url) => /^\/api\/(workspaces\/[^/]+\/mock-exams|mock-exams\/[^/]+)$/.test(url.pathname),
-    async (route) => {
-      const response = await route.fetch();
-      if (!(response.headers()['content-type'] ?? '').includes('json')) {
-        await route.fulfill({ response });
-        return;
-      }
-      await route.fulfill({ response, json: pinTimestamps(await response.json()) });
-    },
-  );
-}
 
 /** `snap`, plus the 375 px phone width on the desktop project (`<name>-375-<scheme>.png`; the
  *  iPad project keeps its own viewport only). */
@@ -451,7 +421,6 @@ test(
     const [, midterm] = exams;
     if (!midterm) throw new Error('no mock exam');
 
-    await pinMockExamTimes(page);
     await signInAs(page, owner.user);
     await page.goto(mockExamsPath(ws.id));
     const dialog = mockUi.dialog(page);
