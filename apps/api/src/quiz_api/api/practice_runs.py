@@ -33,6 +33,18 @@ workspace all answer the same 404. Creating, reading and finishing are allowed i
 workspace (personal, no workspace content changes); practising is not (403 `workspace-archived`
 from the practice API). Share-session guests have no user JWT (401).
 
+Mock exam runs (MOCK-P, `source=mock` + `mock_exam_id`): the range is resolved against the questions
+the mock exam lists now — its shown generation (`current_generation_id`), questions taken out of
+it excluded — in mock exam order (`select_mock_range`): `all`, `question_ids` and
+`excluded_question_ids` of mock exam question ids and the `type` filter. Chapters and the personal
+state filters (`status`, `favorite`, `retry`) do not apply to mock exam questions (no Heatmap, no
+study state) and are 422 `range-invalid`, as are ids the mock exam does not list. The run stores
+the generation it started on; a later 다시 만들기 or 삭제 leaves it as it is (decision n), while a
+question taken out of the mock exam becomes unavailable (skipped). An unknown, deleted or foreign
+mock exam is 404; one without questions yet is 409 `no-matching-questions`. Positions are practised
+through POST /mock-exam-questions/{id}/practice-sessions (quiz_api.api.mock_practice) and recorded
+only in the mock exam practice tables.
+
 Summary: `correct`/`incorrect`/`pending` count submitted positions by their current result;
 `skipped` counts positions without a submission — all of them once the run is finished, and
 while it is open those before the furthest position opened (`reached`). A position whose question
@@ -75,10 +87,17 @@ from quiz_api.question_ranges import (
     MAX_RANGE_QUESTIONS,
     QuestionRange,
     QuestionRangeResolver,
+    no_matching_questions,
+    range_invalid,
     stored_range,
 )
 from quiz_api.question_rules import QuestionType
 from quiz_api.repositories.idempotency import IdempotencyStore
+from quiz_api.repositories.mock_practice import (
+    MockPracticeRepository,
+    MockRunCandidate,
+    MockSessionRecord,
+)
 from quiz_api.repositories.practice import PracticeRepository, SessionRecord
 from quiz_api.repositories.practice_runs import (
     PracticeRunRepository,
@@ -108,8 +127,9 @@ SessionState = Literal["open", "pending_grade", "graded"]
 
 
 class PracticeRunCreate(BaseModel):
-    """`source=bank`: the workspace's questions. `source=mock` (with `mock_exam_id`) arrives with
-    MOCK-P. Unknown body fields are ignored (never a workspace or user override)."""
+    """`source=bank`: the workspace's questions. `source=mock` (with `mock_exam_id`): the
+    questions the mock exam lists now. Unknown body fields are ignored (never a workspace or user
+    override)."""
 
     source: RunSource
     mock_exam_id: uuid.UUID | None = None
@@ -234,6 +254,12 @@ def get_practice_repository(
     return PracticeRepository(session)
 
 
+def get_mock_practice_repository(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> MockPracticeRepository:
+    return MockPracticeRepository(session)
+
+
 def get_overview_repository(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> QuestionOverviewRepository:
@@ -255,6 +281,7 @@ RunRepo = Annotated[PracticeRunRepository, Depends(get_run_repository)]
 ResolverDep = Annotated[QuestionRangeResolver, Depends(get_resolver)]
 PracticeRepo = Annotated[PracticeRepository, Depends(get_practice_repository)]
 OverviewRepo = Annotated[QuestionOverviewRepository, Depends(get_overview_repository)]
+MockRepo = Annotated[MockPracticeRepository, Depends(get_mock_practice_repository)]
 IdempotencyStoreDep = Annotated[IdempotencyStore, Depends(get_idempotency_store)]
 AccessRepo = Annotated[AccessRepository, Depends(get_access_repository)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -309,6 +336,27 @@ def run_order(heatmap_ids: list[uuid.UUID], random_order: bool, seed: int) -> li
     return out
 
 
+def select_mock_range(candidates: list[MockRunCandidate], range_: QuestionRange) -> list[uuid.UUID]:
+    """The mock exam questions a range selects, in mock exam order (pure; see the module
+    docstring). Raises `range-invalid` for chapters, personal state filters and ids the mock exam
+    does not list, never dropping them silently."""
+    f = range_.filters
+    if range_.chapter_ids or f.status is not None or f.favorite is not None or f.retry is not None:
+        raise range_invalid()
+    listed = {c.id for c in candidates}
+    if any(i not in listed for i in (*range_.question_ids, *range_.excluded_question_ids)):
+        raise range_invalid()
+    picked = set(range_.question_ids)
+    excluded = set(range_.excluded_question_ids)
+    return [
+        c.id
+        for c in candidates
+        if (range_.all or c.id in picked)
+        and c.id not in excluded
+        and (f.type is None or c.question_type == f.type)
+    ]
+
+
 def run_summary(run: RunRecord, progress: RunProgress) -> RunSummary:
     if run.finished_at is not None:
         skipped = run.total - progress.submitted
@@ -358,7 +406,10 @@ def _chapter_numbers(
     return {cid: chapter_number(titles) for cid, titles in lineage.items()}
 
 
-def _attempt_out(session: SessionRecord, practice: PracticeRepository) -> RunAttempt | None:
+def _attempt_out(
+    session: SessionRecord | MockSessionRecord,
+    practice: PracticeRepository | MockPracticeRepository,
+) -> RunAttempt | None:
     if session.state == "open":
         return None
     latest = practice.latest_attempt(session.id, session.user_id)
@@ -396,6 +447,41 @@ def _unavailable(position: int, total: int) -> RunItem:
     )
 
 
+def _mock_item(
+    run: RunRecord, position: int, question_id: uuid.UUID | None, mocks: MockPracticeRepository
+) -> RunItem:
+    """A mock run position: the mock exam question unless it was taken out of the mock exam.
+    Mock exam questions have no chapter or bank number (labels are "문제 k")."""
+    live = mocks.live_question(run.workspace_id, question_id) if question_id else None
+    if live is None:
+        return _unavailable(position, run.total)
+    session = mocks.run_session(run.id, position, run.user_id)
+    if session is not None:
+        texts = {o["id"]: o["text"] for o in session.revision.options}
+        options = [RunOption(id=i, text=texts[i]) for i in session.displayed_option_ids]
+        stem, multi = session.revision.stem, session.revision.is_multi_answer
+    else:
+        options = [RunOption(id=o["id"], text=o["text"]) for o in live.options]
+        stem, multi = live.stem, live.is_multi_answer
+    return RunItem(
+        position=position,
+        total=run.total,
+        available=True,
+        question_id=live.id,
+        question_type=live.question_type,
+        chapter_id=None,
+        chapter_number=None,
+        chapter_title=None,
+        question_number=None,
+        stem=stem,
+        is_multi_answer=multi,
+        options=options,
+        practice_session_id=session.id if session else None,
+        session_state=session.state if session else None,  # type: ignore[arg-type]
+        attempt=_attempt_out(session, mocks) if session else None,
+    )
+
+
 # --- routes -------------------------------------------------------------------------------------
 
 
@@ -411,6 +497,7 @@ def create_practice_run(
     body: PracticeRunCreate,
     runs: RunRepo,
     resolver: ResolverDep,
+    mocks: MockRepo,
     idempotency: IdempotencyStoreDep,
     settings: SettingsDep,
     idempotency_key: IdempotencyKey = None,
@@ -426,10 +513,20 @@ def create_practice_run(
         if stored is not None:
             return replay(stored, body_hash)
 
+    generation_id: uuid.UUID | None = None
     if body.source == "mock":
-        # Mock exam runs arrive with MOCK-P: no mock exam can be found yet.
-        raise _not_found()
-    ids = resolver.resolve(workspace_id, user_id, body.range)
+        assert body.mock_exam_id is not None  # noqa: S101 - the model validator
+        exam = mocks.run_source(body.mock_exam_id, workspace_id)
+        if exam is None:
+            raise _not_found()
+        if exam.current_generation_id is None:
+            raise no_matching_questions()
+        generation_id = exam.current_generation_id
+        ids = select_mock_range(mocks.run_candidates(generation_id), body.range)
+        if not ids:
+            raise no_matching_questions()
+    else:
+        ids = resolver.resolve(workspace_id, user_id, body.range)
     if len(ids) > MAX_RUN:
         raise ProblemException(
             422,
@@ -441,7 +538,8 @@ def create_practice_run(
         workspace_id=workspace_id,
         user_id=user_id,
         source=body.source,
-        mock_exam_id=None,
+        mock_exam_id=body.mock_exam_id if body.source == "mock" else None,
+        mock_exam_generation_id=generation_id,
         range_=stored_range(body.range),
         random_order=body.random_order,
         seed=seed,
@@ -462,10 +560,14 @@ def create_practice_run(
     return result
 
 
+def _progress(run: RunRecord, runs: PracticeRunRepository, mocks: MockPracticeRepository) -> Any:
+    return mocks.progress(run) if run.source == "mock" else runs.progress(run)
+
+
 @router.get("/practice-runs/{run_id}", operation_id="getPracticeRun")
-def get_practice_run(run: ReadRun, runs: RunRepo) -> PracticeRun:
+def get_practice_run(run: ReadRun, runs: RunRepo, mocks: MockRepo) -> PracticeRun:
     """The run's counts, progress and summary (no items, no content)."""
-    return _run_out(run, runs.progress(run))
+    return _run_out(run, _progress(run, runs, mocks))
 
 
 @router.get("/practice-runs/{run_id}/items/{position}", operation_id="getPracticeRunItem")
@@ -473,6 +575,7 @@ def get_practice_run_item(
     run: ReadRun,
     runs: RunRepo,
     practice: PracticeRepo,
+    mocks: MockRepo,
     overview: OverviewRepo,
     position: Annotated[int, Path(ge=1, description="1-based; past the end is 404.")],
 ) -> RunItem:
@@ -481,6 +584,8 @@ def get_practice_run_item(
     if position > run.total:
         raise _not_found()
     question_id = runs.question_at(run.id, position)
+    if run.source == "mock":
+        return _mock_item(run, position, question_id, mocks)
     live = runs.live_question(run.workspace_id, question_id) if question_id else None
     if live is None:
         return _unavailable(position, run.total)
@@ -516,13 +621,17 @@ def get_practice_run_item(
 def list_practice_run_results(
     run: ReadRun,
     runs: RunRepo,
+    mocks: MockRepo,
     overview: OverviewRepo,
     offset: Annotated[int, Query(ge=0, le=MAX_RUN)] = 0,
     limit: Annotated[int, Query(ge=1, le=MAX_RESULTS_PAGE)] = DEFAULT_RESULTS_PAGE,
 ) -> RunResults:
     """Positions offset+1 .. offset+limit with their result (no answers)."""
-    reached = runs.progress(run).reached
-    rows: list[ResultRow] = runs.results(run, offset, limit) if offset < run.total else []
+    reached = _progress(run, runs, mocks).reached
+    rows: list[ResultRow] = []
+    if offset < run.total:
+        source = mocks if run.source == "mock" else runs
+        rows = source.results(run, offset, limit)
     numbers = _chapter_numbers(overview, [r.chapter_id for r in rows])
     return RunResults(
         total=run.total,
@@ -547,14 +656,14 @@ def list_practice_run_results(
 
 
 @router.post("/practice-runs/{run_id}/finish", operation_id="finishPracticeRun")
-def finish_practice_run(run: WriteRun, runs: RunRepo) -> PracticeRun:
+def finish_practice_run(run: WriteRun, runs: RunRepo, mocks: MockRepo) -> PracticeRun:
     """End the run: unsubmitted positions count as skipped and no position can be submitted
     any more. Finishing a finished run returns it unchanged."""
     runs.finish(run.id)
     finished = runs.get(run.id, run.user_id)
     if finished is None:  # pragma: no cover - locked by the membership lookup
         raise _not_found()
-    out = _run_out(finished, runs.progress(finished))
+    out = _run_out(finished, _progress(finished, runs, mocks))
     runs.commit()
     return out
 

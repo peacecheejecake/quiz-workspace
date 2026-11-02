@@ -42,7 +42,7 @@ import json
 import uuid
 from dataclasses import replace
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.exceptions import RequestValidationError
@@ -412,7 +412,7 @@ def _my_state(question_id: uuid.UUID, s: StateRecord) -> MyState:
     )
 
 
-def _unstorable() -> RequestValidationError:
+def unstorable() -> RequestValidationError:
     return RequestValidationError(
         [
             {
@@ -424,12 +424,27 @@ def _unstorable() -> RequestValidationError:
     )
 
 
-def _answer(session: SessionRecord, body: SubmitBody) -> tuple[dict[str, Any], AttemptResult]:
-    """Validate the submission against the pinned revision; returns (stored answer, result).
-    Messages never mention which option is correct."""
+class GradableRevision(Protocol):
+    """What grading reads of a pinned revision (bank `RevisionRecord`, mock exam revision)."""
+
+    @property
+    def options(self) -> list[dict[str, str]]: ...
+    @property
+    def is_multi_answer(self) -> bool: ...
+    @property
+    def correct_option_ids(self) -> list[str] | None: ...
+    @property
+    def accepted_answers(self) -> list[str] | None: ...
+
+
+def grade_submission(
+    question_type: str, rev: GradableRevision, body: SubmitBody
+) -> tuple[dict[str, Any], AttemptResult]:
+    """Validate a submission against the pinned revision; returns (stored answer, result).
+    MCQs are graded by stable option ids, never positions. Messages never mention which option
+    is correct. Shared by bank and mock exam practice (MOCK-P)."""
     issues = Issues()
-    rev = session.revision
-    if session.question_type == "MCQ":
+    if question_type == "MCQ":
         ids = body.selected_option_ids
         if body.answer_text is not None:
             issues.add(("answer_text",), "A multiple-choice question takes selected_option_ids.")
@@ -457,7 +472,7 @@ def _answer(session: SessionRecord, body: SubmitBody) -> tuple[dict[str, Any], A
         issues.add(("answer_text",), "Text must not contain NUL characters or invalid code points.")
     issues.raise_if_any()
     assert text is not None  # noqa: S101 - checked above
-    if session.question_type == "SHORT_ANSWER":
+    if question_type == "SHORT_ANSWER":
         return {"answer_text": text}, grade_short_answer(text, rev.accepted_answers)
     return {"answer_text": text}, "pending"
 
@@ -650,7 +665,7 @@ def submit_practice_session(
             ProblemType.PRACTICE_SESSION_SUBMITTED,
             detail="This practice session was already submitted. Start a new one to retry.",
         )
-    answer, result = _answer(found, body)
+    answer, result = grade_submission(found.question_type, found.revision, body)
     try:
         submitted = practice.submit(found, submitted_answer=answer, result=result)
         updated = replace(
@@ -663,7 +678,7 @@ def submit_practice_session(
         practice.commit()
     except (IntegrityError, DataError):
         practice.rollback()
-        raise _unstorable() from None
+        raise unstorable() from None
     return out
 
 

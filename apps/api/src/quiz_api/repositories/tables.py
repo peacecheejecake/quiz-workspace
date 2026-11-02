@@ -594,3 +594,13 @@ mock_exam_questions = Table(
     Column("mock_exam_id", Uuid, nullable=False),
     _ts("removed_at"),
 )
+
+# MOCK-P: the ownership lookup of a mock practice session (quiz_api.repositories.mock_practice
+# reads and writes the rest with SQL text).
+mock_exam_practice_sessions = Table(
+    "mock_exam_practice_sessions",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("user_id", Uuid, nullable=False),
+)
