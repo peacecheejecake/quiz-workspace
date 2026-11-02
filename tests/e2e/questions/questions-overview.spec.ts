@@ -561,6 +561,9 @@ test(
   async ({ page, workspaceFactory }) => {
     test.setTimeout(JOB_TIMEOUT_MS + 60_000);
     const s = await seed(workspaceFactory, 'qov01-ac09', 2);
+    // A question paper with an extraction, for the 문제 검토 sub-page link below (read with the
+    // home's document list, so it is made before the home loads).
+    await importPaperDrafts(s.owner, s.workspaceId);
     await openOverview(page, s);
 
     // Hold the history reads: the dialog is already open, busy, with a status text.
@@ -589,7 +592,6 @@ test(
     // carry the loading boundary. 문제 검토 is chosen only once every one of them has been
     // delivered: a click before they land makes Next render the skeleton from the navigation's
     // own streamed response, which the gate holds whole (the WebKit flake, UX7-FLAKE-AC09).
-    await importPaperDrafts(s.owner, s.workspaceId);
     let releasePage!: () => void;
     const pageGate = new Promise<void>((resolve) => (releasePage = resolve));
     let prefetching = 0;
