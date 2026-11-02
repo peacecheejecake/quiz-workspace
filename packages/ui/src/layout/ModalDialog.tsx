@@ -5,6 +5,7 @@ import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
 import { LayerProvider } from '../internal/layer';
+import { handlesOwnEscape } from '../internal/own-escape';
 import { ScrollRegion } from '../internal/scroll-region';
 import { IconButton } from '../primitives/IconButton';
 import { CloseIcon } from '../primitives/icons';
@@ -63,6 +64,10 @@ export function ModalDialog({
           onCloseAutoFocus={onCloseAutoFocus}
           onPointerDownOutside={(event) => {
             if (!closeOnBackdropClick) event.preventDefault();
+          }}
+          onEscapeKeyDown={(event) => {
+            // An inline edit (ownEscapeProps) cancels itself; the next Escape closes the dialog.
+            if (handlesOwnEscape(event)) event.preventDefault();
           }}
         >
           <LayerProvider value="var(--z-modal)">
