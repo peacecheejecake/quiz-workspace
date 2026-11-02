@@ -841,13 +841,8 @@ def _poller(request: Request, kind: _Kind) -> StreamPoller:
     ) -> _Polled | None:
         with database.read_sessionmaker() as session:
             repo = ExplanationRepository(session)
-            row = repo.get(kind.name, explanation_id)
-            if row is None:
-                return None
             try:
-                access = _authorize(repo, user_id, kind, row.target_id, Action.READ)
-                target = _target(repo, kind, row.target_id)
-                _revision(repo, kind, access, target, gate)
+                row = _readable(repo, user_id, kind, explanation_id, gate)
             except (HTTPException, ProblemException):
                 return None
             body = _explanation_out(repo, row) if full and row.terminal else None
@@ -857,6 +852,25 @@ def _poller(request: Request, kind: _Kind) -> StreamPoller:
             return _Polled(row.status, row.error_code, body)
 
     return poll
+
+
+def _readable(
+    repo: ExplanationRepository,
+    user_id: uuid.UUID,
+    kind: _Kind,
+    explanation_id: uuid.UUID,
+    gate: _Gate,
+) -> ExplanationRow:
+    """The explanation if the gate opens *its* revision: a session submitted on another revision
+    of the question (or `view` on an older revision's explanation) is the unknown-id 404."""
+    row = repo.get(kind.name, explanation_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=EXPLANATION_NOT_FOUND)
+    access = _authorize(repo, user_id, kind, row.target_id, Action.READ)
+    target = _target(repo, kind, row.target_id)
+    if _revision(repo, kind, access, target, gate) != row.revision_id:
+        raise HTTPException(status_code=404, detail=EXPLANATION_NOT_FOUND)
+    return row
 
 
 def get_bank_poller(request: Request) -> StreamPoller:
@@ -990,13 +1004,7 @@ async def _stream(
     def check() -> None:
         database: Database = request.app.state.database
         with database.read_sessionmaker() as session:
-            repo = ExplanationRepository(session)
-            row = repo.get(kind.name, explanation_id)
-            if row is None:
-                raise HTTPException(status_code=404, detail=EXPLANATION_NOT_FOUND)
-            access = _authorize(repo, user_id, kind, row.target_id, Action.READ)
-            target = _target(repo, kind, row.target_id)
-            _revision(repo, kind, access, target, gate)
+            _readable(ExplanationRepository(session), user_id, kind, explanation_id, gate)
 
     try:
         await run_in_threadpool(check)

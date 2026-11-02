@@ -720,6 +720,38 @@ def test_c05_a_second_reader_gets_the_stream_from_seq_zero_and_each_connection_i
     assert deltas["owner"] == deltas["reader"]
 
 
+def test_c05_a_session_of_another_revision_never_reads_its_stream(seed: Any) -> None:
+    """The stream is bound to the explanation's own revision: a session submitted on revision A
+    never opens the stream (or its final `done`) of revision B's explanation — the same 404 as an
+    unknown id, so nothing tells B exists."""
+    owner = seed.client("expl-c05b-owner")
+    book = Book(owner)
+    q = book.mcq()
+    learner = member(seed, book.ws, "expl-c05b-learner", "viewer")
+    old_session = submitted(learner, q)  # revision A
+    owner.ok(
+        "PATCH",
+        f"/questions/{q['id']}",
+        {"base_revision_id": q["revision"]["id"], "explanation": "고친 사람 해설 B"},
+    )
+    on_b = make(owner, q["id"], view="detail")  # revision B
+    assert on_b["question_revision_id"] != q["revision"]["id"]
+    leaked = learner.call(
+        "GET", f"/ai-explanations/{on_b['id']}/stream?practice_session_id={old_session}"
+    )
+    unknown = learner.call(
+        "GET", f"/ai-explanations/{uuid.uuid4()}/stream?practice_session_id={old_session}"
+    )
+    implemented(leaked)
+    assert leaked.status_code == 404
+    assert leaked.json()["detail"] == unknown.json()["detail"]
+    assert "고친 사람 해설" not in leaked.text
+    # A session of its own revision still reads it.
+    fresh = submitted(learner, owner.ok("GET", f"/questions/{q['id']}"))
+    events = _events(learner, on_b["id"], practice_session_id=fresh)
+    assert events[-1][0] == "done"
+
+
 # ---------------------------------------------------------------------------------------------
 # C06 no leaks, usage, activity
 # ---------------------------------------------------------------------------------------------
