@@ -9,6 +9,7 @@ import {
   type ComponentProps,
   type ReactElement,
   type ReactNode,
+  type Ref,
 } from 'react';
 import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
@@ -49,6 +50,12 @@ export interface FloatingSidePanelProps {
   title: ReactNode;
   /** Optional description; linked via `aria-describedby`. */
   description?: ReactNode;
+  /**
+   * The title heading. Passing it makes the heading programmatically focusable (`tabIndex=-1`),
+   * for panels that move focus to their title when their content changes (QuestionViewer
+   * `sequence`: each new question).
+   */
+  titleRef?: Ref<HTMLHeadingElement>;
   /** Header slot between the title and the close button (e.g. favorite / retry toggles). */
   headerActions?: ReactNode;
   /** Footer slot (submit, self-grade, next/previous, loading/error status). */
@@ -128,6 +135,7 @@ export function FloatingSidePanel({
   trigger,
   title,
   description,
+  titleRef,
   headerActions,
   footer,
   closeLabel = '닫기',
@@ -280,7 +288,13 @@ export function FloatingSidePanel({
             <LayerProvider value={layer.zIndex}>
               <div className="header">
                 <div className="heading">
-                  <Dialog.Title className="title">{title}</Dialog.Title>
+                  <Dialog.Title
+                    ref={titleRef}
+                    tabIndex={titleRef ? -1 : undefined}
+                    className="title"
+                  >
+                    {title}
+                  </Dialog.Title>
                   {description ? (
                     <Dialog.Description className="description">{description}</Dialog.Description>
                   ) : null}

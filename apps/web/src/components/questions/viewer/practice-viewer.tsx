@@ -1,29 +1,26 @@
 'use client';
 
-// QPLAY-01 QuestionPracticePanel (docs/screens/questions-practice.md, questions.md §3.2/§4,
-// design-system §5.1): a modal Floating Side Panel opened from a heatmap dot or `?question=`.
-// Opening it starts a practice session, which is what records the view (never the hover
-// preview). The session carries no answers: the correct options, accepted answers, rubric and
-// explanation arrive only with the submit result. Essays and ungradable short answers stay
-// pending until the user grades them (맞음/틀림). Previous/next follow the heatmap order and are
-// URL changes owned by the screen; Escape/close return focus to the dot (the screen decides).
-// UX7-CACHE (QPLAY-01-AC06): the open, answer-free sessions this panel started are kept in memory
+// QuestionViewer `practice` mode (QVIEW-01 call sites 1–3: a Heatmap marker or `?question=`, the
+// history dialog's attempt links, a 정리 노트 footnote; QPLAY-01, questions.md §3.2/§4,
+// design-system §5.1): one question in a modal Floating Side Panel. Opening it starts a practice
+// session, which is what records the view (never the hover preview). The session carries no
+// answers: the correct options, accepted answers, rubric and explanation arrive only with the
+// submit result. Essays and ungradable short answers stay pending until the user grades them
+// (맞음/틀림). Previous/next follow the heatmap order and are URL changes owned by the screen;
+// Escape/close return focus to the dot (the screen decides).
+// UX7-CACHE (QPLAY-01-AC06): the open, answer-free sessions this viewer started are kept in memory
 // (lib/questions/practice-cache.ts), so re-opening an unanswered question shows it at once; a
 // session whose submission started is never reused.
 // UX7-BANK: editors get the screen's 문제 관리 menu (`headerExtra`) in the header; after an edit
-// the screen invalidates that question (`invalidated`) and the panel, if it still shows it,
-// opens a session of the new revision
-// (the cached session of the old revision is dropped).
+// the screen invalidates that question (`invalidated`) and the viewer, if it still shows it,
+// opens a session of the new revision (the cached session of the old revision is dropped).
 // UX7-BANK-2: the header menu's 정답·해설 보기 opens a separate read-only dialog over the panel; the
 // session on screen (and an answer being chosen) stays as it is and nothing is recorded.
 import {
   Button,
-  Checkbox,
   FavoriteToggle,
   FloatingSidePanel,
-  RadioGroup,
   RetryToggle,
-  Textarea,
   questionTypeLabels,
 } from '@quiz/ui';
 import {
@@ -45,25 +42,19 @@ import {
   type SubmitResult,
 } from '@/lib/questions/practice-actions';
 import { PracticeSessionCache } from '@/lib/questions/practice-cache';
+import { displayStem } from '@/lib/questions/display-stem';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 import {
-  ANSWER_TEXT_MAX,
   canSubmit,
   EMPTY_ANSWER,
-  finalResult,
-  optionMark,
-  optionTone,
-  resultMessage,
   submitBody,
-  toggleOption,
   type AttemptResult,
   type GradeResult,
   type Neighbors,
-  type OptionTone,
   type PracticeAnswer,
 } from './practice-model';
-import styles from './practice-panel.module.css';
-import { displayStem } from '@/lib/questions/display-stem';
+import { QuestionBody } from './question-body';
+import styles from './question-viewer.module.css';
 
 export interface PracticeQuestion {
   readonly id: string;
@@ -79,7 +70,7 @@ export interface PracticeQuestion {
   readonly savingFlags?: boolean;
 }
 
-export interface PracticePanelProps {
+export interface PracticeViewerProps {
   readonly workspaceId: string;
   /** The open question; null = closed. */
   readonly question: PracticeQuestion | null;
@@ -160,7 +151,7 @@ function newKey(): string {
 
 const NO_NEIGHBORS: Neighbors = { previous: null, next: null };
 
-export function PracticePanel({
+export function PracticeViewer({
   workspaceId,
   question,
   readOnly,
@@ -174,7 +165,7 @@ export function PracticePanel({
   onCloseAutoFocus,
   headerExtra,
   invalidated = null,
-}: PracticePanelProps) {
+}: PracticeViewerProps) {
   const questionId = question?.id ?? null;
   // The last open question keeps rendering while the panel animates closed.
   const [shown, setShown] = useState(question);
@@ -348,14 +339,7 @@ export function PracticePanel({
         </Button>
       ) : null}
       {ready && pendingGrade ? (
-        <div className={styles.selfGrade} role="group" aria-label="직접 채점">
-          <Button loading={work.busy === 'grade'} onClick={() => void selfGrade('correct')}>
-            맞음
-          </Button>
-          <Button disabled={work.busy === 'grade'} onClick={() => void selfGrade('incorrect')}>
-            틀림
-          </Button>
-        </div>
+        <SelfGradeButtons busy={work.busy === 'grade'} onGrade={(g) => void selfGrade(g)} />
       ) : null}
       {ready && finished ? (
         <Button
@@ -392,19 +376,11 @@ export function PracticePanel({
       headerActions={
         view && !readOnly ? (
           <>
-            <FavoriteToggle
-              pressed={view.isFavorite}
-              aria-disabled={view.savingFlags || undefined}
-              onPressedChange={(pressed) => {
-                if (!view.savingFlags) onFlagsChange(view.id, { is_favorite: pressed });
-              }}
-            />
-            <RetryToggle
-              pressed={view.needsRetry}
-              aria-disabled={view.savingFlags || undefined}
-              onPressedChange={(pressed) => {
-                if (!view.savingFlags) onFlagsChange(view.id, { needs_retry: pressed });
-              }}
+            <StudyToggles
+              favorite={view.isFavorite}
+              retry={view.needsRetry}
+              saving={view.savingFlags === true}
+              onChange={(flags) => onFlagsChange(view.id, flags)}
             />
             {headerExtra}
           </>
@@ -431,32 +407,20 @@ export function PracticePanel({
               aria-busy={work.busy !== null || undefined}
               noValidate
             >
-              <p className={styles.stem}>{displayStem(ready.stem)}</p>
-              <AnswerField
-                session={ready}
+              <QuestionBody
+                kind="answer"
+                stem={ready.stem}
+                question={ready}
                 answer={work.answer}
                 disabled={locked}
-                correct={outcome?.correct_option_ids ?? null}
-                graded={outcome?.result ?? null}
-                onChange={(answer) => {
+                onAnswerChange={(answer) => {
                   if (workId) updateWork(workId, () => ({ answer }));
                 }}
+                outcome={outcome}
+                selfGrade={work.selfGrade}
+                error={work.error}
+                resultRef={resultRef}
               />
-              <p
-                ref={resultRef}
-                role="status"
-                tabIndex={-1}
-                className={styles.result}
-                data-result={outcome ? finalResult(outcome.result, work.selfGrade) : undefined}
-              >
-                {outcome ? resultMessage(outcome.result, work.selfGrade) : ''}
-              </p>
-              {work.error ? (
-                <p role="alert" className={styles.error}>
-                  {work.error}
-                </p>
-              ) : null}
-              {outcome ? <Reveal outcome={outcome} /> : null}
             </form>
           ) : state.status === 'error' ? (
             <div role="alert" className={styles.error}>
@@ -474,6 +438,59 @@ export function PracticePanel({
         </div>
       ) : null}
     </FloatingSidePanel>
+  );
+}
+
+/** Favorite / retry toggles of a bank question (practice, sequence(bank)). */
+export function StudyToggles({
+  favorite,
+  retry,
+  saving,
+  onChange,
+}: {
+  readonly favorite: boolean;
+  readonly retry: boolean;
+  /** A change is being saved: the toggles show the saved state and wait. */
+  readonly saving: boolean;
+  readonly onChange: (flags: { is_favorite?: boolean; needs_retry?: boolean }) => void;
+}) {
+  return (
+    <>
+      <FavoriteToggle
+        pressed={favorite}
+        aria-disabled={saving || undefined}
+        onPressedChange={(pressed) => {
+          if (!saving) onChange({ is_favorite: pressed });
+        }}
+      />
+      <RetryToggle
+        pressed={retry}
+        aria-disabled={saving || undefined}
+        onPressedChange={(pressed) => {
+          if (!saving) onChange({ needs_retry: pressed });
+        }}
+      />
+    </>
+  );
+}
+
+/** 맞음 / 틀림 of a pending submission (essays, short answers without accepted answers). */
+export function SelfGradeButtons({
+  busy,
+  onGrade,
+}: {
+  readonly busy: boolean;
+  readonly onGrade: (grade: GradeResult) => void;
+}) {
+  return (
+    <div className={styles.selfGrade} role="group" aria-label="직접 채점">
+      <Button loading={busy} onClick={() => onGrade('correct')}>
+        맞음
+      </Button>
+      <Button disabled={busy} onClick={() => onGrade('incorrect')}>
+        틀림
+      </Button>
+    </div>
   );
 }
 
@@ -501,141 +518,5 @@ function NavButton({
     >
       {children}
     </Button>
-  );
-}
-
-function AnswerField({
-  session,
-  answer,
-  disabled,
-  correct,
-  graded,
-  onChange,
-}: {
-  readonly session: PracticeSession;
-  readonly answer: PracticeAnswer;
-  readonly disabled: boolean;
-  readonly correct: readonly string[] | null;
-  /** The submit result; null until the answers are revealed. */
-  readonly graded: AttemptResult | null;
-  readonly onChange: (answer: PracticeAnswer) => void;
-}) {
-  if (session.question_type !== 'MCQ') {
-    return (
-      <Textarea
-        label="답안"
-        value={answer.text}
-        rows={session.question_type === 'ESSAY' ? 8 : 3}
-        maxLength={ANSWER_TEXT_MAX}
-        disabled={disabled}
-        onChange={(e) => onChange({ ...answer, text: e.target.value })}
-      />
-    );
-  }
-  // UX7-QDISPLAY (QPLAY-01-AC12): every row keeps the same (transparent) border, and grading
-  // only colors it; the text mark below the label is the meaning, linked as the description.
-  const mark = (id: string) => {
-    const text = graded ? optionMark(id, correct, answer.selected) : undefined;
-    return text ? <span className={styles.mark}>{text}</span> : undefined;
-  };
-  const rowClass = (id: string) => {
-    const tone = graded ? optionTone(id, correct, answer.selected, graded) : undefined;
-    return tone ? `${styles.option} ${TONE_CLASS[tone]}` : styles.option;
-  };
-  if (!session.is_multi_answer) {
-    return (
-      <RadioGroup
-        // UX7-QDISPLAY: no visible 보기 label; the group keeps it as its accessible name.
-        label="보기"
-        hideLabel
-        orientation="vertical"
-        disabled={disabled}
-        value={answer.selected[0] ?? ''}
-        onValueChange={(id) =>
-          onChange({ ...answer, selected: toggleOption(session, answer.selected, id, true) })
-        }
-        options={session.options.map((o, index) => {
-          const description = mark(o.id);
-          return {
-            value: o.id,
-            label: <OptionLabel index={index} text={o.text} />,
-            className: rowClass(o.id),
-            ...(description ? { description } : {}),
-          };
-        })}
-      />
-    );
-  }
-  return (
-    <fieldset className={styles.choices}>
-      <legend className={styles.legend}>
-        <span className="qz-visually-hidden">보기 —</span> 정답을 모두 고르세요
-      </legend>
-      {session.options.map((o, index) => (
-        <Checkbox
-          key={o.id}
-          className={rowClass(o.id)}
-          label={<OptionLabel index={index} text={o.text} />}
-          description={mark(o.id)}
-          disabled={disabled}
-          checked={answer.selected.includes(o.id)}
-          onCheckedChange={(checked) =>
-            onChange({
-              ...answer,
-              selected: toggleOption(session, answer.selected, o.id, checked === true),
-            })
-          }
-        />
-      ))}
-    </fieldset>
-  );
-}
-
-const TONE_CLASS: Readonly<Record<OptionTone, string | undefined>> = {
-  correct: styles.toneCorrect,
-  chosen: styles.toneChosen,
-  answer: styles.toneAnswer,
-};
-
-/**
- * An option's display number (`1.`, by displayed position, so a shuffled session numbers its own
- * order) and text. The number is decorative: grading uses the option ID, and the radio/checkbox
- * keeps the option text as its name while its position is announced by the group.
- */
-function OptionLabel({ index, text }: { readonly index: number; readonly text: string }) {
-  return (
-    <>
-      <span className={styles.optionNumber} aria-hidden="true">
-        {index + 1}.
-      </span>{' '}
-      {text}
-    </>
-  );
-}
-
-/** Answers revealed by the submit result (never before submission). */
-function Reveal({ outcome }: { readonly outcome: SubmitResult }) {
-  const accepted = outcome.accepted_answers ?? [];
-  return (
-    <div className={styles.reveal}>
-      {accepted.length > 0 ? (
-        <section aria-label="허용 답안">
-          <h3 className={styles.revealTitle}>허용 답안</h3>
-          <p className={styles.revealText}>{accepted.join(', ')}</p>
-        </section>
-      ) : null}
-      {outcome.rubric ? (
-        <section aria-label="채점 기준">
-          <h3 className={styles.revealTitle}>채점 기준</h3>
-          <p className={styles.revealText}>{outcome.rubric}</p>
-        </section>
-      ) : null}
-      {outcome.explanation ? (
-        <section aria-label="해설">
-          <h3 className={styles.revealTitle}>해설</h3>
-          <p className={styles.revealText}>{outcome.explanation}</p>
-        </section>
-      ) : null}
-    </div>
   );
 }

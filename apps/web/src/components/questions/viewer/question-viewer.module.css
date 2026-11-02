@@ -1,0 +1,460 @@
+/* QuestionViewer (QVIEW-01, docs/screens/question-viewer.md): the shared question body, the
+   practice / sequence / manage / read-only modes and the range picker. Semantic tokens only. */
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.stem {
+  margin: 0;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-relaxed);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.choices {
+  display: grid;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.optionNumber {
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * One MCQ option row (UX7-QDISPLAY, QPLAY-01-AC12, design-system §4.1 "채점 결과 테두리"): the
+ * 2px border is always there and transparent until the answer is graded, so a result changes only
+ * its color and never the layout. The text mark carries the meaning; color only reinforces it.
+ */
+.option {
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+}
+
+.toneCorrect {
+  border-color: var(--color-success);
+}
+
+.toneChosen {
+  border-color: var(--color-border-strong);
+}
+
+.toneAnswer {
+  border-color: var(--color-danger);
+}
+
+.mark {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+@media (forced-colors: active) {
+  .option {
+    border-color: Canvas;
+  }
+
+  .toneCorrect,
+  .toneAnswer {
+    border-color: Highlight;
+  }
+
+  .toneChosen {
+    border-color: GrayText;
+  }
+}
+
+.legend {
+  margin-block-end: var(--space-2);
+  padding: 0;
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.notice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.loading {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.error {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  margin: 0;
+  color: var(--color-danger);
+}
+
+.error p {
+  margin: 0;
+}
+
+/* Result text (정답/오답/채점 대기) carries the meaning; color only reinforces it. */
+.result {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.result:empty {
+  display: none;
+}
+
+.result:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.result[data-result='correct'] {
+  color: var(--color-success);
+}
+
+.result[data-result='incorrect'] {
+  color: var(--color-danger);
+}
+
+.result[data-result='pending'] {
+  color: var(--color-text-secondary);
+}
+
+.reveal {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.reveal:empty {
+  display: none;
+}
+
+.revealTitle {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.revealText {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  inline-size: 100%;
+}
+
+.selfGrade {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.nav {
+  display: flex;
+  gap: var(--space-2);
+  margin-inline-start: auto;
+}
+
+/* Revision body (manage, read-only): a revision with its answers, no answer input. */
+.detailSection {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.detailHeading {
+  margin: 0;
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.detailText {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: var(--line-height-relaxed);
+}
+
+.optionList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.optionRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+/* Correct options: border + check icon + "정답" text, not color alone. */
+.optionRow[data-correct='true'] {
+  border: 2px solid var(--color-success);
+}
+
+.optionLabel {
+  flex: none;
+  font-weight: var(--font-weight-semibold);
+}
+
+.optionText {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.correctMark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.correctMark svg {
+  color: var(--color-success);
+}
+
+@media (forced-colors: active) {
+  .optionRow[data-correct='true'] {
+    border-color: Highlight;
+  }
+}
+
+/* manage: the 문제 상세 dialog's content (UX7-BANK-2). */
+.detail {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.heading:focus-visible,
+.sourceLink:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: var(--line-height-relaxed);
+}
+
+.plainList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sourceLink {
+  color: var(--color-text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Toggle styling (off: no border/fill, on: selected fill + weight) comes from the Button kit. */
+.revisionButton {
+  padding: 0 var(--space-2);
+}
+
+.revisionPreview {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+.alert {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+
+.alert p {
+  margin: 0;
+}
+
+/* read-only: the type badge row. */
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* sequence: progress and the results step. */
+.progress {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.progressText {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.resultList {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resultButton {
+  inline-size: 100%;
+  justify-content: flex-start;
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.stepActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* QuestionRangePicker */
+.picker {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.filterGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-2);
+}
+
+.filterGroup[hidden] {
+  display: none;
+}
+
+.groups {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.groupHeader > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.questionList {
+  display: grid;
+  margin: 0;
+  padding: 0 0 0 var(--space-5);
+  list-style: none;
+}
+
+/* A virtualized chapter list scrolls in its own box (only the rows in view are rendered). */
+.virtualList {
+  position: relative;
+  max-block-size: 24rem;
+  overflow-y: auto;
+}
+
+.virtualRow {
+  position: absolute;
+  inset-inline: var(--space-5) 0;
+}
+
+.questionRow {
+  min-width: 0;
+  padding-block: var(--space-1);
+}
+
+.selectedCount {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}

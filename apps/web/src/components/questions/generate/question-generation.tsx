@@ -60,7 +60,7 @@ import { lookupOverviewQuestionAction, setMyStateAction } from '@/lib/questions/
 import { DraftEditor, type DraftSaveResult } from '../drafts/draft-editor';
 import { formatDateTime } from '../labels';
 import { QuestionDraftReview, type DraftReviewState } from '../drafts/question-draft-review';
-import { PracticePanel, type PracticeQuestion } from '../practice/practice-panel';
+import { QuestionViewer, type PracticeQuestion } from '../viewer/question-viewer';
 import { GenerationComparePanel } from './generation-compare-panel';
 import { QuestionGenerationForm } from './question-generation-form';
 import { VariationDiffViewer, type VariationOriginal } from './variation-diff-viewer';
@@ -906,7 +906,8 @@ export function QuestionGeneration({
         onClose={() => setComparing(null)}
         pageHref={docHref}
       />
-      <PracticePanel
+      <QuestionViewer
+        mode="practice"
         workspaceId={workspaceId}
         question={practice}
         readOnly={readOnly === 'archived'}

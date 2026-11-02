@@ -60,14 +60,14 @@ import { lookupOverviewQuestionAction, setMyStateAction } from '@/lib/questions/
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from '@/lib/questions/problems';
 import { QuestionDetailDialog, type DetailTarget } from '../detail/question-detail-dialog';
 import { HomeQuestionEditor } from '../home-question-editor';
-import {
-  PracticePanel,
-  type Invalidation,
-  type PracticeQuestion,
-} from '../practice/practice-panel';
 import { QuestionManageMenu } from '../practice/question-manage-menu';
 import type { EditorTarget } from '../question-editor';
-import { neighbors, type AttemptResult } from '../practice/practice-model';
+import { neighbors, type AttemptResult } from '../viewer/practice-model';
+import {
+  QuestionViewer,
+  type Invalidation,
+  type PracticeQuestion,
+} from '../viewer/question-viewer';
 import {
   applyOverrides,
   flagsPatch,
@@ -730,7 +730,8 @@ export function QuestionsOverview({
         </div>
       )}
 
-      <PracticePanel
+      <QuestionViewer
+        mode="practice"
         workspaceId={workspaceId}
         question={panelQuestion}
         readOnly={readOnly === 'archived'}
