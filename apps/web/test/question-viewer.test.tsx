@@ -8,7 +8,7 @@
 import './dom-setup';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PracticeSession, SubmitResult } from '../src/lib/questions/practice-actions';
@@ -284,6 +284,52 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     );
     expect(within(panel).queryByRole('button', { name: SUBMIT_UI })).toBeNull();
     expect(within(panel).getByRole('button', { name: '다음' })).toBeInTheDocument();
+  });
+
+  it('sequence(bank): UX9-RETRY-OPT toggles flip before the response, never busy, failures roll back', async () => {
+    const user = userEvent.setup();
+    const held: { patch: object; resolve: (value: unknown) => void }[] = [];
+    const setFlags = vi.fn(
+      (_qid: string, patch: object) => new Promise((resolve) => held.push({ patch, resolve })),
+    );
+    const onFlagsSaved = vi.fn();
+    const onFlagsFailed = vi.fn();
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        onFlagsSaved={onFlagsSaved}
+        onFlagsFailed={onFlagsFailed}
+        client={fakeClient({ setFlags: setFlags as unknown as RunClient['setFlags'] })}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('button', { name: '다시 풀기 표시' }));
+    const retry = within(panel).getByRole('button', { name: '다시 풀기 해제' });
+    expect(retry).toHaveAttribute('data-state', 'on');
+    expect(retry).not.toHaveAttribute('aria-disabled');
+    await user.click(within(panel).getByRole('button', { name: '즐겨찾기 추가' }));
+    expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toBeInTheDocument();
+    expect(retry).toHaveAttribute('data-state', 'on');
+    expect(held.map((h) => h.patch)).toEqual([{ needs_retry: true }]);
+    await act(async () =>
+      held[0]?.resolve({
+        ok: true,
+        data: { question_id: QID, is_favorite: false, needs_retry: true },
+      }),
+    );
+    expect(held.map((h) => h.patch)).toEqual([{ needs_retry: true }, { is_favorite: true }]);
+    expect(onFlagsSaved).not.toHaveBeenCalled();
+    await act(async () => held[1]?.resolve({ ok: false, kind: 'unavailable', message: '실패' }));
+    expect(within(panel).getByRole('button', { name: '즐겨찾기 추가' })).toBeInTheDocument();
+    expect(retry).toHaveAttribute('data-state', 'on');
+    expect(onFlagsFailed).toHaveBeenCalledWith('실패');
+    // The retry change was saved before the failure: the screen refreshes its heatmap.
+    expect(onFlagsSaved).toHaveBeenCalledWith(QID, { is_favorite: false, needs_retry: true });
   });
 
   it('sequence(mock): "문제 k" and no favorite / retry toggle', async () => {

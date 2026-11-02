@@ -59,7 +59,11 @@ import {
   QUESTION_PARAM,
   type OverviewFilters,
 } from '@/lib/questions/overview-filters';
-import { lookupOverviewQuestionAction, setMyStateAction } from '@/lib/questions/practice-actions';
+import {
+  lookupOverviewQuestionAction,
+  setMyStateAction,
+  type MyState,
+} from '@/lib/questions/practice-actions';
 import { parseRunState, type RunUrlState } from '@/lib/questions/practice-runs';
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from '@/lib/questions/problems';
 import { QuestionDetailDialog, type DetailTarget } from '../detail/question-detail-dialog';
@@ -73,6 +77,7 @@ import {
   type Invalidation,
   type PracticeQuestion,
 } from '../viewer/question-viewer';
+import { useFlagSync } from '../viewer/use-flag-sync';
 import {
   applyOverrides,
   flagsPatch,
@@ -324,20 +329,18 @@ export function QuestionsOverview({
 
   const panelQuestion = useMemo<PracticeQuestion | null>(() => {
     if (!openPlaced) return null;
-    // The panel toggles show the CONFIRMED study state (server item + settled changes), so their
-    // label flips once the change is saved; the dot alone is optimistic. While a change is in
-    // flight the toggles are busy. Outside the list the server overview can never catch up, so
-    // a settled change always applies there.
+    // The panel toggles show the same study state as the dot (UX9-RETRY-OPT): a change in flight
+    // at once, a settled one until the server overview moves on. Outside the list the server
+    // overview can never catch up, so a settled change always applies there.
     const id = openPlaced.item.question_id;
     const override = overrides.get(id);
-    const pending = override?.settledOn === null;
     const serverItem = found ? serverItems.find((i) => i.question_id === id) : undefined;
     const base = serverItem ?? openPlaced.item;
-    const settled =
-      override && !pending && (!serverItem || override.settledOn === serverItems)
+    const live =
+      override && (override.settledOn === null || !serverItem || override.settledOn === serverItems)
         ? override.patch
         : undefined;
-    const item = { ...base, ...settled };
+    const item = { ...base, ...live };
     return {
       id: item.question_id,
       title: placedTitle(openPlaced),
@@ -346,7 +349,6 @@ export function QuestionsOverview({
       preview: item.preview,
       isFavorite: item.is_favorite,
       needsRetry: item.needs_retry,
-      savingFlags: pending,
     };
   }, [openPlaced, found, overrides, serverItems]);
 
@@ -410,44 +412,61 @@ export function QuestionsOverview({
       : undefined;
   }
 
-  async function changeFlags(
+  // UX9-RETRY-OPT: the toggles and the dot show a press at once; my-state requests of a question
+  // run one at a time (presses in between are coalesced), and a failure rolls back only the
+  // fields it carried. A question being saved is remembered by id, so its save settles (and a
+  // failure rolls back) even once it is no longer open or listed (a deep link outside the
+  // filters, then another question).
+  const savingItems = useRef(new Map<string, OverviewItem>());
+  const flagSync = useFlagSync<MyState>(
+    (questionId, patch) => setMyStateAction(workspaceId, questionId, patch),
+    (questionId, event) => {
+      if (event.type === 'failed') toast({ tone: 'error', title: event.message });
+      const item = currentItem(questionId) ?? savingItems.current.get(questionId);
+      if (!item) return;
+      const saved =
+        event.type === 'saved' ? event.result : event.type === 'failed' ? event.saved : null;
+      if (saved) staleOverview.current = true;
+      const pending = event.type === 'change' || (event.type === 'failed' && event.pending);
+      if (pending || !saved) {
+        const patch: StudyPatch = {
+          ...event.flags,
+          last_graded_result: item.last_graded_result,
+          is_pending_grading: item.is_pending_grading,
+          status: optimisticStatus(item, event.flags),
+        };
+        putOverride(questionId, nextSeq(questionId), {
+          patch,
+          settledOn: pending ? null : latestItems.current,
+        });
+        if (pending) savingItems.current.set(questionId, { ...item, ...patch });
+        else savingItems.current.delete(questionId);
+        return;
+      }
+      savingItems.current.delete(questionId);
+      // A submission settled while a request was in flight wins over the response's grading.
+      const grading = gradings.current.get(questionId) ?? {
+        last_graded_result: saved.last_graded_result,
+        is_pending_grading: item.is_pending_grading,
+      };
+      putOverride(questionId, nextSeq(questionId), {
+        patch: flagsPatch(saved, grading),
+        settledOn: latestItems.current,
+      });
+    },
+  );
+
+  function changeFlags(
     questionId: string,
     flags: { is_favorite?: boolean; needs_retry?: boolean },
   ) {
-    const item = currentItem(questionId);
+    const item = currentItem(questionId) ?? savingItems.current.get(questionId);
     if (!item) return;
-    const seq = nextSeq(questionId);
-    const optimistic: StudyPatch = {
-      is_favorite: item.is_favorite,
-      needs_retry: item.needs_retry,
-      last_graded_result: item.last_graded_result,
-      is_pending_grading: item.is_pending_grading,
-      ...flags,
-      status: optimisticStatus(item, flags),
-    };
-    putOverride(questionId, seq, { patch: optimistic, settledOn: null });
-    let result: Awaited<ReturnType<typeof setMyStateAction>>;
-    try {
-      result = await setMyStateAction(workspaceId, questionId, flags);
-    } catch {
-      // The request itself failed (network): roll this change back.
-      result = { ok: false, kind: 'unavailable', message: QUESTION_FAILURE_MESSAGES.unavailable };
-    }
-    if (!result.ok) {
-      putOverride(questionId, seq, null);
-      toast({ tone: 'error', title: result.message });
-      return;
-    }
-    staleOverview.current = true;
-    // A submission settled while this request was in flight wins over the response's grading.
-    const grading = gradings.current.get(questionId) ?? {
-      last_graded_result: result.data.last_graded_result,
-      is_pending_grading: item.is_pending_grading,
-    };
-    putOverride(questionId, seq, {
-      patch: flagsPatch(result.data, grading),
-      settledOn: latestItems.current,
-    });
+    flagSync.toggle(
+      questionId,
+      { is_favorite: item.is_favorite, needs_retry: item.needs_retry },
+      flags,
+    );
   }
 
   const markViewed = useCallback(
@@ -766,7 +785,7 @@ export function QuestionsOverview({
         onNavigate={(questionId) => setQuestionParam(questionId)}
         onClose={() => setQuestionParam(null)}
         onGraded={markGraded}
-        onFlagsChange={(questionId, flags) => void changeFlags(questionId, flags)}
+        onFlagsChange={changeFlags}
         onViewed={markViewed}
         invalidated={invalidated}
         headerExtra={
@@ -835,6 +854,7 @@ export function QuestionsOverview({
           onFlagsSaved={() => {
             staleOverview.current = true;
           }}
+          onFlagsFailed={(message) => toast({ tone: 'error', title: message })}
           invalidated={invalidated}
           headerExtra={(q) => (
             <QuestionManageMenu

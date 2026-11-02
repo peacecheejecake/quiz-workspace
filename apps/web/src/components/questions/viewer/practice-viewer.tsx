@@ -64,9 +64,8 @@ export interface PracticeQuestion {
   /** Overview preview (first lines of the stem), shown until the session arrives. */
   readonly preview: string;
   readonly isFavorite: boolean;
+  /** The flags to show: a change being saved shows at once (UX9-RETRY-OPT, optimistic). */
   readonly needsRetry: boolean;
-  /** A favorite/retry change is being saved: the toggles show the saved state and wait. */
-  readonly savingFlags?: boolean;
 }
 
 export interface PracticeViewerProps {
@@ -378,7 +377,6 @@ export function PracticeViewer({
             <StudyToggles
               favorite={view.isFavorite}
               retry={view.needsRetry}
-              saving={view.savingFlags === true}
               onChange={(flags) => onFlagsChange(view.id, flags)}
             />
             {headerExtra}
@@ -440,34 +438,29 @@ export function PracticeViewer({
   );
 }
 
-/** Favorite / retry toggles of a bank question (practice, sequence(bank)). */
+/**
+ * Favorite / retry toggles of a bank question (practice, sequence(bank)). UX9-RETRY-OPT: they are
+ * never busy — the caller shows each press at once and saves it in the background (FlagSync), so
+ * pressing one never changes the other.
+ */
 export function StudyToggles({
   favorite,
   retry,
-  saving,
   onChange,
 }: {
   readonly favorite: boolean;
   readonly retry: boolean;
-  /** A change is being saved: the toggles show the saved state and wait. */
-  readonly saving: boolean;
   readonly onChange: (flags: { is_favorite?: boolean; needs_retry?: boolean }) => void;
 }) {
   return (
     <>
       <FavoriteToggle
         pressed={favorite}
-        aria-disabled={saving || undefined}
-        onPressedChange={(pressed) => {
-          if (!saving) onChange({ is_favorite: pressed });
-        }}
+        onPressedChange={(pressed) => onChange({ is_favorite: pressed })}
       />
       <RetryToggle
         pressed={retry}
-        aria-disabled={saving || undefined}
-        onPressedChange={(pressed) => {
-          if (!saving) onChange({ needs_retry: pressed });
-        }}
+        onPressedChange={(pressed) => onChange({ needs_retry: pressed })}
       />
     </>
   );
