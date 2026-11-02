@@ -54,11 +54,6 @@ export interface QuestionRangePickerProps {
    * selection makes ("선택 n문제 중 m문항을 만듭니다") in the same live line.
    */
   readonly countText?: (count: number) => ReactNode;
-  /**
-   * One flat list numbered "문제 k" without chapter rows (a mock exam's own questions, which keep
-   * no chapter of their own: QVIEW-01-AC05).
-   */
-  readonly flat?: boolean;
 }
 
 const STATUS_CHIPS: readonly { readonly status: QuestionDotStatus; readonly label: string }[] = [
@@ -81,7 +76,6 @@ export function QuestionRangePicker({
   onFiltersChange,
   emptyText = '아직 확정된 문제가 없습니다.',
   countText = (n) => `선택 ${n}문제`,
-  flat = false,
 }: QuestionRangePickerProps) {
   const filterId = useId();
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -206,47 +200,25 @@ export function QuestionRangePicker({
             checked={triState(visible, selected)}
             onCheckedChange={() => onSelectedChange(toggleIds(selected, visible))}
           />
-          {flat ? (
-            <ul className={styles.questionList} aria-label="범위">
-              {groups
-                .flatMap((g) => g.questions)
-                .map((q, i) => (
-                  <li key={q.id} className={styles.questionRow}>
-                    <Checkbox
-                      label={questionLabel({ ...q, number: `문제 ${i + 1}` })}
-                      tabIndex={0}
-                      checked={selected.has(q.id)}
-                      onCheckedChange={(checked) => {
-                        const next = new Set(selected);
-                        if (checked === true) next.add(q.id);
-                        else next.delete(q.id);
-                        onSelectedChange(next);
-                      }}
-                    />
-                  </li>
-                ))}
-            </ul>
-          ) : (
-            <ul className={styles.groups} aria-label="범위">
-              {groups.map((group) => (
-                <ChapterGroup
-                  key={group.key}
-                  group={group}
-                  expanded={expanded.has(group.key)}
-                  onExpandedChange={(open) =>
-                    setExpanded((prev) => {
-                      const next = new Set(prev);
-                      if (open) next.add(group.key);
-                      else next.delete(group.key);
-                      return next;
-                    })
-                  }
-                  selected={selected}
-                  onSelectedChange={onSelectedChange}
-                />
-              ))}
-            </ul>
-          )}
+          <ul className={styles.groups} aria-label="범위">
+            {groups.map((group) => (
+              <ChapterGroup
+                key={group.key}
+                group={group}
+                expanded={expanded.has(group.key)}
+                onExpandedChange={(open) =>
+                  setExpanded((prev) => {
+                    const next = new Set(prev);
+                    if (open) next.add(group.key);
+                    else next.delete(group.key);
+                    return next;
+                  })
+                }
+                selected={selected}
+                onSelectedChange={onSelectedChange}
+              />
+            ))}
+          </ul>
         </>
       )}
       <p className={styles.selectedCount} aria-live="polite">

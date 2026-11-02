@@ -2,7 +2,8 @@
 
 // A mock exam's `풀기` (MOCK-01, QVIEW-01 call site 8): the home's range run panel (QuestionViewer
 // sequence) with `source=mock`. The run API is the bank's (`/practice-runs`, MOCK-P); what differs
-// is the range step (the questions the mock exam lists now, no filters, all selected), the start
+// is the range step (the questions the mock exam lists now grouped by source chapter, no filters,
+// all selected; a whole chapter goes out as question ids), the start
 // (`source=mock` + `mock_exam_id`), and the positions' sessions and submissions (the mock practice
 // routes). Only the range step's URL says which source a run is (`?practice=new&source=mock`):
 // later steps learn it from the run itself (GET /practice-runs/{id} → `source`), so a reload or a
@@ -20,27 +21,58 @@ import { bankRunClient, type RunClient } from '../viewer/question-viewer';
 import { createMockExamApi, createMockPracticeApi } from './mock-exam-client';
 import type { MockExamQuestion } from './mock-exam-model';
 
-/** The range step's one group of a mock exam's questions. */
-export const MOCK_RANGE_GROUP = '모의고사 문제';
+/** The range step's group of the questions whose source has no chapter (or was deleted). */
+export const MOCK_NO_CHAPTER_TITLE = '챕터 없음';
 
-/** A mock exam's questions as the range step reads a Heatmap overview: one group, in order. */
+/**
+ * A mock exam's questions as the range step reads a Heatmap overview (QVIEW-01 "진입 (mock)"):
+ * grouped by their source chapter (`source.chapter`) in the generation plan's chapter rank, the
+ * questions without one (no chapter, deleted source) last; each question keeps its number in the
+ * mock exam ("문제 k", k in mock exam order) and its order within its group.
+ */
 export function mockRangeOverview(
   questions: readonly MockExamQuestion[],
 ): Pick<QuestionOverview, 'chapters' | 'items'> {
+  const numbered = questions.map((q, i) => ({ q, k: i + 1, chapter: q.source.chapter ?? null }));
+  interface Group {
+    id: string | null;
+    rank: number;
+    first: number;
+    title: string;
+    number: number | null;
+    count: number;
+  }
+  const groups = new Map<string | null, Group>();
+  for (const { chapter, k } of numbered) {
+    const id = chapter?.id ?? null;
+    const group = groups.get(id);
+    if (group) {
+      group.count += 1;
+      if (chapter && chapter.rank < group.rank) group.rank = chapter.rank;
+      continue;
+    }
+    groups.set(id, {
+      id,
+      rank: chapter ? chapter.rank : Number.POSITIVE_INFINITY,
+      first: k,
+      title: chapter ? chapter.title : MOCK_NO_CHAPTER_TITLE,
+      number: chapter?.number ?? null,
+      count: 1,
+    });
+  }
+  const ordered = [...groups.values()].sort((a, b) => a.rank - b.rank || a.first - b.first);
   return {
-    chapters: [
-      {
-        id: null,
-        title: MOCK_RANGE_GROUP,
-        number: null,
-        document_id: null,
-        question_count: questions.length,
-      },
-    ],
-    items: questions.map((q, i) => ({
+    chapters: ordered.map((g) => ({
+      id: g.id,
+      title: g.title,
+      number: g.number,
+      document_id: null,
+      question_count: g.count,
+    })),
+    items: numbered.map(({ q, k, chapter }) => ({
       question_id: q.id,
-      chapter_id: null,
-      question_number: i + 1,
+      chapter_id: chapter?.id ?? null,
+      question_number: k,
       question_type: q.question_type,
       preview: q.stem,
       status: 'unseen',

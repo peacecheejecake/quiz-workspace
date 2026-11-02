@@ -435,7 +435,7 @@ function usePickerStep({
   if (load !== seenLoad) {
     setSeenLoad(load);
     if (load?.status === 'ready') {
-      const next = rangeGroups(load.data);
+      const next = rangeGroups(load.data, source);
       const first = groups?.opening !== opening;
       setGroups({ opening, groups: next });
       // A filter hides questions: they leave the selection. A mock exam starts all selected.
@@ -447,7 +447,7 @@ function usePickerStep({
   const shownGroups = groups?.opening === opening ? groups.groups : null;
   const busy = load?.status === 'loading';
 
-  const request = shownGroups ? rangeRequest(shownGroups, selected, filters) : null;
+  const request = shownGroups ? rangeRequest(shownGroups, selected, filters, source) : null;
   const count = shownGroups ? keepVisible(selected, shownGroups).size : 0;
   const tooLarge = count > PRACTICE_RUN_MAX;
   const reason =
@@ -497,7 +497,6 @@ function usePickerStep({
           setSelected(next);
           setStartError(null);
         }}
-        flat={source === 'mock'}
         {...(source === 'bank'
           ? {
               filters,
