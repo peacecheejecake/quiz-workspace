@@ -11,7 +11,7 @@
 import { CheckIcon, Checkbox, RadioGroup, Textarea } from '@quiz/ui';
 import type { Ref } from 'react';
 import type { QuestionRevision } from '@/lib/questions/actions';
-import { displayStem } from '@/lib/questions/display-stem';
+import { displayStem, stemParagraphs } from '@/lib/questions/display-stem';
 import type { Question } from '@/lib/questions/form';
 import {
   ANSWER_TEXT_MAX,
@@ -55,6 +55,20 @@ export function QuestionBody(props: QuestionBodyProps) {
   return props.kind === 'answer' ? <AnswerBody {...props} /> : <RevisionBody {...props} />;
 }
 
+/**
+ * The displayed stem (UX9-QTYPE): one paragraph per blank-line-separated block, so the gap between
+ * paragraphs is a spacing token rather than a full empty line.
+ */
+export function QuestionStem({ stem }: { readonly stem: string }) {
+  return (
+    <div className={styles.stem}>
+      {stemParagraphs(displayStem(stem)).map((paragraph, i) => (
+        <p key={i}>{paragraph}</p>
+      ))}
+    </div>
+  );
+}
+
 interface AnswerBodyProps {
   readonly stem: string;
   readonly question: AnswerQuestion;
@@ -82,7 +96,7 @@ function AnswerBody({
 }: AnswerBodyProps) {
   return (
     <>
-      <p className={styles.stem}>{displayStem(stem)}</p>
+      <QuestionStem stem={stem} />
       <AnswerField
         question={question}
         answer={answer}
@@ -154,6 +168,7 @@ function AnswerField({
         // UX7-QDISPLAY: no visible 보기 label; the group keeps it as its accessible name.
         label="보기"
         hideLabel
+        className={styles.optionGroup}
         orientation="vertical"
         disabled={disabled}
         value={answer.selected[0] ?? ''}
@@ -259,7 +274,7 @@ function RevisionBody({ revision, type, heading }: RevisionBodyProps) {
     <>
       <section className={styles.detailSection}>
         <h3 className={styles.detailHeading}>{heading}</h3>
-        <p className={styles.detailText}>{displayStem(revision.stem)}</p>
+        <QuestionStem stem={revision.stem} />
       </section>
       {type === 'MCQ' ? (
         <section className={styles.detailSection}>
