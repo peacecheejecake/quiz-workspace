@@ -70,6 +70,7 @@
 | `--question-status-incorrect` | `#E0525E` | 틀린 문제 |
 | `--question-status-correct` | `#26865C` | 맞은 문제 |
 | `--question-status-retry` | `#E9B447` | 다시 풀기 |
+| `--heatmap-marker-stroke-mix` | `57%` | heatmap marker 윤곽의 status 색 비율(나머지는 `--color-text-primary`). 상태 색이 표면 대비 3:1 미만이어도 윤곽이 3:1 이상이 되는 테마별 가장 연한 값(dark `79%`; UX9-STROKE, §6) |
 | `--color-border-strong` | `#7D8799` | 입력 컨트롤 경계(표면 대비 3:1 이상) |
 | `--color-on-accent` | `#FFFFFF` | accent 채움 위 텍스트·아이콘 |
 | `--color-danger` | `#C42B3A` | 오류·파괴적 동작 피드백(텍스트 대비 4.5:1 이상) |
@@ -123,6 +124,7 @@
   --question-status-incorrect: #F17B84;
   --question-status-correct: #4BC68E;
   --question-status-retry: #F4C763;
+  --heatmap-marker-stroke-mix: 79%;
   --color-border-strong: #7A8799;
   --color-on-accent: #11151D;
   --color-danger: #FF8A93;
@@ -165,6 +167,7 @@
   --question-status-incorrect: #E0525E;
   --question-status-correct: #26865C;
   --question-status-retry: #E9B447;
+  --heatmap-marker-stroke-mix: 57%;
   --color-border-strong: #7D8799;
   --color-on-accent: #FFFFFF;
   --color-danger: #C42B3A;
@@ -218,7 +221,7 @@
   --floating-panel-width: 500px;
   --outline-panel-width: 20rem; /* v1.2.7 (DOCVIEW-PORT): 탐색 panel(size="narrow")·docked 목차 panel 폭 */
   --heatmap-cell: 24px;        /* v1.2.3 (UX5-UI): 28px → 24px */
-  --heatmap-cell-touch: 32px;
+  --heatmap-cell-touch: 24px;  /* UX9-STROKE (2026-11-02, 사용자 요청): 32px → 24px */
   --heatmap-gap: 0px;          /* v1.2.3 (UX5-UI): 4px → 0 */
   --heatmap-dot: 16px;         /* 장식용 marker(legend·요약·preview). heatmap 점은 셀 크기로 그린다 */
   --heatmap-marker-hover-scale: 1.18;
@@ -387,15 +390,15 @@ type QuestionDotProps = {
 };
 ```
 
-- 기본 marker는 **rounded square**, 즐겨찾기는 **rounded five-point star SVG**(부드러운 꼭짓점: `stroke-linejoin="round"`, 넉넉한 stroke width 또는 rounded SVG path); 두 모양 모두 semantic status color를 채우고 subtle stroke를 적용한다.
-- 셀 `24×24px`(mobile·coarse pointer `32×32px`), 셀 간 grid gap `0`. heatmap 점의 marker SVG box는 셀과 같은 크기라 그려진 사각형은 viewBox 18/24 = `18px`(touch `24px`)이고, 이웃 marker 사이 보이는 간격은 `6px`(touch `8px`) = **marker 폭의 1/3 이하**(v1.2.3, UX5-UI 사용자 요청 "점 사이 간격을 점 width의 1/3 이하로"). 장식용 marker(legend·상태 요약·preview)는 `--heatmap-dot` 16px box. favorite는 **크기 확대가 아니라 사각형→별 모양 전환**이다. hover 및 `:focus-visible` 시 marker만 `scale(var(--heatmap-marker-hover-scale))`; transition은 transform 150ms, reduced-motion시 즉시 변경한다.
+- 기본 marker는 **rounded square**, 즐겨찾기는 **rounded five-point star SVG**(부드러운 꼭짓점: `stroke-linejoin="round"`, 넉넉한 stroke width 또는 rounded SVG path); 두 모양 모두 semantic status color를 채우고 subtle stroke를 적용한다. stroke는 모든 marker 크기에서 `--heatmap-marker-stroke-width` = `0.5px`(CSS px, `vector-effect: non-scaling-stroke`)이고 색은 `color-mix(in srgb, currentColor var(--heatmap-marker-stroke-mix), var(--color-text-primary))`, 즉 light `57%`·dark `79%` status 색이다(UX9-STROKE 2026-11-02, 사용자 요청 "heatmap shape의 stroke-width를 0.5px로, 색은 좀 더 연하게"와 dark 테마별 값 사용자 결정: 이전 viewBox 1.5 단위 ≈ 셀 크기 기준 1.5px, 두 테마 mix 50%). light unseen·retry와 dark unseen 채움은 표면 대비 3:1 미만이라 outline이 경계를 맡으므로, 두 값은 각 테마에서 outline이 surface·canvas·surface-muted 대비 비텍스트 3:1 이상을 지키는 가장 연한 정수 %다(최저 light unseen/surface-muted 3.03:1, dark unseen 3.02:1; 한 칸 더 연하면 2.96·2.94로 미달, `question-marker-contrast.test.ts`). 별의 둥근 꼭짓점은 stroke 두께가 아니라 `stroke-linejoin="round"`에만 기댄다. forced-colors에서는 같은 두께의 `CanvasText` stroke다.
+- 셀 `24×24px`, mobile·coarse pointer도 `24×24px`(`--heatmap-cell-touch`; UX9-STROKE 2026-11-02 사용자 요청으로 `32px`→`24px`, WCAG 2.2 target size 최소 24×24 CSS px 충족), 셀 간 grid gap `0`. heatmap 점의 marker SVG box는 셀과 같은 크기라 그려진 사각형은 viewBox 18/24 = `18px`(모서리 반경 `4.5px`, 셀 안쪽 `3px`)이고, 이웃 marker 사이 보이는 간격은 `6px` = **marker 폭의 1/3 이하**(v1.2.3, UX5-UI 사용자 요청 "점 사이 간격을 점 width의 1/3 이하로"). 장식용 marker(legend·상태 요약·preview)는 `--heatmap-dot` 16px box. favorite는 **크기 확대가 아니라 사각형→별 모양 전환**이다. hover 및 `:focus-visible` 시 marker만 `scale(var(--heatmap-marker-hover-scale))`; transition은 transform 150ms, reduced-motion시 즉시 변경한다.
 - favorite는 별 silhouette로 표시하며 상세 텍스트에서도 별 아이콘을 제공. hover/focus scale을 적용해도 고정 셀과 grid 위치는 바꾸지 않는다.
-- 선택된 dot는 focus ring/outline으로 강조하고 상태 색은 그대로 유지.
+- 현재 문제 dot(풀이 panel에 열린 문제, `aria-current="true"`)는 상태 색을 그대로 두고 2px `--color-text-primary` ring(light 거의 검정 `#172033`, dark 거의 흰색 `#F2F5F9`)을 사각형에 **틈 없이** 붙여 그린다(`outline-offset` = −셀/8 = `−3px`, 셀 `border-radius` = 셀×7.5/24 = `7.5px`라 ring 안쪽 반경이 사각형의 `4.5px`와 같다; UX9-STROKE 2026-11-02, 사용자 요청 "cell 내부 공간 제거, current일 때 outline을 black에 가까운 색으로"; 이전: accent ring을 셀 가장자리에 그려 사각형과 `3px` 띄움). `:focus-visible`은 셀 가장자리의 2px `--color-focus` ring + marker 확대로, 현재 표시와 색뿐 아니라 위치·크기로도 구분된다. focus된 현재 dot는 focus ring 하나만 보인다. forced-colors에서는 둘 다 `Highlight`이고 위치로 구분한다.
 - 점은 `<button>`으로 구현하고 label에 챕터·번호·유형·상태·favorite·retry를 포함.
 - roving tabindex 또는 명확한 Tab/Arrow navigation을 제공하여 수백 개의 버튼이 키보드 사용자에게 부담이 되지 않게 한다.
 - hover/focus에는 Tooltip/Popover로 preview, click/Enter/Space에는 Floating Question Panel.
 - 색맹 등 색상 인지가 어려운 사용자도 구별할 수 있도록 marker label·preview popover·상태 필터에 상태 텍스트를 제공한다. 상시 legend·상태 요약은 UX3c(2026-10-20, 사용자 결정)로 없애고, 상태 필터를 펼치면(기본 접힘, chevron 버튼 `aria-expanded`) 색 견본과 텍스트가 함께 보인다.
-- 24 CSS px 이상의 클릭 타깃을 기준으로 하고, 모바일에는 더 넓게 제공한다.
+- 24 CSS px 이상의 클릭 타깃을 기준으로 한다(WCAG 2.2 target size 최소). heatmap 셀은 UX9-STROKE(2026-11-02, 사용자 요청)부터 모바일에서도 24px이다(이전: 모바일에는 더 넓게 32px).
 
 ### 6.1 Marker 렌더링 구현 규칙
 
@@ -408,7 +411,7 @@ function Marker({ favorite }: { favorite: boolean }) {
       data-shape={favorite ? 'star' : 'square'} aria-hidden="true">
       {favorite ? (
         <path d="M12 2.5 15.1 8.5 21.6 9.45 16.8 14.1 17.95 20.65 12 17.5 6.05 20.65 7.2 14.1 2.4 9.45 8.9 8.5Z"
-          fill="currentColor" stroke="currentColor" strokeWidth="1.1"
+          fill="currentColor" stroke="currentColor"
           strokeLinejoin="round" strokeLinecap="round" />
       ) : (
         <rect x="3" y="3" width="18" height="18" rx="4.5" fill="currentColor" />
