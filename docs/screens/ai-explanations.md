@@ -44,7 +44,7 @@ linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC07]
 - **키·저장:** 모의고사 문제는 문제은행 밖의 별도 테이블(`mock_exam_questions`·`mock_exam_question_revisions`, MOCK-01)이므로 해설도 별도 테이블 `mock_exam_question_ai_explanations`에 둔다. 키 `(mock_exam_question_revision_id, prompt_version, model)`, 상태·버전·`superseded_at`·동시성 규칙은 `question_ai_explanations`와 같다. 원본 등록 문제의 해설과 **공유하지 않는다** — `보기 섞기` 문제도 원본과 다른 행이다(모의고사 문제는 원본을 편집·삭제해도 바뀌지 않는 별개 문제 — questions.md §11). 모의고사를 다시 만들면(새 회차) 문제가 새로 생기므로 새 키, 모의고사 문제를 편집하면(새 revision) 새 키다.
 - **입력:** 그 revision의 발문·보기·정답·허용 답안·채점 기준·해설과 `evidence`(SourceEvidence) 중 이 Workspace의 살아 있는 `book` 문서의 현재 발행 revision에 있는 블록(Postgres에서 다시 읽음; `evidence.quote` 글과 문제지·가져온 문제 PDF 쪽 근거는 쓰지 않음), 그리고 같은 검색 근거. 정답 일치 검증(C04)은 그 revision의 `correct_option_ids` 기준.
 - **제출 확인·인가:** `mock_practice_session_id`(그 사용자의 그 모의고사 문제 session, `mock_exam_attempts` 있음 — 채점 대기 포함)가 없으면 409 `explanation-before-submit`, 남의 session 404. 읽기·만들기는 모든 구성원(모의고사를 볼 수 있는 사람), 보관된 Workspace는 읽기만, 다시 만들기는 편집 권한. 삭제된 모의고사·모의고사에서 빠진 문제는 404(MOCK-P의 "삭제된 모의고사의 단독 session은 정답을 보내지 않음"과 같은 판정).
-- **모의고사 문제 관리(`manage(mock)`, 편집 권한) (제안 — 사용자 확인 필요):** 정답이 이미 보이는 화면이므로 "문제 상세"와 같이 제출 없이 `AI 해설`을 둔다(`view: manage`, 편집 권한 판정). 대안: 풀이(`sequence(mock)`) 결과에만.
+- **모의고사 문제 관리(`manage(mock)`, 편집 권한) (사용자 결정 2026-11-02, ASK-SYNC (a)):** 정답이 이미 보이는 화면이므로 "문제 상세"와 같이 제출 없이 `AI 해설`을 둔다(`view: manage`, 편집 권한·활성 Workspace 판정 — 보기 권한 403).
 - **공유·Fork:** 모의고사는 공유 링크 게스트에게 없고 Fork에 복제되지 않으므로(workspace-sharing §9) 모의고사 문제의 AI 해설도 공유 API·Fork 복제가 없다.
 - 활동 기록은 등록 문제와 같은 "AI 해설 만듦"(`mock_exam.ai_explanation_generated`, id·버전만).
 
@@ -53,7 +53,7 @@ linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC07]
 구성원은 문제 상세 dialog(QuestionViewer `manage`, QVIEW-01 호출 위치 4 — 풀이 panel 메뉴의 `정답·해설 보기`·`수정 이력·출처` — 와 5 — `보관·초안 문제` dialog의 행)에서 이미 정답·해설을 본다(UX7-BANK-2). dialog의 해설 아래에도 `AI 해설`을 둔다: 서버는 `view: detail`을 받으면 `GET /questions/{id}` 권한(모든 구성원)으로 판정하고 제출을 요구하지 않는다. 같은 캐시를 쓴다. 지난 버전 미리보기(`수정 이력`의 버전 toggle)에는 AI 해설이 없다 — 지금 revision의 것만.
 
 - **보관(ARCHIVED) 문제:** 호출 위치 5에서 같은 영역을 보인다(그 revision의 캐시). 중복 정리로 보관된 중복(UX7-DEDUP)도 자기 revision의 해설만 보이고, 남길 문제의 해설과 섞이지 않는다 — 남길 문제는 자기 revision의 해설 하나만 보인다(합쳐진 풀이 기록은 학습 상태만 합치고 문제 내용·캐시는 합치지 않음, questions.md §10.2). 보관 해제하면 그대로 자기 해설이다. 공유 게스트에게는 보관 문제가 없다.
-- **초안(DRAFT) 문제 (제안 — 사용자 확인 필요):** 호출 위치 5의 초안 상세에는 `AI 해설`을 두지 않는다 — 초안은 사람이 승인하기 전이고(AGENTS.md §5) 정답이 비어 있을 수 있어 정답 일치 검증(C04)을 할 수 없다. 서버는 DRAFT 문제의 `view: detail` 요청을 409 `explanation-unavailable`로 거절한다. 대안: 정답이 있는 초안에는 둠.
+- **초안(DRAFT) 문제 (사용자 결정 2026-11-02, ASK-SYNC (b)):** 호출 위치 5의 초안 상세에는 `AI 해설`을 두지 않는다 — 초안은 사람이 승인하기 전이고(AGENTS.md §5) 정답이 비어 있을 수 있어 정답 일치 검증(C04)을 할 수 없다. 서버는 DRAFT 문제의 `view: detail` 요청을 409 `explanation-unavailable`로 거절한다(행·job·LLM 호출 없음). `질문하기`는 초안 상세에도 그대로 있다(ASK-01). 보관(ARCHIVED) 문제는 위와 같이 AI 해설을 보인다.
 
 ### 한도와 비용 (사용자 결정 2026-11-01)
 
@@ -154,7 +154,7 @@ E2E는 `APP_ENV=test`의 결정적 fake 해설기(C08)를 쓴다.
 | AIEXPL-01-C06 | **유출 금지·기록:** 문제·정답·해설·근거 본문·prompt·LLM 응답은 로그·job 결과·trace·활동 기록에 없다. 생성마다 `llm_feature_usage` 행(`feature = ai_explanation`). 활동 기록은 `question.ai_explanation_generated`(id·버전만; 이력 dialog에 "AI 해설 만듦"). |
 | AIEXPL-01-C07 | **Fork:** snapshot의 문제 revision에 해당하는 최신 성공 해설만 새 id로 복제(question·revision·출처 블록 id 재매핑). 이전 버전·실패·usage는 복제하지 않는다. |
 | AIEXPL-01-C08 | **결정적 fake (`APP_ENV=test`만):** 정답 보기 글과 상위 근거 첫 문장으로 보기마다 한 줄을 만들어 정해진 덩어리로 흘린다. marker(문제 발문): `E2E-EXPL-FAIL`, `E2E-EXPL-MISMATCH`, `E2E-EXPL-HOLD-<token>`, `E2E-EXPL-SLOW`. 호출 수는 test 전용 기록 디렉터리로 확인. |
-| AIEXPL-01-C09 | **모의고사 문제 (EXPL-B, ASK-SYNC — 이전 ASK-QM):** `mock_exam_question_ai_explanations` 키 `(mock_exam_question_revision_id, prompt_version, model)`(C03과 같은 partial unique·동시성·버전 규칙), `GET`·`POST /mock-exam-questions/{id}/ai-explanation`(+ `/regenerate`)은 `mock_practice_session_id`(그 사용자의 그 문제 `mock_exam_practice_sessions`, `mock_exam_attempts` 있음) 또는 `view: manage`(편집 권한 — 위 제안이 확정될 때만)를 요구하고 그 밖 409 `explanation-before-submit`, 남의 session·다른 Workspace·삭제된 모의고사·빠진 문제 404. 입력은 그 revision과 `evidence` 중 현재 발행 `book` 블록만(quote 글·문제지·가져온 문제 PDF 근거 제외). 등록 문제 해설과 행을 공유하지 않는다(원본 revision의 해설이 있어도 새로 만듦 — test). 공유 API·Fork 복제 없음. 모의고사 practice API(`/mock-exam-questions/{id}/practice-sessions`·`/mock-practice-sessions/{id}/submit`) 응답 schema 불변. EXPL.0에서 pytest `red`, EXPL-B에서 GREEN. |
+| AIEXPL-01-C09 | **모의고사 문제 (EXPL-B, ASK-SYNC — 이전 ASK-QM):** `mock_exam_question_ai_explanations` 키 `(mock_exam_question_revision_id, prompt_version, model)`(C03과 같은 partial unique·동시성·버전 규칙), `GET`·`POST /mock-exam-questions/{id}/ai-explanation`(+ `/regenerate`)은 `mock_practice_session_id`(그 사용자의 그 문제 `mock_exam_practice_sessions`, `mock_exam_attempts` 있음) 또는 `view: manage`(편집 권한·활성 Workspace, 제출 없이 — ASK-SYNC (a))를 요구하고 그 밖 409 `explanation-before-submit`, 남의 session·다른 Workspace·삭제된 모의고사·빠진 문제 404. 입력은 그 revision과 `evidence` 중 현재 발행 `book` 블록만(quote 글·문제지·가져온 문제 PDF 근거 제외). 등록 문제 해설과 행을 공유하지 않는다(원본 revision의 해설이 있어도 새로 만듦 — test). 공유 API·Fork 복제 없음. 모의고사 practice API(`/mock-exam-questions/{id}/practice-sessions`·`/mock-practice-sessions/{id}/submit`) 응답 schema 불변. EXPL.0에서 pytest `red`, EXPL-B에서 GREEN. |
 
 ## Test-first 규칙
 
