@@ -868,6 +868,22 @@ provider = "default"
 note = "5; answer versions per question (409 ask-regenerate-limit)"
 
 [[var]]
+name = "RELATED_SOURCES_LIMIT"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "5; related passages per list (RELSRC-01; always on, no switch)"
+
+[[var]]
+name = "RELATED_SOURCES_MIN_RELEVANCE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "0.1; search hits below this relevance are not related passages where a relevance scorer exists (APP_ENV=test fake; set by the ASK-X eval)"
+
+[[var]]
 name = "ASK_RETENTION_DAYS"
 services = ["worker"]
 kind = "config"
@@ -1104,6 +1120,27 @@ services = ["worker"]
 kind = "config"
 forbidden = true
 note = "APP_ENV=test crash fault of the batched mock exam fake (K7, MockExamSimulatedCrash)"
+
+[[var]]
+name = "RELATED_SOURCES_HOLD_DIR"
+services = ["api"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test hold barrier of the related-passage computation (RELSRC-01 R5)"
+
+[[var]]
+name = "RELATED_SOURCES_FAULT_DIR"
+services = ["api"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test first-computation outage of the related-passage computation (RELSRC-01 R6)"
+
+[[var]]
+name = "RELATED_SOURCES_CALL_LOG_DIR"
+services = ["api"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test search-call record of the related-passage computation (RELSRC-01 R8)"
 
 [[var]]
 name = "FORWARDED_ALLOW_IPS"

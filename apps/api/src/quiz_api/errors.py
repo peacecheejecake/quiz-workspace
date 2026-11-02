@@ -162,6 +162,13 @@ class ProblemType(StrEnum):
     ASK_NOT_RETRYABLE = "urn:quiz-workspace:problem:ask-not-retryable"
     # 429: the user's AI questions of today (Asia/Seoul) are used up.
     ASK_DAILY_LIMIT = "urn:quiz-workspace:problem:ask-daily-limit"
+    # RELSRC-01 (related passages). 409: no submission proof (`practice_session_id` /
+    # `mock_practice_session_id` with a submission, or `view: detail` / `view: manage`).
+    RELATED_BEFORE_SUBMIT = "urn:quiz-workspace:problem:related-before-submit"
+    # 409: a DRAFT question has no related passages (ASK-SYNC (b)).
+    RELATED_DRAFT_UNAVAILABLE = "urn:quiz-workspace:problem:related-draft-unavailable"
+    # 503: the search index cannot be reached; nothing was stored.
+    RELATED_UNAVAILABLE = "urn:quiz-workspace:problem:related-unavailable"
 
 
 class ProblemException(StarletteHTTPException):

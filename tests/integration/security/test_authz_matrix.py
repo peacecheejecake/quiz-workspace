@@ -159,6 +159,11 @@ RULES: dict[str, Rule | str] = {
     "regenerateAskAnswer": OWN_WRITE,
     "setAskFeedback": OWN_ARCHIVED_WRITE,
     "selfGradeMockPracticeSession": OWN_WRITE,
+    # RELSRC-B related passages, called with the proof in QUERY below: `view=detail` is a read of
+    # any member (computed, not stored, when archived); `view=manage` needs edit rights and an
+    # active workspace (403 workspace-archived), like an edit.
+    "getQuestionRelatedSources": READ,
+    "getMockExamQuestionRelatedSources": EDIT,
     # workspace lifecycle and sharing
     "getWorkspace": READ,
     "listWorkspaceActivities": READ,
@@ -185,6 +190,7 @@ RULES: dict[str, Rule | str] = {
     "startWorkspaceFork": SHARED,
     "listSharedQuestions": SHARED,
     "getSharedQuestion": SHARED,
+    "getSharedQuestionRelatedSources": SHARED,
     "searchSharedWorkspace": SHARED,
     "listSharedChapterNotes": SHARED,
     "getSharedChapterNote": SHARED,
@@ -277,6 +283,13 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
     return bodies.get(op_id)
 
 
+# Query strings an operation needs so that authorization (not a missing proof) decides.
+QUERY: dict[str, str] = {
+    "getQuestionRelatedSources": "?view=detail",
+    "getMockExamQuestionRelatedSources": "?view=manage",
+}
+
+
 def _op(s4: Any, op_id: str) -> Any:
     return next(o for o in s4.load_operations() if o.operation_id == op_id)
 
@@ -297,7 +310,10 @@ def call(
         headers["Cookie"] = cookie
     body = body_for(op.operation_id, ids)
     res: httpx.Response = http.request(
-        op.method, f"{s4.API}{op.url(ids)}", json=body, headers=headers
+        op.method,
+        f"{s4.API}{op.url(ids)}{QUERY.get(op.operation_id, '')}",
+        json=body,
+        headers=headers,
     )
     http.cookies.clear()
     return res

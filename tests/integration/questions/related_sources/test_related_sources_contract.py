@@ -12,7 +12,7 @@ rows (C06); mock exam questions have their own table, use their evidence's book 
 their own submission proof (C07).
 
 Shapes, markers and files are assumptions R1-R10 in tests/e2e/fixtures/related-sources.ts. Jobs
-run in this process (conftest.py). RELSRC.0: every test is `red` until RELSRC-B.
+run in this process (conftest.py). RELSRC.0 wrote them `red`; RELSRC-B made them GREEN.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ import httpx
 import psycopg
 import pytest
 
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = [pytest.mark.infra]
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PDFS = REPO_ROOT / "tests" / "fixtures" / "pdfs"
@@ -721,7 +721,7 @@ def test_relsrc_01_c03_fingerprint_key_supersedes_and_stores_references_only(
         assert now["id"] not in seen, f"{what} must change the corpus fingerprint"
         seen.append(now["id"])
 
-    # A correction publish, a restore (published), a new book, a deleted book: new keys.
+    # A correction publish, a restore (published), a new book: new keys.
     publish(rig.owner, rig.doc, {rig.block["ch2-s1-p1"]: APPLIED_REMOVED})
     changed("a correction publish")
     assert APPLIED not in "\n".join(
@@ -737,8 +737,15 @@ def test_relsrc_01_c03_fingerprint_key_supersedes_and_stores_references_only(
     changed("a restored revision")
     extra = upload(rig.owner, rig.ws, BOOK_EN, "book")
     changed("an added book")
+    # Deleting that book brings back the restored corpus, so its key and stored list: current
+    # again, nothing recomputed (the fingerprint is the corpus, not its history).
+    before_delete = calls(rev)
     rig.owner.ok("DELETE", f"/documents/{extra}", None, (200, 202, 204))
-    changed("a deleted book")
+    back = ok(read(rig.owner, q["id"], view="detail"))
+    assert back["id"] != seen[-1], "a deleted book must change the corpus fingerprint"
+    assert back["id"] == seen[-2], "the restored corpus is back: its stored list again"
+    assert calls(rev) == before_delete
+    assert [r[0] for r in rows(q["id"]) if not r[2]] == [back["id"]]
     # A question edit: a new question revision, a new key.
     edited = rig.owner.ok(
         "PATCH",

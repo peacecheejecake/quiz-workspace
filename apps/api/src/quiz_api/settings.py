@@ -301,6 +301,27 @@ class Settings(BaseSettings):
         default=5, ge=1, le=50, validation_alias="ASK_MAX_REGENERATIONS"
     )
 
+    # Related passages (RELSRC-B, RELSRC-01): always on (search only, no LLM; no switch — user
+    # decision 2026-11-01). Rows per list, and the relevance floor of search hits (applies where a
+    # relevance scorer exists: the deterministic one under APP_ENV=test; set by the ASK-X eval).
+    related_sources_limit: int = Field(
+        default=5, ge=1, le=20, validation_alias="RELATED_SOURCES_LIMIT"
+    )
+    related_sources_min_relevance: float = Field(
+        default=0.1, ge=0, le=1, validation_alias="RELATED_SOURCES_MIN_RELEVANCE"
+    )
+    # APP_ENV=test only (ignored elsewhere): the E2E hold barrier, the first-computation fault and
+    # the search-call record directories (defaults under the system temp dir).
+    related_sources_hold_dir: str | None = Field(
+        default=None, validation_alias="RELATED_SOURCES_HOLD_DIR"
+    )
+    related_sources_fault_dir: str | None = Field(
+        default=None, validation_alias="RELATED_SOURCES_FAULT_DIR"
+    )
+    related_sources_call_log_dir: str | None = Field(
+        default=None, validation_alias="RELATED_SOURCES_CALL_LOG_DIR"
+    )
+
     db_pool_size: int = Field(default=5, ge=1, validation_alias="DB_POOL_SIZE")
     db_connect_timeout_seconds: float = Field(
         default=3.0, gt=0, validation_alias="DB_CONNECT_TIMEOUT_SECONDS"

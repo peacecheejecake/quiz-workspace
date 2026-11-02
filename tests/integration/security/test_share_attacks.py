@@ -151,6 +151,8 @@ def shared(module_seed: Any) -> Shared:
     for document_id in (done["document_id"], other_done["document_id"]):
         seed._admin(_SEED_SUMMARY, (str(document_id),))
     chapter = _seed_chapter_note(seed, owner, str(done["document_id"]), question)
+    # RELSRC-B: guests read stored related-passage lists only; a member's read stores one.
+    owner.ok("GET", f"/questions/{question['id']}/related-sources?view=detail")
     return Shared(
         seed,
         owner,
