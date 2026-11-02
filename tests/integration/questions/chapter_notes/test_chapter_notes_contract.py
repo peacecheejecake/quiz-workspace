@@ -24,6 +24,7 @@ from urllib.parse import urlsplit
 
 import httpx
 import pytest
+from sqlalchemy import event
 
 pytestmark = pytest.mark.infra
 
@@ -419,6 +420,47 @@ def test_chnote_01_c03_stale_is_computed_on_read_and_versions_are_kept(seed: Any
     seed.problem(post_note(owner, ch[CH1], str(uuid.uuid4())), 409, RUNNING)
     finish(owner, ch[CH1])
     assert len(state(owner, ch[CH1])["versions"]) == len(cases) + 2
+
+
+def test_chnote_01_c03_a_read_never_pairs_the_old_note_with_a_finished_generation(
+    seed: Any, app_client: Any
+) -> None:
+    """The worker can finish between two statements of one GET (autocommit, quiz_api.db): the
+    state must still be one snapshot, or the panel stops polling on version 1 (CHNOTE-01-AC03)."""
+    owner = seed.client("chnote-c03-race")
+    ws = owner.create_workspace()["id"]
+    ch = book(owner, ws)
+    questions(owner, ws, ch[CH1], OK, token(), range(1, 3))
+    generate(owner, ch[CH1])
+    queued = start(owner, ch[CH1])["generation"]
+
+    engine = app_client.app.state.database.engine
+    fired: list[str] = []
+
+    def finish_after_first_note_read(_conn: Any, _cursor: Any, statement: str, *_: Any) -> None:
+        if (
+            not fired
+            and "chapter_notes" in statement
+            and statement.lstrip().upper().startswith("SELECT")
+        ):
+            fired.append(statement)
+            owner.worker.drain(str(queued["job_id"]))
+
+    event.listen(engine, "after_cursor_execute", finish_after_first_note_read)
+    try:
+        raced = state(owner, ch[CH1])
+    finally:
+        event.remove(engine, "after_cursor_execute", finish_after_first_note_read)
+    assert fired, "the GET read chapter_notes"
+    gen = raced["generation"]
+    assert gen["id"] == queued["id"]
+    # Either the read saw the queued generation with version 1, or the finished one with 2.
+    expected = 2 if gen["status"] == "succeeded" else 1
+    assert raced["note"]["version"] == expected, (gen["status"], raced["note"]["version"])
+    assert [v["version"] for v in raced["versions"]] == list(range(expected, 0, -1))
+    after = state(owner, ch[CH1])
+    assert after["generation"]["status"] == "succeeded"
+    assert after["note"]["version"] == 2
 
 
 # ---------------------------------------------------------------------------------------------

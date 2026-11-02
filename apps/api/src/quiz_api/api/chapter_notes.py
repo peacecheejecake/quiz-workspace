@@ -334,10 +334,10 @@ def note_state(
     version: int | None = None,
 ) -> ChapterNoteState:
     current = repo.chapter_questions(chapter.workspace_id, [chapter.id])[chapter.id]
-    note = repo.note(chapter, version)
+    snapshot = repo.snapshot(chapter, version)
+    note, latest = snapshot.note, snapshot.latest
     if version is not None and note is None:
         raise HTTPException(status_code=404, detail=NOT_FOUND)
-    latest = repo.latest_generation(chapter)
     linkable = {q.question_id: q.stem for q in current}
     stale = False
     if note is not None:
@@ -356,7 +356,7 @@ def note_state(
                 created_at=v.finished_at or v.created_at,
                 question_count=v.question_count,
             )
-            for v in repo.versions(chapter)
+            for v in snapshot.versions
         ],
         stale=stale,
     )

@@ -50,6 +50,7 @@ import {
   type MockExam,
   type MockExamList,
 } from './mock-exam-model';
+import { formatDateTime } from '../labels';
 import { RenameField } from './rename-field';
 import styles from './mock-exams.module.css';
 
@@ -534,7 +535,10 @@ function ListRow({
           )}
           <Badge tone={STATUS_TONES[exam.status]}>{STATUS_LABELS[exam.status]}</Badge>
         </div>
-        <p className={styles.meta}>{metaText(exam)}</p>
+        <p className={styles.meta}>
+          {metaText(exam)} ·{' '}
+          <time dateTime={exam.created_at}>{formatDateTime(exam.created_at)}</time>
+        </p>
         {generating ? (
           <ProgressBar
             label="문제 생성 진행률"
