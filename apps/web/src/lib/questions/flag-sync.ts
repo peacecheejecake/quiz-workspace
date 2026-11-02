@@ -2,7 +2,8 @@
 // favorite / retry toggles. A press shows its new state at once; the my-state requests of one
 // question run one at a time, and presses made while one is in flight are coalesced into the next
 // request, so the last press always wins and a late response never overwrites a newer intent. A
-// failed request rolls the fields it carried back to the server's state.
+// failed request rolls the fields it carried back to the server's state. Only fields the user
+// pressed are ever sent: the others follow the server (a change made in another tab is kept).
 
 export interface StudyFlags {
   readonly is_favorite: boolean;
@@ -17,7 +18,9 @@ const FIELDS = ['is_favorite', 'needs_retry'] as const;
 export interface FlagEntry {
   /** The server's flags as last known (the base, then each response). */
   readonly confirmed: StudyFlags;
-  /** What the toggles show: the latest intent. */
+  /** The fields the user pressed and not yet saved, with the value last pressed. */
+  readonly intent: FlagPatch;
+  /** What the toggles show: the server's flags with the intent on top. */
   readonly desired: StudyFlags;
   /** The request in flight (null: none). */
   readonly sending: FlagPatch | null;
@@ -34,11 +37,15 @@ function isEmpty(patch: FlagPatch): boolean {
   return Object.keys(patch).length === 0;
 }
 
+function entryOf(confirmed: StudyFlags, intent: FlagPatch, sending: FlagPatch | null): FlagEntry {
+  return { confirmed, intent, desired: { ...confirmed, ...intent }, sending };
+}
+
 /** The entry with its next request started, if the intent still differs from the server. */
 function dispatch(entry: FlagEntry): { entry: FlagEntry; send: FlagPatch | null } {
   if (entry.sending) return { entry, send: null };
   const send = flagDiff(entry.confirmed, entry.desired);
-  if (isEmpty(send)) return { entry, send: null };
+  if (isEmpty(send)) return { entry: entryOf(entry.confirmed, {}, null), send: null };
   return { entry: { ...entry, sending: send }, send };
 }
 
@@ -48,29 +55,30 @@ export function intendFlags(
   base: StudyFlags,
   patch: FlagPatch,
 ): { entry: FlagEntry; send: FlagPatch | null } {
-  const current = entry ?? { confirmed: base, desired: base, sending: null };
-  return dispatch({ ...current, desired: { ...current.desired, ...patch } });
+  const current = entry ?? entryOf(base, {}, null);
+  return dispatch(entryOf(current.confirmed, { ...current.intent, ...patch }, current.sending));
 }
 
 /**
- * The request in flight finished. Success: the response is the server's state. Failure: the
- * fields it carried return to the server's state (a newer press of another field still goes).
- * Returns the next request (if any); `done` when nothing is left to save.
+ * The request in flight finished. Success: the response is the server's state (a pressed field
+ * it already matches is saved; an untouched field takes its value). Failure: the fields it
+ * carried return to the server's state (a newer press of another field still goes). Returns the
+ * next request (if any); `done` when nothing is left to save.
  */
 export function settleFlags(
   entry: FlagEntry,
   outcome: { readonly ok: true; readonly flags: StudyFlags } | { readonly ok: false },
 ): { entry: FlagEntry; send: FlagPatch | null; done: boolean } {
   const sent = entry.sending ?? {};
-  let next: FlagEntry;
-  if (outcome.ok) {
-    next = { confirmed: outcome.flags, desired: entry.desired, sending: null };
-  } else {
-    const desired = { ...entry.desired };
-    for (const field of FIELDS) if (field in sent) desired[field] = entry.confirmed[field];
-    next = { confirmed: entry.confirmed, desired, sending: null };
+  const confirmed = outcome.ok ? outcome.flags : entry.confirmed;
+  const intent: { is_favorite?: boolean; needs_retry?: boolean } = {};
+  for (const field of FIELDS) {
+    const wanted = entry.intent[field];
+    if (wanted === undefined || wanted === confirmed[field]) continue;
+    if (!outcome.ok && field in sent) continue;
+    intent[field] = wanted;
   }
-  const started = dispatch(next);
+  const started = dispatch(entryOf(confirmed, intent, null));
   return { ...started, done: started.send === null };
 }
 
@@ -78,7 +86,7 @@ export type FlagResult<R> =
   { readonly ok: true; readonly data: R } | { readonly ok: false; readonly message: string };
 
 export type FlagEvent<R> =
-  /** The flags to show changed (a press, or a failure while more is still being saved). */
+  /** The flags to show changed (a press, a response changing an untouched field, a failure). */
   | { readonly type: 'change'; readonly flags: StudyFlags }
   /** Everything is saved: `result` is the last response. */
   | { readonly type: 'saved'; readonly flags: StudyFlags; readonly result: R }
@@ -93,6 +101,10 @@ export type FlagEvent<R> =
       readonly pending: boolean;
       readonly saved: R | null;
     };
+
+function sameFlags(a: StudyFlags, b: StudyFlags): boolean {
+  return a.is_favorite === b.is_favorite && a.needs_retry === b.needs_retry;
+}
 
 /**
  * Drives the entries above: one serial request queue per question. `send` saves a patch;
@@ -153,8 +165,10 @@ export class FlagSync<R extends StudyFlags> {
       });
     } else if (settled.done) {
       this.onEvent(questionId, { type: 'saved', flags, result: result.data });
+    } else if (!sameFlags(flags, entry.desired)) {
+      // More to save, but the server changed a field the user did not touch: show it.
+      this.onEvent(questionId, { type: 'change', flags });
     }
-    // A success with more to save keeps showing the intent: no event.
     if (settled.send) void this.run(questionId, settled.send);
   }
 }

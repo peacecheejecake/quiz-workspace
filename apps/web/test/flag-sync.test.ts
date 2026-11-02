@@ -52,6 +52,29 @@ describe('flag state machine', () => {
     expect(settled.send).toEqual({ is_favorite: true });
   });
 
+  it('a field the user did not press takes the server value (another tab changed it)', () => {
+    // This screen loaded retry off; another tab turned it on. Only favorite is pressed here.
+    const { entry, send } = intendFlags(undefined, OFF, { is_favorite: true });
+    expect(send).toEqual({ is_favorite: true });
+    const settled = settleFlags(entry, {
+      ok: true,
+      flags: { is_favorite: true, needs_retry: true },
+    });
+    expect(settled.entry.desired).toEqual({ is_favorite: true, needs_retry: true });
+    expect(settled).toMatchObject({ send: null, done: true });
+  });
+
+  it('a newer press of one field still goes while the other follows the server', () => {
+    let { entry } = intendFlags(undefined, OFF, { is_favorite: true });
+    ({ entry } = intendFlags(entry, OFF, { is_favorite: false }));
+    const settled = settleFlags(entry, {
+      ok: true,
+      flags: { is_favorite: true, needs_retry: true },
+    });
+    expect(settled.entry.desired).toEqual({ is_favorite: false, needs_retry: true });
+    expect(settled.send).toEqual({ is_favorite: false });
+  });
+
   it('flagDiff lists only differing fields', () => {
     expect(flagDiff(OFF, OFF)).toEqual({});
     expect(flagDiff(OFF, { is_favorite: true, needs_retry: false })).toEqual({ is_favorite: true });
@@ -117,6 +140,19 @@ describe('FlagSync', () => {
       saved: null,
     });
     expect(sync.active('q')).toBeNull();
+  });
+
+  it('a response that changes an untouched field is shown while more is still being saved', async () => {
+    const { calls, events, sync, flush } = setup();
+    sync.toggle('q', OFF, { is_favorite: true });
+    sync.toggle('q', OFF, { is_favorite: false });
+    calls[0]?.resolve({ ok: true, data: { is_favorite: true, needs_retry: true } });
+    await flush();
+    expect(events.at(-1)?.[1]).toEqual({
+      type: 'change',
+      flags: { is_favorite: false, needs_retry: true },
+    });
+    expect(calls[1]?.patch).toEqual({ is_favorite: false });
   });
 
   it('questions are independent', async () => {
