@@ -109,9 +109,9 @@ async function expandAll(panel: Locator): Promise<void> {
   await expect(collapsed).toHaveCount(0);
 }
 
-/** Question checkboxes of the range step ("1장 1번 · …", mock "문제 k · …"). */
-function questionBoxes(panel: Locator): Locator {
-  return panel.getByRole('checkbox', { name: / · / });
+/** A mock exam's question checkboxes ("문제 k · …"), not its chapter ones ("1장 … · 2문제"). */
+function mockBoxes(panel: Locator): Locator {
+  return panel.getByRole('checkbox', { name: /^(문제|question) \d+ · /i });
 }
 
 /** Selects every question and starts the run; returns its id from `?practice=`. */
@@ -580,9 +580,9 @@ test(
       await expect(runUi.chapter(panel, title)).toBeChecked();
     }
     await expandAll(panel);
-    await expect(questionBoxes(panel)).toHaveCount(4);
+    await expect(mockBoxes(panel)).toHaveCount(4);
     await expect(runUi.selectAll(panel)).toBeChecked();
-    for (const box of await questionBoxes(panel).all()) await expect(box).toBeChecked();
+    for (const box of await mockBoxes(panel).all()) await expect(box).toBeChecked();
     // A whole chapter off: the run starts from single question ids (no `chapter_ids`).
     await runUi.chapter(panel, '챕터 없음').uncheck();
     await expect(runUi.selected(panel, 3)).toBeVisible();
