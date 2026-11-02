@@ -7,6 +7,7 @@ import re
 
 from book_core.embedding import FakeEmbedder
 from book_core.indexing import embedder_model_key
+from book_core.search import DEFAULT_MAX_QUERY_CHARS, prepare_query
 from book_core.search.related import (
     MAX_EXCERPT_CHARS,
     RelatedCandidate,
@@ -58,7 +59,7 @@ def test_relsrc_01_c02_query_is_stem_and_correct_answer_only() -> None:
     assert short == "발문? 증발 기화"
     essay = related_query("발문?", question_type="ESSAY", rubric="핵심 기준")
     assert essay == "발문? 핵심 기준"
-    assert len(related_query("가" * 5000, question_type="ESSAY")) == 2000
+    assert len(related_query("가" * 5000, question_type="ESSAY")) == DEFAULT_MAX_QUERY_CHARS
 
 
 def _c(block: str, page: int, doc: str = "d", relevance: float | None = None) -> RelatedCandidate:
@@ -97,3 +98,18 @@ def test_relsrc_01_c02_excerpt_keeps_paragraphs_and_highlights_query_terms() -> 
     assert long_text.endswith("…")
     two, _ = related_excerpt(["가" * 200, "나" * 200], "가")
     assert two == "가" * 200
+
+
+def test_relsrc_01_c02_a_long_stem_never_pushes_the_answer_out_of_the_search_query() -> None:
+    """The retrieval cuts queries at DEFAULT_MAX_QUERY_CHARS: the stem is shortened, never the
+    correct answer (a long stem would otherwise search its opening text only)."""
+    options = [{"id": "a", "text": "가나다 원리"}, {"id": "b", "text": "마바사 오개념"}]
+    for stem in ("문제   설명 " * 400, "가" * (DEFAULT_MAX_QUERY_CHARS - 3)):
+        query = related_query(stem, question_type="MCQ", options=options, correct_option_ids=["a"])
+        searched = prepare_query(query).text
+        assert len(query) <= DEFAULT_MAX_QUERY_CHARS
+        assert searched.endswith("가나다 원리"), searched[-40:]
+        assert "마바사" not in searched
+    huge = related_query("발문", question_type="ESSAY", rubric="기준 " * 2000)
+    assert len(huge) <= DEFAULT_MAX_QUERY_CHARS
+    assert huge.startswith("기준")  # an answer over the budget leaves no room for the stem

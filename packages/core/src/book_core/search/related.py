@@ -10,7 +10,7 @@ Pure helpers shared by the API's computation (`quiz_api.api.related_sources`):
   does not.
 - ``related_query``: the search query, the stem plus the correct answer only (MCQ: the correct
   options' texts; short answer: the accepted answers; essay: the rubric), never a wrong option,
-  cut to ``MAX_RELATED_QUERY_CHARS``.
+  within ``MAX_RELATED_QUERY_CHARS`` (the stem is shortened first, so the answer always stays).
 - ``merge_related``: the deterministic list: the question's own source blocks first (order
   kept), then search hits, one row per block and per page, hits below the relevance floor
   dropped, at most ``limit`` rows.
@@ -22,15 +22,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 
 from book_core.search.excerpt import term_spans
+from book_core.search.query import DEFAULT_MAX_QUERY_CHARS
 
 # Bump when the chunking of indexed revisions changes in a way that changes search results
 # without a new model key (the model key already covers the embedder, BM25 and payload schema).
 CHUNK_CONFIG_VERSION = "1"
-MAX_RELATED_QUERY_CHARS = 2000
+# The retrieval cuts longer queries (`prepare_query`), so the stem + answer budget is that limit
+# (RELSRC-01 says the first 2,000 characters; the search accepts 1,000).
+MAX_RELATED_QUERY_CHARS = DEFAULT_MAX_QUERY_CHARS
 MAX_EXCERPT_CHARS = 300
 _ELLIPSIS = "…"
 
@@ -73,8 +77,18 @@ def related_query(
         answer.extend(str(a) for a in accepted_answers or ())
     elif rubric:
         answer.append(rubric)
-    text = " ".join(p.strip() for p in (stem, *answer) if p and p.strip())
-    return text[:max_chars]
+    head = _flat(stem)
+    tail = " ".join(t for t in (_flat(a) for a in answer) if t)[:max_chars]
+    if not tail:
+        return head[:max_chars]
+    room = max_chars - len(tail) - 1
+    head = head[:room].rstrip() if room > 0 else ""
+    return f"{head} {tail}" if head else tail
+
+
+def _flat(text: str) -> str:
+    """NFC + collapsed whitespace, as `prepare_query` measures the query."""
+    return " ".join(unicodedata.normalize("NFC", text).split())
 
 
 @dataclass(frozen=True)
