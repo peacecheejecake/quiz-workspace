@@ -62,12 +62,12 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 - **채점 결과 테두리 (QPLAY-01-AC12, UX7-QDISPLAY):** 객관식 결과를 보이는 모든 곳 — `practice`, `sequence(bank|mock)`의 제출 직후, `이전`·결과 목록으로 돌아간 읽기 전용 결과 — 은 같은 표시를 쓴다: 맞힘 = 고른 보기 `--color-success`, 오답 = 고른 보기 `--color-border-strong` + 정답 보기 `--color-danger`, 행마다 "정답"·"내 선택"·"정답 · 내 선택" 글자(`aria-describedby`), 제출 전후 같은 두께(레이아웃 이동 없음). `manage`·`read-only`의 정답 표시는 채점 결과가 아니므로 기존 "정답" 글자 + 체크 아이콘 그대로다.
 - **열어 본 문제 client cache (QPLAY-01-AC06, UX7-CACHE):** `practice` 방식은 지금처럼 이번 화면에서 연 정답 없는 session을 메모리에 보관한다(화면 인스턴스·Workspace 단위, TTL 10분, 200개, browser storage 없음, 제출 시작·실패·만료 session 버림, 제출 결과 미보관, 이웃 prefetch 없음 — 열기 = 열람 기록). `sequence`가 같은 cache를 쓰면 같은 규칙을 따르고, 묶음 안 위치(`practice_run_id`, position)를 key에 넣어 묶음 밖 `practice` session과 섞지 않는다. `manage`·`read-only`의 정답이 든 내용은 cache하지 않는다.
 - **정답 보기는 풀이가 아님 (QPLAY-01-AC09, UX7 확인 7):** 4의 "문제 상세"를 열고 닫아도 아래 `practice`(또는 `sequence`)의 고른 답·session은 그대로이고 그대로 제출된다. `sequence`에서는 4의 메뉴를 열 수 있어도 묶음 진행·결과를 바꾸지 않는다.
-- **뒤로가기·URL state (QOV-01-AC14, UX7-BACK·UX7-BACK-2):** 새 URL state `?practice=new&source=…`·`?practice=<id>&i=<n>`·`?panel=mock-exams`(`&mock=new|<id>`)도 홈 dialog 기록 규칙을 그대로 따른다: 열면 기록 항목 하나, 열린 동안 뒤로가기 한 번 = 맨 위 dialog 하나 닫기, 닫힌 dialog는 뒤로가기·앞으로가기 어느 쪽으로도 다시 열리지 않음, 닫으면 열기 전 주소로 돌아가되 열린 동안 바꾼 필터·검색어는 유지, 딥링크·새로 고침으로 열린 dialog도 뒤로가기 한 번에 하나씩 닫힘. 묶음 안 `이전`·`다음`(`i` 변경)은 풀이 panel의 이전/다음처럼 dialog 닫기가 아니다: 뒤로가기는 panel을 연 채 앞 위치로, 앞으로가기는 다시 뒤 위치로 간다. **풀이 panel(`?question=`)과 범위 풀이(`?practice=`)는 동시에 열리지 않는다 (사용자 결정 2026-11-02, AC09):** 하나를 열면 다른 하나는 닫힌다 — `?question=`을 여는 모든 곳(Heatmap marker, 이력·정리 노트 각주 링크)은 열린 범위 풀이를 닫고, `문제 풀기`로 범위 고르기를 열거나 묶음(`?practice=<id>`)을 열면 열린 풀이 panel을 닫는다. 이 바꾸기는 "닫기 한 번 + 열기 한 번"이다: 닫힌 쪽은 위 규칙대로 뒤로가기·앞으로가기 어느 쪽으로도 다시 열리지 않고, 새로 연 panel은 기록 항목 하나라 뒤로가기 한 번이 그것을 닫는다(그 아래 열려 있던 non-modal dialog는 다음 뒤로가기가 닫는다). 둘 다 modal이라 화면에서는 한쪽이 열린 동안 다른 쪽을 여는 버튼에 닿지 않으므로, 이 규칙은 주로 URL로 들어올 때 보인다. 두 매개변수를 함께 가진 주소(딥링크·북마크)는 서버가 `question`을 뺀 주소로 바꾸어(redirect) 범위 풀이만 연다 (제안 — 사용자 확인 필요: 범위 풀이가 더 나중의 의도라고 보고 `?practice=`를 남김). 모의고사 `manage`(9)도 modal이라 둘 중 어느 것과도 함께 열리지 않는다; `?panel=mock-exams`는 다른 non-modal 홈 dialog와 쌓인다(QOV-01-AC10). (사용자 결정 2026-11-02) 범위 고르기에서 `시작`해 `practice=new`가 `practice=<id>`로 바뀌는 것, `결과 보기`, `처음부터 다시`는 같은 dialog 안의 단계 전환이라 기록 항목을 **바꾸고**(replace) 새로 쌓지 않는다 — 시작한 뒤 뒤로가기 한 번이 범위 고르기로 돌아가지 않고 panel을 닫는다. 모의고사 dialog 안의 목록 → 만들기·상세 전환(`mock=`)은 `이전`·`다음`처럼 항목을 쌓아 뒤로가기가 dialog를 연 채 목록으로 돌아간다(`BackLink` "모의고사 목록"과 같은 결과).
+- **뒤로가기·URL state (QOV-01-AC14, UX7-BACK·UX7-BACK-2):** 새 URL state `?practice=new&source=…`·`?practice=<id>&i=<n>`·`?panel=mock-exams`(`&mock=new|<id>`)도 홈 dialog 기록 규칙을 그대로 따른다: 열면 기록 항목 하나, 열린 동안 뒤로가기 한 번 = 맨 위 dialog 하나 닫기, 닫힌 dialog는 뒤로가기·앞으로가기 어느 쪽으로도 다시 열리지 않음, 닫으면 열기 전 주소로 돌아가되 열린 동안 바꾼 필터·검색어는 유지, 딥링크·새로 고침으로 열린 dialog도 뒤로가기 한 번에 하나씩 닫힘. 묶음 안 `이전`·`다음`(`i` 변경)은 풀이 panel의 이전/다음처럼 dialog 닫기가 아니다: 뒤로가기는 panel을 연 채 앞 위치로, 앞으로가기는 다시 뒤 위치로 간다. **풀이 panel(`?question=`)과 범위 풀이(`?practice=`)는 동시에 열리지 않는다 (사용자 결정 2026-11-02, AC09):** 하나를 열면 다른 하나는 닫힌다 — `?question=`을 여는 모든 곳(Heatmap marker, 이력·정리 노트 각주 링크)은 열린 범위 풀이를 닫고, `문제 풀기`로 범위 고르기를 열거나 묶음(`?practice=<id>`)을 열면 열린 풀이 panel을 닫는다. 이 바꾸기는 "닫기 한 번 + 열기 한 번"이다: 닫힌 쪽은 위 규칙대로 뒤로가기·앞으로가기 어느 쪽으로도 다시 열리지 않고, 새로 연 panel은 기록 항목 하나라 뒤로가기 한 번이 그것을 닫는다(그 아래 열려 있던 non-modal dialog는 다음 뒤로가기가 닫는다). 둘 다 modal이라 화면에서는 한쪽이 열린 동안 다른 쪽을 여는 버튼에 닿지 않으므로, 이 규칙은 주로 URL로 들어올 때 보인다. 두 매개변수를 함께 가진 주소(딥링크·북마크)는 서버가 `question`을 뺀 주소로 바꾸어(redirect) 범위 풀이만 연다 (사용자 결정 2026-11-02: 범위 풀이(`문제 풀기`)가 더 나중의 의도라고 보고 `?practice=`를 남김). 모의고사 `manage`(9)도 modal이라 둘 중 어느 것과도 함께 열리지 않는다; `?panel=mock-exams`는 다른 non-modal 홈 dialog와 쌓인다(QOV-01-AC10). (사용자 결정 2026-11-02) 범위 고르기에서 `시작`해 `practice=new`가 `practice=<id>`로 바뀌는 것, `결과 보기`, `처음부터 다시`는 같은 dialog 안의 단계 전환이라 기록 항목을 **바꾸고**(replace) 새로 쌓지 않는다 — 시작한 뒤 뒤로가기 한 번이 범위 고르기로 돌아가지 않고 panel을 닫는다. 모의고사 dialog 안의 목록 → 만들기·상세 전환(`mock=`)은 `이전`·`다음`처럼 항목을 쌓아 뒤로가기가 dialog를 연 채 목록으로 돌아간다(`BackLink` "모의고사 목록"과 같은 결과).
 
 ## 레이아웃 및 컴포넌트
 
 - **진입 (bank):** Workspace header `문제` 메뉴에 `문제 풀기` 항목(모든 구성원; 보관된 Workspace에서도 보임) (사용자 결정 2026-11-01). 메뉴 항목은 `requiresEdit: false`(UX7-DOCS-2 패턴)라 보기 권한·보관된 Workspace에서도 활성이고 이유 글자가 붙지 않는다 — 위치는 구분선 아래 보기 권한 항목 묶음(`보관·초안 문제`·`모의고사`·`문제 풀기`, QOV-01 "Workspace header"). 누르면 QuestionViewer가 범위 고르기 단계로 바로 열리고(`?practice=new&source=bank`) 목록을 불러오는 동안 skeleton(QOV-01-AC09 규칙).
-- **진입 (mock):** 모의고사 행·상세의 `풀기`(MOCK-01). 범위 고르기 단계는 그 모의고사의 문제만 보이고(출처 장별 묶음) 처음에 모두 선택되어 있다.
+- **진입 (mock):** 모의고사 행·상세의 `풀기`(MOCK-01). 범위 고르기 단계는 그 모의고사의 문제만 보이고(출처 장별 묶음) 처음에 모두 선택되어 있다. 출처 장별 묶음 (사용자 결정 2026-11-02, MOCK-W-3): 등록 문제와 같은 장 그룹 `QuestionRangePicker`(tri-state `전체 선택`, 장 checkbox·펼치기, 긴 장 virtualize)이고, 장은 원본 문제의 지금 장(API `source.chapter`, MOCK-01-C10 — 출처 글자 "3장 12번"의 장과 같음)이며 생성 계획의 장 순서(`chapter_rank`, 만들 때의 Heatmap 순서)로 놓인다. 원본에 장이 없거나 원본이 삭제된 문제는 맨 뒤 "챕터 없음" 묶음이다. 문제 행은 모의고사 안 번호 "문제 k · 발문 앞 40자 · 유형"이고 상태 필터는 없다(모의고사 문제는 개인 상태가 없음). `시작`은 장 전체를 고른 것도 그 문제들의 id(`question_ids`)로 보낸다 — 모의고사 묶음 범위는 `chapter_ids`를 받지 않으므로(422 `range-invalid`, MOCK-P) 범위 API는 그대로다. 전부 고르면 `all`.
 - **범위 고르기 단계:** 제목 "문제 풀기"(mock이면 "<모의고사 이름> 풀기").
   - 필터 줄(접힘 가능, 홈 상태 필터와 같은 칩) → `QuestionRangePicker`. 목록은 Heatmap에 보이는 문제와 같다: 보관된 문제(중복 정리로 보관된 중복 포함)·초안은 없고, 풀이 상태·즐겨찾기·다시 풀기 필터는 합쳐진 중복의 기록까지 합친 상태로 판정한다(Heatmap marker와 같은 상태, C07).
   - `QuestionRangePicker`: 맨 위 `전체 선택` checkbox(지금 필터에 보이는 문제 전체; 일부만 선택이면 `aria-checked="mixed"`), 장 그룹마다 장 checkbox(장 제목·문제 수, 일부 선택 = mixed)와 펼치기 버튼(`aria-expanded`), 펼치면 문제 checkbox 목록("3장 12번 · 발문 앞 40자 · 유형"). 필터를 바꾸면 보이지 않게 된 문제는 선택에서 빠진다(선택 = 보이는 문제 중에서만). 아래 "선택 n문제" 글자.
@@ -98,7 +98,7 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 - 문제가 바뀌면 focus는 문제 제목(heading, `tabIndex=-1`)으로 가고, 진행 "n문제 중 k번째"를 `aria-live="polite"`로 알린다. 결과는 `role="status"` 글자로 알리고 색만으로 전달하지 않는다.
 - 범위 checkbox 목록: native checkbox(또는 Radix Checkbox)로 Space 토글, mixed 상태 `aria-checked="mixed"`, 장 펼치기는 별도 버튼. 목록은 roving 없이 Tab 순서(장 checkbox → 펼치기 → 문제 checkbox).
 - `prefers-reduced-motion`에서 panel·진행 막대 움직임 없음. 결과·정답 영역은 hover 없이 보인다(터치 동등).
-- **품질 suite (MOCK-X):** axe `A11Y-15`(`tests/e2e/quality/a11y-mock.spec.ts`, light·dark)가 범위 고르기(`전체 선택` mixed, 상태 필터, 80문제를 넘어 virtualize된 장)·풀이·채점 뒤·결과 단계와 모의고사 출처(`sequence(mock)`) 풀이를 검사하고, 키보드만으로 `문제` 메뉴 → 범위 → `시작` → 제출 → `결과 보기`까지 가는 흐름을 확인한다. visual `VISUAL-07`은 범위 고르기와 결과 요약만 찍는다(채점 뒤 정답·해설 상태는 찍지 않음, 결과 요약은 정답 보기 없이 결과 글자만 있음).
+- **품질 suite (MOCK-X):** axe `A11Y-15`(`tests/e2e/quality/a11y-mock.spec.ts`, light·dark)가 범위 고르기(`전체 선택` mixed, 상태 필터, 80문제를 넘어 virtualize된 장)·풀이·채점 뒤·결과 단계와 모의고사 출처(`sequence(mock)`)의 출처 장별 범위 고르기(펼친 장)·풀이를 검사하고, 키보드만으로 `문제` 메뉴 → 범위 → `시작` → 제출 → `결과 보기`까지 가는 흐름을 확인한다. visual `VISUAL-07`은 범위 고르기와 결과 요약만 찍는다(채점 뒤 정답·해설 상태는 찍지 않음, 결과 요약은 정답 보기 없이 결과 글자만 있음).
 
 ## 수용 기준
 
@@ -128,9 +128,9 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 
 ### QVIEW-01-AC05
 
-- **Given:** 문제 4개로 만들어진 모의고사(MOCK-01)와 문제 10개의 Heatmap
-- **When:** 모의고사 행의 `풀기` → 범위 고르기에서 문제 하나를 해제하고 `무작위 순서`를 켜고 `시작` → 3문제를 모두 제출하고 `결과 보기`
-- **Then:** 범위 고르기는 그 모의고사의 문제 4개만 처음부터 모두 선택된 상태로 보이고(`전체 선택` checked), 해제 후 "선택 3문제"다. 풀이 단계는 등록 문제와 같은 본문·footer를 쓰고 즐겨찾기·다시 풀기 toggle이 없다. 제출 결과·정답·해설은 AC04와 같다. 끝나면 Heatmap marker 10개의 상태·문제 수와 `question_attempts`는 그대로이고, 풀이는 모의고사 문제의 기록으로만 남는다(`mock_exam_attempts` 3건).
+- **Given:** 문제 10개의 Heatmap(1장 4개·2장 3개·장 없음 3개)과 그중 1장 2개·2장 1개·장 없는 1개를 원본으로 만든 4문제 모의고사(MOCK-01)
+- **When:** 모의고사 행의 `풀기` → 범위 고르기에서 `챕터 없음` 묶음을 해제하고 `무작위 순서`를 켜고 `시작` → 3문제를 모두 제출하고 `결과 보기`
+- **Then:** 범위 고르기는 그 모의고사의 문제 4개만 처음부터 모두 선택된 상태로 출처 장별 묶음("1장 … · 2문제", "2장 … · 1문제", "챕터 없음 · 1문제" 순)으로 보이고(`전체 선택` checked), 해제 후 "선택 3문제"이며 `시작` 요청의 범위는 `chapter_ids` 없이 `question_ids` 3개다. 풀이 단계는 등록 문제와 같은 본문·footer를 쓰고 즐겨찾기·다시 풀기 toggle이 없다. 제출 결과·정답·해설은 AC04와 같다. 끝나면 Heatmap marker 10개의 상태·문제 수와 `question_attempts`는 그대로이고, 풀이는 모의고사 문제의 기록으로만 남는다(`mock_exam_attempts` 3건).
 
 ### QVIEW-01-AC06
 
@@ -154,7 +154,7 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 
 - **Given:** 확정 문제 2개가 있는 Workspace(Owner), 그 문제들로 만든 묶음, 그 전에 Workspace 목록을 연 기록
 - **When:** `?practice=<id>&i=2&question=<1번 문제>` 주소로 들어와 뒤로가기·앞으로가기를 누르고; `?question=<2번 문제>&practice=new&source=bank`로 들어와 `전체 선택` → `시작` → 건너뛰기 → `결과 보기` → 결과 목록의 첫 문제를 누른다
-- **Then:** 두 매개변수를 가진 주소는 범위 풀이 panel 하나만 연다("2문제 중 2번째"; 풀이 panel은 렌더링되지 않고 URL에 `question`이 없다 — 제안). 뒤로가기 한 번이 그 panel을 닫고 아무 panel도 남지 않으며, 앞으로가기는 어느 panel도 다시 열지 않는다. 범위 고르기 주소도 범위 고르기 panel 하나만 연다. 결과 목록의 문제는 그 묶음의 위치(`i=1`, "2문제 중 1번째")를 열고 `?question=`·풀이 panel을 열지 않는다(열린 modal panel 하나). 한쪽을 연 채 다른 쪽을 여는 URL 전환(닫기 + 열기, 뒤로가기·앞으로가기로 닫힌 쪽이 돌아오지 않음)은 `apps/web` Vitest(panel-history·home URL)로 확인한다. (사용자 결정 2026-11-02)
+- **Then:** 두 매개변수를 가진 주소는 범위 풀이 panel 하나만 연다("2문제 중 2번째"; 풀이 panel은 렌더링되지 않고 URL에 `question`이 없다 — 사용자 결정 2026-11-02). 뒤로가기 한 번이 그 panel을 닫고 아무 panel도 남지 않으며, 앞으로가기는 어느 panel도 다시 열지 않는다. 범위 고르기 주소도 범위 고르기 panel 하나만 연다. 결과 목록의 문제는 그 묶음의 위치(`i=1`, "2문제 중 1번째")를 열고 `?question=`·풀이 panel을 열지 않는다(열린 modal panel 하나). 한쪽을 연 채 다른 쪽을 여는 URL 전환(닫기 + 열기, 뒤로가기·앞으로가기로 닫힌 쪽이 돌아오지 않음)은 `apps/web` Vitest(panel-history·home URL)로 확인한다. (사용자 결정 2026-11-02)
 
 ## 계약 요구사항 (pytest·unit, 화면 AC 아님)
 

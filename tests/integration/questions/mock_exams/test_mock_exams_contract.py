@@ -1,4 +1,4 @@
-"""MOCK-01 server guarantees C01-C09 (docs/screens/mock-exams.md, questions.md §11,
+"""MOCK-01 server guarantees C01-C10 (docs/screens/mock-exams.md, questions.md §11,
 architecture.md §5-§6).
 
 Mock exam questions never touch the question bank (C01); the reused approval-blocking validation
@@ -8,7 +8,8 @@ new round, history rows are append-only (C04); the authorization matrix and the 
 (C05); cost limits and idempotency (C06); no question, explanation, book text, prompt or output in
 logs, job results or activities (C07); later source edits, deletes, archives and duplicate merges
 leave made questions alone (C08); LLM calls are batched by token budget, re-requested together,
-halved on unreadable output, checkpointed per batch and capped in concurrency (C09).
+halved on unreadable output, checkpointed per batch and capped in concurrency (C09); each
+question names its source chapter in the plan's chapter rank, without answer fields (C10).
 
 Shapes are assumptions K1-K9 in tests/e2e/fixtures/mock-exams.ts; the batched scenario LLM is the
 `mock_exam` block of tests/fixtures/llm/generation-scenarios.json. Jobs run in this process
