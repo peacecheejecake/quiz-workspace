@@ -209,8 +209,8 @@ class WorkerSettings(BaseSettings):
     # question text to the provider, docs/deployment.md §6). Never used in APP_ENV=test.
     question_import_llm: bool = Field(default=False, validation_alias="WORKER_QUESTION_IMPORT_LLM")
 
-    # -- question.generate (M6.2) ---------------------------------------------------------------
-    # APP_ENV=test only: scripted LLM outputs (book_core ScenarioLLMClient); defaults to the
+    # -- scripted LLM (APP_ENV=test) -------------------------------------------------------------
+    # APP_ENV=test only: scripted LLM outputs (chapter notes, mock exams); defaults to the
     # repository's tests/fixtures/llm/generation-scenarios.json. Ignored elsewhere (the provider
     # comes from LLM_API_KEY / LLM_MODEL).
     llm_scenario_file: str | None = Field(default=None, validation_alias="WORKER_LLM_SCENARIO_FILE")

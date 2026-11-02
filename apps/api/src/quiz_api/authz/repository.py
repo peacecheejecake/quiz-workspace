@@ -32,7 +32,6 @@ from quiz_api.repositories.tables import (
     mock_exams,
     practice_sessions,
     question_drafts,
-    question_generation_runs,
     question_import_runs,
     questions,
     workspace_memberships,
@@ -51,8 +50,9 @@ class ResourceType(StrEnum):
     QUESTION = "question"
     # Per-user: the route must additionally check `practice_sessions.user_id` is the caller.
     PRACTICE_SESSION = "practice_session"
+    # Import drafts only: the generation drafts of the retired 변형 출제 (QGEN-RM) stay as rows but
+    # are no longer addressable.
     QUESTION_DRAFT = "question_draft"
-    QUESTION_GENERATION_RUN = "question_generation_run"
     QUESTION_IMPORT_RUN = "question_import_run"
     # M3.2a. A soft-deleted document and its revisions are invisible.
     DOCUMENT = "document"
@@ -95,8 +95,9 @@ RESOURCES: dict[ResourceType, ResourceBinding] = {
     ),
     ResourceType.QUESTION: ResourceBinding(questions, deleted_column="deleted_at"),
     ResourceType.PRACTICE_SESSION: ResourceBinding(practice_sessions),
-    ResourceType.QUESTION_DRAFT: ResourceBinding(question_drafts),
-    ResourceType.QUESTION_GENERATION_RUN: ResourceBinding(question_generation_runs),
+    ResourceType.QUESTION_DRAFT: ResourceBinding(
+        question_drafts, visible_when=question_drafts.c.source_type == "import"
+    ),
     ResourceType.QUESTION_IMPORT_RUN: ResourceBinding(question_import_runs),
     ResourceType.DOCUMENT: ResourceBinding(documents, deleted_column="deleted_at"),
     ResourceType.REVISION: ResourceBinding(
