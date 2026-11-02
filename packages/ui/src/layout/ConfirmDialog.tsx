@@ -7,6 +7,7 @@ import { cx } from '../internal/cx';
 import { LayerProvider } from '../internal/layer';
 import { useMergedRefs } from '../internal/merge-refs';
 import { useOverscrollGuard } from '../internal/overscroll-guard';
+import { useScrollFreeze } from '../internal/scroll-freeze';
 import { Button } from '../primitives/Button';
 
 export interface ConfirmDialogProps {
@@ -48,6 +49,7 @@ export function ConfirmDialog({
   // Radix's modal scroll lock covers this too; the guard keeps every overlay alike (UX9-SCROLL).
   const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
   const surfaceRef = useMergedRefs(animateHeight, guardOverscroll);
+  useScrollFreeze(open);
   return (
     <AlertDialog.Root
       open={open}
@@ -59,13 +61,14 @@ export function ConfirmDialog({
         <AlertDialog.Overlay className="qz-backdrop" data-layer="modal" />
         <AlertDialog.Content
           ref={surfaceRef}
+          aria-modal="true"
           data-size="sm"
           className={cx('qz-modal', className)}
           onCloseAutoFocus={(event) => {
             const target = returnFocusRef?.current;
             if (!target) return;
             event.preventDefault();
-            target.focus();
+            target.focus({ preventScroll: true });
           }}
         >
           <LayerProvider value="var(--z-modal)">

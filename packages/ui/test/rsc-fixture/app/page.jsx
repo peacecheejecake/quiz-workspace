@@ -88,9 +88,10 @@ import {
   summarizeStatuses,
   useTheme,
   useToast,
+  useUnsavedChanges,
 } from '@quiz/ui';
 
-const hooks = [useTheme, useToast];
+const hooks = [useTheme, useToast, useUnsavedChanges];
 // Need function props (onOpen / onPressedChange), so a Client Component has to render them.
 const interactive = [
   QuestionDot,

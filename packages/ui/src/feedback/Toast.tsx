@@ -131,7 +131,15 @@ export function ToastProvider({
             </RadixToast.Close>
           </RadixToast.Root>
         ))}
-        <RadixToast.Viewport label={`${label} ({hotkey})`} className="qz-toast-viewport" />
+        {/* A modal panel hides the rest of the page from assistive technology but keeps live
+            regions (aria-hidden `hideOthers`): `off` keeps the notifications (and their F8
+            landmark) reachable while a modal is open without adding announcements — each toast
+            announces itself. */}
+        <RadixToast.Viewport
+          label={`${label} ({hotkey})`}
+          className="qz-toast-viewport"
+          aria-live="off"
+        />
       </RadixToast.Provider>
     </ToastContext.Provider>
   );

@@ -12,14 +12,18 @@ import {
   type Ref,
 } from 'react';
 import { useAnimatedHeight } from '../internal/animated-height';
+import { useBackdropClose } from '../internal/backdrop';
 import { cx } from '../internal/cx';
+import { DirtyProvider, useDirtyRegistry } from '../internal/dirty';
 import { LayerProvider, useFloatingLayer } from '../internal/layer';
 import { handlesOwnEscape } from '../internal/own-escape';
 import { containOverscroll } from '../internal/overscroll-guard';
+import { currentOpener, watchOpeners } from '../internal/opener';
 import { ScrollRegion } from '../internal/scroll-region';
+import { useScrollFreeze } from '../internal/scroll-freeze';
 import { handOffFocus } from '../internal/tabbable';
 import { IconButton } from '../primitives/IconButton';
-import { CloseIcon } from '../primitives/icons';
+import { ChevronDownIcon, ChevronUpIcon, CloseIcon } from '../primitives/icons';
 
 type ContentProps = ComponentProps<typeof Dialog.Content>;
 
@@ -35,15 +39,26 @@ function controllerOf(id: string | undefined): HTMLElement | null {
   return null;
 }
 
+export interface PanelSteps {
+  /** Accessible names, e.g. `이전 결과` / `다음 결과`. */
+  readonly previousLabel: string;
+  readonly nextLabel: string;
+  readonly onPrevious?: (() => void) | undefined;
+  readonly onNext?: (() => void) | undefined;
+}
+
 export interface FloatingSidePanelProps {
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
   /**
-   * `true` (default, e.g. QuestionPracticePanel): backdrop, focus trap, background hidden from
-   * assistive technology, Escape closes, focus returns to the trigger.
-   * `false` (e.g. DocumentExcerptPanel): no backdrop or trap; the background stays interactive
-   * and clicking/focusing it keeps the panel open. Escape closes only while focus is inside.
+   * `true` (default; QuestionPracticePanel and, since UX9, every workspace home dialog and floating
+   * panel — design-system §5.5): backdrop, focus trap, background hidden from assistive
+   * technology, Escape and a backdrop click close, focus returns to the opener. The modal scroll
+   * lock adds no scrollbar compensation (the app's `html { scrollbar-gutter: stable }` keeps it).
+   * `false` (no screen uses it since UX9; docked panels are always non-modal): no backdrop or
+   * trap; the background stays interactive and clicking/focusing it keeps the panel open. Escape
+   * closes only while focus is inside.
    */
   modal?: boolean;
   /** Optional element that toggles the panel (Radix `Dialog.Trigger`, rendered `asChild`). */
@@ -64,8 +79,22 @@ export interface FloatingSidePanelProps {
   footer?: ReactNode;
   /** Accessible name of the close button. */
   closeLabel?: string;
-  /** Modal only: whether clicking the backdrop closes the panel. */
+  /**
+   * Modal only: whether clicking the backdrop closes the panel (like Escape). The click never
+   * reaches the content underneath either way (design-system §5.5).
+   */
   closeOnBackdropClick?: boolean;
+  /**
+   * Modal only: the panel holds unsaved input, so a backdrop click leaves it open (HOMEDLG-01).
+   * Parts inside the panel can report the same through `useUnsavedChanges`.
+   */
+  dirty?: boolean;
+  /**
+   * Header `이전`/`다음` buttons that move the panel to the neighbouring item of the list it was
+   * opened from (a modal panel covers that list), also on Alt+↑/Alt+↓. A missing handler disables
+   * its button (the list's end).
+   */
+  steps?: PanelSteps;
   /**
    * `default` = min(500px, 100vw - 32px); `wide` for comparison drawers (≥ 600px); `narrow`
    * (`--outline-panel-width`) for navigation columns. Viewport placement only: a docked panel is
@@ -142,6 +171,8 @@ export function FloatingSidePanel({
   footer,
   closeLabel = '닫기',
   closeOnBackdropClick = true,
+  dirty: dirtyProp = false,
+  steps,
   size = 'default',
   side = 'end',
   placement = 'viewport',
@@ -191,6 +222,12 @@ export function FloatingSidePanel({
     onOpenChange?.(next);
   };
   const layer = useFloatingLayer(isOpen, raiseKey);
+  const registry = useDirtyRegistry();
+  useEffect(watchOpeners, []);
+  useScrollFreeze(modal && isOpen);
+  const backdrop = useBackdropClose(closeOnBackdropClick && !dirtyProp && !registry.dirty, () =>
+    handleOpenChange(false),
+  );
 
   // Inset docking: the container pads the panel's edge so its content steps aside.
   const insetHost = docked && dockMode === 'inset' && isOpen ? container : null;
@@ -215,6 +252,7 @@ export function FloatingSidePanel({
               className="qz-backdrop"
               data-layer="panel"
               style={{ zIndex: layer.zIndex }}
+              {...backdrop}
             />
           ) : null}
           <Dialog.Content
@@ -241,12 +279,11 @@ export function FloatingSidePanel({
                 event.preventDefault();
                 return;
               }
-              returnFocusRef.current =
-                document.activeElement instanceof HTMLElement ? document.activeElement : null;
+              returnFocusRef.current = currentOpener();
               onOpenAutoFocus?.(event);
               if (event.defaultPrevented) return;
               event.preventDefault();
-              contentRef.current?.focus();
+              contentRef.current?.focus({ preventScroll: true });
             }}
             onCloseAutoFocus={(event) => {
               onCloseAutoFocus?.(event);
@@ -260,11 +297,13 @@ export function FloatingSidePanel({
                 !active || active === document.body || contentRef.current?.contains(active);
               if (target?.isConnected && focusLost) {
                 event.preventDefault();
-                target.focus();
+                // The page stays where it was (HOMEDLG-01-AC03), even for an opener out of view.
+                target.focus({ preventScroll: true });
               }
             }}
             onPointerDownOutside={(event) => {
-              if (modal && !closeOnBackdropClick) event.preventDefault();
+              // A modal panel closes on its backdrop's click instead (useBackdropClose).
+              if (modal) event.preventDefault();
             }}
             onInteractOutside={(event) => {
               // Non-modal panels sit next to the content they annotate (PDF, search results):
@@ -272,6 +311,19 @@ export function FloatingSidePanel({
               if (!modal) event.preventDefault();
             }}
             onKeyDown={(event) => {
+              if (steps && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                const step =
+                  event.key === 'ArrowUp'
+                    ? steps.onPrevious
+                    : event.key === 'ArrowDown'
+                      ? steps.onNext
+                      : undefined;
+                if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  step?.();
+                  return;
+                }
+              }
               if (!modal && contentRef.current) {
                 handOffFocus(event, contentRef.current, returnFocusRef.current ?? controllerOf(id));
               }
@@ -301,30 +353,70 @@ export function FloatingSidePanel({
             }}
           >
             <LayerProvider value={layer.zIndex}>
-              <div className="header">
-                <div className="heading">
-                  <Dialog.Title
-                    ref={titleRef}
-                    tabIndex={titleRef ? -1 : undefined}
-                    className="title"
-                  >
-                    {title}
-                  </Dialog.Title>
-                  {description ? (
-                    <Dialog.Description className="description">{description}</Dialog.Description>
+              <DirtyProvider value={registry.report}>
+                <div className="header">
+                  <div className="heading">
+                    <Dialog.Title
+                      ref={titleRef}
+                      tabIndex={titleRef ? -1 : undefined}
+                      className="title"
+                    >
+                      {title}
+                    </Dialog.Title>
+                    {description ? (
+                      <Dialog.Description className="description">{description}</Dialog.Description>
+                    ) : null}
+                  </div>
+                  {steps || headerActions ? (
+                    <div className="actions">
+                      {steps ? <StepButtons steps={steps} /> : null}
+                      {headerActions}
+                    </div>
                   ) : null}
+                  <Dialog.Close asChild>
+                    <IconButton label={closeLabel} icon={<CloseIcon />} />
+                  </Dialog.Close>
                 </div>
-                {headerActions ? <div className="actions">{headerActions}</div> : null}
-                <Dialog.Close asChild>
-                  <IconButton label={closeLabel} icon={<CloseIcon />} />
-                </Dialog.Close>
-              </div>
-              <ScrollRegion className="body">{children}</ScrollRegion>
-              {footer ? <div className="footer">{footer}</div> : null}
+                <ScrollRegion className="body">{children}</ScrollRegion>
+                {footer ? <div className="footer">{footer}</div> : null}
+              </DirtyProvider>
             </LayerProvider>
           </Dialog.Content>
         </Dialog.Portal>
       )}
     </Dialog.Root>
+  );
+}
+
+/** The header's 이전/다음 pair; focus moves to the other one when its button reaches the end. */
+function StepButtons({ steps }: { steps: PanelSteps }) {
+  const previousRef = useRef<HTMLButtonElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
+  const canPrevious = steps.onPrevious !== undefined;
+  const canNext = steps.onNext !== undefined;
+  useEffect(() => {
+    const active = document.activeElement;
+    if (active === nextRef.current && !canNext && canPrevious) previousRef.current?.focus();
+    if (active === previousRef.current && !canPrevious && canNext) nextRef.current?.focus();
+  }, [canPrevious, canNext]);
+  return (
+    <>
+      <IconButton
+        ref={previousRef}
+        label={steps.previousLabel}
+        title={`${steps.previousLabel} (Alt+↑)`}
+        icon={<ChevronUpIcon />}
+        disabled={!canPrevious}
+        onClick={() => steps.onPrevious?.()}
+      />
+      <IconButton
+        ref={nextRef}
+        label={steps.nextLabel}
+        title={`${steps.nextLabel} (Alt+↓)`}
+        icon={<ChevronDownIcon />}
+        disabled={!canNext}
+        onClick={() => steps.onNext?.()}
+      />
+    </>
   );
 }
