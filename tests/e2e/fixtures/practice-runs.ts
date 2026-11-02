@@ -57,9 +57,10 @@
 //      none (AC03 "fake seed 고정"), so a random run of five shows Heatmap positions
 //      TEST_SEED_ORDER_5 = random.Random(20261101).shuffle([1, 2, 3, 4, 5]).
 //   P7 Mock exams (MOCK-01, owned by MOCK.0's tests/e2e/fixtures/mock-exams.ts; only what AC05
-//      needs is repeated here): POST /workspaces/{id}/mock-exams {name, config:
-//      {variation_types: ["OPTION_SHUFFLE"], question_count}, range: RunRange} → 201/202
-//      MockExam {id, status, ...}; GET /mock-exams/{id} until status `ready`; GET
+//      needs is repeated here, as MOCK-B built it): POST /workspaces/{id}/mock-exams {title,
+//      config: {variation_types: ["OPTION_SHUFFLE"], question_count}, range: RunRange} → 202
+//      MockExam {id, title, status, latest_generation: {job_id, ...}, ...}; the generation job
+//      (GET /jobs/{job_id}) succeeds, then GET /mock-exams/{id} is `ready`; GET
 //      /mock-exams/{id}/questions → {items: [{id, ...}]}. `보기 섞기` needs no LLM.
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
@@ -84,7 +85,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { apiError, type ApiResponse } from './api.ts';
-import { JOB_TIMEOUT_MS, outlineNodeId, uploadReadyBook } from './documents.ts';
+import { outlineNodeId, uploadReadyBook, waitForJob } from './documents.ts';
 import { seedMembership } from './db.ts';
 import { localDbAdminUrl } from './local-env.ts';
 import { rangePickerUi } from './range-picker.ts';
@@ -256,15 +257,16 @@ export function openRunSession(
 
 export interface MockExam {
   readonly id: string;
-  readonly name: string;
+  readonly title: string;
   readonly status: string;
+  readonly latest_generation: { readonly job_id: string | null } | null;
 }
 
 /** A `보기 섞기` mock exam of `count` questions from `questionIds`, waited until `ready`. */
 export async function createShuffleMockExam(
   owner: Member,
   workspaceId: string,
-  name: string,
+  title: string,
   questionIds: readonly string[],
   count: number,
 ): Promise<MockExam> {
@@ -272,21 +274,18 @@ export async function createShuffleMockExam(
     'POST',
     `/workspaces/${workspaceId}/mock-exams`,
     {
-      name,
+      title,
       config: { variation_types: ['OPTION_SHUFFLE'], question_count: count },
       range: { question_ids: questionIds },
     },
-    [201, 202],
+    [202],
   );
-  const deadline = Date.now() + JOB_TIMEOUT_MS;
-  for (;;) {
-    const exam = await owner.api.ok<MockExam>('GET', `/mock-exams/${created.id}`, undefined, [200]);
-    if (exam.status === 'ready') return exam;
-    if (exam.status === 'failed' || Date.now() > deadline) {
-      throw new Error(`mock exam ended as ${exam.status}`);
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
+  const jobId = created.latest_generation?.job_id;
+  if (!jobId) throw new Error('mock exam: no generation job');
+  await waitForJob(owner, jobId);
+  const exam = await owner.api.ok<MockExam>('GET', `/mock-exams/${created.id}`, undefined, [200]);
+  expect(exam.status, 'mock exam status').toBe('ready');
+  return exam;
 }
 
 // ---------------------------------------------------------------------------------------------
