@@ -7,9 +7,10 @@ loaded by path because conftest modules are not importable under `--import-mode=
 
 `World` is one fully populated workspace (a parsed and published book with revisions and blocks,
 a CONFIRMED question, a generation run, an import run with a draft, a practice session, a share
-link with Fork ON, a pending upload intent, a fork request of another user) plus an editor, a
-viewer and an outsider. Its ids feed the operation table of `test_authz_matrix.py`, which is
-generated from `contracts/openapi.json` so a new route cannot be left out.
+link with Fork ON, a pending upload intent, a fork request of another user, a made mock exam)
+plus an editor, a viewer and an outsider. Its ids feed the operation table of
+`test_authz_matrix.py`, which is generated from `contracts/openapi.json` so a new route cannot be
+left out.
 """
 
 from __future__ import annotations
@@ -246,9 +247,8 @@ def build_world(seed: Any, label: str) -> World:
     fork = forker.fork(str(link["id"]), cookie, f"S4 {label} fork")
     assert fork.status_code == 202, f"fork start: HTTP {fork.status_code}"
 
-    # MOCK-B: a made mock exam with one question, seeded as the superuser (making one through
-    # the API needs the range resolver of QVIEW-B; MOCK-B-2 can switch this to the API).
-    mock_exam_id, mock_question_id = seed_mock_exam(seed, wid, owner.user.id, qid, question)
+    # MOCK-B: a made mock exam with one question (보기 섞기, no LLM).
+    mock_exam_id, mock_question_id = make_mock_exam(owner, wid, qid)
 
     # A second workspace of the same owner, for requests that mix ids of two workspaces.
     twin = owner.create_workspace(f"S4 {label} twin")
@@ -313,69 +313,24 @@ def build_world(seed: Any, label: str) -> World:
     return World(owner, editor, viewer, outsider, forker, ids, twin_ids, str(link["secret"]))
 
 
-def seed_mock_exam(
-    seed: Any, workspace_id: str, user_id: Any, question_id: str, question: dict[str, Any]
-) -> tuple[str, str]:
-    """A succeeded OPTION_SHUFFLE mock exam of `question` (superuser rows, MOCK-B schema)."""
-    exam, generation, made, revision = (str(uuid.uuid4()) for _ in range(4))
-    rev = question["revision"]
-    plan = [
+def make_mock_exam(owner: Any, workspace_id: str, question_id: str) -> tuple[str, str]:
+    """A succeeded OPTION_SHUFFLE mock exam of one question, made through the API."""
+    made = owner.ok(
+        "POST",
+        f"/workspaces/{workspace_id}/mock-exams",
         {
-            "position": 0,
-            "question_id": question_id,
-            "question_revision_id": rev["id"],
-            "variation_type": "OPTION_SHUFFLE",
-            "chapter_rank": 0,
-        }
-    ]
-    config = {"variation_types": ["OPTION_SHUFFLE"], "question_count": 1, "difficulty": None}
-    rng = {
-        "all": True,
-        "chapter_ids": [],
-        "question_ids": [],
-        "excluded_question_ids": [],
-        "filters": {},
-    }
-    seed._admin(
-        "insert into public.mock_exams (id, workspace_id, title, config, range, created_by) "
-        "values (%s, %s, 'S4 모의고사', %s::jsonb, %s::jsonb, %s)",
-        (exam, workspace_id, json.dumps(config), json.dumps(rng), str(user_id)),
+            "title": "S4 모의고사",
+            "config": {"variation_types": ["OPTION_SHUFFLE"], "question_count": 1},
+            "range": {"question_ids": [question_id]},
+        },
+        (202,),
     )
-    seed._admin(
-        "insert into public.mock_exam_generations (id, workspace_id, mock_exam_id, version, "
-        "status, config, range, plan, seed, requested_count, created_count, progress_done, "
-        "finished_at) values (%s, %s, %s, 1, 'succeeded', %s::jsonb, %s::jsonb, %s::jsonb, 7, "
-        "1, 1, 1, now())",
-        (generation, workspace_id, exam, json.dumps(config), json.dumps(rng), json.dumps(plan)),
-    )
-    seed._admin(
-        "insert into public.mock_exam_questions (id, workspace_id, mock_exam_id, generation_id, "
-        "position, question_type, variation_type, source_question_id, "
-        "source_question_revision_id) values (%s, %s, %s, %s, 0, %s, 'OPTION_SHUFFLE', %s, %s)",
-        (made, workspace_id, exam, generation, question["question_type"], question_id, rev["id"]),
-    )
-    seed._admin(
-        "insert into public.mock_exam_question_revisions (id, workspace_id, "
-        "mock_exam_question_id, version, stem, options, correct_option_ids, is_multi_answer, "
-        "origin) values (%s, %s, %s, 1, %s, %s::jsonb, %s, %s, 'generated')",
-        (
-            revision,
-            workspace_id,
-            made,
-            rev["stem"],
-            json.dumps(list(reversed(rev["options"]))),
-            rev["correct_option_ids"],
-            rev["is_multi_answer"],
-        ),
-    )
-    seed._admin(
-        "update public.mock_exam_questions set active_revision_id = %s where id = %s",
-        (revision, made),
-    )
-    seed._admin(
-        "update public.mock_exams set current_generation_id = %s where id = %s", (generation, exam)
-    )
-    return exam, made
+    exam_id = str(made["id"])
+    owner.wait_for_job(str(made["latest_generation"]["job_id"]))
+    after = owner.ok("GET", f"/mock-exams/{exam_id}")
+    assert after["status"] == "ready", after["latest_generation"]
+    [item] = owner.ok("GET", f"/mock-exams/{exam_id}/questions")["items"]
+    return exam_id, str(item["id"])
 
 
 class LogCapture(logging.Handler):

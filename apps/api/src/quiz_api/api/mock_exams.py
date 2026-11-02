@@ -72,6 +72,7 @@ from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.idempotency import IdempotencyKey, replay, request_hash
 from quiz_api.jobs import JobPublisher
 from quiz_api.mock_exam_ranges import resolve_candidates
+from quiz_api.question_ranges import QuestionRange
 from quiz_api.question_rules import (
     MAX_ACCEPTED_ANSWERS,
     MAX_LONG_TEXT,
@@ -130,26 +131,12 @@ class MockExamConfig(BaseModel):
         return value
 
 
-class MockExamRange(BaseModel):
-    """The range a person chose (QVIEW-01-C01): re-resolved on every generation."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    all: bool = False
-    chapter_ids: list[uuid.UUID | None] = Field(default_factory=list, max_length=1000)
-    question_ids: list[uuid.UUID] = Field(default_factory=list, max_length=MAX_RANGE_QUESTIONS)
-    excluded_question_ids: list[uuid.UUID] = Field(
-        default_factory=list, max_length=MAX_RANGE_QUESTIONS
-    )
-    filters: dict[str, Any] = Field(default_factory=dict)
-
-
 class MockExamCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(min_length=1, max_length=100)
     config: MockExamConfig
-    range: MockExamRange
+    range: QuestionRange
     seed: int | None = Field(default=None, ge=0, le=MAX_SEED)
 
 
@@ -163,7 +150,7 @@ class MockExamGenerationCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     config: MockExamConfig | None = Field(default=None, description="설정 바꾸기: new settings.")
-    range: MockExamRange | None = None
+    range: QuestionRange | None = None
     seed: int | None = Field(default=None, ge=0, le=MAX_SEED)
 
 
@@ -197,7 +184,7 @@ class MockExam(BaseModel):
     version: int
     status: ExamStatus
     config: MockExamConfig
-    range: MockExamRange
+    range: QuestionRange
     question_count_current: int
     current_generation: MockExamGeneration | None = Field(
         description="The generation whose questions are shown."
@@ -425,7 +412,7 @@ def exams_out(repo: MockExamRepository, exams: list[ExamRecord]) -> list[MockExa
                 version=exam.version,
                 status=_exam_status(newest_out),
                 config=MockExamConfig.model_validate(exam.config),
-                range=MockExamRange.model_validate(exam.range),
+                range=QuestionRange.model_validate(exam.range),
                 question_count_current=counts.get(current.id, 0) if current else 0,
                 current_generation=generation_out(current) if current is not None else None,
                 latest_generation=newest_out,
@@ -540,17 +527,20 @@ def _start(
     exam: ExamRecord,
     actor_id: uuid.UUID,
     config: MockExamConfig,
-    range_: MockExamRange,
+    range_: QuestionRange,
     seed: int | None,
     *,
     new_config: bool,
+    saved_range: bool = False,
 ) -> uuid.UUID:
     """Resolve, plan, enforce the start limits and queue the generation (no commit). A count
     over the range is refused when the settings are new (create / 설정 바꾸기); a plain remake
-    of a range that shrank since makes `min(count, range)` like the AI types."""
+    of a range that shrank since makes `min(count, range)` like the AI types. A `saved_range`
+    (다시 만들기 of the stored range) drops questions gone since instead of 422 (C08). A whole
+    range (`question_count` null) over 5,000 questions is 422 however it starts (C06)."""
     repo.lock_workspace_generations(exam.workspace_id)
     candidates = resolve_candidates(
-        repo.session, exam.workspace_id, actor_id, range_.model_dump(mode="json")
+        repo.session, exam.workspace_id, actor_id, range_, saved=saved_range
     )
     if not candidates:
         raise ProblemException(
@@ -568,6 +558,13 @@ def _start(
         raise _invalid(
             ("config", "question_count"),
             "With 보기 섞기 only make at most as many questions as the range holds.",
+        )
+    if config.question_count is None and len(candidates) > MAX_RANGE_QUESTIONS:
+        # The whole range (보기 섞기 only), on create, 설정 바꾸기 or a saved range grown since.
+        raise _invalid(
+            ("config", "question_count"),
+            f"A mock exam holds at most {MAX_RANGE_QUESTIONS:,} questions: the range has "
+            f"{len(candidates):,}. Choose a question count or a smaller range.",
         )
     if repo.running_count(exam.workspace_id) >= settings.mock_exam_max_running_per_workspace:
         raise ProblemException(
@@ -774,7 +771,7 @@ def create_mock_exam_generation(
         return replayed
     exam = _load(repo, access, lock=True)
     config = body.config or MockExamConfig.model_validate(exam.config)
-    range_ = body.range or MockExamRange.model_validate(exam.range)
+    range_ = body.range or QuestionRange.model_validate(exam.range)
     _check_config(config, settings)
     active = repo.active(exam.id)
     if active is not None:
@@ -808,6 +805,7 @@ def create_mock_exam_generation(
         range_,
         body.seed,
         new_config=body.config is not None or body.range is not None,
+        saved_range=body.range is None,
     )
     return _accepted(
         repo, idempotency, jobs, publisher, exam.id, user_id, scope, idempotency_key, body_hash

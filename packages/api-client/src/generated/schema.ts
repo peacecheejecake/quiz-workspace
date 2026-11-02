@@ -3703,7 +3703,7 @@ export type components = {
       latest_generation: components['schemas']['MockExamGeneration'] | null;
       /** Question Count Current */
       question_count_current: number;
-      range: components['schemas']['MockExamRange'];
+      range: components['schemas']['QuestionRange'];
       /**
        * Status
        * @enum {string}
@@ -3747,7 +3747,7 @@ export type components = {
     /** MockExamCreate */
     MockExamCreate: {
       config: components['schemas']['MockExamConfig'];
-      range: components['schemas']['MockExamRange'];
+      range: components['schemas']['QuestionRange'];
       /** Seed */
       seed?: number | null;
       /** Title */
@@ -3799,7 +3799,7 @@ export type components = {
     MockExamGenerationCreate: {
       /** @description 설정 바꾸기: new settings. */
       config?: components['schemas']['MockExamConfig'] | null;
-      range?: components['schemas']['MockExamRange'] | null;
+      range?: components['schemas']['QuestionRange'] | null;
       /** Seed */
       seed?: number | null;
     };
@@ -3888,27 +3888,6 @@ export type components = {
       rubric?: string | null;
       /** Stem */
       stem?: string | null;
-    };
-    /**
-     * MockExamRange
-     * @description The range a person chose (QVIEW-01-C01): re-resolved on every generation.
-     */
-    MockExamRange: {
-      /**
-       * All
-       * @default false
-       */
-      all?: boolean;
-      /** Chapter Ids */
-      chapter_ids?: (string | null)[];
-      /** Excluded Question Ids */
-      excluded_question_ids?: string[];
-      /** Filters */
-      filters?: {
-        [key: string]: unknown;
-      };
-      /** Question Ids */
-      question_ids?: string[];
     };
     /** MockExamRevisionRef */
     MockExamRevisionRef: {

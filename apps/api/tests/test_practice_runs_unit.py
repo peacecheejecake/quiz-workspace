@@ -52,7 +52,7 @@ def row(
     retry: bool = False,
     question_type: Any = "MCQ",
 ) -> RangeRow:
-    return RangeRow(uuid.uuid4(), chapter, question_type, status, favorite, retry)
+    return RangeRow(uuid.uuid4(), chapter, question_type, status, favorite, retry, uuid.uuid4())
 
 
 # Heatmap: 1장 3 questions, 2장 2, then two without a chapter.
