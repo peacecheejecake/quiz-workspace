@@ -64,6 +64,8 @@ export interface ChapterNotePanelProps {
   readonly onOpenQuestion: (questionId: string, returnFocus: HTMLElement | null) => void;
   /** The chapter's generation started or ended (the Heatmap header's "만드는 중"). */
   readonly onGeneratingChange?: (chapterId: string, generating: boolean) => void;
+  /** Bumped when the chapter's questions moved (CHREDIST-01): the open note is read again. */
+  readonly refreshKey?: number;
 }
 
 export function ChapterNotePanel({
@@ -76,6 +78,7 @@ export function ChapterNotePanel({
   screenId,
   onOpenQuestion,
   onGeneratingChange,
+  refreshKey = 0,
 }: ChapterNotePanelProps) {
   const [title, setTitle] = useState<string | null>(null);
   return (
@@ -98,6 +101,7 @@ export function ChapterNotePanel({
             onTitle={setTitle}
             onOpenQuestion={onOpenQuestion}
             onGeneratingChange={onGeneratingChange}
+            refreshKey={refreshKey}
           />
         ) : (
           <p className={styles.note}>{NOTE_TEXT.notFound}</p>
@@ -118,12 +122,14 @@ function NoteContent({
   onTitle,
   onOpenQuestion,
   onGeneratingChange,
+  refreshKey,
 }: {
   readonly chapterId: string;
   readonly canEdit: boolean;
   readonly onTitle: (title: string | null) => void;
   readonly onOpenQuestion: ChapterNotePanelProps['onOpenQuestion'];
   readonly onGeneratingChange: ChapterNotePanelProps['onGeneratingChange'];
+  readonly refreshKey: number;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -168,7 +174,7 @@ function NoteContent({
       },
     );
     return () => controller.abort();
-  }, [chapterId, version, reload]);
+  }, [chapterId, version, reload, refreshKey]);
 
   // Poll while a generation is queued or running; a failed re-read is retried with backoff.
   useEffect(() => {

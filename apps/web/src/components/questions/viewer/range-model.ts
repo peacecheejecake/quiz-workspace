@@ -18,6 +18,8 @@ export interface RangeQuestion {
   readonly number: string;
   readonly preview: string;
   readonly type: QuestionType;
+  /** A text badge after the row (CHREDIST-01 "직접 정함"); never part of the checkbox name. */
+  readonly badge?: string;
 }
 
 export interface RangeGroup {

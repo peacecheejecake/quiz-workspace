@@ -37,6 +37,7 @@ import {
   tabTo,
 } from '../fixtures/chapter-redistribution.ts';
 import { rangePickerUi } from '../fixtures/range-picker.ts';
+import { homeBackgroundUi } from '../fixtures/ux9-pages.ts';
 import {
   answerCorrectly,
   archiveQuestion,
@@ -225,7 +226,8 @@ test(
         url.pathname === `/workspaces/${s.workspaceId}` &&
         url.searchParams.getAll('panel').includes(REDIST_PANEL),
     );
-    await expect(overviewUi.heatmap(page)).toBeAttached();
+    // The modal hides the home from the accessibility tree; it is still there behind it.
+    await expect(homeBackgroundUi.heatmap(page)).toBeAttached();
     await expectFocusTrapped(page, dialog, 40);
     await expectFocusTrapped(page, dialog, 10, 'Shift+Tab');
 
@@ -427,6 +429,11 @@ test(
     await page.goto(notePanelPath(s.workspaceId, s.ch1));
     const panel = noteUi.panel(page);
     await expect(noteUi.stale(panel)).toBeVisible();
+    // Until UX9-NOTE-W drops the folded note body (CHNOTE-02), unfold it to read the footnotes.
+    const fold = noteUi.disclosure(panel);
+    if ((await fold.count()) > 0 && (await fold.getAttribute('aria-expanded')) === 'false') {
+      await fold.click();
+    }
     await expect(
       noteUi.footnoteList(panel).getByRole('listitem').filter({ hasText: FOOTNOTE_GONE }),
     ).not.toHaveCount(0);

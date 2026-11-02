@@ -570,6 +570,8 @@ test(
       /^(직접 추가|add question)$/i,
       // UX7-DEDUP (QOV-01-AC16).
       /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
+      // CHREDIST-01 (UX9-REDIST-W).
+      /^(챕터 재분배|redistribute chapters)$/i,
       // UX7-BANK-2 (QOV-01-AC15).
       /^(보관·초안 문제|archived and draft questions)$/i,
       // MOCK-01 (MOCK-W) and QVIEW-01 (QVIEW-W).

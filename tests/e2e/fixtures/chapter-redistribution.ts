@@ -176,11 +176,15 @@ export const redistUi = {
   /** A question checkbox row by a unique stem fragment. */
   questionByStem: (dialog: Locator, stem: string) =>
     dialog.getByRole('checkbox', { name: new RegExp(`\\d+번 · .*${escape(stem)}`) }),
-  /** The element holding a question row (checkbox + badge). */
+  /** The element holding a question row (checkbox + badge); `has` is relative to the row. */
   rowByStem: (dialog: Locator, stem: string) =>
     dialog
       .getByRole('listitem')
-      .filter({ has: redistUi.questionByStem(dialog, stem) })
+      .filter({
+        has: dialog
+          .page()
+          .getByRole('checkbox', { name: new RegExp(`\\d+번 · .*${escape(stem)}`) }),
+      })
       .last(),
   target: (dialog: Locator) => dialog.getByRole('combobox', { name: /^(옮길 챕터|move to)/i }),
   move: (dialog: Locator) => dialog.getByRole('button', { name: /^(이동|move)(\s*\(\d+\))?$/i }),

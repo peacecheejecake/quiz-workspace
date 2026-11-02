@@ -834,6 +834,8 @@ test(
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
       /^(직접 추가|add question)$/i,
       /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
+      // CHREDIST-01 (UX9-REDIST-W): editor-only like the two above.
+      /^(챕터 재분배|redistribute chapters)$/i,
       /^(보관·초안 문제|archived and draft questions)$/i,
       // MOCK-01 (MOCK-W): mock exams; QVIEW-01 (QVIEW-W): the range run — both for every member.
       /^(모의고사|mock exams?)$/i,
@@ -852,11 +854,11 @@ test(
     await expect(homeUi.questionMenu(page)).toBeHidden();
     await expect(button).toBeFocused();
 
-    // 모의고사 by keyboard (Enter opens the menu on 직접 추가; ArrowDown past 중복 문제 정리 and
-    // 보관·초안 문제; Enter).
+    // 모의고사 by keyboard (Enter opens the menu on 직접 추가; ArrowDown past 중복 문제 정리,
+    // 챕터 재분배 and 보관·초안 문제; Enter).
     await page.keyboard.press('Enter');
     await expect(homeUi.questionMenuItem(page, 'create')).toBeFocused();
-    for (const item of ['duplicates', 'inactive', 'mockExams'] as const) {
+    for (const item of ['duplicates', 'redistribution', 'inactive', 'mockExams'] as const) {
       await page.keyboard.press('ArrowDown');
       await expect(homeUi.questionMenuItem(page, item)).toBeFocused();
     }
@@ -884,7 +886,7 @@ test(
     await expect(homeUi.questionMenuButton(page)).toBeFocused();
 
     // Without edit rights the button stays (UX7-DOCS-2): a viewer, then the archived workspace's
-    // owner, see the editor items (직접 추가, 중복 문제 정리) disabled with the reason in text.
+    // owner, see the editor items (직접 추가, 중복 문제 정리, 챕터 재분배) disabled with the reason.
     const viewer = await workspaceFactory.member('qov01-ac11-viewer');
     seedMembership(s.workspaceId, viewer.user.id, 'viewer');
     await page.context().clearCookies();

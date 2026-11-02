@@ -24,6 +24,10 @@
 //                     aside for them: opening or closing a dialog moves nothing.
 //   문제 등록 editor  `?panel=question-create` (문제 › 직접 추가 and the empty heatmap, UX7-BANK): the
 //                     modal question editor, rendered by QuestionsOverview; not a stacked panel.
+//   챕터 재분배        `?panel=chapter-redistribution` (문제 › 챕터 재분배, CHREDIST-01, editors of an
+//                     active workspace): a stacked floating dialog that moves confirmed questions
+//                     between chapters (직접 옮기기, 자동 추천 미리보기); a move re-reads the heatmap
+//                     and an open 정리 노트. Others' deep links to it are dropped from the URL.
 //   중복 문제 정리     `?panel=question-duplicates` (문제 › 중복 문제 정리, UX7-DEDUP, editors of an active
 //                     workspace): a stacked floating dialog that scans for identical confirmed
 //                     questions and merges each group into the question kept (QOV-01-AC16).
@@ -69,6 +73,7 @@ import { QuestionDuplicates } from '@/components/questions/duplicates/question-d
 import { InactiveQuestions } from '@/components/questions/inactive/inactive-questions';
 import { MockExamsPanel } from '@/components/questions/mock-exams/mock-exams-panel';
 import { ChapterNotePanel } from '@/components/questions/notes/chapter-note-panel';
+import { ChapterRedistributionDialog } from '@/components/questions/redistribution/chapter-redistribution-dialog';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
 import {
   ContentSearchOptions,
@@ -117,6 +122,7 @@ import {
   DUPLICATES_PANEL,
   INACTIVE_QUESTIONS_PANEL,
   MOCK_EXAMS_PANEL,
+  REDISTRIBUTION_PANEL,
   mockParamOf,
   mockViewOf,
   runOwnsMockParam,
@@ -180,6 +186,7 @@ export interface WorkspaceHomeProps {
     readonly chapterNote: string;
     readonly summary: string;
     readonly mockExams: string;
+    readonly redistribution?: string;
   };
 }
 
@@ -231,7 +238,10 @@ export function WorkspaceHome({
   }
   const allowed = (panel: HomePanel) =>
     (panel !== 'share' || isOwner) &&
-    ((panel !== QUESTION_CREATE_PANEL && panel !== DUPLICATES_PANEL) || canEdit);
+    ((panel !== QUESTION_CREATE_PANEL &&
+      panel !== DUPLICATES_PANEL &&
+      panel !== REDISTRIBUTION_PANEL) ||
+      canEdit);
   const panels = parsePanels(searchParams).filter(allowed);
   const isOpen = (panel: HomePanel) => panels.includes(panel);
   // The dialogs on screen: the URL's, mounted one per commit in opening order (HOMEDLG-01). The
@@ -268,6 +278,14 @@ export function WorkspaceHome({
     panelHistory.push(`${pathname}${withSummaryPanel(window.location.search, documentId)}`);
   };
   const [host, setHost] = useState<HTMLDivElement | null>(null);
+  // CHREDIST-01: without edit rights the dialog's deep link opens nothing and leaves the URL.
+  const deniedRedistribution = !canEdit && parsePanels(searchParams).includes(REDISTRIBUTION_PANEL);
+  useEffect(() => {
+    if (!deniedRedistribution) return;
+    panelHistory.replace(
+      `${pathname}${withPanel(window.location.search, REDISTRIBUTION_PANEL, false)}`,
+    );
+  }, [deniedRedistribution, panelHistory, pathname]);
 
   // --- 정리 노트 (CHNOTE-01) ---------------------------------------------------------------------
   // `chapter` names the note's chapter while its panel is open (home.ts noteChapterOf).
@@ -389,6 +407,24 @@ export function WorkspaceHome({
     .map((d) => ({ id: d.id, title: d.title }));
   // Bumped when the heatmap's panel changes a question: an open 보관·초안 문제 list re-reads.
   const [questionsVersion, setQuestionsVersion] = useState(0);
+  // Bumped when 챕터 재분배 moved questions: an open 정리 노트 panel reads its note again.
+  const [notesVersion, setNotesVersion] = useState(0);
+  // A move (or a move refused because questions changed) re-reads the heatmap and the notes. The
+  // dialog's close replaces the URL, which can drop a refresh still in flight: it is redone then.
+  const chaptersStale = useRef(false);
+  const onChaptersChanged = () => {
+    chaptersStale.current = true;
+    setQuestionsVersion((n) => n + 1);
+    setNotesVersion((n) => n + 1);
+    setNoteListRead((n) => n + 1);
+    startNavigation(() => router.refresh());
+  };
+  const redistributionOpen = isOpen(REDISTRIBUTION_PANEL);
+  useEffect(() => {
+    if (redistributionOpen || !chaptersStale.current) return;
+    chaptersStale.current = false;
+    startNavigation(() => router.refresh());
+  }, [redistributionOpen, router]);
   // Source titles of the 문제 상세 dialog (UX7-BANK-2).
   const documentTitles = library.documents.map((d) => ({ id: d.id, title: d.title }));
 
@@ -618,6 +654,7 @@ export function WorkspaceHome({
               readOnly={readOnly}
               onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
               onDuplicates={() => setPanel(DUPLICATES_PANEL, true)}
+              onRedistribute={() => setPanel(REDISTRIBUTION_PANEL, true)}
               onInactive={() => setPanel(INACTIVE_QUESTIONS_PANEL, true)}
               onMockExams={() => setPanel(MOCK_EXAMS_PANEL, true)}
               onPractice={openRun}
@@ -749,6 +786,16 @@ export function WorkspaceHome({
               ) : null}
             </FloatingSidePanel>
           ) : null}
+          {canEdit ? (
+            <ChapterRedistributionDialog
+              open={shows(REDISTRIBUTION_PANEL)}
+              onOpenChange={(open) => setPanel(REDISTRIBUTION_PANEL, open)}
+              container={host}
+              workspaceId={workspace.id}
+              onChanged={onChaptersChanged}
+              screenId={screenIds.redistribution}
+            />
+          ) : null}
           <FloatingSidePanel
             open={shows(INACTIVE_QUESTIONS_PANEL)}
             onOpenChange={(open) => setPanel(INACTIVE_QUESTIONS_PANEL, open)}
@@ -797,6 +844,7 @@ export function WorkspaceHome({
             screenId={screenIds.chapterNote}
             onOpenQuestion={openNoteQuestion}
             onGeneratingChange={onNoteGenerating}
+            refreshKey={notesVersion}
           />
           <DocumentSummaryPanel
             open={shows('document-summary')}

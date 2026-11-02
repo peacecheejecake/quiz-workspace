@@ -11,6 +11,7 @@
 // the list's controls carry an explicit tabIndex so WebKit (Safari's default: Tab skips buttons)
 // stops on them too.
 import {
+  Badge,
   Button,
   Checkbox,
   ChevronDownIcon,
@@ -250,19 +251,29 @@ function ChapterGroup({
 }) {
   const listId = useId();
   const ids = group.questions.map((q) => q.id);
-  const row = (q: RangeQuestion) => (
-    <Checkbox
-      label={questionLabel(q)}
-      tabIndex={0}
-      checked={selected.has(q.id)}
-      onCheckedChange={(checked) => {
-        const next = new Set(selected);
-        if (checked === true) next.add(q.id);
-        else next.delete(q.id);
-        onSelectedChange(next);
-      }}
-    />
-  );
+  const row = (q: RangeQuestion) => {
+    const box = (
+      <Checkbox
+        label={questionLabel(q)}
+        tabIndex={0}
+        checked={selected.has(q.id)}
+        onCheckedChange={(checked) => {
+          const next = new Set(selected);
+          if (checked === true) next.add(q.id);
+          else next.delete(q.id);
+          onSelectedChange(next);
+        }}
+      />
+    );
+    return q.badge ? (
+      <div className={styles.badgedRow}>
+        {box}
+        <Badge>{q.badge}</Badge>
+      </div>
+    ) : (
+      box
+    );
+  };
   return (
     <li className={styles.group}>
       <div className={styles.groupHeader}>

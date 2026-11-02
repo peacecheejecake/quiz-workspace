@@ -6,6 +6,7 @@
 //        |inactive-questions                                 (보관·초안 문제, UX7-BANK-2)
 //        |question-duplicates                                (중복 문제 정리, editors, UX7-DEDUP)
 //        |mock-exams                                         (모의고사, every member, MOCK-01)
+//        |chapter-redistribution                             (챕터 재분배, editors, CHREDIST-01)
 //        |question-create                                    the modal 문제 등록 editor (UX7-BANK;
 //                                                            not stacked, see FLOATING_PANELS)
 //   ?chapter=<id> (with panel=chapter-note)                  the chapter of the 정리 노트 panel
@@ -43,6 +44,7 @@ export const HOME_PANELS = [
   'inactive-questions',
   'question-duplicates',
   'mock-exams',
+  'chapter-redistribution',
 ] as const;
 export type HomePanel = (typeof HOME_PANELS)[number];
 
@@ -57,6 +59,9 @@ export const DUPLICATES_PANEL = 'question-duplicates' satisfies HomePanel;
 
 /** MOCK-01: `?panel=mock-exams` opens the 모의고사 dialog (every member). */
 export const MOCK_EXAMS_PANEL = 'mock-exams' satisfies HomePanel;
+
+/** CHREDIST-01: `?panel=chapter-redistribution` opens the 챕터 재분배 dialog (editors only). */
+export const REDISTRIBUTION_PANEL = 'chapter-redistribution' satisfies HomePanel;
 
 /** The floating side panels (modal since UX9, HOMEDLG-01): every home dialog but 문제 등록. */
 export function isFloatingPanel(panel: HomePanel): boolean {
