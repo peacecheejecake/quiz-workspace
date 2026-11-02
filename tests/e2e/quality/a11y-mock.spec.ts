@@ -480,7 +480,7 @@ test(
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
 
-    // A mock exam run (sequence(mock)): its flat range step and a position.
+    // A mock exam run (sequence(mock)): its range step grouped by source chapter and a position.
     const exam = await createShuffleMockExam(
       s.owner,
       s.workspaceId,
@@ -494,7 +494,11 @@ test(
     panel = runUi.panel(page);
     await expect(mockUi.practiceTitle(panel, exam.title)).toBeVisible();
     await expect(runUi.selectAll(panel)).toBeChecked();
-    await expectAccessible(page, 'mock exam run, range step');
+    await expect(runUi.chapter(panel, CH2)).toBeChecked();
+    await runUi.expand(panel, CH2).click();
+    await expect(runUi.expand(panel, CH2)).toHaveAttribute('aria-expanded', 'true');
+    await expect(panel.getByRole('checkbox', { name: /^(문제|question) \d+ · /i })).toHaveCount(2);
+    await expectAccessible(page, 'mock exam run, range step grouped by source chapter');
     await runUi.start(panel).click();
     await expect(runUi.mockTitle(panel, 1)).toBeVisible();
     await expect(runUi.favorite(panel)).toHaveCount(0);
