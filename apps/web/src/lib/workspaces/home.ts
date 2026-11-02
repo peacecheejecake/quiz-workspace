@@ -246,6 +246,17 @@ export function withMockView(search: string, view: MockView): string {
   });
 }
 
+/**
+ * `search` with the 모의고사 dialog (when open there) back on `shown`, the view it showed while a
+ * run's range step borrowed `mock` (runOwnsMockParam): what closing that step or moving the run
+ * on hands back. Unchanged while the range step still owns `mock`.
+ */
+export function withShownMockView(search: string, shown: MockView): string {
+  const params = new URLSearchParams(search);
+  if (!parsePanels(params).includes(MOCK_EXAMS_PANEL) || runOwnsMockParam(params)) return search;
+  return patchSearch(search, { [MOCK_PARAM]: mockParamOf(shown) });
+}
+
 /** `search` with the 모의고사 dialog closed: its view goes with it (not a run's mock exam). */
 export function withoutMockExams(search: string): string {
   const closed = withPanel(search, MOCK_EXAMS_PANEL, false);
@@ -306,6 +317,11 @@ export function withPracticeQuestion(search: string, questionId: string): string
 /** `search` with the run panel on `state` and the practice panel closed. */
 export function withRunPanel(search: string, state: RunUrlState): string {
   return withRunState(patchSearch(search, { [QUESTION_PARAM]: null }), state);
+}
+
+/** `search` with a mock exam's 풀기: the run panel's range step on it, the practice panel closed. */
+export function withMockRun(search: string, mockExamId: string): string {
+  return withRunPanel(search, { step: 'picker', source: 'mock', mockExamId });
 }
 
 /**

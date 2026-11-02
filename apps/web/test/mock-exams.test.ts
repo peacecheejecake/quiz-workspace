@@ -40,6 +40,7 @@ import {
   withMockRun,
   withMockView,
   withoutMockExams,
+  withShownMockView,
   withoutPanels,
 } from '../src/lib/workspaces/home';
 
@@ -98,6 +99,17 @@ describe('모의고사 dialog URL state', () => {
     expect(exclusiveClose(list, fromList)).toBe('?panel=mock-exams');
     // Closing the run leaves the dialog (its view is the home's to restore, keepMockView).
     expect(closeDialog(fromList, 'practice')).toBe('?panel=mock-exams');
+    // Closing the run (button or Back) hands `mock` back to the view the dialog showed.
+    const detailView = { view: 'detail', mockExamId: EXAM } as const;
+    expect(withShownMockView(closeDialog(fromList, 'practice'), detailView)).toBe(
+      `?panel=mock-exams&mock=${EXAM}`,
+    );
+    expect(withShownMockView(closeDialog(fromList, 'practice'), { view: 'list' })).toBe(
+      '?panel=mock-exams',
+    );
+    // Still the run's while its range step is open; nothing without the dialog.
+    expect(withShownMockView(fromList, { view: 'create' })).toBe(fromList);
+    expect(withShownMockView('?q=x', detailView)).toBe('?q=x');
     // Nothing to close without a question.
     expect(exclusiveClose('?panel=mock-exams', withMockRun('?panel=mock-exams', EXAM))).toBeNull();
   });
