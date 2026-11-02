@@ -161,9 +161,9 @@
 //             submit; self-grade buttons "맞음"/"틀림"; "이전 문제"/"다음 문제". While open the URL
 //             carries ?question=<id>; closing removes it and returns focus to the trigger dot.
 //             UX7-BANK: editors of a non-archived workspace get a menu button "문제 관리" in the
-//             panel header with menuitems "편집" (the "문제 편집" dialog), "변형 출제" (link to the
-//             review page) and "삭제" (alertdialog "문제를 삭제할까요?" with "삭제"); none for
-//             viewers or archived workspaces.
+//             panel header with menuitems "편집" (the "문제 편집" dialog), "보관" and "삭제"
+//             (alertdialog "문제를 삭제할까요?" with "삭제"); none for viewers or archived
+//             workspaces. Its "변형 출제" link went with QGEN-01 (QGEN-RM).
 import { copyFileSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
@@ -883,6 +883,7 @@ export const PANEL_MANAGE_ITEMS: Readonly<Record<PanelManageItem, RegExp>> = {
   answers: /^(정답·해설 보기|show answers?( and explanation)?)$/i,
   history: /^(수정 이력·출처|revisions and sources)$/i,
   edit: /^(편집|edit)$/i,
+  /** Retired by QGEN-RM: only ever expected to be absent. */
   generate: /^(변형 출제|generate variants?)$/i,
   archive: /^(보관|archive)$/i,
   delete: /^(삭제|delete)$/i,

@@ -6,14 +6,15 @@
 //   Workspace header  the 문제 search (SEARCH-01-AC12: filters the heatmap as you type, no button;
 //                     its "설정" popover holds the heatmap's chapter/type filters) with the
 //                     "본문 검색" disclosure under it (AC10, collapsed by default), then two
-//                     button groups: `문서 n` · `문제` (editors' menu: 직접 추가 / 변형 출제, UX4;
+//                     button groups: `문서 n` · `문제` (직접 추가 / 중복 문제 정리 | 보관·초안 문제 /
+//                     모의고사 / 문제 풀기, UX4, MOCK-SYNC;
 //                     no 전체 문제 since UX7-BANK, no PDF 관리 since UX7-DOCS), and, aligned right,
 //                     `이력` · `공유하기` (icon
 //                     buttons; share for the owner only)
 //   본문 search       when expanded: its form (box, icon submit, "본문 설정") and the results
 //                     (AC09; clicking a result opens the excerpt panel, AC11)
 //   문제 영역         the heatmap (QuestionsOverview)
-//   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 문제 생성 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
+//   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 모의고사 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
 //                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): non-modal
 //                     FloatingSidePanels portalled into this page (inside <main>), opened at once
 //                     and listed in the URL (`?panel=`, repeatable); the most recently opened is
@@ -61,7 +62,6 @@ import { useSummaryActivity } from '@/components/documents/summary/use-summary-a
 import { bodyDocumentCount } from '@/components/documents/labels';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
-import { GenerationDialog } from '@/components/questions/generate/generation-dialog';
 import { QuestionDuplicates } from '@/components/questions/duplicates/question-duplicates';
 import { InactiveQuestions } from '@/components/questions/inactive/inactive-questions';
 import { MockExamsPanel } from '@/components/questions/mock-exams/mock-exams-panel';
@@ -227,8 +227,7 @@ export function WorkspaceHome({
   }
   const allowed = (panel: HomePanel) =>
     (panel !== 'share' || isOwner) &&
-    ((panel !== 'generate' && panel !== QUESTION_CREATE_PANEL && panel !== DUPLICATES_PANEL) ||
-      canEdit);
+    ((panel !== QUESTION_CREATE_PANEL && panel !== DUPLICATES_PANEL) || canEdit);
   const panels = parsePanels(searchParams).filter(allowed);
   const isOpen = (panel: HomePanel) => panels.includes(panel);
   // Pressing the button of a dialog that is already open (maybe under another one) raises it.
@@ -615,7 +614,6 @@ export function WorkspaceHome({
             <QuestionMenu
               readOnly={readOnly}
               onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
-              onGenerate={() => setPanel('generate', true)}
               onDuplicates={() => setPanel(DUPLICATES_PANEL, true)}
               onInactive={() => setPanel(INACTIVE_QUESTIONS_PANEL, true)}
               onMockExams={() => setPanel(MOCK_EXAMS_PANEL, true)}
@@ -731,30 +729,6 @@ export function WorkspaceHome({
               />
             </div>
           </FloatingSidePanel>
-          {canEdit ? (
-            <FloatingSidePanel
-              open={isOpen('generate')}
-              onOpenChange={(open) => setPanel('generate', open)}
-              raiseKey={raised.generate}
-              modal={false}
-              container={host}
-              title="문제 생성"
-              closeLabel="문제 생성 닫기"
-              mobileLayout="full"
-            >
-              <GenerationDialog
-                workspaceId={workspace.id}
-                archived={workspace.archived}
-                chapters={chapterChoices}
-                onShuffle={(questionId) => {
-                  const search = patchSearch(withPanel(window.location.search, 'generate', false), {
-                    question: questionId,
-                  });
-                  panelHistory.push(`${pathname}${search}`);
-                }}
-              />
-            </FloatingSidePanel>
-          ) : null}
           {canEdit ? (
             <FloatingSidePanel
               open={isOpen(DUPLICATES_PANEL)}

@@ -6,6 +6,7 @@ import {
   isFloatingPanel,
   homeRedirect,
   legacyBankRedirect,
+  legacyGenerateRedirect,
   legacyPanelRedirect,
   legacyQuestionsRedirect,
   legacyScopeRedirect,
@@ -91,6 +92,26 @@ describe('pre-UX3c routes redirect onto the home', () => {
     expect(retiredPanelRedirect(WS, { panel: ['documents', 'bogus'] })).toBeNull();
     expect(retiredPanelRedirect(WS, { panel: 'toString' })).toBeNull();
     expect(retiredPanelRedirect(WS, {})).toBeNull();
+  });
+
+  it('MOCK-01-AC01 the retired 문제 생성 panel opens 모의고사, keeping the rest of the query (QGEN-RM)', () => {
+    expect(parsePanels({ panel: 'generate' })).toEqual([]);
+    expect(retiredPanelRedirect(WS, { panel: 'generate' })).toBe(
+      `/workspaces/${WS}?panel=mock-exams`,
+    );
+    expect(retiredPanelRedirect(WS, { q: 'x', panel: ['documents', 'generate'] })).toBe(
+      `/workspaces/${WS}?q=x&panel=documents&panel=mock-exams`,
+    );
+    expect(retiredPanelRedirect(WS, { panel: ['mock-exams', 'generate'] })).toBe(
+      `/workspaces/${WS}?panel=mock-exams`,
+    );
+    expect(homeRedirect(WS, { panel: ['generate', 'question-pdfs'] })).toBe(
+      `/workspaces/${WS}?panel=mock-exams&panel=documents`,
+    );
+  });
+
+  it('the retired 변형 출제 pages (QGEN-RM) open the 모의고사 dialog on the home', () => {
+    expect(legacyGenerateRedirect(WS)).toBe(`/workspaces/${WS}?panel=mock-exams`);
   });
 
   it('the retired 전체 문제 page (UX7-BANK) keeps only a valid ?question=', () => {

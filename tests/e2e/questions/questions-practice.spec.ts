@@ -773,7 +773,9 @@ test(
     expect(leaks(await capture.stop(), [explanation])).toEqual([]);
 
     await panelUi.manage(panel).click();
-    await expectMenuItems(page, ['answers', 'history', 'edit', 'generate', 'archive', 'delete']);
+    // QGEN-RM: no 변형 출제 (its review page was retired with QGEN-01).
+    await expectMenuItems(page, ['answers', 'history', 'edit', 'archive', 'delete']);
+    await expect(panelUi.manageItem(page, 'generate')).toHaveCount(0);
     await panelUi.manageItem(page, 'answers').click();
     let detail = detailUi.dialog(page);
     await expect(detail).toBeVisible();

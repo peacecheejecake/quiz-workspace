@@ -38,7 +38,7 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 | # | 호출 위치 (지금 구현) | 문제 수 | 방식 | 겉 panel | 기준 AC |
 |---|---|---|---|---|---|
 | 1 | Workspace 홈 Heatmap marker click/Enter, `?question=` 딥링크 (`components/questions/practice/practice-panel.tsx`) | 한 문제(이전·다음 = Heatmap 순서·현재 필터, URL이 문제마다 바뀜) | `practice` | modal `FloatingSidePanel`(design-system §5.1 `QuestionPracticePanel` 규칙) | QOV-01-AC06·AC14, QPLAY-01-AC01~AC06·AC12·AC13 |
-| 1a | 1의 header 메뉴 (`practice/question-manage-menu.tsx`): 편집 권한·보관되지 않은 Workspace는 `문제 관리`(`정답·해설 보기`·`수정 이력·출처` \| `편집`·`변형 출제`·`보관` \| `삭제`), 보기 권한·보관된 Workspace는 읽기 전용 `문제 정보`(`정답·해설 보기`·`수정 이력·출처`) | 한 문제 | `practice`의 header 메뉴(쓰기 항목은 편집 권한에만 보이고 비활성으로도 보이지 않음) | 1과 같음; `편집`은 그 위에 modal "문제 편집" dialog, `보관`·`삭제`는 확인 dialog 후 panel을 닫음, `변형 출제`는 QGEN 검토 페이지로 이동(QGEN-RM에서 제거) | QPLAY-01-AC07~AC11 |
+| 1a | 1의 header 메뉴 (`practice/question-manage-menu.tsx`): 편집 권한·보관되지 않은 Workspace는 `문제 관리`(`정답·해설 보기`·`수정 이력·출처` \| `편집`·`보관` \| `삭제`; `변형 출제`는 QGEN-RM에서 제거), 보기 권한·보관된 Workspace는 읽기 전용 `문제 정보`(`정답·해설 보기`·`수정 이력·출처`) | 한 문제 | `practice`의 header 메뉴(쓰기 항목은 편집 권한에만 보이고 비활성으로도 보이지 않음) | 1과 같음; `편집`은 그 위에 modal "문제 편집" dialog, `보관`·`삭제`는 확인 dialog 후 panel을 닫음 | QPLAY-01-AC07~AC11 |
 | 2 | 이력 dialog의 풀이 기록 링크(`?question=`, 합쳐진 중복이면 남길 문제를 엶 — UX7-DEDUP) | 한 문제 | `practice` | 1과 같음 | HISTORY-01, QOV-01-AC17 |
 | 3 | 챕터 정리 노트 각주 링크(구성원, `?question=`) | 한 문제 | `practice` | 1과 같음(열리면 노트 본문 접힘) | CHNOTE-01-AC02·AC05 |
 | 4 | 1a의 `정답·해설 보기`·`수정 이력·출처`가 여는 "문제 상세" dialog (`components/questions/detail/question-detail-dialog.tsx`, 본문 `question-detail.tsx`의 `RevisionView`) | 한 문제 | `manage`(정답·해설·허용 답안·채점 기준·출처(DOC-02 `?page=` 링크)·수정 이력(버전 toggle `aria-pressed`, 지난 버전 미리보기); 정답이 든 문제는 항목을 고를 때만 `GET /questions/{id}`로 불러옴; 풀이 기록·viewed 기록 없음; 여기서는 동작 버튼 없음) | panel 위 modal `ModalDialog` "문제 상세"(설명: 제목 · 유형 · 챕터). `수정 이력·출처`로 열면 `수정 이력` 제목에 focus, 닫으면 메뉴 버튼으로 focus 복귀. 닫아도 아래 `practice`의 고른 답·session이 그대로 남아 제출할 수 있다 | QPLAY-01-AC09·AC10·AC13 |
@@ -50,7 +50,7 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 | — | `문제` › `중복 문제 정리` dialog(`?panel=question-duplicates`, `components/questions/duplicates/question-duplicates.tsx`)의 묶음 행 | — | 범위 밖: popup이 아니라 목록 안 렌더링(번호·챕터·등록일·발문·보기, **정답 표시 없음**, `남길 문제` radio). 바꿀 때 문제 본문 부품을 쓰더라도 정답·해설을 렌더링하지 않는다 | — | QOV-01-AC16 |
 | — | Heatmap marker hover/focus preview(`QuestionPreviewPopover`) | — | 범위 밖: 발문 앞부분 미리보기. `displayStem`만 공유한다 | — | QOV-01, QPLAY-01-AC13 |
 | — | DOC-02·공유 문서 화면의 "가져온 문제 형식"(본문 안에 펼쳐 보이는 문제) | — | 범위 밖: popup이 아니라 본문 안 렌더링. 문제 본문 부품(`QuestionBody` — 발문·번호 붙은 보기·접힌 정답·해설)만 공유한다 | — | DOC-02-AC11 |
-| — | 문제 변형 출제의 보기 섞기 미리보기(QGEN-01) | — | 없앤다(QGEN-RM) | — | — |
+| — | 문제 변형 출제의 보기 섞기 미리보기(QGEN-01) | — | 없앴다(QGEN-RM 2026-11-02) | — | — |
 
 - **modal vs non-modal:** 새 범위 풀이(7·8)는 사용자 요청의 "팝업"에 맞춰 1과 같은 modal `FloatingSidePanel`(데스크톱 오른쪽 500px, 모바일 bottom sheet)로 한다 (사용자 결정 2026-11-01). 게스트 미리보기(6)는 지금처럼 non-modal로 남긴다 — 공유 화면 AC가 문제 목록과 panel을 함께 쓰는 동작을 전제한다. 4·5의 "문제 상세"는 UX7-BANK-2가 만든 대로 다른 panel·dialog 위의 modal `ModalDialog`로 남는다(QuestionViewer `manage`가 그 안을 그린다).
 - 방식마다 header 동작: `practice`·`sequence(bank)`는 즐겨찾기·다시 풀기 toggle(QPLAY; 합쳐진 중복이 있으면 끄기는 기존 my-state PATCH 그대로 — 합쳐진 중복의 flag도 함께 꺼짐, questions.md §10.2)과 1a의 `문제 관리`/`문제 정보` 메뉴, `sequence(mock)`는 toggle·메뉴 없음(모의고사 문제는 개인 상태가 없음, 사용자 결정 2026-11-01), `manage`는 호출 위치가 넘긴 동작(4: 없음, 5: `보관 해제`/`확정`·`편집`·`삭제`, 9: `편집`·`빼기`), `read-only`는 없음. 보관된 Workspace의 `practice`는 toggle 없이 `문제 정보` 메뉴만 보인다(QPLAY-01 "메뉴").

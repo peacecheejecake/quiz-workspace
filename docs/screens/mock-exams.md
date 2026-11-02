@@ -41,7 +41,7 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 | worker `question.generate` job의 원본 읽기·근거 passage 검색·근거 좁히기(`source_question`, `build_passages`, `narrow_evidence`) | **재사용**: 공용 모듈로 옮겨 새 job `mock_exam.generate`가 쓴다. `question.generate` job 등록은 QGEN-RM에서 뺀다. |
 | `question_generation_runs`·생성 `question_drafts`·`question_lineage` 테이블과 기존 행 | **보존**(additive-first; 삭제 migration 없음). 새 행은 생기지 않는다. 승인되지 않은 기존 생성 초안은 검토 화면이 없어져 볼 수 없게 된다 — 보존만 하고 지우지 않는다(사용자 결정 2026-11-01). 이미 등록된 변형 문제와 lineage는 그대로 확정 문제다. |
 | API `POST /questions/{id}/generations`, `/question-generations/*`, `/workspaces/{id}/question-generation-batches*` | **폐지**(QGEN-RM에서 router 제거 → 404). OpenAPI·api-client 재생성. |
-| 화면: `문제` 메뉴 `변형 출제`, "문제 생성" dialog(`?panel=generate`), 검토 페이지·묶음 결과 페이지(`/questions/generate?…`), 문제 상세의 `변형 출제` | **폐지**. 이전 URL은 홈으로 redirect(`?panel=generate` → `?panel=mock-exams`). |
+| 화면: `문제` 메뉴 `변형 출제`, "문제 생성" dialog(`?panel=generate`), 검토 페이지·묶음 결과 페이지(`/questions/generate?…`), 문제 상세의 `변형 출제` | **폐지** (QGEN-RM 2026-11-02). 이전 URL은 홈으로 redirect(`?panel=generate` → `?panel=mock-exams`, `/questions/generate?…` → `?panel=mock-exams`). |
 | 이력의 `question_generation.*` 활동·"문제 생성" 작업 label | **보존**(과거 기록 표시용). |
 
 ## LLM 호출 묶기 (batching — 사용자 결정 2026-11-01 "API 호출을 최소화")
@@ -60,7 +60,7 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 
 **레이아웃 패턴 (floating dialog — 사용자 결정 2026-11-01):** 문서 관리 dialog([DOC-01](documents-library.md))와 보관·초안 문제 dialog(QOV-01-AC15)의 목록 dialog 패턴을 따른다(MOCK-SPEC 초안의 문제 PDF 관리 dialog는 UX7-DOCS에서 문서 관리로 합쳐져 없음) — Workspace header에서 여는 non-modal `FloatingSidePanel`, 제목·설명 header 없음(접근성 이름 "모의고사"), 위쪽 동작 영역 + 행 목록, 행은 제목 · 글자 badge · 메타 줄 · 오른쪽 아이콘 동작, 즉시 열리고 skeleton(QOV-01-AC09), 다른 홈 dialog와 쌓기(QOV-01-AC10). 만들기·상세는 같은 dialog 안에서 목록을 대신하고 위에 `BackLink` "모의고사 목록"을 둔다(넓은 화면 전환 없음).
 
-- **진입:** Workspace header `문제` 메뉴의 `모의고사` 항목(모든 구성원). 메뉴 순서는 UX7 이후의 메뉴에 `모의고사`·`문제 풀기`(QVIEW-01)를 더한 것이다(MOCK-SYNC): `직접 추가`·`변형 출제`·`중복 문제 정리`(편집 권한 항목, `requiresEdit: true` — 보기 권한·보관 Workspace에는 이유 글자와 함께 비활성, UX7-DOCS-2) | `보관·초안 문제`·`모의고사`·`문제 풀기`(`requiresEdit: false`, 모든 구성원·보관 Workspace에서도 활성). QGEN-RM 뒤에는 `변형 출제`가 빠진다. 목록 위 `추가`는 메뉴 항목이 아니므로 비활성 패턴을 쓰지 않고 편집 권한에만 보인다(AC01).
+- **진입:** Workspace header `문제` 메뉴의 `모의고사` 항목(모든 구성원). 메뉴 순서는 UX7 이후의 메뉴에 `모의고사`·`문제 풀기`(QVIEW-01)를 더한 것이다(MOCK-SYNC): `직접 추가`·`중복 문제 정리`(편집 권한 항목, `requiresEdit: true` — 보기 권한·보관 Workspace에는 이유 글자와 함께 비활성, UX7-DOCS-2) | `보관·초안 문제`·`모의고사`·`문제 풀기`(`requiresEdit: false`, 모든 구성원·보관 Workspace에서도 활성). `직접 추가`와 `중복 문제 정리` 사이의 `변형 출제`는 QGEN-RM(2026-11-02)에서 빠졌다. 목록 위 `추가`는 메뉴 항목이 아니므로 비활성 패턴을 쓰지 않고 편집 권한에만 보인다(AC01).
 - **목록 화면:**
   - 목록 위 동작 줄: 왼쪽 "모의고사 n개", 오른쪽 primary 버튼 `추가`(편집 권한·보관되지 않은 Workspace에서만).
   - 행: 이름(누르면 상세) · 상태 badge(`만드는 중`·`준비됨`·`일부만 만듦`·`실패`) · 메타 줄 `문제 18개 · 문구 변형, 정오 반전 · 2026. 11. 1. 오후 3:28` · `풀기`(준비됨·일부만 만듦, 모든 구성원) · 행 메뉴(편집 권한: `이름 바꾸기`·`설정 바꾸기`·`삭제`). 만드는 중이면 메타 줄 아래 공통 `ProgressBar`("문제 생성 진행률", 값 글자 "20개 중 7개").
