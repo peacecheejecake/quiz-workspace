@@ -24,7 +24,8 @@ APP_ENV=test fake explainer recording `calls` as (markers, LLMRequest) like the 
 request ("… not implemented (404)").
 
 The `postgres` superuser reads `question_ai_explanations`, `mock_exam_question_ai_explanations`,
-`llm_feature_usage`, `jobs` and `activity_events` for guarantees no API exposes.
+`llm_feature_usage` (`ref_id` = the explanation), `async_jobs` and `activity_events` for
+guarantees no API exposes.
 """
 
 from __future__ import annotations
@@ -58,8 +59,12 @@ seed = _sh.seed
 
 _LOG_DIR = Path(tempfile.mkdtemp(prefix="it-expl-calls-"))
 _HOLD_DIR = Path(tempfile.mkdtemp(prefix="it-expl-hold-"))
+# The module's app allows more new explanations per minute than the default 6: one test makes
+# seven in a few seconds (failed, retried, two revisions, three regenerations); the per-minute
+# limit itself is AIEXPL-01-AC05's (E8 "분당 한도 2" stack).
 EXPL_ON = {
     "WORKER_AI_EXPLANATIONS": "true",
+    "AI_EXPLANATION_RATE_LIMIT_PER_MINUTE": "120",
     "WORKER_MOCK_EXAMS": "true",
     "WORKER_ASK_FAKE_LOG_DIR": str(_LOG_DIR),
     "WORKER_ASK_HOLD_DIR": str(_HOLD_DIR),
@@ -126,7 +131,8 @@ def calls() -> Callable[[str], int]:
 
 @pytest.fixture
 def hold_dir() -> Path:
-    """The fake's hold barrier directory (E7): `<token>.held` / `<token>.release`."""
+    """The fake's hold barrier directory (E7): `<token>.held` / `<token>.release`, and the
+    contract-only mid-stream barrier `<token>.mid` / `<token>.resume`."""
     return _HOLD_DIR
 
 

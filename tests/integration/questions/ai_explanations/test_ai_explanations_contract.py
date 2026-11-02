@@ -13,8 +13,7 @@ the deterministic fake and its markers (C08); mock exam questions with their own
 `view: manage` (C09).
 
 Shapes are assumptions E1-E9 in tests/e2e/fixtures/ai-explanations.ts. Jobs run in this process
-(conftest.py). EXPL.0: every test carries the `red` marker (excluded from `make test-infra`);
-EXPL-B removes it.
+(conftest.py). EXPL.0 marked every test `red`; EXPL-B removed the marker.
 """
 
 from __future__ import annotations
@@ -33,7 +32,7 @@ from urllib.parse import urlencode, urlsplit
 import httpx
 import pytest
 
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = pytest.mark.infra
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PDF_DIR = REPO_ROOT / "tests" / "fixtures" / "pdfs"
@@ -264,7 +263,7 @@ def rows(db: Callable[..., list[tuple[Any, ...]]], question_id: str) -> list[tup
 def explain_jobs(db: Callable[..., list[tuple[Any, ...]]], target_id: str) -> int:
     return int(
         db(
-            "select count(*) from public.jobs where job_type = 'question.ai_explain' "
+            "select count(*) from public.async_jobs where job_type = 'question.ai_explain' "
             "and payload::text like %s",
             (f"%{target_id}%",),
         )[0][0]
@@ -745,7 +744,7 @@ def test_c06_no_content_in_logs_job_results_or_activities_and_one_usage_row(
     for secret in secrets:
         assert secret not in logged
     job = db(
-        "select result::text from public.jobs where job_type = 'question.ai_explain' "
+        "select result::text from public.async_jobs where job_type = 'question.ai_explain' "
         "and payload::text like %s",
         (f"%{q['id']}%",),
     )

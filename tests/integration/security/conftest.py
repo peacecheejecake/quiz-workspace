@@ -120,6 +120,8 @@ def random_ids() -> dict[str, str]:
         "mock_practice_session_id",
         "conversation_id",
         "message_id",
+        "explanation_id",
+        "mock_explanation_id",
     )
     out = {k: str(uuid.uuid4()) for k in keys}
     out["block_id"] = f"b-{uuid.uuid4().hex[:12]}"
@@ -259,6 +261,26 @@ def build_world(seed: Any, label: str) -> World:
         (answer_message, conversation["id"], wid, owner.user.id, question_message),
     )
 
+    # EXPL-B: a finished AI explanation of the question and of the mock exam question (direct
+    # seed: making one needs the feature on, which this stack leaves off).
+    explanation_id, mock_explanation_id = (str(uuid.uuid4()) for _ in range(2))
+    body = json.dumps(
+        {"correct_option_ids": [], "summary_md": "S4 AI 해설", "options": [], "concepts_md": ""}
+    )
+    seed._admin(
+        "insert into public.question_ai_explanations (id, workspace_id, question_id, "
+        "question_revision_id, status, prompt_version, model, body, finished_at) values "
+        "(%s, %s, %s, %s, 'succeeded', 's4/v1', 's4', %s::jsonb, now())",
+        (explanation_id, wid, qid, question["revision"]["id"], body),
+    )
+    seed._admin(
+        "insert into public.mock_exam_question_ai_explanations (id, workspace_id, "
+        "mock_exam_question_id, mock_exam_question_revision_id, status, prompt_version, model, "
+        "body, finished_at) select %s, workspace_id, id, active_revision_id, 'succeeded', "
+        "'s4/v1', 's4', %s::jsonb, now() from public.mock_exam_questions where id = %s",
+        (mock_explanation_id, body, mock_question_id),
+    )
+
     # A second workspace of the same owner, for requests that mix ids of two workspaces.
     twin = owner.create_workspace(f"S4 {label} twin")
     tid = str(twin["id"])
@@ -294,6 +316,8 @@ def build_world(seed: Any, label: str) -> World:
         "mock_practice_session_id": str(mock_session["id"]),
         "conversation_id": str(conversation["id"]),
         "message_id": answer_message,
+        "explanation_id": explanation_id,
+        "mock_explanation_id": mock_explanation_id,
     }
     twin_ids = {
         "workspace_id": tid,
