@@ -203,9 +203,9 @@ describe('the practice panel and the range run panel are exclusive', () => {
 
   it('names the address with the other panel closed when an open replaces it', () => {
     // Opening the run over the practice panel closes the practice panel first.
-    expect(exclusiveClose(`?panel=history&question=${Q}`, '?panel=history&practice=new&source=bank')).toBe(
-      '?panel=history',
-    );
+    expect(
+      exclusiveClose(`?panel=history&question=${Q}`, '?panel=history&practice=new&source=bank'),
+    ).toBe('?panel=history');
     // Opening a question over the run closes the run first.
     expect(exclusiveClose(`?q=x&practice=${RUN}&i=2`, `?q=x&question=${Q}`)).toBe('?q=x');
     // Nothing to close: another question, a position of the run, a plain dialog.

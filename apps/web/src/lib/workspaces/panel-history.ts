@@ -31,6 +31,11 @@
 // one (attach, or pageshow from the BFCache) closes behind that Back as onPopState does
 // (closeBehind), keeping what changed while the dialog was open.
 //
+// A close can carry an open (close(url, open)): the practice panel and the range run panel are
+// exclusive (QVIEW-01-AC09), so opening one over the other first closes it as above and then
+// pushes the open where the close lands, instead of truncating (the push drops the forward entries
+// just as well). The closed panel is then in neither direction; Back from the opened one closes it.
+//
 // Each entry of ours records in `history.state` (beside Next's keys) its position (`pos`, to tell
 // Back from Forward), its depth (entries above its base) and, on a skip entry, how far to skip.
 // Next's patched pushState/replaceState copy its internals into the object we pass, and its
@@ -232,6 +237,8 @@ interface Rewind {
    * the base: that entry, which shows exactly the dialogs that stay, is rewritten to this target.
    */
   readonly below: string | null;
+  /** Pushed once the close landed (close(url, open)). */
+  readonly open: string | null;
 }
 
 type Pending =
@@ -260,9 +267,16 @@ function parseRewind(raw: string | null, now: number): Rewind | null {
       typeof value.pos === 'number' &&
       typeof value.base === 'string' &&
       (typeof value.reopen === 'string' || value.reopen === null) &&
-      (typeof value.below === 'string' || value.below === null)
+      (typeof value.below === 'string' || value.below === null) &&
+      (typeof value.open === 'string' || value.open === null || value.open === undefined)
     ) {
-      return { pos: value.pos, base: value.base, reopen: value.reopen, below: value.below };
+      return {
+        pos: value.pos,
+        base: value.base,
+        reopen: value.reopen,
+        below: value.below,
+        open: value.open ?? null,
+      };
     }
   } catch {
     // A malformed value is no handover.
@@ -398,18 +412,25 @@ export class PanelHistory {
     this.resting = this.current();
   }
 
-  /** Closes to `url` (see the module comment). */
-  close(url: string): void {
+  /**
+   * Closes to `url` (see the module comment), then, with `open`, opens that on a new entry where
+   * the close lands (one panel replacing another, QVIEW-01-AC09).
+   */
+  close(url: string, open: string | null = null): void {
     if (this.pending) return;
     const target = pathAndQuery(url, this.win.location.href);
-    if (target === this.current()) return;
+    const then = open === null ? null : pathAndQuery(open, this.win.location.href);
+    if (target === this.current()) {
+      if (then !== null) this.push(then);
+      return;
+    }
     const { path, search } = splitUrl(target);
     const base = `${path}${this.getDialogs().closeAll(search)}`;
     const reopen = base === target ? null : target;
     if (this.mark.depth > 0) {
       const steps = this.rewindSteps(target);
       const below = steps < this.mark.depth ? target : null;
-      const rewind: Rewind = { pos: this.mark.pos - steps, base, reopen, below };
+      const rewind: Rewind = { pos: this.mark.pos - steps, base, reopen, below, open: then };
       const pending: Pending = { kind: 'rewind', ...rewind, fallback: target, timer: 0 };
       pending.timer = this.win.setTimeout(() => {
         // The traversal never came: close in place rather than leave the dialog open.
@@ -417,6 +438,7 @@ export class PanelHistory {
         this.pending = null;
         this.takeRewind();
         this.replace(pending.fallback);
+        if (pending.open !== null) this.push(pending.open);
       }, TRAVERSAL_TIMEOUT_MS);
       this.pending = pending;
       this.storeRewind(rewind);
@@ -425,9 +447,10 @@ export class PanelHistory {
     }
     if (reopen === null && this.win.navigation?.canGoForward === false) {
       this.replace(target);
+      if (then !== null) this.push(then);
       return;
     }
-    this.settle(base, reopen);
+    this.settle(base, reopen, then);
   }
 
   /**
@@ -453,19 +476,22 @@ export class PanelHistory {
 
   /** Where a close's rewind landed: the base (settle) or the entry below the closed dialog. */
   private land(rewind: Rewind): void {
-    if (rewind.below !== null) {
-      this.onPage(rewind.below, () => this.truncate());
-      this.resting = rewind.below;
+    const { below, open } = rewind;
+    if (below !== null) {
+      // The open's push drops the forward entries as a truncate would.
+      this.onPage(below, () => (open !== null ? this.push(open) : this.truncate()));
+      this.resting = open ?? below;
       return;
     }
-    this.settle(rewind.base, rewind.reopen);
+    this.settle(rewind.base, rewind.reopen, open);
   }
 
   /**
    * On the base entry: rewrite it to `base`, then push the dialogs still open, or a copy of it
-   * (the base becomes a skip entry).
+   * (the base becomes a skip entry); then `open` on its own entry, which drops the forward
+   * entries itself (no copy then).
    */
-  private settle(base: string, reopen: string | null): void {
+  private settle(base: string, reopen: string | null, open: string | null = null): void {
     this.mark = { ...this.mark, depth: 0 };
     this.onPage(base, () => {
       if (reopen) {
@@ -478,11 +504,12 @@ export class PanelHistory {
         // Only dialog keys differ from the base: Next syncs its URL from the plain write.
         this.win.history.pushState(markState(null, this.mark), '', reopen);
         this.resting = this.current();
-      } else {
+      } else if (open === null) {
         this.truncate();
       }
+      if (open !== null) this.push(open);
     });
-    this.resting = reopen ?? base;
+    this.resting = open ?? reopen ?? base;
   }
 
   /**
