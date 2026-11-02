@@ -3,7 +3,68 @@
 /* eslint-disable */
 
 export type paths = {
-  '/api/v1/chapters/{chapter_id}/my-highlights': {
+  '/api/v1/ask/conversations/{conversation_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Conversation */
+    get: operations['getAskConversation'];
+    put?: never;
+    post?: never;
+    /**
+     * Delete Conversation
+     * @description Deletes the conversation with its messages, sources and feedback (usage counts stay).
+     */
+    delete: operations['deleteAskConversation'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/ask/conversations/{conversation_id}/attachment': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * Detach Question
+     * @description Later messages carry no question context; earlier answers stay.
+     */
+    delete: operations['detachAskQuestion'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/ask/conversations/{conversation_id}/messages': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Ask Question
+     * @description Ask a question in the conversation; stream the answer from `stream_url`.
+     */
+    post: operations['askQuestion'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/ask/messages/{message_id}': {
     parameters: {
       query?: never;
       header?: never;
@@ -11,12 +72,110 @@ export type paths = {
       cookie?: never;
     };
     /**
-     * List Chapter Highlights
-     * @description The caller's highlights of the chapter: those of every note version of the chapter (version
-     *     number included) and the explanation highlights of the questions now in it (live CONFIRMED;
-     *     archived, deleted, draft and moved-away questions are left out).
+     * Get Message
+     * @description One message; while an answer streams, its text so far (the SSE fallback).
      */
-    get: operations['listChapterHighlights'];
+    get: operations['getAskMessage'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/ask/messages/{message_id}/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cancel Answer
+     * @description Stops an unfinished answer, keeping the text streamed so far (idempotent).
+     */
+    post: operations['cancelAskAnswer'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/ask/messages/{message_id}/feedback': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Set Feedback
+     * @description "도움이 안 됨" with one reason code (no free text), for the caller's own answer.
+     */
+    put: operations['setAskFeedback'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/ask/messages/{message_id}/regenerate': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Regenerate Answer
+     * @description A new answer version of the conversation's last question (evidence searched again).
+     */
+    post: operations['regenerateAskAnswer'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/ask/messages/{message_id}/retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Retry Answer
+     * @description A new answer to the question of a failed or stopped answer (which stays).
+     */
+    post: operations['retryAskAnswer'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/ask/messages/{message_id}/stream': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream Answer
+     * @description The answer's text as it is written (re-authorized on every poll).
+     */
+    get: operations['streamAskAnswer'];
     put?: never;
     post?: never;
     delete?: never;
@@ -605,73 +764,6 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/my-highlights': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Create Highlight
-     * @description Highlight a range of a note version or of a question's current explanation. Overlapping
-     *     highlights of the caller must be named in `replace_ids` (they are replaced by this one in the
-     *     same transaction); allowed for every member, also in an archived workspace.
-     */
-    post: operations['createHighlight'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/my-highlights/{highlight_id}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    /**
-     * Delete Highlight
-     * @description Remove one of the caller's highlights (idempotent; it can be restored for 10 minutes).
-     */
-    delete: operations['deleteHighlight'];
-    options?: never;
-    head?: never;
-    /**
-     * Update Highlight
-     * @description Change the color of one of the caller's live highlights (`version` must match).
-     */
-    patch: operations['updateHighlight'];
-    trace?: never;
-  };
-  '/api/v1/my-highlights/{highlight_id}/restore': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Restore Highlight
-     * @description Undo the deletion of one of the caller's highlights within 10 minutes: the same id,
-     *     target, anchor and color (`version` + 1). Merged-away highlights are not restorable.
-     */
-    post: operations['restoreHighlight'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/v1/practice-runs/{run_id}': {
     parameters: {
       query?: never;
@@ -1061,27 +1153,6 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/questions/{question_id}/my-highlights': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * List Question Highlights
-     * @description The caller's highlights of the question's explanation (same access as GET /questions/{id};
-     *     the response holds the caller's quotes only, never the explanation).
-     */
-    get: operations['listQuestionHighlights'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/v1/questions/{question_id}/my-state': {
     parameters: {
       query?: never;
@@ -1121,27 +1192,6 @@ export type paths = {
      *     open session is resumed (another view), a submitted one is 409 `already-submitted`.
      */
     post: operations['startPracticeSession'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/questions/{question_id}/preview': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get Question Preview
-     * @description A chapter-note footnote preview (CHNOTE-02-C01): stem and options of a live CONFIRMED
-     *     question, no answer or explanation. Records no view.
-     */
-    get: operations['getQuestionPreview'];
-    put?: never;
-    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1363,27 +1413,6 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/shared/{share_id}/questions/{question_id}/preview': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get Shared Question Preview
-     * @description The member preview's DTO for a question in the share's published scope (CHNOTE-02-C02);
-     *     anything else is the same 404.
-     */
-    get: operations['getSharedQuestionPreview'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/v1/shared/{share_id}/search': {
     parameters: {
       query?: never;
@@ -1523,6 +1552,50 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspace_id}/ask': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Ask State
+     * @description Whether new AI questions can be asked here, and the limits the panel shows.
+     */
+    get: operations['getAskState'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/ask/conversations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Conversations
+     * @description The caller's own conversations of this workspace, most recent first (30 per page).
+     */
+    get: operations['listAskConversations'];
+    put?: never;
+    /**
+     * Create Conversation
+     * @description A new (personal) conversation, optionally with one attached question.
+     */
+    post: operations['createAskConversation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspace_id}/attempts': {
     parameters: {
       query?: never;
@@ -1557,48 +1630,6 @@ export type paths = {
      *     the newest version, whether it is stale and whether a generation is queued/running.
      */
     get: operations['listChapterNotes'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/workspaces/{workspace_id}/chapter-redistribution/preview': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Preview Redistribution
-     * @description Recommend chapters again (CHAPTER-MAP on each question's first source block) and list the
-     *     questions whose chapter would change. Read-only: computed on every request, nothing stored.
-     */
-    post: operations['previewChapterRedistribution'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/workspaces/{workspace_id}/chapter-redistribution/questions': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * List Redistribution Questions
-     * @description The workspace's confirmed questions by chapter group (Heatmap order) with how each chapter
-     *     was decided, and the book chapters they can move to. No answers.
-     */
-    get: operations['listChapterRedistributionQuestions'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1691,26 +1722,6 @@ export type paths = {
      *     questions, answers, explanations and related book text are sent to the LLM provider.
      */
     post: operations['createMockExam'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/workspaces/{workspace_id}/my-highlights': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * List Chapterless Highlights
-     * @description The caller's explanation highlights of the "챕터 없음" Heatmap group.
-     */
-    get: operations['listChapterlessHighlights'];
-    put?: never;
-    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1832,28 +1843,6 @@ export type paths = {
      *     complete content (an MCQ needs >= 2 options and a correct option); DRAFT may be incomplete.
      */
     post: operations['createQuestion'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/workspaces/{workspace_id}/questions/chapter-assignments': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Assign Question Chapters
-     * @description Move questions to chapters in one transaction (all or nothing). Each item carries the
-     *     chapter the client showed; any difference refuses the whole request. Moving never creates a
-     *     question revision and keeps attempts and study state.
-     */
-    post: operations['assignQuestionChapters'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2125,37 +2114,87 @@ export type components = {
        */
       number: number | null;
     };
-    /** AiExplanationHighlightTarget */
-    AiExplanationHighlightTarget: {
-      /**
-       * Ai Explanation Id
-       * Format: uuid
-       */
-      ai_explanation_id: string;
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      kind: 'ai_explanation';
-      /**
-       * Question Id
-       * Format: uuid
-       */
-      question_id: string;
+    /** AskLimits */
+    AskLimits: {
+      /** Max Question Chars */
+      max_question_chars: number;
+      /** Max Regenerations */
+      max_regenerations: number;
+      /** Max Turns */
+      max_turns: number;
     };
-    /** AiExplanationTargetIn */
-    AiExplanationTargetIn: {
+    /** AskScope */
+    AskScope: {
+      /** Chapter Ids */
+      chapter_ids?: string[];
+      /** Document Ids */
+      document_ids?: string[];
+    };
+    /** AskState */
+    AskState: {
       /**
-       * Ai Explanation Id
-       * Format: uuid
-       * @description AIEXPL-01 (not available yet: 404).
+       * Available
+       * @description New questions can be asked here now.
        */
-      ai_explanation_id: string;
+      available: boolean;
+      limits: components['schemas']['AskLimits'];
       /**
-       * @description discriminator enum property added by openapi-typescript
+       * Reason
+       * @description Why not: the feature is off in this environment, or the workspace is archived (stored conversations stay readable either way).
+       */
+      reason: ('disabled' | 'archived') | null;
+    };
+    /** Attachment */
+    Attachment: {
+      /**
+       * Available
+       * @description False once the question, session or mock exam is gone (no context then).
+       */
+      available: boolean;
+      /**
+       * Disclosure
+       * @description What the next message will use (from the DB).
        * @enum {string}
        */
-      kind: 'ai_explanation';
+      disclosure: 'hint' | 'full';
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: 'question' | 'mock_exam_question';
+      /**
+       * Label
+       * @description `<n>장 <m>번 · <발문 앞 40자>` / `문제 k · …`.
+       */
+      label: string;
+      /**
+       * View
+       * @enum {string}
+       */
+      view: 'practice' | 'detail' | 'manage';
+    };
+    /** AttachmentInput */
+    AttachmentInput: {
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: 'question' | 'mock_exam_question';
+      /** Mock Exam Question Id */
+      mock_exam_question_id?: string | null;
+      /** Mock Practice Session Id */
+      mock_practice_session_id?: string | null;
+      /** Practice Session Id */
+      practice_session_id?: string | null;
+      /** Question Id */
+      question_id?: string | null;
+      /** Selected Option Ids */
+      selected_option_ids?: string[];
+      /**
+       * View
+       * @enum {string}
+       */
+      view: 'practice' | 'detail' | 'manage';
     };
     /** Attempt */
     Attempt: {
@@ -2300,45 +2339,6 @@ export type components = {
       y0: number;
       /** Y1 */
       y1: number;
-    };
-    /** ChapterAssignmentItem */
-    ChapterAssignmentItem: {
-      /**
-       * Chapter Id
-       * @description Target; null = "챕터 없음".
-       */
-      chapter_id: string | null;
-      /**
-       * Expected Chapter Id
-       * @description The chapter the client showed (the current one); a different current chapter refuses the whole request (409 `chapter-changed`).
-       */
-      expected_chapter_id: string | null;
-      /**
-       * Question Id
-       * Format: uuid
-       */
-      question_id: string;
-    };
-    /** ChapterAssignmentRequest */
-    ChapterAssignmentRequest: {
-      /** Items */
-      items: components['schemas']['ChapterAssignmentItem'][];
-      /**
-       * Source
-       * @description manual (직접 옮기기 -> `manual`) | recommendation (applied -> `auto`).
-       * @enum {string}
-       */
-      source: 'manual' | 'recommendation';
-    };
-    /** ChapterAssignmentResult */
-    ChapterAssignmentResult: {
-      /** Moved */
-      moved: number;
-      /**
-       * Unchanged
-       * @description Already in the target chapter (as expected).
-       */
-      unchanged: number;
     };
     /** ChapterNote */
     ChapterNote: {
@@ -2518,6 +2518,66 @@ export type components = {
        * @description Send as `base_version` when correcting this block.
        */
       version: string;
+    };
+    /** Conversation */
+    Conversation: {
+      attachment: components['schemas']['Attachment'] | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Last Message At
+       * Format: date-time
+       */
+      last_message_at: string;
+      /** Messages */
+      messages: components['schemas']['Message'][];
+      scope: components['schemas']['AskScope'];
+      /** Title */
+      title: string | null;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /**
+     * ConversationCreate
+     * @description Extra fields (e.g. a `disclosure` value) are ignored.
+     */
+    ConversationCreate: {
+      attachment?: components['schemas']['AttachmentInput'] | null;
+      scope?: components['schemas']['AskScope'] | null;
+    };
+    /** ConversationPage */
+    ConversationPage: {
+      /** Items */
+      items: components['schemas']['ConversationSummary'][];
+      /** Next Cursor */
+      next_cursor: string | null;
+    };
+    /** ConversationSummary */
+    ConversationSummary: {
+      attachment: components['schemas']['Attachment'] | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Last Message At
+       * Format: date-time
+       */
+      last_message_at: string;
+      /** Title */
+      title: string | null;
     };
     /** DependencyStatus */
     DependencyStatus: {
@@ -3008,43 +3068,26 @@ export type components = {
        */
       question_count: number;
     };
-    /** ExplanationHighlightTarget */
-    ExplanationHighlightTarget: {
+    /** Feedback */
+    Feedback: {
       /**
-       * @description discriminator enum property added by openapi-typescript
+       * Message Id
+       * Format: uuid
+       */
+      message_id: string;
+      /**
+       * Reason
        * @enum {string}
        */
-      kind: 'explanation';
-      /**
-       * Question Id
-       * Format: uuid
-       */
-      question_id: string;
-      /**
-       * Question Revision Id
-       * Format: uuid
-       * @description The revision it was made on.
-       */
-      question_revision_id: string;
+      reason: 'source_mismatch' | 'made_up' | 'revealed_answer' | 'other';
     };
-    /** ExplanationTargetIn */
-    ExplanationTargetIn: {
+    /** FeedbackInput */
+    FeedbackInput: {
       /**
-       * @description discriminator enum property added by openapi-typescript
+       * Reason
        * @enum {string}
        */
-      kind: 'explanation';
-      /**
-       * Question Id
-       * Format: uuid
-       * @description The question's current revision's explanation.
-       */
-      question_id: string;
-      /**
-       * Question Revision Id
-       * @description The revision whose explanation the client showed (recommended): 409 `stale-revision` when it is no longer the current one, so the anchor is never applied to a different text.
-       */
-      question_revision_id?: string | null;
+      reason: 'source_mismatch' | 'made_up' | 'revealed_answer' | 'other';
     };
     /**
      * Fork
@@ -3107,129 +3150,6 @@ export type components = {
        * @description Name of the new workspace.
        */
       name: string;
-    };
-    /** Highlight */
-    Highlight: {
-      /** @description Where it was made (in its note version/revision). */
-      anchor: components['schemas']['HighlightAnchor'];
-      /** @description Position in the current text; null when missing. */
-      anchor_current: components['schemas']['HighlightAnchor'] | null;
-      /**
-       * Anchor Status
-       * @description `exact`: same text; `relocated`: found again in the current revision; `missing`: the current explanation no longer contains the quote.
-       * @enum {string}
-       */
-      anchor_status: 'exact' | 'relocated' | 'missing';
-      /**
-       * Color
-       * @enum {string}
-       */
-      color: 'yellow' | 'blue' | 'pink';
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /** @description Explanation highlights only. */
-      question: components['schemas']['HighlightQuestion'] | null;
-      /**
-       * Quote
-       * @description The highlighted text, cut by the server.
-       */
-      quote: string;
-      /** Target */
-      target:
-        | components['schemas']['NoteHighlightTarget']
-        | components['schemas']['ExplanationHighlightTarget']
-        | components['schemas']['AiExplanationHighlightTarget'];
-      /**
-       * Updated At
-       * Format: date-time
-       */
-      updated_at: string;
-      /** Version */
-      version: number;
-    };
-    /** HighlightAnchor */
-    HighlightAnchor: {
-      /**
-       * Block
-       * @description `s<i>.i<j>` (note item `sections[i].items[j]`) or `p<i>` (explanation paragraph, blank-line separated, 0-based).
-       */
-      block: string;
-      /**
-       * End
-       * @description UTF-16 offset, exclusive.
-       */
-      end: number;
-      /**
-       * Start
-       * @description UTF-16 offset in the block.
-       */
-      start: number;
-    };
-    /** HighlightCreate */
-    HighlightCreate: {
-      anchor: components['schemas']['HighlightAnchor'];
-      /**
-       * Color
-       * @enum {string}
-       */
-      color: 'yellow' | 'blue' | 'pink';
-      /**
-       * Replace Ids
-       * @description The caller's live highlights of the same target that overlap `anchor`: removed in the same transaction (merge). They cannot be restored.
-       */
-      replace_ids?: string[] | null;
-      /** Target */
-      target:
-        | components['schemas']['NoteTargetIn']
-        | components['schemas']['ExplanationTargetIn']
-        | components['schemas']['AiExplanationTargetIn'];
-    };
-    /** HighlightList */
-    HighlightList: {
-      /**
-       * Items
-       * @description Display order: note highlights (newest version first, body order), then explanation highlights (Heatmap order, position in the explanation).
-       */
-      items: components['schemas']['Highlight'][];
-    };
-    /** HighlightQuestion */
-    HighlightQuestion: {
-      /**
-       * Number Label
-       * @description `<n>장 <번호>번` (the Heatmap's numbering).
-       */
-      number_label: string;
-      /**
-       * Question Id
-       * Format: uuid
-       */
-      question_id: string;
-      /**
-       * Stem Preview
-       * @description First 40 characters of the current stem.
-       */
-      stem_preview: string;
-    };
-    /** HighlightUpdate */
-    HighlightUpdate: {
-      /**
-       * Color
-       * @enum {string}
-       */
-      color: 'yellow' | 'blue' | 'pink';
-      /**
-       * Version
-       * @description The `version` the client read (optimistic lock).
-       */
-      version: number;
     };
     /** HitBoundingBox */
     HitBoundingBox: {
@@ -3770,7 +3690,7 @@ export type components = {
       progress: number | null;
       /**
        * Result
-       * @description Counts and code only, for `mock_exam.generate`: {created_count, skipped_count, usage: {llm_calls, batches, input_tokens, output_tokens}, error_code}; null for other job types.
+       * @description Counts and code only, for `mock_exam.generate`: {created_count, skipped_count, usage: {llm_calls, batches, input_tokens, output_tokens}, error_code}; for `ask.answer` (its creator only): {sources, dropped_citations, llm_calls, usage: {input_tokens, output_tokens, cache_read_tokens}, status, error_code}; null for other job types.
        */
       result?: {
         [key: string]: unknown;
@@ -3850,6 +3770,91 @@ export type components = {
     MergeResult: {
       /** Groups */
       groups: components['schemas']['MergedGroup'][];
+    };
+    /** Message */
+    Message: {
+      /**
+       * Conversation Id
+       * Format: uuid
+       */
+      conversation_id: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Degraded */
+      degraded: ('dense_unavailable' | 'attachment_only')[];
+      /**
+       * Disclosure
+       * @enum {string}
+       */
+      disclosure: 'none' | 'hint' | 'full';
+      /** Error Code */
+      error_code: string | null;
+      /** Feedback */
+      feedback: ('source_mismatch' | 'made_up' | 'revealed_answer' | 'other') | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Question Message Id */
+      question_message_id: string | null;
+      /** Regenerated From Message Id */
+      regenerated_from_message_id: string | null;
+      /** Retry Of Message Id */
+      retry_of_message_id: string | null;
+      /**
+       * Role
+       * @enum {string}
+       */
+      role: 'user' | 'assistant';
+      /**
+       * Searched Sources
+       * @description The passages searched for a `no_sources` answer ("검색한 구절").
+       */
+      searched_sources: components['schemas']['Source'][];
+      /**
+       * Sources
+       * @description Cited passages of a finished answer.
+       */
+      sources: components['schemas']['Source'][];
+      /**
+       * Status
+       * @enum {string}
+       */
+      status:
+        'queued' | 'retrieving' | 'streaming' | 'succeeded' | 'no_sources' | 'stopped' | 'failed';
+      /**
+       * Text
+       * @description Markdown: the finished, validated answer (footnotes `[1]`…), or the text streamed so far.
+       */
+      text: string;
+      /** Truncated */
+      truncated: boolean;
+      /** Uncited */
+      uncited: boolean;
+    };
+    /** MessageAccepted */
+    MessageAccepted: {
+      answer: components['schemas']['Message'];
+      /**
+       * Job Id
+       * Format: uuid
+       */
+      job_id: string;
+      /** Stream Url */
+      stream_url: string;
+      user_message: components['schemas']['Message'];
+    };
+    /** MessageCreate */
+    MessageCreate: {
+      /** Question */
+      question: string;
+      scope?: components['schemas']['AskScope'] | null;
+      /** Selected Option Ids */
+      selected_option_ids?: string[] | null;
     };
     /** MockExam */
     MockExam: {
@@ -4348,21 +4353,6 @@ export type components = {
        */
       status: 'queued' | 'running' | 'succeeded' | 'failed';
     };
-    /** NoteHighlightTarget */
-    NoteHighlightTarget: {
-      /**
-       * Chapter Note Id
-       * Format: uuid
-       */
-      chapter_note_id: string;
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      kind: 'note';
-      /** Note Version */
-      note_version: number;
-    };
     /** NoteItem */
     NoteItem: {
       /**
@@ -4410,20 +4400,6 @@ export type components = {
       heading: string;
       /** Items */
       items: components['schemas']['NoteItem'][];
-    };
-    /** NoteTargetIn */
-    NoteTargetIn: {
-      /**
-       * Chapter Note Id
-       * Format: uuid
-       * @description A succeeded chapter note version.
-       */
-      chapter_note_id: string;
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      kind: 'note';
     };
     /** NoteUsage */
     NoteUsage: {
@@ -4834,13 +4810,6 @@ export type components = {
        */
       workspace_id: string;
     };
-    /** PreviewOption */
-    PreviewOption: {
-      /** Id */
-      id: string;
-      /** Text */
-      text: string;
-    };
     /** Problem */
     Problem: {
       /**
@@ -4860,12 +4829,6 @@ export type components = {
        * @default null
        */
       instance?: string | null;
-      /**
-       * Question Ids
-       * @description 409 `chapter-changed` of a chapter assignment: the questions whose chapter is no longer the expected one.
-       * @default null
-       */
-      question_ids?: string[] | null;
       /**
        * Request Id
        * @default null
@@ -4928,12 +4891,6 @@ export type components = {
        * @description Document outline node (`chapters.id`).
        */
       chapter_id: string | null;
-      /**
-       * Chapter Source
-       * @description How the chapter was decided: `manual` (a person chose it: registration, edit, a move) or `auto` (a CHAPTER-MAP suggestion: import registration, an applied recommendation).
-       * @enum {string}
-       */
-      chapter_source: 'manual' | 'auto';
       /**
        * Created At
        * Format: date-time
@@ -5034,12 +4991,6 @@ export type components = {
        * @description Document outline node (`chapters.id`).
        */
       chapter_id: string | null;
-      /**
-       * Chapter Source
-       * @description How the chapter was decided: `manual` (a person chose it: registration, edit, a move) or `auto` (a CHAPTER-MAP suggestion: import registration, an applied recommendation).
-       * @enum {string}
-       */
-      chapter_source: 'manual' | 'auto';
       /**
        * Created At
        * Format: date-time
@@ -5187,39 +5138,6 @@ export type components = {
       counts: components['schemas']['OverviewCounts'];
       /** Items */
       items: components['schemas']['OverviewItem'][];
-    };
-    /**
-     * QuestionPreview
-     * @description Stem and options only: no answer, explanation, rubric, source or per-user field.
-     */
-    QuestionPreview: {
-      /** Chapter Title */
-      chapter_title: string | null;
-      /**
-       * Number Label
-       * @description "<n>장 <번호>번" like the Heatmap, or "<번호>번".
-       */
-      number_label: string;
-      /**
-       * Options
-       * @description Original order; empty for text answers.
-       */
-      options: components['schemas']['PreviewOption'][];
-      /**
-       * Question Id
-       * Format: uuid
-       */
-      question_id: string;
-      /**
-       * Question Type
-       * @enum {string}
-       */
-      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
-      /**
-       * Stem
-       * @description The active revision's stem, unaltered.
-       */
-      stem: string;
     };
     /**
      * QuestionRange
@@ -5419,184 +5337,6 @@ export type components = {
        * @enum {string}
        */
       status: 'ok' | 'unavailable';
-    };
-    /** RedistributionChapter */
-    RedistributionChapter: {
-      /** Document Id */
-      document_id?: string | null;
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /** Title */
-      title: string;
-    };
-    /** RedistributionGroup */
-    RedistributionGroup: {
-      /** Document Id */
-      document_id: string | null;
-      /**
-       * Id
-       * @description null = "챕터 없음" (always last).
-       */
-      id: string | null;
-      /**
-       * Number
-       * @description Chapter number for labels, if known.
-       */
-      number: number | null;
-      /** Question Count */
-      question_count: number;
-      /** Title */
-      title: string;
-    };
-    /** RedistributionList */
-    RedistributionList: {
-      /**
-       * Chapters
-       * @description Groups of `items`, Heatmap order.
-       */
-      chapters: components['schemas']['RedistributionGroup'][];
-      /**
-       * Items
-       * @description Heatmap order.
-       */
-      items: components['schemas']['RedistributionQuestion'][];
-      /**
-       * Targets
-       * @description Chapters a question may move to (live books' current revisions; "챕터 없음" = `chapter_id: null` is always allowed).
-       */
-      targets: components['schemas']['RedistributionTargetDocument'][];
-    };
-    /** RedistributionPreview */
-    RedistributionPreview: {
-      /**
-       * Items
-       * @description Only questions whose chapter would change.
-       */
-      items: components['schemas']['RedistributionPreviewItem'][];
-      /**
-       * No Recommendation
-       * @description Questions without a recommendation, by reason (non-zero only).
-       */
-      no_recommendation: {
-        [key: string]: number;
-      };
-      /**
-       * Skipped Manual
-       * @description `manual` questions not computed (include_manual).
-       */
-      skipped_manual: number;
-      /**
-       * Unchanged
-       * @description Recommended chapter = current chapter.
-       */
-      unchanged: number;
-    };
-    /** RedistributionPreviewItem */
-    RedistributionPreviewItem: {
-      /** @description null = "챕터 없음". */
-      current_chapter: components['schemas']['RedistributionChapter'] | null;
-      /** Number Label */
-      number_label: string;
-      /**
-       * Question Id
-       * Format: uuid
-       */
-      question_id: string;
-      /**
-       * Reason
-       * @description source_in_book (출처 교재의 장) | matched (문제지 장 제목과 일치).
-       * @enum {string}
-       */
-      reason: 'source_in_book' | 'matched';
-      recommended_chapter: components['schemas']['RedistributionChapter'];
-      /** Stem Preview */
-      stem_preview: string;
-    };
-    /** RedistributionPreviewRequest */
-    RedistributionPreviewRequest: {
-      /**
-       * All
-       * @description Every confirmed question (nothing selected).
-       * @default false
-       */
-      all?: boolean;
-      /**
-       * Include Manual
-       * @description Also recommend for chapters a person chose (`manual`).
-       * @default false
-       */
-      include_manual?: boolean;
-      /**
-       * Question Ids
-       * @description The selected questions (ids that are not confirmed questions here are ignored).
-       */
-      question_ids?: string[] | null;
-    };
-    /** RedistributionQuestion */
-    RedistributionQuestion: {
-      /** Chapter Id */
-      chapter_id: string | null;
-      /**
-       * Chapter Source
-       * @description `manual` rows show 직접 정함.
-       * @enum {string}
-       */
-      chapter_source: 'manual' | 'auto';
-      /**
-       * Label
-       * @description Display label, e.g. "1장 3번" (chapter number, number).
-       */
-      label: string;
-      /**
-       * Question Id
-       * Format: uuid
-       */
-      question_id: string;
-      /** Question Number */
-      question_number: number | null;
-      /**
-       * Question Type
-       * @enum {string}
-       */
-      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
-      /**
-       * Stem Preview
-       * @description The stem's first 40 characters.
-       */
-      stem_preview: string;
-    };
-    /** RedistributionTargetChapter */
-    RedistributionTargetChapter: {
-      /**
-       * Depth
-       * @description Outline level (1 = top level).
-       */
-      depth: number;
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /** Title */
-      title: string;
-    };
-    /** RedistributionTargetDocument */
-    RedistributionTargetDocument: {
-      /**
-       * Chapters
-       * @description Outline order.
-       */
-      chapters: components['schemas']['RedistributionTargetChapter'][];
-      /**
-       * Document Id
-       * Format: uuid
-       */
-      document_id: string;
-      /** Document Title */
-      document_title: string;
     };
     /** RestoredDraft */
     RestoredDraft: {
@@ -6384,6 +6124,44 @@ export type components = {
        */
       url: string;
     };
+    /** Source */
+    Source: {
+      /** Block Ids */
+      block_ids: string[];
+      /** Chapter Id */
+      chapter_id: string | null;
+      /** Chapter Title */
+      chapter_title: string | null;
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Document Title */
+      document_title: string;
+      /** Document Type */
+      document_type: string;
+      /**
+       * Number
+       * @description The footnote number `[n]` in the answer text.
+       */
+      number: number;
+      /**
+       * Outdated
+       * @description The revision is no longer the published one.
+       */
+      outdated: boolean;
+      /** Page From */
+      page_from: number;
+      /** Page To */
+      page_to: number;
+      /**
+       * Revision Id
+       * Format: uuid
+       * @description The published revision the passage was read in.
+       */
+      revision_id: string;
+    };
     /**
      * SubmitBody
      * @description `selected_option_ids` for an MCQ (one id unless multi-answer), `answer_text` otherwise.
@@ -6914,12 +6692,12 @@ export type components = {
 };
 export type $defs = Record<string, never>;
 export interface operations {
-  listChapterHighlights: {
+  getAskConversation: {
     parameters: {
       query?: never;
       header?: never;
       path: {
-        chapter_id: string;
+        conversation_id: string;
       };
       cookie?: never;
     };
@@ -6931,7 +6709,625 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['HighlightList'];
+          'application/json': components['schemas']['Conversation'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  deleteAskConversation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  detachAskQuestion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Conversation'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  askQuestion: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MessageCreate'];
+      };
+    };
+    responses: {
+      /** @description Accepted: the answer is being made. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MessageAccepted'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getAskMessage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        message_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Message'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  cancelAskAnswer: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        message_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Message'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  setAskFeedback: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        message_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FeedbackInput'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Feedback'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  regenerateAskAnswer: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        message_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Accepted: the answer is being made. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MessageAccepted'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  retryAskAnswer: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        message_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Accepted: the answer is being made. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MessageAccepted'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  streamAskAnswer: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        message_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Server-Sent Events: `delta {seq, text}` (the SSE `id` is `seq`; send `Last-Event-ID` to resume after it), `reset` (drop the text received so far), then one `done {message}` or `error {code}`. A finished answer is a single `done`/`error` from the database. Send the Bearer token in the Authorization header (fetch streaming, not EventSource); never in the URL. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'text/event-stream': string;
         };
       };
       /** @description Unauthorized */
@@ -9387,272 +9783,6 @@ export interface operations {
       };
     };
   };
-  createHighlight: {
-    parameters: {
-      query?: never;
-      header?: {
-        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
-        'Idempotency-Key'?: string | null;
-      };
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['HighlightCreate'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Highlight'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Conflict */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  deleteHighlight: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        highlight_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  updateHighlight: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        highlight_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['HighlightUpdate'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Highlight'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Conflict */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  restoreHighlight: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        highlight_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Highlight'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Conflict */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
   getPracticeRun: {
     parameters: {
       query?: never;
@@ -11033,64 +11163,6 @@ export interface operations {
       };
     };
   };
-  listQuestionHighlights: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        question_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HighlightList'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
   updateMyQuestionState: {
     parameters: {
       query?: never;
@@ -11218,73 +11290,6 @@ export interface operations {
       };
       /** @description Conflict */
       409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  getQuestionPreview: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        question_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['QuestionPreview'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
         headers: {
           [name: string]: unknown;
         };
@@ -12035,75 +12040,6 @@ export interface operations {
       };
     };
   };
-  getSharedQuestionPreview: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        question_id: string;
-        /** @description The share link id (`/share/{id}`). */
-        share_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['QuestionPreview'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
   searchSharedWorkspace: {
     parameters: {
       query?: never;
@@ -12756,6 +12692,186 @@ export interface operations {
       };
     };
   };
+  getAskState: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AskState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listAskConversations: {
+    parameters: {
+      query?: {
+        cursor?: string | null;
+      };
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ConversationPage'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createAskConversation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ConversationCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Conversation'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   listMyWorkspaceAttempts: {
     parameters: {
       query?: {
@@ -12835,144 +12951,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ChapterNoteList'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  previewChapterRedistribution: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['RedistributionPreviewRequest'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['RedistributionPreview'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  listChapterRedistributionQuestions: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['RedistributionList'];
         };
       };
       /** @description Unauthorized */
@@ -13392,67 +13370,6 @@ export interface operations {
       };
       /** @description Service Unavailable */
       503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  listChapterlessHighlights: {
-    parameters: {
-      query: {
-        /** @description Only `none`: the "챕터 없음" group (no workspace-wide list). */
-        chapter: 'none';
-      };
-      header?: never;
-      path: {
-        workspace_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HighlightList'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
         headers: {
           [name: string]: unknown;
         };
@@ -13949,89 +13866,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Question'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Conflict */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  assignQuestionChapters: {
-    parameters: {
-      query?: never;
-      header?: {
-        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
-        'Idempotency-Key'?: string | null;
-      };
-      path: {
-        workspace_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ChapterAssignmentRequest'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ChapterAssignmentResult'];
         };
       };
       /** @description Unauthorized */

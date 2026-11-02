@@ -186,9 +186,11 @@ select is_empty(
                               'document_summary_units', 'document_summary_run_units',
                               'chapter_notes', 'mock_exams', 'mock_exam_generations',
                               'mock_exam_generation_items', 'mock_exam_questions',
-                              'mock_exam_question_revisions') $$,
+                              'mock_exam_question_revisions',
+                              'ask_conversations', 'ask_messages', 'ask_message_sources',
+                              'llm_feature_usage', 'ask_daily_counts') $$,
   'quiz_worker has policies on async_jobs, the M3.2a document tables, M4.4a imports, M6.2 '
-    || 'generation, S3a forks, QIMP-JOB registration items (read), DOCSUM-B summaries and MOCK-B '
+    || 'generation, S3a forks, QIMP-JOB registration items (read), DOCSUM-B summaries, MOCK-B and ASK-B '
     || 'mock exams only');
 
 -- quiz_worker works within its grants -----------------------------------------------------------

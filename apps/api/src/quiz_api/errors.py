@@ -143,6 +143,26 @@ class ProblemType(StrEnum):
     # 409: the range overlaps a live highlight of the caller (merge it with `replace_ids`).
     HIGHLIGHT_OVERLAP = "urn:quiz-workspace:problem:highlight-overlap"
 
+    # ASK-01 (AI questions). 422: the question is longer than ASK_MAX_QUESTION_CHARS.
+    QUESTION_TOO_LONG = "urn:quiz-workspace:problem:question-too-long"
+    # 409: the conversation already holds ASK_MAX_TURNS questions; start a new one.
+    ASK_TURN_LIMIT = "urn:quiz-workspace:problem:ask-turn-limit"
+    # 409: an answer of this user is still being made (one at a time).
+    ASK_ANSWER_RUNNING = "urn:quiz-workspace:problem:ask-answer-running"
+    # 409: AI questions are off in this environment (WORKER_ASK_LLM / no LLM); conversations stay
+    # readable.
+    ASK_DISABLED = "urn:quiz-workspace:problem:ask-disabled"
+    # 409: the environment's monthly AI question token cap is used up.
+    ASK_BUDGET_EXCEEDED = "urn:quiz-workspace:problem:ask-budget-exceeded"
+    # 409: the question already has ASK_MAX_REGENERATIONS answer versions.
+    ASK_REGENERATE_LIMIT = "urn:quiz-workspace:problem:ask-regenerate-limit"
+    # 409: only the conversation's last question can be answered again.
+    ASK_NOT_LAST_ANSWER = "urn:quiz-workspace:problem:ask-not-last-answer"
+    # 409: `retry` is for a failed or stopped answer (use `regenerate` otherwise).
+    ASK_NOT_RETRYABLE = "urn:quiz-workspace:problem:ask-not-retryable"
+    # 429: the user's AI questions of today (Asia/Seoul) are used up.
+    ASK_DAILY_LIMIT = "urn:quiz-workspace:problem:ask-daily-limit"
+
 
 class ProblemException(StarletteHTTPException):
     """An HTTP error rendered with a specific problem `type`."""

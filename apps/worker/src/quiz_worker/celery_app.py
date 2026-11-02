@@ -34,6 +34,8 @@ from celery import Celery, Task, signals
 from celery.exceptions import WorkerLostError
 from celery.worker.request import Request
 
+from quiz_worker.ask_job import LazyAskDeps, ask_answer_definition
+from quiz_worker.ask_store import JOB_TYPE as ASK_JOB_TYPE
 from quiz_worker.chapter_note_job import LazyChapterNoteDeps, chapter_note_definition
 from quiz_worker.document_job import JOB_TYPE as DOCUMENT_PARSE_JOB_TYPE
 from quiz_worker.document_job import (
@@ -73,6 +75,18 @@ logger = logging.getLogger(__name__)
 TASK_NAME_PREFIX = "quiz.jobs."
 DEFAULT_QUEUE = "quiz.jobs"
 RECONCILE_TASK_NAME = "quiz.maintenance.reconcile_jobs"
+ASK_PURGE_TASK_NAME = "quiz.maintenance.ask_purge"
+ASK_PURGE_INTERVAL_SECONDS = 24 * 3600
+# Interactive jobs (ASK-B) have their own queue, consumed by a dedicated worker process
+# (`WORKER_QUEUE=interactive`, quiz_worker.serve) so document jobs never delay an answer.
+INTERACTIVE_QUEUE = "interactive"
+INTERACTIVE_JOB_TYPES = frozenset({ASK_JOB_TYPE})
+
+
+def queue_for(job_type: str) -> str:
+    return INTERACTIVE_QUEUE if job_type in INTERACTIVE_JOB_TYPES else DEFAULT_QUEUE
+
+
 # Job types that run under the document task time limits (whole-book parse + embedding).
 DOCUMENT_LIMIT_JOB_TYPES = frozenset({DOCUMENT_PARSE_JOB_TYPE})
 
@@ -284,6 +298,7 @@ def create_celery_app(
     for definition in definitions:
         register_job(app, definition)
     register_reconciler(app)
+    register_ask_purge(app, LazyAskDeps(settings))
     return app
 
 
@@ -328,6 +343,9 @@ def build_celery_config(settings: WorkerSettings) -> dict[str, Any]:
         "task_soft_time_limit": settings.task_soft_time_limit_seconds or None,
         "task_time_limit": settings.task_time_limit_seconds,
         "task_default_queue": DEFAULT_QUEUE,
+        "task_routes": {
+            task_name(job_type): {"queue": INTERACTIVE_QUEUE} for job_type in INTERACTIVE_JOB_TYPES
+        },
         # No task arguments in the result backend or task events.
         "result_extended": False,
         "result_expires": 24 * 3600,
@@ -347,7 +365,13 @@ def build_celery_config(settings: WorkerSettings) -> dict[str, Any]:
                 "schedule": settings.reconcile_interval_seconds,
                 # A backlog of reconcile messages is pointless; only the latest matters.
                 "options": {"expires": settings.reconcile_interval_seconds},
-            }
+            },
+            # ASK-01-C08: conversations past ASK_RETENTION_DAYS, usage past 13 months.
+            "ask-purge": {
+                "task": ASK_PURGE_TASK_NAME,
+                "schedule": ASK_PURGE_INTERVAL_SECONDS,
+                "options": {"expires": ASK_PURGE_INTERVAL_SECONDS},
+            },
         },
     }
 
@@ -470,6 +494,15 @@ def register_reconciler(app: QuizCelery) -> Any:
     return reconcile
 
 
+def register_ask_purge(app: QuizCelery, provider: Any) -> Any:
+    @app.task(name=ASK_PURGE_TASK_NAME, ignore_result=True, acks_late=False, shared=False)
+    def ask_purge() -> dict[str, int]:
+        report = provider().purge()
+        return {"conversations": report.conversations, "usage": report.usage}
+
+    return ask_purge
+
+
 def run_reconciler(app: QuizCelery) -> ReconcileReport:
     """One reconcile pass with the app's store, settings and job definitions."""
     settings = app.worker_settings
@@ -553,4 +586,5 @@ def default_definitions(
         document_summarize_definition(LazySummaryDeps(settings)),
         chapter_note_definition(LazyChapterNoteDeps(settings)),
         mock_exam_generate_definition(LazyMockExamDeps(settings)),
+        ask_answer_definition(LazyAskDeps(settings)),
     ]

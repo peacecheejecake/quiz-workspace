@@ -269,6 +269,38 @@ class Settings(BaseSettings):
     document_summary: bool = Field(default=False, validation_alias="WORKER_DOCUMENT_SUMMARY")
     llm_model: str | None = Field(default=None, validation_alias="LLM_MODEL")
 
+    # AI questions (ASK-B, ASK-01): new questions are accepted (`available`) only with the
+    # worker's switch on AND an LLM provider configured (LLM_MODEL, as for summaries; the API never
+    # holds LLM_API_KEY). Stored conversations stay readable either way. ⛔ staging/production need
+    # approval (questions, attached questions and passages go to the LLM provider).
+    ask_llm: bool = Field(default=False, validation_alias="WORKER_ASK_LLM")
+    ask_max_question_chars: int = Field(
+        default=1000, ge=10, le=20_000, validation_alias="ASK_MAX_QUESTION_CHARS"
+    )
+    ask_max_turns: int = Field(default=20, ge=1, le=200, validation_alias="ASK_MAX_TURNS")
+    # Evidence passages per answer and their total characters (lower ranks are dropped).
+    ask_top_k: int = Field(default=8, ge=1, le=30, validation_alias="ASK_TOP_K")
+    ask_max_context_chars: int = Field(
+        default=16_000, ge=200, le=200_000, validation_alias="ASK_MAX_CONTEXT_CHARS"
+    )
+    # Candidates scoring below this relevance are no evidence (applies where a relevance scorer
+    # exists: the deterministic one under APP_ENV=test; quiz_api.ask_retrieval). Set by eval.
+    ask_min_relevance: float = Field(default=0.3, ge=0, le=1, validation_alias="ASK_MIN_RELEVANCE")
+    # Accepted questions (new, retry, regenerate) per minute per user (in-process token bucket,
+    # burst = rate; 429 + Retry-After; 0 disables it), per Asia/Seoul day per user (DB count),
+    # and the environment-wide monthly token cap (0 = off).
+    ask_rate_per_minute: int = Field(
+        default=6, ge=0, le=600, validation_alias="ASK_RATE_LIMIT_PER_MINUTE"
+    )
+    ask_daily_limit_per_user: int = Field(
+        default=50, ge=1, le=100_000, validation_alias="ASK_DAILY_LIMIT_PER_USER"
+    )
+    ask_monthly_token_cap: int = Field(default=0, ge=0, validation_alias="ASK_MONTHLY_TOKEN_CAP")
+    # Answer versions of one question (the first answer, retries and regenerations).
+    ask_max_regenerations: int = Field(
+        default=5, ge=1, le=50, validation_alias="ASK_MAX_REGENERATIONS"
+    )
+
     db_pool_size: int = Field(default=5, ge=1, validation_alias="DB_POOL_SIZE")
     db_connect_timeout_seconds: float = Field(
         default=3.0, gt=0, validation_alias="DB_CONNECT_TIMEOUT_SECONDS"
@@ -374,6 +406,12 @@ class Settings(BaseSettings):
     def mock_exam_llm_available(self) -> bool:
         """Mock exams may use the AI variation types here (MOCK-01-AC08)."""
         return self.mock_exams and self.llm_provider_configured
+
+    @property
+    def ask_available(self) -> bool:
+        """New AI questions can be asked here (ASK-01-AC08): the switch is on and a provider is
+        configured (the worker's deterministic fake under APP_ENV=test)."""
+        return self.ask_llm and self.llm_provider_configured
 
     @property
     def llm_provider_configured(self) -> bool:

@@ -63,7 +63,9 @@ _m3 = _sh._m3
 stack = _sh.stack
 seed = _sh.seed
 
-ASK_ON = {"WORKER_ASK_LLM": "true"}
+# The module's app also allows more questions per minute than the default 6: the C03 property test
+# asks eight times in a few seconds (`limits_app` tests the per-minute limit itself).
+ASK_ON = {"WORKER_ASK_LLM": "true", "ASK_RATE_LIMIT_PER_MINUTE": "120"}
 SMALL_LIMITS = {
     "ASK_MAX_TURNS": "2",
     "ASK_RATE_LIMIT_PER_MINUTE": "3",

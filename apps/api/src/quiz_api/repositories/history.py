@@ -27,7 +27,13 @@ from sqlalchemy import Select, and_, func, or_, select, true, tuple_
 from sqlalchemy.orm import Session
 
 from quiz_api.practice_grading import AttemptResult
-from quiz_api.repositories.jobs import JobStatus, JobView, error_code, progress_of
+from quiz_api.repositories.jobs import (
+    PERSONAL_JOB_TYPES,
+    JobStatus,
+    JobView,
+    error_code,
+    progress_of,
+)
 from quiz_api.repositories.tables import (
     activity_events,
     async_jobs,
@@ -206,7 +212,11 @@ def jobs_query(workspace_id: uuid.UUID, *, limit: int, after: Cursor | None) -> 
         j.c.updated_at,
         j.c.started_at,
         j.c.finished_at,
-    ).where(j.c.workspace_id == workspace_id)
+    ).where(
+        j.c.workspace_id == workspace_id,
+        # Personal jobs (ASK-01-C07: AI question answers) are in no workspace history.
+        *(j.c.job_type != job_type for job_type in sorted(PERSONAL_JOB_TYPES)),
+    )
     if after is not None:
         stmt = stmt.where(tuple_(j.c.created_at, j.c.id) < tuple_(after.at, after.id))
     return stmt.order_by(j.c.created_at.desc(), j.c.id.desc()).limit(limit + 1)
