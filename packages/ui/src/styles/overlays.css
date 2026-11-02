@@ -317,7 +317,6 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    overscroll-behavior: contain;
     padding: var(--space-4) var(--space-5);
     font-size: var(--font-size-body-lg);
     line-height: var(--line-height-relaxed);
@@ -497,7 +496,6 @@
   > .nav {
     flex: 1;
     overflow-y: auto;
-    overscroll-behavior: contain;
     padding: var(--space-3) var(--space-2);
   }
 }
