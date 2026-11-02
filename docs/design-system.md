@@ -361,10 +361,10 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 
 ### 5.5 홈 dialog는 modal, 배치 고정 (v1.2.8, UX9-MODAL — 사용자 요청 "문서 관리, 중복 문제 정리 등도 modal로 변경하고 해당 dialog의 열고 닫힘에 따라 본문 layout이 변하지 않게", "정리 노트도 모달로 변경")
 
-- Workspace 홈의 floating dialog(문서 관리·중복 문제 정리·보관·초안 문제·모의고사·이력·링크 공유·챕터 재분배·정리 노트, 제안: 문서 요약)는 `FloatingSidePanel modal`이다: focus trap, 배경 `inert` + backdrop `--color-backdrop`(풀이 panel과 같은 scrim), Escape는 dialog 안 어디서든 닫음, 닫으면 opener로 focus. 목록은 [HOMEDLG-01](screens/home-dialogs.md).
-- **한 번에 홈 dialog 하나, 안에서 연 것만 쌓임:** 아래 "여러 패널 쌓기"의 rank 규칙은 이제 안쪽에서 연 dialog(요약·문제 상세·각주 풀이 panel·확인 dialog)에만 쓰인다. 홈 수준 dialog를 나란히 여는 경로와 `raiseKey`로 가려진 dialog를 다시 위로 올리는 경로는 없어진다.
+- Workspace 홈의 floating dialog(문서 관리·중복 문제 정리·보관·초안 문제·모의고사·이력·링크 공유·챕터 재분배·정리 노트·문서 요약)와 홈 밖의 floating panel(본문 발췌·원본 비교·공유 화면의 문제·요약·정리 노트 panel)은 모두 `FloatingSidePanel modal`이다(사용자 결정 2026-11-02): focus trap, 배경 `inert` + backdrop `--color-backdrop`(풀이 panel과 같은 scrim), Escape는 dialog 안 어디서든 닫음, 닫으면 opener로 focus. 목록은 [HOMEDLG-01](screens/home-dialogs.md).
+- **여러 개가 쌓일 수 있고 맨 위 하나만 활성:** 아래 "여러 패널 쌓기"의 rank 규칙(나중에 연 것이 위)은 그대로이고, modal이라 맨 위 하나만 활성·나머지는 `inert`다. 버튼으로는 안에서 연 것만 쌓이고(header가 비활성), 딥링크는 URL `panel` 순서대로 여러 홈 dialog를 쌓는다(HOMEDLG-01). `raiseKey`로 가려진 dialog를 다시 위로 올리는 경로는 없어진다.
 - **배치 고정:** 열고 닫아도 페이지 내용의 위치·크기가 바뀌지 않는다. (1) scroll root(`html`)에 `scrollbar-gutter: stable` — 잠금으로 scrollbar가 사라져도 그 폭을 지킨다. (2) kit의 modal scroll 잠금(Radix `RemoveScroll`)은 scrollbar 보정(`padding-right`/`margin-right` 추가)을 끈다(gutter가 이미 자리를 지키므로 보정하면 두 배로 밀림). (3) 홈 내용이 dialog 옆으로 비켜서던 inset(데스크톱 `--floating-panel-width`만큼 padding, UX3c)은 없앤다 — modal이 위를 덮는다. (4) 등장·퇴장은 dialog 자신의 transform·opacity만, 문서 흐름에 영향 없음. 이 규칙은 kit primitive가 보장한다(기능 코드에서 따로 padding을 주지 않음). docked panel(`placement="docked"`, DOCVIEW 목차)은 페이지 배치라 이 규칙 밖이다.
-- **홈 밖 non-modal panel:** 본문 검색 페이지의 "본문 발췌", 가져오기 페이지의 원본 비교, 공유 게스트 화면의 panel은 non-modal로 남는다(제안 — HOMEDLG-01). non-modal panel이 내용 옆으로 비켜서는 inset은 그 페이지의 설계다(홈 배치 고정 규칙 대상 아님).
+- **홈 밖 panel도 modal:** 본문 발췌·원본 비교·공유 화면 panel도 modal이고 배치 고정 규칙이 같다(목록이 비켜서던 inset 없음). 목록의 다른 항목으로 옮기는 것은 panel header의 이전·다음 버튼(제안)이다. non-modal로 남는 floating 표면은 없다(docked 목차는 페이지 배치).
 - 검증: HOMEDLG-01-AC03(bounding box 0px, 고전 scrollbar Chromium·iPad WebKit).
 
 ## 6. QuestionDot / Heatmap 컴포넌트 계약

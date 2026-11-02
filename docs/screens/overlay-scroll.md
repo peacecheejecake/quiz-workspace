@@ -45,7 +45,7 @@ linked_tests: [UX9-SCROLL-AC01 … UX9-SCROLL-AC04]
 
 ### UX9-SCROLL-AC04
 
-> **UX9-SPEC 사용자 결정 2026-11-02 D3:** 홈에는 non-modal dialog가 남지 않는다(HOMEDLG-01). UX9-MODAL이 이 AC의 대상을 남은 non-modal panel — 본문 검색 페이지의 "본문 발췌"(SEARCH-02)·가져오기 페이지의 원본 비교(QIMPORT-01) — 로 바꾸고, 홈 modal dialog에 대해서는 "wheel이 페이지를 scroll하지 않음(배경 잠금)"만 확인한다. side panel 경우(AC03)는 그대로다.
+> **UX9-SPEC 사용자 결정 2026-11-02 D3:** 홈에는 non-modal dialog가 남지 않는다(HOMEDLG-01). 같은 날 결정으로 홈 밖의 panel(본문 발췌·원본 비교·공유 화면 panel)도 modal이 되어 guard 대상인 non-modal floating 표면이 남지 않는다(docked 목차는 guard 밖). UX9-MODAL이 이 AC를 "데스크톱에서 modal dialog 위의 wheel/trackpad scroll은 header에서도 본문 끝을 넘어서도 페이지를 scroll하지 않는다(배경 잠금); 닫으면 페이지는 다시 scroll된다"로 test와 함께 고친다. side panel 경우(AC03)는 그대로다.
 
 - **Given:** 데스크톱 Workspace 홈에서 non-modal dialog가 열린 상태(페이지는 scroll 가능)
 - **When:** dialog의 header 위에서, 그리고 끝까지 scroll한 dialog 본문 위에서 그 끝을 넘는 방향으로 wheel/trackpad scroll하고; dialog 옆의 페이지 위에서 wheel scroll한다

@@ -13,7 +13,7 @@ actor: workspace_member (owner · editor · viewer)
 permission: read
 status: confirmed
 api: [POST /api/v1/workspaces/:id/search, GET /api/v1/workspaces/:id/documents]
-components: [PageHeader, BackLink, Breadcrumb, Input, IconButton, Popover, FloatingSidePanel, EmptyState]
+components: [PageHeader, BackLink, Breadcrumb, Input, IconButton, Popover, FloatingSidePanel(modal), EmptyState]
 linked_tests: [SEARCH-02-AC01 … SEARCH-02-AC04]
 ```
 
@@ -30,7 +30,7 @@ linked_tests: [SEARCH-02-AC01 … SEARCH-02-AC04]
 ## 레이아웃 및 컴포넌트
 
 - `PageHeader`(제목 "본문 검색" `h1`, back·breadcrumb 슬롯) 아래 검색 줄: 입력란(접근성 이름 "본문 검색어", 페이지를 열면 focus — 검색어가 URL에 있으면 focus하지 않고 결과로), 아이콘 검색 버튼("검색"), "설정" 버튼("본문 설정" popover). 영역은 이름 "본문 검색"의 `search` landmark. 그 아래 "본문 검색 결과" 목록과 "검색 결과 지우기"(검색어·결과를 지움). 처음(검색어 없음)에는 안내 "교재 본문에서 찾을 말을 입력하세요."
-- 결과 항목을 누르면 non-modal "본문 발췌" `FloatingSidePanel`(데스크톱 오른쪽, 결과 목록이 비켜섬; 휴대폰 bottom sheet) — SEARCH-01-AC11 그대로. 이 panel은 홈 dialog가 아니라 이 페이지의 결과 옆 보기라 non-modal로 남긴다(제안 — 사용자 확인 필요: 결과를 보며 다른 항목을 누르는 흐름. 대안: modal로 바꾸고 다른 항목은 panel을 닫고 고름).
+- 결과 항목을 누르면 non-modal "본문 발췌" `FloatingSidePanel`(데스크톱 오른쪽, 결과 목록이 비켜섬; 휴대폰 bottom sheet) — SEARCH-01-AC11 그대로. **이 panel도 modal이다**(사용자 결정 2026-11-02 — 처음 제안(non-modal)과 다름, HOMEDLG-01): 열린 동안 결과 목록은 `inert`이고 결과 목록이 비켜서지 않으며(배치 고정), 다른 결과로 옮기려면 panel header의 `이전 결과`·`다음 결과` 버튼(결과 목록 순서, 끝에서는 비활성; Alt+↑/Alt+↓)으로 바꾸거나 닫고 고른다 (제안 — 사용자 확인 필요: panel header의 `이전`·`다음` 버튼과 Alt+↑/Alt+↓로 목록 순서대로 옮기고, 다른 항목을 고르려면 닫고 고름. 대안: 닫고 고르기만). 닫으면 focus는 그 결과 항목(마지막으로 본 결과)으로 가고 그 항목이 `aria-current`다.
 - 반응형: 375px에서 가로 스크롤 없음, 검색 줄의 버튼은 줄바꿈 없이 입력란이 줄어든다.
 
 ## 수용 기준
@@ -45,7 +45,7 @@ linked_tests: [SEARCH-02-AC01 … SEARCH-02-AC04]
 
 - **Given:** 본문 검색 결과가 여럿 나오는 검색어가 있는 Workspace(편집 권한, 데스크톱과 휴대폰 터치)
 - **When:** 검색 페이지에서 "본문 설정"으로 문서 하나를 고른 뒤 검색하고, 결과 항목의 발췌를 눌러 "본문 발췌" panel을 열고 "PDF에서 보기"를 누른 뒤 PDF 열람 페이지에서 뒤로가기를 누른다
-- **Then:** 결과는 고른 문서의 발췌만이다(URL `document`). 발췌 panel이 non-modal로 열려(제안 유지) 문서·쪽 위치와 표시된 검색어를 보이고(휴대폰은 bottom sheet), "PDF에서 보기"는 그 PDF의 그 쪽(DOC-02 `?page=`)을 연다. 뒤로가기는 같은 검색어·같은 문서 설정의 검색 페이지와 결과로 돌아온다. 문제지는 결과·문서 필터에 없다(UX7-SEARCH-2).
+- **Then:** 결과는 고른 문서의 발췌만이다(URL `document`). 발췌 panel이 modal로 열려(결과 목록 `inert`) 문서·쪽 위치와 표시된 검색어를 보이고(휴대폰은 bottom sheet), `다음 결과`가 다음 결과의 발췌로 바꾸며, "PDF에서 보기"는 그 PDF의 그 쪽(DOC-02 `?page=`)을 연다. 뒤로가기는 같은 검색어·같은 문서 설정의 검색 페이지와 결과로 돌아온다. 문제지는 결과·문서 필터에 없다(UX7-SEARCH-2).
 
 ### SEARCH-02-AC03
 
