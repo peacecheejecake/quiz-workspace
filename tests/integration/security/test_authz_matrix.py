@@ -102,11 +102,8 @@ RULES: dict[str, Rule | str] = {
     "getPracticeRunItem": OWN_READ,
     "listPracticeRunResults": OWN_READ,
     "finishPracticeRun": OWN_RUN_WRITE,
-    # questions, drafts, generation, import
+    # questions, drafts, import (the QGEN generation routes were retired by QGEN-RM)
     "updateQuestionDraft": EDIT,
-    "getQuestionGeneration": READ,
-    "listQuestionGenerationDrafts": READ,
-    "publishQuestionGenerationDrafts": EDIT,
     "getQuestionImport": READ,
     "listQuestionImportDrafts": READ,
     "listQuestionImportDraftSummaries": READ,
@@ -117,14 +114,10 @@ RULES: dict[str, Rule | str] = {
     "deleteQuestion": EDIT,
     "getQuestion": READ,
     "updateQuestion": EDIT,
-    "createQuestionGeneration": EDIT,
-    "createQuestionGenerationBatch": EDIT,
     # UX7-DEDUP: the scan only serves the merge, so both are question edits (archived 403).
     "listQuestionDuplicates": EDIT,
     "mergeQuestionDuplicates": EDIT,
-    "getQuestionGenerationBatch": READ,
     "getQuestionRevision": READ,
-    "listQuestionGenerations": READ,
     "listQuestionImports": READ,
     "createQuestionImport": EDIT,
     "listQuestions": READ,
@@ -429,18 +422,20 @@ def test_body_ids_of_another_workspace_answer_like_unknown_ids(
         ("POST", f"/workspaces/{wid}/search", lambda d: {"query": "S4", "document_ids": [d]}),
     ]
     foreign_question = world.twin_ids["question_id"]
-    batch_path = f"/workspaces/{wid}/question-generation-batches"
+    # A range id of another workspace (QGEN-RM moved this check off the retired batch route).
+    mock_path = f"/workspaces/{wid}/mock-exams"
 
-    def batch_body(q: str) -> dict[str, Any]:
+    def mock_body(q: str) -> dict[str, Any]:
         return {
-            "selection": {"mode": "selected", "question_ids": [q]},
-            "variation_types": ["PARAPHRASE"],
+            "title": "S4 범위",
+            "config": {"variation_types": ["OPTION_SHUFFLE"], "question_count": 1},
+            "range": {"question_ids": [q]},
         }
 
-    foreign_batch = owner.call("POST", batch_path, batch_body(foreign_question))
-    unknown_batch = owner.call("POST", batch_path, batch_body(str(uuid.uuid4())))
-    assert foreign_batch.status_code == 404, f"batch accepted a foreign question: {foreign_batch}"
-    assert s4.problem_key(foreign_batch) == s4.problem_key(unknown_batch), "batch: oracle"
+    foreign_mock = owner.call("POST", mock_path, mock_body(foreign_question))
+    unknown_mock = owner.call("POST", mock_path, mock_body(str(uuid.uuid4())))
+    assert foreign_mock.status_code >= 400, f"mock exam accepted a foreign question: {foreign_mock}"
+    assert s4.problem_key(foreign_mock) == s4.problem_key(unknown_mock), "mock exam: oracle"
     for method, path, body in cases:
         foreign = owner.call(method, path, body(foreign_doc))
         unknown = owner.call(method, path, body(unknown_doc))

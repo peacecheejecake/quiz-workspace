@@ -35,7 +35,9 @@ export interface DraftChapterInfo {
   readonly sourceTitle: string | null;
 }
 export type DraftUpdateBody = Schemas['QuestionDraftUpdate'];
-export type ReviewedDraftRef = Schemas['ReviewedDraft'];
+/** A draft at the version it was reviewed (`ReviewedDraft` left the contract with the QGEN publish
+ * route, QGEN-RM; the import body carries the same two fields). */
+export type ReviewedDraftRef = Pick<Schemas['ReviewedImportDraft'], 'draft_id' | 'version'>;
 /** An import draft selected for registration, with the chapter shown for it (CHAPTER-MAP). */
 export type SelectedImportDraft = Schemas['ReviewedImportDraft'];
 export type ReviewStatus = ImportDraft['review_status'];
@@ -366,27 +368,6 @@ export function draftUpdateBody(values: QuestionFormValues, baseVersion: string)
     rubric: values.type === 'ESSAY' ? nullIfBlank(values.rubric) : null,
     question_number: /^\d+$/.test(number) ? Number(number) : null,
   };
-}
-
-/**
- * Content edit of a generation draft. Sending `question_type` confirms a changed question type
- * (API `question_type_changed`), so it is sent only when the reviewer changed the type in the
- * editor; the explicit confirmation is `confirmTypeBody`.
- */
-export function generationDraftUpdateBody(
-  values: QuestionFormValues,
-  draft: Pick<ReviewDraft, 'type'>,
-  baseVersion: string,
-): DraftUpdateBody {
-  const body = draftUpdateBody(values, baseVersion);
-  if (values.type !== draft.type) return body;
-  const { question_type: _unchanged, ...rest } = body;
-  return rest;
-}
-
-/** Confirms the generated draft's question type (clears the blocking `question_type_changed`). */
-export function confirmTypeBody(draft: Pick<ReviewDraft, 'version' | 'type'>): DraftUpdateBody {
-  return { base_version: draft.version, question_type: draft.type };
 }
 
 /** Approve (`true`) or return to pending (`false`) exactly the version on screen. */

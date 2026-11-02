@@ -6,7 +6,7 @@ app with APP_ENV=test, local Auth users, the `quiz_api` DB role and the in-proce
 loaded by path because conftest modules are not importable under `--import-mode=importlib`.
 
 `World` is one fully populated workspace (a parsed and published book with revisions and blocks,
-a CONFIRMED question, a generation run, an import run with a draft, a practice session, a share
+a CONFIRMED question, an import run with a draft, a practice session, a share
 link with Fork ON, a pending upload intent, a fork request of another user, a made mock exam)
 plus an editor, a viewer and an outsider. Its ids feed the operation table of
 `test_authz_matrix.py`, which is generated from `contracts/openapi.json` so a new route cannot be
@@ -106,8 +106,6 @@ def random_ids() -> dict[str, str]:
         "session_id",
         "run_id",
         "draft_id",
-        "generation_id",
-        "batch_id",
         "import_id",
         "registration_id",
         "question_id",
@@ -193,18 +191,6 @@ def build_world(seed: Any, label: str) -> World:
     chapter_id = str(owner.ok("GET", f"/documents/{doc_id}/outline")["items"][0]["id"])
     question = owner.create_question(wid, f"S4 {label} 문제", answer=1)
     qid = str(question["id"])
-    generation = owner.ok(
-        "POST", f"/questions/{qid}/generations", {"variation_types": ["PARAPHRASE"]}, (202,)
-    )
-    batch = owner.ok(
-        "POST",
-        f"/workspaces/{wid}/question-generation-batches",
-        {
-            "selection": {"mode": "selected", "question_ids": [qid]},
-            "variation_types": ["PARAPHRASE"],
-        },
-        (202,),
-    )
     unpublished = seed.unpublished_questions(owner, wid)
     draft_id = unpublished["importDraft"]
     rows = seed._admin(
@@ -263,15 +249,6 @@ def build_world(seed: Any, label: str) -> World:
     twin_doc = str(twin_done["document_id"])
     twin_question = owner.create_question(tid, f"S4 {label} twin 문제")
     twin_link = owner.create_link(tid)
-    twin_batch = owner.ok(
-        "POST",
-        f"/workspaces/{tid}/question-generation-batches",
-        {
-            "selection": {"mode": "selected", "question_ids": [str(twin_question["id"])]},
-            "variation_types": ["PARAPHRASE"],
-        },
-        (202,),
-    )
 
     ids = {
         "workspace_id": wid,
@@ -284,8 +261,6 @@ def build_world(seed: Any, label: str) -> World:
         "run_id": str(run["id"]),
         "position": "1",
         "draft_id": draft_id,
-        "generation_id": str(generation["id"]),
-        "batch_id": str(batch["id"]),
         "import_id": import_id,
         "registration_id": str(registration["job_id"]),
         "question_id": qid,
@@ -313,7 +288,6 @@ def build_world(seed: Any, label: str) -> World:
         "revision_id@questions": str(twin_question["revision"]["id"]),
         "link_id": str(twin_link["id"]),
         "share_id": str(twin_link["id"]),
-        "batch_id": str(twin_batch["id"]),
         "chapter_id": str(owner.ok("GET", f"/documents/{twin_doc}/outline")["items"][0]["id"]),
     }
     return World(owner, editor, viewer, outsider, forker, ids, twin_ids, str(link["secret"]))
