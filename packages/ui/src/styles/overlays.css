@@ -45,9 +45,9 @@
     width: min(720px, calc(100vw - 2 * var(--space-4)));
   }
 
-  /* Navigation panels (DOC-02 목차): a narrow column. */
+  /* Navigation columns (size="narrow"; the docked DOCVIEW-01 목차 panel has the same width). */
   &[data-size='narrow'] {
-    width: min(20rem, calc(100vw - 2 * var(--space-4)));
+    width: min(var(--outline-panel-width), calc(100vw - 2 * var(--space-4)));
   }
 
   /* `side="start"`: the panel floats at the inline start (left in LTR) edge. */
@@ -221,6 +221,56 @@
       padding-inline: var(--space-4);
     }
   }
+}
+
+/*
+ * Docked panels (placement="docked", design-system §5.1 v1.2.7) sit inside their positioned
+ * container instead of the viewport, at every width: full container height at the `side` edge,
+ * --outline-panel-width wide. Declared after the mobile rules so they win there too (narrow
+ * screens keep the opaque surface of the mobile rules).
+ */
+.qz-panel[data-placement='docked'] {
+  position: absolute;
+  top: 0;
+  right: auto;
+  bottom: 0;
+  left: 0;
+  width: min(var(--outline-panel-width), 100%);
+  height: auto;
+  max-height: none;
+  border-radius: var(--radius-xl);
+  padding-top: 0;
+  padding-bottom: 0;
+
+  &[data-side='end'] {
+    right: 0;
+    left: auto;
+  }
+
+  &[data-side='start'][data-state='open'] {
+    animation-name: qz-panel-in-start;
+  }
+
+  &[data-side='start'][data-state='closed'] {
+    animation-name: qz-panel-out-start;
+  }
+
+  &[data-side='end'][data-state='open'] {
+    animation-name: qz-panel-in;
+  }
+
+  &[data-side='end'][data-state='closed'] {
+    animation-name: qz-panel-out;
+  }
+}
+
+/* Inset docking: the panel's container makes room for it (set by FloatingSidePanel while open). */
+[data-qz-dock-inset='start'] {
+  padding-inline-start: calc(var(--outline-panel-width) + var(--space-3));
+}
+
+[data-qz-dock-inset='end'] {
+  padding-inline-end: calc(var(--outline-panel-width) + var(--space-3));
 }
 
 /* ModalDialog */

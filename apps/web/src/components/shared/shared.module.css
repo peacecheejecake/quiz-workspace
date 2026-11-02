@@ -302,17 +302,3 @@ button.questionButton:focus-visible {
   font-weight: var(--font-weight-semibold);
   overflow-wrap: anywhere;
 }
-
-/* The share page has no app header: size the viewer panes to the viewport. */
-@media (width >= 768px) {
-  .split {
-    height: calc(100dvh - 12rem);
-  }
-}
-
-/* DOC-02-AC06: the open 목차 panel sits beside the document on desktop. */
-@media (width >= 1024px) {
-  .document:is([data-outline='open'], [data-outline='auto']) {
-    padding-inline-start: calc(20rem + var(--space-3));
-  }
-}

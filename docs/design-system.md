@@ -1,6 +1,6 @@
-# Design System v1.2.6 — Minimal Glass (Platform v1.2)
+# Design System v1.2.7 — Minimal Glass (Platform v1.2)
 
-**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19 · v1.2.1 버튼 hover 개정 2026-10-19 · v1.2.2 밀도(compact)·스위치·메뉴·Dropzone·Breadcrumb·패널 쌓기 개정 2026-10-20 · v1.2.5 floating glass 불투명도 개정 2026-11-01 · v1.2.6 Toast 왼쪽 bar 제거·CopyButton·객관식 채점 결과 테두리 2026-11-01  
+**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19 · v1.2.1 버튼 hover 개정 2026-10-19 · v1.2.2 밀도(compact)·스위치·메뉴·Dropzone·Breadcrumb·패널 쌓기 개정 2026-10-20 · v1.2.5 floating glass 불투명도 개정 2026-11-01 · v1.2.6 Toast 왼쪽 bar 제거·CopyButton·객관식 채점 결과 테두리 2026-11-01 · v1.2.7 `SplitView`·docked `FloatingSidePanel`·`--outline-panel-width` 2026-11-02  
 **적용:** 전역 Workspace UI, 문서 뷰어, 검색, Questions heatmap, floating side panels  
 **키워드:** minimalism, restrained glassmorphism, readability, focus, consistent semantics
 
@@ -216,6 +216,7 @@
   --breakpoint-md: 768px;
   --breakpoint-lg: 1024px;
   --floating-panel-width: 500px;
+  --outline-panel-width: 20rem; /* v1.2.7 (DOCVIEW-PORT): 탐색 panel(size="narrow")·docked 목차 panel 폭 */
   --heatmap-cell: 24px;        /* v1.2.3 (UX5-UI): 28px → 24px */
   --heatmap-cell-touch: 32px;
   --heatmap-gap: 0px;          /* v1.2.3 (UX5-UI): 4px → 0 */
@@ -309,7 +310,14 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - Desktop right panel: width `min(500px, calc(100vw - 32px))`, top/right/bottom margin `16px`, rounded `20px`, glass surface, shadow, viewport 내부 독립 scroll.
 - `QuestionPracticePanel`: **modal** 기본. 정답을 제출하거나 뒤로/다음 이동하는 명확한 흐름. backdrop 클릭/ESC 처리 정책 정의, 닫을 때 trigger dot로 focus 복귀.
 - `DocumentExcerptPanel`: **non-modal** 기본. PDF·검색 결과와 동시에 볼 수 있음.
-- **왼쪽·좁은 panel (DOCVIEW, 2026-11-01):** `side="start"`(데스크톱에서 왼쪽 16px margin, 들어오고 나갈 때 왼쪽에서 움직임; 모바일은 같은 bottom sheet)와 `size="narrow"`(`min(20rem, 100vw - 32px)`)는 탐색용 panel이다. DOC-02 `목차`가 non-modal로 쓰며, 데스크톱(≥1024px)에서는 화면 내용이 panel 폭만큼 비켜서 PDF를 가리지 않고, 더 좁은 화면에서 PDF 위에 뜰 때는 불투명(`--color-glass-solid`, blur 없음)이다(DOC-02-AC06).
+- **왼쪽·좁은·docked panel (DOCVIEW 2026-11-01, v1.2.7 DOCVIEW-PORT 2026-11-02 — API 하나로 정리):** `FloatingSidePanel`의 위치·크기 prop은 다음 넷뿐이다.
+  - `side`: `end`(기본, LTR 오른쪽) · `start`(왼쪽; 데스크톱에서 왼쪽 16px margin, 들어오고 나갈 때 왼쪽에서 움직임). 모바일(< 768px) viewport panel은 어느 쪽이든 같은 bottom sheet/full-height 레이아웃이다.
+  - `size`: `default`(`min(--floating-panel-width, 100vw - 32px)`) · `wide`(비교 drawer, ≥ 600px) · `narrow`(탐색용 열, `min(--outline-panel-width, 100vw - 32px)`).
+  - `placement`: `viewport`(기본; viewport에 고정, 16px margin) · `docked`(지정한 `container` — position이 있는 요소 — 의 `side` 쪽 위에 붙어 container 높이 전체를 쓰는 panel. 항상 non-modal(`modal`은 무시)이고 폭은 `narrow`와 같은 `--outline-panel-width`(docked에서는 `size`를 쓰지 않음), container가 없으면 렌더하지 않는다. 모든 폭에서 container 안에 붙으며 glass surface·`--shadow-floating`·radius·header/close·독립 scroll은 같다).
+  - `dockMode`(docked에서만): `inset`(기본, 넓은 container — 열린 동안 container에 `data-qz-dock-inset="start|end"`를 두어 그쪽 padding을 panel 폭만큼 늘려 옆 내용이 비켜선다) · `overlay`(좁은 container — 내용 위에 겹쳐 뜬다. 읽기 영역(PDF·텍스트)을 가리므로 화면 쪽에서 불투명 `--color-glass-solid`, blur 없음).
+  - `id`: panel 요소 id. Radix `trigger`가 아닌 panel 밖 toggle은 `aria-expanded` + `aria-controls`로 이 id를 가리키고, 그 toggle은 돌아갈 opener가 없을 때(저장된 상태로 열린 채 mount된 panel) 닫힘 뒤 focus를 받으며 non-modal panel에서 Tab이 나갈 기준이 된다. `trigger`가 있고 `id`를 주면 trigger의 `aria-controls`도 같은 id를 가리킨다.
+  - docked panel이 열린 채 mount되면(저장된 상태 복원) focus를 옮기지 않고, 사용자가 열 때만 안으로 옮긴다. Escape는 focus가 panel 안에 있을 때만 닫는다(non-modal 규칙).
+  - 쓰는 곳: DOCVIEW-01 목차 panel — 데스크톱 `side="start" placement="docked" dockMode="inset"`, 태블릿 `dockMode="overlay"`, 좁은 화면 `placement="viewport" mobileLayout="full"`. DOC-02 v1.4의 PDF 도구 막대 목차(viewport `side="start" size="narrow"`)는 DOCVIEW-PORT에서 이것으로 바뀌었다(DOC-02-AC06 폐기). 이전 브랜치의 `side="left"/"right"` 이름은 쓰지 않는다(`start`/`end`가 같은 뜻).
 - `QuestionGenerationReviewPanel`: 충분한 공간이 필요하므로 desktop에서는 600px 이상 비교 drawer 또는 전체 page 모드 제공(500px 강제 금지).
 - Mobile: full width bottom sheet 또는 full-height panel, safe-area inset, `max-height: 90dvh`; 화면이 좁다면 문제 상세 전체 페이지로 전환 가능.
 - URL query: `?question=<id>` 또는 `?panel=...`로 열림 상태/딥링크 복원. 뒤로가기와 동기화(열면 기록 항목 하나, 열린 동안 뒤로가기는 닫기). 닫기 버튼·Escape로 닫으면 연 기록 항목을 되돌려 닫은 뒤 뒤로가기가 그 panel을 다시 열지 않는다(UX7-BACK, Workspace 홈 규칙은 [QOV-01](screens/questions-overview.md) "뒤로가기"·AC14).
@@ -401,7 +409,9 @@ function Marker({ favorite }: { favorite: boolean }) {
 
 ### Layout
 
-`AppShell`(UX3c: Workspace 화면은 sidebar 없이 header만), `WorkspaceSwitcher`, `SidebarNav`, `PageHeader`, `Breadcrumb`, `BackLink`, `ContentContainer`, `SplitView`, `ResizablePanel`, `FloatingSidePanel`, `ModalDialog`, `EmptyState`, `StatusSummary`.
+`AppShell`(UX3c: Workspace 화면은 sidebar 없이 header만), `WorkspaceSwitcher`, `SidebarNav`, `PageHeader`, `Breadcrumb`, `BackLink`, `ContentContainer`, `SplitView`, `FloatingSidePanel`, `ModalDialog`, `EmptyState`, `StatusSummary`.
+
+`SplitView` (v1.2.7, DOCVIEW-SPEC 2026-10-29 · DOCVIEW-PORT 2026-11-02; 첫 사용 DOCVIEW-01): 두 pane과 그 사이 크기 조절 막대. props: `orientation`(`horizontal` = 좌우, `vertical` = 상하), `ratio`(앞 pane %, 제어형)·`onRatioChange`(끄는 동안)·`onRatioCommit`(놓을 때·키 입력 때), `minRatio`(기본 20)·`minSize`(px, 축별), `defaultRatio`(Enter·더블클릭 reset, 기본 50), `visible`(`both` · `first` · `second`: 한쪽만 보일 때 다른 pane은 unmount하지 않고 `hidden`, 막대도 숨김), `separatorLabel`, `valueText(ratio)`. 막대는 `role="separator"`·focus 가능·`aria-orientation`(좌우 분할 = `vertical`)·`aria-valuenow/min/max/text`·`aria-controls`(앞 pane); 키보드는 분할 축 화살표 ±5, Home/End = 최소/최대, Enter = reset, 반대 축 화살표 무시. Pointer Events(mouse·touch·pen, `touch-action: none`, pointer capture), 끄는 동안 text 선택 막음. 시각 선 1px `--color-border`, hit 영역 ≥ 24px(coarse pointer 44px), hover·focus-visible·drag 중 굵기·grip으로 강조(색만이 아님), 상태 전환 `--duration-state`·reduced-motion 즉시. 컨테이너가 두 최소 크기 합보다 작으면 50:50 고정(min = max = 50). pane wrapper는 child의 `key`로 keyed라 호출자가 children 순서를 바꾸면(위치 바꾸기) pane이 다시 mount되지 않고 DOM만 옮겨진다; pane header 끌기는 화면 쪽 구현이다. 인벤토리의 `ResizablePanel`은 `SplitView`로 대신한다(별도 컴포넌트 두지 않음; DOC-02 v1.4의 화면 전용 `PaneSplitter`도 DOCVIEW-PORT에서 없앰). Storybook: 좌우·상하, 최소 크기, 키보드, 좁은 컨테이너, 한쪽만 보기.
 
 Workspace 홈(UX3c, 2026-10-20): Workspace 안에는 sidebar가 없다. 홈의 Workspace header(통합 검색 + `문서 n`·`문제`(DropdownMenu: 직접 추가·변형 출제 — `PDF 관리`와 문제 PDF 관리 dialog는 UX7-DOCS에서 문서 관리로 통합; UX6-PROGRESS~UX6-BANK의 `전체 문제` 항목은 그 페이지(QBANK-01)와 함께 UX7-BANK에서 없어졌고, `직접 추가`는 홈 위에 modal "문제 등록" dialog를 연다) 묶음과 오른쪽 정렬된 `이력`·`공유하기` secondary `IconButton` 묶음, UX4)가 진입점이며, 문서 관리·문제 생성·이력·링크 공유는 모두 non-modal `FloatingSidePanel`(§5.1 stacking: 나중에 연 것이 위, 열린 dialog의 버튼을 다시 누르면 `raiseKey`로 다시 위로)로 홈의 `<main>` 안에 portal하고, 데스크톱에서는 dialog가 열린 동안 홈 내용이 dialog 폭만큼 비켜선다. 홈과 dialog에는 `PageHeader` 제목·설명이 없고 `h1`은 시각적으로 숨긴다. 통합 검색 옵션은 "검색 옵션" 텍스트 버튼이 여는 `Popover`다. 새 icon: `SearchIcon`, `TrashIcon`, `HistoryIcon`, `ChevronUpIcon`, `ShareIcon`.
 
