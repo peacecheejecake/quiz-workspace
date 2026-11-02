@@ -10,6 +10,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { closeTopModal } from '../internal/modal-stack';
+import { handlesOwnEscape } from '../internal/own-escape';
 import { IconButton } from '../primitives/IconButton';
 import { AlertIcon, CheckIcon, CloseIcon } from '../primitives/icons';
 
@@ -97,6 +99,16 @@ export function ToastProvider({
             className="qz-toast glass-surface"
             onOpenChange={(open) => {
               if (!open) dismiss(item.id);
+            }}
+            onEscapeKeyDown={(event) => {
+              // While a modal is open Escape closes its top dialog, never the toast (user decision
+              // 2026-11-02): the toast closes by its own button or timeout then. An inline edit
+              // (ownEscapeProps) keeps its own Escape.
+              if (handlesOwnEscape(event)) {
+                event.preventDefault();
+                return;
+              }
+              if (closeTopModal()) event.preventDefault();
             }}
           >
             {item.tone === 'success' || item.tone === 'error' ? (

@@ -3,11 +3,18 @@
 // scrollbar compensation, and the panel's 이전/다음 steps.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { FloatingSidePanel, Input, ModalDialog, useUnsavedChanges } from '../src';
+import {
+  FloatingSidePanel,
+  Input,
+  ModalDialog,
+  ToastProvider,
+  useToast,
+  useUnsavedChanges,
+} from '../src';
 
 function backdrop(): HTMLElement {
   const all = document.querySelectorAll<HTMLElement>('.qz-backdrop');
@@ -165,5 +172,36 @@ describe('FloatingSidePanel steps', () => {
     // At the end Alt+↓ does nothing.
     await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
     expect(dialog).toHaveTextContent('다');
+  });
+});
+
+function ToastOverPanel() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(true);
+  return (
+    <FloatingSidePanel open={open} onOpenChange={setOpen} title="보관·초안 문제">
+      <button type="button" onClick={() => toast({ title: '보관 해제했습니다', tone: 'success' })}>
+        보관 해제
+      </button>
+    </FloatingSidePanel>
+  );
+}
+
+describe('Escape with a toast over a modal', () => {
+  it('closes the top dialog first; the toast stays until its own button or timeout', async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <ToastOverPanel />
+      </ToastProvider>,
+    );
+    const dialog = await screen.findByRole('dialog', { name: '보관·초안 문제' });
+    await user.click(within(dialog).getByRole('button', { name: '보관 해제' }));
+    expect(await screen.findAllByText('보관 해제했습니다')).not.toHaveLength(0);
+    await user.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: '보관·초안 문제' })).not.toBeInTheDocument(),
+    );
+    expect(screen.getAllByText('보관 해제했습니다')).not.toHaveLength(0);
   });
 });

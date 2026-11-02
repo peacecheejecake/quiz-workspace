@@ -7,11 +7,11 @@ import { useBackdropClose } from '../internal/backdrop';
 import { cx } from '../internal/cx';
 import { DirtyProvider, useDirtyRegistry } from '../internal/dirty';
 import { LayerProvider } from '../internal/layer';
+import { useModalStackEntry } from '../internal/modal-stack';
 import { useMergedRefs } from '../internal/merge-refs';
 import { useOverscrollGuard } from '../internal/overscroll-guard';
 import { handlesOwnEscape } from '../internal/own-escape';
 import { ScrollRegion } from '../internal/scroll-region';
-import { useScrollFreeze } from '../internal/scroll-freeze';
 import { IconButton } from '../primitives/IconButton';
 import { CloseIcon } from '../primitives/icons';
 
@@ -75,7 +75,7 @@ export function ModalDialog({
     onOpenChange?.(next);
   };
   const registry = useDirtyRegistry();
-  useScrollFreeze(isOpen);
+  useModalStackEntry(isOpen, () => changeOpen(false));
   const backdrop = useBackdropClose(closeOnBackdropClick && !dirty && !registry.dirty, () =>
     changeOpen(false),
   );

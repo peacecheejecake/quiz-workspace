@@ -5,9 +5,9 @@ import type { ReactNode, RefObject } from 'react';
 import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
 import { LayerProvider } from '../internal/layer';
+import { useModalStackEntry } from '../internal/modal-stack';
 import { useMergedRefs } from '../internal/merge-refs';
 import { useOverscrollGuard } from '../internal/overscroll-guard';
-import { useScrollFreeze } from '../internal/scroll-freeze';
 import { Button } from '../primitives/Button';
 
 export interface ConfirmDialogProps {
@@ -49,7 +49,10 @@ export function ConfirmDialog({
   // Radix's modal scroll lock covers this too; the guard keeps every overlay alike (UX9-SCROLL).
   const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
   const surfaceRef = useMergedRefs(animateHeight, guardOverscroll);
-  useScrollFreeze(open);
+  // Escape cancels it (unless busy), also while a toast is shown over it.
+  useModalStackEntry(open, () => {
+    if (!loading) onOpenChange(false);
+  });
   return (
     <AlertDialog.Root
       open={open}

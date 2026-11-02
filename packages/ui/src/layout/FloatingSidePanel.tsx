@@ -16,11 +16,11 @@ import { useBackdropClose } from '../internal/backdrop';
 import { cx } from '../internal/cx';
 import { DirtyProvider, useDirtyRegistry } from '../internal/dirty';
 import { LayerProvider, useFloatingLayer } from '../internal/layer';
+import { useModalStackEntry } from '../internal/modal-stack';
 import { handlesOwnEscape } from '../internal/own-escape';
 import { containOverscroll } from '../internal/overscroll-guard';
 import { currentOpener, watchOpeners } from '../internal/opener';
 import { ScrollRegion } from '../internal/scroll-region';
-import { useScrollFreeze } from '../internal/scroll-freeze';
 import { handOffFocus } from '../internal/tabbable';
 import { IconButton } from '../primitives/IconButton';
 import { ChevronDownIcon, ChevronUpIcon, CloseIcon } from '../primitives/icons';
@@ -223,8 +223,8 @@ export function FloatingSidePanel({
   };
   const layer = useFloatingLayer(isOpen, raiseKey);
   const registry = useDirtyRegistry();
+  useModalStackEntry(modal && isOpen, () => handleOpenChange(false));
   useEffect(watchOpeners, []);
-  useScrollFreeze(modal && isOpen);
   const backdrop = useBackdropClose(closeOnBackdropClick && !dirtyProp && !registry.dirty, () =>
     handleOpenChange(false),
   );
