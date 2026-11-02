@@ -6516,13 +6516,6 @@ export type components = {
        */
       progress: number | null;
       /**
-       * Result
-       * @description Counts and code only, for `mock_exam.generate`: {created_count, skipped_count, usage: {llm_calls, batches, input_tokens, output_tokens}, error_code}; null for other job types.
-       */
-      result?: {
-        [key: string]: unknown;
-      } | null;
-      /**
        * Retryable
        * @description The caller can start this job again: `document` → POST /documents/{target_id}/publish, `question_import` → POST /question-imports/{target_id}/retry. The retry is a new job.
        */
