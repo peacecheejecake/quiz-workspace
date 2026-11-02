@@ -89,7 +89,8 @@ def test_ask_answer_goes_to_the_interactive_queue_like_the_worker_routes_it(
 
     assert queue_for("ask.answer") == INTERACTIVE_QUEUE == celery_app.INTERACTIVE_QUEUE
     assert queue_for("document.parse") == DEFAULT_QUEUE
-    for job_type in ("ask.answer", "document.parse", "mock_exam.generate"):
+    assert queue_for("question.ai_explain") == INTERACTIVE_QUEUE  # EXPL-B
+    for job_type in ("ask.answer", "question.ai_explain", "document.parse", "mock_exam.generate"):
         assert queue_for(job_type) == celery_app.queue_for(job_type)
     publisher = CeleryJobPublisher("memory://")
     sent: dict[str, Any] = {}

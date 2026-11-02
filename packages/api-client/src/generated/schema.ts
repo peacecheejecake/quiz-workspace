@@ -3,6 +3,26 @@
 /* eslint-disable */
 
 export type paths = {
+  '/api/v1/ai-explanations/{explanation_id}/stream': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream Question Explanation
+     * @description The explanation's text as it is written (same gate as GET …/ai-explanation).
+     */
+    get: operations['streamQuestionAiExplanation'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/ask/conversations/{conversation_id}': {
     parameters: {
       query?: never;
@@ -601,6 +621,23 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/mock-ai-explanations/{mock_explanation_id}/stream': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Stream Mock Explanation */
+    get: operations['streamMockExamQuestionAiExplanation'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/mock-exam-questions/{mock_exam_question_id}': {
     parameters: {
       query?: never;
@@ -626,6 +663,44 @@ export type paths = {
     patch: operations['updateMockExamQuestion'];
     trace?: never;
   };
+  '/api/v1/mock-exam-questions/{mock_exam_question_id}/ai-explanation': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Mock Explanation
+     * @description The AI explanation of this mock exam question's revision (its own, never the source's).
+     */
+    get: operations['getMockExamQuestionAiExplanation'];
+    put?: never;
+    /** Create Mock Explanation */
+    post: operations['createMockExamQuestionAiExplanation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/mock-exam-questions/{mock_exam_question_id}/ai-explanation/regenerate': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Regenerate Mock Explanation */
+    post: operations['regenerateMockExamQuestionAiExplanation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/mock-exam-questions/{mock_exam_question_id}/practice-sessions': {
     parameters: {
       query?: never;
@@ -643,26 +718,6 @@ export type paths = {
      *     session is resumed, a submitted one is 409 `already-submitted`.
      */
     post: operations['startMockPracticeSession'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/mock-exam-questions/{mock_exam_question_id}/related-sources': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get Mock Exam Question Related Sources
-     * @description Related passages of a mock exam question (its own list; evidence book blocks first).
-     */
-    get: operations['getMockExamQuestionRelatedSources'];
-    put?: never;
-    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1151,6 +1206,50 @@ export type paths = {
     patch: operations['updateQuestion'];
     trace?: never;
   };
+  '/api/v1/questions/{question_id}/ai-explanation': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Question Explanation
+     * @description The AI explanation of this question's revision for a submitted session or `view=detail`.
+     */
+    get: operations['getQuestionAiExplanation'];
+    put?: never;
+    /**
+     * Create Question Explanation
+     * @description Make the explanation (202), or return the cached one (200) / the one being made (202).
+     */
+    post: operations['createQuestionAiExplanation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/ai-explanation/regenerate': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Regenerate Question Explanation
+     * @description A new version of the explanation (owner/editor; 3 per revision per day).
+     */
+    post: operations['regenerateQuestionAiExplanation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/questions/{question_id}/attempts': {
     parameters: {
       query?: never;
@@ -1212,26 +1311,6 @@ export type paths = {
      *     open session is resumed (another view), a submitted one is 409 `already-submitted`.
      */
     post: operations['startPracticeSession'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/questions/{question_id}/related-sources': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get Question Related Sources
-     * @description Related passages of a registered question after a submission or in its details.
-     */
-    get: operations['getQuestionRelatedSources'];
-    put?: never;
-    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1453,7 +1532,7 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/shared/{share_id}/questions/{question_id}/related-sources': {
+  '/api/v1/shared/{share_id}/questions/{question_id}/ai-explanation': {
     parameters: {
       query?: never;
       header?: never;
@@ -1461,11 +1540,10 @@ export type paths = {
       cookie?: never;
     };
     /**
-     * Get Shared Question Related Sources
-     * @description The stored list of a published question's active revision and the current corpus;
-     *     guests never compute (404 until a member's read stored one).
+     * Get Shared Question Explanation
+     * @description The AI explanation of one published question, as members see it (read-only).
      */
-    get: operations['getSharedQuestionRelatedSources'];
+    get: operations['getSharedQuestionAiExplanation'];
     put?: never;
     post?: never;
     delete?: never;
@@ -3129,6 +3207,127 @@ export type components = {
        */
       question_count: number;
     };
+    /** Explanation */
+    Explanation: {
+      /** @description Succeeded only. */
+      body: components['schemas']['ExplanationBody'] | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Error Code */
+      error_code: string | null;
+      /** Finished At */
+      finished_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Job Id */
+      job_id: string | null;
+      /**
+       * Question Revision Id
+       * Format: uuid
+       */
+      question_revision_id: string;
+      /**
+       * Sources
+       * @description The cited sources (succeeded only).
+       */
+      sources: components['schemas']['ExplanationSource'][];
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'queued' | 'running' | 'succeeded' | 'failed';
+      /** Truncated */
+      truncated: boolean;
+      /** Version */
+      version: number;
+    };
+    /** ExplanationBody */
+    ExplanationBody: {
+      /** Concepts Md */
+      concepts_md: string;
+      /**
+       * Correct Option Ids
+       * @description The server's answer (MCQ); [] otherwise.
+       */
+      correct_option_ids: string[];
+      /**
+       * Options
+       * @description Every option exactly once, in stored order.
+       */
+      options: components['schemas']['OptionWhy'][];
+      /**
+       * Points Md
+       * @description Short answer / essay: the rubric's core, common wrong answers.
+       */
+      points_md?: string | null;
+      /** Summary Md */
+      summary_md: string;
+    };
+    /** ExplanationRequest */
+    ExplanationRequest: {
+      /**
+       * Practice Session Id
+       * @description The caller's submitted practice session of this question.
+       */
+      practice_session_id?: string | null;
+      /**
+       * View
+       * @description `detail`: the 문제 상세 dialog (no submission needed).
+       */
+      view?: 'detail' | null;
+    };
+    /** ExplanationSource */
+    ExplanationSource: {
+      /** Block Id */
+      block_id: string | null;
+      /** Chapter Title */
+      chapter_title: string | null;
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Document Title */
+      document_title: string;
+      /**
+       * N
+       * @description The footnote number `[n]` in the body.
+       */
+      n: number;
+      /**
+       * Outdated
+       * @description The document was published again since.
+       */
+      outdated: boolean;
+      /** Page */
+      page: number;
+    };
+    /** ExplanationState */
+    ExplanationState: {
+      /**
+       * Available
+       * @description This environment can make AI explanations.
+       */
+      available: boolean;
+      /**
+       * Can Create
+       * @description available, active workspace, none for this revision.
+       */
+      can_create: boolean;
+      /**
+       * Can Regenerate
+       * @description An owner/editor of an active workspace, a success.
+       */
+      can_regenerate: boolean;
+      /** @description The newest explanation of this revision that is not superseded (a current success over a later failed attempt), or null. */
+      explanation: components['schemas']['Explanation'] | null;
+    };
     /** Feedback */
     Feedback: {
       /**
@@ -4184,6 +4383,78 @@ export type components = {
        */
       severity: 'error' | 'warning';
     };
+    /** MockExplanation */
+    MockExplanation: {
+      /** @description Succeeded only. */
+      body: components['schemas']['ExplanationBody'] | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Error Code */
+      error_code: string | null;
+      /** Finished At */
+      finished_at: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Job Id */
+      job_id: string | null;
+      /**
+       * Mock Exam Question Revision Id
+       * Format: uuid
+       */
+      mock_exam_question_revision_id: string;
+      /**
+       * Sources
+       * @description The cited sources (succeeded only).
+       */
+      sources: components['schemas']['ExplanationSource'][];
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'queued' | 'running' | 'succeeded' | 'failed';
+      /** Truncated */
+      truncated: boolean;
+      /** Version */
+      version: number;
+    };
+    /** MockExplanationRequest */
+    MockExplanationRequest: {
+      /**
+       * Mock Practice Session Id
+       * @description The caller's submitted mock practice session of this question.
+       */
+      mock_practice_session_id?: string | null;
+      /**
+       * View
+       * @description `manage`: 모의고사 문제 관리 (owner/editor, no submission).
+       */
+      view?: 'manage' | null;
+    };
+    /** MockExplanationState */
+    MockExplanationState: {
+      /**
+       * Available
+       * @description This environment can make AI explanations.
+       */
+      available: boolean;
+      /**
+       * Can Create
+       * @description available, active workspace, none for this revision.
+       */
+      can_create: boolean;
+      /**
+       * Can Regenerate
+       * @description An owner/editor of an active workspace, a success.
+       */
+      can_regenerate: boolean;
+      explanation: components['schemas']['MockExplanation'] | null;
+    };
     /**
      * MockPracticeSession
      * @description What a viewer needs to show a mock exam question. Never carries answers, explanations,
@@ -4255,22 +4526,6 @@ export type components = {
        * Format: uuid
        */
       workspace_id: string;
-    };
-    /** MockRelatedSources */
-    MockRelatedSources: {
-      /** Degraded */
-      degraded: 'dense_unavailable'[];
-      /** Id */
-      id: string | null;
-      /** Items */
-      items: components['schemas']['RelatedSource'][];
-      /**
-       * Mock Exam Question Revision Id
-       * Format: uuid
-       */
-      mock_exam_question_revision_id: string;
-      /** Stored */
-      stored: boolean;
     };
     /**
      * MockSubmitResult
@@ -4523,6 +4778,13 @@ export type components = {
       question_count: number;
       /** Version */
       version: number;
+    };
+    /** OptionWhy */
+    OptionWhy: {
+      /** Option Id */
+      option_id: string;
+      /** Why Md */
+      why_md: string;
     };
     /** Outline */
     Outline: {
@@ -5415,90 +5677,6 @@ export type components = {
        */
       status: 'ok' | 'unavailable';
     };
-    /** RelatedSource */
-    RelatedSource: {
-      /**
-       * Block Id
-       * @description The passage's first block (DOC-02 / excerpt panel).
-       */
-      block_id: string;
-      /**
-       * Chapter Id
-       * @description Top-level chapter of the passage.
-       */
-      chapter_id: string | null;
-      /** Chapter Title */
-      chapter_title: string | null;
-      /**
-       * Document Id
-       * Format: uuid
-       */
-      document_id: string;
-      /** Document Title */
-      document_title: string;
-      /**
-       * Excerpt
-       * @description At most 300 characters, whole paragraphs where possible.
-       */
-      excerpt: string;
-      /**
-       * From Question Source
-       * @description One of the question's own sources (문제 출처).
-       */
-      from_question_source: boolean;
-      /**
-       * Highlights
-       * @description Query-term ranges in `excerpt` (<mark>).
-       */
-      highlights: components['schemas']['TextSpan'][];
-      /** Page End */
-      page_end: number;
-      /** Page Start */
-      page_start: number;
-      /**
-       * Rank
-       * @description 1-based position in the list.
-       */
-      rank: number;
-      /**
-       * Revision Id
-       * Format: uuid
-       * @description The document revision the passage is from.
-       */
-      revision_id: string;
-      /**
-       * Score
-       * @description Relevance (or fusion) score of a search hit; null for sources.
-       */
-      score?: number | null;
-      /**
-       * Stale
-       * @description The revision is no longer the document's published one.
-       */
-      stale: boolean;
-    };
-    /** RelatedSources */
-    RelatedSources: {
-      /**
-       * Degraded
-       * @description `dense_unavailable`: keyword (BM25) results only, not stored.
-       */
-      degraded: 'dense_unavailable'[];
-      /**
-       * Id
-       * @description The stored list (the same for every reader of the key); null when the list was computed but not stored (archived workspace, degraded search).
-       */
-      id: string | null;
-      /** Items */
-      items: components['schemas']['RelatedSource'][];
-      /**
-       * Question Revision Id
-       * Format: uuid
-       */
-      question_revision_id: string;
-      /** Stored */
-      stored: boolean;
-    };
     /** RestoredDraft */
     RestoredDraft: {
       /**
@@ -6082,6 +6260,17 @@ export type components = {
       /** Title */
       title: string;
     };
+    /** SharedExplanation */
+    SharedExplanation: {
+      body: components['schemas']['ExplanationBody'];
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Sources */
+      sources: components['schemas']['ExplanationSource'][];
+    };
     /**
      * SharedQuestion
      * @description A published question with its answer and explanation; no per-user or owner fields.
@@ -6121,57 +6310,6 @@ export type components = {
       items: components['schemas']['SharedQuestion'][];
       /** Next Cursor */
       next_cursor: string | null;
-    };
-    /** SharedRelatedSource */
-    SharedRelatedSource: {
-      /**
-       * Block Id
-       * @description The passage's first block (DOC-02 / excerpt panel).
-       */
-      block_id: string;
-      /**
-       * Chapter Id
-       * @description Top-level chapter of the passage.
-       */
-      chapter_id: string | null;
-      /** Chapter Title */
-      chapter_title: string | null;
-      /**
-       * Document Id
-       * Format: uuid
-       */
-      document_id: string;
-      /** Document Title */
-      document_title: string;
-      /**
-       * Excerpt
-       * @description At most 300 characters, whole paragraphs where possible.
-       */
-      excerpt: string;
-      /**
-       * From Question Source
-       * @description One of the question's own sources (문제 출처).
-       */
-      from_question_source: boolean;
-      /**
-       * Highlights
-       * @description Query-term ranges in `excerpt` (<mark>).
-       */
-      highlights: components['schemas']['TextSpan'][];
-      /** Page End */
-      page_end: number;
-      /** Page Start */
-      page_start: number;
-      /**
-       * Rank
-       * @description 1-based position in the list.
-       */
-      rank: number;
-    };
-    /** SharedRelatedSources */
-    SharedRelatedSources: {
-      /** Items */
-      items: components['schemas']['SharedRelatedSource'][];
     };
     /** SharedSearchResponse */
     SharedSearchResponse: {
@@ -6591,13 +6729,6 @@ export type components = {
        */
       start: number;
     };
-    /** TextSpan */
-    TextSpan: {
-      /** End */
-      end: number;
-      /** Start */
-      start: number;
-    };
     /** UploadCompleted */
     UploadCompleted: {
       /**
@@ -6911,6 +7042,76 @@ export type components = {
 };
 export type $defs = Record<string, never>;
 export interface operations {
+  streamQuestionAiExplanation: {
+    parameters: {
+      query?: {
+        practice_session_id?: string | null;
+        view?: 'detail' | null;
+      };
+      header?: never;
+      path: {
+        explanation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Server-Sent Events: `delta {seq, text}` (seq counts deltas from 0, again from 0 after a `reset`; the SSE `id` is the event number: send `Last-Event-ID` to resume), `reset` (drop the text received so far), then one `done {explanation}` or `error {code}`. A finished explanation is a single `done`/`error`. Send the Bearer token in the Authorization header, never in the URL. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'text/event-stream': string;
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getAskConversation: {
     parameters: {
       query?: never;
@@ -9249,6 +9450,76 @@ export interface operations {
       };
     };
   };
+  streamMockExamQuestionAiExplanation: {
+    parameters: {
+      query?: {
+        mock_practice_session_id?: string | null;
+        view?: 'manage' | null;
+      };
+      header?: never;
+      path: {
+        mock_explanation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Server-Sent Events: `delta {seq, text}` (seq counts deltas from 0, again from 0 after a `reset`; the SSE `id` is the event number: send `Last-Event-ID` to resume), `reset` (drop the text received so far), then one `done {explanation}` or `error {code}`. A finished explanation is a single `done`/`error`. Send the Bearer token in the Authorization header, never in the URL. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'text/event-stream': string;
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   removeMockExamQuestion: {
     parameters: {
       query?: never;
@@ -9394,31 +9665,27 @@ export interface operations {
       };
     };
   };
-  startMockPracticeSession: {
+  getMockExamQuestionAiExplanation: {
     parameters: {
-      query?: never;
-      header?: {
-        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
-        'Idempotency-Key'?: string | null;
+      query?: {
+        mock_practice_session_id?: string | null;
+        view?: 'manage' | null;
       };
+      header?: never;
       path: {
         mock_exam_question_id: string;
       };
       cookie?: never;
     };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PracticeSessionCreate'] | null;
-      };
-    };
+    requestBody?: never;
     responses: {
       /** @description Successful Response */
-      201: {
+      200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['MockPracticeSession'];
+          'application/json': components['schemas']['MockExplanationState'];
         };
       };
       /** @description Unauthorized */
@@ -9466,8 +9733,86 @@ export interface operations {
           'application/problem+json': components['schemas']['Problem'];
         };
       };
-      /** @description Service Unavailable */
-      503: {
+    };
+  };
+  createMockExamQuestionAiExplanation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mock_exam_question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MockExplanationRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockExplanationState'];
+        };
+      };
+      /** @description Accepted: the explanation is being made (stream it). */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
         headers: {
           [name: string]: unknown;
         };
@@ -9477,21 +9822,20 @@ export interface operations {
       };
     };
   };
-  getMockExamQuestionRelatedSources: {
+  regenerateMockExamQuestionAiExplanation: {
     parameters: {
-      query?: {
-        /** @description The caller's own submitted mock practice session of this question. */
-        mock_practice_session_id?: string | null;
-        /** @description `manage`: 모의고사 문제 관리 (edit rights, active workspace). */
-        view?: 'manage' | null;
-      };
+      query?: never;
       header?: never;
       path: {
         mock_exam_question_id: string;
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MockExplanationRequest'];
+      };
+    };
     responses: {
       /** @description Successful Response */
       200: {
@@ -9499,7 +9843,97 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['MockRelatedSources'];
+          'application/json': components['schemas']['MockExplanationState'];
+        };
+      };
+      /** @description Accepted: the explanation is being made (stream it). */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  startMockPracticeSession: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        mock_exam_question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PracticeSessionCreate'] | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockPracticeSession'];
         };
       };
       /** @description Unauthorized */
@@ -11393,6 +11827,250 @@ export interface operations {
       };
     };
   };
+  getQuestionAiExplanation: {
+    parameters: {
+      query?: {
+        practice_session_id?: string | null;
+        view?: 'detail' | null;
+      };
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ExplanationState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createQuestionAiExplanation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ExplanationRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ExplanationState'];
+        };
+      };
+      /** @description Accepted: the explanation is being made (stream it). */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  regenerateQuestionAiExplanation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ExplanationRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ExplanationState'];
+        };
+      };
+      /** @description Accepted: the explanation is being made (stream it). */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   listMyQuestionAttempts: {
     parameters: {
       query?: {
@@ -11559,87 +12237,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PracticeSession'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Conflict */
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  getQuestionRelatedSources: {
-    parameters: {
-      query?: {
-        /** @description The caller's own submitted practice session of this question. */
-        practice_session_id?: string | null;
-        /** @description `detail`: the 문제 상세 dialog. */
-        view?: 'detail' | null;
-      };
-      header?: never;
-      path: {
-        question_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['RelatedSources'];
         };
       };
       /** @description Unauthorized */
@@ -12421,7 +13018,7 @@ export interface operations {
       };
     };
   };
-  getSharedQuestionRelatedSources: {
+  getSharedQuestionAiExplanation: {
     parameters: {
       query?: never;
       header?: never;
@@ -12440,7 +13037,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['SharedRelatedSources'];
+          'application/json': components['schemas']['SharedExplanation'];
         };
       };
       /** @description Unauthorized */

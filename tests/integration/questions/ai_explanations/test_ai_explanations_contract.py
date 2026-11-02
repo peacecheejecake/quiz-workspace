@@ -13,8 +13,7 @@ the deterministic fake and its markers (C08); mock exam questions with their own
 `view: manage` (C09).
 
 Shapes are assumptions E1-E9 in tests/e2e/fixtures/ai-explanations.ts. Jobs run in this process
-(conftest.py). EXPL.0: every test carries the `red` marker (excluded from `make test-infra`);
-EXPL-B removes it.
+(conftest.py). EXPL.0 marked every test `red`; EXPL-B removed the marker.
 """
 
 from __future__ import annotations
@@ -33,7 +32,7 @@ from urllib.parse import urlencode, urlsplit
 import httpx
 import pytest
 
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = pytest.mark.infra
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PDF_DIR = REPO_ROOT / "tests" / "fixtures" / "pdfs"
@@ -264,7 +263,7 @@ def rows(db: Callable[..., list[tuple[Any, ...]]], question_id: str) -> list[tup
 def explain_jobs(db: Callable[..., list[tuple[Any, ...]]], target_id: str) -> int:
     return int(
         db(
-            "select count(*) from public.jobs where job_type = 'question.ai_explain' "
+            "select count(*) from public.async_jobs where job_type = 'question.ai_explain' "
             "and payload::text like %s",
             (f"%{target_id}%",),
         )[0][0]
@@ -572,6 +571,57 @@ def test_c03_failed_rows_do_not_block_new_revisions_get_new_keys_regenerate_caps
     assert [r[3] for r in live] == [True, True, True, False]  # superseded, never deleted
 
 
+def test_c03_a_failed_regeneration_never_hides_the_current_success(seed: Any, db: Any) -> None:
+    """After a success, a regeneration that fails leaves the success current: GET and the POST
+    cache hit answer it (not the failed attempt), and it can be regenerated again."""
+    owner = seed.client("expl-c03c-owner")
+    book = Book(owner)
+    q = book.mcq()
+    good = make(owner, q["id"], view="detail")
+    again = state(regenerate(owner, q["id"], view="detail"), (202,))["explanation"]
+    assert again["version"] == 2
+    # The worker failing the regeneration (as on a provider error), written as the superuser.
+    db(
+        "update public.question_ai_explanations set status = 'failed', "
+        "error_code = 'llm_unavailable', started_at = now(), finished_at = now() where id = %s",
+        (again["id"],),
+    )
+    read = state(get(owner, q["id"], view="detail"), (200,))
+    assert read["explanation"]["id"] == good["id"]
+    assert read["explanation"]["status"] == "succeeded"
+    assert read["explanation"]["body"] == good["body"]
+    assert read["can_regenerate"] is True
+    hit = state(post(owner, q["id"], view="detail"), (200,))
+    assert hit["explanation"]["id"] == good["id"]
+
+
+def test_c03_the_daily_limit_holds_under_concurrent_posts_across_questions(
+    seed: Any, db: Any, daily_app: Any
+) -> None:
+    """Concurrent new explanations of different questions never exceed the user's daily limit
+    (the count is re-checked under a per-user lock in the inserting transaction)."""
+    owner = seed.client("expl-c03d-owner")
+    book = Book(owner)
+    questions = [book.mcq() for _ in range(6)]
+    limited = type(owner)(daily_app, owner.user)
+    results = race(
+        [
+            lambda qid=q["id"]: limited.call("POST", base("question", qid), {"view": "detail"})
+            for q in questions
+        ]
+    )
+    made = db(
+        "select count(*) from public.question_ai_explanations where created_by = %s",
+        (owner.user.id,),
+    )[0][0]
+    assert made == 2
+    codes = sorted(r.status_code for r in results)
+    assert codes == [202, 202, 429, 429, 429, 429]
+    for res in results:
+        if res.status_code == 429:
+            assert res.json()["type"] == P + "explanation-daily-limit"
+
+
 # ---------------------------------------------------------------------------------------------
 # C04 input and validation
 # ---------------------------------------------------------------------------------------------
@@ -721,6 +771,38 @@ def test_c05_a_second_reader_gets_the_stream_from_seq_zero_and_each_connection_i
     assert deltas["owner"] == deltas["reader"]
 
 
+def test_c05_a_session_of_another_revision_never_reads_its_stream(seed: Any) -> None:
+    """The stream is bound to the explanation's own revision: a session submitted on revision A
+    never opens the stream (or its final `done`) of revision B's explanation — the same 404 as an
+    unknown id, so nothing tells B exists."""
+    owner = seed.client("expl-c05b-owner")
+    book = Book(owner)
+    q = book.mcq()
+    learner = member(seed, book.ws, "expl-c05b-learner", "viewer")
+    old_session = submitted(learner, q)  # revision A
+    owner.ok(
+        "PATCH",
+        f"/questions/{q['id']}",
+        {"base_revision_id": q["revision"]["id"], "explanation": "고친 사람 해설 B"},
+    )
+    on_b = make(owner, q["id"], view="detail")  # revision B
+    assert on_b["question_revision_id"] != q["revision"]["id"]
+    leaked = learner.call(
+        "GET", f"/ai-explanations/{on_b['id']}/stream?practice_session_id={old_session}"
+    )
+    unknown = learner.call(
+        "GET", f"/ai-explanations/{uuid.uuid4()}/stream?practice_session_id={old_session}"
+    )
+    implemented(leaked)
+    assert leaked.status_code == 404
+    assert leaked.json()["detail"] == unknown.json()["detail"]
+    assert "고친 사람 해설" not in leaked.text
+    # A session of its own revision still reads it.
+    fresh = submitted(learner, owner.ok("GET", f"/questions/{q['id']}"))
+    events = _events(learner, on_b["id"], practice_session_id=fresh)
+    assert events[-1][0] == "done"
+
+
 # ---------------------------------------------------------------------------------------------
 # C06 no leaks, usage, activity
 # ---------------------------------------------------------------------------------------------
@@ -745,7 +827,7 @@ def test_c06_no_content_in_logs_job_results_or_activities_and_one_usage_row(
     for secret in secrets:
         assert secret not in logged
     job = db(
-        "select result::text from public.jobs where job_type = 'question.ai_explain' "
+        "select result::text from public.async_jobs where job_type = 'question.ai_explain' "
         "and payload::text like %s",
         (f"%{q['id']}%",),
     )

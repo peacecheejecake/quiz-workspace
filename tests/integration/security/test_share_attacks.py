@@ -153,6 +153,8 @@ def shared(module_seed: Any) -> Shared:
     chapter = _seed_chapter_note(seed, owner, str(done["document_id"]), question)
     # RELSRC-B: guests read stored related-passage lists only; a member's read stores one.
     owner.ok("GET", f"/questions/{question['id']}/related-sources?view=detail")
+    for q in (question, other_question):
+        _seed_explanation(seed, q)
     return Shared(
         seed,
         owner,
@@ -191,6 +193,21 @@ def _seed_chapter_note(seed: Any, owner: Any, document_id: str, question: dict[s
         ("0" * 64, "0" * 64, json.dumps(refs), json.dumps(body), owner.user.id, chapter["id"]),
     )
     return str(chapter["id"])
+
+
+def _seed_explanation(seed: Any, question: dict[str, Any]) -> None:
+    """EXPL-B: a succeeded AI explanation of the question's revision under the APP_ENV=test key
+    (prompt version, fake model), written as the superuser (no LLM job needed)."""
+    from book_core.explain import FAKE_MODEL, PROMPT_VERSION
+
+    body = {"correct_option_ids": [], "summary_md": "S4 AI 해설", "options": [], "concepts_md": ""}
+    seed._admin(
+        "insert into public.question_ai_explanations (workspace_id, question_id, "
+        "question_revision_id, status, prompt_version, model, body, finished_at) "
+        "select workspace_id, id, active_revision_id, 'succeeded', %s, %s, %s::jsonb, now() "
+        "from public.questions where id = %s",
+        (PROMPT_VERSION, FAKE_MODEL, json.dumps(body), str(question["id"])),
+    )
 
 
 def _type(res: httpx.Response) -> str | None:

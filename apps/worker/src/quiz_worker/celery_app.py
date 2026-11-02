@@ -45,6 +45,8 @@ from quiz_worker.document_job import (
 )
 from quiz_worker.envelope import JobEnvelope
 from quiz_worker.errors import JobOutcomeError, JobRetryError, sanitize_error
+from quiz_worker.explain_job import LazyExplainDeps, explain_definition
+from quiz_worker.explain_store import JOB_TYPE as EXPLAIN_JOB_TYPE
 from quiz_worker.fork_job import LazyForkDeps, workspace_fork_definition
 from quiz_worker.jobs import ECHO_JOB
 from quiz_worker.logging_config import configure_logging, job_id_var
@@ -80,7 +82,7 @@ ASK_PURGE_INTERVAL_SECONDS = 24 * 3600
 # Interactive jobs (ASK-B) have their own queue, consumed by a dedicated worker process
 # (`WORKER_QUEUE=interactive`, quiz_worker.serve) so document jobs never delay an answer.
 INTERACTIVE_QUEUE = "interactive"
-INTERACTIVE_JOB_TYPES = frozenset({ASK_JOB_TYPE})
+INTERACTIVE_JOB_TYPES = frozenset({ASK_JOB_TYPE, EXPLAIN_JOB_TYPE})
 
 
 def queue_for(job_type: str) -> str:
@@ -587,4 +589,5 @@ def default_definitions(
         chapter_note_definition(LazyChapterNoteDeps(settings)),
         mock_exam_generate_definition(LazyMockExamDeps(settings)),
         ask_answer_definition(LazyAskDeps(settings)),
+        explain_definition(LazyExplainDeps(settings)),
     ]

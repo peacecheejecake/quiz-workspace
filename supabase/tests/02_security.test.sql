@@ -35,7 +35,8 @@ select is_empty(
                                'mock_exam_generation_items', 'mock_exam_questions',
                                'mock_exam_question_revisions',
                               'ask_conversations', 'ask_messages', 'ask_message_sources',
-                              'llm_feature_usage', 'ask_daily_counts')
+                              'llm_feature_usage', 'ask_daily_counts',
+                              'question_ai_explanations', 'mock_exam_question_ai_explanations')
                  and roles = array['quiz_worker']::name[]) $$,
   'every policy in public targets quiz_api only (plus quiz_worker on async_jobs, P0.7b, the '
     || 'document tables, M3.2a, the import runs/drafts, M4.4a, generation, M6.2, and '

@@ -58,6 +58,11 @@ OWN_RUN_WRITE = Rule(ALL, writes=True, archived_ok=True, personal=True)
 # ASK-B AI question conversations: the creator's only; deleting, detaching, stopping and feedback
 # are allowed on an archived workspace (ASK-01-C01).
 OWN_ARCHIVED_WRITE = Rule(ALL, writes=True, archived_ok=True, personal=True)
+# EXPL-B AI explanations: reading the 모의고사 문제 관리 view (`view=manage`) is for editors;
+# creating is any member's write but not executed here (an equal, separate object from
+# PRACTICE: the feature is off on this stack, so an executed call would be 409).
+EDIT_READ = Rule(EDITORS, writes=False)
+EXPLAIN_CREATE = Rule(ALL, writes=True)
 
 # Not workspace-scoped: the caller's own account data, the guest share API, health probes.
 ME = "me"  # any signed-in user, own data only
@@ -158,12 +163,16 @@ RULES: dict[str, Rule | str] = {
     "retryAskAnswer": OWN_WRITE,
     "regenerateAskAnswer": OWN_WRITE,
     "setAskFeedback": OWN_ARCHIVED_WRITE,
+    # EXPL-B AI explanations (AIEXPL-01-C01/C02/C09), called with `view=detail` / `view=manage`
+    "getQuestionAiExplanation": READ,
+    "createQuestionAiExplanation": EXPLAIN_CREATE,
+    "regenerateQuestionAiExplanation": EDIT,
+    "streamQuestionAiExplanation": READ,
+    "getMockExamQuestionAiExplanation": EDIT_READ,
+    "createMockExamQuestionAiExplanation": EDIT,
+    "regenerateMockExamQuestionAiExplanation": EDIT,
+    "streamMockExamQuestionAiExplanation": EDIT_READ,
     "selfGradeMockPracticeSession": OWN_WRITE,
-    # RELSRC-B related passages, called with the proof in QUERY below: `view=detail` is a read of
-    # any member (computed, not stored, when archived); `view=manage` needs edit rights and an
-    # active workspace (403 workspace-archived), like an edit.
-    "getQuestionRelatedSources": READ,
-    "getMockExamQuestionRelatedSources": EDIT,
     # workspace lifecycle and sharing
     "getWorkspace": READ,
     "listWorkspaceActivities": READ,
@@ -190,10 +199,10 @@ RULES: dict[str, Rule | str] = {
     "startWorkspaceFork": SHARED,
     "listSharedQuestions": SHARED,
     "getSharedQuestion": SHARED,
-    "getSharedQuestionRelatedSources": SHARED,
     "searchSharedWorkspace": SHARED,
     "listSharedChapterNotes": SHARED,
     "getSharedChapterNote": SHARED,
+    "getSharedQuestionAiExplanation": SHARED,
     "createSharedSession": SHARED,
     # health
     "getLiveness": PUBLIC,
@@ -279,14 +288,20 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "createAskConversation": {},
         "askQuestion": {"question": "S4 질문"},
         "setAskFeedback": {"reason": "other"},
+        "createQuestionAiExplanation": {"view": "detail"},
+        "regenerateQuestionAiExplanation": {"view": "detail"},
+        "createMockExamQuestionAiExplanation": {"view": "manage"},
+        "regenerateMockExamQuestionAiExplanation": {"view": "manage"},
     }
     return bodies.get(op_id)
 
 
-# Query strings an operation needs so that authorization (not a missing proof) decides.
-QUERY: dict[str, str] = {
-    "getQuestionRelatedSources": "?view=detail",
-    "getMockExamQuestionRelatedSources": "?view=manage",
+# EXPL-B: the AI explanation reads carry their gate in the query string (AIEXPL-01-C01).
+QUERIES = {
+    "getQuestionAiExplanation": "?view=detail",
+    "streamQuestionAiExplanation": "?view=detail",
+    "getMockExamQuestionAiExplanation": "?view=manage",
+    "streamMockExamQuestionAiExplanation": "?view=manage",
 }
 
 
@@ -311,7 +326,7 @@ def call(
     body = body_for(op.operation_id, ids)
     res: httpx.Response = http.request(
         op.method,
-        f"{s4.API}{op.url(ids)}{QUERY.get(op.operation_id, '')}",
+        f"{s4.API}{op.url(ids)}{QUERIES.get(op.operation_id, '')}",
         json=body,
         headers=headers,
     )

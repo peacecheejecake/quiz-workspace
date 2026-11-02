@@ -32,12 +32,14 @@
 //      and an LLM, the fake under APP_ENV=test); `can_create` = available, active workspace and
 //      no live (queued/running/succeeded) explanation for the key; `can_regenerate` = editor of an
 //      active workspace and a succeeded explanation. `explanation` = the newest non-superseded
-//      row of the current revision's key (any status), or null.
+//      row of the current revision's key (any status; EXPL-B: a current success wins over a later
+//      failed regeneration), or null.
 //      Explanation = {id, job_id, status, version, question_revision_id (mock:
 //      mock_exam_question_revision_id), error_code: string|null, created_at, finished_at,
-//      body: {correct_option_ids, summary_md, options: [{option_id, why_md}], concepts_md} | null
-//      (succeeded only), sources: [{n, document_id, document_title, chapter_title, page,
-//      block_id, outdated}], truncated: bool}. Never in any body: prompts, raw LLM output, usage.
+//      body: {correct_option_ids, summary_md, options: [{option_id, why_md}], concepts_md,
+//      points_md (EXPL-B: short answer / essay, else null)} | null (succeeded only),
+//      sources: [{n, document_id, document_title, chapter_title, page, block_id, outdated}],
+//      truncated: bool}. Never in any body: prompts, raw LLM output, usage.
 //   E2 POST /questions/{id}/ai-explanation {practice_session_id} | {view: "detail"} → 202
 //      ExplanationState with a queued/running explanation (a new one, or the one already in
 //      flight for the key: concurrent POSTs get the same id), or 200 with the succeeded one
@@ -46,7 +48,9 @@
 //   E3 Stream: GET /ai-explanations/{id}/stream?practice_session_id=… | ?view=detail (mock:
 //      /mock-ai-explanations/{id}/stream?mock_practice_session_id=… | ?view=manage), Bearer,
 //      `text/event-stream`; events `delta` data {seq, text} (seq from 0, contiguous), `done` data
-//      {explanation: Explanation}, `error` data {code}. A running explanation replays from seq 0
+//      {explanation: Explanation}, `error` data {code} (EXPL-B: also `reset` {} before the one
+//      coverage re-request, after which seq starts at 0 again; the SSE `id` is the event number
+//      for `Last-Event-ID`). A running explanation replays from seq 0
 //      to every connection; a finished one answers one `done`/`error` from Postgres.
 //   E4 Shared: GET /shared/{shareId}/questions/{qid}/ai-explanation (share cookie) → 200
 //      {body, sources, created_at} — no id/status/version/error_code/usage keys — or the share
@@ -64,9 +68,10 @@
 //      re-request → failed, C04).
 //   E6 Call log: the fake writes one file per LLM call to
 //      `<WORKER_ASK_FAKE_LOG_DIR>/ai_explanation/<target id>/<call id>.json` (target = the bank
-//      question id or the mock exam question id; content {target_kind, revision_id, markers},
-//      never question text). Default dir `<system temp dir>/quiz-e2e-ask-fake-log` (same for Node
-//      and Python processes of one machine, as e2e:log-audit starts them). ASK.0 uses the same
+//      question id or the mock exam question id; content {target_kind, revision_id, markers} plus
+//      (EXPL-B) explanation_id and attempt, never question text). Default dir
+//      `<system temp dir>/quiz-e2e-ask-fake-log` (same for Node and Python processes of one
+//      machine, as e2e:log-audit starts them). ASK.0 uses the same
 //      variable for `ask` calls (its own subdirectory).
 //   E7 Hold barrier: E2E-EXPL-HOLD-<token> makes the fake create `<hold dir>/<token>.held` when
 //      it is called, then wait (≤ 120 s) until `<token>.release` exists. Hold dir =
