@@ -1,20 +1,22 @@
 # RELSRC-01 — 관련 본문 (제출 후)
 
 **상태:** 화면 요구사항 v1.0 (모든 제안 사용자 결정 2026-11-01) · ASK-SPEC 추가 2026-11-01 (사용자 요청 "문제 답 제출 후 문서에서 관련된 부분 제시 -- 이것도 생성 후 저장"). [AIEXPL-01](ai-explanations.md) 옆의 별도 기능이다. 검색 범위 규칙은 [ASK-01](ask-llm.md) "검색 범위"와 같고, 제출 확인·공유 캐시·동시성은 AIEXPL-01과 같은 방식이다. 모든 설계 선택은 사용자가 확인했다(implementation-plan §7 ASK-SPEC 사용자 결정 행).
-**Route:** 별도 route 없음. 풀이 panel(QPLAY-01, `?question=:questionId`) 결과 영역 안(AI 해설 아래)과 "문제 상세" dialog 안에 있고, 이후 QuestionViewer(QVIEW-01) 결과 영역에도 들어간다.
+**Route:** 별도 route 없음. QuestionViewer(QVIEW-01) 결과 영역 안(AI 해설 아래): `practice`(풀이 panel, `?question=`)·`sequence(bank|mock)`(범위 풀이, `?practice=`)의 제출 결과, `manage`("문제 상세" dialog), `read-only`(공유 게스트 미리보기 — 저장된 목록만).
 **테스트:** `tests/e2e/questions/related-sources.spec.ts` (계약: `tests/integration/questions/related_sources/test_related_sources_contract.py`, `packages/core` unit test, `supabase/tests` pgTAP)
 **Phase:** RELSRC.0 (RED) → RELSRC-B (계약) → RELSRC-W (AC01~AC05, CI phase 켬) → ASK-QM (모의고사 문제, C07)
 **연계:** [AIEXPL-01](ai-explanations.md), [ASK-01](ask-llm.md), [SEARCH-01](search.md), [QPLAY-01](questions-practice.md), [DOC-02](documents-editor.md), [Questions 명세](../questions.md) §11, [공유 명세](../workspace-sharing.md) §10, [E2E 규칙](../e2e-strategy.md)
+**Phase:** RELSRC.0 (RED) → RELSRC-B (계약 C01~C07, 모의고사 C07 포함) → RELSRC-W (AC01~AC06, CI phase 켬). 이전 ASK-QM은 ASK-SYNC 2026-11-02에 RELSRC-B·RELSRC-W로 합쳤다.
+**연계:** [AIEXPL-01](ai-explanations.md), [ASK-01](ask-llm.md), [SEARCH-01](search.md), [QPLAY-01](questions-practice.md), [QVIEW-01](question-viewer.md), [MOCK-01](mock-exams.md), [DOC-02](documents-editor.md), [Questions 명세](../questions.md) §13, [공유 명세](../workspace-sharing.md) §10, [E2E 규칙](../e2e-strategy.md)
 
 ```yaml
 id: RELSRC-01
-route: /workspaces/:workspaceId?question=:questionId (결과 영역)
+route: /workspaces/:workspaceId?question=:questionId | ?practice=:runId (QuestionViewer 결과 영역)
 actor: workspace_member (제출 후 보기) · share guest (이미 저장된 목록 읽기)
 permission: read · personal attempt
 status: confirmed
-api: [GET /api/v1/questions/:id/related-sources, GET /api/v1/shared/:shareId/questions/:questionId/related-sources]
+api: [GET /api/v1/questions/:id/related-sources, GET /api/v1/shared/:shareId/questions/:questionId/related-sources, GET /api/v1/mock-exam-questions/:id/related-sources]
 components: [Disclosure, Button, DocumentExcerptPanel]
-linked_tests: [RELSRC-01-AC01 … RELSRC-01-AC05]
+linked_tests: [RELSRC-01-AC01 … RELSRC-01-AC06]
 ```
 
 ## 목적과 정책
@@ -39,10 +41,12 @@ linked_tests: [RELSRC-01-AC01 … RELSRC-01-AC05]
 - **공유 게스트 (사용자 결정 2026-11-01):** AI 해설과 같이 공유 문제 panel에서 **이미 저장된** 현재 키의 목록만 읽기 전용으로 보인다(발행 교재·발행 문제는 게스트의 열람 범위). 게스트 요청은 계산하지 않는다.
 - **Fork (사용자 결정 2026-11-01):** 복제하지 않는다. 사본의 문서 id가 새로 생겨 `corpus_fingerprint`가 바뀌므로 어차피 처음 읽을 때 다시 계산된다(비용 없음).
 - 관련 본문을 보는 것은 풀이·열람이 아니다(풀이 기록·Heatmap 상태 불변). practice API 응답은 바뀌지 않는다.
+- **모의고사 문제 (ASK-SYNC 2026-11-02 — 이전 ASK-QM, RELSRC-B·RELSRC-W에 합침):** 모의고사 풀이(QuestionViewer `sequence(mock)`)의 제출 결과에도 같은 영역이 나온다(AC06). 저장은 별도 테이블 `mock_exam_question_related_sources`, 키 `(mock_exam_question_revision_id, corpus_fingerprint, retrieval_version)`(같은 무효화·동시성 규칙). 원본 등록 문제의 목록과 공유하지 않는다. 1단계의 "문제 출처"는 `question_sources` 대신 그 revision의 `evidence`(SourceEvidence) 중 현재 발행 `book` 블록만이다 — `보기 섞기`는 원본의 근거를 그대로 복사하므로 가져온 문제 PDF·문제지 쪽 근거가 들어 있을 수 있고, 그것은 뺀다(`evidence.quote` 글도 쓰지 않고 블록 본문을 다시 읽음). 검색어는 그 revision의 발문 + 정답 글. 제출 확인은 `mock_practice_session_id`(그 사용자의 그 문제 session, `mock_exam_attempts` 있음), 삭제된 모의고사·빠진 문제는 404, 보관된 Workspace는 계산만. 모의고사는 공유·Fork 대상이 아니므로 공유 API가 없다. 모의고사 문제 관리(`manage(mock)`)에 둘지는 AIEXPL-01 "모의고사 문제"의 제안과 같이 정한다(제안 — 사용자 확인 필요).
+- **보관·중복 정리·초안 (ASK-SYNC 2026-11-02, UX7-BANK-2·UX7-DEDUP):** 목록은 그 문제 revision 하나의 것이다. 중복 정리로 합친 남길 문제는 **자기** `question_sources`만 1단계에 쓰고 보관된 중복들의 출처를 더하지 않는다(풀이 기록 합침은 학습 상태만 — questions.md §10.2). 보관된(ARCHIVED) 문제는 "문제 상세"(QVIEW-01 호출 위치 5)에서 같은 영역을 보이고(그 revision의 목록), 공유 게스트에게는 없다. 초안(DRAFT)은 AIEXPL-01 "초안 문제" 제안과 같이 영역을 두지 않는다(제안 — 사용자 확인 필요). 검색 후보 쪽 제외는 바뀌지 않는다: 문제 상태와 상관없이 교재(`book`) 현재 발행 revision만이고, 다른 문제의 정답·해설·정리 노트·AI 해설은 후보가 아니다.
 
 ## 레이아웃 및 컴포넌트
 
-- **위치:** 풀이 panel 결과 영역에서 결과·정답·해설 → AI 해설(AIEXPL-01, 있을 때) → **관련 본문** 순서. 문제 상세 dialog에서도 같은 순서(사용자 결정 2026-11-01). QuestionViewer가 풀이 panel을 대신하면(QVIEW-W) 같은 자리로 옮긴다.
+- **위치:** QuestionViewer 결과 영역에서 결과·정답·해설 → AI 해설(AIEXPL-01, 있을 때) → **관련 본문** 순서. 문제 상세(`manage`)에서도 같은 순서(사용자 결정 2026-11-01). 모든 방식이 같은 부품이다: `practice`·`sequence(bank|mock)`는 제출 뒤(`이전`·결과 목록으로 돌아간 읽기 전용 결과 포함 — 그 위치의 제출한 session으로 요청), `manage`는 제출 없이(`view: detail`), `read-only`는 저장된 목록만. `sequence`에서 위치를 바꾸면 그 문제의 목록으로 바뀐다(펼침은 위치마다 다시 기본 펼침).
 - **disclosure:** 버튼 "관련 본문"(`aria-expanded`, `aria-controls`), **기본 펼침**(사용자 결정 2026-11-01). 결과가 보이면(또는 문제 상세가 열리면) 바로 `GET /questions/{id}/related-sources`를 부른다. 사용자가 접을 수 있고 접은 상태는 기억하지 않는다(다음 문제·다음 열기는 다시 펼침). focus는 옮기지 않는다(결과 영역에 그대로).
 - **상태:**
   - 불러오는 중: 영역 안 skeleton 3줄 + `role="status"` "관련 본문을 찾는 중입니다".
@@ -97,6 +101,12 @@ E2E는 기존 검색 fake(결정적 embedder·reranker, `APP_ENV=test`)를 쓴�
 - **When:** 보기 권한 멤버가 풀이 panel의 `문제 정보` › `정답·해설 보기`로 연 문제 상세 dialog에서 "관련 본문"을 확인하고, 키보드로 disclosure를 접었다 펼친 뒤 행을 Enter로 열고 Escape를 누른다. 보관된 Workspace의 Owner가 목록이 없는 문제를 제출한다. 게스트가 공유 문제 panel에서 두 문제를 열고 공유 API를 부른다
 - **Then:** 문제 상세에는 제출 없이도 펼친 "관련 본문"이 있고(`view: detail`) 풀이 panel의 session·풀이 기록은 바뀌지 않는다. Enter는 발췌 panel을 열고 Escape는 focus를 그 행으로 돌린다. 보관된 Workspace에서는 목록이 보이지만 저장되지 않는다(DB 행 0). 게스트는 저장된 문제에서만 읽기 전용 "관련 본문"을 보고(목록이 없는 문제는 영역 없음, 공유 API 404), 게스트 요청은 계산하지 않는다. axe 위반 0.
 
+### RELSRC-01-AC06
+
+- **Given:** 장 1 쪽을 책 출처로, 문제 PDF의 쪽을 가져온 출처(`imported`)로 함께 가진 확정 객관식 문제(정답 보기 "가나다 원리")와 그 문제로 만든 `보기 섞기` 모의고사(근거 `evidence`에 두 출처가 모두 복사됨), 같은 Workspace의 보기 권한 멤버 둘(A·B)
+- **When:** A가 `문제` › `문제 풀기`로 그 문제를 시작해 제출하고 "관련 본문"을 본다. A가 모의고사 `풀기`로 같은 문제의 모의고사 문제를 제출 전 `GET /mock-exam-questions/{id}/related-sources`로 부르고, 제출한 뒤 "관련 본문"을 본다. B가 같은 모의고사 문제를 제출한다
+- **Then:** 범위 풀이(`sequence(bank)`)의 제출 결과 아래에 펼친 "관련 본문"이 있고 풀이 panel과 같은 저장 목록이다(같은 행 id). 모의고사 문제는 제출 전 409 `related-before-submit`(저장 행 0), 제출 뒤 첫 행이 `문제 출처` badge가 붙은 장 1 구절이고 문제 PDF 쪽은 어느 행에도 없다. 모의고사 문제의 목록은 원본 문제와 다른 저장 행이고, B는 계산 없이 같은 목록을 본다(검색 호출 기록 변화 없음). 관련 본문을 보는 것은 `mock_exam_attempts`·`question_attempts`·Heatmap을 바꾸지 않는다.
+
 ## 계약 요구사항 (pytest·unit, 화면 AC 아님)
 
 `tests/integration/questions/related_sources/test_related_sources_contract.py`, `packages/core/tests`, `supabase/tests`(pgTAP).
@@ -104,12 +114,12 @@ E2E는 기존 검색 fake(결정적 embedder·reranker, `APP_ENV=test`)를 쓴�
 | ID | 요구사항 |
 |---|---|
 | RELSRC-01-C01 | **제출 확인·인가:** `practice_session_id`(그 사용자의 그 문제 session, 제출 있음) 또는 `view: detail`(`GET /questions/{id}` 권한). 그 밖 409 `related-before-submit`, 남의 session·다른 Workspace·삭제 문제 404. 판정은 DB, client 값 무시. 409·404에서는 검색·저장 없음. 공유 API는 발행된 CONFIRMED 문제의 active revision과 현재 `corpus_fingerprint`의 저장된 행만(그 밖 404), 계산하지 않음, 매 요청 링크 재검증, 점수·키·버전 없음. 끄는 설정은 없다(언제나 켜짐). |
-| RELSRC-01-C02 | **범위:** 후보는 ASK-01-C02와 같은 범위(`book` 현재 발행 revision, 문제지 제외, `mixed` 문제 구간 제외, 요약·노트·AI 해설 제외; 같은 `ask_retrieval` 모듈). `question_sources` 행은 발행 `book` 문서 블록일 때만 먼저(가져온 출처·문제지 출처 제외). 검색어는 발문 + 정답 글(오답 보기 없음), 같은 블록·같은 쪽 중복 제거, 상한 `RELATED_SOURCES_LIMIT`(5), 점수 하한. |
+| RELSRC-01-C02 | **범위:** 후보는 ASK-01-C02와 같은 범위(`book` 현재 발행 revision, 문제지 제외, `mixed` 문제 구간 제외, 요약·노트·AI 해설 제외; 같은 `ask_retrieval` 모듈). `question_sources` 행은 발행 `book` 문서 블록일 때만 먼저(가져온 출처·문제지 출처 제외). 중복 정리로 합친 남길 문제는 자기 `question_sources`만 쓴다(보관된 중복의 출처를 더하지 않음 — test). 검색어는 발문 + 정답 글(오답 보기 없음), 같은 블록·같은 쪽 중복 제거, 상한 `RELATED_SOURCES_LIMIT`(5), 점수 하한. |
 | RELSRC-01-C03 | **캐시 키·무효화:** unique `(question_revision_id, corpus_fingerprint, retrieval_version)`. `corpus_fingerprint`는 정렬된 `(document_id, active published revision id)`(살아 있는 `book`만) + embedding model + chunk 설정 버전의 SHA-256 — 교정 발행·복원·교재 추가/삭제·embedder 전환은 바꾸고, 같은 revision 재색인은 바꾸지 않는다(각각 test). 예전 키 행은 `superseded_at`만 적고 지우지 않는다. 저장 행은 참조만(문서·revision·block ids·쪽·점수·`from_question_source`·순서), 본문 없음. |
 | RELSRC-01-C04 | **동시성:** 같은 키의 동시 첫 요청 20개 → 검색 1회·행 1개, 모두 같은 목록(advisory xact lock + 재확인 + unique; 경쟁 test). |
 | RELSRC-01-C05 | **저장하지 않는 경우:** 보관된 Workspace(계산만, 쓰기 0), 검색 저하(`degraded: ["dense_unavailable"]` — 응답에 그대로 담고 저장하지 않음), 공유 게스트(계산 안 함). 오류(Qdrant 장애)는 503 `related-unavailable`, 행 없음. |
 | RELSRC-01-C06 | **유출 금지·영향 없음:** 발문·정답·검색어·발췌는 로그·trace에 없다(검색 로그 규칙과 같음: 예외 type·code만). practice API 응답 schema 불변, 풀이 기록·`question_user_states` 불변. Fork는 행을 복제하지 않는다(사용자 결정 2026-11-01). |
-| RELSRC-01-C07 | **모의고사 문제 (ASK-QM):** 키 `(mock_exam_question_revision_id, corpus_fingerprint, retrieval_version)`, 모의고사 practice session 제출 확인, 출처 블록 대신 그 문제를 만들 때 쓴 근거 블록을 먼저. ASK-QM까지 pytest `red`. |
+| RELSRC-01-C07 | **모의고사 문제 (RELSRC-B, ASK-SYNC — 이전 ASK-QM):** `mock_exam_question_related_sources` unique `(mock_exam_question_revision_id, corpus_fingerprint, retrieval_version)`(C03·C04와 같은 무효화·동시성), `GET /mock-exam-questions/{id}/related-sources`는 `mock_practice_session_id`(그 사용자의 그 문제 session, `mock_exam_attempts` 있음)를 요구하고 그 밖 409 `related-before-submit`, 남의 session·다른 Workspace·삭제된 모의고사·빠진 문제 404, 409·404에서는 검색·저장 없음. 1단계는 `question_sources` 대신 그 revision의 `evidence` 중 현재 발행 `book` 블록만(가져온 문제 PDF·문제지 근거와 `quote` 글 제외 — test). 등록 문제 목록과 행을 공유하지 않음, 공유 API 없음. 모의고사 practice API 응답 schema 불변. RELSRC.0에서 pytest `red`, RELSRC-B에서 GREEN. |
 
 ## Test-first 규칙
 

@@ -250,7 +250,7 @@ make deploy-prepare REF=main ENV=production ARGS="--db-url-env SUPABASE_DB_URL -
 - api 도메인(현재 Railway 기본 domain). (지역 Singapore, production web `quiz.red-10-proto.xyz`, SMTP Resend `mail.red-10-proto.xyz`는 결정됨.)
 - GHCR 이미지 공개 여부 vs Railway registry credential.
 - staging 도메인의 Vercel Deployment Protection.
-- LLM 사용 여부·모델·예산(`LLM_API_KEY`/`LLM_MODEL`; 미설정 시 문제 생성 비활성). 문서 요약·챕터 정리 노트(`WORKER_DOCUMENT_SUMMARY`·`WORKER_CHAPTER_NOTES`)를 staging·production에서 켤지와 그 예산(9장, ⛔ 사용자 승인). AI 모의고사(`WORKER_MOCK_EXAMS`)를 켤지와 그 예산·`MOCK_EXAM_*` 조정(11장, ⛔ 사용자 승인).
+- LLM 사용 여부·모델·예산(`LLM_API_KEY`/`LLM_MODEL`; 미설정 시 문제 생성 비활성). 문서 요약·챕터 정리 노트(`WORKER_DOCUMENT_SUMMARY`·`WORKER_CHAPTER_NOTES`)를 staging·production에서 켤지와 그 예산(9장, ⛔ 사용자 승인). AI 모의고사(`WORKER_MOCK_EXAMS`)를 켤지와 그 예산·`MOCK_EXAM_*` 조정(11장, ⛔ 사용자 승인). AI 질문·AI 해설(`WORKER_ASK_LLM`·`WORKER_AI_EXPLANATIONS`)을 켤지와 그 예산·`ASK_*`·`AI_EXPLANATION_*` 한도(12장, ⛔ 사용자 승인).
 - `/terms`, `/privacy` 실제 문구(현재 placeholder).
 - CAPTCHA(A4 구현 완료): staging을 기본값인 Turnstile 테스트 키 쌍으로 둘지, staging 전용 실제 widget을 쓸지(그 경우 DEP smoke 로그인 단계는 수동). production은 실제 widget 필수.
 - PR preview(10장): 켤지(`PR_PREVIEW_ENABLED`), preview project에 `RELAY_CLIENT_SECRET`을 넣을지(공유 링크 preview), staging이 실제 Turnstile widget을 쓸 때 preview 로그인을 어떻게 할지.
@@ -390,8 +390,8 @@ AI 질문(ASK-01)과 AI 문제 해설(AIEXPL-01)은 모든 환경에서 **기본
 
 | 변수 | 서비스 | 켜면 |
 |---|---|---|
-| `WORKER_ASK_LLM=true` | `api`·`worker` **같은 값** | 구성원이 header `AI 질문`과 문제의 `질문하기`로 질문한다. **질문, 첨부 문제(제출 전에는 발문·보기·고른 답만, 제출 후·문제 상세에서는 정답·해설·출처 포함), 검색된 발행 교재 구절(질문마다 최대 16,000자)이 LLM 제공자로 전송된다.** |
-| `WORKER_AI_EXPLANATIONS=true` | `api`·`worker` **같은 값** | 제출 후 결과 아래·문제 상세의 `AI 해설 만들기`. **문제 revision의 발문·보기·정답·해설·출처와 교재 구절(최대 8,000자)이 전송된다.** 문제 revision마다 한 번 만들어 Workspace가 공유한다. |
+| `WORKER_ASK_LLM=true` | `api`·`worker` **같은 값** | 구성원이 header `AI 질문`과 문제의 `질문하기`(문제 상세·모의고사 문제)로 질문한다. **질문, 첨부 문제(등록 문제·모의고사 문제; 제출 전에는 발문·보기·고른 답만, 제출 후·문제 상세·모의고사 문제 관리에서는 정답·해설·출처 포함), 검색된 발행 교재 구절(질문마다 최대 16,000자)이 LLM 제공자로 전송된다.** |
+| `WORKER_AI_EXPLANATIONS=true` | `api`·`worker` **같은 값** | 제출 후 결과 아래(풀이 panel·범위 풀이·모의고사 풀이)·문제 상세의 `AI 해설 만들기`. **문제 revision(등록 문제 또는 모의고사 문제)의 발문·보기·정답·해설·출처와 교재 구절(최대 8,000자)이 전송된다.** 문제 revision마다 한 번 만들어 Workspace가 공유한다(모의고사 문제는 원본과 따로). |
 
 두 플래그는 독립이다. 관련 본문(RELSRC-01)은 LLM을 쓰지 않아 이 장의 승인 대상이 아니고 끄는 설정도 없다(언제나 켜짐). worker는 `interactive` queue를 읽는 process를 띄워야 한다(`ASK_WORKER_CONCURRENCY`, 기본 2; 플래그가 둘 다 꺼져 있으면 띄우지 않아도 됨). LLM 변수는 9장과 같다: worker `LLM_API_KEY`·`LLM_MODEL`, api 같은 `LLM_MODEL`(check-env `same`), 선택 `LLM_PRICE_*`(넣어야 `cost_usd`가 기록됨).
 
