@@ -32,7 +32,6 @@ import psycopg
 import pytest
 
 pytestmark = [pytest.mark.infra]
-# C01, C04 and C08 also practise mock exam questions (MOCK-P): `red` until then.
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 BOOK_KO = REPO_ROOT / "tests" / "fixtures" / "pdfs" / "book-ko.pdf"
@@ -334,7 +333,6 @@ def bank_snapshot(db: Any, ws: str) -> dict[str, tuple[Any, ...]]:
 # ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.red
 def test_mock_01_c01_making_editing_and_practising_never_touch_the_bank(
     seed: Any, db: Any, app_client: Any, job_worker: Any
 ) -> None:
@@ -545,7 +543,6 @@ def test_mock_01_c03_the_range_is_this_workspaces_live_confirmed_questions_and_s
 # ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.red
 def test_mock_01_c04_remaking_is_a_new_round_and_history_rows_are_append_only(
     seed: Any, db: Any
 ) -> None:
@@ -913,7 +910,6 @@ def test_mock_01_c07_no_question_explanation_book_or_prompt_text_in_logs_results
 # ---------------------------------------------------------------------------------------------
 
 
-@pytest.mark.red
 def test_mock_01_c08_later_source_changes_leave_made_questions_alone(seed: Any, db: Any) -> None:
     owner = seed.client("mock-c08")
     book = Book(owner)
