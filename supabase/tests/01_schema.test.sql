@@ -36,7 +36,9 @@ select tables_are(
         'mock_exam_practice_sessions', 'mock_exam_attempts',
         -- ASK-B AI questions
         'ask_conversations', 'ask_messages', 'ask_message_sources', 'ask_message_feedback',
-        'llm_feature_usage', 'ask_daily_counts'],
+        'llm_feature_usage', 'ask_daily_counts',
+        -- EXPL-B AI explanations
+        'question_ai_explanations', 'mock_exam_question_ai_explanations'],
   'public schema contains exactly the expected tables'
 );
 
@@ -106,8 +108,10 @@ select is(
   array['ask_conversations', 'ask_message_feedback', 'ask_messages', 'async_jobs',
         'chapter_notes', 'content_blocks', 'document_revisions', 'document_uploads',
         'documents', 'mock_exam_generation_items', 'mock_exam_generations',
-        'mock_exam_practice_sessions', 'mock_exam_questions', 'mock_exams',
-        'practice_sessions', 'profiles', 'question_drafts', 'question_generation_runs',
+        'mock_exam_practice_sessions', 'mock_exam_question_ai_explanations',
+        'mock_exam_questions', 'mock_exams',
+        'practice_sessions', 'profiles', 'question_ai_explanations', 'question_drafts',
+        'question_generation_runs',
         'question_import_runs', 'question_user_states', 'questions', 'workspace_forks',
         'workspace_memberships', 'workspace_share_links', 'workspaces'],
   'updated_at trigger exists on every mutable table'
