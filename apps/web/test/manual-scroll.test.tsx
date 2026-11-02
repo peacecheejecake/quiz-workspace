@@ -4,6 +4,7 @@
 // dialog has closed — the push that opens a dialog must not make "manual" the mode to restore.
 import './dom-setup';
 import { act, render } from '@testing-library/react';
+import { useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PanelHistory } from '../src/lib/workspaces/panel-history';
 import {
@@ -11,14 +12,17 @@ import {
   usePanelHistory,
 } from '../src/components/workspaces/use-panel-history';
 
-let history: PanelHistory | null = null;
+const captured: { history: PanelHistory | null } = { history: null };
 
 function Home({ open }: { open: boolean }) {
-  history = usePanelHistory({
+  const history = usePanelHistory({
     open: (search) => new URLSearchParams(search).getAll('panel'),
     close: (search) => search,
     closeAll: () => '',
     read: () => undefined,
+  });
+  useEffect(() => {
+    captured.history = history;
   });
   useManualScrollWhile(open);
   return null;
@@ -33,12 +37,12 @@ describe('dialog history scroll restoration', () => {
   afterEach(() => {
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
-    history = null;
+    captured.history = null;
   });
 
   it('is manual while a dialog is open and back to auto after the last one closed', () => {
     const view = render(<Home open={false} />);
-    act(() => history?.push('/workspaces/w?panel=documents'));
+    act(() => captured.history?.push('/workspaces/w?panel=documents'));
     view.rerender(<Home open />);
     expect(window.history.scrollRestoration).toBe('manual');
     view.rerender(<Home open={false} />);
@@ -50,13 +54,13 @@ describe('dialog history scroll restoration', () => {
 
   it('a push made after the dialogs closed is restored as well', () => {
     const view = render(<Home open={false} />);
-    act(() => history?.push('/workspaces/w?panel=documents'));
+    act(() => captured.history?.push('/workspaces/w?panel=documents'));
     view.rerender(<Home open />);
     view.rerender(<Home open={false} />);
     act(() => {
       vi.advanceTimersByTime(1_000);
     });
-    act(() => history?.push('/workspaces/w?panel=history'));
+    act(() => captured.history?.push('/workspaces/w?panel=history'));
     act(() => {
       vi.advanceTimersByTime(1_000);
     });
