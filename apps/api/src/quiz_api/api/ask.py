@@ -745,7 +745,7 @@ def _check_budgets(repo: AskRepository, settings: Settings, user_id: uuid.UUID) 
             detail="An answer is still being written. Wait for it or stop it.",
         )
     now = datetime.now(UTC)
-    if repo.answers_since(user_id, _start_of_day(now)) >= settings.ask_daily_limit_per_user:
+    if repo.answers_on(user_id, _start_of_day(now).date()) >= settings.ask_daily_limit_per_user:
         tomorrow = _start_of_day(now) + timedelta(days=1)
         raise ProblemException(
             429,

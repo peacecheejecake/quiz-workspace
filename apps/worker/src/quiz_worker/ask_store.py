@@ -619,7 +619,8 @@ class PostgresAskStore:
             _usage(conn, answer, usage, status, None)
 
     def purge(self, now: datetime, retention_days: int) -> PurgeReport:
-        """Conversations idle past the retention and usage older than 13 months (idempotent)."""
+        """Conversations idle past the retention, usage and daily answer counts older than 13
+        months (idempotent)."""
         with self._engine.begin() as conn:
             conversations = conn.execute(
                 text("delete from public.ask_conversations where last_message_at < :t"),
@@ -629,7 +630,14 @@ class PostgresAskStore:
                 text("delete from public.llm_feature_usage where created_at < :t"),
                 {"t": now - USAGE_RETENTION},
             ).rowcount
-        return PurgeReport(int(conversations or 0), int(usage or 0))
+            # Daily answer counts only serve the daily limit; kept as long as usage.
+            days = conn.execute(
+                text("delete from public.ask_daily_counts where day < :d"),
+                {"d": (now - USAGE_RETENTION).date()},
+            ).rowcount
+        return PurgeReport(
+            int(conversations or 0), int(usage or 0), {"daily_counts": int(days or 0)}
+        )
 
 
 def _pages(page_start: int | None, page_end: int | None, locations: Any) -> list[int]:

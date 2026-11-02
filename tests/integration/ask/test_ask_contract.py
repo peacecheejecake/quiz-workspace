@@ -1061,9 +1061,16 @@ def test_ask_01_c06_daily_and_monthly_limits(seed: Any, app_with: Any) -> None:
     owner, daily = seed.client("owner"), seed.client("daily")
     s = AskSeed(owner)
     seed.membership(s.ws, daily.user, "editor")
-    # Daily limit 2 per user (Asia/Seoul day, counted in the DB, whichever app took them).
-    for _ in range(2):
-        ask_new(daily, s.ws)
+    # Daily limit 2 per user (Asia/Seoul day, counted in the DB, whichever app took them). User
+    # decision 2026-11-02: deleting the conversations frees nothing — not even an answer
+    # without evidence, which made no LLM call (and so has no usage row).
+    asked = [ask_new(daily, s.ws), ask_new(daily, s.ws, NOWHERE)]
+    assert [a["status"] for a in asked] == ["succeeded", "no_sources"]
+    for answer in asked:
+        assert (
+            daily.send("DELETE", f"/ask/conversations/{answer['conversation_id']}").status_code
+            == 204
+        )
     daily_app = app_with(ASK_DAILY_LIMIT_PER_USER="2")
     cid = new_conv(daily, s.ws)["id"]
     refused = via(
@@ -1182,6 +1189,12 @@ def test_ask_01_c08_delete_purge_fork_and_append_only(seed: Any, db: Any, job_wo
         (owner.user.id,),
     )
     assert kept >= 1
+    # The daily answer count survives the deletion too (user decision 2026-11-02).
+    [[counted]] = db(
+        "select coalesce(sum(answers), 0) from public.ask_daily_counts where user_id = %s",
+        (owner.user.id,),
+    )
+    assert counted >= 1
 
     old, recent = new_conv(owner, s.ws), new_conv(owner, s.ws)
     ask(owner, old["id"], QUESTION)

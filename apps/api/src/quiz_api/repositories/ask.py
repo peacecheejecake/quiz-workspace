@@ -18,7 +18,7 @@ import re
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import text
@@ -442,19 +442,15 @@ class AskRepository:
             ).scalar_one()
         )
 
-    def answers_since(self, user_id: uuid.UUID, since: datetime) -> int:
-        """Answers made for the user since `since`, deleted conversations included (their LLM
-        usage rows outlive them)."""
-        count: int = self._session.execute(
-            text(
-                "select (select count(*) from public.ask_messages where user_id = :u "
-                "and role = 'assistant' and created_at >= :t) + "
-                "(select count(*) from public.llm_feature_usage where user_id = :u "
-                "and feature = 'ask' and message_id is null and created_at >= :t)"
-            ),
-            {"u": user_id, "t": since},
-        ).scalar_one()
-        return count
+    def answers_on(self, user_id: uuid.UUID, day: date) -> int:
+        """Answers accepted for the user on an Asia/Seoul `day` (ask_daily_counts, written by a
+        trigger on every answer and kept when conversations are deleted — user decision
+        2026-11-02)."""
+        count: int | None = self._session.execute(
+            text("select answers from public.ask_daily_counts where user_id = :u and day = :d"),
+            {"u": user_id, "d": day},
+        ).scalar_one_or_none()
+        return count or 0
 
     def tokens_since(self, since: datetime) -> int:
         total: int = self._session.execute(
