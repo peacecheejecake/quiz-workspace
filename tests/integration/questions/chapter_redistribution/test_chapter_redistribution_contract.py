@@ -7,12 +7,13 @@ validated whole and applied atomically (C02); idempotency only through the same 
 function on the question's first source block (C05); the preview is read-only (C06);
 `chapter_source` rules and fork copies (C07); overview, note staleness and logs after a move (C08).
 
-Shapes are assumptions R1-R5 in tests/e2e/fixtures/chapter-redistribution.ts. Jobs run in this
-process (conftest.py). RED (UX9.0): every test carries the `red` marker until UX9-REDIST-B. The
-lock order (documents before questions) and the deadlock-free concurrent correction publish are
-unit/concurrency tests of UX9-REDIST-B in apps/api; the `chapter_source` backfill, the
-append-only trigger and the grants of `question_chapter_changes` are its pgTAP file under
-supabase/tests (UX9-REDIST-B adds it). Superuser reads are only for rows no API exposes.
+Shapes are assumptions R1-R5 in tests/e2e/fixtures/chapter-redistribution.ts (confirmed by
+UX9-REDIST-B). Jobs run in this process (conftest.py). The lock order (documents before questions)
+is unit-tested in apps/api/tests/test_chapter_redistribution.py and raced against a correction
+publish in test_chapter_redistribution_lock_order.py; the `chapter_source` trigger, the
+append-only trigger and the grants of `question_chapter_changes` are
+supabase/tests/24_question_chapter_source.test.sql. Superuser reads are only for rows no API
+exposes.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from typing import Any
 
 import pytest
 
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = pytest.mark.infra
 
 _NOTES = Path(__file__).resolve().parents[1] / "chapter_notes" / "test_chapter_notes_contract.py"
 _spec = importlib.util.spec_from_file_location("_chnote_contract_helpers_redist", _NOTES)
