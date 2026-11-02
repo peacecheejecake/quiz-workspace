@@ -117,7 +117,21 @@ export class FlagSync<R extends StudyFlags> {
     private readonly send: (questionId: string, patch: FlagPatch) => Promise<FlagResult<R>>,
     private readonly onEvent: (questionId: string, event: FlagEvent<R>) => void,
     private readonly failureMessage: string,
+    /** Called when saving starts (true) or nothing is left to save (false). */
+    private readonly onBusyChange?: (busy: boolean) => void,
   ) {}
+
+  /** Whether any question still has a change to save. */
+  busy(): boolean {
+    return this.entries.size > 0;
+  }
+
+  private update(apply: () => void): void {
+    const before = this.busy();
+    apply();
+    const after = this.busy();
+    if (before !== after) this.onBusyChange?.(after);
+  }
 
   /** The flags to show while a change of `questionId` is being saved (null: none). */
   active(questionId: string): StudyFlags | null {
@@ -128,7 +142,11 @@ export class FlagSync<R extends StudyFlags> {
   toggle(questionId: string, base: StudyFlags, patch: FlagPatch): void {
     const prev = this.entries.get(questionId);
     const { entry, send } = intendFlags(prev, base, patch);
-    this.entries.set(questionId, { ...entry, saved: prev?.saved ?? null });
+    this.update(() => {
+      // Nothing in flight and nothing to send: no entry (the press restored the saved state).
+      if (entry.sending) this.entries.set(questionId, { ...entry, saved: prev?.saved ?? null });
+      else this.entries.delete(questionId);
+    });
     this.onEvent(questionId, { type: 'change', flags: entry.desired });
     if (send) void this.run(questionId, send);
   }
@@ -152,8 +170,10 @@ export class FlagSync<R extends StudyFlags> {
         : { ok: false },
     );
     const saved = result.ok ? result.data : entry.saved;
-    if (settled.done) this.entries.delete(questionId);
-    else this.entries.set(questionId, { ...settled.entry, saved });
+    this.update(() => {
+      if (settled.done) this.entries.delete(questionId);
+      else this.entries.set(questionId, { ...settled.entry, saved });
+    });
     const flags = settled.entry.desired;
     if (!result.ok) {
       this.onEvent(questionId, {
