@@ -114,7 +114,6 @@ import {
   INACTIVE_QUESTIONS_PANEL,
   isFloatingPanel,
   MOCK_EXAMS_PANEL,
-  MOCK_PARAM,
   mockParamOf,
   mockViewOf,
   runOwnsMockParam,
@@ -130,6 +129,9 @@ import {
   openDialogs,
   closeDialog,
   exclusiveClose,
+  withMockRun,
+  withShownMockView,
+  RUN_DIALOG,
   withPracticeQuestion,
   withRunPanel,
   type HomePanel,
@@ -204,7 +206,11 @@ export function WorkspaceHome({
   // Forward reopens it (UX7-BACK, UX7-BACK-2); what changed meanwhile (filters) is kept.
   const panelHistory = usePanelHistory({
     open: openDialogs,
-    close: (search, dialog) => closeDialog(search, dialog, executedFilter()),
+    // Closing the run (its button or Back) hands `mock` back to the 모의고사 dialog's view.
+    close: (search, dialog) => {
+      const closed = closeDialog(search, dialog, executedFilter());
+      return dialog === RUN_DIALOG ? keepMockView(closed) : closed;
+    },
     closeAll: (search) => withoutPanels(search, executedFilter()),
     read: (url) => router.replace(url, { scroll: false }),
   });
@@ -311,10 +317,7 @@ export function WorkspaceHome({
   }
   const mockView = borrowed ? shownMockView : urlMockView;
   function keepMockView(search: string): string {
-    if (!isOpen(MOCK_EXAMS_PANEL)) return search;
-    const params = new URLSearchParams(search);
-    if (runOwnsMockParam(params)) return search;
-    return patchSearch(search, { [MOCK_PARAM]: mockParamOf(shownMockView) });
+    return withShownMockView(search, shownMockView);
   }
   function changeMockView(view: MockView, how: 'push' | 'replace') {
     const target = `${pathname}${withMockView(window.location.search, view)}`;
@@ -323,8 +326,7 @@ export function WorkspaceHome({
   }
   /** A mock exam's 풀기: the run panel's range step on it (QVIEW-01 `sequence(mock)`). */
   function openMockRun(mockExamId: string) {
-    const picker: RunUrlState = { step: 'picker', source: 'mock', mockExamId };
-    panelHistory.push(`${pathname}${withRunState(window.location.search, picker)}`);
+    openPanelAt(`${pathname}${withMockRun(window.location.search, mockExamId)}`);
   }
   // The practice panel's open, previous/next (new entries) and close (QPLAY-01-AC05, UX7-BACK).
   function changeQuestion(questionId: string | null) {

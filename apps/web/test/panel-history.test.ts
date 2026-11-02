@@ -2,7 +2,14 @@
 // entry; every close (button or Back) drops the closed dialog's entries, so neither Back nor
 // Forward reopens it.
 import { describe, expect, it } from 'vitest';
-import { closeDialog, openDialogs, withoutPanels } from '../src/lib/workspaces/home';
+import {
+  closeDialog,
+  openDialogs,
+  RUN_DIALOG,
+  withMockRun,
+  withoutPanels,
+  withShownMockView,
+} from '../src/lib/workspaces/home';
 import {
   DEFAULT_DIALOG_URLS,
   markState,
@@ -836,6 +843,45 @@ describe('PanelHistory', () => {
       expect(fake.url()).toBe('/w?panel=history');
       fake.forward();
       expect(fake.url()).toBe('/w?panel=history');
+      fake.back();
+      expect(fake.url()).toBe('/w');
+      fake.forward();
+      noDialogs(fake);
+      expectBackLeavesForwardStaysClosed(fake);
+    });
+
+    it('a mock exam run over the practice panel: the 모의고사 dialog stays, nothing reopens', () => {
+      // MOCK-W-2: the dialog's 풀기 opens the run panel the same exclusive way.
+      const exam = '44444444-4444-4444-8444-000000000001';
+      const dialog = `/w?panel=mock-exams&mock=${exam}`;
+      // The home's close of the run hands `mock` back to the dialog's shown view (keepMockView).
+      const fake = fakeWindow('/w');
+      const history = new PanelHistory(
+        () => fake.win,
+        () => ({
+          ...DEFAULT_DIALOG_URLS,
+          close: (search, d) => {
+            const closed = closeDialog(search, d);
+            return d === RUN_DIALOG
+              ? withShownMockView(closed, { view: 'detail', mockExamId: exam })
+              : closed;
+          },
+        }),
+      );
+      history.attach();
+      history.stamp();
+      history.push(dialog);
+      history.push(`${dialog}&question=1`);
+      const target = `/w${withMockRun(new URL(fake.url(), ORIGIN).search, exam)}`;
+      history.close(dialog, target);
+      fake.traverse();
+      expect(fake.url()).toBe(target);
+      expect(openDialogs(new URL(target, ORIGIN).search)).toEqual(['mock-exams', 'practice']);
+      // Back closes the run onto the dialog; Forward never brings the practice panel back.
+      fake.back();
+      expect(fake.url()).toBe(dialog);
+      fake.forward();
+      expect(fake.url()).toBe(dialog);
       fake.back();
       expect(fake.url()).toBe('/w');
       fake.forward();
