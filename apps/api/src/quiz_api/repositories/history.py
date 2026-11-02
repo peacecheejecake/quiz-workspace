@@ -215,7 +215,7 @@ def jobs_query(workspace_id: uuid.UUID, *, limit: int, after: Cursor | None) -> 
     ).where(
         j.c.workspace_id == workspace_id,
         # Personal jobs (ASK-01-C07: AI question answers) are in no workspace history.
-        j.c.job_type.not_in(sorted(PERSONAL_JOB_TYPES)),
+        *(j.c.job_type != job_type for job_type in sorted(PERSONAL_JOB_TYPES)),
     )
     if after is not None:
         stmt = stmt.where(tuple_(j.c.created_at, j.c.id) < tuple_(after.at, after.id))
