@@ -44,9 +44,10 @@ import {
   type RedistributionApi,
   type RedistributionList,
   type RedistributionPreview,
+  type RedistributionPreviewItem,
 } from '@/lib/questions/redistribution';
 import { triState } from '../viewer/range-model';
-import { QuestionRangePicker } from '../viewer/question-range-picker';
+import { QuestionRangePicker, VIRTUALIZE_AT, VirtualRows } from '../viewer/question-range-picker';
 import styles from './chapter-redistribution.module.css';
 
 export interface ChapterRedistributionDialogProps {
@@ -97,6 +98,9 @@ interface PendingMove {
 }
 
 type Notice = { readonly tone: 'status' | 'alert'; readonly text: string } | null;
+
+/** The fixed height of a recommendation row once the list is virtualized (px). */
+const PREVIEW_ROW_PX = 104;
 
 const CONFIRM_DESCRIPTION =
   '옮긴 장과 새 장의 정리 노트가 최신이 아니게 됩니다. 문제 내용과 풀이 기록은 바뀌지 않습니다.';
@@ -497,6 +501,39 @@ function PreviewStep({
   const data = preview.status === 'ready' ? preview.data : null;
   const ids = data ? data.items.map((i) => i.question_id) : [];
   const count = ids.filter((id) => checked.has(id)).length;
+  /** One recommendation: `적용` (named with the whole change) and its text lines. */
+  const row = (item: RedistributionPreviewItem) => {
+    const current = item.current_chapter?.title ?? NO_CHAPTER_TITLE;
+    const next = item.recommended_chapter.title;
+    const number =
+      item.current_chapter === null
+        ? rowNumber({ chapter_id: null, label: item.number_label })
+        : item.number_label;
+    return (
+      <>
+        <Checkbox
+          label="적용"
+          aria-label={`적용: ${number} · ${item.stem_preview} (${current}에서 ${next}으로)`}
+          tabIndex={0}
+          checked={checked.has(item.question_id)}
+          onCheckedChange={(on) => {
+            const set = new Set(checked);
+            if (on === true) set.add(item.question_id);
+            else set.delete(item.question_id);
+            onCheckedChange(set);
+          }}
+        />
+        <div className={styles.previewText}>
+          <p className={styles.stem}>{`${number} · ${item.stem_preview}`}</p>
+          <p>
+            <span>{`현재: ${current}`}</span> <span aria-hidden="true">→</span>{' '}
+            <span>{`추천: ${next}`}</span>
+          </p>
+          <p className={styles.muted}>{REASON_LABELS[item.reason] ?? item.reason}</p>
+        </div>
+      </>
+    );
+  };
   const missing = data ? Object.entries(data.no_recommendation).filter(([, n]) => n > 0) : [];
   return (
     <div className={styles.body}>
@@ -543,39 +580,24 @@ function PreviewStep({
                   onCheckedChange(triState(ids, checked) === true ? new Set() : new Set(ids))
                 }
               />
-              <ul className={styles.previewList} aria-label="추천">
-                {data.items.map((item) => {
-                  const current = item.current_chapter?.title ?? NO_CHAPTER_TITLE;
-                  const next = item.recommended_chapter.title;
-                  const number =
-                    item.current_chapter === null
-                      ? rowNumber({ chapter_id: null, label: item.number_label })
-                      : item.number_label;
-                  return (
+              {data.items.length > VIRTUALIZE_AT ? (
+                <VirtualRows
+                  items={data.items.map((item) => ({ id: item.question_id, item }))}
+                  row={({ item }) => row(item)}
+                  rowPx={PREVIEW_ROW_PX}
+                  label="추천"
+                  listClassName={styles.previewList}
+                  rowClassName={`${styles.previewRow} ${styles.previewRowFixed}`}
+                />
+              ) : (
+                <ul className={styles.previewList} aria-label="추천">
+                  {data.items.map((item) => (
                     <li key={item.question_id} className={styles.previewRow}>
-                      <Checkbox
-                        label="적용"
-                        aria-label={`적용: ${number} · ${item.stem_preview} (${current}에서 ${next}으로)`}
-                        checked={checked.has(item.question_id)}
-                        onCheckedChange={(on) => {
-                          const set = new Set(checked);
-                          if (on === true) set.add(item.question_id);
-                          else set.delete(item.question_id);
-                          onCheckedChange(set);
-                        }}
-                      />
-                      <div className={styles.previewText}>
-                        <p className={styles.stem}>{`${number} · ${item.stem_preview}`}</p>
-                        <p>
-                          <span>{`현재: ${current}`}</span> <span aria-hidden="true">→</span>{' '}
-                          <span>{`추천: ${next}`}</span>
-                        </p>
-                        <p className={styles.muted}>{REASON_LABELS[item.reason] ?? item.reason}</p>
-                      </div>
+                      {row(item)}
                     </li>
-                  );
-                })}
-              </ul>
+                  ))}
+                </ul>
+              )}
               <div className={styles.row}>
                 <Button
                   ref={applyRef}

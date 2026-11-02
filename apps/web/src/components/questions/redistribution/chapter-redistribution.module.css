@@ -125,6 +125,20 @@
   background: var(--color-surface-muted);
 }
 
+/* A virtualized row: fixed height (PREVIEW_ROW_PX), full width, one line per text part (the
+   checkbox name carries the whole change). */
+li.previewRowFixed {
+  inset-inline: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+li.previewRowFixed .previewText p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .previewText {
   display: grid;
   gap: var(--space-1);
