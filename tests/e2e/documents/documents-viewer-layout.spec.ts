@@ -481,8 +481,77 @@ test(
     await expectSplit(page, { orientation: 'vertical', first: 'pdf', pdfRatio: 45 });
     await separator.press('ArrowRight');
     await expectSplit(page, { orientation: 'vertical', first: 'pdf', pdfRatio: 45 });
+
+    // A taller PDF pane (상하 only changes its height) re-reads its viewport without a scroll:
+    // with page 2's top just below the reading line (1/4) of the short pane, End makes the pane
+    // tall enough that the line falls on page 2 — "현재 페이지" follows and every page now in view
+    // is drawn (DOC-02-AC07/AC08 in the DOCVIEW-01 split).
+    await separator.press('Home');
+    const short = await measureSplit(page, 'vertical');
+    await expectSplit(page, { orientation: 'vertical', first: 'pdf', pdfRatio: short.valueMin });
+    await expect(viewerUi.currentPage(page)).toHaveValue('1');
+    const placed = await placePageBelowReadingLine(page, 2, 24);
+    expect(placed, 'page 2 placed just below the reading line').toBe(true);
+    await expect(viewerUi.currentPage(page)).toHaveValue('1');
+    await separator.press('End');
+    const tall = await measureSplit(page, 'vertical');
+    expect(tall.pdf.height, 'the PDF pane grew').toBeGreaterThan(short.pdf.height + 200);
+    await expect
+      .poll(() => pdfReading(page))
+      .toEqual({
+        lineOnPage: 2,
+        shown: '2',
+        undrawn: [],
+      });
   },
 );
+
+const PDF_PAGES = '[role="group"][aria-label="PDF 페이지 영역"]';
+
+/**
+ * Scrolls the PDF page area (as a reader would) so that page `n`'s top sits `gap` px below the
+ * reading line (the upper quarter of the area). False when the page cannot be placed there.
+ */
+async function placePageBelowReadingLine(page: Page, n: number, gap: number): Promise<boolean> {
+  return page.evaluate(
+    ({ selector, n: target, gap: px }) => {
+      const scroller = document.querySelector<HTMLElement>(selector);
+      const frame = scroller?.querySelector<HTMLElement>(`[data-page="${target}"]`);
+      if (!scroller || !frame) return false;
+      const offset = frame.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      const top = scroller.scrollTop + offset - scroller.clientHeight / 4 - px;
+      if (top < 0 || top > scroller.scrollHeight - scroller.clientHeight) return false;
+      scroller.scrollTop = top;
+      scroller.dispatchEvent(new Event('scroll'));
+      return true;
+    },
+    { selector: PDF_PAGES, n, gap },
+  );
+}
+
+/** The page under the PDF area's reading line, the "현재 페이지" value and undrawn pages in view. */
+async function pdfReading(
+  page: Page,
+): Promise<{ lineOnPage: number; shown: string; undrawn: number[] }> {
+  const shown = await viewerUi.currentPage(page).inputValue();
+  const geometry = await page.evaluate((selector) => {
+    const scroller = document.querySelector<HTMLElement>(selector);
+    if (!scroller) return { lineOnPage: 0, undrawn: [] as number[] };
+    const box = scroller.getBoundingClientRect();
+    const line = box.top + scroller.clientHeight / 4;
+    let lineOnPage = 0;
+    const undrawn: number[] = [];
+    for (const frame of scroller.querySelectorAll<HTMLElement>('[data-page]')) {
+      const rect = frame.getBoundingClientRect();
+      const n = Number(frame.dataset.page);
+      if (rect.top <= line) lineOnPage = Math.max(lineOnPage, n);
+      const inView = rect.bottom > box.top && rect.top < box.top + scroller.clientHeight;
+      if (inView && !frame.querySelector('canvas')) undrawn.push(n);
+    }
+    return { lineOnPage, undrawn };
+  }, PDF_PAGES);
+  return { lineOnPage: geometry.lineOnPage, shown, undrawn: geometry.undrawn };
+}
 
 /** WebKit's messages for a load cancelled by a navigation (not an app error). */
 const CANCELLED_LOAD =

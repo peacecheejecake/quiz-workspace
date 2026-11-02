@@ -237,11 +237,22 @@ export function PdfViewer({
     };
   }, [source, attempt]);
 
-  // Fit-to-width follows the pane's width. A hidden pane (phones: the 원문 view) measures 0 and
-  // keeps the last width; when it shows again, the reading spot is restored (its scroll position
-  // may have been reset while hidden).
+  // Fit-to-width follows the pane's width. A hidden pane (a DOCVIEW-01 view mode, the other pane
+  // on a phone) measures 0 and keeps the last width; when it shows again, the reading spot is
+  // restored (its scroll position may have been reset while hidden). Any size change — also a
+  // height-only one (상하 split) — re-reads the viewport: the pages in view and the page at the
+  // reading line. While the splitter is dragged that waits for the release (deferResize).
   const hidden = useRef(false);
   const restoreAnchor = useRef<() => void>(() => undefined);
+  const refreshViewport = useRef<() => void>(() => undefined);
+  const deferResizeRef = useRef(deferResize);
+  const viewportStale = useRef(false);
+  useEffect(() => {
+    deferResizeRef.current = deferResize;
+    if (deferResize || !viewportStale.current) return;
+    viewportStale.current = false;
+    refreshViewport.current();
+  }, [deferResize]);
   useEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
@@ -255,6 +266,8 @@ export function PdfViewer({
         hidden.current = false;
         restoreAnchor.current();
       }
+      if (deferResizeRef.current) viewportStale.current = true;
+      else refreshViewport.current();
     };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
@@ -337,6 +350,14 @@ export function PdfViewer({
     return { view, current };
   }, []);
 
+  const reportCurrent = useCallback((read: NonNullable<ReturnType<typeof readViewport>>) => {
+    const current = currentPageAt(read.current, read.view);
+    if (current !== shownPage.current) {
+      shownPage.current = current;
+      onPageChangeRef.current(current, 'scroll');
+    }
+  }, []);
+
   const onScroll = useCallback(() => {
     const read = readViewport();
     if (!read) return;
@@ -345,12 +366,17 @@ export function PdfViewer({
       ownScroll.current = null;
       if (Math.abs(read.view.scrollTop - own) <= 2) return;
     }
-    const current = currentPageAt(read.current, read.view);
-    if (current !== shownPage.current) {
-      shownPage.current = current;
-      onPageChangeRef.current(current, 'scroll');
-    }
-  }, [readViewport]);
+    reportCurrent(read);
+  }, [readViewport, reportCurrent]);
+
+  // The area was resized without a scroll (e.g. a taller 상하 pane): new pages may be in view and
+  // another page may sit at the reading line.
+  useLayoutEffect(() => {
+    refreshViewport.current = () => {
+      const read = readViewport();
+      if (read) reportCurrent(read);
+    };
+  }, [readViewport, reportCurrent]);
 
   // Keep the reading spot in place whenever the layout changes: a new scale (zoom, fit width
   // after a resize) or a page whose real size replaced its placeholder.
