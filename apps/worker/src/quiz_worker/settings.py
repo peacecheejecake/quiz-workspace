@@ -308,6 +308,16 @@ class WorkerSettings(BaseSettings):
     ask_fake_log_dir: str | None = Field(default=None, validation_alias="WORKER_ASK_FAKE_LOG_DIR")
     ask_hold_dir: str | None = Field(default=None, validation_alias="WORKER_ASK_HOLD_DIR")
 
+    # -- question.ai_explain (EXPL-B) --------------------------------------------------------------
+    # AI explanations send the question (with its answer), its source passages and the evidence
+    # to the LLM provider (needs LLM_API_KEY / LLM_MODEL outside APP_ENV=test). Off by default,
+    # separate from WORKER_ASK_LLM; the API reads the same variable (409 explanation-disabled).
+    # ⛔ staging/production need approval. Jobs run on the `interactive` queue.
+    ai_explanations: bool = Field(default=False, validation_alias="WORKER_AI_EXPLANATIONS")
+    ai_explanation_max_output_tokens: int = Field(
+        default=1500, ge=100, le=64_000, validation_alias="AI_EXPLANATION_MAX_OUTPUT_TOKENS"
+    )
+
     @model_validator(mode="after")
     def _check_limits(self) -> WorkerSettings:
         if self.task_soft_time_limit_seconds >= self.task_time_limit_seconds:

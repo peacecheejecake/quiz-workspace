@@ -733,14 +733,21 @@ class StreamWriter(Protocol):
 
 class AskStreamWriter:
     def __init__(
-        self, client: Any, *, ttl_seconds: int = STREAM_TTL_SECONDS, maxlen: int = STREAM_MAXLEN
+        self,
+        client: Any,
+        *,
+        ttl_seconds: int = STREAM_TTL_SECONDS,
+        maxlen: int = STREAM_MAXLEN,
+        key_prefix: str = STREAM_KEY_PREFIX,
     ) -> None:
         self._client = client
         self._ttl = ttl_seconds
         self._maxlen = maxlen
+        # EXPL-B: AI explanations write the same layout under `explain:<id>`.
+        self._prefix = key_prefix
 
     def append(self, message_id: uuid.UUID, event: str, seq: int, data: Mapping[str, Any]) -> None:
-        key = stream_key(message_id)
+        key = f"{self._prefix}{message_id}"
         pipe = self._client.pipeline(transaction=False)
         pipe.xadd(
             key,
@@ -752,7 +759,7 @@ class AskStreamWriter:
         pipe.execute()
 
     def last_seq(self, message_id: uuid.UUID) -> int:
-        entries = self._client.xrevrange(stream_key(message_id), count=1)
+        entries = self._client.xrevrange(f"{self._prefix}{message_id}", count=1)
         for _sid, fields in entries or []:
             raw = fields.get(b"seq", fields.get("seq"))
             try:

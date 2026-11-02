@@ -283,7 +283,11 @@ def test_interactive_queue_routing_and_process() -> None:
     assert queue_for("ask.answer") == INTERACTIVE_QUEUE
     assert queue_for("document.parse") == "quiz.jobs"
     config = build_celery_config(WorkerSettings(_env_file=None, WORKER_TASK_ALWAYS_EAGER=True))  # type: ignore[call-arg]
-    assert config["task_routes"] == {task_name("ask.answer"): {"queue": INTERACTIVE_QUEUE}}
+    assert config["task_routes"] == {
+        task_name("ask.answer"): {"queue": INTERACTIVE_QUEUE},
+        # EXPL-B: AI explanations share the interactive queue.
+        task_name("question.ai_explain"): {"queue": INTERACTIVE_QUEUE},
+    }
     assert "ask-purge" in config["beat_schedule"]
     argv = serve.build_worker_argv(2, "info", beat=False, queue=INTERACTIVE_QUEUE)
     assert "--queues=interactive" in argv
