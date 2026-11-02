@@ -46,6 +46,7 @@ import {
   MinusIcon,
   MoreIcon,
   ModalDialog,
+  ownEscapeProps,
   PageHeader,
   Popover,
   PopoverAnchor,
@@ -205,7 +206,7 @@ export default function Page() {
             <DialogClose>닫기</DialogClose>
           </ModalDialog>
           <FloatingSidePanel title="패널" modal={false} trigger={<Button>패널</Button>}>
-            본문
+            <div {...ownEscapeProps}>본문</div>
           </FloatingSidePanel>
           <div style={{ height: '200px' }}>
             <SplitView separatorLabel="크기 조절" orientation="vertical" visible="both">

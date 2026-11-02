@@ -105,6 +105,7 @@ export type { ConfirmDialogProps } from './layout/ConfirmDialog';
 export { FloatingSidePanel } from './layout/FloatingSidePanel';
 export type { FloatingSidePanelProps } from './layout/FloatingSidePanel';
 export { DialogClose, ModalDialog } from './layout/ModalDialog';
+export { ownEscapeProps } from './internal/own-escape';
 export type { ModalDialogProps } from './layout/ModalDialog';
 export { PageHeader } from './layout/PageHeader';
 export type { PageHeaderProps } from './layout/PageHeader';

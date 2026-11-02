@@ -14,6 +14,7 @@ import {
 import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
 import { LayerProvider, useFloatingLayer } from '../internal/layer';
+import { handlesOwnEscape } from '../internal/own-escape';
 import { ScrollRegion } from '../internal/scroll-region';
 import { handOffFocus } from '../internal/tabbable';
 import { IconButton } from '../primitives/IconButton';
@@ -274,11 +275,20 @@ export function FloatingSidePanel({
               // itself: another non-modal panel raised over it, or a modal panel opened on top
               // whose layer Radix had not ranked highest yet (CHNOTE-01-AC02: the practice panel
               // opened from a 정리 노트 footnote ignored Escape while the note panel held the rank).
-              if (event.key === 'Escape' && declinedEscapes.has(event.nativeEvent)) {
+              if (
+                event.key === 'Escape' &&
+                declinedEscapes.has(event.nativeEvent) &&
+                !handlesOwnEscape(event.nativeEvent)
+              ) {
                 handleOpenChange(false);
               }
             }}
             onEscapeKeyDown={(event) => {
+              // An inline edit (ownEscapeProps) cancels itself; the next Escape closes the panel.
+              if (handlesOwnEscape(event)) {
+                event.preventDefault();
+                return;
+              }
               if (!modal && !contentRef.current?.contains(document.activeElement)) {
                 event.preventDefault();
                 declinedEscapes.add(event);
