@@ -348,6 +348,131 @@ test(
 );
 
 test(
+  'QOV-01-AC05 the retry toggle flips before the server answers and toggling favorite never changes it (UX9-RETRY-OPT)',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seed(workspaceFactory, 'qov01-ac05-opt', 2);
+    const question = q(s, 1);
+    await answerCorrectly(s.owner, question);
+    await openOverview(page, s);
+    // Heatmap dots are hidden from the accessibility tree under the modal panel: read by id.
+    const dotById = page.locator(`[data-question-id="${question.id}"]`);
+    await expect(dotById).toHaveAttribute('data-status', 'correct');
+
+    // Hold every my-state save (the panel's setMyStateAction server action) until released; the
+    // request then goes to the real server unchanged.
+    const held: { release: (how: 'send' | 'abort') => void; done: Promise<void> }[] = [];
+    await page.route(
+      (url) => url.pathname.startsWith('/workspaces/'),
+      async (route) => {
+        const request = route.request();
+        const body = request.method() === 'POST' ? (request.postData() ?? '') : '';
+        if (!request.headers()['next-action'] || !/"(needs_retry|is_favorite)"/.test(body)) {
+          return route.fallback();
+        }
+        let release!: (how: 'send' | 'abort') => void;
+        let finish!: () => void;
+        const how = new Promise<'send' | 'abort'>((resolve) => (release = resolve));
+        held.push({ release, done: new Promise<void>((resolve) => (finish = resolve)) });
+        try {
+          if ((await how) === 'abort') await route.abort('failed');
+          else await route.fulfill({ response: await route.fetch() });
+        } finally {
+          finish();
+        }
+      },
+    );
+
+    await overviewUi.dot(page, 1).click();
+    const panel = panelUi.numbered(page, 1);
+    await expect(panel).toBeVisible();
+    await panelUi.retryOn(panel).click();
+    // Flipped while the request is still held: name, state, not busy, and the dot follows.
+    await expect.poll(() => held.length).toBe(1);
+    const retry = panelUi.retryOff(panel);
+    await expect(retry).toBeVisible();
+    await expect(retry).toHaveAttribute('data-state', 'on');
+    await expect(retry).not.toHaveAttribute('aria-disabled');
+    await expect(dotById).toHaveAttribute('data-status', 'retry');
+    held[0]?.release('send');
+    await held[0]?.done;
+    await expect(retry).toHaveAttribute('data-state', 'on');
+
+    // Sample the retry toggle on every mutation and every frame while favorite is toggled.
+    await panel.evaluate((root) => {
+      const w = window as unknown as { __retrySamples: string[]; __stopRetry: () => void };
+      const first = root.querySelector('[aria-label^="다시 풀기"]');
+      const sample = () => {
+        const el = root.querySelector('[aria-label^="다시 풀기"]');
+        w.__retrySamples.push(
+          el === first && el
+            ? ['aria-label', 'data-state', 'aria-disabled', 'disabled']
+                .map((a) => `${a}=${el.getAttribute(a)}`)
+                .concat(`icon=${el.querySelector('svg')?.outerHTML.length ?? 0}`)
+                .join(' ')
+            : 'replaced',
+        );
+      };
+      w.__retrySamples = [];
+      const observer = new MutationObserver(sample);
+      observer.observe(root, { subtree: true, attributes: true, childList: true });
+      let frame = requestAnimationFrame(function tick() {
+        sample();
+        frame = requestAnimationFrame(tick);
+      });
+      w.__stopRetry = () => {
+        observer.disconnect();
+        cancelAnimationFrame(frame);
+      };
+    });
+    await panelUi.favoriteOn(panel).click();
+    await expect.poll(() => held.length).toBe(2);
+    await expect(panelUi.favoriteOff(panel)).toBeVisible();
+    await expect(overviewUi.marker(dotById)).toHaveAttribute('data-shape', 'star');
+    held[1]?.release('send');
+    await held[1]?.done;
+    await expect(panelUi.favoriteOff(panel)).toBeVisible();
+    // A few more committed frames after the response.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 200))),
+        ),
+    );
+    const samples = await page.evaluate(() => {
+      const w = window as unknown as { __retrySamples: string[]; __stopRetry: () => void };
+      w.__stopRetry();
+      return w.__retrySamples;
+    });
+    expect(samples.length).toBeGreaterThan(5);
+    expect(new Set(samples).size, samples.join('\n')).toBe(1);
+    expect(samples[0]).toMatch(/aria-label=다시 풀기 해제 data-state=on aria-disabled=null/);
+
+    // A failed save rolls back only its own toggle and is reported.
+    await panelUi.favoriteOff(panel).click();
+    await expect.poll(() => held.length).toBe(3);
+    await expect(panelUi.favoriteOn(panel)).toBeVisible();
+    held[2]?.release('abort');
+    await held[2]?.done;
+    await expect(page.getByText(/일시적인 오류|temporar/i).first()).toBeVisible();
+    await expect(panelUi.favoriteOff(panel)).toBeVisible();
+    await expect(retry).toHaveAttribute('data-state', 'on');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+    await panelUi.close(panel).click();
+    await expect(panel).toBeHidden();
+    await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'retry');
+    await expect(overviewUi.marker(overviewUi.dot(page, 1))).toHaveAttribute('data-shape', 'star');
+    expect(await overviewItem(s.owner, s.workspaceId, question.id)).toMatchObject({
+      status: 'retry',
+      needs_retry: true,
+      is_favorite: true,
+      last_graded_result: 'correct',
+    });
+  },
+);
+
+test(
   'QOV-01-AC06 click, Enter or Space opens the modal practice panel and closing restores focus to the marker',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
