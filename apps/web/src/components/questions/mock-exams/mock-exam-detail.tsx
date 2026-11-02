@@ -338,7 +338,6 @@ export function MockExamDetail({
         ) : null}
       </div>
 
-
       {mode === 'settings' && canEdit ? (
         <section className={styles.form} aria-label="설정 바꾸기">
           <h3 className={styles.legend}>설정 바꾸기</h3>

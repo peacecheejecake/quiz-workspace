@@ -683,7 +683,8 @@ test(
       /^(변형 출제|generate variants?)$/i,
       /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
       /^(보관·초안 문제|archived and draft questions)$/i,
-      // QVIEW-01 (QVIEW-W): the range run, for every member.
+      // MOCK-01 (MOCK-W): mock exams; QVIEW-01 (QVIEW-W): the range run — both for every member.
+      /^(모의고사|mock exams?)$/i,
       /^(문제 풀기|practice questions?|start practice)$/i,
     ]);
     await expect(
