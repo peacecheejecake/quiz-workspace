@@ -903,7 +903,10 @@ export function QuestionsOverview({
       {canAuthor ? (
         <>
           <HomeQuestionEditor
-            container={dialogContainer}
+            // 문제 등록 is a home dialog: with the home's other dialogs, so one stacked over it stays
+            // exposed (HOMEDLG-01-AC02). 문제 편집 opens from the practice panel (portalled to
+            // <body>): the home's container is hidden behind that panel, so it portals to <body>.
+            container={editorTarget?.mode === 'create' ? dialogContainer : undefined}
             workspaceId={workspaceId}
             target={editorTarget}
             session={editorSession}
