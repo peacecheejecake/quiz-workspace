@@ -100,6 +100,9 @@ class MockSessionRecord:
     revision: MockRevision
     practice_run_id: uuid.UUID | None
     run_position: int | None
+    # The mock exam lists the session's question now (exam not deleted, shown generation, not
+    # taken out): what a session outside a run needs to be submitted or self-graded.
+    shown: bool = True
 
 
 @dataclass(frozen=True)
@@ -190,6 +193,8 @@ _SESSION = """
     select s.id, s.workspace_id, q.mock_exam_id, s.mock_exam_question_id, s.user_id,
            q.question_type, q.variation_type, s.displayed_option_ids, s.state, s.opened_at,
            s.submitted_at, s.graded_at, s.practice_run_id, s.run_position,
+           (q.removed_at is null and e.deleted_at is null
+            and e.current_generation_id is not distinct from q.generation_id) as shown,
            r.id as rev_id, r.version as rev_version, r.stem as rev_stem,
            r.options as rev_options, r.correct_option_ids as rev_correct_option_ids,
            r.accepted_answers as rev_accepted_answers, r.is_multi_answer as rev_is_multi_answer,
@@ -197,6 +202,7 @@ _SESSION = """
       from public.mock_exam_practice_sessions s
       join public.mock_exam_questions q
         on q.id = s.mock_exam_question_id and q.workspace_id = s.workspace_id
+      join public.mock_exams e on e.id = q.mock_exam_id and e.workspace_id = q.workspace_id
       join public.mock_exam_question_revisions r
         on r.id = s.mock_exam_question_revision_id and r.mock_exam_question_id = q.id
 """
@@ -236,6 +242,7 @@ def _session(row: Any) -> MockSessionRecord:
         revision=_revision(row),
         practice_run_id=row.practice_run_id,
         run_position=row.run_position,
+        shown=bool(row.shown),
     )
 
 
@@ -315,8 +322,8 @@ class MockPracticeRepository:
     def get_session(
         self, session_id: uuid.UUID, user_id: uuid.UUID, *, lock: bool = False
     ) -> MockSessionRecord | None:
-        """The caller's session whose question is still in its mock exam; `lock` = FOR UPDATE of
-        the session row (submit / self-grade)."""
+        """The caller's session whose question is still in its mock exam (`shown` says whether the
+        mock exam lists it now); `lock` = FOR UPDATE of the session row (submit / self-grade)."""
         row = self._session.execute(
             text(
                 _SESSION

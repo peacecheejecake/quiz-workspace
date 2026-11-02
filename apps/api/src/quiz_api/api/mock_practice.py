@@ -18,7 +18,8 @@ study state, no Heatmap change, no view record (MOCK-01-C01, QVIEW-01-C04).
 
 Which questions can be opened:
   * without a run: a question the mock exam lists now (its shown generation, not taken out, the
-    mock exam not deleted);
+    mock exam not deleted) — checked again on submit and self-grade, so a session opened before
+    a 삭제 or 다시 만들기 is over (404, no attempt, no answers);
   * with `{practice_run_id, run_position}`: the caller's `source = mock` run of this workspace
     must hold this question at that position, and the question must not have been taken out of
     the mock exam. A 다시 만들기 or 삭제 after the run started does not matter: the run keeps the
@@ -164,6 +165,10 @@ def _own_session(
     access = decide(record, Action.PRACTICE, not_found_detail=NOT_FOUND)
     found = repo.get_session(session_id, user_id, lock=True)
     if found is None:  # the question was taken out of its mock exam
+        raise _not_found()
+    if found.practice_run_id is None and not found.shown:
+        # Outside a run a session ends with what the mock exam lists: after 삭제 (MOCK-01-C05)
+        # or 다시 만들기 (the earlier round is hidden, C04). Runs continue (decision n).
         raise _not_found()
     return access, found
 

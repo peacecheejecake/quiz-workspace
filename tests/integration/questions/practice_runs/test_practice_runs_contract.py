@@ -1261,3 +1261,82 @@ def test_c04_mock_pending_answers_are_self_graded_once(seed: Any) -> None:
         (session["id"],),
     )
     assert rows == [("pending", None, None), ("correct", "self", pending["attempt_id"])]
+
+
+def test_c05_standalone_sessions_end_with_their_mock_exam_round_and_workspace(seed: Any) -> None:
+    """MOCK-01-C05/C04: outside a run only what the mock exam lists now is practised — a
+    standalone session opened before 삭제 or 다시 만들기 cannot be submitted or self-graded
+    afterwards (404, no attempt, no answers); a run keeps its questions (decision n)."""
+    owner = seed.client("qview-mock-standalone")
+    ws_id = str(owner.create_workspace()["id"])
+    mcqs = [owner.create_question(ws_id, mcq("ms", 1, n, None)) for n in (1, 2)]
+    essay = owner.create_question(
+        ws_id,
+        {"question_type": "ESSAY", "stem": "모의 단독 서술형", "explanation": "단독 해설 비밀"},
+    )
+
+    def opened(exam_id: str) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+        return [
+            (q, owner.ok("POST", f"/mock-exam-questions/{q['id']}/practice-sessions", {}, (201,)))
+            for q in mock_questions(owner, exam_id)
+        ]
+
+    def attempts(session_id: str) -> int:
+        return count(
+            "select count(*) from public.mock_exam_attempts where practice_session_id = %s",
+            (session_id,),
+        )
+
+    def refused(res: Any, session_id: str, before: int) -> None:
+        seed.problem(res, 404)
+        assert "해설 비밀" not in res.text
+        assert "correct_option_ids" not in res.text
+        assert attempts(session_id) == before
+
+    # 삭제: open MCQ and pending essay sessions are over; the run continues.
+    exam = create_mock_exam(owner, ws_id, [mcqs[0]["id"], essay["id"]])
+    sessions = opened(exam["id"])
+    (q_mcq, s_mcq) = next(p for p in sessions if p[0]["question_type"] == "MCQ")
+    (_, s_essay) = next(p for p in sessions if p[0]["question_type"] == "ESSAY")
+    owner.ok("POST", f"/mock-practice-sessions/{s_essay['id']}/submit", {"answer_text": "답"})
+    run = created(owner, ws_id, mock(exam["id"], {"question_ids": [q_mcq["id"]]}))
+    in_run = owner.ok_response(
+        mock_session(owner, q_mcq["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    assert owner.call("DELETE", f"/mock-exams/{exam['id']}").status_code == 204
+    refused(mock_submit(owner, s_mcq["id"], q_mcq["correct_option_ids"]), s_mcq["id"], 0)
+    refused(
+        owner.call(
+            "POST", f"/mock-practice-sessions/{s_essay['id']}/self-grade", {"result": "correct"}
+        ),
+        s_essay["id"],
+        1,
+    )
+    graded = mock_submit(owner, in_run["id"], q_mcq["correct_option_ids"])
+    assert graded.status_code == 200, graded.text[:200]
+
+    # 다시 만들기: a session of the superseded round is over; the new round is practised.
+    remade_exam = create_mock_exam(owner, ws_id, [mcqs[1]["id"]])
+    [(old_q, old_s)] = opened(remade_exam["id"])
+    remade = owner.ok("POST", f"/mock-exams/{remade_exam['id']}/generations", {}, (202,))
+    owner.wait_for_job(str(remade["latest_generation"]["job_id"]))
+    refused(mock_submit(owner, old_s["id"], old_q["correct_option_ids"]), old_s["id"], 0)
+    [(new_q, new_s)] = opened(remade_exam["id"])
+    assert new_q["id"] != old_q["id"]
+    ok = mock_submit(owner, new_s["id"], new_q["correct_option_ids"])
+    assert ok.status_code == 200, ok.text[:200]
+
+    # A soft-deleted workspace: every mock practice route is 404.
+    [(last_q, last_s)] = opened(remade_exam["id"])
+    owner.ok("DELETE", f"/workspaces/{ws_id}", None, (200, 202, 204))
+    seed.problem(
+        owner.call("POST", f"/mock-exam-questions/{last_q['id']}/practice-sessions", {}), 404
+    )
+    refused(mock_submit(owner, last_s["id"], last_q["correct_option_ids"]), last_s["id"], 0)
+    seed.problem(
+        owner.call(
+            "POST", f"/mock-practice-sessions/{last_s['id']}/self-grade", {"result": "correct"}
+        ),
+        404,
+    )
+    seed.problem(mock_session(owner, q_mcq["id"], run["id"], 1), 404)
