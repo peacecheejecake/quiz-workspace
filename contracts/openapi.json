@@ -10647,19 +10647,6 @@
             "description": "0-100 while running (100 once succeeded); null when unknown.",
             "title": "Progress"
           },
-          "result": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Counts and code only, for `mock_exam.generate`: {created_count, skipped_count, usage: {llm_calls, batches, input_tokens, output_tokens}, error_code}; null for other job types.",
-            "title": "Result"
-          },
           "retryable": {
             "description": "The caller can start this job again: `document` → POST /documents/{target_id}/publish, `question_import` → POST /question-imports/{target_id}/retry. The retry is a new job.",
             "title": "Retryable",
