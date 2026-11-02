@@ -31,6 +31,8 @@ linked_tests: [UX9-SCROLL-AC01 … UX9-SCROLL-AC04]
 
 ### UX9-SCROLL-AC02
 
+> **UX9-SPEC 사용자 결정 2026-11-02 D3:** 문서 관리·모의고사 등 홈 floating dialog가 modal이 되므로 이 AC는 "modal floating dialog(모바일 full-screen 레이아웃 포함)"에 대해 그대로 성립한다(내용 불변). UX9-MODAL이 test 이름·Given의 "non-modal"만 고친다.
+
 - **Given:** 페이지가 scroll되는 Workspace 홈에서 non-modal floating dialog(문서 관리, 모의고사 등 홈 dialog; 모바일 full-screen 레이아웃 포함)가 열린 상태
 - **When:** AC01과 같은 스와이프를 dialog 위에서 한다
 - **Then:** AC01과 같다: dialog의 header나 끝에 닿은 scroll 영역의 스와이프는 페이지를 scroll하지 않고, scroll할 수 있는 영역은 그 영역만 움직인다.
@@ -42,6 +44,8 @@ linked_tests: [UX9-SCROLL-AC01 … UX9-SCROLL-AC04]
 - **Then:** AC01과 같다: 페이지는 scroll되지 않고, scroll할 수 있는 panel 영역만 움직인다.
 
 ### UX9-SCROLL-AC04
+
+> **UX9-SPEC 사용자 결정 2026-11-02 D3:** 홈에는 non-modal dialog가 남지 않는다(HOMEDLG-01). UX9-MODAL이 이 AC의 대상을 남은 non-modal panel — 본문 검색 페이지의 "본문 발췌"(SEARCH-02)·가져오기 페이지의 원본 비교(QIMPORT-01) — 로 바꾸고, 홈 modal dialog에 대해서는 "wheel이 페이지를 scroll하지 않음(배경 잠금)"만 확인한다. side panel 경우(AC03)는 그대로다.
 
 - **Given:** 데스크톱 Workspace 홈에서 non-modal dialog가 열린 상태(페이지는 scroll 가능)
 - **When:** dialog의 header 위에서, 그리고 끝까지 scroll한 dialog 본문 위에서 그 끝을 넘는 방향으로 wheel/trackpad scroll하고; dialog 옆의 페이지 위에서 wheel scroll한다

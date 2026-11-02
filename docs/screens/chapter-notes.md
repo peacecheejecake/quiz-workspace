@@ -1,7 +1,7 @@
 # CHNOTE-01 — 챕터 정리 노트 Floating Side Panel
 
 **상태:** 확정 화면 요구사항 v1.0 · DOCSUM-SPEC 신규 2026-10-29 (사용자 요청 "문제 및 해설로부터 챕터별 내용 정리 생성 — 추가한 내용은 문제 출처를 주석에 명시", 사용자 결정 Q4·Q6·Q7·Q10) · UX9-SPEC 개정 2026-11-02 (사용자 결정 C7 "정리 노트의 접기/펼치기는 필요 없을듯": "정답·해설 포함" disclosure 폐지, 본문 항상 표시 — 새 동작의 AC는 [CHNOTE-02](chapter-note-tools.md)(검색·각주 미리보기·Heatmap marker를 누르면 노트 닫기)와 [HILITE-01](highlights.md)(하이라이트·`내 하이라이트`); 이 화면의 AC01·AC02·AC04·AC05 문구를 함께 고침, test는 UX9-NOTE-W가 고침)
-**Route:** `/workspaces/:workspaceId?panel=chapter-note&chapter=:chapterId` (Workspace 홈 Heatmap의 챕터 그룹 header `정리 노트` 버튼이 여는 non-modal panel) · 공유 게스트는 `/share/:shareId?panel=chapter-note&chapter=:chapterId`
+**Route:** `/workspaces/:workspaceId?panel=chapter-note&chapter=:chapterId` (Workspace 홈 Heatmap의 챕터 그룹 header `정리 노트` 버튼이 여는 panel — DOCSUM-SPEC은 non-modal, UX9-SPEC 사용자 결정 2026-11-02부터 modal: "정리 노트도 모달로 변경. 모달을 닫고 문제를 누르도록 유도", [HOMEDLG-01](home-dialogs.md)) · 공유 게스트는 `/share/:shareId?panel=chapter-note&chapter=:chapterId`
 **테스트:** `tests/e2e/questions/chapter-notes.spec.ts` (계약: `tests/integration/questions/chapter_notes/test_chapter_notes_contract.py`, `apps/worker` · `packages/core` unit test)
 **Phase:** CHNOTE.0 (RED) → CHNOTE-B → CHNOTE-W
 **연계:** [Questions 명세](../questions.md) §9, [QOV-01](questions-overview.md), [QPLAY-01](questions-practice.md), [WS-VIEW-01](workspace-shared-view.md), [공유 명세](../workspace-sharing.md) §8, [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
@@ -25,13 +25,13 @@ linked_tests: [CHNOTE-01-AC01 … CHNOTE-01-AC06]
 - **최신 여부(stale):** 노트를 만든 뒤 그 장의 확정 문제가 추가·수정(새 revision)·삭제·보관되거나 다른 장으로 옮겨지면 노트에 글자 badge "문제가 바뀌어 최신이 아닙니다"를 단다(읽을 때 계산; 노트 내용은 그대로). 더 이상 그 장의 확정 문제가 아닌 문제를 가리키는 각주는 "삭제되었거나 옮긴 문제"로 보이고 링크가 없다.
 - **공유 게스트·Fork는 출처가 일치하는 노트만 (Codex P1 2026-10-29):** 노트 본문은 각주 문제의 정답·해설에서 나왔으므로, 공유 링크 게스트와 Fork에는 **출처 일치** 노트만 준다: `question_refs`의 모든 문제가 살아 있고 CONFIRMED이며 그 active revision이 노트에 고정된 `question_revision_id`와 같다. 문제가 삭제·보관·수정(새 revision)되면 그 노트는 다시 만들어 출처가 일치할 때까지 게스트에게 본문 없이 "정리 노트가 갱신 중이거나 없습니다."만 보이고(API 404), Fork에는 복제되지 않는다. 문제 추가만으로 생긴 stale은 인용한 내용이 여전히 공개 범위라 막지 않는다. 구성원에게는 그대로 stale badge와 함께 보인다.
 - **보이기 (Q6·Q7):** 모든 구성원과 공유 링크 게스트(위 출처 일치 조건)가 볼 수 있다. 사람의 승인 없이 바로 보이고 편집할 수 없으며 `AI 생성` 글자 badge를 단다. 노트 본문은 정답·해설에서 나온 내용이다 — DOCSUM-SPEC부터 UX9 전까지는 panel을 열 때마다 본문이 접혀 있고 "정답·해설 포함" disclosure를 펼쳐야 보였으나, UX9-SPEC(사용자 결정 C7 2026-11-02)부터 접기 없이 본문을 바로 보이고 본문 위에 설명 "이 노트에는 문제의 정답과 해설 내용이 들어 있습니다."를 글자로 둔다(CHNOTE-02-AC01).
-- **풀이와 분리:** 문제 풀이 panel(QPLAY-01)과 practice API는 정리 노트 내용·링크를 보이거나 보내지 않는다(제출 전후 모두; 풀이 panel에는 진입점이 없음). 풀이 panel(과 범위 풀이)이 노트 panel 위에 열린 동안에는 노트 panel의 내용을 가린다(UX9: 접기 대신, CHNOTE-02 "풀이와 분리는 그대로"). Heatmap marker로 문제를 열면 노트 panel은 닫힌다(UX9 사용자 결정 C9, CHNOTE-02-AC04); 각주로 열면 노트 panel은 남는다(CHNOTE-02-AC05).
+- **풀이와 분리:** 문제 풀이 panel(QPLAY-01)과 practice API는 정리 노트 내용·링크를 보이거나 보내지 않는다(제출 전후 모두; 풀이 panel에는 진입점이 없음). 풀이 panel(과 범위 풀이)이 노트 panel 위에 열린 동안에는 노트 panel의 내용을 가린다(UX9: 접기 대신, CHNOTE-02 "풀이와 분리는 그대로"). 노트가 열린 동안 Heatmap은 비활성이라 문제는 노트를 닫은 뒤 연다(UX9 사용자 결정 2026-11-02 modal 노트 — 처음의 C9 "marker를 누르면 노트 닫기"를 대체, CHNOTE-02-AC04); 각주로 열면 노트 위에 쌓인다(CHNOTE-02-AC05).
 - **환경별 사용 여부:** 노트 생성은 worker 설정 `WORKER_CHAPTER_NOTES`가 켜져 있고 LLM이 설정된 환경에서만 가능하다. 꺼진 환경에서도 저장된 노트는 읽을 수 있다.
 
 ## 레이아웃 및 컴포넌트
 
-- **진입 (QOV-01 Heatmap):** 챕터 그룹 header(장 제목·문제 수) 오른쪽에 `정리 노트` 버튼(글자 버튼, 접근성 이름 "<장 제목> 정리 노트", 모든 구성원). "챕터 없음" 그룹에는 없다(UX9 제안: 그 그룹에는 대신 `내 하이라이트` 버튼 — HILITE-01). 노트가 만들어지는 중이면 버튼 옆에 "만드는 중" 글자 상태. 상태 필터는 노트 입력에 영향을 주지 않는다(필터와 무관하게 그 장의 모든 확정 문제).
-- **panel:** 공통 `FloatingSidePanel`(non-modal). 다른 홈 dialog와 함께 열리고 나중에 연 것이 위(QOV-01-AC10). 한 번에 장 하나(다른 장의 `정리 노트`를 누르면 같은 panel의 장이 바뀐다). 즉시 열리고 불러오는 동안 skeleton(QOV-01-AC09).
+- **진입 (QOV-01 Heatmap):** 챕터 그룹 header(장 제목·문제 수) 오른쪽에 `정리 노트` 버튼(글자 버튼, 접근성 이름 "<장 제목> 정리 노트", 모든 구성원). "챕터 없음" 그룹에는 없다(UX9 사용자 결정 2026-11-02: 그 그룹에는 대신 `내 하이라이트` 버튼 — HILITE-01). 노트가 만들어지는 중이면 버튼 옆에 "만드는 중" 글자 상태. 상태 필터는 노트 입력에 영향을 주지 않는다(필터와 무관하게 그 장의 모든 확정 문제).
+- **panel:** 공통 `FloatingSidePanel`(non-modal → UX9-SPEC부터 **modal**: focus trap, 배경 `inert`, 노트가 열린 동안 Heatmap을 누를 수 없음 — CHNOTE-02). 다른 홈 dialog와 함께 열리고 나중에 연 것이 위(QOV-01-AC10; UX9부터 한 번에 홈 dialog 하나, 노트 안에서 연 풀이 panel·문제 상세만 그 위에 쌓임). 한 번에 장 하나(다른 장의 `정리 노트`를 누르면 같은 panel의 장이 바뀐다). 즉시 열리고 불러오는 동안 skeleton(QOV-01-AC09).
   - header: 제목 "정리 노트", 부제 장 제목, `AI 생성` badge, 메타 줄 "문제 n개 기준 · <생성 시각>", stale badge(해당 시), 닫기 버튼.
   - `버전` 선택(구성원, 버전이 둘 이상일 때; 항목 "버전 k · <생성 시각>", 최신에 "(최신)"). 이전 버전을 고르면 "이전 버전" 안내가 붙는다.
   - ~~**"정답·해설 포함" disclosure**~~ — UX9-SPEC(사용자 결정 C7)에서 폐지. 그 자리에 노트 안 검색 줄과 설명 한 줄 "이 노트에는 문제의 정답과 해설 내용이 들어 있습니다."(CHNOTE-02 "panel 순서").
@@ -85,8 +85,8 @@ linked_tests: [CHNOTE-01-AC01 … CHNOTE-01-AC06]
 ### CHNOTE-01-AC05
 
 - **Given:** 노트가 있는 장의 아직 풀지 않은 문제, 그 장의 노트 panel이 열린 상태
-- **When:** Heatmap에서 그 문제의 marker를 눌러 풀이 panel을 열고, 답을 제출하기 전 화면과 `practice-sessions` 응답을 확인한 뒤 답을 제출하고 panel을 닫고, 노트 panel을 다시 연다
-- **Then:** marker를 누르면 노트 panel이 닫히고 풀이 panel이 열린다(UX9-SPEC 사용자 결정 C9, CHNOTE-02-AC04; 그 전에는 노트 panel이 남고 본문이 접혔다). 풀이 panel에는 제출 전후 모두 정리 노트 내용·링크가 없으며 practice API 응답에 노트 필드가 없다(정답·해설 비노출 규칙 유지). 노트 panel을 다시 열면 본문이 바로 보인다(UX9; 그 전에는 접힌 상태로 시작).
+- **When:** 노트 panel을 닫고(UX9: 노트가 열린 동안 Heatmap은 비활성) Heatmap에서 그 문제의 marker를 눌러 풀이 panel을 열고, 답을 제출하기 전 화면과 `practice-sessions` 응답을 확인한 뒤 답을 제출하고 panel을 닫고, 노트 panel을 다시 연다
+- **Then:** 노트가 열린 동안에는 marker를 누를 수 없고(UX9-SPEC 사용자 결정 2026-11-02 modal 노트, CHNOTE-02-AC04; UX9 전에는 노트 panel이 남고 본문이 접혔다), 노트를 닫은 뒤 marker가 풀이 panel을 연다. 풀이 panel에는 제출 전후 모두 정리 노트 내용·링크가 없으며 practice API 응답에 노트 필드가 없다(정답·해설 비노출 규칙 유지). 노트 panel을 다시 열면 본문이 바로 보인다(UX9; 그 전에는 접힌 상태로 시작).
 
 ### CHNOTE-01-AC06
 

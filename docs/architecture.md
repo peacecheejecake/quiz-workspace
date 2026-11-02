@@ -207,7 +207,8 @@ workspace
 | GET | `/api/v1/questions/{id}/preview` | 정리 노트 각주 미리보기(발문·보기만 — 정답·해설·채점 기준 없음, 열람 기록 없음; CHNOTE-02-C01). 공유: `/api/v1/shared/{shareId}/questions/{questionId}/preview` |
 | GET | `/api/v1/chapters/{chapterId}/my-highlights` | 그 장의 내 하이라이트(모든 노트 버전 + 지금 그 장 확정 문제의 해설·AI 해설, 다시 찾은 위치; HILITE-01-C06). "챕터 없음"은 `GET /api/v1/workspaces/{id}/my-highlights?chapter=none` |
 | GET | `/api/v1/questions/{id}/my-highlights` | 그 문제 해설(·AI 해설)의 내 하이라이트(모든 구성원 — `GET /questions/{id}`와 같은 권한; practice 응답에는 없음) |
-| POST | `/api/v1/my-highlights` | 하이라이트 만들기(대상·`anchor`·색, 겹친 것 `replace_ids` 원자적 교체, 서버가 quote를 자름, 보관 Workspace 403; HILITE-01-C03·C04) |
+| POST | `/api/v1/my-highlights` | 하이라이트 만들기(대상·`anchor`·색, 겹친 것 `replace_ids` 원자적 교체, 서버가 quote를 자름; 보관 Workspace에서도 허용 — 하이라이트만의 예외; HILITE-01-C01·C03·C04) |
+| POST | `/api/v1/my-highlights/{id}/restore` | 지운 지 10분 안의 자기 하이라이트 되살리기(같은 id·anchor·색; 겹침 409 `highlight-overlap`; `되돌리기` 알림, HILITE-01) |
 | PATCH/DELETE | `/api/v1/my-highlights/{id}` | 색 바꾸기(`version` 낙관적 잠금) · 지우기(멱등). 다른 사용자의 id는 404 |
 | GET | `/api/v1/workspaces/{id}/mock-exams` | 모의고사 목록(이름·상태·문제 수·설정 요약·현재 회차 진행; MOCK-01) |
 | POST | `/api/v1/workspaces/{id}/mock-exams` | 모의고사 만들기(이름·`config`·`range`, 첫 회차 생성 시작, 편집 권한, `Idempotency-Key`; 범위 0개 409 `no-matching-questions`, 진행 한도 409 `generation-busy`, 429) |
