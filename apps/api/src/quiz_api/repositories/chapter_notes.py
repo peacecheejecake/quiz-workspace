@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, func, insert, literal, select, text, update
+from sqlalchemy import and_, case, func, insert, literal, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -92,6 +92,15 @@ class NoteRow:
 
 
 @dataclass(frozen=True)
+class NoteSnapshot:
+    """One consistent read of a chapter's note rows (`ChapterNoteRepository.snapshot`)."""
+
+    latest: NoteRow | None
+    note: NoteRow | None
+    versions: list[NoteRow]
+
+
+@dataclass(frozen=True)
 class LiveQuestion:
     """Current state of a question a note cites."""
 
@@ -149,17 +158,19 @@ def _note(row: Any, *, body: bool) -> NoteRow:
     )
 
 
+def _notes_from() -> Any:
+    return chapter_notes.outerjoin(
+        async_jobs,
+        and_(
+            async_jobs.c.id == chapter_notes.c.job_id,
+            async_jobs.c.workspace_id == chapter_notes.c.workspace_id,
+        ),
+    )
+
+
 def _notes_select(*, body: bool) -> Any:
     columns = (*_NOTE_COLUMNS, chapter_notes.c.body) if body else _NOTE_COLUMNS
-    return select(*columns).select_from(
-        chapter_notes.outerjoin(
-            async_jobs,
-            and_(
-                async_jobs.c.id == chapter_notes.c.job_id,
-                async_jobs.c.workspace_id == chapter_notes.c.workspace_id,
-            ),
-        )
-    )
+    return select(*columns).select_from(_notes_from())
 
 
 def _chapter_select() -> Any:
@@ -347,23 +358,39 @@ class ChapterNoteRepository:
             chapter_notes.c.section_key == chapter.section_key,
         )
 
-    def latest_generation(self, chapter: ChapterRecord) -> NoteRow | None:
-        row = self._session.execute(
-            _notes_select(body=False)
+    def snapshot(self, chapter: ChapterRecord, version: int | None) -> NoteSnapshot:
+        """The chapter's newest generation, its succeeded versions and the note to show (version
+        `version`, or the newest succeeded one) from ONE statement.
+
+        GET runs in autocommit (quiz_api.db), where every statement reads its own snapshot: read
+        separately, a worker finishing in between could pair the old note with its succeeded
+        generation, and a client that stops polling then keeps the old version (CHNOTE-01-AC03).
+        """
+        succeeded = chapter_notes.c.status == "succeeded"
+        target = (
+            literal(version)
+            if version is not None
+            else func.max(chapter_notes.c.version).filter(succeeded).over()
+        )
+        shown = and_(succeeded, chapter_notes.c.version == target)
+        rows = self._session.execute(
+            select(
+                *_NOTE_COLUMNS,
+                case((shown, chapter_notes.c.body)).label("body"),
+                shown.label("shown"),
+            )
+            .select_from(_notes_from())
             .where(self._chapter_rows(chapter))
             .order_by(chapter_notes.c.created_at.desc(), chapter_notes.c.id.desc())
-            .limit(1)
-        ).one_or_none()
-        return _note(row, body=False) if row is not None else None
-
-    def versions(self, chapter: ChapterRecord) -> list[NoteRow]:
-        """Succeeded rows, newest version first (no bodies)."""
-        rows = self._session.execute(
-            _notes_select(body=False)
-            .where(self._chapter_rows(chapter), chapter_notes.c.status == "succeeded")
-            .order_by(chapter_notes.c.version.desc())
+        ).all()
+        latest = _note(rows[0], body=False) if rows else None
+        note = next((_note(r, body=True) for r in rows if r.shown), None)
+        versions = sorted(
+            (_note(r, body=False) for r in rows if r.status == "succeeded"),
+            key=lambda r: r.version or 0,
+            reverse=True,
         )
-        return [_note(r, body=False) for r in rows]
+        return NoteSnapshot(latest=latest, note=note, versions=versions)
 
     def note(self, chapter: ChapterRecord, version: int | None) -> NoteRow | None:
         """Version `version`, or the newest succeeded version, with its body."""
