@@ -98,6 +98,7 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 - 문제가 바뀌면 focus는 문제 제목(heading, `tabIndex=-1`)으로 가고, 진행 "n문제 중 k번째"를 `aria-live="polite"`로 알린다. 결과는 `role="status"` 글자로 알리고 색만으로 전달하지 않는다.
 - 범위 checkbox 목록: native checkbox(또는 Radix Checkbox)로 Space 토글, mixed 상태 `aria-checked="mixed"`, 장 펼치기는 별도 버튼. 목록은 roving 없이 Tab 순서(장 checkbox → 펼치기 → 문제 checkbox).
 - `prefers-reduced-motion`에서 panel·진행 막대 움직임 없음. 결과·정답 영역은 hover 없이 보인다(터치 동등).
+- **품질 suite (MOCK-X):** axe `A11Y-15`(`tests/e2e/quality/a11y-mock.spec.ts`, light·dark)가 범위 고르기(`전체 선택` mixed, 상태 필터, 80문제를 넘어 virtualize된 장)·풀이·채점 뒤·결과 단계와 모의고사 출처(`sequence(mock)`) 풀이를 검사하고, 키보드만으로 `문제` 메뉴 → 범위 → `시작` → 제출 → `결과 보기`까지 가는 흐름을 확인한다. visual `VISUAL-07`은 범위 고르기와 결과 요약만 찍는다(채점 뒤 정답·해설 상태는 찍지 않음, 결과 요약은 정답 보기 없이 결과 글자만 있음).
 
 ## 수용 기준
 

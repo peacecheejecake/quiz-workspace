@@ -97,6 +97,7 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 - 상태 badge·"확인 필요"·"편집됨"은 글자로 전달한다(색만으로 전달하지 않음). 생성 진행은 `ProgressBar` 값 글자 + 완료·실패 때 `aria-live="polite"` 알림.
 - 행 메뉴는 Radix DropdownMenu(접근성 이름 "<이름> 메뉴"), 아이콘 버튼은 접근성 이름을 가진다. `QuestionRangePicker` 접근성은 QVIEW-01과 같다.
 - 375px에서 가로 스크롤 없음, 버튼 문구는 줄바꿈하지 않고 버튼 단위로 넘어간다.
+- **품질 suite (MOCK-X):** axe `A11Y-14`(`tests/e2e/quality/a11y-mock.spec.ts`, light·dark)가 목록(빈·채워진·행 메뉴)·만들기 두 단계(AI 변형 안내 포함)·상세(만드는 중·실패·일부만 만듦·2회차)·문제 `manage` dialog·확인 dialog(삭제·다시 만들기·빼기)를 검사하고, 키보드만으로 `추가` → 두 단계 → `만들기` → `풀기` → 제출까지 가는 흐름을 확인한다. visual `VISUAL-07`(`visual.spec.ts`, light·dark × desktop·iPad, desktop 실행에서 375px 폭도)은 목록·만들기 1단계·범위 2단계·상세만 찍는다 — 정답·해설이 보이는 `manage` dialog와 채점 뒤 상태는 screenshot에 남기지 않는다(e2e-strategy §7.1).
 
 ## 수용 기준
 

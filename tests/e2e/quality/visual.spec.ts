@@ -39,8 +39,15 @@ import {
   createQuestion,
   homeUi,
   listDocuments,
+  mcqInput,
   outlineNodeId,
+  RESULT_TEXT,
+  waitForJob,
+  type Question,
 } from '../fixtures/test.ts';
+import { MOCK_TEXT, mockExamsPath, mockUi, STATUS_TEXT } from '../fixtures/mock-exams.ts';
+import { goToResults, runUi } from '../fixtures/practice-runs.ts';
+import { rangePickerUi } from '../fixtures/range-picker.ts';
 import {
   createShareLink,
   expect,
@@ -339,5 +346,184 @@ test(
     await expectSplit(page, { orientation: 'vertical', first: 'text', pdfRatio: 50 });
     await pdfReady();
     await snap(page, 'document-viewer-vertical-text-first');
+  },
+);
+
+/** VISUAL-07: the mock exam list and detail print their server timestamps inside the meta line as
+ *  plain text (no `<time>`), so a mask would not hold them still: the API answers of those reads
+ *  get one fixed instant instead (rendered "2026. 11. 1. 오후 3:28"). */
+const PINNED_INSTANT = '2026-11-01T06:28:00Z';
+const TIMESTAMP_KEYS = new Set(['created_at', 'updated_at', 'finished_at', 'started_at']);
+const PHONE = { width: 375, height: 812 };
+
+function pinTimestamps(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(pinTimestamps);
+  if (value === null || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([k, v]) => [
+      k,
+      TIMESTAMP_KEYS.has(k) && typeof v === 'string' ? PINNED_INSTANT : pinTimestamps(v),
+    ]),
+  );
+}
+
+async function pinMockExamTimes(page: Page): Promise<void> {
+  await page.route(
+    (url) => /^\/api\/(workspaces\/[^/]+\/mock-exams|mock-exams\/[^/]+)$/.test(url.pathname),
+    async (route) => {
+      const response = await route.fetch();
+      if (!(response.headers()['content-type'] ?? '').includes('json')) {
+        await route.fulfill({ response });
+        return;
+      }
+      await route.fulfill({ response, json: pinTimestamps(await response.json()) });
+    },
+  );
+}
+
+/** `snap`, plus the 375 px phone width on the desktop project (`<name>-375-<scheme>.png`; the
+ *  iPad project keeps its own viewport only). */
+async function snapEvery(page: Page, name: string): Promise<void> {
+  await page.mouse.move(0, 0);
+  await snap(page, name);
+  if (test.info().project.name !== 'visual-desktop') return;
+  const viewport = page.viewportSize();
+  await page.setViewportSize(PHONE);
+  await snap(page, `${name}-375`);
+  if (viewport) await page.setViewportSize(viewport);
+}
+
+/** VISUAL-07 questions: fixed stems and option texts (one per chapter position). */
+const VISUAL07_QUESTIONS: readonly (readonly [chapter: 1 | 2, stem: string, options: string[]])[] =
+  [
+    [1, '햇빛을 받은 물이 수증기로 바뀌는 과정은?', ['증발', '응결', '강수', '침투']],
+    [1, '수증기가 식어 작은 물방울이 되는 과정은?', ['응결', '증발', '유출', '증산']],
+    [1, '구름 속 물방울이 땅으로 떨어지는 현상은?', ['강수', '응결', '침투', '증발']],
+    [2, '작은 입자를 뭉쳐 큰 덩어리로 만드는 단계는?', ['응집', '침전', '여과', '소독']],
+    [2, '물속 병원성 미생물을 줄이는 마지막 단계는?', ['소독', '응집', '침전', '여과']],
+  ];
+
+test(
+  'VISUAL-07 모의고사 list, create options and range steps, detail, and the QuestionViewer range picker and results summary',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('visual07');
+    const ws = await workspaceFactory.create(owner, '모의고사 스터디');
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    const chapters = {
+      1: await outlineNodeId(owner, documentId, '1장 물의 순환'),
+      2: await outlineNodeId(owner, documentId, '2장 정수 처리'),
+    } as const;
+    const numbers = { 1: 0, 2: 0 };
+    const questions: Question[] = [];
+    for (const [chapter, stem, options] of VISUAL07_QUESTIONS) {
+      numbers[chapter] += 1;
+      questions.push(
+        await createQuestion(owner, ws.id, {
+          ...mcqInput(stem, options, 0),
+          explanation: `${options[0]}: 해설`,
+          chapter_id: chapters[chapter],
+          question_number: numbers[chapter],
+        }),
+      );
+    }
+    // 보기 섞기 only (no LLM) with fixed seeds; every question of the range is taken, in Heatmap
+    // order, so the rows are the same on every run.
+    const exams: { id: string; job: string }[] = [];
+    for (const [title, range, count] of [
+      ['1장 복습', { all: false, chapter_ids: [chapters[1]] }, 3],
+      ['중간 점검', { all: true }, 5],
+    ] as const) {
+      const exam = await owner.api.ok<{ id: string; latest_generation: { job_id: string } }>(
+        'POST',
+        `/workspaces/${ws.id}/mock-exams`,
+        {
+          title,
+          config: { variation_types: ['OPTION_SHUFFLE'], question_count: count },
+          range,
+          seed: 4711,
+        },
+        [202],
+      );
+      exams.push({ id: exam.id, job: exam.latest_generation.job_id });
+    }
+    for (const exam of exams) await waitForJob(owner, exam.job);
+    const [, midterm] = exams;
+    if (!midterm) throw new Error('no mock exam');
+
+    await pinMockExamTimes(page);
+    await signInAs(page, owner.user);
+    await page.goto(mockExamsPath(ws.id));
+    const dialog = mockUi.dialog(page);
+    await expect(mockUi.rows(dialog)).toHaveCount(2);
+    await expect(mockUi.row(dialog, '중간 점검')).toContainText(STATUS_TEXT.ready);
+    await expect(mockUi.row(dialog, '1장 복습')).toContainText(STATUS_TEXT.ready);
+    await snapEvery(page, 'mock-exams-list');
+
+    // 만들기: options (default name, 문구 변형 checked) and the range (1장 open, 1장 1번 off).
+    await mockUi.add(dialog).click();
+    await expect(mockUi.variations(dialog)).toHaveCount(4);
+    await mockUi.title(dialog).fill('기말 대비');
+    for (const type of ['OPTION_SHUFFLE', 'INVERT_POLARITY', 'ANALOGOUS_CONCEPT'] as const) {
+      const box = mockUi.variation(dialog, type);
+      if (await box.isChecked()) await box.uncheck();
+    }
+    await mockUi.variation(dialog, 'PARAPHRASE').check();
+    await mockUi.questionCount(dialog).fill('4');
+    await snapEvery(page, 'mock-exams-create-options');
+    await mockUi.next(dialog).click();
+    await rangePickerUi.selectAll(dialog).check();
+    await rangePickerUi.expand(dialog, '1장 물의 순환').click();
+    await rangePickerUi.question(dialog, 1, 1).uncheck();
+    await expect(rangePickerUi.selected(dialog, 4)).toBeVisible();
+    await expect(dialog.getByText(MOCK_TEXT.aiNotice)).toBeVisible();
+    await snapEvery(page, 'mock-exams-create-range');
+
+    // The detail (round 1, five 보기 섞기 copies; no answer shown in the rows).
+    await page.goto(mockExamsPath(ws.id, midterm.id));
+    await expect(mockUi.heading(dialog, '중간 점검')).toBeVisible();
+    await expect(mockUi.questions(dialog)).toHaveCount(5);
+    await snapEvery(page, 'mock-exams-detail');
+
+    // QuestionViewer: the range picker (전체 선택 mixed, 1장 open) ...
+    await page.goto(overviewPath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(5);
+    await homeUi.questionMenuButton(page).click();
+    await runUi.menuItem(page).click();
+    let panel = runUi.panel(page);
+    await expect(runUi.pickerTitle(panel)).toBeVisible();
+    await expect(runUi.busy(panel)).toHaveCount(0);
+    await runUi.selectAll(panel).check();
+    await runUi.expand(panel, '1장 물의 순환').click();
+    await runUi.question(panel, 1, 2).uncheck();
+    await expect(runUi.selectAll(panel)).toHaveAttribute('aria-checked', 'mixed');
+    await snapEvery(page, 'question-viewer-range');
+
+    // ... and the results summary of a 2장 run: one correct, one skipped (graded positions with
+    // their answer and explanation are never captured).
+    // From mixed, one click selects everything and the next clears it.
+    for (
+      let i = 0;
+      i < 2 && (await runUi.selectAll(panel).getAttribute('aria-checked')) !== 'false';
+      i += 1
+    ) {
+      await runUi.selectAll(panel).click();
+    }
+    await expect(runUi.selectAll(panel)).toHaveAttribute('aria-checked', 'false');
+    await runUi.chapter(panel, '2장 정수 처리').check();
+    await runUi.start(panel).click();
+    panel = runUi.panel(page);
+    await expect(runUi.title(panel, 2, 1)).toBeVisible();
+    await runUi.option(panel, '응집').check();
+    await runUi.submit(panel).click();
+    await expect(runUi.result(panel)).toContainText(RESULT_TEXT.correct);
+    await runUi.next(panel).click();
+    await expect(runUi.title(panel, 2, 2)).toBeVisible();
+    await goToResults(panel);
+    await expect(
+      runUi.summary(panel, { correct: 1, incorrect: 0, pending: 0, skipped: 1 }),
+    ).toBeVisible();
+    await snapEvery(page, 'question-viewer-results');
+    expect(questions).toHaveLength(5);
   },
 );

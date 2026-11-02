@@ -25,7 +25,7 @@ SUPABASE := pnpm exec supabase
 SIGNING_KEYS := supabase/signing_keys.json
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
-	test test-ts test-py test-infra test-models test-llm test-workers-ai eval eval-models eval-workers-ai eval-summaries eval-summaries-llm auth-keys infra-up infra-down infra-status infra-reset \
+	test test-ts test-py test-infra test-models test-llm test-workers-ai eval eval-models eval-workers-ai eval-summaries eval-summaries-llm eval-mock-exams eval-mock-exams-llm auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
 	e2e e2e-browsers e2e-trace test-red images image-api image-api-models image-worker image-web reindex backup restore \
 	check-env deploy-prepare smoke-local smoke-staging
@@ -150,6 +150,20 @@ eval-summaries-llm: ## Same with the real LLM provider (billed) -> eval/reports/
 		-o eval/reports/summaries-llm.json --markdown eval/reports/summaries-llm.md
 	uv run python eval/summaries/note_eval.py --provider llm \
 		-o eval/reports/notes-llm.json --markdown eval/reports/notes-llm.md
+
+# Mock exam validation evaluation (MOCK-X, eval/mock_exams/): the share of requested questions that
+# pass the per-item validation (pass rate, first-pass rate, failure codes, re-requests, calls per
+# question) over synthetic sources of tests/fixtures/llm/generation-scenarios.json and the synthetic
+# book-ko passages. `eval-mock-exams` uses the scripted fake (offline); `eval-mock-exams-llm` calls
+# the real provider (LLM_API_KEY/LLM_MODEL, optional LLM_PRICE_* for cost_usd; billed, sends only
+# the synthetic fixtures). Reports hold numbers and codes, never text.
+eval-mock-exams: ## Mock exam validation pass rate with the scripted fake -> eval/reports/mock-exams-fake.{json,md}
+	uv run python eval/mock_exams/mock_exam_eval.py \
+		-o eval/reports/mock-exams-fake.json --markdown eval/reports/mock-exams-fake.md
+
+eval-mock-exams-llm: ## Same with the real LLM provider (billed) -> eval/reports/mock-exams-llm.{json,md}
+	uv run python eval/mock_exams/mock_exam_eval.py --provider llm \
+		-o eval/reports/mock-exams-llm.json --markdown eval/reports/mock-exams-llm.md
 
 auth-keys: $(SIGNING_KEYS) ## Generate the local Auth JWT signing key if missing (idempotent)
 
