@@ -170,6 +170,7 @@ export interface WorkspaceHomeProps {
     readonly share: string;
     readonly chapterNote: string;
     readonly summary: string;
+    readonly mockExams: string;
   };
 }
 
@@ -787,6 +788,7 @@ export function WorkspaceHome({
             view={mockView}
             onViewChange={changeMockView}
             onPractise={(exam) => openMockRun(exam.id)}
+            screenId={screenIds.mockExams}
           />
           <FloatingSidePanel
             open={isOpen('history')}
