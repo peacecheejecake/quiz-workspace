@@ -44,6 +44,7 @@ class JobView:
     started_at: datetime | None
     finished_at: datetime | None
     result: dict[str, Any] | None = None
+    created_by: uuid.UUID | None = None
 
     @property
     def terminal(self) -> bool:
@@ -59,8 +60,14 @@ def error_code(status: str, last_error: str | None) -> str | None:
     return code if _CODE.fullmatch(code) else FALLBACK_ERROR_CODE
 
 
-# Job types whose (counts-only) result is part of GET /jobs/{id}: MOCK-B K5 (`usage.llm_calls`).
-RESULT_JOB_TYPES = frozenset({"mock_exam.generate"})
+# Job types whose (counts-only) result is part of GET /jobs/{id}: MOCK-B K5 (`usage.llm_calls`)
+# and ASK-B (`ask.answer`: counts, usage and the error code only).
+RESULT_JOB_TYPES = frozenset({"mock_exam.generate", "ask.answer"})
+# Personal jobs (ASK-01-C07): in no workspace job list, and `GET /jobs/{id}` only for their
+# creator (another member gets the unknown-job 404).
+PERSONAL_JOB_TYPES = frozenset({"ask.answer"})
+_ASK_COUNTS = ("sources", "dropped_citations", "llm_calls")
+_ASK_STATUSES = frozenset({"succeeded", "no_sources", "stopped", "failed", "skipped"})
 _RESULT_COUNTS = ("created_count", "skipped_count")
 _USAGE_COUNTS = ("llm_calls", "batches", "input_tokens", "output_tokens")
 
@@ -69,10 +76,28 @@ def public_result(job_type: str, result: Any) -> dict[str, Any] | None:
     """The allow-listed counts and code of a job's result, else None."""
     if job_type not in RESULT_JOB_TYPES or not isinstance(result, dict):
         return None
+    if job_type == "ask.answer":
+        return _ask_result(result)
     out: dict[str, Any] = {k: result[k] for k in _RESULT_COUNTS if isinstance(result.get(k), int)}
     usage = result.get("usage")
     if isinstance(usage, dict):
         out["usage"] = {k: usage[k] for k in _USAGE_COUNTS if isinstance(usage.get(k), int)}
+    code = result.get("error_code")
+    out["error_code"] = code if isinstance(code, str) and _CODE.fullmatch(code) else None
+    return out
+
+
+def _ask_result(result: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {k: result[k] for k in _ASK_COUNTS if isinstance(result.get(k), int)}
+    usage = result.get("usage")
+    if isinstance(usage, dict):
+        out["usage"] = {
+            k: usage[k]
+            for k in ("input_tokens", "output_tokens", "cache_read_tokens")
+            if isinstance(usage.get(k), int)
+        }
+    status = result.get("status")
+    out["status"] = status if status in _ASK_STATUSES else None
     code = result.get("error_code")
     out["error_code"] = code if isinstance(code, str) and _CODE.fullmatch(code) else None
     return out
@@ -108,6 +133,7 @@ _COLUMNS = (
     async_jobs.c.updated_at,
     async_jobs.c.started_at,
     async_jobs.c.finished_at,
+    async_jobs.c.created_by,
 )
 
 
@@ -137,4 +163,5 @@ class JobRepository:
             started_at=row.started_at,
             finished_at=row.finished_at,
             result=public_result(row.job_type, row.result),
+            created_by=row.created_by,
         )

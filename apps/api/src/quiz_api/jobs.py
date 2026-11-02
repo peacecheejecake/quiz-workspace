@@ -8,10 +8,10 @@ leaves the row queued and unpublished; the worker's reconciler publishes it afte
 period, so the job is never lost.
 
 The message is exactly what `quiz_worker.celery_app.publish_record` sends: task
-`quiz.jobs.<job_type>` on queue `quiz.jobs`, `task_id` = job id, one positional argument = the
-JSON `JobEnvelope`. The argument repr is replaced so the envelope never reaches broker events or
-logs. These names are mirrored (not imported) so the API does not depend on the worker package;
-`apps/api/tests/test_jobs.py` checks they match.
+`quiz.jobs.<job_type>` on queue `quiz.jobs` (`interactive` for `ask.answer`), `task_id` = job
+id, one positional argument = the JSON `JobEnvelope`. The argument repr is replaced so the
+envelope never reaches broker events or logs. These names are mirrored (not imported) so the
+API does not depend on the worker package; `apps/api/tests/test_jobs.py` checks they match.
 """
 
 from __future__ import annotations
@@ -29,6 +29,14 @@ logger = logging.getLogger(__name__)
 
 TASK_NAME_PREFIX = "quiz.jobs."
 DEFAULT_QUEUE = "quiz.jobs"
+# Interactive jobs (ASK-B: `ask.answer`) run on their own queue and worker process, so a long
+# `document.parse` or summary never delays an answer the user is waiting for.
+INTERACTIVE_QUEUE = "interactive"
+INTERACTIVE_JOB_TYPES = frozenset({"ask.answer"})
+
+
+def queue_for(job_type: str) -> str:
+    return INTERACTIVE_QUEUE if job_type in INTERACTIVE_JOB_TYPES else DEFAULT_QUEUE
 
 
 @dataclass(frozen=True)
@@ -83,7 +91,7 @@ class CeleryJobPublisher:
             task_name(message.job_type),
             args=(message.to_message(),),
             task_id=str(message.job_id),
-            queue=DEFAULT_QUEUE,
+            queue=queue_for(message.job_type),
             argsrepr=f"(<job {message.job_id}>,)",
             kwargsrepr="{}",
             retry=True,
