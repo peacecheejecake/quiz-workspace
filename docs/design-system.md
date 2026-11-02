@@ -1,6 +1,6 @@
-# Design System v1.2.7 — Minimal Glass (Platform v1.2)
+# Design System v1.2.8 — Minimal Glass (Platform v1.2)
 
-**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19 · v1.2.1 버튼 hover 개정 2026-10-19 · v1.2.2 밀도(compact)·스위치·메뉴·Dropzone·Breadcrumb·패널 쌓기 개정 2026-10-20 · v1.2.5 floating glass 불투명도 개정 2026-11-01 · v1.2.6 Toast 왼쪽 bar 제거·CopyButton·객관식 채점 결과 테두리 2026-11-01 · v1.2.7 `SplitView`·docked `FloatingSidePanel`·`--outline-panel-width` 2026-11-02  
+**상태:** 디자인 시스템 초기 명세 확정 · 2026-10-16 · v1.2 상호작용 상태·glass 개정 2026-10-19 · v1.2.1 버튼 hover 개정 2026-10-19 · v1.2.2 밀도(compact)·스위치·메뉴·Dropzone·Breadcrumb·패널 쌓기 개정 2026-10-20 · v1.2.5 floating glass 불투명도 개정 2026-11-01 · v1.2.6 Toast 왼쪽 bar 제거·CopyButton·객관식 채점 결과 테두리 2026-11-01 · v1.2.7 `SplitView`·docked `FloatingSidePanel`·`--outline-panel-width` 2026-11-02 · v1.2.8 공통 하이라이트 도구·overlay scroll 격리·pointer 기준 floating·`다시 풀기` 물음표 아이콘 (UX9-SPEC 2026-11-02)  
 **적용:** 전역 Workspace UI, 문서 뷰어, 검색, Questions heatmap, floating side panels  
 **키워드:** minimalism, restrained glassmorphism, readability, focus, consistent semantics
 
@@ -322,12 +322,42 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - `QuestionGenerationReviewPanel`: 충분한 공간이 필요하므로 desktop에서는 600px 이상 비교 drawer 또는 전체 page 모드 제공(500px 강제 금지).
 - Mobile: full width bottom sheet 또는 full-height panel, safe-area inset, `max-height: 90dvh`; 화면이 좁다면 문제 상세 전체 페이지로 전환 가능.
 - URL query: `?question=<id>` 또는 `?panel=...`로 열림 상태/딥링크 복원. 뒤로가기와 동기화(열면 기록 항목 하나, 열린 동안 뒤로가기는 닫기). 닫기 버튼·Escape로 닫으면 연 기록 항목을 되돌려 닫은 뒤 뒤로가기가 그 panel을 다시 열지 않는다(UX7-BACK, Workspace 홈 규칙은 [QOV-01](screens/questions-overview.md) "뒤로가기"·AC14).
-- Panel Header: title / breadcrumb / action icons(즐겨찾기·다시 풀기) / close.
+- Panel Header: title / breadcrumb / action icons(즐겨찾기 star·다시 풀기 물음표 — UX9 v1.2.8, 이전 화살표 아이콘 대체) / close.
 - Panel Footer: submit, self-grade, next/previous, loading/error 상태.
 - Modal focus trap, title/description, Escape and focus restore는 Radix 기반으로 구성. Non-modal은 배경과 panel 간 키보드 이동을 허용.
 - **인라인 편집 안의 Escape (MOCK-ESC, 2026-11-02):** `FloatingSidePanel`·`ModalDialog` 안의 인라인 편집 컨트롤(이름 바꾸기 입력, 행 안의 편집 form)에서 누른 Escape는 그 편집만 취소하고 focus를 편집을 시작한 컨트롤로 돌려보낸다. dialog는 열린 채로 남고, 그다음 Escape가 평소처럼 dialog를 닫는다. Radix는 Escape를 document capture 단계에서 먼저 처리하므로, 자기 Escape를 처리하는 컨트롤(keydown handler가 있는 요소)에 kit의 `ownEscapeProps`(`data-own-escape`)를 붙인다. 두 컴포넌트는 그 안에서 시작된 Escape를 닫기에 쓰지 않는다. 표시 없는 일반 입력란(dialog 전체가 하나의 form인 문제 편집 등)의 Escape는 그대로 dialog를 닫는다.
 - **높이 변화 (v1.2.3, UX5-UI):** 내용에 따라 높이가 정해지는 overlay(ModalDialog·ConfirmDialog, 모바일 bottom sheet)는 내용이 늘거나 줄면(경고·결과가 나타남, 로딩 → 내용) 이전 높이에서 새 높이로 `--duration-panel-enter` `--easing-standard`로 부드럽게 바뀐다(공통 `useAnimatedHeight`: ResizeObserver로 재고 전환 중에만 inline 높이, 끝나면 CSS가 다시 높이를 정함). 높이가 고정된 데스크톱 side panel과 모바일 full 레이아웃은 그대로다. 전환 중 body에 스크롤바를 보이지 않고 focus·스크롤 위치는 유지하며, `prefers-reduced-motion`에서는 즉시 바뀐다.
 - **여러 패널 쌓기 (v1.2.2, UX3b):** floating panel·dialog가 여러 개 열려 있으면 **나중에 연 것이 위**에 온다(portal DOM 순서와 무관). 열린 순서의 rank r에 대해 z-index는 `min(--z-side-panel + 2r, --z-modal - 2)`이고, 그 안에서 portal로 뜨는 popover·tooltip·menu는 +1(`LayerProvider`/`useLayerStyle`)이다. 닫았다가 다시 연 패널은 맨 위로 올라온다. 가운데 modal dialog(`--z-modal`)는 항상 모든 패널 위다. 사이드 패널이 아닌 floating dialog도 kit 내부 `useFloatingLayer(open)`을 써서 같은 순서에 참여한다.
+
+### 5.2 공통 하이라이트 도구 (v1.2.8, UX9-SPEC 2026-11-02, [HILITE-01](screens/highlights.md))
+
+사용자 결정 C3 "정리 노트 하이라이트를 위한 툴을 공통으로 쓰면 될듯": 정리 노트 본문과 문제 해설(사람 해설·AI 해설)은 같은 두 컴포넌트를 쓴다. 화면 코드에 하이라이트·선택 메뉴를 따로 만들지 않는다.
+
+- **`HighlightableText`** (`packages/ui/src/reading`): props `blocks`(id + 글; 노트 항목·해설 문단), `highlights`(block·start·end·color, 겹치지 않음), `matches`(검색 결과 범위·현재 결과, CHNOTE-02), `readOnly`, `onSelectRange(block, start, end)`, `onHighlightPress(id)`, `label`. 하이라이트는 `<mark class="qz-highlight" data-color>` + 앞뒤 시각적으로 숨긴 글자("하이라이트 시작(노랑)"·"하이라이트 끝"), 검색 결과는 `<mark class="qz-search-match">`(+ 현재 결과 "현재 결과")로 같은 글 위에 겹쳐 그린다(검색 표시가 위). 각주 번호 등 `data-hl-skip` 요소는 offset 계산과 `복사`에서 빠진다. 영역은 `role="group"`·`tabindex="0"`이고 위·아래 화살표로 block 하나를 고르며(roving, focus ring), Shift+F10·ContextMenu·Enter가 그 block 전체(또는 브라우저 키보드 선택이 있으면 그 범위)에 메뉴를 연다.
+- **`HighlightMenu`**: 선택 범위(DOM Range의 bounding rect — virtual anchor)에 붙는 Radix `DropdownMenu`(`role="menu"`, 이름 "하이라이트") — 위쪽 우선, 공간이 없으면 아래; coarse pointer는 선택 끝 아래(iOS 기본 선택 메뉴가 위에 뜨므로). 항목: `노랑`·`파랑`·`분홍`(`menuitemradio`, 견본 + 글자) | `하이라이트 지우기`(겹침이 있을 때) · `복사`(상태 글자 "복사했습니다"). `readOnly`(보관 Workspace)면 `복사`만. Escape는 메뉴만 닫고 focus를 영역으로 돌리며 선택을 지우지 않는다. 메뉴를 여는 동안 선택 범위는 컴포넌트가 기억한다(focus 이동으로 선택이 사라져도 적용).
+- **토큰:** `--color-highlight-yellow`·`--color-highlight-blue`·`--color-highlight-pink`(배경, light/dark 각각 본문 글자와 4.5:1 이상), 밑줄 모양은 색마다 실선·이중선·점선(`text-decoration-style`) — 색만으로 구분하지 않는다. forced-colors: 배경 `Mark`·글자 `MarkText`, 밑줄 모양 유지. `--color-search-match-bg`·`--color-search-match`(테두리 2px, 현재 결과 3px). 상태 색(`--question-status-*`)과 섞어 쓰지 않는다.
+- **목록:** `MyHighlightsSection`(정리 노트 panel의 `내 하이라이트`, 색·출처 칩 `aria-pressed`, 행 메뉴 `IconButton` "하이라이트 메뉴")은 화면 쪽 조합이지만 칩·행 메뉴는 kit 부품만 쓴다.
+- Storybook: 하이라이트 3색·겹친 검색 표시·readOnly·키보드 block 선택·터치 위치·dark·forced-colors.
+
+### 5.3 Overlay scroll 격리 (v1.2.8, UX9-SCROLL — 사용자 피드백 "dialog가 올라와 있을 때, dialog 위를 스와이프했는데 하단에 깔린 페이지에 스크롤이 발생하는 현상 수정(ios safari에서 확인했음)")
+
+**규칙: overlay 안에서 시작한 scroll은 절대 아래 페이지로 이어지지 않는다.** 모든 floating 표면 — `FloatingSidePanel`(docked 제외, modal·non-modal 모두), `ModalDialog`, `ConfirmDialog`, 모바일 drawer(bottom sheet·full-screen), `Popover`, `DropdownMenu`(그리고 그 위에 만든 `Select` 목록·pointer 기준 floating) — 는 공통 overscroll guard로 자기 scroll을 가둔다. kit primitive가 보장하므로 기능 코드는 따로 처리하지 않는다. pinch-zoom과 ctrl+wheel 확대는 건드리지 않는다. **docked panel(DOCVIEW-01 목차, `placement="docked"`)은 페이지 배치의 일부라 guard하지 않는다.**
+
+- overlay의 scroll 컨테이너(panel body, dialog 내용, 목록)는 `overscroll-behavior: contain`(가로·세로). 끝에 닿아도 페이지로 넘기지 않는다.
+- iOS Safari는 scroll할 내용이 없는 요소(짧은 dialog, header, footer, backdrop)에서의 끌기와 끝에 닿은 컨테이너의 끌기를 `overscroll-behavior`와 상관없이 문서로 넘긴다. 그래서 kit의 `useOverlayScrollGuard`가 overlay 루트에 `touchmove` listener(`passive: false`)를 두고, 한 손가락 끌기가 overlay 안에서 시작했고 그 방향으로 scroll할 수 있는 조상 컨테이너가 overlay 안에 없으면 `preventDefault`한다(두 손가락 pinch-zoom·글자 선택 handle 끌기·`input`/`textarea` 안 caret 이동은 막지 않음). 같은 판정을 `wheel`에도 쓴다(trackpad; `ctrlKey`가 있는 wheel = 확대는 통과). 실제 구현 이름·세부는 Task UX9-SCROLL(ec5b97f · 06271da · a1215c4)이 기준이다.
+- **modal:** 열린 동안 페이지 scroll을 잠근다(Radix `RemoveScroll` 기본; iOS에서 `body` 고정 방식으로 잠그고 닫으면 원래 scroll 위치로 되돌림). backdrop에서의 끌기도 페이지를 움직이지 않는다.
+- **non-modal:** 페이지는 잠그지 않는다 — overlay **밖**에서 시작한 scroll은 지금처럼 페이지를 움직인다(옆 내용과 함께 쓰는 panel이므로). overlay **안**에서 시작한 scroll만 위 규칙으로 막는다.
+- 겹친 overlay(panel 위 dialog, panel 안 Select 목록)는 가장 안쪽 overlay가 판정한다.
+- 검증: 화면 AC `UX9-SCROLL-AC01`~`AC04`([overlay-scroll.md](screens/overlay-scroll.md) — modal dialog, non-modal floating dialog, side panel·bottom sheet, 데스크톱 wheel), 실기기 iOS Safari 확인은 UX9-SCROLL DoD의 사용자 확인 항목.
+
+### 5.4 Pointer 기준 floating (v1.2.8, UX9-SPEC, [CHNOTE-02](screens/chapter-note-tools.md))
+
+`PointerAnchoredFloating`: hover로 여는 미리보기를 **pointer가 들어온 점**에 붙이는 floating(정리 노트 각주 미리보기가 첫 사용처). Radix Tooltip은 요소 가장자리에 붙으므로 쓰지 않고 floating-ui virtual element(`pointerenter` 좌표)로 위치를 정한다.
+
+- 열기: `pointerenter` 뒤 `TOOLTIP_DELAY_MS`(300ms), 그 사이 pointer가 움직이면 마지막 좌표 기준. 키보드 `:focus-visible`이면 지연 없이 **요소에** 붙는다(pointer 좌표 없음). coarse pointer(touch)는 hover가 없으므로 tap이 연다(호출한 화면이 tap 동작을 정함 — 각주는 `문제 열기` 버튼을 둠).
+- 위치: 좌표에서 8px 아래·오른쪽, 화면 밖이면 뒤집기·밀기(16px 여백). 열린 뒤 pointer를 따라 움직이지 않는다(읽는 동안 흔들리지 않게).
+- 닫기: pointer가 trigger와 floating 둘 다에서 벗어나 120ms, Escape(floating만 닫음), blur, scroll 컨테이너가 scroll될 때. floating 안으로 옮겨 가는 동안은 유지된다(안에서 scroll 가능, §5.3 격리).
+- 접근성: 비대화형이면 `role="tooltip"` + trigger의 `aria-describedby`(열린 동안), 안에 버튼이 있으면(touch) non-modal `role="dialog"` + 이름. `prefers-reduced-motion`이면 등장 애니메이션 없음. glass `Popover` 표면·`--shadow-floating`, 폭 `min(360px, 100vw - 32px)`, 최대 높이 `min(320px, 50vh)` 넘치면 안에서 scroll.
 
 ## 6. QuestionDot / Heatmap 컴포넌트 계약
 
@@ -421,7 +451,7 @@ Workspace 홈(UX3c, 2026-10-20): Workspace 안에는 sidebar가 없다. 홈의 W
 
 ### Domain components
 
-`AuthLayout`, `SignInForm`, `SignUpForm`, `PasswordResetForm`, `VerificationNotice`, `SessionExpiredDialog`, `DocumentOutlineTree`, `PdfViewer`, `TextBlockEditor`, `SearchResultList`, `SearchExcerpt`, `QuestionMarker`, `QuestionDot`, `QuestionHeatmap`, `HeatmapLegend`, `QuestionPreviewPopover`, `QuestionPracticePanel`(→ `QuestionViewer` `practice` 방식, MOCK-SPEC), `QuestionViewer`, `QuestionRangePicker`, `QuestionOptionList`, `QuestionAnswerField`, `FavoriteToggle`, `RetryToggle`, `QuestionGenerationForm`, `VariationDiffViewer`, `QuestionDraftReview`, `ImportJobProgress`.
+`HighlightableText`·`HighlightMenu`·`PointerAnchoredFloating`·`SearchField`(v1.2.8, UX9 — §5.2·§5.4, 노트 안 검색 줄), `AuthLayout`, `SignInForm`, `SignUpForm`, `PasswordResetForm`, `VerificationNotice`, `SessionExpiredDialog`, `DocumentOutlineTree`, `PdfViewer`, `TextBlockEditor`, `SearchResultList`, `SearchExcerpt`, `QuestionMarker`, `QuestionDot`, `QuestionHeatmap`, `HeatmapLegend`, `QuestionPreviewPopover`, `QuestionPracticePanel`(→ `QuestionViewer` `practice` 방식, MOCK-SPEC), `QuestionViewer`, `QuestionRangePicker`, `QuestionOptionList`, `QuestionAnswerField`, `FavoriteToggle`, `RetryToggle`(v1.2.8 UX9: `RetryIcon` = 원 안의 물음표, 꺼짐 윤곽선·켜짐 채운 원 — 사용자 피드백 "문제별 '다시 풀기' 버튼을 물음표 모양 아이콘으로 변경"; 이름 "다시 풀기 표시"/"다시 풀기 해제"·`data-state`·tooltip은 그대로, QVIEW-01-C08), `QuestionGenerationForm`, `VariationDiffViewer`, `QuestionDraftReview`, `ImportJobProgress`.
 
 ## 8. 컴포넌트 상태·문서화 규칙
 

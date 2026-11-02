@@ -1,6 +1,6 @@
 # SEARCH-01 — 문제 검색·다국어 본문 검색
 
-**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (Workspace header 통합 검색) · UX4 개정 2026-10-21 (검색 옵션 단일 목록) · UX6 개정 2026-10-28 (문제·본문 검색 범위 분리와 on/off) · UX7-SELECT 개정 2026-11-01 (터치로 연 Select의 현재 항목 탭) · UX7-SEARCH 개정 2026-11-01 (문제·본문 검색창 분리, 본문 검색 접힘, 결과 항목 → 주변 내용 panel, 문제 실시간 필터) · UX7-SEARCH-2 개정 2026-11-01 (문제지는 문제 검색에서만: 본문 검색에서 제외) · UX7-BACK-2 개정 2026-11-01 (dialog가 열린 동안 바꾼 본문 검색어는 그 dialog를 닫는 뒤로가기 뒤에도 남음, AC09)
+**상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (Workspace header 통합 검색) · UX4 개정 2026-10-21 (검색 옵션 단일 목록) · UX6 개정 2026-10-28 (문제·본문 검색 범위 분리와 on/off) · UX7-SELECT 개정 2026-11-01 (터치로 연 Select의 현재 항목 탭) · UX7-SEARCH 개정 2026-11-01 (문제·본문 검색창 분리, 본문 검색 접힘, 결과 항목 → 주변 내용 panel, 문제 실시간 필터) · UX7-SEARCH-2 개정 2026-11-01 (문제지는 문제 검색에서만: 본문 검색에서 제외) · UX7-BACK-2 개정 2026-11-01 (dialog가 열린 동안 바꾼 본문 검색어는 그 dialog를 닫는 뒤로가기 뒤에도 남음, AC09) · UX9-SPEC 개정 2026-11-02 (본문 검색을 별도 페이지로 — [SEARCH-02](search-page.md); 문제 검색은 홈에 그대로)
 **Route:** `/workspaces/:workspaceId?q=:문제검색어&text=:본문검색어` (Workspace 홈 header; 이전 `/workspaces/:workspaceId/search?q=…`는 `text=…`로 redirect)
 **테스트:** `tests/e2e/search/search.spec.ts`
 **연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
@@ -11,6 +11,10 @@
 - 모든 편집·상태 변경은 서버 측 인가·revision 일관성을 검증한다.
 - "검색 방식"(키워드/의미/하이브리드) 선택지의 설명은 Tooltip으로 보여 준다(hover·키보드 focus, `aria-describedby` 유지, hover 없는 기기는 인라인; UX1 2026-10-19, design-system.md §4.1).
 - query embedding을 쓸 수 없으면 키워드(BM25) 결과로 계속 검색하고 비차단 안내를 표시한다(AC06).
+
+## 본문 검색 페이지로 이동 (UX9-SPEC 2026-11-02)
+
+사용자 피드백 "본문 검색을 별도의 페이지로 넣기, 홈 화면에서 버튼 눌러서 진입"(사용자 결정 D2). 본문 검색은 홈 안의 펼치기 영역이 아니라 하위 페이지 `/workspaces/:workspaceId/search`([SEARCH-02](search-page.md))에서 하고, 홈 header의 "본문 검색" 펼치기 버튼 자리는 그 페이지로 가는 `본문 검색` 버튼이 된다. 아래 UX7-SEARCH의 본문 검색 규칙(설정·실행·문제지 제외·비활성·결과 항목 → 발췌 panel·URL key)은 **그 페이지에서 그대로** 적용되고, "펼치기·접기·header 아래 전체 폭·홈 URL의 `text`"에 관한 문장만 SEARCH-02로 바뀐다. 문제 검색(실시간 필터, AC12)·"문제 설정"(AC08)은 홈에 그대로다. **GREEN AC 처리(이 repo의 개정 규칙):** phase M3.0이 CI에서 GREEN이므로 이 명세 커밋은 AC를 지우거나 새 AC를 SEARCH-01에 더하지 않는다. 새 동작의 AC는 SEARCH-02(phase UX9.0)에 있고, 구현 Task UX9-SEARCH-W가 같은 커밋들에서 (1) AC10(본문 검색 접힘)을 test와 함께 아래 "폐기된 AC" 표로 옮기고(대신 SEARCH-02-AC01), (2) AC01~AC04·AC06·AC11·AC13의 test 진입을 홈 펼치기 영역에서 검색 페이지로 바꾸며(AC 내용은 그대로), (3) AC09의 "본문 검색 입력란이 홈 header에 있음" 부분을 "홈 header에는 `본문 검색` 버튼, 입력란은 SEARCH-02 페이지"로 고친다(아래 각 AC의 UX9 표시). 그 전까지 이 AC들의 test는 지금 동작으로 GREEN이다.
 
 ## 문제 검색·본문 검색 (UX7-SEARCH 2026-11-01)
 
@@ -44,6 +48,8 @@
 ## 수용 기준
 
 ### SEARCH-01-AC01
+
+> **UX9-SPEC 2026-11-02:** AC01~AC04·AC06의 본문 검색은 검색 페이지(SEARCH-02)에서 한다 — 내용 불변, test 진입만 UX9-SEARCH-W가 바꿈.
 
 - **Given:** 해당 화면과 테스트용 데이터 및 권한이 주어진 상태
 - **When:** 관련 조작/네트워크 요청을 수행
@@ -87,17 +93,23 @@
 
 ### SEARCH-01-AC09
 
+> **UX9-SPEC 2026-11-02:** 본문 검색 입력란·"본문 설정"·검색 버튼은 SEARCH-02 페이지에 있고 홈 header에는 `본문 검색` 버튼이 있다. 두 검색이 서로 독립이라는 내용·비활성 규칙·URL 복원은 그대로(본문 검색 key는 그 페이지 URL). UX9-SEARCH-W가 이 AC의 문구·test를 고친다.
+
 - **Given:** 확정 문제와 발행된 문서가 있는 Workspace 홈(비활성화 경우는 문제나 발행된 문서가 없는 Workspace)
 - **When:** header의 문제 검색 입력란과 본문 검색 입력란을 각각 쓰고, 각 "설정" 버튼으로 상세 설정을 바꾸고, 새로 고침·뒤로가기를 함
 - **Then:** 검색 범위 체크박스와 "검색 옵션" 버튼은 없고 문제 검색("문제 검색")과 본문 검색("본문 검색어", 아이콘만 있는 검색 버튼 "검색"; 펼치기 버튼이 "본문 검색")이 서로 다른 입력란이다. 한쪽에 입력해도 다른 쪽 값·결과는 바뀌지 않는다: 문제 검색어는 Heatmap만 거르고(URL `q`), 본문 검색어는 본문 검색 결과만 바꾼다(URL `text`). "문제 설정"(popover "문제 검색 설정": 챕터·유형)은 문제 검색 옆, "본문 설정"(popover "본문 검색 설정": 검색 방식·문서·장)은 본문 검색 옆에 있고 클릭과 키보드로 열고 닫는다(`aria-expanded`, Escape로 닫히면 focus 복귀). "문제지 PDF도 검색" 토글은 없다. 확정 문제가 없으면 문제 검색 입력란이, 발행된 교재가 없으면(문제지만 있어도) 본문 검색 버튼이 비활성화되고 그 이유를 `aria-describedby`로 연결된 상태 메시지로 보인다. 두 검색 상태는 URL에 남아 새로 고침과 뒤로가기가 그 기록 항목의 검색어·결과를 되살리고(dialog가 열려 있지 않은 경우; dialog가 열린 동안 바꾼 검색어는 그 dialog를 닫는 뒤로가기 뒤에도 남는다 — QOV-01-AC14, 사용자 결정 UX7 확인 7 2026-11-01), "검색 결과 닫기"는 본문 검색어와 결과만 지운다. 이전 `scope=content&q=` URL과 `/search?q=`는 `text=`로 redirect한다(UX7-SEARCH).
 
 ### SEARCH-01-AC10
 
+> **UX9-SPEC 2026-11-02: 폐기 예정** — 본문 검색이 페이지로 옮겨 펼치기 영역이 없어진다. UX9-SEARCH-W가 test와 함께 "폐기된 AC"로 옮긴다(대신 [SEARCH-02-AC01](search-page.md)).
+
 - **Given:** URL에 본문 검색어(`text`)가 없는 Workspace 홈
 - **When:** 홈을 열고 "본문 검색" 펼치기 버튼을 클릭(또는 키보드 Enter/Space)함
 - **Then:** 처음에는 본문 검색 영역이 접혀 있어 본문 검색 입력란·검색 버튼·"본문 설정"이 보이지 않고, 펼치기 버튼은 `aria-expanded="false"`이며 `aria-controls`가 그 영역을 가리킨다. 누르면 `aria-expanded="true"`로 펼쳐지고 focus가 본문 검색 입력란으로 가며, 검색할 수 있다. 다시 누르면 접히고 입력한 검색어와 결과는 남아 다시 펼치면 그대로 보인다. URL에 `text`가 있으면 펼친 채로 열리고 그 검색을 실행한다(UX7-SEARCH).
 
 ### SEARCH-01-AC11
+
+> **UX9-SPEC 2026-11-02:** 같은 동작이 본문 검색 페이지(SEARCH-02)에서 일어난다("Workspace 홈" → "본문 검색 페이지"; UX9-SEARCH-W가 test 진입을 바꿈).
 
 - **Given:** 본문 검색 결과가 여러 개 있는 Workspace 홈(데스크톱, 그리고 휴대폰 터치 화면)
 - **When:** 결과 항목의 발췌 문단(제목이 아닌 곳)을 클릭·탭하거나, 키보드로 항목의 제목 버튼에 가서 Enter를 누름
@@ -110,6 +122,8 @@
 - **Then:** 입력이 멈추면(250ms debounce) Enter나 버튼 없이 Heatmap이 그 검색어로 걸러지고, 검색어를 바꾸거나 지우면 결과도 따라 바뀐다. 빠르게 이어 입력해도 입력란의 글자와 caret 위치는 그대로이고, 화면에는 마지막 검색어의 결과만 남는다(늦게 도착한 이전 응답은 무시). URL `q`는 `replace`로 바뀌어 입력해도 방문 기록이 늘지 않는다. IME 조합 중(`compositionstart` 뒤 `compositionend` 전)에는 거르지 않고, 조합이 끝나면 그 값으로 거른다(UX7-SEARCH).
 
 ### SEARCH-01-AC13
+
+> **UX9-SPEC 2026-11-02:** 본문 검색 부분은 검색 페이지(SEARCH-02)에서, 문제 검색(Heatmap) 부분은 홈에서 확인한다.
 
 - **Given:** 발행된 교재와 발행된 문제지(같은 검색어가 둘 다에 있음)가 있는 Workspace 홈, 그리고 발행된 문서가 문제지뿐인 Workspace 홈
 - **When:** 본문 검색을 실행하고 "본문 설정"의 문서 필터를 열며, 검색 API를 문제지를 지정해(`document_ids`, `include_question_papers: true`) 직접 호출함

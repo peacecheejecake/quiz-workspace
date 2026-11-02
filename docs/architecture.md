@@ -106,13 +106,15 @@ workspace
  │             ├── question_source
  │             ├── question_user_state  (user별 학습 상태·플래그)
  │             ├── question_attempt     (채점 이력)
- │             └── question_lineage     (변형 관계)
+ │             ├── question_lineage     (변형 관계)
+ │             └── question_chapter_change (챕터 변경 이력, UX9 챕터 재분배)
  ├── question_draft ── generation_run(QGEN, MOCK-SPEC부터 새 행 없음) / pdf_import_run
  ├── mock_exam ── mock_exam_revision (이름·설정·범위 이력)
  │             └── mock_exam_generation (회차) ── mock_exam_question ── mock_exam_question_revision
  │                                                              ├── mock_exam_practice_session
  │                                                              └── mock_exam_attempt (모의고사 풀이, Heatmap과 무관)
  ├── practice_run (사용자별 범위 풀이 묶음, bank|mock; QVIEW)
+ ├── user_highlight (사용자별 하이라이트: 노트 버전·문제 해설·AI 해설; UX9, 공유·Fork 제외)
  ├── activity_event
  └── async_job
 ```
@@ -121,7 +123,8 @@ workspace
 - `profiles(user_id FK auth.users, display_name, created_at)`, `workspace_memberships(workspace_id, user_id, role, created_at)`; MVP는 owner 1인이고 다인 공유는 후속이지만 권한 모델은 미리 정의한다.
 - `workspaces(id, name, owner_id, status, archived_at, deleted_at)`.
 - `documents(id, workspace_id, type, storage_key, checksum)` — `document_type`(`book` | `question_paper`: 본문 여부), `type_source`(`user` | `auto`), `content_kind`(`book` | `question_paper` | `mixed`, 자동 분류 또는 사람이 고른 종류; null = 미분류), `detection`(분류 수치, UX6-UPLOAD); `document_uploads.auto_classify`; `document_revisions`; `chapters(parent_id)`; `content_blocks(source_location)`.
-- `questions(id, workspace_id, chapter_id, question_type, active_revision_id, publication_status)`.
+- `questions(id, workspace_id, chapter_id, question_type, active_revision_id, publication_status)` — UX9-SPEC(2026-11-02) additive: `chapter_source manual|auto`(not null, backfill — questions.md §14.1), `chapter_set_by`, `chapter_set_at`. 챕터는 revision이 아니라 문제 행의 속성이라 바꿔도 새 revision이 없다.
+- `question_chapter_changes(id, workspace_id, question_id FK on delete cascade, from_chapter_id, to_chapter_id, source manual|recommendation|edit|import, changed_by, changed_at)` (UX9, [CHREDIST-01](screens/chapter-redistribution.md)) — append-only(update·delete trigger 거절), quiz_api는 insert·select만.
 - `question_revisions(id, question_id, version, stem, options, correct_answer, explanation, rubric)`.
 - `question_sources(question_id, document_id, document_revision_id, page_range, block_ids)`.
 - `question_user_states(user_id, question_id, first_viewed_at, last_viewed_at, last_graded_result, last_graded_attempt_id, is_favorite, needs_retry, updated_at)` with `(user_id, question_id)` unique.
@@ -146,6 +149,7 @@ workspace
   - `mock_exam_practice_sessions` / `mock_exam_attempts` — `practice_sessions`/`question_attempts`와 같은 모양·제약(표시 option ID, `pending` 자기평가 연결, immutable; FK는 `mock_exam_question_revisions`), `practice_run_id` 포함.
 - **범위 풀이 묶음 (QVIEW, [QVIEW-01](screens/question-viewer.md)):** `practice_runs(id, workspace_id, user_id, source bank|mock, mock_exam_id, mock_exam_generation_id, range jsonb, random_order, seed, item_ids uuid[](순서 고정, 최대 5,000), created_at, finished_at)` — 만든 사용자만 읽음. 결과 집계는 세션 테이블의 `(practice_run_id, run_position)` index로 계산하고, 문제 내용은 위치별로만 읽는다. 기존 `practice_sessions`에 nullable `practice_run_id`·`run_position`을 더한다(additive). 문제마다 세션은 묶음 안에서 하나(partial unique `(practice_run_id, run_position)`).
 - **QGEN 폐지 (MOCK-SPEC, QGEN-RM 2026-11-02):** `question_generation_runs`·생성 초안·`question_lineage`의 기존 행은 보존하고 drop하지 않는다(additive-first). 새 생성 run은 만들어지지 않는다(router 404, worker에 `question.generate` 등록 없음; 대기열에 남은 `question.generate` job은 reconciler가 `failed`/`job_retired`로 끝낸다). 실행되지 않던 코드는 UX8-QGEN-DEAD(2026-11-02)에서 지웠다: worker `question_generation_job`·`question_generation_store`(원본 row type은 `quiz_worker.question_sources`로 이동), API `question_generation_review`·`repositories/question_generations`, 설정 `QUESTION_GENERATION_BATCH_RATE_LIMIT_PER_MINUTE`. `PATCH /question-drafts/{id}`는 import 초안만 받는다 — 생성 초안 id는 404(authz binding이 `source_type = import`만 보임).
+- **하이라이트 (UX9-SPEC 2026-11-02, [HILITE-01](screens/highlights.md), questions.md §15):** `user_highlights(id, workspace_id, user_id, target_kind note|explanation|ai_explanation, chapter_note_id FK chapter_notes on delete cascade, question_id FK questions on delete cascade, question_revision_id FK question_revisions, ai_explanation_id (AIEXPL-01의 `question_ai_explanations` FK — 그 테이블이 생기는 migration에서 FK 추가, 그 전에는 `ai_explanation` 행을 받지 않는 check), anchor jsonb{block, start, end}, quote text(≤ 2,000), prefix, suffix(≤ 32), color yellow|blue|pink, version int(낙관적 잠금), created_at, updated_at, deleted_at)`. check: 대상 열은 `target_kind`에 맞는 것 하나만(`explanation`은 `question_id`+`question_revision_id`). index `(user_id, chapter_note_id) where deleted_at is null`, `(user_id, question_id) where deleted_at is null`, `(workspace_id, user_id)`. RLS 켬, 브라우저 role 권한 없음, quiz_api는 select·insert·update(`color`·`version`·`deleted_at`·`updated_at`)만 — 모든 query는 JWT `sub`의 `user_id`로 거른다. 장 정리는 읽을 때 계산한다(노트 → `(document_id, section_key)`, 해설 → 문제의 지금 `chapter_id`). Fork(`worker_fork_commit`)는 이 테이블을 복사하지 않고 공유 API는 읽지 않는다. 사용자·대상당 살아 있는 행 500개 제한은 API가 대상 행 FOR UPDATE 아래에서 센다.
 
 문제 상태는 독립 필드를 합성해 계산한다. 색상 규칙·열람 판정·변형 정책은 `docs/questions.md`가 단일 기준이다.
 
@@ -197,6 +201,14 @@ workspace
 | GET | `/api/v1/workspaces/{id}/chapter-notes` | 장별 최신 정리 노트 상태(진행·stale·버전 수; Heatmap header 표시, CHNOTE-01) |
 | GET | `/api/v1/chapters/{chapterId}/note` | 장 정리 노트(`version=` 이전 버전, `question_refs` 각주, `stale`) |
 | POST | `/api/v1/chapters/{chapterId}/note` | 정리 노트 만들기·다시 만들기(새 버전, 편집 권한, `Idempotency-Key`; 확정 문제 없음 409 `no-chapter-questions`, 진행 중 409 `note-generation-running`, 꺼짐 409 `note-generation-disabled`) |
+| GET | `/api/v1/workspaces/{id}/chapter-redistribution/questions` | 챕터 재분배 목록: 장 그룹별 살아 있는 확정 문제(번호·발문 앞 40자·유형·`chapter_source`, 정답 없음)와 옮길 수 있는 장 목록(편집 권한, 활성 Workspace; CHREDIST-01) |
+| POST | `/api/v1/workspaces/{id}/chapter-redistribution/preview` | 추천 다시 계산(읽기 전용: `question_ids`\|`all`, `include_manual`; 바뀔 문제만 `현재 → 추천`과 개수; CHREDIST-01-C05·C06) |
+| POST | `/api/v1/workspaces/{id}/questions/chapter-assignments` | 여러 문제의 챕터를 한 번에 바꿈(`source manual\|recommendation`, 항목마다 `expected_chapter_id`, ≤ 5,000, 원자적, `Idempotency-Key`; 409 `chapter-changed`·`question-not-confirmed`, 422 `chapter-invalid`; CHREDIST-01-C02) |
+| GET | `/api/v1/questions/{id}/preview` | 정리 노트 각주 미리보기(발문·보기만 — 정답·해설·채점 기준 없음, 열람 기록 없음; CHNOTE-02-C01). 공유: `/api/v1/shared/{shareId}/questions/{questionId}/preview` |
+| GET | `/api/v1/chapters/{chapterId}/my-highlights` | 그 장의 내 하이라이트(모든 노트 버전 + 지금 그 장 확정 문제의 해설·AI 해설, 다시 찾은 위치; HILITE-01-C06). "챕터 없음"은 `GET /api/v1/workspaces/{id}/my-highlights?chapter=none` |
+| GET | `/api/v1/questions/{id}/my-highlights` | 그 문제 해설(·AI 해설)의 내 하이라이트(모든 구성원 — `GET /questions/{id}`와 같은 권한; practice 응답에는 없음) |
+| POST | `/api/v1/my-highlights` | 하이라이트 만들기(대상·`anchor`·색, 겹친 것 `replace_ids` 원자적 교체, 서버가 quote를 자름, 보관 Workspace 403; HILITE-01-C03·C04) |
+| PATCH/DELETE | `/api/v1/my-highlights/{id}` | 색 바꾸기(`version` 낙관적 잠금) · 지우기(멱등). 다른 사용자의 id는 404 |
 | GET | `/api/v1/workspaces/{id}/mock-exams` | 모의고사 목록(이름·상태·문제 수·설정 요약·현재 회차 진행; MOCK-01) |
 | POST | `/api/v1/workspaces/{id}/mock-exams` | 모의고사 만들기(이름·`config`·`range`, 첫 회차 생성 시작, 편집 권한, `Idempotency-Key`; 범위 0개 409 `no-matching-questions`, 진행 한도 409 `generation-busy`, 429) |
 | GET/PATCH/DELETE | `/api/v1/mock-exams/{id}` | 상세(설정·회차 상태·진행) · 이름/설정 변경(`mock_exam_revisions`) · soft delete(생성 중이면 job 취소) |

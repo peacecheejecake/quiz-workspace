@@ -225,6 +225,54 @@ PR #43(이 계획의 "DOCVIEW", DOC-02-AC06–AC11)과 병렬로 만든 DOCVIEW-
 - 파일 범위 겹침 최소화: QuestionViewer 부품은 QVIEW-W만 만들고 MOCK-W는 import만 한다. `문제` 메뉴는 QVIEW-W(`문제 풀기`) → MOCK-W(`모의고사`) → QGEN-RM(`변형 출제` 제거) 순서로만 고친다.
 - 비용·호출 수(사용자 결정 "API 호출 최소화"): 원본마다 호출하지 않고 token 예산으로 묶는다 — 20문항 ≈ 1번(+1), 100문항 ≈ 3번(+1), passage가 큰 교재 100문항 ≈ 6번(+1), 해석할 수 없는 응답 하나마다 +2번(MOCK-01 "LLM 호출 묶기"). 출력 예산 16,000 token 호출은 오래 걸리므로 job 시간 한도는 묶음 수·동시 수·호출 timeout으로 설정 검사한다. 한도(MOCK-01-C06)와 LLM 없는 `보기 섞기` 경로가 남은 비용을 막는다.
 
+### UX9 — 피드백 배치 (챕터 재분배·하이라이트·정리 노트·다시 풀기 아이콘·iOS 스크롤)
+
+사용자 피드백 2026-11-02(원문):
+
+```
+- '챕터 재분배' 기능 필요
+  - 여러 문제를 한 번에 챕터에 할당
+  - 자동 챕터 분배 재시도 기능
+- 문제별 '다시 풀기' 버튼을 물음표 모양 아이콘으로 변경
+- dialog가 올라와 있을 때, dialog 위를 스와이프했는데 하단에 깔린 페이지에 스크롤이 발생하는 현상 수정(ios safari에서 확인했음)
+- 정리 노트 수정
+  - 정리 노트 내 키워드 검색 기능 추가
+  - 하이라이트 기능 추가: 텍스트 선택 시 dropdown menu 노출
+  - 문장 옆에 각주 번호에 hover하면 마우스 포인트를 기준으로 또다른 floating (tooltip)이 보이며 문제가 보이도록 하기
+  - 정리 노트의 접기/펼치기는 필요 없을듯
+문제 해설(AI 생성 문구 포함)을 하이라이트하면 정리 노트에 추가
+- 하이라이트 목록 관리
+- 정리 노트 하이라이트를 위한 툴을 공통으로 쓰면 될듯
+정리 노트가 열린 상태에서 개별 문제(Heatmap)를 누르면 정리노트 dialog 닫기
+- 문제 pdf 가져오기 Layout 변경
+  - 왼쪽에 전체 검토할 pdf 목록(문서 관리와 동일하게 각각의 제목, 상태 보여줌)
+  - 오른쪽에 선택한 문서의 검토 상세
+- 본문 검색을 별도의 페이지로 넣기, 홈 화면에서 버튼 눌러서 진입
+```
+
+화면 명세: [CHREDIST-01](screens/chapter-redistribution.md)(4 AC), [HILITE-01](screens/highlights.md)(6 AC), [CHNOTE-02](screens/chapter-note-tools.md)(5 AC), [QIMPORT-02](screens/questions-import-layout.md)(4 AC), [SEARCH-02](screens/search-page.md)(4 AC) — 모두 phase `UX9.0`(`scripts/e2e-trace.ts` PHASES) — 와 [UX9-SCROLL](screens/overlay-scroll.md)(4 AC, test-first 구현 Task UX9-SCROLL의 `tests/e2e/workspaces/overlay-scroll.spec.ts`; phase 없음 — ID가 index route 표 검사 형식이 아니므로 전체 `--strict` trace로 확인), 화면 AC 178 → 205·화면 25 → 31. GREEN phase 화면(QOV-01·QPLAY-01 M5.0, CHNOTE-01 CHNOTE.0, QIMPORT-01 M4.0, SEARCH-01 M3.0)은 문구만 UX9 표시로 고쳤고 그 test는 해당 구현 Task가 함께 고친다. 규칙: questions.md §14(챕터 재분배)·§15(하이라이트), design-system v1.2.8 §5.2~§5.4, workspace-sharing §11, architecture §5·§6. 결정은 §7(2026-11-02 UX9). 브랜치 `feature/ux9-feedback`, Task마다 `task/<ID>-<slug>`. 품질 ID: `A11Y-19`·`VISUAL-10`(A11Y-17·18·VISUAL-09는 ASK-SPEC 예약). **AIEXPL 의존:** AI 해설 하이라이트(UX9-HL-AIEXPL)는 ASK-SPEC의 EXPL-W가 develop에 들어온 뒤에만 한다.
+
+| ID | 내용 | 범위(디렉터리) | 의존 | DoD |
+|---|---|---|---|---|
+| UX9-SPEC | 명세·계획: 새 화면 5개(위), CHNOTE-01·QOV-01·QPLAY-01·QVIEW-01·QIMPORT-01·SEARCH-01 UX9 표시, questions §14·§15, architecture(`chapter_source`·`question_chapter_changes`·`user_highlights`, API), design-system v1.2.8, workspace-sharing §11, e2e-strategy 품질 ID, index·trace PHASES `UX9.0`·AC 수 test | `docs`, `scripts/e2e-trace.ts`(PHASES), `scripts/e2e-trace.test.ts` | — | `make lint` GREEN, `node --test scripts/e2e-trace.test.ts` GREEN, `pnpm e2e:trace --strict --phase "$E2E_PHASES"` OK(GREEN phase에 orphan 없음) |
+| UX9-SCROLL | overlay scroll 격리(design-system §5.3): 공통 overscroll guard를 모든 floating 표면(`FloatingSidePanel` docked 제외, `ModalDialog`, `ConfirmDialog`, 모바일 drawer, `Popover`, `DropdownMenu`)에 적용, pinch-zoom·ctrl+wheel 확대는 통과, docked panel은 guard 안 함. test-first: `tests/e2e/workspaces/overlay-scroll.spec.ts` UX9-SCROLL-AC01~AC04(modal dialog, non-modal floating dialog, side panel·bottom sheet, 데스크톱 wheel)를 먼저 RED로 확인 | `packages/ui`, `tests/e2e/workspaces/overlay-scroll.spec.ts` | UX9-SPEC(병렬 진행 — 별도 task branch) | UX9-SCROLL-AC01~AC04 GREEN(chromium·webkit·모바일), 기존 smoke·A11Y·VISUAL 회귀 없음, merge 때 `pnpm e2e:trace --strict`(phase 없이)로 [overlay-scroll.md](screens/overlay-scroll.md) AC와 test 일치 확인, **⛔ 사용자 실기기 iOS Safari 확인** |
+| UX9.0 | RED: CHREDIST-01-AC01~AC04, HILITE-01-AC01~AC06, CHNOTE-02-AC01~AC05, QIMPORT-02-AC01~AC04, SEARCH-02-AC01~AC04 E2E + 계약 CHREDIST-01-C01~C08·HILITE-01-C01~C08·CHNOTE-02-C01~C03(pytest `infra red`, pgTAP 자리) + fixture(두 교재 장·문제지 장 제목 일치 import 문제·`chapter_source` 섞인 문제, 해설 있는 문제, 노트 버전 2개, 512 초안 PDF와 run 없는 교재+문제, 문제지만 발행된 Workspace). Vitest 계약(HILITE-01-C09·CHNOTE-02-C04·C05·QVIEW-01-C08)은 구현 Task가 함께 쓴다 | `tests/e2e/questions/chapter-redistribution.spec.ts`·`highlights.spec.ts`·`chapter-note-tools.spec.ts`·`questions-import-layout.spec.ts`, `tests/e2e/search/search-page.spec.ts`, `tests/e2e/fixtures`(새 `highlights.ts`·`chapter-redistribution.ts`), `tests/integration/questions/chapter_redistribution`·`highlights`·`chapter_notes` | UX9-SPEC | RED 증거(메뉴 항목·API·도구 없음이 원인 — 인프라·seed 아님), `pnpm e2e:trace --strict --phase UX9.0` orphan AC 0, `make test-infra` GREEN(red 제외), CI `E2E_PHASES`에 `UX9.0` 없음 |
+| UX9-REDIST-B | migration: `questions.chapter_source`(backfill §14.1)·`chapter_set_by`·`chapter_set_at`, `question_chapter_changes`(append-only trigger, grants), pgTAP. API `GET …/chapter-redistribution/questions`, `POST …/preview`(읽기 전용, `quiz_api.chapter_matching`을 등록 문제 시작 블록으로 확장 — §14.2), `POST …/questions/chapter-assignments`(원자적·잠금 순서·`expected_chapter_id`·Idempotency·활동). 기존 등록·편집·가져오기 등록 경로가 `chapter_source`·이력 행을 씀, Fork 복사, `make contracts` | `supabase/migrations`, `supabase/tests`, `apps/api`(새 `api/chapter_redistribution.py`, `chapter_matching.py`, 문제 등록·편집·import 등록의 챕터 쓰기), `contracts`, `packages/api-client` | UX9.0 | CHREDIST-01-C01~C08 GREEN(`red` 제거, 초안·문제 추천 같은 결과 property test), pgTAP GREEN, `make test`·`make test-infra` GREEN, QIMPORT-01·QOV-01 회귀 없음 |
+| UX9-REDIST-W | `문제` 메뉴 `챕터 재분배`(requiresEdit, 비활성 이유), `ChapterRedistributionDialog`(`?panel=chapter-redistribution`, `QuestionRangePicker` 재사용 + "직접 정함" badge, 직접 옮기기 줄·확인, 미리보기 단계·`모두 적용`·확인, 409 처리·다시 읽기, Heatmap·열린 노트 panel 다시 읽기), 이력 label(`questions.chapters_reassigned`), QOV-01-AC11 test에 새 항목 | `apps/web/src/components/questions/redistribution`(새), `apps/web/src/components/workspaces`(메뉴·dialog 등록), `apps/web/src/components/history` | UX9-REDIST-B | CHREDIST-01 AC01~AC04 GREEN(chromium·webkit), QOV-01·QVIEW-01 E2E 회귀 없음 |
+| UX9-HL-B | migration `user_highlights`(check·index·RLS·grants, pgTAP). API(`quiz_api.highlights`): 만들기(서버가 quote·prefix·suffix 자름, 대상 검증, `replace_ids` 원자적, 한도), 바꾸기·지우기, 장·문제·"챕터 없음" 읽기와 다시 찾기(`exact`/`relocated`/`missing`), practice·shared 응답 schema에 필드 없음, Fork 비복제, log audit, `make contracts` | `supabase/migrations`, `supabase/tests`, `apps/api`(새 `api/highlights.py`·`highlight_anchor.py`), `contracts`, `packages/api-client` | UX9.0 | HILITE-01-C01~C08 GREEN(`red` 제거, 다시 찾기 property test), QVIEW-01-C09 GREEN, pgTAP GREEN, `make test-infra` GREEN |
+| UX9-HL-UI | kit `HighlightableText`·`HighlightMenu`(§5.2)·`PointerAnchoredFloating`(§5.4)·`SearchField`, 토큰 `--color-highlight-*`·`--color-search-match*`(light/dark·forced-colors), Storybook, Vitest HILITE-01-C09(a~d)·CHNOTE-02-C04(`findInNote`) | `packages/design-tokens`, `packages/ui/src/reading`(새) | UX9-SPEC | Vitest GREEN, Storybook build, `pnpm --filter @quiz/ui check:rsc` OK, token contrast 검사 GREEN |
+| UX9-NOTE-B | `GET /questions/{id}/preview`·`GET /shared/{shareId}/questions/{questionId}/preview`(발문·보기만, 열람 기록 없음), `make contracts` | `apps/api`, `contracts`, `packages/api-client` | UX9.0 | CHNOTE-02-C01~C03 GREEN(`red` 제거, 응답 key 검사) |
+| UX9-NOTE-W | `ChapterNotePanel`: disclosure 제거·설명 한 줄, 검색 줄(`SearchField` + `HighlightableText` matches, Enter/Shift+Enter/Escape `ownEscapeProps`), 각주 `PointerAnchoredFloating` 미리보기(touch `문제 열기`), modal 풀이·범위 풀이가 위에 있는 동안 내용 가림(`inert`)·각주로 focus 복귀, marker로 문제를 열면 노트 닫기(home dialog 상태 함수, CHNOTE-02-C05), 공유 노트 panel 같은 도구. **CHNOTE-01-AC01·AC02·AC04·AC05 test를 UX9 문구대로 고침**, A11Y-12·VISUAL-06(본문 mask) 갱신 | `apps/web/src/components/questions/notes`, `apps/web/src/components/workspaces`(home dialog 상태), `apps/web/src/components/shared`, `tests/e2e/questions/chapter-notes.spec.ts`, `tests/e2e/quality` | UX9-NOTE-B, UX9-HL-UI | CHNOTE-02 AC01~AC05 GREEN, CHNOTE-01 AC01~AC06 GREEN(고친 문구), QOV-01-AC06·AC14·QVIEW-01-AC09 회귀 없음, VISUAL-06 baseline 재생성 |
+| UX9-HL-W | 노트 본문·QuestionViewer 해설(`practice`·`sequence(bank)` 결과, `manage` "문제 상세")에 `HighlightableText`·`HighlightMenu` 연결(제출 뒤에만 불러옴, 보관 Workspace readOnly), `MyHighlightsSection`(거르기·행 메뉴·`위치로 이동`·`색 바꾸기`·`삭제`, 해설 각주와 미리보기), "챕터 없음" 그룹 `내 하이라이트` 버튼(`chapter=none`), 노트 검색 범위에 인용 포함 | `apps/web/src/components/questions/notes`·`viewer`·`detail`·`overview`(챕터 없음 header) | UX9-HL-B, UX9-HL-UI, UX9-NOTE-W | HILITE-01 AC01~AC06 GREEN(chromium·webkit·iPhone WebKit의 AC06 touch), QPLAY-01·QVIEW-01 회귀 없음 |
+| UX9-HL-AIEXPL | AI 해설(AIEXPL-01) 글에 같은 도구: migration으로 `user_highlights.ai_explanation_id` FK·check 완화, API 대상 `ai_explanation`·다시 만들기 뒤 다시 찾기, 결과 영역 연결, HILITE-01 AC03·AC05의 AI 해설 경우 test 추가 | `supabase/migrations`, `apps/api`, `apps/web`(AI 해설 영역), `tests` | UX9-HL-W, ASK-SPEC EXPL-W(develop merge) | AI 해설 하이라이트 E2E·계약 GREEN, AIEXPL-01 AC 회귀 없음 |
+| UX9-RETRY-ICON | `RetryIcon` = 원 안 물음표(꺼짐 윤곽선·켜짐 채운 원), `RetryToggle` 이름·`data-state`·tooltip 그대로, Storybook, Vitest QVIEW-01-C08, 영향 VISUAL baseline(풀이 panel header가 찍힌 VISUAL-03·07 등) 재생성 | `packages/ui/src/questions`, `tests/e2e/quality/__screenshots__` | UX9-SPEC | QVIEW-01-C08 GREEN, QPLAY-01·QVIEW-01 E2E 회귀 없음(이름 기반 locator 불변), visual 재생성 diff가 아이콘뿐 |
+| UX9-IMPORT-W | 가져오기 페이지 두 영역(QIMPORT-02): 왼쪽 `nav` 목록(문서 관리 행 부품 재사용, 진행 polling, `문제 추출`), 오른쪽 기존 검토, `?document=` push·없으면 replace, 바꿀 때 선택 확인 dialog, 늦은 응답 취소, 좁은 화면 "검토할 PDF" bottom sheet, `검토할 PDF` 선택 상자 제거. **QIMPORT-01-AC05 test를 목록 선택으로 고침** | `apps/web/src/app/workspaces/[workspaceId]/questions/import`, `apps/web/src/components/questions/import`, `apps/web/src/components/documents`(행 부품 공유만) | UX9.0 | QIMPORT-02 AC01~AC04 GREEN, QIMPORT-01 AC01~AC10 GREEN(AC09 성능 기준 유지) |
+| UX9-SEARCH-W | 본문 검색 페이지 `/workspaces/[workspaceId]/search`(PageHeader·BackLink·breadcrumb, 기존 본문 검색 부품 이동, `loading.tsx`), 홈의 펼치기 영역 제거 → `본문 검색` 링크 버튼, redirect(홈 `?text=`·`scope=content`, 이전 `/search?q=`), `apps/web/src/screens.ts`에 SEARCH-02. **SEARCH-01-AC10을 test와 함께 "폐기된 AC"로 옮기고(화면 AC 205 → 204, trace test), AC01~AC04·AC06·AC09·AC11·AC13 test 진입을 페이지로**, QOV-01-AC07 test 갱신 | `apps/web/src/app/workspaces/[workspaceId]/search`, `apps/web/src/components/search`, `apps/web/src/components/workspaces`(header), `apps/web/src/screens.ts`, `tests/e2e/search`, `docs/screens/search.md`, `scripts/e2e-trace.test.ts` | UX9.0 | SEARCH-02 AC01~AC04 GREEN, SEARCH-01 남은 AC GREEN, QOV-01-AC07·AC13 GREEN, `apps/web` screens test GREEN |
+| UX9-X | 교차 마무리: `A11Y-19`(`a11y-ux9.spec.ts`)·`VISUAL-10`(정답·해설·노트 본문 mask), CI `E2E_PHASES`에 `UX9.0` 추가(모든 UX9 AC GREEN 확인 후), 전체 `pnpm e2e:trace --strict` orphan 0, 명세의 "제안" 남은 것 정리 | `tests/e2e/quality`, `.github/workflows/ci.yml`, `docs` | UX9-SCROLL, UX9-REDIST-W, UX9-HL-W, UX9-NOTE-W, UX9-RETRY-ICON, UX9-IMPORT-W, UX9-SEARCH-W | quality suite GREEN, `pnpm e2e:trace --strict`(전체) OK, CI GREEN |
+
+- 병렬: `UX9-SCROLL ∥ UX9-HL-UI ∥ UX9-RETRY-ICON ∥ UX9.0`(서로 다른 파일), 그 뒤 `UX9-REDIST-B ∥ UX9-HL-B ∥ UX9-NOTE-B ∥ UX9-IMPORT-W ∥ UX9-SEARCH-W`, `UX9-REDIST-W ∥ UX9-NOTE-W`, 그 뒤 `UX9-HL-W`, 마지막 `UX9-X`. `UX9-HL-AIEXPL`은 AIEXPL이 develop에 들어온 뒤 별도. 공유 파일(`apps/api` router 등록, migration timestamp, `contracts/openapi.json`, `packages/api-client`, `문제` 메뉴 파일, home dialog 상태 파일, `packages/ui/src/index.ts`)은 충돌이 예상되며 orchestrator가 merge 후 `make contracts`로 재생성한다. `UX9-NOTE-W`와 `UX9-HL-W`는 같은 `ChapterNotePanel`을 고치므로 순서대로만.
+- `UX9-SEARCH-W`는 SEARCH-01-AC10을 폐기하므로 화면 AC 수가 205 → 204가 된다(그 Task가 index·trace test를 고침).
+
 ## 4. Task 의존 그래프
 
 ```mermaid
@@ -390,6 +438,36 @@ flowchart TB
     MKX --> MKENV[staging 활성화 ⛔]
   end
   DSX --> MSPEC
+
+  subgraph UX9[UX9 피드백 배치]
+    U9S[UX9-SPEC]
+    U9SC[UX9-SCROLL overlay scroll ⛔ 실기기 확인]
+    U90[UX9.0 RED]
+    U9HUI[UX9-HL-UI 공통 하이라이트 도구]
+    U9RI[UX9-RETRY-ICON]
+    U9S --> U9SC
+    U9S --> U90
+    U9S --> U9HUI
+    U9S --> U9RI
+    U90 ==> U9RB[UX9-REDIST-B] --> U9RW[UX9-REDIST-W]
+    U90 ==> U9HB[UX9-HL-B]
+    U90 ==> U9NB[UX9-NOTE-B] --> U9NW[UX9-NOTE-W]
+    U9HUI --> U9NW
+    U9HB --> U9HW[UX9-HL-W]
+    U9HUI --> U9HW
+    U9NW --> U9HW
+    U90 ==> U9IW[UX9-IMPORT-W]
+    U90 ==> U9SW[UX9-SEARCH-W]
+    U9HW --> U9HA[UX9-HL-AIEXPL]
+    EXPLW[ASK-SPEC EXPL-W develop merge] -.-> U9HA
+    U9SC --> U9X[UX9-X a11y·visual·CI UX9.0]
+    U9RW --> U9X
+    U9HW --> U9X
+    U9RI --> U9X
+    U9IW --> U9X
+    U9SW --> U9X
+  end
+  MKX --> U9S
   M70 ==> M71
   M52 --> M71
   M55 --> M72
@@ -432,6 +510,10 @@ flowchart TB
 | W27 | QVIEW-W · MOCK-P | QVIEW-W는 UX7-CACHE·UX7-BANK merge 뒤. web(QVIEW-W)과 api(MOCK-P)로 범위가 다름. 이 wave의 gate는 `bank` 출처(QVIEW-W)와 mock 계약(MOCK-P)만 |
 | W28 | MOCK-W → QGEN-RM | 같은 `문제` 메뉴 파일을 순서대로 고침. MOCK-W가 CI에 `QVIEW.0`, QGEN-RM이 `MOCK.0`을 켬 |
 | W29 | MOCK-X → staging 활성화⛔ | LLM 비용 사용자 승인 필요 |
+| W30 | UX9-SCROLL · UX9.0 · UX9-HL-UI · UX9-RETRY-ICON | UX9-SPEC 이후. kit(scroll guard·reading)·tests·icon으로 파일 범위가 다름. UX9-SCROLL은 실기기 확인⛔ |
+| W31 | UX9-REDIST-B · UX9-HL-B · UX9-NOTE-B · UX9-IMPORT-W · UX9-SEARCH-W | api 모듈·migration 분리(timestamp 충돌은 orchestrator), web은 가져오기 페이지·검색 페이지로 다름 |
+| W32 | UX9-REDIST-W · UX9-NOTE-W | `문제` 메뉴·재분배 dialog와 노트 panel로 다름(home dialog 상태 파일은 순서대로 merge) |
+| W33 | UX9-HL-W → UX9-X | UX9-X가 CI에 `UX9.0`을 켬. UX9-HL-AIEXPL은 AIEXPL merge 뒤 별도 |
 
 Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 Task를 즉시 착수한다.
 
@@ -589,6 +671,10 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-11-02 | **사용자 결정(MOCK-SYNC 확인)**: (1) **범위 풀이 뒤로가기** — 제안대로 확정: `시작`(`practice=new` → `practice=<id>`)·`결과 보기`·`처음부터 다시`는 같은 dialog 안의 단계 전환이라 기록 항목을 바꾸고(replace) 쌓지 않는다 — 시작한 뒤 뒤로가기 한 번은 범위 고르기로 돌아가지 않고 panel을 닫는다. 모의고사 dialog 안의 목록 → 만들기·상세(`mock=`)는 항목을 쌓아 뒤로가기가 dialog를 연 채 목록으로 돌아간다. (2) **개별로 고른 중복 원본** — 중복 정리로 보관된 문제는 `다시 만들기` 때 범위에서 빠지고 다른 문제(남긴 문제 등)로 바꿔 넣지 않는다(MOCK-01-C08). | 사용자 결정; QVIEW-01 "모든 방식이 지켜야 하는 UX7 동작", MOCK-01-C08 |
 | 2026-11-02 | **사용자 결정(모의고사 AI production)**: "approve turning on AI generation" — production만(staging은 꺼둔 채) `WORKER_MOCK_EXAMS=true`를 api·worker에 설정(MOCK_EXAM_* 예산은 기본값), 모델 `claude-sonnet-5-5`, 비용은 기존 월 $20 목표를 함께 쓴다. 모의고사 생성은 고른 범위의 확정 문제·교재 본문을 Anthropic에 보낸다(runbook §11). 2026-11-02 설정·재배포 SUCCESS, worker가 `quiz.jobs.mock_exam.generate`를 등록. |
 | 2026-11-02 | **사용자 결정(UX8-FLAKES 탭 제목)**: "Leave it" — App Router soft navigation(로그인 redirect, `?panel=` push) 동안 서버 왕복 시간만큼 탭 제목이 비는 것은 알려진 동작으로 두고 제품을 고치지 않는다. axe helper가 제목을 기다린다(e633915). |
+| 2026-11-02 | **사용자 결정(UX9 C1~C10)**: (C1) 여러 문제 한 번에 = `문제` 메뉴 `챕터 재분배` dialog(편집 권한 항목, 비활성 이유 패턴, 자기 `?panel=chapter-redistribution`; 장별 checkbox 목록·장 전체 선택·개수, `옮길 챕터`, `이동`, 키보드·터치 동등). (C2) 자동 분배 재시도 = 추천 → 미리보기 → 적용(선택 또는 전체를 서버가 CHAPTER-MAP 규칙으로 다시 추천, 바뀌는 문제만 `현재 → 추천`, 행·전체 확인 후 적용; 사람이 정한 챕터는 기본 제외 — `questions.chapter_source`, 직접 옮기기는 `manual`). (C3) 공통 하이라이트 도구 하나(`HighlightableText` + 선택 메뉴: 3색·`하이라이트 지우기`·`복사`)를 노트 본문과 해설(사람·AI)에 씀; 사용자별 서버 저장(기기 간 동기화, 다른 구성원·게스트·Fork에 없음); 노트 하이라이트는 노트 버전에 속함. (C4) 해설 하이라이트는 그 문제 장의 정리 노트 panel `내 하이라이트`(인용·색·문제 각주)로; 본인만, AI 노트 다시 만들기와 무관, AI 노트가 없어도 있음. (C5) 하이라이트 목록 관리는 노트 panel 안 장 단위(출처·색 거르기, 위치로 이동, 색 바꾸기, 삭제; Workspace 전체 목록 없음). (C6) 각주 hover/focus = pointer 위치 기준 floating(focus는 요소 기준), 발문 + 보기만(정답·해설 없음, payload에도 없음), click은 문제 열기, touch tap = floating + `문제 열기`. (C7) 노트 접기/펼치기 폐지, 본문 항상 표시(관련 AC 문구 고침). (C8) 노트 안 검색(표시는 색만이 아님, "2/5", Enter/Shift+Enter·버튼, Escape 비움; `내 하이라이트`도 찾음 — 제안 채택). (C9) 노트가 열린 동안 Heatmap 문제를 누르면 노트 닫고 문제 열기(UX7-BACK 기록 규칙); 각주 click은 현재 동작 유지. (C10) `다시 풀기` toggle = 물음표 아이콘(이름·상태·tooltip 유지). 화면: CHREDIST-01·HILITE-01·CHNOTE-02. | 사용자 피드백 2026-11-02(§3 UX9 원문), orchestrator가 전달한 결정 |
+| 2026-11-02 | **사용자 결정(UX9 D1·D2)**: (D1) 문제 PDF 가져오기 = 왼쪽 검토할 PDF 목록(문서 관리와 같은 제목·상태) + 오른쪽 선택한 PDF의 검토 상세, `?document=` 유지, 대량 검토 paging 규칙 유지 → QIMPORT-02. (D2) 본문 검색 = 별도 페이지, 홈의 버튼으로 진입 → SEARCH-02 `/workspaces/:workspaceId/search`(이전 홈 `?text=`·`/search?q=`는 그 페이지로 redirect), 문제 검색은 홈 그대로. | 사용자 피드백 2026-11-02 추가분(§3 UX9 원문) |
+| 2026-11-02 | UX9-SPEC 해석: (1) **GREEN phase에 AC를 더하지 않음** — CI가 `--strict --phase "$E2E_PHASES"`로 돌므로 QOV-01·QPLAY-01(M5.0)·CHNOTE-01(CHNOTE.0)·QIMPORT-01(M4.0)·SEARCH-01(M3.0)에 새 AC를 넣으면 UX9.0 전까지 orphan이 된다. 그래서 새 동작은 새 화면 ID(CHREDIST-01·HILITE-01·CHNOTE-02·QIMPORT-02·SEARCH-02, phase `UX9.0`)에 두고(DOCVIEW-01이 DOC-02 배치를 따로 둔 방식), GREEN 화면은 문구만 "UX9 표시"로 고쳤으며 그 test는 해당 구현 Task가 같은 커밋에서 고친다(CHNOTE-01 AC01·AC02·AC04·AC05 → UX9-NOTE-W, QOV-01-AC11 → UX9-REDIST-W, QIMPORT-01-AC05 → UX9-IMPORT-W, SEARCH-01-AC10 폐기·나머지 진입 → UX9-SEARCH-W — UX7-SEARCH의 "폐기된 AC" 방식). (2) **`다시 풀기` 아이콘·iOS scroll은 화면 AC가 아님** — 아이콘은 컴포넌트 계약 QVIEW-01-C08 + VISUAL-10, scroll은 별도 화면 doc [overlay-scroll.md](screens/overlay-scroll.md)의 UX9-SCROLL-AC01~AC04(구현 Task가 test-first로 먼저 만든 ID `UX9-SCROLL-ACnn`; trace는 이 형식을 받지만 index route 표 검사(`apps/web/test/screens.test.ts`)의 ID 형식이 아니라 PHASES에 넣지 않음). 지금 `RetryToggle`은 상태에 따라 이름이 바뀌고 `aria-pressed`를 두지 않는 결정(`StudyToggles.tsx`)이 있어 "이름에 '다시 풀기' 유지 + `data-state`"로 해석했다. (3) **AIEXPL-01(AI 해설)은 develop에 없음**(`task/ASK-SYNC`) — 하이라이트 대상 `ai_explanation`은 명세·enum만 두고 구현은 UX9-HL-AIEXPL(EXPL-W 뒤). questions.md §13·workspace-sharing §10·A11Y-17/18·VISUAL-09는 ASK-SPEC 번호라 비워 두고 UX9는 §14·§15·§11·A11Y-19·VISUAL-10을 쓴다. (4) 챕터는 `questions` 행 속성이라 옮겨도 revision을 만들지 않고(attempt·상태 불변) 이력은 새 `question_chapter_changes`. (5) 각주 click 동작은 유지하되 접기가 없어져 생긴 공백(풀이 panel 옆에 정답 내용)을 "modal 풀이가 위에 있는 동안 노트 내용 가림"으로 채움(제안). (6) 하이라이트 읽기 API는 정답·해설을 이미 모든 구성원에게 주는 `GET /questions/{id}`와 같은 권한이고 practice 응답에는 없다; `내 하이라이트`는 사용자가 고른 인용만 보인다(본 글) — AI 해설을 다시 만들어도 보지 않은 새 글은 나오지 않는다. | AGENTS.md §1(설계 문서 우선)·§5, CI `e2e:trace --strict`, `scripts/e2e-trace.ts` |
+| 2026-11-02 | **UX9-SPEC 제안 (사용자 확인 필요)**: (a) 재분배 대상은 확정 문제만(초안·보관 제외); (b) 재분배 dialog는 non-modal; (c) `이동`·추천 적용 모두 확인 dialog; (d) 추천 적용한 문제는 `auto`(다음 재추천 대상); (e) backfill: 가져온 초안 `chapter_manual=false` → `auto`, 나머지 `manual`(UX9 전 편집한 가져온 문제는 `auto`로 남음); (f) 미리보기 단계는 URL·기록 밖; (g) 옮긴 뒤 같은 장 번호 충돌을 막지 않음; (h) 하이라이트 없는 곳: 공유·Fork·모의고사 문제·발문/보기·지난 버전 미리보기·각주 목록; (i) 보관 Workspace는 하이라이트 읽기 전용(`복사`만); (j) "챕터 없음" 그룹에 `내 하이라이트` 버튼(`chapter=none`); (k) 겹친 선택에 색 → 합쳐 하나로; (l) `하이라이트 지우기`는 겹친 하이라이트 통째로; (m) 키보드 = 문단(block) 단위 하이라이트(Shift+F10/ContextMenu/Enter) + 브라우저 키보드 선택; (n) 삭제는 확인·되돌리기 없음; (o) 하이라이트는 Workspace 활동 기록에 남기지 않음; (p) 보관 문제 해설도 "문제 상세"에서 하이라이트 가능; (q) 각주로 연 풀이 panel이 위에 있는 동안 노트 내용 가림; (r) 노트 버전을 바꾸면 검색어 비움; (s) 가져오기 목록에 run 없는 문제지·교재+문제 포함; (t) PDF를 바꿀 때 고른 초안이 있으면 확인 dialog; (u) 좁은 화면의 가져오기 목록 = "검토할 PDF" 버튼 + bottom sheet; (v) `본문 검색` 버튼은 문제 검색 아래 지금 펼치기 버튼 자리(글자 + 아이콘); (w) 홈 `?text=` redirect는 검색 key만 남기고 `q`·필터·dialog를 버림. | 명세의 `(제안 — 사용자 확인 필요)` 표시 |
 
 ## 8. 진행 현황
 
@@ -755,5 +841,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | MOCK-REBASE · MOCK-REBASE-2 `feature/mock-exams`를 develop 위로 | ✅ | 백업 ref `backup/mock-exams-aebb408` · `backup/mock-exams-e6d38e2` | 2026-11-02. #46 merge 후 fd44a44 위로, #48·#49 merge 후 a99c633 위로 `--rebase-merges`(미push 브랜치). 두 번째: 103 commit·264 파일 동일, 18개 파일만 develop 변경과 합침(runbook §10 PR preview / §11 모의고사, 화면 AC 178·25). 위 표의 SHA는 rebase 전 task 브랜치 기준. |
 | UX8-QGEN-DEAD 폐기된 QGEN 코드 정리 | ✅ | d031510 · 97fdc64 · 0071b0f · aaca29b · merge 69b340b | 2026-11-02. `question.generate` job 모듈·생성 초안 검토·배치 생성 rate-limit 설정 제거(테이블 유지). Codex review 지적 없음. orchestrator 재검증: lint·typecheck·test(pytest 2361, Vitest 999) OK. |
 | UX8-FLAKES CHNOTE-01-AC03·axe 제목·모의고사 `<time>` | ✅ | f4680de · e633915 · 8f43e9e · merge 76b8d2e | 2026-11-02. AC03은 제품 버그(노트 상태를 세 문장으로 읽어 끝난 생성과 옛 버전을 함께 반환) → 한 SELECT snapshot + 통합 테스트(옛 코드 100% 재현); axe는 제목을 기다림; 모의고사 시각 `<time>` + VISUAL-07 baseline 12장. Codex review 지적 없음. orchestrator 재검증: lint·typecheck·test(pytest 2376, Vitest 999) OK. |
+| UX9-SPEC 챕터 재분배·공통 하이라이트·정리 노트 읽기 도구·다시 풀기 아이콘·iOS scroll·가져오기 두 영역·본문 검색 페이지 명세·계획 | ✅ (사용자 확인 대기: §7 UX9-SPEC 제안 (a)~(w)) | 이 커밋 | 2026-11-02. 새 화면 6개·AC 27개(178 → 205, 화면 25 → 31; phase `UX9.0` 23개 + UX9-SCROLL 4개), GREEN 화면은 UX9 표시 문구만. |
+| UX9-SCROLL overlay scroll 격리(iOS Safari dialog 위 스와이프) | 🔶 구현됨, Codex review 대기 | ec5b97f · 06271da · a1215c4 | 2026-11-02. `task/UX9-SCROLL`(별도 branch). UX9-SCROLL-AC01~AC04는 UX9-SPEC의 [overlay-scroll.md](screens/overlay-scroll.md)에 등록. 사용자 실기기 확인 대기. |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.

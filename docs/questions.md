@@ -218,7 +218,8 @@ Confirmed question
 - **입력:** 그 장의 살아 있는 CONFIRMED 문제의 active revision(발문·보기·정답·해설)만. 초안(`question_drafts`)·보관·삭제 문제는 넣지 않는다 — 확정 문제만 Heatmap에 보이는 규칙(§2)과 같다. 장의 발행 본문은 참고(grounding)일 뿐이며 노트 항목의 근거가 될 수 없다.
 - **출처 각주:** 모든 항목은 입력 문제를 1개 이상 각주로 단다(`[^1] 3장 12번`). 입력에 없는 문제 인용, 각주 없는 항목, 본문에 없는 인용은 서버가 버리거나 거절해 저장·표시하지 않는다. 각주의 문제 번호는 Heatmap 미리보기 번호와 같다.
 - **표시:** 사람의 승인 없이 바로 보이고(`AI 생성` 표시), 편집하지 않고 다시 만들기만 한다. 다시 만들면 새 버전이며 이전 버전은 남는다. 장의 확정 문제가 바뀌면(추가·revision·삭제·보관·장 이동) stale로 표시한다. 노트 생성·열람은 문제의 VIEWED 상태나 풀이 기록을 바꾸지 않는다(§2.1).
-- **정답 노출:** 노트는 정답·해설에서 나온 내용이므로 본문을 기본으로 접고("정답·해설 포함") 문제 풀이 panel과 practice API에는 노트를 넣지 않는다(§4의 제출 전 정답·해설 비노출 규칙 유지). 풀이 panel이 열리면 노트 본문을 다시 접는다.
+- **정답 노출:** 노트는 정답·해설에서 나온 내용이므로 문제 풀이 panel과 practice API에는 노트를 넣지 않는다(§4의 제출 전 정답·해설 비노출 규칙 유지). UX9-SPEC(2026-11-02, 사용자 결정 C7) 전에는 본문을 기본으로 접고("정답·해설 포함") 풀이 panel이 열리면 다시 접었다. 이제 본문은 늘 보이고, 대신 Heatmap marker로 문제를 열면 노트 panel을 닫으며(C9) 각주로 연 풀이 panel이 위에 있는 동안 노트 내용을 가린다([CHNOTE-02](screens/chapter-note-tools.md)).
+- **읽기 도구·하이라이트 (UX9-SPEC 2026-11-02):** 노트 안 검색·각주 미리보기(발문·보기만, 정답 없음)는 [CHNOTE-02](screens/chapter-note-tools.md), 사용자별 하이라이트와 문제 해설 하이라이트를 모은 `내 하이라이트`는 §15·[HILITE-01](screens/highlights.md).
 - **권한:** 모든 구성원이 읽고, owner·editor가 활성 Workspace에서 만든다. 공유 링크 게스트는 장마다 최신 노트를 출처 일치(인용 문제가 모두 살아 있는 CONFIRMED이고 active revision이 고정된 것과 같음)일 때만 읽는다(아래 공유 규칙). Fork는 출처 일치인 최신 노트만 문제 id 재매핑과 함께 복제한다.
 
 ## 공유 Workspace에서의 문제 개인정보 규칙 (v1.3 추가)
@@ -278,3 +279,51 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 - **범위 고르기:** 장 그룹 → 문제 두 단계 checkbox, 맨 위 `전체 선택`(지금 필터에 보이는 문제 전체, 일부 선택은 mixed), §7 필터(풀이 상태·즐겨찾기·유형)로 좁힘. 범위 단위는 사용자 결정(2026-11-01)이다(QVIEW-01 "범위 단위"). 한 묶음은 최대 5,000문제. 모의고사 만들기의 범위 고르기도 같은 부품이다.
 - **순서:** 시작 전 `무작위 순서` checkbox. 꺼짐 = Heatmap 기본 정렬(§3.1), 켜짐 = 서버 seed shuffle. 순서는 묶음(`practice_run`)에 고정되어 새로 고침해도 같다.
 - **기록:** `bank` 범위 풀이는 §2.1·§4 그대로 `viewed`·attempt·`question_user_state`에 반영된다(풀이 panel을 연 것과 같음). `mock`은 §11.
+
+## 14. 챕터 재분배 (UX9-SPEC 2026-11-02)
+
+(§13은 ASK-SPEC(AI 질문·AI 문제 해설, `task/ASK-SYNC`)이 쓰는 번호다 — 그 branch가 develop에 merge되기 전이라 이 문서에는 아직 없다.)
+
+화면·AC는 [CHREDIST-01](screens/chapter-redistribution.md). 사용자 피드백 "'챕터 재분배' 기능 필요 — 여러 문제를 한 번에 챕터에 할당 — 자동 챕터 분배 재시도 기능", 사용자 결정 2026-11-02 C1(`문제` 메뉴의 `챕터 재분배` dialog)·C2(추천 → 미리보기 → 적용, 사람이 정한 챕터는 기본 제외).
+
+### 14.1 등록된 문제의 챕터와 출처 기록
+
+- 문제의 챕터는 `questions.chapter_id`(교재 문서의 장, null = "챕터 없음")다. 문제 내용 revision(`question_revisions`)에 들어 있지 않으므로 **챕터를 바꿔도 새 revision이 생기지 않는다** — 버전 번호·attempt(그 시점 revision을 가리킴, immutable)·`question_user_states`·즐겨찾기·다시 풀기·중복 정리 연결(`question_merges`)은 그대로다. Heatmap(§3.1)은 장 그룹을 `chapter_id`로 나누므로 읽을 때마다 새 장에 보인다.
+- **`chapter_source`(새 열):** `manual`(사람이 정함) | `auto`(자동 추천). 함께 `chapter_set_by`(사용자 id, 자동 등록·적용은 그 요청자)·`chapter_set_at`. 규칙:
+  - `manual`: 직접 등록(문제 등록 dialog의 `챕터`), 문제 편집(`PATCH /questions/{id}`)에서 `chapter_id`가 바뀜, 가져오기 검토에서 검토자가 고른 챕터(`question_drafts.chapter_manual = true`)로 등록, 챕터 재분배의 직접 옮기기.
+  - `auto`: 가져오기 등록의 자동 추천 챕터(`chapter_manual = false` 초안 — publish·서버 등록 job 모두), 챕터 재분배의 추천 적용(제안 — 사용자 확인 필요: 사람이 미리보기에서 확인해도 `auto`).
+  - 바꾸지 않음: 교정 발행이 장 id를 같은 `section_key`의 새 revision 장으로 다시 잇는 것(`documents_remap_question_chapters`), 보관·보관 해제, 중복 정리, Fork(값을 그대로 복사).
+  - 기존 행 backfill(migration): 가져온 초안(`question_drafts.published_question_id`)에서 등록되었고 그 초안이 `chapter_manual = false`였던 문제는 `auto`, 나머지는 `manual`(제안 — 사용자 확인 필요: UX9 전 `편집`으로 챕터를 바꾼 가져온 문제는 기록이 없어 `auto`로 남음).
+- 화면에는 `manual`만 "직접 정함" 글자로 보인다(챕터 재분배 목록). Heatmap·풀이 panel에는 보이지 않는다.
+
+### 14.2 추천 다시 받기 (등록된 문제의 첫 출처 블록)
+
+초안 추천(§6 "챕터", `quiz_api.chapter_matching`)과 **같은 함수**를 등록된 문제에 쓴다. 문제의 시작 블록:
+
+1. 그 문제의 `question_sources` 중 가져온 출처(import provenance — 문제지 PDF의 발문·보기 영역)가 있으면 그것, 없으면 가장 먼저 만든 출처 행.
+2. 그 행의 `block_ids[0]`; 없으면 `page_range` 첫 쪽의 첫 블록(그 행의 `document_revision_id`의 블록 — 지난 revision의 블록도 남아 있으므로 그대로 읽는다).
+3. 시작 블록의 문서가 `book`이면 그 블록의 장을 그 문서 **현재 발행 revision**의 같은 `section_key` 장으로 옮긴 것이 추천이다(`source_in_book`; 없으면 `no_source_chapter`).
+4. 아니면(문제지·`mixed`의 문제 구간) 그 블록의 `content_blocks.chapter_id`에서 상위 장까지 깊은 것부터 제목 key(NFKC·casefold, 앞 번호 분리, 문자·숫자만)를 Workspace의 살아 있는 책들의 현재 revision 장 key와 비교한다: 후보 1개 `matched`, 여럿이면 장 번호가 같은 하나만 `matched` 아니면 `ambiguous`, 없으면 `no_match`, 시작 블록에 장 없음 `no_source_chapter`. 숫자만으로 맞추지 않는다(추측 금지).
+5. 출처 행이 없으면 `no_source`(직접 등록한 문제 대부분).
+
+추천은 저장하지 않고 미리보기 요청마다 계산한다(교재 추가·교정으로 달라질 수 있음). 미리보기는 읽기 전용이고, 적용은 보이던 지금 챕터(`expected_chapter_id`)를 함께 보내 그 사이 바뀐 문제가 있으면 요청 전체를 409 `chapter-changed`로 거절한다(CHAPTER-MAP의 등록 409와 같은 방식). 기본으로 `chapter_source = manual` 문제는 계산하지 않고 "직접 정한 챕터라 건너뜀"으로 센다.
+
+### 14.3 옮기기 계약
+
+- `POST /workspaces/{id}/questions/chapter-assignments` — 편집 권한·활성 Workspace, 1~5,000문제를 **한 트랜잭션**으로(전부 아니면 전무), `Idempotency-Key`. 잠금 순서: Workspace FOR SHARE → 문제 id 순 FOR UPDATE → 대상 장의 책 문서 FOR SHARE(revision 게시·`종류 변경`과 경쟁하지 않음; 문서가 그 사이 `question_paper`로 바뀌면 422 `chapter-invalid`). 대상 장은 이 Workspace의 살아 있는 `book` 문서의 현재 발행 revision 장이거나 null. 세부 오류 코드는 CHREDIST-01-C02.
+- 이력: `question_chapter_changes(id, workspace_id, question_id, from_chapter_id, to_chapter_id, source manual|recommendation|edit|import, changed_by, changed_at)` append-only(UX9부터; 이전 변경은 없음). 활동 `questions.chapters_reassigned`(요청마다, 개수·source만).
+- **정리 노트:** 옮긴 문제가 있던 장과 새 장의 노트는 stale(§9 "장 이동", CHNOTE-01-C03 fingerprint). 노트 본문·각주는 그대로이고, 옮긴 문제의 옛 장 노트 각주는 구성원에게 "삭제되었거나 옮긴 문제"로 보인다. 공유 게스트·Fork의 출처 일치 판정은 바뀌지 않는다(인용 문제의 상태·revision이 그대로이므로 계속 보임 — 내용은 이미 공개 범위).
+- **이미 만든 것:** 범위 풀이 묶음(`practice_runs.item_ids`)·모의고사 문제·그 풀이는 바뀌지 않는다. 모의고사 범위 고르기의 출처 장 묶음은 원본의 지금 장(MOCK-01-C10)이라 새 장으로 보인다. 문제의 해설 하이라이트(§15)는 문제를 따라 새 장의 `내 하이라이트`로 간다.
+- **문제 번호:** 번호는 바꾸지 않는다. 다른 장에서 옮겨 와 같은 장에 같은 번호가 둘이면 Heatmap 순서(`sort_order`, 번호, 등록 순)대로 둘 다 보인다(제안 — 사용자 확인 필요: 번호 충돌을 막지 않음).
+
+## 15. 하이라이트와 `내 하이라이트` (UX9-SPEC 2026-11-02)
+
+화면·AC는 [HILITE-01](screens/highlights.md)·[CHNOTE-02](screens/chapter-note-tools.md). 사용자 피드백 "하이라이트 기능 추가: 텍스트 선택 시 dropdown menu 노출 … 문제 해설(AI 생성 문구 포함)을 하이라이트하면 정리 노트에 추가 · 하이라이트 목록 관리 · 정리 노트 하이라이트를 위한 툴을 공통으로 쓰면 될듯", 사용자 결정 2026-11-02 C3·C4·C5.
+
+- **개인 기록:** 사용자마다 서버에 저장(`user_highlights`, architecture §5)되어 그 사용자의 기기 사이에 이어진다. 다른 구성원·공유 링크 게스트·Fork에는 없다(§"공유 Workspace에서의 문제 개인정보 규칙" — `question_user_states`와 같은 범위). 구성원 누구나(viewer 포함) 만들고, 보관된 Workspace에서는 읽기만(제안 — 사용자 확인 필요).
+- **대상 세 가지:** (1) 정리 노트 **버전**(§9; 버전이 바뀌지 않으므로 위치가 고정, 다시 만든 새 버전에는 없음), (2) 문제 해설(`question_revisions.explanation` — 만든 revision과 인용 글을 기억), (3) AI 해설 버전(AIEXPL-01, `question_ai_explanations` — ASK-SPEC merge 뒤). 발문·보기·모의고사 문제·공유 화면에는 없다(제안).
+- **위치(anchor) 모델:** `{block, start, end}`(노트 = `body.sections[i].items[j]`의 렌더링 글, 해설 = 해설 글의 문단 i) + 서버가 저장된 글에서 자른 `quote`(≤ 2,000자)·`prefix`·`suffix`(앞뒤 32자). 글이 바뀌지 않으면(같은 노트 버전, 같은 revision) `exact`, 바뀌었으면 quote + prefix/suffix로 지금 글에서 다시 찾아 `relocated`, 못 찾으면 `missing`(해설에 표시하지 않고 `내 하이라이트`에 "해설이 바뀌어 위치를 찾을 수 없습니다"/"이전 AI 해설의 하이라이트"로 남김; 자동으로 지우지 않음).
+- **장에 모으기:** 해설·AI 해설 하이라이트는 읽을 때 문제의 **지금** `chapter_id`로 장을 정한다 — 문제를 옮기면(§14) 따라간다. 장의 살아 있는 CONFIRMED 문제만(보관·삭제·초안 문제의 하이라이트는 숨김, 보관 해제하면 다시 보임; 문제 행이 지워지면 cascade). "챕터 없음" 문제는 "챕터 없음" 그룹의 `내 하이라이트` panel(제안).
+- **정답·해설 비노출:** practice API·범위 풀이 item 응답에는 하이라이트가 없다. 풀이 화면은 해설이 보인 뒤(제출 후)에만 하이라이트를 불러온다. `내 하이라이트`는 사용자가 고른 인용만 보이고 그 주변의 지금 해설 글은 보이지 않는다 — 사용자가 이미 본 글이다(AI 해설을 다시 만들어도 사용자가 보지 않은 새 글은 `내 하이라이트`에 나타나지 않는다). 하이라이트 읽기 권한은 정답·해설을 이미 모든 구성원에게 주는 `GET /questions/{id}`와 같다. 노트 panel 자체는 원래 정답·해설 내용을 보이는 곳이다(§9).
+- **검색:** 노트 안 검색(CHNOTE-02)은 지금 버전 본문·각주 목록·`내 하이라이트` 인용을 찾는다.
+- **기록:** 하이라이트는 Workspace 활동 기록(`activity_events`, 이력 dialog)을 남기지 않는다(제안 — 사용자 확인 필요: 개인 주석이라 Workspace 이력에 섞지 않음; 대안: 즐겨찾기처럼 기록). 행의 `created_at`·`updated_at`·`deleted_at`이 자기 기록이다. 인용 글은 로그·trace·URL에 넣지 않는다.
