@@ -525,9 +525,11 @@ def test_source_question_view_and_fingerprint(world: World) -> None:
     assert len(source_fingerprint(source)) == 64
 
 
-def test_the_job_is_registered_with_the_scenario_llm_in_test_only() -> None:
+def test_the_retired_job_is_not_registered_and_keeps_the_scenario_llm_in_test_only() -> None:
+    # QGEN-RM retired 변형 출제: the worker no longer runs `question.generate` (its queued jobs are
+    # failed by the reconciler, test_recovery.py); the job module stays for the shared helpers.
     settings = WorkerSettings.model_construct(app_env=Environment.LOCAL)
-    assert JOB_TYPE in {d.job_type for d in default_definitions(settings)}
+    assert JOB_TYPE not in {d.job_type for d in default_definitions(settings)}
     test_env = WorkerSettings.model_construct(app_env=Environment.TEST, llm_scenario_file=None)
     assert isinstance(build_generation_llm(test_env), ScenarioLLMClient)
 
