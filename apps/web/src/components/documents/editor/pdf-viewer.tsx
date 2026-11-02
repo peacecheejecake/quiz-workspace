@@ -9,7 +9,10 @@
 // network. The current page is the page under the upper quarter line of the viewport; the toolbar
 // keeps "현재 페이지", previous/next and zoom (fit width by default), and the selected block's
 // source is highlighted from its bbox (PDF points, origin top-left). The reading area is an opaque
-// surface — no glass/blur over it (design-system §1, checklist).
+// surface — no glass/blur over it (design-system §1, checklist). DOCVIEW-01: the viewer may be
+// hidden (원본 hidden by a view mode, or the other pane on a narrow screen) and resized by the
+// splitter; a hidden viewer keeps its document and drawings, takes jumps made meanwhile when it is
+// shown again, and a splitter drag redraws only once, after the release.
 import { Button, IconButton } from '@quiz/ui';
 import {
   memo,
@@ -20,7 +23,6 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
-  type ReactNode,
 } from 'react';
 import type { ContentBlock } from '@/lib/documents/editor-api';
 import {
@@ -61,8 +63,11 @@ export interface PdfViewerProps {
   readonly highlights: ContentBlock['locations'];
   /** Changes whenever the highlight should be scrolled into view. */
   readonly highlightKey?: string | null;
-  /** Toolbar slot before the page controls (the 목차 toggle, DOC-02-AC06). */
-  readonly toolbarStart?: ReactNode;
+  /**
+   * The pane is being resized (DOCVIEW-01 splitter drag): page boxes follow the width but drawing
+   * waits; the pages are redrawn once for the final width when this turns false.
+   */
+  readonly deferResize?: boolean;
   readonly className?: string;
 }
 
@@ -166,7 +171,7 @@ export function PdfViewer({
   onPageCount,
   highlights,
   highlightKey,
-  toolbarStart,
+  deferResize = false,
   className,
 }: PdfViewerProps) {
   const [attempt, setAttempt] = useState(0);
@@ -268,10 +273,10 @@ export function PdfViewer({
   // and the last drawing is stretched.
   const [renderScale, setRenderScale] = useState(scale);
   useEffect(() => {
-    if (renderScale === scale) return;
+    if (renderScale === scale || deferResize) return;
     const timer = setTimeout(() => setRenderScale(scale), zoom === 'fit' ? REDRAW_DELAY_MS : 0);
     return () => clearTimeout(timer);
-  }, [renderScale, scale, zoom]);
+  }, [deferResize, renderScale, scale, zoom]);
 
   const layout: PageLayout | null = useMemo(
     () => (pageCount && firstPage ? layoutPages(pageCount, firstPage, sizes, scale) : null),
@@ -385,6 +390,21 @@ export function PdfViewer({
     const highlightChanged = shownHighlight.current !== highlightKey;
     shownHighlight.current = highlightKey;
     const box = highlights.find((l) => l.bbox !== null && l.page >= 1);
+    if (scroller.clientHeight === 0) {
+      // Hidden (DOCVIEW-01 view mode or narrow-screen pane): nothing can scroll now. Remember the
+      // spot instead; showing the viewer again restores it (see the width measurement above).
+      if (highlightChanged && box?.bbox && box.page <= current.tops.length) {
+        const height = current.heights[box.page - 1] ?? 1;
+        anchor.current = {
+          page: box.page,
+          fraction: Math.min(Math.max((box.bbox.y0 * scaleRef.current) / height, 0), 1),
+        };
+      } else if (target !== shownPage.current) {
+        anchor.current = { page: target, fraction: 0 };
+      }
+      shownPage.current = target;
+      return;
+    }
     if (highlightChanged && box?.bbox) {
       const y = (current.tops[box.page - 1] ?? 0) + box.bbox.y0 * scaleRef.current;
       scrollToTop(y - scroller.clientHeight * READING_LINE);
@@ -570,7 +590,6 @@ export function PdfViewer({
     <div className={`${styles.viewer} ${className ?? ''}`}>
       <div className={styles.viewerToolbar} role="toolbar" aria-label="PDF 보기 도구">
         <div className={styles.toolbarGroup}>
-          {toolbarStart}
           <IconButton
             label="이전 페이지"
             icon={<span aria-hidden="true">‹</span>}

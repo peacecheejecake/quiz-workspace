@@ -41,7 +41,7 @@ region 이름은 화면 문구(원본·변환본)를 담고 기존 E2E helper(`/
 ### 데스크톱 (≥ 1024px)
 
 - **보기 설정 막대**: `PublishBar`·안내(note/alert) 아래, 분할 영역 바로 위 한 줄. 왼쪽부터 `목차` 펼치기/접기 toggle, `보기 방식` radio group(함께 보기 · 원본 · 변환본), 함께 보기일 때만 `분할 방향` radio group(좌우 · 상하)과 `위치 바꾸기` 버튼. 이름 "보기 설정"인 `role="group"`. 선택 상태는 `aria-checked` + 선택 배경 + 굵은 글씨(색만으로 구분하지 않음, design-system §4.1). PDF 도구 막대에는 더 이상 `목차` 토글이 없다(DOC-02-AC06 폐기).
-- **목차 panel**: 분할 영역의 왼쪽 위에 떠 있는 docked `FloatingSidePanel`(`side="start"`, `placement="docked"`, non-modal, glass surface·`--shadow-floating`·radius token; viewport가 아니라 화면의 분할 영역에 붙는다). 제목 `목차`, 안에 기존 `nav "문서 목차"` + tree. 높이는 분할 영역과 같고 내용은 독립 scroll. 폭 `--outline-panel-width`(20rem, DOC-02 v1.4 `size="narrow"` 목차 panel과 같은 폭을 token으로).
+- **목차 panel**: 분할 영역의 왼쪽 위에 떠 있는 docked `FloatingSidePanel`(`side="start"`, `placement="docked"`, non-modal, glass surface·`--shadow-floating`·radius token; viewport가 아니라 화면의 분할 영역에 붙는다). 제목 `목차`(dialog 이름), 안에 기존 tree `목차`(DOC-02 v1.4처럼 별도 `nav` landmark 없음). 높이는 분할 영역과 같고 내용은 독립 scroll. 폭 `--outline-panel-width`(20rem, DOC-02 v1.4 `size="narrow"` 목차 panel과 같은 폭을 token으로).
   - 펼침: 분할 영역(원본·변환본)이 panel 폭만큼 오른쪽으로 비켜선다 — panel이 pane 내용을 가리지 않는다(Workspace 홈 dialog의 "내용이 비켜선다" 규칙과 같음).
   - 접힘: panel이 사라지고 분할 영역이 전체 폭을 쓴다. 보기 설정 막대의 `목차` toggle(`aria-expanded=false`, 접근성 이름 `목차 펼치기`)이 남는 손잡이다. 펼쳐져 있을 때 toggle 이름은 `목차 접기`, panel header의 접기 버튼(`목차 접기`)도 같은 동작.
   - 펼치기/접기는 transform+opacity `--duration-panel-enter`(reduced-motion: 즉시). Escape는 focus가 panel 안에 있을 때만 접는다(non-modal 규칙). 접으면 focus는 `목차 펼치기` toggle로, 사용자가 펼치면 focus는 tree의 현재 항목(없으면 첫 항목)으로 간다. 저장된 설정으로 펼쳐진 채 열린 페이지는 focus를 옮기지 않는다.
