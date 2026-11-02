@@ -229,6 +229,24 @@ function useKeyedLoad<T>(
   return state?.key === key ? state.load : LOADING;
 }
 
+/**
+ * The Idempotency-Key of one creation request (QVIEW-01-C01): kept while the same payload is
+ * retried — a failure may be a lost response of a run the server created, which a retry with the
+ * same key recovers — and new for another payload or after a confirmed success.
+ */
+function useRequestKey() {
+  const ref = useRef<{ readonly payload: string; readonly key: string } | null>(null);
+  return {
+    keyFor(payload: string): string {
+      if (ref.current?.payload !== payload) ref.current = { payload, key: newKey() };
+      return ref.current.key;
+    },
+    succeeded(): void {
+      ref.current = null;
+    },
+  };
+}
+
 export function SequenceViewer({
   workspaceId,
   state,
@@ -433,23 +451,35 @@ function usePickerStep({
   const tooLarge = count > PRACTICE_RUN_MAX;
   const reason =
     count === 0 ? '풀 문제를 고르세요' : tooLarge ? RUN_FAILURE_MESSAGES.tooLarge : null;
-  const [startKey, setStartKey] = useState(newKey);
+  const startKey = useRequestKey();
   const reasonId = useId();
+  // The opening a 시작 belongs to: a run created after the panel closed (or for an earlier
+  // opening) is not started — the dismissed panel stays closed.
+  const liveOpening = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    liveOpening.current = active ? opening : null;
+  });
 
   async function start() {
     if (!request || tooLarge || starting || busy) return;
+    const token = opening;
+    const key = startKey.keyFor(JSON.stringify([request, random]));
     setStarting(true);
     setStartError(null);
     let result: RunActionResult<PracticeRun>;
     try {
-      result = await client.create(request, random, startKey);
+      result = await client.create(request, random, key);
     } catch {
       result = { ok: false, kind: 'unavailable', message: RUN_FAILURE_MESSAGES.unavailable };
     }
-    setStartKey(newKey());
+    if (liveOpening.current !== token) return;
     setStarting(false);
-    if (result.ok) onStarted(result.data.id);
-    else setStartError(result.message);
+    if (result.ok) {
+      startKey.succeeded();
+      onStarted(result.data.id);
+    } else {
+      setStartError(result.message);
+    }
   }
 
   const error = load?.status === 'error' ? load.message : null;
@@ -612,8 +642,11 @@ function useSolveStep({
   }
   const opening = sessionWanted && sessionOpening?.itemKey === itemKey ? sessionOpening : null;
   const questionId = item?.question_id ?? null;
-  const sessionLoad = useKeyedLoad(opening ? `${opening.itemKey}:${opening.key}` : null, () =>
-    client.openSession(questionId ?? '', runId ?? '', position, opening?.key ?? ''),
+  // 다시 시도 after a failed opening asks again with the same key (one session per opening).
+  const [sessionRetry, setSessionRetry] = useState(0);
+  const sessionLoad = useKeyedLoad(
+    opening ? `${opening.itemKey}:${opening.key}:${sessionRetry}` : null,
+    () => client.openSession(questionId ?? '', runId ?? '', position, opening?.key ?? ''),
   );
   const session = sessionLoad?.status === 'ready' ? sessionLoad.data : null;
   const sessionId = session?.id ?? null;
@@ -720,7 +753,17 @@ function useSolveStep({
     } catch {
       result = { ok: false, kind: 'unavailable', message: '제출하지 못했습니다. 다시 시도하세요.' };
     }
-    if (result.ok) onGraded?.(qid, result.data.result);
+    if (result.ok) {
+      onGraded?.(qid, result.data.result);
+    } else if (runId) {
+      // The answer may have been recorded and only the response lost (or another tab submitted
+      // it): when the position now has an attempt, show what the server kept.
+      const again = await client.getItem(runId, position).catch(() => null);
+      if (liveWork.current === workId && again?.ok && again.data.attempt) {
+        setItemSeq((n) => n + 1);
+        return;
+      }
+    }
     updateWork(workId, () =>
       result.ok
         ? { busy: null, outcome: result.data }
@@ -774,8 +817,15 @@ function useSolveStep({
 
   const total = run?.total ?? item?.total ?? null;
   const last = total !== null && position >= total;
-  const go = (to: number) => onNavigate({ step: 'solve', runId: view.runId, position: to }, 'push');
-  const toResults = () => onNavigate({ step: 'results', runId: view.runId }, 'replace');
+  // A submission or a self-grade in flight holds the position: finishing the run under it would
+  // refuse the answer (409 practice-run-finished) and count it as skipped.
+  const holding = work.busy !== null;
+  const go = (to: number) => {
+    if (!holding) onNavigate({ step: 'solve', runId: view.runId, position: to }, 'push');
+  };
+  const toResults = () => {
+    if (!holding) onNavigate({ step: 'results', runId: view.runId }, 'replace');
+  };
   const forward = () => (last ? toResults() : go(position + 1));
 
   const revealed: RevealedAnswers | null = work.outcome ?? item?.attempt ?? null;
@@ -841,10 +891,13 @@ function useSolveStep({
           <p className={styles.notice}>{RUN_FAILURE_MESSAGES.archived}</p>
         ) : null}
         {finished && !answered ? <p className={styles.notice}>건너뛴 문제입니다.</p> : null}
-        {sessionLoad?.status === 'error' && sessionKind !== 'alreadySubmitted' ? (
-          <p role="alert" className={styles.error}>
-            {sessionLoad.message}
-          </p>
+        {sessionLoad?.status === 'error' &&
+        sessionKind !== 'alreadySubmitted' &&
+        sessionKind !== 'finished' ? (
+          <div role="alert" className={styles.error}>
+            <p>{sessionLoad.message}</p>
+            <Button onClick={() => setSessionRetry((n) => n + 1)}>다시 시도</Button>
+          </div>
         ) : null}
         <form
           id={formId}
@@ -890,7 +943,7 @@ function useSolveStep({
       ) : null}
       <nav className={styles.nav} aria-label="문제 이동">
         {position > 1 ? (
-          <Button size="sm" onClick={() => go(position - 1)}>
+          <Button size="sm" disabled={holding} onClick={() => go(position - 1)}>
             이전
           </Button>
         ) : null}
@@ -899,16 +952,17 @@ function useSolveStep({
           <Button
             size="sm"
             variant={!item || !run || canAnswer ? 'secondary' : 'primary'}
+            disabled={holding}
             onClick={toResults}
           >
             결과 보기
           </Button>
         ) : !item || !run || canAnswer ? (
-          <Button size="sm" onClick={forward}>
+          <Button size="sm" disabled={holding} onClick={forward}>
             건너뛰기
           </Button>
         ) : (
-          <Button size="sm" variant="primary" onClick={forward}>
+          <Button size="sm" variant="primary" disabled={holding} onClick={forward}>
             다음
           </Button>
         )}
@@ -988,12 +1042,31 @@ function useResultsStep({
   const [loadingMore, setLoadingMore] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [restartKey, setRestartKey] = useState(newKey);
+  const restartKey = useRequestKey();
+  // Each showing of the results step: an answer that arrives after it closed (or after it showed
+  // again) is dropped — a late 처음부터 다시 never reopens a dismissed panel.
+  const [visit, setVisit] = useState(0);
+  const [seenRunId, setSeenRunId] = useState(runId);
+  if (runId !== seenRunId) {
+    setSeenRunId(runId);
+    if (runId) {
+      setVisit((n) => n + 1);
+      setError(null);
+      setRestarting(false);
+      setLoadingMore(false);
+    }
+  }
+  const liveVisit = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    liveVisit.current = runId ? visit : null;
+  });
 
   async function loadMore() {
     if (!data || !runId || loadingMore) return;
+    const token = visit;
     setLoadingMore(true);
     const page = await client.results(runId, items.length).catch(() => null);
+    if (liveVisit.current !== token) return;
     setLoadingMore(false);
     if (page?.ok) setMore({ runId, items: [...extra, ...page.data.items] });
     else setError(page?.message ?? RUN_FAILURE_MESSAGES.unavailable);
@@ -1001,8 +1074,11 @@ function useResultsStep({
 
   async function restart() {
     if (!data || !runId || restarting) return;
+    const token = visit;
     setRestarting(true);
     setError(null);
+    let failure: string | null = null;
+    let started: string | null = null;
     try {
       // The same questions (those still available) and the same order setting, as a new run.
       const all = [...items];
@@ -1012,15 +1088,22 @@ function useResultsStep({
         if (page.data.items.length === 0) break;
         all.push(...page.data.items);
       }
-      const created = await client.create(restartRange(all), data.run.random_order, restartKey);
-      setRestartKey(newKey());
-      if (created.ok) onNavigate({ step: 'solve', runId: created.data.id, position: 1 }, 'replace');
-      else setError(created.message);
+      const range = restartRange(all);
+      const key = restartKey.keyFor(JSON.stringify([range, data.run.random_order]));
+      const created = await client.create(range, data.run.random_order, key);
+      if (created.ok) {
+        restartKey.succeeded();
+        started = created.data.id;
+      } else {
+        failure = created.message;
+      }
     } catch {
-      setError(RUN_FAILURE_MESSAGES.unavailable);
-    } finally {
-      setRestarting(false);
+      failure = RUN_FAILURE_MESSAGES.unavailable;
     }
+    if (liveVisit.current !== token) return;
+    setRestarting(false);
+    if (started) onNavigate({ step: 'solve', runId: started, position: 1 }, 'replace');
+    else setError(failure);
   }
 
   let body: ReactNode;
