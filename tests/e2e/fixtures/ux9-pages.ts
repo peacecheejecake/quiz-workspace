@@ -251,9 +251,12 @@ export const reviewListUi = {
   cancelSwitch: (dialog: Locator) => dialog.getByRole('button', { name: /^(취소|cancel)$/i }),
   notFound: (page: Page) => main(page).getByText(/pdf를 찾을 수 없습니다|pdf not found/i),
   empty: (page: Page) => main(page).getByText(/추출된 문제가 없습니다/),
-  /** The review pane's title (the selected PDF's title; focus lands on it after a switch). */
+  /**
+   * The review pane's h2 = the selected PDF's title (focus lands on it after a switch); the page
+   * h1 stays "문제 PDF 가져오기" (decision 2026-11-02).
+   */
   reviewTitle: (page: Page, title: string) =>
-    main(page).getByRole('heading', { name: title, exact: true }),
+    main(page).getByRole('heading', { level: 2, name: title, exact: true }),
 };
 
 /** The status text of a row: "초안 n개 · 등록 m개". */

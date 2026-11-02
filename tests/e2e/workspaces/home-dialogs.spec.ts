@@ -234,25 +234,32 @@ test(
       await expect(overviewUi.dots(page).first()).toBeVisible();
       await expect(d.dialog(page), `${d.name} after Back/Forward`).toHaveCount(0);
 
-      // Real clicks on a marker and a header button while it is open open nothing.
+      // A real click on a marker, then on a header button, with the dialog open (reopened and
+      // on top before each probe): the click may land on the backdrop and close a dialog that
+      // has nothing to lose, but never activates what is behind it.
       const marker = await overviewUi.dots(page).first().boundingBox();
       const header = await homeUi.questionMenuButton(page).boundingBox();
       if (!marker || !header) throw new Error('home controls are not visible');
-      await d.open(page);
-      await expect(dialog).toBeVisible();
-      for (const box of [marker, header]) {
+      for (const [what, box] of [
+        ['marker', marker],
+        ['header button', header],
+      ] as const) {
+        await d.open(page);
+        await expectModal(page, dialog, `${d.name} before the ${what} click`);
         await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-        await expect(panelUi.panel(page), `${d.name}: no question panel`).toHaveCount(0);
-        await expect(page.getByRole('menu'), `${d.name}: no menu`).toHaveCount(0);
+        const probe = `${d.name}, ${what} click`;
+        await expect(panelUi.panel(page), `${probe}: no question panel`).toHaveCount(0);
+        await expect(page.getByRole('menu'), `${probe}: no menu`).toHaveCount(0);
         const url = new URL(page.url());
-        expect(url.searchParams.has('question'), d.name).toBe(false);
+        expect(url.searchParams.has('question'), `${probe}: no question=`).toBe(false);
         expect(
           url.searchParams.getAll('panel').every((p) => p === d.panel),
-          d.name,
+          `${probe}: no other panel`,
         ).toBe(true);
-      }
-      if (await dialog.isVisible()) {
-        await page.keyboard.press('Escape');
+        // Closed by the backdrop or still open: either way, close it before the next probe.
+        if (await dialog.isVisible()) {
+          await page.keyboard.press('Escape');
+        }
         await expect(dialog).toHaveCount(0);
       }
     }
