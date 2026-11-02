@@ -363,6 +363,28 @@ test(
     await expect(documents).toBeVisible();
     await expect.poll(() => hasFocusWithin(summary)).toBe(true);
     expect(await isBlocked(documents), '문서 관리 under 문서 요약 (deep link)').toBe(true);
+
+    // Mixed dialog types in one deep link: the centered 문제 등록 editor, then 문서 관리 on top —
+    // the active (last) dialog is also the one drawn on top, its backdrop over the editor.
+    await page.goto(homePath(s.workspaceId, 'panel=question-create&panel=documents'));
+    const editor = page.getByRole('dialog', {
+      name: /^(문제 등록|new question)$/i,
+      includeHidden: true,
+    });
+    await expect(editor).toBeVisible();
+    await expect(documents).toBeVisible();
+    await expect.poll(() => hasFocusWithin(documents)).toBe(true);
+    expect(await isBlocked(editor), '문제 등록 under 문서 관리').toBe(true);
+    const z = (l: Locator) => l.evaluate((el) => Number(getComputedStyle(el).zIndex));
+    expect(await z(documents), '문서 관리 drawn above 문제 등록').toBeGreaterThan(await z(editor));
+    // What is under the dialog's own first control is that control (not the editor's backdrop).
+    const close = documents.getByRole('button', { name: /문서 관리 닫기|close/i });
+    const hit = await close.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return top !== null && el.contains(top);
+    });
+    expect(hit, '문서 관리 receives the pointer').toBe(true);
   },
 );
 

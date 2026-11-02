@@ -308,23 +308,31 @@ describe('layering', () => {
       expect(step('둘째')).toBeGreaterThan(step('첫째'));
     });
 
-    it('keeps modal dialogs above every panel', async () => {
-      render(
-        <>
-          <FloatingSidePanel defaultOpen modal={false} title="패널">
-            패널
-          </FloatingSidePanel>
-          <ModalDialog defaultOpen title="확인">
-            확인
-          </ModalDialog>
-        </>,
-      );
-      await screen.findByRole('dialog', { name: '확인' });
-      // Panels are capped at --z-modal - 2 (their popovers at - 1); the modal uses --z-modal.
-      expect(step(document.querySelector<HTMLElement>('.qz-panel') as HTMLElement)).toBe(0);
-      expect(document.querySelector('.qz-modal')?.getAttribute('style') ?? '').not.toContain(
-        'z-index',
-      );
+    it('stacks modal dialogs and panels in one opening order (UX9, HOMEDLG-01)', async () => {
+      const user = userEvent.setup();
+      function Mixed() {
+        const [panel, setPanel] = useState(false);
+        return (
+          <>
+            <ModalDialog defaultOpen title="문제 등록">
+              <button type="button" onClick={() => setPanel(true)}>
+                문서 관리 열기
+              </button>
+            </ModalDialog>
+            <FloatingSidePanel open={panel} onOpenChange={setPanel} title="문서 관리">
+              문서
+            </FloatingSidePanel>
+          </>
+        );
+      }
+      render(<Mixed />);
+      const editor = await screen.findByRole('dialog', { name: '문제 등록' });
+      await user.click(screen.getByRole('button', { name: '문서 관리 열기' }));
+      const documents = await screen.findByRole('dialog', { name: '문서 관리' });
+      // The panel opened later sits above the modal dialog, its backdrop included.
+      expect(step(documents)).toBeGreaterThan(step(editor));
+      const backdrops = [...document.querySelectorAll<HTMLElement>('.qz-backdrop')];
+      expect(backdrops.map((b) => step(b))).toEqual([step(editor), step(documents)]);
     });
   });
 });

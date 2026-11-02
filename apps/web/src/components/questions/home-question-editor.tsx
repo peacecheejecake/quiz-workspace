@@ -16,6 +16,7 @@ export function HomeQuestionEditor({
   session,
   onClose,
   onSaved,
+  container,
 }: {
   readonly workspaceId: string;
   /** Null while closed. */
@@ -24,6 +25,8 @@ export function HomeQuestionEditor({
   readonly session: number;
   readonly onClose: () => void;
   readonly onSaved?: (question: Question, mode: 'create' | 'edit') => void;
+  /** Where the dialog is portalled (the home's dialog container, HOMEDLG-01). */
+  readonly container?: HTMLElement | null;
 }) {
   // Re-read on every opening (a book may have become ready meanwhile); the last one shows until then.
   const [context, setContext] = useState<QuestionEditorContext>(EMPTY);
@@ -48,6 +51,7 @@ export function HomeQuestionEditor({
       target={target}
       session={session}
       onClose={onClose}
+      container={container}
       chapters={context.chapters}
       documents={context.documents}
       onSaved={(question, mode) => onSaved?.(question, mode)}

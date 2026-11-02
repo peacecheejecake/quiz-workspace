@@ -684,6 +684,7 @@ export function WorkspaceHome({
         onRunClose={closeRun}
         createOpen={shows(QUESTION_CREATE_PANEL)}
         holdPanels={holdPracticePanels}
+        dialogContainer={host}
         onCreateOpenChange={(open) => setPanel(QUESTION_CREATE_PANEL, open)}
         documents={documentTitles}
         onQuestionsChanged={() => setQuestionsVersion((n) => n + 1)}

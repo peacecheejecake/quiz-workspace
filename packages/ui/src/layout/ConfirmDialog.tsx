@@ -4,7 +4,7 @@ import { AlertDialog } from 'radix-ui';
 import type { ReactNode, RefObject } from 'react';
 import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
-import { LayerProvider } from '../internal/layer';
+import { LayerProvider, useFloatingLayer } from '../internal/layer';
 import { useModalStackEntry } from '../internal/modal-stack';
 import { useMergedRefs } from '../internal/merge-refs';
 import { useOverscrollGuard } from '../internal/overscroll-guard';
@@ -49,6 +49,7 @@ export function ConfirmDialog({
   // Radix's modal scroll lock covers this too; the guard keeps every overlay alike (UX9-SCROLL).
   const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
   const surfaceRef = useMergedRefs(animateHeight, guardOverscroll);
+  const layer = useFloatingLayer(open);
   // Escape cancels it (unless busy), also while a toast is shown over it.
   useModalStackEntry(open, () => {
     if (!loading) onOpenChange(false);
@@ -61,11 +62,17 @@ export function ConfirmDialog({
       }}
     >
       <AlertDialog.Portal>
-        <AlertDialog.Overlay className="qz-backdrop" data-layer="modal" />
+        <AlertDialog.Overlay
+          className="qz-backdrop"
+          data-layer="modal"
+          style={{ zIndex: layer.zIndex }}
+        />
         <AlertDialog.Content
           ref={surfaceRef}
           aria-modal="true"
           data-size="sm"
+          data-layer-rank={layer.rank}
+          style={{ zIndex: layer.zIndex }}
           className={cx('qz-modal', className)}
           onCloseAutoFocus={(event) => {
             const target = returnFocusRef?.current;
@@ -74,7 +81,7 @@ export function ConfirmDialog({
             target.focus({ preventScroll: true });
           }}
         >
-          <LayerProvider value="var(--z-modal)">
+          <LayerProvider value={layer.zIndex}>
             <div className="header">
               <div className="heading">
                 <AlertDialog.Title className="title">{title}</AlertDialog.Title>

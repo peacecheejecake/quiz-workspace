@@ -63,6 +63,8 @@ export interface QuestionEditorProps {
   readonly documents: readonly DocumentOption[];
   /** A save succeeded (also for a session that is no longer on screen). */
   readonly onSaved: (question: Question, mode: 'create' | 'edit') => void;
+  /** Where the dialog is portalled (the home's dialog container, HOMEDLG-01). */
+  readonly container?: HTMLElement | null;
 }
 
 const NO_CHAPTER = '__none__';
@@ -82,6 +84,7 @@ export function QuestionEditor({
   chapters,
   documents,
   onSaved,
+  container,
 }: QuestionEditorProps) {
   const { toast } = useToast();
   const sessionRef = useRef(session);
@@ -143,6 +146,7 @@ export function QuestionEditor({
   const title = target?.mode === 'edit' ? '문제 편집' : '문제 등록';
   return (
     <ModalDialog
+      container={container}
       open={target !== null}
       onOpenChange={(next) => {
         if (!next) onClose();

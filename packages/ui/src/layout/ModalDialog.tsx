@@ -6,7 +6,7 @@ import { useAnimatedHeight } from '../internal/animated-height';
 import { useBackdropClose } from '../internal/backdrop';
 import { cx } from '../internal/cx';
 import { DirtyProvider, useDirtyRegistry } from '../internal/dirty';
-import { LayerProvider } from '../internal/layer';
+import { LayerProvider, useFloatingLayer } from '../internal/layer';
 import { useModalStackEntry } from '../internal/modal-stack';
 import { useMergedRefs } from '../internal/merge-refs';
 import { useOverscrollGuard } from '../internal/overscroll-guard';
@@ -41,11 +41,20 @@ export interface ModalDialogProps {
   size?: 'sm' | 'md';
   onOpenAutoFocus?: ContentProps['onOpenAutoFocus'];
   onCloseAutoFocus?: ContentProps['onCloseAutoFocus'];
+  /**
+   * Element the dialog is portalled into (default: `document.body`). A dialog stacked with other
+   * modal panels of a page passes their container (the workspace home's dialogs live in <main>),
+   * so the one opened later never hides the earlier ones' container from assistive technology.
+   */
+  container?: HTMLElement | null;
   className?: string;
   children?: ReactNode;
 }
 
-/** Centered modal dialog (z-index `--z-modal`) on Radix Dialog: focus trap, Escape, focus return. */
+/**
+ * Centered modal dialog on Radix Dialog: focus trap, Escape, focus return. It stacks with the
+ * floating panels in opening order (internal/layer.tsx; UX9, HOMEDLG-01).
+ */
 export function ModalDialog({
   open,
   defaultOpen,
@@ -60,6 +69,7 @@ export function ModalDialog({
   size = 'md',
   onOpenAutoFocus,
   onCloseAutoFocus,
+  container,
   className,
   children,
 }: ModalDialogProps) {
@@ -76,19 +86,29 @@ export function ModalDialog({
   };
   const registry = useDirtyRegistry();
   useModalStackEntry(isOpen, () => changeOpen(false));
+  // One stacking order with the panels (UX9, HOMEDLG-01): the layer opened later is on top,
+  // whether a centered dialog or a side panel.
+  const layer = useFloatingLayer(isOpen);
   const backdrop = useBackdropClose(closeOnBackdropClick && !dirty && !registry.dirty, () =>
     changeOpen(false),
   );
   return (
     <Dialog.Root open={isOpen} onOpenChange={changeOpen}>
       {trigger ? <Dialog.Trigger asChild>{trigger}</Dialog.Trigger> : null}
-      <Dialog.Portal>
-        <Dialog.Overlay className="qz-backdrop" data-layer="modal" {...backdrop} />
+      <Dialog.Portal container={container}>
+        <Dialog.Overlay
+          className="qz-backdrop"
+          data-layer="modal"
+          style={{ zIndex: layer.zIndex }}
+          {...backdrop}
+        />
         <Dialog.Content
           ref={surfaceRef}
           // Radix hides the background from assistive technology but does not set aria-modal.
           aria-modal="true"
           data-size={size}
+          data-layer-rank={layer.rank}
+          style={{ zIndex: layer.zIndex }}
           className={cx('qz-modal', className)}
           {...(description ? {} : { 'aria-describedby': undefined })}
           onOpenAutoFocus={onOpenAutoFocus}
@@ -102,7 +122,7 @@ export function ModalDialog({
             if (handlesOwnEscape(event)) event.preventDefault();
           }}
         >
-          <LayerProvider value="var(--z-modal)">
+          <LayerProvider value={layer.zIndex}>
             <DirtyProvider value={registry.report}>
               <div className="header">
                 <div className="heading">

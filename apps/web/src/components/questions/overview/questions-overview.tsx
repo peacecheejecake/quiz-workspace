@@ -128,6 +128,11 @@ export interface QuestionsOverviewProps {
    * deep link's modal layers mount one at a time, in URL order): keep those panels closed meanwhile.
    */
   readonly holdPanels?: boolean;
+  /**
+   * The home's dialog container (inside <main>): the 문제 등록 editor is portalled there with the
+   * home's other modal dialogs, so a dialog stacked over it stays exposed (HOMEDLG-01).
+   */
+  readonly dialogContainer?: HTMLElement | null;
   readonly onCreateOpenChange?: (open: boolean) => void;
   /** The workspace's documents, for the 문제 상세 dialog's source titles (UX7-BANK-2). */
   readonly documents?: readonly { readonly id: string; readonly title: string }[];
@@ -213,6 +218,7 @@ export function QuestionsOverview({
   onQuestionChange,
   createOpen = false,
   holdPanels = false,
+  dialogContainer,
   onCreateOpenChange,
   documents = NO_DOCUMENTS,
   onQuestionsChanged,
@@ -877,6 +883,7 @@ export function QuestionsOverview({
       {canAuthor ? (
         <>
           <HomeQuestionEditor
+            container={dialogContainer}
             workspaceId={workspaceId}
             target={editorTarget}
             session={editorSession}
