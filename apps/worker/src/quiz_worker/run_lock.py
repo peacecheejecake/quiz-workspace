@@ -1,7 +1,7 @@
 """Session-level advisory lock serialising the jobs (and cleanups) of one question run.
 
-Shared by `question.import` (M4.4a) and `question.generate` (M6.2). The lock lives on a dedicated
-connection, so a dead worker's connection drops and releases it.
+Shared by the question import, registration, chapter note and mock exam jobs. The lock lives on
+a dedicated connection, so a dead worker's connection drops and releases it.
 """
 
 from __future__ import annotations
