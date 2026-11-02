@@ -28,7 +28,7 @@ import {
   ProgressBar,
   Skeleton,
 } from '@quiz/ui';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { MockView } from '@/lib/workspaces/home';
 import { createMockExamApi, type MockExamApi } from './mock-exam-client';
 import { MockExamDetail } from './mock-exam-detail';
@@ -91,6 +91,20 @@ export function MockExamsPanel({
   const api = useMemo(() => givenApi ?? createMockExamApi(workspaceId), [givenApi, workspaceId]);
   const [list, setList] = useState<Load<MockExamList>>({ status: 'loading' });
   const [reads, setReads] = useState(0);
+  // 만들기 is tied to the opening that started it (QVIEW-W key rule): a creation that answers after
+  // the person left the form (closed the panel, went back to the list, opened another view or a
+  // new 만들기) keeps the mock exam it made but never navigates or touches the newer form.
+  const [formOpening, setFormOpening] = useState(0);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  /** The opening a creation may still show its answer in (null: not on 만들기). */
+  const liveOpening = useRef<number | null>(null);
+  /** Whether the panel is open on `view` now (for answers that arrive later). */
+  const liveView = useRef<{ open: boolean; view: MockView }>({ open, view });
+  useLayoutEffect(() => {
+    liveOpening.current = open && view.view === 'create' ? formOpening : null;
+    liveView.current = { open, view };
+  });
   const reload = () => setReads((n) => n + 1);
 
   // Read on every opening, then again while a mock exam is being made.
@@ -98,6 +112,10 @@ export function MockExamsPanel({
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) setList({ status: 'loading' });
+    // A new opening of the panel is a new 만들기 too (see formOpening).
+    setFormOpening((n) => n + 1);
+    setCreating(false);
+    setCreateError(null);
   }
   useEffect(() => {
     if (!open) return;
@@ -139,6 +157,10 @@ export function MockExamsPanel({
   if (seenKey !== viewKey) {
     setSeenKey(viewKey);
     setFocusTick((n) => n + 1);
+    // Every arrival on 만들기 is a new opening: a new form, its own creation key.
+    setFormOpening((n) => n + 1);
+    setCreating(false);
+    setCreateError(null);
   }
   useEffect(() => {
     if (focusTick === 0 || !open) return;
@@ -175,7 +197,10 @@ export function MockExamsPanel({
           }
         : prev,
     );
-    if (view.view === 'detail' && view.mockExamId === exam.id) {
+    // Only the open detail of the deleted mock exam goes back to the list (a panel closed
+    // meanwhile stays closed).
+    const now = liveView.current;
+    if (now.open && now.view.view === 'detail' && now.view.mockExamId === exam.id) {
       deleteReturn.current = null;
       onViewChange({ view: 'list' }, 'replace');
     }
@@ -201,26 +226,41 @@ export function MockExamsPanel({
   }
 
   // --- 만들기 ------------------------------------------------------------------------------------
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const createKey = useRef<{ payload: string; key: string } | null>(null);
+  // One Idempotency-Key per opening and payload: a retry of the same opening reuses it (an
+  // ambiguous failure may hide a saved mock exam, which the retry gets back), a new opening or
+  // another payload gets a fresh one, and a confirmed success retires only its own key.
+  const createKey = useRef<{ opening: number; payload: string; key: string } | null>(null);
   async function create(value: MockExamSubmit) {
     if (creating) return;
-    // A retry of the same payload reuses its key: the lost answer of a saved one comes back.
+    const opening = formOpening;
     const payload = JSON.stringify(value);
-    if (createKey.current?.payload !== payload) {
-      createKey.current = { payload, key: crypto.randomUUID() };
-    }
+    const held = createKey.current;
+    const key =
+      held && held.opening === opening && held.payload === payload
+        ? held.key
+        : (createKey.current = { opening, payload, key: crypto.randomUUID() }).key;
     setCreating(true);
     setCreateError(null);
-    const result = await api.create(value, createKey.current.key);
+    let result: Awaited<ReturnType<MockExamApi['create']>>;
+    try {
+      result = await api.create(value, key);
+    } catch {
+      result = {
+        ok: false,
+        kind: 'unavailable',
+        message: '모의고사를 만들지 못했습니다. 다시 시도하세요.',
+      };
+    }
+    if (result.ok) {
+      if (createKey.current?.key === key) createKey.current = null;
+      reload();
+    }
+    if (liveOpening.current !== opening) return;
     setCreating(false);
     if (!result.ok) {
       setCreateError(result.message);
       return;
     }
-    createKey.current = null;
-    reload();
     onViewChange({ view: 'detail', mockExamId: result.data.id }, 'replace');
   }
 
@@ -262,8 +302,15 @@ export function MockExamsPanel({
     body =
       list.status === 'loading' ? (
         <Loading />
+      ) : list.status === 'error' ? (
+        // The environment's AI availability comes with the list: without it, read it again.
+        <div role="alert" className={styles.alert}>
+          <p>{list.message}</p>
+          <Button onClick={reload}>다시 시도</Button>
+        </div>
       ) : canEdit ? (
         <MockExamForm
+          key={formOpening}
           workspaceId={workspaceId}
           mode="create"
           initial={newOptions(exams.length, llmAvailable)}

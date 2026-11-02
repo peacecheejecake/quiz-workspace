@@ -9,7 +9,7 @@
 // 문제 목록 rows open MockQuestionDialog (manage for editors, an answer-free preview otherwise).
 // While a round runs the mock exam is read again every MOCK_POLL_MS; its end is announced.
 import { Badge, Button, ConfirmDialog, ProgressBar, Skeleton } from '@quiz/ui';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { MockExamApi } from './mock-exam-client';
 import { MockExamForm, type MockExamSubmit } from './mock-exam-form';
 import {
@@ -189,6 +189,7 @@ export function MockExamDetail({
   }, [data, generating, onChanged]);
 
   const [mode, setMode] = useState<'view' | 'settings'>(openSettings ? 'settings' : 'view');
+  // 설정 바꾸기 from the list's row menu is an opening of its own (see roundOpening).
   useEffect(() => {
     if (openSettings) onSettingsShown();
   }, [openSettings, onSettingsShown]);
@@ -201,29 +202,64 @@ export function MockExamDetail({
   const [confirm, setConfirm] = useState<{ body: Partial<MockExamSubmit> } | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const roundKey = useRef<{ payload: string; key: string } | null>(null);
+  // One Idempotency-Key per opening and payload (the QVIEW-W rule): this detail's mount and each
+  // 설정 바꾸기 opening are openings; a retry within one reuses its key (an ambiguous failure may
+  // hide a started round), and a confirmed success retires only its own key.
+  const [roundOpening, setRoundOpening] = useState(0);
+  const roundKey = useRef<{ opening: number; payload: string; key: string } | null>(null);
+  const mounted = useRef(true);
+  const liveRound = useRef(roundOpening);
+  useLayoutEffect(() => {
+    liveRound.current = roundOpening;
+  });
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   async function startRound(body: Partial<MockExamSubmit>) {
     if (!data || starting) return;
+    const opening = roundOpening;
     const payload = JSON.stringify(body);
-    if (roundKey.current?.payload !== payload) {
-      roundKey.current = { payload, key: crypto.randomUUID() };
-    }
+    const held = roundKey.current;
+    const key =
+      held && held.opening === opening && held.payload === payload
+        ? held.key
+        : (roundKey.current = { opening, payload, key: crypto.randomUUID() }).key;
     setStarting(true);
     setStartError(null);
     const request: Parameters<MockExamApi['regenerate']>[1] = {};
     if (body.config) request.config = body.config;
     if (body.range) request.range = body.range;
-    const result = await api.regenerate(data.id, request, roundKey.current.key);
+    let result: Awaited<ReturnType<MockExamApi['regenerate']>>;
+    try {
+      result = await api.regenerate(data.id, request, key);
+    } catch {
+      result = {
+        ok: false,
+        kind: 'unavailable',
+        message: '다시 만들지 못했습니다. 다시 시도하세요.',
+      };
+    }
+    if (result.ok && roundKey.current?.key === key) roundKey.current = null;
+    // The list reads the new round even when this detail was left meanwhile.
+    if (result.ok) onChanged();
+    if (!mounted.current) return;
     setStarting(false);
     setConfirm(null);
     if (!result.ok) {
-      setStartError(result.message);
+      // A 설정 바꾸기 closed or reopened meanwhile keeps its own (newer) state.
+      if (liveRound.current === opening) setStartError(result.message);
       return;
     }
-    roundKey.current = null;
     setExam({ status: 'ready', data: result.data });
-    setMode('view');
-    onChanged();
+    if (liveRound.current === opening) setMode('view');
+  }
+  function startSettings() {
+    setStartError(null);
+    setRoundOpening((n) => n + 1);
+    setMode('settings');
   }
   function askRound(body: Partial<MockExamSubmit>) {
     if (!data) return;
@@ -313,14 +349,7 @@ export function MockExamDetail({
             ) : null}
             {canEdit ? (
               <>
-                <Button
-                  ref={settingsButton}
-                  disabled={generating}
-                  onClick={() => {
-                    setStartError(null);
-                    setMode('settings');
-                  }}
-                >
+                <Button ref={settingsButton} disabled={generating} onClick={startSettings}>
                   설정 바꾸기
                 </Button>
                 <Button disabled={generating || starting} onClick={() => askRound({})}>
