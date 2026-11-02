@@ -9,7 +9,9 @@ select plan(164);
 select columns_are('public', 'questions',
   array['id', 'workspace_id', 'chapter_id', 'question_type', 'origin', 'question_number',
         'sort_order', 'active_revision_id', 'publication_status', 'created_by', 'created_at',
-        'updated_at', 'deleted_at']);
+        'updated_at', 'deleted_at',
+        -- UX9-REDIST-B
+        'chapter_source', 'chapter_set_by', 'chapter_set_at']);
 select columns_are('public', 'question_revisions',
   array['id', 'workspace_id', 'question_id', 'version', 'stem', 'options', 'correct_option_ids',
         'accepted_answers', 'is_multi_answer', 'explanation', 'rubric', 'created_by',

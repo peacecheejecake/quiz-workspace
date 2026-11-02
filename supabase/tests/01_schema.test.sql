@@ -33,7 +33,9 @@ select tables_are(
         -- MOCK-B mock exams
         'mock_exams', 'mock_exam_revisions', 'mock_exam_generations',
         'mock_exam_generation_items', 'mock_exam_questions', 'mock_exam_question_revisions',
-        'mock_exam_practice_sessions', 'mock_exam_attempts'],
+        'mock_exam_practice_sessions', 'mock_exam_attempts',
+        -- UX9-REDIST-B chapter history
+        'question_chapter_changes'],
   'public schema contains exactly the expected tables'
 );
 
