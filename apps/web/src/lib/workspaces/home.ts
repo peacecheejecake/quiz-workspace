@@ -12,12 +12,16 @@
 //   &document=<id> (with panel=document-summary)             the summary panel's document (DOCSUM-01;
 //                                                            while that panel is open the key is
 //                                                            the panel's, not the content search's)
+//   ?practice=new&source=bank | ?practice=<run id>&i=<n>     the range run panel (QVIEW-01,
+//                                                            QuestionViewer sequence; keys in
+//                                                            lib/questions/practice-runs.ts)
 //   ?q=<text>                                               the 문제 search (heatmap, UX7-SEARCH)
 //   ?text=<text>&mode=&document=&section=                    the 본문 search and its options
 //                                                            (search/state.ts); the UX6 `scope`
 //                                                            key is migrated by legacyScopeRedirect
 // Pure helpers, plus the redirects of the pre-UX3c routes onto the home and of retired URL
 // state (`scope`, UX7-SEARCH; `question-pdfs` → `documents`, UX7-DOCS): homeRedirect.
+import { RUN_PARAM, withRunState } from '@/lib/questions/practice-runs';
 
 export const HOME_PANELS = [
   'documents',
@@ -185,7 +189,7 @@ export function withSummaryPanel(
 }
 
 /**
- * `search` with every dialog and the practice panel closed (UX7-BACK: what the entry before the
+ * `search` with every dialog, the practice panel and the run panel closed (UX7-BACK: what the entry before the
  * first open gets when a dialog closes, panel-history.ts). The summary panel hands `document` and
  * `section` back to the content search (`restore`, see withSummaryPanel); the 정리 노트 panel
  * takes its `chapter` with it.
@@ -198,11 +202,18 @@ export function withoutPanels(
   let out = search;
   if (panels.includes(SUMMARY_PANEL)) out = withSummaryPanel(out, null, restore);
   if (panels.includes(CHAPTER_NOTE_PANEL)) out = withChapterNote(out, null);
+  out = withRunState(out, null);
   return patchSearch(out, { [PANEL_PARAM]: null, [QUESTION_PARAM]: null });
 }
 
 /** The practice panel's name among the open dialogs (openDialogs). */
 export const PRACTICE_DIALOG = 'question';
+
+/**
+ * The range run panel's name among the open dialogs (QVIEW-01 `?practice=`). Its steps (range,
+ * positions, results) and which run it shows are not part of it: changing them is not a close.
+ */
+export const RUN_DIALOG = 'practice';
 
 /**
  * What is open in `search` (UX7-BACK-2, panel-history.ts): the dialogs in opening order, then
@@ -213,6 +224,7 @@ export function openDialogs(search: string): string[] {
   const params = new URLSearchParams(search);
   const out: string[] = parsePanels(params);
   if (params.get(QUESTION_PARAM)) out.push(PRACTICE_DIALOG);
+  if (params.get(RUN_PARAM)) out.push(RUN_DIALOG);
   return out;
 }
 
@@ -223,6 +235,7 @@ export function closeDialog(
   restore: ContentDocumentFilter | null = null,
 ): string {
   if (dialog === PRACTICE_DIALOG) return patchSearch(search, { [QUESTION_PARAM]: null });
+  if (dialog === RUN_DIALOG) return withRunState(search, null);
   if (dialog === SUMMARY_PANEL) return withSummaryPanel(search, null, restore);
   if (dialog === CHAPTER_NOTE_PANEL) return withChapterNote(search, null);
   return isHomePanel(dialog) ? withPanel(search, dialog, false) : search;

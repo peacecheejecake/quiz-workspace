@@ -5,6 +5,7 @@ import { QUESTION_PROBLEM_TYPES } from './problems';
 
 /** Why a run action failed, as the run panel tells it. */
 export type RunFailureKind =
+  | 'unauthenticated'
   | 'notFound'
   | 'archived'
   | 'noMatching'
@@ -20,6 +21,7 @@ export type RunActionResult<T> =
   | { readonly ok: false; readonly kind: RunFailureKind; readonly message: string };
 
 export const RUN_FAILURE_MESSAGES: Readonly<Record<RunFailureKind, string>> = {
+  unauthenticated: '로그인이 만료되었습니다. 다시 로그인해 주세요.',
   notFound: '풀이를 찾을 수 없습니다.',
   archived: '보관된 Workspace에서는 답안을 제출할 수 없습니다.',
   noMatching: '조건에 맞는 문제가 없습니다.',
@@ -47,6 +49,7 @@ function problemType(body: unknown): string | undefined {
 /** An API failure of a run call as the run panel tells it. */
 export function classifyRunFailure(status: number, body: unknown): RunFailureKind {
   const type = problemType(body);
+  if (status === 401) return 'unauthenticated';
   if (status === 403) {
     return type === QUESTION_PROBLEM_TYPES.workspaceArchived ? 'archived' : 'notFound';
   }

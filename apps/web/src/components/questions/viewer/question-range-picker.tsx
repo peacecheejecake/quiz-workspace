@@ -7,7 +7,9 @@
 // expand button (aria-expanded; groups start collapsed and only an expanded group renders its
 // rows — a long one virtualized), the home's status filter chips in a collapsible "상태 필터"
 // group, and "선택 n문제". Controlled: the caller loads the questions for the filters and owns
-// the selection. Native Tab order (chapter checkbox → expand → question checkboxes), Space toggles.
+// the selection. Native Tab order (chapter checkbox → expand → question checkboxes), Space toggles;
+// the list's controls carry an explicit tabIndex so WebKit (Safari's default: Tab skips buttons)
+// stops on them too.
 import {
   Button,
   Checkbox,
@@ -188,6 +190,7 @@ export function QuestionRangePicker({
         <>
           <Checkbox
             label="전체 선택"
+            tabIndex={0}
             checked={triState(visible, selected)}
             onCheckedChange={() => onSelectedChange(toggleIds(selected, visible))}
           />
@@ -244,6 +247,7 @@ function ChapterGroup({
   const row = (q: RangeQuestion) => (
     <Checkbox
       label={questionLabel(q)}
+      tabIndex={0}
       checked={selected.has(q.id)}
       onCheckedChange={(checked) => {
         const next = new Set(selected);
@@ -258,6 +262,7 @@ function ChapterGroup({
       <div className={styles.groupHeader}>
         <Checkbox
           label={`${group.title} · ${group.questions.length}문제`}
+          tabIndex={0}
           checked={triState(ids, selected)}
           onCheckedChange={() => onSelectedChange(toggleIds(selected, ids))}
         />
@@ -265,6 +270,7 @@ function ChapterGroup({
           size="sm"
           variant="ghost"
           aria-label={`${group.title} 펼치기`}
+          tabIndex={0}
           aria-expanded={expanded}
           aria-controls={listId}
           onClick={() => onExpandedChange(!expanded)}

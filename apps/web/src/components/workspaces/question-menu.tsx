@@ -44,6 +44,9 @@ interface QuestionMenuAction {
  * editor-only like 직접 추가 and 변형 출제.
  * 보관·초안 문제 (UX7-BANK-2, QOV-01-AC15: the floating dialog of draft and archived questions,
  * `?panel=inactive-questions`) is readable by every member, so it stays enabled.
+ * 문제 풀기 (QVIEW-01: the range run panel, `?practice=new&source=bank`) is a personal practice
+ * every member may start, archived workspaces included, so it is enabled too and follows
+ * 보관·초안 문제 in the same group (MOCK-SYNC).
  */
 export function QuestionMenu({
   readOnly,
@@ -51,12 +54,14 @@ export function QuestionMenu({
   onGenerate,
   onDuplicates,
   onInactive,
+  onPractice,
 }: {
   readonly readOnly: QuestionMenuReadOnly;
   readonly onCreate: () => void;
   readonly onGenerate: () => void;
   readonly onDuplicates: () => void;
   readonly onInactive: () => void;
+  readonly onPractice: () => void;
 }) {
   const reasonId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -75,6 +80,7 @@ export function QuestionMenu({
       separated: true,
       onSelect: onInactive,
     },
+    { key: 'practice', label: '문제 풀기', requiresEdit: false, onSelect: onPractice },
   ];
   const reason = readOnly ? READ_ONLY_REASONS[readOnly] : null;
   const anyDisabled = reason !== null && actions.some((a) => a.requiresEdit);

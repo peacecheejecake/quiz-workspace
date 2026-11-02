@@ -25,6 +25,9 @@
 //                     questions and merges each group into the question kept (QOV-01-AC16).
 //   보관·초안 문제     `?panel=inactive-questions` (문제 › 보관·초안 문제, UX7-BANK-2, every member): a
 //                     stacked floating dialog of the draft and archived questions (QOV-01-AC15).
+//   문제 풀기          `?practice=new&source=bank` → `?practice=<run>&i=<n>` (문제 › 문제 풀기, QVIEW-01,
+//                     every member): the modal range run (QuestionViewer sequence, rendered by
+//                     QuestionsOverview). Its steps replace the entry; positions push one.
 //
 // State lives in the URL: heatmap filters (overview-filters.ts), the 문제 search `q`, the 본문
 // search `text` and its options (search/state.ts), `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
@@ -116,6 +119,7 @@ import {
   closeDialog,
   type HomePanel,
 } from '@/lib/workspaces/home';
+import { withRunState, type RunUrlState } from '@/lib/questions/practice-runs';
 import { usePanelHistory } from './use-panel-history';
 import styles from './workspace-home.module.css';
 
@@ -255,6 +259,20 @@ export function WorkspaceHome({
     panelHistory.push(
       `${pathname}${patchSearch(window.location.search, { question: questionId })}`,
     );
+  }
+  // The range run panel (QVIEW-01): opened from the 문제 menu on a new entry; its range → run →
+  // results steps rewrite that entry, its positions push entries, closing drops them (QOV-01-AC14).
+  function openRun() {
+    const picker: RunUrlState = { step: 'picker', source: 'bank', mockExamId: null };
+    panelHistory.push(`${pathname}${withRunState(window.location.search, picker)}`);
+  }
+  function navigateRun(state: RunUrlState, how: 'push' | 'replace') {
+    const target = `${pathname}${withRunState(window.location.search, state)}`;
+    if (how === 'push') panelHistory.push(target);
+    else panelHistory.replace(target);
+  }
+  function closeRun() {
+    closeTo(`${pathname}${withRunState(window.location.search, null)}`);
   }
   // The practice panel's open, previous/next (new entries) and close (QPLAY-01-AC05, UX7-BACK).
   function changeQuestion(questionId: string | null) {
@@ -544,6 +562,7 @@ export function WorkspaceHome({
               onGenerate={() => setPanel('generate', true)}
               onDuplicates={() => setPanel(DUPLICATES_PANEL, true)}
               onInactive={() => setPanel(INACTIVE_QUESTIONS_PANEL, true)}
+              onPractice={openRun}
             />
           </div>
           <div className={styles.actionGroup} data-align="end">
@@ -603,6 +622,8 @@ export function WorkspaceHome({
         panelScreenId={screenIds.practice}
         practiceReturnFocusRef={practiceReturnFocusRef}
         onQuestionChange={changeQuestion}
+        onRunNavigate={navigateRun}
+        onRunClose={closeRun}
         createOpen={isOpen(QUESTION_CREATE_PANEL)}
         onCreateOpenChange={(open) => setPanel(QUESTION_CREATE_PANEL, open)}
         documents={documentTitles}

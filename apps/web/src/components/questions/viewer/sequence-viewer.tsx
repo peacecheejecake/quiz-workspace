@@ -42,15 +42,7 @@ import {
   type StudyActionResult,
   type SubmitResult,
 } from '@/lib/questions/practice-actions';
-import {
-  createPracticeRunAction,
-  finishPracticeRunAction,
-  getPracticeRunAction,
-  getRunItemAction,
-  listRangeQuestionsAction,
-  listRunResultsAction,
-  openRunSessionAction,
-} from '@/lib/questions/practice-run-actions';
+import { createPracticeRunApi } from '@/lib/questions/practice-run-client';
 import { RUN_FAILURE_MESSAGES, type RunActionResult } from '@/lib/questions/practice-run-problems';
 import {
   PRACTICE_RUN_MAX,
@@ -130,24 +122,20 @@ export interface RunClient {
   setFlags?(questionId: string, flags: Partial<StudyFlags>): Promise<StudyActionResult<MyState>>;
 }
 
-/** The bank run client: the BFF server actions of this workspace. */
+/** The bank run client: this workspace's BFF routes and the practice panel's actions. */
 export function bankRunClient(workspaceId: string): RunClient {
+  const api = createPracticeRunApi(workspaceId);
   return {
-    listRange: (filters) => listRangeQuestionsAction(workspaceId, filters),
-    create: (range, randomOrder, key) =>
-      createPracticeRunAction(
-        workspaceId,
-        { source: 'bank', range, random_order: randomOrder },
-        key,
-      ),
-    getRun: (runId) => getPracticeRunAction(workspaceId, runId),
-    getItem: (runId, position) => getRunItemAction(workspaceId, runId, position),
+    listRange: (filters) => api.rangeQuestions(filters),
+    create: (range, randomOrder, key) => api.create(range, randomOrder, key),
+    getRun: (runId) => api.getRun(runId),
+    getItem: (runId, position) => api.getItem(runId, position),
     openSession: (questionId, runId, position, key) =>
-      openRunSessionAction(workspaceId, questionId, runId, position, key),
+      api.openSession(questionId, runId, position, key),
     submit: (sessionId, answer) => submitPracticeAction(workspaceId, sessionId, answer),
     selfGrade: (sessionId, grade) => selfGradePracticeAction(workspaceId, sessionId, grade),
-    finish: (runId) => finishPracticeRunAction(workspaceId, runId),
-    results: (runId, offset) => listRunResultsAction(workspaceId, runId, offset),
+    finish: (runId) => api.finish(runId),
+    results: (runId, offset) => api.results(runId, offset),
     flags: async (questionId) => {
       const found = await lookupOverviewQuestionAction(workspaceId, questionId);
       if (!found.ok || !found.data) return null;
@@ -173,6 +161,8 @@ export interface SequenceViewerProps {
   readonly onViewed?: (questionId: string) => void;
   /** A position was submitted (`pending`) or graded (bank). */
   readonly onGraded?: (questionId: string, result: AttemptResult) => void;
+  /** A position's favorite / retry flags were saved (bank). */
+  readonly onFlagsSaved?: (questionId: string, flags: StudyFlags) => void;
   /** Header controls after the study toggles (bank: the screen's 문제 관리 / 문제 정보 menu). */
   readonly headerExtra?: (question: RunQuestionInfo) => ReactNode;
   /** A question edited, archived or deleted meanwhile: its position is read again. */
@@ -249,6 +239,7 @@ export function SequenceViewer({
   onClose,
   onViewed,
   onGraded,
+  onFlagsSaved,
   headerExtra,
   invalidated = null,
   client: givenClient,
@@ -302,6 +293,7 @@ export function SequenceViewer({
     invalidated,
     onViewed,
     onGraded,
+    onFlagsSaved,
     onNavigate,
   });
   const results = useResultsStep({
@@ -562,6 +554,7 @@ function useSolveStep({
   invalidated,
   onViewed,
   onGraded,
+  onFlagsSaved,
   onNavigate,
 }: {
   readonly view: Extract<RunUrlState, { step: 'solve' }> | null;
@@ -574,6 +567,7 @@ function useSolveStep({
   readonly invalidated: Invalidation | null;
   readonly onViewed: ((questionId: string) => void) | undefined;
   readonly onGraded: ((questionId: string, result: AttemptResult) => void) | undefined;
+  readonly onFlagsSaved: ((questionId: string, flags: StudyFlags) => void) | undefined;
   readonly onNavigate: (state: RunUrlState, how: 'push' | 'replace') => void;
 }) {
   const active = open && view !== null;
@@ -683,6 +677,12 @@ function useSolveStep({
       result = await client.setFlags(qid, patch);
     } catch {
       result = { ok: false, kind: 'unavailable', message: QUESTION_FAILURE_MESSAGES.unavailable };
+    }
+    if (result.ok) {
+      onFlagsSaved?.(qid, {
+        is_favorite: result.data.is_favorite,
+        needs_retry: result.data.needs_retry,
+      });
     }
     setFlags((prev) =>
       prev?.questionId !== qid
@@ -894,21 +894,24 @@ function useSolveStep({
             이전
           </Button>
         ) : null}
-        {item && run ? (
-          canAnswer && !last ? (
-            <Button size="sm" onClick={forward}>
-              건너뛰기
-            </Button>
-          ) : last ? (
-            <Button size="sm" variant={canAnswer ? 'secondary' : 'primary'} onClick={toResults}>
-              결과 보기
-            </Button>
-          ) : (
-            <Button size="sm" variant="primary" onClick={forward}>
-              다음
-            </Button>
-          )
-        ) : null}
+        {/* Always a way forward, also while the position loads (it is skipped then). */}
+        {total === null ? null : last ? (
+          <Button
+            size="sm"
+            variant={!item || !run || canAnswer ? 'secondary' : 'primary'}
+            onClick={toResults}
+          >
+            결과 보기
+          </Button>
+        ) : !item || !run || canAnswer ? (
+          <Button size="sm" onClick={forward}>
+            건너뛰기
+          </Button>
+        ) : (
+          <Button size="sm" variant="primary" onClick={forward}>
+            다음
+          </Button>
+        )}
       </nav>
     </>
   );
