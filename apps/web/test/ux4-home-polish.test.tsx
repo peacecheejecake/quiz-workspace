@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-// UX4 (2026-10-21): the home header's `문제` menu (직접 추가 / 변형 출제, keyboard reachable, for
-// editors only). UX7-BANK retired its 전체 문제 link with the page, and 직접 추가 now opens the
-// 문제 등록 dialog on the home (QOV-01-AC12); UX7-DOCS merged PDF 관리 into 문서 관리
+// UX4 (2026-10-21): the home header's `문제` menu (직접 추가, keyboard reachable, for editors
+// only; its 변형 출제 was retired with QGEN-01 by QGEN-RM). UX7-BANK retired its 전체 문제 link
+// with the page, and 직접 추가 now opens the 문제 등록 dialog on the home (QOV-01-AC12); UX7-DOCS merged PDF 관리 into 문서 관리
 // (DOC-01-AC09). UX7-DOCS-2 keeps the button for viewers and archived workspaces, with both items
 // disabled and the reason in text. UX7-BANK-2 adds 보관·초안 문제, enabled for every member.
-// UX7-DEDUP adds 중복 문제 정리, editor-only like 직접 추가 and 변형 출제 (QOV-01-AC16). QVIEW-W adds
+// UX7-DEDUP adds 중복 문제 정리, editor-only like 직접 추가 (QOV-01-AC16). QVIEW-W adds
 // 문제 풀기 (the range run, QVIEW-01), enabled for every member like 보관·초안 문제. MOCK-W adds
 // 모의고사 (MOCK-01) between them, enabled for every member too.
 import './dom-setup';
@@ -18,7 +18,6 @@ const { QuestionMenu } = await import('../src/components/workspaces/question-men
 function menu(readOnly: QuestionMenuReadOnly) {
   const handlers = {
     onCreate: vi.fn(),
-    onGenerate: vi.fn(),
     onDuplicates: vi.fn(),
     onInactive: vi.fn(),
     onMockExams: vi.fn(),
@@ -29,7 +28,7 @@ function menu(readOnly: QuestionMenuReadOnly) {
 }
 
 describe('home `문제` menu', () => {
-  it('QOV-01-AC11 offers 직접 추가 and 변형 출제 to editors and opens each', async () => {
+  it('QOV-01-AC11 offers 직접 추가 and 중복 문제 정리 to editors, then 모의고사, and opens each', async () => {
     const user = userEvent.setup();
     const handlers = menu(null);
     const trigger = screen.getByRole('button', { name: '문제' });
@@ -39,7 +38,6 @@ describe('home `문제` menu', () => {
     const items = screen.getAllByRole('menuitem').map((item) => item.textContent);
     expect(items).toEqual([
       '직접 추가',
-      '변형 출제',
       '중복 문제 정리',
       '보관·초안 문제',
       '모의고사',
@@ -55,17 +53,13 @@ describe('home `문제` menu', () => {
     await user.keyboard('{Enter}');
     await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
     await user.keyboard('{ArrowDown}{Enter}');
-    await waitFor(() => expect(handlers.onGenerate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(handlers.onDuplicates).toHaveBeenCalledTimes(1));
     // The dialog opens after the menu returned focus to its trigger.
     expect(trigger).toHaveFocus();
 
     await user.click(trigger);
     await user.click(screen.getByRole('menuitem', { name: '보관·초안 문제' }));
     await waitFor(() => expect(handlers.onInactive).toHaveBeenCalledTimes(1));
-
-    await user.click(trigger);
-    await user.click(screen.getByRole('menuitem', { name: '중복 문제 정리' }));
-    await waitFor(() => expect(handlers.onDuplicates).toHaveBeenCalledTimes(1));
 
     await user.click(trigger);
     await user.click(screen.getByRole('menuitem', { name: '모의고사' }));
@@ -93,13 +87,12 @@ describe('home `문제` menu', () => {
       const all = screen.getAllByRole('menuitem');
       expect(all.map((item) => item.textContent)).toEqual([
         '직접 추가',
-        '변형 출제',
         '중복 문제 정리',
         '보관·초안 문제',
         '모의고사',
         '문제 풀기',
       ]);
-      const items = all.slice(0, 3);
+      const items = all.slice(0, 2);
       for (const item of items) {
         expect(item).toHaveAttribute('aria-disabled', 'true');
         expect(item).toHaveAccessibleDescription(reason);
@@ -107,7 +100,6 @@ describe('home `문제` menu', () => {
       }
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(handlers.onCreate).not.toHaveBeenCalled();
-      expect(handlers.onGenerate).not.toHaveBeenCalled();
       expect(handlers.onDuplicates).not.toHaveBeenCalled();
       expect(screen.queryByRole('link', { name: '전체 문제' })).toBeNull();
       // UX7-BANK-2: 보관·초안 문제 is readable, so it stays enabled and opens the dialog.

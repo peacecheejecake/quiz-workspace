@@ -565,7 +565,6 @@ test(
     await homeUi.questionMenuButton(page).click();
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
       /^(직접 추가|add question)$/i,
-      /^(변형 출제|generate variants?)$/i,
       // UX7-DEDUP (QOV-01-AC16).
       /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
       // UX7-BANK-2 (QOV-01-AC15).

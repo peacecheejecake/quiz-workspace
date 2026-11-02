@@ -13,8 +13,7 @@
 //     the questions-ko paper truth, and the QIMPORT-01 UI label contract (QBANK-01 retired, UX7-BANK); M5.0 adds the
 //     overview/practice/my-state/attempts API helpers and the QOV-01/QPLAY-01 UI contract.
 //   - S0: owner/guest/recipient share fixtures on top of the two above.
-//   - generation.ts (M6.0): scenario-driven source questions (fake LLM markers, G1), generation
-//     run API helpers and the QGEN-01 UI contract.
+//   - (generation.ts, M6.0, went with QGEN-01: QGEN-RM.)
 //   - history.ts (M7.0): activities/jobs/attempts read-API helpers, document corrections that
 //     produce history, and the HISTORY-01 UI contract.
 //   - summary.ts (DOCSUM.0): document summary API helpers, the APP_ENV=test fake summarizer's
@@ -93,7 +92,6 @@ export * from './auth-ui.ts';
 export * from './turnstile.ts';
 export { ApiClient, PROBLEM_TYPES, type ApiResponse, type Problem } from './api.ts';
 export * from './documents.ts';
-export * from './generation.ts';
 export * from './history.ts';
 export {
   attemptRevision,

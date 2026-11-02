@@ -92,7 +92,7 @@ export type OverviewReadOnly = 'viewer' | 'archived' | null;
 
 export interface QuestionsOverviewProps {
   readonly workspaceId: string;
-  /** `viewer`: no import/generate links, practice allowed. `archived`: read-only panel. */
+  /** `viewer`: no import links, practice allowed. `archived`: read-only panel. */
   readonly readOnly: OverviewReadOnly;
   /** The filters the server rendered `overview` with. */
   readonly filters: OverviewFilters;
@@ -772,8 +772,6 @@ export function QuestionsOverview({
         headerExtra={
           panelQuestion ? (
             <QuestionManageMenu
-              workspaceId={workspaceId}
-              questionId={panelQuestion.id}
               busy={loadingEdit || deleting || archiving}
               onShowDetail={(focus, trigger) =>
                 setDetail({
@@ -840,8 +838,6 @@ export function QuestionsOverview({
           invalidated={invalidated}
           headerExtra={(q) => (
             <QuestionManageMenu
-              workspaceId={workspaceId}
-              questionId={q.questionId}
               busy={loadingEdit || deleting || archiving}
               onShowDetail={(focus, trigger) =>
                 setDetail({

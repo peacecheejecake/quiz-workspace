@@ -80,7 +80,7 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   // QBANK-01 (M4.0) was retired by UX7-BANK (2026-11-01): docs/screens/questions-bank.md.
   'M4.0': ['QIMPORT-01'],
   'M5.0': ['QOV-01', 'QPLAY-01'],
-  'M6.0': ['QGEN-01'],
+  // QGEN-01 (M6.0) was retired by QGEN-RM (2026-11-02): docs/screens/questions-generation.md.
   'M7.0': ['HISTORY-01'],
   S0: ['WS-SHARE-01', 'WS-VIEW-01', 'WS-FORK-01'],
   // DOCSUM-SPEC (2026-10-29): full-text export, document summary, chapter notes.

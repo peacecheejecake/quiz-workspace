@@ -145,7 +145,7 @@ workspace
   - `mock_exam_question_revisions(id, mock_exam_question_id, workspace_id, version, stem, options, correct_answer, explanation, rubric, evidence jsonb, validation_issues jsonb, origin generated|edited, edited_by, created_at)` — append-only, 정답은 stable option ID.
   - `mock_exam_practice_sessions` / `mock_exam_attempts` — `practice_sessions`/`question_attempts`와 같은 모양·제약(표시 option ID, `pending` 자기평가 연결, immutable; FK는 `mock_exam_question_revisions`), `practice_run_id` 포함.
 - **범위 풀이 묶음 (QVIEW, [QVIEW-01](screens/question-viewer.md)):** `practice_runs(id, workspace_id, user_id, source bank|mock, mock_exam_id, mock_exam_generation_id, range jsonb, random_order, seed, item_ids uuid[](순서 고정, 최대 5,000), created_at, finished_at)` — 만든 사용자만 읽음. 결과 집계는 세션 테이블의 `(practice_run_id, run_position)` index로 계산하고, 문제 내용은 위치별로만 읽는다. 기존 `practice_sessions`에 nullable `practice_run_id`·`run_position`을 더한다(additive). 문제마다 세션은 묶음 안에서 하나(partial unique `(practice_run_id, run_position)`).
-- **QGEN 폐지 (MOCK-SPEC):** `question_generation_runs`·생성 초안·`question_lineage`의 기존 행은 보존하고 drop하지 않는다(additive-first). 새 생성 run은 만들어지지 않는다.
+- **QGEN 폐지 (MOCK-SPEC, QGEN-RM 2026-11-02):** `question_generation_runs`·생성 초안·`question_lineage`의 기존 행은 보존하고 drop하지 않는다(additive-first). 새 생성 run은 만들어지지 않는다(router 404, worker에 `question.generate` 등록 없음; 대기열에 남은 `question.generate` job은 reconciler가 `failed`/`job_retired`로 끝낸다).
 
 문제 상태는 독립 필드를 합성해 계산한다. 색상 규칙·열람 판정·변형 정책은 `docs/questions.md`가 단일 기준이다.
 
@@ -183,11 +183,11 @@ workspace
 | GET | `/api/v1/questions/{id}/attempts` | 풀이 이력(합쳐진 중복의 attempt 포함, 항목별 `question_id`, UX7-DEDUP) |
 | GET | `/api/v1/workspaces/{id}/question-duplicates` | 중복 확정 문제 묶음(편집 권한, 정답 없음; UX7-DEDUP) |
 | POST | `/api/v1/workspaces/{id}/question-duplicates/merge` | 묶음마다 남길 문제 하나, 나머지 보관 + 기록 합침(편집 권한, 멱등; UX7-DEDUP) |
-| POST | `/api/v1/questions/{id}/generations` | 변형 문제 생성 작업 (**폐지 예정** — QGEN-RM, MOCK-SPEC 2026-11-01) |
-| GET | `/api/v1/question-generations/{id}/drafts` | 생성 문제 검토 (폐지 예정 — QGEN-RM) |
-| POST | `/api/v1/question-generations/{id}/publish` | 승인한 문제만 등록 (폐지 예정 — QGEN-RM) |
-| POST | `/api/v1/workspaces/{id}/question-generation-batches` | 여러 문제·임의 선택 묶음 변형 출제(원본마다 `question.generate` run; QGEN-MULTI) (폐지 예정 — QGEN-RM) |
-| GET | `/api/v1/workspaces/{id}/question-generation-batches/{batch_id}` | 묶음의 원본별 run·진행 상태 (폐지 예정 — QGEN-RM) |
+| POST | `/api/v1/questions/{id}/generations` | 변형 문제 생성 작업 (**폐지** — QGEN-RM 2026-11-02, 404) |
+| GET | `/api/v1/question-generations/{id}/drafts` | 생성 문제 검토 (폐지 — QGEN-RM, 404) |
+| POST | `/api/v1/question-generations/{id}/publish` | 승인한 문제만 등록 (폐지 — QGEN-RM, 404) |
+| POST | `/api/v1/workspaces/{id}/question-generation-batches` | 여러 문제·임의 선택 묶음 변형 출제(원본마다 `question.generate` run; QGEN-MULTI) (폐지 — QGEN-RM, 404) |
+| GET | `/api/v1/workspaces/{id}/question-generation-batches/{batch_id}` | 묶음의 원본별 run·진행 상태 (폐지 — QGEN-RM, 404) |
 | POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기(준비 완료된 모든 PDF, UX6-UPLOAD) |
 | GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토(초안별 등록 챕터 추천·선택, 교재 챕터 목록 — CHAPTER-MAP; `offset`/`limit`(≤200)이면 한 페이지와 `total`, `include_chapters=false`이면 챕터 목록 생략 — QIMP-PAGING) |
 | GET | `/api/v1/question-imports/{id}/draft-summaries` | 모든 초안의 요약(본문·보기·정답·해설 없음: id·version·순서·번호·유형·검토 상태·등록 여부·승인 가능·정답 없음·검증 코드·등록 챕터 id·중복 `duplicate_of`(UX7-DEDUP))과 교재 챕터 목록 — 검토 화면의 선택·개수·등록용(QIMP-PAGING) |

@@ -28,9 +28,6 @@ import {
   QUESTION_MENU_REASONS,
   openSearchOptions,
   closeSearchOptions,
-  generatePath,
-  generateUi,
-  generationSourceInput,
   historyPath,
   historyUi,
   importPath,
@@ -354,64 +351,40 @@ test(
   },
 );
 
-test(
-  'A11Y-05 question import and variant generation review',
-  { tag: '@infra' },
-  async ({ page, workspaceFactory }) => {
-    const owner = await workspaceFactory.member('a11y05');
-    const ws = await workspaceFactory.create(owner);
-    await signInAs(page, owner.user);
+test('A11Y-05 question import review', { tag: '@infra' }, async ({ page, workspaceFactory }) => {
+  const owner = await workspaceFactory.member('a11y05');
+  const ws = await workspaceFactory.create(owner);
+  await signInAs(page, owner.user);
 
-    await page.goto(importPath(ws.id));
-    await expect(importUi.openDocuments(main(page))).toBeVisible();
-    await expectAccessible(page, 'import empty');
-    await importPaperDrafts(owner, ws.id);
-    await page.reload();
-    await expect(importUi.draftItems(page).first()).toBeVisible({ timeout: JOB_TIMEOUT_MS });
-    await settle(page);
-    await expectAccessible(page, 'import drafts review');
-    const compare = importUi.compare(importUi.draftItems(page).first());
-    if (await compare.count()) {
-      await compare.first().click();
-      await expect(importUi.sourceView(page).first()).toBeVisible();
-      await expectAccessible(page, 'import source comparison');
-    }
+  await page.goto(importPath(ws.id));
+  await expect(importUi.openDocuments(main(page))).toBeVisible();
+  await expectAccessible(page, 'import empty');
+  await importPaperDrafts(owner, ws.id);
+  await page.reload();
+  await expect(importUi.draftItems(page).first()).toBeVisible({ timeout: JOB_TIMEOUT_MS });
+  await settle(page);
+  await expectAccessible(page, 'import drafts review');
+  const compare = importUi.compare(importUi.draftItems(page).first());
+  if (await compare.count()) {
+    await compare.first().click();
+    await expect(importUi.sourceView(page).first()).toBeVisible();
+    await expectAccessible(page, 'import source comparison');
+  }
 
-    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
-    const source = await createQuestion(
-      owner,
-      ws.id,
-      generationSourceInput('disinfection', documentId, 20),
-    );
-    await page.goto(generatePath(ws.id, source.id));
-    await expect(generateUi.source(page)).toBeVisible();
-    await expectAccessible(page, 'generate form');
-    await generateUi.generate(page).click();
-    await expect(
-      generateUi.alert(page).or(main(page).locator('[aria-invalid="true"]')).first(),
-    ).toBeVisible();
-    await expectAccessible(page, 'generate form without a variation');
-    await generateUi.variation(page, 'PARAPHRASE').check();
-    await generateUi.generate(page).click();
-    await expect(generateUi.draftItems(page)).toHaveCount(1, { timeout: JOB_TIMEOUT_MS });
-    await settle(page);
-    await expectAccessible(page, 'generated draft review');
-
-    // Error state: the first import job of a marked paper fails (fake extractor, QIMPORT A7).
-    const failingWs = await workspaceFactory.create(owner);
-    mkdirSync(test.info().outputDir, { recursive: true });
-    await uploadQuestionPaper(
-      page,
-      failingWs.id,
-      failingOnceCopy(questionPaper(), test.info().outputDir),
-    );
-    await expect(importUi.alert(page)).toContainText(/실패|오류|failed|error/i, {
-      timeout: JOB_TIMEOUT_MS,
-    });
-    await settle(page);
-    await expectAccessible(page, 'import failed with retry');
-  },
-);
+  // Error state: the first import job of a marked paper fails (fake extractor, QIMPORT A7).
+  const failingWs = await workspaceFactory.create(owner);
+  mkdirSync(test.info().outputDir, { recursive: true });
+  await uploadQuestionPaper(
+    page,
+    failingWs.id,
+    failingOnceCopy(questionPaper(), test.info().outputDir),
+  );
+  await expect(importUi.alert(page)).toContainText(/실패|오류|failed|error/i, {
+    timeout: JOB_TIMEOUT_MS,
+  });
+  await settle(page);
+  await expectAccessible(page, 'import failed with retry');
+});
 
 test(
   'A11Y-13 중복 문제 정리 dialog: groups with the answers warning, the confirm step, a stopped merge with the frozen plan, and the empty state',

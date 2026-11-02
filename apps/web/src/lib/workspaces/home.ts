@@ -1,7 +1,7 @@
 // Workspace home URL state (docs/screens/questions-overview.md "Workspace 홈 레이아웃", UX3c).
 // The home `/workspaces/:id` carries, besides the heatmap filters (overview-filters.ts) and the
 // open question (`?question=`):
-//   ?panel=documents|generate|history|share                 open floating dialogs (repeatable, in
+//   ?panel=documents|history|share                          open floating dialogs (repeatable, in
 //        |chapter-note|document-summary                      the order they were opened)
 //        |inactive-questions                                 (보관·초안 문제, UX7-BANK-2)
 //        |question-duplicates                                (중복 문제 정리, editors, UX7-DEDUP)
@@ -23,7 +23,8 @@
 //                                                            (search/state.ts); the UX6 `scope`
 //                                                            key is migrated by legacyScopeRedirect
 // Pure helpers, plus the redirects of the pre-UX3c routes onto the home and of retired URL
-// state (`scope`, UX7-SEARCH; `question-pdfs` → `documents`, UX7-DOCS): homeRedirect.
+// state (`scope`, UX7-SEARCH; `question-pdfs` → `documents`, UX7-DOCS; `generate` → `mock-exams`,
+// QGEN-RM): homeRedirect.
 import {
   RUN_MOCK_PARAM,
   RUN_PARAM,
@@ -34,7 +35,6 @@ import {
 
 export const HOME_PANELS = [
   'documents',
-  'generate',
   'history',
   'share',
   'chapter-note',
@@ -525,9 +525,13 @@ export function legacyBankRedirect(workspaceId: string, params: RawParams): stri
 
 /**
  * Retired `?panel=` values and the dialog that replaced them: 문제 PDF 관리 was merged into
- * 문서 관리 (UX7-DOCS, DOC-01-AC09).
+ * 문서 관리 (UX7-DOCS, DOC-01-AC09), and the 문제 생성 dialog of the retired 변형 출제 gave way to
+ * 모의고사 (QGEN-RM, MOCK-01-AC01).
  */
-const RETIRED_PANELS: Readonly<Record<string, HomePanel>> = { 'question-pdfs': 'documents' };
+const RETIRED_PANELS: Readonly<Record<string, HomePanel>> = {
+  'question-pdfs': 'documents',
+  generate: MOCK_EXAMS_PANEL,
+};
 
 /**
  * The home URL with every retired `?panel=` value replaced by its successor (in place; a panel
@@ -563,7 +567,7 @@ export function exclusivePanelRedirect(workspaceId: string, params: RawParams): 
 /**
  * Every migration of retired or conflicting home URL state, applied together so a link takes a
  * single redirect: the UX6 search `scope` (legacyScopeRedirect, UX7-SEARCH), retired `?panel=`
- * values (retiredPanelRedirect, UX7-DOCS), then a practice panel beside a run
+ * values (retiredPanelRedirect, UX7-DOCS and QGEN-RM), then a practice panel beside a run
  * (exclusivePanelRedirect, QVIEW-01-AC09). Null when the URL is current.
  */
 export function homeRedirect(workspaceId: string, params: RawParams): string | null {
@@ -580,6 +584,14 @@ export function homeRedirect(workspaceId: string, params: RawParams): string | n
     current = parsed;
   }
   return out;
+}
+
+/**
+ * The retired 변형 출제 review and batch pages (`/questions/generate?source=&run=` · `?batch=`,
+ * QGEN-RM): the home with the 모의고사 dialog that replaced them; their query means nothing there.
+ */
+export function legacyGenerateRedirect(workspaceId: string): string {
+  return legacyPanelRedirect(workspaceId, MOCK_EXAMS_PANEL);
 }
 
 /** A pre-UX3c section page (`/documents`, `/history`, `/settings/sharing`): its dialog. */

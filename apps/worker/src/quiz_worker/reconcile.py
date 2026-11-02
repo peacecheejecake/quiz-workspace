@@ -14,12 +14,17 @@ past a grace period or were published long ago without being claimed. Every step
 conditional transition, so a live worker or a concurrent reconciler cannot be overridden;
 re-publishing a job whose message still exists only yields a duplicate delivery, which the
 claim makes a no-op.
+
+A job type the worker no longer runs (RETIRED_JOB_TYPES) would be re-published forever with no
+task to take it: its queued rows (including the expired running ones requeued above) are failed
+with `job_retired` instead, and a cleanup left pending on one of its terminal rows is dropped,
+since the code that would run it is gone.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -33,11 +38,14 @@ from quiz_worker.runner import (
     TerminalReason,
     perform_cleanup,
 )
-from quiz_worker.store import JobRecord, JobStatus, JobStore
+from quiz_worker.store import JOB_RETIRED_ERROR, JobRecord, JobStatus, JobStore
 
 logger = logging.getLogger(__name__)
 
 Publisher = Callable[[JobRecord], None]
+
+# Job types whose task was removed: `question.generate` went with 변형 출제 (QGEN-01, QGEN-RM).
+RETIRED_JOB_TYPES: frozenset[str] = frozenset({"question.generate"})
 
 
 @dataclass(frozen=True)
@@ -50,6 +58,7 @@ class ReconcileReport:
     cleaned: int = 0
     cleanup_failed: int = 0
     cleanup_gave_up: int = 0
+    retired: int = 0
 
     def as_dict(self) -> dict[str, int]:
         return {
@@ -61,6 +70,7 @@ class ReconcileReport:
             "cleaned": self.cleaned,
             "cleanup_failed": self.cleanup_failed,
             "cleanup_gave_up": self.cleanup_gave_up,
+            "retired": self.retired,
         }
 
 
@@ -73,6 +83,7 @@ def reconcile_jobs(
     stale_after_seconds: float,
     cleanup_policy: CleanupPolicy | None = None,
     limit: int = 100,
+    retired_job_types: Collection[str] = RETIRED_JOB_TYPES,
 ) -> ReconcileReport:
     policy = cleanup_policy or CleanupPolicy()
     counts = {"requeued": 0, "failed": 0, "cancelled": 0}
@@ -99,7 +110,7 @@ def reconcile_jobs(
         finally:
             job_id_var.reset(token)
 
-    republished = publish_errors = 0
+    republished = publish_errors = retired = 0
     candidates = store.find_republish_candidates(
         unpublished_grace_seconds=unpublished_grace_seconds,
         stale_after_seconds=stale_after_seconds,
@@ -110,6 +121,11 @@ def reconcile_jobs(
     for record in to_publish.values():
         token = job_id_var.set(str(record.job_id))
         try:
+            if record.job_type in retired_job_types and record.job_type not in definitions:
+                if store.retire(record.job_id, error=JOB_RETIRED_ERROR) is not None:
+                    retired += 1
+                    logger.warning("queued job of a retired job_type failed as job_retired")
+                continue
             if record.job_type not in definitions:
                 logger.error("cannot republish job: no task for its job_type")
                 publish_errors += 1
@@ -128,6 +144,10 @@ def reconcile_jobs(
     for record in store.find_pending_cleanups(max_attempts=policy.retry.max_attempts, limit=limit):
         token = job_id_var.set(str(record.job_id))
         try:
+            if record.job_type in retired_job_types and record.job_type not in definitions:
+                outcome = _drop_retired_cleanup(store, record, policy)
+                cleanup_counts[outcome] += 1
+                continue
             outcome = perform_cleanup(
                 store, definitions.get(record.job_type), record.job_id, policy
             )
@@ -147,7 +167,22 @@ def reconcile_jobs(
         cleaned=cleanup_counts[CleanupOutcome.DONE],
         cleanup_failed=cleanup_counts[CleanupOutcome.FAILED],
         cleanup_gave_up=cleanup_counts[CleanupOutcome.GAVE_UP],
+        retired=retired,
     )
     if any(report.as_dict().values()):
         logger.info("reconcile_jobs: %s", report.as_dict())
     return report
+
+
+def _drop_retired_cleanup(
+    store: JobStore, record: JobRecord, policy: CleanupPolicy
+) -> CleanupOutcome:
+    """Clear the pending cleanup of a retired job type's terminal row without running anything."""
+    claimed = store.claim_cleanup(
+        record.job_id, lease_seconds=policy.lease_seconds, max_attempts=policy.retry.max_attempts
+    )
+    if claimed is None:
+        return CleanupOutcome.SKIPPED
+    store.finish_cleanup(record.job_id, cleanup_attempt=claimed.cleanup_attempts)
+    logger.warning("pending cleanup of a retired job_type dropped")
+    return CleanupOutcome.DONE
