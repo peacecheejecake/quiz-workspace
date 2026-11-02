@@ -7,14 +7,6 @@
   min-width: 0;
 }
 
-/* Desktop: the open dialogs float on the right; keep the header (and its buttons, which open
-   further dialogs) and the heatmap beside them, not under them. */
-@media (width >= 1024px) {
-  .home[data-panel-open] {
-    padding-inline-end: calc(var(--floating-panel-width) + var(--space-4));
-  }
-}
-
 .header {
   display: flex;
   flex-wrap: wrap;

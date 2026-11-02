@@ -9,6 +9,7 @@ import { Input } from '../primitives/Input';
 import { Skeleton } from '../primitives/Skeleton';
 import { Surface } from '../primitives/Surface';
 import { Tooltip } from '../primitives/Tooltip';
+import { useUnsavedChanges } from '../internal/dirty';
 import { FloatingSidePanel, type FloatingSidePanelProps } from './FloatingSidePanel';
 import { SplitView } from './SplitView';
 
@@ -31,8 +32,11 @@ const meta = {
           'Shared side panel (design-system §5.1). Desktop: min(500px, 100vw - 32px) wide, 16px ' +
           'viewport margins, radius 20px, glass surface, independent body scroll. Mobile ' +
           '(< 768px): bottom sheet up to 90dvh or full height. ' +
-          '**Modal** (QuestionPracticePanel): backdrop, focus trap, background inert, Escape ' +
-          'and backdrop click close, focus returns to the opener. ' +
+          '**Modal** (QuestionPracticePanel, every home dialog since UX9 — design-system §5.5): ' +
+          'backdrop, focus trap, background inert, Escape and backdrop click close (a backdrop ' +
+          'click never reaches the content underneath; with `dirty` or `useUnsavedChanges` ' +
+          'reporting unsaved input it does nothing), focus returns to the opener. `steps` adds ' +
+          'header 이전/다음 buttons (Alt+↑/Alt+↓) for panels that cover the list they show. ' +
           '**Non-modal** (DocumentExcerptPanel): no backdrop or trap; the background stays ' +
           'clickable and focusable and does not dismiss the panel; Escape closes only while ' +
           'focus is inside; focus returns to the opener. Layer: --z-side-panel; motion: ' +
@@ -121,6 +125,47 @@ export const NonModal: Story = {
     footer: <Button>원문으로 이동</Button>,
   },
   render: (args) => <Demo {...args} />,
+};
+
+function UnsavedName() {
+  const [name, setName] = useState('');
+  useUnsavedChanges(name !== '');
+  return (
+    <Input
+      label="모의고사 이름"
+      value={name}
+      onChange={(e) => setName(e.target.value)}
+      description="이름을 입력하면 backdrop을 눌러도 닫히지 않습니다(Escape·닫기로는 닫힘)."
+    />
+  );
+}
+
+export const UnsavedInput: Story = {
+  args: { title: '모의고사 만들기', description: undefined, children: <UnsavedName /> },
+  render: (args) => <Demo {...args} />,
+};
+
+function StepsDemo(args: FloatingSidePanelProps) {
+  const results = ['1번 결과', '2번 결과', '3번 결과'];
+  const [at, setAt] = useState(0);
+  return (
+    <Demo
+      {...args}
+      steps={{
+        previousLabel: '이전 결과',
+        nextLabel: '다음 결과',
+        onPrevious: at > 0 ? () => setAt(at - 1) : undefined,
+        onNext: at < results.length - 1 ? () => setAt(at + 1) : undefined,
+      }}
+    >
+      <p style={{ margin: 0 }}>{results[at]}의 발췌입니다.</p>
+    </Demo>
+  );
+}
+
+export const WithSteps: Story = {
+  args: { title: '본문 발췌', description: '3장 · 42쪽' },
+  render: (args) => <StepsDemo {...args} />,
 };
 
 export const NoBackdropClose: Story = {

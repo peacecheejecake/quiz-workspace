@@ -238,7 +238,10 @@ test(
       // on top before each probe): the click may land on the backdrop and close a dialog that
       // has nothing to lose, but never activates what is behind it.
       const marker = await overviewUi.dots(page).first().boundingBox();
-      const header = await homeUi.questionMenuButton(page).boundingBox();
+      // The `문서 n` button: the home no longer steps aside (AC03), so at 1280px the `문제` menu
+      // button lies under the 500px dialog itself (a click there lands inside the dialog, not on
+      // its backdrop); `문서 n` stays left of every dialog.
+      const header = await homeUi.documentsButton(page).boundingBox();
       if (!marker || !header) throw new Error('home controls are not visible');
       for (const [what, box] of [
         ['marker', marker],
@@ -360,6 +363,28 @@ test(
     await expect(documents).toBeVisible();
     await expect.poll(() => hasFocusWithin(summary)).toBe(true);
     expect(await isBlocked(documents), '문서 관리 under 문서 요약 (deep link)').toBe(true);
+
+    // Mixed dialog types in one deep link: the centered 문제 등록 editor, then 문서 관리 on top —
+    // the active (last) dialog is also the one drawn on top, its backdrop over the editor.
+    await page.goto(homePath(s.workspaceId, 'panel=question-create&panel=documents'));
+    const editor = page.getByRole('dialog', {
+      name: /^(문제 등록|new question)$/i,
+      includeHidden: true,
+    });
+    await expect(editor).toBeVisible();
+    await expect(documents).toBeVisible();
+    await expect.poll(() => hasFocusWithin(documents)).toBe(true);
+    expect(await isBlocked(editor), '문제 등록 under 문서 관리').toBe(true);
+    const z = (l: Locator) => l.evaluate((el) => Number(getComputedStyle(el).zIndex));
+    expect(await z(documents), '문서 관리 drawn above 문제 등록').toBeGreaterThan(await z(editor));
+    // What is under the dialog's own first control is that control (not the editor's backdrop).
+    const close = documents.getByRole('button', { name: /문서 관리 닫기|close/i });
+    const hit = await close.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return top !== null && el.contains(top);
+    });
+    expect(hit, '문서 관리 receives the pointer').toBe(true);
   },
 );
 
@@ -528,7 +553,12 @@ async function expectStableLayout(
     await expect(dialog, `${d.name} is modal`).toHaveAttribute('aria-modal', 'true');
     await settleAnimations(page);
     const during = await measure(page, parts);
-    expect(during, `${d.name}: layout while open`).toEqual(before);
+    // The scrollbar is hidden while a modal is open (user decision 2026-11-02); its gutter keeps
+    // the room, so every box stays put, but Chromium reports the root's clientWidth without the
+    // reserved gutter then. The home content's geometry is what must not move.
+    expect({ ...during, clientWidth: before.clientWidth }, `${d.name}: layout while open`).toEqual(
+      before,
+    );
 
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);

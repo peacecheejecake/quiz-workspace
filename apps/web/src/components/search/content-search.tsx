@@ -461,11 +461,7 @@ export function ContentSearchResults({
   return (
     <>
       {search.submitted ? (
-        <section
-          aria-labelledby="search-results-heading"
-          className={styles.resultsSection}
-          data-panel-open={search.panelOpen || undefined}
-        >
+        <section aria-labelledby="search-results-heading" className={styles.resultsSection}>
           <div className={styles.resultsHeader}>
             <h2 id="search-results-heading" className={styles.resultsTitle}>
               본문 검색 결과
@@ -539,6 +535,8 @@ export function ContentSearchResults({
         workspaceId={workspaceId}
         client={search.client}
         item={search.selected}
+        items={response?.items ?? []}
+        onSelect={search.openHit}
         open={search.panelOpen}
         onClose={search.closeHit}
       />

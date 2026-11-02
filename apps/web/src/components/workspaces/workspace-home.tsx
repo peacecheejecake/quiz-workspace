@@ -15,10 +15,13 @@
 //                     (AC09; clicking a result opens the excerpt panel, AC11)
 //   문제 영역         the heatmap (QuestionsOverview)
 //   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 모의고사 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
-//                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): non-modal
-//                     FloatingSidePanels portalled into this page (inside <main>), opened at once
-//                     and listed in the URL (`?panel=`, repeatable); the most recently opened is
-//                     on top (UX3b stacking).
+//                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): modal
+//                     FloatingSidePanels (HOMEDLG-01, UX9) portalled into this page (inside <main>)
+//                     and listed in the URL (`?panel=`, repeatable). While one is open the home
+//                     behind it is inert, so buttons open one home dialog at a time; dialogs opened
+//                     inside one (요약, 문제 상세, a footnote's question) and those of a deep link stack
+//                     in opening order, the top one active (useStagedDialogs). The home never steps
+//                     aside for them: opening or closing a dialog moves nothing.
 //   문제 등록 editor  `?panel=question-create` (문제 › 직접 추가 and the empty heatmap, UX7-BANK): the
 //                     modal question editor, rendered by QuestionsOverview; not a stacked panel.
 //   중복 문제 정리     `?panel=question-duplicates` (문제 › 중복 문제 정리, UX7-DEDUP, editors of an active
@@ -106,13 +109,13 @@ import {
   noteChapterOf,
   openChapterNote,
   parsePanels,
+  isHomePanel,
   patchSearch,
   withChapterNote,
   summaryDocumentId,
   contentSearchParams,
   DUPLICATES_PANEL,
   INACTIVE_QUESTIONS_PANEL,
-  isFloatingPanel,
   MOCK_EXAMS_PANEL,
   mockParamOf,
   mockViewOf,
@@ -137,7 +140,8 @@ import {
   type HomePanel,
 } from '@/lib/workspaces/home';
 import { withRunState, type RunUrlState } from '@/lib/questions/practice-runs';
-import { usePanelHistory } from './use-panel-history';
+import { useManualScrollWhile, usePanelHistory } from './use-panel-history';
+import { useStagedDialogs } from './use-staged-dialogs';
 import styles from './workspace-home.module.css';
 
 const ALL = '__all__';
@@ -230,13 +234,19 @@ export function WorkspaceHome({
     ((panel !== QUESTION_CREATE_PANEL && panel !== DUPLICATES_PANEL) || canEdit);
   const panels = parsePanels(searchParams).filter(allowed);
   const isOpen = (panel: HomePanel) => panels.includes(panel);
-  // Pressing the button of a dialog that is already open (maybe under another one) raises it.
-  const [raised, setRaised] = useState<Partial<Record<HomePanel, number>>>({});
+  // The dialogs on screen: the URL's, mounted one per commit in opening order (HOMEDLG-01). The
+  // practice and run panels (rendered by QuestionsOverview) wait for the dialogs listed before them.
+  const urlDialogs = openDialogs(`?${searchParams.toString()}`).filter(
+    (dialog) => !isHomePanel(dialog) || allowed(dialog),
+  );
+  const staged = useStagedDialogs(urlDialogs);
+  const shows = (panel: HomePanel) => isOpen(panel) && staged.has(panel);
+  const holdPracticePanels = urlDialogs.some((dialog) => !staged.has(dialog));
+  useManualScrollWhile(urlDialogs.length > 0);
   const setPanel = (panel: HomePanel, open: boolean) => {
-    if (open && isOpen(panel)) {
-      setRaised((r) => ({ ...r, [panel]: (r[panel] ?? 0) + 1 }));
-    }
     if (open) {
+      // A home dialog's button is behind the open dialog (inert): an open one is never reopened.
+      if (isOpen(panel)) return;
       panelHistory.push(`${pathname}${withPanel(window.location.search, panel, true)}`);
       return;
     }
@@ -255,9 +265,6 @@ export function WorkspaceHome({
   const summaryOpenerRef = useRef<HTMLElement | null>(null);
   const openSummary = (documentId: string, opener: HTMLElement) => {
     summaryOpenerRef.current = opener;
-    if (isOpen('document-summary')) {
-      setRaised((r) => ({ ...r, 'document-summary': (r['document-summary'] ?? 0) + 1 }));
-    }
     panelHistory.push(`${pathname}${withSummaryPanel(window.location.search, documentId)}`);
   };
   const [host, setHost] = useState<HTMLDivElement | null>(null);
@@ -266,11 +273,7 @@ export function WorkspaceHome({
   // `chapter` names the note's chapter while its panel is open (home.ts noteChapterOf).
   const noteChapter = noteChapterOf(searchParams);
   function openNote(chapterId: string) {
-    // An open note panel (maybe under another one) comes to the top, whichever chapter it shows.
     const next = openChapterNote(window.location.search, chapterId);
-    if (next.raise) {
-      setRaised((r) => ({ ...r, 'chapter-note': (r['chapter-note'] ?? 0) + 1 }));
-    }
     const target = `${pathname}${next.search}`;
     panelHistory.push(target);
     if (view.chapter !== null) {
@@ -556,7 +559,7 @@ export function WorkspaceHome({
   ];
 
   return (
-    <div className={styles.home} data-panel-open={panels.some(isFloatingPanel) || undefined}>
+    <div className={styles.home}>
       <h1 className="qz-visually-hidden">{workspace.name}</h1>
 
       <div className={styles.header}>
@@ -679,7 +682,9 @@ export function WorkspaceHome({
         onQuestionChange={changeQuestion}
         onRunNavigate={navigateRun}
         onRunClose={closeRun}
-        createOpen={isOpen(QUESTION_CREATE_PANEL)}
+        createOpen={shows(QUESTION_CREATE_PANEL)}
+        holdPanels={holdPracticePanels}
+        dialogContainer={host}
         onCreateOpenChange={(open) => setPanel(QUESTION_CREATE_PANEL, open)}
         documents={documentTitles}
         onQuestionsChanged={() => setQuestionsVersion((n) => n + 1)}
@@ -706,10 +711,8 @@ export function WorkspaceHome({
       {host ? (
         <>
           <FloatingSidePanel
-            open={isOpen('documents')}
+            open={shows('documents')}
             onOpenChange={(open) => setPanel('documents', open)}
-            raiseKey={raised.documents}
-            modal={false}
             container={host}
             title="문서 관리"
             closeLabel="문서 관리 닫기"
@@ -731,16 +734,14 @@ export function WorkspaceHome({
           </FloatingSidePanel>
           {canEdit ? (
             <FloatingSidePanel
-              open={isOpen(DUPLICATES_PANEL)}
+              open={shows(DUPLICATES_PANEL)}
               onOpenChange={(open) => setPanel(DUPLICATES_PANEL, open)}
-              raiseKey={raised[DUPLICATES_PANEL]}
-              modal={false}
               container={host}
               title="중복 문제 정리"
               closeLabel="중복 문제 정리 닫기"
               mobileLayout="full"
             >
-              {isOpen(DUPLICATES_PANEL) ? (
+              {shows(DUPLICATES_PANEL) ? (
                 <QuestionDuplicates
                   workspaceId={workspace.id}
                   onMerged={() => setQuestionsVersion((n) => n + 1)}
@@ -749,10 +750,8 @@ export function WorkspaceHome({
             </FloatingSidePanel>
           ) : null}
           <FloatingSidePanel
-            open={isOpen(INACTIVE_QUESTIONS_PANEL)}
+            open={shows(INACTIVE_QUESTIONS_PANEL)}
             onOpenChange={(open) => setPanel(INACTIVE_QUESTIONS_PANEL, open)}
-            raiseKey={raised[INACTIVE_QUESTIONS_PANEL]}
-            modal={false}
             container={host}
             title="보관·초안 문제"
             closeLabel="보관·초안 문제 닫기"
@@ -766,9 +765,8 @@ export function WorkspaceHome({
             />
           </FloatingSidePanel>
           <MockExamsPanel
-            open={isOpen(MOCK_EXAMS_PANEL)}
+            open={shows(MOCK_EXAMS_PANEL)}
             onOpenChange={(open) => setPanel(MOCK_EXAMS_PANEL, open)}
-            raiseKey={raised[MOCK_EXAMS_PANEL]}
             container={host}
             workspaceId={workspace.id}
             canEdit={canEdit}
@@ -778,10 +776,8 @@ export function WorkspaceHome({
             screenId={screenIds.mockExams}
           />
           <FloatingSidePanel
-            open={isOpen('history')}
+            open={shows('history')}
             onOpenChange={(open) => setPanel('history', open)}
-            raiseKey={raised.history}
-            modal={false}
             container={host}
             title="이력"
             closeLabel="이력 닫기"
@@ -792,9 +788,8 @@ export function WorkspaceHome({
             </div>
           </FloatingSidePanel>
           <ChapterNotePanel
-            open={isOpen('chapter-note')}
+            open={shows('chapter-note')}
             onOpenChange={(open) => (open ? undefined : closeNote())}
-            raiseKey={raised['chapter-note']}
             container={host}
             chapterId={noteChapter ?? null}
             chapterTitle={overview.chapters.find((c) => c.id === noteChapter)?.title}
@@ -804,9 +799,8 @@ export function WorkspaceHome({
             onGeneratingChange={onNoteGenerating}
           />
           <DocumentSummaryPanel
-            open={isOpen('document-summary')}
+            open={shows('document-summary')}
             onOpenChange={(open) => setPanel('document-summary', open)}
-            raiseKey={raised['document-summary']}
             container={host}
             workspaceId={workspace.id}
             documentId={summaryDocument?.id ?? null}
@@ -820,13 +814,12 @@ export function WorkspaceHome({
             returnFocusTo={() => summaryOpenerRef.current}
             onActivity={summaryActivity.report}
           />
-          {isOwner && isOpen('share') ? (
+          {isOwner && shows('share') ? (
             <WorkspaceSharingPanel
               workspaceId={workspace.id}
               archived={workspace.archived}
               open
               onOpenChange={(open) => setPanel('share', open)}
-              raiseKey={raised.share}
               container={host}
               screenId={screenIds.share}
             />

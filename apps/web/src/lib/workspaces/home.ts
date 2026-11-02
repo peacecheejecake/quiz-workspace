@@ -58,7 +58,7 @@ export const DUPLICATES_PANEL = 'question-duplicates' satisfies HomePanel;
 /** MOCK-01: `?panel=mock-exams` opens the 모의고사 dialog (every member). */
 export const MOCK_EXAMS_PANEL = 'mock-exams' satisfies HomePanel;
 
-/** The non-modal side panels: they stack and move the home content aside (UX3b). */
+/** The floating side panels (modal since UX9, HOMEDLG-01): every home dialog but 문제 등록. */
 export function isFloatingPanel(panel: HomePanel): boolean {
   return panel !== QUESTION_CREATE_PANEL;
 }

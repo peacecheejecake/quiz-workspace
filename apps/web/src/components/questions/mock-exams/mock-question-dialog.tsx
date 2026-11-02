@@ -7,7 +7,7 @@
 // new revision, PATCH /mock-exam-questions/{id}) and `이 모의고사에서 빼기` (ConfirmDialog). Viewers,
 // and editors of an archived workspace, get an answer-free preview: the list they read carries no
 // answers (MOCK-01-C05), so nothing here can show one before a submission.
-import { Badge, Button, ConfirmDialog, ModalDialog } from '@quiz/ui';
+import { Badge, Button, ConfirmDialog, ModalDialog, useUnsavedChanges } from '@quiz/ui';
 import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from 'react';
 import { FormNotice } from '@/components/auth/form-notice';
 import { displayStem } from '@/lib/questions/display-stem';
@@ -253,6 +253,8 @@ function MockQuestionEditor({
 }) {
   const stemId = useId();
   const [values, setValues] = useState(() => formOf(question));
+  const [opening] = useState(() => JSON.stringify(values));
+  useUnsavedChanges(JSON.stringify(values) !== opening);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [notice, setNotice] = useState<{ text: string; attempt: number } | null>(null);
   const [pending, setPending] = useState(false);

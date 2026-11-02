@@ -67,6 +67,16 @@ import {
   type Question,
 } from '../fixtures/test.ts';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
+import { homeBackgroundUi, isBlocked } from '../fixtures/ux9-pages.ts';
+
+/**
+ * The note's "정답·해설 포함" disclosure while a modal (the practice panel) is stacked over the note:
+ * the note is hidden from assistive technology then (UX9, HOMEDLG-01).
+ */
+const hiddenDisclosure = (page: Page) =>
+  page
+    .getByRole('dialog', { name: /^(정리 노트|chapter notes?)$/i, includeHidden: true })
+    .getByRole('button', { name: /^(정답·해설 포함|contains answers)/i, includeHidden: true });
 
 test.use({
   storageState: { cookies: [], origins: [] },
@@ -228,7 +238,8 @@ test(
           url.searchParams.getAll('panel').includes('chapter-note') &&
           url.searchParams.get('chapter') === s.ch1,
       );
-      await expect(panel).not.toHaveAttribute('aria-modal', 'true');
+      // UX9 (HOMEDLG-01, user decision "정리 노트도 모달로 변경"): a modal panel.
+      await expect(panel).toHaveAttribute('aria-modal', 'true');
       await expect(noteUi.empty(panel)).toBeVisible();
       await expect(noteUi.sendNotice(panel)).toBeVisible();
       await expect(panel).toContainText(noteUi.sendCount(3));
@@ -332,7 +343,9 @@ test(
     const play = panelUi.numbered(page, 2);
     await expect(play).toBeVisible();
     await expect(page).toHaveURL((url) => url.searchParams.get('question') === q(s, 2).id);
-    await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    // UX9 (HOMEDLG-01): the practice panel stacks over the modal note, which is hidden from
+    // assistive technology meanwhile.
+    await expect(hiddenDisclosure(page)).toHaveAttribute('aria-expanded', 'false');
     await expect(body).toBeHidden();
 
     // Closing it leaves the note folded and returns focus to the disclosure button.
@@ -455,6 +468,10 @@ test(
     await noteUi.sharedChapter(card, CH1).click();
     panel = noteUi.panel(page);
     await expect(noteUi.aiBadge(panel)).toBeVisible();
+    // UX9 (HOMEDLG-01, WS-VIEW-01): the guest's note panel is modal, the shared lists behind it
+    // inert.
+    await expect(panel).toHaveAttribute('aria-modal', 'true');
+    expect(await isBlocked(page.locator('aside').first()), 'the shared cards are inert').toBe(true);
     await expect(noteUi.version(panel)).toHaveCount(0);
     await expect(noteUi.create(panel)).toHaveCount(0);
     await expect(noteUi.regenerate(panel)).toHaveCount(0);
@@ -464,7 +481,9 @@ test(
     const body = await expand(panel);
     await expectText(body, 'NOTE-MIX-A', true, 'the guest reads the latest note');
     await noteUi.footnoteList(body).getByRole('link').first().click();
+    // The footnote's read-only question panel stacks over the note (both modal).
     await expect(sharedUi.questionPanel(page)).toBeVisible();
+    await expect(sharedUi.questionPanel(page)).toHaveAttribute('aria-modal', 'true');
     await expect(sharedUi.forbiddenControls(page)).toHaveCount(0);
 
     const own = await session.get(`/chapters/${s.ch1}/note`);
@@ -493,6 +512,10 @@ test(
     for (const token of NOTE_TOKENS.mixedValid) {
       await expectText(panel, token, false, `${token} is withheld from the guest`);
     }
+    // The card behind the modal panel is read once the panel is closed.
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await expect(noteUi.sharedCard(page)).toBeVisible();
     await expect(noteUi.sharedChapter(noteUi.sharedCard(page), CH1)).toHaveCount(0);
     const member = await getNote(viewer, s.ch1);
     expect(member.note).not.toBeNull();
@@ -514,7 +537,7 @@ test(
 );
 
 test(
-  'CHNOTE-01-AC05 opening a question folds the note; the practice panel and API never carry note content',
+  'CHNOTE-01-AC05 the Heatmap opens a question once the modal note is closed; the practice panel and API never carry note content',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await noteWorkspace(workspaceFactory, 'chnote01-ac05', 'mixed', 3);
@@ -523,17 +546,22 @@ test(
 
     await signInAs(page, s.owner.user);
     let panel = await openPanel(page, s.workspaceId, s.ch1);
-    const disclosure = noteUi.disclosure(panel);
     const body = await expand(panel);
     await expectText(body, 'NOTE-MIX-A', true, 'the note body is open');
 
-    // The Heatmap marker of the unsolved question 1 opens the practice panel; the note folds.
+    // UX9 (HOMEDLG-01, user decision "정리 노트도 모달로 변경. 모달을 닫고 문제를 누르도록 유도"):
+    // while the note is open the Heatmap is inert; the note is closed, then the marker of the
+    // unsolved question 1 opens the practice panel.
+    expect(
+      await isBlocked(homeBackgroundUi.chapterGroup(page, CH1)),
+      'the Heatmap is inert under the note',
+    ).toBe(true);
+    await noteUi.close(panel).click();
+    await expect(panel).toBeHidden();
     const dot = noteUi.group(page, CH1).getByRole('button', { name: questionNumberName(1) });
     await dot.click();
     const play = panelUi.numbered(page, 1);
     await expect(play).toBeVisible();
-    await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
-    await expect(body).toBeHidden();
     const optionText = `${s.label}-1 보기 가`;
     await expect(panelUi.option(play, optionText)).toBeVisible();
     const noNote = async (when: string) => {
@@ -573,8 +601,6 @@ test(
     await expect(play).toBeHidden();
 
     // Reopening the note panel starts folded again.
-    await noteUi.close(panel).click();
-    await expect(panel).toBeHidden();
     await noteUi.opener(noteUi.group(page, CH1), CH1).click();
     panel = noteUi.panel(page);
     await expect(noteUi.aiBadge(panel)).toBeVisible();

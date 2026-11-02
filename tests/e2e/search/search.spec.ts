@@ -42,6 +42,7 @@ import {
   type Problem,
   type SearchItem,
 } from '../fixtures/test.ts';
+import { homeBackgroundUi, isBlocked } from '../fixtures/ux9-pages.ts';
 import {
   createShareLink,
   expectFragmentRemoved,
@@ -202,15 +203,18 @@ test(
       .first();
     await hit.getByRole('button').first().click();
 
-    // Non-modal FloatingSidePanel next to the results: paragraph-complete excerpt + page.
+    // FloatingSidePanel over the results (modal since UX9, HOMEDLG-01: the search form and the
+    // results behind it are inert): paragraph-complete excerpt + page.
     const panel = searchUi.excerptPanel(page);
     await expect(panel).toBeVisible();
-    await expect(panel).not.toHaveAttribute('aria-modal', 'true');
+    await expect(panel).toHaveAttribute('aria-modal', 'true');
     await expect(panel).toContainText(CHLORINE_EN.text);
     await expect(panel).toContainText(pageLabel(CHLORINE_PAGE));
-    await searchUi.box(page).click();
-    await expect(searchUi.box(page)).toBeFocused();
-    await expect(panel).toBeVisible();
+    const box = page.locator('main').getByRole('searchbox', {
+      name: /^(본문 검색어|body search (query|text))$/i,
+      includeHidden: true,
+    });
+    expect(await isBlocked(box), 'the search box is inert').toBe(true);
 
     await searchUi.openInPdf(panel).click();
     await expect(page).toHaveURL(
@@ -330,6 +334,9 @@ test(
       .first()
       .click();
     await expect(searchUi.excerptPanel(page)).toBeVisible();
+    // UX9: the excerpt panel is modal (the search form behind it is inert); closed again.
+    await page.keyboard.press('Escape');
+    await expect(searchUi.excerptPanel(page)).toHaveCount(0);
 
     // The notice belongs to the degraded answer only.
     await runSearch(page, 'chlorine', 'hybrid');
@@ -521,22 +528,21 @@ test(
     await runSearch(page, 'chlorine', 'keyword');
     const items = searchUi.resultItems(page);
     await expect(items.filter({ hasText: /chlorine/i }).first()).toBeVisible();
-    // A dialog opens on a new history entry; a second search rewrites that entry's query.
+    // A dialog opens on a new history entry; Back with it open closes it and keeps the search.
+    // UX9 (HOMEDLG-01): the dialog is modal, so the search behind it cannot change meanwhile.
     await homeUi.documentsButton(page).click();
     await expect(homeUi.documentsDialog(page)).toBeVisible();
-    await searchUi.box(page).fill('evaporation');
-    await searchUi.box(page).press('Enter');
-    await expect(page).toHaveURL((url) => url.searchParams.get('text') === 'evaporation');
-    await expect(items.filter({ hasText: /evaporat/i }).first()).toBeVisible();
-
-    // Back with the dialog open closes it and keeps the search made meanwhile (UX7 확인 7).
     await page.waitForLoadState('networkidle');
     await page.goBack();
     await expect(page).toHaveURL(
-      (url) => url.searchParams.get('text') === 'evaporation' && !url.searchParams.has('panel'),
+      (url) => url.searchParams.get('text') === 'chlorine' && !url.searchParams.has('panel'),
     );
     await expect(homeUi.documentsDialog(page)).toHaveCount(0);
-    await expect(searchUi.box(page)).toHaveValue('evaporation');
+    await expect(searchUi.box(page)).toHaveValue('chlorine');
+    // A second search rewrites the entry's query.
+    await searchUi.box(page).fill('evaporation');
+    await searchUi.box(page).press('Enter');
+    await expect(page).toHaveURL((url) => url.searchParams.get('text') === 'evaporation');
     await expect(items.filter({ hasText: /evaporat/i }).first()).toBeVisible();
 
     // Without a dialog, Back onto the home restores the body search it had.
@@ -628,7 +634,7 @@ async function expectMarkedKeyword(panel: Locator, keyword: RegExp): Promise<voi
 }
 
 test(
-  'SEARCH-01-AC11 clicking anywhere on a body result opens its text around the keyword on the right; the keyboard does the same',
+  'SEARCH-01-AC11 clicking anywhere on a body result opens its text around the keyword in a modal panel; 이전/다음 결과 and the keyboard do the same',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('search01-ac11');
@@ -642,29 +648,54 @@ test(
     await expect(items.nth(1)).toBeVisible();
     const panel = searchUi.excerptPanel(page);
     await expect(panel).toHaveCount(0);
-
-    // Mouse on the excerpt paragraph (not the title) of the second hit.
+    const listBefore = await searchUi.results(page).boundingBox();
+    const first = items.first();
     const second = items.nth(1);
-    const secondText = (await searchUi.excerpt(second).innerText()).replace(/…/g, '').trim();
+    // Behind the modal panel the results are hidden from assistive technology: found with them.
+    const hits = homeBackgroundUi
+      .searchResults(page)
+      .getByRole('listitem', { includeHidden: true });
+    const firstTitle = hits.first().getByRole('button', { includeHidden: true }).first();
+    const secondTitle = hits.nth(1).getByRole('button', { includeHidden: true }).first();
+    const textOf = async (item: Locator) =>
+      (await searchUi.excerpt(item).innerText()).replace(/…/g, '').trim();
+    const firstText = await textOf(first);
+    const secondText = await textOf(second);
+
+    // Mouse on the excerpt paragraph (not the title) of the second hit. UX9 (user decision
+    // 2026-11-02): the panel is modal — the results behind it are inert and do not step aside.
     await searchUi.excerpt(second).click();
     await expect(panel).toBeVisible();
-    await expect(panel).not.toHaveAttribute('aria-modal', 'true');
+    await expect(panel).toHaveAttribute('aria-modal', 'true');
+    expect(await isBlocked(homeBackgroundUi.searchResults(page)), 'results are inert').toBe(true);
+    expect(await homeBackgroundUi.searchResults(page).boundingBox()).toEqual(listBefore);
     await expect(panel).toContainText(secondText.slice(0, 30));
     await expectMarkedKeyword(panel, /water/i);
-    await expect(second.getByRole('button').first()).toHaveAttribute('aria-current', 'true');
-    // On the right of the results.
-    const panelBox = await panel.boundingBox();
-    const listBox = await searchUi.results(page).boundingBox();
-    expect(panelBox && listBox && panelBox.x >= listBox.x + listBox.width - 1).toBe(true);
+    await expect(secondTitle).toHaveAttribute('aria-current', 'true');
 
-    // Keyboard: the first hit's title button with Enter switches the panel to it.
-    const first = items.first();
-    const firstText = (await searchUi.excerpt(first).innerText()).replace(/…/g, '').trim();
-    await first.getByRole('button').first().focus();
+    // 이전 결과 moves the panel to the result before it (the list's order).
+    await panel.getByRole('button', { name: /^(이전 결과|previous result)$/i }).click();
+    await expect(panel).toContainText(firstText.slice(0, 30));
+    await expect(firstTitle).toHaveAttribute('aria-current', 'true');
+    await expect(secondTitle).not.toHaveAttribute('aria-current', 'true');
+    await expect(
+      panel.getByRole('button', { name: /^(이전 결과|previous result)$/i }),
+    ).toBeDisabled();
+    // Alt+↓ is 다음 결과.
+    await page.keyboard.press('Alt+ArrowDown');
+    await expect(panel).toContainText(secondText.slice(0, 30));
+    await expect(secondTitle).toHaveAttribute('aria-current', 'true');
+
+    // Escape closes it; focus goes to the result last shown.
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await expect(secondTitle).toBeFocused();
+
+    // Keyboard: the first hit's title button with Enter opens it.
+    await firstTitle.focus();
     await page.keyboard.press('Enter');
     await expect(panel).toContainText(firstText.slice(0, 30));
-    await expect(first.getByRole('button').first()).toHaveAttribute('aria-current', 'true');
-    await expect(second.getByRole('button').first()).not.toHaveAttribute('aria-current', 'true');
+    await expect(firstTitle).toHaveAttribute('aria-current', 'true');
   },
 );
 
@@ -819,7 +850,8 @@ test(
     await homeUi.documentsButton(page).click();
     await expect(homeUi.documentsDialog(page)).toBeVisible();
     release();
-    await expect(overviewUi.dots(page)).toHaveCount(1);
+    // UX9: the Heatmap behind the modal dialog is hidden from assistive technology.
+    await expect(homeBackgroundUi.dots(page)).toHaveCount(1);
     await expect(page).toHaveURL(
       (url) =>
         url.searchParams.get('q') === 'search01-ac12 chlorine' &&

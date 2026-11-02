@@ -104,7 +104,8 @@ export function QuestionMenu({
           pending.current = null;
           if (!action) return;
           event.preventDefault();
-          triggerRef.current?.focus();
+          // The dialog it opens never moves the page (HOMEDLG-01-AC03), nor does this focus.
+          triggerRef.current?.focus({ preventScroll: true });
           action();
         }}
       >

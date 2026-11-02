@@ -2,7 +2,7 @@
 
 // WS-VIEW-01 `정리 노트` card and read-only panel (CHNOTE-01-AC04, docs/workspace-sharing.md §8):
 // the card lists the chapters whose newest note matches its source questions (the API leaves out
-// the rest); a chapter button opens the note in a non-modal panel
+// the rest); a chapter button opens the note in a modal panel (UX9, HOMEDLG-01)
 // (`/share/:id?panel=chapter-note&chapter=:chapterId`) with the same folded "정답·해설 포함"
 // body. A guest gets no versions, status, errors or actions; a note that no longer matches its
 // questions (404) shows only "정리 노트가 갱신 중이거나 없습니다.". Footnotes open the share page's
@@ -123,7 +123,6 @@ export function SharedChapterNotes({
         onOpenChange={(open) => {
           if (!open) navigate(null, false);
         }}
-        modal={false}
         title={NOTE_TEXT.title}
         description={title ?? listedTitle ?? undefined}
         closeLabel="정리 노트 닫기"

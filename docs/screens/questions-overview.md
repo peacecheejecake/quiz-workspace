@@ -101,11 +101,11 @@
 
 ### QOV-01-AC10
 
-- **Given:** Workspace 홈에서 floating dialog 하나가 열린 상태
-- **When:** 다른 floating dialog(문서 관리·이력·링크 공유·`문제` 메뉴의 모의고사)를 연다
-> **UX9-SPEC 사용자 결정 2026-11-02 D3:** 홈 dialog가 modal이 되어 이 AC의 "두 dialog를 함께 열기·가려진 dialog 다시 위로·옆으로 비켜서기"는 없어진다 — 대신 HOMEDLG-01-AC01(modal·배경 비활성)·AC02(안에서 연 것만 쌓임)·AC03(배치 고정). UX9-MODAL이 이 AC를 test와 함께 "한 dialog가 열린 동안 다른 홈 dialog 버튼은 비활성이고 닫기·Escape로 닫으면 `panel=`이 URL에서 빠진다"로 고친다(그 전까지 지금 test는 지금 동작으로 GREEN).
+> **UX9-SPEC 사용자 결정 2026-11-02 D3 (UX9-MODAL에서 test와 함께 고침):** 홈 dialog가 modal이 되어 이 AC의 "두 dialog를 함께 열기·가려진 dialog 다시 위로·옆으로 비켜서기"는 없어졌다 — 대신 HOMEDLG-01-AC01(modal·배경 비활성)·AC02(안에서 연 것만 쌓임)·AC03(배치 고정). UX9 전 문구: Given "floating dialog 하나가 열린 상태", When "다른 floating dialog(문서 관리·이력·링크 공유·모의고사)를 연다", Then "두 dialog가 함께 열려 있고 나중에 연 dialog가 위, 가려진 dialog의 버튼을 다시 누르면 다시 위로, 데스크톱에서는 홈 내용이 비켜섬, 닫기 버튼과 Escape(focus가 안에 있을 때)로 닫히고 `?panel=` 값이 빠짐(UX3c)".
 
-- **Then:** 두 dialog가 함께 열려 있고 나중에 연 dialog가 위에 온다(더 높은 쌓임 순서). 이미 열려 있지만 가려진 dialog의 버튼을 다시 누르면 그 dialog가 다시 위로 온다. 데스크톱에서는 열린 dialog 옆으로 홈 내용(header 버튼 포함)이 비켜서 다른 dialog를 열 수 있다. 각 dialog는 닫기 버튼과 Escape(focus가 안에 있을 때)로 닫히고, 닫히면 해당 `?panel=` 값이 URL에서 빠진다(UX3c).
+- **Given:** Workspace 홈(데스크톱)에서 floating dialog(이력) 하나가 열린 상태
+- **When:** 다른 홈 dialog 버튼(`문서 n` — dialog 왼쪽에 보이는 버튼) 자리를 누르고; `문제` 메뉴의 모의고사를 열어 닫기 버튼으로 닫고; 이력을 열어 Escape로 닫는다
+- **Then:** 열린 dialog는 modal이라 다른 홈 dialog 버튼(`문서 n`·`문제`)은 비활성(`inert`)이고, 그 자리 click은 backdrop click이라 열린 dialog(저장하지 않은 입력 없음)만 닫고 다른 dialog를 열지 않는다. 각 dialog는 닫기 버튼과 Escape(dialog 안 어디서든)로 닫히고, 닫히면 그 `?panel=` 값이 URL에서 빠지며 focus는 연 버튼으로 돌아간다.
 
 ### QOV-01-AC11
 
@@ -127,7 +127,7 @@
 
 ### QOV-01-AC14
 
-> **UX9-SPEC 사용자 결정 2026-11-02 D3:** 기록 규칙은 그대로지만 홈 dialog가 modal이 되어 "두 dialog(문서 관리 위에 이력)를 쌓아 연 채 뒤로가기 두 번"·"아래 dialog를 닫은 뒤 뒤로가기"를 버튼으로는 만들 수 없다. UX9-MODAL이 그 단계를 "문서 관리 → 행의 `요약`(쌓임) 뒤 뒤로가기 두 번"으로, `?panel=documents&panel=history` 딥링크 단계는 그대로(둘 다 쌓여 열리고 뒤로가기 한 번에 맨 위부터 하나씩 — HOMEDLG-01-AC02) 두되 "닫힌 아래 dialog" 단계만 test와 함께 바꾼다.
+> **UX9-SPEC 사용자 결정 2026-11-02 D3:** 기록 규칙은 그대로지만 홈 dialog가 modal이 되어 "두 dialog(문서 관리 위에 이력)를 쌓아 연 채 뒤로가기 두 번"·"아래 dialog를 닫은 뒤 뒤로가기"를 버튼으로는 만들 수 없다. UX9-MODAL이 그 단계를 "문서 관리 → 행의 `요약`(쌓임) 뒤 뒤로가기 두 번"으로, `?panel=documents&panel=history` 딥링크 단계는 그대로(둘 다 쌓여 열리고 뒤로가기 한 번에 맨 위부터 하나씩 — HOMEDLG-01-AC02) 두되 "닫힌 아래 dialog" 단계는 "`?panel=documents&panel=history` 딥링크에서 Escape로 맨 위(이력)를 닫은 뒤 뒤로가기 두 번(문서 관리 닫힘, 홈을 떠남)"으로 test와 함께 바꿨다. "dialog를 연 채 필터를 바꾸기"는 사용자가 modal 뒤의 필터에 닿을 수 없어 test가 필터 버튼을 DOM으로 눌러 기록 규칙(열린 동안 바뀐 주소는 닫아도 남음)만 확인한다.
 
 - **Given:** 확정 문제가 있는 Workspace 홈(Owner), 그 전에 Workspace 목록을 연 기록
 - **When:** 문서 관리 dialog, 이력, 링크 공유, 문제 등록 dialog, 문제 풀이 panel(다음 문제로 옮긴 뒤)을 각각 열고 닫은 뒤 뒤로가기·앞으로가기를 누르고; dialog를 연 채 필터를 바꾸고 뒤로가기로 닫은 뒤 앞으로가기를 누르고, 다시 연 채 필터를 바꾸고 닫기 버튼으로 닫은 뒤 뒤로가기·앞으로가기를 누르고; 두 dialog(문서 관리 위에 이력)를 쌓아 연 채 뒤로가기를 두 번 누른 뒤 앞으로가기를 누르고; 다시 쌓아 연 채 아래 dialog를 닫은 뒤 뒤로가기를 두 번 누르고; 풀이 panel에서 다음 문제로 옮긴 뒤 뒤로가기·앞으로가기·뒤로가기·뒤로가기·앞으로가기를 누르고; `?panel=history`·`?panel=documents&panel=history`·`?question=` 딥링크로 들어와 뒤로가기를 누르고, `?panel=history` 딥링크의 dialog를 닫기 버튼으로 닫은 뒤 뒤로가기·앞으로가기를 누르고, `?panel=history` 딥링크를 새로 고침한 뒤 뒤로가기를 누름

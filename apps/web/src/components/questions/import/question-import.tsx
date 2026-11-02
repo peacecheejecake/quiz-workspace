@@ -992,7 +992,12 @@ export function QuestionImport({
         save={saveDraft}
         reload={reloadDraft}
       />
-      <SourceComparePanel draft={comparing} onClose={() => setComparing(null)} />
+      <SourceComparePanel
+        draft={comparing}
+        drafts={pageDrafts ?? []}
+        onSelect={setComparing}
+        onClose={() => setComparing(null)}
+      />
     </div>
   );
 }

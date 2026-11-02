@@ -79,6 +79,7 @@ import {
   type Problem,
   type Question,
 } from '../fixtures/test.ts';
+import { homeBackgroundUi, homeDialogUi, isBlocked } from '../fixtures/ux9-pages.ts';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 
 test.use({
@@ -210,7 +211,8 @@ test(
     await mockUi.menuItem(page).click();
     const dialog = mockUi.dialog(page);
     await expect(dialog).toBeVisible();
-    await expect(dialog).not.toHaveAttribute('aria-modal', 'true');
+    // UX9 (HOMEDLG-01): a modal dialog.
+    await expect(dialog).toHaveAttribute('aria-modal', 'true');
     await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').includes('mock-exams'));
     await expect(mockUi.busy(dialog)).toBeVisible();
     await expect(mockUi.loading(dialog)).toBeVisible();
@@ -221,13 +223,17 @@ test(
     await expect(mockUi.add(dialog)).toHaveCount(1);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
 
-    // It stacks with the 문서 관리 dialog; the one opened later is on top.
-    await homeUi.documentsButton(page).click();
-    const documents = homeUi.documentsDialog(page);
+    // UX9 (HOMEDLG-01): modal — the header behind it is inert, so 문서 관리 does not open beside
+    // it; a deep link listing both stacks them in URL order, the last one on top.
+    expect(await isBlocked(homeBackgroundUi.documentsButton(page)), '문서 n is inert').toBe(true);
+    await page.goto(homePath(ws.id, 'panel=mock-exams&panel=documents'));
+    const documents = homeDialogUi.documents(page);
+    const stacked = homeDialogUi.mockExams(page);
     await expect(documents).toBeVisible();
-    await expect(dialog).toBeVisible();
+    await expect(stacked).toBeVisible();
     const z = (l: Locator) => l.evaluate((el) => Number(getComputedStyle(el).zIndex));
-    expect(await z(documents)).toBeGreaterThan(await z(dialog));
+    expect(await z(documents)).toBeGreaterThan(await z(stacked));
+    expect(await isBlocked(stacked), '모의고사 under 문서 관리').toBe(true);
 
     // The retired 문제 생성 dialog URL lands on 모의고사.
     await page.goto(homePath(ws.id, 'panel=generate'));

@@ -2,9 +2,10 @@
 
 // QuestionViewer `read-only` mode (QVIEW-01 call site 6: a share-link guest's question preview,
 // WS-VIEW-01-AC01/AC03, CHNOTE-01-AC04): a published question with its options, correct answer
-// and explanation in a non-modal Floating Side Panel next to the list that opened it. No answer
-// input, favourite, retry, history or edit control, and showing it records nothing.
-import { Badge, FloatingSidePanel } from '@quiz/ui';
+// and explanation in a modal Floating Side Panel over the list that opened it (modal since UX9,
+// HOMEDLG-01: the list behind it is inert; `steps` moves to the list's neighbouring question). No
+// answer input, favourite, retry, history or edit control, and showing it records nothing.
+import { Badge, FloatingSidePanel, type FloatingSidePanelProps, type PanelSteps } from '@quiz/ui';
 import type { ReactNode } from 'react';
 import type { QuestionRevision } from '@/lib/questions/actions';
 import { QUESTION_TYPE_LABELS } from '@/lib/questions/form';
@@ -24,6 +25,9 @@ export interface ReadOnlyViewerProps {
   readonly onClose: () => void;
   /** Below the body: the caller's source links (they point into its own document viewer). */
   readonly sources?: ReactNode;
+  /** `이전 문제`/`다음 문제` along the list the panel covers. */
+  readonly steps?: PanelSteps;
+  readonly onCloseAutoFocus?: FloatingSidePanelProps['onCloseAutoFocus'];
   readonly className?: string;
 }
 
@@ -33,11 +37,12 @@ export function ReadOnlyViewer({
   description,
   onClose,
   sources,
+  steps,
+  onCloseAutoFocus,
   className,
 }: ReadOnlyViewerProps) {
   return (
     <FloatingSidePanel
-      modal={false}
       open={question !== null}
       onOpenChange={(next) => {
         if (!next) onClose();
@@ -45,6 +50,8 @@ export function ReadOnlyViewer({
       title={title}
       description={description}
       closeLabel="패널 닫기"
+      steps={steps}
+      onCloseAutoFocus={onCloseAutoFocus}
       mobileLayout="full"
     >
       {question ? (

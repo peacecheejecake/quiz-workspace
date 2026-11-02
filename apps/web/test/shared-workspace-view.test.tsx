@@ -165,7 +165,7 @@ describe('SharedWorkspaceView', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('previews a question read-only in a non-modal panel', async () => {
+  it('previews a question read-only in a modal panel with 이전/다음 문제 (UX9)', async () => {
     routes({
       '': () => json(WORKSPACE),
       '/questions': () => json({ items: [QUESTION], next_cursor: null }),
@@ -174,7 +174,10 @@ describe('SharedWorkspaceView', () => {
     const list = await screen.findByRole('list', { name: /문제/ });
     await userEvent.click(within(list).getByRole('button', { name: /비는 무엇인가/ }));
     const panel = await screen.findByRole('dialog', { name: /문제/ });
-    expect(panel).not.toHaveAttribute('aria-modal', 'true');
+    expect(panel).toHaveAttribute('aria-modal', 'true');
+    // One question: no neighbour either way.
+    expect(within(panel).getByRole('button', { name: '이전 문제' })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: '다음 문제' })).toBeDisabled();
     expect(panel).toHaveTextContent('나');
     expect(panel).toHaveTextContent('정답');
     expect(panel).toHaveTextContent('해설 본문');
@@ -261,8 +264,11 @@ describe('SharedWorkspaceView', () => {
       [`/questions/${Q1}`]: () => json(QUESTION),
     });
     renderView();
-    const card = await screen.findByRole('region', { name: '정리 노트' });
-    expect(await within(card).findByRole('button', { name: '1장 비' })).toBeInTheDocument();
+    // The deep-linked note panel is modal (UX9): the card behind it is hidden from AT.
+    const card = await screen.findByRole('region', { name: '정리 노트', hidden: true });
+    expect(
+      await within(card).findByRole('button', { name: '1장 비', hidden: true }),
+    ).toBeInTheDocument();
     const panel = await screen.findByRole('dialog', { name: '정리 노트' });
     expect(await within(panel).findByText('AI 생성')).toBeInTheDocument();
     expect(within(panel).queryByRole('combobox')).toBeNull();
@@ -290,6 +296,6 @@ describe('SharedWorkspaceView', () => {
       await within(panel).findByText('정리 노트가 갱신 중이거나 없습니다.'),
     ).toBeInTheDocument();
     expect(within(panel).queryByText('AI 생성')).toBeNull();
-    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, hidden: true })).toBeInTheDocument();
   });
 });

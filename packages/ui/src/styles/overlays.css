@@ -5,6 +5,16 @@
  * then mounts and unmounts at once.
  */
 
+/* Modal scroll lock (design-system §5.5, HOMEDLG-01-AC03): Radix's RemoveScroll hides the page's
+   overflow (the scrollbar disappears while a modal is open) and compensates the vanished
+   scrollbar with body margin/padding, which moved the page sideways. The app keeps the scroll
+   root's gutter (`html { scrollbar-gutter: stable }`), so the compensation is turned off: the
+   gutter keeps the scrollbar's room and opening or closing a modal moves nothing. */
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
+  padding-right: 0 !important;
+}
+
 /* Backdrop shared by modal side panels, the mobile nav drawer and modal dialogs. */
 .qz-backdrop {
   position: fixed;

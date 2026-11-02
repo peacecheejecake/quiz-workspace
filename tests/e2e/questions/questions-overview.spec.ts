@@ -65,6 +65,7 @@ import {
   type Problem,
   type Question,
 } from '../fixtures/test.ts';
+import { homeBackgroundUi, homeDialogUi, isBlocked } from '../fixtures/ux9-pages.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -719,6 +720,9 @@ test(
     await expect(dialog.getByRole('list', { name: /^(이력|history)$/i })).toBeVisible();
     await expect(dialog.locator('[aria-busy="true"]')).toHaveCount(0);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
+    // UX9 (HOMEDLG-01): modal — the header behind it is inert until it closes.
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
 
     // A sub-page (문제 PDF 가져오기, from the 문서 관리 row's 문제 검토 link; QGEN-RM moved this
     // off the retired 변형 출제 review page): the route skeleton shows while the page's server
@@ -771,49 +775,47 @@ test(
 );
 
 test(
-  'QOV-01-AC10 a dialog opened later stacks above one already open; each closes on its own',
+  'QOV-01-AC10 while a home dialog is open the other dialog buttons are inert; its close button or Escape closes it and drops its panel',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac10', 1);
     await openOverview(page, s);
 
-    await homeUi.documentsButton(page).click();
-    const documents = homeUi.documentsDialog(page);
-    await expect(documents).toBeVisible();
-    await expect(documents).not.toHaveAttribute('aria-modal', 'true');
-    // The background stays usable while a dialog is open.
+    // UX9 (HOMEDLG-01): 이력 is modal, the header behind it is inert.
     await homeUi.historyButton(page).click();
-    const history = main(page).getByRole('dialog', { name: /^(이력|history)$/i });
+    const history = page.getByRole('dialog', { name: /^(이력|history)$/i });
     await expect(history).toBeVisible();
-    await expect(documents).toBeVisible();
-    await expect(page).toHaveURL(/panel=documents&panel=history/);
+    await expect(history).toHaveAttribute('aria-modal', 'true');
+    const documentsButton = homeBackgroundUi.documentsButton(page);
+    expect(await isBlocked(documentsButton), '문서 n is inert').toBe(true);
+    expect(await isBlocked(homeBackgroundUi.questionMenuButton(page)), '문제 is inert').toBe(true);
+    // A real click where 문서 n is (left of the dialog) lands on the backdrop: it closes 이력
+    // (nothing unsaved) and opens no other dialog.
+    const box = await documentsButton.boundingBox();
+    if (!box) throw new Error('문서 n is not visible');
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(history).toHaveCount(0);
+    await expect(homeUi.documentsDialog(page)).toHaveCount(0);
+    await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
 
-    const z = (l: Locator) => l.evaluate((el) => Number(getComputedStyle(el).zIndex));
-    expect(await z(history)).toBeGreaterThan(await z(documents));
-
-    // The `문제` menu's 모의고사 dialog (QGEN-RM: it replaced 변형 출제's 문제 생성) stacks on top too.
+    // The 모의고사 dialog: its close button drops `panel=mock-exams`.
     await chooseQuestionMenu(page, 'mockExams');
-    const mockExams = main(page).getByRole('dialog', { name: /^(모의고사|mock exams?)$/i });
+    const mockExams = page.getByRole('dialog', { name: /^(모의고사|mock exams?)$/i });
     await expect(mockExams).toBeVisible();
-    await expect(mockExams).not.toHaveAttribute('aria-modal', 'true');
-    await expect(page).toHaveURL(/panel=documents&panel=history&panel=mock-exams/);
-    expect(await z(mockExams)).toBeGreaterThan(await z(history));
+    await expect(mockExams).toHaveAttribute('aria-modal', 'true');
+    await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').join() === 'mock-exams');
     await mockExams.getByRole('button', { name: /모의고사 닫기|close/i }).click();
     await expect(mockExams).toBeHidden();
-    await expect(page).toHaveURL(/panel=documents&panel=history$/);
+    await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
 
-    // Pressing 문서 again brings its (covered) dialog back on top.
-    await homeUi.documentsButton(page).click();
-    await expect.poll(async () => (await z(documents)) > (await z(history))).toBe(true);
-
-    await documents.getByRole('button', { name: /문서 관리 닫기|close/i }).click();
-    await expect(documents).toBeHidden();
+    // 이력: Escape closes it wherever focus is inside it (modal: focus never leaves it).
+    await homeUi.historyButton(page).click();
     await expect(history).toBeVisible();
     await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').join() === 'history');
-    await history.getByRole('button', { name: /이력 닫기|close/i }).focus();
     await page.keyboard.press('Escape');
     await expect(history).toBeHidden();
     await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
+    await expect(homeUi.historyButton(page)).toBeFocused();
   },
 );
 
@@ -1085,6 +1087,9 @@ test(
   async ({ page, workspaceFactory }) => {
     test.setTimeout(180_000);
     const s = await seed(workspaceFactory, 'qov01-ac14', 2);
+    // A ready book: its 문서 관리 row's 요약 opens 문서 요약 stacked on 문서 관리 (UX9).
+    await uploadReadyBook(s.owner, s.workspaceId, 'book-ko');
+    const bookTitle = 'book-ko';
     const home = overviewPath(s.workspaceId);
     const onHome = (url: URL) => url.pathname === home;
     const onList = (url: URL) => url.pathname === '/workspaces';
@@ -1097,7 +1102,13 @@ test(
     await signInAs(page, s.owner.user);
 
     /** A history entry before the home (the workspace list), then the home itself. */
-    async function arrive(search = '', ready = overviewUi.heatmap(page)): Promise<void> {
+    async function arrive(
+      search = '',
+      // UX9: a deep-linked modal dialog hides the heatmap from assistive technology.
+      ready = search.includes('panel=')
+        ? page.getByRole('dialog').first()
+        : overviewUi.heatmap(page),
+    ): Promise<void> {
       await gotoAfterReload('/workspaces');
       await expect(page).toHaveURL(onList);
       await page.goto(`${home}${search}`);
@@ -1182,14 +1193,27 @@ test(
     // A filter chosen while a dialog is open survives its close, by Back (UX7 확인 7) or by its
     // close button; neither Back nor Forward reopens the dialog.
     const unseen = (url: URL) => noPanel(url) && url.searchParams.get('status') === 'unseen';
-    /** Opens 문서 관리 and picks the 미열람 filter while it is open. */
+    /**
+     * Opens 문서 관리 and picks the 미열람 filter while it is open. UX9 (HOMEDLG-01): the dialog is
+     * modal, so the user cannot reach the filter behind it; the filter's own buttons are driven
+     * through the DOM to keep the rule covered for any address change made while a dialog is open.
+     */
     async function openDocumentsAndFilter(): Promise<void> {
       await arrive();
       await homeUi.documentsButton(page).click();
       await expect(documents).toBeVisible();
-      await homeUi.statusFilterToggle(page).click();
-      await homeUi.statusFilters(page).getByRole('button', { name: '미열람', exact: true }).click();
+      const filters = main(page).getByRole('group', {
+        name: /^(상태 필터|status filter)$/i,
+        includeHidden: true,
+      });
+      await main(page)
+        .getByRole('button', { name: /^(상태 필터|status filter)$/i, includeHidden: true })
+        .dispatchEvent('click');
+      await filters
+        .getByRole('button', { name: '미열람', exact: true, includeHidden: true })
+        .dispatchEvent('click');
       await expect(page).toHaveURL(/[?&]status=unseen(&|$)/);
+      await expect(documents).toBeVisible();
     }
     // The close shows the filtered home over the entry before the open: Next reads it, and
     // WebKit cancels a Back started before that read ends.
@@ -1269,16 +1293,23 @@ test(
     await backLeavesHome();
     await forwardStaysClosed(panelUi.panel(page));
 
-    // Two stacked dialogs (이력 over 문서 관리): each Back closes the top one only, and Forward
-    // reopens neither.
+    // Two stacked dialogs (UX9: 문서 요약 opened from a 문서 관리 row stacks on it — buttons
+    // behind a modal dialog are inert): each Back closes the top one only, and Forward reopens
+    // neither.
+    const summary = homeUi.dialog(page, /^(문서 요약|document summary)$/i);
     await arrive();
     await homeUi.documentsButton(page).click();
     await expect(documents).toBeVisible();
-    await homeUi.historyButton(page).click();
-    await expect(history).toBeVisible();
+    await documents
+      .getByRole('button', { name: new RegExp(`^${bookTitle} (요약|summary)$`, 'i') })
+      .click();
+    await expect(summary).toBeVisible();
+    await expect(page).toHaveURL(
+      (url) => onHome(url) && panels(url) === 'documents,document-summary',
+    );
     await back();
     await expect(page).toHaveURL((url) => onHome(url) && panels(url) === 'documents');
-    await expect(history).toBeHidden();
+    await expect(summary).toBeHidden();
     await expect(documents).toBeVisible();
     await back();
     await expect(page).toHaveURL(noPanel);
@@ -1286,22 +1317,20 @@ test(
     await forward();
     await expect(page).toHaveURL(noPanel);
     await expect(documents).toBeHidden();
-    await expect(history).toBeHidden();
+    await expect(summary).toBeHidden();
     await backLeavesHome();
 
-    // Closing the lower one keeps the upper one open; the first Back closes it (the closed 문서
-    // 관리 stays closed), Forward reopens neither, the next Back leaves the home.
-    await arrive();
-    await homeUi.documentsButton(page).click();
+    // UX9: the lower dialog cannot be closed while one is stacked on it (it is inert); closing
+    // the top one with Escape leaves the lower one, the first Back closes that, Forward reopens
+    // neither, the next Back leaves the home.
+    await arrive('?panel=documents&panel=history');
+    await expect(history).toBeVisible();
+    // UX9: 문서 관리 is open under 이력, hidden from assistive technology meanwhile.
+    await expect(homeDialogUi.documents(page)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(history).toBeHidden();
     await expect(documents).toBeVisible();
-    await homeUi.historyButton(page).click();
-    await expect(history).toBeVisible();
-    // 문서 관리 lies under 이력: its close button is pressed from the keyboard.
-    await documents.getByRole('button', { name: closeDocuments }).focus();
-    await page.keyboard.press('Enter');
-    await expect(documents).toBeHidden();
-    await expect(history).toBeVisible();
-    await expect(page).toHaveURL((url) => panels(url) === 'history');
+    await expect(page).toHaveURL((url) => panels(url) === 'documents');
     await back();
     await expect(page).toHaveURL(noPanel);
     await expect(history).toBeHidden();
@@ -1323,7 +1352,8 @@ test(
     await forwardStaysClosed(history);
     await arrive('?panel=documents&panel=history');
     await expect(history).toBeVisible();
-    await expect(documents).toBeVisible();
+    // UX9: 문서 관리 is open under 이력, hidden from assistive technology meanwhile.
+    await expect(homeDialogUi.documents(page)).toBeVisible();
     await back();
     await expect(page).toHaveURL((url) => onHome(url) && panels(url) === 'documents');
     await expect(history).toBeHidden();
@@ -1436,20 +1466,22 @@ test(
     // 확정 the draft and 보관 해제 one archived question: both leave the list for the heatmap.
     await inactiveUi.confirm(inactiveUi.row(dialog, draft.revision.stem)).click();
     await expect(inactiveUi.rows(dialog)).toHaveCount(0);
-    await expect(overviewUi.dots(page)).toHaveCount(3);
+    // UX9: the Heatmap behind the modal dialog is hidden from assistive technology.
+    await expect(homeBackgroundUi.dots(page)).toHaveCount(3);
     await chooseFilter(page, inactiveUi.status(dialog), INACTIVE_STATUS_OPTIONS.archived);
     const restoredRow = inactiveUi.row(dialog, restored.revision.stem);
     await expect(restoredRow).toHaveCount(1);
     await inactiveUi.restore(restoredRow).click();
     await expect(restoredRow).toHaveCount(0);
-    await expect(overviewUi.dots(page)).toHaveCount(4);
-    await expect(overviewUi.dot(page, 10)).toBeVisible();
+    await expect(homeBackgroundUi.dots(page)).toHaveCount(4);
     expect((await getQuestion(s.owner, restored.id)).publication_status).toBe('CONFIRMED');
     expect((await getQuestion(s.owner, draft.id)).publication_status).toBe('CONFIRMED');
 
     // Closing drops the panel; Back never reopens it (QOV-01-AC14).
     await inactiveUi.close(dialog).click();
     await expect(dialog).toBeHidden();
+    await expect(overviewUi.dots(page)).toHaveCount(4);
+    await expect(overviewUi.dot(page, 10)).toBeVisible();
     await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
     // As in AC14: WebKit cancels a cross-document Back started under a pending router refresh
     // (here the status actions' revalidation), not because of the feature.
@@ -1603,10 +1635,8 @@ test(
     await expect(dedupUi.keepNumber(group, 2)).toBeChecked();
     await mergeSelected(page, dialog, 2);
     await expect(dedupUi.empty(dialog)).toBeVisible();
-    await expect(overviewUi.dots(page)).toHaveCount(3);
-    await expect(overviewUi.dot(page, 2)).toBeVisible();
-    await expect(overviewUi.dot(page, 1)).toHaveCount(0);
-    await expect(overviewUi.dot(page, 3)).toHaveCount(0);
+    // UX9: the Heatmap behind the modal dialog is hidden from assistive technology.
+    await expect(homeBackgroundUi.dots(page)).toHaveCount(3);
     expect((await getQuestion(owner, first.id)).publication_status).toBe('ARCHIVED');
     expect((await getQuestion(owner, third.id)).publication_status).toBe('ARCHIVED');
     expect((await getQuestion(owner, second.id)).publication_status).toBe('CONFIRMED');
@@ -1616,12 +1646,17 @@ test(
     // The archived copies are in 보관·초안 문제 (보관됨).
     await dedupUi.close(dialog).click();
     await expect(dialog).toBeHidden();
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    await expect(overviewUi.dot(page, 2)).toBeVisible();
+    await expect(overviewUi.dot(page, 1)).toHaveCount(0);
+    await expect(overviewUi.dot(page, 3)).toHaveCount(0);
     await chooseQuestionMenu(page, 'inactive');
     const inactive = inactiveUi.dialog(page);
     await chooseFilter(page, inactiveUi.status(inactive), INACTIVE_STATUS_OPTIONS.archived);
     await expect(inactiveUi.rows(inactive)).toHaveCount(2);
     await page.reload();
-    await expect(overviewUi.dots(page)).toHaveCount(3);
+    // Reloaded with 보관·초안 문제 open (modal): the Heatmap behind it.
+    await expect(homeBackgroundUi.dots(page)).toHaveCount(3);
 
     // Viewer: the item is disabled with the reason, the URL opens nothing, the API refuses.
     for (const res of [
@@ -1723,6 +1758,11 @@ test(
     await chooseFilter(page, inactiveUi.status(inactive), INACTIVE_STATUS_OPTIONS.archived);
     await expect(inactiveUi.rows(inactive)).toHaveCount(1);
     await inactiveUi.restore(inactiveUi.rows(inactive).first()).click();
+    await expect(homeBackgroundUi.dots(page)).toHaveCount(2);
+    // UX9: the Heatmap is read once the modal dialog is closed — Escape closes it even with the
+    // 보관 해제 toast shown (the top dialog first; the toast stays).
+    await page.keyboard.press('Escape');
+    await expect(inactive).toBeHidden();
     await expect(overviewUi.dots(page)).toHaveCount(2);
     await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'correct');
     await expect(overviewUi.dot(page, 2)).toHaveAttribute('data-status', 'incorrect');

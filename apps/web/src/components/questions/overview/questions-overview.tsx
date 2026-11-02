@@ -128,6 +128,16 @@ export interface QuestionsOverviewProps {
   readonly onQuestionChange?: (questionId: string | null) => void;
   /** `?panel=question-create` (owned by the home): the 문제 등록 editor is open. */
   readonly createOpen?: boolean;
+  /**
+   * The home's dialogs listed before the practice or run panel are still opening (HOMEDLG-01: a
+   * deep link's modal layers mount one at a time, in URL order): keep those panels closed meanwhile.
+   */
+  readonly holdPanels?: boolean;
+  /**
+   * The home's dialog container (inside <main>): the 문제 등록 editor is portalled there with the
+   * home's other modal dialogs, so a dialog stacked over it stays exposed (HOMEDLG-01).
+   */
+  readonly dialogContainer?: HTMLElement | null;
   readonly onCreateOpenChange?: (open: boolean) => void;
   /** The workspace's documents, for the 문제 상세 dialog's source titles (UX7-BANK-2). */
   readonly documents?: readonly { readonly id: string; readonly title: string }[];
@@ -212,6 +222,8 @@ export function QuestionsOverview({
   practiceReturnFocusRef,
   onQuestionChange,
   createOpen = false,
+  holdPanels = false,
+  dialogContainer,
   onCreateOpenChange,
   documents = NO_DOCUMENTS,
   onQuestionsChanged,
@@ -778,7 +790,7 @@ export function QuestionsOverview({
       <QuestionViewer
         mode="practice"
         workspaceId={workspaceId}
-        question={panelQuestion}
+        question={holdPanels ? null : panelQuestion}
         readOnly={readOnly === 'archived'}
         screenId={panelScreenId}
         neighbors={panelNeighbors}
@@ -834,7 +846,7 @@ export function QuestionsOverview({
         <QuestionViewer
           mode="sequence"
           workspaceId={workspaceId}
-          state={runState}
+          state={holdPanels ? null : runState}
           archived={readOnly === 'archived'}
           onNavigate={onRunNavigate}
           onClose={onRunClose}
@@ -891,6 +903,7 @@ export function QuestionsOverview({
       {canAuthor ? (
         <>
           <HomeQuestionEditor
+            container={dialogContainer}
             workspaceId={workspaceId}
             target={editorTarget}
             session={editorSession}

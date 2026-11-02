@@ -1,7 +1,7 @@
 'use client';
 
-// `DocumentSummaryPanel` (DOCSUM-01, docs/screens/documents-summary.md): the non-modal
-// FloatingSidePanel "문서 요약" over the workspace home (`?panel=document-summary&document=<id>`).
+// `DocumentSummaryPanel` (DOCSUM-01, docs/screens/documents-summary.md): the modal (UX9,
+// HOMEDLG-01; stacked over 문서 관리 when opened from its row) FloatingSidePanel "문서 요약" over the workspace home (`?panel=document-summary&document=<id>`).
 // It opens at once (an `aria-busy` skeleton while the state loads) and polls the summary state
 // while open — quickly while a run is queued/running, slowly otherwise, so a run started by a
 // publish elsewhere shows up without a reload. States are text, never colour alone:
@@ -44,7 +44,6 @@ export interface DocumentSummaryPanelProps {
   /** Owner/editor of an active workspace. */
   readonly canEdit: boolean;
   readonly container?: HTMLElement | null;
-  readonly raiseKey?: number;
   readonly screenId?: string;
   /** Element that gets focus back when the panel closes (the row's `요약` button). */
   readonly returnFocusTo?: () => HTMLElement | null;
@@ -139,7 +138,6 @@ export function DocumentSummaryPanel({
   questionPaper = false,
   canEdit,
   container,
-  raiseKey,
   screenId,
   returnFocusTo,
   onActivity,
@@ -154,9 +152,7 @@ export function DocumentSummaryPanel({
     <FloatingSidePanel
       open={open}
       onOpenChange={onOpenChange}
-      modal={false}
       container={container}
-      raiseKey={raiseKey}
       title="문서 요약"
       description={documentTitle ?? undefined}
       closeLabel="문서 요약 닫기"
