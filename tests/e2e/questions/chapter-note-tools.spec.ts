@@ -51,8 +51,12 @@ test.use({
 });
 test.describe.configure({ timeout: 6 * JOB_TIMEOUT_MS });
 
-/** Total "주의" hits of the search fixture: body 4 + footnote line 1 + two 내 하이라이트 quotes. */
-const ATTENTION_HITS = 7;
+/**
+ * Total "주의" hits of the search fixture: body 4 + footnote line 1 + the explanation-highlight
+ * row's quote 1. Note-body highlight rows of 내 하이라이트 are not searched (user decision
+ * 2026-11-02: the body already counts that text).
+ */
+const ATTENTION_HITS = 6;
 
 function q(s: NoteSetup, n: number): Question {
   const found = s.questions[n - 1];
@@ -263,7 +267,7 @@ test(
     await noteToolsUi.next(panel).click();
     await expect(noteToolsUi.count(panel, 4, ATTENTION_HITS)).toBeVisible();
     await expect(
-      panel.locator('[aria-live="polite"]').filter({ hasText: /7개 중 4번째|4 of 7/ }),
+      panel.locator('[aria-live="polite"]').filter({ hasText: /6개 중 4번째|4 of 6/ }),
     ).toHaveCount(1);
     // The current result: a stronger outline and the hidden text "현재 결과" (not color alone).
     await expect(noteToolsUi.current(panel)).toHaveCount(1);
@@ -278,8 +282,20 @@ test(
         ),
       ),
     ).toBe(true);
-    // One result is inside 내 하이라이트.
-    await expect(highlightUi.section(panel).locator('mark[data-search-result]')).not.toHaveCount(0);
+    // Inside 내 하이라이트 only the explanation-highlight row is searched; the note-body row (same
+    // text as the body's yellow mark) is not marked.
+    const section = highlightUi.section(panel);
+    await expect(section.locator('mark[data-search-result]')).toHaveCount(1);
+    await expect(
+      highlightUi
+        .row(section, highlightUi.rowMeta('pink', 'explanation', '1장 2번'))
+        .locator('mark[data-search-result]'),
+    ).toHaveCount(1);
+    await expect(
+      highlightUi
+        .row(section, highlightUi.rowMeta('yellow', 'note', '버전 1'))
+        .locator('mark[data-search-result]'),
+    ).toHaveCount(0);
 
     await search.fill('attention');
     await expect(noteToolsUi.count(panel, 1, 2)).toBeVisible();
@@ -299,19 +315,28 @@ test(
 );
 
 test(
-  'CHNOTE-02-AC04 while the modal note is open the Heatmap is inert; after closing it a marker opens and history never reopens either panel',
+  'CHNOTE-02-AC04 while the modal note is open the Heatmap is inert and a backdrop click only closes the note; then a marker opens and history never reopens either panel',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await noteSetup(workspaceFactory, 'chnote02-ac04', { count: 2 });
     await signInAs(page, s.owner.user);
     await page.goto('/workspaces');
     await page.goto(overviewPath(s.workspaceId));
+    const homeParams = [...new URL(page.url()).searchParams.entries()];
     const opener = noteUi.opener(noteUi.group(page, CH1), CH1);
     await opener.click();
     const panel = noteUi.panel(page);
     await expect(panel).toBeVisible();
     await expect(panel).toHaveAttribute('aria-modal', 'true');
-    const urlBefore = page.url();
+    /** The URL lost only the note's panel params (panel=chapter-note, chapter) and has no question. */
+    const expectNoteParamsGone = () =>
+      expect(page).toHaveURL(
+        (url) =>
+          !url.searchParams.has('question') &&
+          !url.searchParams.has('chapter') &&
+          !url.searchParams.getAll('panel').includes('chapter-note') &&
+          JSON.stringify([...url.searchParams.entries()]) === JSON.stringify(homeParams),
+      );
 
     // The Heatmap is inert: no focus, no hit-testing; Tab stays in the note.
     const marker = overviewUi.dot(page, 1);
@@ -325,31 +350,31 @@ test(
       await marker.evaluate((el, c) => el.contains(document.elementFromPoint(c.x, c.y)), center),
       'a click at the marker does not reach it',
     ).toBe(false);
-    await page.mouse.click(center.x, center.y);
-    await expect(panelUi.panel(page)).toHaveCount(0);
-    await expect(page).toHaveURL((url) => !url.searchParams.has('question'));
-    // HOMEDLG-01 lets a backdrop click close a dialog without unsaved input; CHNOTE-02-AC04 keeps
-    // the note open (spec ambiguity reported in UX9.0a). Either way nothing else opened.
-    if (!(await panel.isVisible())) {
-      expect(page.url()).not.toBe(urlBefore);
-      await opener.click();
-      await expect(panel).toBeVisible();
-    } else {
-      expect(page.url()).toBe(urlBefore);
-    }
 
-    await page.keyboard.press('Escape');
+    // A backdrop click at the marker closes the note (HOMEDLG-01 rule, user decision 2026-11-02)
+    // and never activates the marker behind it.
+    await page.mouse.click(center.x, center.y);
     await expect(panel).toBeHidden();
+    await expect(panelUi.panel(page)).toHaveCount(0);
     await expect(opener).toBeFocused();
-    await expect(page).toHaveURL(
-      (url) => !url.searchParams.getAll('panel').includes('chapter-note'),
-    );
+    await expectNoteParamsGone();
+
+    // A second click on the marker opens the question; closing it returns focus to the marker.
     await marker.click();
     const play = panelUi.numbered(page, 1);
     await expect(play).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(play).toBeHidden();
     await expect(marker).toBeFocused();
+
+    // Escape closes the note the same way.
+    await opener.click();
+    await expect(panel).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+    await expect(opener).toBeFocused();
+    await expectNoteParamsGone();
+
     await page.goBack();
     await expect(noteUi.panel(page)).toHaveCount(0);
     await expect(panelUi.panel(page)).toHaveCount(0);
