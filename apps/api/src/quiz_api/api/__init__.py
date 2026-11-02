@@ -14,6 +14,7 @@ from quiz_api.api import (
     document_summaries,
     documents,
     forks,
+    highlights,
     history,
     jobs,
     me,
@@ -59,3 +60,4 @@ api_router.include_router(chapter_notes.router)
 api_router.include_router(shared_chapter_notes.router)
 api_router.include_router(mock_exams.router)
 api_router.include_router(mock_practice.router)
+api_router.include_router(highlights.router)

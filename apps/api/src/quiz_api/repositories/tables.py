@@ -604,3 +604,29 @@ mock_exam_practice_sessions = Table(
     Column("workspace_id", Uuid, nullable=False),
     Column("user_id", Uuid, nullable=False),
 )
+
+
+# --- UX9-HL-B personal highlights (20261103140000_user_highlights.sql) ----------------------
+
+user_highlights = Table(
+    "user_highlights",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("user_id", Uuid, nullable=False),
+    Column("target_kind", Text, nullable=False),
+    Column("chapter_note_id", Uuid),
+    Column("question_id", Uuid),
+    Column("question_revision_id", Uuid),
+    Column("ai_explanation_id", Uuid),
+    Column("anchor", JSONB, nullable=False),
+    Column("quote", Text, nullable=False),
+    Column("prefix", Text, nullable=False),
+    Column("suffix", Text, nullable=False),
+    Column("color", Text, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("replaced_by", Uuid),
+    _ts("created_at", nullable=False),
+    _ts("updated_at", nullable=False),
+    _ts("deleted_at"),
+)

@@ -118,6 +118,7 @@ def random_ids() -> dict[str, str]:
         "mock_exam_id",
         "mock_exam_question_id",
         "mock_practice_session_id",
+        "highlight_id",
     )
     out = {k: str(uuid.uuid4()) for k in keys}
     out["block_id"] = f"b-{uuid.uuid4().hex[:12]}"
@@ -241,6 +242,19 @@ def build_world(seed: Any, label: str) -> World:
         "POST", f"/mock-exam-questions/{mock_question_id}/practice-sessions", None, (201,)
     )
 
+    # UX9-HL-B: the owner's highlight of the question's explanation (personal: other
+    # members get the unknown-id 404).
+    highlight = owner.ok(
+        "POST",
+        "/my-highlights",
+        {
+            "target": {"kind": "explanation", "question_id": qid},
+            "anchor": {"block": "p0", "start": 0, "end": 1},
+            "color": "yellow",
+        },
+        (201,),
+    )
+
     # A second workspace of the same owner, for requests that mix ids of two workspaces.
     twin = owner.create_workspace(f"S4 {label} twin")
     tid = str(twin["id"])
@@ -274,6 +288,7 @@ def build_world(seed: Any, label: str) -> World:
         "mock_exam_id": mock_exam_id,
         "mock_exam_question_id": mock_question_id,
         "mock_practice_session_id": str(mock_session["id"]),
+        "highlight_id": str(highlight["id"]),
     }
     twin_ids = {
         "workspace_id": tid,

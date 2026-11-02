@@ -55,6 +55,10 @@ OWNER_READ = Rule(OWNERS, writes=False)
 # QVIEW-B practice runs: personal, so creating and finishing one is allowed when archived.
 RUN_CREATE = Rule(ALL, writes=True, archived_ok=True)
 OWN_RUN_WRITE = Rule(ALL, writes=True, archived_ok=True, personal=True)
+# UX9-HL-B highlights: personal and the one write an archived workspace allows
+# (HILITE-01-C01).
+HIGHLIGHT_CREATE = Rule(ALL, writes=True, archived_ok=True)
+OWN_HIGHLIGHT = Rule(ALL, writes=True, archived_ok=True, personal=True)
 
 # Not workspace-scoped: the caller's own account data, the guest share API, health probes.
 ME = "me"  # any signed-in user, own data only
@@ -142,6 +146,14 @@ RULES: dict[str, Rule | str] = {
     "startMockPracticeSession": PRACTICE,
     "submitMockPracticeSession": OWN_WRITE,
     "selfGradeMockPracticeSession": OWN_WRITE,
+    # UX9-HL-B personal highlights (reads are the caller's rows only; HILITE-01-C01)
+    "listChapterHighlights": READ,
+    "listChapterlessHighlights": READ,
+    "listQuestionHighlights": READ,
+    "createHighlight": HIGHLIGHT_CREATE,
+    "updateHighlight": OWN_HIGHLIGHT,
+    "deleteHighlight": OWN_HIGHLIGHT,
+    "restoreHighlight": OWN_HIGHLIGHT,
     # workspace lifecycle and sharing
     "getWorkspace": READ,
     "listWorkspaceActivities": READ,
@@ -253,8 +265,18 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "submitMockPracticeSession": {"selected_option_ids": ["opt-1"]},
         "selfGradeMockPracticeSession": {"result": "correct"},
         "updateShareLink": {"allow_fork": False},
+        "createHighlight": {
+            "target": {"kind": "explanation", "question_id": ids["question_id"]},
+            "anchor": {"block": "p0", "start": 0, "end": 1},
+            "color": "yellow",
+        },
+        "updateHighlight": {"color": "blue", "version": 1},
     }
     return bodies.get(op_id)
+
+
+# Required query strings (the path alone would be 422).
+QUERIES: dict[str, str] = {"listChapterlessHighlights": "?chapter=none"}
 
 
 def _op(s4: Any, op_id: str) -> Any:
@@ -277,7 +299,10 @@ def call(
         headers["Cookie"] = cookie
     body = body_for(op.operation_id, ids)
     res: httpx.Response = http.request(
-        op.method, f"{s4.API}{op.url(ids)}", json=body, headers=headers
+        op.method,
+        f"{s4.API}{op.url(ids)}{QUERIES.get(op.operation_id, '')}",
+        json=body,
+        headers=headers,
     )
     http.cookies.clear()
     return res
