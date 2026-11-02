@@ -65,7 +65,7 @@ flowchart TD
 ## 4. 운영 환경 / IaC
 
 - `local`: `supabase start`(Postgres/Auth/Storage/Mailpit), Docker Compose(Qdrant/Redis), FastAPI/Worker/Next.js 로컬. 테스트 사용자/문서 fixture 및 비공개 모델 테스트용 adapter.
-- `preview`: Vercel preview, 공유 또는 분기별 staging Supabase **주의: staging/production DB 분리**, Railway staging API/Worker, 테스트용 Qdrant. redirect URL allowlist 관리.
+- `preview`: Vercel preview, 공유 또는 분기별 staging Supabase **주의: staging/production DB 분리**, Railway staging API/Worker, 테스트용 Qdrant. redirect URL allowlist 관리. (staging 자체가 `APP_ENV=preview`이고, PR마다의 web preview는 §5.1: 별도 Vercel project + staging backend 공유.)
 - `production`: 각 managed 서비스 production project, migration/health check, 모니터링, 알림 및 백업.
 - DB schema migrations: **한 가지 owner 경로만 사용**. MVP는 `supabase/migrations`의 SQL을 기준으로 하고 SQLAlchemy는 query/model 매핑용으로 사용; Alembic으로 이중 마이그레이션 금지. Alembic 채택 시 `supabase/migrations`와 책임을 분리해 인증/RLS/schema 충돌을 방지해야 함.
 - object key 예: `workspaces/{workspace_id}/documents/{document_id}/revisions/{revision_id}/source.pdf`(uuid 등 서버 생성 ID 사용). path 기반 URL 임의 조합 금지.
@@ -96,6 +96,32 @@ PR opened
 - 배포 시 API/schema 호환 기간을 유지하고 worker는 idempotent job 및 task schema version을 사용한다.
 - SQL migration은 additive-first → 코드 deploy → cleanup 방식. 컬렉션 업그레이드는 `documents_v2`/`questions_v2` 구축 후 alias/active index 전환. 실패 시 rollback 경로 보존.
 
+### 5.1 PR preview (PR-PREVIEW)
+
+**결론:** `develop`으로 들어오는 **같은 저장소 branch의 PR**마다 `.github/workflows/preview.yml`이 PR merge commit의 `apps/web`을 **Vercel preview**로 배포하고, URL을 PR의 고정 댓글 하나(`<!-- quiz-pr-preview -->`, push마다 같은 댓글을 수정)와 GitHub deployment `pr-preview`("View deployment")로 보인다. backend는 **staging을 그대로 쓴다**(Railway staging API/worker, staging Supabase·Storage, staging Qdrant prefix). production 값은 어디에도 없다.
+
+| 항목 | 결정 |
+|---|---|
+| 대상 | `pull_request`(opened·synchronize·reopened·closed), base `develop`만. `main` PR은 `develop`→`main` release뿐이고 그 코드는 이미 staging이다. fork PR·Dependabot은 건너뛴다(secret 없음). `pull_request_target`·`workflow_run`은 쓰지 않는다. |
+| 켜기 | repository variable `PR_PREVIEW_ENABLED=true`일 때만 job이 돈다(설정 전에는 모든 PR에서 skipped, 실패 아님). `ci-ok`·branch protection과 무관(preview 실패는 merge를 막지 않음). |
+| 경로 | CI와 같은 `scripts/ci_changes.py`: web image 입력(`apps/web`·`packages/{api-client,ui,design-tokens}`)이나 보수적 "전부 실행" 경로(`.github/`·lockfile·`scripts/` 등)가 바뀐 PR만 배포한다. API/docs만 바뀐 PR은 배포하지 않는다. |
+| Vercel | **preview 전용 Vercel project**(staging·production과 별도, Root Directory `apps/web`). `vercel pull --environment=preview` → `vercel build` → `vercel deploy --prebuilt --meta previewPr=<n> --meta previewSha=<head sha>`. `--prod`·alias 없음: 이 project는 공유 도메인을 갖지 않는다. 새 배포 뒤 같은 PR의 이전 배포는 지우고(best effort), PR이 닫히면 그 PR의 배포를 모두 지운다(`scripts/deploy/vercel_preview.py prune`, `meta.previewPr`이 같은 것만). |
+| 동시성 | PR마다 `preview-<n>` group, 새 push·close가 진행 중 run을 취소한다(close의 cleanup이 그 run이 만든 배포까지 지움). |
+| 권한 | workflow 기본 `permissions: {}`. Vercel token을 쓰는 job(deploy·cleanup)은 `contents: read`만, GitHub Environment `pr-preview`의 secret만 읽는다. 댓글 job은 `pull-requests: write`만 갖고 checkout·secret 없이 검증된 URL만 쓴다. |
+| 접근 | Vercel Deployment Protection(Vercel Authentication, preview 기본값)을 **켜 둔다**: preview는 staging 데이터를 읽고 검토 전 코드를 실행하므로 Vercel team member만 연다. |
+
+**별도 Vercel project인 이유.** (1) staging project의 Preview env에는 staging `AUTH_RECOVERY_MARKER_SECRET`이 있고 PR 코드의 `vercel build`는 project env 전체를 받는다 — preview는 자기 값을 쓴다. (2) staging alias를 옮기거나 staging 배포 목록을 지울 수 없다(prune은 이 project + `previewPr` meta만 본다). (3) `VERCEL_PROJECT_ID`가 GitHub Environment마다 달라 deploy.yml의 staging/production 경로와 섞이지 않는다.
+
+**CORS가 필요 없는 이유.** 브라우저는 FastAPI를 직접 부르지 않는다: 모든 업무 요청은 같은 origin의 Next.js BFF(`apps/web/src/app/api/**`, Server Component·Server Action)가 서버에서 FastAPI로 전달하며 이 호출에는 `Origin` header가 없다(§6.1 Origin guard 영향 없음). 그래서 매번 바뀌는 `*.vercel.app` host를 staging `CORS_ALLOWED_ORIGINS`에 넣지 않으며 wildcard 금지 규칙도 그대로다. 브라우저가 직접 연결하는 곳은 Supabase Auth(가입·재전송·재설정 요청)와 Storage 업로드(API가 발급한 signed URL)뿐이고 둘 다 origin allowlist가 없다. CSP `connect-src`는 build 시 public env의 staging origin을 쓴다.
+
+**Supabase Auth redirect.** preview host를 staging `additional_redirect_urls`에 **넣지 않는다**(wildcard 금지 유지). 메일 template은 `{{ .SiteURL }}/auth/callback?token_hash=…`라 가입 확인·재설정 링크는 항상 staging 웹으로 열리고, preview가 보낸 `emailRedirectTo`가 allowlist 밖이면 GoTrue가 `site_url`로 되돌린다. 같은 staging Supabase project라 확인된 계정은 preview에서 바로 로그인된다(로그인·session cookie는 preview origin의 Server Action). 메일 링크 흐름 자체를 preview에서 검증할 수는 없다.
+
+**Turnstile.** preview의 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`는 staging Supabase의 CAPTCHA secret과 짝이어야 한다. staging 기본(Cloudflare 테스트 키 쌍)은 host 제한이 없어 그대로 동작한다. staging이 실제 widget을 쓰면 preview host가 widget Hostname management에 없어 가입·로그인이 실패한다 — 그때는 preview에서 로그인 흐름을 쓰지 않거나 widget에 preview 도메인을 넣는 것을 사용자가 결정한다.
+
+**한계.** web만 미리 본다: PR의 API·worker·migration 변경은 반영되지 않는다(BFF가 현재 staging API를 부름). API 계약을 바꾼 PR의 preview는 staging API와 맞지 않을 수 있다. Railway PR environment(PR마다 api/worker + 분리된 DB·Redis·Qdrant prefix)는 Supabase project를 PR마다 만들 수 없고(branching 미사용, 2026-10-18 결정) staging DB에 PR migration을 적용하는 일은 금지라 채택하지 않는다. preview 사용자는 staging 계정·데이터를 쓰므로 합성 데이터만 쓴다. 공유 링크 `/shared`는 preview project에 staging과 같은 `RELAY_CLIENT_SECRET`이 있어야 동작한다(없으면 503).
+
+**잔여 위험.** `pull_request`는 PR branch의 workflow 파일로 실행되므로 저장소에 push할 수 있는 사람은 `pr-preview` environment의 Vercel token을 쓸 수 있다(team 단위 token). 그래서 staging/production GitHub Environment는 deployment branch 제한(`develop`/`main`)을 유지해야 하고, preview token은 staging과 별도로 만들어 만료를 짧게 둔다. 설정 단계는 [runbook-deploy.md §10](runbook-deploy.md).
+
 ## 6. Secrets / Security
 
 - Public: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`(Turnstile widget sitekey, auth.md §5.1)는 공개 가능한 값. 접근 권한 자체는 JWT/RLS/API에서 판정.
@@ -123,7 +149,7 @@ PR opened
 - Origin 비교: API는 IDNA 변환을 하지 않는다. 설정값과 들어오는 `Origin` 모두 scheme·host 소문자화, 기본 port(80/443) 제거, IPv6 bracket 유지만 하고 비교한다. 비ASCII `Origin` header는 거부(브라우저는 항상 punycode로 보냄).
 - Origin guard: `Origin` header가 allowlist에도 API 자신의 host에도 없으면(`Origin: null` 포함) preflight·본 요청 모두 route 실행 전 `403 application/problem+json`. `Origin`이 없는 server-to-server 호출(Next.js 서버)은 영향 없음.
 - 모든 응답 header: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`(로컬 `/api/v1/docs` 제외), HTTPS 또는 preview/production에서 `Strict-Transport-Security: max-age=63072000; includeSubDomains`. `/api/v1/**`와 `Authorization` 요청 응답은 `Cache-Control: no-store`. `quiz_api.serve`가 uvicorn `Server` header를 끈다.
-- Vercel preview URL은 배포마다 host가 바뀌므로 wildcard 대신 고정 preview alias 도메인을 `CORS_ALLOWED_ORIGINS`에 넣는다.
+- Vercel preview URL은 배포마다 host가 바뀌므로 wildcard 대신 고정 preview alias 도메인을 `CORS_ALLOWED_ORIGINS`에 넣는다. PR preview(§5.1)는 브라우저→API 직접 호출이 없어(BFF relay) 넣을 필요가 없다.
 
 **Web (Next.js).**
 - `src/proxy.ts`가 요청마다 nonce를 만들고 CSP를 응답(및 render용 request header)에 설정한다. 모든 page는 dynamic rendering(root layout `connection()`): 정적 page는 nonce를 가질 수 없다.
