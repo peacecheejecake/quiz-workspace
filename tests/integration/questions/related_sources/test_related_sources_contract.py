@@ -814,6 +814,37 @@ def test_relsrc_01_c04_twenty_concurrent_first_reads_compute_once(seed: Any) -> 
         hold.cleanup()
 
 
+def test_relsrc_01_c03_a_publish_during_a_computation_is_not_cached_under_the_old_key(
+    seed: Any,
+) -> None:
+    """A book published while a first read computes: the stored list's key and its passages
+    come from one corpus (never the new corpus' passages under the old fingerprint)."""
+    rig = Rig(seed, "c03-race")
+    hold = Hold()
+    try:
+        q = rig.question("c03-race", markers=(hold.marker,))
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(read, rig.owner, q["id"], view="detail")
+            hold.held([future])
+            new_revision = publish(rig.owner, rig.doc, {rig.block["ch2-s1-p1"]: APPLIED_REMOVED})
+            hold.release()
+            racing = ok(future.result(timeout=60))
+        [(items,)] = _admin(
+            "select items from public.question_related_sources where id = %s", (racing["id"],)
+        )
+        assert {i["revision_id"] for i in items} <= {rig.revision}, (
+            "the list stored under the pre-publish key holds passages of the new revision"
+        )
+        # The next read is the new corpus' own list.
+        fresh = ok(read(rig.owner, q["id"], view="detail"))
+        assert fresh["id"] != racing["id"]
+        assert {i["revision_id"] for i in fresh["items"]} == {new_revision}
+        assert APPLIED not in "\n".join(i["excerpt"] for i in fresh["items"])
+    finally:
+        hold.release()
+        hold.cleanup()
+
+
 # ---------------------------------------------------------------------------------------------
 # C05 not stored: archived, degraded, guests; outage
 # ---------------------------------------------------------------------------------------------

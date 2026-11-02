@@ -25,8 +25,10 @@ Storage (C03, C04): one row per (question revision, corpus fingerprint, retrieva
 Workspace-shared, holding references only; excerpts and highlights are rebuilt from the published
 blocks on every read. The corpus fingerprint covers the workspace's searchable books' published
 revisions, the index's model key and the chunk version (`corpus_fingerprint`). A first read takes
-a per-question `pg_advisory_xact_lock` on its own connection, re-checks, then computes and stores
-in that transaction, so concurrent first reads compute once. Older keys stay as superseded rows.
+a per-question advisory lock on its own connection, then in one REPEATABLE READ transaction
+recomputes the fingerprint, re-checks, computes and stores, so concurrent first reads compute
+once and a list is always stored under the key of the corpus it was computed from. Older keys
+stay as superseded rows.
 Not stored (C05): an archived workspace (computed and shown only), degraded search (BM25 only,
 `degraded: ["dense_unavailable"]`), guests (never compute). An index outage is 503
 `related-unavailable`.
@@ -492,10 +494,16 @@ def resolve(session: Session, deps: RelatedDeps, target: Target) -> tuple[Outcom
             session.rollback()
         return Outcome(None, degraded, items), content
     session.rollback()  # free the request's connection before waiting on the lock
-    with deps.database.engine.connect() as conn, conn.begin():
-        lock_lists(conn, target.kind, target.owner_id)
-        with Session(bind=conn, join_transaction_mode="create_savepoint") as locked:
+    with deps.database.engine.connect() as raw, lock_lists(raw, target.kind, target.owner_id):
+        # One REPEATABLE READ snapshot, taken after the lock: the key (fingerprint) and the
+        # computation read the same corpus even if a book is published meanwhile.
+        conn = raw.execution_options(isolation_level="REPEATABLE READ")
+        with (
+            conn.begin(),
+            Session(bind=conn, join_transaction_mode="create_savepoint") as locked,
+        ):
             locked_repo = RelatedSourcesRepository(locked)
+            fingerprint = _fingerprint(locked, deps.engine, target.workspace_id)
             row = locked_repo.stored(target.kind, target.revision_id, fingerprint, version)
             if row is not None:
                 if row.superseded and target.current:

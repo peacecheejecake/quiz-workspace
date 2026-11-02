@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -82,15 +83,24 @@ class BlockRow:
     chapter_id: uuid.UUID | None
 
 
-def lock_lists(conn: Connection, kind: Kind, owner_id: uuid.UUID) -> None:
-    """Transaction-scoped advisory lock of one question's lists, held until `conn` commits.
-
-    Taken on the connection's outer transaction, never inside a Session savepoint: rolling back a
-    savepoint (the retrieval ends its reads that way) would release a lock taken in it."""
-    conn.execute(
-        text("select pg_advisory_xact_lock(hashtextextended(:k, 0))"),
-        {"k": f"{kind.lock_prefix}{owner_id}"},
-    )
+@contextmanager
+def lock_lists(conn: Connection, kind: Kind, owner_id: uuid.UUID) -> Iterator[None]:
+    """Advisory lock of one question's lists while the block runs (session-level, taken and
+    committed before the block so the block's own transaction starts after it; released at the
+    end, or by dropping the connection if the unlock cannot run)."""
+    key = {"k": f"{kind.lock_prefix}{owner_id}"}
+    conn.execute(text("select pg_advisory_lock(hashtextextended(:k, 0))"), key)
+    conn.commit()
+    try:
+        yield
+    finally:
+        try:
+            if conn.in_transaction():
+                conn.rollback()
+            conn.execute(text("select pg_advisory_unlock(hashtextextended(:k, 0))"), key)
+            conn.commit()
+        except Exception:  # the connection is dropped instead
+            conn.invalidate()  # closing the session releases its locks
 
 
 class RelatedSourcesRepository:
