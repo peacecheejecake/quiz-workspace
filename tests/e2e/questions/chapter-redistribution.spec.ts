@@ -538,6 +538,14 @@ test(
     // Apply A only.
     await redistUi.applyRow(redistUi.previewRow(dialog, stemOf(2))).uncheck();
     await expect(redistUi.applyAll(dialog)).toHaveAttribute('aria-checked', 'mixed');
+    // The changed 적용 choices are unsaved input (no question selected, no target): a click on
+    // the backdrop keeps the dialog and the choices (HOMEDLG-01).
+    const panelBox = await dialog.boundingBox();
+    if (!panelBox || panelBox.x < 40) throw new Error('no backdrop beside the dialog');
+    await page.mouse.click(panelBox.x / 2, panelBox.y + panelBox.height / 2);
+    await expect(dialog).toBeVisible();
+    await expect(redistUi.applyRow(redistUi.previewRow(dialog, stemOf(2)))).not.toBeChecked();
+    await expect(redistUi.applyRow(redistUi.previewRow(dialog, stemOf(1)))).toBeChecked();
     const apply = redistUi.applySelected(dialog);
     await expect(apply).toHaveAccessibleName(/\(1\)$/);
     await apply.click();

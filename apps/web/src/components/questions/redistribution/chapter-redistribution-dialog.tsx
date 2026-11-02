@@ -32,6 +32,7 @@ import {
   movePlan,
   NO_CHAPTER_TITLE,
   NO_RECOMMENDATION_LABELS,
+  previewEdited,
   previewSummary,
   REASON_LABELS,
   REDIST_FAILURE_MESSAGES,
@@ -164,7 +165,14 @@ function RedistributionContent({
   const autoId = useId();
   const applyReasonId = useId();
 
-  useUnsavedChanges(selected.size > 0 || target !== null);
+  // Unsaved input: selected questions, a chosen target, or `적용` choices changed in the preview.
+  useUnsavedChanges(
+    selected.size > 0 ||
+      target !== null ||
+      (step === 'preview' &&
+        preview.status === 'ready' &&
+        previewEdited(preview.data.items, applyChecked)),
+  );
   const rootRef = useRef<HTMLDivElement>(null);
   useTabStops(rootRef);
 

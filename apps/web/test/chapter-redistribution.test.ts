@@ -6,6 +6,7 @@ import {
   createRedistributionApi,
   movePlan,
   NO_TARGET_CHAPTER,
+  previewEdited,
   previewSummary,
   redistributionGroups,
   targetOptions,
@@ -126,6 +127,14 @@ describe('CHREDIST-01 model', () => {
     expect(applyItems(PREVIEW.items, new Set([Q(4)]))).toEqual([
       { question_id: Q(4), chapter_id: CH1, expected_chapter_id: null },
     ]);
+  });
+
+  it('CHREDIST-01-AC03 counts an unchecked recommendation as unsaved input', () => {
+    const items = [{ question_id: Q(1) }, { question_id: Q(4) }];
+    expect(previewEdited(items, new Set([Q(1), Q(4)]))).toBe(false);
+    expect(previewEdited(items, new Set([Q(1)]))).toBe(true);
+    expect(previewEdited(items, new Set())).toBe(true);
+    expect(previewEdited([], new Set())).toBe(false);
   });
 
   it('treats a changed, archived or deleted question as one refused move', () => {

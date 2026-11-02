@@ -127,6 +127,14 @@ export function applyItems(
     }));
 }
 
+/** Whether the `적용` choices differ from the preview's initial state (every row checked). */
+export function previewEdited(
+  items: readonly Pick<RedistributionPreviewItem, 'question_id'>[],
+  checked: ReadonlySet<string>,
+): boolean {
+  return items.some((i) => !checked.has(i.question_id));
+}
+
 export const NO_RECOMMENDATION_LABELS: Readonly<Record<string, string>> = {
   no_source: '출처가 없음',
   no_source_chapter: '출처의 장을 찾을 수 없음',
