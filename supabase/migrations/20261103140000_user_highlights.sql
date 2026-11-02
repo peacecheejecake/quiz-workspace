@@ -81,8 +81,7 @@ create table public.user_highlights (
   constraint user_highlights_color_valid check (color in ('yellow', 'blue', 'pink')),
   constraint user_highlights_version_positive check (version >= 1),
   constraint user_highlights_replaced_deleted check (replaced_by is null or deleted_at is not null),
-  constraint user_highlights_replaced_not_self check (replaced_by is distinct from id),
-  constraint user_highlights_deleted_order check (deleted_at is null or deleted_at >= created_at)
+  constraint user_highlights_replaced_not_self check (replaced_by is distinct from id)
 );
 
 -- The caller's live highlights of one target (create/restore overlap + limit, reads).
