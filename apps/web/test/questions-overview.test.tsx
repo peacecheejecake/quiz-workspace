@@ -1269,4 +1269,27 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
     expect(retry).toHaveAttribute('data-state', 'on');
     expect(dotStatus(1)).toBe('retry');
   });
+
+  it('a save of a deep-linked question outside the list settles after another question opened', async () => {
+    const user = userEvent.setup();
+    const navigate = (search: string) =>
+      act(async () => {
+        realPushState(null, '', `${PATH}${search}`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+    realPushState(null, '', `${PATH}?favorite=true&question=${id(2)}`);
+    render(<Screen data={only(1, 3)} requested={outsidePlaced(2)} />);
+    let panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    await user.click(within(panel).getByRole('button', { name: '즐겨찾기 추가' }));
+    expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toBeInTheDocument();
+    await navigate(`?favorite=true&question=${id(1)}`);
+    await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await act(async () =>
+      held[0]?.resolve({ ok: false, kind: 'unavailable', message: '일시적인 오류입니다.' }),
+    );
+    expect(await screen.findByText(/일시적인 오류/)).toBeInTheDocument();
+    await navigate(`?favorite=true&question=${id(2)}`);
+    panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    expect(within(panel).getByRole('button', { name: '즐겨찾기 추가' })).toBeInTheDocument();
+  });
 });

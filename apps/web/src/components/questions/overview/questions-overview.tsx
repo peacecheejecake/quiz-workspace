@@ -414,13 +414,16 @@ export function QuestionsOverview({
 
   // UX9-RETRY-OPT: the toggles and the dot show a press at once; my-state requests of a question
   // run one at a time (presses in between are coalesced), and a failure rolls back only the
-  // fields it carried.
+  // fields it carried. A question being saved is remembered by id, so its save settles (and a
+  // failure rolls back) even once it is no longer open or listed (a deep link outside the
+  // filters, then another question).
+  const savingItems = useRef(new Map<string, OverviewItem>());
   const flagSync = useFlagSync<MyState>(
     (questionId, patch) => setMyStateAction(workspaceId, questionId, patch),
     (questionId, event) => {
-      const item = currentItem(questionId);
-      if (!item) return;
       if (event.type === 'failed') toast({ tone: 'error', title: event.message });
+      const item = currentItem(questionId) ?? savingItems.current.get(questionId);
+      if (!item) return;
       const saved =
         event.type === 'saved' ? event.result : event.type === 'failed' ? event.saved : null;
       if (saved) staleOverview.current = true;
@@ -436,8 +439,11 @@ export function QuestionsOverview({
           patch,
           settledOn: pending ? null : latestItems.current,
         });
+        if (pending) savingItems.current.set(questionId, { ...item, ...patch });
+        else savingItems.current.delete(questionId);
         return;
       }
+      savingItems.current.delete(questionId);
       // A submission settled while a request was in flight wins over the response's grading.
       const grading = gradings.current.get(questionId) ?? {
         last_graded_result: saved.last_graded_result,
@@ -454,7 +460,7 @@ export function QuestionsOverview({
     questionId: string,
     flags: { is_favorite?: boolean; needs_retry?: boolean },
   ) {
-    const item = currentItem(questionId);
+    const item = currentItem(questionId) ?? savingItems.current.get(questionId);
     if (!item) return;
     flagSync.toggle(
       questionId,
