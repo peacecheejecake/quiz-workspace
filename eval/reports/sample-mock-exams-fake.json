@@ -1,0 +1,173 @@
+{
+  "eval": "mock-exams",
+  "provider": "fake",
+  "model": "fake-mock-exam-llm",
+  "dataset": "eval/mock_exams/mock-seed.json",
+  "summary": {
+    "cases": 6,
+    "failed_cases": 1,
+    "requested": 24,
+    "accepted": 21,
+    "first_pass_accepted": 21,
+    "re_requested": 3,
+    "unreadable": 2,
+    "llm_calls": 12,
+    "batches": 10,
+    "provider_errors": 0,
+    "warnings": 0,
+    "pass_rate": 0.875,
+    "first_pass_rate": 0.875,
+    "calls_per_question": 0.5714,
+    "skipped": {
+      "answer_not_in_options": 1,
+      "citation_not_in_passage": 1,
+      "inverted_answer_mismatch": 1
+    },
+    "usage": {
+      "input_tokens": 19514,
+      "output_tokens": 21917,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cost_usd": null
+    }
+  },
+  "cases": [
+    {
+      "case": "paraphrase-6",
+      "variation_type": "PARAPHRASE",
+      "requested": 6,
+      "accepted": 6,
+      "first_pass_accepted": 6,
+      "re_requested": 0,
+      "unreadable": 0,
+      "llm_calls": 1,
+      "batches": 1,
+      "provider_errors": 0,
+      "warnings": 0,
+      "skipped": {},
+      "usage": {
+        "input_tokens": 2216,
+        "output_tokens": 1074,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cost_usd": null
+      },
+      "pass_rate": 1.0
+    },
+    {
+      "case": "invert-6",
+      "variation_type": "INVERT_POLARITY",
+      "requested": 6,
+      "accepted": 6,
+      "first_pass_accepted": 6,
+      "re_requested": 0,
+      "unreadable": 0,
+      "llm_calls": 1,
+      "batches": 1,
+      "provider_errors": 0,
+      "warnings": 0,
+      "skipped": {},
+      "usage": {
+        "input_tokens": 2224,
+        "output_tokens": 1482,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cost_usd": null
+      },
+      "pass_rate": 1.0
+    },
+    {
+      "case": "invert-faults",
+      "variation_type": "INVERT_POLARITY",
+      "requested": 3,
+      "accepted": 2,
+      "first_pass_accepted": 2,
+      "re_requested": 1,
+      "unreadable": 0,
+      "llm_calls": 2,
+      "batches": 2,
+      "provider_errors": 0,
+      "warnings": 0,
+      "skipped": {
+        "inverted_answer_mismatch": 1
+      },
+      "usage": {
+        "input_tokens": 3173,
+        "output_tokens": 957,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cost_usd": null
+      },
+      "pass_rate": 0.6667
+    },
+    {
+      "case": "broken-batch",
+      "variation_type": "PARAPHRASE",
+      "requested": 4,
+      "accepted": 4,
+      "first_pass_accepted": 4,
+      "re_requested": 0,
+      "unreadable": 1,
+      "llm_calls": 3,
+      "batches": 2,
+      "provider_errors": 0,
+      "warnings": 0,
+      "skipped": {},
+      "usage": {
+        "input_tokens": 4542,
+        "output_tokens": 1103,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cost_usd": null
+      },
+      "pass_rate": 1.0
+    },
+    {
+      "case": "truncated-batch",
+      "variation_type": "PARAPHRASE",
+      "requested": 3,
+      "accepted": 3,
+      "first_pass_accepted": 3,
+      "re_requested": 0,
+      "unreadable": 1,
+      "llm_calls": 3,
+      "batches": 2,
+      "provider_errors": 0,
+      "warnings": 0,
+      "skipped": {},
+      "usage": {
+        "input_tokens": 4855,
+        "output_tokens": 16555,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cost_usd": null
+      },
+      "pass_rate": 1.0
+    },
+    {
+      "case": "all-fail",
+      "variation_type": "PARAPHRASE",
+      "requested": 2,
+      "accepted": 0,
+      "first_pass_accepted": 0,
+      "re_requested": 2,
+      "unreadable": 0,
+      "llm_calls": 2,
+      "batches": 2,
+      "provider_errors": 0,
+      "warnings": 0,
+      "skipped": {
+        "answer_not_in_options": 1,
+        "citation_not_in_passage": 1
+      },
+      "usage": {
+        "input_tokens": 2504,
+        "output_tokens": 746,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cost_usd": null
+      },
+      "pass_rate": 0.0
+    }
+  ]
+}
