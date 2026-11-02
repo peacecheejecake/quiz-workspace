@@ -27,6 +27,7 @@ first one always kept). When the query embedder is down the result is keyword-on
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import re
 import threading
@@ -310,6 +311,7 @@ class AskRetrieval:
         loader = ExcerptLoader(self._repo, searchable, chapters)
         loader.prepare(hits[: top_k * 2])
         sources: list[RetrievedSource] = []
+        block_texts: dict[uuid.UUID, dict[str, str]] = {}
         seen: set[tuple[str, tuple[str, ...]]] = set()
         total = 0
         for hit in hits:
@@ -320,6 +322,31 @@ class AskRetrieval:
             source = _source(len(sources) + 1, doc, hit, excerpt, loader, relevance.get(id(hit)))
             if source is None:
                 continue
+            excluded = question_blocks.get(doc.revision_id)
+            if excluded:
+                # The excerpt adds neighbouring paragraphs: none of them may be a question,
+                # option, answer or explanation block either (the worker re-checks the pins).
+                kept = tuple(b for b in source.block_ids if b not in excluded)
+                if not kept:
+                    dropped += 1
+                    continue
+                if doc.revision_id not in block_texts:
+                    block_texts[doc.revision_id] = {
+                        row["block_id"]: row["text"] for row in self._repo.blocks(doc.revision_id)
+                    }
+                texts = block_texts[doc.revision_id]
+                kept_text = "\n\n".join(texts.get(b, "") for b in kept).strip()
+                if not kept_text:
+                    dropped += 1
+                    continue
+                source = dataclasses.replace(
+                    source,
+                    text=kept_text,
+                    block_ids=kept,
+                    matched_block_ids=tuple(
+                        b for b in source.matched_block_ids if b not in excluded
+                    ),
+                )
             key = (str(source.revision_id), source.block_ids)
             if key in seen:
                 continue

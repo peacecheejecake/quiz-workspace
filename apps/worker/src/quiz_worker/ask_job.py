@@ -82,6 +82,7 @@ from quiz_worker.settings import WorkerSettings
 
 logger = logging.getLogger(__name__)
 
+MIXED = "mixed"
 FLUSH_SECONDS = 0.1
 FLUSH_CHARS = 20
 SOURCE_CHARS = 2000
@@ -199,13 +200,18 @@ def _result(
     return out
 
 
-def _passage(store: PostgresAskStore, revision_id: uuid.UUID, ref: SourceRef | PinnedSource) -> str:
-    texts = store.block_texts(revision_id, ref.block_ids)
+def _passage(
+    store: PostgresAskStore,
+    revision_id: uuid.UUID,
+    ref: SourceRef | PinnedSource,
+    exclude: frozenset[str] = frozenset(),
+) -> str:
+    texts = store.block_texts(revision_id, ref.block_ids, exclude)
     if not texts:
         pages = (
             ref.pages if isinstance(ref, SourceRef) else list(range(ref.page_from, ref.page_to + 1))
         )
-        texts = store.page_texts(revision_id, pages)
+        texts = store.page_texts(revision_id, pages, exclude)
     return "\n\n".join(texts)[:PASSAGE_CHARS]
 
 
@@ -216,11 +222,17 @@ def _sources(
     docs = store.documents(answer.workspace_id, list({s.document_id for s in pinned}))
     chapters = store.chapter_titles([s.chapter_id for s in pinned if s.chapter_id])
     out: list[AskSource] = []
+    excluded: dict[uuid.UUID, frozenset[str]] = {}
     for source in pinned:
         doc = docs.get(source.document_id)
         if doc is None or doc.active_revision_id != source.revision_id:
             return None
-        body = _passage(store, source.revision_id, source)
+        if doc.content_kind == MIXED and source.revision_id not in excluded:
+            # Re-check the API's rule: no question-part block of a `mixed` book reaches the model.
+            excluded[source.revision_id] = store.question_part_block_ids(source.revision_id)
+        body = _passage(
+            store, source.revision_id, source, excluded.get(source.revision_id, frozenset())
+        )
         if not body.strip():
             continue
         out.append(

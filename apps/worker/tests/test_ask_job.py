@@ -31,6 +31,11 @@ WS = uuid.uuid4()
 DOC = uuid.uuid4()
 REV = uuid.uuid4()
 JOB = uuid.uuid4()
+QUESTION_SECRET = "E2E-QUESTION-PART-SECRET"  # noqa: S105 - a marker string
+BLOCK_TEXTS = {
+    "b1": "가나다 원리는 합성 개념이다. 둘째 문장.",
+    "q1": f"1. 문제 ① 보기 {QUESTION_SECRET}",
+}
 
 
 @dataclass
@@ -64,19 +69,26 @@ class FakeStore:
         return self.member
 
     def sources(self, _message_id: uuid.UUID) -> list[PinnedSource]:
-        return [PinnedSource(1, DOC, REV, None, ["b1"], 2, 2)]
+        return [PinnedSource(1, DOC, REV, None, self.pinned_blocks, 2, 2)]
 
     def documents(self, _ws: uuid.UUID, _ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, LiveDocument]:
-        return {DOC: LiveDocument(DOC, "책", "book", self.revision)}
+        return {DOC: LiveDocument(DOC, "책", "book", self.revision, self.content_kind)}
 
     def chapter_titles(self, _ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, str]:
         return {}
 
-    def block_texts(self, _revision: uuid.UUID, _ids: Sequence[str]) -> list[str]:
-        return ["가나다 원리는 합성 개념이다. 둘째 문장."]
+    def block_texts(
+        self, _revision: uuid.UUID, ids: Sequence[str], exclude: frozenset[str] = frozenset()
+    ) -> list[str]:
+        return [BLOCK_TEXTS[i] for i in ids if i in BLOCK_TEXTS and i not in exclude]
 
-    def page_texts(self, _revision: uuid.UUID, _pages: Sequence[int]) -> list[str]:
+    def page_texts(
+        self, _revision: uuid.UUID, _pages: Sequence[int], exclude: frozenset[str] = frozenset()
+    ) -> list[str]:
         return []
+
+    def question_part_block_ids(self, _revision: uuid.UUID) -> frozenset[str]:
+        return frozenset({"q1"})
 
     def question_text(self, _id: uuid.UUID) -> str:
         return self.answer_question
@@ -103,6 +115,8 @@ class FakeStore:
         self.usage.append((usage, status))
 
     answer_question: str = "가나다 원리를 설명해 줘"
+    pinned_blocks: list[str] = field(default_factory=lambda: ["b1"])
+    content_kind: str | None = "book"
 
 
 class MemoryStream:
@@ -274,3 +288,18 @@ def test_interactive_queue_routing_and_process() -> None:
     argv = serve.build_worker_argv(2, "info", beat=False, queue=INTERACTIVE_QUEUE)
     assert "--queues=interactive" in argv
     assert "--beat" not in argv
+
+
+def test_ask_01_c02_the_worker_rechecks_pinned_blocks_of_a_mixed_book(
+    fake: FakeAskAnswerer,
+) -> None:
+    """Even a pin that names a question-part block of a `mixed` book (say, pinned by an older
+    API) never brings its text to the model."""
+    store = FakeStore(_answer(), pinned_blocks=["b1", "q1"], content_kind="mixed")
+    _run(store, fake)
+    request = fake.calls[-1][1]
+    assert "가나다 원리" in request.sources[0].text
+    assert QUESTION_SECRET not in request.prompt
+    plain = FakeStore(_answer(), pinned_blocks=["b1", "q1"], content_kind="book")
+    _run(plain, fake)
+    assert QUESTION_SECRET in fake.calls[-1][1].prompt  # a plain book has no question part

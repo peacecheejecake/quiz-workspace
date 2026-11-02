@@ -20,6 +20,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import importlib
+import itertools
 import json
 import logging
 import os
@@ -560,6 +561,109 @@ def test_ask_01_c02_evidence_is_live_published_books_only_pinned_without_text(
     )
     assert rows
     assert all(BOOK_PASSAGE not in r[0] for r in rows)
+
+
+NEIGHBOUR_PASSAGE = "하하하 원리"
+NEIGHBOUR_SECRET = "E2E-MIXED-NEIGHBOUR-SECRET"  # noqa: S105 - a marker string
+
+
+def _blocks(client: Any, document_id: str) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    after: int | None = None
+    while True:
+        page = client.ok(
+            "GET",
+            f"/documents/{document_id}/blocks?revision=latest&limit=200"
+            + (f"&after={after}" if after is not None else ""),
+        )
+        out += page["items"]
+        after = page["next_after"]
+        if after is None:
+            return out
+
+
+def _question_part(items: list[dict[str, Any]]) -> set[str]:
+    """The extractor's question/option/answer/explanation blocks (the server's `mixed` rule)."""
+    from book_core.contracts import Block, BlockType, SourceLocation
+    from book_core.summary.chapters import question_block_indices
+
+    blocks = [
+        Block(
+            id=b["block_id"],
+            type=BlockType(b["type"]),
+            text=b["text"],
+            section_id=str(b["chapter_id"]) if b["chapter_id"] else None,
+            locations=tuple(SourceLocation(page=loc["page"]) for loc in b["locations"]),
+            heading_level=b["heading_level"],
+            caption_block_id=b["caption_block_id"],
+            ordinal=b["ordinal"],
+        )
+        for b in items
+    ]
+    return {blocks[i].id for i in question_block_indices(blocks)}
+
+
+def test_ask_01_c02_a_mixed_books_question_part_never_rides_along_as_excerpt_context(
+    seed: Any, fake: Any, db: Any
+) -> None:
+    """A body paragraph of a `mixed` book next to a question: the hit is evidence, but the
+    excerpt's neighbouring question/answer block never reaches the model (API pin + worker)."""
+    owner = seed.client("owner")
+    s = AskSeed(owner)
+    doc = upload(owner, s.ws, PAPER, "book")
+    owner.ok("PATCH", f"/documents/{doc}", {"kind": "mixed", "extract": False})
+    items = sorted(_blocks(owner, doc), key=lambda b: b["ordinal"])
+    question = _question_part(items)
+    pairs = [
+        (a, b)
+        for a, b in itertools.pairwise(items)
+        if a["block_id"] not in question
+        and a["type"] == "text"
+        and b["block_id"] in question
+        and a["chapter_id"] == b["chapter_id"]
+    ] + [
+        (b, a)
+        for a, b in itertools.pairwise(items)
+        if b["block_id"] not in question
+        and b["type"] == "text"
+        and a["block_id"] in question
+        and a["chapter_id"] == b["chapter_id"]
+    ]
+    assert pairs, "the fixture has a body paragraph next to a question"
+    body, neighbour = pairs[0]
+    for block, new in (
+        # Long enough to be a chunk of its own (the chunker packs ~256 tokens of whole blocks),
+        # so the hit itself is clean and only the excerpt's context reaches the question.
+        (
+            body,
+            f"{NEIGHBOUR_PASSAGE}는 물방울이 모여 비가 되는 합성 개념이다. "
+            + " ".join(f"구름 속 물방울은 서로 부딪혀 점점 커진다 {n}." for n in range(42))
+            + " {text}",
+        ),
+        (neighbour, f"{{text}} {NEIGHBOUR_SECRET}"),
+    ):
+        owner.ok(
+            "PATCH",
+            f"/documents/{doc}/blocks/{block['block_id']}",
+            {"text": new.replace("{text}", block["text"]), "base_version": block["version"]},
+        )
+    publish(owner, doc)
+    assert _question_part(_blocks(owner, doc)) == question, "the edits kept the segmentation"
+
+    answer = ask_new(owner, s.ws, f"{NEIGHBOUR_PASSAGE}를 설명해 줘")
+    assert answer["status"] == "succeeded"
+    assert doc in {x["document_id"] for x in answer["sources"]}, "the body paragraph is evidence"
+    request = last_request(fake, owner.worker)
+    assert NEIGHBOUR_PASSAGE in request
+    assert NEIGHBOUR_SECRET not in request
+    pinned = [
+        set(r[0])
+        for r in db(
+            "select block_ids from public.ask_message_sources where message_id = %s",
+            (answer["id"],),
+        )
+    ]
+    assert all(not ids & question for ids in pinned), "no question-part block is pinned"
 
 
 def test_ask_01_c02_a_publish_while_answering_ends_in_sources_unavailable(

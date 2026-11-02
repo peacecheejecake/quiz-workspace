@@ -95,6 +95,7 @@ class LiveDocument:
     title: str
     document_type: str
     active_revision_id: uuid.UUID | None
+    content_kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -329,7 +330,8 @@ class PostgresAskStore:
         with self._engine.connect() as conn:
             rows = conn.execute(
                 text(
-                    "select d.id, d.title, d.document_type, d.active_revision_id "
+                    "select d.id, d.title, d.document_type, d.active_revision_id, "
+                    "d.content_kind "
                     "from public.documents d join public.document_revisions r "
                     "on r.id = d.active_revision_id and r.document_id = d.id "
                     "where d.workspace_id = :w and d.id = any(:ids) and d.deleted_at is null "
@@ -338,7 +340,9 @@ class PostgresAskStore:
                 {"w": workspace_id, "ids": list(ids)},
             )
             return {
-                r.id: LiveDocument(r.id, r.title, r.document_type, r.active_revision_id)
+                r.id: LiveDocument(
+                    r.id, r.title, r.document_type, r.active_revision_id, r.content_kind
+                )
                 for r in rows
             }
 
@@ -352,22 +356,31 @@ class PostgresAskStore:
             )
             return {r.id: r.title for r in rows}
 
-    def block_texts(self, revision_id: uuid.UUID, block_ids: Sequence[str]) -> list[str]:
-        """The texts of `block_ids` in the revision, in reading order (unknown ids skipped)."""
+    def block_texts(
+        self,
+        revision_id: uuid.UUID,
+        block_ids: Sequence[str],
+        exclude: frozenset[str] = frozenset(),
+    ) -> list[str]:
+        """The texts of `block_ids` in the revision, in reading order (unknown and `exclude`d
+        ids skipped)."""
         if not block_ids:
             return []
         with self._engine.connect() as conn:
             rows = conn.execute(
                 text(
                     "select text from public.content_blocks where document_revision_id = :r "
-                    "and block_id = any(:ids) and btrim(text) <> '' order by ordinal"
+                    "and block_id = any(:ids) and not (block_id = any(:ex)) "
+                    "and btrim(text) <> '' order by ordinal"
                 ),
-                {"r": revision_id, "ids": list(block_ids)},
+                {"r": revision_id, "ids": list(block_ids), "ex": sorted(exclude)},
             )
             return [r.text for r in rows]
 
-    def page_texts(self, revision_id: uuid.UUID, pages: Sequence[int]) -> list[str]:
-        """Non-heading body text located on `pages`, in reading order."""
+    def page_texts(
+        self, revision_id: uuid.UUID, pages: Sequence[int], exclude: frozenset[str] = frozenset()
+    ) -> list[str]:
+        """Non-heading body text located on `pages`, in reading order (`exclude`d ids skipped)."""
         if not pages:
             return []
         with self._engine.connect() as conn:
@@ -375,11 +388,49 @@ class PostgresAskStore:
                 text(
                     "select text from public.content_blocks where document_revision_id = :r "
                     "and page = any(:p) and block_type <> 'heading' and btrim(text) <> '' "
-                    "order by ordinal"
+                    "and not (block_id = any(:ex)) order by ordinal"
                 ),
-                {"r": revision_id, "p": list(pages)},
+                {"r": revision_id, "p": list(pages), "ex": sorted(exclude)},
             )
             return [r.text for r in rows]
+
+    def question_part_block_ids(self, revision_id: uuid.UUID) -> frozenset[str]:
+        """Blocks a `mixed` book's question extractor reads as questions, options, answers or
+        explanations (`book_core.summary.question_block_indices`, the API's retrieval rule)."""
+        from book_core.contracts import Block, BlockType, SourceLocation, TableContent
+        from book_core.summary.chapters import question_block_indices
+
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "select block_id, ordinal, chapter_id, block_type, text, provenance, "
+                    "attributes, edited from public.content_blocks "
+                    "where document_revision_id = :r order by ordinal"
+                ),
+                {"r": revision_id},
+            ).mappings()
+            blocks = []
+            for row in rows:
+                attributes = row["attributes"] or {}
+                table = attributes.get("table")
+                blocks.append(
+                    Block(
+                        id=row["block_id"],
+                        type=BlockType(row["block_type"]),
+                        text=row["text"],
+                        section_id=str(row["chapter_id"]) if row["chapter_id"] else None,
+                        locations=tuple(
+                            SourceLocation.model_validate(loc)
+                            for loc in row["provenance"]["locations"]
+                        ),
+                        heading_level=attributes.get("heading_level"),
+                        table=TableContent.model_validate(table) if table is not None else None,
+                        caption_block_id=attributes.get("caption_block_id"),
+                        ordinal=row["ordinal"],
+                        edited=row["edited"],
+                    )
+                )
+        return frozenset(blocks[i].id for i in question_block_indices(blocks))
 
     # --- the attached question ---------------------------------------------------------------
 
