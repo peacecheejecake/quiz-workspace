@@ -22,8 +22,9 @@
                                                  (no stem/options/answers/explanation): what the
                                                  review screen selects, counts and registers by
     PATCH /question-drafts/{id}                  editor+; edit / approve / reject a draft
-                                                 (`base_version` optimistic concurrency); also
-                                                 generation drafts (M6.2, question_generations)
+                                                 (`base_version` optimistic concurrency); import
+                                                 drafts only: a generation draft of the retired
+                                                 변형 출제 answers 404 (UX8-QGEN-DEAD)
     POST  /question-imports/{id}/publish         editor+; {drafts: [{draft_id, version}]} of
                                                  APPROVED drafts at the reviewed version -> the
                                                  CONFIRMED questions, idempotent per draft;
@@ -103,7 +104,6 @@ from quiz_api.question_drafts import (
     with_review,
 )
 from quiz_api.question_fingerprint import fingerprint, model_answer_of
-from quiz_api.question_generation_review import acknowledged_codes, generation_validations
 from quiz_api.question_rules import (
     MAX_ACCEPTED_ANSWERS,
     MAX_LONG_TEXT,
@@ -1134,12 +1134,10 @@ def update_question_draft(
     """Edit a draft (e.g. enter the answer the source did not give), approve or reject it.
     409 `stale-draft` when `base_version` is outdated, 409 `draft-published` once published.
 
-    Import and generation drafts share this route. A generation draft (M6.2) is re-validated
-    against its run's source revision and passages on every request; `is_multi_answer: true`
-    confirms a changed answer count and `question_type` a changed type (`acknowledged_codes`)."""
+    Import drafts only: a generation draft of the retired 변형 출제 (QGEN-RM) answers 404."""
     _reject_unstorable(body)
     record = repo.get_draft(access.resource_id, lock=True)
-    if record is None:
+    if record is None or record.source_type != "import":  # the binding hides other drafts too
         raise HTTPException(status_code=404, detail=NOT_FOUND)
     if body.base_version != draft_version(record.updated_at):
         raise ProblemException(
@@ -1187,19 +1185,10 @@ def update_question_draft(
     number_changed = "question_number" in sent and body.question_number != record.question_number
     # Validated per target status: a review-status change alone (reject, back to pending) does
     # not depend on the content rules; an edit must be storable; an approval must be publishable.
+    validations = draft.validations
     if content_changed:
         content_issues(content, "DRAFT").raise_if_any()
-    acknowledged = record.acknowledged_codes
-    if record.source_type == "generation":
-        # quiz_api.question_generation_review: the worker's rules, recomputed on every PATCH.
-        acknowledged = acknowledged_codes(
-            record, sent=sent, is_multi_answer=body.is_multi_answer, question_type=question_type
-        )
-        validations = generation_validations(repo.session, record, draft, content, acknowledged)
-    elif content_changed:
         validations = recompute_validations(content, draft)
-    else:
-        validations = draft.validations
     validation_rows = [v.model_dump(mode="json") for v in validations]
     # Human approval covers exactly the reviewed content: any other change returns an approved
     # draft to pending unless this same request approves the new content.
@@ -1227,21 +1216,10 @@ def update_question_draft(
         "is_multi_answer": content.is_multi_answer,
         "rubric": content.rubric,
         "validations": validation_rows,
-        "acknowledged_codes": list(acknowledged),
     }
     if "question_number" in sent:
         values["question_number"] = body.question_number
     if "chapter_id" in sent:
-        if record.source_type != "import":
-            raise RequestValidationError(
-                [
-                    {
-                        "loc": ("body", "chapter_id"),
-                        "msg": "Only import drafts have a chapter.",
-                        "type": "value_error",
-                    }
-                ]
-            )
         if body.chapter_id is not None:
             chapters_repo = DraftChapterRepository(repo.session)
             chapters_repo.lock_documents_of(record.workspace_id, [body.chapter_id])

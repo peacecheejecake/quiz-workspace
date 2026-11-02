@@ -746,9 +746,7 @@ export type paths = {
      * @description Edit a draft (e.g. enter the answer the source did not give), approve or reject it.
      *     409 `stale-draft` when `base_version` is outdated, 409 `draft-published` once published.
      *
-     *     Import and generation drafts share this route. A generation draft (M6.2) is re-validated
-     *     against its run's source revision and passages on every request; `is_multi_answer: true`
-     *     confirms a changed answer count and `question_type` a changed type (`acknowledged_codes`).
+     *     Import drafts only: a generation draft of the retired 변형 출제 (QGEN-RM) answers 404.
      */
     patch: operations['updateQuestionDraft'];
     trace?: never;
