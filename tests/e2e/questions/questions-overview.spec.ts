@@ -216,6 +216,10 @@ test(
     await expect(panel).toBeVisible();
     await panelUi.favoriteOn(panel).click();
     await expect(panelUi.favoriteOff(panel)).toBeVisible();
+    // The toggle flips before the save (UX9-RETRY-OPT): wait for the server before leaving.
+    await expect
+      .poll(async () => (await overviewItem(s.owner, s.workspaceId, q(s, 2).id)).is_favorite)
+      .toBe(true);
     await panelUi.close(panel).click();
     await expect(panel).toBeHidden();
 
@@ -329,6 +333,10 @@ test(
     const panel = panelUi.numbered(page, 1);
     await panelUi.retryOff(panel).click();
     await expect(panelUi.retryOn(panel)).toBeVisible();
+    // The toggle flips before the save (UX9-RETRY-OPT): wait for the server before leaving.
+    await expect
+      .poll(async () => (await overviewItem(s.owner, s.workspaceId, question.id)).needs_retry)
+      .toBe(false);
     await panelUi.close(panel).click();
     await expect(panel).toBeHidden();
 
@@ -355,8 +363,9 @@ test(
     const question = q(s, 1);
     await answerCorrectly(s.owner, question);
     await openOverview(page, s);
-    // Heatmap dots are hidden from the accessibility tree under the modal panel: read by id.
-    const dotById = page.locator(`[data-question-id="${question.id}"]`);
+    // Heatmap dots are hidden from the accessibility tree under the modal panel: read by id (the
+    // visible one: a streamed render can briefly leave a hidden copy in the document).
+    const dotById = page.locator(`[data-question-id="${question.id}"]:visible`);
     await expect(dotById).toHaveAttribute('data-status', 'correct');
 
     // Hold every my-state save (the panel's setMyStateAction server action) until released; the
@@ -1696,6 +1705,10 @@ test(
     await expect(panel).toBeVisible();
     await panelUi.favoriteOff(panel).click();
     await expect(panelUi.favoriteOn(panel)).toBeVisible();
+    // The toggle flips before the save (UX9-RETRY-OPT): wait for the server before leaving.
+    await expect
+      .poll(async () => (await overviewItem(owner, ws.id, kept.id)).is_favorite)
+      .toBe(false);
     await panelUi.close(panel).click();
     await expect(overviewUi.marker(dot)).toHaveAttribute('data-shape', 'square');
     await page.reload();
