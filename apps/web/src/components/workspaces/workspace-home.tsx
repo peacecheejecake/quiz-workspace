@@ -117,6 +117,9 @@ import {
   withoutPanels,
   openDialogs,
   closeDialog,
+  exclusiveClose,
+  withPracticeQuestion,
+  withRunPanel,
   type HomePanel,
 } from '@/lib/workspaces/home';
 import { withRunState, type RunUrlState } from '@/lib/questions/practice-runs';
@@ -195,6 +198,14 @@ export function WorkspaceHome({
   function closeTo(url: string) {
     panelHistory.close(url);
   }
+  // The practice panel and the run panel are never open together (QVIEW-01-AC09): opening one
+  // over the other closes that one first (neither Back nor Forward brings it back), then opens.
+  function openPanelAt(target: string) {
+    const search = new URL(target, window.location.href).search;
+    const closed = exclusiveClose(window.location.search, search);
+    if (closed === null) panelHistory.push(target);
+    else panelHistory.close(`${pathname}${closed}`, target);
+  }
   const allowed = (panel: HomePanel) =>
     (panel !== 'share' || isOwner) &&
     ((panel !== 'generate' && panel !== QUESTION_CREATE_PANEL && panel !== DUPLICATES_PANEL) ||
@@ -256,15 +267,13 @@ export function WorkspaceHome({
   const practiceReturnFocusRef = useRef<HTMLElement | null>(null);
   function openNoteQuestion(questionId: string, returnFocus: HTMLElement | null) {
     practiceReturnFocusRef.current = returnFocus;
-    panelHistory.push(
-      `${pathname}${patchSearch(window.location.search, { question: questionId })}`,
-    );
+    openPanelAt(`${pathname}${withPracticeQuestion(window.location.search, questionId)}`);
   }
   // The range run panel (QVIEW-01): opened from the 문제 menu on a new entry; its range → run →
   // results steps rewrite that entry, its positions push entries, closing drops them (QOV-01-AC14).
   function openRun() {
     const picker: RunUrlState = { step: 'picker', source: 'bank', mockExamId: null };
-    panelHistory.push(`${pathname}${withRunState(window.location.search, picker)}`);
+    openPanelAt(`${pathname}${withRunPanel(window.location.search, picker)}`);
   }
   function navigateRun(state: RunUrlState, how: 'push' | 'replace') {
     const target = `${pathname}${withRunState(window.location.search, state)}`;
@@ -276,9 +285,11 @@ export function WorkspaceHome({
   }
   // The practice panel's open, previous/next (new entries) and close (QPLAY-01-AC05, UX7-BACK).
   function changeQuestion(questionId: string | null) {
-    const target = `${pathname}${patchSearch(window.location.search, { question: questionId })}`;
-    if (questionId) panelHistory.push(target);
-    else closeTo(target);
+    if (questionId) {
+      openPanelAt(`${pathname}${withPracticeQuestion(window.location.search, questionId)}`);
+      return;
+    }
+    closeTo(`${pathname}${patchSearch(window.location.search, { question: null })}`);
   }
   // The Heatmap headers' "만드는 중": the workspace's note list, re-read while one is generating,
   // and what an open note panel last saw.

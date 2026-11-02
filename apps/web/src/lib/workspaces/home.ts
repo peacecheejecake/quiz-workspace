@@ -21,7 +21,7 @@
 //                                                            key is migrated by legacyScopeRedirect
 // Pure helpers, plus the redirects of the pre-UX3c routes onto the home and of retired URL
 // state (`scope`, UX7-SEARCH; `question-pdfs` → `documents`, UX7-DOCS): homeRedirect.
-import { RUN_PARAM, withRunState } from '@/lib/questions/practice-runs';
+import { RUN_PARAM, withRunState, type RunUrlState } from '@/lib/questions/practice-runs';
 
 export const HOME_PANELS = [
   'documents',
@@ -226,6 +226,38 @@ export function openDialogs(search: string): string[] {
   if (params.get(QUESTION_PARAM)) out.push(PRACTICE_DIALOG);
   if (params.get(RUN_PARAM)) out.push(RUN_DIALOG);
   return out;
+}
+
+// The practice panel and the range run panel are never open together (QVIEW-01-AC09, user
+// decision 2026-11-02): both are modal, and opening one closes the other first.
+
+/** `search` with the practice panel on `questionId` and the run panel closed. */
+export function withPracticeQuestion(search: string, questionId: string): string {
+  return patchSearch(withRunState(search, null), { [QUESTION_PARAM]: questionId });
+}
+
+/** `search` with the run panel on `state` and the practice panel closed. */
+export function withRunPanel(search: string, state: RunUrlState): string {
+  return withRunState(patchSearch(search, { [QUESTION_PARAM]: null }), state);
+}
+
+/**
+ * When going from `current` to `target` opens the practice panel or the run panel while the other
+ * one is open: `current` with that other one closed (the open is then a close followed by an open,
+ * panel-history.ts). Null when the move closes nothing.
+ */
+export function exclusiveClose(current: string, target: string): string | null {
+  const now = openDialogs(current);
+  const next = openDialogs(target);
+  for (const [opens, closes] of [
+    [RUN_DIALOG, PRACTICE_DIALOG],
+    [PRACTICE_DIALOG, RUN_DIALOG],
+  ] as const) {
+    if (next.includes(opens) && !now.includes(opens) && now.includes(closes)) {
+      return closeDialog(current, closes);
+    }
+  }
+  return null;
 }
 
 /** `search` with one dialog of openDialogs closed, as its close button does it. */
@@ -433,18 +465,37 @@ export function retiredPanelRedirect(workspaceId: string, params: RawParams): st
 }
 
 /**
- * Every migration of retired home URL state, applied together so an old link takes a single
- * redirect: the UX6 search `scope` (legacyScopeRedirect, UX7-SEARCH), then retired `?panel=`
- * values (retiredPanelRedirect, UX7-DOCS). Null when the URL is current.
+ * A link that opens both the practice panel and the run panel (QVIEW-01-AC09): the home URL
+ * without `question`, so only the run opens (proposal: the run is the later intent). Null when
+ * the URL does not carry both.
+ */
+export function exclusivePanelRedirect(workspaceId: string, params: RawParams): string | null {
+  const source = toSearchParams(params);
+  if (!source.get(QUESTION_PARAM) || !source.get(RUN_PARAM)) return null;
+  source.delete(QUESTION_PARAM);
+  return workspaceHomePath(workspaceId, source.toString());
+}
+
+/**
+ * Every migration of retired or conflicting home URL state, applied together so a link takes a
+ * single redirect: the UX6 search `scope` (legacyScopeRedirect, UX7-SEARCH), retired `?panel=`
+ * values (retiredPanelRedirect, UX7-DOCS), then a practice panel beside a run
+ * (exclusivePanelRedirect, QVIEW-01-AC09). Null when the URL is current.
  */
 export function homeRedirect(workspaceId: string, params: RawParams): string | null {
-  const scoped = legacyScopeRedirect(workspaceId, params);
-  if (scoped === null) return retiredPanelRedirect(workspaceId, params);
-  const next: Record<string, string[]> = {};
-  for (const [key, value] of new URL(scoped, 'http://home').searchParams) {
-    (next[key] ??= []).push(value);
+  let current = params;
+  let out: string | null = null;
+  for (const step of [legacyScopeRedirect, retiredPanelRedirect, exclusivePanelRedirect]) {
+    const next = step(workspaceId, current);
+    if (next === null) continue;
+    out = next;
+    const parsed: Record<string, string[]> = {};
+    for (const [key, value] of new URL(next, 'http://home').searchParams) {
+      (parsed[key] ??= []).push(value);
+    }
+    current = parsed;
   }
-  return retiredPanelRedirect(workspaceId, next) ?? scoped;
+  return out;
 }
 
 /** A pre-UX3c section page (`/documents`, `/history`, `/settings/sharing`): its dialog. */
