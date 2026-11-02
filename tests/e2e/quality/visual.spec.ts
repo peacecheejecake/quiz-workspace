@@ -54,6 +54,7 @@ import {
 } from '../fixtures/sharing.ts';
 import { generateNote, notePanelPath, noteQuestion, noteUi } from '../fixtures/chapter-notes.ts';
 import { exportUi } from '../fixtures/export.ts';
+import { expectFitsViewport, expectSplit, viewerUi } from '../fixtures/document-viewer.ts';
 import {
   startSummary,
   summaryPanelPath,
@@ -209,9 +210,12 @@ test(
     await page.mouse.move(0, 0);
     await snap(page, 'search-excerpt');
 
+    // DOCVIEW-01 default layout (함께 보기 · 좌우; docked outline on desktop, collapsed on iPad).
     await page.goto(`/workspaces/${ws.id}/documents/${documentId}`);
+    await expect(viewerUi.settingsBar(page)).toBeVisible();
     await expect(editorUi.textPanel(page)).toBeVisible();
     await expect(editorUi.viewer(page).locator('canvas').first()).toBeVisible();
+    await expectFitsViewport(page);
     await snap(page, 'document-editor');
   },
 );
@@ -287,5 +291,46 @@ test(
     await expect(noteUi.disclosure(note)).toHaveAttribute('aria-expanded', 'false');
     await page.mouse.move(0, 0);
     await snap(page, 'chapter-note', [noteUi.meta(note)]);
+  },
+);
+
+test(
+  'VISUAL-08 document viewer layout: outline open, outline collapsed, 상하 with 변환본 first',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('visual08');
+    const ws = await workspaceFactory.create(owner, '보기 설정');
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    await signInAs(page, owner.user);
+    await page.goto(`/workspaces/${ws.id}/documents/${documentId}`);
+    await expect(viewerUi.settingsBar(page)).toBeVisible();
+    const pdfReady = async () => {
+      await expect(editorUi.textPanel(page)).toBeVisible();
+      await expect(editorUi.viewer(page).locator('canvas').first()).toBeVisible();
+      await expectFitsViewport(page);
+      await page.mouse.move(0, 0);
+    };
+
+    // Default layout (함께 보기 · 좌우 · 원본 먼저) with the outline open: docked beside the panes
+    // on desktop; on the iPad (tablet width) it starts collapsed and opens as an opaque overlay.
+    const toggle = viewerUi.outlineToggle(page);
+    if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+    await expect(viewerUi.outlinePanel(page)).toBeVisible();
+    await expectSplit(page, { orientation: 'horizontal', first: 'pdf', pdfRatio: 50 });
+    await pdfReady();
+    await snap(page, 'document-viewer-outline-open');
+
+    await viewerUi.collapseOutline(page).click();
+    await expect(viewerUi.outlinePanel(page)).toBeHidden();
+    await expect(viewerUi.expandOutline(page)).toHaveAttribute('aria-expanded', 'false');
+    await pdfReady();
+    await snap(page, 'document-viewer-outline-collapsed');
+
+    // 상하 with 변환본 on top (위치 바꾸기), outline still collapsed.
+    await viewerUi.orientation(page, 'vertical').click();
+    await viewerUi.swapButton(page).click();
+    await expectSplit(page, { orientation: 'vertical', first: 'text', pdfRatio: 50 });
+    await pdfReady();
+    await snap(page, 'document-viewer-vertical-text-first');
   },
 );
