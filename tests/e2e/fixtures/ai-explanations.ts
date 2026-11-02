@@ -32,7 +32,8 @@
 //      and an LLM, the fake under APP_ENV=test); `can_create` = available, active workspace and
 //      no live (queued/running/succeeded) explanation for the key; `can_regenerate` = editor of an
 //      active workspace and a succeeded explanation. `explanation` = the newest non-superseded
-//      row of the current revision's key (any status), or null.
+//      row of the current revision's key (any status; EXPL-B: a current success wins over a later
+//      failed regeneration), or null.
 //      Explanation = {id, job_id, status, version, question_revision_id (mock:
 //      mock_exam_question_revision_id), error_code: string|null, created_at, finished_at,
 //      body: {correct_option_ids, summary_md, options: [{option_id, why_md}], concepts_md,

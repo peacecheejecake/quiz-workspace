@@ -162,7 +162,8 @@ class _StateBase(BaseModel):
 
 class ExplanationState(_StateBase):
     explanation: Explanation | None = Field(
-        description="The newest explanation of this revision that is not superseded, or null."
+        description="The newest explanation of this revision that is not superseded (a current "
+        "success over a later failed attempt), or null."
     )
 
 
@@ -398,6 +399,10 @@ def _state(
     newest = repo.newest(kind.name, revision_id, PROMPT_VERSION, model)
     live = repo.live(kind.name, revision_id, PROMPT_VERSION, model)
     current = repo.current(kind.name, revision_id, PROMPT_VERSION, model)
+    # A failed attempt after a success (a regeneration that failed) never hides that success:
+    # the current success is shown; a failed row is shown only when nothing succeeded.
+    if newest is not None and newest.status == "failed" and current is not None:
+        newest = current
     available = settings.ai_explanations_available and model is not None
     active = access.status == "active"
     state: dict[str, Any] = {

@@ -571,6 +571,30 @@ def test_c03_failed_rows_do_not_block_new_revisions_get_new_keys_regenerate_caps
     assert [r[3] for r in live] == [True, True, True, False]  # superseded, never deleted
 
 
+def test_c03_a_failed_regeneration_never_hides_the_current_success(seed: Any, db: Any) -> None:
+    """After a success, a regeneration that fails leaves the success current: GET and the POST
+    cache hit answer it (not the failed attempt), and it can be regenerated again."""
+    owner = seed.client("expl-c03c-owner")
+    book = Book(owner)
+    q = book.mcq()
+    good = make(owner, q["id"], view="detail")
+    again = state(regenerate(owner, q["id"], view="detail"), (202,))["explanation"]
+    assert again["version"] == 2
+    # The worker failing the regeneration (as on a provider error), written as the superuser.
+    db(
+        "update public.question_ai_explanations set status = 'failed', "
+        "error_code = 'llm_unavailable', started_at = now(), finished_at = now() where id = %s",
+        (again["id"],),
+    )
+    read = state(get(owner, q["id"], view="detail"), (200,))
+    assert read["explanation"]["id"] == good["id"]
+    assert read["explanation"]["status"] == "succeeded"
+    assert read["explanation"]["body"] == good["body"]
+    assert read["can_regenerate"] is True
+    hit = state(post(owner, q["id"], view="detail"), (200,))
+    assert hit["explanation"]["id"] == good["id"]
+
+
 # ---------------------------------------------------------------------------------------------
 # C04 input and validation
 # ---------------------------------------------------------------------------------------------

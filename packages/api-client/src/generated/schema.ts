@@ -3325,7 +3325,7 @@ export type components = {
        * @description An owner/editor of an active workspace, a success.
        */
       can_regenerate: boolean;
-      /** @description The newest explanation of this revision that is not superseded, or null. */
+      /** @description The newest explanation of this revision that is not superseded (a current success over a later failed attempt), or null. */
       explanation: components['schemas']['Explanation'] | null;
     };
     /** Feedback */

@@ -2696,7 +2696,7 @@
                 "type": "null"
               }
             ],
-            "description": "The newest explanation of this revision that is not superseded, or null."
+            "description": "The newest explanation of this revision that is not superseded (a current success over a later failed attempt), or null."
           }
         },
         "required": [
