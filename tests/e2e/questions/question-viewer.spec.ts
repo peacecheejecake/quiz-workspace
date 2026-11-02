@@ -246,11 +246,15 @@ test(
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     const isApi = (url: URL) => url.pathname.includes('/api/');
+    // The held reads continue before the route goes: unrouting while a handler still waits lets
+    // Playwright drop the interception under it ("Route is already handled").
+    const held: Promise<void>[] = [];
     await page.route(
       isApi, // the same function instance unroutes it below
-      async (route) => {
-        await gate;
-        await route.continue();
+      (route) => {
+        const continued = gate.then(() => route.continue());
+        held.push(continued);
+        return continued;
       },
     );
     await openQuestionMenuWithPractice(page);
@@ -262,6 +266,7 @@ test(
     await expect(page).toHaveURL(/[?&]practice=new(&|$)/);
     await expect(page).toHaveURL(/[?&]source=bank(&|$)/);
     release();
+    await Promise.all(held);
     await page.unroute(isApi);
 
     await expect(runUi.chapters(panel)).toHaveCount(2);
@@ -392,6 +397,14 @@ test(
         .first(),
     ).toBeAttached();
 
+    // Positions are Back/Forward steps inside the open panel (QOV-01-AC14 rules).
+    await page.goBack();
+    await expect(page).toHaveURL(/[?&]i=1(&|$)/);
+    await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(1, 5));
+    await page.goForward();
+    await expect(page).toHaveURL(/[?&]i=2(&|$)/);
+    await expect(runUi.title(panel, 1, 2)).toBeVisible();
+
     await page.reload();
     panel = runUi.panel(page);
     await expect(runUi.title(panel, 1, 2)).toBeVisible();
@@ -419,6 +432,15 @@ test(
     await page.reload();
     await expect(runUi.title(runUi.panel(page), 1, 3)).toBeVisible();
     expect(await runOrder(s.viewer, shuffled, 5)).toEqual(order);
+
+    // 시작 replaced the range step's entry (user decision 2026-11-02): one Back closes the panel,
+    // and Forward never reopens it.
+    await page.goBack();
+    await expect(runUi.panel(page)).toBeHidden();
+    expect(practiceParam(page)).toBeNull();
+    await page.goForward();
+    await expect(runUi.panel(page)).toBeHidden();
+    expect(practiceParam(page)).toBeNull();
   },
 );
 

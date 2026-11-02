@@ -1,6 +1,12 @@
-// Pure QPLAY-01 practice model: what an answer submits, when it can be submitted, the result
-// wording and previous/next. Unit-tested without a browser; the server grades (questions.md §4).
+// Pure QPLAY-01 / QVIEW-01 practice model: what an answer submits, when it can be submitted, the
+// result wording and previous/next. Unit-tested without a browser; the server grades
+// (questions.md §4). Shared by every QuestionViewer mode that takes an answer.
 import type { PracticeSession, SubmitResult } from '@/lib/questions/practice-actions';
+
+/** The parts of an answer-free question (a practice session, a run position) answers depend on. */
+type AnswerShape = Pick<PracticeSession, 'question_type' | 'is_multi_answer'> & {
+  readonly displayed_option_ids: readonly string[];
+};
 
 export type GradeResult = 'correct' | 'incorrect';
 export type AttemptResult = SubmitResult['result'];
@@ -22,7 +28,7 @@ export const ANSWER_TEXT_MAX = 20_000;
 
 /** The selection after (un)checking `optionId`: single answer replaces, multi answer toggles. */
 export function toggleOption(
-  session: Pick<PracticeSession, 'is_multi_answer' | 'displayed_option_ids'>,
+  session: Pick<AnswerShape, 'is_multi_answer' | 'displayed_option_ids'>,
   selected: readonly string[],
   optionId: string,
   checked: boolean,
@@ -36,10 +42,7 @@ export function toggleOption(
 }
 
 /** Whether `answer` is a complete answer for `session` (one option, ≥ 1 for multi, or text). */
-export function canSubmit(
-  session: Pick<PracticeSession, 'question_type' | 'is_multi_answer' | 'displayed_option_ids'>,
-  answer: PracticeAnswer,
-): boolean {
+export function canSubmit(session: AnswerShape, answer: PracticeAnswer): boolean {
   if (session.question_type === 'MCQ') {
     const known = answer.selected.filter((id) => session.displayed_option_ids.includes(id));
     return session.is_multi_answer ? known.length > 0 : known.length === 1;
@@ -50,7 +53,7 @@ export function canSubmit(
 
 /** The submit body: option ids of this session only (MCQ), otherwise the answer text. */
 export function submitBody(
-  session: Pick<PracticeSession, 'question_type' | 'displayed_option_ids'>,
+  session: Pick<AnswerShape, 'question_type' | 'displayed_option_ids'>,
   answer: PracticeAnswer,
 ): SubmitBody {
   if (session.question_type === 'MCQ') {

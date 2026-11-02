@@ -20,7 +20,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { generatePath } from '@/lib/questions/generation-client';
-import type { DetailFocus } from '../detail/question-detail-dialog';
+import type { DetailFocus } from '../viewer/question-viewer';
 
 export interface QuestionManageActions {
   readonly onEdit: () => void;

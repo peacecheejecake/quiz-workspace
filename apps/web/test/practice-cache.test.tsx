@@ -141,7 +141,7 @@ vi.mock('../src/lib/questions/practice-actions', () => ({
   selfGradePracticeAction: vi.fn(),
 }));
 
-const { PracticePanel } = await import('../src/components/questions/practice/practice-panel');
+const { QuestionViewer } = await import('../src/components/questions/viewer/question-viewer');
 
 function question(id: string, n: number) {
   return {
@@ -164,7 +164,8 @@ function Harness({
 }) {
   const q = questionId === Q1 ? question(Q1, 1) : questionId === Q2 ? question(Q2, 2) : null;
   return (
-    <PracticePanel
+    <QuestionViewer
+      mode="practice"
       workspaceId={workspaceId}
       question={q}
       readOnly={false}
@@ -184,7 +185,7 @@ beforeEach(() => {
   }));
 });
 
-describe('PracticePanel session cache', () => {
+describe('QuestionViewer practice session cache', () => {
   it('re-opens a viewed unanswered question (close/reopen, previous/next) without a request', async () => {
     const view = render(<Harness questionId={Q1} />);
     expect(await screen.findByText(`stem of ${Q1}`)).toBeInTheDocument();

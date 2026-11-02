@@ -4,7 +4,8 @@
 // 문제 등록 dialog on the home (QOV-01-AC12); UX7-DOCS merged PDF 관리 into 문서 관리
 // (DOC-01-AC09). UX7-DOCS-2 keeps the button for viewers and archived workspaces, with both items
 // disabled and the reason in text. UX7-BANK-2 adds 보관·초안 문제, enabled for every member.
-// UX7-DEDUP adds 중복 문제 정리, editor-only like 직접 추가 and 변형 출제 (QOV-01-AC16).
+// UX7-DEDUP adds 중복 문제 정리, editor-only like 직접 추가 and 변형 출제 (QOV-01-AC16). QVIEW-W adds
+// 문제 풀기 (the range run, QVIEW-01), enabled for every member like 보관·초안 문제.
 import './dom-setup';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -19,6 +20,7 @@ function menu(readOnly: QuestionMenuReadOnly) {
     onGenerate: vi.fn(),
     onDuplicates: vi.fn(),
     onInactive: vi.fn(),
+    onPractice: vi.fn(),
   };
   render(<QuestionMenu readOnly={readOnly} {...handlers} />);
   return handlers;
@@ -33,7 +35,13 @@ describe('home `문제` menu', () => {
 
     await user.click(trigger);
     const items = screen.getAllByRole('menuitem').map((item) => item.textContent);
-    expect(items).toEqual(['직접 추가', '변형 출제', '중복 문제 정리', '보관·초안 문제']);
+    expect(items).toEqual([
+      '직접 추가',
+      '변형 출제',
+      '중복 문제 정리',
+      '보관·초안 문제',
+      '문제 풀기',
+    ]);
     await user.click(screen.getByRole('menuitem', { name: '직접 추가' }));
     // UX7-BANK: the 문제 등록 dialog opens on the home once focus is back on the trigger.
     await waitFor(() => expect(handlers.onCreate).toHaveBeenCalledTimes(1));
@@ -55,6 +63,11 @@ describe('home `문제` menu', () => {
     await user.click(trigger);
     await user.click(screen.getByRole('menuitem', { name: '중복 문제 정리' }));
     await waitFor(() => expect(handlers.onDuplicates).toHaveBeenCalledTimes(1));
+
+    await user.click(trigger);
+    await user.click(screen.getByRole('menuitem', { name: '문제 풀기' }));
+    await waitFor(() => expect(handlers.onPractice).toHaveBeenCalledTimes(1));
+    expect(trigger).toHaveFocus();
   });
 
   it.each([
@@ -76,6 +89,7 @@ describe('home `문제` menu', () => {
         '변형 출제',
         '중복 문제 정리',
         '보관·초안 문제',
+        '문제 풀기',
       ]);
       const items = all.slice(0, 3);
       for (const item of items) {
@@ -93,6 +107,13 @@ describe('home `문제` menu', () => {
       expect(inactive).not.toHaveAttribute('aria-disabled');
       await user.click(inactive);
       await waitFor(() => expect(handlers.onInactive).toHaveBeenCalledTimes(1));
+      // QVIEW-01: 문제 풀기 is a personal practice: enabled, no reason attached.
+      await user.click(trigger);
+      const practice = screen.getByRole('menuitem', { name: '문제 풀기' });
+      expect(practice).not.toHaveAttribute('aria-disabled');
+      expect(practice).not.toHaveAccessibleDescription(reason);
+      await user.click(practice);
+      await waitFor(() => expect(handlers.onPractice).toHaveBeenCalledTimes(1));
     },
   );
 });
