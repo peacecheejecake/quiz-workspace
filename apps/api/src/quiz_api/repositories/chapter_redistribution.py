@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from sqlalchemy import and_, func, insert, select
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
 from quiz_api.chapter_matching import BookChapter, StartBlock
@@ -140,7 +141,7 @@ class ChapterRedistributionRepository:
                 question_sources.c.created_at,
                 question_sources.c.id,
             )
-            .distinct(question_sources.c.question_id)
+            .ext(distinct_on(question_sources.c.question_id))
         ).all()
         doc_ids = sorted({r.document_id for r in first if r.document_id is not None})
         kinds: dict[uuid.UUID, bool] = {}
