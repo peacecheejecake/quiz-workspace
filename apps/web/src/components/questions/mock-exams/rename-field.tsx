@@ -2,7 +2,7 @@
 
 // MOCK-01 이름 바꾸기: the inline name field of a list row and of the detail header (Enter saves,
 // Escape cancels, 1–100 characters; the same name may repeat in a workspace).
-import { Button, Input } from '@quiz/ui';
+import { Button, Input, ownEscapeProps } from '@quiz/ui';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { TITLE_MAX } from './mock-exam-model';
 import styles from './mock-exams.module.css';
@@ -52,6 +52,8 @@ export function RenameField({
     <form className={styles.renameForm} onSubmit={submit} noValidate>
       <Input
         ref={input}
+        // Escape cancels the rename only; the dialog closes on the next one (MOCK-ESC).
+        {...ownEscapeProps}
         label="모의고사 이름"
         hideLabel
         value={value}

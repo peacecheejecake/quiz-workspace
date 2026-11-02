@@ -423,15 +423,37 @@ test(
     await expect(mockUi.questions(dialog)).toHaveCount(4);
     await mockUi.backToList(dialog).click();
 
+    // Escape in the rename field cancels only the rename: the dialog stays open and focus goes
+    // back to the row menu that started it. The next Escape closes the dialog.
+    const rowMenu = mockUi.rowMenu(mockUi.row(dialog, '중간 점검'), '중간 점검');
+    await rowMenu.click();
+    await mockUi.menuAction(page, /^(이름 바꾸기|rename)$/i).click();
+    const field = mockUi.renameField(dialog);
+    await field.fill('버릴 이름');
+    await field.press('Escape');
+    await expect(field).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await expect(mockUi.row(dialog, '중간 점검')).toBeVisible();
+    await expect(rowMenu).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    dialog = await openMockExams(page);
+
     // Rename in place (Enter saves); it sticks after a reload.
     await mockUi.rowMenu(mockUi.row(dialog, '중간 점검'), '중간 점검').click();
     await mockUi.menuAction(page, /^(이름 바꾸기|rename)$/i).click();
-    const field = mockUi.renameField(dialog);
     await field.fill('기말 대비');
     await field.press('Enter');
     await expect(mockUi.row(dialog, '기말 대비')).toBeVisible();
     await mockUi.open(mockUi.row(dialog, '기말 대비'), '기말 대비').click();
     await expect(mockUi.heading(dialog, '기말 대비')).toBeVisible();
+    // The detail header's rename: Escape cancels it and focus returns to `이름 바꾸기`.
+    await mockUi.rename(dialog).click();
+    await mockUi.renameField(dialog).fill('버릴 이름');
+    await mockUi.renameField(dialog).press('Escape');
+    await expect(mockUi.renameField(dialog)).toHaveCount(0);
+    await expect(mockUi.heading(dialog, '기말 대비')).toBeVisible();
+    await expect(mockUi.rename(dialog)).toBeFocused();
     await page.reload();
     dialog = mockUi.dialog(page);
     await expect(mockUi.heading(dialog, '기말 대비')).toBeVisible();
