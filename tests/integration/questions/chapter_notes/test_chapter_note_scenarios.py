@@ -62,6 +62,7 @@ def test_scenarios_load_and_answer_by_marker() -> None:
         "E2E-NOTE-MIXED",
         "E2E-NOTE-INVALID",
         "E2E-NOTE-FAIL",
+        "E2E-NOTE-SEARCH",
     }
     for marker in ("E2E-NOTE-OK", "E2E-NOTE-MIXED", "E2E-NOTE-INVALID"):
         out = client.complete(_request(marker), _Note).output
