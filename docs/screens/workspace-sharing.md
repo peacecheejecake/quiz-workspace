@@ -6,7 +6,7 @@
 
 ## 목적 및 UI
 - 권한 경계: Owner 전용 설정; Floating Side Panel 사용.
-- UX3c 2026-10-20: 별도 "공유 설정" 섹션·화면 제목은 없다. Owner가 Workspace header의 `공유하기`를 누르면 "링크 공유" non-modal floating dialog가 바로 열리고(링크 정보를 불러오는 동안 skeleton) 아래 AC의 모든 동작을 그 안에서 한다. Owner가 아니면 `공유하기` 버튼이 없고 `?panel=share`도 열리지 않는다.
+- UX3c 2026-10-20: 별도 "공유 설정" 섹션·화면 제목은 없다. Owner가 Workspace header의 `공유하기`를 누르면 "링크 공유" non-modal floating dialog(UX9-SPEC 사용자 결정 2026-11-02 D3부터 modal — [HOMEDLG-01](home-dialogs.md))가 바로 열리고(링크 정보를 불러오는 동안 skeleton) 아래 AC의 모든 동작을 그 안에서 한다. Owner가 아니면 `공유하기` 버튼이 없고 `?panel=share`도 열리지 않는다.
 - 모바일/데스크톱 레이아웃, 로딩·에러·빈 상태, 키보드 포커스·스크린리더, URL/token 로그 비노출을 충족한다.
 
 ## 수용 기준
