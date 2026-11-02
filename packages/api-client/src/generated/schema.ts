@@ -2895,6 +2895,11 @@ export type components = {
        * @description The question's current revision's explanation.
        */
       question_id: string;
+      /**
+       * Question Revision Id
+       * @description The revision whose explanation the client showed (recommended): 409 `stale-revision` when it is no longer the current one, so the anchor is never applied to a different text.
+       */
+      question_revision_id?: string | null;
     };
     /**
      * Fork

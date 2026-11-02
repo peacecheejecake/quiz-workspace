@@ -2130,6 +2130,19 @@
             "format": "uuid",
             "title": "Question Id",
             "type": "string"
+          },
+          "question_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The revision whose explanation the client showed (recommended): 409 `stale-revision` when it is no longer the current one, so the anchor is never applied to a different text.",
+            "title": "Question Revision Id"
           }
         },
         "required": [

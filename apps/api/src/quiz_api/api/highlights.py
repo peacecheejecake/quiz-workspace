@@ -99,6 +99,12 @@ class NoteTargetIn(BaseModel):
 class ExplanationTargetIn(BaseModel):
     kind: Literal["explanation"]
     question_id: uuid.UUID = Field(description="The question's current revision's explanation.")
+    question_revision_id: uuid.UUID | None = Field(
+        default=None,
+        description="The revision whose explanation the client showed (recommended): 409 "
+        "`stale-revision` when it is no longer the current one, so the anchor is never applied "
+        "to a different text.",
+    )
 
 
 class AiExplanationTargetIn(BaseModel):
@@ -277,6 +283,13 @@ class _Context:
         self.texts: dict[uuid.UUID, QuestionText] = {}
         self.labels: dict[uuid.UUID, HighlightQuestion] = {}
         self.positions: dict[uuid.UUID, int] = {}
+        self._pinned: set[uuid.UUID] = set()
+
+    def pin(self, text: QuestionText) -> None:
+        """Use this snapshot of the question for every later label/position/relocation in the
+        request, even if a concurrent edit commits a newer revision meanwhile."""
+        self.texts[text.question_id] = text
+        self._pinned.add(text.question_id)
 
     def add_group(
         self, chapter_id: uuid.UUID | None, title: str | None, ordered: list[QuestionText]
@@ -286,7 +299,8 @@ class _Context:
             number = chapter_number(self._repo.chapter_lineage([chapter_id]).get(chapter_id, []))
         heading = title if title is not None else NO_CHAPTER_TITLE
         for position, q in enumerate(ordered, start=1):
-            self.texts[q.question_id] = q
+            if q.question_id not in self._pinned:
+                self.texts[q.question_id] = q
             self.positions[q.question_id] = position
             self.labels[q.question_id] = HighlightQuestion(
                 question_id=q.question_id,
@@ -297,7 +311,7 @@ class _Context:
     def ensure(self, question_ids: Iterable[uuid.UUID]) -> None:
         """Labels for questions outside the groups added so far (their own Heatmap group)."""
         for qid in set(question_ids) - set(self.labels):
-            text = self._repo.questions(self.workspace_id, [qid]).get(qid)
+            text = self.texts.get(qid) or self._repo.questions(self.workspace_id, [qid]).get(qid)
             if text is None:
                 continue
             group = self._repo.group_of(self.workspace_id, qid)
@@ -309,7 +323,8 @@ class _Context:
                     lineage = self._repo.chapter_lineage([group.chapter_id])
                     number = chapter_number(lineage.get(group.chapter_id, []))
                 heading = group.chapter_title or NO_CHAPTER_TITLE
-                self.texts[qid] = text
+                if qid not in self._pinned:
+                    self.texts[qid] = text
                 self.labels[qid] = HighlightQuestion(
                     question_id=qid,
                     number_label=question_label(
@@ -530,6 +545,7 @@ def create_highlight(
 
     kind = target.kind
     revision_id: uuid.UUID | None = None
+    ctx = _Context(repo, workspace_id)
     if isinstance(target, NoteTargetIn):
         note = repo.note(target_id, workspace_id)
         if note is None:
@@ -545,7 +561,16 @@ def create_highlight(
             raise _unavailable("Draft questions cannot be highlighted.")
         if not question.explanation or question.revision_id is None:
             raise _unavailable("The question has no explanation.")
+        if target.question_revision_id not in (None, question.revision_id):
+            raise ProblemException(
+                409,
+                ProblemType.STALE_REVISION,
+                detail="The explanation changed since it was loaded; reload it.",
+            )
         revision_id = question.revision_id
+        # One snapshot: the cut, the other highlights' positions and the overlap checks all use
+        # this revision (a question edit may commit while this request runs).
+        ctx.pin(question)
         blocks = explanation_blocks(question.explanation)
 
     anchor = Anchor(body.anchor.block, body.anchor.start, body.anchor.end)
@@ -555,7 +580,6 @@ def create_highlight(
         raise _invalid("The anchor is not a range of one block of the text.") from None
 
     repo.lock_target(user.id, target_id)
-    ctx = _Context(repo, workspace_id)
     if kind == "explanation":
         ctx.ensure([target_id])
     live = repo.live_on_target(user.id, workspace_id, kind, target_id)
