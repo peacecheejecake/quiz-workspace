@@ -1,17 +1,20 @@
 // Pure `QuestionRangePicker` model (QVIEW-01 "범위 고르기 단계", questions.md §12): the chapter groups
 // of the questions a range can hold (the Heatmap's: CONFIRMED only, Heatmap order), the tri-state
 // selection over the visible questions and the range a selection sends (`전체 선택` and whole
-// chapters as `all` / `chapter_ids`, single questions as ids — QVIEW-01-C01). Unit-tested.
+// chapters as `all` / `chapter_ids`, single questions as ids — QVIEW-01-C01). A mock exam's
+// questions come grouped by source chapter too (mock-run.ts `mockRangeOverview`), numbered
+// "문제 k", and a whole chapter is sent as its question ids (a mock run refuses `chapter_ids`).
+// Unit-tested.
 import type { QuestionDotStatus } from '@quiz/ui';
 import { displayStem } from '@/lib/questions/display-stem';
 import type { QuestionOverview } from '@/lib/questions/overview-data';
 import { NO_CHAPTER_KEY, placeQuestions } from '@/lib/questions/overview-placement';
-import type { RunRange, RunRangeFilters } from '@/lib/questions/practice-runs';
+import type { RunRange, RunRangeFilters, RunSource } from '@/lib/questions/practice-runs';
 import type { QuestionType } from './question-body';
 
 export interface RangeQuestion {
   readonly id: string;
-  /** "1장 1번" (as the Heatmap numbers it). */
+  /** "1장 1번" (as the Heatmap numbers it); a mock exam's "문제 k". */
   readonly number: string;
   readonly preview: string;
   readonly type: QuestionType;
@@ -27,8 +30,14 @@ export interface RangeGroup {
 /** Characters of the stem shown in a question's row ("발문 앞 40자"). */
 export const RANGE_STEM_CHARS = 40;
 
-/** The overview's questions as range groups, in Heatmap order. */
-export function rangeGroups(overview: Pick<QuestionOverview, 'chapters' | 'items'>): RangeGroup[] {
+/**
+ * The overview's questions as range groups, in Heatmap order. `mock`: the items' numbers are
+ * the mock exam's own ("문제 k"), not a chapter's.
+ */
+export function rangeGroups(
+  overview: Pick<QuestionOverview, 'chapters' | 'items'>,
+  source: RunSource = 'bank',
+): RangeGroup[] {
   const groups: { key: string; title: string; questions: RangeQuestion[] }[] = [];
   for (const placed of placeQuestions(overview.chapters, overview.items)) {
     let group = groups.find((g) => g.key === placed.chapterKey);
@@ -44,7 +53,7 @@ export function rangeGroups(overview: Pick<QuestionOverview, 'chapters' | 'items
           : `${placed.chapterTitle} `;
     group.questions.push({
       id: placed.item.question_id,
-      number: `${chapter}${placed.number}번`,
+      number: source === 'mock' ? `문제 ${placed.number}` : `${chapter}${placed.number}번`,
       preview: displayStem(placed.item.preview).replace(/\s+/g, ' ').trim(),
       type: placed.item.question_type,
     });
@@ -125,13 +134,15 @@ export function rangeApiFilters(filters: RangeFilterState): RunRangeFilters | un
 
 /**
  * The range `시작` sends for `selected` among the visible `groups`: everything visible as `all`,
- * whole chapters as `chapter_ids`, the rest as `question_ids`, with the filters that made them
- * visible. Null when nothing is selected.
+ * whole chapters as `chapter_ids` (`mock`: as their `question_ids` — a mock run's range takes no
+ * chapters, MOCK-P), the rest as `question_ids`, with the filters that made them visible. Null
+ * when nothing is selected.
  */
 export function rangeRequest(
   groups: readonly RangeGroup[],
   selected: ReadonlySet<string>,
   filters: RangeFilterState,
+  source: RunSource = 'bank',
 ): RunRange | null {
   const visible = keepVisible(selected, groups);
   if (visible.size === 0) return null;
@@ -143,7 +154,8 @@ export function rangeRequest(
   for (const group of groups) {
     const ids = group.questions.map((q) => q.id);
     const state = triState(ids, visible);
-    if (state === true) chapterIds.push(group.key);
+    if (state === true && source === 'bank') chapterIds.push(group.key);
+    else if (state === true) questionIds.push(...ids);
     else if (state === 'indeterminate') questionIds.push(...ids.filter((id) => visible.has(id)));
   }
   return {

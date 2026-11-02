@@ -27,7 +27,13 @@ import {
   type OptionValues,
 } from '../src/components/questions/mock-exams/mock-exam-model';
 import { mockRangeOverview } from '../src/components/questions/mock-exams/mock-run';
-import { rangeGroups, type RangeGroup } from '../src/components/questions/viewer/range-model';
+import {
+  allIds,
+  EMPTY_RANGE_FILTERS,
+  rangeGroups,
+  rangeRequest,
+  type RangeGroup,
+} from '../src/components/questions/viewer/range-model';
 import { eventLabel, jobTypeLabel } from '../src/lib/history/model';
 import { withRunState } from '../src/lib/questions/practice-runs';
 import {
@@ -252,8 +258,18 @@ describe('mock exam API and run', () => {
     expect(classifyMockFailure(429, undefined)).toBe('rateLimited');
   });
 
-  it('lists a mock exam’s questions as one range group in order, without answers', () => {
-    const q = (id: string, position: number): MockExamQuestion => ({
+  it('groups a mock exam’s questions by source chapter in plan rank, the none group last', () => {
+    const chapter = (id: string, rank: number, number: number | null) => ({
+      id,
+      rank,
+      number,
+      title: number === null ? '부록' : `${number}장 제목`,
+    });
+    const q = (
+      id: string,
+      position: number,
+      ch: ReturnType<typeof chapter> | null,
+    ): MockExamQuestion => ({
       id,
       position,
       question_type: 'MCQ',
@@ -263,15 +279,48 @@ describe('mock exam API and run', () => {
       is_multi_answer: false,
       revision: { id, version: 1 },
       edited: false,
-      source: { question_id: null, label: '원본 삭제됨' },
+      source: ch
+        ? { question_id: `src-${id}`, label: '1번', chapter: ch }
+        : { question_id: null, label: '원본 삭제됨', chapter: null },
     });
-    const range = rangeGroups(mockRangeOverview([q('x', 1), q('y', 3)]));
-    expect(range).toHaveLength(1);
-    expect(range[0]?.questions.map((r) => [r.id, r.number])).toEqual([
-      ['x', '1번'],
-      ['y', '2번'],
+    const one = chapter('c1', 0, 1);
+    const two = chapter('c2', 1, 2);
+    const appendix = chapter('c3', 2, null);
+    // Mock exam order: 2장, deleted source, 1장, 부록, 1장 (a moved source keeps its plan rank).
+    const range = rangeGroups(
+      mockRangeOverview([
+        q('a', 0, two),
+        q('b', 1, null),
+        q('c', 2, one),
+        q('d', 3, appendix),
+        q('e', 4, one),
+      ]),
+      'mock',
+    );
+    expect(range.map((g) => [g.key, g.title])).toEqual([
+      ['c1', '1장 제목'],
+      ['c2', '2장 제목'],
+      ['c3', '부록'],
+      ['none', '챕터 없음'],
+    ]);
+    // Rows keep the mock exam's own numbers ("문제 k" in mock order), never the source's.
+    expect(range.map((g) => g.questions.map((r) => [r.id, r.number]))).toEqual([
+      [
+        ['c', '문제 3'],
+        ['e', '문제 5'],
+      ],
+      [['a', '문제 1']],
+      [['d', '문제 4']],
+      [['b', '문제 2']],
     ]);
     expect(JSON.stringify(range)).not.toMatch(/correct|explanation/);
+
+    // 시작 sends single question ids for a whole chapter (`chapter_ids` is 422 for a mock run).
+    const all = new Set(allIds(range));
+    expect(rangeRequest(range, all, EMPTY_RANGE_FILTERS, 'mock')).toEqual({ all: true });
+    expect(rangeRequest(range, new Set(['c', 'e', 'b']), EMPTY_RANGE_FILTERS, 'mock')).toEqual({
+      question_ids: ['c', 'e', 'b'],
+    });
   });
 
   it('maps a mock session and its result onto the solve step’s shapes', () => {

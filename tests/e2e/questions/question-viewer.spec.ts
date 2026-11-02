@@ -15,6 +15,7 @@
 // off, and shown answers are checked with role/text assertions on synthetic strings only.
 import { randomUUID } from 'node:crypto';
 import type { Locator, Page, Request, Response } from '@playwright/test';
+import { outlineNodeId, uploadReadyBook } from '../fixtures/documents.ts';
 import {
   createPracticeRun,
   createShuffleMockExam,
@@ -108,9 +109,9 @@ async function expandAll(panel: Locator): Promise<void> {
   await expect(collapsed).toHaveCount(0);
 }
 
-/** Question checkboxes of the range step ("1장 1번 · …", mock "문제 k · …"). */
-function questionBoxes(panel: Locator): Locator {
-  return panel.getByRole('checkbox', { name: / · / });
+/** A mock exam's question checkboxes ("문제 k · …"), not its chapter ones ("1장 … · 2문제"). */
+function mockBoxes(panel: Locator): Locator {
+  return panel.getByRole('checkbox', { name: /^(문제|question) \d+ · /i });
 }
 
 /** Selects every question and starts the run; returns its id from `?practice=`. */
@@ -528,17 +529,29 @@ test(
     const label = unique('qview01-ac05');
     const owner = await workspaceFactory.member('qview01-ac05');
     const ws = await workspaceFactory.create(owner);
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    const ch1 = await outlineNodeId(owner, documentId, CH1);
+    const ch2 = await outlineNodeId(owner, documentId, CH2);
     // MCQs with explanations: the mock copies carry them, so the result can show one.
+    // 1장: 1-4, 2장: 5-7, no chapter: 8-10.
     const bank: Question[] = [];
     for (let n = 1; n <= 10; n += 1) {
-      bank.push(await createQuestion(owner, ws.id, { ...flatMcq(label, n), question_number: n }));
+      const chapterId = n <= 4 ? ch1 : n <= 7 ? ch2 : null;
+      bank.push(
+        await createQuestion(owner, ws.id, {
+          ...flatMcq(label, n),
+          question_number: n,
+          chapter_id: chapterId,
+        }),
+      );
     }
     const name = `모의 ${label}`;
+    // 1장 1·2번, 2장 5번 and 8번 (no chapter).
     const exam = await createShuffleMockExam(
       owner,
       ws.id,
       name,
-      bank.slice(0, 4).map((q) => q.id),
+      [0, 1, 4, 7].map((i) => bank[i]?.id ?? ''),
       4,
     );
     const overviewBefore = await getOverview(owner, ws.id);
@@ -555,14 +568,32 @@ test(
     await expect(panel.getByRole('heading', { name: new RegExp(`${name} 풀기`) })).toBeVisible();
     await expect(page).toHaveURL(/[?&]source=mock(&|$)/);
     await expect(page).toHaveURL(new RegExp(`[?&]mock=${exam.id}(&|$)`));
+    // Grouped by source chapter like the bank's range step: 1장, 2장, then 챕터 없음.
+    await expect(
+      panel.getByRole('list', { name: /^(범위|range)$/i }).getByRole('listitem'),
+    ).toHaveText([
+      new RegExp(`^${CH1} · 2문제`),
+      new RegExp(`^${CH2} · 1문제`),
+      /^(챕터 없음|no chapter) · 1문제/i,
+    ]);
+    for (const title of [CH1, CH2, '챕터 없음']) {
+      await expect(runUi.chapter(panel, title)).toBeChecked();
+    }
     await expandAll(panel);
-    await expect(questionBoxes(panel)).toHaveCount(4);
+    await expect(mockBoxes(panel)).toHaveCount(4);
     await expect(runUi.selectAll(panel)).toBeChecked();
-    for (const box of await questionBoxes(panel).all()) await expect(box).toBeChecked();
-    await questionBoxes(panel).first().uncheck();
+    for (const box of await mockBoxes(panel).all()) await expect(box).toBeChecked();
+    // A whole chapter off: the run starts from single question ids (no `chapter_ids`).
+    await runUi.chapter(panel, '챕터 없음').uncheck();
     await expect(runUi.selected(panel, 3)).toBeVisible();
+    const created = page.waitForRequest(
+      (r) => r.method() === 'POST' && /\/api\/workspaces\/[^/]+\/practice-runs$/.test(r.url()),
+    );
     await runUi.random(panel).check();
     await runUi.start(panel).click();
+    const sent = (await created).postDataJSON() as { range: Record<string, unknown> };
+    expect(sent.range).not.toHaveProperty('chapter_ids');
+    expect(sent.range['question_ids']).toHaveLength(3);
     await expect(page).toHaveURL(/[?&]practice=[0-9a-f-]{36}(&|$)/);
 
     panel = runUi.panel(page);

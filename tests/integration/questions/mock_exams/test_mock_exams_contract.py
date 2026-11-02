@@ -1,4 +1,4 @@
-"""MOCK-01 server guarantees C01-C09 (docs/screens/mock-exams.md, questions.md §11,
+"""MOCK-01 server guarantees C01-C10 (docs/screens/mock-exams.md, questions.md §11,
 architecture.md §5-§6).
 
 Mock exam questions never touch the question bank (C01); the reused approval-blocking validation
@@ -8,7 +8,8 @@ new round, history rows are append-only (C04); the authorization matrix and the 
 (C05); cost limits and idempotency (C06); no question, explanation, book text, prompt or output in
 logs, job results or activities (C07); later source edits, deletes, archives and duplicate merges
 leave made questions alone (C08); LLM calls are batched by token budget, re-requested together,
-halved on unreadable output, checkpointed per batch and capped in concurrency (C09).
+halved on unreadable output, checkpointed per batch and capped in concurrency (C09); each
+question names its source chapter in the plan's chapter rank, without answer fields (C10).
 
 Shapes are assumptions K1-K9 in tests/e2e/fixtures/mock-exams.ts; the batched scenario LLM is the
 `mock_exam` block of tests/fixtures/llm/generation-scenarios.json. Jobs run in this process
@@ -1000,6 +1001,74 @@ def test_mock_01_c08_later_source_changes_leave_made_questions_alone(seed: Any, 
     # Workspace deletion: the mock exam API answers 404.
     assert owner.call("DELETE", f"/workspaces/{book.ws}").status_code in {200, 202, 204}
     seed.problem(owner.call("GET", f"/mock-exams/{made['id']}"), 404)
+
+
+# ---------------------------------------------------------------------------------------------
+# C10 source chapters (the range step's 출처 장별 묶음)
+# ---------------------------------------------------------------------------------------------
+
+
+def test_mock_01_c10_each_question_names_its_source_chapter_in_plan_rank_without_answers(
+    seed: Any, db: Any
+) -> None:
+    owner = seed.client("mock-c10")
+    book = Book(owner)
+    viewer = member(seed, book.ws, "mock-c10-viewer", "viewer")
+    ch2_a = book.source("flocculation")
+    ch1_a = book.source("evaporation")
+    loose = book.source("condensation", chapter=None)
+    ch1_b = book.source("precipitation")
+    ch2_b = book.source("disinfection")
+    gone = book.source("infiltration")
+    picks = [ch2_a, ch1_a, loose, ch1_b, ch2_b, gone]
+    made = make(
+        owner, book.ws, config(("OPTION_SHUFFLE",), None), picked(*(q["id"] for q in picks))
+    )
+    assert owner.call("DELETE", f"/questions/{gone['id']}").status_code == 204
+
+    [(plan,)] = db(
+        "select plan from public.mock_exam_generations where id = %s",
+        (made["latest_generation"]["id"],),
+    )
+    plan_rank = {str(p["question_id"]): int(p["chapter_rank"]) for p in plan}
+    ch1 = {"id": book.ch1, "number": 1, "title": CH1, "rank": plan_rank[ch1_a["id"]]}
+    ch2 = {"id": book.ch2, "number": 2, "title": CH2, "rank": plan_rank[ch2_a["id"]]}
+    assert ch1["rank"] < ch2["rank"], "Heatmap order: 1장 before 2장"
+    expected = {
+        ch1_a["id"]: ch1,
+        ch1_b["id"]: ch1,
+        ch2_a["id"]: ch2,
+        ch2_b["id"]: ch2,
+        loose["id"]: None,  # no chapter: the 'none' group, after every chapter
+    }
+
+    for client, answers in ((owner, True), (owner, False), (viewer, False)):
+        items = questions(client, made["id"], answers=answers)
+        assert len(items) == len(picks)
+        by_source = {q["source"]["question_id"]: q["source"] for q in items}
+        assert {k: by_source[k]["chapter"] for k in expected} == expected
+        # A deleted source keeps no chapter: it goes to the 'none' group too.
+        deleted = [q["source"] for q in items if q["source"]["question_id"] is None]
+        assert deleted == [{"question_id": None, "label": "원본 삭제됨", "chapter": None}]
+        # The chapter adds no answer field; viewers still get none at all.
+        for q in items:
+            chapter = q["source"]["chapter"]
+            assert chapter is None or set(chapter) == {"id", "number", "title", "rank"}
+        if client is viewer or not answers:
+            assert answer_keys(items) == []
+
+    # One question's read (an edit's answer) carries the same chapter.
+    one = next(
+        q
+        for q in questions(owner, made["id"], answers=True)
+        if q["source"]["question_id"] == ch2_b["id"]
+    )
+    edited = owner.ok(
+        "PATCH",
+        f"/mock-exam-questions/{one['id']}",
+        {"base_revision_id": one["revision"]["id"], "stem": "고친 발문"},
+    )
+    assert edited["source"]["chapter"] == ch2
 
 
 # ---------------------------------------------------------------------------------------------
