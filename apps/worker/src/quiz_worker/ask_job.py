@@ -133,7 +133,11 @@ class _Stream:
     def __init__(self, deps: AskJobDeps, message_id: uuid.UUID) -> None:
         self._deps = deps
         self._id = message_id
-        self.seq = deps.stream.last_seq(message_id)
+        try:
+            self.seq = deps.stream.last_seq(message_id)
+        except Exception as exc:  # Redis down: the answer is still stored; clients poll
+            logger.warning("ask: stream read failed (%s)", type(exc).__name__)
+            self.seq = 0
         self.sent = 0
         self.text: list[str] = []
         self._buffer: list[str] = []

@@ -303,3 +303,23 @@ def test_ask_01_c02_the_worker_rechecks_pinned_blocks_of_a_mixed_book(
     plain = FakeStore(_answer(), pinned_blocks=["b1", "q1"], content_kind="book")
     _run(plain, fake)
     assert QUESTION_SECRET in fake.calls[-1][1].prompt  # a plain book has no question part
+
+
+class DownStream:
+    """Redis unreachable: every stream call raises."""
+
+    def append(self, _message_id: uuid.UUID, event: str, seq: int, data: Mapping[str, Any]) -> None:
+        raise ConnectionError("redis down")
+
+    def last_seq(self, _message_id: uuid.UUID) -> int:
+        raise ConnectionError("redis down")
+
+
+def test_ask_01_c05_redis_down_still_stores_the_answer_for_polling(
+    fake: FakeAskAnswerer,
+) -> None:
+    store = FakeStore(_answer())
+    result = _run(store, fake, DownStream())  # type: ignore[arg-type]
+    assert result["status"] == "succeeded"
+    [finished] = store.finished
+    assert "[1]" in finished.text
