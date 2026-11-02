@@ -117,6 +117,10 @@ RULES: dict[str, Rule | str] = {
     # UX7-DEDUP: the scan only serves the merge, so both are question edits (archived 403).
     "listQuestionDuplicates": EDIT,
     "mergeQuestionDuplicates": EDIT,
+    # UX9-REDIST-B: the list and preview only serve the move, so all three are question edits.
+    "listChapterRedistributionQuestions": EDIT,
+    "previewChapterRedistribution": EDIT,
+    "assignQuestionChapters": EDIT,
     "getQuestionRevision": READ,
     "listQuestionImports": READ,
     "createQuestionImport": EDIT,
@@ -226,6 +230,17 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
                     "duplicate_question_ids": [str(uuid.UUID(int=1))],
                 }
             ]
+        },
+        "previewChapterRedistribution": {"all": True},
+        "assignQuestionChapters": {
+            "source": "manual",
+            "items": [
+                {
+                    "question_id": ids["question_id"],
+                    "chapter_id": None,
+                    "expected_chapter_id": None,
+                }
+            ],
         },
         "startWorkspaceFork": {"name": "S4 fork"},
         "searchSharedWorkspace": {"query": "S4"},
