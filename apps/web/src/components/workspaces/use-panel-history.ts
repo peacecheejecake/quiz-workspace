@@ -21,7 +21,7 @@ function browserWindow(): PanelHistoryWindow {
       // entries of an open/close are "manual", so traversing between them (Back, a close's
       // rewind) never moves the page (useManualScrollWhile).
       pushState: (data, unused, url) => {
-        window.history.scrollRestoration = 'manual';
+        manualScrollForPush();
         window.history.pushState(data, unused, url);
       },
       replaceState: (data, unused, url) => window.history.replaceState(data, unused, url),
@@ -80,24 +80,46 @@ export function usePanelHistory(dialogs: DialogUrls): PanelHistory {
 const SCROLL_SETTLE_MS = 1000;
 
 // Module state: a close's traversal can remount the home, so component state would lose it.
+/** The browser's own mode, saved by the first switch to manual; restored when nothing holds it. */
 let savedRestoration: ScrollRestoration | null = null;
+/** Open dialogs holding manual restoration (useManualScrollWhile). */
+let holders = 0;
 let restoreTimer: number | null = null;
 
-function holdManualScroll() {
+function toManual() {
   if (restoreTimer !== null) window.clearTimeout(restoreTimer);
   restoreTimer = null;
+  // Saved before the first switch: never "manual" itself (that would stay forever).
   savedRestoration ??= window.history.scrollRestoration;
   window.history.scrollRestoration = 'manual';
 }
 
-function releaseManualScroll() {
-  if (savedRestoration === null) return;
+/** Puts the saved mode back a moment after nothing holds manual any more (the close's traversals). */
+function scheduleRestore() {
+  if (savedRestoration === null || holders > 0) return;
   if (restoreTimer !== null) window.clearTimeout(restoreTimer);
   restoreTimer = window.setTimeout(() => {
     restoreTimer = null;
+    if (holders > 0) return;
     if (savedRestoration !== null) window.history.scrollRestoration = savedRestoration;
     savedRestoration = null;
   }, SCROLL_SETTLE_MS);
+}
+
+/** Before a dialog push: the new entry inherits manual; restored if no dialog takes hold. */
+function manualScrollForPush() {
+  toManual();
+  scheduleRestore();
+}
+
+function holdManualScroll() {
+  holders += 1;
+  toManual();
+}
+
+function releaseManualScroll() {
+  holders = Math.max(0, holders - 1);
+  scheduleRestore();
 }
 
 /**
