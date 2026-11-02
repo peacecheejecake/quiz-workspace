@@ -6,12 +6,26 @@
     {
       "id": "paraphrase-6",
       "variation_type": "PARAPHRASE",
-      "sources": ["evaporation", "condensation", "precipitation", "infiltration", "flocculation", "disinfection"]
+      "sources": [
+        "evaporation",
+        "condensation",
+        "precipitation",
+        "infiltration",
+        "flocculation",
+        "disinfection"
+      ]
     },
     {
       "id": "invert-6",
       "variation_type": "INVERT_POLARITY",
-      "sources": ["evaporation", "condensation", "precipitation", "infiltration", "flocculation", "disinfection"]
+      "sources": [
+        "evaporation",
+        "condensation",
+        "precipitation",
+        "infiltration",
+        "flocculation",
+        "disinfection"
+      ]
     },
     {
       "id": "invert-faults",
