@@ -849,6 +849,50 @@ class _Ask:
     scope_changed: bool = False
 
 
+def _write_answer(
+    repo: AskRepository,
+    settings: Settings,
+    conversation: ConversationRow,
+    ask: _Ask,
+    pin: AttachmentPin | None,
+    retrieval: RetrievalResult,
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+    """The question (when new), the queued answer, its job and pins; flushed, so a violated
+    one-running-answer index raises IntegrityError here."""
+    title: str | None = None
+    question_message_id = ask.question_message_id
+    if ask.question is not None:
+        question_message_id = repo.insert_question(conversation, ask.question, ask.scope)
+        if conversation.title is None:
+            prefix = ""
+            if conversation.attachment_label and " · " in conversation.attachment_label:
+                prefix = conversation.attachment_label.split(" · ", 1)[0] + " · "
+            title = (prefix + stem_head(ask.question, TITLE_QUESTION_CHARS))[:200]
+    assert question_message_id is not None  # noqa: S101 - set above or by the caller
+    degraded = list(retrieval.degraded)
+    if pin is not None and not retrieval.sources:
+        degraded.append("attachment_only")
+    answer_id, job_id = repo.insert_answer(
+        conversation,
+        question_message_id=question_message_id,
+        scope=ask.scope,
+        pin=pin,
+        context_char_limit=settings.ask_max_context_chars,
+        degraded=degraded,
+        retry_of=ask.retry_of,
+        regenerated_from=ask.regenerated_from,
+    )
+    repo.insert_sources(answer_id, conversation.workspace_id, retrieval.sources)
+    repo.touch(
+        conversation.id,
+        title=title,
+        scope=ask.scope if ask.scope_changed else None,
+        selected_option_ids=ask.selected,
+    )
+    repo.session.flush()
+    return answer_id, job_id, question_message_id
+
+
 def _accept(
     repo: AskRepository,
     deps: AskDeps,
@@ -895,39 +939,12 @@ def _accept(
         stored = store.find(user_id, scope_name, key)
         if stored is not None:
             return replay(stored, body_hash)
-    title: str | None = None
-    question_message_id = ask.question_message_id
-    if ask.question is not None:
-        question_message_id = repo.insert_question(conversation, ask.question, ask.scope)
-        if conversation.title is None:
-            prefix = ""
-            if conversation.attachment_label and " · " in conversation.attachment_label:
-                prefix = conversation.attachment_label.split(" · ", 1)[0] + " · "
-            title = (prefix + stem_head(ask.question, TITLE_QUESTION_CHARS))[:200]
-    assert question_message_id is not None  # noqa: S101 - set above or by the caller
-    degraded = list(retrieval.degraded)
-    if pin is not None and not retrieval.sources:
-        degraded.append("attachment_only")
-    answer_id, job_id = repo.insert_answer(
-        conversation,
-        question_message_id=question_message_id,
-        scope=ask.scope,
-        pin=pin,
-        context_char_limit=settings.ask_max_context_chars,
-        degraded=degraded,
-        retry_of=ask.retry_of,
-        regenerated_from=ask.regenerated_from,
-    )
-    repo.insert_sources(answer_id, conversation.workspace_id, retrieval.sources)
-    repo.touch(
-        conversation.id,
-        title=title,
-        scope=ask.scope if ask.scope_changed else None,
-        selected_option_ids=ask.selected,
-    )
     try:
-        repo.session.flush()
+        answer_id, job_id, question_message_id = _write_answer(
+            repo, settings, conversation, ask, pin, retrieval
+        )
     except IntegrityError:
+        # A concurrent request of the same user won the one-running-answer index.
         repo.rollback()
         raise ProblemException(
             409,

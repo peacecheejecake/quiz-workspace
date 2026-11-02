@@ -1018,6 +1018,24 @@ def test_ask_01_c06_limits_idempotency_and_usage(seed: Any, limits_app: Any, db:
     assert all(r[2] > 0 and QUESTION not in r[5] for r in rows)
 
 
+def test_ask_01_c06_a_racing_second_answer_is_409_not_500(
+    seed: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two requests of one user can both pass the running-answer check; the partial unique
+    index then refuses the second insert, which must still answer 409 ask-answer-running."""
+    from quiz_api.repositories.ask import AskRepository
+
+    owner = seed.client("owner")
+    s = AskSeed(owner)
+    first = post(owner, new_conv(owner, s.ws)["id"], QUESTION)
+    assert first.status_code == 202  # queued: the user's running answer
+    monkeypatch.setattr(AskRepository, "running_answer", lambda _self, _user: False)
+    raced = post(owner, new_conv(owner, s.ws)["id"], QUESTION)
+    assert (raced.status_code, problem_type(raced)) == (409, P + "ask-answer-running")
+    monkeypatch.undo()
+    assert finish(owner, first)["status"] == "succeeded"
+
+
 def test_ask_01_c06_requests_respect_top_k_context_and_output_caps(
     seed: Any, limits_app: Any, fake: Any, worker_with: Any, ask_env: Any
 ) -> None:
