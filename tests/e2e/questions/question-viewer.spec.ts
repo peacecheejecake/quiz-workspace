@@ -14,7 +14,7 @@
 // The panel shows answers and explanations after a submission: traces, screenshots and videos are
 // off, and shown answers are checked with role/text assertions on synthetic strings only.
 import { randomUUID } from 'node:crypto';
-import type { Locator, Page, Response } from '@playwright/test';
+import type { Locator, Page, Request, Response } from '@playwright/test';
 import {
   createPracticeRun,
   createShuffleMockExam,
@@ -799,6 +799,51 @@ function questionParam(page: Page): string | null {
   return new URL(page.url()).searchParams.get('question');
 }
 
+/**
+ * Waits for the home to settle after a Back or Forward. When Next's router has no cached copy of
+ * the entry a traversal restores, it reads that page again (an RSC request without the prefetch
+ * header) and commits it to the history once the response is in — a same-document navigation a
+ * `page.goto` started meanwhile is interrupted by (the WebKit flake of QVIEW-01-AC09). Settled:
+ * no such read in flight, a main-frame navigation (its commit) after the last one started, and
+ * the entry stamped with the panel history's marks again (PanelHistory.stamp).
+ */
+function historySettler(page: Page): () => Promise<void> {
+  let reading = 0;
+  let uncommitted = false;
+  const isRead = (request: Request) => {
+    const headers = request.headers();
+    return (
+      request.resourceType() !== 'document' &&
+      headers['rsc'] !== undefined &&
+      headers['next-router-prefetch'] === undefined
+    );
+  };
+  page.on('request', (request) => {
+    if (!isRead(request)) return;
+    reading += 1;
+    uncommitted = true;
+  });
+  const settle = (request: Request) => {
+    if (isRead(request)) reading -= 1;
+  };
+  page.on('requestfinished', settle);
+  page.on('requestfailed', settle);
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) uncommitted = false;
+  });
+  return async () => {
+    await expect.poll(() => reading === 0 && !uncommitted).toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const state: unknown = window.history.state;
+          return typeof state === 'object' && state !== null && '__quizPanelPos' in state;
+        }),
+      )
+      .toBe(true);
+  };
+}
+
 test(
   'QVIEW-01-AC09 the practice panel and range practice are never open together; a link with both opens the run',
   { tag: '@infra' },
@@ -815,6 +860,7 @@ test(
       random_order: false,
     });
     await signInAs(page, s.owner.user);
+    const settled = historySettler(page);
     await page.goto('/workspaces');
 
     // A link carrying both opens only the run (the later intent); `question` leaves the URL.
@@ -826,10 +872,12 @@ test(
     expect(practiceParam(page)).toBe(run.id);
     // One Back closes the run and nothing else is left open; Forward reopens neither panel.
     await page.goBack();
+    await settled();
     await expect(modalPanels(page)).toHaveCount(0);
     expect(practiceParam(page)).toBeNull();
     expect(questionParam(page)).toBeNull();
     await page.goForward();
+    await settled();
     await expect(modalPanels(page)).toHaveCount(0);
     expect(practiceParam(page)).toBeNull();
     expect(questionParam(page)).toBeNull();
