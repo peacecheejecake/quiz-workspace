@@ -7,7 +7,16 @@
 // workspace's confirmed questions with its filters, "선택 n문제 중 m문항을 만듭니다", the AI notice
 // and `만들기` (설정 바꾸기: `다시 만들기`), disabled with "출제 범위를 고르세요" while nothing is
 // selected. A saved range comes back as the selection it meant (selectionFromRange).
-import { Button, Checkbox, IconButton, Input, Select, StepProgress, Tooltip } from '@quiz/ui';
+import {
+  Button,
+  Checkbox,
+  IconButton,
+  Input,
+  Select,
+  StepProgress,
+  Tooltip,
+  useUnsavedChanges,
+} from '@quiz/ui';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPracticeRunApi } from '@/lib/questions/practice-run-client';
 import { RUN_FAILURE_MESSAGES } from '@/lib/questions/practice-run-problems';
@@ -86,6 +95,9 @@ export function MockExamForm({
 }: MockExamFormProps) {
   const [step, setStep] = useState<0 | 1>(0);
   const [values, setValues] = useState(initial);
+  const [opening] = useState(() => JSON.stringify(initial));
+  // HOMEDLG-01: typed options or the range step are unsaved input (the backdrop keeps them).
+  useUnsavedChanges(step === 1 || JSON.stringify(values) !== opening);
   const [optionError, setOptionError] = useState<OptionError | null>(null);
   const stepHeading = useRef<HTMLHeadingElement>(null);
   const [moved, setMoved] = useState(0);

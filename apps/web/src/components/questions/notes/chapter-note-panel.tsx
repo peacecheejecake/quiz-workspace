@@ -1,7 +1,8 @@
 'use client';
 
 // CHNOTE-01 정리 노트 panel on the workspace home (`?panel=chapter-note&chapter=<id>`,
-// docs/screens/chapter-notes.md): a non-modal FloatingSidePanel for one Heatmap chapter. It opens
+// docs/screens/chapter-notes.md): a modal FloatingSidePanel (UX9, HOMEDLG-01: the Heatmap is
+// inert while it is open) for one Heatmap chapter. It opens
 // at once with a skeleton, then shows the note state: none yet (editors: the send notice and
 // `정리 노트 만들기`), generating (polled; the previous note stays), failed (alert + reason,
 // editors `다시 시도`), or the note — `AI 생성`, "문제 n개 기준 · <시각>", the stale badge, `버전`,
@@ -48,7 +49,6 @@ export function notePollDelay(failures: number): number {
 export interface ChapterNotePanelProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly raiseKey?: number;
   readonly container: HTMLElement | null;
   /** The note's chapter; null for a URL without a usable chapter id ("장을 찾을 수 없습니다."). */
   readonly chapterId: string | null;
@@ -69,7 +69,6 @@ export interface ChapterNotePanelProps {
 export function ChapterNotePanel({
   open,
   onOpenChange,
-  raiseKey,
   container,
   chapterId,
   chapterTitle,
@@ -83,10 +82,6 @@ export function ChapterNotePanel({
     <FloatingSidePanel
       open={open}
       onOpenChange={onOpenChange}
-      raiseKey={raiseKey}
-      modal={false}
-      // The practice panel (modal) folds this one: it must stay reachable meanwhile.
-      staysExposedUnderModal
       container={container}
       title={NOTE_TEXT.title}
       description={title ?? chapterTitle ?? undefined}

@@ -63,7 +63,6 @@ export interface WorkspaceSharingPanelProps {
   /** Screen id on the dialog body (`data-screen-id`, docs/screens/index.md). */
   readonly screenId?: string;
   /** A new value raises the open dialog above the other floating dialogs. */
-  readonly raiseKey?: number;
 }
 
 const noSubscribe = () => () => undefined;
@@ -86,7 +85,6 @@ export function WorkspaceSharingPanel({
   onOpenChange,
   container,
   screenId,
-  raiseKey,
 }: WorkspaceSharingPanelProps) {
   const { toast } = useToast();
   const isClient = useIsClient();
@@ -296,9 +294,10 @@ export function WorkspaceSharingPanel({
       <FloatingSidePanel
         open={open}
         onOpenChange={onOpenChange}
-        modal={false}
         container={container}
-        raiseKey={raiseKey}
+        // HOMEDLG-01: an expiry date being changed (not saved yet) keeps the dialog open on a
+        // backdrop click.
+        dirty={expiryDraft !== null && expiryDraft !== savedExpiry}
         title="링크 공유"
         closeLabel="공유 관리 닫기"
         mobileLayout="full"

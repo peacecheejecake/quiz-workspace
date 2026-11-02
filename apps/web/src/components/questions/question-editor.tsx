@@ -15,6 +15,7 @@ import {
   ModalDialog,
   Select,
   useToast,
+  useUnsavedChanges,
 } from '@quiz/ui';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { FormNotice } from '@/components/auth/form-notice';
@@ -195,6 +196,9 @@ function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: 
   const [values, setValues] = useState<QuestionFormValues>(() =>
     editing ? formFromQuestion(editing) : emptyForm(),
   );
+  const [opening] = useState(() => JSON.stringify(values));
+  // HOMEDLG-01: a changed form keeps the dialog open on a backdrop click.
+  useUnsavedChanges(JSON.stringify(values) !== opening);
   const [baseRevisionId, setBaseRevisionId] = useState(editing?.revision.id ?? null);
   const [baseSources, setBaseSources] = useState(() => (editing ? sourceSnapshot(editing) : []));
   const [currentChapter, setCurrentChapter] = useState(editing?.chapter ?? null);
