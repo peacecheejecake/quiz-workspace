@@ -32,10 +32,12 @@ import { eventLabel, jobTypeLabel } from '../src/lib/history/model';
 import { withRunState } from '../src/lib/questions/practice-runs';
 import {
   closeDialog,
+  exclusiveClose,
   mockViewOf,
   openDialogs,
   parsePanels,
   runOwnsMockParam,
+  withMockRun,
   withMockView,
   withoutMockExams,
   withoutPanels,
@@ -77,6 +79,27 @@ describe('모의고사 dialog URL state', () => {
     expect(runOwnsMockParam(P(run))).toBe(true);
     expect(P(withoutMockExams(run)).get('mock')).toBe(EXAM);
     expect(withoutPanels(run)).toBe('');
+  });
+
+  // MOCK-W-2 (QVIEW-01-AC09): a mock exam's 풀기 is the run panel, so it closes the practice panel.
+  it('a mock exam run closes the practice panel; the dialog stays under it', () => {
+    const Q = '66666666-6666-4666-8666-666666666666';
+    const detail = `${withMockView('?q=x', { view: 'detail', mockExamId: EXAM })}&question=${Q}`;
+    const fromDetail = withMockRun(detail, EXAM);
+    expect(P(fromDetail).has('question')).toBe(false);
+    expect(openDialogs(fromDetail)).toEqual(['mock-exams', 'practice']);
+    expect(runOwnsMockParam(P(fromDetail))).toBe(true);
+    expect(P(fromDetail).get('mock')).toBe(EXAM);
+    expect(exclusiveClose(detail, fromDetail)).toBe(`?q=x&panel=mock-exams&mock=${EXAM}`);
+
+    const list = `${withMockView('', { view: 'list' })}&question=${Q}`;
+    const fromList = withMockRun(list, EXAM);
+    expect(fromList).toBe(`?panel=mock-exams&practice=new&source=mock&mock=${EXAM}`);
+    expect(exclusiveClose(list, fromList)).toBe('?panel=mock-exams');
+    // Closing the run leaves the dialog (its view is the home's to restore, keepMockView).
+    expect(closeDialog(fromList, 'practice')).toBe('?panel=mock-exams');
+    // Nothing to close without a question.
+    expect(exclusiveClose('?panel=mock-exams', withMockRun('?panel=mock-exams', EXAM))).toBeNull();
   });
 });
 
