@@ -120,6 +120,16 @@ export function MockExamDetail({
     };
   }, [api, mockExamId, reads, refreshKey]);
   const data = exam.status === 'ready' ? exam.data : null;
+  // The panel focuses the view's heading on arrival, but a detail that is still loading has no
+  // heading yet (after 만들기 the form's button is gone and focus fell to <body>): once it is
+  // read, its heading takes the focus that was lost meanwhile (MOCK-01 접근성, A11Y-14).
+  const loaded = exam.status !== 'loading';
+  useEffect(() => {
+    if (!loaded) return;
+    const active = document.activeElement;
+    if (active === null || active === document.body) headingRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
   const generating = data ? isGenerating(data) : false;
   useEffect(() => {
     if (!generating) return;
