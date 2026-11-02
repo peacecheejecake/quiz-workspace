@@ -26,6 +26,7 @@ from quiz_api.api import (
     question_imports,
     question_overview,
     questions,
+    related_sources,
     search,
     share_links,
     shared,
@@ -61,3 +62,5 @@ api_router.include_router(shared_chapter_notes.router)
 api_router.include_router(mock_exams.router)
 api_router.include_router(mock_practice.router)
 api_router.include_router(ask.router)
+api_router.include_router(related_sources.router)
+api_router.include_router(related_sources.shared_router)

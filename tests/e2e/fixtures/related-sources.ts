@@ -44,7 +44,10 @@
 //      retrieval_version, superseded_at, created_at, …)` and `mock_exam_question_related_sources
 //      (id, mock_exam_question_revision_id, …)`. The fixture counts rows through the revision
 //      tables (`question_revisions.question_id`, `mock_exam_question_revisions.
-//      mock_exam_question_id`), so a different own column set is fine.
+//      mock_exam_question_id`), so a different own column set is fine. RELSRC-B: the rows also
+//      carry `question_id` / `mock_exam_question_id` and `items` (references only); exactly one
+//      row per question is current. A corpus that comes back (a book added, then deleted) has
+//      its earlier key again: that stored row is current again, nothing is recomputed.
 //   R5 Hold barrier (APP_ENV=test): `E2E-RELSRC-HOLD-<token>` in a stem makes the computation for
 //      that revision — inside the advisory lock, after the "no row yet" re-check, before the
 //      search — create `<hold dir>/<token>.held` and wait (≤ 60 s) until `<token>.release` exists

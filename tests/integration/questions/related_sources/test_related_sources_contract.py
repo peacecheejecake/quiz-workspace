@@ -12,7 +12,7 @@ rows (C06); mock exam questions have their own table, use their evidence's book 
 their own submission proof (C07).
 
 Shapes, markers and files are assumptions R1-R10 in tests/e2e/fixtures/related-sources.ts. Jobs
-run in this process (conftest.py). RELSRC.0: every test is `red` until RELSRC-B.
+run in this process (conftest.py). RELSRC.0 wrote them `red`; RELSRC-B made them GREEN.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ import httpx
 import psycopg
 import pytest
 
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = [pytest.mark.infra]
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PDFS = REPO_ROOT / "tests" / "fixtures" / "pdfs"
@@ -721,7 +721,7 @@ def test_relsrc_01_c03_fingerprint_key_supersedes_and_stores_references_only(
         assert now["id"] not in seen, f"{what} must change the corpus fingerprint"
         seen.append(now["id"])
 
-    # A correction publish, a restore (published), a new book, a deleted book: new keys.
+    # A correction publish, a restore (published), a new book: new keys.
     publish(rig.owner, rig.doc, {rig.block["ch2-s1-p1"]: APPLIED_REMOVED})
     changed("a correction publish")
     assert APPLIED not in "\n".join(
@@ -737,8 +737,15 @@ def test_relsrc_01_c03_fingerprint_key_supersedes_and_stores_references_only(
     changed("a restored revision")
     extra = upload(rig.owner, rig.ws, BOOK_EN, "book")
     changed("an added book")
+    # Deleting that book brings back the restored corpus, so its key and stored list: current
+    # again, nothing recomputed (the fingerprint is the corpus, not its history).
+    before_delete = calls(rev)
     rig.owner.ok("DELETE", f"/documents/{extra}", None, (200, 202, 204))
-    changed("a deleted book")
+    back = ok(read(rig.owner, q["id"], view="detail"))
+    assert back["id"] != seen[-1], "a deleted book must change the corpus fingerprint"
+    assert back["id"] == seen[-2], "the restored corpus is back: its stored list again"
+    assert calls(rev) == before_delete
+    assert [r[0] for r in rows(q["id"]) if not r[2]] == [back["id"]]
     # A question edit: a new question revision, a new key.
     edited = rig.owner.ok(
         "PATCH",
@@ -802,6 +809,37 @@ def test_relsrc_01_c04_twenty_concurrent_first_reads_compute_once(seed: Any) -> 
         assert all(b["items"] == bodies[0]["items"] for b in bodies)
         assert calls(q["revision"]["id"]) == 1
         assert len(rows(q["id"])) == 1
+    finally:
+        hold.release()
+        hold.cleanup()
+
+
+def test_relsrc_01_c03_a_publish_during_a_computation_is_not_cached_under_the_old_key(
+    seed: Any,
+) -> None:
+    """A book published while a first read computes: the stored list's key and its passages
+    come from one corpus (never the new corpus' passages under the old fingerprint)."""
+    rig = Rig(seed, "c03-race")
+    hold = Hold()
+    try:
+        q = rig.question("c03-race", markers=(hold.marker,))
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(read, rig.owner, q["id"], view="detail")
+            hold.held([future])
+            new_revision = publish(rig.owner, rig.doc, {rig.block["ch2-s1-p1"]: APPLIED_REMOVED})
+            hold.release()
+            racing = ok(future.result(timeout=60))
+        [(items,)] = _admin(
+            "select items from public.question_related_sources where id = %s", (racing["id"],)
+        )
+        assert {i["revision_id"] for i in items} <= {rig.revision}, (
+            "the list stored under the pre-publish key holds passages of the new revision"
+        )
+        # The next read is the new corpus' own list.
+        fresh = ok(read(rig.owner, q["id"], view="detail"))
+        assert fresh["id"] != racing["id"]
+        assert {i["revision_id"] for i in fresh["items"]} == {new_revision}
+        assert APPLIED not in "\n".join(i["excerpt"] for i in fresh["items"])
     finally:
         hold.release()
         hold.cleanup()

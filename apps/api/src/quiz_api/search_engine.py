@@ -132,6 +132,7 @@ class SearchEngine:
         self._settings = settings
         self._factory = store_factory
         self._service: SearchService | None = None
+        self._model_key: str | None = None
         self._lock = threading.Lock()
 
     def service(self) -> SearchService:
@@ -146,5 +147,13 @@ class SearchEngine:
                         # Type only: messages can carry URLs or model paths.
                         logger.warning("search: index unavailable (%s)", type(exc).__name__)
                         raise SearchUnavailableError("search index unavailable") from exc
+                    key = getattr(store, "model_key", None)
+                    self._model_key = key if isinstance(key, str) else "unknown"
                     self._service = SearchService(store)
         return self._service
+
+    def model_key(self) -> str:
+        """The index's model key (embedder, dimension, BM25, payload schema): a new collection
+        after an embedder switch has another one (RELSRC-01-C03 corpus fingerprint)."""
+        self.service()
+        return self._model_key or "unknown"
