@@ -2,7 +2,7 @@
 // (P0.3b), so the marker outline must reach 3:1 on every background the heatmap sits on.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { questionStatuses, themeNames, themedTokens } from '@quiz/design-tokens';
+import { questionStatuses, staticTokens, themeNames, themedTokens } from '@quiz/design-tokens';
 import { describe, expect, it } from 'vitest';
 
 const CSS = readFileSync(resolve(import.meta.dirname, '../src/styles/questions.css'), 'utf8');
@@ -40,6 +40,13 @@ describe('question marker outline contrast', () => {
   it('questions.css declares the outline as a color-mix of the status color', () => {
     expect(mixWith).toBe('color-text-primary');
     expect(Number(percent)).toBeGreaterThan(0);
+  });
+
+  it('draws a 0.5 CSS px outline at every marker size (UX9-STROKE)', () => {
+    const rule = /\.qz-question-marker > \.shape\s*\{([^}]*)\}/.exec(CSS)?.[1] ?? '';
+    expect(rule).toMatch(/stroke-width:\s*var\(--heatmap-marker-stroke-width\)/);
+    expect(rule).toMatch(/vector-effect:\s*non-scaling-stroke/);
+    expect(staticTokens['heatmap-marker-stroke-width']).toBe('0.5px');
   });
 
   const cases = themeNames.flatMap((theme) =>

@@ -36,13 +36,16 @@
 }
 
 /*
- * Outline of the same hue mixed 50% toward the primary text color. Light unseen/retry fills are
- * below 3:1 against the surface; the outline is ≥ 3.6:1 on surface/canvas/surface-muted in both
- * themes (test/question-marker-contrast.test.ts). 1.5 viewBox units ≈ 1 CSS px at 16px.
+ * Outline of the same hue mixed 43% toward the primary text color (UX9-STROKE: 50% → 43%, softer
+ * against the fill). Light unseen/retry fills are below 3:1 against the surface; 57% currentColor
+ * is the lightest mix that keeps the outline ≥ 3:1 on surface/canvas/surface-muted in both themes
+ * (light unseen on surface-muted 3.03:1; test/question-marker-contrast.test.ts). The width is
+ * --heatmap-marker-stroke-width in CSS px at every marker size (non-scaling stroke).
  */
 .qz-question-marker > .shape {
-  stroke: color-mix(in srgb, currentColor 50%, var(--color-text-primary));
-  stroke-width: 1.5;
+  stroke: color-mix(in srgb, currentColor 57%, var(--color-text-primary));
+  stroke-width: var(--heatmap-marker-stroke-width);
+  vector-effect: non-scaling-stroke;
 }
 
 .qz-question-marker[data-status='unseen'] {

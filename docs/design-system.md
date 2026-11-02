@@ -348,7 +348,7 @@ type QuestionDotProps = {
 };
 ```
 
-- 기본 marker는 **rounded square**, 즐겨찾기는 **rounded five-point star SVG**(부드러운 꼭짓점: `stroke-linejoin="round"`, 넉넉한 stroke width 또는 rounded SVG path); 두 모양 모두 semantic status color를 채우고 subtle stroke를 적용한다.
+- 기본 marker는 **rounded square**, 즐겨찾기는 **rounded five-point star SVG**(부드러운 꼭짓점: `stroke-linejoin="round"`, 넉넉한 stroke width 또는 rounded SVG path); 두 모양 모두 semantic status color를 채우고 subtle stroke를 적용한다. stroke는 모든 marker 크기에서 `--heatmap-marker-stroke-width` = `0.5px`(CSS px, `vector-effect: non-scaling-stroke`)이고 색은 `color-mix(in srgb, currentColor 57%, var(--color-text-primary))`다(UX9-STROKE 2026-11-02, 사용자 요청 "heatmap shape의 stroke-width를 0.5px로, 색은 좀 더 연하게": 이전 viewBox 1.5 단위 ≈ 셀 크기 기준 1.5px, mix 50%). 57%는 light unseen·retry 채움이 표면 대비 3:1 미만이라 경계를 맡는 outline이 surface·canvas·surface-muted 대비 비텍스트 3:1 이상을 지키는 가장 연한 값이다(최저 light unseen/surface-muted 3.03:1, dark unseen/surface-muted 4.75:1; `question-marker-contrast.test.ts`). 별의 둥근 꼭짓점은 이제 stroke 두께가 아니라 `stroke-linejoin="round"`에만 기댄다. forced-colors에서는 같은 두께의 `CanvasText` stroke이고, focus·선택 ring(2px outline)은 바뀌지 않는다.
 - 셀 `24×24px`(mobile·coarse pointer `32×32px`), 셀 간 grid gap `0`. heatmap 점의 marker SVG box는 셀과 같은 크기라 그려진 사각형은 viewBox 18/24 = `18px`(touch `24px`)이고, 이웃 marker 사이 보이는 간격은 `6px`(touch `8px`) = **marker 폭의 1/3 이하**(v1.2.3, UX5-UI 사용자 요청 "점 사이 간격을 점 width의 1/3 이하로"). 장식용 marker(legend·상태 요약·preview)는 `--heatmap-dot` 16px box. favorite는 **크기 확대가 아니라 사각형→별 모양 전환**이다. hover 및 `:focus-visible` 시 marker만 `scale(var(--heatmap-marker-hover-scale))`; transition은 transform 150ms, reduced-motion시 즉시 변경한다.
 - favorite는 별 silhouette로 표시하며 상세 텍스트에서도 별 아이콘을 제공. hover/focus scale을 적용해도 고정 셀과 grid 위치는 바꾸지 않는다.
 - 선택된 dot는 focus ring/outline으로 강조하고 상태 색은 그대로 유지.
