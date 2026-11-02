@@ -4,6 +4,8 @@ import { Popover as RadixPopover } from 'radix-ui';
 import type { ComponentProps, ReactNode } from 'react';
 import { cx } from '../internal/cx';
 import { useLayerStyle } from '../internal/layer';
+import { useMergedRefs } from '../internal/merge-refs';
+import { useOverscrollGuard } from '../internal/overscroll-guard';
 import { IconButton } from './IconButton';
 import { CloseIcon } from './icons';
 
@@ -29,12 +31,17 @@ export function PopoverContent({
   children,
   sideOffset = 8,
   style,
+  ref,
   ...rest
 }: PopoverContentProps) {
   const layerStyle = useLayerStyle();
+  // Scrolling a list inside the popper never scrolls the page under it (UX9-SCROLL).
+  const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
+  const contentRef = useMergedRefs(ref, guardOverscroll);
   return (
     <RadixPopover.Portal>
       <RadixPopover.Content
+        ref={contentRef}
         sideOffset={sideOffset}
         className={cx('qz-popover', 'glass-surface', className)}
         style={{ ...layerStyle, ...style }}

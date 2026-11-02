@@ -4,6 +4,8 @@ import { DropdownMenu as RadixDropdownMenu } from 'radix-ui';
 import type { ComponentProps } from 'react';
 import { cx } from '../internal/cx';
 import { useLayerStyle } from '../internal/layer';
+import { useMergedRefs } from '../internal/merge-refs';
+import { useOverscrollGuard } from '../internal/overscroll-guard';
 
 export const DropdownMenu = RadixDropdownMenu.Root;
 export const DropdownMenuTrigger = RadixDropdownMenu.Trigger;
@@ -23,12 +25,17 @@ export function DropdownMenuContent({
   sideOffset = 6,
   align = 'end',
   style,
+  ref,
   ...rest
 }: DropdownMenuContentProps) {
   const layerStyle = useLayerStyle();
+  // Scrolling a list inside the popper never scrolls the page under it (UX9-SCROLL).
+  const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
+  const contentRef = useMergedRefs(ref, guardOverscroll);
   return (
     <RadixDropdownMenu.Portal>
       <RadixDropdownMenu.Content
+        ref={contentRef}
         sideOffset={sideOffset}
         align={align}
         className={cx('qz-menu', 'glass-surface', className)}

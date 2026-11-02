@@ -4,6 +4,7 @@ import { Dialog } from 'radix-ui';
 import { useState, type ReactNode } from 'react';
 import { cx } from '../internal/cx';
 import { LayerProvider } from '../internal/layer';
+import { useOverscrollGuard } from '../internal/overscroll-guard';
 import { IconButton } from '../primitives/IconButton';
 import { CloseIcon, MenuIcon } from '../primitives/icons';
 
@@ -47,6 +48,7 @@ export function AppShell({
 }: AppShellProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const drawerOpen = mobileNavOpen ?? uncontrolledOpen;
+  const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
   const setDrawerOpen = (open: boolean) => {
     if (mobileNavOpen === undefined) setUncontrolledOpen(open);
     onMobileNavOpenChange?.(open);
@@ -65,7 +67,11 @@ export function AppShell({
             </Dialog.Trigger>
             <Dialog.Portal>
               <Dialog.Overlay className="qz-backdrop" data-layer="drawer" />
-              <Dialog.Content className="qz-drawer" aria-describedby={undefined}>
+              <Dialog.Content
+                ref={guardOverscroll}
+                className="qz-drawer"
+                aria-describedby={undefined}
+              >
                 <LayerProvider value="var(--z-modal)">
                   <div className="header">
                     <Dialog.Title className="title">{navLabel}</Dialog.Title>
