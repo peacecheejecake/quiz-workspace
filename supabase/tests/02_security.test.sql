@@ -33,12 +33,14 @@ select is_empty(
                                'document_summary_run_units', 'chapter_notes',
                                'mock_exams', 'mock_exam_generations',
                                'mock_exam_generation_items', 'mock_exam_questions',
-                               'mock_exam_question_revisions')
+                               'mock_exam_question_revisions',
+                              'ask_conversations', 'ask_messages', 'ask_message_sources',
+                              'llm_feature_usage')
                  and roles = array['quiz_worker']::name[]) $$,
   'every policy in public targets quiz_api only (plus quiz_worker on async_jobs, P0.7b, the '
     || 'document tables, M3.2a, the import runs/drafts, M4.4a, generation, M6.2, and '
     || 'workspace_forks, S3a, the QIMP-JOB registration items, the DOCSUM-B summary tables '
-    || 'CHNOTE chapter_notes and the MOCK-B mock exam tables the worker writes)'
+    || 'CHNOTE chapter_notes, the MOCK-B mock exam tables the worker writes and the ASK-B ask tables)'
 );
 
 -- Table privileges ------------------------------------------------------------------------------
