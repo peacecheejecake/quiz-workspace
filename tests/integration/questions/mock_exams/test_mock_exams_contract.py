@@ -782,6 +782,60 @@ def test_mock_01_c06_question_count_bounds_running_limit_rate_limit_and_idempote
     assert int(limited.headers["Retry-After"]) >= 1
 
 
+def bulk_confirmed(db: Any, workspace_id: str, n: int, start: int) -> None:
+    """`n` CONFIRMED short-answer questions without a chapter, inserted as the superuser (as the
+    QVIEW-01-C01 cap test does: 5,000 API calls would take minutes)."""
+    db(
+        "with q as (insert into public.questions (workspace_id, question_type, "
+        "question_number, sort_order) select %s, 'SHORT_ANSWER', g, g "
+        "from generate_series(%s::int, %s::int) g returning id, question_number) "
+        "insert into public.question_revisions (workspace_id, question_id, version, stem) "
+        "select %s, q.id, 1, 'bulk question ' || q.question_number from q",
+        (workspace_id, start, start + n - 1, workspace_id),
+    )
+    db(
+        "update public.questions q set active_revision_id = r.id, "
+        "publication_status = 'CONFIRMED' from public.question_revisions r "
+        "where q.workspace_id = %s and q.active_revision_id is null "
+        "and r.question_id = q.id and r.version = 1",
+        (workspace_id,),
+    )
+
+
+def test_mock_01_c06_a_whole_range_over_five_thousand_questions_is_refused(
+    seed: Any, db: Any
+) -> None:
+    owner = seed.client("mock-c06-cap")
+    ws = owner.create_workspace()["id"]
+    owner.create_question(ws, "모의고사 한도 원본")
+    whole = config(("OPTION_SHUFFLE",), None)
+    made = make(owner, ws, whole)  # the saved range: the whole (then one-question) workspace
+
+    def generations() -> list[tuple[Any, ...]]:
+        return db(
+            "select count(*) from public.mock_exam_generations where workspace_id = %s", (ws,)
+        )
+
+    def exams() -> list[tuple[Any, ...]]:
+        return db("select count(*) from public.mock_exams where workspace_id = %s", (ws,))
+
+    bulk_confirmed(db, ws, 5_000, start=2)  # 5,001 confirmed questions
+    rounds, saved = generations(), exams()
+    for res in (
+        post_exam(owner, ws, whole),  # create
+        regenerate(owner, made["id"], {"config": whole, "range": ALL}),  # 설정 바꾸기
+        regenerate(owner, made["id"]),  # 다시 만들기 of the saved range, grown since
+    ):
+        assert res.status_code == 422, (res.status_code, res.text[:300])
+        assert "5,000" in res.text
+    assert generations() == rounds, "a refused start wrote a generation"
+    assert exams() == saved, "a refused create wrote a mock exam"
+    assert exam(owner, made["id"])["latest_generation"]["id"] == made["latest_generation"]["id"]
+    # A count within the cap still samples the large range.
+    res = regenerate(owner, made["id"], {"config": config(("OPTION_SHUFFLE",), 5_000)})
+    assert res.status_code == 202, res.text[:300]
+
+
 # ---------------------------------------------------------------------------------------------
 # C07 no leaks
 # ---------------------------------------------------------------------------------------------

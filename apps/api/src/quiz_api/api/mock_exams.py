@@ -536,7 +536,8 @@ def _start(
     """Resolve, plan, enforce the start limits and queue the generation (no commit). A count
     over the range is refused when the settings are new (create / 설정 바꾸기); a plain remake
     of a range that shrank since makes `min(count, range)` like the AI types. A `saved_range`
-    (다시 만들기 of the stored range) drops questions gone since instead of 422 (C08)."""
+    (다시 만들기 of the stored range) drops questions gone since instead of 422 (C08). A whole
+    range (`question_count` null) over 5,000 questions is 422 however it starts (C06)."""
     repo.lock_workspace_generations(exam.workspace_id)
     candidates = resolve_candidates(
         repo.session, exam.workspace_id, actor_id, range_, saved=saved_range
@@ -557,6 +558,13 @@ def _start(
         raise _invalid(
             ("config", "question_count"),
             "With 보기 섞기 only make at most as many questions as the range holds.",
+        )
+    if config.question_count is None and len(candidates) > MAX_RANGE_QUESTIONS:
+        # The whole range (보기 섞기 only), on create, 설정 바꾸기 or a saved range grown since.
+        raise _invalid(
+            ("config", "question_count"),
+            f"A mock exam holds at most {MAX_RANGE_QUESTIONS:,} questions: the range has "
+            f"{len(candidates):,}. Choose a question count or a smaller range.",
         )
     if repo.running_count(exam.workspace_id) >= settings.mock_exam_max_running_per_workspace:
         raise ProblemException(
