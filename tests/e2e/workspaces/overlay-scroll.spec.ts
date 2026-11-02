@@ -1,6 +1,8 @@
 // UX9-SCROLL — swiping or wheeling over an open overlay never scrolls the page underneath
 // (user report 2026-11-02, iOS Safari). Overlays: a centered modal dialog (workspace 만들기), a
-// non-modal floating dialog (문서 관리) and a modal side panel (the question viewer).
+// floating dialog (문서 관리 — modal since UX9-MODAL, HOMEDLG-01) and a modal side panel (the question
+// viewer). A modal holds the page where it was while it is open, so the page is made scrollable
+// (and scrolled) before the overlay opens.
 //
 // Touch: Playwright has no swipe API. Every swipe is dispatched twice:
 // - as synthetic TouchEvents (both engines) at the element under the finger. A touchmove the page
@@ -18,7 +20,6 @@
 import type { Locator, Page } from '@playwright/test';
 import {
   createQuestion,
-  documentsPath,
   expect,
   homeUi,
   mcqInput,
@@ -43,6 +44,19 @@ async function makePageScrollable(page: Page, y = 400): Promise<void> {
     window.scrollTo(0, top);
   }, y);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(y);
+}
+
+/**
+ * Opens 문서 관리 from the home without moving the page: the `문서 n` button may be scrolled out of
+ * view, and a real click would first scroll it back (the test moving the page, not the overlay).
+ */
+async function openDocumentsInPlace(page: Page): Promise<Locator> {
+  const button = homeUi.documentsButton(page);
+  await button.evaluate((el: HTMLElement) => el.focus({ preventScroll: true }));
+  await button.dispatchEvent('click');
+  const dialog = homeUi.documentsDialog(page);
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 /** The overlay's own scroller (the vertically scrolling body), made taller than its viewport. */
@@ -214,16 +228,16 @@ test.describe('phone (touch)', () => {
   );
 
   test(
-    'UX9-SCROLL-AC02 swiping over the non-modal 문서 관리 dialog (header or its scroller at an end) never scrolls the page',
+    'UX9-SCROLL-AC02 swiping over the modal 문서 관리 dialog (header or its scroller at an end) never scrolls the page',
     { tag: '@infra' },
     async ({ page, workspaceFactory, browserName }) => {
       const owner = await workspaceFactory.member('ux9-scroll-ac02');
       const ws = await workspaceFactory.create(owner);
       await signInAs(page, owner.user);
-      await page.goto(documentsPath(ws.id));
-      const dialog = homeUi.documentsDialog(page);
-      await expect(dialog).toBeVisible();
+      await page.goto(overviewPath(ws.id));
+      await expect(homeUi.documentsButton(page)).toBeVisible();
       await makePageScrollable(page);
+      const dialog = await openDocumentsInPlace(page);
       await expectSwipesContained(page, dialog, browserName);
     },
   );
@@ -252,16 +266,16 @@ test.describe('phone (touch)', () => {
 });
 
 test(
-  'UX9-SCROLL-AC04 the mouse wheel over the non-modal 문서 관리 dialog never scrolls the page; outside it the page still scrolls',
+  'UX9-SCROLL-AC04 the mouse wheel over the modal 문서 관리 dialog never scrolls the page, nor over its backdrop; closed, the page scrolls again',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('ux9-scroll-ac04');
     const ws = await workspaceFactory.create(owner);
     await signInAs(page, owner.user);
-    await page.goto(documentsPath(ws.id));
-    const dialog = homeUi.documentsDialog(page);
-    await expect(dialog).toBeVisible();
+    await page.goto(overviewPath(ws.id));
+    await expect(homeUi.documentsButton(page)).toBeVisible();
     await makePageScrollable(page);
+    const dialog = await openDocumentsInPlace(page);
     const scroller = await overlayScroller(dialog);
     const scrollY = () => page.evaluate(() => window.scrollY);
 
@@ -290,10 +304,18 @@ test(
     await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(middle);
     expect(await scrollY(), 'wheel scrolling the dialog body').toBe(400);
 
-    // Non-modal: the page beside the dialog stays scrollable.
+    // Modal (UX9): the backdrop beside the dialog does not scroll the page either…
     const box = await dialog.boundingBox();
     if (!box) throw new Error('dialog is not visible');
     await page.mouse.move(box.x - 40, 300);
+    await page.mouse.wheel(0, 200);
+    await page.evaluate(
+      () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+    );
+    expect(await scrollY(), 'wheel over the backdrop').toBe(400);
+    // …and once the dialog is closed the page scrolls again.
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
     await page.mouse.wheel(0, 200);
     await expect.poll(scrollY).toBeGreaterThan(400);
   },

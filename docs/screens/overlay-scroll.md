@@ -33,7 +33,7 @@ linked_tests: [UX9-SCROLL-AC01 … UX9-SCROLL-AC04]
 
 > **UX9-SPEC 사용자 결정 2026-11-02 D3:** 문서 관리·모의고사 등 홈 floating dialog가 modal이 되므로 이 AC는 "modal floating dialog(모바일 full-screen 레이아웃 포함)"에 대해 그대로 성립한다(내용 불변). UX9-MODAL이 test 이름·Given의 "non-modal"만 고친다.
 
-- **Given:** 페이지가 scroll되는 Workspace 홈에서 non-modal floating dialog(문서 관리, 모의고사 등 홈 dialog; 모바일 full-screen 레이아웃 포함)가 열린 상태
+- **Given:** 페이지가 scroll되는 Workspace 홈에서 floating dialog(문서 관리, 모의고사 등 홈 dialog — UX9부터 modal; 모바일 full-screen 레이아웃 포함)가 열린 상태
 - **When:** AC01과 같은 스와이프를 dialog 위에서 한다
 - **Then:** AC01과 같다: dialog의 header나 끝에 닿은 scroll 영역의 스와이프는 페이지를 scroll하지 않고, scroll할 수 있는 영역은 그 영역만 움직인다.
 
@@ -47,6 +47,6 @@ linked_tests: [UX9-SCROLL-AC01 … UX9-SCROLL-AC04]
 
 > **UX9-SPEC 사용자 결정 2026-11-02 D3:** 홈에는 non-modal dialog가 남지 않는다(HOMEDLG-01). 같은 날 결정으로 홈 밖의 panel(본문 발췌·원본 비교·공유 화면 panel)도 modal이 되어 guard 대상인 non-modal floating 표면이 남지 않는다(docked 목차는 guard 밖). UX9-MODAL이 이 AC를 "데스크톱에서 modal dialog 위의 wheel/trackpad scroll은 header에서도 본문 끝을 넘어서도 페이지를 scroll하지 않는다(배경 잠금); 닫으면 페이지는 다시 scroll된다"로 test와 함께 고친다. side panel 경우(AC03)는 그대로다.
 
-- **Given:** 데스크톱 Workspace 홈에서 non-modal dialog가 열린 상태(페이지는 scroll 가능)
-- **When:** dialog의 header 위에서, 그리고 끝까지 scroll한 dialog 본문 위에서 그 끝을 넘는 방향으로 wheel/trackpad scroll하고; dialog 옆의 페이지 위에서 wheel scroll한다
-- **Then:** dialog 위의 wheel/trackpad scroll은 header에서도 본문 끝을 넘어서도 페이지를 scroll하지 않는다. dialog 옆의 페이지는 그대로 scroll된다.
+- **Given:** 데스크톱 Workspace 홈에서 modal floating dialog(문서 관리)가 열린 상태(페이지는 scroll 가능) — UX9-MODAL 고침, 그 전: non-modal dialog
+- **When:** dialog의 header 위에서, 그리고 끝까지 scroll한 dialog 본문 위에서 그 끝을 넘는 방향으로 wheel/trackpad scroll하고; dialog 옆의 backdrop 위에서 wheel scroll하고; dialog를 닫은 뒤 페이지 위에서 wheel scroll한다
+- **Then:** dialog 위의 wheel/trackpad scroll은 header에서도 본문 끝을 넘어서도 페이지를 scroll하지 않는다. scroll할 수 있는 dialog 본문은 그 본문만 움직인다. 열린 동안 backdrop 위의 wheel도 페이지를 scroll하지 않고(배경 잠금), 닫으면 페이지는 다시 scroll된다. (UX9 전: "dialog 옆의 페이지는 그대로 scroll된다")

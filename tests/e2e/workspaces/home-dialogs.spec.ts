@@ -238,7 +238,10 @@ test(
       // on top before each probe): the click may land on the backdrop and close a dialog that
       // has nothing to lose, but never activates what is behind it.
       const marker = await overviewUi.dots(page).first().boundingBox();
-      const header = await homeUi.questionMenuButton(page).boundingBox();
+      // The `문서 n` button: the home no longer steps aside (AC03), so at 1280px the `문제` menu
+      // button lies under the 500px dialog itself (a click there lands inside the dialog, not on
+      // its backdrop); `문서 n` stays left of every dialog.
+      const header = await homeUi.documentsButton(page).boundingBox();
       if (!marker || !header) throw new Error('home controls are not visible');
       for (const [what, box] of [
         ['marker', marker],

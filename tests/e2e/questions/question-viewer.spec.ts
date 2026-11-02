@@ -734,7 +734,7 @@ test(
     await expect(runUi.notFound(page.locator('body'))).toBeVisible();
     expect((await getPracticeRun(s.owner, foreignRun.id)).status).toBe(404);
 
-    // A guest of a share link: no 문제 풀기, the preview stays non-modal and read-only.
+    // A guest of a share link: no 문제 풀기, the preview is read-only (modal since UX9, HOMEDLG-01).
     const link = await createShareLink(other.owner, other.workspaceId);
     const guest = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     try {
@@ -748,7 +748,7 @@ test(
       await sharedUi.question(guestPage, nth(other.questions, 0).revision.stem).click();
       const preview = sharedUi.questionPanel(guestPage);
       await expect(preview).toBeVisible();
-      await expect(preview).not.toHaveAttribute('aria-modal', 'true');
+      await expect(preview).toHaveAttribute('aria-modal', 'true');
       await expect(runUi.submit(preview)).toHaveCount(0);
       expect(new URL(guestPage.url()).searchParams.has('practice')).toBe(false);
     } finally {
