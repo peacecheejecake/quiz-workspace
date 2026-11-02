@@ -18,6 +18,7 @@ from quiz_api.api import (
     jobs,
     me,
     mock_exams,
+    mock_practice,
     practice,
     practice_runs,
     question_duplicates,
@@ -61,3 +62,4 @@ api_router.include_router(history.router)
 api_router.include_router(chapter_notes.router)
 api_router.include_router(shared_chapter_notes.router)
 api_router.include_router(mock_exams.router)
+api_router.include_router(mock_practice.router)

@@ -145,6 +145,10 @@ RULES: dict[str, Rule | str] = {
     "listMockExamQuestions": READ,
     "updateMockExamQuestion": EDIT,
     "removeMockExamQuestion": EDIT,
+    # MOCK-P mock exam practice: personal like bank practice
+    "startMockPracticeSession": PRACTICE,
+    "submitMockPracticeSession": OWN_WRITE,
+    "selfGradeMockPracticeSession": OWN_WRITE,
     # workspace lifecycle and sharing
     "getWorkspace": READ,
     "listWorkspaceActivities": READ,
@@ -253,6 +257,8 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "renameMockExam": {"title": "S4 이름"},
         "createMockExamGeneration": {},
         "updateMockExamQuestion": {"base_revision_id": str(uuid.UUID(int=1)), "stem": "S4"},
+        "submitMockPracticeSession": {"selected_option_ids": ["opt-1"]},
+        "selfGradeMockPracticeSession": {"result": "correct"},
         "updateShareLink": {"allow_fork": False},
     }
     return bodies.get(op_id)
@@ -609,6 +615,12 @@ def test_practice_routes_never_reveal_answers_before_submission(world: Any) -> N
             learner.call("GET", f"/questions/{qid}/attempts"),
             learner.call("GET", f"/workspaces/{wid}/activities"),
             learner.call("PATCH", f"/questions/{qid}/my-state", {"needs_retry": True}),
+            # MOCK-P: the mock exam copy of the question (보기 섞기 keeps its explanation).
+            learner.call(
+                "POST",
+                f"/mock-exam-questions/{world.ids['mock_exam_question_id']}/practice-sessions",
+                None,
+            ),
         ]
         for res in responses:
             path = res.request.url.path

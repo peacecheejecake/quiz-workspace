@@ -119,6 +119,7 @@ def random_ids() -> dict[str, str]:
         "chapter_id",
         "mock_exam_id",
         "mock_exam_question_id",
+        "mock_practice_session_id",
     )
     out = {k: str(uuid.uuid4()) for k in keys}
     out["block_id"] = f"b-{uuid.uuid4().hex[:12]}"
@@ -249,6 +250,10 @@ def build_world(seed: Any, label: str) -> World:
 
     # MOCK-B: a made mock exam with one question (보기 섞기, no LLM).
     mock_exam_id, mock_question_id = make_mock_exam(owner, wid, qid)
+    # MOCK-P: the owner's open practice session of that mock exam question.
+    mock_session = owner.ok(
+        "POST", f"/mock-exam-questions/{mock_question_id}/practice-sessions", None, (201,)
+    )
 
     # A second workspace of the same owner, for requests that mix ids of two workspaces.
     twin = owner.create_workspace(f"S4 {label} twin")
@@ -293,6 +298,7 @@ def build_world(seed: Any, label: str) -> World:
         "chapter_id": chapter_id,
         "mock_exam_id": mock_exam_id,
         "mock_exam_question_id": mock_question_id,
+        "mock_practice_session_id": str(mock_session["id"]),
     }
     twin_ids = {
         "workspace_id": tid,

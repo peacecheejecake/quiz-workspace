@@ -445,6 +445,29 @@ export type paths = {
     patch: operations['updateMockExamQuestion'];
     trace?: never;
   };
+  '/api/v1/mock-exam-questions/{mock_exam_question_id}/practice-sessions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start Mock Practice Session
+     * @description Open a mock exam question: pins its active revision and shuffles MCQ options. No answers
+     *     in the response, nothing recorded outside the mock exam tables. With a run position the
+     *     caller's mock run of this workspace must hold this question there; the position's open
+     *     session is resumed, a submitted one is 409 `already-submitted`.
+     */
+    post: operations['startMockPracticeSession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/mock-exams/{mock_exam_id}': {
     parameters: {
       query?: never;
@@ -511,6 +534,49 @@ export type paths = {
     get: operations['listMockExamQuestions'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/mock-practice-sessions/{mock_practice_session_id}/self-grade': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Self Grade Mock Practice Session
+     * @description The user's own grade of a pending (essay / ungradable short answer) submission: appends a
+     *     grade attempt referencing the pending one; the session becomes graded. Once.
+     */
+    post: operations['selfGradeMockPracticeSession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/mock-practice-sessions/{mock_practice_session_id}/submit': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Submit Mock Practice Session
+     * @description Grade the answer on the server against the session's revision (option ids, never
+     *     positions); append the attempt; reveal answers and explanation. Once per session — for a run
+     *     position once per position (409 `already-submitted`), and not after the run finished.
+     */
+    post: operations['submitMockPracticeSession'];
     delete?: never;
     options?: never;
     head?: never;
@@ -3927,6 +3993,123 @@ export type components = {
        */
       severity: 'error' | 'warning';
     };
+    /**
+     * MockPracticeSession
+     * @description What a viewer needs to show a mock exam question. Never carries answers, explanations,
+     *     rubrics or accepted answers (a new field here is a reviewed change).
+     */
+    MockPracticeSession: {
+      /**
+       * Displayed Option Ids
+       * @description The displayed order (MCQ), as ids.
+       */
+      displayed_option_ids: string[];
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Is Multi Answer */
+      is_multi_answer: boolean;
+      /**
+       * Mock Exam Id
+       * Format: uuid
+       */
+      mock_exam_id: string;
+      /**
+       * Mock Exam Question Id
+       * Format: uuid
+       */
+      mock_exam_question_id: string;
+      /**
+       * Opened At
+       * Format: date-time
+       */
+      opened_at: string;
+      /**
+       * Options
+       * @description MCQ options in displayed order.
+       */
+      options: components['schemas']['PracticeOption'][];
+      /**
+       * Practice Run Id
+       * @description The practice run this session practises a position of.
+       */
+      practice_run_id?: string | null;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * Revision Id
+       * Format: uuid
+       * @description The mock exam question revision graded on.
+       */
+      revision_id: string;
+      /**
+       * Run Position
+       * @description That run position (1-based).
+       */
+      run_position?: number | null;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: 'open' | 'pending_grade' | 'graded';
+      /** Stem */
+      stem: string;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /**
+     * MockSubmitResult
+     * @description The graded (or pending) submission with the pinned revision's answers revealed.
+     */
+    MockSubmitResult: {
+      /** Accepted Answers */
+      accepted_answers: string[] | null;
+      /**
+       * Attempt Id
+       * Format: uuid
+       * @description The attempt that holds the current result.
+       */
+      attempt_id: string;
+      /** Correct Option Ids */
+      correct_option_ids: string[] | null;
+      /** Explanation */
+      explanation: string | null;
+      /**
+       * Mock Exam Question Id
+       * Format: uuid
+       */
+      mock_exam_question_id: string;
+      /**
+       * Practice Session Id
+       * Format: uuid
+       */
+      practice_session_id: string;
+      /**
+       * Result
+       * @enum {string}
+       */
+      result: 'correct' | 'incorrect' | 'pending';
+      /**
+       * Revision Id
+       * Format: uuid
+       */
+      revision_id: string;
+      /** Rubric */
+      rubric: string | null;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: 'open' | 'pending_grade' | 'graded';
+    };
     /** MyState */
     MyState: {
       /** Is Favorite */
@@ -4318,8 +4501,9 @@ export type components = {
     };
     /**
      * PracticeRunCreate
-     * @description `source=bank`: the workspace's questions. `source=mock` (with `mock_exam_id`) arrives with
-     *     MOCK-P. Unknown body fields are ignored (never a workspace or user override).
+     * @description `source=bank`: the workspace's questions. `source=mock` (with `mock_exam_id`): the
+     *     questions the mock exam lists now. Unknown body fields are ignored (never a workspace or user
+     *     override).
      */
     PracticeRunCreate: {
       /** Mock Exam Id */
@@ -8215,6 +8399,89 @@ export interface operations {
       };
     };
   };
+  startMockPracticeSession: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        mock_exam_question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PracticeSessionCreate'] | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockPracticeSession'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getMockExam: {
     parameters: {
       query?: never;
@@ -8553,6 +8820,166 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  selfGradeMockPracticeSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mock_practice_session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SelfGradeBody'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SelfGradeResult'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  submitMockPracticeSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mock_practice_session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SubmitBody'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockSubmitResult'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };

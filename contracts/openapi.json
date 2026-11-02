@@ -4749,6 +4749,233 @@
         "title": "MockExamValidationNote",
         "type": "object"
       },
+      "MockPracticeSession": {
+        "description": "What a viewer needs to show a mock exam question. Never carries answers, explanations,\nrubrics or accepted answers (a new field here is a reviewed change).",
+        "properties": {
+          "displayed_option_ids": {
+            "description": "The displayed order (MCQ), as ids.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Displayed Option Ids",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_multi_answer": {
+            "title": "Is Multi Answer",
+            "type": "boolean"
+          },
+          "mock_exam_id": {
+            "format": "uuid",
+            "title": "Mock Exam Id",
+            "type": "string"
+          },
+          "mock_exam_question_id": {
+            "format": "uuid",
+            "title": "Mock Exam Question Id",
+            "type": "string"
+          },
+          "opened_at": {
+            "format": "date-time",
+            "title": "Opened At",
+            "type": "string"
+          },
+          "options": {
+            "description": "MCQ options in displayed order.",
+            "items": {
+              "$ref": "#/components/schemas/PracticeOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "practice_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The practice run this session practises a position of.",
+            "title": "Practice Run Id"
+          },
+          "question_type": {
+            "enum": [
+              "MCQ",
+              "SHORT_ANSWER",
+              "ESSAY"
+            ],
+            "title": "Question Type",
+            "type": "string"
+          },
+          "revision_id": {
+            "description": "The mock exam question revision graded on.",
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "run_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "That run position (1-based).",
+            "title": "Run Position"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "pending_grade",
+              "graded"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "stem": {
+            "title": "Stem",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "mock_exam_id",
+          "mock_exam_question_id",
+          "revision_id",
+          "question_type",
+          "stem",
+          "is_multi_answer",
+          "options",
+          "displayed_option_ids",
+          "state",
+          "opened_at"
+        ],
+        "title": "MockPracticeSession",
+        "type": "object"
+      },
+      "MockSubmitResult": {
+        "description": "The graded (or pending) submission with the pinned revision's answers revealed.",
+        "properties": {
+          "accepted_answers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Answers"
+          },
+          "attempt_id": {
+            "description": "The attempt that holds the current result.",
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "correct_option_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct Option Ids"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "mock_exam_question_id": {
+            "format": "uuid",
+            "title": "Mock Exam Question Id",
+            "type": "string"
+          },
+          "practice_session_id": {
+            "format": "uuid",
+            "title": "Practice Session Id",
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "correct",
+              "incorrect",
+              "pending"
+            ],
+            "title": "Result",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "rubric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "pending_grade",
+              "graded"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt_id",
+          "practice_session_id",
+          "mock_exam_question_id",
+          "revision_id",
+          "state",
+          "result",
+          "correct_option_ids",
+          "accepted_answers",
+          "explanation",
+          "rubric"
+        ],
+        "title": "MockSubmitResult",
+        "type": "object"
+      },
       "MyState": {
         "properties": {
           "is_favorite": {
@@ -5620,7 +5847,7 @@
         "type": "object"
       },
       "PracticeRunCreate": {
-        "description": "`source=bank`: the workspace's questions. `source=mock` (with `mock_exam_id`) arrives with\nMOCK-P. Unknown body fields are ignored (never a workspace or user override).",
+        "description": "`source=bank`: the workspace's questions. `source=mock` (with `mock_exam_id`): the\nquestions the mock exam lists now. Unknown body fields are ignored (never a workspace or user\noverride).",
         "properties": {
           "mock_exam_id": {
             "anyOf": [
@@ -13278,6 +13505,141 @@
         ]
       }
     },
+    "/api/v1/mock-exam-questions/{mock_exam_question_id}/practice-sessions": {
+      "post": {
+        "description": "Open a mock exam question: pins its active revision and shuffles MCQ options. No answers\nin the response, nothing recorded outside the mock exam tables. With a run position the\ncaller's mock run of this workspace must hold this question there; the position's open\nsession is resumed, a submitted one is 409 `already-submitted`.",
+        "operationId": "startMockPracticeSession",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PracticeSessionCreate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockPracticeSession"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Start Mock Practice Session",
+        "tags": [
+          "mock-exams"
+        ]
+      }
+    },
     "/api/v1/mock-exams/{mock_exam_id}": {
       "delete": {
         "description": "Soft delete: the mock exam leaves the list (attempts stay); a running generation is\ncancelled.",
@@ -13785,6 +14147,224 @@
           }
         ],
         "summary": "List Mock Exam Questions",
+        "tags": [
+          "mock-exams"
+        ]
+      }
+    },
+    "/api/v1/mock-practice-sessions/{mock_practice_session_id}/self-grade": {
+      "post": {
+        "description": "The user's own grade of a pending (essay / ungradable short answer) submission: appends a\ngrade attempt referencing the pending one; the session becomes graded. Once.",
+        "operationId": "selfGradeMockPracticeSession",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_practice_session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Practice Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelfGradeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfGradeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Self Grade Mock Practice Session",
+        "tags": [
+          "mock-exams"
+        ]
+      }
+    },
+    "/api/v1/mock-practice-sessions/{mock_practice_session_id}/submit": {
+      "post": {
+        "description": "Grade the answer on the server against the session's revision (option ids, never\npositions); append the attempt; reveal answers and explanation. Once per session — for a run\nposition once per position (409 `already-submitted`), and not after the run finished.",
+        "operationId": "submitMockPracticeSession",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_practice_session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Practice Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockSubmitResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Submit Mock Practice Session",
         "tags": [
           "mock-exams"
         ]
