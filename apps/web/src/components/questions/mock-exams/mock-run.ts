@@ -75,6 +75,13 @@ export function knownRun(runId: string): RunInfo | undefined {
 }
 
 /**
+ * Which source each practice session of this page belongs to. Page-wide, not per client: the run
+ * panel replaces its client when a reloaded run's mock exam becomes known, while a position read
+ * by the earlier client still decides where its pending session is self-graded.
+ */
+const sessionSources = new Map<string, RunSource>();
+
+/**
  * The run client of the home's run panel: the bank's, except that a mock run lists, starts,
  * opens and submits through the mock exam routes. `mockExamId` is the mock exam a new run starts
  * from (the range step's, or the shown run's for `처음부터 다시`); positions follow their run's
@@ -89,7 +96,6 @@ export function homeRunClient(
   const runs = createPracticeRunApi(workspaceId, fetchImpl);
   const exams = createMockExamApi(workspaceId, fetchImpl);
   const mock = createMockPracticeApi(workspaceId, fetchImpl);
-  const sessionSources = new Map<string, RunSource>();
 
   async function sourceOf(runId: string): Promise<RunSource> {
     const known = knownRun(runId);
