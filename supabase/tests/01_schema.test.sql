@@ -36,7 +36,9 @@ select tables_are(
         'mock_exam_practice_sessions', 'mock_exam_attempts',
         -- ASK-B AI questions
         'ask_conversations', 'ask_messages', 'ask_message_sources', 'ask_message_feedback',
-        'llm_feature_usage', 'ask_daily_counts'],
+        'llm_feature_usage', 'ask_daily_counts',
+        -- RELSRC-B related passages
+        'question_related_sources', 'mock_exam_question_related_sources'],
   'public schema contains exactly the expected tables'
 );
 
