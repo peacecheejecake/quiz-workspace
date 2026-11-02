@@ -359,7 +359,7 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 
 | 곳 | 판정 | LLM 입력 |
 |---|---|---|
-| `practice` 첨부 제출 전 (QuestionViewer `practice`·`sequence(bank)`의 session — 등록 문제에는 UI 경로 없음, 서버 규칙으로 유지; 모의고사 `sequence(mock)`의 제출 전 `질문하기`가 쓴다 — 사용자 결정 2026-11-01) | 첨부 session에 그 사용자의 제출 없음 → `hint` | 번호·장·유형·발문·보기 글(표시 순서)·고른 답(미제출). 정답·허용 답안·채점 기준·해설·`question_sources` 구절 없음 |
+| `practice` 첨부 제출 전 (QuestionViewer `practice`·`sequence(bank)`의 session — 등록 문제에는 UI 경로 없음, 서버 규칙으로 유지; 모의고사 `sequence(mock)`의 제출 전 `질문하기`가 쓴다 — 사용자 결정 2026-11-01) | 첨부 session에 그 사용자의 제출 없음 → `hint` | 번호·장·유형·발문·보기 글(표시 순서; 정답 보기의 글도 보통 보기로 들어감)·고른 답(미제출). 어느 보기가 정답인지(정답 id·표시·순서)·허용 답안·모범답안·채점 기준·해설·`question_sources` 구절 없음 — 단답·서술형은 보기가 없으므로 허용 답안·모범답안·채점 기준 글이 요청 어디에도 없음(ASK-01-C03) |
 | 같은 곳 제출 후 | 제출 있음(채점 대기 포함) → `full` | 위 + 제출한 답·결과·정답·해설·출처 구절 |
 | 문제 상세 dialog(QuestionViewer `manage`, `detail`) | `GET /questions/{id}` 권한 → `full` | 현재 revision의 문제·정답·해설·출처 (이미 화면에 보이는 것) |
 | 모의고사 풀이(`sequence(mock)`)·관리(`manage(mock)`) | `mock_exam_practice_sessions`의 `mock_exam_attempts` 유무 / 편집 권한 | 같은 규칙. 내용은 `mock_exam_question_revisions` 행, 출처 구절은 그 revision의 `evidence` 중 현재 발행 `book` 블록(원본 문제의 `question_sources`가 아님) — ASK-01-C10 |
