@@ -333,6 +333,12 @@ function useRangeStep(workspaceId: string, active: boolean, initialRange: MockRa
   const [retries, setRetries] = useState(0);
   // The saved range is applied once, to the first questions read (설정 바꾸기).
   const pendingRange = useRef<MockRange | null>(initialRange);
+  // Until the person changes the selection or the filters, 설정 바꾸기 sends the saved range
+  // itself: its intent (`전체 선택` with exclusions, chapters, single questions) is resolved
+  // again by the server on every round (docs/screens/mock-exams.md "범위"), whereas a selection
+  // recompressed from today's questions would turn, e.g., single ids covering everything into
+  // `all`, which takes in questions added later.
+  const [changed, setChanged] = useState(initialRange === null);
   const filtersKey = JSON.stringify(filters);
   const requestKey = `${filtersKey}:${retries}`;
   const busy = active && loadedKey !== requestKey;
@@ -370,16 +376,26 @@ function useRangeStep(workspaceId: string, active: boolean, initialRange: MockRa
   }, [api, active, requestKey]);
 
   const count = groups ? keepVisible(selected, groups).size : 0;
-  const request = groups ? rangeRequest(groups, selected, filters) : null;
+  const request = !groups
+    ? null
+    : !changed && initialRange
+      ? initialRange
+      : rangeRequest(groups, selected, filters);
   return {
     groups,
     busy,
     error,
     retry: () => setRetries((n) => n + 1),
     selected,
-    setSelected: (next: Set<string>) => setSelected(next),
+    setSelected: (next: Set<string>) => {
+      setChanged(true);
+      setSelected(next);
+    },
     filters,
-    setFilters: (next: RangeFilterState) => setFiltersState(next),
+    setFilters: (next: RangeFilterState) => {
+      setChanged(true);
+      setFiltersState(next);
+    },
     count,
     request,
   };
