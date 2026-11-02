@@ -309,14 +309,6 @@ provider = "default"
 note = "5"
 
 [[var]]
-name = "QUESTION_GENERATION_BATCH_RATE_LIMIT_PER_MINUTE"
-services = ["api"]
-kind = "config"
-check = "number"
-provider = "default"
-note = "6"
-
-[[var]]
 name = "SUPABASE_URL"
 services = ["api", "worker"]
 kind = "config"
@@ -819,7 +811,7 @@ kind = "secret"
 check = "nonempty"
 required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true", "WORKER_MOCK_EXAMS=true"]
 provider = "LLM provider console (Anthropic)"
-note = "optional; unset disables question generation (QGEN) — a user decision (cost, data policy)"
+note = "optional; unset disables the LLM features (summaries, chapter notes, mock exam AI types) — a user decision (cost, data policy)"
 
 [[var]]
 name = "LLM_MODEL"
