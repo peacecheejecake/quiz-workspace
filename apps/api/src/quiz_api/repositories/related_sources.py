@@ -15,7 +15,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import Connection, text
 from sqlalchemy.orm import Session
 
 
@@ -80,6 +80,17 @@ class BlockRow:
     text: str
     page: int
     chapter_id: uuid.UUID | None
+
+
+def lock_lists(conn: Connection, kind: Kind, owner_id: uuid.UUID) -> None:
+    """Transaction-scoped advisory lock of one question's lists, held until `conn` commits.
+
+    Taken on the connection's outer transaction, never inside a Session savepoint: rolling back a
+    savepoint (the retrieval ends its reads that way) would release a lock taken in it."""
+    conn.execute(
+        text("select pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+        {"k": f"{kind.lock_prefix}{owner_id}"},
+    )
 
 
 class RelatedSourcesRepository:
@@ -193,13 +204,6 @@ class RelatedSourcesRepository:
         return [SourceRef(r.document_id, tuple(r.block_ids or ())) for r in rows]
 
     # --- stored lists ----------------------------------------------------------------------------
-
-    def lock(self, kind: Kind, owner_id: uuid.UUID) -> None:
-        """Transaction-scoped advisory lock of one question's lists (released at commit)."""
-        self._session.execute(
-            text("select pg_advisory_xact_lock(hashtextextended(:k, 0))"),
-            {"k": f"{kind.lock_prefix}{owner_id}"},
-        )
 
     def stored(
         self, kind: Kind, revision_id: uuid.UUID, fingerprint: str, version: str

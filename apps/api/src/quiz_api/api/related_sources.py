@@ -90,6 +90,7 @@ from quiz_api.repositories.related_sources import (
     RevisionContent,
     SourceRef,
     StoredList,
+    lock_lists,
 )
 from quiz_api.repositories.search import ChapterRow, SearchableDocument, SearchRepository
 from quiz_api.search_engine import SearchEngine, SearchUnavailableError
@@ -491,36 +492,33 @@ def resolve(session: Session, deps: RelatedDeps, target: Target) -> tuple[Outcom
             session.rollback()
         return Outcome(None, degraded, items), content
     session.rollback()  # free the request's connection before waiting on the lock
-    with (
-        deps.database.engine.connect() as conn,
-        conn.begin(),
-        Session(bind=conn, join_transaction_mode="create_savepoint") as locked,
-    ):
-        locked_repo = RelatedSourcesRepository(locked)
-        locked_repo.lock(target.kind, target.owner_id)
-        row = locked_repo.stored(target.kind, target.revision_id, fingerprint, version)
-        if row is not None:
-            if row.superseded and target.current:
-                locked_repo.make_current(target.kind, target.owner_id, row.id)
-                locked.commit()
-            return _stored_outcome(row), content
-        try:
-            items, degraded = _compute(locked, deps, target, content)
-        except RelatedUnavailableError:
-            raise _unavailable() from None
-        if degraded:
-            return Outcome(None, degraded, items), content
-        row_id = locked_repo.insert(
-            target.kind,
-            workspace_id=target.workspace_id,
-            owner_id=target.owner_id,
-            revision_id=target.revision_id,
-            fingerprint=fingerprint,
-            version=version,
-            items=items,
-            current=target.current,
-        )
-        locked.commit()
+    with deps.database.engine.connect() as conn, conn.begin():
+        lock_lists(conn, target.kind, target.owner_id)
+        with Session(bind=conn, join_transaction_mode="create_savepoint") as locked:
+            locked_repo = RelatedSourcesRepository(locked)
+            row = locked_repo.stored(target.kind, target.revision_id, fingerprint, version)
+            if row is not None:
+                if row.superseded and target.current:
+                    locked_repo.make_current(target.kind, target.owner_id, row.id)
+                    locked.commit()
+                return _stored_outcome(row), content
+            try:
+                items, degraded = _compute(locked, deps, target, content)
+            except RelatedUnavailableError:
+                raise _unavailable() from None
+            if degraded:
+                return Outcome(None, degraded, items), content
+            row_id = locked_repo.insert(
+                target.kind,
+                workspace_id=target.workspace_id,
+                owner_id=target.owner_id,
+                revision_id=target.revision_id,
+                fingerprint=fingerprint,
+                version=version,
+                items=items,
+                current=target.current,
+            )
+            locked.commit()
     return Outcome(row_id, (), items), content
 
 
