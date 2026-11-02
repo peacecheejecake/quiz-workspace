@@ -725,7 +725,7 @@ def test_ask_01_c04_unknown_tags_are_dropped_renumbered_and_counted(seed: Any, d
 
 
 def test_ask_01_c05_sse_resumes_without_gaps_and_finished_messages_answer_from_postgres(
-    seed: Any,
+    seed: Any, live_api: str
 ) -> None:
     import redis
 
@@ -756,28 +756,48 @@ def test_ask_01_c05_sse_resumes_without_gaps_and_finished_messages_answer_from_p
     assert status == 200
     assert [e[0] for e in events] == ["done"], "finished: one done from Postgres"
 
-    # A second slow answer: read part of it, resume with Last-Event-ID, no gap and no duplicate.
+    # A second slow answer over a real HTTP server (TestClient buffers whole responses): read
+    # three deltas, disconnect while the answer is still streaming, resume with Last-Event-ID.
     sent = post(owner, c["id"], f"{SLOW} 다시 {QUESTION}")
     answer_id = str(sent.json()["answer"]["id"])
     runner = threading.Thread(
         target=owner.worker.drain, args=(str(sent.json()["job_id"]),), daemon=True
     )
     runner.start()
-    seqs: list[int] = []
+    url = f"{live_api}{API}/ask/messages/{answer_id}/stream"
     headers = {"Authorization": f"Bearer {owner.user.token}", "Accept": "text/event-stream"}
-    with owner._http.stream(
-        "GET", f"{API}/ask/messages/{answer_id}/stream", headers=headers
-    ) as res:
+    first: list[tuple[int, str]] = []
+    with httpx.stream("GET", url, headers=headers, timeout=60) as res:
+        assert res.status_code == 200
+        ident: str | None = None
         for line in res.iter_lines():
-            if line.startswith("data:") and '"seq"' in line:
-                seqs.append(int(json.loads(line[5:])["seq"]))
-            if len(seqs) >= 3:
+            if line.startswith("id:"):
+                ident = line[3:].strip()
+            elif line.startswith("data:") and '"seq"' in line:
+                seq = int(json.loads(line[5:])["seq"])
+                assert ident == str(seq), "a delta's SSE id is its seq (Q5)"
+                first.append((seq, ident))
+            if len(first) >= 3:
                 break
-    status, rest = sse(owner, answer_id, last_event_id=str(seqs[-1]))
-    seqs += [int(json.loads(e[2])["seq"]) for e in rest if e[0] == "delta"]
-    assert seqs == list(range(seqs[0], seqs[0] + len(seqs))), "contiguous, no duplicate"
-    assert rest[-1][0] == "done"
+    assert message(owner, answer_id)["status"] == "streaming", "disconnected mid-answer"
+    resumed: list[int] = []
+    last = ""
+    with httpx.stream(
+        "GET", url, headers={**headers, "Last-Event-ID": first[-1][1]}, timeout=120
+    ) as res:
+        assert res.status_code == 200
+        for line in res.iter_lines():
+            if line.startswith("event:"):
+                last = line[6:].strip()
+            elif line.startswith("data:") and '"seq"' in line and last == "delta":
+                resumed.append(int(json.loads(line[5:])["seq"]))
     runner.join(120)
+    assert resumed, "deltas arrived after the resume"
+    assert resumed[0] == first[-1][0] + 1, "resumes right after Last-Event-ID"
+    seqs = [seq for seq, _ in first] + resumed
+    assert seqs == list(range(seqs[0], seqs[0] + len(seqs))), "contiguous, no duplicate"
+    assert last == "done"
+    assert message(owner, answer_id)["status"] == "succeeded"
 
 
 def test_ask_01_c05_cancel_is_idempotent_and_a_deleted_conversation_ends_the_stream(
@@ -928,16 +948,16 @@ def test_ask_01_c06_daily_and_monthly_limits(seed: Any, app_with: Any) -> None:
         daily_app, daily, "POST", f"/ask/conversations/{cid}/messages", {"question": QUESTION}
     )
     assert (refused.status_code, problem_type(refused)) == (429, P + "ask-daily-limit")
-    assert (
-        via(
-            daily_app,
-            owner,
-            "POST",
-            f"/ask/conversations/{new_conv(owner, s.ws)['id']}/messages",
-            {"question": QUESTION},
-        ).status_code
-        == 202
-    ), "another user is not limited by the first one's day"
+    accepted = via(
+        daily_app,
+        owner,
+        "POST",
+        f"/ask/conversations/{new_conv(owner, s.ws)['id']}/messages",
+        {"question": QUESTION},
+    )
+    assert accepted.status_code == 202, "another user is not limited by the first one's day"
+    # Finish it: an unfinished answer would make the next question 409 ask-answer-running.
+    assert finish(owner, accepted)["status"] == "succeeded"
     # Monthly token cap 1 over the whole environment: the answers above already exceed it.
     budget_app = app_with(ASK_MONTHLY_TOKEN_CAP="1")  # noqa: S106 - a token budget, not a secret
     cid = new_conv(owner, s.ws)["id"]

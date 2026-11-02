@@ -34,13 +34,17 @@ guarantees no API exposes (no copied passage text, usage rows, append-only, purg
 from __future__ import annotations
 
 import importlib.util
+import socket
 import sys
+import threading
+import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
 import psycopg
 import pytest
+import uvicorn
 from fastapi.testclient import TestClient
 from quiz_api.main import create_app
 from quiz_api.settings import Settings
@@ -111,6 +115,31 @@ def job_worker(stack: Any, ask_env: dict[str, Path]) -> Iterator[Any]:
 def app_client(stack: Any, job_worker: Any) -> Iterator[TestClient]:
     with _app(job_worker._names.prefix) as client:
         yield client
+
+
+@pytest.fixture(scope="module")
+def live_api(stack: Any, job_worker: Any) -> Iterator[str]:
+    """The same app served by uvicorn on a free local port, for real incremental HTTP
+    streaming (Starlette's TestClient buffers a whole response, even with `.stream()`).
+    Returns its base URL; the SSE resume test (C05) reads it with httpx."""
+    app = _app(job_worker._names.prefix).app
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = uvicorn.Server(
+        uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", lifespan="on")
+    )
+    thread = threading.Thread(target=server.run, name="ask-live-api", daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 30
+    while not server.started and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert server.started, "the live API did not start"
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        thread.join(15)
 
 
 @pytest.fixture(scope="module")
