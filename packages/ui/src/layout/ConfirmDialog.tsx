@@ -5,6 +5,8 @@ import type { ReactNode, RefObject } from 'react';
 import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
 import { LayerProvider } from '../internal/layer';
+import { useMergedRefs } from '../internal/merge-refs';
+import { useOverscrollGuard } from '../internal/overscroll-guard';
 import { Button } from '../primitives/Button';
 
 export interface ConfirmDialogProps {
@@ -43,6 +45,9 @@ export function ConfirmDialog({
   className,
 }: ConfirmDialogProps) {
   const animateHeight = useAnimatedHeight<HTMLDivElement>();
+  // Radix's modal scroll lock covers this too; the guard keeps every overlay alike (UX9-SCROLL).
+  const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
+  const surfaceRef = useMergedRefs(animateHeight, guardOverscroll);
   return (
     <AlertDialog.Root
       open={open}
@@ -53,7 +58,7 @@ export function ConfirmDialog({
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="qz-backdrop" data-layer="modal" />
         <AlertDialog.Content
-          ref={animateHeight}
+          ref={surfaceRef}
           data-size="sm"
           className={cx('qz-modal', className)}
           onCloseAutoFocus={(event) => {

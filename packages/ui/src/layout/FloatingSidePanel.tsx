@@ -15,6 +15,7 @@ import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
 import { LayerProvider, useFloatingLayer } from '../internal/layer';
 import { handlesOwnEscape } from '../internal/own-escape';
+import { containOverscroll } from '../internal/overscroll-guard';
 import { ScrollRegion } from '../internal/scroll-region';
 import { handOffFocus } from '../internal/tabbable';
 import { IconButton } from '../primitives/IconButton';
@@ -164,13 +165,17 @@ export function FloatingSidePanel({
     (node: HTMLDivElement | null) => {
       contentRef.current = node;
       const cleanup = animateHeight(node);
+      // Swipes and wheel turns on a floating panel never scroll the page under it (UX9-SCROLL). A
+      // docked panel is part of the page layout, like the panes next to it: it chains as they do.
+      const releaseGuard = node && !docked ? containOverscroll(node) : undefined;
       // A returned cleanup replaces React's call with null, so clear the ref here too.
       return () => {
         cleanup?.();
+        releaseGuard?.();
         contentRef.current = null;
       };
     },
-    [animateHeight],
+    [animateHeight, docked],
   );
   // Element focused when the panel opened. Panels are often opened from controls that are not
   // a Radix trigger (heatmap dots, search results); focus must still return there on close.

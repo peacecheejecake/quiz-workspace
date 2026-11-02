@@ -5,6 +5,8 @@ import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
 import { LayerProvider } from '../internal/layer';
+import { useMergedRefs } from '../internal/merge-refs';
+import { useOverscrollGuard } from '../internal/overscroll-guard';
 import { handlesOwnEscape } from '../internal/own-escape';
 import { ScrollRegion } from '../internal/scroll-region';
 import { IconButton } from '../primitives/IconButton';
@@ -50,13 +52,16 @@ export function ModalDialog({
   children,
 }: ModalDialogProps) {
   const animateHeight = useAnimatedHeight<HTMLDivElement>();
+  // Radix's modal scroll lock covers this too; the guard keeps every overlay alike (UX9-SCROLL).
+  const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
+  const surfaceRef = useMergedRefs(animateHeight, guardOverscroll);
   return (
     <Dialog.Root open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
       {trigger ? <Dialog.Trigger asChild>{trigger}</Dialog.Trigger> : null}
       <Dialog.Portal>
         <Dialog.Overlay className="qz-backdrop" data-layer="modal" />
         <Dialog.Content
-          ref={animateHeight}
+          ref={surfaceRef}
           data-size={size}
           className={cx('qz-modal', className)}
           {...(description ? {} : { 'aria-describedby': undefined })}
