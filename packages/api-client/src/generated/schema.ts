@@ -1413,6 +1413,48 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspace_id}/chapter-redistribution/preview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Preview Redistribution
+     * @description Recommend chapters again (CHAPTER-MAP on each question's first source block) and list the
+     *     questions whose chapter would change. Read-only: computed on every request, nothing stored.
+     */
+    post: operations['previewChapterRedistribution'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/chapter-redistribution/questions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Redistribution Questions
+     * @description The workspace's confirmed questions by chapter group (Heatmap order) with how each chapter
+     *     was decided, and the book chapters they can move to. No answers.
+     */
+    get: operations['listChapterRedistributionQuestions'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspace_id}/documents': {
     parameters: {
       query?: never;
@@ -1618,6 +1660,28 @@ export type paths = {
      *     complete content (an MCQ needs >= 2 options and a correct option); DRAFT may be incomplete.
      */
     post: operations['createQuestion'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/questions/chapter-assignments': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Assign Question Chapters
+     * @description Move questions to chapters in one transaction (all or nothing). Each item carries the
+     *     chapter the client showed; any difference refuses the whole request. Moving never creates a
+     *     question revision and keeps attempts and study state.
+     */
+    post: operations['assignQuestionChapters'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2032,6 +2096,45 @@ export type components = {
       y0: number;
       /** Y1 */
       y1: number;
+    };
+    /** ChapterAssignmentItem */
+    ChapterAssignmentItem: {
+      /**
+       * Chapter Id
+       * @description Target; null = "챕터 없음".
+       */
+      chapter_id: string | null;
+      /**
+       * Expected Chapter Id
+       * @description The chapter the client showed (the current one); a different current chapter refuses the whole request (409 `chapter-changed`).
+       */
+      expected_chapter_id: string | null;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+    };
+    /** ChapterAssignmentRequest */
+    ChapterAssignmentRequest: {
+      /** Items */
+      items: components['schemas']['ChapterAssignmentItem'][];
+      /**
+       * Source
+       * @description manual (직접 옮기기 -> `manual`) | recommendation (applied -> `auto`).
+       * @enum {string}
+       */
+      source: 'manual' | 'recommendation';
+    };
+    /** ChapterAssignmentResult */
+    ChapterAssignmentResult: {
+      /** Moved */
+      moved: number;
+      /**
+       * Unchanged
+       * @description Already in the target chapter (as expected).
+       */
+      unchanged: number;
     };
     /** ChapterNote */
     ChapterNote: {
@@ -4357,6 +4460,12 @@ export type components = {
        */
       instance?: string | null;
       /**
+       * Question Ids
+       * @description 409 `chapter-changed` of a chapter assignment: the questions whose chapter is no longer the expected one.
+       * @default null
+       */
+      question_ids?: string[] | null;
+      /**
        * Request Id
        * @default null
        */
@@ -4418,6 +4527,12 @@ export type components = {
        * @description Document outline node (`chapters.id`).
        */
       chapter_id: string | null;
+      /**
+       * Chapter Source
+       * @description How the chapter was decided: `manual` (a person chose it: registration, edit, a move) or `auto` (a CHAPTER-MAP suggestion: import registration, an applied recommendation).
+       * @enum {string}
+       */
+      chapter_source: 'manual' | 'auto';
       /**
        * Created At
        * Format: date-time
@@ -4518,6 +4633,12 @@ export type components = {
        * @description Document outline node (`chapters.id`).
        */
       chapter_id: string | null;
+      /**
+       * Chapter Source
+       * @description How the chapter was decided: `manual` (a person chose it: registration, edit, a move) or `auto` (a CHAPTER-MAP suggestion: import registration, an applied recommendation).
+       * @enum {string}
+       */
+      chapter_source: 'manual' | 'auto';
       /**
        * Created At
        * Format: date-time
@@ -4864,6 +4985,184 @@ export type components = {
        * @enum {string}
        */
       status: 'ok' | 'unavailable';
+    };
+    /** RedistributionChapter */
+    RedistributionChapter: {
+      /** Document Id */
+      document_id?: string | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Title */
+      title: string;
+    };
+    /** RedistributionGroup */
+    RedistributionGroup: {
+      /** Document Id */
+      document_id: string | null;
+      /**
+       * Id
+       * @description null = "챕터 없음" (always last).
+       */
+      id: string | null;
+      /**
+       * Number
+       * @description Chapter number for labels, if known.
+       */
+      number: number | null;
+      /** Question Count */
+      question_count: number;
+      /** Title */
+      title: string;
+    };
+    /** RedistributionList */
+    RedistributionList: {
+      /**
+       * Chapters
+       * @description Groups of `items`, Heatmap order.
+       */
+      chapters: components['schemas']['RedistributionGroup'][];
+      /**
+       * Items
+       * @description Heatmap order.
+       */
+      items: components['schemas']['RedistributionQuestion'][];
+      /**
+       * Targets
+       * @description Chapters a question may move to (live books' current revisions; "챕터 없음" = `chapter_id: null` is always allowed).
+       */
+      targets: components['schemas']['RedistributionTargetDocument'][];
+    };
+    /** RedistributionPreview */
+    RedistributionPreview: {
+      /**
+       * Items
+       * @description Only questions whose chapter would change.
+       */
+      items: components['schemas']['RedistributionPreviewItem'][];
+      /**
+       * No Recommendation
+       * @description Questions without a recommendation, by reason (non-zero only).
+       */
+      no_recommendation: {
+        [key: string]: number;
+      };
+      /**
+       * Skipped Manual
+       * @description `manual` questions not computed (include_manual).
+       */
+      skipped_manual: number;
+      /**
+       * Unchanged
+       * @description Recommended chapter = current chapter.
+       */
+      unchanged: number;
+    };
+    /** RedistributionPreviewItem */
+    RedistributionPreviewItem: {
+      /** @description null = "챕터 없음". */
+      current_chapter: components['schemas']['RedistributionChapter'] | null;
+      /** Number Label */
+      number_label: string;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /**
+       * Reason
+       * @description source_in_book (출처 교재의 장) | matched (문제지 장 제목과 일치).
+       * @enum {string}
+       */
+      reason: 'source_in_book' | 'matched';
+      recommended_chapter: components['schemas']['RedistributionChapter'];
+      /** Stem Preview */
+      stem_preview: string;
+    };
+    /** RedistributionPreviewRequest */
+    RedistributionPreviewRequest: {
+      /**
+       * All
+       * @description Every confirmed question (nothing selected).
+       * @default false
+       */
+      all?: boolean;
+      /**
+       * Include Manual
+       * @description Also recommend for chapters a person chose (`manual`).
+       * @default false
+       */
+      include_manual?: boolean;
+      /**
+       * Question Ids
+       * @description The selected questions (ids that are not confirmed questions here are ignored).
+       */
+      question_ids?: string[] | null;
+    };
+    /** RedistributionQuestion */
+    RedistributionQuestion: {
+      /** Chapter Id */
+      chapter_id: string | null;
+      /**
+       * Chapter Source
+       * @description `manual` rows show 직접 정함.
+       * @enum {string}
+       */
+      chapter_source: 'manual' | 'auto';
+      /**
+       * Label
+       * @description Display label, e.g. "1장 3번" (chapter number, number).
+       */
+      label: string;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /** Question Number */
+      question_number: number | null;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * Stem Preview
+       * @description The stem's first 40 characters.
+       */
+      stem_preview: string;
+    };
+    /** RedistributionTargetChapter */
+    RedistributionTargetChapter: {
+      /**
+       * Depth
+       * @description Outline level (1 = top level).
+       */
+      depth: number;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Title */
+      title: string;
+    };
+    /** RedistributionTargetDocument */
+    RedistributionTargetDocument: {
+      /**
+       * Chapters
+       * @description Outline order.
+       */
+      chapters: components['schemas']['RedistributionTargetChapter'][];
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Document Title */
+      document_title: string;
     };
     /** RestoredDraft */
     RestoredDraft: {
@@ -11633,6 +11932,144 @@ export interface operations {
       };
     };
   };
+  previewChapterRedistribution: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RedistributionPreviewRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RedistributionPreview'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listChapterRedistributionQuestions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RedistributionList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   listDocuments: {
     parameters: {
       query?: {
@@ -12499,6 +12936,89 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Question'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  assignQuestionChapters: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChapterAssignmentRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChapterAssignmentResult'];
         };
       };
       /** @description Unauthorized */

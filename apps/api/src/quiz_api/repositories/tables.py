@@ -134,6 +134,24 @@ questions = Table(
     _ts("created_at", nullable=False),
     _ts("updated_at", nullable=False),
     _ts("deleted_at"),
+    # UX9-REDIST-B (20261103130000_question_chapter_source.sql): how the chapter was decided.
+    Column("chapter_source", Text, nullable=False, server_default=FetchedValue()),
+    Column("chapter_set_by", Uuid),
+    _ts("chapter_set_at"),
+)
+
+# UX9-REDIST-B: append-only history of chapter changes (quiz_api: insert and select only).
+question_chapter_changes = Table(
+    "question_chapter_changes",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=FetchedValue()),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("question_id", Uuid, nullable=False),
+    Column("from_chapter_id", Uuid),
+    Column("to_chapter_id", Uuid),
+    Column("source", Text, nullable=False),
+    Column("changed_by", Uuid),
+    Column("changed_at", DateTime(timezone=True), nullable=False, server_default=FetchedValue()),
 )
 
 question_revisions = Table(
