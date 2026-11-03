@@ -40,14 +40,12 @@ import {
   createConversation,
   createSecretQuestion,
   deleteConversation,
-  deltas,
   fakeCalls,
   getConversation,
   getMessage,
   listConversations,
   NOT_FOUND_TEXT,
   openAskPanel,
-  parseSse,
   PASSAGES,
   readStream,
   recordedMessageIds,
@@ -325,9 +323,16 @@ test(
     const saved = (await getConversation(s.owner, conversationId)).body as Conversation;
     expect(saved.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
 
-    // Streamed in several deltas, through the progress texts.
-    const body = await (await stream).text();
-    expect(deltas(parseSse(body)).length, 'SSE delta events').toBeGreaterThanOrEqual(2);
+    // Streamed in several deltas, through the progress texts. The browser read the relay's
+    // event stream; Chromium keeps no body of a text/event-stream response for the test to read,
+    // so the deltas are counted by the fake's call record and the growing text below.
+    const relayed = await stream;
+    expect(relayed.status()).toBe(200);
+    expect(relayed.headers()['content-type'] ?? '').toContain('text/event-stream');
+    const answerId = saved.messages.find((m) => m.role === 'assistant')?.id ?? '';
+    expect(fakeCalls(answerId).at(-1)?.deltas_sent ?? 0, 'SSE delta events').toBeGreaterThanOrEqual(
+      2,
+    );
     const seen = await watched(page);
     expect(seen.searching, '"근거를 찾는 중" was shown').toBe(true);
     expect(seen.writing, '"답을 쓰는 중" was shown').toBe(true);
@@ -669,7 +674,13 @@ test(
     await openHome(page, s.owner, s.workspaceId);
     let panel = await openAskPanel(page);
 
-    const questions = [QUESTION, '앞의 답을 더 짧게', '가나다 원리의 순서를 다시 알려 줘'];
+    // Every question names the passage: evidence comes from the last question only, and without
+    // any the fake is never called (ASK-01 "찾지 못함"), so it could not count the turns.
+    const questions = [
+      QUESTION,
+      '가나다 원리, 앞의 답을 더 짧게',
+      '가나다 원리의 순서를 다시 알려 줘',
+    ];
     for (const [i, question] of questions.entries()) {
       const answer = await ask(panel, question);
       await waitDone(answer);
@@ -859,8 +870,10 @@ test(
       expect((refused.body as { type?: string } | undefined)?.type).toBe(ASK_PROBLEMS.disabled);
       const after = (await getConversation(s.owner, conversation)).body as Conversation;
       expect(after.messages.length, 'no message was created').toBe(before.messages.length);
+      // Parallel tests share the record directory: only this conversation's answers count.
+      const ids = new Set(after.messages.map((m) => m.id));
       expect(
-        recordedMessageIds().filter((id) => !recordsBefore.has(id)),
+        recordedMessageIds().filter((id) => !recordsBefore.has(id) && ids.has(id)),
         'no LLM call',
       ).toEqual([]);
     } finally {
@@ -921,7 +934,8 @@ test(
       // 답변 중지 keeps what arrived, stops the worker; a reload mid-stream resumes to the end.
       panel = await open(slow);
       const stopped = await ask(panel, `${ASK_MARKERS.slow} ${QUESTION}`);
-      await expect(stopped).toContainText(/\S{10,}/, { timeout: ASK_TIMEOUT_MS });
+      // The fake's first delta starts with the chapter 1 passage (Korean text has short words).
+      await expect(stopped).toContainText(PASSAGES.book, { timeout: ASK_TIMEOUT_MS });
       await askUi.stop(panel).click();
       await expect(stopped).toContainText(ASK_TEXT.stopped);
       const slowConversation = conversationOf(page);
@@ -934,17 +948,24 @@ test(
         )
       ).body?.messages.at(-1);
       expect(stoppedMessage?.status).toBe('stopped');
-      const sentAtStop = fakeCalls(stoppedMessage?.id ?? '').at(-1)?.deltas_sent ?? 0;
+      // The fake writes its call record when the call ends (Q8): the worker closed the stream a
+      // few deltas after the stop, far before the SLOW answer's 40, and nothing follows.
+      const stoppedId = stoppedMessage?.id ?? '';
+      await expect
+        .poll(() => fakeCalls(stoppedId).length, { message: 'the stopped call ended' })
+        .toBeGreaterThan(0);
+      const sentAtStop = fakeCalls(stoppedId).at(-1)?.deltas_sent ?? 0;
+      expect(sentAtStop, 'the stream closed early').toBeLessThan(40);
       await page.waitForTimeout(3_000); // several of the fake's 500 ms delta intervals
       expect(
-        fakeCalls(stoppedMessage?.id ?? '').at(-1)?.deltas_sent ?? 0,
+        fakeCalls(stoppedId).map((c) => c.deltas_sent),
         'no delta after stop',
-      ).toBeLessThanOrEqual(sentAtStop + 1);
+      ).toEqual([sentAtStop]);
       await expect(askUi.retry(stopped)).toBeVisible();
 
       const flowing = await ask(panel, `${ASK_MARKERS.slow} 다시 ${QUESTION}`);
       await expect(flowing).toHaveAttribute('aria-busy', 'true');
-      await expect(flowing).toContainText(/\S{10,}/, { timeout: ASK_TIMEOUT_MS });
+      await expect(flowing).toContainText(PASSAGES.book, { timeout: ASK_TIMEOUT_MS });
       await page.reload();
       panel = askUi.panel(page);
       const resumed = askUi.answers(panel).last();
@@ -1138,8 +1159,10 @@ test(
     // Tab order: header → the answer's footnote, sources, actions → input → send.
     await askUi.newButton(panel).focus();
     const order: string[] = [];
+    // WebKit (like Safari) reaches buttons with Option+Tab (sharing-owner.spec.ts).
+    const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
     for (let i = 0; i < 60; i += 1) {
-      await page.keyboard.press('Tab');
+      await page.keyboard.press(tab);
       const name = await page.evaluate(() => {
         const el = document.activeElement as HTMLElement | null;
         if (!el) return '';
