@@ -710,6 +710,9 @@ function useSolveStep({
   // UX9-RETRY-OPT: a press shows at once and is saved in the background (FlagSync, serialized per
   // question); a failure rolls its fields back and is reported.
   const [flags, setFlags] = useState<{ questionId: string; flags: StudyFlags } | null>(null);
+  // Re-reads only the study flags / eligibility (a refused `다시 풀기`), never the position: the
+  // answer being typed and the open session stay.
+  const [flagsSeq, setFlagsSeq] = useState(0);
   const flagSync = useFlagSync<MyState>(
     (qid, patch) =>
       client.setFlags
@@ -724,7 +727,7 @@ function useSolveStep({
       if (event.type === 'failed') {
         onFlagsFailed?.(event.message);
         // A stale panel offered `다시 풀기`: read the question's state again (hides the toggle).
-        if (event.message === QUESTION_FAILURE_MESSAGES.retryNotAllowed) setItemSeq((n) => n + 1);
+        if (event.message === QUESTION_FAILURE_MESSAGES.retryNotAllowed) setFlagsSeq((n) => n + 1);
       }
       setFlags((prev) =>
         prev?.questionId !== qid ? prev : { questionId: qid, flags: event.flags },
@@ -760,12 +763,15 @@ function useSolveStep({
     }));
   }
   const flagsWanted = source === 'bank' && !archived && client.flags ? questionId : null;
-  const flagsLoad = useKeyedLoad(flagsWanted ? `${flagsWanted}:${itemSeq}` : null, async () => {
-    const found = (await client.flags?.(flagsWanted ?? '')) ?? null;
-    return found
-      ? { ok: true as const, data: found }
-      : { ok: false as const, kind: 'unavailable' as const, message: '' };
-  });
+  const flagsLoad = useKeyedLoad(
+    flagsWanted ? `${flagsWanted}:${itemSeq}:${flagsSeq}` : null,
+    async () => {
+      const found = (await client.flags?.(flagsWanted ?? '')) ?? null;
+      return found
+        ? { ok: true as const, data: found }
+        : { ok: false as const, kind: 'unavailable' as const, message: '' };
+    },
+  );
   const [seenFlags, setSeenFlags] = useState(flagsLoad);
   if (flagsLoad !== seenFlags) {
     setSeenFlags(flagsLoad);

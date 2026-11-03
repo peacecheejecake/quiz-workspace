@@ -258,6 +258,51 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     ).toBeInTheDocument();
   });
 
+  it('RETRY-01-C04 sequence(bank): a refused retry keeps the typed answer and the open session', async () => {
+    const user = userEvent.setup();
+    const flags = vi
+      .fn()
+      .mockResolvedValueOnce({
+        is_favorite: false,
+        needs_retry: false,
+        last_graded_result: 'correct',
+      })
+      .mockResolvedValue({
+        is_favorite: false,
+        needs_retry: false,
+        last_graded_result: 'incorrect',
+      });
+    const client = fakeClient({
+      flags: flags as unknown as RunClient['flags'],
+      setFlags: vi.fn(async () => ({
+        ok: false as const,
+        kind: 'retryNotAllowed' as const,
+        message: '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.',
+      })) as unknown as RunClient['setFlags'],
+    });
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={client}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('radio', { name: '응결' }));
+    await user.click(await within(panel).findByRole('button', { name: '다시 풀기 표시' }));
+    await waitFor(() => expect(flags).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+    );
+    expect(within(panel).getByRole('radio', { name: '응결' })).toBeChecked();
+    expect(client.openSession).toHaveBeenCalledTimes(1);
+    expect(client.getItem).toHaveBeenCalledTimes(1);
+  });
+
   it('RETRY-01-C04 sequence(bank): a refused retry (409) shows the message, reads the state again and hides the toggle', async () => {
     const user = userEvent.setup();
     const message = '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.';
