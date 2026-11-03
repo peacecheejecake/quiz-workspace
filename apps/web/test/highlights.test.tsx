@@ -9,7 +9,12 @@ import { act, render, renderHook, screen, waitFor, within } from '@testing-libra
 import userEvent from '@testing-library/user-event';
 import { ToastProvider } from '@quiz/ui';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MyHighlightsSection } from '../src/components/questions/notes/my-highlights-section';
+import { ChapterNoteBody } from '../src/components/questions/notes/chapter-note-body';
+import {
+  MyHighlightsSection,
+  type HighlightFilters,
+} from '../src/components/questions/notes/my-highlights-section';
+import { useState } from 'react';
 import {
   useHighlightStore,
   type HighlightItems,
@@ -217,14 +222,20 @@ describe('MyHighlightsSection', () => {
       },
       reload: vi.fn(),
     };
-    const section = () => (
-      <MyHighlightsSection
-        store={store}
-        matchesOf={() => []}
-        onGoTo={vi.fn()}
-        renderFootnote={(_h, line) => line}
-      />
-    );
+    function Section() {
+      const [filters, setFilters] = useState<HighlightFilters>({ source: 'all', color: 'all' });
+      return (
+        <MyHighlightsSection
+          store={store}
+          matchesOf={() => []}
+          onGoTo={vi.fn()}
+          renderFootnote={(_h, line) => line}
+          filters={filters}
+          onFiltersChange={setFilters}
+        />
+      );
+    }
+    const section = () => <Section />;
     const view = render(section(), { wrapper: ToastProvider });
     return view;
   }
@@ -273,6 +284,36 @@ describe('MyHighlightsSection', () => {
         expect.objectContaining({ method: 'POST' }),
       ),
     );
+  });
+});
+
+describe('note search over 내 하이라이트 (CHNOTE-02, HILITE-01)', () => {
+  it('counts only the explanation rows the filters show', async () => {
+    const user = userEvent.setup();
+    const store: HighlightStore = {
+      items: [noteHl(N1, 1), explanationHl(Q1, { quote: '주의할 점', color: 'pink' })],
+      update: vi.fn(),
+      reload: vi.fn(),
+    };
+    render(
+      <ChapterNoteBody
+        sections={[]}
+        footnotes={[]}
+        parts="highlights"
+        questionHref={() => '#'}
+        onOpenQuestion={vi.fn()}
+        loadPreview={vi.fn()}
+        highlighting={{ store, noteId: null, onGoTo: vi.fn() }}
+      />,
+      { wrapper: ToastProvider },
+    );
+    await user.type(screen.getByRole('searchbox', { name: '노트에서 찾기' }), '주의');
+    expect(await screen.findByText('1/1')).toBeTruthy();
+    // 색 노랑 hides the (pink) explanation row: its quote is no longer a result.
+    await user.click(
+      within(screen.getByRole('group', { name: '색' })).getByRole('button', { name: '노랑' }),
+    );
+    expect(await screen.findByText('결과 없음')).toBeTruthy();
   });
 });
 

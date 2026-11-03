@@ -86,6 +86,17 @@ export interface MyHighlightsSectionProps {
   readonly onGoTo: (h: MyHighlight, trigger: HTMLElement | null) => void;
   /** An explanation row's footnote line as a link to its question (with the preview). */
   readonly renderFootnote: (h: MyHighlight, line: ReactNode) => ReactNode;
+  /**
+   * The `출처`·`색` filters, kept by the parent: the note search counts only the explanation rows
+   * they show (a hidden row's quote is not a result one could go to).
+   */
+  readonly filters: HighlightFilters;
+  readonly onFiltersChange: (filters: HighlightFilters) => void;
+}
+
+export interface HighlightFilters {
+  readonly source: SourceFilter;
+  readonly color: ColorFilter;
 }
 
 type FocusAfter = { readonly kind: 'row'; readonly id: string } | { readonly kind: 'heading' };
@@ -95,12 +106,15 @@ export function MyHighlightsSection({
   matchesOf,
   onGoTo,
   renderFootnote,
+  filters,
+  onFiltersChange,
 }: MyHighlightsSectionProps) {
   const titleId = useId();
   const sourceId = useId();
   const colorId = useId();
-  const [source, setSource] = useState<SourceFilter>('all');
-  const [color, setColor] = useState<ColorFilter>('all');
+  const { source, color } = filters;
+  const setSource = (next: SourceFilter) => onFiltersChange({ ...filters, source: next });
+  const setColor = (next: ColorFilter) => onFiltersChange({ ...filters, color: next });
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const headingRef = useRef<HTMLHeadingElement>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());

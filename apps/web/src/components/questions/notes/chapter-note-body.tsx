@@ -50,11 +50,18 @@ import {
   type NoteSection,
   type QuestionPreview,
 } from '@/lib/notes/model';
-import { orderRows } from '@/lib/highlights/model';
+import { matchesFilters, orderRows } from '@/lib/highlights/model';
 import { displayStem } from '@/lib/questions/display-stem';
 import styles from './chapter-note.module.css';
 import { useHighlightTool, type HighlightStore } from './highlight-tool';
-import { highlightRowBlock, MyHighlightsSection, searchesRow } from './my-highlights-section';
+import {
+  highlightRowBlock,
+  MyHighlightsSection,
+  searchesRow,
+  type HighlightFilters,
+} from './my-highlights-section';
+
+const ALL_HIGHLIGHTS: HighlightFilters = { source: 'all', color: 'all' };
 
 export type LoadPreview = (questionId: string, signal?: AbortSignal) => Promise<QuestionPreview>;
 
@@ -345,9 +352,14 @@ export function ChapterNoteBody({
     [myHighlights, noteId, sections],
   );
   // The explanation rows in the order 내 하이라이트 shows them.
+  // 내 하이라이트's filters: the search looks only into the explanation rows they show.
+  const [filters, setFilters] = useState<HighlightFilters>(ALL_HIGHLIGHTS);
   const searchedRows = useMemo(
-    () => orderRows(myHighlights ?? []).filter(searchesRow),
-    [myHighlights],
+    () =>
+      orderRows(myHighlights ?? []).filter(
+        (h) => searchesRow(h) && matchesFilters(h, filters.source, filters.color),
+      ),
+    [myHighlights, filters],
   );
   // Reading order: headings and items, the footnote lines, then the explanation rows.
   const findBlocks = useMemo<FindBlock[]>(() => {
@@ -527,6 +539,8 @@ export function ChapterNoteBody({
       {store && highlighting ? (
         <MyHighlightsSection
           store={store}
+          filters={filters}
+          onFiltersChange={setFilters}
           matchesOf={matchesOf}
           onGoTo={highlighting.onGoTo}
           renderFootnote={(h, line) => {
