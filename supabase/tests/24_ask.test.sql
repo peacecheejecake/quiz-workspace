@@ -1,4 +1,4 @@
--- ASK-B (20261102160000_ask.sql): AI question conversations, append-only messages, pinned
+-- ASK-B (20261104100000_ask.sql): AI question conversations, append-only messages, pinned
 -- sources without text, one running answer per user, usage that outlives its conversation, the
 -- worker's membership re-check, and conversations that go with a soft-deleted workspace.
 begin;

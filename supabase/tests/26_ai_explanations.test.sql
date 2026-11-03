@@ -1,4 +1,4 @@
--- EXPL-B (20261103150000_ai_explanations.sql): one live and one current AI explanation per
+-- EXPL-B (20261104120000_ai_explanations.sql): one live and one current AI explanation per
 -- (revision, prompt version, model), API inserts only queued rows, the worker finishes and
 -- supersedes, activity on success (ids only), usage rows that reference an explanation, and the
 -- mock exam table with the same rules.

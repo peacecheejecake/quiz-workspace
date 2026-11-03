@@ -1,4 +1,4 @@
-"""Reads and writes of AI question conversations (ASK-B, 20261102160000_ask.sql).
+"""Reads and writes of AI question conversations (ASK-B, 20261104100000_ask.sql).
 
 Runs in the request session after the route checked the caller: every conversation / message
 lookup is filtered by the caller's own `user_id` (a conversation is personal: another member, the
