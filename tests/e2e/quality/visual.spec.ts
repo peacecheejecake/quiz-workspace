@@ -201,6 +201,7 @@ test(
     await answerCorrectly(owner, at(2));
     await setMyState(owner, at(2).id, { is_favorite: true });
     await setMyState(owner, at(5).id, { is_favorite: true });
+    await answerCorrectly(owner, at(7)); // retry needs a correct last result (RETRY-01)
     await setMyState(owner, at(7).id, { needs_retry: true });
 
     await signInAs(page, owner.user);

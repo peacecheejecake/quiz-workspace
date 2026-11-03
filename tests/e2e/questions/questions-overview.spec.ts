@@ -640,6 +640,7 @@ test(
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac08', 3);
+    await answerCorrectly(s.owner, q(s, 2)); // RETRY-01: retry needs a correct last result
     await setMyState(s.owner, q(s, 2).id, { needs_retry: true });
     await openOverview(page, s);
 

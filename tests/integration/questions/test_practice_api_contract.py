@@ -305,6 +305,8 @@ def test_qplay_01_ac03_a_correct_answer_never_clears_the_retry_flag(seed: Any) -
     alice = seed.client("qplay01-ac03")
     ws = alice.create_workspace()
     q = alice.create_question(ws["id"], seed.mcq(_stem("다시 풀기"), ["a", "b"], 0))
+    # RETRY-CORRECT: the flag can only be turned on after a correct answer.
+    assert choose(alice, start(alice, q["id"])["id"], "opt-1") == "correct"
     res = my_state(alice, q["id"], {"needs_retry": True})
     assert res.status_code == 200, f"my-state: HTTP {res.status_code}"
     assert res.json()["needs_retry"] is True
@@ -318,7 +320,7 @@ def test_qplay_01_ac03_a_correct_answer_never_clears_the_retry_flag(seed: Any) -
     assert my_state(alice, q["id"], {"needs_retry": False}).status_code == 200
     state = item(alice, ws["id"], q["id"])
     assert (state["status"], state["needs_retry"]) == ("correct", False)
-    assert [a["result"] for a in attempts(alice, q["id"])] == ["correct"]
+    assert [a["result"] for a in attempts(alice, q["id"])] == ["correct", "correct"]
 
 
 def test_qplay_01_ac04_essay_stays_pending_until_self_graded_once(seed: Any) -> None:

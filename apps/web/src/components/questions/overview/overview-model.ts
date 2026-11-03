@@ -65,22 +65,25 @@ export function optimisticStatus(
 }
 
 /**
- * Study state after a practice submission (questions.md §2.1, §4): a graded result becomes the
- * last graded result (retry still wins the color); a pending one only marks grading as pending
- * and keeps the previous graded result.
+ * Study state after a practice submission (questions.md §2.1, §4, §16): a graded result becomes
+ * the last graded result (retry still wins the color); an incorrect one also turns the retry flag
+ * off (the server does the same); a pending one only marks grading as pending and keeps the
+ * previous graded result.
  */
 export function gradedPatch(
   item: OverviewItem,
   result: 'correct' | 'incorrect' | 'pending',
 ): StudyPatch {
   const lastGradedResult = result === 'pending' ? item.last_graded_result : result;
+  const needsRetry = result === 'incorrect' ? false : item.needs_retry;
   return {
     last_graded_result: lastGradedResult,
     is_pending_grading: result === 'pending',
+    ...(needsRetry === item.needs_retry ? {} : { needs_retry: needsRetry }),
     status: deriveDotStatus({
       firstViewedAt: 'viewed',
       lastGradedResult,
-      needsRetry: item.needs_retry,
+      needsRetry,
       isFavorite: item.is_favorite,
     }),
   };

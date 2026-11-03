@@ -86,6 +86,17 @@ const overview: QuestionOverview = {
   })),
 };
 
+/** Question 1 was answered correctly: the only state where `다시 풀기` is offered (RETRY-01). */
+const correctOverview: QuestionOverview = {
+  ...overview,
+  counts: { ...overview.counts, unseen: 2, correct: 1 },
+  items: overview.items.map((item, i) =>
+    i === 0
+      ? { ...item, status: 'correct' as const, last_graded_result: 'correct' as const }
+      : item,
+  ),
+};
+
 function session(n: number) {
   return {
     ok: true,
@@ -548,11 +559,11 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
         status: 'retry',
         is_favorite: false,
         needs_retry: true,
-        last_graded_result: null,
+        last_graded_result: 'correct',
       },
     });
     submitPracticeAction.mockResolvedValue(submitted('correct', { correct_option_ids: ['o1'] }));
-    render(<Screen />);
+    render(<Screen data={correctOverview} filters={EMPTY_OVERVIEW_FILTERS} />);
     await user.click(dot(1));
     const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
     await user.click(within(panel).getByRole('button', { name: '다시 풀기 표시' }));
@@ -1134,8 +1145,8 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
     ok: true,
     data: {
       question_id: id(1),
-      status: flags.needs_retry ? 'retry' : 'viewed',
-      last_graded_result: null,
+      status: flags.needs_retry ? 'retry' : 'correct',
+      last_graded_result: 'correct',
       ...flags,
     },
   });
@@ -1157,7 +1168,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
       ?.getAttribute('data-shape');
   async function openPanel() {
     const user = userEvent.setup();
-    render(<Screen />);
+    render(<Screen data={correctOverview} filters={EMPTY_OVERVIEW_FILTERS} />);
     await user.click(dot(1));
     const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
     return { user, panel };

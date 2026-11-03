@@ -361,6 +361,7 @@ export function QuestionsOverview({
       preview: item.preview,
       isFavorite: item.is_favorite,
       needsRetry: item.needs_retry,
+      lastGradedResult: item.last_graded_result,
     };
   }, [openPlaced, found, overrides, serverItems]);
 

@@ -143,7 +143,11 @@ function fakeClient(overrides: Partial<RunClient> = {}): RunClient {
       ok: true as const,
       data: { total: 0, offset: 0, limit: 200, items: [] },
     })),
-    flags: vi.fn(async () => ({ is_favorite: false, needs_retry: false })),
+    flags: vi.fn(async () => ({
+      is_favorite: false,
+      needs_retry: false,
+      last_graded_result: 'correct' as const,
+    })),
     setFlags: vi.fn(),
     ...overrides,
   } as RunClient;
@@ -170,6 +174,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
           preview: STEM,
           isFavorite: false,
           needsRetry: false,
+          lastGradedResult: 'correct',
         }}
         readOnly={false}
         onClose={noop}
@@ -189,6 +194,76 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: /다시 풀기/ })).toBeInTheDocument();
     expect(openSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('RETRY-01-C04 practice: 다시 풀기 is not rendered unless the last graded result is correct, even when the flag is on', () => {
+    const question = {
+      id: QID,
+      title: '3장 12번 문제',
+      chapterTitle: '3장 물의 순환',
+      questionType: 'MCQ' as const,
+      preview: STEM,
+      isFavorite: false,
+      needsRetry: true,
+    };
+    const props = { workspaceId: WS, readOnly: false, onClose: noop, onFlagsChange: noop };
+    const { rerender } = render(
+      <QuestionViewer
+        mode="practice"
+        {...props}
+        onViewed={noop}
+        question={{ ...question, lastGradedResult: null }}
+      />,
+    );
+    for (const result of [null, 'incorrect'] as const) {
+      rerender(
+        <QuestionViewer
+          mode="practice"
+          {...props}
+          onViewed={noop}
+          question={{ ...question, lastGradedResult: result }}
+        />,
+      );
+      const panel = screen.getByRole('dialog', { name: '3장 12번 문제' });
+      expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
+      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+    }
+    rerender(
+      <QuestionViewer
+        mode="practice"
+        {...props}
+        onViewed={noop}
+        question={{ ...question, lastGradedResult: 'correct' }}
+      />,
+    );
+    expect(
+      within(screen.getByRole('dialog', { name: '3장 12번 문제' })).getByRole('button', {
+        name: '다시 풀기 해제',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('RETRY-01-C04 sequence(bank): no 다시 풀기 for a question not answered correctly', async () => {
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={fakeClient({
+          flags: vi.fn(async () => ({
+            is_favorite: false,
+            needs_retry: true,
+            last_graded_result: null,
+          })),
+        })}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await within(panel).findByRole('button', { name: /즐겨찾기/ });
+    expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
   });
 
   it('manage: the 문제 상세 dialog shows the answers and renders no submit UI', () => {

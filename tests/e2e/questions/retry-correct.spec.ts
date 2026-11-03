@@ -62,6 +62,11 @@ function q(s: Seeded, n: number): Question {
   return found;
 }
 
+/** The Heatmap dot by id: under the modal panel it is out of the accessibility tree. */
+function dotOf(page: Page, question: Question): Locator {
+  return page.locator(`[data-question-id="${question.id}"]:visible`);
+}
+
 async function openPanel(page: Page, n: number): Promise<Locator> {
   await overviewUi.dot(page, n).click();
   const panel = panelUi.numbered(page, n);
@@ -99,7 +104,7 @@ test(
     await expect(panelUi.retryOn(panel)).toHaveAttribute('data-state', 'off');
     await panelUi.retryOn(panel).click();
     await expect(panelUi.retryOff(panel)).toHaveAttribute('data-state', 'on');
-    await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'retry');
+    await expect(dotOf(page, q(s, 1))).toHaveAttribute('data-status', 'retry');
     await expect
       .poll(async () => (await overviewItem(s.owner, s.workspaceId, q(s, 1).id)).needs_retry)
       .toBe(true);
@@ -142,7 +147,7 @@ test(
     await answer(panel, question, false);
     await expect(panelUi.retryOn(panel)).toHaveCount(0);
     await expect(panelUi.retryOff(panel)).toHaveCount(0);
-    await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'incorrect');
+    await expect(dotOf(page, question)).toHaveAttribute('data-status', 'incorrect');
     expect(await overviewItem(s.owner, s.workspaceId, question.id)).toMatchObject({
       status: 'incorrect',
       needs_retry: false,

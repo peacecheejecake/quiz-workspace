@@ -371,8 +371,14 @@ test(
     await openOverview(page, s);
     const panel = await openPanel(page, 1);
 
+    // RETRY-01: the toggle appears after the first correct answer; set it, then answer again.
+    await expect(panelUi.retryOn(panel)).toHaveCount(0);
+    await panelUi.option(panel, question.revision.options[1]?.text ?? '').check();
+    await panelUi.submit(panel).click();
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
     await panelUi.retryOn(panel).click();
     await expect(panelUi.retryOff(panel)).toBeVisible();
+    await panel.getByRole('button', { name: /한 번 더 풀기/ }).click();
     await panelUi.option(panel, question.revision.options[1]?.text ?? '').check();
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
@@ -390,7 +396,10 @@ test(
       needs_retry: true,
       last_graded_result: 'correct',
     });
-    expect((await listAttempts(s.owner, question.id)).map((a) => a.result)).toEqual(['correct']);
+    expect((await listAttempts(s.owner, question.id)).map((a) => a.result)).toEqual([
+      'correct',
+      'correct',
+    ]);
     await page.reload();
     await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'retry');
   },

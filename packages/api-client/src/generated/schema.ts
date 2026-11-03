@@ -1097,9 +1097,11 @@ export type paths = {
     head?: never;
     /**
      * Update My State
-     * @description Toggle the caller's favorite / retry flags (independent of each other and of results).
+     * @description Toggle the caller's favorite / retry flags (independent of each other).
      *     The state answered is folded with the merged duplicates' (UX7-DEDUP): a flag set on any of
-     *     them is set, and turning one off turns it off on all of them.
+     *     them is set, and turning one off turns it off on all of them. RETRY-CORRECT: `needs_retry`
+     *     can only be turned on while the last graded result is correct (409 `retry-requires-correct`,
+     *     nothing written); turning it off is always allowed.
      */
     patch: operations['updateMyQuestionState'];
     trace?: never;
@@ -4263,7 +4265,7 @@ export type components = {
       is_favorite?: boolean | null;
       /**
        * Needs Retry
-       * @description Never cleared by a correct answer; only by the user.
+       * @description Never cleared by a correct answer, only by the user or by a later incorrect grading. Turning it on needs a correct last graded result (409 `retry-requires-correct`).
        */
       needs_retry?: boolean | null;
     };
@@ -11135,6 +11137,15 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };

@@ -12,7 +12,8 @@ the caller's `user_id` (the verified JWT `sub`); nothing here reads another user
   * `first_viewed_at`/`last_viewed_at` are written only when a practice session opens.
   * `last_graded_result`/`last_graded_attempt_id` change only for a graded (correct/incorrect)
     attempt; a pending submission leaves them as they were.
-  * `is_favorite`/`needs_retry` change only through my-state; grading never clears `needs_retry`.
+  * `is_favorite`/`needs_retry` change through my-state; only an incorrect grading clears
+    `needs_retry` (the question_user_states trigger, questions.md §16).
 
 Merged duplicates (UX7-DEDUP, docs/questions.md §10.2): reads of a question's state and attempts
 include its actively merged (archived) duplicates — the state through the

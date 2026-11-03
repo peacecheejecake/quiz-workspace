@@ -215,6 +215,11 @@ def test_my_state_validation_and_private_history(seed: Any) -> None:
         "last_graded_result": None,
     }
     alice.ok("PATCH", path, {"is_favorite": True})  # no change, no new history entry
+    # RETRY-CORRECT: retry can only be turned on after a correct answer.
+    session = alice.ok("POST", f"/questions/{q['id']}/practice-sessions", {}, (201,))
+    alice.ok(
+        "POST", f"/practice-sessions/{session['id']}/submit", {"selected_option_ids": ["opt-1"]}
+    )
     alice.ok("PATCH", path, {"needs_retry": True, "is_favorite": False})
 
     with psycopg.connect(DB_ADMIN_URL, autocommit=True) as conn:
@@ -265,7 +270,7 @@ def test_concurrent_first_my_state_updates_serialize(seed: Any) -> None:
     alice = seed.client("m52-race-mystate")
     ws = alice.create_workspace()
     a = {"is_favorite": True, "needs_retry": False}
-    b = {"is_favorite": False, "needs_retry": True}
+    b = {"is_favorite": False, "needs_retry": False}
     for n in range(8):
         q = alice.create_question(ws["id"], seed.mcq(_stem(f"첫 상태 {n}"), ["a", "b"], 0))
         path = f"/questions/{q['id']}/my-state"

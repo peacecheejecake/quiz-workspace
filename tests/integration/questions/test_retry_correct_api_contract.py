@@ -2,8 +2,9 @@
 
 `다시 풀기` can be turned on only for a question whose last graded result is correct
 (409 `retry-requires-correct` otherwise; off is always allowed), and a new incorrect grading
-turns the flag off, on the merged duplicates' rows too. RED until RETRY-CORRECT (GREEN removes
-the `red` marker); the pgTAP twin is supabase/tests/21_retry_correct.test.sql.
+turns the flag off, on the merged duplicates' rows too. The clearing rule is the trigger of
+supabase/migrations/20261104220000_retry_correct_only.sql (the C02 tests need it applied); its
+pgTAP twin is supabase/tests/21_retry_correct.test.sql.
 """
 
 from __future__ import annotations
@@ -15,11 +16,11 @@ import httpx
 import psycopg
 import pytest
 
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = pytest.mark.infra
 
 DB_ADMIN_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 PROBLEM = "urn:quiz-workspace:problem:retry-requires-correct"
-RIGHT, WRONG = "opt-0", "opt-1"
+RIGHT, WRONG = "opt-1", "opt-2"
 
 
 def _stem(text: str) -> str:

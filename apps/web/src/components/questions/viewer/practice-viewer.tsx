@@ -66,6 +66,8 @@ export interface PracticeQuestion {
   readonly isFavorite: boolean;
   /** The flags to show: a change being saved shows at once (UX9-RETRY-OPT, optimistic). */
   readonly needsRetry: boolean;
+  /** The last graded result: `다시 풀기` is offered only after a correct one (RETRY-CORRECT). */
+  readonly lastGradedResult: 'correct' | 'incorrect' | null;
 }
 
 export interface PracticeViewerProps {
@@ -377,6 +379,7 @@ export function PracticeViewer({
             <StudyToggles
               favorite={view.isFavorite}
               retry={view.needsRetry}
+              retryAvailable={view.lastGradedResult === 'correct'}
               onChange={(flags) => onFlagsChange(view.id, flags)}
             />
             {headerExtra}
@@ -446,15 +449,18 @@ export function PracticeViewer({
 /**
  * Favorite / retry toggles of a bank question (practice, sequence(bank)). UX9-RETRY-OPT: they are
  * never busy — the caller shows each press at once and saves it in the background (FlagSync), so
- * pressing one never changes the other.
+ * pressing one never changes the other. RETRY-CORRECT: `다시 풀기` is not rendered at all unless
+ * `retryAvailable` (the last graded result is correct), even when the flag is still on.
  */
 export function StudyToggles({
   favorite,
   retry,
+  retryAvailable,
   onChange,
 }: {
   readonly favorite: boolean;
   readonly retry: boolean;
+  readonly retryAvailable: boolean;
   readonly onChange: (flags: { is_favorite?: boolean; needs_retry?: boolean }) => void;
 }) {
   return (
@@ -463,10 +469,12 @@ export function StudyToggles({
         pressed={favorite}
         onPressedChange={(pressed) => onChange({ is_favorite: pressed })}
       />
-      <RetryToggle
-        pressed={retry}
-        onPressedChange={(pressed) => onChange({ needs_retry: pressed })}
-      />
+      {retryAvailable ? (
+        <RetryToggle
+          pressed={retry}
+          onPressedChange={(pressed) => onChange({ needs_retry: pressed })}
+        />
+      ) : null}
     </>
   );
 }

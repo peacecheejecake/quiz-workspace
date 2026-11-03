@@ -291,6 +291,7 @@ test(
     if (!first || !second || !third) throw new Error('questions');
     await answerCorrectly(owner, first);
     await setMyState(owner, second.id, { is_favorite: true });
+    await answerCorrectly(owner, third); // retry needs a correct last result (RETRY-01)
     await setMyState(owner, third.id, { needs_retry: true });
 
     await page.goto(overviewPath(ws.id));

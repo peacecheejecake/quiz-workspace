@@ -88,6 +88,9 @@ class ProblemType(StrEnum):
     GENERATION_BUSY = "urn:quiz-workspace:problem:generation-busy"
     # 409: a random-pick batch found no CONFIRMED question matching its filters (no run made).
     NO_MATCHING_QUESTIONS = "urn:quiz-workspace:problem:no-matching-questions"
+    # 409: `needs_retry` can only be turned on for a question whose last graded result is correct
+    # (RETRY-CORRECT, questions.md §16); turning it off is always allowed.
+    RETRY_REQUIRES_CORRECT = "urn:quiz-workspace:problem:retry-requires-correct"
     # 409: the import's previous registration (QIMP-JOB) is still queued or running; follow it.
     IMPORT_REGISTRATION_RUNNING = "urn:quiz-workspace:problem:import-registration-running"
     # 409: a book (body text) cannot become a question paper while questions or import drafts are

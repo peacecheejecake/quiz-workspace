@@ -102,6 +102,11 @@ export interface StudyFlags {
   readonly needs_retry: boolean;
 }
 
+/** `다시 풀기` is offered only while the last graded result is correct (RETRY-CORRECT). */
+export interface StudyGrading {
+  readonly last_graded_result?: 'correct' | 'incorrect' | null;
+}
+
 /**
  * Everything a run reads and writes. `bank` runs use the server actions (bankRunClient); a mock
  * exam run (MOCK-P/MOCK-W) brings its own sessions and has no study flags.
@@ -123,8 +128,8 @@ export interface RunClient {
   selfGrade(sessionId: string, grade: GradeResult): Promise<StudyActionResult<SelfGradeResult>>;
   finish(runId: string): Promise<RunActionResult<PracticeRun>>;
   results(runId: string, offset: number): Promise<RunActionResult<RunResults>>;
-  /** The caller's favorite / retry flags of a bank question (null: unknown). */
-  flags?(questionId: string): Promise<StudyFlags | null>;
+  /** The caller's favorite / retry flags and last graded result of a bank question (null: unknown). */
+  flags?(questionId: string): Promise<(StudyFlags & StudyGrading) | null>;
   setFlags?(questionId: string, flags: Partial<StudyFlags>): Promise<StudyActionResult<MyState>>;
 }
 
@@ -145,7 +150,11 @@ export function bankRunClient(workspaceId: string): RunClient {
     flags: async (questionId) => {
       const found = await lookupOverviewQuestionAction(workspaceId, questionId);
       if (!found.ok || !found.data) return null;
-      return { is_favorite: found.data.item.is_favorite, needs_retry: found.data.item.needs_retry };
+      return {
+        is_favorite: found.data.item.is_favorite,
+        needs_retry: found.data.item.needs_retry,
+        last_graded_result: found.data.item.last_graded_result,
+      };
     },
     setFlags: (questionId, flags) => setMyStateAction(workspaceId, questionId, flags),
   };
@@ -354,6 +363,7 @@ export function SequenceViewer({
             <StudyToggles
               favorite={solve.flags.is_favorite}
               retry={solve.flags.needs_retry}
+              retryAvailable={solve.lastGraded === 'correct'}
               onChange={solve.changeFlags}
             />
           ) : null}
@@ -714,6 +724,22 @@ function useSolveStep({
       );
     },
   );
+  // The last graded result of the question on screen: read with the flags, replaced by a result
+  // graded here. An incorrect one also turns the flag off (the server does).
+  const [lastGraded, setLastGraded] = useState<{
+    questionId: string;
+    result: 'correct' | 'incorrect' | null;
+  } | null>(null);
+  function gradedHere(qid: string, result: 'correct' | 'incorrect') {
+    setLastGraded({ questionId: qid, result });
+    if (result === 'incorrect') {
+      setFlags((prev) =>
+        prev?.questionId === qid
+          ? { questionId: qid, flags: { ...prev.flags, needs_retry: false } }
+          : prev,
+      );
+    }
+  }
   const flagsWanted = source === 'bank' && !archived && client.flags ? questionId : null;
   const flagsLoad = useKeyedLoad(flagsWanted ? `${flagsWanted}:${itemSeq}` : null, async () => {
     const found = (await client.flags?.(flagsWanted ?? '')) ?? null;
@@ -728,6 +754,7 @@ function useSolveStep({
       // A change still being saved wins over a read made before it.
       const shown = flagSync.active(flagsWanted) ?? flagsLoad.data;
       setFlags({ questionId: flagsWanted, flags: shown });
+      setLastGraded({ questionId: flagsWanted, result: flagsLoad.data.last_graded_result ?? null });
     }
   }
   const shownFlags = flags && flags.questionId === questionId ? flags.flags : null;
@@ -757,6 +784,7 @@ function useSolveStep({
       result = { ok: false, kind: 'unavailable', message: '제출하지 못했습니다. 다시 시도하세요.' };
     }
     if (result.ok) {
+      if (result.data.result !== 'pending') gradedHere(qid, result.data.result);
       onGraded?.(qid, result.data.result);
     } else if (runId) {
       // The answer may have been recorded and only the response lost (or another tab submitted
@@ -800,6 +828,7 @@ function useSolveStep({
     } catch {
       // network failure: keep the pending result and let the user try again
     }
+    if (ok) gradedHere(qid, grade);
     if (ok) onGraded?.(qid, grade);
     updateWork(workId, () =>
       ok ? { busy: null, selfGrade: grade } : { busy: null, error: message },
@@ -1006,6 +1035,7 @@ function useSolveStep({
     footer,
     question,
     flags: shownFlags,
+    lastGraded: lastGraded && lastGraded.questionId === questionId ? lastGraded.result : null,
     changeFlags,
   };
 }
