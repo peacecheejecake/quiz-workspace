@@ -148,3 +148,52 @@ export type { StatusSummaryProps } from './questions/StatusSummary';
 export { FavoriteToggle, RetryToggle } from './questions/StudyToggles';
 export type { StudyToggleProps } from './questions/StudyToggles';
 export { RetryIcon, StarIcon } from './questions/icons';
+
+export {
+  HighlightableText,
+  SearchMatchText,
+  TOUCH_SELECTION_REST_MS,
+} from './reading/HighlightableText';
+export type {
+  HighlightableTextProps,
+  HighlightBlockElement,
+  RenderHighlightBlock,
+} from './reading/HighlightableText';
+export { HIGHLIGHT_MENU_TEXT, HighlightMenu } from './reading/HighlightMenu';
+export type { HighlightMenuProps } from './reading/HighlightMenu';
+export {
+  POINTER_FLOATING_CLOSE_MS,
+  PointerAnchoredFloating,
+} from './reading/PointerAnchoredFloating';
+export type {
+  PointerAnchoredFloatingProps,
+  PointerFloatingMode,
+} from './reading/PointerAnchoredFloating';
+export { SEARCH_DEBOUNCE_MS, SEARCH_FIELD_TEXT, SearchField } from './reading/SearchField';
+export type { SearchFieldProps } from './reading/SearchField';
+export {
+  HIGHLIGHT_COLORS,
+  colorAction,
+  drawableHighlights,
+  exactHighlight,
+  highlightColorLabels,
+  overlappingHighlights,
+} from './reading/model';
+export type {
+  HighlightAction,
+  HighlightColor,
+  HighlightSelection,
+  SelectionSource,
+  TextBlock,
+  TextEmphasis,
+  TextHighlight,
+  TextMatch,
+  TextRange,
+} from './reading/model';
+export {
+  FIND_IN_NOTE_LIMIT,
+  findInNote,
+  foldForSearch,
+  matchCountLabel,
+} from './reading/find-in-note';
+export type { FindBlock, FindResult, FoundMatch } from './reading/find-in-note';

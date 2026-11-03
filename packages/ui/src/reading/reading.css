@@ -1,0 +1,282 @@
+/* Shared reading tools (design-system §5.2, §5.4; HILITE-01, CHNOTE-02): HighlightableText,
+   HighlightMenu, PointerAnchoredFloating, SearchField. Semantic tokens only. */
+
+.qz-highlightable {
+  border-radius: var(--radius-md);
+  outline: none;
+
+  /* Roving paragraph focus: the ring sits on the active block while the area has keyboard focus. */
+  &:focus-visible > [data-active],
+  &:focus-visible [data-active] {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  @media (forced-colors: active) {
+    &:focus-visible [data-active] {
+      outline-color: Highlight;
+    }
+  }
+}
+
+/* Highlights: a background and a per-color underline shape (never color alone). */
+.qz-highlight {
+  --qz-highlight-bg: var(--color-highlight-yellow);
+
+  padding: 0;
+  border-radius: 2px;
+  background: var(--qz-highlight-bg);
+  color: var(--color-text-primary);
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+
+  &[data-highlight-color='blue'] {
+    --qz-highlight-bg: var(--color-highlight-blue);
+    text-decoration-style: double;
+    text-decoration-thickness: 3px;
+  }
+
+  &[data-highlight-color='pink'] {
+    --qz-highlight-bg: var(--color-highlight-pink);
+    text-decoration-style: dotted;
+    text-decoration-thickness: 2px;
+  }
+
+  &[data-pressable] {
+    cursor: pointer;
+  }
+
+  &:focus-visible,
+  &:focus {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 1px;
+  }
+
+  @media (forced-colors: active) {
+    forced-color-adjust: none;
+    background: Mark;
+    color: MarkText;
+    text-decoration-color: MarkText;
+
+    &:focus-visible,
+    &:focus {
+      outline-color: Highlight;
+    }
+  }
+}
+
+/* Search results: drawn above highlights (nested inside them), border + background; the current
+   one has a thicker border and the hidden text "현재 결과". */
+.qz-search-match {
+  padding: 0;
+  border-radius: 2px;
+  background: var(--color-search-match-bg);
+  color: var(--color-text-primary);
+  outline: 2px solid var(--color-search-match);
+  outline-offset: 0;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+
+  &[data-current='true'] {
+    outline-width: 3px;
+  }
+
+  @media (forced-colors: active) {
+    forced-color-adjust: none;
+    background: Canvas;
+    color: CanvasText;
+    outline-color: CanvasText;
+
+    &[data-current='true'] {
+      outline-color: Highlight;
+    }
+  }
+}
+
+/* HighlightMenu: color items carry a swatch next to their name. */
+.qz-highlight-menu {
+  > [role='group'] > .item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--control-height-md);
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-primary);
+    outline: none;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color var(--qz-transition-fast);
+
+    &[data-highlighted] {
+      background: var(--color-state-hover);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-focus);
+      outline-offset: -2px;
+    }
+
+    &[data-disabled] {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    > .text {
+      flex: 1;
+    }
+
+    > .check {
+      display: inline-flex;
+      color: var(--color-text-primary);
+    }
+  }
+
+  .swatch {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-highlight-yellow);
+    text-decoration-line: underline;
+
+    &[data-highlight-color='blue'] {
+      background: var(--color-highlight-blue);
+    }
+
+    &[data-highlight-color='pink'] {
+      background: var(--color-highlight-pink);
+    }
+  }
+
+  > .reason {
+    margin: 0;
+    padding: var(--space-1) var(--space-3);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-label);
+    line-height: var(--line-height-snug);
+  }
+
+  > .status {
+    margin: 0;
+    padding: 0 var(--space-3);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-label);
+    line-height: var(--line-height-snug);
+
+    &:empty {
+      padding: 0;
+    }
+  }
+
+  /* Touch: 44px targets. */
+  @media (pointer: coarse) {
+    > .item,
+    > [role='group'] > .item {
+      min-height: 44px;
+    }
+  }
+
+  @media (forced-colors: active) {
+    > [role='group'] > .item:is([data-highlighted], :focus-visible) {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+
+    .swatch {
+      forced-color-adjust: none;
+      background: Mark;
+      border-color: CanvasText;
+    }
+  }
+}
+
+/* PointerAnchoredFloating: glass popover surface, scrolls inside when long. */
+.qz-pointer-floating {
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 2 * var(--space-4)));
+  max-height: min(320px, 50vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-shadow: var(--shadow-floating);
+
+  &[role='tooltip'] {
+    pointer-events: auto;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &[data-state='open'] {
+      animation: none;
+    }
+  }
+}
+
+/* SearchField: input with a leading icon, the result count and previous/next buttons. */
+.qz-search-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+
+  > .field {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-width: 0;
+
+    > .icon {
+      position: absolute;
+      top: 50%;
+      left: var(--space-3);
+      color: var(--color-text-secondary);
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+
+    > .input {
+      box-sizing: border-box;
+      width: 100%;
+      min-width: 0;
+      min-height: var(--control-height-md);
+      padding: var(--space-1) var(--space-3) var(--space-1)
+        calc(var(--space-3) + 16px + var(--space-2));
+      border: 1px solid var(--color-border-strong);
+      border-radius: var(--radius-md);
+      background: var(--color-surface);
+      color: var(--color-text-primary);
+      font: inherit;
+      /* 16px avoids iOS zoom-on-focus. */
+      font-size: var(--font-size-body-lg);
+      line-height: var(--line-height-normal);
+
+      &::placeholder {
+        color: var(--color-text-secondary);
+        opacity: 1;
+      }
+    }
+  }
+
+  > .count {
+    flex: none;
+    min-width: 4ch;
+    padding: 0 var(--space-1);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-label);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  @media (forced-colors: active) {
+    > .field > .input {
+      border-color: CanvasText;
+    }
+  }
+}

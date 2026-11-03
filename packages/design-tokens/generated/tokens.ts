@@ -34,6 +34,11 @@ export const themedTokens = {
     'question-status-correct': '#26865C',
     'question-status-retry': '#E9B447',
     'heatmap-marker-stroke-mix': '57%',
+    'color-highlight-yellow': '#FFF0A8',
+    'color-highlight-blue': '#D6E8FF',
+    'color-highlight-pink': '#FFDCEB',
+    'color-search-match-bg': '#FFE2C7',
+    'color-search-match': '#B45309',
   },
   dark: {
     'color-canvas': '#11151D',
@@ -69,6 +74,11 @@ export const themedTokens = {
     'question-status-correct': '#4BC68E',
     'question-status-retry': '#F4C763',
     'heatmap-marker-stroke-mix': '79%',
+    'color-highlight-yellow': '#5C4B0F',
+    'color-highlight-blue': '#1E3F6B',
+    'color-highlight-pink': '#5E2546',
+    'color-search-match-bg': '#5A3514',
+    'color-search-match': '#FFB066',
   },
 } as const;
 export const staticTokens = {

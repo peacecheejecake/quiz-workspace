@@ -38,6 +38,12 @@ const TEXT_TOKENS = [
   'color-warning',
 ] as const;
 const NON_TEXT_TOKENS = ['color-border-strong', 'color-focus'] as const;
+const HIGHLIGHT_BACKGROUNDS = [
+  'color-highlight-yellow',
+  'color-highlight-blue',
+  'color-highlight-pink',
+  'color-search-match-bg',
+] as const;
 
 const REQUIRED: Pair[] = [
   ...TEXT_TOKENS.flatMap((fg) => BACKGROUNDS.map((bg): Pair => [fg, bg, TEXT_MIN])),
@@ -73,6 +79,19 @@ const REQUIRED: Pair[] = [
       (bg): Pair => [fg, bg, NON_TEXT_MIN],
     ),
   ),
+  // UX9-HL-UI (design-system §5.2): body text stays AA on every highlight color and on the search
+  // match background (marks set the primary text color), and the search match border stands out
+  // from every surface the note panel uses and from the highlight it may sit on.
+  ...HIGHLIGHT_BACKGROUNDS.map((bg): Pair => ['color-text-primary', bg, TEXT_MIN]),
+  ...(
+    [
+      'color-surface',
+      'color-canvas',
+      'color-surface-muted',
+      'color-glass-solid',
+      ...HIGHLIGHT_BACKGROUNDS,
+    ] as const
+  ).map((bg): Pair => ['color-search-match', bg, NON_TEXT_MIN]),
   // Tooltip: inverted text.
   ['color-canvas', 'color-text-primary', TEXT_MIN],
   ...NON_TEXT_TOKENS.flatMap((fg) => BACKGROUNDS.map((bg): Pair => [fg, bg, NON_TEXT_MIN])),
@@ -160,6 +179,20 @@ describe.each(themeNames)('%s theme contrast', (theme) => {
     expect(ratio(theme, 'color-switch-track-hover', 'color-switch-track')).toBeGreaterThanOrEqual(
       1.08,
     );
+  });
+
+  // design-system §5.2: highlight and search colors never reuse the question status colors, the
+  // three highlight colors differ, and the search border is not the focus ring color.
+  it('highlight and search colors are their own', () => {
+    const t = themedTokens[theme];
+    const own = [...HIGHLIGHT_BACKGROUNDS, 'color-search-match'] as const;
+    const values = own.map((name) => t[name].toLowerCase());
+    expect(new Set(values).size).toBe(values.length);
+    const statuses = (['unseen', 'viewed', 'incorrect', 'correct', 'retry'] as const).map((s) =>
+      t[`question-status-${s}`].toLowerCase(),
+    );
+    for (const value of values) expect(statuses).not.toContain(value);
+    expect(t['color-search-match'].toLowerCase()).not.toBe(t['color-focus'].toLowerCase());
   });
 
   it('feedback colors are distinct from question status colors', () => {
