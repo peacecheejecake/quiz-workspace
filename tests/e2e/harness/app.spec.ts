@@ -21,8 +21,8 @@ const PROTECTED_SCREEN_ROUTES = [
   { path: '/workspaces', id: 'WS-01' },
   // UX3c: the workspace home (QOV-01) and its dialogs, by URL state.
   { path: '/workspaces/:ws', id: 'QOV-01' },
-  { path: '/workspaces/:ws?panel=documents', id: 'DOC-01' },
-  { path: '/workspaces/:ws?panel=history', id: 'HISTORY-01' },
+  { path: '/workspaces/:ws?panel=documents', id: 'DOC-01', modal: true },
+  { path: '/workspaces/:ws?panel=history', id: 'HISTORY-01', modal: true },
 ] as const;
 const PLACEHOLDER_WS = '00000000-0000-4000-8000-000000000000';
 /** DOC-02 is a real viewer since M3.5: a document that does not exist is the 404 page. */
@@ -54,12 +54,26 @@ test(
     await submitLogin(page, member.user);
     await expect(page).toHaveURL((url) => url.pathname === '/workspaces');
 
-    for (const { path: template, id } of PROTECTED_SCREEN_ROUTES) {
+    for (const route of PROTECTED_SCREEN_ROUTES) {
+      const { path: template, id } = route;
       const path = template.replace(':ws', ws.id);
       const res = await page.goto(path);
       expect(res?.status(), path).toBe(200);
       await expect(page.getByRole('main').locator(`[data-screen-id="${id}"]`), path).toBeVisible();
-      await expect(page.getByRole('heading', { level: 1 }), path).toBeVisible();
+      if ('modal' in route) {
+        // HOMEDLG-01: an open modal dialog hides the page behind it (Radix aria-hidden), h1
+        // included. The page still has its h1; the dialog is the visible screen and names itself.
+        await expect(
+          page.getByRole('main').getByRole('heading', { level: 1, includeHidden: true }),
+          path,
+        ).toBeAttached();
+        await expect(
+          page.getByRole('dialog').getByRole('heading', { level: 2 }),
+          path,
+        ).toBeVisible();
+      } else {
+        await expect(page.getByRole('heading', { level: 1 }), path).toBeVisible();
+      }
     }
     // DOC-02 route exists and checks the document server-side (viewer: documents-editor spec).
     const missing = await page.goto(`/workspaces/${ws.id}/documents/${UNKNOWN_DOCUMENT}`);
