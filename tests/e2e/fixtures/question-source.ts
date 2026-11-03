@@ -507,19 +507,53 @@ export async function boxOf(locator: Locator): Promise<{
   return box;
 }
 
-/** Touch long-press (Chromium DevTools touch events; needs a `hasTouch` context). */
+/**
+ * Touch long-press, browser neutral: a primary `pointerdown` with `pointerType: 'touch'`, a wait of
+ * `ms`, then `pointerup` (the contract of S6: the implementation listens to pointer events).
+ */
 export async function longPress(page: Page, target: Locator, ms: number): Promise<void> {
   const box = await boxOf(target);
-  const x = box.x + box.width / 2;
-  const y = box.y + box.height / 2;
-  const cdp = await page.context().newCDPSession(page);
-  try {
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
-    await page.waitForTimeout(ms);
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  } finally {
-    await cdp.detach();
-  }
+  const init = {
+    pointerType: 'touch',
+    pointerId: 71,
+    isPrimary: true,
+    button: 0,
+    buttons: 1,
+    clientX: box.x + box.width / 2,
+    clientY: box.y + box.height / 2,
+    bubbles: true,
+    cancelable: true,
+  };
+  await target.dispatchEvent('pointerdown', init);
+  await page.waitForTimeout(ms);
+  await target.dispatchEvent('pointerup', { ...init, buttons: 0 });
+}
+
+/**
+ * A viewport point outside every given box (a backdrop point), or throws. Candidates: the middle
+ * of the strip above, below, left of and right of the boxes' union, then the gaps between boxes.
+ */
+export function pointOutside(
+  boxes: readonly { x: number; y: number; width: number; height: number }[],
+  viewport: { width: number; height: number },
+): { x: number; y: number } {
+  const inside = (p: { x: number; y: number }) =>
+    boxes.some((b) => p.x >= b.x && p.x <= b.x + b.width && p.y >= b.y && p.y <= b.y + b.height);
+  const top = Math.min(...boxes.map((b) => b.y));
+  const bottom = Math.max(...boxes.map((b) => b.y + b.height));
+  const sorted = [...boxes].sort((a, b) => a.x - b.x);
+  const candidates = [
+    { x: viewport.width / 2, y: top / 2 },
+    { x: viewport.width / 2, y: (bottom + viewport.height) / 2 },
+    ...sorted.slice(1).map((b, i) => {
+      const prev = sorted[i] as { x: number; width: number };
+      return { x: (prev.x + prev.width + b.x) / 2, y: viewport.height / 2 };
+    }),
+    { x: (sorted[0] as { x: number }).x / 2, y: viewport.height / 2 },
+  ];
+  const found = candidates.find((p) => p.x > 1 && p.y > 1 && !inside(p));
+  if (!found) throw new Error('no backdrop point outside the boxes');
+  return found;
 }
 
 /** True when the page has no horizontal scroll. */

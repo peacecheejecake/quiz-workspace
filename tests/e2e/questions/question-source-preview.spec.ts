@@ -30,6 +30,7 @@ import {
   noHorizontalScroll,
   PAGE_HEIGHT_PT,
   panelByStem,
+  pointOutside,
   ratio,
   requestMockSourceRegion,
   requestSourceRegion,
@@ -276,7 +277,11 @@ test(
     // Backdrop (left of the dialog, outside both).
     await button.click();
     await expect(dialog).toBeVisible();
-    await page.mouse.click(40, 400);
+    const outside = pointOutside(
+      [await boxOf(dialog), await boxOf(panelByStem(page, stem))],
+      DESKTOP,
+    );
+    await page.mouse.click(outside.x, outside.y);
     await expect(dialog).toHaveCount(0);
     await expect(panel).toBeVisible();
     await expect(button).toBeFocused();
