@@ -84,13 +84,14 @@ export type {
 export { Textarea } from './primitives/Textarea';
 export type { TextareaProps } from './primitives/Textarea';
 export { Tooltip } from './primitives/Tooltip';
+export { PreviewTooltip } from './primitives/PreviewTooltip';
+export type { PreviewTooltipMode, PreviewTooltipProps } from './primitives/PreviewTooltip';
 export {
   PREVIEW_CLOSE_MS,
   PREVIEW_LONG_PRESS_MS,
-  PreviewTooltip,
-} from './primitives/PreviewTooltip';
-export type { PreviewTooltipMode, PreviewTooltipProps } from './primitives/PreviewTooltip';
-export { TOOLTIP_DELAY_MS, TOOLTIP_DESCRIPTION_DELAY_MS } from './primitives/tooltip-delay';
+  TOOLTIP_DELAY_MS,
+  TOOLTIP_DESCRIPTION_DELAY_MS,
+} from './primitives/tooltip-delay';
 export type { TooltipProps } from './primitives/Tooltip';
 
 export { EmptyState } from './feedback/EmptyState';

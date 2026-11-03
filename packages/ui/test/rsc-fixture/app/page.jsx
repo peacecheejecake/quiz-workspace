@@ -120,6 +120,11 @@ import {
   TOUCH_SELECTION_REST_MS,
 } from '@quiz/ui';
 
+// Constants must be real numbers on the server, not client references (a client module's export).
+for (const value of [PREVIEW_CLOSE_MS, PREVIEW_LONG_PRESS_MS, TOOLTIP_DELAY_MS]) {
+  if (typeof value !== 'number') throw new Error('kit constants must be plain numbers in RSC');
+}
+
 const hooks = [useTheme, useToast, useUnsavedChanges, usePairedSheet];
 // Need function props (onOpen / onPressedChange), so a Client Component has to render them.
 const interactive = [

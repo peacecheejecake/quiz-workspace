@@ -16,12 +16,8 @@ import {
 } from 'react';
 import { cx } from '../internal/cx';
 import { PopoverContent } from './Popover';
-import { TOOLTIP_DELAY_MS } from './tooltip-delay';
+import { PREVIEW_CLOSE_MS, PREVIEW_LONG_PRESS_MS, TOOLTIP_DELAY_MS } from './tooltip-delay';
 
-/** A touch press this long opens the preview (QSRC-01 user decision 2026-11-04). */
-export const PREVIEW_LONG_PRESS_MS = 500;
-/** The preview closes this long after the pointer left both the trigger and the preview. */
-export const PREVIEW_CLOSE_MS = 120;
 /** A touch that moves farther than this (px) is a scroll or drag, not a long-press. */
 const PRESS_SLOP = 10;
 /** A swallowed release click that never arrives (real touch fires none) is forgotten after this. */
