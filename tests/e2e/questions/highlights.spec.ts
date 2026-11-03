@@ -138,6 +138,20 @@ async function submitFromHeatmap(page: Page, s: NoteSetup, n: number): Promise<L
   return panel;
 }
 
+/**
+ * `chooseColor`, then waits for the highlight write: a navigation right after the menu closes
+ * would otherwise abort the request still in flight (under a loaded parallel run).
+ */
+async function chooseColorSaved(page: Page, color: HighlightColor): Promise<void> {
+  const saved = page.waitForResponse(
+    (r) =>
+      /\/my-highlights(\/[^/]+)?$/.test(new URL(r.url()).pathname) &&
+      ['POST', 'PATCH'].includes(r.request().method()),
+  );
+  await chooseColor(page, color);
+  expect((await saved).ok(), 'the highlight is saved').toBe(true);
+}
+
 function q(s: NoteSetup, n: number): Question {
   const found = s.questions[n - 1];
   if (!found) throw new Error(`no question ${n}`);
@@ -579,10 +593,10 @@ test(
     await signInAs(page, viewer.user);
     let panel = await openPanel(page, s.workspaceId, s.ch1);
     await dragSelect(highlightUi.noteBody(panel), PHRASE_A);
-    await chooseColor(page, 'yellow');
+    await chooseColorSaved(page, 'yellow');
     const play = await submitFromHeatmap(page, s, 1);
     await dragSelect(highlightUi.explanation(play), '첫 번째 보기가');
-    await chooseColor(page, 'blue');
+    await chooseColorSaved(page, 'blue');
     panel = await openPanel(page, s.workspaceId, s.ch1);
     let section = highlightUi.section(panel);
     await expect(highlightUi.heading(section, 2)).toBeVisible();
