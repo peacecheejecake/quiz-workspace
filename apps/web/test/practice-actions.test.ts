@@ -1,7 +1,7 @@
 // QPLAY-01 BFF actions: untrusted input is validated before FastAPI is called, a response for
 // another session is refused, and conflicts map to their own messages.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { classifyQuestionFailure } from '../src/lib/questions/problems';
+import { classifyQuestionFailure, QUESTION_FAILURE_MESSAGES } from '../src/lib/questions/problems';
 
 const calls: { path: string; init: unknown }[] = [];
 let respond: (path: string) => { data?: unknown; error?: unknown; response: Response } = () => ({
@@ -35,6 +35,18 @@ const OTHER = '99999999-9999-4999-8999-000000000000';
 
 beforeEach(() => {
   calls.length = 0;
+});
+
+describe('RETRY-01-C04 retry-requires-correct', () => {
+  it('maps the 409 problem to its own failure with the Korean message', () => {
+    const failure = classifyQuestionFailure(409, {
+      type: 'urn:quiz-workspace:problem:retry-requires-correct',
+    });
+    expect(failure.kind).toBe('retryNotAllowed');
+    expect(QUESTION_FAILURE_MESSAGES.retryNotAllowed).toBe(
+      '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.',
+    );
+  });
 });
 
 function ok(data: unknown) {

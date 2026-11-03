@@ -12,6 +12,8 @@ export const QUESTION_PROBLEM_TYPES = {
   // UX7-DEDUP merge: the questions are no longer the same / confirmed (scan again).
   notDuplicates: 'urn:quiz-workspace:problem:not-duplicates',
   questionNotConfirmed: 'urn:quiz-workspace:problem:question-not-confirmed',
+  // RETRY-CORRECT: `다시 풀기` needs a correct last graded result (questions.md §17).
+  retryRequiresCorrect: 'urn:quiz-workspace:problem:retry-requires-correct',
 } as const;
 
 export type QuestionFailureKind =
@@ -24,6 +26,7 @@ export type QuestionFailureKind =
   | 'alreadySubmitted'
   | 'notPending'
   | 'changed'
+  | 'retryNotAllowed'
   | 'invalid'
   | 'unavailable';
 
@@ -38,6 +41,7 @@ export const QUESTION_FAILURE_MESSAGES: Readonly<Record<QuestionFailureKind, str
   alreadySubmitted: '이미 제출한 풀이입니다. 문제를 다시 열어 새로 풀어 주세요.',
   notPending: '이미 채점이 끝난 풀이입니다.',
   changed: '그 사이 문제가 바뀌었습니다. 다시 확인해 주세요.',
+  retryNotAllowed: '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.',
   invalid: '입력한 내용을 확인해 주세요.',
   unavailable: '일시적인 오류로 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.',
 };
@@ -70,6 +74,7 @@ export function classifyQuestionFailure(status: number, body: unknown): Question
     ) {
       return { kind: 'changed' };
     }
+    if (type === QUESTION_PROBLEM_TYPES.retryRequiresCorrect) return { kind: 'retryNotAllowed' };
     return { kind: 'unavailable' };
   }
   if (status === 422) return { kind: 'invalid', issues: validationIssues(problem) };

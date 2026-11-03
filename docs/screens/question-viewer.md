@@ -178,6 +178,7 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 | QVIEW-01-C07 | **범위와 보관·중복 (MOCK-SYNC, UX7-BANK-2·UX7-DEDUP):** `quiz_api.question_ranges`는 Heatmap overview와 같은 판정을 쓴다 — 살아 있는 CONFIRMED 문제만(보관 ARCHIVED — 중복 정리로 보관된 중복 포함 — 과 초안 DRAFT는 범위 고르기 목록·`전체 선택`·장 선택에 없다), 풀이 상태·즐겨찾기·다시 풀기 필터는 요청한 사용자의 `question_merged_user_states`(합쳐진 중복까지 합친 상태, questions.md §10.2)로 판정해 Heatmap 필터와 같은 문제를 고른다. 보관·초안 문제 id를 직접 보내면 422 `range-invalid`(C01). 묶음을 만든 뒤 보관(중복 정리 포함)·삭제된 문제의 위치는 "이 문제는 더 이상 풀 수 없습니다."·건너뜀이다(AC08). `bank` 묶음의 제출은 그 문제(남길 문제)의 `question_attempts`·`question_user_states`에 기록되고 합친 상태는 view가 계산한다(기록을 옮기지 않음). Heatmap과 같은 결과를 내는지 같은 fixture로 비교하는 test. |
 | QVIEW-01-C08 | **`다시 풀기` 아이콘 (UX9-SPEC, 사용자 결정 C10; Vitest + VISUAL-10):** `RetryToggle`(`packages/ui/src/questions/StudyToggles.tsx`)은 `RetryIcon` = 원 안의 물음표(꺼짐 윤곽선, 켜짐 채운 원 — `data-state` 별 SVG가 다름)를 그리고, 접근성 이름은 기존대로 "다시 풀기 표시"/"다시 풀기 해제"(둘 다 "다시 풀기"를 포함), `data-state="off|on"`, tooltip은 이름과 같다. 이 toggle을 그리는 모든 방식(`practice`·`sequence(bank)`)이 같은 컴포넌트를 쓴다(이전 화살표 아이콘을 쓰는 곳이 없음 — import 검사). |
 | QVIEW-01-C09 | **하이라이트 비노출 (UX9-SPEC):** `practice-sessions`·`submit`·`self-grade`·`practice-runs/{id}/items/{position}`·모의고사 practice 응답 schema에 하이라이트 필드가 없다(HILITE-01-C07과 같은 test). |
+| QVIEW-01-C10 | **`다시 풀기`는 정답 뒤에만 (RETRY-CORRECT 2026-11-04):** `practice`·`sequence(bank)`의 `다시 풀기` toggle은 마지막 채점 결과가 정답인 문제에만 렌더링한다(비활성 아님). 규칙·AC·계약은 [RETRY-01](retry-correct.md)(C04가 Vitest). C06·C08의 "toggle을 그린다"는 이 조건 아래에서다. |
 
 ## Test-first 규칙
 

@@ -710,7 +710,7 @@ def test_practice_routes_never_reveal_answers_before_submission(world: Any) -> N
             learner.call("GET", f"/workspaces/{wid}/attempts"),
             learner.call("GET", f"/questions/{qid}/attempts"),
             learner.call("GET", f"/workspaces/{wid}/activities"),
-            learner.call("PATCH", f"/questions/{qid}/my-state", {"needs_retry": True}),
+            learner.call("PATCH", f"/questions/{qid}/my-state", {"is_favorite": True}),
             # MOCK-P: the mock exam copy of the question (보기 섞기 keeps its explanation).
             learner.call(
                 "POST",

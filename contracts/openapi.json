@@ -6269,7 +6269,7 @@
                 "type": "null"
               }
             ],
-            "description": "Never cleared by a correct answer; only by the user.",
+            "description": "Never cleared by a correct answer, only by the user or by a later incorrect grading. Turning it on needs a correct last graded result (409 `retry-requires-correct`).",
             "title": "Needs Retry"
           }
         },
@@ -21094,7 +21094,7 @@
     },
     "/api/v1/questions/{question_id}/my-state": {
       "patch": {
-        "description": "Toggle the caller's favorite / retry flags (independent of each other and of results).\nThe state answered is folded with the merged duplicates' (UX7-DEDUP): a flag set on any of\nthem is set, and turning one off turns it off on all of them.",
+        "description": "Toggle the caller's favorite / retry flags (independent of each other).\nThe state answered is folded with the merged duplicates' (UX7-DEDUP): a flag set on any of\nthem is set, and turning one off turns it off on all of them. RETRY-CORRECT: `needs_retry`\ncan only be turned on while the last graded result is correct and the latest submission is not\nwaiting for grading (409 `retry-requires-correct`, nothing written); turning it off is\nalways allowed.",
         "operationId": "updateMyQuestionState",
         "parameters": [
           {
@@ -21158,6 +21158,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {

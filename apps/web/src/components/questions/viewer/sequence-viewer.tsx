@@ -108,6 +108,13 @@ export interface StudyFlags {
   readonly needs_retry: boolean;
 }
 
+/** `다시 풀기` is offered only while the last graded result is correct (RETRY-CORRECT). */
+export interface StudyGrading {
+  readonly last_graded_result?: 'correct' | 'incorrect' | null;
+  /** The latest submission waits for self-grading: `다시 풀기` stays hidden until it is graded. */
+  readonly is_pending_grading?: boolean;
+}
+
 /**
  * Everything a run reads and writes. `bank` runs use the server actions (bankRunClient); a mock
  * exam run (MOCK-P/MOCK-W) brings its own sessions and has no study flags.
@@ -129,8 +136,8 @@ export interface RunClient {
   selfGrade(sessionId: string, grade: GradeResult): Promise<StudyActionResult<SelfGradeResult>>;
   finish(runId: string): Promise<RunActionResult<PracticeRun>>;
   results(runId: string, offset: number): Promise<RunActionResult<RunResults>>;
-  /** The caller's favorite / retry flags of a bank question (null: unknown). */
-  flags?(questionId: string): Promise<StudyFlags | null>;
+  /** The caller's favorite / retry flags and last graded result of a bank question (null: unknown). */
+  flags?(questionId: string): Promise<(StudyFlags & StudyGrading) | null>;
   setFlags?(questionId: string, flags: Partial<StudyFlags>): Promise<StudyActionResult<MyState>>;
 }
 
@@ -151,7 +158,12 @@ export function bankRunClient(workspaceId: string): RunClient {
     flags: async (questionId) => {
       const found = await lookupOverviewQuestionAction(workspaceId, questionId);
       if (!found.ok || !found.data) return null;
-      return { is_favorite: found.data.item.is_favorite, needs_retry: found.data.item.needs_retry };
+      return {
+        is_favorite: found.data.item.is_favorite,
+        needs_retry: found.data.item.needs_retry,
+        last_graded_result: found.data.item.last_graded_result,
+        is_pending_grading: found.data.item.is_pending_grading,
+      };
     },
     setFlags: (questionId, flags) => setMyStateAction(workspaceId, questionId, flags),
   };
@@ -365,6 +377,7 @@ export function SequenceViewer({
             <StudyToggles
               favorite={solve.flags.is_favorite}
               retry={solve.flags.needs_retry}
+              retryAvailable={solve.lastGraded === 'correct' && !solve.pendingGrading}
               onChange={solve.changeFlags}
             />
           ) : null}
@@ -710,6 +723,11 @@ function useSolveStep({
   // UX9-RETRY-OPT: a press shows at once and is saved in the background (FlagSync, serialized per
   // question); a failure rolls its fields back and is reported.
   const [flags, setFlags] = useState<{ questionId: string; flags: StudyFlags } | null>(null);
+  // Re-reads only the study flags / eligibility (a refused `다시 풀기`), never the position: the
+  // answer being typed and the open session stay.
+  const [flagsSeq, setFlagsSeq] = useState(0);
+  // Counts gradings made in this panel: a lookup started before one must not undo it.
+  const gradeGen = useRef(0);
   const flagSync = useFlagSync<MyState>(
     (qid, patch) =>
       client.setFlags
@@ -721,26 +739,92 @@ function useSolveStep({
       if (saved) {
         onFlagsSaved?.(qid, { is_favorite: saved.is_favorite, needs_retry: saved.needs_retry });
       }
-      if (event.type === 'failed') onFlagsFailed?.(event.message);
+      if (event.type === 'failed') {
+        onFlagsFailed?.(event.message);
+        // A stale panel offered `다시 풀기`: read the question's state again (hides the toggle).
+        if (event.message === QUESTION_FAILURE_MESSAGES.retryNotAllowed) setFlagsSeq((n) => n + 1);
+      }
       setFlags((prev) =>
         prev?.questionId !== qid ? prev : { questionId: qid, flags: event.flags },
       );
     },
   );
+  // The last graded result of the question on screen: read with the flags, replaced by a result
+  // graded here. An incorrect one also turns the flag off (the server does).
+  const [lastGraded, setLastGraded] = useState<{
+    questionId: string;
+    result: 'correct' | 'incorrect' | null;
+    /** The latest submission is not graded yet (the previous result stays). */
+    pending: boolean;
+    /** Graded in this panel (true) or read from the server (false). */
+    local: boolean;
+    /** `gradeGen` when it was graded here; a lookup started at or after it is newer. */
+    gen: number;
+  } | null>(null);
+  function gradedHere(qid: string, result: 'correct' | 'incorrect') {
+    gradeGen.current += 1;
+    setLastGraded({ questionId: qid, result, pending: false, local: true, gen: gradeGen.current });
+    if (result === 'incorrect') {
+      setFlags((prev) =>
+        prev?.questionId === qid
+          ? { questionId: qid, flags: { ...prev.flags, needs_retry: false } }
+          : prev,
+      );
+    }
+  }
+  function pendingHere(qid: string) {
+    gradeGen.current += 1;
+    const gen = gradeGen.current;
+    setLastGraded((prev) => ({
+      questionId: qid,
+      result: prev?.questionId === qid ? prev.result : null,
+      pending: true,
+      local: true,
+      gen,
+    }));
+  }
   const flagsWanted = source === 'bank' && !archived && client.flags ? questionId : null;
-  const flagsLoad = useKeyedLoad(flagsWanted ? `${flagsWanted}:${itemSeq}` : null, async () => {
-    const found = (await client.flags?.(flagsWanted ?? '')) ?? null;
-    return found
-      ? { ok: true as const, data: found }
-      : { ok: false as const, kind: 'unavailable' as const, message: '' };
-  });
+  const flagsLoad = useKeyedLoad(
+    flagsWanted ? `${flagsWanted}:${itemSeq}:${flagsSeq}` : null,
+    async () => {
+      const started = gradeGen.current;
+      const found = (await client.flags?.(flagsWanted ?? '')) ?? null;
+      return found
+        ? { ok: true as const, data: { ...found, started } }
+        : { ok: false as const, kind: 'unavailable' as const, message: '' };
+    },
+  );
   const [seenFlags, setSeenFlags] = useState(flagsLoad);
   if (flagsLoad !== seenFlags) {
     setSeenFlags(flagsLoad);
     if (flagsLoad?.status === 'ready' && flagsWanted) {
       // A change still being saved wins over a read made before it.
-      const shown = flagSync.active(flagsWanted) ?? flagsLoad.data;
-      setFlags({ questionId: flagsWanted, flags: shown });
+      const active = flagSync.active(flagsWanted) ?? flagsLoad.data;
+      // A grading made here is newer than a lookup that started before it (a delayed first
+      // response must not bring back an older result): it wins over that lookup's. A lookup
+      // started after it (the refresh of a refused `다시 풀기`) is the server's newer truth.
+      const local =
+        lastGraded?.questionId === flagsWanted &&
+        lastGraded.local &&
+        lastGraded.gen > flagsLoad.data.started
+          ? lastGraded
+          : null;
+      setFlags({
+        questionId: flagsWanted,
+        flags: {
+          is_favorite: active.is_favorite,
+          needs_retry: local?.result === 'incorrect' ? false : active.needs_retry,
+        },
+      });
+      setLastGraded(
+        local ?? {
+          questionId: flagsWanted,
+          result: flagsLoad.data.last_graded_result ?? null,
+          pending: flagsLoad.data.is_pending_grading ?? false,
+          local: false,
+          gen: 0,
+        },
+      );
     }
   }
   const shownFlags = flags && flags.questionId === questionId ? flags.flags : null;
@@ -770,6 +854,8 @@ function useSolveStep({
       result = { ok: false, kind: 'unavailable', message: '제출하지 못했습니다. 다시 시도하세요.' };
     }
     if (result.ok) {
+      if (result.data.result === 'pending') pendingHere(qid);
+      else gradedHere(qid, result.data.result);
       onGraded?.(qid, result.data.result);
     } else if (runId) {
       // The answer may have been recorded and only the response lost (or another tab submitted
@@ -813,6 +899,7 @@ function useSolveStep({
     } catch {
       // network failure: keep the pending result and let the user try again
     }
+    if (ok) gradedHere(qid, grade);
     if (ok) onGraded?.(qid, grade);
     updateWork(workId, () =>
       ok ? { busy: null, selfGrade: grade } : { busy: null, error: message },
@@ -1088,6 +1175,8 @@ function useSolveStep({
     question,
     attachment,
     flags: shownFlags,
+    lastGraded: lastGraded && lastGraded.questionId === questionId ? lastGraded.result : null,
+    pendingGrading: lastGraded?.questionId === questionId && lastGraded.pending,
     changeFlags,
   };
 }

@@ -206,6 +206,8 @@ export function focusAfterPanel(
   return target;
 }
 
+type TouchField = 'is_favorite' | 'needs_retry' | 'grading';
+
 export function QuestionsOverview({
   workspaceId,
   readOnly,
@@ -256,6 +258,16 @@ export function QuestionsOverview({
     gradings.current.clear();
   }, [serverItems]);
   const mutationSeq = useRef(new Map<string, number>());
+  // Per field of a question, when this screen last changed it (a press, a rollback, a submission):
+  // a state read from the server that started earlier must not overwrite it (rereadState).
+  const fieldClock = useRef(0);
+  const fieldTouched = useRef(new Map<string, Partial<Record<TouchField, number>>>());
+  function touch(questionId: string, ...fields: TouchField[]) {
+    fieldClock.current += 1;
+    const entry = fieldTouched.current.get(questionId) ?? {};
+    for (const field of fields) entry[field] = fieldClock.current;
+    fieldTouched.current.set(questionId, entry);
+  }
   const overridesRef = useRef(overrides);
   useLayoutEffect(() => {
     overridesRef.current = overrides;
@@ -361,6 +373,8 @@ export function QuestionsOverview({
       preview: item.preview,
       isFavorite: item.is_favorite,
       needsRetry: item.needs_retry,
+      lastGradedResult: item.last_graded_result,
+      isPendingGrading: item.is_pending_grading,
     };
   }, [openPlaced, found, overrides, serverItems]);
 
@@ -433,8 +447,21 @@ export function QuestionsOverview({
   const flagSync = useFlagSync<MyState>(
     (questionId, patch) => setMyStateAction(workspaceId, questionId, patch),
     (questionId, event) => {
-      if (event.type === 'failed') toast({ tone: 'error', title: event.message });
       const item = currentItem(questionId) ?? savingItems.current.get(questionId);
+      if (event.type === 'failed') {
+        toast({ tone: 'error', title: event.message });
+        // The rollback changes only the fields whose shown value it restores.
+        touch(
+          questionId,
+          ...(['is_favorite', 'needs_retry'] as const).filter(
+            (field) => !item || item[field] !== event.flags[field],
+          ),
+        );
+      }
+      // A stale screen offered `다시 풀기`: read the question's state again (hides the toggle).
+      if (event.type === 'failed' && event.message === QUESTION_FAILURE_MESSAGES.retryNotAllowed) {
+        void rereadState(questionId);
+      }
       if (!item) return;
       const saved =
         event.type === 'saved' ? event.result : event.type === 'failed' ? event.saved : null;
@@ -468,12 +495,71 @@ export function QuestionsOverview({
     },
   );
 
+  /**
+   * RETRY-CORRECT: the server refused `다시 풀기`; show the question's real state. Per field
+   * (favorite, retry flag, grading) the server's value is taken only if this screen did not
+   * change that field after the lookup started; a local incorrect grading also means no retry.
+   */
+  async function rereadState(questionId: string) {
+    // Let the failure handler that called this finish its own rollback first, then stamp.
+    await Promise.resolve();
+    const stamp = fieldClock.current;
+    const found = await lookupOverviewQuestionAction(workspaceId, questionId);
+    if (!found.ok || !found.data) return;
+    const { item } = found.data;
+    staleOverview.current = true;
+    const touched = fieldTouched.current.get(questionId);
+    const changed = (field: TouchField) => (touched?.[field] ?? 0) > stamp;
+    const local = overridesRef.current.get(questionId);
+    const grading: Grading = changed('grading')
+      ? (gradings.current.get(questionId) ?? {
+          last_graded_result: local?.patch.last_graded_result ?? item.last_graded_result,
+          is_pending_grading: local?.patch.is_pending_grading ?? item.is_pending_grading,
+        })
+      : {
+          last_graded_result: item.last_graded_result,
+          is_pending_grading: item.is_pending_grading,
+        };
+    const needsRetry =
+      changed('grading') && grading.last_graded_result === 'incorrect'
+        ? false
+        : changed('needs_retry')
+          ? (local?.patch.needs_retry ?? item.needs_retry)
+          : item.needs_retry;
+    const patch = flagsPatch(
+      {
+        // A submission made meanwhile means the question was opened, whatever the lookup saw.
+        status: item.status === 'unseen' && changed('grading') ? 'viewed' : item.status,
+        is_favorite: changed('is_favorite')
+          ? (local?.patch.is_favorite ?? item.is_favorite)
+          : item.is_favorite,
+        needs_retry: needsRetry,
+        last_graded_result: grading.last_graded_result,
+      },
+      grading,
+    );
+    if (changed('grading') || changed('is_favorite') || changed('needs_retry')) {
+      // Newer local changes own the sequence (an in-flight save still settles it).
+      putOverride(questionId, mutationSeq.current.get(questionId) ?? 0, {
+        patch,
+        // null = a save is still in flight: keep it so a refresh does not drop the override
+        settledOn: local ? local.settledOn : latestItems.current,
+      });
+    } else {
+      putOverride(questionId, nextSeq(questionId), { patch, settledOn: latestItems.current });
+    }
+  }
+
   function changeFlags(
     questionId: string,
     flags: { is_favorite?: boolean; needs_retry?: boolean },
   ) {
     const item = currentItem(questionId) ?? savingItems.current.get(questionId);
     if (!item) return;
+    touch(
+      questionId,
+      ...(['is_favorite', 'needs_retry'] as const).filter((field) => flags[field] !== undefined),
+    );
     flagSync.toggle(
       questionId,
       { is_favorite: item.is_favorite, needs_retry: item.needs_retry },
@@ -516,6 +602,7 @@ export function QuestionsOverview({
         : undefined);
     if (!item) return;
     staleOverview.current = true;
+    touch(questionId, 'grading', ...(result === 'incorrect' ? (['needs_retry'] as const) : []));
     const graded = gradedPatch(item, result);
     gradings.current.set(questionId, {
       last_graded_result: graded.last_graded_result ?? null,

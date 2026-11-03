@@ -139,6 +139,18 @@ describe('gradedPatch', () => {
     expect(gradedPatch({ ...item, needs_retry: true }, 'correct').status).toBe('retry');
   });
 
+  it('RETRY-01-C04 an incorrect result turns the retry flag off, a correct or pending one keeps it', () => {
+    const flagged = { ...item, status: 'retry' as const, needs_retry: true };
+    expect(gradedPatch(flagged, 'incorrect')).toEqual({
+      last_graded_result: 'incorrect',
+      is_pending_grading: false,
+      needs_retry: false,
+      status: 'incorrect',
+    });
+    expect(gradedPatch(flagged, 'correct')).not.toHaveProperty('needs_retry');
+    expect(gradedPatch(flagged, 'pending')).not.toHaveProperty('needs_retry');
+  });
+
   it('a pending submission keeps the previous graded result', () => {
     expect(
       gradedPatch({ ...item, status: 'incorrect', last_graded_result: 'incorrect' }, 'pending'),
