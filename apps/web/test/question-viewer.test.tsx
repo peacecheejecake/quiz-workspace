@@ -280,7 +280,8 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
 
     await user.click(within(panel).getByRole('radio', { name: '응결' }));
     await user.click(within(panel).getByRole('button', { name: SUBMIT_UI }));
-    expect(await within(panel).findByRole('status')).toHaveTextContent('오답');
+    // The result line is the first status; 관련 본문 (RELSRC-01) adds its own below it.
+    expect((await within(panel).findAllByRole('status'))[0]).toHaveTextContent('오답');
     expect(client.submit).toHaveBeenCalledWith(session().id, { selected_option_ids: ['o2'] });
     expect(within(panel).getByRole('radio', { name: '증발' })).toHaveAccessibleDescription('정답');
     expect(within(panel).getByRole('radio', { name: '응결' })).toHaveAccessibleDescription(

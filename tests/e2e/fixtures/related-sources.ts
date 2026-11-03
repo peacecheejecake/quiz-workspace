@@ -103,7 +103,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { ApiResponse, Problem } from './api.ts';
-import { block, book, outlineNodeId, uploadReadyBook, waitForJob } from './documents.ts';
+import {
+  block,
+  book,
+  listDocuments,
+  outlineNodeId,
+  uploadReadyBook,
+  waitForJob,
+} from './documents.ts';
 import { localDbAdminUrl } from './local-env.ts';
 import { createQuestion, mcqInput, type Question, type QuestionInput } from './questions.ts';
 import type { Member } from './workspaces.ts';
@@ -409,9 +416,11 @@ export async function seedRelsrcBook(owner: Member, workspaceId: string): Promis
     { blockId: samePageBlockId, text: TEXT.samePage },
     { blockId: appliedBlockId, text: TEXT.applied },
   ]);
+  // The API names the document by its title (the upload's file name), not the PDF's metadata title.
+  const title = (await listDocuments(owner, workspaceId)).find((d) => d.id === documentId)?.title;
   return {
     documentId,
-    title: KO.title,
+    title: title ?? KO.title,
     ch1: await outlineNodeId(owner, documentId, CH1),
     ch2: await outlineNodeId(owner, documentId, CH2),
     answerBlockId,
@@ -424,7 +433,10 @@ export async function seedRelsrcBook(owner: Member, workspaceId: string): Promis
 /** A unique stem; `markers` are appended in brackets (R5–R7). */
 export function relsrcStem(label: string, ...markers: string[]): string {
   const tail = markers.map((m) => ` [${m}]`).join('');
-  return `RELSRC ${label}: 물 분자가 수증기가 되는 과정을 설명하는 개념은?${tail}`;
+  // Short on purpose: the test scorer is the share of query words found in a passage, so a long
+  // stem would push the 2장 passage under RELATED_SOURCES_MIN_RELEVANCE; "문제" is in the stem so the
+  // 보관·초안 list's row button (named after its stem, /문제|question/) matches the inactiveUi locator.
+  return `RELSRC ${label}: 어떤 문제입니까?${tail}`;
 }
 
 /** MCQ whose correct option (opt-1) is `answer` (the query's answer text, R1). */

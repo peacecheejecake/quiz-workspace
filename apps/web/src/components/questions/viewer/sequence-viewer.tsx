@@ -32,6 +32,7 @@ import {
 } from 'react';
 import { AskQuestionButton } from '@/components/ask/ask-launcher';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
+import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import type { AskAttachmentInput } from '@/lib/ask/client';
 import { displayStem } from '@/lib/questions/display-stem';
 import {
@@ -897,6 +898,19 @@ function useSolveStep({
         }
       />
     ) : null;
+  // RELSRC-01: under the AI 해설, with the same submitted session (never before a submission).
+  const related =
+    answeredSessionId && explained && shownQuestion ? (
+      <RelatedSources
+        workspaceId={workspaceId}
+        target={{ kind: source === 'mock' ? 'mock' : 'question', id: explained }}
+        gate={
+          source === 'mock'
+            ? { mock_practice_session_id: answeredSessionId }
+            : { practice_session_id: answeredSessionId }
+        }
+      />
+    ) : null;
 
   let content: ReactNode;
   if (runLoad?.status === 'error' || itemLoad?.status === 'error') {
@@ -979,6 +993,7 @@ function useSolveStep({
           />
         </form>
         {explanation}
+        {related}
       </>
     );
   }

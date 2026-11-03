@@ -137,6 +137,10 @@ class SharedRelatedSource(BaseModel):
     chapter_id: uuid.UUID | None = Field(description="Top-level chapter of the passage.")
     chapter_title: str | None
     block_id: str = Field(description="The passage's first block (DOC-02 / excerpt panel).")
+    block_ids: list[str] = Field(
+        description="The passage's blocks in reading order (the first is `block_id`); the excerpt "
+        "panel shows all of them."
+    )
     page_start: int
     page_end: int
     excerpt: str = Field(description="At most 300 characters, whole paragraphs where possible.")
@@ -584,6 +588,7 @@ def render(
                 chapter_id=root.id if root else None,
                 chapter_title=root.title if root else None,
                 block_id=rows[0].block_id,
+                block_ids=[r.block_id for r in rows],
                 page_start=int(item.get("page_start") or rows[0].page),
                 page_end=int(item.get("page_end") or rows[-1].page),
                 excerpt=excerpt,

@@ -9368,6 +9368,14 @@
             "title": "Block Id",
             "type": "string"
           },
+          "block_ids": {
+            "description": "The passage's blocks in reading order (the first is `block_id`); the excerpt panel shows all of them.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Block Ids",
+            "type": "array"
+          },
           "chapter_id": {
             "anyOf": [
               {
@@ -9463,6 +9471,7 @@
           "chapter_id",
           "chapter_title",
           "block_id",
+          "block_ids",
           "page_start",
           "page_end",
           "excerpt",
@@ -11211,6 +11220,14 @@
             "title": "Block Id",
             "type": "string"
           },
+          "block_ids": {
+            "description": "The passage's blocks in reading order (the first is `block_id`); the excerpt panel shows all of them.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Block Ids",
+            "type": "array"
+          },
           "chapter_id": {
             "anyOf": [
               {
@@ -11283,6 +11300,7 @@
           "chapter_id",
           "chapter_title",
           "block_id",
+          "block_ids",
           "page_start",
           "page_end",
           "excerpt",

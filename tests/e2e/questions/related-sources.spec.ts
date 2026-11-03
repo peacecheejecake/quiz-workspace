@@ -512,6 +512,8 @@ test(
         'zqxjv-보기-2',
         'zqxjv-보기-3',
       ]),
+      // In 1장 like the others: in the 챕터 없음 group its dot's focus tooltip covers dot 4 above.
+      chapter_id: s.book.ch1,
       question_number: 3,
     });
     const failing = await ask(4, ANSWER, [FAIL_MARKER]);

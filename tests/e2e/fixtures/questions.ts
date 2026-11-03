@@ -858,7 +858,8 @@ export const panelUi = {
   options: (panel: Locator) => panel.getByRole('radio').or(panel.getByRole('checkbox')),
   answerText: (panel: Locator) => panel.getByRole('textbox', { name: /답안|answer/i }),
   submit: (panel: Locator) => panel.getByRole('button', { name: /^(답안 )?제출|^submit/i }),
-  result: (panel: Locator) => panel.getByRole('status'),
+  // The result line is the first status of the panel; 관련 본문 (RELSRC-01) adds its own below it.
+  result: (panel: Locator) => panel.getByRole('status').first(),
   selfGradeCorrect: (panel: Locator) =>
     panel.getByRole('button', { name: /^(맞음|맞았|정답으로|correct)/i }),
   selfGradeIncorrect: (panel: Locator) =>

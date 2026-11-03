@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { useRef, useState, type ReactNode } from 'react';
 import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
+import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import { getQuestionRevisionAction, type QuestionRevision } from '@/lib/questions/actions';
 import {
   PUBLICATION_STATUS_LABELS,
@@ -139,6 +140,15 @@ export function ManageViewer({
                 revisionId={question.revision.id}
                 options={question.revision.options}
                 askAttachment={{ kind: 'question', view: 'detail', question_id: question.id }}
+              />
+            ) : null}
+            {question.publication_status !== 'DRAFT' ? (
+              // RELSRC-01 문제 상세: the same gate as the AI 해설 above; a draft has none (ASK-SYNC (b)).
+              <RelatedSources
+                workspaceId={workspaceId}
+                target={{ kind: 'question', id: question.id }}
+                gate={{ view: 'detail' }}
+                revisionId={question.revision.id}
               />
             ) : null}
           </>
