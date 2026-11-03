@@ -77,6 +77,7 @@ test.describe.configure({ timeout: 3 * JOB_TIMEOUT_MS + 120_000 });
 
 const DESKTOP = { width: 1280, height: 800 };
 const PHONE = { width: 375, height: 812 };
+const TABLET = { width: 820, height: 1180 };
 
 function unique(label: string): string {
   return `${label}-${randomUUID().slice(0, 8)}`;
@@ -161,6 +162,17 @@ test(
       await page.keyboard.press('Escape');
     }
     expect(traffic.pdfRequests(), 'no PDF is fetched until the preview is used').toBe(0);
+
+    // The question PDF is deleted: its questions stay, but there is no source any more.
+    await s.owner.api.ok('DELETE', `/documents/${s.paperDocumentId}`, undefined, [200, 202, 204]);
+    traffic.statuses.delete(s.single.id);
+    const after = await openQuestion(page, s.workspaceId, s.single);
+    await expect
+      .poll(() => traffic.statuses.get(s.single.id), {
+        message: 'region answered 404 after delete',
+      })
+      .toBe(404);
+    await expect(sourceUi.button(after)).toHaveCount(0);
   },
 );
 
@@ -284,7 +296,7 @@ test(
 );
 
 test(
-  'QSRC-01-AC04 on a 375px screen the dialog is a full-screen sheet; 닫기, Escape and browser Back close only it and return to the question',
+  'QSRC-01-AC04 on a 375px screen and on an 820px tablet the dialog is a full-screen sheet; 닫기, Escape and browser Back close only it and return to the question',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seedQuestionSource(workspaceFactory, unique('qsrc01-ac04'));
@@ -324,6 +336,16 @@ test(
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(panel).toBeVisible();
+
+    // A tablet too narrow for the panel plus a 320px dialog (< 868px) gets the same sheet.
+    await page.setViewportSize(TABLET);
+    await expect(panel).toBeVisible();
+    await button.tap();
+    await expect(dialog).toBeVisible();
+    const wide = await boxOf(dialog);
+    expect(wide.x).toBeLessThanOrEqual(1);
+    expect(wide.width).toBeGreaterThanOrEqual(TABLET.width - 1);
+    expect(wide.height).toBeGreaterThanOrEqual(TABLET.height - 1);
   },
 );
 
@@ -393,15 +415,15 @@ async function advance(panel: Locator): Promise<void> {
 }
 
 test(
-  'QSRC-01-AC06 the button is also in range practice, the 문제 상세 dialog and mock exam questions of imported questions, and never for manual questions or share guests',
+  'QSRC-01-AC06 the button is also in range practice, the 문제 상세 dialog and shuffle mock exam questions of imported questions, and never for manual questions, AI-varied mock questions or share guests',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seedQuestionSource(workspaceFactory, unique('qsrc01-ac06'), {
       book: true,
       mocks: true,
     });
-    const { mockImported, mockManual } = s;
-    if (!mockImported || !mockManual) throw new Error('mock exams were not seeded');
+    const { mockImported, mockManual, mockVaried } = s;
+    if (!mockImported || !mockManual || !mockVaried) throw new Error('mock exams were not seeded');
     const viewer = await seedViewer(workspaceFactory, s, 'qsrc01-ac06-viewer');
     const link = await createShareLink(s.owner, s.workspaceId);
 
@@ -415,6 +437,8 @@ test(
     expect(unexpectedKeys(mockRegion.body)).toEqual([]);
     expect(mockRegion.body?.regions).toEqual(importedRegion.body?.regions);
     expect((await requestMockSourceRegion(s.owner, mockManual.question.id)).status).toBe(404);
+    // An AI-varied mock question never has a region, even when its origin question does.
+    expect((await requestMockSourceRegion(s.owner, mockVaried.question.id)).status).toBe(404);
 
     const traffic = watchRegionTraffic(page);
     await page.setViewportSize(DESKTOP);
@@ -457,7 +481,7 @@ test(
     // Mock exam questions: sequence(mock) and manage(mock) of the imported and the manual origin.
     await page.context().clearCookies();
     await openHome(page, s.owner, s.workspaceId);
-    for (const mock of [mockImported, mockManual]) {
+    for (const mock of [mockImported, mockManual, mockVaried]) {
       const wantButton = mock === mockImported;
       await page.goto(mockExamsPath(s.workspaceId));
       const list = mockUi.dialog(page);

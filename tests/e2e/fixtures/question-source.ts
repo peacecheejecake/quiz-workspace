@@ -33,6 +33,11 @@
 //      continues from the previous page stores it. Question 5 then has regions on p.1 and p.2.
 //   S5 Evidence-only question: the manual question API stores `question_sources` rows without an
 //      import run (document + pages only); the fixture points one at book-ko page 2.
+//   S8 AI-varied mock question: `mock_exam_questions.variation_type` other than OPTION_SHUFFLE has
+//      no region (404) and no button, even when its origin question is imported; the fixture
+//      turns a shuffle mock into one as the superuser (setMockVariation).
+//   S9 Deleted source PDF: `DELETE /documents/{id}` on the question paper makes its questions'
+//      regions 404 (button hidden); the questions themselves stay.
 //   S6 UI contract (Korean first, English accepted; AGENTS.md §5):
 //      - button "문제 원문 보기" in the question body header of the QuestionViewer (practice,
 //        sequence(bank|mock), manage, manage(mock)); hidden (not disabled) without a region.
@@ -233,6 +238,23 @@ export function importDocumentId(questionId: string): string {
   return out;
 }
 
+/**
+ * S8: marks a mock question as AI-varied. No LLM runs in E2E and `variation_type` is append-only
+ * for the API, so the superuser sets it (past the trigger) on a `보기 섞기` question.
+ */
+export function setMockVariation(mockQuestionId: string, type: string): void {
+  if (!/^[A-Z_]+$/.test(type)) throw new Error('question-source fixture: variation type');
+  psql(
+    `begin; set local session_replication_role = replica; ` +
+      `update public.mock_exam_questions set variation_type = '${type}' ` +
+      `where id = ${id(mockQuestionId)}; commit;`,
+  );
+  const now = psql(
+    `select variation_type from public.mock_exam_questions where id = ${id(mockQuestionId)}`,
+  ).trim();
+  if (now !== type) throw new Error('question-source fixture: variation was not set');
+}
+
 /** S4: adds a location on `page` to the question's import source row. */
 export function addImportLocation(questionId: string, page: number, bbox: BBox): void {
   if (!Number.isInteger(page) || page < 1) throw new Error('question-source fixture: page');
@@ -278,6 +300,8 @@ export interface SourceSeed {
   /** `보기 섞기` mock exam of the imported question 1 / of the manual question. */
   readonly mockImported: MockOf | undefined;
   readonly mockManual: MockOf | undefined;
+  /** A `보기 섞기` mock of question 1 turned into an AI-varied one (PARAPHRASE) by the DB (S8). */
+  readonly mockVaried: MockOf | undefined;
 }
 
 export interface SeedOptions {
@@ -372,6 +396,10 @@ export async function seedQuestionSource(
   const mockManual = options.mocks
     ? await mockOf(owner, ws.id, `직접 모의 ${tag}`, manual)
     : undefined;
+  const mockVaried = options.mocks
+    ? await mockOf(owner, ws.id, `변형 모의 ${tag}`, single)
+    : undefined;
+  if (mockVaried) setMockVariation(mockVaried.question.id, 'PARAPHRASE');
   return {
     owner,
     workspaceId: ws.id,
@@ -382,6 +410,7 @@ export async function seedQuestionSource(
     bookOnly,
     mockImported,
     mockManual,
+    mockVaried,
   };
 }
 
@@ -393,7 +422,7 @@ const REGION_PATH = /\/(?:questions|mock-exam-questions)\/([0-9a-f-]{36})\/sourc
 
 export interface RegionTraffic {
   /** Final status of each region request, by question / mock question id. */
-  readonly statuses: ReadonlyMap<string, number>;
+  readonly statuses: Map<string, number>;
   /** Parsed JSON body of each 200 region response. */
   readonly bodies: ReadonlyMap<string, unknown>;
   /** Number of requests for the PDF relay (`/source-url`). */

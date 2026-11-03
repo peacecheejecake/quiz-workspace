@@ -203,6 +203,17 @@ class Rig:
         assert rows, "the question has no import source row"
 
 
+def set_variation(mock_question_id: str, variation: str) -> None:
+    """Marks a mock question as AI-varied past the append-only trigger (no LLM in this suite)."""
+    with psycopg.connect(DB_ADMIN_URL, autocommit=False) as conn:
+        conn.execute("set local session_replication_role = replica")
+        conn.execute(
+            "update public.mock_exam_questions set variation_type = %s where id = %s",
+            (variation, mock_question_id),
+        )
+        conn.commit()
+
+
 def stamp_mock_evidence(mock_question_id: str, evidence: list[Any]) -> None:
     """Writes `evidence` onto a mock question's revisions past the append-only trigger (state no
     shuffle path produces: a variation's evidence can cite any page)."""
@@ -424,6 +435,14 @@ def test_qsrc_01_c02_only_import_sources_with_a_bbox_count(seed: Any) -> None:
     assert [r["page"] for r in body["regions"]] == [1]
     assert ANSWER_KEY_PAGE not in [r["page"] for r in body["regions"]]
 
+    # The question PDF is deleted (soft): the questions stay but have no source any more, and the
+    # document itself answers 404 (the original is immutable, so no revision check exists).
+    rig.owner.ok("DELETE", f"/documents/{rig.paper}", None, (200, 202, 204))
+    assert rig.owner.call("GET", f"/documents/{rig.paper}/source-url").status_code == 404
+    for q in (rig.q1, rig.q5, mixed["id"]):
+        not_found(region(rig.owner, q))
+    assert rig.owner.ok("GET", f"/questions/{rig.q1}")["id"] == rig.q1, "the question stays"
+
 
 # ---------------------------------------------------------------------------------------------
 # C03 authorization
@@ -521,6 +540,17 @@ def test_qsrc_01_c04_mock_question_follows_its_origin_question(seed: Any) -> Non
         [{"document_id": rig.paper, "locations": [{"page": 1, "bbox": truth_bbox(1)}]}],
     )
     not_found(mock_region(rig.owner, plain["id"]))
+
+    # Only `보기 섞기` mock questions: an AI-varied one has no region although its origin has one.
+    [varied] = shuffle_exam(rig.owner, rig.ws, [rig.q1])
+    assert ok(mock_region(rig.owner, varied["id"]))["regions"] == origin["regions"]
+    set_variation(varied["id"], "PARAPHRASE")
+    not_found(mock_region(rig.owner, varied["id"]))
+    ok(mock_region(rig.owner, imported["id"]))
+
+    # The origin's source PDF is deleted: the shuffle mock question has no region either.
+    rig.owner.ok("DELETE", f"/documents/{rig.paper}", None, (200, 202, 204))
+    not_found(mock_region(rig.owner, imported["id"]))
 
 
 # ---------------------------------------------------------------------------------------------
