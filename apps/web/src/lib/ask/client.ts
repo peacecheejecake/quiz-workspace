@@ -23,6 +23,8 @@ export type ConversationPage = Schemas['ConversationPage'];
 export type AskMessage = Schemas['Message'];
 export type AskSource = Schemas['Source'];
 export type AskAttachment = Schemas['Attachment'];
+/** A question to attach to a new conversation (the server checks it and decides its disclosure). */
+export type AskAttachmentInput = Schemas['AttachmentInput'];
 export type MessageAccepted = Schemas['MessageAccepted'];
 export type FeedbackReason = Schemas['FeedbackInput']['reason'];
 
@@ -140,7 +142,10 @@ async function call<T>(
 export interface AskClient {
   state(workspaceId: string, signal?: AbortSignal): Promise<AskState>;
   list(workspaceId: string, cursor: string | null, signal?: AbortSignal): Promise<ConversationPage>;
-  create(workspaceId: string, body: { scope?: AskScope }): Promise<Conversation>;
+  create(
+    workspaceId: string,
+    body: { scope?: AskScope; attachment?: AskAttachmentInput },
+  ): Promise<Conversation>;
   get(conversationId: string, signal?: AbortSignal): Promise<Conversation>;
   remove(conversationId: string): Promise<void>;
   detach(conversationId: string): Promise<Conversation>;

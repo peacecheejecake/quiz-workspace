@@ -47,6 +47,7 @@ import {
   NOT_FOUND_TEXT,
   openAskPanel,
   PASSAGES,
+  probeSelected,
   readStream,
   recordedMessageIds,
   requestConversation,
@@ -592,7 +593,7 @@ test(
     expect(hint.disclosure).toBe('hint');
     expect(hint.text).toContain(label);
     expect(hint.text).toContain(SECRETS.correctOption); // an ordinary option, no mark
-    expect(hint.text).toMatch(/selected\s*:\s*보기 가 증산/);
+    expect(probeSelected(hint.text)).toEqual(['보기 가 증산']);
     expect(hint.text).not.toContain(SECRETS.explanation);
     expectNoAnswerFields(hint.text, 'hint probe');
     const fetched = await getMessage(viewer, hintId);
@@ -630,7 +631,7 @@ test(
     const full = await lastAnswer(viewer, conversation.id);
     expect(full.disclosure).toBe('full');
     expect(full.text).toMatch(new RegExp(`correct_answer\\s*:.*${SECRETS.correctOption}`));
-    expect(full.text).toMatch(/submitted_answer\s*:\s*보기 가 증산/);
+    expect(full.text).toMatch(/submitted_answer\s*:\s*(\d+\.\s*)?보기 가 증산/);
     expect(full.text).toMatch(/result\s*:\s*(incorrect|오답)/);
 
     // Someone else's session: 404. A client `disclosure` is ignored.
@@ -1411,10 +1412,12 @@ test(
     await waitDone(hint);
     await expect(hint).toContainText(label);
     await expect(hint).toContainText(SECRETS.mockCorrectOption);
-    await expect(hint).toContainText(/selected\s*:\s*보기 가 \d/);
     await expect(hint).not.toContainText(SECRETS.mockExplanation);
     const firstConversation = conversationOf(page);
     const hintMessage = await lastAnswer(viewer, firstConversation);
+    const picked = probeSelected(hintMessage.text);
+    expect(picked, 'the chosen option, by its display number').toHaveLength(1);
+    expect(picked[0]).toMatch(/^보기 가 \d$/);
     expect(hintMessage.disclosure).toBe('hint');
     expectNoAnswerFields(hintMessage.text, 'mock hint probe');
 

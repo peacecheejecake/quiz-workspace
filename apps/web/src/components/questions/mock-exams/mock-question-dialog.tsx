@@ -6,9 +6,12 @@
 // the 문제 상세 dialog — and get `편집` (the home 문제 편집 dialog's content fields; saving makes a
 // new revision, PATCH /mock-exam-questions/{id}) and `이 모의고사에서 빼기` (ConfirmDialog). Viewers,
 // and editors of an archived workspace, get an answer-free preview: the list they read carries no
-// answers (MOCK-01-C05), so nothing here can show one before a submission.
-import { Badge, Button, ConfirmDialog, ModalDialog, useUnsavedChanges } from '@quiz/ui';
+// answers (MOCK-01-C05), so nothing here can show one before a submission. Editors also get
+// `질문하기` at the top (ASK-01 `manage(mock)`: the question attached as `manage`, with its
+// answers — only where the home's AI 질문 is available).
+import { Badge, Button, ConfirmDialog, ModalDialog } from '@quiz/ui';
 import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from 'react';
+import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher';
 import { FormNotice } from '@/components/auth/form-notice';
 import { displayStem } from '@/lib/questions/display-stem';
 import {
@@ -66,6 +69,7 @@ export function MockQuestionDialog({
   if (target && target !== shown) setShown(target);
   const view = target ?? shown;
   const question = view?.question ?? null;
+  const asks = useAskLauncher() !== null;
 
   const [editing, setEditing] = useState<{ session: number; open: boolean }>({
     session: 0,
@@ -129,6 +133,17 @@ export function MockQuestionDialog({
           <div className={styles.preview}>
             {manage ? (
               <>
+                {asks ? (
+                  <div className={styles.askRow}>
+                    <AskQuestionButton
+                      attachment={{
+                        kind: 'mock_exam_question',
+                        view: 'manage',
+                        mock_exam_question_id: question.id,
+                      }}
+                    />
+                  </div>
+                ) : null}
                 {question.edited || needsReview(question) ? (
                   <div className={styles.badges}>
                     {question.edited ? <Badge>편집됨</Badge> : null}
@@ -253,8 +268,6 @@ function MockQuestionEditor({
 }) {
   const stemId = useId();
   const [values, setValues] = useState(() => formOf(question));
-  const [opening] = useState(() => JSON.stringify(values));
-  useUnsavedChanges(JSON.stringify(values) !== opening);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [notice, setNotice] = useState<{ text: string; attempt: number } | null>(null);
   const [pending, setPending] = useState(false);

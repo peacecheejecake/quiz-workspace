@@ -84,10 +84,12 @@
 //      - ASK_MARKERS.noAnswer: the answer starts with "[NO_ANSWER]".
 //      - ASK_MARKERS.leakProbe: echoes the question context it received, one "<field>: <value>"
 //        line per field of the attachment DTO (hint: number, chapter, question_type, stem,
-//        options — "<k>. <text>" in display order —, selected; full adds correct_answer (the
-//        correct options' texts), explanation, accepted_answers, rubric, submitted_answer,
-//        result, question_sources (the cited passages' text)), then "이전 턴 <n>개". Without an
-//        attachment it echoes "attachment: none".
+//        options — "<k>. <text>" in display order joined by " | " —, selected — the chosen
+//        options' display numbers "<k>, …" (ASK-Q: ASK-B's DTO keeps numbers, read them with
+//        probeSelected) —; full adds correct_answer (the correct options as "<k>. <text>"),
+//        explanation, accepted_answers, rubric, submitted_answer ("<k>. <text>" of the submitted
+//        options), result, question_sources (the cited passages' text)), then "이전 턴 <n>개".
+//        Without an attachment it echoes "attachment: none".
 //      - ASK_MARKERS.uncited: an answer without any footnote (C04 `uncited`).
 //      - `${ASK_MARKERS.hold}-<token>`: before the first delta, creates `<hold dir>/<token>.held`
 //        and waits (≤ 120 s) until `<token>.release` exists. Hold dir = WORKER_ASK_HOLD_DIR,
@@ -981,6 +983,24 @@ export function conversationOf(page: Page): string {
   const id = askParams(page).conversation;
   if (!id) throw new Error('the URL names no conversation');
   return id;
+}
+
+/**
+ * The option texts a LEAK-PROBE echo names as chosen: its `selected: <k>, …` line holds display
+ * numbers, its `options: 1. <text> | 2. <text>` line maps them to texts (Q7).
+ */
+export function probeSelected(probe: string): string[] {
+  const options = new Map<string, string>();
+  for (const option of (/^options\s*:\s*(.*)$/m.exec(probe)?.[1] ?? '').split(' | ')) {
+    const m = /^(\d+)\.\s*(.*)$/.exec(option.trim());
+    if (m?.[1]) options.set(m[1], (m[2] ?? '').trim());
+  }
+  const picked = /^selected\s*:\s*(.*)$/m.exec(probe)?.[1] ?? '';
+  return picked
+    .split(',')
+    .map((n) => n.trim())
+    .filter(Boolean)
+    .map((n) => options.get(n) ?? `<unknown option ${n}>`);
 }
 
 /** "3장 12번 · <발문 앞부분>" for a chip label check. */
