@@ -103,9 +103,7 @@ function RelatedSourcesArea({
     });
     setExcerptOpen(true);
     const ids = [...new Set(source.block_ids.length > 0 ? source.block_ids : [source.block_id])];
-    Promise.all(
-      ids.slice(0, 12).map((id) => search.block(source.document_id, id, source.revision_id)),
-    ).then(
+    fetchInOrder(ids, (id) => search.block(source.document_id, id, source.revision_id)).then(
       (blocks) => {
         if (requestId !== excerptRequest.current || !mounted.current) return;
         const text = blocks.map((b) => b.text).join('\n\n');
@@ -305,6 +303,17 @@ export function RelatedExcerpt({
       )}
     </span>
   );
+}
+
+const BLOCK_CONCURRENCY = 6;
+
+/** Every id's result, in the ids' order, with at most BLOCK_CONCURRENCY requests in flight. */
+async function fetchInOrder<T>(ids: readonly string[], load: (id: string) => Promise<T>) {
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += BLOCK_CONCURRENCY) {
+    out.push(...(await Promise.all(ids.slice(i, i + BLOCK_CONCURRENCY).map(load))));
+  }
+  return out;
 }
 
 /** Mirrors `hitKey` of the search results, so the excerpt panel returns focus to this row. */

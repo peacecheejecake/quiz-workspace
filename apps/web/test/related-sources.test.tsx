@@ -271,6 +271,32 @@ describe('RELSRC-01 area', () => {
   });
 });
 
+describe('RELSRC-01 long passage', () => {
+  it('shows every block of a 13-block passage in order', async () => {
+    const ids = Array.from({ length: 13 }, (_, i) => `c-${i + 1}`);
+    const block = vi.fn(async (_doc: string, id: string) => ({ text: `블록 ${id} 본문` }) as never);
+    const c = fake(async () => ({ items: [source({ block_ids: ids })], degraded: [] }));
+    render(
+      <RelatedSources
+        workspaceId={WS}
+        target={target}
+        gate={gate}
+        client={c}
+        searchClient={{ block }}
+      />,
+    );
+    const list = await screen.findByRole('list', { name: '관련 본문' });
+    await userEvent.click(within(list).getByRole('button', { name: /가나다/ }));
+    const dialog = await screen.findByRole('dialog', { name: '본문 발췌' });
+    await waitFor(() => expect(dialog).toHaveTextContent('블록 c-13 본문'));
+    for (const id of ids) expect(block).toHaveBeenCalledWith(DOC, id, REV);
+    const text = dialog.textContent ?? '';
+    const at = ids.map((id) => text.indexOf(`블록 ${id} 본문`));
+    expect(at.every((n) => n >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+  });
+});
+
 describe('RELSRC-01 guest', () => {
   it('shows a stored list read-only, and nothing when there is none', async () => {
     const stored: RelatedClient = {
