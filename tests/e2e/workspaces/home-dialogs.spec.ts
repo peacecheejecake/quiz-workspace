@@ -214,7 +214,12 @@ test(
       expect(panels(page), d.name).toEqual([d.panel]);
       await expectFocusTrapped(page, dialog);
 
-      // Escape (focus inside) closes it, focus back on its opener, `panel=` gone.
+      // Escape (focus inside) closes it, focus back on its opener, `panel=` gone. A 정리 노트
+      // footnote's keyboard preview takes the first Escape (CHNOTE-02 "키보드").
+      if ((await page.getByRole('tooltip').count()) > 0) {
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('tooltip')).toHaveCount(0);
+      }
       await page.keyboard.press('Escape');
       await expect(dialog, d.name).toHaveCount(0);
       await expect(d.opener(page), `${d.name}: focus back on its opener`).toBeFocused();
