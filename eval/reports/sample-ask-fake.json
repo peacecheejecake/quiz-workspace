@@ -4,31 +4,31 @@
   "model": "scripted-ask",
   "dataset": "eval/ask/ask-seed.json",
   "summary": {
-    "ask_cases": 18,
-    "answers": 14,
-    "citation_tags": 24,
-    "citation_valid_rate": 0.9167,
+    "ask_cases": 21,
+    "answers": 17,
+    "citation_tags": 27,
+    "citation_valid_rate": 0.9259,
     "answers_with_dropped_tags": 1,
     "uncited_answers": 1,
-    "cited_paragraphs": 22,
-    "support_rate": 0.8636,
+    "cited_paragraphs": 25,
+    "support_rate": 0.84,
     "judged_sentences": 0,
     "judge_support_rate": null,
     "not_found_cases": 4,
     "not_found_correct": 3,
-    "answerable_cases": 14,
+    "answerable_cases": 17,
     "false_refusals": 1,
-    "not_found_accuracy": 0.8889,
-    "hint_cases": 6,
+    "not_found_accuracy": 0.9048,
+    "hint_cases": 9,
     "hint_leaked": 2,
-    "hint_leak_rate": 0.3333,
+    "hint_leak_rate": 0.2222,
     "hint_leaks_by_attachment": {
       "registered": {
-        "cases": 3,
+        "cases": 5,
         "leaked": 1
       },
       "mock_exam": {
-        "cases": 3,
+        "cases": 4,
         "leaked": 1
       }
     },
@@ -40,16 +40,16 @@
     "explain_errors": {
       "explanation_answer_mismatch": 1
     },
-    "llm_calls": 25,
+    "llm_calls": 28,
     "usage": {
-      "input_tokens": 11502,
-      "output_tokens": 1492,
+      "input_tokens": 12989,
+      "output_tokens": 1627,
       "cache_read_input_tokens": 0,
       "cache_creation_input_tokens": 0,
       "cost_usd": null
     },
     "first_text_ms": {
-      "count": 25,
+      "count": 28,
       "p50": 0.002,
       "p95": 0.005
     }
@@ -260,6 +260,78 @@
       "sources": 2,
       "leaked": true,
       "attachment": "registered",
+      "disclosure": "hint",
+      "hint_fields": [
+        "kind",
+        "number",
+        "chapter",
+        "question_type",
+        "stem",
+        "options",
+        "selected"
+      ]
+    },
+    {
+      "case": "hint-refuses-the-answer",
+      "kind": "hint",
+      "no_answer": false,
+      "tags": 1,
+      "valid_tags": 1,
+      "dropped": 0,
+      "uncited": false,
+      "cited_paragraphs": 1,
+      "supported_sentences": 1,
+      "sources": 2,
+      "leaked": false,
+      "attachment": "registered",
+      "disclosure": "hint",
+      "hint_fields": [
+        "kind",
+        "number",
+        "chapter",
+        "question_type",
+        "stem",
+        "options",
+        "selected"
+      ]
+    },
+    {
+      "case": "hint-declines-the-final-answer",
+      "kind": "hint",
+      "no_answer": false,
+      "tags": 1,
+      "valid_tags": 1,
+      "dropped": 0,
+      "uncited": false,
+      "cited_paragraphs": 1,
+      "supported_sentences": 1,
+      "sources": 2,
+      "leaked": false,
+      "attachment": "registered",
+      "disclosure": "hint",
+      "hint_fields": [
+        "kind",
+        "number",
+        "chapter",
+        "question_type",
+        "stem",
+        "options",
+        "selected"
+      ]
+    },
+    {
+      "case": "mock-hint-self-solve",
+      "kind": "hint",
+      "no_answer": false,
+      "tags": 1,
+      "valid_tags": 1,
+      "dropped": 0,
+      "uncited": false,
+      "cited_paragraphs": 1,
+      "supported_sentences": 0,
+      "sources": 2,
+      "leaked": false,
+      "attachment": "mock_exam",
       "disclosure": "hint",
       "hint_fields": [
         "kind",

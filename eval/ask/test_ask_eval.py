@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from book_core.ask import ASK_FIELDS_FORBIDDEN_IN_HINT
 from book_core.llm import LLMProviderError
-from book_core.llm.streaming import FakeTextStreamClient
+from book_core.llm.streaming import FakeTextStreamClient, TextDelta, TextStreamEnd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ask_eval
@@ -18,19 +18,19 @@ import ask_eval
 def test_the_scripted_dataset_report() -> None:
     report = ask_eval.run()
     s = report["summary"]
-    assert (s["ask_cases"], s["answers"], s["explain_cases"]) == (18, 14, 6)
-    # 24 raw footnote tags in the answers, two of them unknown ([S9] and [S7]) in one answer.
-    assert (s["citation_tags"], s["answers_with_dropped_tags"]) == (24, 1)
-    assert s["citation_valid_rate"] == pytest.approx(22 / 24, abs=1e-4)
+    assert (s["ask_cases"], s["answers"], s["explain_cases"]) == (21, 17, 6)
+    # 27 raw footnote tags in the answers, two of them unknown ([S9] and [S7]) in one answer.
+    assert (s["citation_tags"], s["answers_with_dropped_tags"]) == (27, 1)
+    assert s["citation_valid_rate"] == pytest.approx(25 / 27, abs=1e-4)
     assert s["uncited_answers"] == 1
-    assert (s["cited_paragraphs"], s["support_rate"]) == (22, pytest.approx(19 / 22, abs=1e-4))
-    # 3 of 4 not-found cases are refused, 1 of 14 answerable cases is refused wrongly.
+    assert (s["cited_paragraphs"], s["support_rate"]) == (25, pytest.approx(21 / 25, abs=1e-4))
+    # 3 of 4 not-found cases are refused, 1 of 17 answerable cases is refused wrongly.
     assert (s["not_found_correct"], s["false_refusals"]) == (3, 1)
-    assert s["not_found_accuracy"] == pytest.approx(16 / 18, abs=1e-4)
-    assert (s["hint_cases"], s["hint_leaked"]) == (6, 2)
+    assert s["not_found_accuracy"] == pytest.approx(19 / 21, abs=1e-4)
+    assert (s["hint_cases"], s["hint_leaked"]) == (9, 2)
     assert s["hint_leaks_by_attachment"] == {
-        "registered": {"cases": 3, "leaked": 1},
-        "mock_exam": {"cases": 3, "leaked": 1},
+        "registered": {"cases": 5, "leaked": 1},
+        "mock_exam": {"cases": 4, "leaked": 1},
     }
     assert s["explain_answer_agreement"] == pytest.approx(5 / 6, abs=1e-4)
     assert (s["explain_valid_first"], s["explain_valid_final"]) == (
@@ -39,7 +39,7 @@ def test_the_scripted_dataset_report() -> None:
     )
     assert s["explain_re_requests"] == 1
     assert s["explain_errors"] == {"explanation_answer_mismatch": 1}
-    assert s["llm_calls"] == 25
+    assert s["llm_calls"] == 28
     assert s["usage"]["input_tokens"] > 0
     assert s["usage"]["output_tokens"] > 0
     assert s["usage"]["cost_usd"] is None
@@ -75,9 +75,13 @@ def test_hint_requests_carry_no_answer_field() -> None:
         ("2번이 정답이다.", True),
         ("답은 2번이다.", True),
         ("응결이 정답입니다.", True),
-        ("최종 답을 말하면 응결이다.", True),
         ("응결은 수증기가 물방울이 되는 과정이라고 한 구절을 확인해 보세요. [1]", False),
         ("보기 2번의 응결과 1번의 증발을 비교해 보세요.", False),
+        ("정답은 알려드릴 수 없습니다. 구절을 확인해 보세요.", False),
+        ("최종 답을 직접 알려주지는 않겠습니다.", False),
+        ("2번이 정답인지는 말씀드릴 수 없고 스스로 찾아보셔야 합니다.", False),
+        ("정답은 스스로 찾아보세요.", False),
+        ("정답: 응결", True),
     ],
 )
 def test_the_leak_patterns(answer: str, leaked: bool) -> None:
@@ -97,10 +101,38 @@ def test_the_llm_provider_gets_the_same_requests_without_scripts() -> None:
     assert client.calls
     assert report["provider"] == "llm"
     assert all(c.task in {"ask.answer", "question.ai_explain", "eval.judge"} for c in client.calls)
-    assert sum(1 for c in client.calls if c.task == "ask.answer") == 18
+    assert sum(1 for c in client.calls if c.task == "ask.answer") == 21
 
 
 def test_a_provider_outage_is_not_swallowed() -> None:
     client = FakeTextStreamClient(error=LLMProviderError("unavailable (test)", kind="unavailable"))
     with pytest.raises(LLMProviderError):
         ask_eval.run(client=client)
+
+
+def test_the_judge_confirms_a_nominated_leak_and_can_clear_it() -> None:
+    class Judged(ask_eval.ScriptedClient):
+        def __init__(self, dataset: ask_eval.Dataset, verdict: str) -> None:
+            super().__init__(dataset)
+            self.verdict = verdict
+            self.judged = 0
+
+        def stream_text(self, request):  # type: ignore[no-untyped-def]
+            if request.task != "eval.judge":
+                return super().stream_text(request)
+            self.judged += 1
+            return iter(
+                [
+                    TextDelta(self.verdict),
+                    TextStreamEnd(model="judge", stop_reason="end_turn"),
+                ]
+            )
+
+    dataset = ask_eval.load_dataset(ask_eval.DEFAULT_DATASET)
+    for verdict, leaked in (("YES", 2), ("NO", 0)):
+        client = Judged(dataset, verdict)
+        report = ask_eval.run(provider="llm", client=client)
+        assert report["summary"]["hint_leaked"] == leaked
+        # The judge is asked only about nominated answers, never about refusals.
+        hints = [e for e in report["ask"] if e["kind"] == "hint"]
+        assert sum(1 for e in hints if "judge_leak" in e) == 2

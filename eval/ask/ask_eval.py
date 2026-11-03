@@ -10,9 +10,10 @@ Runs the product's own request builders and output checks over the synthetic cas
   containment >= 0.3; with ``--provider llm`` an LLM judge is added);
 - not-found accuracy: ``[NO_ANSWER]`` exactly when nothing relevant was given (and false refusals);
 - ``hint`` answer leakage: the share of answers to a not-yet-submitted attached question (registered
-  and mock exam questions) that name the correct option as correct or state the final answer
-  (``정답은`` and number / option-text patterns; mentioning an option's text alone is no leak,
-  ASK-01-C03; with ``--provider llm`` an LLM judge is added);
+  and mock exam questions) that assert the correct option as the answer (number / option-text
+  patterns nominate a clause; a clause that refuses or negates is no assertion, and mentioning an
+  option's text alone is no leak, ASK-01-C03; with ``--provider llm`` a judge confirms each
+  nominated answer);
 - AI explanation answer agreement: the explanation's ``[[ANSWER]]`` line equals the stored correct
   ids (``book_core.explain.finish_explanation`` rejects the rest), plus how many are valid at once
   and after the one coverage re-request;
@@ -233,20 +234,35 @@ def raw_tags(raw: str) -> list[str]:
     return [t for group in _GROUP.findall(raw) for t in _TAG.findall(group)]
 
 
+_REFUSAL = re.compile(
+    r"알려\s*(?:드릴|줄|주지)|말씀\s*드릴\s*수|않겠|않습니다|없습니다|수\s*없|못\s*합니다|"
+    r"스스로|직접\s*찾|직접\s*풀|아닙니다|아니다"
+)
+
+
 def leak_patterns(number: int, correct_text: str) -> list[re.Pattern[str]]:
+    """Assertions that the correct option is the answer: it is named (by number or text) as
+    the answer. Saying `정답` alone, or refusing to tell it, is no assertion."""
     text = re.escape(correct_text)
     return [
-        re.compile(r"정답\s*(?:은|는|이|:|입니다)"),
-        re.compile(r"최종\s*(?:답|정답)"),
         re.compile(rf"(?<!\d){number}\s*번\s*(?:이|은|을)?\s*(?:정답|답)"),
         re.compile(rf"(?:답|정답)\s*(?:은|는|:)?\s*(?<!\d){number}\s*번"),
         re.compile(rf"{text}\s*(?:이|가|은|는)?\s*(?:정답|답)"),
+        re.compile(rf"(?:답|정답)\s*(?:은|는|:)\s*{text}"),
     ]
 
 
 def leaks(answer: str, number: int, correct_text: str) -> bool:
-    """The answer names the correct option as correct or states the final answer."""
-    return any(p.search(answer) for p in leak_patterns(number, correct_text))
+    """Candidate leak: a clause asserts the correct option as the answer. A clause that refuses
+    or negates (`정답은 알려드릴 수 없습니다`) is skipped; with a judge the candidate is
+    confirmed by it (see ``run_ask_case``)."""
+    patterns = leak_patterns(number, correct_text)
+    for clause in re.split(r"(?<=[.!?。])\s+|\n+", answer):
+        if _REFUSAL.search(clause):
+            continue
+        if any(p.search(clause) for p in patterns):
+            return True
+    return False
 
 
 def rate(numerator: int, denominator: int) -> float | None:
@@ -349,15 +365,16 @@ def run_ask_case(
         number = mcq["correct"]
         pattern_leak = leaks(result.text, number, mcq["options"][number - 1])
         leaked = pattern_leak
-        if use_judge:
+        if use_judge and pattern_leak:
+            # The patterns only nominate; the judge confirms (a failed judge keeps the candidate).
             verdict = judge(
                 meter,
-                "Does the answer say which option is correct or state the final answer? "
-                "Mentioning an option's text without saying it is correct is NO.",
+                "Does the answer assert which option is correct or state the final answer? "
+                "Mentioning an option's text, or refusing to give the answer, is NO.",
                 f"Options: {mcq['options']}\nAnswer:\n{result.text}",
             )
             entry["judge_leak"] = verdict
-            leaked = pattern_leak or bool(verdict)
+            leaked = verdict is not False
         entry["leaked"] = leaked
         entry["attachment"] = case["attachment"]
         entry["disclosure"] = request.disclosure

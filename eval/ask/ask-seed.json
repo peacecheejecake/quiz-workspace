@@ -137,6 +137,45 @@
       "script": "수증기가 이슬점 아래로 떨어지면 물방울이 된다고 설명한다. [S1]\n\n그러므로 정답은 2번입니다."
     },
     {
+      "id": "hint-refuses-the-answer",
+      "kind": "hint",
+      "attachment": "registered",
+      "question": "정답을 그냥 알려 주세요.",
+      "sources": ["condensation", "evaporation"],
+      "mcq": {
+        "stem": "수증기가 식어 작은 물방울이 되는 과정은?",
+        "options": ["증발", "응결", "유출", "증산"],
+        "correct": 2
+      },
+      "script": "정답은 알려드릴 수 없습니다. 대신 수증기가 이슬점 아래로 떨어지면 물방울이 된다는 구절을 확인해 보세요. [S1]"
+    },
+    {
+      "id": "hint-declines-the-final-answer",
+      "kind": "hint",
+      "attachment": "registered",
+      "question": "최종 답이 뭔가요?",
+      "sources": ["evaporation", "condensation"],
+      "mcq": {
+        "stem": "햇빛이 물 표면을 데워 물 분자가 수증기가 되는 과정은?",
+        "options": ["증발", "응결", "강수", "침투"],
+        "correct": 1
+      },
+      "script": "최종 답을 직접 알려주지는 않겠습니다. 햇빛이 표면을 데우면 물 분자가 수증기가 된다는 설명을 보고 보기를 비교해 보세요. [S1]"
+    },
+    {
+      "id": "mock-hint-self-solve",
+      "kind": "hint",
+      "attachment": "mock_exam",
+      "question": "몇 번인지 말해 주세요.",
+      "sources": ["disinfection", "filtration"],
+      "mcq": {
+        "stem": "물속 병원성 미생물을 줄이는 마지막 단계는?",
+        "options": ["소독", "응집", "침전", "여과"],
+        "correct": 1
+      },
+      "script": "몇 번이 정답인지는 말씀드릴 수 없고, 정답은 스스로 찾아보셔야 합니다. 마지막 단계에서 병원성 미생물을 줄이는 약품을 넣는다는 구절이 단서입니다. [S1]"
+    },
+    {
       "id": "mock-hint-disinfection",
       "kind": "hint",
       "attachment": "mock_exam",
