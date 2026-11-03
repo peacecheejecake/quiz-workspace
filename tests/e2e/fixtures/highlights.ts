@@ -663,6 +663,29 @@ export async function chooseColor(page: Page, color: HighlightColor): Promise<vo
   await expect(menu).toBeHidden();
 }
 
+/**
+ * Presses `key` until `target` has focus (at most `max` presses). Radix menus move focus a task
+ * after the key, so each press waits for focus to settle before the next one — pressing again
+ * while a move is pending would move from the old item twice and stop short.
+ */
+export async function pressUntilFocused(
+  page: Page,
+  target: Locator,
+  key = 'ArrowDown',
+  max = 4,
+): Promise<void> {
+  const active = () => page.evaluate(() => document.activeElement?.outerHTML ?? '');
+  for (let i = 0; i < max && !(await target.evaluate((el) => el === document.activeElement)); i++) {
+    const before = await active();
+    await page.keyboard.press(key);
+    await expect
+      .poll(active, { timeout: 1000 })
+      .not.toBe(before)
+      .catch(() => undefined);
+  }
+  await expect(target).toBeFocused();
+}
+
 /** Opens a `내 하이라이트` row's menu and chooses `item` (keyboard: Enter on the button). */
 export async function chooseRowItem(
   page: Page,
@@ -676,10 +699,11 @@ export async function chooseRowItem(
     await page.keyboard.press('Enter');
     const target = highlightUi.rowMenuItem(page, item);
     await expect(target).toBeVisible();
-    for (let i = 0; i < 4 && !(await target.evaluate((el) => el === document.activeElement)); i++) {
-      await page.keyboard.press('ArrowDown');
-    }
-    await expect(target).toBeFocused();
+    // The menu focuses its first item once it opens.
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.getAttribute('role') ?? ''))
+      .toMatch(/^menuitem/);
+    await pressUntilFocused(page, target);
     await page.keyboard.press(item === 'recolor' ? 'ArrowRight' : 'Enter');
   } else {
     await button.click();

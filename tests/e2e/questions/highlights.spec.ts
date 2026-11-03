@@ -36,6 +36,7 @@ import {
   itemText,
   markStyle,
   noteSetup,
+  pressUntilFocused,
   recordClipboard,
   chosenText,
   selectionRect,
@@ -451,9 +452,8 @@ test(
     const blue = page
       .getByRole('menuitemradio', { name: /^(파랑|blue)$/i })
       .or(page.getByRole('menuitem', { name: /^(파랑|blue)$/i }));
-    for (let i = 0; i < 4 && !(await blue.evaluate((el) => el === document.activeElement)); i++) {
-      await page.keyboard.press('ArrowDown');
-    }
+    await expect(blue).toBeVisible();
+    await pressUntilFocused(page, blue);
     await page.keyboard.press('Enter');
     await expect(rows.first()).toContainText(highlightUi.rowMeta('blue', 'note', '버전'));
     await page.reload();
@@ -618,6 +618,8 @@ test(
     try {
       const guest = await guestContext.newPage();
       await openShareWithSecret(guest, link.id, link.secret);
+      // The fragment is exchanged for the share session first (the card lists the note).
+      await expect(noteUi.sharedChapter(noteUi.sharedCard(guest), CH1)).toBeVisible();
       await guest.goto(sharedNotePanelPath(link.id, s.ch1));
       const shared = noteUi.panel(guest);
       await expect(shared).toBeVisible();
