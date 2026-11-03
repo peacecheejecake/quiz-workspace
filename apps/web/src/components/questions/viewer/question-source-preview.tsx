@@ -121,13 +121,16 @@ function Preview({ target, aboveModals = false }: QuestionSourcePreviewProps) {
   const pushed = useRef(false);
 
   const openDialog = () => {
-    if (sheet && !pushed.current) {
-      window.history.pushState(window.history.state, '', window.location.href);
-      pushed.current = true;
-    }
     pdf.start();
     setOpen(true);
   };
+  // Entering sheet mode while open (a wide viewport that narrows, e.g. a rotated tablet) pushes the
+  // entry too. Leaving sheet mode keeps it: a later close still calls history.back() once.
+  useEffect(() => {
+    if (!open || !sheet || pushed.current) return;
+    window.history.pushState(window.history.state, '', window.location.href);
+    pushed.current = true;
+  }, [open, sheet]);
   const closeDialog = () => {
     setOpen(false);
     if (pushed.current) {

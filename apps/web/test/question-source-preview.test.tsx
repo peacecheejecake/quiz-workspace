@@ -13,6 +13,12 @@ vi.mock('@/lib/documents/bff', async (original) => ({
   relayToApi: relay.relayToApi,
 }));
 
+const sheetMode = vi.hoisted(() => ({ value: false }));
+vi.mock('@quiz/ui', async (original) => ({
+  ...(await original<typeof import('@quiz/ui')>()),
+  usePairedSheet: () => sheetMode.value,
+}));
+
 const { QuestionSourcePreview } =
   await import('../src/components/questions/viewer/question-source-preview');
 const { fetchSourceRegions, fitRegion, sourceRegionPath } =
@@ -131,5 +137,58 @@ describe('QSRC-01 button', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     expect(screen.queryByRole('button', BUTTON)).toBeNull();
     expect(second.container.innerHTML).toBe('');
+  });
+});
+
+describe('QSRC-01 narrow sheet history', () => {
+  const ui = () => <QuestionSourcePreview target={{ kind: 'question', id: ID }} />;
+
+  it('pushes one entry when the viewport narrows while open, and pops it once on close', async () => {
+    const { fireEvent, act } = await import('@testing-library/react');
+    stubFetch(() => Response.json({ question_id: ID, regions: [REGION] }));
+    const push = vi.spyOn(window.history, 'pushState');
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    sheetMode.value = false;
+    const view = render(ui());
+    fireEvent.click(await screen.findByRole('button', { name: '문제 원문 보기' }));
+    await screen.findByRole('dialog', { name: '문제 원문' });
+    expect(push).not.toHaveBeenCalled();
+
+    sheetMode.value = true;
+    view.rerender(ui());
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+    // Wide again, then narrow again: the entry is kept, not pushed twice.
+    sheetMode.value = false;
+    view.rerender(ui());
+    sheetMode.value = true;
+    view.rerender(ui());
+    expect(push).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '닫기' }));
+    });
+    expect(back).toHaveBeenCalledTimes(1);
+    push.mockRestore();
+    back.mockRestore();
+  });
+
+  it('pushes at open in sheet mode and closes on popstate without another back()', async () => {
+    const { fireEvent, act } = await import('@testing-library/react');
+    stubFetch(() => Response.json({ question_id: ID, regions: [REGION] }));
+    const push = vi.spyOn(window.history, 'pushState');
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    sheetMode.value = true;
+    render(ui());
+    fireEvent.click(await screen.findByRole('button', { name: '문제 원문 보기' }));
+    await screen.findByRole('dialog', { name: '문제 원문' });
+    expect(push).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '문제 원문' })).toBeNull());
+    expect(back).not.toHaveBeenCalled();
+    push.mockRestore();
+    back.mockRestore();
   });
 });
