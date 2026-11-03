@@ -266,6 +266,40 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
   });
 
+  it('RETRY-01-C04 sequence(bank): a delayed first flags lookup does not undo a grading made meanwhile', async () => {
+    const user = userEvent.setup();
+    let release!: (value: { is_favorite: boolean; needs_retry: boolean }) => void;
+    const lookup = new Promise<{ is_favorite: boolean; needs_retry: boolean }>((resolve) => {
+      release = resolve;
+    });
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={fakeClient({
+          flags: vi.fn(() => lookup) as unknown as RunClient['flags'],
+          submit: vi.fn(async () => ({
+            ok: true as const,
+            data: { ...graded, result: 'correct' as const },
+          })),
+        })}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('radio', { name: '증발' }));
+    await user.click(within(panel).getByRole('button', { name: SUBMIT_UI }));
+    expect(await within(panel).findByRole('status')).toHaveTextContent('정답');
+    // The lookup (made before the submission) now answers: it knows no graded result.
+    await act(async () => release({ is_favorite: false, needs_retry: false }));
+    expect(
+      await within(panel).findByRole('button', { name: '다시 풀기 표시' }),
+    ).toBeInTheDocument();
+  });
+
   it('manage: the 문제 상세 dialog shows the answers and renders no submit UI', () => {
     render(
       <QuestionViewer

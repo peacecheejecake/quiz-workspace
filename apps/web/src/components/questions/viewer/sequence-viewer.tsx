@@ -729,9 +729,11 @@ function useSolveStep({
   const [lastGraded, setLastGraded] = useState<{
     questionId: string;
     result: 'correct' | 'incorrect' | null;
+    /** Graded in this panel (true) or read from the server (false). */
+    local: boolean;
   } | null>(null);
   function gradedHere(qid: string, result: 'correct' | 'incorrect') {
-    setLastGraded({ questionId: qid, result });
+    setLastGraded({ questionId: qid, result, local: true });
     if (result === 'incorrect') {
       setFlags((prev) =>
         prev?.questionId === qid
@@ -752,9 +754,24 @@ function useSolveStep({
     setSeenFlags(flagsLoad);
     if (flagsLoad?.status === 'ready' && flagsWanted) {
       // A change still being saved wins over a read made before it.
-      const shown = flagSync.active(flagsWanted) ?? flagsLoad.data;
-      setFlags({ questionId: flagsWanted, flags: shown });
-      setLastGraded({ questionId: flagsWanted, result: flagsLoad.data.last_graded_result ?? null });
+      const active = flagSync.active(flagsWanted) ?? flagsLoad.data;
+      // A grading made here is newer than any lookup that may have started before it (a delayed
+      // first response must not bring back an older result): it wins over the lookup's.
+      const local = lastGraded?.questionId === flagsWanted && lastGraded.local ? lastGraded : null;
+      setFlags({
+        questionId: flagsWanted,
+        flags: {
+          is_favorite: active.is_favorite,
+          needs_retry: local?.result === 'incorrect' ? false : active.needs_retry,
+        },
+      });
+      setLastGraded(
+        local ?? {
+          questionId: flagsWanted,
+          result: flagsLoad.data.last_graded_result ?? null,
+          local: false,
+        },
+      );
     }
   }
   const shownFlags = flags && flags.questionId === questionId ? flags.flags : null;
