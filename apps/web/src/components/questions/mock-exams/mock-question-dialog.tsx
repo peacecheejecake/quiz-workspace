@@ -13,6 +13,7 @@ import { Badge, Button, ConfirmDialog, ModalDialog } from '@quiz/ui';
 import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from 'react';
 import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher';
 import { FormNotice } from '@/components/auth/form-notice';
+import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { displayStem } from '@/lib/questions/display-stem';
 import {
   contentBody,
@@ -36,6 +37,8 @@ export interface MockQuestionTarget {
 
 export interface MockQuestionDialogProps {
   readonly target: MockQuestionTarget | null;
+  /** The workspace (AI 해설: its source links open this workspace's PDF viewer). */
+  readonly workspaceId?: string;
   /** Editors of an active workspace: answers, 편집 and 빼기. */
   readonly manage: boolean;
   readonly api: MockExamApi;
@@ -57,6 +60,7 @@ function warningCodes(question: MockExamQuestion): string {
 
 export function MockQuestionDialog({
   target,
+  workspaceId,
   manage,
   api,
   onClose,
@@ -173,6 +177,22 @@ export function MockQuestionDialog({
                     created_at: '',
                   }}
                 />
+                {workspaceId ? (
+                  // AIEXPL-01 `manage(mock)` (ASK-SYNC (a)): editors see the answers already, so no
+                  // submission is needed (`view: manage`); the mock question's own explanation.
+                  <AiExplanation
+                    workspaceId={workspaceId}
+                    target={{ kind: 'mock', id: question.id }}
+                    gate={{ view: 'manage' }}
+                    revisionId={question.revision.id}
+                    options={question.options}
+                    askAttachment={{
+                      kind: 'mock_exam_question',
+                      view: 'manage',
+                      mock_exam_question_id: question.id,
+                    }}
+                  />
+                ) : null}
               </>
             ) : (
               <>

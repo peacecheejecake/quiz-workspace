@@ -476,6 +476,7 @@ export function MockExamDetail({
 
       <MockQuestionDialog
         target={open}
+        workspaceId={workspaceId}
         manage={canEdit}
         api={api}
         returnFocusRef={openerRef}

@@ -31,6 +31,7 @@ import {
   type ReactNode,
 } from 'react';
 import { AskQuestionButton } from '@/components/ask/ask-launcher';
+import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import type { AskAttachmentInput } from '@/lib/ask/client';
 import { displayStem } from '@/lib/questions/display-stem';
 import {
@@ -315,6 +316,7 @@ export function SequenceViewer({
     onStarted: (runId) => onNavigate({ step: 'solve', runId, position: 1 }, 'replace'),
   });
   const solve = useSolveStep({
+    workspaceId,
     view: view?.step === 'solve' ? view : null,
     runVersion,
     open,
@@ -589,6 +591,7 @@ function itemQuestion(item: RunItem): AnswerQuestion {
 }
 
 function useSolveStep({
+  workspaceId,
   view,
   runVersion,
   open,
@@ -602,6 +605,7 @@ function useSolveStep({
   onFlagsFailed,
   onNavigate,
 }: {
+  readonly workspaceId: string;
   readonly view: Extract<RunUrlState, { step: 'solve' }> | null;
   /** Bumped when the run may have changed elsewhere (finished by its results step). */
   readonly runVersion: number;
@@ -861,6 +865,39 @@ function useSolveStep({
       </div>
     ) : null;
 
+  // AIEXPL-01: under a submitted position's result (also one reopened read-only through 이전 or
+  // the results list), with that position's submitted session; never before a submission.
+  const answeredSessionId = answered ? (session?.id ?? item?.practice_session_id ?? null) : null;
+  const explained = item?.question_id ?? null;
+  const explanation =
+    answeredSessionId && explained && shownQuestion ? (
+      <AiExplanation
+        workspaceId={workspaceId}
+        target={{ kind: source === 'mock' ? 'mock' : 'question', id: explained }}
+        gate={
+          source === 'mock'
+            ? { mock_practice_session_id: answeredSessionId }
+            : { practice_session_id: answeredSessionId }
+        }
+        options={shownQuestion.options}
+        askAttachment={
+          source === 'mock'
+            ? {
+                kind: 'mock_exam_question',
+                view: 'practice',
+                mock_exam_question_id: explained,
+                mock_practice_session_id: answeredSessionId,
+              }
+            : {
+                kind: 'question',
+                view: 'practice',
+                question_id: explained,
+                practice_session_id: answeredSessionId,
+              }
+        }
+      />
+    ) : null;
+
   let content: ReactNode;
   if (runLoad?.status === 'error' || itemLoad?.status === 'error') {
     const failure = runLoad?.status === 'error' ? runLoad : itemLoad;
@@ -941,6 +978,7 @@ function useSolveStep({
             }
           />
         </form>
+        {explanation}
       </>
     );
   }
