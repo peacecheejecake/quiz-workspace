@@ -373,10 +373,14 @@ function useAskPanel({
     let lastEventAt = Date.now();
     // Once the answer is final the stream only drains to its close (no abort: see readAnswerStream).
     let finished = false;
+    // Whichever path finalizes the answer first (stream or poll) wins; everything after that for
+    // this answer — late deltas, a late `done`, an in-flight read — is ignored, and it never
+    // touches another answer's streamed text.
     const finish = (message: AskMessage) => {
+      if (finished) return;
       finished = true;
       applyMessage(message);
-      setLive(null);
+      setLive((current) => (current?.id === id ? null : current));
       if (message.status === 'succeeded' || message.status === 'no_sources') {
         setAnnouncement(liveDoneText(message.sources.length));
       } else if (message.status === 'stopped') {
@@ -386,6 +390,7 @@ function useAskPanel({
     const fetchFinal = async (): Promise<boolean> => {
       try {
         const message = await client.message(id, signal);
+        if (finished) return true;
         if (isTerminal(message)) {
           finish(message);
           return true;
@@ -393,9 +398,9 @@ function useAskPanel({
         if (text === null && message.text) setLive({ id, text: message.text });
         return false;
       } catch (error) {
-        if (signal.aborted) return true;
+        if (signal.aborted || finished) return true;
         if (error instanceof AskApiError && error.kind === 'notFound') {
-          setLive(null);
+          setLive((current) => (current?.id === id ? null : current));
           reload();
           return true;
         }
@@ -419,6 +424,7 @@ function useAskPanel({
             lastEventId: lastSeq,
             signal,
             onEvent: (event) => {
+              if (finished) return; // the body only drains now
               lastEventAt = Date.now();
               if (event.type === 'delta') {
                 if (event.seq <= lastSeq) return;

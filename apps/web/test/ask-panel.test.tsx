@@ -327,4 +327,70 @@ describe('AI 질문 panel request races', () => {
     expect(await screen.findByText(/가나다 원리는 부분/, {}, { timeout: 4000 })).toBeVisible();
     expect(screen.getByRole('button', { name: '답변 중지' })).toBeVisible();
   });
+
+  it('ASK-01-AC09 once polling finalized an answer, its late stream events change neither it nor the next answer', async () => {
+    const user = userEvent.setup();
+    const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(new ReadableStream<Uint8Array>({ start: (c) => void streams.push(c) }), {
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      ),
+    );
+    const push = (i: number, text: string) => streams[i]?.enqueue(new TextEncoder().encode(text));
+    const final = message({
+      id: 'a1',
+      role: 'assistant',
+      question_message_id: 'q1',
+      status: 'succeeded',
+      text: '최종 답',
+    });
+    const next = message({
+      id: 'a2',
+      role: 'assistant',
+      question_message_id: 'q2',
+      status: 'queued',
+      text: '',
+    });
+    const client = fakeClient({
+      // The silent stream is reconciled by polling: the answer is final.
+      message: vi.fn(async (id: string) =>
+        id === 'a1' ? final : { ...next, status: 'streaming' as const },
+      ),
+      get: vi.fn(async () =>
+        conversation({
+          messages: [
+            message({ id: 'q1', role: 'user', text: '질문' }),
+            { ...final, status: 'streaming', text: '' },
+          ],
+        }),
+      ),
+      ask: vi.fn(async () => ({
+        user_message: message({ id: 'q2', role: 'user', text: '다음 질문' }),
+        answer: next,
+        stream_url: '/api/v1/ask/messages/a2/stream',
+        job_id: '44444444-4444-4444-8444-444444444444',
+      })),
+    });
+    render(<AskPanel {...props(client, { conversationId: CONV })} />);
+    expect(await screen.findByText('최종 답', {}, { timeout: 4000 })).toBeVisible();
+
+    // The held-back stream of the finalized answer now delivers a delta: it is ignored.
+    push(0, 'id: 1\nevent: delta\ndata: {"seq":1,"text":"늦은 글자"}\n\n');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(/늦은 글자/)).toBeNull();
+    expect(screen.getByText('최종 답')).toBeVisible();
+
+    // The next answer streams; the first stream's late `done` does not clear its text.
+    await user.type(screen.getByRole('textbox', { name: '질문' }), '다음 질문{Enter}');
+    await waitFor(() => expect(streams).toHaveLength(2));
+    push(1, 'id: 1\nevent: delta\ndata: {"seq":1,"text":"새 답 일부"}\n\n');
+    expect(await screen.findByText(/새 답 일부/)).toBeVisible();
+    push(0, `event: done\ndata: ${JSON.stringify({ message: final })}\n\n`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByText(/새 답 일부/)).toBeVisible();
+  });
 });
