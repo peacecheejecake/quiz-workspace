@@ -234,6 +234,40 @@ describe('PreviewTooltip', () => {
     expect(screen.queryByRole('tooltip')).toBeNull();
   });
 
+  it('tabbing to a sibling in the panel after the dialog closed lets the tooltip open again', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    function WithDialog() {
+      const [open, setOpen] = useState(false);
+      return (
+        <FloatingSidePanel defaultOpen title="문제 3">
+          <PreviewTooltip content="미리보기">
+            <button type="button" onClick={() => setOpen(true)}>
+              문제 원문 보기
+            </button>
+          </PreviewTooltip>
+          <button type="button">형제 버튼</button>
+          <FloatingSidePanel paired title="문제 원문" open={open} onOpenChange={setOpen}>
+            영역
+          </FloatingSidePanel>
+        </FloatingSidePanel>
+      );
+    }
+    render(<WithDialog />);
+    const trigger = screen.getByRole('button', { name: '문제 원문 보기' });
+    for (let i = 0; i < 6 && document.activeElement !== trigger; i += 1) await user.tab();
+    await user.keyboard('{Enter}');
+    await screen.findByRole('dialog', { name: '문제 원문' });
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: '문제 원문' })).toBeNull();
+    expect(trigger).toHaveFocus();
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await user.tab();
+    expect(screen.getByRole('button', { name: '형제 버튼' })).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(trigger).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
+  });
+
   it('reports open and close to the caller (lazy loading starts on the first open)', async () => {
     const onOpenChange = vi.fn();
     render(<Harness onClick={() => undefined} onOpenChange={onOpenChange} />);

@@ -277,9 +277,13 @@ export function PreviewTooltip({
         onBlur={(event: FocusEvent<HTMLElement>) => {
           const next = event.relatedTarget;
           if (next instanceof Node && floatingRef.current?.contains(next)) return;
-          // Focus moving into a dialog the click opened keeps "just clicked" until it comes back.
-          const intoDialog = next instanceof Element && next.closest('[role="dialog"]') !== null;
-          if (!intoDialog && next !== null) clicked.current = false;
+          // Focus moving into the dialog this click opened keeps "just clicked" until it comes
+          // back. That is a dialog other than the one holding the trigger: a sibling control in
+          // the trigger's own panel is not it, and moving there ends the "just clicked" state.
+          const home = event.currentTarget.closest('[role="dialog"]');
+          const into = next instanceof Element ? next.closest('[role="dialog"]') : null;
+          const intoOpened = into !== null && into !== home;
+          if (!intoOpened && next !== null) clicked.current = false;
           if (modeRef.current && modeRef.current !== 'hover') hide();
         }}
         onClickCapture={(event: MouseEvent<HTMLElement>) => {
