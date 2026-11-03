@@ -417,18 +417,19 @@ function useAskPanel({
                 setLive({ id, text });
               } else if (event.type === 'done' && event.message) {
                 finish(event.message);
-              } else {
-                void fetchFinal();
               }
+              // `error` (or `done` without a message): the message's own state is read below.
             },
           });
         } catch {
           return; // aborted
         }
-        if (final) return;
+        if (finished) return;
+        if (final) break; // ended without a final message: reconcile by polling
         await sleep(1000, signal);
       }
-      // The stream keeps breaking: poll the message every second until it is finished.
+      // The stream ended without a final message, or keeps breaking: read the message every
+      // second until it is final (a failed read is retried, never a spinner forever).
       while (!signal.aborted) {
         if (await fetchFinal()) return;
         await sleep(1000, signal);

@@ -234,4 +234,44 @@ describe('AI 질문 panel request races', () => {
     expect(await screen.findByText('대화를 찾을 수 없습니다.')).toBeVisible();
     expect(screen.queryByText('다른 Workspace의 질문')).toBeNull();
   });
+
+  it('ASK-01-AC09 an answer stream that ends in an error keeps reading the message until it is final', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('event: error\ndata: {"code":"llm_unavailable"}\n\n', {
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      ),
+    );
+    const failed = message({
+      id: 'a1',
+      role: 'assistant',
+      question_message_id: 'q1',
+      status: 'failed',
+      error_code: 'llm_unavailable',
+    });
+    const read = vi
+      .fn<AskClient['message']>()
+      .mockRejectedValueOnce(new AskApiError('network'))
+      .mockResolvedValue(failed);
+    const client = fakeClient({
+      message: read,
+      get: vi.fn(async () =>
+        conversation({
+          messages: [
+            message({ id: 'q1', role: 'user', text: '질문' }),
+            { ...failed, status: 'streaming', error_code: null, text: '' },
+          ],
+        }),
+      ),
+    });
+    render(<AskPanel {...props(client, { conversationId: CONV })} />);
+    // The first reconciliation read fails; the panel keeps polling instead of spinning forever.
+    expect(await screen.findByRole('alert', {}, { timeout: 4000 })).toHaveTextContent(
+      'AI 서비스에 연결하지 못했습니다',
+    );
+    expect(read.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
 });
