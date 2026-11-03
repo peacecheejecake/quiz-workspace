@@ -303,4 +303,28 @@ describe('AI 질문 panel request races', () => {
     expect(screen.getByText('복구된 답')).toBeVisible();
     expect(screen.getAllByRole('article', { name: '내 질문' })).toHaveLength(2);
   });
+
+  it('ASK-01-AC09 an answer whose stream delivers nothing yet still shows its text so far and its stop button', async () => {
+    // The relay's stream never delivers (a buffering proxy or browser): the panel reads the
+    // message itself while the stream is silent.
+    const streaming = message({
+      id: 'a1',
+      role: 'assistant',
+      question_message_id: 'q1',
+      status: 'streaming',
+      text: '가나다 원리는 부분',
+    });
+    const read = vi.fn<AskClient['message']>().mockResolvedValue(streaming);
+    const client = fakeClient({
+      message: read,
+      get: vi.fn(async () =>
+        conversation({
+          messages: [message({ id: 'q1', role: 'user', text: '질문' }), { ...streaming, text: '' }],
+        }),
+      ),
+    });
+    render(<AskPanel {...props(client, { conversationId: CONV })} />);
+    expect(await screen.findByText(/가나다 원리는 부분/, {}, { timeout: 4000 })).toBeVisible();
+    expect(screen.getByRole('button', { name: '답변 중지' })).toBeVisible();
+  });
 });

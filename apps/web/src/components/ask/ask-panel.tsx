@@ -151,6 +151,9 @@ function mergeMessages(list: readonly AskMessage[], next: readonly AskMessage[])
   return out;
 }
 
+/** How long the answer stream may stay silent before the message is read directly. */
+const SILENT_STREAM_POLL_MS = 1500;
+
 const sleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
     const timer = window.setTimeout(resolve, ms);
@@ -367,6 +370,7 @@ function useAskPanel({
     const { signal } = controller;
     let lastSeq = 0;
     let text: string | null = null;
+    let lastEventAt = Date.now();
     // Once the answer is final the stream only drains to its close (no abort: see readAnswerStream).
     let finished = false;
     const finish = (message: AskMessage) => {
@@ -398,6 +402,15 @@ function useAskPanel({
         return false;
       }
     };
+    // While the stream is silent (a proxy or browser that holds it back, a stalled worker) the
+    // message itself is read every so often: its text so far and, above all, its end.
+    void (async () => {
+      while (!signal.aborted && !finished) {
+        await sleep(SILENT_STREAM_POLL_MS, signal);
+        if (signal.aborted || finished) return;
+        if (Date.now() - lastEventAt >= SILENT_STREAM_POLL_MS) await fetchFinal();
+      }
+    })();
     void (async () => {
       for (let attempt = 0; attempt < 3 && !signal.aborted; attempt += 1) {
         let final: boolean;
@@ -406,6 +419,7 @@ function useAskPanel({
             lastEventId: lastSeq,
             signal,
             onEvent: (event) => {
+              lastEventAt = Date.now();
               if (event.type === 'delta') {
                 if (event.seq <= lastSeq) return;
                 lastSeq = event.seq;

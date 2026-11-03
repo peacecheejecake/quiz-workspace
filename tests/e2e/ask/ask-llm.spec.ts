@@ -336,7 +336,16 @@ test(
     const seen = await watched(page);
     expect(seen.searching, '"근거를 찾는 중" was shown').toBe(true);
     expect(seen.writing, '"답을 쓰는 중" was shown').toBe(true);
-    expect(seen.lengths.length, 'the answer text grew in steps').toBeGreaterThanOrEqual(3);
+    // Streamed: the fake sent several deltas (above) and the answer showed part of its text while
+    // it was still being written. How many renders the deltas took depends on timing (two
+    // deltas may land in one frame), so the count of distinct lengths is not asserted.
+    expect(seen.lengths.length, 'the busy answer changed while streaming').toBeGreaterThanOrEqual(
+      2,
+    );
+    expect(
+      Math.max(...seen.lengths),
+      'text appeared while the answer was still being written',
+    ).toBeGreaterThan(seen.lengths[0] ?? 0);
 
     // The finished answer: badge, notice, footnote [1] → chapter 1's "가나다 원리" passage.
     await expect(askUi.aiBadge(answer)).toBeVisible();
