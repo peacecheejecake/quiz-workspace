@@ -551,7 +551,8 @@ export const highlightUi = {
   removeItem: (menu: Locator) =>
     menu.getByRole('menuitem', { name: /^(하이라이트 지우기|remove highlight)$/i }),
   copyItem: (menu: Locator) => menu.getByRole('menuitem', { name: /^(복사|copy)$/i }),
-  copied: (scope: Page | Locator) => scope.getByText(/^(복사했습니다|copied)\.?$/i),
+  /** The text under `복사` in the menu (the announcement is a status outside the menu). */
+  copied: (page: Page) => highlightUi.menu(page).getByText(/^(복사했습니다|copied)\.?$/i),
   oneBlockReason: (scope: Page | Locator) =>
     scope.getByText(/한 문단 안에서 고르세요|select within one paragraph/i),
   collectedNotice: (scope: Locator) =>

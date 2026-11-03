@@ -239,6 +239,11 @@ describe('HILITE-01-C09 HighlightableText', () => {
     await user.click(within(open).getByRole('menuitem', { name: '복사' }));
     expect(onCopy).toHaveBeenCalledWith('장의 핵심');
     expect(await within(open).findByText('복사했습니다')).toBeVisible();
+    // Announced by a status outside the menu (a `menu` owns only items, groups, separators).
+    expect(screen.getAllByRole('status').some((el) => el.textContent === '복사했습니다')).toBe(
+      true,
+    );
+    expect(within(open).queryByRole('status')).toBeNull();
 
     await user.click(within(open).getByRole('menuitemradio', { name: '파랑' }));
     expect(onAction).toHaveBeenCalledWith({
