@@ -72,6 +72,25 @@ describe('CHNOTE-02-C04 findInNote', () => {
     );
   });
 
+  it('CHNOTE-02-C04 folds the text and the query the same way (context-sensitive casing, NFKC)', () => {
+    // Whole-string lower case turns a word-final Σ into ς, per character into σ: both sides
+    // must match whichever form either uses.
+    const greek = [{ id: 'g', text: 'ΟΣ και ος' }];
+    expect(findInNote(greek, 'ΟΣ').matches).toEqual([
+      { block: 'g', start: 0, end: 2 },
+      { block: 'g', start: 7, end: 9 },
+    ]);
+    expect(findInNote(greek, 'ος').matches).toHaveLength(2);
+    expect(findInNote(greek, 'οσ').matches).toHaveLength(2);
+    // Korean with full-width punctuation and digits (NFKC) on either side.
+    const korean = [{ id: 'k', text: '（주의）１장 정리, (주의)1장' }];
+    expect(findInNote(korean, '(주의)1장').matches).toEqual([
+      { block: 'k', start: 0, end: 6 },
+      { block: 'k', start: 11, end: 17 },
+    ]);
+    expect(findInNote(korean, '（주의）１장').matches).toHaveLength(2);
+  });
+
   it('CHNOTE-02-C04 finds nothing for an empty query', () => {
     expect(findInNote(BLOCKS, '')).toEqual({ matches: [], capped: false });
   });

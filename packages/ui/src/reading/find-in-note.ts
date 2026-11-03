@@ -23,11 +23,6 @@ export interface FindResult {
   readonly capped: boolean;
 }
 
-/** Case- and width-insensitive form (NFKC + lower case); spacing is kept as is. */
-export function foldForSearch(text: string): string {
-  return text.normalize('NFKC').toLowerCase();
-}
-
 interface Folded {
   readonly text: string;
   /** For each folded UTF-16 unit: [start, end) of the original cluster it came from. */
@@ -48,13 +43,29 @@ function clusters(text: string): { segment: string; index: number }[] {
   return [...text.matchAll(CLUSTER)].map((m) => ({ segment: m[0], index: m.index }));
 }
 
+/**
+ * One grapheme in search form: NFKC + lower case, with the Greek final sigma (which only
+ * whole-string lower-casing produces) folded to σ, so the result never depends on context.
+ */
+function foldCluster(segment: string): string {
+  return segment.normalize('NFKC').toLowerCase().replaceAll('ς', 'σ');
+}
+
+/**
+ * Case- and width-insensitive form (NFKC + lower case, grapheme by grapheme); spacing is kept as
+ * is. Text and query are folded with this same function, so they always compare alike.
+ */
+export function foldForSearch(text: string): string {
+  return fold(text).text;
+}
+
 function fold(text: string): Folded {
   let out = '';
   const from: number[] = [];
   const to: number[] = [];
   for (const { segment, index: start } of clusters(text)) {
     const end = start + segment.length;
-    const f = foldForSearch(segment);
+    const f = foldCluster(segment);
     out += f;
     from.push(...new Array<number>(f.length).fill(start));
     to.push(...new Array<number>(f.length).fill(end));
