@@ -41,6 +41,12 @@
       "explanation_answer_mismatch": 1
     },
     "llm_calls": 28,
+    "generation_calls": 28,
+    "judge_calls": 0,
+    "judge_first_text_ms": {
+      "count": 0,
+      "p50": null
+    },
     "usage": {
       "input_tokens": 12989,
       "output_tokens": 1627,
@@ -51,7 +57,7 @@
     "first_text_ms": {
       "count": 28,
       "p50": 0.002,
-      "p95": 0.005
+      "p95": 0.025
     }
   },
   "ask": [

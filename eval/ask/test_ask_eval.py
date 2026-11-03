@@ -132,7 +132,13 @@ def test_the_judge_confirms_a_nominated_leak_and_can_clear_it() -> None:
     for verdict, leaked in (("YES", 2), ("NO", 0)):
         client = Judged(dataset, verdict)
         report = ask_eval.run(provider="llm", client=client)
-        assert report["summary"]["hint_leaked"] == leaked
+        s = report["summary"]
+        assert s["hint_leaked"] == leaked
+        # Judge calls count in calls and usage but never in the first-text timing.
+        assert s["judge_calls"] == client.judged > 0
+        assert s["llm_calls"] == s["generation_calls"] + s["judge_calls"]
+        assert s["first_text_ms"]["count"] == s["generation_calls"]
+        assert s["judge_first_text_ms"]["count"] == s["judge_calls"]
         # The judge is asked only about nominated answers, never about refusals.
         hints = [e for e in report["ask"] if e["kind"] == "hint"]
         assert sum(1 for e in hints if "judge_leak" in e) == 2

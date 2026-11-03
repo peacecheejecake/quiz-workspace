@@ -184,19 +184,25 @@ class Meter:
     def __init__(self, client: TextStreamClient) -> None:
         self.client = client
         self.usage = LLMUsage()
+        # Time to first text of answer / explanation generation only; judge calls are timed
+        # apart so a short judge reply never pulls the latency numbers down.
         self.first_text_ms: list[float] = []
+        self.judge_first_text_ms: list[float] = []
         self.calls = 0
+        self.judge_calls = 0
 
-    def text(self, request: TextStreamRequest) -> tuple[str, bool]:
-        """(text, truncated)."""
+    def text(self, request: TextStreamRequest, *, judge: bool = False) -> tuple[str, bool]:
+        """(text, truncated). Usage and call counts include judge calls."""
         self.calls += 1
+        self.judge_calls += judge
+        timings = self.judge_first_text_ms if judge else self.first_text_ms
         start = time.perf_counter()
         parts: list[str] = []
         truncated = False
         for event in self.client.stream_text(request):
             if isinstance(event, TextDelta):
                 if not parts:
-                    self.first_text_ms.append((time.perf_counter() - start) * 1000)
+                    timings.append((time.perf_counter() - start) * 1000)
                 parts.append(event.text)
             else:
                 self.usage = self.usage + event.usage
@@ -291,7 +297,7 @@ def judge(meter: Meter, instruction: str, material: str) -> bool | None:
         max_tokens=16,
     )
     try:
-        reply, _ = meter.text(request)
+        reply, _ = meter.text(request, judge=True)
     except Exception:  # a judge outage leaves the metric to the patterns
         return None
     word = reply.strip().upper()
@@ -491,7 +497,13 @@ def summarize(
         "explain_re_requests": sum(1 for e in explain if e["re_requested"]),
         "explain_errors": dict(sorted(errors.items())),
         "llm_calls": meter.calls,
-        "usage": meter.usage.model_dump(),
+        "generation_calls": meter.calls - meter.judge_calls,
+        "judge_calls": meter.judge_calls,
+        "judge_first_text_ms": {
+            "count": len(meter.judge_first_text_ms),
+            "p50": percentile(meter.judge_first_text_ms, 50),
+        },
+        "usage": meter.usage.model_dump(),  # generation and judge calls together
         "first_text_ms": {
             "count": len(ms),
             "p50": percentile(ms, 50),
@@ -570,11 +582,13 @@ def markdown(report: dict[str, Any]) -> str:
         f"{_pct(s['explain_valid_first'])} / {_pct(s['explain_valid_final'])} "
         f"({s['explain_re_requests']} re-request) |",
         f"| AI explanation failures | {s['explain_errors'] or '-'} |",
-        f"| LLM calls | {s['llm_calls']} |",
+        f"| LLM calls (generation + judge) | {s['llm_calls']} "
+        f"({s['generation_calls']} + {s['judge_calls']}) |",
         f"| input / output tokens | {s['usage']['input_tokens']} / {s['usage']['output_tokens']} |",
         f"| cost (USD, LLM_PRICE_*) | {cost if cost is not None else '-'} |",
-        f"| first text p50 / p95 (ms, this process; queue wait and worker RAM are measured "
-        f"on the stack) | {s['first_text_ms']['p50']} / {s['first_text_ms']['p95']} |",
+        f"| first text p50 / p95 (ms, answer and explanation generation only, judges excluded; "
+        f"this process, queue wait and worker RAM are measured on the stack) | "
+        f"{s['first_text_ms']['p50']} / {s['first_text_ms']['p95']} |",
         "",
         "| ask case | kind | answer | tags (known) | cited paragraphs (supported) | leaked |",
         "|---|---|---|---|---|---|",
