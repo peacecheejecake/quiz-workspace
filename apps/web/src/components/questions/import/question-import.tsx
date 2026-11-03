@@ -111,6 +111,8 @@ export interface QuestionImportProps {
   readonly onSelectionChange?: (selected: number, registering: boolean) => void;
   /** Each state of a registration followed here, its last one included (the list's row status). */
   readonly onRegistration?: (registration: ImportRegistration) => void;
+  /** The run as this pane last read it (a retried extraction starts and ends here: the row). */
+  readonly onRunChange?: (run: ImportRun) => void;
   /** How often a running registration is re-read (ms); tests shorten it. */
   readonly registrationPollMs?: number;
   /**
@@ -172,6 +174,7 @@ export function QuestionImport({
   loadedAt,
   onSelectionChange,
   onRegistration,
+  onRunChange,
 }: QuestionImportProps) {
   const router = useRouter();
   const client = useMemo(() => createImportClient(), []);
@@ -770,6 +773,9 @@ export function QuestionImport({
     () => onSelectionChange?.(selectedCount, publishing),
     [onSelectionChange, publishing, selectedCount],
   );
+  useEffect(() => {
+    if (run) onRunChange?.(run);
+  }, [onRunChange, run]);
   // Gone (another PDF chosen): nothing is checked any more. A PDF without an extraction renders
   // no pane to say so; a new pane's own report runs after this cleanup.
   useEffect(() => () => onSelectionChange?.(0, false), [onSelectionChange]);

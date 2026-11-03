@@ -273,6 +273,17 @@ export function ImportReviewLayout({
     [refreshList],
   );
 
+  // The pane's run (e.g. a failed extraction retried there): the row and the phone button follow
+  // it, and a running one is polled like any other.
+  const onRunChange = useCallback((changed: ImportRun) => {
+    setRuns((current) => {
+      const index = current.findIndex((r) => r.id === changed.id);
+      if (index < 0) return [changed, ...current];
+      if (current[index] === changed) return current;
+      return current.map((r, i) => (i === index ? changed : r));
+    });
+  }, []);
+
   // Registrations of PDFs no longer on screen continue on the server: follow them for the row.
   const followed = useMemo(
     () => [...registrations.values()].filter((r) => r.import_id !== paneRunId),
@@ -507,6 +518,7 @@ export function ImportReviewLayout({
                 loadFailed={review.loadFailed}
                 onSelectionChange={onSelectionChange}
                 onRegistration={onRegistration}
+                onRunChange={onRunChange}
               />
             ) : selected && selectedState ? (
               <NotExtracted

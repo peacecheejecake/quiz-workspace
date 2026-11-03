@@ -4,7 +4,7 @@
 // state as text, and the import page's two panes: the list replaces UX6-UPLOAD's switcher, a row
 // pushes `?document=`, a switch with checked drafts asks first.
 import './dom-setup';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { DocumentSummary } from '../src/lib/documents/client-api';
@@ -390,5 +390,56 @@ describe('ImportReviewLayout switching to a PDF without an extraction (Codex P2)
       `/workspaces/${WS}/questions/import?document=${B}`,
       { scroll: false },
     );
+  });
+});
+
+describe('ImportReviewLayout retrying a failed extraction (Codex P2)', () => {
+  it('QIMPORT-02-AC01 the row and the phone button follow the retried extraction, not "추출 실패"', async () => {
+    const failed = run(A, { status: 'failed', job_id: 'job-1', error_code: 'extraction_failed' });
+    const retried = run(A, { status: 'running', job_id: 'job-2', error_code: null });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith('/retry')) return Response.json(retried);
+        // The job runs on: its events never end here.
+        if (url.includes('/api/jobs/')) return new Promise<Response>(() => undefined);
+        return new Response('{}', { status: 404 });
+      }),
+    );
+    try {
+      const user = userEvent.setup();
+      render(
+        <ImportReviewLayout
+          workspaceId={WS}
+          workspaceName="연습 Workspace"
+          readOnly={null}
+          documents={[doc(A, '문제지 A', 'question_paper')]}
+          runs={[failed]}
+          listFailed={false}
+          documentId={A}
+          review={{
+            run: failed,
+            drafts: [],
+            summaries: [],
+            chapters: [],
+            loadedAt: AT,
+            loadFailed: false,
+          }}
+        />,
+      );
+      const nav = screen.getByRole('navigation', { name: '검토할 PDF' });
+      const row = within(nav).getAllByRole('listitem')[0];
+      expect(row?.textContent).toContain('추출 실패');
+      await user.click(screen.getByRole('button', { name: '다시 시도' }));
+      await waitFor(() =>
+        expect(within(nav).getAllByRole('listitem')[0]?.textContent).toContain('문제 추출 중'),
+      );
+      expect(within(nav).getAllByRole('listitem')[0]?.textContent).not.toContain('추출 실패');
+      const opener = document.querySelector('[aria-haspopup="dialog"]');
+      expect(opener?.textContent).toContain('문제 추출 중');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
