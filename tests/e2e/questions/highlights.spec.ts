@@ -293,14 +293,19 @@ test(
   async ({ page, workspaceFactory }) => {
     const s = await noteSetup(workspaceFactory, 'hilite01-ac03', { count: 1, versions: 0 });
     const highlightCalls: string[] = [];
-    const practiceBodies: unknown[] = [];
+    // The practice panel opens and submits its session through server actions (POST with a
+    // `next-action` header, RSC payload) — or the `/api/.../practice-sessions` relay: every such
+    // response body is read as text and must not mention highlights.
+    const practiceBodies: string[] = [];
     page.on('request', (req) => {
       if (/my-highlights/.test(req.url())) highlightCalls.push(req.method());
     });
     page.on('response', async (res) => {
-      if (/practice-sessions/.test(res.url()) && res.request().method() === 'POST') {
-        practiceBodies.push(await res.json().catch(() => null));
-      }
+      const req = res.request();
+      if (req.method() !== 'POST') return;
+      const action = (await req.headerValue('next-action')) !== null;
+      if (!action && !/practice-sessions/.test(res.url())) return;
+      practiceBodies.push(await res.text().catch(() => ''));
     });
 
     await signInAs(page, s.owner.user);
@@ -314,8 +319,22 @@ test(
     await panelUi.submit(panel).click();
     const explanation = highlightUi.explanation(panel);
     await expect(explanation).toBeVisible();
-    expect(practiceBodies.length).toBeGreaterThan(0);
-    for (const body of practiceBodies) expect(highlightKeysIn(body)).toEqual([]);
+    await expect.poll(() => practiceBodies.length).toBeGreaterThan(0);
+    for (const body of practiceBodies) expect(body).not.toMatch(/highlight/i);
+    // The practice API itself (what the server action relays) has no highlight field either.
+    const session = await s.owner.api.ok<{ id: string; options: { id: string }[] }>(
+      'POST',
+      `/questions/${q(s, 1).id}/practice-sessions`,
+      {},
+      [201],
+    );
+    const submitted = await s.owner.api.ok<unknown>(
+      'POST',
+      `/practice-sessions/${session.id}/submit`,
+      { selected_option_ids: [session.options[0]?.id ?? ''] },
+      [200],
+    );
+    expect([...highlightKeysIn(session), ...highlightKeysIn(submitted)]).toEqual([]);
 
     await dragSelect(explanation, '첫 번째 보기가');
     await chooseColor(page, 'pink');
