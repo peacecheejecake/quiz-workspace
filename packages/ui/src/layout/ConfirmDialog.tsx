@@ -4,10 +4,7 @@ import { AlertDialog } from 'radix-ui';
 import type { ReactNode, RefObject } from 'react';
 import { useAnimatedHeight } from '../internal/animated-height';
 import { cx } from '../internal/cx';
-import { LayerProvider, useFloatingLayer } from '../internal/layer';
-import { useModalStackEntry } from '../internal/modal-stack';
-import { useMergedRefs } from '../internal/merge-refs';
-import { useOverscrollGuard } from '../internal/overscroll-guard';
+import { LayerProvider, useModalLayerZIndex } from '../internal/layer';
 import { Button } from '../primitives/Button';
 
 export interface ConfirmDialogProps {
@@ -46,14 +43,8 @@ export function ConfirmDialog({
   className,
 }: ConfirmDialogProps) {
   const animateHeight = useAnimatedHeight<HTMLDivElement>();
-  // Radix's modal scroll lock covers this too; the guard keeps every overlay alike (UX9-SCROLL).
-  const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
-  const surfaceRef = useMergedRefs(animateHeight, guardOverscroll);
-  const layer = useFloatingLayer(open);
-  // Escape cancels it (unless busy), also while a toast is shown over it.
-  useModalStackEntry(open, () => {
-    if (!loading) onOpenChange(false);
-  });
+  // Above the floating layer it was opened from when that layer sits above the modal layers.
+  const zIndex = useModalLayerZIndex();
   return (
     <AlertDialog.Root
       open={open}
@@ -62,26 +53,20 @@ export function ConfirmDialog({
       }}
     >
       <AlertDialog.Portal>
-        <AlertDialog.Overlay
-          className="qz-backdrop"
-          data-layer="modal"
-          style={{ zIndex: layer.zIndex }}
-        />
+        <AlertDialog.Overlay className="qz-backdrop" data-layer="modal" style={{ zIndex }} />
         <AlertDialog.Content
-          ref={surfaceRef}
-          aria-modal="true"
+          ref={animateHeight}
           data-size="sm"
-          data-layer-rank={layer.rank}
-          style={{ zIndex: layer.zIndex }}
           className={cx('qz-modal', className)}
+          style={{ zIndex }}
           onCloseAutoFocus={(event) => {
             const target = returnFocusRef?.current;
             if (!target) return;
             event.preventDefault();
-            target.focus({ preventScroll: true });
+            target.focus();
           }}
         >
-          <LayerProvider value={layer.zIndex}>
+          <LayerProvider value={zIndex}>
             <div className="header">
               <div className="heading">
                 <AlertDialog.Title className="title">{title}</AlertDialog.Title>
