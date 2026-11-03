@@ -302,6 +302,12 @@ PR #43(이 계획의 "DOCVIEW", DOC-02-AC06–AC11)과 병렬로 만든 DOCVIEW-
 - 병렬: `UX9-SCROLL ∥ UX9-HL-UI ∥ UX9-RETRY-ICON ∥ UX9.0`(서로 다른 파일), 그 뒤 **`UX9-MODAL`을 먼저**(다른 UX9 web Task가 dialog 종류에 기댐; UX9-SCROLL merge 뒤), 그 뒤 `UX9-REDIST-B ∥ UX9-HL-B ∥ UX9-NOTE-B ∥ UX9-IMPORT-W ∥ UX9-SEARCH-W`, `UX9-REDIST-W ∥ UX9-NOTE-W`, 그 뒤 `UX9-HL-W`, 마지막 `UX9-X`. `UX9-HL-AIEXPL`은 AIEXPL이 develop에 들어온 뒤 별도. 공유 파일(`apps/api` router 등록, migration timestamp, `contracts/openapi.json`, `packages/api-client`, `문제` 메뉴 파일, home dialog 상태 파일, `packages/ui/src/index.ts`)은 충돌이 예상되며 orchestrator가 merge 후 `make contracts`로 재생성한다. `UX9-NOTE-W`와 `UX9-HL-W`는 같은 `ChapterNotePanel`을 고치므로 순서대로만.
 - `UX9-SEARCH-W`는 SEARCH-01-AC10을 폐기하므로 화면 AC 수가 205 → 204가 된다(그 Task가 index·trace test를 고침).
 
+### HEATMAP-PALETTE — Heatmap 색 palette·marker 테두리 삭제 (사용자 요청 2026-11-04)
+
+| Task | 범위 | 산출물 |
+|---|---|---|
+| HEATMAP-PALETTE | `--question-status-*` 5개 light/dark 값 교체, marker 윤곽(`--heatmap-marker-stroke-mix`) 삭제, 영향 VISUAL·Storybook baseline 재생성 | `docs/questions.md` §2.2, `docs/design-system.md`, `packages/design-tokens`, `packages/ui/src/styles/questions.css`, `question-marker-contrast.test.ts` |
+
 ## 4. Task 의존 그래프
 
 ```mermaid
@@ -771,6 +777,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-11-03 | **사용자 결정(UX9 남은 제안, 문구만 — 구현 그대로)**: (1) modal panel(본문 발췌·원본 비교·공유 게스트 panel)에서 목록의 다른 항목으로 옮기는 길은 panel header의 `이전`·`다음` + Alt+↑/Alt+↓(목록 순서), 다른 항목을 고르려면 닫고 고름. (2) 원본 비교 panel은 초안을 읽기 전용으로 보이고 편집은 닫은 뒤. (3) 홈에 오기 전 기록이 없으면 dialog를 닫은 뒤 뒤로가기는 브라우저 기본 동작(QOV-01 UX7-BACK). home-dialogs·search-page·questions-import·workspace-shared-view·design-system §5.5·question-viewer·search·questions-overview의 제안 표시를 지움. | 사용자 답변(orchestrator 전달) |
 | 2026-11-03 | ASK-INTEG(`feature/ask-llm`을 `feature/ux9-feedback` 6d2fcf48 위에 합친 통합 tree — 설계 문서 우선, AGENTS.md §1): (1) **AI 질문 panel은 modal** — HOMEDLG-01(사용자 결정 2026-11-02 D3 "홈 밖의 floating panel도 모두 modal")이 모든 홈 `?panel=` dialog를 modal로 바꿨으므로 ASK-01의 "non-modal 홈 dialog" 규칙(header·`문제` 메뉴로 열면 non-modal, 다시 누르면 위로)은 홈에서 더는 생기지 않는다. `?panel=ask`는 `openDialogs`에서 늘 마지막(풀이·범위 풀이 panel 뒤)이라 딥링크·새로 고침에서도 맨 위에 쌓이고 뒤로가기가 먼저 닫는다(`useStagedDialogs`가 URL 순서로 쌓으므로 필요). kit: `ConfirmDialog`는 UX9의 공통 layer 순위(`useFloatingLayer`)를 쓰고 ASK-Q의 `useModalLayerZIndex`는 지웠다 — 같은 순위 안에서 `aboveModals` panel 뒤에 연 확인 dialog도 위로 올라간다; `FloatingSidePanel aboveModals`는 유지. (2) **`AI에게 묻기`는 본문 검색 페이지(SEARCH-02)** — UX9-SEARCH-W가 홈의 본문 검색 영역을 없앴으므로 같은 `ContentSearchForm`의 검색 버튼 옆에 두고, 누르면 그 페이지 위에 AI 질문 panel을 modal로 연다(URL 밖, 그 페이지의 본문 발췌 panel과 같음; 저장된 대화는 홈 `?panel=ask`에서). ASK-01-AC11 test는 비활성 확인 뒤 홈으로 돌아가고 `문제` 메뉴 기대 목록에 `챕터 재분배`를 더했다. **⛔ 사용자 확인 필요**(검색 페이지 panel의 URL·뒤로가기 처리 — 아래 진행 현황 ASK-INTEG). (3) header 오른쪽 순서 `AI 질문` · `본문 검색` · `이력` · `공유하기`(두 명세의 "`이력` 앞"을 함께 만족). (4) **번호** — questions.md §13(ASK)·§14·§15(UX9), workspace-sharing §10(ASK)·§11(UX9), A11Y-17/18·VISUAL-09(ASK-X)·A11Y-19·VISUAL-10(UX9)은 UX9-SPEC 해석 (3)대로 겹치지 않음(예약 안내 문구만 지움). 실행 wave는 둘 다 W30~W33을 써서 ASK를 **W34~W37**로 다시 매김. 화면 index 집계 35개 화면·232개(e2e-trace test 같음). (5) **CI `E2E_PHASES`** = 기존 + `UX9.0`·`ASK.0`·`EXPL.0`(`RELSRC.0`은 ask-llm대로 아직 없음). (6) 01_schema·authz matrix·S4 seed는 두 쪽 표·경로를 모두 넣음(`QUERY` 하나로 합침). | AGENTS.md §1, HOMEDLG-01, SEARCH-02, ASK-01 |
 | 2026-11-03 | MIG-RENAME-ask(사용자 결정 2026-11-03): staging 배포가 `--include-all` 없이 `supabase db push`를 돌리므로 이미 적용된 UX9의 `20261103130000`·`20261103140000`보다 앞서는 migration은 거부된다. 그래서 ask migration 네 개를 그 뒤로 이름만 바꾸되 순서는 유지한다(내용 변경 없음, 공유 DB 이력은 이미 갱신됨): `20261102160000_ask`→`20261104100000_ask`, `20261102170000_ask_daily_counts`→`20261104110000_ask_daily_counts`, `20261103150000_ai_explanations`→`20261104120000_ai_explanations`, `20261103160000_related_sources`→`20261104130000_related_sources`. errata migration은 `feature/errata`에서 `20261104140000`~`210000`으로 옮겨져 이 뒤에 온다. | AGENTS.md §3.1, docs/deployment.md |
+| 2026-11-04 | **사용자 결정(HEATMAP-PALETTE)**: 요청 "색상 palette 재조정 — red: #FF6060; green: #00AB7B; yellow: #F6CF35; gray: #ACB6C2; empty: #E7ECF0 — border 삭제". (1) light: incorrect `#FF6060`·correct `#00AB7B`·retry `#F6CF35`·viewed `#ACB6C2`·unseen `#E7ECF0` 그대로. (2) dark는 같은 색상 계열에서 명도만 조정: incorrect `#FF7A7A`·correct `#2CC79A`·retry `#F7D45A`·viewed `#8591A1`·unseen `#3A4554`(표면에 가깝지만 구분되는 회색). (3) UX9-STROKE의 `0.5px` marker 윤곽·`--heatmap-marker-stroke-mix` 삭제(heatmap 점과 장식용 marker·필터 색 견본 모두 같은 `MarkerShape`라 함께). 별만 둥근 꼭짓점 기하를 위해 채움과 같은 색 stroke를 유지(보이는 테두리 아님). 윤곽이 없어 light unseen(`#E7ECF0`)은 표면 대비 약 1.2:1이며 상태 텍스트가 의미를 맡는다 — 테두리를 되돌리지 않는다. `question-marker-contrast.test.ts`의 윤곽 3:1 검사는 폐기. |
 
 ## 8. 진행 현황
 
@@ -943,5 +950,6 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | UX9-SCROLL overlay scroll 격리(iOS Safari dialog 위 스와이프) | 🔶 구현됨, Codex review 대기 | ec5b97f · 06271da · a1215c4 | 2026-11-02. `task/UX9-SCROLL`(별도 branch). UX9-SCROLL-AC01~AC04는 UX9-SPEC의 [overlay-scroll.md](screens/overlay-scroll.md)에 등록. 사용자 실기기 확인 대기. |
 | UX9-SPEC-2 backdrop click 닫기·가져오기 검토 제목 | ✅ | 이 커밋 | 2026-11-02. 사용자 결정 2건(§7 UX9-SPEC-2). AC 수 변화 없음. |
 | UX9-SPEC-3 노트 검색 범위·노트 backdrop 닫기 | ✅ | 이 커밋 | 2026-11-02. 사용자 결정 2건(§7 UX9-SPEC-3). AC 수 변화 없음. |
+| HEATMAP-PALETTE Heatmap palette·테두리 삭제 | ✅ | 이 branch(`task/HEATMAP-PALETTE`) | 2026-11-04. 사용자 결정(§7 HEATMAP-PALETTE). AC 수 변화 없음. |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.
