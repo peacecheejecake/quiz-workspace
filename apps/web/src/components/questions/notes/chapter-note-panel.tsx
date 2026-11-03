@@ -147,6 +147,18 @@ type Load =
   | { readonly status: 'ready'; readonly data: ChapterNoteState };
 
 /**
+ * A practice panel or range run over the note (a footnote's question) may change the reader's
+ * explanation highlights: `내 하이라이트` is read again once the note shows again.
+ */
+function useReloadWhenUncovered(covered: boolean, reload: () => void): void {
+  const wasCovered = useRef(covered);
+  useEffect(() => {
+    if (wasCovered.current && !covered) reload();
+    wasCovered.current = covered;
+  }, [covered, reload]);
+}
+
+/**
  * `위치로 이동` of an explanation highlight: 문제 상세 (QuestionViewer `manage`, read-only) stacked
  * over the note, focused on the mark; closing it returns focus to the row's menu button.
  */
@@ -203,6 +215,7 @@ function ChapterlessContent({
     `${workspaceId}:${refreshKey}`,
   );
   const detail = useHighlightDetail(workspaceId, documents, store.reload);
+  useReloadWhenUncovered(covered, store.reload);
   const questionHref = (id: string) =>
     `${pathname}${patchSearch(searchParams.toString(), { [QUESTION_PARAM]: id })}`;
   return (
@@ -268,6 +281,7 @@ function NoteContent({
     `${chapterId}:${refreshKey}`,
   );
   const detail = useHighlightDetail(workspaceId, documents, store.reload);
+  useReloadWhenUncovered(covered, store.reload);
   // `위치로 이동` of a note highlight: its version is shown, then its mark gets focus.
   const [pendingMark, setPendingMark] = useState<string | null>(null);
 

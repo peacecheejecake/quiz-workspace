@@ -481,6 +481,34 @@ describe('ChapterNotePanel', () => {
     expect(document.activeElement).not.toBe(last);
   });
 
+  it('HILITE-01 reads 내 하이라이트 again when a covering practice panel closes', async () => {
+    responses = [withNote()];
+    const view = renderPanel();
+    await screen.findByRole('heading', { name: '내 하이라이트 (0)' });
+    const reads = () =>
+      fetchMock.mock.calls.filter(([url]) => String(url).includes('/my-highlights')).length;
+    const before = reads();
+    const panel = () => (
+      <ChapterNotePanel
+        workspaceId={WS}
+        documents={[]}
+        open
+        onOpenChange={vi.fn()}
+        container={document.body}
+        chapterId={CH}
+        canEdit
+        onOpenQuestion={vi.fn()}
+      />
+    );
+    // A footnote's question covers the note (highlights may change in its explanation)…
+    search = new URLSearchParams(`panel=chapter-note&chapter=${CH}&question=${Q1}`);
+    view.rerender(panel());
+    // …and closing it shows the note again with its list read again.
+    search = new URLSearchParams(`panel=chapter-note&chapter=${CH}`);
+    view.rerender(panel());
+    await waitFor(() => expect(reads()).toBe(before + 1));
+  });
+
   it('hides the note content while a practice panel covers it', async () => {
     responses = [withNote()];
     const view = renderPanel();
