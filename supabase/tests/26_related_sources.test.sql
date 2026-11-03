@@ -1,4 +1,4 @@
--- RELSRC-B (20261103160000_related_sources.sql): stored related-passage lists keyed by
+-- RELSRC-B (20261104130000_related_sources.sql): stored related-passage lists keyed by
 -- (revision, corpus fingerprint, retrieval version), references only, one current list per
 -- question, quiz_api only (RELSRC-01-C03, C07).
 begin;

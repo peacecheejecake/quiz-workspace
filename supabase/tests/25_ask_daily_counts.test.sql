@@ -1,4 +1,4 @@
--- ASK-B follow-up (20261102170000_ask_daily_counts.sql): every accepted answer counts for its
+-- ASK-B follow-up (20261104110000_ask_daily_counts.sql): every accepted answer counts for its
 -- user's Asia/Seoul day, and the count survives deleting the conversation.
 begin;
 create extension if not exists pgtap with schema extensions;

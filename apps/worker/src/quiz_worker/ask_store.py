@@ -1,7 +1,7 @@
 """AI question answers as the `ask.answer` job sees them (ASK-B), on the `quiz_worker` role, plus
 the answer's Redis Stream.
 
-Grants (supabase/migrations/20261102160000_ask.sql): the worker reads conversations, messages and
+Grants (supabase/migrations/20261104100000_ask.sql): the worker reads conversations, messages and
 their pinned sources, finishes an unfinished answer (status, text, citation counts, model), marks
 its cited sources, writes and purges `llm_feature_usage` and deletes expired conversations. It
 reads documents, revisions, blocks, questions, question revisions and question sources (earlier

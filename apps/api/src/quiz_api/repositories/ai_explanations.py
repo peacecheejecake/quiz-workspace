@@ -1,4 +1,4 @@
-"""Reads and writes of AI explanations (EXPL-B, 20261103150000_ai_explanations.sql).
+"""Reads and writes of AI explanations (EXPL-B, 20261104120000_ai_explanations.sql).
 
 Runs in the request session after the route checked the caller (resource → workspace →
 membership and the submission gate). Two tables with one shape, picked by `kind`:

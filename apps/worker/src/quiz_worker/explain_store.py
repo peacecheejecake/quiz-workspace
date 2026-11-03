@@ -1,7 +1,7 @@
 """AI explanations as the `question.ai_explain` job sees them (EXPL-B), on the `quiz_worker` role,
 plus their Redis Stream.
 
-Grants (supabase/migrations/20261103150000_ai_explanations.sql): the worker reads both
+Grants (supabase/migrations/20261104120000_ai_explanations.sql): the worker reads both
 explanation tables and moves an unfinished row through `running` to `succeeded` / `failed`
 (status, body, cited source numbers, error code) and supersedes the previous success of the key;
 it writes `llm_feature_usage` (`feature = ai_explanation`, `ref_id`). The question content comes
