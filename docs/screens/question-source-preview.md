@@ -31,7 +31,7 @@ linked_tests: [QSRC-01-AC01 … QSRC-01-AC06]
 ## 레이아웃 및 컴포넌트
 
 - **버튼 표시 시점:** 풀이 화면이 열리면 영역 정보를 한 번 요청한다(문제당, 위치를 옮기면 그 문제 것). 응답 200이면 버튼이 나타나고, 404면 버튼은 나타나지 않는다(자리를 비워 두지 않음 — 줄 배치가 달라지지 않는다). 영역 정보는 정답이 없으므로 `practice`·`sequence`의 session cache(UX7-CACHE)에 넣어도 된다.
-- **tooltip (사용자 결정 2026-11-04 5):** hover(데스크톱), keyboard focus(`:focus-visible`), long-press(터치, 500ms)로 열린다. 내용: 영역 그림(쪽마다 잘린 부분을 쌓음, 최대 폭 `min(360px, 100vw - 32px)`·높이 320px — 크면 비율을 지켜 줄임)과 쪽 표시. 불러오는 중에는 `role="status"` "원문을 불러오는 중입니다", 실패하면 "원문을 불러오지 못했습니다"(재시도는 dialog에서). `role="tooltip"`이고 버튼이 `aria-describedby`로 가리킨다. 닫기: 포인터가 버튼과 tooltip을 모두 벗어남, blur, **Escape(tooltip만 닫고 panel은 그대로)**, 터치에서는 **tooltip 바깥을 누르면** 닫힌다. long-press로 연 뒤 손가락을 떼어도 click으로 취급하지 않는다(dialog가 열리지 않음). 짧은 tap은 click이다.
+- **tooltip (사용자 결정 2026-11-04 5):** hover(데스크톱), keyboard focus(`:focus-visible`), long-press(터치, 500ms)로 열린다. 내용: 영역 그림(쪽마다 잘린 부분을 쌓음, 최대 폭 `min(360px, 100vw - 32px)`·높이 320px — 크면 비율을 지켜 줄임)과 쪽 표시. 불러오는 중에는 `role="status"` "원문을 불러오는 중입니다", 실패하면 "원문을 불러오지 못했습니다"(재시도는 dialog에서). `role="tooltip"`이고 버튼이 `aria-describedby`로 가리킨다. 닫기: 포인터가 버튼과 tooltip을 모두 벗어남, blur, **Escape(tooltip만 닫고 panel은 그대로)**, 터치에서는 **tooltip 바깥을 누르면** 닫힌다(그 tap은 tooltip만 닫고 아래 내용 — backdrop 포함 — 에 전달되지 않는다). long-press로 연 뒤 손가락을 떼어도 click으로 취급하지 않는다(dialog가 열리지 않음). 짧은 tap은 click이다.
 - **dialog (click/Enter/Space):** 이름 "문제 원문"인 `FloatingSidePanel`(`role="dialog"`), header에 제목과 `닫기`. 내용은 tooltip과 같은 영역 그림을 dialog 폭에 맞춰 크게(쪽 표시 포함), 쪽 이동·scroll 도구·검색·다운로드·"PDF 열기" 링크가 없다. 불러오는 중·실패(`role="alert"` "원문을 불러오지 못했습니다" + `다시 시도`)를 보인다.
   - **데스크톱·태블릿(≥ 768px):** 열려 있는 문제 panel의 **왼쪽**에 나란히 놓는다 — `FloatingSidePanel side="start"`, 문제 panel은 그대로 보이고 가려지지 않는다. 폭은 `--floating-panel-width` 이하로 두 panel이 겹치지 않을 만큼. 겹치지 않을 만큼의 자리가 없는 폭의 배치는 열린 질문(아래)이다.
   - **좁은 화면(< 768px, 기존 `FloatingSidePanel` 모바일 breakpoint — 사용자 결정 2026-11-04 4):** 전체 화면 sheet(`mobileLayout="full"`)로 문제 panel을 덮는다. header의 `닫기`로 닫으면 문제 panel로 돌아온다(문제 panel의 위치·고른 답·scroll 유지).
@@ -58,12 +58,12 @@ linked_tests: [QSRC-01-AC01 … QSRC-01-AC06]
 
 ## 수용 기준
 
-E2E는 합성 `questions-ko.pdf`(문제 1~8, 정답표가 3쪽에 있음)를 `question_paper`로 올려 기존 가져오기 흐름으로 등록한 문제를 쓴다. 두 쪽에 걸친 영역은 등록 뒤 그 문제의 가져오기 출처 행에 둘째 쪽 위치를 더해 만든다(fixtures/db.ts 사용 5 — 합성 PDF에는 쪽을 넘는 문제가 없고, 어떤 공개 API도 그런 출처를 만들지 못함). LLM은 쓰지 않는다. 정답이 보이는 화면이므로 trace·screenshot·video를 끄고 합성 문자열만 쓴다.
+E2E는 합성 `questions-ko.pdf`(문제 1~8, 정답표가 3쪽에 있음)를 `question_paper`로 올려 기존 가져오기 흐름으로 등록한 문제를 쓴다. 두 쪽에 걸친 영역은 등록 뒤 그 문제의 가져오기 출처 행에 둘째 쪽 위치를 더해 만든다(DB 직접 seed — 합성 PDF에는 쪽을 넘는 문제가 없고, 어떤 공개 API도 그런 출처를 만들지 못함; fixtures/question-source.ts S4). LLM은 쓰지 않는다. 정답이 보이는 화면이므로 trace·screenshot·video를 끄고 합성 문자열만 쓴다.
 
 ### QSRC-01-AC01
 
-- **Given:** 가져오기로 등록된 확정 객관식 문제 2개(문제 1, 문제 5), 직접 만든 문제, 교재 근거(`question_sources`에 책 문서만, `import_run_id` 없음)만 있는 문제, 보기 권한 구성원이 연 Workspace 홈
-- **When:** Heatmap에서 각 문제를 열어 풀이 panel header 아래를 확인하고, 가져온 문제에서 답을 제출한 뒤 다시 확인한다
+- **Given:** 가져오기로 등록된 확정 객관식 문제 2개(문제 1, 문제 5), 직접 만든 문제, 교재 근거(`question_sources`에 책 문서만, `import_run_id` 없음)만 있는 문제, 편집 권한 구성원(답을 제출하는 쪽)이 연 Workspace 홈
+- **When:** 각 문제의 풀이 panel(`?question=`)을 열어 풀이 panel header 아래를 확인하고, 가져온 문제에서 답을 제출한 뒤 다시 확인한다
 - **Then:** 가져온 문제 둘에는 제출 전에도 후에도 `문제 원문 보기` 버튼이 보인다. 직접 만든 문제와 교재 근거만 있는 문제에는 버튼이 없다(자리도 비어 있지 않음). 버튼을 누르기 전에는 PDF를 가져가는 요청(`/documents/:id/source-url`)이 없다. 제출 전에 이 화면이 부른 API 응답에는 `correct_option_ids`·`explanation` 등 정답 키가 없다.
 
 ### QSRC-01-AC02
