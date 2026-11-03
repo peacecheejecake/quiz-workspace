@@ -857,6 +857,8 @@ describe('QVIEW-01-C06 질문하기 by mode (ASK-01 문제 쪽 진입점)', () =
             preview: STEM,
             isFavorite: false,
             needsRetry: false,
+            lastGradedResult: null,
+            isPendingGrading: false,
           }}
           readOnly={false}
           onClose={noop}
