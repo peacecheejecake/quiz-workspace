@@ -6509,6 +6509,11 @@ export type components = {
        */
       block_id: string;
       /**
+       * Block Ids
+       * @description The passage's blocks in reading order (the first is `block_id`); the excerpt panel shows all of them.
+       */
+      block_ids: string[];
+      /**
        * Chapter Id
        * @description Top-level chapter of the passage.
        */
@@ -7226,6 +7231,11 @@ export type components = {
        * @description The passage's first block (DOC-02 / excerpt panel).
        */
       block_id: string;
+      /**
+       * Block Ids
+       * @description The passage's blocks in reading order (the first is `block_id`); the excerpt panel shows all of them.
+       */
+      block_ids: string[];
       /**
        * Chapter Id
        * @description Top-level chapter of the passage.
