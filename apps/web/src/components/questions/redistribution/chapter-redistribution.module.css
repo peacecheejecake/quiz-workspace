@@ -125,8 +125,9 @@
   background: var(--color-surface-muted);
 }
 
-/* A virtualized row: fixed height (PREVIEW_ROW_PX), full width, one line per text part (the
-   checkbox name carries the whole change). */
+/* A virtualized row: fixed height (PREVIEW_ROW_PX, the same for every row), full width, one
+   line per text part, each clamped on its own (현재 and 추천 are separate lines, so the
+   recommended chapter always shows; the checkbox name carries the whole change). */
 li.previewRowFixed {
   inset-inline: 0;
   box-sizing: border-box;

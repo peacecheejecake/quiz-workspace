@@ -117,7 +117,7 @@ interface PendingMove {
 type Notice = { readonly tone: 'status' | 'alert'; readonly text: string } | null;
 
 /** The fixed height of a recommendation row once the list is virtualized (px). */
-const PREVIEW_ROW_PX = 104;
+const PREVIEW_ROW_PX = 128;
 
 const CONFIRM_DESCRIPTION =
   '옮긴 장과 새 장의 정리 노트가 최신이 아니게 됩니다. 문제 내용과 풀이 기록은 바뀌지 않습니다.';
@@ -500,7 +500,7 @@ function RedistributionContent({
   );
 }
 
-function PreviewStep({
+export function PreviewStep({
   preview,
   checked,
   onCheckedChange,
@@ -550,9 +550,10 @@ function PreviewStep({
         />
         <div className={styles.previewText}>
           <p className={styles.stem}>{`${number} · ${item.stem_preview}`}</p>
-          <p>
-            <span>{`현재: ${current}`}</span> <span aria-hidden="true">→</span>{' '}
-            <span>{`추천: ${next}`}</span>
+          {/* Two lines, each clamped on its own: the recommended chapter always shows. */}
+          <p data-part="current">{`현재: ${current}`}</p>
+          <p data-part="recommended">
+            <span aria-hidden="true">→</span> {`추천: ${next}`}
           </p>
           <p className={styles.muted}>{REASON_LABELS[item.reason] ?? item.reason}</p>
         </div>
