@@ -187,6 +187,7 @@ export function AskPanel(props: AskPanelProps) {
 }
 
 function useAskPanel({
+  open,
   workspaceId,
   archived,
   askState,
@@ -228,6 +229,17 @@ function useAskPanel({
   const [versions, setVersions] = useState<Record<string, number>>({});
   const sendingRef = useRef(false);
   const [sending, setSending] = useState(false);
+  // What a request started for: closing the panel or showing another conversation (or the list)
+  // moves it on, and a late answer then changes neither the view nor the URL (the server still
+  // answers; the question is in the conversation when it is opened again).
+  const viewEpochRef = useRef(0);
+  useEffect(() => {
+    viewEpochRef.current += 1;
+  }, [open, conversationId]);
+  const viewToken = () => {
+    const epoch = viewEpochRef.current;
+    return () => viewEpochRef.current === epoch;
+  };
 
   const signIn = useCallback(() => {
     router.push(loginRedirectPath(`${window.location.pathname}${window.location.search}`));
@@ -509,6 +521,7 @@ function useAskPanel({
   async function send() {
     const question = draft.trim();
     if (sendingRef.current || !canSend) return;
+    const current = viewToken();
     sendingRef.current = true;
     setSending(true);
     setPending(question);
@@ -520,6 +533,7 @@ function useAskPanel({
       let conv = conversation;
       if (!conv) {
         conv = await client.create(workspaceId, isEmptyScope(scope) ? {} : { scope });
+        if (!current()) return;
         created = conv;
         setConversation(conv);
       }
@@ -528,33 +542,37 @@ function useAskPanel({
         sameScope(scope, normalizeScope(conv.scope)) ? { question } : { question, scope },
         newIdempotencyKey(),
       );
+      if (!current()) return;
       accepted({ ...conv, scope }, result);
       setAnnouncement(ASK_TEXT.liveWriting);
       setDraft('');
       setAtEnd(true);
       atEndRef.current = true;
     } catch (error) {
-      refuse(error);
+      if (current()) refuse(error);
     } finally {
       sendingRef.current = false;
       setSending(false);
       setPending(null);
-      if (created) onNavigate(created.id, 'replace');
+      if (created && current()) onNavigate(created.id, 'replace');
     }
   }
 
   async function again(message: AskMessage) {
     if (sendingRef.current || running || !conversation) return;
+    const current = viewToken();
     sendingRef.current = true;
     setSending(true);
     setRefusal(null);
     const action =
       message.status === 'failed' || message.status === 'stopped' ? 'retry' : 'regenerate';
     try {
-      accepted(conversation, await client.again(message.id, action, newIdempotencyKey()));
+      const result = await client.again(message.id, action, newIdempotencyKey());
+      if (!current()) return;
+      accepted(conversation, result);
       setAnnouncement(ASK_TEXT.liveWriting);
     } catch (error) {
-      refuse(error);
+      if (current()) refuse(error);
     } finally {
       sendingRef.current = false;
       setSending(false);
@@ -648,10 +666,12 @@ function useAskPanel({
 
   // --- navigation -------------------------------------------------------------------------------
   const showList = () => {
+    viewEpochRef.current += 1;
     setMode('list');
     if (conversationId !== null) onNavigate(null, 'push');
   };
   const startNew = () => {
+    viewEpochRef.current += 1;
     setMode('new');
     setDraft('');
     setScope(EMPTY_SCOPE);
