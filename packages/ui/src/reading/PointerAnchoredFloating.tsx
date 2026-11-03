@@ -277,6 +277,14 @@ export function PointerAnchoredFloating({
             triggerRef.current?.focus({ preventScroll: true });
             refocusing.current = false;
           }}
+          onFocusOutside={(event) => {
+            // The trigger is a Slot, not a Radix trigger: focus landing on it (the keyboard focus
+            // that opened the floating) is not "outside".
+            const target = event.target;
+            if (target instanceof Node && triggerRef.current?.contains(target)) {
+              event.preventDefault();
+            }
+          }}
           onPointerEnter={() => window.clearTimeout(closeTimer.current)}
           onPointerLeave={() => {
             if (stateRef.current?.mode === 'hover') hideSoon();
