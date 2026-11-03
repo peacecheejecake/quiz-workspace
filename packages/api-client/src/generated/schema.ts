@@ -1100,8 +1100,9 @@ export type paths = {
      * @description Toggle the caller's favorite / retry flags (independent of each other).
      *     The state answered is folded with the merged duplicates' (UX7-DEDUP): a flag set on any of
      *     them is set, and turning one off turns it off on all of them. RETRY-CORRECT: `needs_retry`
-     *     can only be turned on while the last graded result is correct (409 `retry-requires-correct`,
-     *     nothing written); turning it off is always allowed.
+     *     can only be turned on while the last graded result is correct and the latest submission is not
+     *     waiting for grading (409 `retry-requires-correct`, nothing written); turning it off is
+     *     always allowed.
      */
     patch: operations['updateMyQuestionState'];
     trace?: never;

@@ -175,6 +175,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
           isFavorite: false,
           needsRetry: false,
           lastGradedResult: 'correct',
+          isPendingGrading: false,
         }}
         readOnly={false}
         onClose={noop}
@@ -212,7 +213,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
         mode="practice"
         {...props}
         onViewed={noop}
-        question={{ ...question, lastGradedResult: null }}
+        question={{ ...question, lastGradedResult: null, isPendingGrading: false }}
       />,
     );
     for (const result of [null, 'incorrect'] as const) {
@@ -221,19 +222,33 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
           mode="practice"
           {...props}
           onViewed={noop}
-          question={{ ...question, lastGradedResult: result }}
+          question={{ ...question, lastGradedResult: result, isPendingGrading: false }}
         />,
       );
       const panel = screen.getByRole('dialog', { name: '3장 12번 문제' });
       expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
       expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
     }
+    // D1: a correct result with a newer submission still waiting for grading hides it too.
     rerender(
       <QuestionViewer
         mode="practice"
         {...props}
         onViewed={noop}
-        question={{ ...question, lastGradedResult: 'correct' }}
+        question={{ ...question, lastGradedResult: 'correct', isPendingGrading: true }}
+      />,
+    );
+    expect(
+      within(screen.getByRole('dialog', { name: '3장 12번 문제' })).queryByRole('button', {
+        name: /다시 풀기/,
+      }),
+    ).toBeNull();
+    rerender(
+      <QuestionViewer
+        mode="practice"
+        {...props}
+        onViewed={noop}
+        question={{ ...question, lastGradedResult: 'correct', isPendingGrading: false }}
       />,
     );
     expect(
@@ -241,6 +256,30 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
         name: '다시 풀기 해제',
       }),
     ).toBeInTheDocument();
+  });
+
+  it('RETRY-01-C04 sequence(bank): no 다시 풀기 while the latest submission is pending grading', async () => {
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={fakeClient({
+          flags: vi.fn(async () => ({
+            is_favorite: false,
+            needs_retry: false,
+            last_graded_result: 'correct' as const,
+            is_pending_grading: true,
+          })),
+        })}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await within(panel).findByRole('button', { name: /즐겨찾기/ });
+    expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
   });
 
   it('RETRY-01-C04 sequence(bank): no 다시 풀기 for a question not answered correctly', async () => {

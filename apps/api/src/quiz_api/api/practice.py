@@ -735,8 +735,9 @@ def update_my_state(
     """Toggle the caller's favorite / retry flags (independent of each other).
     The state answered is folded with the merged duplicates' (UX7-DEDUP): a flag set on any of
     them is set, and turning one off turns it off on all of them. RETRY-CORRECT: `needs_retry`
-    can only be turned on while the last graded result is correct (409 `retry-requires-correct`,
-    nothing written); turning it off is always allowed."""
+    can only be turned on while the last graded result is correct and the latest submission is not
+    waiting for grading (409 `retry-requires-correct`, nothing written); turning it off is
+    always allowed."""
     flags = {
         k: v
         for k, v in body.model_dump(include={"is_favorite", "needs_retry"}).items()
@@ -750,11 +751,17 @@ def update_my_state(
     before = practice.lock_state(ws.workspace_id, access.resource_id, ws.user_id)
     changed = {k: v for k, v in flags.items() if getattr(before, k) != v}
     # The request is judged, not the diff: a legacy flag already on does not let it through.
-    if flags.get("needs_retry") is True and before.last_graded_result != "correct":
+    if flags.get("needs_retry") is True and (
+        before.last_graded_result != "correct"
+        or practice.latest_submission_pending(access.resource_id, ws.user_id)
+    ):
         raise ProblemException(
             409,
             ProblemType.RETRY_REQUIRES_CORRECT,
-            detail="Only a question whose last graded result is correct can be marked for retry.",
+            detail=(
+                "Only a question whose last graded result is correct, with no submission "
+                "waiting for grading, can be marked for retry."
+            ),
         )
     if changed:
         practice.set_flags(ws.workspace_id, access.resource_id, ws.user_id, changed)

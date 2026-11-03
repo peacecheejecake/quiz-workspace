@@ -362,6 +362,7 @@ export function QuestionsOverview({
       isFavorite: item.is_favorite,
       needsRetry: item.needs_retry,
       lastGradedResult: item.last_graded_result,
+      isPendingGrading: item.is_pending_grading,
     };
   }, [openPlaced, found, overrides, serverItems]);
 

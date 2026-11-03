@@ -670,6 +670,22 @@ class PracticeRepository:
             needs_retry=bool(row.needs_retry),
         )
 
+    def latest_submission_pending(self, question_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+        """The caller's most recent submission on the question (or its merged duplicates) waits
+        for self-grading: the overview's `is_pending_grading` (RETRY-CORRECT: `다시 풀기` is not
+        offered until it is graded)."""
+        row = self._session.execute(
+            select(practice_sessions.c.state)
+            .where(
+                practice_sessions.c.user_id == user_id,
+                practice_sessions.c.question_id.in_(self._members(question_id)),
+                practice_sessions.c.submitted_at.is_not(None),
+            )
+            .order_by(practice_sessions.c.submitted_at.desc(), practice_sessions.c.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        return row == "pending_grade"
+
     def record_activity(
         self,
         workspace_id: uuid.UUID,

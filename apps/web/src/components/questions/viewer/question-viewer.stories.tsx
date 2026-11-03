@@ -161,6 +161,7 @@ export const Practice: Story = {
       isFavorite: false,
       needsRetry: true,
       lastGradedResult: 'correct',
+      isPendingGrading: false,
     },
     readOnly: false,
     onClose: noop,

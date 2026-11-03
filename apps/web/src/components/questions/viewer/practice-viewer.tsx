@@ -68,6 +68,8 @@ export interface PracticeQuestion {
   readonly needsRetry: boolean;
   /** The last graded result: `다시 풀기` is offered only after a correct one (RETRY-CORRECT). */
   readonly lastGradedResult: 'correct' | 'incorrect' | null;
+  /** The latest submission waits for self-grading: the toggle stays hidden until it is graded. */
+  readonly isPendingGrading: boolean;
 }
 
 export interface PracticeViewerProps {
@@ -379,7 +381,7 @@ export function PracticeViewer({
             <StudyToggles
               favorite={view.isFavorite}
               retry={view.needsRetry}
-              retryAvailable={view.lastGradedResult === 'correct'}
+              retryAvailable={view.lastGradedResult === 'correct' && !view.isPendingGrading}
               onChange={(flags) => onFlagsChange(view.id, flags)}
             />
             {headerExtra}

@@ -153,6 +153,7 @@ function question(id: string, n: number) {
     isFavorite: false,
     needsRetry: false,
     lastGradedResult: null,
+    isPendingGrading: false,
   };
 }
 

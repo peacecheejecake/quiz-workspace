@@ -333,7 +333,7 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 
 사용자 요청 "다시풀기 버튼은 정답을 맞춘 문제에만 보이도록"과 사용자 결정 2026-11-04(implementation-plan §7). 화면 명세는 [RETRY-01](screens/retry-correct.md).
 
-1. **판정.** 문제의 *마지막 채점 확정 결과가 정답*(Heatmap `정답` 상태와 같은 `last_graded_result = correct`)이면 `다시 풀기`를 켤 수 있다. 합쳐진 중복이 있으면 §10.2의 합친 상태로 판정한다. 채점 대기 제출은 채점 결과가 아니라서(§2.1) 이전 채점 결과가 판정을 유지한다.
+1. **판정.** 문제의 *마지막 채점 확정 결과가 정답*(Heatmap `정답` 상태와 같은 `last_graded_result = correct`)이면 `다시 풀기`를 켤 수 있다. 합쳐진 중복이 있으면 §10.2의 합친 상태로 판정한다. **가장 최근 제출이 채점 대기(pending)이면 아직 채점되지 않은 것이므로 자격이 없다**(사용자 결정 2026-11-04 D1): toggle은 그 제출이 채점될 때까지 숨겨지고, 정답으로 채점되면 다시 보이며, 오답으로 채점되면 숨겨진 채 4항의 trigger가 플래그를 끈다. 서버의 409 규칙도 "가장 최근 제출이 채점 대기"를 자격 없음으로 본다(Heatmap `is_pending_grading`과 같은 판정).
 2. **UI.** 켤 수 없는 문제에는 `RetryToggle`을 렌더링하지 않는다(비활성이 아님). `practice` 풀이 panel은 정답 제출 직후 보이고 이후 오답이면 사라진다. `sequence(bank)`도 같다. `sequence(mock)`·`read-only`는 원래 없다. Heatmap marker 자체에는 `다시 풀기` 토글 조작이 없고(상태 표시만), 다른 곳에서 `RetryToggle`/my-state를 쓰는 경로도 이 규칙을 따른다.
 3. **API.** `PATCH /questions/{id}/my-state`는 마지막 채점 결과(합친 상태)가 정답이 아닌 문제의 `needs_retry: true`를 409 `retry-requires-correct`로 거절한다(요청 전체 거절, 아무것도 쓰지 않음). `needs_retry: false`는 늘 허용하며 합쳐진 중복의 행도 함께 끈다(§10.2).
 4. **자동 해제 — 규칙의 자리.** 앞으로의 새 채점 결과가 오답이면 `needs_retry`를 끈다. 이 규칙은 API 코드가 아니라 DB trigger(`question_user_states_retry_clear`, `last_graded_result`를 쓰는 insert/update, migration `20261104220000_retry_correct_only.sql`)에 있다. 자동 채점·직접 채점·이후의 모든 채점 경로가 `question_user_states.last_graded_result`를 쓰는 곳을 지나가므로 한 곳에서 보장되고, 합쳐진 중복 행도 같은 trigger가 끈다. 정답 채점은 플래그를 바꾸지 않는다.

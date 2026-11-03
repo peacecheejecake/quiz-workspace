@@ -105,6 +105,8 @@ export interface StudyFlags {
 /** `다시 풀기` is offered only while the last graded result is correct (RETRY-CORRECT). */
 export interface StudyGrading {
   readonly last_graded_result?: 'correct' | 'incorrect' | null;
+  /** The latest submission waits for self-grading: `다시 풀기` stays hidden until it is graded. */
+  readonly is_pending_grading?: boolean;
 }
 
 /**
@@ -154,6 +156,7 @@ export function bankRunClient(workspaceId: string): RunClient {
         is_favorite: found.data.item.is_favorite,
         needs_retry: found.data.item.needs_retry,
         last_graded_result: found.data.item.last_graded_result,
+        is_pending_grading: found.data.item.is_pending_grading,
       };
     },
     setFlags: (questionId, flags) => setMyStateAction(workspaceId, questionId, flags),
@@ -363,7 +366,7 @@ export function SequenceViewer({
             <StudyToggles
               favorite={solve.flags.is_favorite}
               retry={solve.flags.needs_retry}
-              retryAvailable={solve.lastGraded === 'correct'}
+              retryAvailable={solve.lastGraded === 'correct' && !solve.pendingGrading}
               onChange={solve.changeFlags}
             />
           ) : null}
@@ -729,11 +732,13 @@ function useSolveStep({
   const [lastGraded, setLastGraded] = useState<{
     questionId: string;
     result: 'correct' | 'incorrect' | null;
+    /** The latest submission is not graded yet (the previous result stays). */
+    pending: boolean;
     /** Graded in this panel (true) or read from the server (false). */
     local: boolean;
   } | null>(null);
   function gradedHere(qid: string, result: 'correct' | 'incorrect') {
-    setLastGraded({ questionId: qid, result, local: true });
+    setLastGraded({ questionId: qid, result, pending: false, local: true });
     if (result === 'incorrect') {
       setFlags((prev) =>
         prev?.questionId === qid
@@ -741,6 +746,14 @@ function useSolveStep({
           : prev,
       );
     }
+  }
+  function pendingHere(qid: string) {
+    setLastGraded((prev) => ({
+      questionId: qid,
+      result: prev?.questionId === qid ? prev.result : null,
+      pending: true,
+      local: true,
+    }));
   }
   const flagsWanted = source === 'bank' && !archived && client.flags ? questionId : null;
   const flagsLoad = useKeyedLoad(flagsWanted ? `${flagsWanted}:${itemSeq}` : null, async () => {
@@ -769,6 +782,7 @@ function useSolveStep({
         local ?? {
           questionId: flagsWanted,
           result: flagsLoad.data.last_graded_result ?? null,
+          pending: flagsLoad.data.is_pending_grading ?? false,
           local: false,
         },
       );
@@ -801,7 +815,8 @@ function useSolveStep({
       result = { ok: false, kind: 'unavailable', message: '제출하지 못했습니다. 다시 시도하세요.' };
     }
     if (result.ok) {
-      if (result.data.result !== 'pending') gradedHere(qid, result.data.result);
+      if (result.data.result === 'pending') pendingHere(qid);
+      else gradedHere(qid, result.data.result);
       onGraded?.(qid, result.data.result);
     } else if (runId) {
       // The answer may have been recorded and only the response lost (or another tab submitted
@@ -1053,6 +1068,7 @@ function useSolveStep({
     question,
     flags: shownFlags,
     lastGraded: lastGraded && lastGraded.questionId === questionId ? lastGraded.result : null,
+    pendingGrading: lastGraded?.questionId === questionId && lastGraded.pending,
     changeFlags,
   };
 }

@@ -18,7 +18,7 @@ linked_tests: [RETRY-01-AC01 … RETRY-01-AC04]
 
 ## 규칙 (questions.md §16)
 
-- **판정:** 문제의 **마지막 채점 확정 결과가 정답**일 때만 `다시 풀기`를 켤 수 있고 toggle이 보인다. Heatmap의 `정답` 상태(마지막 채점 결과 correct)와 같은 판정이며, 중복 정리로 합쳐진 문제는 합친 상태(questions.md §10.2)로 판정한다. 안 푼 문제·본 문제·틀린 문제·채점 대기만 있는 문제에는 toggle이 없다. 채점 대기 제출은 채점 결과가 아니므로 이전 채점 결과가 그대로 판정이다.
+- **판정:** 문제의 **마지막 채점 확정 결과가 정답**일 때만 `다시 풀기`를 켤 수 있고 toggle이 보인다. Heatmap의 `정답` 상태(마지막 채점 결과 correct)와 같은 판정이며, 중복 정리로 합쳐진 문제는 합친 상태(questions.md §10.2)로 판정한다. 안 푼 문제·본 문제·틀린 문제·채점 대기만 있는 문제에는 toggle이 없다. 가장 최근 제출이 채점 대기(pending)이면 이전 결과가 정답이어도 자격이 없다 — toggle은 채점될 때까지 숨겨지고(사용자 결정 2026-11-04 D1), 정답으로 채점되면 다시 보이며 오답으로 채점되면 숨겨진 채 플래그가 꺼진다.
 - **보이지 않음:** toggle은 비활성이 아니라 **렌더링하지 않는다**(`즐겨찾기` toggle은 그대로). 풀이 panel에서는 정답 제출 직후 나타나고, 이후 제출이 오답이면 사라진다.
 - **자동 해제:** 앞으로의 새 채점 결과가 오답이면 `다시 풀기` 플래그가 꺼진다(합쳐진 중복 행 포함). **기존 플래그는 끄지 않는다**(사용자 결정 2026-11-04 변경): 정답이 아닌 문제에 이미 켜진 플래그는 Heatmap `retry` 표시와 `다시 풀기` 필터에 그대로 나오고 toggle만 보이지 않으며, 정답으로 맞힌 뒤에야 toggle로 끌 수 있다. 정답 채점은 플래그를 바꾸지 않는다(questions.md §2.1의 "정답을 맞혔다고 자동 해제하지 않음"은 그대로).
 - **API:** `PATCH /questions/{id}/my-state`가 마지막 채점 결과가 정답이 아닌 문제의 `needs_retry: true`를 거절한다 — 409 `retry-requires-correct`. 끄기(`false`)는 늘 허용한다.
@@ -54,7 +54,7 @@ linked_tests: [RETRY-01-AC01 … RETRY-01-AC04]
 
 | ID | 내용 |
 |---|---|
-| RETRY-01-C01 | **API 거절:** 마지막 채점 결과가 정답이 아닌 문제(안 푼·본·오답·채점 대기만)의 `needs_retry: true` → 409 `retry-requires-correct`(problem type `urn:quiz-workspace:problem:retry-requires-correct`)이고 같은 요청의 다른 flag도 쓰이지 않는다. 정답 뒤에는 200. 끄기는 어떤 상태에서도 200. 보관 Workspace는 그대로 403 `workspace-archived`가 먼저다. |
+| RETRY-01-C01 | **API 거절:** 마지막 채점 결과가 정답이 아니거나 가장 최근 제출이 채점 대기인 문제의 `needs_retry: true` → 409 `retry-requires-correct`(problem type `urn:quiz-workspace:problem:retry-requires-correct`)이고 같은 요청의 다른 flag도 쓰이지 않는다. 요청한 켜기를 판정하므로 이미 켜져 있는 기존 플래그(마지막 결과 정답 아님)도 `{needs_retry: true, …}` 요청은 409다. 정답 뒤에는 200. 끄기는 어떤 상태에서도 200. 보관 Workspace는 그대로 403 `workspace-archived`가 먼저다. |
 | RETRY-01-C02 | **자동 해제:** 자동 채점 오답·직접 채점 `incorrect`가 `needs_retry`를 끄고(합쳐진 중복 행 포함, 다른 사용자·다른 문제는 그대로), 정답 채점과 채점 대기 제출은 플래그를 바꾸지 않는다. API가 아닌 어떤 쓰기 경로로 오답을 기록해도 같다(pgTAP trigger). |
 | RETRY-01-C03 | **migration은 기존 데이터를 바꾸지 않는다:** `20261104220000_retry_correct_only.sql`은 함수와 trigger만 더하고 기존 `question_user_states` 행을 하나도 바꾸지 않는다(정답이 아닌 문제의 기존 `needs_retry`도 그대로). |
-| RETRY-01-C04 | **컴포넌트(Vitest):** `StudyToggles`는 `retryAvailable=false`이면 `RetryToggle`을 렌더링하지 않고, 풀이 panel(`PracticeViewer`)과 범위 풀이는 마지막 채점 결과가 `correct`일 때만 `retryAvailable`이다. 낙관적 상태(`gradedPatch`)는 오답이면 `needs_retry`를 끈다. |
+| RETRY-01-C04 | **컴포넌트(Vitest):** `StudyToggles`는 `retryAvailable=false`이면 `RetryToggle`을 렌더링하지 않고, 풀이 panel(`PracticeViewer`)과 범위 풀이는 마지막 채점 결과가 `correct`이고 가장 최근 제출이 채점 대기가 아닐 때만 `retryAvailable`이다. 범위 풀이의 첫 `flags` 조회 응답이 늦게 와도 그 사이 이 panel에서 한 채점을 되돌리지 않는다. 낙관적 상태(`gradedPatch`)는 오답이면 `needs_retry`를 끈다. |

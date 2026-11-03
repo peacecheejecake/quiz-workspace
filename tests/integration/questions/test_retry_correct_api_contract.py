@@ -187,3 +187,26 @@ def test_retry_01_c01_a_legacy_flag_does_not_let_a_retry_on_request_through(seed
     assert (state["needs_retry"], state["is_favorite"]) == (True, True)
     # Off is allowed, and the flag stays off.
     assert _my_state(alice, q["id"], {"needs_retry": False}).json()["needs_retry"] is False
+
+
+def test_retry_01_c01_a_pending_latest_submission_is_not_eligible(seed: Any) -> None:
+    alice = seed.client("retry01-c01-pending")
+    ws = alice.create_workspace()
+    essay = alice.create_question(
+        ws["id"], {"question_type": "ESSAY", "stem": _stem("서술 대기"), "rubric": "r"}
+    )
+    first = _start(alice, essay["id"])
+    alice.ok("POST", f"/practice-sessions/{first['id']}/submit", {"answer_text": "첫 답"})
+    alice.ok("POST", f"/practice-sessions/{first['id']}/self-grade", {"result": "correct"})
+    assert _my_state(alice, essay["id"], {"needs_retry": True}).status_code == 200
+    assert _my_state(alice, essay["id"], {"needs_retry": False}).status_code == 200
+
+    # A newer submission waits for grading: not eligible, although the last graded result is
+    # still correct.
+    second = _start(alice, essay["id"])
+    alice.ok("POST", f"/practice-sessions/{second['id']}/submit", {"answer_text": "둘째 답"})
+    assert _item(alice, ws["id"], essay["id"])["is_pending_grading"] is True
+    _refused(_my_state(alice, essay["id"], {"needs_retry": True}))
+    # Graded correct: eligible again.
+    alice.ok("POST", f"/practice-sessions/{second['id']}/self-grade", {"result": "correct"})
+    assert _my_state(alice, essay["id"], {"needs_retry": True}).status_code == 200
