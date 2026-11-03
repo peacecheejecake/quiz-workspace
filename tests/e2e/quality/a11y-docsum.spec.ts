@@ -1,7 +1,8 @@
 // M7.2 accessibility of the doc-summary surfaces (DOCSUM-X): the DOC-03 text-export menus, the
 // DOCSUM-01 document summary panel and the CHNOTE-01 chapter note panel, axe in the light and dark
 // theme (fixtures/a11y.ts) in their main states — empty, generating, done (disclosures open),
-// failed, confirmation dialog, versions.
+// failed, confirmation dialog, versions; the note's reading tools (UX9, CHNOTE-02: always-open
+// body, search results, a footnote preview, the practice panel over the covered note).
 //
 // The chapter note body and the practice panel carry answers and explanations, and summaries and
 // exports carry (synthetic) book text: no trace/screenshot/video and no page text on failure; axe
@@ -182,7 +183,7 @@ test(
 );
 
 test(
-  'A11Y-12 chapter note panel: Heatmap openers, empty, generating, collapsed and expanded note, footnote question panel, versions, failure',
+  'A11Y-12 chapter note panel: Heatmap openers, empty, generating, the open note with search results and a footnote preview, footnote question panel, versions, failure',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('a11y12');
@@ -228,19 +229,31 @@ test(
       await expectAccessible(page, 'chapter note panel while generating');
       hold.release();
 
-      // Done: the body folded behind "정답·해설 포함", then expanded with its footnotes.
-      const disclosure = noteUi.disclosure(panel);
-      await expect(disclosure).toBeVisible({ timeout: NOTE_TIMEOUT_MS });
-      await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
-      await settle(page);
-      await expectAccessible(page, 'chapter note collapsed');
-      await disclosure.click();
-      await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+      // Done (UX9, CHNOTE-02): the body is open at once with the search row and its footnotes.
+      await expect(noteUi.body(panel)).toBeVisible({ timeout: NOTE_TIMEOUT_MS });
       const body = await noteBody(panel);
       await expect(noteUi.footnoteList(body)).toBeVisible();
-      await expectAccessible(page, 'chapter note expanded with footnotes');
+      await settle(page);
+      await expectAccessible(page, 'chapter note with its body and footnotes');
 
-      // A footnote opens its question's practice panel over the note (the note body folds).
+      // Search results (marks, "k/n" status) in the body and the footnote lines.
+      const search = panel.getByRole('searchbox', { name: /^(노트에서 찾기|find in note)$/i });
+      await search.fill('NOTE');
+      await expect(panel.locator('mark[data-search-result][data-current="true"]')).toHaveCount(1);
+      await expectAccessible(page, 'chapter note with search results');
+      await search.press('Escape');
+      await expect(search).toHaveValue('');
+
+      // A footnote's preview on keyboard focus (role=tooltip describing the footnote).
+      const ref = noteUi.footnoteRefs(noteUi.body(panel)).first();
+      await ref.focus();
+      await page.keyboard.press('Shift+Tab');
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('tooltip').filter({ hasText: /\d+장\s*\d+번/ })).toBeVisible();
+      await expectAccessible(page, 'chapter note footnote preview');
+      await page.keyboard.press('Escape');
+
+      // A footnote opens its question's practice panel over the note (its content is covered).
       await noteUi.footnoteList(body).getByRole('link').first().click();
       const play = panelUi.numbered(page, 1);
       await expect(play).toBeVisible();
