@@ -165,9 +165,23 @@ export function HighlightMenu({
       {typeof document === 'undefined'
         ? null
         : createPortal(
-            <RadixDropdownMenu.Trigger asChild>
-              <span aria-hidden="true" tabIndex={-1} style={anchorStyle} data-highlight-anchor="" />
-            </RadixDropdownMenu.Trigger>,
+            <>
+              <RadixDropdownMenu.Trigger asChild>
+                <span
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  style={anchorStyle}
+                  data-highlight-anchor=""
+                />
+              </RadixDropdownMenu.Trigger>
+              {/* The copy announcement lives outside the menu: a `menu` may own only items,
+                  groups and separators (axe aria-required-children, A11Y-19). An explicit
+                  aria-live keeps it out of a modal's hideOthers (the 정리 노트 modal), which
+                  exempts [aria-live] but not an implicit role=status. */}
+              <span role="status" aria-live="polite" className="qz-visually-hidden">
+                {copied ? HIGHLIGHT_MENU_TEXT.copied : ''}
+              </span>
+            </>,
             document.body,
           )}
       <RadixDropdownMenu.Portal>
@@ -254,7 +268,8 @@ export function HighlightMenu({
           >
             {HIGHLIGHT_MENU_TEXT.copy}
           </RadixDropdownMenu.Item>
-          <p role="status" className="status">
+          {/* Shown under the item; announced by the status outside the menu (above). */}
+          <p aria-hidden="true" className="status">
             {copied ? HIGHLIGHT_MENU_TEXT.copied : ''}
           </p>
         </RadixDropdownMenu.Content>

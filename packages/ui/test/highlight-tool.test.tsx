@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   HighlightableText,
   HighlightMenu,
+  ModalDialog,
   colorAction,
   type HighlightAction,
   type HighlightSelection,
@@ -147,6 +148,35 @@ function Harness({
 
 const menu = () => screen.findByRole('menu', { name: '하이라이트' }, { timeout: 4000 });
 
+/** Whether `el` or an ancestor is hidden from assistive technology. */
+function ariaHidden(el: Element): boolean {
+  return el.closest('[aria-hidden="true"]') !== null;
+}
+
+describe('HILITE-01-C09 HighlightMenu inside a modal', () => {
+  it('HILITE-01-C09e keeps the copy status announced while the menu lives in a modal (정리 노트)', async () => {
+    const user = userEvent.setup();
+    const onCopy = vi.fn(async () => true);
+    render(
+      <ModalDialog defaultOpen title="정리 노트">
+        <Harness onCopy={onCopy} />
+      </ModalDialog>,
+    );
+    await screen.findByRole('dialog', { name: '정리 노트' });
+    const status = document.querySelector('body > [role="status"][aria-live="polite"]');
+    if (!status) throw new Error('the copy status is not portalled to <body>');
+    // The modal hid the rest of the page on open, but not the status.
+    await waitFor(() => expect(document.querySelector('[data-aria-hidden]')).not.toBeNull());
+    expect(ariaHidden(status)).toBe(false);
+
+    mouseSelect('장의 ', '핵심');
+    const open = await menu();
+    await user.click(within(open).getByRole('menuitem', { name: '복사' }));
+    await waitFor(() => expect(status).toHaveTextContent('복사했습니다'));
+    expect(ariaHidden(status)).toBe(false);
+  });
+});
+
 describe('HILITE-01-C09 HighlightableText', () => {
   it('HILITE-01-C09a draws non-overlapping highlights and search results over the same text', async () => {
     const { container } = render(
@@ -239,6 +269,11 @@ describe('HILITE-01-C09 HighlightableText', () => {
     await user.click(within(open).getByRole('menuitem', { name: '복사' }));
     expect(onCopy).toHaveBeenCalledWith('장의 핵심');
     expect(await within(open).findByText('복사했습니다')).toBeVisible();
+    // Announced by a status outside the menu (a `menu` owns only items, groups, separators).
+    expect(screen.getAllByRole('status').some((el) => el.textContent === '복사했습니다')).toBe(
+      true,
+    );
+    expect(within(open).queryByRole('status')).toBeNull();
 
     await user.click(within(open).getByRole('menuitemradio', { name: '파랑' }));
     expect(onAction).toHaveBeenCalledWith({

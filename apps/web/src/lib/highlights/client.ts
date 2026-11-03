@@ -64,6 +64,11 @@ export function classifyHighlightFailure(status: number, body: unknown): Highlig
 type FetchLike = typeof fetch;
 const defaultFetch: FetchLike = (...a) => fetch(...a);
 
+/**
+ * Writes (create, recolor, delete, restore) go out with `keepalive`: a navigation right after the
+ * reader picks a color (closing the panel, opening a question) must not abort a save in flight.
+ * The relay routes do not forward the browser's abort to FastAPI.
+ */
 async function call<T>(fetchImpl: FetchLike, url: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
@@ -138,6 +143,7 @@ export function createHighlight(
 ): Promise<MyHighlight> {
   return call(fetchImpl, '/api/my-highlights', {
     method: 'POST',
+    keepalive: true,
     headers: { 'idempotency-key': idempotencyKey },
     body: JSON.stringify(input),
   });
@@ -151,12 +157,16 @@ export function recolorHighlight(
 ): Promise<MyHighlight> {
   return call(fetchImpl, `/api/my-highlights/${encodeURIComponent(id)}`, {
     method: 'PATCH',
+    keepalive: true,
     body: JSON.stringify({ color, version }),
   });
 }
 
 export function deleteHighlight(id: string, fetchImpl: FetchLike = defaultFetch): Promise<void> {
-  return call(fetchImpl, `/api/my-highlights/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  return call(fetchImpl, `/api/my-highlights/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    keepalive: true,
+  });
 }
 
 export function restoreHighlight(
@@ -165,5 +175,6 @@ export function restoreHighlight(
 ): Promise<MyHighlight> {
   return call(fetchImpl, `/api/my-highlights/${encodeURIComponent(id)}/restore`, {
     method: 'POST',
+    keepalive: true,
   });
 }

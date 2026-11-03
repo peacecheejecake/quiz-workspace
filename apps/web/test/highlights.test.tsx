@@ -23,7 +23,11 @@ import {
 import {
   classifyHighlightFailure,
   createHighlight,
+  deleteHighlight,
+  getQuestionHighlights,
   HIGHLIGHT_PROBLEMS,
+  recolorHighlight,
+  restoreHighlight,
 } from '../src/lib/highlights/client';
 import {
   canGoTo,
@@ -194,6 +198,35 @@ describe('highlight relay client', () => {
     expect(init?.method).toBe('POST');
     expect((init?.headers as Record<string, string>)['idempotency-key']).toBe('key-1');
     expect(JSON.parse(String(init?.body))).toMatchObject({ color: 'blue', replace_ids: ['x'] });
+  });
+
+  it('sends every write with keepalive so a navigation right after it never drops the save', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (_url, init) =>
+      init?.method === 'DELETE'
+        ? new Response(null, { status: 204 })
+        : Response.json(explanationHl(Q1), { status: 200 }),
+    );
+    await createHighlight(
+      {
+        target: { kind: 'explanation', question_id: Q1 },
+        anchor: { block: 'p0', start: 0, end: 3 },
+        color: 'yellow',
+      },
+      'key-2',
+      fetchImpl,
+    );
+    await recolorHighlight('h1', 'pink', 1, fetchImpl);
+    await deleteHighlight('h1', fetchImpl);
+    await restoreHighlight('h1', fetchImpl);
+    expect(fetchImpl.mock.calls.map(([, init]) => [init?.method, init?.keepalive])).toEqual([
+      ['POST', true],
+      ['PATCH', true],
+      ['DELETE', true],
+      ['POST', true],
+    ]);
+    // Reads stay ordinary requests.
+    await getQuestionHighlights(Q1, undefined, fetchImpl);
+    expect(fetchImpl.mock.calls.at(-1)?.[1]?.keepalive).toBeUndefined();
   });
 });
 
