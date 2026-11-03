@@ -384,7 +384,7 @@ make deploy-prepare REF=main ENV=production ARGS="--db-url-env SUPABASE_DB_URL -
 
 ## 12. AI 질문·AI 문제 해설 켜기 (ASK-X) — ⛔ 사용자 승인 후
 
-AI 질문(ASK-01)과 AI 문제 해설(AIEXPL-01)은 모든 환경에서 **기본 꺼짐**이다(ASK-SPEC 2026-11-01 — 변수 이름·기본값은 구현 Task가 env manifest에 넣을 때 확정). 9장과 같이 이 장은 방법만 적고, 저장소·CI·배포 workflow는 어떤 환경에서도 이 값을 켜지 않는다. 승인(환경, 모델, 월 예산, 데이터 정책 동의)은 `docs/implementation-plan.md` §7에 남긴 뒤 시작한다. CI·E2E는 `APP_ENV=test`의 결정적 fake만 쓴다.
+AI 질문(ASK-01)과 AI 문제 해설(AIEXPL-01)은 모든 환경에서 **기본 꺼짐**이다(변수 이름·기본값·서비스는 `infra/deploy/env-manifest.toml`과 같다 — ASK-X 2026-11-04 확정). 9장과 같이 이 장은 방법만 적고, 저장소·CI·배포 workflow는 어떤 환경에서도 이 값을 켜지 않는다. 승인(환경, 모델, 월 예산, 데이터 정책 동의)은 `docs/implementation-plan.md` §7에 남긴 뒤 시작한다. CI·E2E는 `APP_ENV=test`의 결정적 fake만 쓴다.
 
 **무엇이 켜지나**
 
@@ -393,15 +393,23 @@ AI 질문(ASK-01)과 AI 문제 해설(AIEXPL-01)은 모든 환경에서 **기본
 | `WORKER_ASK_LLM=true` | `api`·`worker` **같은 값** | 구성원이 header `AI 질문`과 문제의 `질문하기`(문제 상세·모의고사 문제)로 질문한다. **질문, 첨부 문제(등록 문제·모의고사 문제; 제출 전에는 발문·보기·고른 답만, 제출 후·문제 상세·모의고사 문제 관리에서는 정답·해설·출처 포함), 검색된 발행 교재 구절(질문마다 최대 16,000자)이 LLM 제공자로 전송된다.** |
 | `WORKER_AI_EXPLANATIONS=true` | `api`·`worker` **같은 값** | 제출 후 결과 아래(풀이 panel·범위 풀이·모의고사 풀이)·문제 상세의 `AI 해설 만들기`. **문제 revision(등록 문제 또는 모의고사 문제)의 발문·보기·정답·해설·출처와 교재 구절(최대 8,000자)이 전송된다.** 문제 revision마다 한 번 만들어 Workspace가 공유한다(모의고사 문제는 원본과 따로). |
 
-두 플래그는 독립이다. 관련 본문(RELSRC-01)은 LLM을 쓰지 않아 이 장의 승인 대상이 아니고 끄는 설정도 없다(언제나 켜짐). worker는 `interactive` queue를 읽는 process를 띄워야 한다(`ASK_WORKER_CONCURRENCY`, 기본 2; 플래그가 둘 다 꺼져 있으면 띄우지 않아도 됨). LLM 변수는 9장과 같다: worker `LLM_API_KEY`·`LLM_MODEL`, api 같은 `LLM_MODEL`(check-env `same`), 선택 `LLM_PRICE_*`(넣어야 `cost_usd`가 기록됨).
+두 플래그는 독립이다. 관련 본문(RELSRC-01)은 LLM을 쓰지 않아 이 장의 승인 대상이 아니고 끄는 설정도 없다(언제나 켜짐). worker는 `interactive` queue를 읽는 두 번째 process를 띄워야 한다: 같은 image·같은 env에 `WORKER_QUEUE=interactive`를 더하고 `python -m quiz_worker.serve`로 시작한다(beat 없음, 풀 크기 `ASK_WORKER_CONCURRENCY`, 기본 2). 기본 process는 그대로 beat와 문서·요약·모의고사 job을 맡아, 긴 문서 job이 답을 늦추지 않는다. 플래그가 둘 다 꺼져 있으면 띄우지 않아도 된다(`ask.purge`도 기본 process가 돈다). LLM 변수는 9장과 같다: worker `LLM_API_KEY`·`LLM_MODEL`, api 같은 `LLM_MODEL`(check-env `same`), 선택 `LLM_PRICE_*`(넣어야 `cost_usd`가 기록됨).
 
-**한도(기본값 유지 권장)** — `ASK_MAX_QUESTION_CHARS=1000`, `ASK_MAX_TURNS=20`, `ASK_HISTORY_TURNS=3`, `ASK_TOP_K=8`, `ASK_MAX_CONTEXT_CHARS=16000`, `ASK_MAX_OUTPUT_TOKENS=2000`, `ASK_LLM_EFFORT=low`, `ASK_RATE_LIMIT_PER_MINUTE=6`, `ASK_DAILY_LIMIT_PER_USER=50`, `ASK_MONTHLY_TOKEN_CAP=0`(끔; 켜려면 월 input+output token 합계), `ASK_RETENTION_DAYS=90`, `ASK_MAX_REGENERATIONS=5`(같은 질문의 답 버전 수; `다시 생성`은 분당·하루 한도에도 셈); `AI_EXPLANATION_TOP_K=5`, `AI_EXPLANATION_MAX_OUTPUT_TOKENS=1500`, `AI_EXPLANATION_RATE_LIMIT_PER_MINUTE=6`, `AI_EXPLANATION_DAILY_LIMIT_PER_USER=30`, `AI_EXPLANATION_MONTHLY_TOKEN_CAP=0`.
+**한도(기본값 유지 권장; 변수마다 읽는 서비스가 다르다 — `infra/deploy/env-manifest.toml`)**
+
+| 서비스 | 변수 = 기본값 |
+|---|---|
+| `api` | `ASK_MAX_QUESTION_CHARS=1000`, `ASK_MAX_TURNS=20`, `ASK_TOP_K=8`, `ASK_MAX_CONTEXT_CHARS=16000`, `ASK_MIN_RELEVANCE=0.3`, `ASK_RATE_LIMIT_PER_MINUTE=6`, `ASK_DAILY_LIMIT_PER_USER=50`, `ASK_MONTHLY_TOKEN_CAP=0`(끔; 켜려면 월 input+output token 합계), `ASK_MAX_REGENERATIONS=5`(같은 질문의 답 버전 수; `다시 생성`은 분당·하루 한도에도 셈); `AI_EXPLANATION_TOP_K=5`, `AI_EXPLANATION_RATE_LIMIT_PER_MINUTE=6`, `AI_EXPLANATION_DAILY_LIMIT_PER_USER=30`, `AI_EXPLANATION_MONTHLY_TOKEN_CAP=0`; 관련 본문 `RELATED_SOURCES_LIMIT=5`, `RELATED_SOURCES_MIN_RELEVANCE=0.1` |
+| `worker` | `WORKER_QUEUE`(두 번째 process만 `interactive`), `ASK_WORKER_CONCURRENCY=2`, `ASK_HISTORY_TURNS=3`, `ASK_MAX_OUTPUT_TOKENS=2000`, `ASK_LLM_EFFORT=low`, `ASK_RETENTION_DAYS=90`, `AI_EXPLANATION_MAX_OUTPUT_TOKENS=1500` |
+
+`ASK_MIN_RELEVANCE`·`RELATED_SOURCES_MIN_RELEVANCE`는 관련도 점수기(reranker)가 있을 때만 적용되는 하한이다. 기본값(0.3·0.1)은 합성 fixture와 fake로 정했을 뿐이므로, 실제 reranker를 쓰는 환경에서는 `make eval-models`와 `make eval-related-sources`로 확인하고 바꾼다(관련 본문 오프라인 평가는 keyword 절반만 본다 — 아래). 관련 본문은 LLM을 쓰지 않아 이 값으로 비용이 늘지 않는다.
 
 **비용 가늠**(`claude-sonnet-5-5`, 입력 $2 · 출력 $10 / 1M token, 2026-10 공개 가격 — 켜기 전에 제공자 가격표로 다시 확인)
 
 - AI 질문 1개 ≈ 입력 1만~1.5만 token + 출력 0.5k~2k → **$0.03~0.05**. 하루 한도 50개를 매일 다 쓰는 사용자 1명 ≈ 월 $45~75 — 월 예산을 넘길 수 있으므로 `ASK_MONTHLY_TOKEN_CAP`이나 낮은 하루 한도를 함께 정한다.
 - AI 해설 1개 ≈ 입력 6k~9k + 출력 1k~1.5k → **$0.02~0.03**, 문제 revision마다 한 번(1,000문제를 모두 만들면 약 $20~30). 캐시 읽기는 비용이 없다.
-- 켜기 전 측정: `make eval-ask-llm`(합성 fixture만 전송: 인용 유효율·근거 지지율·찾지 못함 정확도·`hint` 정답 누설률·token·`cost_usd`), 연결만 확인할 때 `make test-llm`.
+- 켜기 전 측정: 승인된 모델로 `make eval-ask-llm`(합성 fixture만 전송, `eval/reports/ask-llm.{json,md}`; 인용 유효율·근거 지지율(문장 겹침 + LLM judge)·찾지 못함 정확도·`hint` 정답 누설률(등록·모의고사 문제)·AI 해설 정답 일치율과 재요청 뒤 유효율·token·`cost_usd`(`LLM_PRICE_*`)·첫 글자까지 시간), 연결·streaming·형식만 확인할 때 `make test-llm`(ask·hint·explain smoke 포함, 합성 글만). 호출 수는 ask 18 + AI 해설 6에 judge 최대 약 30회와 재요청 1회. 오프라인 기준선(scripted fake, 2026-11-04, `eval/reports/sample-ask-fake.md`): 인용 유효율 91.7%(24 tag 중 2개가 받지 않은 tag), 근거 지지율 86.4%(22문단), 찾지 못함 정확도 88.9%(거절 3/4, 잘못된 거절 1/14), `hint` 정답 누설률 33.3%(2/6 — 일부러 넣은 결함), AI 해설 정답 일치율 83.3%·재요청 뒤 유효율 83.3%. 이 수치는 harness가 결함을 잡는지 보이는 기준이지 모델 성능이 아니다. 관련 본문은 `make eval-related-sources`(오프라인, fake embedder라 keyword 절반만: 출처 블록 포함률 100%, recall@5 72.7%, 문제지·문제 구간·가져온 출처 0행; 실제 embedder·reranker의 recall은 `make eval-models`와 staging 확인).
+- 지연(실제 provider는 승인 뒤, staging에서): 첫 글자까지 시간 = 브라우저 network 탭에서 `POST /api/ask/conversations/{id}/messages` 응답부터 `/api/ask/messages/{id}/stream` 첫 `delta` 도착까지(목표 p50 ≤ 3초·p95 ≤ 6초, 질문 20개 이상). interactive queue 대기 = 같은 요청의 job 생성 시각과 첫 delta 사이에서 모델 첫 글자 시간(`eval-ask-llm`의 `first_text_ms`)을 뺀 값. worker RAM = Railway의 interactive process 메모리 그래프(동시 2개 답 중 최대, 요약·문서 job이 기본 process에서 도는 동안 측정). 이 세 수치를 승인 기록(§7)에 남긴다. 이 harness 안의 `first_text_ms`는 scripted fake로는 자기 overhead(≈0.01 ms)일 뿐이다.
 
 **켜는 순서**(환경마다, staging 먼저): (1) 승인 기록, 제공자 console 예산 알림. (2) env 파일에 값 → `make check-env ENV=<env> ARGS="--check api=… --check worker=…"`. (3) Railway `worker`에 변수 + interactive process 설정 → Restart, 이어서 `api` → Restart. (4) 확인: 작은 교재에서 질문 하나 → 글자가 흘러나오고 `AI 생성`·각주가 보이는지, 첫 글자까지 시간(목표 p50 ≤ 3초), 풀이 panel 제출 전 `질문하기` 답에 정답이 없는지, 제출 후 `AI 해설 만들기` → 두 번째 사용자에게 캐시가 보이는지, `llm_feature_usage` 합계. worker 로그에는 본문·prompt·출력이 없고 counts·오류 코드만. (5) 첫 주 provider 사용량과 usage 합계를 예산과 비교.
 
