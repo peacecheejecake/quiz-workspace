@@ -44,7 +44,31 @@ export interface E2EFixtures {
   turnstile: FakeTurnstile;
 }
 
+/**
+ * Retries a `page.goto` only when it was interrupted by another navigation. Closing a practice
+ * panel (or a dialog) that saw a change makes the app navigate late on purpose (the Heatmap
+ * `router.refresh()` of a stale overview, or a history re-read), and WebKit reports that as an
+ * interruption of the test's next goto. There is no observable signal to wait for, so exactly that
+ * error is retried (up to 3 times); every other error is rethrown and callers keep their
+ * assertions.
+ */
+const GOTO_INTERRUPTED = /interrupted by another navigation/i;
+const GOTO_MAX_ATTEMPTS = 3;
+
 export const test = base.extend<E2EFixtures>({
+  page: async ({ page }, use) => {
+    const goto = page.goto.bind(page);
+    page.goto = async (...args: Parameters<typeof goto>) => {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          return await goto(...args);
+        } catch (error) {
+          if (attempt >= GOTO_MAX_ATTEMPTS || !GOTO_INTERRUPTED.test(String(error))) throw error;
+        }
+      }
+    };
+    await use(page);
+  },
   turnstile: [
     async ({ context }, use) => {
       const fake = new FakeTurnstile();
