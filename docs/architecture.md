@@ -251,6 +251,7 @@ workspace
 | POST | `/api/v1/questions/{id}/ai-explanation/regenerate` | 다시 만들기(편집 권한, revision당 하루 3번) |
 | GET | `/api/v1/ai-explanations/{id}/stream` | AI 해설 SSE |
 | GET | `/api/v1/questions/{id}/related-sources` | 제출 후 관련 본문(`practice_session_id` 제출 확인 또는 `view=detail`; 없으면 API 안에서 검색해 저장, LLM 없음 — RELSRC-01) |
+| GET | `/api/v1/questions/{id}/source-region` · `/api/v1/mock-exam-questions/{id}/source-region` | 문제 원문 보기(QSRC-01): 가져오기 출처(`question_sources.import_run_id` 있음) 위치의 문서·쪽·bbox 합집합만, 정답·글 없음, 구성원 누구나, 없으면 404. PDF는 기존 `GET /documents/{id}/source-url` 중계 |
 | GET/POST | `/api/v1/mock-exam-questions/{id}/ai-explanation` · `/ai-explanation/regenerate` · `/related-sources`, GET `/api/v1/mock-ai-explanations/{id}/stream` | 모의고사 문제의 AI 해설·SSE·관련 본문(`mock_practice_session_id` 제출 확인; 삭제된 모의고사·빠진 문제 404; 공유 API 없음 — AIEXPL-01-C09·RELSRC-01-C07, ASK-SYNC) |
 | GET | `/api/v1/jobs/{id}` | 비동기 작업 상태 |
 | GET | `/api/v1/jobs/{id}/events` | SSE 진행 상황 |
