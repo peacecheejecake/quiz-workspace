@@ -84,6 +84,12 @@ export type {
 export { Textarea } from './primitives/Textarea';
 export type { TextareaProps } from './primitives/Textarea';
 export { Tooltip } from './primitives/Tooltip';
+export {
+  PREVIEW_CLOSE_MS,
+  PREVIEW_LONG_PRESS_MS,
+  PreviewTooltip,
+} from './primitives/PreviewTooltip';
+export type { PreviewTooltipMode, PreviewTooltipProps } from './primitives/PreviewTooltip';
 export { TOOLTIP_DELAY_MS, TOOLTIP_DESCRIPTION_DELAY_MS } from './primitives/tooltip-delay';
 export type { TooltipProps } from './primitives/Tooltip';
 
@@ -109,6 +115,7 @@ export { ConfirmDialog } from './layout/ConfirmDialog';
 export type { ConfirmDialogProps } from './layout/ConfirmDialog';
 export { FloatingSidePanel } from './layout/FloatingSidePanel';
 export type { FloatingSidePanelProps, PanelSteps } from './layout/FloatingSidePanel';
+export { usePairedSheet } from './layout/paired-sheet';
 export { DialogClose, ModalDialog } from './layout/ModalDialog';
 export { ownEscapeProps } from './internal/own-escape';
 export { useUnsavedChanges } from './internal/dirty';
