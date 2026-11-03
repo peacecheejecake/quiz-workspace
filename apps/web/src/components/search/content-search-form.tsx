@@ -23,6 +23,8 @@ export interface ContentSearchFormProps {
   /** The content-search options, shown in the "본문 설정" popover. */
   readonly settings: ReactNode;
   readonly inputRef?: Ref<HTMLInputElement>;
+  /** Extra action after the search button (the home's `AI에게 묻기`, ASK-01). */
+  readonly extraAction?: ReactNode;
 }
 
 export function ContentSearchForm({
@@ -32,6 +34,7 @@ export function ContentSearchForm({
   searchable,
   settings,
   inputRef,
+  extraAction,
 }: ContentSearchFormProps) {
   const messageId = useId();
   const message = searchable ? null : CONTENT_SEARCH_BLOCKED;
@@ -65,6 +68,7 @@ export function ContentSearchForm({
           disabled={!searchable}
           aria-describedby={message ? messageId : undefined}
         />
+        {extraAction}
         <SearchSettings label="본문">{settings}</SearchSettings>
       </div>
       <p

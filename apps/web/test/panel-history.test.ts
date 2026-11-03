@@ -924,5 +924,32 @@ describe('PanelHistory', () => {
       expect(fake.url()).toBe('/w');
       expectBackLeavesForwardStaysClosed(fake);
     });
+
+    it('ASK-01: the AI 질문 panel stays open while the practice panel gives way to the run', () => {
+      // `?panel=ask` is a home dialog beside both panels (QVIEW-01-AC09 does not concern it):
+      // list → conversation pushes, the first question names it in place.
+      const c = '77777777-7777-4777-8777-000000000001';
+      const ask = `/w?panel=ask&conversation=${c}`;
+      const { fake, history } = controller();
+      history.push('/w?panel=ask');
+      history.push(ask);
+      history.push(`${ask}&question=1`);
+      history.close(ask, `${ask}&practice=new&source=bank`);
+      fake.traverse();
+      expect(fake.url()).toBe(`${ask}&practice=new&source=bank`);
+      // Back closes the run (the AI 질문 panel stays on its conversation), then goes back to
+      // the list inside the panel, then closes the panel; Forward reopens nothing closed.
+      fake.back();
+      expect(fake.url()).toBe(ask);
+      fake.forward();
+      expect(fake.url()).toBe(ask);
+      fake.back();
+      expect(fake.url()).toBe('/w?panel=ask');
+      fake.back();
+      expect(fake.url()).toBe('/w');
+      fake.forward();
+      noDialogs(fake);
+      expectBackLeavesForwardStaysClosed(fake);
+    });
   });
 });
