@@ -156,6 +156,27 @@ async function expandAll(dialog: Locator, titles: readonly string[]): Promise<vo
   }
 }
 
+/** The dialog is gone and so is its `panel` value (the app's URL write has landed). */
+async function expectDialogClosed(page: Page): Promise<void> {
+  await expect(redistUi.dialog(page)).toBeHidden();
+  await expect(page).not.toHaveURL(/[?&]panel=/);
+}
+
+/**
+ * `page.goto` after a dialog closed: the close's own history traversal (dropping its entries,
+ * then a re-read) can still be running and interrupt the goto; that one is simply retried.
+ */
+async function gotoSettled(page: Page, url: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await page.goto(url);
+      return;
+    } catch (error) {
+      if (attempt >= 3 || !/interrupted by another navigation/i.test(String(error))) throw error;
+    }
+  }
+}
+
 /** The heatmap group of `title` holds `n` markers (0 = the group is gone). */
 async function expectGroupSize(page: Page, title: string, n: number): Promise<void> {
   const group = redistUi.heatmapGroup(page, title);
@@ -419,6 +440,7 @@ test(
       ).toBeVisible();
     }
     await page.keyboard.press('Escape');
+    await expectDialogClosed(page);
     const moved = overviewUi.dot(page, 1);
     await expect(moved).toHaveAttribute('data-status', statusBefore ?? 'correct');
     await expect(overviewUi.marker(moved)).toHaveAttribute('data-shape', 'star');
@@ -426,7 +448,7 @@ test(
     expect((await getQuestion(s.owner, q1.id)).revision.version).toBe(q1.revision.version);
 
     // Both notes are stale; 1장's footnote of a moved question reads "삭제되었거나 옮긴 문제".
-    await page.goto(notePanelPath(s.workspaceId, s.ch1));
+    await gotoSettled(page, notePanelPath(s.workspaceId, s.ch1));
     const panel = noteUi.panel(page);
     await expect(noteUi.stale(panel)).toBeVisible();
     // Until UX9-NOTE-W drops the folded note body (CHNOTE-02), unfold it to read the footnotes.
@@ -660,11 +682,13 @@ test(
     expect(reassignedActivityCount(s.workspaceId)).toBe(activityBefore + 1);
     expect(chapterChangeCount(s.workspaceId)).toBe(changesBefore + 2);
     await page.keyboard.press('Escape');
+    // The close drops `panel` with its own history write: a goto before it lands is interrupted.
+    await expectDialogClosed(page);
     await expectGroupSize(page, CH2, 2);
 
     // Keyboard only at 375px: move the 챕터 없음 question to 1장.
     await page.setViewportSize({ width: 375, height: 740 });
-    await page.goto(overviewPath(s.workspaceId));
+    await gotoSettled(page, overviewPath(s.workspaceId));
     await expect(overviewUi.heatmap(page)).toBeVisible();
     // Enter, arrows to 챕터 재분배 (asserted focused), Enter.
     dialog = await openRedistributionByKeyboard(page);

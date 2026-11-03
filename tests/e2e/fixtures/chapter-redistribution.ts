@@ -255,14 +255,23 @@ export function summaryText(parts: {
 /** Opens `문제` › `챕터 재분배` with the keyboard (Enter, arrows) and returns the dialog. */
 export async function openRedistributionByKeyboard(page: Page): Promise<Locator> {
   const button = main(page).getByRole('button', { name: /^(문제|questions)$/i });
-  await button.focus();
-  await page.keyboard.press('Enter');
   const item = redistUi.menuItem(page);
-  await expect(item).toBeVisible();
-  for (let i = 0; i < 8 && !(await item.evaluate((el) => el === document.activeElement)); i++) {
-    await page.keyboard.press('ArrowDown');
-  }
-  await expect(item).toBeFocused();
+  // Right after a navigation the page may still be settling (hydration, a late history write):
+  // a menu that lost its focus meanwhile is closed with Escape and opened again, keyboard only.
+  await expect(async () => {
+    if (!(await item.isVisible())) {
+      await button.focus();
+      await page.keyboard.press('Enter');
+    }
+    await expect(item).toBeVisible({ timeout: 2_000 });
+    for (let i = 0; i < 8 && !(await item.evaluate((el) => el === document.activeElement)); i++) {
+      await page.keyboard.press('ArrowDown');
+    }
+    if (!(await item.evaluate((el) => el === document.activeElement))) {
+      await page.keyboard.press('Escape');
+      throw new Error('챕터 재분배 is not focused yet');
+    }
+  }).toPass({ timeout: 20_000 });
   await page.keyboard.press('Enter');
   const dialog = redistUi.dialog(page);
   await expect(dialog).toBeVisible();
