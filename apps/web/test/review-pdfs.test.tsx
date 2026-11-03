@@ -353,3 +353,42 @@ describe('ImportReviewLayout (QIMPORT-02)', () => {
     expect(screen.queryByRole('navigation', { name: '검토할 PDF' })).toBeNull();
   });
 });
+
+describe('ImportReviewLayout switching to a PDF without an extraction (Codex P2)', () => {
+  it('QIMPORT-02-AC03 the checked drafts of the PDF left behind never make the next switch ask', async () => {
+    router.push.mockClear();
+    const user = userEvent.setup();
+    const { rerender } = render(layout());
+    const nav = () => screen.getByRole('navigation', { name: '검토할 PDF' });
+    await user.click(screen.getByRole('checkbox', { name: '1번 문제 선택' }));
+    await user.click(within(nav()).getByRole('link', { name: '교재+문제 C' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '바꾸기' }),
+    );
+    expect(router.push).toHaveBeenCalledTimes(1);
+    // The server renders C: no review pane (it has no extraction), so nothing is checked.
+    rerender(
+      <ImportReviewLayout
+        workspaceId={WS}
+        workspaceName="연습 Workspace"
+        readOnly={null}
+        documents={[
+          doc(A, '문제지 A', 'question_paper'),
+          doc(B, '교재 B', 'mixed'),
+          doc(C, '교재+문제 C', 'mixed', { latest_import_id: null }),
+        ]}
+        runs={[run(A, { draft_count: 2, published_count: 0 }), run(B)]}
+        listFailed={false}
+        documentId={C}
+        review={null}
+      />,
+    );
+    expect(screen.getByText('아직 추출하지 않았습니다.')).toBeTruthy();
+    await user.click(within(nav()).getByRole('link', { name: '교재 B' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(router.push).toHaveBeenLastCalledWith(
+      `/workspaces/${WS}/questions/import?document=${B}`,
+      { scroll: false },
+    );
+  });
+});

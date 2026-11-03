@@ -770,6 +770,9 @@ export function QuestionImport({
     () => onSelectionChange?.(selectedCount, publishing),
     [onSelectionChange, publishing, selectedCount],
   );
+  // Gone (another PDF chosen): nothing is checked any more. A PDF without an extraction renders
+  // no pane to say so; a new pane's own report runs after this cleanup.
+  useEffect(() => () => onSelectionChange?.(0, false), [onSelectionChange]);
 
   const documentsHref = workspaceHomePath(workspaceId, 'panel=documents');
   const step: ImportStep | null = activity?.step ?? null;
