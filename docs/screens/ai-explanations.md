@@ -60,9 +60,11 @@ linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC07]
 | 항목 | 기본값 | 넘으면 |
 |---|---|---|
 | 새로 만들기(캐시 없음) 분당 `AI_EXPLANATION_RATE_LIMIT_PER_MINUTE` | 사용자당 6 | 429 + Retry-After, "잠시 후 다시 시도하세요 (n초)" |
-| 하루 새로 만들기 `AI_EXPLANATION_DAILY_LIMIT_PER_USER` | 30 (캐시 읽기는 무제한) | 429 `explanation-daily-limit` |
-| 다시 만들기 | 문제 revision당 하루 3번(편집 권한) | 409 `explanation-regenerate-limit` |
-| 월 token 상한 `AI_EXPLANATION_MONTHLY_TOKEN_CAP` | 0 = 끔 | 409 `explanation-budget-exceeded` |
+| 하루 새로 만들기 `AI_EXPLANATION_DAILY_LIMIT_PER_USER` | 30 (캐시 읽기는 무제한) | 429 `explanation-daily-limit`, "오늘 만들 수 있는 AI 해설을 모두 만들었습니다." |
+| 다시 만들기 | 문제 revision당 하루 3번(편집 권한) | 409 `explanation-regenerate-limit`, "오늘은 이 문제의 해설을 더 다시 만들 수 없습니다." |
+| 월 token 상한 `AI_EXPLANATION_MONTHLY_TOKEN_CAP` | 0 = 끔 | 409 `explanation-budget-exceeded`, "이번 달 AI 해설 사용량을 모두 썼습니다." |
+
+거절 문구 세 개(하루 한도·다시 만들기 한도·월 상한)는 사용자 결정 2026-11-03(EXPL-W).
 | 모델 출력 `AI_EXPLANATION_MAX_OUTPUT_TOKENS` · effort | 1,500 token · `low` | 잘리면 "(해설이 길어 잘렸습니다)" |
 
 - **비용 가늠** (`claude-sonnet-5-5`, 입력 $2 · 출력 $10 / 1M token, 2026-10 공개 가격): 해설 하나 ≈ 입력 6k~9k token(지시 1.5k + 문제 1k + 근거 8,000자 ≈ 4k~6k) + 출력 1k~1.5k → **약 $0.02~0.03, 문제 revision마다 한 번**(공유 캐시). 1,000문제 Workspace에서 모든 문제를 한 번씩 만들면 약 $20~30.
@@ -74,12 +76,12 @@ linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC07]
   - 만든 적 없음: 글자 버튼 `AI 해설 만들기`(접근성 이름 "AI 해설 만들기") + 작은 안내 "문제와 정답, 관련 교재 구절이 AI 서비스로 전송됩니다."
   - 이미 있음(캐시) (사용자 결정 2026-11-01): 결과를 가리지 않도록 버튼 대신 접힌 disclosure `AI 해설 보기`(`aria-expanded`, 기본 접힘)로 보인다. 펼치면 생성 없이 저장된 해설을 불러온다.
   - 만드는 중: "AI 해설을 만드는 중" 글자 + 받은 글자를 이어 붙임(ASK-01과 같은 SSE·`aria-busy`·status 알림 규칙: 시작 한 번 "AI 해설을 만드는 중입니다", 끝 한 번 "AI 해설이 준비되었습니다"). 다른 사람이 만드는 중이면 같은 stream을 이어 본다.
-  - 완료: `AI 생성` badge, 안내 문구, 본문(Markdown 일부만, sanitize), 각주 `[1]`과 `출처` 목록(문서·장·쪽, 버튼 → "본문 발췌" panel → "PDF에서 보기"가 DOC-02 그 쪽), 메타 "<생성 시각> · 버전 k"(다시 만든 경우), 편집 권한이면 `다시 만들기`, 그리고 `이 문제로 질문하기`(ASK가 켜진 환경).
+  - 완료: `AI 생성` badge, 안내 문구, 본문(Markdown 일부만, sanitize), 각주 `[1]`과 `출처` 목록(문서·장·쪽, 버튼 → "본문 발췌" panel → "PDF에서 보기"가 DOC-02 그 쪽 — 발췌와 PDF는 해설을 만들 때 인용한 문서 revision으로 열린다; 그 뒤 다시 발행되었으면 "이 출처는 이전 발행본입니다."), 메타 "<생성 시각> · 버전 k"(다시 만든 경우), 편집 권한이면 `다시 만들기`, 그리고 `이 문제로 질문하기`(ASK가 켜진 환경).
   - 실패: `role="alert"` 이유(ASK-01 오류 문구, `explanation_answer_mismatch` → "정답과 맞지 않는 해설이 나와 보여 주지 않았습니다. 다시 시도하세요.") + `다시 시도`.
   - 기능 꺼짐: 버튼 대신 "이 환경에서는 AI 해설을 사용할 수 없습니다."(이미 있는 해설은 보임).
   - 보관된 Workspace: 이미 있는 해설만, 만들기·다시 만들기 없음("보관된 Workspace에서는 새 AI 해설을 만들 수 없습니다.").
 - 해설 영역은 결과 영역과 같은 panel scroll 안에 있고, 만들기를 누르면 focus는 영역 제목으로 가고 완료되어도 이동하지 않는다. 키보드: 버튼 Enter/Space, 각주·출처 Tab, 발췌 panel Escape로 닫으면 focus는 누른 출처로. 모바일 bottom sheet에서도 같은 순서, 가로 스크롤 없음.
-- 공유 게스트: 공유 문제 미리보기(QuestionViewer `read-only`, non-modal — QVIEW-01 호출 위치 6)의 해설 아래 "AI 해설" disclosure(있을 때만). 만들기·다시 만들기·상태·오류·버전·비용 없음.
+- 공유 게스트: 공유 문제 미리보기(QuestionViewer `read-only`, non-modal — QVIEW-01 호출 위치 6)의 해설 아래 "AI 해설" disclosure(있을 때만). 만들기·다시 만들기·상태·오류·버전·비용 없음. 각주·출처는 글자로만 보인다(본문 발췌 panel 없음).
 
 ## 화면 상태
 
