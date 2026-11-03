@@ -256,6 +256,7 @@ const DraftItem = memo(function DraftItem({
               size="sm"
               aria-haspopup="dialog"
               aria-label={`원본 비교: ${n}번 문제`}
+              data-compare-draft={draft.id}
               onClick={() => onCompare(draft)}
             >
               원본 비교

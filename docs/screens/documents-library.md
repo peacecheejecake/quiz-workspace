@@ -1,7 +1,7 @@
 # DOC-01 — 문서 관리 (Documents 목록·PDF 업로드)
 
 **상태:** 확정 화면 요구사항 v1.4 · UX1·UX2 개정 2026-10-19 · UX3c 개정 2026-10-20 (문서 관리 floating dialog) · UX6-UPLOAD 개정 2026-10-28 (모든 PDF를 한 곳에서 여러 개 올림, 자동 분류·종류 badge·`종류 변경`) · UX6-PROGRESS 개정 2026-10-28 (단계 진행 표시) · UX7-DOCS 개정 2026-11-01 (문제 PDF 관리를 문서 관리로 통합) · UX7-DOCS-2 개정 2026-11-01 (보기 권한에도 `문제` 버튼, 종류 필터 없음 확정)
-**Route:** `/workspaces/:workspaceId?panel=documents` (Workspace header `문서 n` 버튼이 여는 non-modal floating dialog "문서 관리"; 이전 `/workspaces/:workspaceId/documents`와 폐기된 문제 PDF 관리 dialog `?panel=question-pdfs`(UX7-DOCS)는 여기로 redirect)
+**Route:** `/workspaces/:workspaceId?panel=documents` (Workspace header `문서 n` 버튼이 여는 non-modal floating dialog "문서 관리" — UX9-SPEC부터 modal, HOMEDLG-01; 이전 `/workspaces/:workspaceId/documents`와 폐기된 문제 PDF 관리 dialog `?panel=question-pdfs`(UX7-DOCS)는 여기로 redirect)
 **테스트:** `tests/e2e/documents/documents-library.spec.ts`
 **연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
 
@@ -61,7 +61,7 @@
 
 - **Given:** 교재 문서, 문제지, 교재+문제 PDF가 함께 등록된 Workspace 홈
 - **When:** header의 `문서 n` 버튼을 누름
-- **Then:** "문서 관리" non-modal floating dialog가 열리고(`?panel=documents`) 목록은 세 PDF를 모두 보이며 각 행에 종류 badge(`교재`/`문제지`/`교재+문제`, 글자)가 있다. n은 본문이 있는 PDF(교재와 교재+문제, 여기서는 2)만 센다(UX6-UPLOAD 2026-10-28; 이전 UX3c는 책 문서만 나열하고 badge 없음). 페이지 제목·설명은 없고, 편집 권한이 있으면 점선 Dropzone이 보인다. 상태 badge(예: "준비 완료")는 종류 badge 오른쪽, 메타 줄은 `<날짜 시각> · <용량>`("수정" 글자·파일 이름 없음), 파일 이름은 제목의 tooltip으로만 보인다. 삭제는 휴지통 아이콘 버튼(접근성 이름 "<제목> 삭제")이고 확인 후 목록이 줄어들며, 지운 PDF가 교재(또는 교재+문제)면 `문서 n`도 함께 줄어든다(UX3c).
+- **Then:** "문서 관리" non-modal floating dialog(UX9-SPEC 사용자 결정 2026-11-02 D3: modal — [HOMEDLG-01](home-dialogs.md); test는 UX9-MODAL이 고침)가 열리고(`?panel=documents`) 목록은 세 PDF를 모두 보이며 각 행에 종류 badge(`교재`/`문제지`/`교재+문제`, 글자)가 있다. n은 본문이 있는 PDF(교재와 교재+문제, 여기서는 2)만 센다(UX6-UPLOAD 2026-10-28; 이전 UX3c는 책 문서만 나열하고 badge 없음). 페이지 제목·설명은 없고, 편집 권한이 있으면 점선 Dropzone이 보인다. 상태 badge(예: "준비 완료")는 종류 badge 오른쪽, 메타 줄은 `<날짜 시각> · <용량>`("수정" 글자·파일 이름 없음), 파일 이름은 제목의 tooltip으로만 보인다. 삭제는 휴지통 아이콘 버튼(접근성 이름 "<제목> 삭제")이고 확인 후 목록이 줄어들며, 지운 PDF가 교재(또는 교재+문제)면 `문서 n`도 함께 줄어든다(UX3c).
 
 ### DOC-01-AC07
 

@@ -166,15 +166,19 @@ describe('search address-bar state', () => {
     expect(parseSearchParams({ ...params, papers: '0' })).toEqual(q);
   });
 
-  it('drops invalid values and a chapter without its document', () => {
+  it('drops invalid values and keeps a chapter without its document (the old /search?chapter=)', () => {
     expect(
       parseSearchParams({ text: '  water ', mode: 'fuzzy', document: 'nope', section: CHAPTER }),
     ).toEqual({
       query: 'water',
       mode: 'hybrid',
       documentId: null,
-      chapterId: null,
+      chapterId: CHAPTER,
     });
+    expect(parseSearchParams({ text: 'water', section: 'nope' }).chapterId).toBeNull();
+    expect(
+      searchParamsFor({ query: 'water', mode: 'hybrid', documentId: null, chapterId: CHAPTER }),
+    ).toBe(`text=water&section=${CHAPTER}`);
     expect(parseSearchParams({ text: 'x'.repeat(5000) }).query).toHaveLength(1000);
     // UX7-SEARCH: `q` is the 문제 search, not the 본문 query.
     expect(parseSearchParams({ q: 'water' }).query).toBe('');

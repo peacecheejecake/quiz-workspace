@@ -40,7 +40,7 @@ export function ScrollRegion({ className, children }: { className: string; child
       subtree: true,
       characterData: true,
       attributes: true,
-      attributeFilter: ['disabled', 'tabindex', 'hidden', 'href', 'contenteditable'],
+      attributeFilter: ['disabled', 'tabindex', 'hidden', 'inert', 'href', 'contenteditable'],
     });
     return () => {
       resize?.disconnect();

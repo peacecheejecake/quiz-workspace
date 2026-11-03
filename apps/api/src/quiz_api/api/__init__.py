@@ -9,11 +9,13 @@ from fastapi import APIRouter
 
 from quiz_api.api import (
     chapter_notes,
+    chapter_redistribution,
     document_export,
     document_revisions,
     document_summaries,
     documents,
     forks,
+    highlights,
     history,
     jobs,
     me,
@@ -24,6 +26,7 @@ from quiz_api.api import (
     question_duplicates,
     question_imports,
     question_overview,
+    question_previews,
     questions,
     search,
     share_links,
@@ -47,6 +50,7 @@ api_router.include_router(search.router)
 api_router.include_router(questions.router)
 api_router.include_router(question_overview.router)
 api_router.include_router(question_duplicates.router)
+api_router.include_router(chapter_redistribution.router)
 api_router.include_router(question_imports.router)
 api_router.include_router(practice.router)
 api_router.include_router(practice_runs.router)
@@ -57,5 +61,8 @@ api_router.include_router(jobs.router)
 api_router.include_router(history.router)
 api_router.include_router(chapter_notes.router)
 api_router.include_router(shared_chapter_notes.router)
+api_router.include_router(question_previews.router)
+api_router.include_router(question_previews.shared_router)
 api_router.include_router(mock_exams.router)
 api_router.include_router(mock_practice.router)
+api_router.include_router(highlights.router)

@@ -26,7 +26,8 @@ const meta = {
           'one horizontally scrollable row below 768px. HeatmapLegend: always-visible status ' +
           'names + favorite star. QuestionMarker: decorative SVG (aria-hidden), status color ' +
           'via data-status, ≥3:1 outline. FavoriteToggle/RetryToggle: IconButtons whose label ' +
-          'names the action (`즐겨찾기 추가`/`즐겨찾기 해제`, `다시 풀기 표시`/`다시 풀기 해제`).',
+          'names the action (`즐겨찾기 추가`/`즐겨찾기 해제`, `다시 풀기 표시`/`다시 풀기 해제`); ' +
+          'the retry icon is a question mark in a circle (outline off, filled circle on).',
       },
     },
   },
@@ -66,3 +67,19 @@ function TogglesDemo() {
 }
 
 export const Toggles: Story = { render: () => <TogglesDemo /> };
+
+/** `RetryToggle` off (outlined question mark) and on (filled circle), UX9 QVIEW-01-C08. */
+function RetryStates() {
+  return (
+    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+      <RetryToggle pressed={false} onPressedChange={() => undefined} />
+      <RetryToggle pressed onPressedChange={() => undefined} />
+    </div>
+  );
+}
+
+export const RetryToggleStates: Story = { render: () => <RetryStates /> };
+export const RetryToggleStatesDark: Story = {
+  globals: { theme: 'dark' },
+  render: () => <RetryStates />,
+};

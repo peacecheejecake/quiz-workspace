@@ -11,6 +11,7 @@
 // the list's controls carry an explicit tabIndex so WebKit (Safari's default: Tab skips buttons)
 // stops on them too.
 import {
+  Badge,
   Button,
   Checkbox,
   ChevronDownIcon,
@@ -250,19 +251,29 @@ function ChapterGroup({
 }) {
   const listId = useId();
   const ids = group.questions.map((q) => q.id);
-  const row = (q: RangeQuestion) => (
-    <Checkbox
-      label={questionLabel(q)}
-      tabIndex={0}
-      checked={selected.has(q.id)}
-      onCheckedChange={(checked) => {
-        const next = new Set(selected);
-        if (checked === true) next.add(q.id);
-        else next.delete(q.id);
-        onSelectedChange(next);
-      }}
-    />
-  );
+  const row = (q: RangeQuestion) => {
+    const box = (
+      <Checkbox
+        label={questionLabel(q)}
+        tabIndex={0}
+        checked={selected.has(q.id)}
+        onCheckedChange={(checked) => {
+          const next = new Set(selected);
+          if (checked === true) next.add(q.id);
+          else next.delete(q.id);
+          onSelectedChange(next);
+        }}
+      />
+    );
+    return q.badge ? (
+      <div className={styles.badgedRow}>
+        {box}
+        <Badge>{q.badge}</Badge>
+      </div>
+    ) : (
+      box
+    );
+  };
   return (
     <li className={styles.group}>
       <div className={styles.groupHeader}>
@@ -290,7 +301,7 @@ function ChapterGroup({
       </div>
       {expanded ? (
         group.questions.length > VIRTUALIZE_AT ? (
-          <VirtualRows id={listId} questions={group.questions} row={row} />
+          <VirtualRows id={listId} items={group.questions} row={row} />
         ) : (
           <ul id={listId} className={styles.questionList}>
             {group.questions.map((q) => (
@@ -312,33 +323,51 @@ export function questionLabel(q: RangeQuestion): string {
   return `${q.number} · ${stem} · ${questionTypeLabels[q.type]}`;
 }
 
-/** A long chapter: only the rows in view (and a few around them) are in the DOM. */
-function VirtualRows({
+/**
+ * A long list: only the rows in view (and a few around them) are in the DOM, each at a fixed
+ * height (`rowPx`) inside a scrolling box of the list's max-block-size (24rem). Used by a long
+ * chapter here and by the CHREDIST-01 recommendation list.
+ */
+export function VirtualRows<T extends { readonly id: string }>({
   id,
-  questions,
+  items,
   row,
+  rowPx = ROW_PX,
+  label,
+  listClassName = styles.questionList,
+  rowClassName = styles.questionRow,
 }: {
-  readonly id: string;
-  readonly questions: readonly RangeQuestion[];
-  readonly row: (q: RangeQuestion) => ReactNode;
+  readonly id?: string;
+  readonly items: readonly T[];
+  readonly row: (item: T) => ReactNode;
+  readonly rowPx?: number;
+  /** The list's accessible name (`aria-label`). */
+  readonly label?: string;
+  readonly listClassName?: string;
+  readonly rowClassName?: string;
 }) {
   const [top, setTop] = useState(0);
   const viewport = 24 * 16; // the list's max-block-size (24rem)
-  const first = Math.max(0, Math.floor(top / ROW_PX) - OVERSCAN);
-  const last = Math.min(questions.length, Math.ceil((top + viewport) / ROW_PX) + OVERSCAN);
+  const first = Math.max(0, Math.floor(top / rowPx) - OVERSCAN);
+  const last = Math.min(items.length, Math.ceil((top + viewport) / rowPx) + OVERSCAN);
   return (
     <div
       className={styles.virtualList}
       onScroll={(event: UIEvent<HTMLDivElement>) => setTop(event.currentTarget.scrollTop)}
     >
-      <ul id={id} className={styles.questionList} style={{ blockSize: questions.length * ROW_PX }}>
-        {questions.slice(first, last).map((q, i) => (
+      <ul
+        id={id}
+        aria-label={label}
+        className={listClassName}
+        style={{ blockSize: items.length * rowPx }}
+      >
+        {items.slice(first, last).map((item, i) => (
           <li
-            key={q.id}
-            className={`${styles.questionRow} ${styles.virtualRow}`}
-            style={{ insetBlockStart: (first + i) * ROW_PX, blockSize: ROW_PX }}
+            key={item.id}
+            className={`${rowClassName} ${styles.virtualRow}`}
+            style={{ insetBlockStart: (first + i) * rowPx, blockSize: rowPx }}
           >
-            {row(q)}
+            {row(item)}
           </li>
         ))}
       </ul>

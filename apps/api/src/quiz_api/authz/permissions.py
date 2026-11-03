@@ -7,7 +7,8 @@ authorization query takes so the check and the action happen in one transaction.
 Role draft (auth.md §4): owner = everything; editor = edit documents/questions + practice;
 viewer = read + own practice/favorites. Archived workspaces are read-only: only the owner's
 lifecycle actions (restore, delete, archive itself) and share-link revocation/policy changes
-(docs/screens/workspace-sharing.md) remain possible. Personal practice writes count as writes.
+(docs/screens/workspace-sharing.md) remain possible. Personal practice writes count as writes;
+personal highlights (UX9-HL-B) are the one member write an archived workspace still allows.
 """
 
 from __future__ import annotations
@@ -57,6 +58,9 @@ class Action(StrEnum):
     SHARE_CREATE = "workspace.share.create"
     # Revoke a share link or change its policy (allow_fork, expiry).
     SHARE_MANAGE = "workspace.share.manage"
+    # UX9-HL-B: the caller's own highlights (a personal record, like practice). The only write
+    # allowed in an archived workspace for every role (user decision 2026-11-02 (i), HILITE-01).
+    HIGHLIGHT = "workspace.highlight"
 
 
 @dataclass(frozen=True)
@@ -103,6 +107,7 @@ PERMISSIONS: Final[Mapping[Action, ActionPolicy]] = MappingProxyType(
         Action.MEMBERS_MANAGE: _lifecycle(archived_ok=False),
         Action.SHARE_CREATE: _write(_OWNER),
         Action.SHARE_MANAGE: _write(_OWNER, archived_ok=True),
+        Action.HIGHLIGHT: _write(_ALL, archived_ok=True),
     }
 )
 

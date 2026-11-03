@@ -43,6 +43,8 @@ import {
   waitForJob,
   waitForLatestImport,
 } from '../fixtures/test.ts';
+// UX9 (HOMEDLG-01): behind a modal dialog the home is hidden from assistive technology.
+import { homeBackgroundUi, homeDialogUi } from '../fixtures/ux9-pages.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -327,13 +329,14 @@ test(
 
     await signInAs(page, owner.user);
     await page.goto(`/workspaces/${ws.id}`);
-    const button = homeUi.documentsButton(page);
+    const button = homeBackgroundUi.documentsButton(page);
     await expect(button).toHaveText(/문서\s*2$/); // 교재 + 교재+문제; not the 문제지
     await button.click();
     await expect(page).toHaveURL(/[?&]panel=documents(&|$)/);
     const dialog = homeUi.documentsDialog(page);
     await expect(dialog).toBeVisible();
-    await expect(dialog).not.toHaveAttribute('aria-modal', 'true');
+    // UX9 (HOMEDLG-01): a modal dialog.
+    await expect(dialog).toHaveAttribute('aria-modal', 'true');
 
     // UX6-UPLOAD: every PDF, each with its kind as text.
     const rows = dialog.getByRole('list', { name: /문서 목록|documents/i }).getByRole('listitem');
@@ -392,7 +395,7 @@ test(
     const paper = questionPaper();
     await signInAs(page, owner.user);
     await page.goto(`/workspaces/${ws.id}`);
-    await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*0$/);
+    await expect(homeBackgroundUi.documentsButton(page)).toHaveText(/문서\s*0$/);
     await homeUi.documentsButton(page).click();
     const dialog = homeUi.documentsDialog(page);
     await expect(dialog).toBeVisible();
@@ -435,7 +438,7 @@ test(
     await expect(docUi.reviewLink(paperRow)).toBeVisible({ timeout: JOB_TIMEOUT_MS });
     await expect(docUi.reviewLink(bookRow)).toHaveCount(0);
     await expect(docUi.extractButton(bookRow)).toHaveCount(0);
-    await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*1$/);
+    await expect(homeBackgroundUi.documentsButton(page)).toHaveText(/문서\s*1$/);
 
     const docs = await listDocuments(owner, ws.id);
     expect(docs).toHaveLength(2);
@@ -486,7 +489,7 @@ test(
 
     await signInAs(page, owner.user);
     await page.goto(`/workspaces/${ws.id}`);
-    const button = homeUi.documentsButton(page);
+    const button = homeBackgroundUi.documentsButton(page);
     await expect(button).toHaveText(/문서\s*1$/);
     await button.click();
     const paperRow = docUi.item(page, /questions-ko/);
@@ -567,6 +570,8 @@ test(
       /^(직접 추가|add question)$/i,
       // UX7-DEDUP (QOV-01-AC16).
       /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
+      // CHREDIST-01 (UX9-REDIST-W).
+      /^(챕터 재분배|redistribute chapters)$/i,
       // UX7-BANK-2 (QOV-01-AC15).
       /^(보관·초안 문제|archived and draft questions)$/i,
       // MOCK-01 (MOCK-W) and QVIEW-01 (QVIEW-W).
@@ -586,7 +591,8 @@ test(
     );
     const dialog = homeUi.documentsDialog(page);
     await expect(dialog).toBeVisible();
-    await expect(homeUi.shareDialog(page)).toBeVisible();
+    // UX9: both deep-linked dialogs are open, 문서 관리 (last in the URL) on top.
+    await expect(homeDialogUi.share(page)).toBeVisible();
     await expect(homeUi.questionPdfsDialog(page)).toHaveCount(0);
 
     // Every PDF in one list (문서 관리 alone, so no other dialog covers its rows); the question rows carry the import actions, the 교재 none.
@@ -649,6 +655,9 @@ test(
     await expect(dialog.getByRole('button', { name: /pdf 업로드|upload/i })).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: /종류 변경|change kind/i })).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: /삭제|delete/i })).toHaveCount(0);
+    // UX9 (HOMEDLG-01): the header is inert under the modal dialog.
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
     await expectReadOnlyQuestionMenu(page, 'viewer');
   },
 );

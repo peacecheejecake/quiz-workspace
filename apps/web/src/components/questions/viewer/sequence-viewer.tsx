@@ -70,7 +70,12 @@ import {
   type PracticeAnswer,
 } from './practice-model';
 import { SelfGradeButtons, StudyToggles, type Invalidation } from './practice-viewer';
-import { QuestionBody, type AnswerQuestion, type RevealedAnswers } from './question-body';
+import {
+  QuestionBody,
+  QuestionStem,
+  type AnswerQuestion,
+  type RevealedAnswers,
+} from './question-body';
 import { QuestionRangePicker } from './question-range-picker';
 import {
   EMPTY_RANGE_FILTERS,
@@ -82,6 +87,7 @@ import {
   type RangeGroup,
 } from './range-model';
 import styles from './question-viewer.module.css';
+import { useFlagSync } from './use-flag-sync';
 
 /** The question a run position shows, for the screen's header menu. */
 export interface RunQuestionInfo {
@@ -163,6 +169,8 @@ export interface SequenceViewerProps {
   readonly onGraded?: (questionId: string, result: AttemptResult) => void;
   /** A position's favorite / retry flags were saved (bank). */
   readonly onFlagsSaved?: (questionId: string, flags: StudyFlags) => void;
+  /** Saving a position's favorite / retry flags failed (bank): the toggles rolled back. */
+  readonly onFlagsFailed?: (message: string) => void;
   /** Header controls after the study toggles (bank: the screen's 문제 관리 / 문제 정보 menu). */
   readonly headerExtra?: (question: RunQuestionInfo) => ReactNode;
   /** A question edited, archived or deleted meanwhile: its position is read again. */
@@ -259,6 +267,7 @@ export function SequenceViewer({
   onViewed,
   onGraded,
   onFlagsSaved,
+  onFlagsFailed,
   headerExtra,
   invalidated = null,
   client: givenClient,
@@ -313,6 +322,7 @@ export function SequenceViewer({
     onViewed,
     onGraded,
     onFlagsSaved,
+    onFlagsFailed,
     onNavigate,
   });
   const results = useResultsStep({
@@ -344,7 +354,6 @@ export function SequenceViewer({
             <StudyToggles
               favorite={solve.flags.is_favorite}
               retry={solve.flags.needs_retry}
-              saving={solve.flags.saving}
               onChange={solve.changeFlags}
             />
           ) : null}
@@ -555,10 +564,6 @@ function freshWork(workId: string | null): WorkState {
   return { workId, answer: EMPTY_ANSWER, busy: null, outcome: null, selfGrade: null, error: null };
 }
 
-interface FlagState extends StudyFlags {
-  readonly saving: boolean;
-}
-
 function attemptAnswer(item: RunItem): PracticeAnswer {
   const submitted = item.attempt?.submitted_answer;
   return {
@@ -587,6 +592,7 @@ function useSolveStep({
   onViewed,
   onGraded,
   onFlagsSaved,
+  onFlagsFailed,
   onNavigate,
 }: {
   readonly view: Extract<RunUrlState, { step: 'solve' }> | null;
@@ -600,6 +606,7 @@ function useSolveStep({
   readonly onViewed: ((questionId: string) => void) | undefined;
   readonly onGraded: ((questionId: string, result: AttemptResult) => void) | undefined;
   readonly onFlagsSaved: ((questionId: string, flags: StudyFlags) => void) | undefined;
+  readonly onFlagsFailed: ((message: string) => void) | undefined;
   readonly onNavigate: (state: RunUrlState, how: 'push' | 'replace') => void;
 }) {
   const active = open && view !== null;
@@ -687,7 +694,26 @@ function useSolveStep({
   }
 
   // Study flags of the question on screen (bank): read with the position, saved through my-state.
-  const [flags, setFlags] = useState<{ questionId: string; flags: FlagState } | null>(null);
+  // UX9-RETRY-OPT: a press shows at once and is saved in the background (FlagSync, serialized per
+  // question); a failure rolls its fields back and is reported.
+  const [flags, setFlags] = useState<{ questionId: string; flags: StudyFlags } | null>(null);
+  const flagSync = useFlagSync<MyState>(
+    (qid, patch) =>
+      client.setFlags
+        ? client.setFlags(qid, patch)
+        : Promise.resolve({ ok: false, message: QUESTION_FAILURE_MESSAGES.unavailable }),
+    (qid, event) => {
+      const saved =
+        event.type === 'saved' ? event.result : event.type === 'failed' ? event.saved : null;
+      if (saved) {
+        onFlagsSaved?.(qid, { is_favorite: saved.is_favorite, needs_retry: saved.needs_retry });
+      }
+      if (event.type === 'failed') onFlagsFailed?.(event.message);
+      setFlags((prev) =>
+        prev?.questionId !== qid ? prev : { questionId: qid, flags: event.flags },
+      );
+    },
+  );
   const flagsWanted = source === 'bank' && !archived && client.flags ? questionId : null;
   const flagsLoad = useKeyedLoad(flagsWanted ? `${flagsWanted}:${itemSeq}` : null, async () => {
     const found = (await client.flags?.(flagsWanted ?? '')) ?? null;
@@ -699,40 +725,15 @@ function useSolveStep({
   if (flagsLoad !== seenFlags) {
     setSeenFlags(flagsLoad);
     if (flagsLoad?.status === 'ready' && flagsWanted) {
-      setFlags({ questionId: flagsWanted, flags: { ...flagsLoad.data, saving: false } });
+      // A change still being saved wins over a read made before it.
+      const shown = flagSync.active(flagsWanted) ?? flagsLoad.data;
+      setFlags({ questionId: flagsWanted, flags: shown });
     }
   }
   const shownFlags = flags && flags.questionId === questionId ? flags.flags : null;
-  async function changeFlags(patch: Partial<StudyFlags>) {
-    if (!questionId || !shownFlags || shownFlags.saving || !client.setFlags) return;
-    const qid = questionId;
-    setFlags({ questionId: qid, flags: { ...shownFlags, saving: true } });
-    let result: StudyActionResult<MyState>;
-    try {
-      result = await client.setFlags(qid, patch);
-    } catch {
-      result = { ok: false, kind: 'unavailable', message: QUESTION_FAILURE_MESSAGES.unavailable };
-    }
-    if (result.ok) {
-      onFlagsSaved?.(qid, {
-        is_favorite: result.data.is_favorite,
-        needs_retry: result.data.needs_retry,
-      });
-    }
-    setFlags((prev) =>
-      prev?.questionId !== qid
-        ? prev
-        : {
-            questionId: qid,
-            flags: result.ok
-              ? {
-                  is_favorite: result.data.is_favorite,
-                  needs_retry: result.data.needs_retry,
-                  saving: false,
-                }
-              : { ...prev.flags, saving: false },
-          },
-    );
+  function changeFlags(patch: Partial<StudyFlags>) {
+    if (!questionId || !shownFlags || !client.setFlags) return;
+    flagSync.toggle(questionId, shownFlags, patch);
   }
 
   const formId = useId();
@@ -882,7 +883,7 @@ function useSolveStep({
   } else if (!shownQuestion || (sessionWanted && !session && sessionLoad?.status !== 'error')) {
     content = (
       <div aria-busy="true">
-        <p className={styles.stem}>{displayStem(item.stem ?? '')}</p>
+        <QuestionStem stem={item.stem ?? ''} />
         <p className={styles.loading}>문제를 불러오는 중입니다…</p>
       </div>
     );
@@ -921,6 +922,15 @@ function useSolveStep({
             selfGrade={work.selfGrade}
             error={work.error}
             resultRef={resultRef}
+            highlighting={
+              source === 'bank' && item.question_id
+                ? {
+                    questionId: item.question_id,
+                    revisionId: session?.question_revision_id ?? null,
+                    chapterTitle: item.chapter_title ?? null,
+                  }
+                : null
+            }
           />
         </form>
       </>
@@ -996,7 +1006,7 @@ function useSolveStep({
     footer,
     question,
     flags: shownFlags,
-    changeFlags: (patch: Partial<StudyFlags>) => void changeFlags(patch),
+    changeFlags,
   };
 }
 

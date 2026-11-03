@@ -71,11 +71,11 @@ export function documentsPath(workspaceId: string): string {
 }
 
 /**
- * The home, where the 본문 search lives (UX7-SEARCH: collapsed until its "본문 검색" disclosure is
- * opened; runSearch/openContentSearch open it). `/search?q=` redirects here with `text=`.
+ * The 본문 search page, where the 본문 search lives since UX9 (SEARCH-02; before, a collapsed area
+ * of the home). The home's `?text=` and the old `/search?q=` redirect here.
  */
 export function searchPath(workspaceId: string): string {
-  return homePath(workspaceId);
+  return `/workspaces/${workspaceId}/search`;
 }
 
 export const homeUi = {
@@ -106,10 +106,13 @@ export const homeUi = {
     }),
   /** The status message under the 문제 search (why it is disabled). */
   questionSearchMessage: (page: Page) => homeUi.header(page).getByRole('status'),
-  /** The "본문 검색" disclosure button (collapsed by default, SEARCH-01-AC10). */
+  /** The home's retired "본문 검색" disclosure button (SEARCH-01-AC10, retired by UX9). */
   contentSearchToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(본문 검색|body search|content search)$/i }),
-  /** The 본문 search form inside the disclosure. */
+  /** The home header's link to the 본문 search page (SEARCH-02, UX9). */
+  contentSearchLink: (page: Page) =>
+    main(page).getByRole('link', { name: /^(본문 검색|body search|content search)$/i }),
+  /** The 본문 search form (on the 본문 search page since UX9). */
   contentSearch: (page: Page) =>
     main(page).getByRole('search', { name: /^(본문 검색|body search|content search)$/i }),
   /** The status message of the 본문 search (why its button is disabled). */
@@ -136,7 +139,14 @@ const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
 };
 
 type QuestionMenuItem =
-  'pdfs' | 'create' | 'generate' | 'duplicates' | 'inactive' | 'mockExams' | 'practice';
+  | 'pdfs'
+  | 'create'
+  | 'generate'
+  | 'duplicates'
+  | 'redistribution'
+  | 'inactive'
+  | 'mockExams'
+  | 'practice';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   /** Retired by UX7-DOCS: only ever expected to be absent. */
   pdfs: /^(pdf 관리|manage pdfs?)$/i,
@@ -145,6 +155,8 @@ const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   generate: /^(변형 출제|generate variants?)$/i,
   /** UX7-DEDUP: the 중복 문제 정리 dialog, editors only (QOV-01-AC16). */
   duplicates: /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
+  /** CHREDIST-01 (UX9-REDIST-W): the 챕터 재분배 dialog, editors only. */
+  redistribution: /^(챕터 재분배|redistribute chapters)$/i,
   /** UX7-BANK-2: the 보관·초안 문제 dialog, usable by every member. */
   inactive: /^(보관·초안 문제|archived and draft questions)$/i,
   /** MOCK-01: the 모의고사 dialog, usable by every member. */
@@ -153,13 +165,17 @@ const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   practice: /^(문제 풀기|practice questions?|start practice)$/i,
 };
 
-/** The `문제` menu's editor-only items (UX7-DOCS-2, UX7-DEDUP; 변형 출제 retired by QGEN-RM). */
-const EDITOR_ITEMS = ['create', 'duplicates'] as const;
+/**
+ * The `문제` menu's editor-only items (UX7-DOCS-2, UX7-DEDUP, CHREDIST-01; 변형 출제 retired by
+ * QGEN-RM).
+ */
+const EDITOR_ITEMS = ['create', 'duplicates', 'redistribution'] as const;
 
 /** Every `문제` menu item in order (MOCK-SYNC, QOV-01 7). */
 const QUESTION_MENU_ORDER = [
   QUESTION_MENU_ITEMS.create,
   QUESTION_MENU_ITEMS.duplicates,
+  QUESTION_MENU_ITEMS.redistribution,
   QUESTION_MENU_ITEMS.inactive,
   QUESTION_MENU_ITEMS.mockExams,
   QUESTION_MENU_ITEMS.practice,
@@ -224,6 +240,9 @@ export async function expectReadOnlyQuestionMenu(
       page.getByRole('dialog', { name: /^(중복 문제 정리|duplicate questions)$/i }),
     ).toHaveCount(0);
     await expect(
+      page.getByRole('dialog', { name: /^(챕터 재분배|redistribute chapters)$/i }),
+    ).toHaveCount(0);
+    await expect(
       page.getByRole('dialog', { name: /문제 (등록|추가)|(new|add) question/i }),
     ).toHaveCount(0);
     expect(new URL(page.url()).searchParams.getAll('panel')).toEqual(before);
@@ -238,12 +257,16 @@ export async function chooseQuestionMenu(page: Page, item: QuestionMenuItem): Pr
   await homeUi.questionMenuItem(page, item).click();
 }
 
-/** Expands the collapsed 본문 search (SEARCH-01-AC10; no-op when it is open). */
+/**
+ * Makes the 본문 search form available: on the home, follows the header's `본문 검색` link to the
+ * search page (SEARCH-02, UX9); on the search page, a no-op.
+ */
 export async function openContentSearch(page: Page): Promise<void> {
-  const toggle = homeUi.contentSearchToggle(page);
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(searchUi.box(page)).toBeVisible();
+  const box = searchUi.box(page);
+  const link = homeUi.contentSearchLink(page);
+  await expect(box.or(link).first()).toBeVisible();
+  if (!(await box.isVisible())) await link.click();
+  await expect(box).toBeVisible();
 }
 
 /** Opens a search's settings popover ("본문 설정" by default; no-op when it is open). */
@@ -403,7 +426,7 @@ export const PUBLISHED = /발행(됨| 완료)|published/i;
 export const INDEX_FAILED = /색인.*실패|indexing failed|reindex(ing)? failed/i;
 
 export const searchUi = {
-  /** The 본문 search box (inside the "본문 검색" disclosure: openContentSearch). */
+  /** The 본문 search box (on the 본문 search page: openContentSearch). */
   box: (page: Page) =>
     main(page).getByRole('searchbox', { name: /^(본문 검색어|body search (query|text))$/i }),
   submit: (page: Page) => main(page).getByRole('button', { name: /^(검색|search)$/i }),
@@ -424,7 +447,9 @@ export const searchUi = {
   resultsRegion: (page: Page) =>
     main(page).getByRole('region', { name: /본문 검색 결과|content results/i }),
   closeResults: (page: Page) =>
-    main(page).getByRole('button', { name: /검색 결과 닫기|close results/i }),
+    main(page).getByRole('button', {
+      name: /검색 결과 (지우기|닫기)|clear results|close results/i,
+    }),
   results: (page: Page) => main(page).getByRole('list', { name: /검색 결과|search results/i }),
   resultItems: (page: Page) => searchUi.results(page).getByRole('listitem'),
   /** The quoted source text of each result (the part whose language is the book's). */

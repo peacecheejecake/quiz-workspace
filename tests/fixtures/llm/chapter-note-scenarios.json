@@ -118,6 +118,41 @@
       }
     },
     {
+      "marker": "E2E-NOTE-SEARCH",
+      "description": "Note search fixture (CHNOTE-02-AC03, UX9.0): for a chapter with two or more confirmed questions. Section 1 items A (Q1) and B (Q2) each contain \"주의\" twice; section 2 item C (Q2) contains the full-width \"ＡＴＴＥＮＴＩＯＮ\" and \"attention\" once each. Headings and tokens never contain \"주의\" or \"attention\". No quotes; nothing dropped.",
+      "responses": {
+        "chapter_notes.generate": {
+          "sections": [
+            {
+              "heading": "핵심 개념",
+              "items": [
+                {
+                  "text": "끓는 물을 다룰 때는 주의가 필요하고 증발 과정도 주의해서 본다. NOTE-SEARCH-A",
+                  "tags": ["Q1"],
+                  "quote": null
+                },
+                {
+                  "text": "응결 단계는 주의 깊게 보고 온도 변화에 주의한다. NOTE-SEARCH-B",
+                  "tags": ["Q2"],
+                  "quote": null
+                }
+              ]
+            },
+            {
+              "heading": "정리",
+              "items": [
+                {
+                  "text": "ＡＴＴＥＮＴＩＯＮ 표기와 attention 표기를 함께 쓴다. NOTE-SEARCH-C",
+                  "tags": ["Q2"],
+                  "quote": null
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
       "marker": "E2E-NOTE-FAIL",
       "description": "Output that is not JSON (truncated mid-string): the generation fails with error_code `llm_invalid_output` (the generic reason \"정리 노트를 만들지 못했습니다. 다시 시도하세요.\") and stores no note.",
       "responses": {

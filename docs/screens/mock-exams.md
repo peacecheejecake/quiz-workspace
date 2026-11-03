@@ -94,7 +94,7 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 
 ## 접근성
 
-- non-modal dialog: 닫기 버튼·Escape(focus가 안에 있을 때)로 닫고 연 `문제` 메뉴 버튼으로 focus 복귀(QOV-01-AC10). 목록 ↔ 만들기 ↔ 상세 전환 때 focus는 새 화면의 제목(heading)으로 간다.
+- non-modal dialog(UX9-SPEC 사용자 결정 2026-11-02 D3부터 modal — focus trap·배경 `inert`, Escape는 dialog 안 어디서든, [HOMEDLG-01](home-dialogs.md)): 닫기 버튼·Escape(focus가 안에 있을 때)로 닫고 연 `문제` 메뉴 버튼으로 focus 복귀(QOV-01-AC10). 목록 ↔ 만들기 ↔ 상세 전환 때 focus는 새 화면의 제목(heading)으로 간다.
 - 상태 badge·"확인 필요"·"편집됨"은 글자로 전달한다(색만으로 전달하지 않음). 생성 진행은 `ProgressBar` 값 글자 + 완료·실패 때 `aria-live="polite"` 알림.
 - 행 메뉴는 Radix DropdownMenu(접근성 이름 "<이름> 메뉴"), 아이콘 버튼은 접근성 이름을 가진다. `QuestionRangePicker` 접근성은 QVIEW-01과 같다.
 - 375px에서 가로 스크롤 없음, 버튼 문구는 줄바꿈하지 않고 버튼 단위로 넘어간다.
@@ -106,7 +106,7 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 
 - **Given:** 확정 문제가 있고 모의고사가 없는 Workspace 홈(편집 권한, 그리고 보기 권한)
 - **When:** header `문제` 메뉴를 열어 `모의고사`를 고른다
-- **Then:** 메뉴에 `변형 출제` 항목은 없고 `모의고사`가 있다. non-modal dialog "모의고사"(`?panel=mock-exams`)가 데이터 응답 전에 열려 skeleton 뒤 빈 상태 "아직 모의고사가 없습니다."를 보인다. 편집 권한자에게는 목록 위에 `추가` 버튼이 하나 있고 보기 권한자에게는 없다. 이전 URL `?panel=generate`는 `?panel=mock-exams`로 바뀐다. dialog는 다른 홈 dialog(문서 관리)와 함께 열리고 나중에 연 것이 위에 온다.
+- **Then:** 메뉴에 `변형 출제` 항목은 없고 `모의고사`가 있다. non-modal dialog "모의고사"(`?panel=mock-exams`)(UX9-SPEC 사용자 결정 2026-11-02 D3: modal — [HOMEDLG-01](home-dialogs.md); test는 UX9-MODAL이 고침)가 데이터 응답 전에 열려 skeleton 뒤 빈 상태 "아직 모의고사가 없습니다."를 보인다. 편집 권한자에게는 목록 위에 `추가` 버튼이 하나 있고 보기 권한자에게는 없다. 이전 URL `?panel=generate`는 `?panel=mock-exams`로 바뀐다. dialog는 다른 홈 dialog(문서 관리)와 함께 열리고 나중에 연 것이 위에 온다.
 
 ### MOCK-01-AC02
 

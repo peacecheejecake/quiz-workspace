@@ -159,6 +159,8 @@ export function ForkWorkspaceDialog({
     <ModalDialog
       open={open}
       onOpenChange={onOpenChange}
+      // A changed name is unsaved input: the backdrop leaves the dialog open (HOMEDLG-01).
+      dirty={phase.status === 'form' && name !== suggestedForkName(sourceName)}
       title="Workspace Fork"
       description="공유된 Workspace를 내 계정의 새 Workspace로 복제합니다."
       onOpenAutoFocus={(event) => {

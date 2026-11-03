@@ -122,12 +122,18 @@ export function MockExamDetail({
   const data = exam.status === 'ready' ? exam.data : null;
   // The panel focuses the view's heading on arrival, but a detail that is still loading has no
   // heading yet (after 만들기 the form's button is gone and focus fell to <body>): once it is
-  // read, its heading takes the focus that was lost meanwhile (MOCK-01 접근성, A11Y-14).
+  // read, its heading takes the focus that was lost meanwhile (MOCK-01 접근성, A11Y-14). The modal
+  // panel (UX9) catches lost focus on itself instead of <body>: that counts as lost too.
   const loaded = exam.status !== 'loading';
   useEffect(() => {
     if (!loaded) return;
     const active = document.activeElement;
-    if (active === null || active === document.body) headingRef.current?.focus();
+    const heading = headingRef.current;
+    const lost =
+      active === null ||
+      active === document.body ||
+      (active.getAttribute('role') === 'dialog' && heading !== null && active.contains(heading));
+    if (lost) heading?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
   const generating = data ? isGenerating(data) : false;

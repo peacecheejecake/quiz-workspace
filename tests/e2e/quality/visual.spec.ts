@@ -43,8 +43,27 @@ import {
   outlineNodeId,
   RESULT_TEXT,
   waitForJob,
+  importPaperDrafts,
+  setDocumentKind,
+  uploadPdf,
   type Question,
+  type QuestionInput,
 } from '../fixtures/test.ts';
+import { chooseTarget, redistUi } from '../fixtures/chapter-redistribution.ts';
+import {
+  highlightExplanation,
+  highlightNote,
+  highlightUi,
+  noteToolsUi,
+  SEARCH_MARKER,
+} from '../fixtures/highlights.ts';
+import {
+  importDocumentPath,
+  renamedCopy,
+  reviewListUi,
+  searchPagePath,
+  searchPageUi,
+} from '../fixtures/ux9-pages.ts';
 import { MOCK_TEXT, mockExamsPath, mockUi, STATUS_TEXT } from '../fixtures/mock-exams.ts';
 import { goToResults, runUi } from '../fixtures/practice-runs.ts';
 import { rangePickerUi } from '../fixtures/range-picker.ts';
@@ -189,11 +208,14 @@ test(
     await expect(overviewUi.dots(page)).toHaveCount(24);
     await page.mouse.move(0, 0);
     await snap(page, 'questions-overview');
-    // The 본문 search's settings popover over the home (UX7-SEARCH: the 본문 search is expanded).
+    // The 본문 search's settings popover, on the search page reached by the home header's link
+    // (SEARCH-02, UX9; before, the expanded 본문 search area of the home).
     await openSearchOptions(page, 'body');
     await page.mouse.move(0, 0);
     await snap(page, 'search-options');
     await page.keyboard.press('Escape');
+    await page.goto(overviewPath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(24);
 
     await overviewUi.dot(page, PANEL_QUESTION).click();
     const panel = panelUi.numbered(page, PANEL_QUESTION);
@@ -257,7 +279,7 @@ test(
 );
 
 test(
-  'VISUAL-06 text export menu, document summary panel and chapter note panel (body folded)',
+  'VISUAL-06 text export menu, document summary panel and chapter note panel (body masked)',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('visual06');
@@ -299,12 +321,21 @@ test(
     await page.mouse.move(0, 0);
     await snap(page, 'document-summary', [summaryUi.meta(summary)]);
 
-    // CHNOTE-01: the note with its body folded behind "정답·해설 포함" (answers never captured).
+    // CHNOTE-01 / CHNOTE-02: the always-open note with its body, footnote lines and 내 하이라이트
+    // masked (answers never captured; layout, the search row and the actions are compared).
     await page.goto(notePanelPath(ws.id, chapter));
     const note = noteUi.panel(page);
-    await expect(noteUi.disclosure(note)).toHaveAttribute('aria-expanded', 'false');
+    await expect(noteUi.body(note)).toBeVisible();
+    await expect(
+      note.getByRole('region', { name: /^(내 하이라이트|my highlights)/i }),
+    ).toBeVisible();
     await page.mouse.move(0, 0);
-    await snap(page, 'chapter-note', [noteUi.meta(note)]);
+    await snap(page, 'chapter-note', [
+      noteUi.meta(note),
+      noteUi.body(note),
+      noteUi.footnoteList(note),
+      note.getByRole('region', { name: /^(내 하이라이트|my highlights)/i }),
+    ]);
   },
 );
 
@@ -494,5 +525,218 @@ test(
     ).toBeVisible();
     await snapEvery(page, 'question-viewer-results');
     expect(questions).toHaveLength(5);
+  },
+);
+
+/** Element screenshot of `target` in every color scheme: `<name>-<scheme>.png`. */
+async function snapElement(page: Page, target: Locator, name: string): Promise<void> {
+  for (const scheme of COLOR_SCHEMES) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await ready(page);
+    await expect(target).toHaveScreenshot(`${name}-${scheme}.png`);
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+}
+
+/** `snapEvery` with extra masks (answers, explanations and note text are never compared). */
+async function snapEveryMasked(page: Page, name: string, mask: () => Locator[]): Promise<void> {
+  await page.mouse.move(0, 0);
+  await snap(page, name, mask());
+  if (test.info().project.name !== 'visual-desktop') return;
+  const viewport = page.viewportSize();
+  await page.setViewportSize(PHONE);
+  await snap(page, `${name}-375`, mask());
+  if (viewport) await page.setViewportSize(viewport);
+}
+
+/** VISUAL-10 redistribution questions: fixed stems, filed in 1장 by hand, quoting page 4 (2장). */
+function visual10Mcq(n: number, chapterId: string, documentId: string): QuestionInput {
+  return {
+    ...mcqInput(
+      `정수 처리 ${n}단계에 해당하는 것을 고르시오.`,
+      ['응집', '침전', '여과', '소독'],
+      0,
+    ),
+    explanation: '해설',
+    chapter_id: chapterId,
+    question_number: n,
+    sources: [{ document_id: documentId, page_start: 4, page_end: 4 }],
+  };
+}
+
+test(
+  'VISUAL-10 챕터 재분배 list and recommendations preview, and the 다시 풀기 toggle off and on',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('visual10-redist');
+    const ws = await workspaceFactory.create(owner, '챕터 재분배');
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    const ch1 = await outlineNodeId(owner, documentId, '1장 물의 순환');
+    for (const n of [1, 2, 3]) {
+      await createQuestion(owner, ws.id, visual10Mcq(n, ch1, documentId));
+    }
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+
+    // The list: 1장 open, question 1 ticked, 2장 chosen.
+    await homeUi.questionMenuButton(page).click();
+    await redistUi.menuItem(page).click();
+    const dialog = redistUi.dialog(page);
+    await expect(dialog).toBeVisible();
+    await rangePickerUi.expand(dialog, '1장 물의 순환').click();
+    await rangePickerUi.question(dialog, 1, 1).check();
+    await chooseTarget(page, dialog, '2장 정수 처리');
+    await expect(redistUi.move(dialog)).toHaveAccessibleName(redistUi.moveCount(1));
+    await snapEvery(page, 'chapter-redistribution-list');
+
+    // The preview with hand-set chapters included: all three → 2장.
+    await rangePickerUi.question(dialog, 1, 1).uncheck();
+    await redistUi.includeManual(dialog).check();
+    await redistUi.recommend(dialog).click();
+    await expect(redistUi.previewRows(dialog)).toHaveCount(3);
+    await snapEvery(page, 'chapter-redistribution-preview');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    // The 다시 풀기 toggle (QVIEW-01-C08): off, then on, with the favorite star beside it.
+    await overviewUi.dot(page, 1).click();
+    const panel = panelUi.numbered(page, 1);
+    await expect(panel).toBeVisible();
+    await page.mouse.move(0, 0);
+    await snapElement(page, panelUi.retryOn(panel).locator('xpath=..'), 'retry-toggle-off');
+    await panelUi.retryOn(panel).click();
+    await expect(panelUi.retryOff(panel)).toHaveAttribute('data-state', 'on');
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.mouse.move(0, 0);
+    await expect(page.getByRole('tooltip')).toHaveCount(0);
+    await snapElement(page, panelUi.retryOff(panel).locator('xpath=..'), 'retry-toggle-on');
+  },
+);
+
+test(
+  'VISUAL-10 chapter note search and highlights (body, footnotes and 내 하이라이트 quotes masked) and the highlight menu',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('visual10-note');
+    const ws = await workspaceFactory.create(owner, '정리 노트 도구');
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    const chapter = await outlineNodeId(owner, documentId, '1장 물의 순환');
+    // The N-SEARCH scenario (fixtures/highlights.ts): six "주의" hits once both highlights exist.
+    await createQuestion(
+      owner,
+      ws.id,
+      noteQuestion('visual10', 1, chapter, 'ok', {
+        stem: `끓는 물 주의 사항을 고르시오. [${SEARCH_MARKER}]`,
+      }),
+    );
+    const q2 = await createQuestion(
+      owner,
+      ws.id,
+      noteQuestion('visual10', 2, chapter, 'ok', {
+        stem: `응결이 일어나는 단계를 고르시오. [${SEARCH_MARKER}]`,
+        explanation: '응결 해설: 온도 주의 사항을 정리한다.',
+      }),
+    );
+    const state = await generateNote(owner, chapter);
+    await highlightNote(owner, state, 0, 1, '주의 깊게', 'yellow');
+    await highlightExplanation(owner, q2, '온도 주의 사항', 'pink');
+    await signInAs(page, owner.user);
+
+    await page.goto(notePanelPath(ws.id, chapter));
+    const note = noteUi.panel(page);
+    const body = highlightUi.noteBody(note);
+    await expect(body).toBeVisible();
+    const section = highlightUi.section(note);
+    await expect(highlightUi.heading(section, 2)).toBeVisible();
+    const search = noteToolsUi.search(note);
+    await search.fill('주의');
+    await expect(noteToolsUi.count(note, 1, 6)).toBeVisible();
+    await search.blur();
+    // Only the layout, the search row, the filters and the actions are compared.
+    const masks = () => [
+      noteUi.meta(note),
+      body,
+      noteUi.footnoteList(note),
+      section.getByRole('list', { name: /^(내 하이라이트 목록|my highlights list)$/i }),
+    ];
+    await snapEveryMasked(page, 'chapter-note-search', masks);
+
+    // The highlight menu on the highlighted paragraph (keyboard: the item, then Shift+F10).
+    await search.fill('');
+    await search.focus();
+    for (
+      let i = 0;
+      i < 40 && !(await body.evaluate((el) => el.contains(document.activeElement)));
+      i++
+    ) {
+      await page.keyboard.press('Tab');
+    }
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Shift+F10');
+    const menu = highlightUi.menu(page);
+    await expect(menu).toBeVisible();
+    await expect(highlightUi.colorItem(menu, 'yellow')).toBeFocused();
+    await expect(highlightUi.removeItem(menu)).toBeVisible();
+    // The reduced-transparency rendering (opaque glass): the blurred note text behind the menu
+    // would otherwise show through it.
+    await page.addStyleTag({
+      content:
+        '.qz-highlight-menu.glass-surface { background: var(--color-glass-solid) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }',
+    });
+    await snapElement(page, menu, 'highlight-menu');
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+  },
+);
+
+test(
+  'VISUAL-10 문제 PDF 가져오기 list and review panes (drafts masked) and the 본문 검색 page',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('visual10-pages');
+    const ws = await workspaceFactory.create(owner, '가져오기와 검색');
+    const { run } = await importPaperDrafts(owner, ws.id);
+    // A 교재+문제 copy waiting for 문제 추출 (the kind set by hand, no extraction); it is also the
+    // only searchable body (one copy of the text, so equal scores never reorder the results).
+    const copy = renamedCopy(book('book-ko'), test.info().outputPath('pdfs'), '교재와 문제');
+    const mixed = await uploadPdf(owner, ws.id, copy);
+    await waitForJob(owner, mixed.jobId);
+    await setDocumentKind(owner, mixed.documentId, 'mixed', false);
+    await signInAs(page, owner.user);
+
+    await page.goto(importDocumentPath(ws.id, run.source_document_id));
+    const nav = reviewListUi.nav(page);
+    await expect(reviewListUi.rows(nav)).toHaveCount(2);
+    await expect(reviewListUi.reviewTitle(page, 'questions-ko')).toBeVisible();
+    // A CSS selector: under the 375px sheet the list is hidden from the accessibility tree and a
+    // role locator would leave its answers unmasked. `:visible`: while the page streams in, Next
+    // briefly also holds the list in a `hidden` Suspense template next to the swapped-in one, and a
+    // strict locator over both fails the test.
+    const drafts = page.locator('ul[aria-label="가져온 초안"]:visible');
+    await expect(drafts).toBeVisible();
+    await snapEveryMasked(page, 'question-import-panes', () => [drafts]);
+    if (test.info().project.name === 'visual-desktop') {
+      // Below 768px the list is a button that opens a bottom sheet.
+      const viewport = page.viewportSize();
+      await page.setViewportSize(PHONE);
+      await reviewListUi.sheetButton(page).click();
+      const sheet = reviewListUi.sheet(page);
+      await expect(reviewListUi.rows(sheet)).toHaveCount(2);
+      await page.mouse.move(0, 0);
+      await snap(page, 'question-import-sheet-375', [drafts]);
+      await page.keyboard.press('Escape');
+      await expect(sheet).toBeHidden();
+      if (viewport) await page.setViewportSize(viewport);
+    }
+
+    // The 본문 검색 page: before a search, then with results.
+    await page.goto(searchPagePath(ws.id));
+    await expect(searchPageUi.intro(page)).toBeVisible();
+    await snapEvery(page, 'search-page');
+    const target = block(BOOK, 'ch1-s2-p1');
+    await page.goto(searchPagePath(ws.id, `text=${encodeURIComponent(snippet(target.text, 6))}`));
+    await expect(searchUi.resultItems(page).first()).toBeVisible();
+    await snapEvery(page, 'search-page-results');
   },
 );

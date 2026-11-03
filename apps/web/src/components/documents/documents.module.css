@@ -194,3 +194,20 @@ a.title:hover {
   color: var(--color-danger);
   font-size: var(--font-size-label);
 }
+
+/* A narrow column (QIMPORT-02 `검토할 PDF`): the title takes its own line, shortened. */
+.row[data-variant='compact'] .titleLine > .title {
+  flex: 1 1 100%;
+  max-width: 100%;
+}
+
+.row[data-variant='compact'] .rowMain {
+  flex-basis: 100%;
+}
+
+/* The current row (also aria-current, not colour only): the selected surface and a thick edge. */
+.row[data-current] {
+  border-color: var(--color-border-strong);
+  border-inline-start-width: 4px;
+  background: var(--color-state-selected);
+}

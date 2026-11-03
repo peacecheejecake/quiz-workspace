@@ -31,7 +31,7 @@ linked_tests: [DOCSUM-01-AC01 … DOCSUM-01-AC08]
 ## 레이아웃 및 컴포넌트
 
 - **진입:** 문서 관리 dialog(DOC-01)의 준비 완료 `교재`·`교재+문제` 행마다 `요약` 버튼(글자 버튼, 접근성 이름 "<제목> 요약", 모든 구성원). 요약이 진행 중이면 버튼 옆에 "요약 중" 글자 상태. DOC-02 header의 `요약` 링크는 같은 Workspace 홈의 이 panel을 연다(`/workspaces/:id?panel=document-summary&document=:docId`).
-- **panel:** 공통 `FloatingSidePanel`(non-modal, design-system §5.1). 다른 홈 dialog와 함께 열리고 나중에 연 것이 위(QOV-01-AC10 규칙). 한 번에 문서 하나만 연다(다른 문서의 `요약`을 누르면 같은 panel의 문서가 바뀐다). 즉시 열리고 데이터를 불러오는 동안 `aria-busy` skeleton과 "불러오는 중"(QOV-01-AC09).
+- **panel:** 공통 `FloatingSidePanel`(non-modal, design-system §5.1). 다른 홈 dialog와 함께 열리고 나중에 연 것이 위(QOV-01-AC10 규칙). (UX9-SPEC 사용자 결정 2026-11-02 D3: **modal**, 문서 관리 행의 `요약`으로 열면 문서 관리 위에 쌓임 — [HOMEDLG-01](home-dialogs.md); 공유 화면의 요약 panel도 modal. test는 UX9-MODAL이 고침.) 한 번에 문서 하나만 연다(다른 문서의 `요약`을 누르면 같은 panel의 문서가 바뀐다). 즉시 열리고 데이터를 불러오는 동안 `aria-busy` skeleton과 "불러오는 중"(QOV-01-AC09).
   - header: 제목 "문서 요약", 부제 문서 제목, `AI 생성` badge, 메타 줄 "<발행 시각> 발행본 기준 · 장 n개", 닫기 버튼.
   - **전체 요약** 영역(`h3`): 요약 본문과 `핵심` 목록. 핵심 항목 끝의 쪽 링크(`p.12–14`, 접근성 이름 "12–14쪽 열기")는 DOC-02의 해당 쪽을 연다(게스트는 공유 문서 화면의 해당 쪽).
   - **장별 요약** 영역(`h3`): 최상위 장마다 disclosure 버튼(장 제목 + 쪽 범위, `aria-expanded`, 기본 접힘). 펼치면 장 요약 본문과 핵심 목록(쪽 링크). 본문이 없는 장은 "요약할 본문이 없습니다."
@@ -98,8 +98,8 @@ linked_tests: [DOCSUM-01-AC01 … DOCSUM-01-AC08]
 ### DOCSUM-01-AC07
 
 - **Given:** 준비 완료 `문제지`, 처리 중인 교재, 요약이 있는 교재가 있는 Workspace 홈(편집 권한), 그리고 다른 Workspace의 문서 id
-- **When:** 문서 관리 dialog를 보고, DOC-02 header의 `요약` 링크를 누르고, `?panel=document-summary&document=<다른 Workspace 문서 id>`로 직접 연다. 요약 panel이 열린 채로 `이력` dialog를 연다
-- **Then:** `문제지`와 처리 중인 행에는 `요약` 버튼이 없고(`문제지` POST는 409 `summary-not-applicable`, 처리 중 409 `document-not-ready`) 준비 완료 교재 행에는 있다. DOC-02의 `요약` 링크는 Workspace 홈으로 이동해 그 문서의 요약 panel을 연다. 다른 Workspace 문서 딥링크는 panel에 "문서를 찾을 수 없습니다."를 보이고 API는 404다. 이력 dialog가 요약 panel 위에 오고, 이력에는 `요약 만들기`(활동)와 요약 작업(작업, 종류 "문서 요약")이 본문 없이 보인다.
+- **When:** 문서 관리 dialog를 보고, DOC-02 header의 `요약` 링크를 누르고, `?panel=document-summary&document=<다른 Workspace 문서 id>`로 직접 연다. 요약 panel이 열린 채로 `이력` dialog를 연다(UX9-MODAL 고침: 요약 panel은 modal이라 header가 비활성 — panel을 닫고 `이력`을 연다)
+- **Then:** `문제지`와 처리 중인 행에는 `요약` 버튼이 없고(`문제지` POST는 409 `summary-not-applicable`, 처리 중 409 `document-not-ready`) 준비 완료 교재 행에는 있다. DOC-02의 `요약` 링크는 Workspace 홈으로 이동해 그 문서의 요약 panel을 연다. 다른 Workspace 문서 딥링크는 panel에 "문서를 찾을 수 없습니다."를 보이고 API는 404다. 이력 dialog가 요약 panel 위에 오고(UX9 전; UX9부터 panel을 닫은 뒤 연 이력), 이력에는 `요약 만들기`(활동)와 요약 작업(작업, 종류 "문서 요약")이 본문 없이 보인다.
 
 ### DOCSUM-01-AC08
 

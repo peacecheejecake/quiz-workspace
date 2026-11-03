@@ -10,6 +10,12 @@ body {
   min-height: 100%;
 }
 
+/* The scroll root keeps its scrollbar's room while a modal locks scrolling, so opening or closing
+   a dialog never moves the page (design-system §5.5, HOMEDLG-01-AC03). */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   background: var(--color-canvas);
   color: var(--color-text-primary);

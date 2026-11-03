@@ -1,9 +1,11 @@
 'use client';
 
-// `DocumentExcerptPanel` (docs/design-system.md §5.1): non-modal FloatingSidePanel next to the
-// results (a bottom sheet on phones) with the hit's paragraph-complete excerpt — the text around the
-// keyword, the keyword marked (SEARCH-01-AC11) and scrolled into view —, its location and the jump
-// into the PDF.
+// `DocumentExcerptPanel` (docs/design-system.md §5.1): a modal FloatingSidePanel over the results
+// (a bottom sheet on phones; modal since UX9, HOMEDLG-01 — the results behind it are inert and do
+// not step aside) with the hit's paragraph-complete excerpt — the text around the keyword, the
+// keyword marked (SEARCH-01-AC11) and scrolled into view —, its location and the jump into the
+// PDF. `이전 결과`/`다음 결과` (Alt+↑/Alt+↓) move it along the results; closing it returns focus
+// to the result last shown.
 // The jump target is refined to the block that holds the match (lib/search/jump.ts) while the
 // panel is open; a click before that finished waits for it.
 import { Button, FloatingSidePanel } from '@quiz/ui';
@@ -25,6 +27,9 @@ export interface DocumentExcerptPanelProps {
   readonly client: Pick<SearchClient, 'block'>;
   /** The hit shown; kept while the panel animates closed. */
   readonly item: SearchItem | null;
+  /** The results in list order: `이전 결과`/`다음 결과` show the neighbouring one via `onSelect`. */
+  readonly items?: readonly SearchItem[];
+  readonly onSelect?: (item: SearchItem) => void;
   readonly open: boolean;
   readonly onClose: () => void;
 }
@@ -42,6 +47,8 @@ export function DocumentExcerptPanel({
   onJump: jumpInPlace,
   client,
   item,
+  items = [],
+  onSelect,
   open,
   onClose,
 }: DocumentExcerptPanelProps) {
@@ -63,6 +70,9 @@ export function DocumentExcerptPanel({
   }, [client, item]);
 
   const key = item ? hitKey(item) : null;
+  const at = key === null ? -1 : items.findIndex((i) => hitKey(i) === key);
+  const previous = at > 0 ? items[at - 1] : undefined;
+  const next = at >= 0 ? items[at + 1] : undefined;
 
   // The first query term (else the matched passage) in view once the panel shows a hit.
   const visible = open && item !== null;
@@ -96,12 +106,31 @@ export function DocumentExcerptPanel({
 
   return (
     <FloatingSidePanel
-      modal={false}
       open={open && item !== null}
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
       title="본문 발췌"
+      steps={
+        onSelect
+          ? {
+              previousLabel: '이전 결과',
+              nextLabel: '다음 결과',
+              onPrevious: previous ? () => onSelect(previous) : undefined,
+              onNext: next ? () => onSelect(next) : undefined,
+            }
+          : undefined
+      }
+      onCloseAutoFocus={(event) => {
+        // The result last shown (maybe not the one that opened the panel).
+        if (key === null) return;
+        const result = document.querySelector<HTMLElement>(
+          `button[data-hit-key="${CSS.escape(key)}"]`,
+        );
+        if (!result) return;
+        event.preventDefault();
+        result.focus();
+      }}
       description={
         item && target ? `${item.document_title} · ${pageLabel(target.page)}` : undefined
       }

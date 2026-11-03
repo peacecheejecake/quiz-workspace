@@ -1,0 +1,157 @@
+/* CHREDIST-01 챕터 재분배 dialog. Semantic tokens only; rows wrap button by button at 375px. */
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.notice:empty {
+  display: none;
+}
+
+.notice,
+.alertText {
+  margin: 0;
+  font-size: var(--font-size-label);
+}
+
+.notice:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.alertText {
+  color: var(--color-danger);
+}
+
+.muted {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.loading,
+.failure,
+.section {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.failure {
+  justify-items: start;
+}
+
+.failure p {
+  margin: 0;
+}
+
+.section {
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--color-border);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+
+.target {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.option {
+  display: inline-block;
+}
+
+.option[data-depth='2'] {
+  padding-inline-start: var(--space-3);
+}
+
+.option[data-depth='3'] {
+  padding-inline-start: var(--space-6);
+}
+
+.option[data-depth='4'] {
+  padding-inline-start: var(--space-8);
+}
+
+.summary {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.details {
+  font-size: var(--font-size-label);
+}
+
+.detailsSummary {
+  cursor: pointer;
+  min-block-size: 24px;
+}
+
+.reasons {
+  margin: var(--space-1) 0 0;
+  padding-inline-start: var(--space-4);
+  color: var(--color-text-secondary);
+}
+
+.previewList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.previewRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+/* A virtualized row: fixed height (PREVIEW_ROW_PX, the same for every row), full width, one
+   line per text part, each clamped on its own (현재 and 추천 are separate lines, so the
+   recommended chapter always shows; the checkbox name carries the whole change). */
+li.previewRowFixed {
+  inset-inline: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+li.previewRowFixed .previewText p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previewText {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  font-size: var(--font-size-label);
+}
+
+.previewText p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.stem {
+  color: var(--color-text-primary);
+}

@@ -107,19 +107,20 @@ test('UX5-UI the gap between heatmap markers is at most 1/3 of the marker width'
   expect(desktop.width).toBeGreaterThanOrEqual(18);
   expect(desktop.gap).toBeLessThanOrEqual(desktop.width / 3);
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect.poll(async () => (await drawnGap(page, 'q-1-1', 'q-1-2')).width).toBeGreaterThan(23);
   const mobile = await drawnGap(page, 'q-1-1', 'q-1-2');
+  expect(mobile.width).toBeGreaterThanOrEqual(18);
   expect(mobile.gap).toBeLessThanOrEqual(mobile.width / 3);
 });
 
-test('mobile uses 32px cells', async ({ page }) => {
+// UX9-STROKE: touch cells are 24px (the WCAG 2.2 target-size minimum), like desktop.
+test('mobile uses 24px cells', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openStory(page, 'questions-questionheatmap--full');
   const box = await page.locator('[data-question-id="q-1-1"]').boundingBox();
-  expect(box).toMatchObject({ width: 32, height: 32 });
+  expect(box).toMatchObject({ width: 24, height: 24 });
 });
 
-test('a standalone dot (no heatmap ancestor) is 24px on desktop and 32px on mobile', async ({
+test('a standalone dot (no heatmap ancestor) is 24px on desktop and on mobile', async ({
   page,
 }) => {
   await openStory(page, 'questions-questiondot--default');
@@ -127,11 +128,11 @@ test('a standalone dot (no heatmap ancestor) is 24px on desktop and 32px on mobi
   expect(await dot.boundingBox()).toMatchObject({ width: 24, height: 24 });
   await expect(dot.getByTestId('question-marker')).toHaveCSS('width', '24px');
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect.poll(() => dot.boundingBox()).toMatchObject({ width: 32, height: 32 });
-  await expect(dot.getByTestId('question-marker')).toHaveCSS('width', '32px');
+  expect(await dot.boundingBox()).toMatchObject({ width: 24, height: 24 });
+  await expect(dot.getByTestId('question-marker')).toHaveCSS('width', '24px');
 });
 
-test('a standalone dot is 32px for a coarse pointer at desktop width', async ({ browser }) => {
+test('a standalone dot is 24px for a coarse pointer at desktop width', async ({ browser }) => {
   const context = await browser.newContext({
     hasTouch: true,
     isMobile: true,
@@ -141,11 +142,40 @@ test('a standalone dot is 32px for a coarse pointer at desktop width', async ({ 
   await openStory(page, 'questions-questiondot--default');
   expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
   expect(await page.locator('[data-question-id]').boundingBox()).toMatchObject({
-    width: 32,
-    height: 32,
+    width: 24,
+    height: 24,
   });
   await context.close();
 });
+
+// UX9-STROKE: the current dot's ring hugs the square (no inner space) in a near-black/near-white
+// text-primary color; focus stays a ring on the cell edge around a scaled marker.
+for (const theme of ['light', 'dark'] as const) {
+  test(`the current ring hugs the marker square in text-primary (${theme})`, async ({ page }) => {
+    await openStory(page, 'questions-questionheatmap--full', theme);
+    const current = page.locator('[data-question-id="q-2-5"]');
+    await expect(current).toHaveAttribute('aria-current', 'true');
+    await expect(current).toHaveCSS(
+      'outline-color',
+      await tokenColor(page, '--color-text-primary'),
+    );
+    await expect(current).toHaveCSS('outline-width', '2px');
+    // The marker box is the cell and its square is x=3..21 of the 24-unit viewBox, so an outline
+    // inset by cell/8 has its inner edge on the square's edge.
+    const [cell, marker] = await Promise.all([
+      current.boundingBox(),
+      current.getByTestId('question-marker').boundingBox(),
+    ]);
+    if (!cell || !marker) throw new Error('current dot not rendered');
+    expect(marker).toEqual(cell);
+    await expect(current).toHaveCSS('outline-offset', `-${cell.width / 8}px`);
+
+    await page.keyboard.press('Tab');
+    await expect(current).toBeFocused();
+    await expect(current).toHaveCSS('outline-color', await tokenColor(page, '--color-focus'));
+    await expect(current).toHaveCSS('outline-offset', '0px');
+  });
+}
 
 test('touch devices (hover: none) never scale on hover', async ({ browser }) => {
   const context = await browser.newContext({

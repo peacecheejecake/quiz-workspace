@@ -177,7 +177,9 @@ test(
       homePath(other.id, 'panel=share'),
     ]) {
       await page.goto(path);
-      await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+      // A deep-linked dialog is modal (UX9, HOMEDLG-01): the visually hidden h1 behind it is
+      // hidden from assistive technology meanwhile.
+      await expect(page.getByRole('heading', { level: 1, includeHidden: true })).toHaveCount(1);
       await settle(page);
       await expectAccessible(page, `archived workspace ${path}`);
     }
@@ -207,14 +209,15 @@ test(
     await page.goto(documentsPath(ws.id));
     await expect(docUi.emptyState(page)).toBeVisible();
     await expectAccessible(page, 'documents empty');
-    await page.goto(searchPath(ws.id));
-    await openContentSearch(page);
-    await expectAccessible(page, 'search without documents');
-    // The settings popovers of the 문제 search (filters) and the 본문 search (mode tooltips,
-    // filters), UX7-SEARCH.
+    // The settings popovers of the 문제 search (filters, on the home) and the 본문 search (mode
+    // tooltips, filters, on its own page since UX9 — SEARCH-02), UX7-SEARCH.
+    await page.goto(homePath(ws.id));
     await openSearchOptions(page, 'questions');
     await expectAccessible(page, 'question search settings popover');
     await closeSearchOptions(page, 'questions');
+    await page.goto(searchPath(ws.id));
+    await openContentSearch(page);
+    await expectAccessible(page, 'search without documents');
     await openSearchOptions(page, 'body');
     await expectAccessible(page, 'body search settings popover');
     await closeSearchOptions(page, 'body');
@@ -478,8 +481,9 @@ test(
     }
     await settle(page);
     await expectAccessible(page, 'history list');
-    // A second dialog stacked on top of it (QOV-01-AC10).
-    await homeUi.documentsButton(page).click();
+    // A second dialog stacked on top of it: UX9 (HOMEDLG-01) a deep link opens both, modal, the
+    // last one on top.
+    await page.goto(homePath(ws.id, 'panel=history&panel=documents'));
     await expect(homeUi.documentsDialog(page)).toBeVisible();
     await settle(page);
     await expectAccessible(page, 'history and documents dialogs');
@@ -605,7 +609,7 @@ test(
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0, { timeout: REDUCED_CLOSE_MS });
 
-    // FloatingSidePanel (non-modal) unmounts from its close button.
+    // FloatingSidePanel (modal since UX9, HOMEDLG-01) unmounts from its close button.
     await page.goto(homePath(ws.id));
     await homeUi.documentsButton(page).click();
     const panel = homeUi.documentsDialog(page);

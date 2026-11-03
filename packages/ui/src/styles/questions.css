@@ -13,7 +13,8 @@
   --qz-heatmap-cell: var(--heatmap-cell);
 }
 
-/* Touch-sized cells on mobile and coarse pointers (min 32px). */
+/* Mobile and coarse pointers use --heatmap-cell-touch (24px since UX9-STROKE, the WCAG 2.2
+   target-size minimum; the same as the desktop cell). */
 @media (width < 768px), (pointer: coarse) {
   .qz-heatmap,
   .qz-heatmap-legend,
@@ -36,13 +37,20 @@
 }
 
 /*
- * Outline of the same hue mixed 50% toward the primary text color. Light unseen/retry fills are
- * below 3:1 against the surface; the outline is ≥ 3.6:1 on surface/canvas/surface-muted in both
- * themes (test/question-marker-contrast.test.ts). 1.5 viewBox units ≈ 1 CSS px at 16px.
+ * Outline of the same hue mixed toward the primary text color by the themed
+ * --heatmap-marker-stroke-mix (UX9-STROKE: light 57%, dark 79% status color). Light unseen/retry
+ * and dark unseen fills are below 3:1 against the surface; each value is the lightest that keeps
+ * the outline ≥ 3:1 on surface/canvas/surface-muted (test/question-marker-contrast.test.ts). The
+ * width is --heatmap-marker-stroke-width in CSS px at every marker size (non-scaling stroke).
  */
 .qz-question-marker > .shape {
-  stroke: color-mix(in srgb, currentColor 50%, var(--color-text-primary));
-  stroke-width: 1.5;
+  stroke: color-mix(
+    in srgb,
+    currentColor var(--heatmap-marker-stroke-mix),
+    var(--color-text-primary)
+  );
+  stroke-width: var(--heatmap-marker-stroke-width);
+  vector-effect: non-scaling-stroke;
 }
 
 .qz-question-marker[data-status='unseen'] {
@@ -73,8 +81,8 @@
 
 /*
  * Heatmap dots draw the marker at the cell size: the square fills 18/24 of the viewBox, so the
- * visible gap between neighbours (cell − square, grid gap 0) is 1/3 of the square's width on every
- * breakpoint (24px cell → 18px square, 6px gap; 32px touch cell → 24px square, 8px gap).
+ * visible gap between neighbours (cell − square, grid gap 0) is 1/3 of the square's width
+ * (24px cell → 18px square inset 3px, 6px gap; the touch cell is 24px too since UX9-STROKE).
  */
 .qz-question-dot > .qz-question-marker {
   width: var(--qz-heatmap-cell);
@@ -92,7 +100,9 @@
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  /* The current ring hugs the square (inset cell/8, rx 4.5/24 of the cell): an outline at that
+     negative offset follows this radius minus the inset, i.e. the square's own corner radius. */
+  border-radius: calc(var(--qz-heatmap-cell) * 7.5 / 24);
   background: transparent;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -103,21 +113,24 @@
 }
 
 /*
- * Selection and focus rings are one 2px outline just outside the cell: it lies in the
- * neighbours' transparent margin (their square starts 1/8 of the cell in), so the dense grid keeps
- * the ring clear of this marker, even scaled, and of the neighbours'. A focused selected dot has
- * one boundary, in the focus color.
+ * Focus: a 2px outline on the cell edge, in the neighbours' transparent margin (their square starts
+ * 1/8 of the cell in), with the marker scaled up inside it.
+ * Current (UX9-STROKE): a 2px near-black (dark: near-white) --color-text-primary ring hugging the
+ * unscaled square with no space in between (outline inset by the square's 1/8-cell margin).
+ * The two differ in position and size as well as color. A focused current dot shows the focus
+ * ring only: same specificity, the focus rule comes later.
  */
+
+/* Current (open in the panel, aria-current): ring only, the status color never changes. */
+.qz-question-dot[data-selected] {
+  z-index: var(--z-raised);
+  outline: 2px solid var(--color-text-primary);
+  outline-offset: calc(var(--qz-heatmap-cell) / -8);
+}
+
 .qz-question-dot:focus-visible {
   z-index: var(--z-raised);
   outline: 2px solid var(--color-focus);
-  outline-offset: 0;
-}
-
-/* Selected (open in the panel): ring only, the status color never changes. */
-.qz-question-dot[data-selected]:not(:focus-visible) {
-  z-index: var(--z-raised);
-  outline: 2px solid var(--color-accent);
   outline-offset: 0;
 }
 
@@ -137,11 +150,8 @@
 }
 
 @media (forced-colors: active) {
+  .qz-question-dot[data-selected],
   .qz-question-dot:focus-visible {
-    outline-color: Highlight;
-  }
-
-  .qz-question-dot[data-selected]:not(:focus-visible) {
     outline-color: Highlight;
   }
 }
@@ -325,4 +335,18 @@
    accent icon; the label flips and the favorite star fills, so it is never color alone. */
 .qz-study-toggle[data-state='on'] {
   color: var(--color-accent);
+}
+
+/* Retry icon "on" (QVIEW-01-C08): the token pair (accent disc, on-accent mark) is not forced, so
+   forced-colors uses the Highlight / HighlightText system pair; `!important` beats the mark's
+   inline on-accent stroke. */
+@media (forced-colors: active) {
+  .qz-retry-icon[data-filled='true'] > .qz-retry-icon__disc {
+    fill: Highlight;
+    stroke: Highlight;
+  }
+
+  .qz-retry-icon[data-filled='true'] > .qz-retry-icon__mark {
+    stroke: HighlightText !important;
+  }
 }

@@ -93,6 +93,9 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   // MOCK-SPEC (2026-11-01): mock exams, unified QuestionViewer range practice.
   'MOCK.0': ['MOCK-01'],
   'QVIEW.0': ['QVIEW-01'],
+  // UX9-SPEC (2026-11-02): feedback batch — chapter redistribution, shared highlights, chapter note
+  // reading tools, question PDF import two-pane layout, book-text search page, modal home dialogs.
+  'UX9.0': ['CHREDIST-01', 'HILITE-01', 'CHNOTE-02', 'QIMPORT-02', 'SEARCH-02', 'HOMEDLG-01'],
 };
 
 const LEADING_ID = new RegExp(

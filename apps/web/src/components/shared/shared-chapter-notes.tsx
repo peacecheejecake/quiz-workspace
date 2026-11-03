@@ -2,15 +2,16 @@
 
 // WS-VIEW-01 `정리 노트` card and read-only panel (CHNOTE-01-AC04, docs/workspace-sharing.md §8):
 // the card lists the chapters whose newest note matches its source questions (the API leaves out
-// the rest); a chapter button opens the note in a non-modal panel
-// (`/share/:id?panel=chapter-note&chapter=:chapterId`) with the same folded "정답·해설 포함"
-// body. A guest gets no versions, status, errors or actions; a note that no longer matches its
-// questions (404) shows only "정리 노트가 갱신 중이거나 없습니다.". Footnotes open the share page's
-// read-only question panel.
+// the rest); a chapter button opens the note in a modal panel (UX9, HOMEDLG-01)
+// (`/share/:id?panel=chapter-note&chapter=:chapterId`) with the member panel's always-open body
+// and reading tools (CHNOTE-02: search, footnote previews from the shared preview API; no
+// 내 하이라이트). A guest gets no versions, status, errors or actions; a note that no longer matches
+// its questions (404) shows only "정리 노트가 갱신 중이거나 없습니다.". Footnotes open the share
+// page's read-only question panel over the note, which hides the note's content meanwhile.
 import { Badge, Button, FloatingSidePanel, Skeleton } from '@quiz/ui';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { ChapterNoteBody } from '@/components/questions/notes/chapter-note-body';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChapterNoteBody, dropStrayFocus } from '@/components/questions/notes/chapter-note-body';
 import noteStyles from '@/components/questions/notes/chapter-note.module.css';
 import { metaLine, NOTE_TEXT } from '@/lib/notes/model';
 import {
@@ -123,11 +124,11 @@ export function SharedChapterNotes({
         onOpenChange={(open) => {
           if (!open) navigate(null, false);
         }}
-        modal={false}
         title={NOTE_TEXT.title}
         description={title ?? listedTitle ?? undefined}
         closeLabel="정리 노트 닫기"
         mobileLayout="full"
+        onCloseAutoFocus={dropStrayFocus}
       >
         {chapterId ? (
           <SharedNoteContent
@@ -172,8 +173,12 @@ function SharedNoteContent({
   const searchParams = useSearchParams();
   const [load, setLoad] = useState<NoteLoad>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
-  const [expanded, setExpanded] = useState(false);
   const [question, setQuestion] = useState<SharedQuestion | null>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const loadPreview = useCallback(
+    (questionId: string, signal?: AbortSignal) => client.questionPreview(questionId, signal),
+    [client],
+  );
   const [questionError, setQuestionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -194,7 +199,8 @@ function SharedNoteContent({
     return () => controller.abort();
   }, [client, chapterId, attempt, onTitle, onUnavailable]);
 
-  const openQuestion = async (questionId: string) => {
+  const openQuestion = async (questionId: string, trigger: HTMLElement | null) => {
+    triggerRef.current = trigger;
     setQuestionError(null);
     try {
       setQuestion(await client.question(questionId));
@@ -236,31 +242,46 @@ function SharedNoteContent({
   }
 
   const { note } = load;
+  const covered = question !== null;
   return (
-    <div className={noteStyles.content}>
-      <div className={noteStyles.head}>
-        <div className={noteStyles.badges}>
-          <Badge tone="accent">{NOTE_TEXT.aiBadge}</Badge>
-          {note.stale ? <Badge tone="warning">{NOTE_TEXT.stale}</Badge> : null}
+    <>
+      <div
+        className={noteStyles.content}
+        inert={covered || undefined}
+        data-covered={covered || undefined}
+      >
+        <div className={noteStyles.head}>
+          <div className={noteStyles.badges}>
+            <Badge tone="accent">{NOTE_TEXT.aiBadge}</Badge>
+            {note.stale ? <Badge tone="warning">{NOTE_TEXT.stale}</Badge> : null}
+          </div>
+          <p className={noteStyles.meta}>{metaLine(note.question_count, note.created_at)}</p>
         </div>
-        <p className={noteStyles.meta}>{metaLine(note.question_count, note.created_at)}</p>
+        <ChapterNoteBody
+          sections={note.sections}
+          footnotes={note.footnotes}
+          // The question opens in the page's read-only panel; the link stays on this view.
+          questionHref={() => `${pathname}?${searchParams.toString()}`}
+          onOpenQuestion={(questionId, trigger) => void openQuestion(questionId, trigger)}
+          loadPreview={loadPreview}
+          covered={covered}
+        />
+        {questionError ? <p className={noteStyles.note}>{questionError}</p> : null}
       </div>
-      <ChapterNoteBody
-        sections={note.sections}
-        footnotes={note.footnotes}
-        expanded={expanded}
-        onExpandedChange={setExpanded}
-        // The question opens in the page's read-only panel; the link stays on this view.
-        questionHref={() => `${pathname}?${searchParams.toString()}`}
-        onOpenQuestion={(questionId) => void openQuestion(questionId)}
-      />
-      {questionError ? <p className={noteStyles.note}>{questionError}</p> : null}
       <SharedQuestionPanel
         shareId={shareId}
         question={question}
         documents={documents}
         onClose={() => setQuestion(null)}
+        onCloseAutoFocus={(event) => {
+          const trigger = triggerRef.current;
+          triggerRef.current = null;
+          if (trigger?.isConnected) {
+            event.preventDefault();
+            trigger.focus();
+          }
+        }}
       />
-    </div>
+    </>
   );
 }

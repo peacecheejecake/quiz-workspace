@@ -37,7 +37,6 @@ export function MarkerShape({
           d="M12 2.5 15.1 8.5 21.6 9.45 16.8 14.1 17.95 20.65 12 17.5 6.05 20.65 7.2 14.1 2.4 9.45 8.9 8.5Z"
           fill="currentColor"
           stroke="currentColor"
-          strokeWidth="1.1"
           strokeLinejoin="round"
           strokeLinecap="round"
         />

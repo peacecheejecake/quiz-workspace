@@ -401,10 +401,15 @@ export const noteUi = {
     panel.getByText(/문제가 바뀌어 최신이 아닙니다|questions changed|out of date/i),
   version: (panel: Locator) => panel.getByRole('combobox', { name: /^(버전|version)/i }),
   previousNotice: (panel: Locator) => panel.getByText(/^(이전 버전|previous version)/i),
-  disclosure: (panel: Locator) =>
-    panel.getByRole('button', { name: /^(정답·해설 포함|contains answers)/i }),
-  disclosureNote: (panel: Locator) =>
+  /** UX9 (CHNOTE-02, user decision C7): the retired "정답·해설 포함" fold. */
+  oldDisclosure: (panel: Locator) =>
+    panel.getByRole('button', { name: /정답·해설 포함|펼쳐서 보기|contains answers/i }),
+  /** The text above the always-open body (CHNOTE-02). */
+  answersNotice: (panel: Locator) =>
     panel.getByText(/이 노트에는 문제의 정답과 해설 내용이 들어 있습니다|contains the answers/i),
+  /** The note body (HighlightableText group "정리 노트 본문", CHNOTE-02 / HILITE-01). */
+  body: (panel: Locator) =>
+    panel.getByRole('group', { name: /^(정리 노트 본문|chapter note body|note body)$/i }),
   sectionHeadings: (body: Locator) => body.getByRole('heading', { level: 3 }),
   footnoteRefs: (scope: Locator) => scope.getByRole('link', { name: /^(각주|footnote)\s*\d+$/i }),
   footnoteList: (body: Locator) => body.getByRole('list', { name: /^(각주|footnotes)$/i }),
@@ -434,11 +439,26 @@ export const noteUi = {
     panel.getByText(/정리 노트가 갱신 중이거나 없습니다|no chapter note is available/i),
 };
 
-/** The element the disclosure button controls (the collapsible note body). */
+/**
+ * The note's content (sections, items, the 각주 list), always open since UX9 (CHNOTE-02-AC01):
+ * the panel, once its body group shows.
+ */
 export async function noteBody(panel: Locator): Promise<Locator> {
-  const id = await noteUi.disclosure(panel).getAttribute('aria-controls');
-  expect(id, 'the disclosure names the body it controls').toBeTruthy();
-  return panel.page().locator(`[id="${id}"]`);
+  await expect(noteUi.body(panel)).toBeVisible();
+  return panel;
+}
+
+/**
+ * The note body found hidden-inclusively: while a modal is stacked over the note (a footnote's
+ * practice panel) the note's content is hidden and inert (CHNOTE-02-AC05).
+ */
+export function coveredNoteBody(page: Page): Locator {
+  return page
+    .getByRole('dialog', { name: /^(정리 노트|chapter notes?)$/i, includeHidden: true })
+    .getByRole('group', {
+      name: /^(정리 노트 본문|chapter note body|note body)$/i,
+      includeHidden: true,
+    });
 }
 
 /**

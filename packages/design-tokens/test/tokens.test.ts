@@ -83,12 +83,14 @@ describe('spec extraction (guards against a vacuous comparison)', () => {
     // 15 v1.1 colors + 6 v1.1.1 additions (border-strong, on-accent, danger/success/warning, scrim)
     // + 4 v1.2 additions (glass-solid, state-hover/pressed/selected)
     // + 3 v1.2.1 additions (accent-hover/pressed, state-selected-hover)
-    // + 4 v1.2.2 switch track colors (track, track-hover, track-border, track-checked-border).
-    expect(Object.keys(docLight)).toHaveLength(32);
-    expect(Object.keys(docDark)).toHaveLength(32);
+    // + 4 v1.2.2 switch track colors (track, track-hover, track-border, track-checked-border)
+    // + UX9-STROKE heatmap-marker-stroke-mix (themed percentage, not a color)
+    // + UX9-HL-UI 3 highlight backgrounds and the search match background/border.
+    expect(Object.keys(docLight)).toHaveLength(38);
+    expect(Object.keys(docDark)).toHaveLength(38);
     // 32 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 12 typography
-    // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width.
-    expect(Object.keys(docRoot)).toHaveLength(74);
+    // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width + UX9-STROKE stroke mix.
+    expect(Object.keys(docRoot)).toHaveLength(75);
   });
 });
 
@@ -199,7 +201,7 @@ describe('density (design-system.md §4, v1.2.2)', () => {
 
   it('heatmap cells keep their spec sizes (not part of the density change)', () => {
     expect(staticTokens['heatmap-cell']).toBe('24px');
-    expect(staticTokens['heatmap-cell-touch']).toBe('32px');
+    expect(staticTokens['heatmap-cell-touch']).toBe('24px'); // UX9-STROKE: 32px → 24px (user request)
     expect(staticTokens['heatmap-dot']).toBe('16px');
     expect(staticTokens['heatmap-gap']).toBe('0px');
   });

@@ -1,18 +1,18 @@
 'use client';
 
-// SEARCH-01 본문 (content) search of the workspace home (docs/screens/search.md, UX3c → UX7-SEARCH:
-// its own box in the collapsed "본문 검색" area). `useContentSearch` holds the options (mode,
-// document/chapter filters), runs the query through the same-origin relay — FastAPI enforces the workspace and the
-// published-revision scope — and mirrors the submitted search into the home URL next to its other
-// keys, so the back button from the PDF viewer restores it. A newer request always wins: older
-// ones are aborted and their late answers ignored. `ContentSearchOptions` renders the options
-// inside the "본문 설정" popover; `ContentSearchResults` the results under the 본문 search form.
+// SEARCH-01 본문 (content) search (docs/screens/search.md), on its own page since UX9 (SEARCH-02,
+// content-search-page.tsx; before, a collapsed area of the workspace home). `useContentSearch`
+// holds the options (mode, document/chapter filters), runs the query through the same-origin
+// relay — FastAPI enforces the workspace and the published-revision scope — and mirrors the
+// submitted search into the page URL in place, so the back button from the PDF viewer restores
+// it. A newer request always wins: older ones are aborted and their late answers ignored.
+// `ContentSearchOptions` renders the options inside the "본문 설정" popover;
+// `ContentSearchResults` the results under the 본문 search form.
 // Question papers are never searched (UX7-SEARCH-2: the server leaves them out, and the document
 // filter lists books only).
 import { Badge, Button, EmptyState, RadioGroup, Select } from '@quiz/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { summaryOwnsDocumentKey } from '@/lib/workspaces/home';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import {
   createSearchClient,
@@ -97,7 +97,7 @@ export interface ContentSearch {
   readonly search: (query: string) => void;
   /** Re-runs the last search (after a failure). */
   readonly retry: () => void;
-  /** Forgets the results (the home's "검색 결과 닫기"). */
+  /** Forgets the results (the page's "검색 결과 지우기"). */
   readonly clear: () => void;
   /**
    * Follows the address bar (browser Back/Forward): runs `q` with its options when it differs from
@@ -156,11 +156,7 @@ export function useContentSearch({
         status: 'loading',
         previous: current.status === 'done' ? current.response : null,
       }));
-      window.history.replaceState(
-        window.history.state,
-        '',
-        `${window.location.pathname}${mergeContentSearch(window.location.search, q)}`,
-      );
+      replaceAddress(`${window.location.pathname}${mergeContentSearch(window.location.search, q)}`);
       try {
         const response = await client.search(workspaceId, q, controller.signal);
         if (generation !== generationRef.current) return;
@@ -239,11 +235,8 @@ export function useContentSearch({
           void run({ ...last, chapterId: null });
         } else {
           const url = new URL(window.location.href);
-          // An open 문서 요약 panel owns `document`/`section` (DOCSUM-01).
-          if (!summaryOwnsDocumentKey(url.searchParams)) {
-            url.searchParams.delete('section');
-            window.history.replaceState(window.history.state, '', url);
-          }
+          url.searchParams.delete('section');
+          replaceAddress(url.href);
         }
       }
     };
@@ -269,7 +262,8 @@ export function useContentSearch({
   const options = (overrides: Partial<SearchQuery> = {}): Omit<SearchQuery, 'query'> => ({
     mode,
     documentId,
-    chapterId: documentId ? chapterId : null,
+    // A chapter without its document only comes from the address bar (the old route's filter).
+    chapterId,
     ...overrides,
   });
 
@@ -356,12 +350,26 @@ export function useContentSearch({
   };
 }
 
+/**
+ * Rewrites the current history entry's URL in place (no new entry). The entry's own state is kept
+ * without Next's keys, so Next's patched `replaceState` copies them back and its router follows the
+ * new URL (`useSearchParams`, and a later re-render of the router never writes the old URL back).
+ */
+export function replaceAddress(url: string): void {
+  const state: unknown = window.history.state;
+  const own: Record<string, unknown> =
+    state !== null && typeof state === 'object' ? { ...(state as Record<string, unknown>) } : {};
+  delete own.__NA;
+  delete own._N;
+  window.history.replaceState(own, '', url);
+}
+
 function sameSearch(a: SearchQuery, b: SearchQuery): boolean {
   return (
     a.query === b.query &&
     a.mode === b.mode &&
     a.documentId === b.documentId &&
-    (a.documentId ? a.chapterId : null) === (b.documentId ? b.chapterId : null)
+    a.chapterId === b.chapterId
   );
 }
 
@@ -427,6 +435,11 @@ export function ContentSearchOptions({
           onValueChange={search.setChapter}
         />
       </div>
+      {!search.documentId && search.chapterId ? (
+        <p className={styles.hint}>
+          주소에 있던 장 하나에서만 검색합니다. 문서를 고르면 장 필터가 바뀝니다.
+        </p>
+      ) : null}
       {search.chapterNotice ? (
         <p role="status" className={styles.hint}>
           {search.chapterNotice}
@@ -436,7 +449,7 @@ export function ContentSearchOptions({
   );
 }
 
-/** "본문 검색 결과" under the home header, with the excerpt panel; hidden without a search. */
+/** "본문 검색 결과" under the 본문 search form, with the excerpt panel; hidden without a search. */
 export function ContentSearchResults({
   workspaceId,
   search,
@@ -444,7 +457,7 @@ export function ContentSearchResults({
 }: {
   readonly workspaceId: string;
   readonly search: ContentSearch;
-  /** "검색 결과 닫기": clears the search. */
+  /** "검색 결과 지우기": clears the search. */
   readonly onClose: () => void;
 }) {
   const { results, now } = search;
@@ -461,11 +474,7 @@ export function ContentSearchResults({
   return (
     <>
       {search.submitted ? (
-        <section
-          aria-labelledby="search-results-heading"
-          className={styles.resultsSection}
-          data-panel-open={search.panelOpen || undefined}
-        >
+        <section aria-labelledby="search-results-heading" className={styles.resultsSection}>
           <div className={styles.resultsHeader}>
             <h2 id="search-results-heading" className={styles.resultsTitle}>
               본문 검색 결과
@@ -478,7 +487,7 @@ export function ContentSearchResults({
                   : null}
             </p>
             <Button size="sm" variant="ghost" onClick={onClose}>
-              검색 결과 닫기
+              검색 결과 지우기
             </Button>
           </div>
 
@@ -539,6 +548,8 @@ export function ContentSearchResults({
         workspaceId={workspaceId}
         client={search.client}
         item={search.selected}
+        items={response?.items ?? []}
+        onSelect={search.openHit}
         open={search.panelOpen}
         onClose={search.closeHit}
       />

@@ -42,7 +42,8 @@ interface QuestionMenuAction {
  * onCloseAutoFocus, which Radix fires from a timer after the menu unmounts), so the dialog it
  * opens records the trigger as its opener and closing the dialog brings focus back there.
  * 중복 문제 정리 (UX7-DEDUP, QOV-01-AC16: `?panel=question-duplicates`) merges questions, so it is
- * editor-only like 직접 추가.
+ * editor-only like 직접 추가; so is 챕터 재분배 (CHREDIST-01: `?panel=chapter-redistribution`), which
+ * moves questions between chapters, after it in the same group.
  * 보관·초안 문제 (UX7-BANK-2, QOV-01-AC15: the floating dialog of draft and archived questions,
  * `?panel=inactive-questions`) is readable by every member, so it stays enabled.
  * 문제 풀기 (QVIEW-01: the range run panel, `?practice=new&source=bank`) is a personal practice
@@ -55,6 +56,7 @@ export function QuestionMenu({
   readOnly,
   onCreate,
   onDuplicates,
+  onRedistribute,
   onInactive,
   onMockExams,
   onPractice,
@@ -62,6 +64,7 @@ export function QuestionMenu({
   readonly readOnly: QuestionMenuReadOnly;
   readonly onCreate: () => void;
   readonly onDuplicates: () => void;
+  readonly onRedistribute: () => void;
   readonly onInactive: () => void;
   readonly onMockExams: () => void;
   readonly onPractice: () => void;
@@ -75,6 +78,7 @@ export function QuestionMenu({
   const actions: readonly QuestionMenuAction[] = [
     { key: 'create', label: '직접 추가', requiresEdit: true, onSelect: onCreate },
     { key: 'duplicates', label: '중복 문제 정리', requiresEdit: true, onSelect: onDuplicates },
+    { key: 'redistribute', label: '챕터 재분배', requiresEdit: true, onSelect: onRedistribute },
     {
       key: 'inactive',
       label: '보관·초안 문제',
@@ -104,7 +108,8 @@ export function QuestionMenu({
           pending.current = null;
           if (!action) return;
           event.preventDefault();
-          triggerRef.current?.focus();
+          // The dialog it opens never moves the page (HOMEDLG-01-AC03), nor does this focus.
+          triggerRef.current?.focus({ preventScroll: true });
           action();
         }}
       >

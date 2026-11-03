@@ -60,6 +60,7 @@ import {
   type Draft,
   type TruthQuestion,
 } from '../fixtures/test.ts';
+import { isBlocked, reviewListUi } from '../fixtures/ux9-pages.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 test.describe.configure({ timeout: 2 * JOB_TIMEOUT_MS + 60_000 });
@@ -117,11 +118,34 @@ test(
       await expect(item.getByText(pageLabel(q.page)).first(), `question ${q.number}`).toBeVisible();
     }
 
-    // Compare view: the draft next to its source page.
+    // Compare view: the draft next to its source page. UX9 (HOMEDLG-01, user decision 2026-11-02):
+    // a modal panel — the draft list behind it is inert — showing the draft's extracted content
+    // read-only, moving along the page's drafts with 이전 초안 / 다음 초안.
     const q5 = Q(5);
-    await importUi.compare(importUi.draft(page, q5.stem)).click();
-    await expect(importUi.sourceView(page)).toBeVisible();
-    await expect(importUi.sourceView(page)).toContainText(pageLabel(q5.page));
+    const q6 = Q(6);
+    const compare5 = importUi.compare(importUi.draft(page, q5.stem));
+    await compare5.click();
+    const source = page.getByRole('dialog', { name: /^(원본|원문|source)/i });
+    await expect(source).toBeVisible();
+    await expect(source).toHaveAttribute('aria-modal', 'true');
+    await expect(source).toContainText(pageLabel(q5.page));
+    await expect(source).toContainText(q5.stem);
+    const list = page.locator('main').getByRole('list', {
+      name: /가져온 (초안|문제)|초안|drafts?|imported questions/i,
+      includeHidden: true,
+    });
+    expect(await isBlocked(list), 'the draft list is inert').toBe(true);
+    // Read-only: no field of the draft and nothing to save in the panel.
+    await expect(source.getByRole('button', { name: /저장|save/i })).toHaveCount(0);
+    await source.getByRole('button', { name: /^(다음 초안|next draft)$/i }).click();
+    await expect(source).toContainText(q6.stem);
+    await expect(source).toContainText(pageLabel(q6.page));
+    await source.getByRole('button', { name: /^(이전 초안|previous draft)$/i }).click();
+    await expect(source).toContainText(q5.stem);
+    // To edit, close it: focus returns to the compare button of the draft last shown.
+    await page.keyboard.press('Escape');
+    await expect(source).toHaveCount(0);
+    await expect(compare5).toBeFocused();
 
     // Server: 8 pending drafts with page provenance into the uploaded PDF.
     expect(drafts).toHaveLength(PAPER.questions.length);
@@ -554,27 +578,33 @@ test(
     );
     await expect(homeUi.documentsDialog(page)).toBeVisible();
 
-    // Two extracted PDFs: `검토할 PDF` switches between their reviews (one per PDF).
+    // Two extracted PDFs: the `검토할 PDF` list switches between their reviews (one per PDF; UX9:
+    // the list replaced the combobox, QIMPORT-02-AC01·AC02).
     const mixedRun = await startImport(owner, ws.id, mixed);
     await waitForImportStatus(owner, mixedRun.id, 'succeeded');
     await page.goto(importPath(ws.id));
-    const switcher = importUi.pdfSwitcher(page);
-    await expect(switcher).toContainText(/book-en/); // the newest extraction
+    const pdfList = reviewListUi.nav(page);
+    const pdfLink = (title: RegExp) =>
+      reviewListUi.rows(pdfList).getByRole('link', { name: title });
+    await expect(importUi.pdfSwitcher(page)).toHaveCount(0);
+    // The newest extraction is chosen; the plain 교재 is not listed.
+    await expect(pdfLink(/book-en/)).toHaveAttribute('aria-current', 'page');
+    await expect(reviewListUi.rows(pdfList)).toHaveCount(2);
+    await expect(reviewListUi.rows(pdfList).filter({ hasText: /book-ko/ })).toHaveCount(0);
     await expect(
       main(page).getByRole('button', { name: /pdf (업로드|선택)|upload|choose/i }),
     ).toHaveCount(0);
-    await switcher.click();
-    const options = page.getByRole('option');
-    await expect(options).toHaveCount(2);
-    await expect(options.filter({ hasText: /book-en/ })).toContainText('교재+문제');
-    await options.filter({ hasText: /questions-ko/ }).click();
+    await expect(
+      reviewListUi.rows(pdfList).filter({ has: page.getByRole('link', { name: /book-en/ }) }),
+    ).toContainText('교재+문제');
+    await pdfLink(/questions-ko/).click();
     await expect(page).toHaveURL(
       (url) =>
         url.pathname === importPath(ws.id) &&
         url.searchParams.get('document') === uploaded.documentId,
     );
     await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length);
-    await expect(importUi.pdfSwitcher(page)).toContainText(/questions-ko/);
+    await expect(pdfLink(/questions-ko/)).toHaveAttribute('aria-current', 'page');
   },
 );
 

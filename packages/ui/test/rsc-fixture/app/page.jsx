@@ -32,7 +32,12 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   EmptyState,
   FavoriteToggle,
@@ -88,9 +93,30 @@ import {
   summarizeStatuses,
   useTheme,
   useToast,
+  useUnsavedChanges,
+  colorAction,
+  drawableHighlights,
+  exactHighlight,
+  FIND_IN_NOTE_LIMIT,
+  findInNote,
+  foldForSearch,
+  HIGHLIGHT_COLORS,
+  HIGHLIGHT_MENU_TEXT,
+  highlightColorLabels,
+  HighlightableText,
+  HighlightMenu,
+  matchCountLabel,
+  overlappingHighlights,
+  POINTER_FLOATING_CLOSE_MS,
+  PointerAnchoredFloating,
+  SEARCH_DEBOUNCE_MS,
+  SEARCH_FIELD_TEXT,
+  SearchField,
+  SearchMatchText,
+  TOUCH_SELECTION_REST_MS,
 } from '@quiz/ui';
 
-const hooks = [useTheme, useToast];
+const hooks = [useTheme, useToast, useUnsavedChanges];
 // Need function props (onOpen / onPressedChange), so a Client Component has to render them.
 const interactive = [
   QuestionDot,
@@ -100,8 +126,29 @@ const interactive = [
   ConfirmDialog,
   Dropzone,
   CopyButton,
+  HighlightMenu,
+  SearchField,
 ];
 const copyFeedbackMs = COPY_FEEDBACK_MS;
+
+// The reading helpers are plain functions and must be callable on the server too.
+const noteBlocks = [
+  { id: 's0.i0', text: '증발과 응축의 순서를 묻는다.' },
+  { id: 's0.i1', text: '주의: ＡＴＴＥＮＴＩＯＮ과 attention.' },
+];
+const noteHighlights = [{ id: 'h1', block: 's0.i0', start: 0, end: 2, color: HIGHLIGHT_COLORS[0] }];
+const found = findInNote(noteBlocks, foldForSearch('ATTENTION'), FIND_IN_NOTE_LIMIT);
+const readingSummary = [
+  matchCountLabel(found.matches.length, found.capped),
+  drawableHighlights(noteHighlights, noteBlocks[0]).length,
+  exactHighlight(noteHighlights, { block: 's0.i0', start: 0, end: 2 })?.id,
+  overlappingHighlights(noteHighlights, { block: 's0.i0', start: 1, end: 4 }).length,
+  colorAction(noteHighlights, { block: 's0.i0', start: 1, end: 4 }, 'blue')?.type,
+  highlightColorLabels.pink,
+  HIGHLIGHT_MENU_TEXT.label,
+  SEARCH_FIELD_TEXT.none,
+  SEARCH_DEBOUNCE_MS + TOUCH_SELECTION_REST_MS + POINTER_FLOATING_CLOSE_MS,
+].join(' · ');
 
 // The status helpers are plain functions and must be callable on the server.
 const questions = QUESTION_DOT_STATUSES.map((status, index) => ({
@@ -230,6 +277,14 @@ export default function Page() {
                 <DropdownMenuLabel>작업</DropdownMenuLabel>
                 <DropdownMenuItem>보관</DropdownMenuItem>
               </DropdownMenuGroup>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>색 바꾸기</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent aria-label="색 바꾸기">
+                  <DropdownMenuRadioGroup value="yellow">
+                    <DropdownMenuRadioItem value="yellow">노랑</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
               <DropdownMenuSeparator />
               <DropdownMenuItem tone="danger">삭제</DropdownMenuItem>
             </DropdownMenuContent>
@@ -255,6 +310,17 @@ export default function Page() {
           </QuestionPreviewPopover>
           <StarIcon />
           <RetryIcon />
+          <p>{readingSummary}</p>
+          <HighlightableText
+            label="정리 노트 본문"
+            blocks={noteBlocks.map((b, i) => ({ ...b, suffix: <a href="#fn">[{i + 1}]</a> }))}
+            highlights={noteHighlights}
+            matches={found.matches.map((m, i) => ({ ...m, current: i === 0 }))}
+          />
+          <SearchMatchText text="주의 주의" matches={[{ start: 0, end: 2, current: true }]} />
+          <PointerAnchoredFloating label="문제 미리보기" content="3장 12번 · 객관식">
+            <a href="#q">[1]</a>
+          </PointerAnchoredFloating>
         </AppShell>
       </ToastProvider>
     </ThemeProvider>

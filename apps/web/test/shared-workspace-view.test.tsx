@@ -165,7 +165,7 @@ describe('SharedWorkspaceView', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('previews a question read-only in a non-modal panel', async () => {
+  it('previews a question read-only in a modal panel with 이전/다음 문제 (UX9)', async () => {
     routes({
       '': () => json(WORKSPACE),
       '/questions': () => json({ items: [QUESTION], next_cursor: null }),
@@ -174,7 +174,10 @@ describe('SharedWorkspaceView', () => {
     const list = await screen.findByRole('list', { name: /문제/ });
     await userEvent.click(within(list).getByRole('button', { name: /비는 무엇인가/ }));
     const panel = await screen.findByRole('dialog', { name: /문제/ });
-    expect(panel).not.toHaveAttribute('aria-modal', 'true');
+    expect(panel).toHaveAttribute('aria-modal', 'true');
+    // One question: no neighbour either way.
+    expect(within(panel).getByRole('button', { name: '이전 문제' })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: '다음 문제' })).toBeDisabled();
     expect(panel).toHaveTextContent('나');
     expect(panel).toHaveTextContent('정답');
     expect(panel).toHaveTextContent('해설 본문');
@@ -241,7 +244,7 @@ describe('SharedWorkspaceView', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await waitFor(() => expect(screen.getByRole('link', { name: /^fork/i })).toHaveFocus());
   });
-  it('lists source-matched chapter notes and opens one read-only, folded (CHNOTE-01)', async () => {
+  it('lists source-matched chapter notes and opens one read-only, body open (CHNOTE-01, CHNOTE-02)', async () => {
     const CHAPTER = '3e9d8f3b-4a5c-4d6e-9f7a-8b9c0d1e2f3a';
     window.history.replaceState(null, '', `/share/${SHARE}?panel=chapter-note&chapter=${CHAPTER}`);
     routes({
@@ -261,19 +264,27 @@ describe('SharedWorkspaceView', () => {
       [`/questions/${Q1}`]: () => json(QUESTION),
     });
     renderView();
-    const card = await screen.findByRole('region', { name: '정리 노트' });
-    expect(await within(card).findByRole('button', { name: '1장 비' })).toBeInTheDocument();
+    // The deep-linked note panel is modal (UX9): the card behind it is hidden from AT.
+    const card = await screen.findByRole('region', { name: '정리 노트', hidden: true });
+    expect(
+      await within(card).findByRole('button', { name: '1장 비', hidden: true }),
+    ).toBeInTheDocument();
     const panel = await screen.findByRole('dialog', { name: '정리 노트' });
     expect(await within(panel).findByText('AI 생성')).toBeInTheDocument();
     expect(within(panel).queryByRole('combobox')).toBeNull();
     expect(within(panel).queryByRole('button', { name: /만들기|다시 시도/ })).toBeNull();
-    expect(panel).not.toHaveTextContent('NOTE-S');
-    await userEvent.click(within(panel).getByRole('button', { name: /^정답·해설 포함/ }));
+    // UX9 (user decision C7): no fold; the body is shown at once, with the answers notice.
+    expect(within(panel).queryByRole('button', { name: /^정답·해설 포함/ })).toBeNull();
     expect(panel).toHaveTextContent('NOTE-S');
+    expect(panel).toHaveTextContent('이 노트에는 문제의 정답과 해설 내용이 들어 있습니다.');
+    expect(within(panel).getByRole('searchbox', { name: '노트에서 찾기' })).toBeInTheDocument();
+    expect(within(panel).queryByRole('region', { name: /내 하이라이트/ })).toBeNull();
     await userEvent.click(
       within(within(panel).getByRole('list', { name: '각주' })).getByRole('link'),
     );
     expect(await screen.findByRole('dialog', { name: /1번 문제/ })).toBeInTheDocument();
+    // The question panel stacked over the note hides the note's content meanwhile.
+    expect(panel.querySelector('[inert][data-covered]')).not.toBeNull();
   });
 
   it('shows only the missing notice for a note that no longer matches its questions', async () => {
@@ -290,6 +301,6 @@ describe('SharedWorkspaceView', () => {
       await within(panel).findByText('정리 노트가 갱신 중이거나 없습니다.'),
     ).toBeInTheDocument();
     expect(within(panel).queryByText('AI 생성')).toBeNull();
-    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, hidden: true })).toBeInTheDocument();
   });
 });

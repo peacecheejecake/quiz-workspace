@@ -11,17 +11,39 @@
   gap: var(--space-4);
 }
 
+/*
+ * Question typography (UX9-QTYPE, design-system §4.1 "문제 본문 타이포그래피"): the stem and the
+ * options are body-lg; the stem keeps its relaxed line-height and its paragraphs (blank-line
+ * blocks) are a spacing token apart instead of a full empty line.
+ */
 .stem {
+  display: grid;
+  gap: var(--space-3);
   margin: 0;
-  font-size: var(--font-size-body);
+  font-size: var(--font-size-body-lg);
   line-height: var(--line-height-relaxed);
+}
+
+.stem > p {
+  margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
+/* Answer options: body-lg labels (the kit's 24px line box keeps the first line centered on the
+   20px radio/checkbox) and a tighter gap between rows; each row keeps its padding (44px touch
+   height for one line). */
+.optionGroup > :global(.qz-radio-group) {
+  gap: var(--space-1);
+}
+
+.option:is(:global(.qz-radio), :global(.qz-checkbox)) > :global(.text) > :global(.label) {
+  font-size: var(--font-size-body-lg);
+}
+
 .choices {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-1);
   min-inline-size: 0;
   margin: 0;
   padding: 0;
@@ -162,6 +184,26 @@
   overflow-wrap: anywhere;
 }
 
+/* HILITE-01: the explanation as a highlightable area, one paragraph per block. */
+.explanation {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.explanation > p {
+  margin: 0;
+}
+
+.collected {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.collected:empty {
+  margin: 0;
+}
+
 .footer {
   display: flex;
   flex-wrap: wrap;
@@ -203,7 +245,7 @@
 
 .optionList {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-1);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -225,11 +267,13 @@
 
 .optionLabel {
   flex: none;
+  font-size: var(--font-size-body-lg);
   font-weight: var(--font-weight-semibold);
 }
 
 .optionText {
   flex: 1;
+  font-size: var(--font-size-body-lg);
   min-width: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -446,6 +490,15 @@
 .questionRow {
   min-width: 0;
   padding-block: var(--space-1);
+}
+
+/* A row with a text badge (CHREDIST-01 "직접 정함"): the badge wraps under a long label. */
+.badgedRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
 }
 
 .selectedCount {

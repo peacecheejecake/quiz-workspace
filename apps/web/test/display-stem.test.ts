@@ -1,7 +1,7 @@
 // UX7-QDISPLAY (docs/questions.md §4 item 10, QPLAY-01-AC13): a stem is shown without the empty
 // answer mark exam papers put at its end; fill-in blanks inside the sentence stay. Display only.
 import { describe, expect, it } from 'vitest';
-import { displayStem } from '../src/lib/questions/display-stem';
+import { displayStem, stemParagraphs } from '../src/lib/questions/display-stem';
 
 describe('displayStem', () => {
   it.each([
@@ -67,6 +67,37 @@ describe('displayStem', () => {
     const started = performance.now();
     expect(displayStem(stem)).toBe(stem);
     expect(displayStem(`${' ( '.repeat(50_000)}`)).toBe(`${' ( '.repeat(50_000)}`);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+});
+
+describe('stemParagraphs (UX9-QTYPE)', () => {
+  it('keeps a one-paragraph stem whole, single line breaks included', () => {
+    expect(stemParagraphs('다음 중\n옳은 것은?')).toEqual(['다음 중\n옳은 것은?']);
+  });
+
+  it('splits at blank lines, whitespace-only and CRLF blank lines included', () => {
+    expect(stemParagraphs('지문 1\n\n지문 2')).toEqual(['지문 1', '지문 2']);
+    expect(stemParagraphs('지문 1\n  \n\n지문 2\r\n\r\n물음')).toEqual([
+      '지문 1',
+      '지문 2',
+      '물음',
+    ]);
+  });
+
+  it('drops empty leading and trailing paragraphs', () => {
+    expect(stemParagraphs('\n\n지문\n\n')).toEqual(['지문']);
+  });
+
+  it('returns a stem without text as itself', () => {
+    expect(stemParagraphs('')).toEqual(['']);
+    expect(stemParagraphs('\n\n')).toEqual(['\n\n']);
+  });
+
+  it('stays fast on long whitespace runs', () => {
+    const stem = `지문${'\n '.repeat(100_000)}x`;
+    const started = performance.now();
+    expect(stemParagraphs(stem)).toEqual(['지문', ' x']);
     expect(performance.now() - started).toBeLessThan(500);
   });
 });

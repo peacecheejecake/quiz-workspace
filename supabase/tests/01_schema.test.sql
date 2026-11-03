@@ -33,7 +33,11 @@ select tables_are(
         -- MOCK-B mock exams
         'mock_exams', 'mock_exam_revisions', 'mock_exam_generations',
         'mock_exam_generation_items', 'mock_exam_questions', 'mock_exam_question_revisions',
-        'mock_exam_practice_sessions', 'mock_exam_attempts'],
+        'mock_exam_practice_sessions', 'mock_exam_attempts',
+        -- UX9-HL-B personal highlights
+        'user_highlights',
+        -- UX9-REDIST-B chapter history
+        'question_chapter_changes'],
   'public schema contains exactly the expected tables'
 );
 
@@ -104,8 +108,8 @@ select is(
         'documents', 'mock_exam_generation_items', 'mock_exam_generations',
         'mock_exam_practice_sessions', 'mock_exam_questions', 'mock_exams',
         'practice_sessions', 'profiles', 'question_drafts', 'question_generation_runs',
-        'question_import_runs', 'question_user_states', 'questions', 'workspace_forks',
-        'workspace_memberships', 'workspace_share_links', 'workspaces'],
+        'question_import_runs', 'question_user_states', 'questions', 'user_highlights',
+        'workspace_forks', 'workspace_memberships', 'workspace_share_links', 'workspaces'],
   'updated_at trigger exists on every mutable table'
 );
 

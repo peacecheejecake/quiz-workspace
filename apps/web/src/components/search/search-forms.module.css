@@ -1,8 +1,8 @@
-/* SEARCH-01 search forms on the workspace home (UX7-SEARCH): the header's 문제 search (box +
-   "설정") with the "본문 검색" disclosure under it, and the 본문 search form (box + icon submit +
-   "설정") at the top of the expanded 본문 search area. Semantic tokens only. */
+/* SEARCH-01 search forms (UX7-SEARCH): the workspace home header's 문제 search (box + "설정") and
+   the 본문 search form (box + icon submit + "설정") at the top of the 본문 search page (SEARCH-02,
+   UX9). Semantic tokens only. */
 
-/* The header's search column: 문제 search, then the 본문 disclosure button. */
+/* The home header's search column: the 문제 search (the space under it stays empty, UX9). */
 .column {
   display: grid;
   flex: 1 1 22rem;
@@ -31,17 +31,6 @@
 .field {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-/* The expanded 본문 search: its form, then the results. */
-.contentArea {
-  display: grid;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.contentArea[hidden] {
-  display: none;
 }
 
 /* The small "설정" text button next to a search box. */

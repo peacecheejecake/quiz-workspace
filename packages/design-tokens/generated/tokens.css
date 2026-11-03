@@ -33,6 +33,12 @@
   --question-status-incorrect: #e0525e;
   --question-status-correct: #26865c;
   --question-status-retry: #e9b447;
+  --heatmap-marker-stroke-mix: 57%;
+  --color-highlight-yellow: #fff0a8;
+  --color-highlight-blue: #d6e8ff;
+  --color-highlight-pink: #ffdceb;
+  --color-search-match-bg: #ffe2c7;
+  --color-search-match: #b45309;
   --font-sans: 'Pretendard', 'Inter', system-ui, -apple-system, sans-serif;
   --font-size-label-sm: 12px;
   --font-size-label: 13px;
@@ -70,10 +76,11 @@
   --floating-panel-width: 500px;
   --outline-panel-width: 20rem;
   --heatmap-cell: 24px;
-  --heatmap-cell-touch: 32px;
+  --heatmap-cell-touch: 24px;
   --heatmap-gap: 0px;
   --heatmap-dot: 16px;
   --heatmap-marker-hover-scale: 1.18;
+  --heatmap-marker-stroke-width: 0.5px;
   --z-base: 0;
   --z-raised: 1;
   --z-popover: 20;
@@ -122,6 +129,12 @@
   --question-status-incorrect: #f17b84;
   --question-status-correct: #4bc68e;
   --question-status-retry: #f4c763;
+  --heatmap-marker-stroke-mix: 79%;
+  --color-highlight-yellow: #5c4b0f;
+  --color-highlight-blue: #1e3f6b;
+  --color-highlight-pink: #5e2546;
+  --color-search-match-bg: #5a3514;
+  --color-search-match: #ffb066;
 }
 
 [data-theme='light'] {
@@ -158,6 +171,12 @@
   --question-status-incorrect: #e0525e;
   --question-status-correct: #26865c;
   --question-status-retry: #e9b447;
+  --heatmap-marker-stroke-mix: 57%;
+  --color-highlight-yellow: #fff0a8;
+  --color-highlight-blue: #d6e8ff;
+  --color-highlight-pink: #ffdceb;
+  --color-search-match-bg: #ffe2c7;
+  --color-search-match: #b45309;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -195,5 +214,11 @@
     --question-status-incorrect: #f17b84;
     --question-status-correct: #4bc68e;
     --question-status-retry: #f4c763;
+    --heatmap-marker-stroke-mix: 79%;
+    --color-highlight-yellow: #5c4b0f;
+    --color-highlight-blue: #1e3f6b;
+    --color-highlight-pink: #5e2546;
+    --color-search-match-bg: #5a3514;
+    --color-search-match: #ffb066;
   }
 }
