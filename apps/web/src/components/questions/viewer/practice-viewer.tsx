@@ -392,17 +392,17 @@ export function PracticeViewer({
     >
       {view ? (
         <div className={styles.body} data-screen-id={screenId}>
+          {/* QSRC-01: requested as soon as the panel shows the question, in every state. */}
+          <QuestionSourcePreview target={{ kind: 'question', id: view.id }} />
           {readOnly ? (
             <>
               <p className={styles.notice}>
                 보관된 Workspace는 읽기 전용입니다. 문제를 풀거나 학습 상태를 바꿀 수 없습니다.
               </p>
-              <QuestionSourcePreview target={{ kind: 'question', id: view.id }} />
               <QuestionStem stem={view.preview} />
             </>
           ) : ready ? (
             <>
-              <QuestionSourcePreview target={{ kind: 'question', id: ready.question_id }} />
               <form
                 id={formId}
                 className={styles.form}

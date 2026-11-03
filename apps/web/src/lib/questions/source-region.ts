@@ -30,8 +30,10 @@ export async function fetchSourceRegions(
       cache: 'no-store',
       headers: { accept: 'application/json' },
     });
+    // Always read the body (also of a 404): an unread fetch body keeps the response open.
+    const text = await response.text();
     if (!response.ok) return null;
-    const body = (await response.json()) as { regions?: unknown };
+    const body = JSON.parse(text) as { regions?: unknown };
     if (!Array.isArray(body.regions)) return null;
     const regions = (body.regions as SourceRegion[]).filter(isDrawable);
     return regions.length > 0 ? regions : null;
