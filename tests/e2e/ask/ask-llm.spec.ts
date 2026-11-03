@@ -1337,6 +1337,11 @@ test(
     await runSearch(page, PASSAGES.book, 'keyword');
     await expect(searchUi.resultItems(page).first()).toBeVisible();
     await openSearchOptions(page);
+    // Reopening the options focuses the checked mode radio, whose description tooltip covers the
+    // filter; moving focus (and the pointer) to the filter closes it.
+    await page.mouse.move(0, 0);
+    await searchUi.documentFilter(page).focus();
+    await expect(page.getByRole('tooltip')).toHaveCount(0);
     await chooseFilter(page, searchUi.documentFilter(page), new RegExp(escapeRegExp(s.book.title)));
     await closeSearchOptions(page);
     const textParam = new URL(page.url()).searchParams.get('text');

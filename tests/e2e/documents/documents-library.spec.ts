@@ -577,6 +577,8 @@ test(
       // MOCK-01 (MOCK-W) and QVIEW-01 (QVIEW-W).
       /^(모의고사|mock exams?)$/i,
       /^(문제 풀기|practice questions?|start practice)$/i,
+      // ASK-01 (ASK-W): the end of the group below the divider.
+      /^(AI 질문|ask ai)$/i,
     ]);
     await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
     await page.keyboard.press('Escape');

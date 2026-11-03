@@ -867,6 +867,10 @@ test(
     expect(viaPanel.body?.explanation?.id).toBe(runExplanationId);
     expect(explainCalls(q1.id)).toBe(q1Calls + 1);
     await panelUi.close(panel).click();
+    // Closing navigates back to the bare home; a goto that starts before that settles is
+    // interrupted by it (WebKit).
+    await expect(panel).toBeHidden();
+    await expect(page).toHaveURL((url) => url.search === '');
 
     // A: the mock exam's first question — refused before the submission, then its own one.
     const overviewBefore = await getOverview(a, s.workspaceId);
