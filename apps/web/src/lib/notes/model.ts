@@ -14,6 +14,8 @@ export type NoteFootnote = Schemas['NoteFootnote'];
 export type NoteVersion = Schemas['NoteVersion'];
 export type SharedChapterNote = Schemas['SharedChapterNote'];
 export type SharedChapterNoteList = Schemas['SharedChapterNoteList'];
+export type QuestionPreview = Schemas['QuestionPreview'];
+export type MyHighlight = Schemas['Highlight'];
 
 export const NOTE_PROBLEMS = {
   noQuestions: 'urn:quiz-workspace:problem:no-chapter-questions',
@@ -32,8 +34,13 @@ export const NOTE_TEXT = {
   failed: '정리 노트를 만들지 못했습니다',
   unavailable: '이 환경에서는 AI 정리 노트를 사용할 수 없습니다.',
   previous: '이전 버전입니다. 최신 버전은 버전 선택에서 고를 수 있습니다.',
-  disclosure: '정답·해설 포함',
-  disclosureNote: '이 노트에는 문제의 정답과 해설 내용이 들어 있습니다.',
+  answersNotice: '이 노트에는 문제의 정답과 해설 내용이 들어 있습니다.',
+  search: '노트에서 찾기',
+  bodyLabel: '정리 노트 본문',
+  preview: '문제 미리보기',
+  previewLoading: '미리보기를 불러오는 중',
+  previewFailed: '미리보기를 불러오지 못했습니다',
+  openQuestion: '문제 열기',
   footnoteGone: '삭제되었거나 옮긴 문제',
   sharedMissing: '정리 노트가 갱신 중이거나 없습니다.',
 } as const;
@@ -177,4 +184,52 @@ export function inlineParts(text: string): InlinePart[] {
   }
   if (last < text.length) parts.push({ kind: 'text', text: text.slice(last) });
   return parts;
+}
+
+// --- CHNOTE-02 reading tools --------------------------------------------------------------------
+
+/** Highlight block name of note item `sections[s].items[i]` (the API's anchor `block`). */
+export function noteItemBlock(section: number, item: number): string {
+  return `s${section}.i${item}`;
+}
+
+export interface PlainText {
+  readonly text: string;
+  readonly emphasis: readonly { start: number; end: number; kind: 'strong' | 'em' }[];
+}
+
+/** Item text as shown (emphasis marks removed) with the emphasis ranges over it. */
+export function plainItemText(text: string): PlainText {
+  let out = '';
+  const emphasis: { start: number; end: number; kind: 'strong' | 'em' }[] = [];
+  for (const part of inlineParts(text)) {
+    if (part.kind !== 'text') {
+      emphasis.push({ start: out.length, end: out.length + part.text.length, kind: part.kind });
+    }
+    out += part.text;
+  }
+  return { text: out, emphasis };
+}
+
+const PREVIEW_TYPES: Readonly<Record<QuestionPreview['question_type'], string>> = {
+  MCQ: '객관식',
+  SHORT_ANSWER: '단답형',
+  ESSAY: '서술형',
+};
+
+/** Footnote preview heading: "3장 12번 · 객관식". */
+export function previewHeading(preview: QuestionPreview): string {
+  return `${preview.number_label} · ${PREVIEW_TYPES[preview.question_type]}`;
+}
+
+/** Note highlights of the shown version, where they are drawn now. */
+export function noteHighlightsOf(
+  items: readonly MyHighlight[],
+  noteId: string,
+): { id: string; block: string; start: number; end: number; color: MyHighlight['color'] }[] {
+  return items.flatMap((h) => {
+    if (h.target.kind !== 'note' || h.target.chapter_note_id !== noteId) return [];
+    const at = h.anchor_current ?? h.anchor;
+    return [{ id: h.id, block: at.block, start: at.start, end: at.end, color: h.color }];
+  });
 }

@@ -7,6 +7,11 @@
   min-width: 0;
 }
 
+/* A wrapper that only carries `inert` (no box of its own). */
+.contents {
+  display: contents;
+}
+
 .header {
   display: flex;
   flex-wrap: wrap;

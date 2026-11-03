@@ -2,7 +2,8 @@
 // CHNOTE-01 정리 노트 (docs/screens/chapter-notes.md): the view model (states, reasons, footnote
 // lines, the Markdown subset), the URL helpers (`?panel=chapter-note&chapter=` sharing `chapter`
 // with the heatmap filter), the history labels, and the member panel's states against a stubbed
-// relay (folded body, footnotes, actions per role, the feature-off reason, one request per press).
+// relay (always-open body, search, footnotes, the covered content under a practice panel, actions
+// per role, the feature-off reason, one request per press) and the CHNOTE-02-C05 stacking rule.
 import './dom-setup';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -21,8 +22,10 @@ import {
 } from '../src/lib/notes/model';
 import { sharedNoteChapterOf, withSharedNote } from '../src/lib/shared/view-state';
 import {
+  homeOpensBlocked,
   keepNoteChapter,
   noteChapterOf,
+  noteCovered,
   openChapterNote,
   parsePanels,
   withChapterNote,
@@ -245,6 +248,21 @@ describe('note URL state', () => {
     expect(keepNoteChapter('?type=MCQ', '?type=ESSAY', null)).toBe('?type=ESSAY');
   });
 
+  it('blocks home-level opens while the note is open; a footnote question stacks over it (CHNOTE-02-C05)', () => {
+    const open = new URLSearchParams(`?panel=chapter-note&chapter=${CH}`);
+    expect(homeOpensBlocked(open)).toBe(true);
+    expect(homeOpensBlocked(new URLSearchParams('?panel=history'))).toBe(false);
+    expect(noteCovered(open)).toBe(false);
+    // A footnote's question keeps the note and covers it; without the note nothing is covered.
+    const stacked = new URLSearchParams(`?panel=chapter-note&chapter=${CH}&question=${Q1}`);
+    expect(parsePanels(stacked)).toEqual(['chapter-note']);
+    expect(noteCovered(stacked)).toBe(true);
+    expect(noteCovered(new URLSearchParams(`?question=${Q1}`))).toBe(false);
+    expect(noteCovered(new URLSearchParams(`?panel=chapter-note&chapter=${CH}&practice=new`))).toBe(
+      true,
+    );
+  });
+
   it('opens the share page note panel next to other state', () => {
     const opened = withSharedNote('?document=d', CH);
     expect(sharedNoteChapterOf(new URLSearchParams(opened))).toBe(CH);
@@ -262,6 +280,17 @@ describe('ChapterNotePanel', () => {
     responses = [];
     fetchMock.mockReset();
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.includes('/my-highlights')) return Response.json({ items: [] });
+      if (url.includes('/preview')) {
+        return Response.json({
+          question_id: Q1,
+          number_label: '1장 1번',
+          chapter_title: '1장 물의 순환',
+          question_type: 'MCQ',
+          stem: '첫 문제 발문',
+          options: [{ id: 'o1', text: '보기 하나' }],
+        });
+      }
       if (init?.method === 'POST') {
         return Response.json(
           state({
@@ -315,7 +344,7 @@ describe('ChapterNotePanel', () => {
     expect(headers.get('idempotency-key')).toBeTruthy();
   });
 
-  it('shows the note folded, with footnotes only once expanded', async () => {
+  it('shows the note body at once with the answers notice; footnotes open the question', async () => {
     responses = [withNote({ stale: true })];
     const onOpenQuestion = vi.fn();
     renderPanel(true, onOpenQuestion);
@@ -324,23 +353,18 @@ describe('ChapterNotePanel', () => {
     expect(within(dialog).getByText(/^문제 2개 기준 · /)).toBeTruthy();
     expect(within(dialog).getByText('문제가 바뀌어 최신이 아닙니다')).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: '다시 만들기' })).toBeTruthy();
-    const disclosure = within(dialog).getByRole('button', {
-      name: /^정답·해설 포함 — 펼쳐서 보기/,
-    });
-    expect(disclosure.getAttribute('aria-expanded')).toBe('false');
-    const body = document.getElementById(disclosure.getAttribute('aria-controls') ?? '');
-    if (!body) throw new Error('the disclosure controls the body');
-    expect(body.hidden).toBe(true);
-    expect(dialog.textContent).not.toContain('NOTE-A');
+    expect(within(dialog).queryByRole('button', { name: /정답·해설 포함|펼쳐서 보기/ })).toBeNull();
+    expect(
+      within(dialog).getByText('이 노트에는 문제의 정답과 해설 내용이 들어 있습니다.'),
+    ).toBeTruthy();
 
-    const user = userEvent.setup();
-    await user.click(disclosure);
-    expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+    const body = within(dialog).getByRole('group', { name: '정리 노트 본문' });
     expect(within(body).getByRole('heading', { level: 3, name: '물의 순환' })).toBeTruthy();
     expect(within(body).getByText('증발').tagName).toBe('STRONG');
     expect(body.querySelector('b')).toBeNull();
-    expect(within(body).getAllByRole('link', { name: /^각주 \d+$/ })).toHaveLength(3);
-    const list = within(body).getByRole('list', { name: '각주' });
+    const refs = within(body).getAllByRole('link', { name: /^각주 \d+$/ });
+    expect(refs).toHaveLength(3);
+    const list = within(dialog).getByRole('list', { name: '각주' });
     const lines = within(list).getAllByRole('listitem');
     expect(lines.map((l) => l.textContent)).toEqual([
       '[^1] 1장 1번 — 첫 문제 발문',
@@ -351,18 +375,62 @@ describe('ChapterNotePanel', () => {
     expect(within(line2).queryByRole('link')).toBeNull();
     const link = within(line1).getByRole('link');
     expect(link.getAttribute('href')).toContain(`question=${Q1}`);
+    const user = userEvent.setup();
     await user.click(link);
-    expect(onOpenQuestion).toHaveBeenCalledWith(Q1, disclosure);
-    expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+    expect(onOpenQuestion).toHaveBeenLastCalledWith(Q1, link);
+    // A body footnote number opens its question too; a gone question's number only jumps.
+    const [ref1, , ref2] = refs;
+    if (!ref1 || !ref2) throw new Error('three footnote numbers');
+    expect(ref1.getAttribute('href')).toContain(`question=${Q1}`);
+    await user.click(ref1);
+    expect(onOpenQuestion).toHaveBeenLastCalledWith(Q1, ref1);
+    expect(ref2.getAttribute('href')?.startsWith('#')).toBe(true);
+    await user.click(ref2);
+    expect(onOpenQuestion).toHaveBeenCalledTimes(2);
   });
 
-  it('folds the body when a practice panel opens', async () => {
+  it('finds text in the note with the search row; Escape clears it first', async () => {
+    responses = [withNote()];
+    renderPanel();
+    const dialog = await screen.findByRole('dialog', { name: '정리 노트' });
+    const search = await within(dialog).findByRole('searchbox', { name: '노트에서 찾기' });
+    const user = userEvent.setup();
+    await user.type(search, 'note-');
+    await waitFor(() =>
+      expect(dialog.querySelectorAll('mark[data-search-result]')).toHaveLength(2),
+    );
+    expect(within(dialog).getByText('1/2')).toBeTruthy();
+    expect(dialog.querySelectorAll('mark[data-current="true"]')).toHaveLength(1);
+    await user.keyboard('{Enter}');
+    expect(within(dialog).getByText('2/2')).toBeTruthy();
+    await user.keyboard('{Enter}');
+    expect(within(dialog).getByText('1/2')).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect((search as HTMLInputElement).value).toBe('');
+    expect(dialog.querySelectorAll('mark[data-search-result]')).toHaveLength(0);
+  });
+
+  it('keeps Tab inside the note while a footnote preview is open on its last control', async () => {
+    responses = [withNote()];
+    renderPanel(false);
+    const dialog = await screen.findByRole('dialog', { name: '정리 노트' });
+    const list = await within(dialog).findByRole('list', { name: '각주' });
+    const last = within(list).getByRole('link');
+    const user = userEvent.setup();
+    for (let i = 0; i < 20 && document.activeElement !== last; i++) await user.tab();
+    expect(last).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toBeTruthy();
+    await user.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(last);
+  });
+
+  it('hides the note content while a practice panel covers it', async () => {
     responses = [withNote()];
     const view = renderPanel();
     const dialog = await screen.findByRole('dialog', { name: '정리 노트' });
-    const disclosure = await within(dialog).findByRole('button', { name: /^정답·해설 포함/ });
-    await userEvent.setup().click(disclosure);
-    expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+    const body = await within(dialog).findByRole('group', { name: '정리 노트 본문' });
+    expect(dialog.querySelector('[inert]')).toBeNull();
     search = new URLSearchParams(`panel=chapter-note&chapter=${CH}&question=${Q2}`);
     view.rerender(
       <ChapterNotePanel
@@ -374,7 +442,12 @@ describe('ChapterNotePanel', () => {
         onOpenQuestion={vi.fn()}
       />,
     );
-    expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+    const covered = dialog.querySelector('[inert]');
+    expect(covered?.hasAttribute('data-covered')).toBe(true);
+    expect(covered?.contains(body)).toBe(true);
+    // The header (title, close) stays.
+    const close = within(dialog).getByRole('button', { name: '정리 노트 닫기' });
+    expect(covered?.contains(close)).toBe(false);
   });
 
   it('gives viewers no actions and words a failure as an alert', async () => {
@@ -425,7 +498,8 @@ describe('ChapterNotePanel', () => {
         generation: { id: 'g5', status: 'running', job_id: null, error_code: null, progress: null },
       });
       let call = 0;
-      fetchMock.mockImplementation(async () => {
+      fetchMock.mockImplementation(async (url: string) => {
+        if (url.includes('/my-highlights')) return Response.json({ items: [] });
         call += 1;
         if (call === 1) return Response.json(running);
         if (call === 2) return Response.json({ status: 503 }, { status: 503 });
