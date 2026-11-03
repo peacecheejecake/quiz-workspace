@@ -55,6 +55,7 @@ import {
   type PracticeAnswer,
 } from './practice-model';
 import { QuestionBody, QuestionStem } from './question-body';
+import { QuestionSourcePreview } from './question-source-preview';
 import styles from './question-viewer.module.css';
 
 export interface PracticeQuestion {
@@ -391,6 +392,8 @@ export function PracticeViewer({
     >
       {view ? (
         <div className={styles.body} data-screen-id={screenId}>
+          {/* QSRC-01: requested as soon as the panel shows the question, in every state. */}
+          <QuestionSourcePreview target={{ kind: 'question', id: view.id }} />
           {readOnly ? (
             <>
               <p className={styles.notice}>

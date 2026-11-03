@@ -258,7 +258,8 @@ html body[data-scroll-locked] {
     right: 0;
     bottom: 0;
     left: 0;
-    width: 100%;
+    /* The whole viewport, also over a classic scrollbar gutter (html keeps `scrollbar-gutter`). */
+    width: 100vw;
     height: 100dvh;
     max-height: none;
     border-radius: 0;
