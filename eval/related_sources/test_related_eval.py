@@ -36,6 +36,34 @@ def test_question_papers_question_parts_and_imports_never_reach_the_list() -> No
     assert control["imported_refs_dropped"] == 1
 
 
+def test_bypassing_the_production_exclusion_makes_the_check_fail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The exclusion is the API's own code (`book_core.search.related`): if it stops excluding,
+    rows from the paper, the question part and an imported source reach the lists."""
+    from book_core.search import related
+
+    monkeypatch.setattr(related, "is_searchable_document", lambda _kind: True)
+    broken = related_eval.run()["summary"]["excluded_rows"]
+    assert broken["question_paper"] > 0
+    assert broken["imported_source"] > 0
+    monkeypatch.undo()
+    monkeypatch.setattr(related, "touches_question_part", lambda _blocks, _question: False)
+    assert related_eval.run()["summary"]["excluded_rows"]["question_part"] > 0
+
+
+def test_the_api_calls_the_same_exclusion_functions() -> None:
+    """The eval and the API share the predicates, so a bypass in either place is one change."""
+    root = Path(__file__).resolve().parents[2] / "apps" / "api" / "src" / "quiz_api"
+    uses = {
+        "api/search.py": "is_searchable_document(",
+        "api/related_sources.py": "touches_question_part(",
+        "ask_retrieval.py": "touches_question_part(",
+    }
+    for name, call in uses.items():
+        assert call in (root / name).read_text(encoding="utf-8"), name
+
+
 def test_the_report_holds_no_passage_or_question_text() -> None:
     report = related_eval.run()
     text = json.dumps(report, ensure_ascii=False) + related_eval.markdown(report)
