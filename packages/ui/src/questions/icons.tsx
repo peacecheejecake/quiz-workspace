@@ -29,10 +29,26 @@ export function StarIcon({ filled = false, ...props }: IconProps & { filled?: bo
  * `--color-on-accent`, so the state shows by shape as well as color.
  */
 export function RetryIcon({ filled = false, ...props }: IconProps & { filled?: boolean }) {
-  const glyph = filled ? { style: { stroke: 'var(--color-on-accent)' } } : {};
+  // `qz-retry-icon` classes: forced-colors swaps the pair to system colors (questions.css).
+  const glyph = {
+    className: 'qz-retry-icon__mark',
+    ...(filled ? { style: { stroke: 'var(--color-on-accent)' } } : {}),
+  };
   return (
-    <svg {...base} fill="none" data-filled={filled ? 'true' : 'false'} {...props}>
-      <circle cx="12" cy="12" r="9.5" fill={filled ? 'currentColor' : 'none'} />
+    <svg
+      {...base}
+      fill="none"
+      className="qz-retry-icon"
+      data-filled={filled ? 'true' : 'false'}
+      {...props}
+    >
+      <circle
+        className="qz-retry-icon__disc"
+        cx="12"
+        cy="12"
+        r="9.5"
+        fill={filled ? 'currentColor' : 'none'}
+      />
       <path d="M9.25 9.25a2.75 2.75 0 1 1 3.9 2.5c-.75.35-1.15.95-1.15 1.75v.25" {...glyph} />
       <path d="M12 17.25h.01" {...glyph} strokeWidth={2.5} />
     </svg>

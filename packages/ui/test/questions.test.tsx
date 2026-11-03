@@ -494,6 +494,27 @@ describe('legend, summary and toggles', () => {
     expect(on.getAttribute('aria-label')).toContain('다시 풀기');
   });
 
+  it('QVIEW-01-C08 forced colors keep the on-state question mark visible on its disc', () => {
+    const css = readFileSync(resolve(import.meta.dirname, '../src/styles/questions.css'), 'utf8');
+    const block = css.match(
+      /@media \(forced-colors: active\) \{\s*\.qz-retry-icon\[data-filled='true'\][^]*?\n\}/,
+    )?.[0];
+    expect(block).toBeDefined();
+    expect(block).toMatch(
+      /\.qz-retry-icon\[data-filled='true'\] > \.qz-retry-icon__disc \{[^}]*fill: Highlight;/,
+    );
+    expect(block).toMatch(
+      /\.qz-retry-icon\[data-filled='true'\] > \.qz-retry-icon__mark \{[^}]*stroke: HighlightText !important;/,
+    );
+    // The selectors match what RetryToggle renders.
+    render(<RetryToggle pressed onPressedChange={vi.fn()} />);
+    const svg = screen.getByRole('button', { name: '다시 풀기 해제' }).querySelector('svg');
+    expect(svg).toHaveClass('qz-retry-icon');
+    expect(svg).toHaveAttribute('data-filled', 'true');
+    expect(svg?.querySelector(':scope > circle.qz-retry-icon__disc')).not.toBeNull();
+    expect(svg?.querySelectorAll(':scope > path.qz-retry-icon__mark')).toHaveLength(2);
+  });
+
   it('QVIEW-01-C08 no source still draws the old circular-arrow retry icon', () => {
     const roots = ['../src', '../../../apps/web/src'].map((p) => resolve(import.meta.dirname, p));
     const files = roots.flatMap((root) =>
