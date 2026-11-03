@@ -14,6 +14,7 @@ import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } fr
 import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher';
 import { FormNotice } from '@/components/auth/form-notice';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
+import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import { displayStem } from '@/lib/questions/display-stem';
 import {
   contentBody,
@@ -191,6 +192,15 @@ export function MockQuestionDialog({
                       view: 'manage',
                       mock_exam_question_id: question.id,
                     }}
+                  />
+                ) : null}
+                {workspaceId ? (
+                  // RELSRC-01 `manage(mock)`: the mock question's own list (`view: manage`).
+                  <RelatedSources
+                    workspaceId={workspaceId}
+                    target={{ kind: 'mock', id: question.id }}
+                    gate={{ view: 'manage' }}
+                    revisionId={question.revision.id}
                   />
                 ) : null}
               </>

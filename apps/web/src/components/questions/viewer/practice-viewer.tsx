@@ -42,6 +42,7 @@ import {
   type SubmitResult,
 } from '@/lib/questions/practice-actions';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
+import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import { PracticeSessionCache } from '@/lib/questions/practice-cache';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 import {
@@ -439,6 +440,14 @@ export function PracticeViewer({
                     question_id: ready.question_id,
                     practice_session_id: ready.id,
                   }}
+                />
+              ) : null}
+              {outcome ? (
+                // RELSRC-01: under the AI 해설, also only once this session was submitted.
+                <RelatedSources
+                  workspaceId={workspaceId}
+                  target={{ kind: 'question', id: ready.question_id }}
+                  gate={{ practice_session_id: ready.id }}
                 />
               ) : null}
             </>

@@ -10,6 +10,7 @@ import { Button, type FloatingSidePanelProps, type PanelSteps } from '@quiz/ui';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { SharedAiExplanation } from '@/components/questions/ai-explanation/shared-ai-explanation';
+import { SharedRelatedSources } from '@/components/questions/related-sources/shared-related-sources';
 import { NO_CHAPTER_TITLE, pageText } from '@/components/questions/labels';
 import { QuestionViewer } from '@/components/questions/viewer/question-viewer';
 import { QUESTION_TYPE_LABELS } from '@/lib/questions/form';
@@ -219,6 +220,8 @@ export function SharedQuestionPanel({
               questionId={question.id}
               options={question.revision.options}
             />
+            {/* RELSRC-01: the stored 관련 본문 list (read-only), under the AI 해설. */}
+            <SharedRelatedSources shareId={shareId} questionId={question.id} />
             <section className={styles.panelSection} aria-labelledby="shared-question-sources">
               <h3 id="shared-question-sources" className={styles.panelHeading}>
                 출처
