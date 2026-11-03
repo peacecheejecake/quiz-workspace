@@ -5,6 +5,7 @@
 import './dom-setup';
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type * as Ui from '@quiz/ui';
 import type * as Bff from '../src/lib/documents/bff';
 
 const relay = vi.hoisted(() => ({ relayToApi: vi.fn() }));
@@ -15,7 +16,7 @@ vi.mock('@/lib/documents/bff', async (original) => ({
 
 const sheetMode = vi.hoisted(() => ({ value: false }));
 vi.mock('@quiz/ui', async (original) => ({
-  ...(await original<typeof import('@quiz/ui')>()),
+  ...(await original<typeof Ui>()),
   usePairedSheet: () => sheetMode.value,
 }));
 
