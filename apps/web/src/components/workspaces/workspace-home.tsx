@@ -84,11 +84,15 @@ import { listChapterNotes } from '@/lib/notes/client';
 import { generatingChapters, type ChapterNoteList } from '@/lib/notes/model';
 import { WorkspaceSharingPanel } from '@/components/sharing/workspace-sharing-panel';
 import { AskIcon } from '@/components/ask/ask-icons';
-import { AskLauncherProvider, type AskLauncher } from '@/components/ask/ask-launcher';
+import {
+  AskLauncherProvider,
+  useGuardedAskLaunch,
+  type AskLaunched,
+} from '@/components/ask/ask-launcher';
 import { AskPanel, type AskIntent } from '@/components/ask/ask-panel';
 import { AskSearchButton } from '@/components/ask/ask-search-button';
 import { useAskState } from '@/components/ask/use-ask-state';
-import { normalizeScope, type AskAttachmentInput, type Conversation } from '@/lib/ask/client';
+import { normalizeScope } from '@/lib/ask/client';
 import { EMPTY_SCOPE, unavailableReason, unavailableText } from '@/lib/ask/model';
 import { QuestionMenu } from './question-menu';
 import type { DocumentSummary } from '@/lib/documents/client-api';
@@ -430,10 +434,7 @@ export function WorkspaceHome({
   // A question's `질문하기`: a new conversation with it attached, on top. An AI 질문 panel open
   // under the modal layer is closed first (its unsent input is dropped; neither Back nor Forward
   // brings it back) and the new one opens on its own entry (ASK-SYNC (c)).
-  async function launchAsk(attachment: AskAttachmentInput, opener: HTMLElement | null) {
-    const conversation: Conversation | null = await ask.client
-      .create(workspace.id, { attachment })
-      .catch(() => null);
+  function showLaunched({ conversation, opener }: AskLaunched) {
     askIntentKey.current += 1;
     setAskIntent({
       key: askIntentKey.current,
@@ -455,13 +456,10 @@ export function WorkspaceHome({
     }
   }
   const askAvailable = ask.state?.available === true && !workspace.archived;
-  const launchRef = useRef(launchAsk);
-  useEffect(() => {
-    launchRef.current = launchAsk;
-  });
-  const [askLauncher] = useState<AskLauncher>(() => ({
-    open: (attachment, opener) => launchRef.current(attachment, opener),
-  }));
+  const askLauncher = useGuardedAskLaunch(
+    (attachment) => ask.client.create(workspace.id, { attachment }),
+    showLaunched,
+  );
   function askFromSearch() {
     if (askUnavailable) return;
     setAskOpener(null);

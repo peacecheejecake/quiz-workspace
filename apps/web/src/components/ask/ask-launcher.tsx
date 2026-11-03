@@ -11,8 +11,8 @@
 // disclosure: nothing here sends one) and shows it in the AI 질문 panel on top of every open modal
 // layer, holding focus; closing it returns focus to `opener`.
 import { Button } from '@quiz/ui';
-import { createContext, useContext, useState, type ReactNode } from 'react';
-import type { AskAttachmentInput } from '@/lib/ask/client';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import type { AskAttachmentInput, Conversation } from '@/lib/ask/client';
 
 export interface AskLauncher {
   /** Opens a new conversation with `attachment`; resolves once the panel shows it (or failed). */
@@ -35,6 +35,52 @@ export function AskLauncherProvider({
 /** The home's launcher, or null where questions cannot be attached here. */
 export function useAskLauncher(): AskLauncher | null {
   return useContext(AskLauncherContext);
+}
+
+/** What a finished, still current launch hands the home: the created conversation (or null). */
+export interface AskLaunched {
+  readonly conversation: Conversation | null;
+  readonly opener: HTMLElement | null;
+}
+
+/**
+ * The home's launcher: `create` makes the conversation, then `show` opens the panel on it — but
+ * only while the launch is still current. A creation that finishes after the user moved on (the
+ * question dialog closed so its 질문하기 left the page, the address changed — another panel or
+ * workspace —, the home unmounted, or a newer 질문하기) opens nothing and touches no history; the
+ * conversation stays on the server, empty (hidden from the 대화 목록).
+ */
+export function useGuardedAskLaunch(
+  create: (attachment: AskAttachmentInput) => Promise<Conversation | null>,
+  show: (launched: AskLaunched) => void,
+): AskLauncher {
+  const latest = useRef({ create, show });
+  useEffect(() => {
+    latest.current = { create, show };
+  });
+  const mounted = useRef(true);
+  const epoch = useRef(0);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      epoch.current += 1;
+    };
+  }, []);
+  const [launcher] = useState<AskLauncher>(() => ({
+    open: async (attachment, opener) => {
+      const mine = ++epoch.current;
+      const address = `${window.location.pathname}${window.location.search}`;
+      const conversation = await latest.current.create(attachment).catch(() => null);
+      const current =
+        mounted.current &&
+        epoch.current === mine &&
+        `${window.location.pathname}${window.location.search}` === address &&
+        (opener === null || opener.isConnected);
+      if (current) latest.current.show({ conversation, opener });
+    },
+  }));
+  return launcher;
 }
 
 export interface AskQuestionButtonProps {
