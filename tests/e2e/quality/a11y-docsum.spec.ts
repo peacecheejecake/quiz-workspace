@@ -209,6 +209,9 @@ test(
     await seed(ch2, 'fail', [4, 4]);
 
     try {
+      // A short viewport makes the note body overflow on every renderer (it only did on CI's Linux
+      // fonts): a covered, inert note body must still be a keyboard-reachable scroll region.
+      await page.setViewportSize({ width: 1280, height: 480 });
       await signInAs(page, owner.user);
       await page.goto(overviewPath(ws.id));
       await expect(noteUi.opener(page, CHAPTER_1)).toBeVisible();

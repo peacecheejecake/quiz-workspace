@@ -403,6 +403,28 @@ describe('overlay body scroll region (axe scrollable-region-focusable)', () => {
     await waitFor(() => expect(body).toHaveAttribute('tabindex', '0'));
   });
 
+  it('follows content that becomes inert (a covered panel): focusable once nothing in it is', async () => {
+    function Covered() {
+      const [covered, setCovered] = useState(false);
+      return (
+        <FloatingSidePanel defaultOpen modal={false} title="덮인 패널">
+          <div inert={covered || undefined}>
+            <Button>원문으로 이동</Button>
+            <button type="button" onClick={() => setCovered(true)} data-cover>
+              덮기
+            </button>
+          </div>
+        </FloatingSidePanel>
+      );
+    }
+    const user = userEvent.setup();
+    render(<Covered />);
+    const body = bodyOf(await screen.findByRole('dialog', { name: '덮인 패널' }));
+    expect(body).not.toHaveAttribute('tabindex');
+    await user.click(screen.getByText('덮기'));
+    await waitFor(() => expect(body).toHaveAttribute('tabindex', '0'));
+  });
+
   it('applies to ModalDialog bodies too', async () => {
     render(
       <ModalDialog defaultOpen title="안내" closeLabel={null}>
