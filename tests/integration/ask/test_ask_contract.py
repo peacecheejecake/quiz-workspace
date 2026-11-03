@@ -1261,6 +1261,38 @@ def test_ask_01_c08_delete_purge_fork_and_append_only(seed: Any, db: Any, job_wo
     )
 
 
+def test_ask_01_c08_conversations_without_messages_stay_out_of_the_list_and_are_purged(
+    seed: Any, db: Any, job_worker: Any
+) -> None:
+    """User decision 2026-11-03 (ASK-Q): a conversation nobody asked in yet — 질문하기 creates it
+    with the question attached before anything is sent — is not listed; its link still opens it
+    and a question there puts it in the list. Idle past the retention it is purged like any."""
+    owner = seed.client("owner")
+    s = AskSeed(owner)
+    empty, asked = new_conv(owner, s.ws), new_conv(owner, s.ws)
+    ask(owner, asked["id"], QUESTION)
+
+    def listed() -> list[str]:
+        items = owner.ok("GET", f"/workspaces/{s.ws}/ask/conversations")["items"]
+        return [c["id"] for c in items]
+
+    assert asked["id"] in listed()
+    assert empty["id"] not in listed()
+    assert owner.send("GET", f"/ask/conversations/{empty['id']}").status_code == 200
+    ask(owner, empty["id"], QUESTION)
+    assert empty["id"] in listed()
+
+    idle = new_conv(owner, s.ws)
+    db(
+        "update public.ask_conversations set last_message_at = now() - interval '91 days' "
+        "where id = %s",
+        (idle["id"],),
+    )
+    job_worker.ask_deps.purge(now=datetime.now(UTC))
+    assert owner.send("GET", f"/ask/conversations/{idle['id']}").status_code == 404
+    assert owner.send("GET", f"/ask/conversations/{empty['id']}").status_code == 200
+
+
 # ---------------------------------------------------------------------------------------------
 # C09 worker re-checks and idempotency
 # ---------------------------------------------------------------------------------------------

@@ -83,11 +83,17 @@ import { SendIcon } from './ask-icons';
 import { AskScopePopover, type ScopeDocument } from './ask-scope';
 import styles from './ask.module.css';
 
-/** What `AI에게 묻기` hands the panel: a new conversation with this text and scope (not sent). */
+/**
+ * What an entry point hands the panel: `AI에게 묻기` a new conversation with this text and scope
+ * (not sent); a question's `질문하기` the new conversation it created with the question attached
+ * (or, when that failed, why).
+ */
 export interface AskIntent {
   readonly key: number;
   readonly text: string;
   readonly scope: AskScope;
+  readonly conversation?: Conversation | null;
+  readonly failure?: string | null;
 }
 
 export interface AskPanelProps {
@@ -107,6 +113,13 @@ export interface AskPanelProps {
   readonly documents: readonly ScopeDocument[];
   readonly intent: AskIntent | null;
   readonly screenId?: string;
+  /**
+   * Opened from a question inside a modal layer (ASK-01 "modal 층 위로 열기"): modal, on top of
+   * every open modal layer (also the centered 문제 상세 dialog), portalled to the body.
+   */
+  readonly modal?: boolean;
+  /** Where focus goes back on close (the question's `질문하기`), when it is still on the page. */
+  readonly returnFocus?: HTMLElement | null;
 }
 
 type ViewMode = 'list' | 'new';
@@ -164,7 +177,7 @@ const sleep = (ms: number, signal: AbortSignal) =>
   });
 
 export function AskPanel(props: AskPanelProps) {
-  const { open, onOpenChange, raiseKey, container, screenId } = props;
+  const { open, onOpenChange, raiseKey, container, screenId, modal = false, returnFocus } = props;
   const body = useAskPanel(props);
   return (
     <>
@@ -172,19 +185,29 @@ export function AskPanel(props: AskPanelProps) {
         open={open}
         onOpenChange={onOpenChange}
         raiseKey={raiseKey}
-        modal={false}
-        container={container}
+        modal={modal}
+        aboveModals={modal}
+        // A modal layer hides everything else from assistive technology, the home's dialog host
+        // included: a panel on top of it lives at the body.
+        container={modal ? null : container}
         title={ASK_TEXT.title}
         description={body.subtitle ?? undefined}
         closeLabel="AI 질문 닫기"
         mobileLayout="full"
         footer={body.footer}
+        onCloseAutoFocus={(event) => {
+          if (!returnFocus?.isConnected) return;
+          event.preventDefault();
+          returnFocus.focus();
+        }}
       >
         <div data-screen-id={screenId} className={styles.body}>
           {body.content}
         </div>
+        {/* Over a modal panel the excerpt panel and the delete confirmation are its own layers. */}
+        {modal ? body.overlays : null}
       </FloatingSidePanel>
-      {body.overlays}
+      {modal ? null : body.overlays}
     </>
   );
 }
@@ -221,14 +244,21 @@ function useAskPanel({
     setScope(intent.scope);
   }
 
-  const [conversation, setConversation] = useState<Conversation | null>(null);
-  const [load, setLoad] = useState<Load>(conversationId ? 'loading' : 'ready');
+  // A question's `질문하기` hands over the conversation it just created: shown as it is.
+  const [conversation, setConversation] = useState<Conversation | null>(
+    intent?.conversation && intent.conversation.id === conversationId ? intent.conversation : null,
+  );
+  const [load, setLoad] = useState<Load>(
+    conversationId && conversation?.id !== conversationId ? 'loading' : 'ready',
+  );
   const [reloadKey, setReloadKey] = useState(0);
   const [live, setLive] = useState<{ id: string; text: string | null } | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [pending, setPending] = useState<string | null>(null);
   /** Why the last request was refused; `seconds` counts a 429's Retry-After down. */
-  const [refusal, setRefusal] = useState<{ text: string; seconds: number | null } | null>(null);
+  const [refusal, setRefusal] = useState<{ text: string; seconds: number | null } | null>(
+    intent?.failure ? { text: intent.failure, seconds: null } : null,
+  );
   const [versions, setVersions] = useState<Record<string, number>>({});
   const sendingRef = useRef(false);
   const [sending, setSending] = useState(false);

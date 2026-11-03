@@ -265,6 +265,9 @@ class AskRepository:
             text(
                 f"select {_CONVERSATION_COLUMNS} from public.ask_conversations c "  # noqa: S608
                 f"where c.workspace_id = :w and c.user_id = :u {cursor} "
+                # Nobody asked here yet (질문하기 creates it before a question): not listed; its
+                # link still opens it (user decision 2026-11-03).
+                "and exists (select 1 from public.ask_messages m where m.conversation_id = c.id) "
                 "order by c.last_message_at desc, c.id desc limit :n"
             ),
             {

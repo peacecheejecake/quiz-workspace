@@ -84,10 +84,16 @@ import { listChapterNotes } from '@/lib/notes/client';
 import { generatingChapters, type ChapterNoteList } from '@/lib/notes/model';
 import { WorkspaceSharingPanel } from '@/components/sharing/workspace-sharing-panel';
 import { AskIcon } from '@/components/ask/ask-icons';
+import {
+  AskLauncherProvider,
+  useGuardedAskLaunch,
+  type AskLaunched,
+} from '@/components/ask/ask-launcher';
 import { AskPanel, type AskIntent } from '@/components/ask/ask-panel';
 import { AskSearchButton } from '@/components/ask/ask-search-button';
 import { useAskState } from '@/components/ask/use-ask-state';
-import { unavailableReason, unavailableText } from '@/lib/ask/model';
+import { normalizeScope } from '@/lib/ask/client';
+import { EMPTY_SCOPE, unavailableReason, unavailableText } from '@/lib/ask/model';
 import { QuestionMenu } from './question-menu';
 import type { DocumentSummary } from '@/lib/documents/client-api';
 import type { ChapterChoice, QuestionOverview } from '@/lib/questions/overview-data';
@@ -145,6 +151,7 @@ import {
   withRunPanel,
   type HomePanel,
   ASK_PANEL,
+  PRACTICE_DIALOG,
   askConversationOf,
   withAskConversation,
   withoutAsk,
@@ -388,25 +395,75 @@ export function WorkspaceHome({
   // One panel: the header button and 문제 › AI 질문 open it (or raise it), the 본문 search's
   // `AI에게 묻기` opens it on a new conversation prefilled with the search text and filter. Each
   // opening starts it afresh (askSession): unsent input never survives a close.
+  // A question's `질문하기` (ASK-Q, the launcher below) opens it on a new conversation with that
+  // question attached, modal on top of the modal layers (practice, range run, 문제 상세, mock exam
+  // question); a deep link or reload with a modal layer and `panel=ask` opens it that way too.
   const ask = useAskState(workspace.id);
   const askReason = unavailableReason(ask.state, workspace.archived);
   const askUnavailable = askReason ? unavailableText(askReason) : null;
   const askConversation = askConversationOf(searchParams) ?? null;
   const askOpen = isOpen(ASK_PANEL);
+  const underModalLayer = () => {
+    const dialogs = openDialogs(searchParams.toString());
+    return dialogs.includes(PRACTICE_DIALOG) || dialogs.includes(RUN_DIALOG);
+  };
   const [askSession, setAskSession] = useState(0);
   const [askWasOpen, setAskWasOpen] = useState(askOpen);
+  const [askModal, setAskModal] = useState(() => askOpen && underModalLayer());
+  // How the next opening shows the panel (null: as the URL says, see above).
+  const [askModalNext, setAskModalNext] = useState<boolean | null>(null);
   if (askOpen !== askWasOpen) {
     setAskWasOpen(askOpen);
-    if (askOpen) setAskSession((n) => n + 1);
+    if (askOpen) {
+      setAskSession((n) => n + 1);
+      setAskModal(askModalNext ?? underModalLayer());
+      setAskModalNext(null);
+    }
   }
   const [askIntent, setAskIntent] = useState<AskIntent | null>(null);
   const askIntentKey = useRef(0);
+  const [askOpener, setAskOpener] = useState<HTMLElement | null>(null);
   function openAsk() {
-    if (!askOpen) setAskIntent(null);
+    if (!askOpen) {
+      setAskIntent(null);
+      setAskOpener(null);
+      setAskModalNext(false);
+    }
     setPanel(ASK_PANEL, true);
   }
+  // A question's `질문하기`: a new conversation with it attached, on top. An AI 질문 panel open
+  // under the modal layer is closed first (its unsent input is dropped; neither Back nor Forward
+  // brings it back) and the new one opens on its own entry (ASK-SYNC (c)).
+  function showLaunched({ conversation, opener }: AskLaunched) {
+    askIntentKey.current += 1;
+    setAskIntent({
+      key: askIntentKey.current,
+      text: '',
+      scope: conversation ? normalizeScope(conversation.scope) : EMPTY_SCOPE,
+      conversation,
+      failure: conversation ? null : '문제를 첨부하지 못했습니다. 다시 시도하세요.',
+    });
+    setAskOpener(opener);
+    setAskModal(true);
+    setAskModalNext(true);
+    const search = window.location.search;
+    const target = `${pathname}${withAskConversation(withoutAsk(search), conversation?.id ?? null)}`;
+    if (isOpen(ASK_PANEL)) {
+      setAskSession((n) => n + 1);
+      panelHistory.close(`${pathname}${withoutAsk(search)}`, target);
+    } else {
+      panelHistory.push(target);
+    }
+  }
+  const askAvailable = ask.state?.available === true && !workspace.archived;
+  const askLauncher = useGuardedAskLaunch(
+    (attachment) => ask.client.create(workspace.id, { attachment }),
+    showLaunched,
+  );
   function askFromSearch() {
     if (askUnavailable) return;
+    setAskOpener(null);
+    if (!askOpen) setAskModalNext(false);
     askIntentKey.current += 1;
     setAskIntent({
       key: askIntentKey.current,
@@ -612,7 +669,7 @@ export function WorkspaceHome({
     ...chapterChoices.map((c) => ({ value: c.value, label: c.title })),
   ];
 
-  return (
+  const page = (
     <div className={styles.home} data-panel-open={panels.some(isFloatingPanel) || undefined}>
       <h1 className="qz-visually-hidden">{workspace.name}</h1>
 
@@ -899,6 +956,8 @@ export function WorkspaceHome({
             documents={searchDocuments}
             intent={askIntent}
             screenId={screenIds.ask}
+            modal={askModal}
+            returnFocus={askOpener}
           />
           {isOwner && isOpen('share') ? (
             <WorkspaceSharingPanel
@@ -916,5 +975,8 @@ export function WorkspaceHome({
 
       <DocumentLibraryFeedback library={library} />
     </div>
+  );
+  return (
+    <AskLauncherProvider launcher={askAvailable ? askLauncher : null}>{page}</AskLauncherProvider>
   );
 }
