@@ -442,6 +442,7 @@ export async function startSummaryOffStack(
   const logs = {
     api: join(dir, 'api.log'),
     worker: join(dir, 'worker.log'),
+    interactive: join(dir, 'worker-interactive.log'),
     web: join(dir, 'web.log'),
   };
   const children: ChildProcess[] = [];
@@ -476,6 +477,16 @@ export async function startSummaryOffStack(
       logs.worker,
     );
     children.push(worker);
+    // ASK-01: `ask.answer` runs on the `interactive` queue's own worker process (ASK-B). Started
+    // on every stack so its log file exists; without WORKER_ASK_LLM it simply idles.
+    children.push(
+      startLogged(
+        'uv',
+        ['run', 'python', '-m', 'quiz_worker.serve'],
+        { ...env, WORKER_QUEUE: 'interactive' },
+        logs.interactive,
+      ),
+    );
     const web = startLogged(
       'pnpm',
       [

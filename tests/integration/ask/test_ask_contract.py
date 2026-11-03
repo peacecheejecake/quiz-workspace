@@ -1506,3 +1506,44 @@ def test_ask_01_c11_the_fake_streams_top_sources_deterministically_and_records_i
         off_app, owner, "POST", f"/ask/conversations/{cid}/messages", {"question": QUESTION}
     )
     assert (refused.status_code, problem_type(refused)) == (409, P + "ask-disabled")
+
+
+def test_ask_01_c08_a_question_comes_before_its_answer_written_in_the_same_transaction(
+    seed: Any, db: Any
+) -> None:
+    """The question and its answer share `created_at` (one transaction, `now()`): the
+    conversation still lists the question first, whatever the uuids (here the answer's sorts
+    first, so an order by `created_at, id` alone puts it ahead)."""
+    owner = seed.client("order")
+    ws = owner.create_workspace()["id"]
+    conversation = new_conv(owner, ws)
+    question_id = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+    answer_id = "00000000-0000-4000-8000-000000000001"
+    db(
+        "with t as (select now() as at) "
+        "insert into public.ask_messages "
+        "(id, conversation_id, workspace_id, user_id, role, status, question_message_id, text, "
+        " created_at, finished_at) "
+        "select %s::uuid, %s::uuid, %s::uuid, %s::uuid, 'user', 'succeeded', null::uuid, '질문', "
+        "t.at, null::timestamptz from t "
+        "union all "
+        "select %s::uuid, %s::uuid, %s::uuid, %s::uuid, 'assistant', 'succeeded', %s::uuid, '답', "
+        "t.at, t.at from t",
+        (
+            question_id,
+            conversation["id"],
+            ws,
+            owner.user.id,
+            answer_id,
+            conversation["id"],
+            ws,
+            owner.user.id,
+            question_id,
+        ),
+    )
+    got = owner.send("GET", f"/ask/conversations/{conversation['id']}")
+    assert got.status_code == 200
+    assert [(m["id"], m["role"]) for m in got.json()["messages"]] == [
+        (question_id, "user"),
+        (answer_id, "assistant"),
+    ]

@@ -32,6 +32,8 @@ export interface DocumentExcerptPanelProps {
   readonly onSelect?: (item: SearchItem) => void;
   readonly open: boolean;
   readonly onClose: () => void;
+  /** A note above the excerpt (ASK-01: the source's revision is no longer the published one). */
+  readonly notice?: string | null;
 }
 
 const linkFor = (workspaceId: string, item: SearchItem, target: JumpTarget) =>
@@ -51,6 +53,7 @@ export function DocumentExcerptPanel({
   onSelect,
   open,
   onClose,
+  notice,
 }: DocumentExcerptPanelProps) {
   const router = useRouter();
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -150,6 +153,7 @@ export function DocumentExcerptPanel({
     >
       {item ? (
         <div ref={bodyRef} className={styles.panelBody}>
+          {notice ? <p className={styles.hint}>{notice}</p> : null}
           {item.breadcrumb.length > 1 ? (
             <nav aria-label="위치">
               <ol className={styles.panelBreadcrumb}>

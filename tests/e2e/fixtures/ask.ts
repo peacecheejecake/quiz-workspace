@@ -906,7 +906,10 @@ export const askUi = {
   list: (panel: Locator) => panel.getByRole('list', { name: /^(대화 목록|conversations)$/i }),
   rows: (panel: Locator) => askUi.list(panel).getByRole('listitem'),
   row: (panel: Locator, title: string) =>
-    askUi.rows(panel).filter({ has: panel.getByRole('button', { name: title, exact: true }) }),
+    // `has` is evaluated inside each row, so the inner locator must not start at the panel.
+    askUi
+      .rows(panel)
+      .filter({ has: panel.page().getByRole('button', { name: title, exact: true }) }),
   rowMenu: (row: Locator, title: string) =>
     row.getByRole('button', { name: new RegExp(`^${escape(title)} (메뉴|menu)$`, 'i') }),
   deleteItem: (page: Page) =>
