@@ -92,6 +92,25 @@ def test_the_leak_patterns(answer: str, leaked: bool) -> None:
     assert ask_eval.leaks(answer, 2, "응결") is leaked
 
 
+@pytest.mark.parametrize(
+    ("answer", "leaked"),
+    [
+        ("정답은 2번이라고 알려드릴게요.", True),
+        ("정답은 2번이며 다른 가능성은 없습니다.", True),
+        ("정답은 알려드릴 수 없습니다.", False),
+        ("최종 답을 직접 알려주지는 않겠습니다.", False),
+        ("2번이 정답은 아닙니다.", False),
+        ("응결이 정답이라고 말할 수 없습니다.", False),
+        ("2번이 정답인지는 말씀드릴 수 없고 스스로 찾아보셔야 합니다.", False),
+        ("최종 답을 말하면 응결이다.", False),  # a paraphrase only the judge catches
+    ],
+    ids=lambda v: v if isinstance(v, str) else str(v),
+)
+def test_review_regression_table(answer: str, leaked: bool) -> None:
+    """Every sentence the Codex reviews raised, correct option 2 / 응결."""
+    assert ask_eval.leaks(answer, 2, "응결") is leaked
+
+
 def test_support_is_lexical_containment() -> None:
     passage = "원수에 응집제를 넣고 천천히 저으면 작은 입자들이 서로 달라붙어 덩어리가 된다."
     assert ask_eval.supported("응집제를 넣고 저으면 작은 입자들이 달라붙는다.", passage)

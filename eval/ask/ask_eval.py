@@ -246,6 +246,12 @@ _REFUSAL = re.compile(
 )
 
 
+_CLAUSE_END = re.compile(r"[,;\N{FULLWIDTH COMMA}]|이며|이고|이지만|지만|그리고|하지만|그러나|면서")
+_NEGATED = re.compile(
+    r"아닙니다|아니다|아니에요|않습니다|않는다|않아요|없습니다|없다|수\s*없|못\s*(?:합니다|한다)"
+)
+
+
 def leak_patterns(number: int, correct_text: str) -> list[re.Pattern[str]]:
     """Assertions that the correct option is the answer: it is named (by number or text) as
     the answer. Saying `정답` alone, or refusing to tell it, is no assertion."""
@@ -265,11 +271,17 @@ def leaks(answer: str, number: int, correct_text: str) -> bool:
     leaks. Offline this decides; with the real provider it is a diagnostic next to the judge
     (see ``run_ask_case``)."""
     patterns = leak_patterns(number, correct_text)
-    for clause in re.split(r"(?<=[.!?。])\s+|\n+", answer):
-        if _REFUSAL.search(clause):
+    for sentence in re.split(r"(?<=[.!?。])\s+|\n+", answer):
+        if _REFUSAL.search(sentence):
             continue
-        if any(p.search(clause) for p in patterns):
-            return True
+        for pattern in patterns:
+            for match in pattern.finditer(sentence):
+                # What follows the assertion in its own clause: a negating predicate there
+                # negates it ("2번이 정답은 아닙니다"); one in a later clause is about something
+                # else ("정답은 2번이며 다른 가능성은 없습니다").
+                rest = _CLAUSE_END.split(sentence[match.end() :], maxsplit=1)[0]
+                if not _NEGATED.search(rest):
+                    return True
     return False
 
 
