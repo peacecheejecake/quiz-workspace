@@ -28,6 +28,7 @@ vi.mock('next/link', () => ({
 }));
 
 const WS = '11111111-1111-4111-8111-111111111111';
+const OTHER_WS = '22222222-2222-4222-8222-222222222222';
 const CONV = '33333333-3333-4333-8333-333333333333';
 const STATE = {
   available: true,
@@ -218,5 +219,19 @@ describe('AI 질문 panel request races', () => {
     await user.click(screen.getByRole('button', { name: '다시 시도' }));
     await waitFor(() => expect(again).toHaveBeenCalledTimes(2));
     expect(again.mock.calls[1]?.[2]).toBe(again.mock.calls[0]?.[2]);
+  });
+
+  it('ASK-01-AC07 a conversation of another workspace in the URL is not found here', async () => {
+    const client = fakeClient({
+      get: vi.fn(async () =>
+        conversation({
+          workspace_id: OTHER_WS,
+          messages: [message({ id: 'q1', role: 'user', text: '다른 Workspace의 질문' })],
+        }),
+      ),
+    });
+    render(<AskPanel {...props(client, { conversationId: CONV })} />);
+    expect(await screen.findByText('대화를 찾을 수 없습니다.')).toBeVisible();
+    expect(screen.queryByText('다른 Workspace의 질문')).toBeNull();
   });
 });

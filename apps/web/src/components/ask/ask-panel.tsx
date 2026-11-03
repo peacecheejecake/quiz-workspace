@@ -271,6 +271,12 @@ function useAskPanel({
     const controller = new AbortController();
     client.get(conversationId, controller.signal).then(
       (next) => {
+        // A conversation is personal to its workspace: one of another workspace (a link to this
+        // home with another home's conversation) is not found here.
+        if (next.workspace_id !== workspaceId) {
+          setLoad('notFound');
+          return;
+        }
         setConversation(next);
         setScope(normalizeScope(next.scope));
         setVersions({});
@@ -283,7 +289,7 @@ function useAskPanel({
       },
     );
     return () => controller.abort();
-  }, [client, conversationId, load, reloadKey, signIn]);
+  }, [client, conversationId, load, reloadKey, signIn, workspaceId]);
 
   // --- the list ------------------------------------------------------------------------------
   const listing = conversationId === null && mode === 'list';
