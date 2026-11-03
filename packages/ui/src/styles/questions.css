@@ -336,3 +336,17 @@
 .qz-study-toggle[data-state='on'] {
   color: var(--color-accent);
 }
+
+/* Retry icon "on" (QVIEW-01-C08): the token pair (accent disc, on-accent mark) is not forced, so
+   forced-colors uses the Highlight / HighlightText system pair; `!important` beats the mark's
+   inline on-accent stroke. */
+@media (forced-colors: active) {
+  .qz-retry-icon[data-filled='true'] > .qz-retry-icon__disc {
+    fill: Highlight;
+    stroke: Highlight;
+  }
+
+  .qz-retry-icon[data-filled='true'] > .qz-retry-icon__mark {
+    stroke: HighlightText !important;
+  }
+}

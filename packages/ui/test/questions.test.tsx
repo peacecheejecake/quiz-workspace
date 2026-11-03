@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
@@ -464,6 +464,78 @@ describe('legend, summary and toggles', () => {
     rerender(<RetryToggle pressed onPressedChange={onPressedChange} />);
     await user.click(screen.getByRole('button', { name: '다시 풀기 해제' }));
     expect(onPressedChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('QVIEW-01-C08 RetryToggle draws a question mark in a circle: outline off, filled on', () => {
+    const { rerender } = render(<RetryToggle pressed={false} onPressedChange={vi.fn()} />);
+    const off = screen.getByRole('button', { name: '다시 풀기 표시' });
+    expect(off).toHaveAttribute('data-state', 'off');
+    expect(off).toHaveAttribute('title', '다시 풀기 표시');
+    const offSvg = off.querySelector('svg');
+    if (!offSvg) throw new Error('RetryToggle has no icon');
+    expect(offSvg).toHaveAttribute('aria-hidden', 'true');
+    expect(offSvg.querySelector('circle')).toHaveAttribute('fill', 'none');
+    // The question-mark hook and its dot.
+    expect(offSvg.querySelectorAll('path')).toHaveLength(2);
+    const offMarkup = offSvg.outerHTML;
+
+    rerender(<RetryToggle pressed onPressedChange={vi.fn()} />);
+    const on = screen.getByRole('button', { name: '다시 풀기 해제' });
+    expect(on).toHaveAttribute('data-state', 'on');
+    expect(on).toHaveAttribute('title', '다시 풀기 해제');
+    const onSvg = on.querySelector('svg');
+    if (!onSvg) throw new Error('RetryToggle has no icon');
+    expect(onSvg.querySelector('circle')).toHaveAttribute('fill', 'currentColor');
+    for (const glyph of onSvg.querySelectorAll('path')) {
+      expect(glyph.style.stroke).toBe('var(--color-on-accent)');
+    }
+    expect(onSvg.outerHTML).not.toBe(offMarkup);
+    // Both names keep "다시 풀기" (QPLAY-01 / QVIEW-01 locators).
+    expect(on.getAttribute('aria-label')).toContain('다시 풀기');
+  });
+
+  it('QVIEW-01-C08 forced colors keep the on-state question mark visible on its disc', () => {
+    const css = readFileSync(resolve(import.meta.dirname, '../src/styles/questions.css'), 'utf8');
+    const block = css.match(
+      /@media \(forced-colors: active\) \{\s*\.qz-retry-icon\[data-filled='true'\][^]*?\n\}/,
+    )?.[0];
+    expect(block).toBeDefined();
+    expect(block).toMatch(
+      /\.qz-retry-icon\[data-filled='true'\] > \.qz-retry-icon__disc \{[^}]*fill: Highlight;/,
+    );
+    expect(block).toMatch(
+      /\.qz-retry-icon\[data-filled='true'\] > \.qz-retry-icon__mark \{[^}]*stroke: HighlightText !important;/,
+    );
+    // The selectors match what RetryToggle renders.
+    render(<RetryToggle pressed onPressedChange={vi.fn()} />);
+    const svg = screen.getByRole('button', { name: '다시 풀기 해제' }).querySelector('svg');
+    expect(svg).toHaveClass('qz-retry-icon');
+    expect(svg).toHaveAttribute('data-filled', 'true');
+    expect(svg?.querySelector(':scope > circle.qz-retry-icon__disc')).not.toBeNull();
+    expect(svg?.querySelectorAll(':scope > path.qz-retry-icon__mark')).toHaveLength(2);
+  });
+
+  it('QVIEW-01-C08 no source still draws the old circular-arrow retry icon', () => {
+    const roots = ['../src', '../../../apps/web/src'].map((p) => resolve(import.meta.dirname, p));
+    const files = roots.flatMap((root) =>
+      readdirSync(root, { recursive: true, encoding: 'utf8' })
+        .filter((f) => /\.(tsx?|jsx?)$/.test(f))
+        .map((f) => join(root, f)),
+    );
+    expect(files.length).toBeGreaterThan(10);
+    const offenders = files.filter((f) => {
+      const text = readFileSync(f, 'utf8');
+      return text.includes('M20 12a8 8 0 1 1-2.34-5.66') || text.includes('M20 4v5h-5');
+    });
+    expect(offenders).toEqual([]);
+    const viewer = readFileSync(
+      resolve(
+        import.meta.dirname,
+        '../../../apps/web/src/components/questions/viewer/practice-viewer.tsx',
+      ),
+      'utf8',
+    );
+    expect(viewer).toMatch(/\bRetryToggle\b[^]*from '@quiz\/ui'/);
   });
 });
 
