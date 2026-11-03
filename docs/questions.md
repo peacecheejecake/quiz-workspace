@@ -81,11 +81,13 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 
 | 토큰 | 의미 | 라이트 기준 제안값 |
 |---|---|---|
-| `--question-status-unseen` | 보지 않은 문제 | `#D9DEE5` |
-| `--question-status-viewed` | 보기만 한 문제 | `#858E9B` |
-| `--question-status-incorrect` | 틀린 문제 | `#E0525E` |
-| `--question-status-correct` | 맞은 문제 | `#26865C` |
-| `--question-status-retry` | 다시 풀기 | `#E9B447` |
+| `--question-status-unseen` | 보지 않은 문제 | `#E7ECF0` |
+| `--question-status-viewed` | 보기만 한 문제 | `#ACB6C2` |
+| `--question-status-incorrect` | 틀린 문제 | `#FF6060` |
+| `--question-status-correct` | 맞은 문제 | `#00AB7B` |
+| `--question-status-retry` | 다시 풀기 | `#F6CF35` |
+
+사용자 결정(HEATMAP-PALETTE 2026-11-04, "색상 palette 재조정 — red: #FF6060; green: #00AB7B; yellow: #F6CF35; gray: #ACB6C2; empty: #E7ECF0 — border 삭제"): 위 값이 light 값이다(incorrect=red, correct=green, retry=yellow, viewed=gray, unseen=empty). dark 값은 같은 색상 계열에서 어두운 표면에 맞게 명도를 조정한다(design-system §3.2: unseen `#3A4554`, viewed `#8591A1`, incorrect `#FF7A7A`, correct `#2CC79A`, retry `#F7D45A`). marker에는 테두리(stroke)가 없다.
 
 스타일은 상태의 `semantic token`만 참조한다. 컴포넌트 안에서 hex 값을 직접 쓰지 않는다.
 
