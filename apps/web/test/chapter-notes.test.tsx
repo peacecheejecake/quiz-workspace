@@ -15,7 +15,11 @@ import {
   failureReason,
   footnoteText,
   inlineParts,
+  noteHighlightsOf,
   noteView,
+  plainItemText,
+  plainRangeToRaw,
+  rawRangeToPlain,
   versionLabel,
   type ChapterNote,
   type ChapterNoteState,
@@ -187,6 +191,51 @@ describe('note view model', () => {
       { kind: 'text', text: ' ' },
       { kind: 'em', text: 'c' },
       { kind: 'text', text: ' [d](http://x) <i>e</i> ![f](g)' },
+    ]);
+  });
+
+  it('maps highlight offsets between raw item text (with delimiters) and the shown text', () => {
+    const raw = '**word** tail *em* end';
+    const plain = plainItemText(raw);
+    expect(plain.text).toBe('word tail em end');
+    expect(plain.emphasis).toEqual([
+      { start: 0, end: 4, kind: 'strong' },
+      { start: 10, end: 12, kind: 'em' },
+    ]);
+    // Raw 2–6 is "word": shown 0–4, not "rd t".
+    expect(rawRangeToPlain(plain, 2, 6)).toEqual({ start: 0, end: 4 });
+    // Ends inside delimiters snap to the nearest shown character.
+    expect(rawRangeToPlain(plain, 0, 8)).toEqual({ start: 0, end: 4 });
+    expect(rawRangeToPlain(plain, 1, 13)).toEqual({ start: 0, end: 9 });
+    expect(rawRangeToPlain(plain, 7, 15)).toEqual({ start: 4, end: 10 });
+    // Delimiters only: nothing to draw.
+    expect(rawRangeToPlain(plain, 6, 8)).toBeNull();
+    expect(rawRangeToPlain(plain, 14, 15)).toBeNull();
+    // The inverse (creating a highlight from a selection of the shown text).
+    expect(plainRangeToRaw(plain, 0, 4)).toEqual({ start: 2, end: 6 });
+    expect(plainRangeToRaw(plain, 2, 12)).toEqual({ start: 4, end: 17 });
+    expect(plainRangeToRaw(plain, 3, 3)).toBeNull();
+    for (const [a, b] of [
+      [0, 4],
+      [5, 9],
+      [10, 12],
+      [3, 16],
+    ] as const) {
+      const r = plainRangeToRaw(plain, a, b);
+      expect(r && rawRangeToPlain(plain, r.start, r.end)).toEqual({ start: a, end: b });
+    }
+    // Drawn note highlights use shown offsets; delimiter-only ones are dropped.
+    const h = (id: string, start: number, end: number) =>
+      ({
+        id,
+        color: 'yellow',
+        target: { kind: 'note', chapter_note_id: 'n1', note_version: 1 },
+        anchor: { block: 's0.i0', start, end },
+        anchor_current: null,
+      }) as unknown as Parameters<typeof noteHighlightsOf>[0][number];
+    const sections = [{ heading: 'h', items: [{ text: raw, footnotes: [1] }] }];
+    expect(noteHighlightsOf([h('a', 2, 6), h('b', 6, 8)], 'n1', sections)).toEqual([
+      { id: 'a', block: 's0.i0', start: 0, end: 4, color: 'yellow' },
     ]);
   });
 

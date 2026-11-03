@@ -382,7 +382,7 @@ function NoteContent({
           questionHref={questionHref}
           onOpenQuestion={onOpenQuestion}
           loadPreview={getQuestionPreview}
-          highlights={myHighlights ? noteHighlightsOf(myHighlights, note.id) : []}
+          highlights={myHighlights ? noteHighlightsOf(myHighlights, note.id, note.sections) : []}
           myHighlights={myHighlights === undefined ? [] : myHighlights}
           covered={covered}
         />
