@@ -532,7 +532,7 @@ class ExplanationRepository:
     ) -> list[SourceView]:
         """The cited sources (with `number`) in number order, of live documents of the workspace
         (and, for a guest, the shared ones in `visible`)."""
-        cited: list[tuple[int, uuid.UUID, uuid.UUID | None, uuid.UUID | None, Mapping[str, Any]]]
+        cited: list[tuple[int, uuid.UUID, uuid.UUID, uuid.UUID | None, Mapping[str, Any]]]
         cited = []
         for s in sources:
             number = s.get("number")
