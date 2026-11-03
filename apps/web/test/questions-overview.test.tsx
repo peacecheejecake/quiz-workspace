@@ -1395,6 +1395,66 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
     });
   });
 
+  async function refuseRetry(user: ReturnType<typeof userEvent.setup>, panel: HTMLElement) {
+    await user.click(toggles(panel).retry);
+    await act(async () =>
+      held[0]?.resolve({
+        ok: false,
+        kind: 'retryNotAllowed',
+        message: '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.',
+      }),
+    );
+    await screen.findByText('정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.');
+  }
+
+  it('RETRY-01-C04 a favorite still being saved survives an overview refresh after the re-read', async () => {
+    let release!: (value: unknown) => void;
+    lookupOverviewQuestionAction.mockImplementation(
+      () => new Promise((resolve) => (release = resolve)),
+    );
+    const user = userEvent.setup();
+    const { rerender } = render(<Screen data={correctOverview} filters={EMPTY_OVERVIEW_FILTERS} />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await refuseRetry(user, panel);
+    await user.click(toggles(panel).favorite); // held[1]: the save is in flight
+    await act(async () => release({ ok: true, data: outsidePlaced(1) }));
+    // A newer server overview arrives (it does not know the favorite yet) before the save ends.
+    rerender(
+      <Screen
+        data={{ ...correctOverview, items: [...correctOverview.items] }}
+        filters={EMPTY_OVERVIEW_FILTERS}
+      />,
+    );
+    expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toHaveAttribute(
+      'data-state',
+      'on',
+    );
+  });
+
+  it('RETRY-01-C04 a failed favorite save does not stamp the retry flag of the re-read', async () => {
+    let release!: (value: unknown) => void;
+    lookupOverviewQuestionAction.mockImplementation(
+      () => new Promise((resolve) => (release = resolve)),
+    );
+    const { user, panel } = await openPanel();
+    await refuseRetry(user, panel);
+    await user.click(toggles(panel).favorite);
+    await act(async () =>
+      held[1]?.resolve({ ok: false, kind: 'unavailable', message: '일시적인 오류입니다.' }),
+    );
+    // The server has the retry flag on (set long ago): the favorite failure did not touch it.
+    const server = outsidePlaced(1);
+    await act(async () =>
+      release({
+        ok: true,
+        data: { ...server, item: { ...server.item, status: 'retry', needs_retry: true } },
+      }),
+    );
+    await waitFor(() => expect(dotStatus(1)).toBe('retry'));
+    expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+  });
+
   it('a rejected request after a saved change keeps the saved change', async () => {
     const { user, panel } = await openPanel();
     const { favorite, retry } = toggles(panel);

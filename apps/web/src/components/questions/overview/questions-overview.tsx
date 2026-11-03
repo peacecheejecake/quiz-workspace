@@ -447,15 +447,21 @@ export function QuestionsOverview({
   const flagSync = useFlagSync<MyState>(
     (questionId, patch) => setMyStateAction(workspaceId, questionId, patch),
     (questionId, event) => {
+      const item = currentItem(questionId) ?? savingItems.current.get(questionId);
       if (event.type === 'failed') {
         toast({ tone: 'error', title: event.message });
-        touch(questionId, 'is_favorite', 'needs_retry'); // the rollback is a local change
+        // The rollback changes only the fields whose shown value it restores.
+        touch(
+          questionId,
+          ...(['is_favorite', 'needs_retry'] as const).filter(
+            (field) => !item || item[field] !== event.flags[field],
+          ),
+        );
       }
       // A stale screen offered `다시 풀기`: read the question's state again (hides the toggle).
       if (event.type === 'failed' && event.message === QUESTION_FAILURE_MESSAGES.retryNotAllowed) {
         void rereadState(questionId);
       }
-      const item = currentItem(questionId) ?? savingItems.current.get(questionId);
       if (!item) return;
       const saved =
         event.type === 'saved' ? event.result : event.type === 'failed' ? event.saved : null;
@@ -536,7 +542,8 @@ export function QuestionsOverview({
       // Newer local changes own the sequence (an in-flight save still settles it).
       putOverride(questionId, mutationSeq.current.get(questionId) ?? 0, {
         patch,
-        settledOn: local?.settledOn ?? latestItems.current,
+        // null = a save is still in flight: keep it so a refresh does not drop the override
+        settledOn: local ? local.settledOn : latestItems.current,
       });
     } else {
       putOverride(questionId, nextSeq(questionId), { patch, settledOn: latestItems.current });
