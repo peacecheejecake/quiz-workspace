@@ -25,7 +25,7 @@ SUPABASE := pnpm exec supabase
 SIGNING_KEYS := supabase/signing_keys.json
 
 .PHONY: help install lint lint-ts lint-py fmt fmt-check typecheck typecheck-ts typecheck-py \
-	test test-ts test-py test-infra test-models test-llm test-workers-ai eval eval-models eval-workers-ai eval-summaries eval-summaries-llm eval-mock-exams eval-mock-exams-llm auth-keys infra-up infra-down infra-status infra-reset \
+	test test-ts test-py test-infra test-models test-llm test-workers-ai eval eval-models eval-workers-ai eval-summaries eval-summaries-llm eval-mock-exams eval-mock-exams-llm eval-ask eval-ask-llm eval-related-sources auth-keys infra-up infra-down infra-status infra-reset \
 	contracts contracts-check api-dev web-dev worker-dev db-reset db-lint db-test \
 	e2e e2e-browsers e2e-trace test-red images image-api image-api-models image-worker image-web reindex backup restore \
 	check-env deploy-prepare smoke-local smoke-staging
@@ -164,6 +164,28 @@ eval-mock-exams: ## Mock exam validation pass rate with the scripted fake -> eva
 eval-mock-exams-llm: ## Same with the real LLM provider (billed) -> eval/reports/mock-exams-llm.{json,md}
 	uv run python eval/mock_exams/mock_exam_eval.py --provider llm \
 		-o eval/reports/mock-exams-llm.json --markdown eval/reports/mock-exams-llm.md
+
+# AI question / AI explanation evaluation (ASK-X, eval/ask/): citation validity, grounding,
+# not-found accuracy, `hint` answer leakage, AI explanation answer agreement, tokens and cost, time to
+# the first text, over synthetic cases and the synthetic book-ko passages. `eval-ask` plays back the
+# scripted fake (offline); `eval-ask-llm` calls the real provider (LLM_API_KEY/LLM_MODEL, optional
+# LLM_PRICE_* for cost_usd; billed, sends only the synthetic fixtures; needs the user's approval, see
+# docs/runbook-deploy.md 12). Reports hold numbers and codes, never text.
+eval-ask: ## AI question + AI explanation evaluation with the scripted fake -> eval/reports/ask-fake.{json,md}
+	uv run python eval/ask/ask_eval.py \
+		-o eval/reports/ask-fake.json --markdown eval/reports/ask-fake.md
+
+eval-ask-llm: ## Same with the real LLM provider (billed) -> eval/reports/ask-llm.{json,md}
+	uv run python eval/ask/ask_eval.py --provider llm \
+		-o eval/reports/ask-llm.json --markdown eval/reports/ask-llm.md
+
+# Related passages evaluation (ASK-X, eval/related_sources/): question source block inclusion,
+# recall@5 of the judged passages and the excluded sources (question papers, a mixed document's
+# question part, imported sources: 0) over the synthetic fixture. Offline (fake embedder, in-process
+# Qdrant, no LLM); no billed variant (related passages call no LLM).
+eval-related-sources: ## Related passages evaluation (offline) -> eval/reports/related-sources-fake.{json,md}
+	uv run python eval/related_sources/related_eval.py \
+		-o eval/reports/related-sources-fake.json --markdown eval/reports/related-sources-fake.md
 
 auth-keys: $(SIGNING_KEYS) ## Generate the local Auth JWT signing key if missing (idempotent)
 

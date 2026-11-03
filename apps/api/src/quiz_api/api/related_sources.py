@@ -58,9 +58,11 @@ from typing import Annotated, Any, Literal
 from book_core.search.related import (
     RelatedCandidate,
     corpus_fingerprint,
+    is_searchable_document,
     merge_related,
     related_excerpt,
     related_query,
+    touches_question_part,
 )
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi import Path as PathParam
@@ -106,7 +108,6 @@ shared_router = APIRouter(
 )
 
 NOT_FOUND = "Not found."
-QUESTION_PAPER = "question_paper"
 RETRIEVAL_VERSION = "a1"
 DEGRADED_DENSE: Literal["dense_unavailable"] = "dense_unavailable"
 EDIT_ROLES = frozenset({Role.OWNER, Role.EDITOR})
@@ -301,7 +302,7 @@ def _books(repo: SearchRepository, workspace_id: uuid.UUID) -> dict[uuid.UUID, S
     return {
         d.id: d
         for d in repo.searchable_documents(workspace_id)
-        if d.document_type != QUESTION_PAPER
+        if is_searchable_document(d.document_type)
     }
 
 
@@ -407,7 +408,7 @@ def _compute(
             continue  # question paper, deleted / unpublished document, page-only source
         excluded = question_part_blocks(search_repo, doc, chapters) if _mixed(session, doc) else ()
         for block in ref.block_ids:
-            if block in excluded:
+            if touches_question_part((block,), excluded):
                 continue
             located = _with_pages(repo, doc.revision_id, (block,))
             if located is None:

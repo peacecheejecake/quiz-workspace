@@ -50,7 +50,16 @@ import {
   type Question,
   type QuestionInput,
 } from '../fixtures/test.ts';
+import { explUi, expectDone } from '../fixtures/ai-explanations.ts';
 import { chooseTarget, redistUi } from '../fixtures/chapter-redistribution.ts';
+import {
+  ANSWER as RELATED_ANSWER,
+  createSourcedQuestion,
+  relatedBody,
+  relatedUi,
+  relsrcInput,
+  seedRelsrcBook,
+} from '../fixtures/related-sources.ts';
 import {
   highlightExplanation,
   highlightNote,
@@ -757,3 +766,65 @@ test(
     await snapEvery(page, 'search-page-results');
   },
 );
+
+// VISUAL-09 (ASK-X): a completed answer with the AI 해설 and 관련 본문 below it. The answer, the
+// explanation and passages of the book are on screen (synthetic text only), so unlike the rest of
+// this file the page text is not attached on failure either (trace, screenshot and video are off
+// file-wide). The options are masked: the practice panel shows them in a per-session order.
+test.describe('VISUAL-09 completed answer with AI 해설 and 관련 본문', () => {
+  test.use({ attachPageTextOnFailure: false });
+
+  test(
+    'VISUAL-09 completed answer, AI 해설 and 관련 본문 in the practice panel',
+    { tag: '@infra' },
+    async ({ page, workspaceFactory }) => {
+      const owner = await workspaceFactory.member('visual09');
+      const ws = await workspaceFactory.create(owner, 'AI 해설과 관련 본문');
+      const book09 = await seedRelsrcBook(owner, ws.id);
+      await createSourcedQuestion(owner, ws.id, book09, {
+        ...relsrcInput('visual09', book09),
+        question_number: 1,
+      });
+      await signInAs(page, owner.user);
+      await page.goto(overviewPath(ws.id));
+      await overviewUi.dot(page, 1).click();
+      const panel = panelUi.numbered(page, 1);
+      await expect(panel).toBeVisible();
+      await panelUi.option(panel, RELATED_ANSWER).check();
+      await panelUi.submit(panel).click();
+      await expect(
+        panel.getByRole('status').filter({ hasText: RESULT_TEXT.correct }),
+      ).toBeVisible();
+      const related = await relatedBody(panel);
+      await expect(relatedUi.rows(related).first()).toBeVisible();
+      const area = explUi.area(panel);
+      await explUi.create(area).click();
+      await expectDone(area);
+      // The options (per-session order) and the explanation's creation time are not compared.
+      const masks = () => [
+        panel.getByRole('radiogroup'),
+        area.getByText(/^\d{4}\. \d{1,2}\. \d{1,2}\./),
+      ];
+      // A resize resets the panel's scroll, so each shot reveals its part first.
+      const shot = async (name: string, reveal: () => Promise<void>) => {
+        await reveal();
+        await page.mouse.move(0, 0);
+        await snap(page, name, masks());
+        if (test.info().project.name !== 'visual-desktop') return;
+        const viewport = page.viewportSize();
+        await page.setViewportSize(PHONE);
+        await reveal();
+        await page.mouse.move(0, 0);
+        await snap(page, `${name}-375`, masks());
+        if (viewport) await page.setViewportSize(viewport);
+      };
+      // The top of the panel: the question, the result and the start of the AI 해설.
+      await shot('ask-answer-explanation', () => area.scrollIntoViewIfNeeded());
+      // The end: the AI 해설 sources and the 관련 본문 list.
+      await shot('ask-related-sources', async () => {
+        await related.scrollIntoViewIfNeeded();
+        await relatedUi.rows(related).last().scrollIntoViewIfNeeded();
+      });
+    },
+  );
+});
