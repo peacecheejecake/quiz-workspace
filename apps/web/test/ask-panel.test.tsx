@@ -10,6 +10,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AskPanel, type AskPanelProps } from '../src/components/ask/ask-panel';
 import {
+  AskApiError,
   type AskClient,
   type AskMessage,
   type Conversation,
@@ -159,5 +160,63 @@ describe('AI 질문 panel request races', () => {
       expect(p.onNavigate, after).not.toHaveBeenCalled();
       view.unmount();
     }
+  });
+
+  it('ASK-01-AC09 a resend after a lost response reuses its Idempotency-Key; another question re-reads the conversation first', async () => {
+    const user = userEvent.setup();
+    const ask = vi
+      .fn<AskClient['ask']>()
+      .mockRejectedValueOnce(new AskApiError('network'))
+      .mockRejectedValueOnce(new AskApiError('network'))
+      .mockImplementation(async (_c, body) => accepted(body.question));
+    const get = vi.fn(async () => conversation());
+    const client = fakeClient({ ask, get });
+    render(<AskPanel {...props(client, { conversationId: CONV })} />);
+    const input = await screen.findByRole('textbox', { name: '질문' });
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+
+    await user.type(input, '가나다 원리{Enter}');
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    await screen.findByText(/네트워크 연결을 확인/);
+    // The same question again: the same operation, the same key (the first may have landed).
+    await user.type(input, '{Enter}');
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
+    expect(ask.mock.calls[1]?.[2]).toBe(ask.mock.calls[0]?.[2]);
+    await screen.findByText(/네트워크 연결을 확인/);
+
+    // Another question: the conversation is re-read first, then a new key.
+    await user.clear(input);
+    await user.type(input, '다른 질문{Enter}');
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(3));
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(ask.mock.calls[2]?.[2]).not.toBe(ask.mock.calls[0]?.[2]);
+  });
+
+  it('ASK-01-AC09 a retry after a lost response reuses its Idempotency-Key', async () => {
+    const user = userEvent.setup();
+    const failed = message({
+      id: 'a1',
+      role: 'assistant',
+      question_message_id: 'q1',
+      status: 'failed',
+      error_code: 'llm_unavailable',
+    });
+    const again = vi
+      .fn<AskClient['again']>()
+      .mockRejectedValueOnce(new AskApiError('network'))
+      .mockImplementation(async () => accepted('질문'));
+    const client = fakeClient({
+      again,
+      get: vi.fn(async () =>
+        conversation({ messages: [message({ id: 'q1', role: 'user', text: '질문' }), failed] }),
+      ),
+    });
+    render(<AskPanel {...props(client, { conversationId: CONV })} />);
+    await user.click(await screen.findByRole('button', { name: '다시 시도' }));
+    await waitFor(() => expect(again).toHaveBeenCalledTimes(1));
+    await screen.findByText(/네트워크 연결을 확인/);
+    await user.click(screen.getByRole('button', { name: '다시 시도' }));
+    await waitFor(() => expect(again).toHaveBeenCalledTimes(2));
+    expect(again.mock.calls[1]?.[2]).toBe(again.mock.calls[0]?.[2]);
   });
 });

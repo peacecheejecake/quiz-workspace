@@ -509,6 +509,33 @@ function useAskPanel({
   const canSend =
     !blockedReason && !tooLong && draft.trim() !== '' && !running && !sending && !waiting;
 
+  // A request whose answer was lost (network, 5xx) may still have been accepted. Sending the
+  // same operation again reuses its Idempotency-Key (the API replays the first result); any
+  // other operation first re-reads the conversation so a landed one shows up, then starts afresh.
+  const ambiguousRef = useRef<{ op: string; key: string; conversationId: string } | null>(null);
+  const operationKey = async (op: string): Promise<string> => {
+    const last = ambiguousRef.current;
+    if (last?.op === op) return last.key;
+    ambiguousRef.current = null;
+    if (last) {
+      try {
+        const fresh = await client.get(last.conversationId);
+        setConversation((current) => (current?.id === fresh.id ? fresh : current));
+      } catch {
+        // Unreadable now: the next read shows it.
+      }
+    }
+    return newIdempotencyKey();
+  };
+  const settleOperation = (op: string, key: string, conversationId: string, error?: unknown) => {
+    const lost =
+      error !== undefined &&
+      (!(error instanceof AskApiError) ||
+        error.kind === 'network' ||
+        (error.kind === 'failed' && (error.status === 0 || error.status >= 500)));
+    ambiguousRef.current = lost ? { op, key, conversationId } : null;
+  };
+
   const accepted = (conv: Conversation, result: MessageAccepted) => {
     setConversation({
       ...conv,
@@ -537,11 +564,19 @@ function useAskPanel({
         created = conv;
         setConversation(conv);
       }
-      const result = await client.ask(
-        conv.id,
-        sameScope(scope, normalizeScope(conv.scope)) ? { question } : { question, scope },
-        newIdempotencyKey(),
-      );
+      const body = sameScope(scope, normalizeScope(conv.scope))
+        ? { question }
+        : { question, scope };
+      const op = `ask:${conv.id}:${JSON.stringify(body)}`;
+      const key = await operationKey(op);
+      let result: MessageAccepted;
+      try {
+        result = await client.ask(conv.id, body, key);
+        settleOperation(op, key, conv.id);
+      } catch (error) {
+        settleOperation(op, key, conv.id, error);
+        throw error;
+      }
       if (!current()) return;
       accepted({ ...conv, scope }, result);
       setAnnouncement(ASK_TEXT.liveWriting);
@@ -567,7 +602,16 @@ function useAskPanel({
     const action =
       message.status === 'failed' || message.status === 'stopped' ? 'retry' : 'regenerate';
     try {
-      const result = await client.again(message.id, action, newIdempotencyKey());
+      const op = `${action}:${message.id}`;
+      const key = await operationKey(op);
+      let result: MessageAccepted;
+      try {
+        result = await client.again(message.id, action, key);
+        settleOperation(op, key, conversation.id);
+      } catch (error) {
+        settleOperation(op, key, conversation.id, error);
+        throw error;
+      }
       if (!current()) return;
       accepted(conversation, result);
       setAnnouncement(ASK_TEXT.liveWriting);
