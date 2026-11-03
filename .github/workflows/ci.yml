@@ -273,6 +273,8 @@ jobs:
           WORKER_MOCK_EXAMS: 'true'
           # DOCSUM-01: API + worker summarize; AC05's feature-off stack claims Redis DBs 10-15.
           WORKER_DOCUMENT_SUMMARY: 'true'
+          # ASK-01: API + worker answer AI questions (APP_ENV=test fake answerer).
+          WORKER_ASK_LLM: 'true'
         run: |
           # Skip only the screen specs of phases that are not GREEN yet (none once every phase is
           # listed). A blank entry would be an empty Playwright filter matching every spec.
@@ -301,6 +303,7 @@ jobs:
           WORKER_CHAPTER_NOTES: 'true'
           WORKER_MOCK_EXAMS: 'true'
           WORKER_DOCUMENT_SUMMARY: 'true'
+          WORKER_ASK_LLM: 'true'
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-visual
         run: >-
           scripts/visual-run.sh pnpm e2e:log-audit --worker --no-build --web-port 3000 --api-port 8000
