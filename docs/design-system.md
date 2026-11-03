@@ -85,6 +85,11 @@
 | `--color-switch-track-hover` | `#687285` | 꺼진 스위치 track hover 채움 |
 | `--color-switch-track-border` | `#B9C0CC` | 꺼진 스위치 track 테두리(채움보다 연함) |
 | `--color-switch-track-checked-border` | `#8C9CE6` | 켜진 스위치 track 테두리(accent 채움보다 연함) |
+| `--color-highlight-yellow` | `#FFF0A8` | 하이라이트 노랑 배경(본문 글자 4.5:1 이상, 실선 밑줄과 함께 — §5.2) |
+| `--color-highlight-blue` | `#D6E8FF` | 하이라이트 파랑 배경(이중선 밑줄과 함께) |
+| `--color-highlight-pink` | `#FFDCEB` | 하이라이트 분홍 배경(점선 밑줄과 함께) |
+| `--color-search-match-bg` | `#FFE2C7` | 노트 안 검색 결과 배경(CHNOTE-02) |
+| `--color-search-match` | `#B45309` | 검색 결과 테두리(2px, 현재 결과 3px; 표면·하이라이트 배경 대비 3:1 이상) |
 
 **v1.1.1 추가:** `--color-border-strong`, `--color-on-accent`, `--color-danger`/`success`/`warning`, `--color-scrim`, typography scale(`--font-size-*`, `--line-height-*`, `--font-weight-*`), breakpoint(`--breakpoint-*`). feedback 색은 question-status 토큰을 재사용하지 않으며(의미가 다름), canvas·surface 위 텍스트로 4.5:1 이상을 만족한다.
 
@@ -139,6 +144,11 @@
   --color-switch-track-hover: #808C9E;
   --color-switch-track-border: #8A95A6;
   --color-switch-track-checked-border: #B4C1FF;
+  --color-highlight-yellow: #5C4B0F;
+  --color-highlight-blue: #1E3F6B;
+  --color-highlight-pink: #5E2546;
+  --color-search-match-bg: #5A3514;
+  --color-search-match: #FFB066;
 }
 ```
 
