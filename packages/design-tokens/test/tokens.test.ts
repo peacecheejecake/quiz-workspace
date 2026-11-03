@@ -124,6 +124,15 @@ describe('generated tokens.css', () => {
     expect(explicitLight).toEqual(themedLight);
   });
 
+  // HEATMAP-PALETTE (2026-11-04): the light palette is the user's exact choice.
+  it('light question status tokens are the HEATMAP-PALETTE values', () => {
+    expect(themedTokens.light['question-status-incorrect']).toBe('#FF6060');
+    expect(themedTokens.light['question-status-correct']).toBe('#00AB7B');
+    expect(themedTokens.light['question-status-retry']).toBe('#F6CF35');
+    expect(themedTokens.light['question-status-viewed']).toBe('#ACB6C2');
+    expect(themedTokens.light['question-status-unseen']).toBe('#E7ECF0');
+  });
+
   it.each(['light', 'dark'] as const)('every question status token exists in %s', (theme) => {
     const decls = theme === 'light' ? genLight : genDark;
     expect(questionStatuses).toEqual(EXPECTED_STATUSES);
