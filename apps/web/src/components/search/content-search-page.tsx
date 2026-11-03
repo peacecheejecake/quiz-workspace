@@ -13,7 +13,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { WorkspaceBreadcrumb, type WorkspaceCrumb } from '@/components/workspaces/sub-page-nav';
-import { MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
+import { CONTENT_QUERY_PARAM, MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
 import { workspaceHomePath } from '@/lib/workspaces/home';
 import {
   ContentSearchOptions,
@@ -63,11 +63,15 @@ export function ContentSearchPage({
     else clear();
   }
 
+  /**
+   * "검색 결과 지우기": the query and the results only (search-page.md). The options (mode,
+   * document, chapter) stay chosen, in the state and in the URL alike, so a reload keeps them.
+   */
   function clear() {
     setDraft('');
     content.clear();
     const url = new URL(window.location.href);
-    for (const key of ['text', 'mode', 'document', 'section']) url.searchParams.delete(key);
+    url.searchParams.delete(CONTENT_QUERY_PARAM);
     replaceAddress(`${url.pathname}${url.search}`);
   }
 
