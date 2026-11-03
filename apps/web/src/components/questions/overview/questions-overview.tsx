@@ -476,8 +476,13 @@ export function QuestionsOverview({
 
   /** RETRY-CORRECT: the server refused `다시 풀기`; show the question's real state. */
   async function rereadState(questionId: string) {
+    // Let the failure handler that called this finish its own rollback first, then stamp the
+    // lookup: any later submit / favorite press of the question makes the answer older news.
+    await Promise.resolve();
+    const stamp = mutationSeq.current.get(questionId) ?? 0;
     const found = await lookupOverviewQuestionAction(workspaceId, questionId);
     if (!found.ok || !found.data) return;
+    if ((mutationSeq.current.get(questionId) ?? 0) !== stamp) return;
     const { item } = found.data;
     staleOverview.current = true;
     putOverride(questionId, nextSeq(questionId), {

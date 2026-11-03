@@ -1289,6 +1289,33 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
     expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
   });
 
+  it('RETRY-01-C04 the state re-read after a refused retry does not overwrite a newer press', async () => {
+    let release!: (value: unknown) => void;
+    lookupOverviewQuestionAction.mockImplementation(
+      () => new Promise((resolve) => (release = resolve)),
+    );
+    const { user, panel } = await openPanel();
+    const { favorite, retry } = toggles(panel);
+    await user.click(retry);
+    await act(async () =>
+      held[0]?.resolve({
+        ok: false,
+        kind: 'retryNotAllowed',
+        message: '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.',
+      }),
+    );
+    await screen.findByText('정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.');
+    // The favorite press made while the re-read is on its way is newer than its answer.
+    await user.click(favorite);
+    expect(favorite).toHaveAttribute('data-state', 'on');
+    await act(async () => release({ ok: true, data: outsidePlaced(1) }));
+    expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toHaveAttribute(
+      'data-state',
+      'on',
+    );
+    expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeInTheDocument();
+  });
+
   it('a rejected request after a saved change keeps the saved change', async () => {
     const { user, panel } = await openPanel();
     const { favorite, retry } = toggles(panel);
