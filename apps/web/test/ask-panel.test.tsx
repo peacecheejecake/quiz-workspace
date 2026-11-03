@@ -274,4 +274,33 @@ describe('AI 질문 panel request races', () => {
     );
     expect(read.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
+
+  it('ASK-01-AC09 a turn recovered by re-reading after a lost response stays shown after the next question', async () => {
+    const user = userEvent.setup();
+    const recovered = [
+      message({ id: 'q0', role: 'user', text: '가나다 원리' }),
+      message({ id: 'a0', role: 'assistant', question_message_id: 'q0', text: '복구된 답' }),
+    ];
+    const ask = vi
+      .fn<AskClient['ask']>()
+      .mockRejectedValueOnce(new AskApiError('network'))
+      .mockImplementation(async (_c, body) => accepted(body.question));
+    const get = vi
+      .fn<AskClient['get']>()
+      .mockResolvedValueOnce(conversation())
+      .mockResolvedValue(conversation({ messages: recovered }));
+    const client = fakeClient({ ask, get });
+    render(<AskPanel {...props(client, { conversationId: CONV })} />);
+    const input = await screen.findByRole('textbox', { name: '질문' });
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+    await user.type(input, '가나다 원리{Enter}');
+    await screen.findByText(/네트워크 연결을 확인/);
+    await user.clear(input);
+    await user.type(input, '다른 질문{Enter}');
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('다른 질문')).toBeVisible();
+    // The first question landed after all: the re-read showed it, and the next send keeps it.
+    expect(screen.getByText('복구된 답')).toBeVisible();
+    expect(screen.getAllByRole('article', { name: '내 질문' })).toHaveLength(2);
+  });
 });

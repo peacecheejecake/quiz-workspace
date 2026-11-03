@@ -544,9 +544,12 @@ function useAskPanel({
   };
 
   const accepted = (conv: Conversation, result: MessageAccepted) => {
-    setConversation({
-      ...conv,
-      messages: mergeMessages(conv.messages, [result.user_message, result.answer]),
+    // Onto the latest state, not the snapshot the request started from: a re-read meanwhile
+    // (operationKey) may have brought in a turn that landed despite a lost response.
+    const added = [result.user_message, result.answer];
+    setConversation((current) => {
+      const base = current?.id === conv.id ? current : conv;
+      return { ...base, scope: conv.scope, messages: mergeMessages(base.messages, added) };
     });
     const question = result.answer.question_message_id ?? '';
     setVersions((v) => Object.fromEntries(Object.entries(v).filter(([key]) => key !== question)));
