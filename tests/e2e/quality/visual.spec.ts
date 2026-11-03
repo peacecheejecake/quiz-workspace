@@ -21,6 +21,7 @@ import {
   documentsPath,
   editorUi,
   expectCaptchaVerified,
+  getOverview,
   JOB_TIMEOUT_MS,
   overviewPath,
   openSearchOptions,
@@ -523,6 +524,22 @@ test(
     await expect(
       runUi.summary(panel, { correct: 1, incorrect: 0, pending: 0, skipped: 1 }),
     ).toBeVisible();
+    // The skipped position was opened (읽음). Whether the Heatmap behind the panel already shows it
+    // depends on the order of two requests, so wait until the server has it and reload: the
+    // run's URL restores the same results step with a fresh overview.
+    await expect
+      .poll(
+        async () =>
+          (await getOverview(owner, ws.id)).items.filter((i) => i.status === 'viewed').length,
+      )
+      .toBe(1);
+    await page.reload();
+    await expect(
+      runUi.summary(runUi.panel(page), { correct: 1, incorrect: 0, pending: 0, skipped: 1 }),
+    ).toBeVisible();
+    await expect(page.locator('[data-testid="question-marker"][data-status="viewed"]')).toHaveCount(
+      1,
+    );
     await snapEvery(page, 'question-viewer-results');
     expect(questions).toHaveLength(5);
   },
