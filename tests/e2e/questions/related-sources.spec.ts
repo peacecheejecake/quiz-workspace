@@ -171,6 +171,15 @@ async function answerInPanel(page: Page, n: number, answer: string): Promise<Loc
   return panel;
 }
 
+/**
+ * Waits until a closed practice panel has finished its navigation back to the bare home; a
+ * `goto` that starts before that settles is interrupted by it (WebKit).
+ */
+async function expectClosedToHome(page: Page, panel: Locator): Promise<void> {
+  await expect(panel).toBeHidden();
+  await expect(page).toHaveURL((url) => url.search === '');
+}
+
 /** Re-opens `question` with `?question=` (a submitted question opens a new session) and answers. */
 async function reanswer(page: Page, workspaceId: string, question: Question): Promise<Locator> {
   await page.goto(overviewPath(workspaceId, question.id));
@@ -569,6 +578,7 @@ test(
     await expect(relatedUi.rows(body).first()).toBeVisible();
     expect(relatedRowCount(degraded.id)).toBe(0);
     await panelUi.close(panel).click();
+    await expectClosedToHome(page, panel);
     // … and in the normal state the same question is computed and stored.
     const healthy = await editStem(s.owner, degraded, relsrcStem(`${label}-5`));
     read = relatedResponse(page, 'questions', degraded.id);
@@ -779,12 +789,14 @@ test(
     await expect(relatedUi.toggle(runPanel)).toHaveAttribute('aria-expanded', 'true');
     await expect(relatedUi.badge(relatedUi.row(body, 0))).toBeVisible();
     await page.keyboard.press('Escape');
+    await expectClosedToHome(page, runPanel);
     // The practice panel reads the same stored list.
     read = relatedResponse(page, 'questions', question.id);
     const panel = await reanswer(page, s.workspaceId, question);
     await expect(relatedUi.rows(await relatedBody(panel)).first()).toBeVisible();
     expect((await read).id).toBe(inRun.id);
     await page.keyboard.press('Escape');
+    await expectClosedToHome(page, panel);
 
     // A: the mock exam's 풀기; before submitting the mock API refuses with 409.
     await page.goto(homePath(s.workspaceId, 'panel=mock-exams'));
