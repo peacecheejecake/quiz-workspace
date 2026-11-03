@@ -251,6 +251,21 @@ PR #43(이 계획의 "DOCVIEW", DOC-02-AC06–AC11)과 병렬로 만든 DOCVIEW-
 - **새 env 변수(구현 Task가 env manifest·check-env에 추가; ASK-SPEC·ASK-SYNC는 manifest를 고치지 않음):** `WORKER_ASK_LLM`(api·worker same, 기본 false; true면 worker `LLM_API_KEY`·`LLM_MODEL`과 api `LLM_MODEL` 필수 — DOCSUM과 같은 `required_when`), `WORKER_AI_EXPLANATIONS`(같은 규칙), `ASK_WORKER_CONCURRENCY`(worker, 2), `ASK_MAX_QUESTION_CHARS`(api, 1000), `ASK_MAX_TURNS`(api, 20), `ASK_HISTORY_TURNS`(worker, 3), `ASK_TOP_K`(api, 8), `ASK_MAX_CONTEXT_CHARS`(api, 16000), `ASK_MIN_RELEVANCE`(api, eval로 정함), `ASK_MAX_OUTPUT_TOKENS`(worker, 2000), `ASK_LLM_EFFORT`(worker, low), `ASK_RATE_LIMIT_PER_MINUTE`(api, 6), `ASK_DAILY_LIMIT_PER_USER`(api, 50), `ASK_MONTHLY_TOKEN_CAP`(api, 0 = 끔), `ASK_RETENTION_DAYS`(worker, 90), `ASK_MAX_REGENERATIONS`(api, 5), `AI_EXPLANATION_TOP_K`(api, 5), `AI_EXPLANATION_MAX_OUTPUT_TOKENS`(worker, 1500), `AI_EXPLANATION_RATE_LIMIT_PER_MINUTE`(api, 6), `AI_EXPLANATION_DAILY_LIMIT_PER_USER`(api, 30), `AI_EXPLANATION_MONTHLY_TOKEN_CAP`(api, 0), `RELATED_SOURCES_LIMIT`(api, 5), `RELATED_SOURCES_MIN_RELEVANCE`(api, eval로 정함). test 전용: `WORKER_ASK_FAKE_LOG_DIR`·`WORKER_ASK_HOLD_DIR`(`APP_ENV=test`만).
 - 비용 위험: AI 질문은 질문마다 호출(≈ $0.03~0.05, `claude-sonnet-5-5` 공개 가격), AI 해설은 문제 revision마다 한 번(≈ $0.02~0.03; 모의고사 문제는 원본과 따로 — 모의고사를 다시 만들 때마다 새 문제). 사용자별 하루 한도와 선택 월 token 상한이 막는다. 켤 때 DOCSUM·CHNOTE·MOCK과 같은 키·월 예산을 다시 정해야 한다(⛔, runbook-deploy 12장).
 
+### QSRC — 문제 원문 보기 (QSRC-SPEC 2026-11-04 사용자 결정)
+
+사용자 요청 "문제에 이미지가 포함된 경우 사용자가 볼 수 있어야 한다 — 범위가 작은 방식으로", 선택한 방식 "문제 원문 보기 버튼(hover·focus·long-press는 PDF 영역 tooltip, click은 새 floating dialog)". 화면 명세: [QSRC-01](screens/question-source-preview.md)(6 AC, 계약 C01~C05); 결정은 §7(2026-11-04 QSRC-SPEC 행). migration 없음.
+
+| ID | 내용 | 범위(디렉터리) | 의존 | DoD |
+|---|---|---|---|---|
+| QSRC-SPEC | 명세: 화면 문서 `question-source-preview.md`(QSRC-01 AC01~AC06, 계약 C01~C05, 열린 질문 2), questions §16, QVIEW-01·design-system §5.6(짝 floating dialog)·architecture API 목록·screens index/AGENTS.md AC 수 갱신, `scripts/e2e-trace.ts` PHASES `QSRC.0`·테스트 수, 이 계획의 Task와 §7 결정 | `docs`, `scripts/e2e-trace.*`, `AGENTS.md` | QVIEW·MOCK·ASK(develop) | `node --test scripts/e2e-trace.test.ts` GREEN, `pnpm e2e:trace --strict --phase QSRC.0`의 AC 쪽 orphan은 QSRC.0 RED 전까지만, 기존 GREEN phase의 AC 불변 |
+| QSRC.0 | RED: QSRC-01-AC01~AC06 E2E + 계약 QSRC-01-C01~C05(pytest `infra red`) + fixture(합성 `questions-ko.pdf`를 기존 가져오기 흐름으로 등록한 문제 — bbox 있음, 정답표는 3쪽, 두 쪽 걸친 영역은 DB로 둘째 쪽 위치 추가; 직접 만든 문제; 교재 근거(책)만 있는 문제; 가져온 문제·직접 만든 문제의 `보기 섞기` 모의고사; 보기 권한 구성원; 공유 링크; 범위 풀이; 375px 터치 context) | `tests/e2e/questions/question-source-preview.spec.ts`, `tests/e2e/fixtures`(새 `question-source.ts`), `tests/integration/questions/source_region` | QSRC-SPEC | RED 증거(`문제 원문 보기` 버튼·`source-region` API 없음이 원인 — 인프라·seed 아님), `pnpm e2e:trace --strict --phase QSRC.0` orphan 0, `make test-infra` GREEN(red 제외), CI `E2E_PHASES`에 넣지 않음 |
+| QSRC-API | `GET /questions/{id}/source-region`·`GET /mock-exam-questions/{id}/source-region`: 가져오기 출처(`import_run_id` not null) 위치의 문서·쪽별 bbox 합집합, bbox 없으면 건너뜀·없으면 404, 구성원 누구나(DRAFT·삭제·타 Workspace·게스트는 거절), `Cache-Control: private, no-store`, 모의고사는 원본 문제 기준. `make contracts` | `apps/api/src/quiz_api`(새 `api/source_region.py`·`repositories`), `contracts/openapi.json`, `packages/api-client`(생성), `tests/integration/questions/source_region`(`red` marker 제거) | QSRC.0 | 계약 C01~C05 GREEN(`make test-infra`), 정답·글 key 없음 test, ruff·mypy, contracts-check |
+| QSRC-UI | 문제 본문 부품 header의 `문제 원문 보기` 버튼(영역 정보 요청 결과로 표시, 숨김 규칙), hover/focus/long-press(500ms) tooltip + 바깥 터치·Escape 닫기, click dialog(`FloatingSidePanel side="start"`, < 768px 전체 화면 sheet + Back/Escape/focus 복귀), 영역만 그리는 `PdfRegionView`(기존 `PdfViewer`·`loadPdfBytes`·`SignedUrlCache`에서 bbox 영역만 canvas로 — 쪽 이동 없음, 쪽 쌓기, 여백 없음), 풀이 panel(`practice`)·범위 풀이(`sequence(bank)`)·"문제 상세"(`manage`)에 연결 | `apps/web/src/components/questions/viewer`, `apps/web/src/components/questions/source-preview`(새), `apps/web/src/lib/documents/pdf-source.ts`(재사용), `packages/ui`(Tooltip long-press 필요 시) | QSRC-API | QSRC-01 AC01~AC05 GREEN(chromium; webkit은 환경 허용 시), AC06의 범위 풀이·문제 상세·게스트 없음 부분, QPLAY-01·QVIEW-01·QOV-01·WS-VIEW-01 회귀 없음, axe, 의미 token만 |
+| QSRC-W | 모의고사 문제(`sequence(mock)`·`manage(mock)`) 연결, `E2E_PHASES`에 `QSRC.0` 추가, 열린 질문 1·2가 풀린 뒤 해당 배치·범위 반영 | `apps/web/src/components/questions/mock-exams`, `.github/workflows/ci.yml`, `playwright.config.ts` | QSRC-UI | QSRC-01 AC06 전부 GREEN, `E2E_PHASES`에 `QSRC.0`, MOCK-01 회귀 없음 |
+
+- 병렬: 없음(순차 `QSRC-SPEC → QSRC.0 → QSRC-API → QSRC-UI → QSRC-W`; QSRC-UI는 QuestionViewer 파일을 고치므로 다른 viewer Task와 같이 돌리지 않는다). 공유 파일(`apps/api` router 등록, `contracts/openapi.json`, `packages/api-client`, `.github/workflows/ci.yml`, QuestionViewer 파일)은 orchestrator가 merge 후 `make contracts`로 재생성한다.
+- 새 env 변수 없음.
+
 ### UX9 — 피드백 배치 (챕터 재분배·하이라이트·정리 노트·다시 풀기 아이콘·iOS 스크롤)
 
 사용자 피드백 2026-11-02(원문):
@@ -524,6 +539,14 @@ flowchart TB
     RSW --> AKX[ASK-X a11y·visual·eval·runbook]
     AKX --> AKENV[staging·production 활성화 ⛔]
   end
+  subgraph QSRC[QSRC 문제 원문 보기]
+    QSPEC[QSRC-SPEC 사용자 결정] --> QS0[QSRC.0 RED]
+    QS0 ==> QSA[QSRC-API source-region]
+    QSA --> QSU[QSRC-UI 버튼·tooltip·dialog]
+    QSU --> QSW[QSRC-W 모의고사·CI]
+    QSW -. CI QSRC.0 .-> CIQ[E2E_PHASES += QSRC.0]
+  end
+  RSW --> QSPEC
   DSX --> ASPEC
   MKX --> ASYNC
   M70 ==> M71
@@ -576,6 +599,7 @@ flowchart TB
 | W35 | ASK-B → (ASK-W · EXPL-B · RELSRC-B) | EXPL-B·RELSRC-B는 ASK-B의 streaming·SSE·`ask_retrieval`·usage를 재사용. ASK-W(web)와 EXPL-B·RELSRC-B(api/worker, migration 분리)는 범위가 다름 |
 | W36 | ASK-Q → EXPL-W → RELSRC-W | 같은 QuestionViewer 파일을 순서대로 고침. ASK-Q가 CI에 `ASK.0`, EXPL-W가 `EXPL.0`, RELSRC-W가 `RELSRC.0`을 켬 |
 | W37 | ASK-X → 활성화⛔ | LLM 비용·데이터 전송 사용자 승인 필요 |
+| W38 | QSRC-SPEC → QSRC.0 → QSRC-API → QSRC-UI → QSRC-W | ASK 이후(feature/question-source-preview, develop 위). 순차 — QSRC-UI·QSRC-W가 QuestionViewer 파일을 고침. QSRC-W가 CI에 `QSRC.0`을 켬 |
 
 Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 Task를 즉시 착수한다.
 
@@ -771,6 +795,12 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-11-03 | **사용자 결정(UX9 남은 제안, 문구만 — 구현 그대로)**: (1) modal panel(본문 발췌·원본 비교·공유 게스트 panel)에서 목록의 다른 항목으로 옮기는 길은 panel header의 `이전`·`다음` + Alt+↑/Alt+↓(목록 순서), 다른 항목을 고르려면 닫고 고름. (2) 원본 비교 panel은 초안을 읽기 전용으로 보이고 편집은 닫은 뒤. (3) 홈에 오기 전 기록이 없으면 dialog를 닫은 뒤 뒤로가기는 브라우저 기본 동작(QOV-01 UX7-BACK). home-dialogs·search-page·questions-import·workspace-shared-view·design-system §5.5·question-viewer·search·questions-overview의 제안 표시를 지움. | 사용자 답변(orchestrator 전달) |
 | 2026-11-03 | ASK-INTEG(`feature/ask-llm`을 `feature/ux9-feedback` 6d2fcf48 위에 합친 통합 tree — 설계 문서 우선, AGENTS.md §1): (1) **AI 질문 panel은 modal** — HOMEDLG-01(사용자 결정 2026-11-02 D3 "홈 밖의 floating panel도 모두 modal")이 모든 홈 `?panel=` dialog를 modal로 바꿨으므로 ASK-01의 "non-modal 홈 dialog" 규칙(header·`문제` 메뉴로 열면 non-modal, 다시 누르면 위로)은 홈에서 더는 생기지 않는다. `?panel=ask`는 `openDialogs`에서 늘 마지막(풀이·범위 풀이 panel 뒤)이라 딥링크·새로 고침에서도 맨 위에 쌓이고 뒤로가기가 먼저 닫는다(`useStagedDialogs`가 URL 순서로 쌓으므로 필요). kit: `ConfirmDialog`는 UX9의 공통 layer 순위(`useFloatingLayer`)를 쓰고 ASK-Q의 `useModalLayerZIndex`는 지웠다 — 같은 순위 안에서 `aboveModals` panel 뒤에 연 확인 dialog도 위로 올라간다; `FloatingSidePanel aboveModals`는 유지. (2) **`AI에게 묻기`는 본문 검색 페이지(SEARCH-02)** — UX9-SEARCH-W가 홈의 본문 검색 영역을 없앴으므로 같은 `ContentSearchForm`의 검색 버튼 옆에 두고, 누르면 그 페이지 위에 AI 질문 panel을 modal로 연다(URL 밖, 그 페이지의 본문 발췌 panel과 같음; 저장된 대화는 홈 `?panel=ask`에서). ASK-01-AC11 test는 비활성 확인 뒤 홈으로 돌아가고 `문제` 메뉴 기대 목록에 `챕터 재분배`를 더했다. **⛔ 사용자 확인 필요**(검색 페이지 panel의 URL·뒤로가기 처리 — 아래 진행 현황 ASK-INTEG). (3) header 오른쪽 순서 `AI 질문` · `본문 검색` · `이력` · `공유하기`(두 명세의 "`이력` 앞"을 함께 만족). (4) **번호** — questions.md §13(ASK)·§14·§15(UX9), workspace-sharing §10(ASK)·§11(UX9), A11Y-17/18·VISUAL-09(ASK-X)·A11Y-19·VISUAL-10(UX9)은 UX9-SPEC 해석 (3)대로 겹치지 않음(예약 안내 문구만 지움). 실행 wave는 둘 다 W30~W33을 써서 ASK를 **W34~W37**로 다시 매김. 화면 index 집계 35개 화면·232개(e2e-trace test 같음). (5) **CI `E2E_PHASES`** = 기존 + `UX9.0`·`ASK.0`·`EXPL.0`(`RELSRC.0`은 ask-llm대로 아직 없음). (6) 01_schema·authz matrix·S4 seed는 두 쪽 표·경로를 모두 넣음(`QUERY` 하나로 합침). | AGENTS.md §1, HOMEDLG-01, SEARCH-02, ASK-01 |
 | 2026-11-03 | MIG-RENAME-ask(사용자 결정 2026-11-03): staging 배포가 `--include-all` 없이 `supabase db push`를 돌리므로 이미 적용된 UX9의 `20261103130000`·`20261103140000`보다 앞서는 migration은 거부된다. 그래서 ask migration 네 개를 그 뒤로 이름만 바꾸되 순서는 유지한다(내용 변경 없음, 공유 DB 이력은 이미 갱신됨): `20261102160000_ask`→`20261104100000_ask`, `20261102170000_ask_daily_counts`→`20261104110000_ask_daily_counts`, `20261103150000_ai_explanations`→`20261104120000_ai_explanations`, `20261103160000_related_sources`→`20261104130000_related_sources`. errata migration은 `feature/errata`에서 `20261104140000`~`210000`으로 옮겨져 이 뒤에 온다. | AGENTS.md §3.1, docs/deployment.md |
+| 2026-11-04 | **QSRC-SPEC 사용자 결정 (사용자 요청 "문제에 이미지가 포함된 경우 사용자가 볼 수 있어야 한다 — 범위가 작은 방식으로", 선택: "문제 원문 보기" 버튼)**: (1) **보이는 것 — 문제 자기 영역만:** 가져오기 출처 위치(`question_sources.locations`)의 bbox 합집합으로 자른 부분뿐이고 쪽 이동·scroll이 없다. "해설 포함" PDF는 같은 쪽·뒤쪽에 정답이 있기 때문이다. 두 쪽에 걸친 영역은 두 쪽의 잘린 부분을 쌓아 보인다. (2) **언제:** 제출 전·후. (3) **어디에:** 풀이 panel(`practice`)·범위 풀이(`sequence(bank)`)·"문제 상세"(`manage`)·원본 문제에 가져오기 출처가 있는 모의고사 문제. 공유 게스트, 가져오기 출처가 없는 문제(직접 만든·생성된·교재 근거만)에는 버튼을 **숨긴다**. (4) 좁은 화면(< 768px, 기존 `FloatingSidePanel` 모바일 breakpoint)은 전체 화면 sheet, 데스크톱은 열린 문제 panel의 **왼쪽**에 나란히. (5) 기본값: long-press 500ms, tooltip 바깥을 누르면 닫힘. 동작: hover·focus·long-press는 tooltip 미리보기, click은 새 floating dialog. |
+| 2026-11-04 | QSRC-SPEC 해석(화면 ID·phase): 새 화면 `QSRC-01`과 RED phase `QSRC.0`으로 둔다(기존 화면에 테스트 없는 AC를 넣으면 CI strict가 깨지므로 — 2026-11-02 UX9-SPEC 해석 (1)과 같은 방식). QVIEW-01·QPLAY-01 등 GREEN phase에는 AC를 추가하지 않고 호출 위치 설명만 QSRC-01을 가리키게 한다. 화면 수 35 → 36, AC 232 → 238. |
+| 2026-11-04 | QSRC-SPEC 해석(정답 비노출 = 화면 수준): AGENTS.md §5 "Practice APIs never send correct answers or explanations before submission"을 지키기 위해 새 API `source-region`은 문서 id·revision id·쪽·bbox만 돌려주고 글·정답·해설·`block_ids`가 없다(풀이 DTO는 불변, 풀이 session 불필요). 단 PDF 바이트는 기존 `GET /documents/{id}/source-url` 중계(구성원 누구나 — 이미 열려 있는 권한)에서 통째로 받으므로 "정답이 안 보인다"는 보장은 **영역 밖을 그리지 않는 화면 수준**이다(canvas는 bbox 크기만, 쪽 도구·text layer 없음). 새 권한은 열리지 않는다. 서버가 영역만 잘라 주는 방식(서버 렌더링)은 비용·복잡도 때문에 고르지 않았다(기록). |
+| 2026-11-04 | QSRC-SPEC 해석(가져오기 출처만): `import_run_id`가 있고 bbox가 있는 위치만 쓴다. 교재 근거·`evidence`·직접 만든 문제의 쪽 출처는 정답이 든 쪽을 가리킬 수 있어 쓰지 않는다. bbox가 없는 위치만 있으면 쪽 전체로 대체하지 않고 영역 없음(404, 버튼 숨김)으로 한다 — 쪽 전체는 정답을 보일 수 있다(명세에 없던 세부, 사용자 결정 1의 보수적 적용). 이전에 가져온 draft에 bbox가 없다면 버튼이 나타나지 않는다. |
+| 2026-11-04 | QSRC-SPEC 해석(modal 층·Back): 풀이 panel·범위 풀이가 modal이므로 원문 dialog도 같은 modal 층의 맨 위에 쌓이고(문제 panel은 보이되 `inert`) Escape·backdrop은 원문 dialog만 닫는다(design-system §5.5 규칙). 좁은 화면의 Back은 sheet만 닫는다(history 항목 하나, URL 불변). 문제 위치를 바꾸면 dialog는 닫힌다. 사용자 결정에 명시되지 않은 세부 — 사용자 확인 대상으로 남긴다. |
+| 2026-11-04 | **QSRC-SPEC 열린 질문 (사용자 결정 전, 명세 [QSRC-01](screens/question-source-preview.md) "열린 질문")**: (1) 768px 이상이지만 문제 panel 왼쪽에 dialog가 들어갈 자리가 없는 태블릿 폭의 배치(전체 sheet / 남는 폭만큼 축소 / 일부 덮기). (2) 모의고사의 AI 변형 문제(원본과 글이 다름)에도 원본 문제의 영역을 보일지(사용자 결정 문구 그대로면 보임). AC는 1280px·375px만 요구하고 E2E는 `보기 섞기` 모의고사만 쓴다. |
 
 ## 8. 진행 현황
 
@@ -943,5 +973,6 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | UX9-SCROLL overlay scroll 격리(iOS Safari dialog 위 스와이프) | 🔶 구현됨, Codex review 대기 | ec5b97f · 06271da · a1215c4 | 2026-11-02. `task/UX9-SCROLL`(별도 branch). UX9-SCROLL-AC01~AC04는 UX9-SPEC의 [overlay-scroll.md](screens/overlay-scroll.md)에 등록. 사용자 실기기 확인 대기. |
 | UX9-SPEC-2 backdrop click 닫기·가져오기 검토 제목 | ✅ | 이 커밋 | 2026-11-02. 사용자 결정 2건(§7 UX9-SPEC-2). AC 수 변화 없음. |
 | UX9-SPEC-3 노트 검색 범위·노트 backdrop 닫기 | ✅ | 이 커밋 | 2026-11-02. 사용자 결정 2건(§7 UX9-SPEC-3). AC 수 변화 없음. |
+| QSRC-SPEC 문제 원문 보기 명세 | ✅ | 이 커밋 | 2026-11-04. 사용자 결정 5건(§7 QSRC-SPEC). 신규 화면 QSRC-01(AC 6개, 계약 C01~C05), 열린 질문 2건. 구현 Task QSRC.0·API·UI·W는 §3 QSRC. |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.

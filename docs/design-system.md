@@ -383,6 +383,13 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - **홈 밖 panel도 modal:** 본문 발췌·원본 비교·공유 화면 panel도 modal이고 배치 고정 규칙이 같다(목록이 비켜서던 inset 없음). 목록의 다른 항목으로 옮기는 것은 panel header의 이전·다음 버튼(Alt+↑/Alt+↓)이고 다른 항목을 고르려면 닫고 고른다(사용자 결정 2026-11-03). non-modal로 남는 floating 표면은 없다(docked 목차는 페이지 배치).
 - 검증: HOMEDLG-01-AC03(bounding box 0px, 고전 scrollbar Chromium·iPad WebKit).
 
+### 5.6 짝 floating dialog — 문제 panel 옆 원문 (v1.2.9, QSRC-SPEC 2026-11-04, [QSRC-01](screens/question-source-preview.md))
+
+- 열린 `FloatingSidePanel`(문제 풀이 panel 등) **곁에 참고 내용을 나란히 보이는** 짝 dialog 패턴이다. 짝 dialog는 `side="start"`(문제 panel은 `end`)로 같은 modal 층의 맨 위에 쌓이고, 본 panel은 가려지지 않고 보이되 `inert`다. Escape·backdrop click은 짝 dialog만 닫고 focus는 연 버튼으로 돌아온다(§5.5의 "맨 위부터 닫기").
+- 폭 `< 768px`(`--breakpoint-md`, §4 breakpoint)에서는 `mobileLayout="full"` 전체 화면 sheet가 본 panel을 덮고, 닫으면 본 panel로 돌아온다. 브라우저 Back은 sheet만 닫는다(sheet를 연 history 항목을 쓰며 URL은 바뀌지 않음).
+- 짝 dialog가 두 panel이 겹치지 않을 만큼의 자리가 없는 폭(≥ 768px)에서 어떻게 놓이는지는 QSRC-01 "열린 질문" 1.
+- 쓰는 곳: QSRC-01 `문제 원문`. 짧은 미리보기는 `Tooltip`(hover·`:focus-visible`·터치 long-press 500ms, 바깥 터치·Escape로 닫힘, `aria-describedby`)이고 click이 짝 dialog를 연다.
+
 ## 6. QuestionDot / Heatmap 컴포넌트 계약
 
 ```ts
