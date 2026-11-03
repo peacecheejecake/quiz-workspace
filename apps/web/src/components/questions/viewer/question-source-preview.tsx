@@ -16,6 +16,7 @@ import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
 import { loadPdfjs, openPdf, type PdfDocument, type PdfLoadingTask } from '@/lib/documents/pdfjs';
 import {
   fetchSourceRegions,
+  tooltipFit,
   type SourceRegion,
   type SourceRegionTarget,
 } from '@/lib/questions/source-region';
@@ -246,16 +247,10 @@ function TooltipContent({
   readonly regions: readonly SourceRegion[];
   readonly pdf: ReturnType<typeof useRegionPdf>;
 }) {
-  const fit = useMemo(() => {
-    // The preview shell pads its content; one figure per page must fit the 320px height together.
-    const width = Math.min(360, window.innerWidth - 32) - 32;
-    const height = Math.min(320, window.innerHeight - 32) - 32;
-    const labels = 24 * regions.length;
-    return {
-      maxWidth: Math.max(width, 80),
-      maxHeight: Math.max((height - labels) / regions.length, 60),
-    };
-  }, [regions.length]);
+  const fit = useMemo(
+    () => tooltipFit(regions.length, window.innerWidth, window.innerHeight),
+    [regions.length],
+  );
   if (pdf.state.status === 'error') return <p className={styles.message}>{FAILURE_TEXT}</p>;
   if (pdf.state.status !== 'ready') {
     return (

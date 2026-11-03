@@ -21,7 +21,7 @@ vi.mock('@quiz/ui', async (original) => ({
 
 const { QuestionSourcePreview } =
   await import('../src/components/questions/viewer/question-source-preview');
-const { fetchSourceRegions, fitRegion, sourceRegionPath } =
+const { fetchSourceRegions, fitRegion, sourceRegionPath, tooltipFit } =
   await import('../src/lib/questions/source-region');
 const bank = await import('../src/app/api/questions/[questionId]/source-region/route');
 const mock = await import('../src/app/api/mock-exam-questions/[questionId]/source-region/route');
@@ -190,5 +190,22 @@ describe('QSRC-01 narrow sheet history', () => {
     expect(back).not.toHaveBeenCalled();
     push.mockRestore();
     back.mockRestore();
+  });
+});
+
+describe('QSRC-01 tooltip budget', () => {
+  it.each([1, 2, 3])('%i tall regions fit the 320px maximum', (count) => {
+    const fit = tooltipFit(count, 1280, 800);
+    // padding + border, gaps between figures, a caption (with its gap) per figure
+    const total = 2 * 17 + (count - 1) * 12 + count * (24 + fit.maxHeight);
+    expect(total).toBeLessThanOrEqual(320);
+    expect(fit.maxHeight).toBeGreaterThan(0);
+    expect(fit.maxWidth).toBeLessThanOrEqual(360);
+  });
+
+  it('shrinks with a short viewport and never exceeds it', () => {
+    const fit = tooltipFit(3, 375, 400);
+    expect(2 * 17 + 2 * 12 + 3 * (24 + fit.maxHeight)).toBeLessThanOrEqual(400 - 32);
+    expect(fit.maxWidth).toBeLessThanOrEqual(375 - 32);
   });
 });

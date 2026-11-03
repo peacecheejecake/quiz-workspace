@@ -71,3 +71,27 @@ export function fitRegion(
   if (maxHeight !== null) scale = Math.min(scale, Math.max(maxHeight, 1) / h);
   return { width: w * scale, height: h * scale };
 }
+
+/** Space around the figures in the preview tooltip (CSS px): padding, border, gaps, captions. */
+const TOOLTIP_PADDING = 16;
+const TOOLTIP_BORDER = 1;
+const FIGURE_GAP = 12;
+const CAPTION_AND_GAP = 24;
+
+/**
+ * Per-figure size limit in the tooltip (max `min(360px, 100vw - 32px)` x `min(320px, 100dvh - 32px)`):
+ * the height budget has the padding, border, the gaps between figures and every `p.N` caption taken
+ * out first, so all `count` figures always fit (nothing is cropped by the tooltip's overflow).
+ */
+export function tooltipFit(
+  count: number,
+  viewportWidth: number,
+  viewportHeight: number,
+): { readonly maxWidth: number; readonly maxHeight: number } {
+  const n = Math.max(count, 1);
+  const frame = 2 * (TOOLTIP_PADDING + TOOLTIP_BORDER);
+  const width = Math.min(360, viewportWidth - 32) - frame;
+  const height =
+    Math.min(320, viewportHeight - 32) - frame - (n - 1) * FIGURE_GAP - n * CAPTION_AND_GAP;
+  return { maxWidth: Math.max(width, 40), maxHeight: Math.max(height / n, 1) };
+}
