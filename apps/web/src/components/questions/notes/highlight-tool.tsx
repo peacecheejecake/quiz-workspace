@@ -35,13 +35,20 @@ export interface HighlightStore {
   readonly reload: () => void;
 }
 
-/** Reads `load` whenever `key` changes (or `reload` is called); a failure keeps null. */
+/**
+ * Reads `load` whenever `key` changes (or `reload` is called); a failure keeps null. The menu
+ * works before the list arrives: a change is applied to the list on screen (an empty one while
+ * loading or after a failed read), and a read that started before the latest change is not
+ * applied — it would undo that change — but is made again.
+ */
 export function useHighlightStore(
   load: ((signal: AbortSignal) => Promise<HighlightItems>) | null,
   key: string,
 ): HighlightStore {
   const [items, setItems] = useState<HighlightItems | null | undefined>(undefined);
   const [round, setRound] = useState(0);
+  // Bumped by every change: a read that started before the latest change is stale.
+  const changes = useRef(0);
   const loadRef = useRef(load);
   useEffect(() => {
     loadRef.current = load;
@@ -51,21 +58,25 @@ export function useHighlightStore(
     const read = loadRef.current;
     if (!enabled || !read) return undefined;
     const controller = new AbortController();
+    const startedAt = changes.current;
+    const stale = () => changes.current !== startedAt;
     read(controller.signal).then(
       (list) => {
-        if (!controller.signal.aborted) setItems(list);
+        if (controller.signal.aborted) return;
+        if (stale()) setRound((n) => n + 1);
+        else setItems(list);
       },
       () => {
-        if (!controller.signal.aborted) setItems((prev) => (prev === undefined ? null : prev));
+        if (controller.signal.aborted || stale()) return;
+        setItems((prev) => (prev === undefined ? null : prev));
       },
     );
     return () => controller.abort();
   }, [enabled, key, round]);
-  const update = useCallback(
-    (change: (items: HighlightItems) => HighlightItems) =>
-      setItems((prev) => (prev ? change(prev) : prev)),
-    [],
-  );
+  const update = useCallback((change: (items: HighlightItems) => HighlightItems) => {
+    changes.current += 1;
+    setItems((prev) => change(prev ?? []));
+  }, []);
   const reload = useCallback(() => setRound((n) => n + 1), []);
   return { items, update, reload };
 }

@@ -5,12 +5,16 @@
 // HILITE-01-C09's import check: the note body and the explanation use the same kit tool.
 import './dom-setup';
 import { readFileSync } from 'node:fs';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ToastProvider } from '@quiz/ui';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MyHighlightsSection } from '../src/components/questions/notes/my-highlights-section';
-import type { HighlightStore } from '../src/components/questions/notes/highlight-tool';
+import {
+  useHighlightStore,
+  type HighlightItems,
+  type HighlightStore,
+} from '../src/components/questions/notes/highlight-tool';
 import {
   classifyHighlightFailure,
   createHighlight,
@@ -134,6 +138,25 @@ describe('내 하이라이트 view model', () => {
     expect(explanationHighlightsOf([found, lost, explanationHl(Q2)], Q1)).toEqual([
       { id: found.id, block: 'p0', start: 9, end: 12, color: 'pink' },
     ]);
+  });
+});
+
+describe('HILITE-01 highlight store', () => {
+  it('keeps a change made before the list arrived and drops the older read', async () => {
+    const pending: ((items: HighlightItems) => void)[] = [];
+    const load = vi.fn(() => new Promise<HighlightItems>((resolve) => pending.push(resolve)));
+    const { result } = renderHook(() => useHighlightStore(load, 'k'));
+    expect(result.current.items).toBeUndefined();
+    const made = explanationHl(Q1);
+    act(() => result.current.update((list) => [...list, made]));
+    expect(result.current.items?.map((h) => h.id)).toEqual([made.id]);
+    // The read that started before the change answers without it: it is not applied.
+    await act(async () => pending[0]?.([]));
+    expect(result.current.items?.map((h) => h.id)).toEqual([made.id]);
+    // A newer read is made instead, and its answer is.
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+    await act(async () => pending[1]?.([made]));
+    expect(result.current.items?.map((h) => h.id)).toEqual([made.id]);
   });
 });
 
