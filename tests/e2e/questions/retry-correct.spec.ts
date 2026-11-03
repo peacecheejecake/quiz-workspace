@@ -14,6 +14,7 @@ import {
   progressText,
   runUi,
 } from '../fixtures/practice-runs.ts';
+import { seedOwnerStudyState } from '../fixtures/sharing.ts';
 import {
   createNumberedQuestions,
   expect,
@@ -190,5 +191,39 @@ test(
     await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(2, 2));
     await expect(runUi.favorite(panel)).toBeVisible();
     await expect(runUi.retryToggle(panel)).toHaveCount(0);
+  },
+);
+
+test(
+  'RETRY-01-AC04 an existing retry flag on an unanswered question still shows in the Heatmap and filter but has no toggle until a correct answer',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seed(workspaceFactory, 'retry01-ac04', 2);
+    const question = q(s, 1);
+    // A flag from before the rule: set directly in the database (the API now refuses it).
+    seedOwnerStudyState(s.owner.user.id, s.workspaceId, question.id);
+    expect(await overviewItem(s.owner, s.workspaceId, question.id)).toMatchObject({
+      needs_retry: true,
+      status: 'retry',
+      last_graded_result: null,
+    });
+    const filtered = await s.owner.api.ok<{ items: { question_id: string }[] }>(
+      'GET',
+      `/workspaces/${s.workspaceId}/questions/overview?retry=true`,
+    );
+    expect(filtered.items.map((i) => i.question_id)).toEqual([question.id]);
+
+    await signInAs(page, s.owner.user);
+    await page.goto(overviewPath(s.workspaceId));
+    await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'retry');
+    const panel = await openPanel(page, 1);
+    await expect(panelUi.favoriteOff(panel)).toBeVisible();
+    await expect(panelUi.retryOn(panel)).toHaveCount(0);
+    await expect(panelUi.retryOff(panel)).toHaveCount(0);
+
+    await answer(panel, question, true);
+    await expect(panelUi.retryOff(panel)).toHaveAttribute('data-state', 'on');
+    await panelUi.retryOff(panel).click();
+    await expect(panelUi.retryOn(panel)).toHaveAttribute('data-state', 'off');
   },
 );
