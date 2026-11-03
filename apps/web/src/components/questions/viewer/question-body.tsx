@@ -13,6 +13,7 @@ import type { Ref } from 'react';
 import type { QuestionRevision } from '@/lib/questions/actions';
 import { displayStem, stemParagraphs } from '@/lib/questions/display-stem';
 import type { Question } from '@/lib/questions/form';
+import { ExplanationText, type ExplanationHighlighting } from './explanation-text';
 import {
   ANSWER_TEXT_MAX,
   finalResult,
@@ -81,6 +82,8 @@ interface AnswerBodyProps {
   readonly selfGrade: GradeResult | null;
   readonly error?: string | null;
   readonly resultRef?: Ref<HTMLParagraphElement>;
+  /** The revealed explanation takes the reader's highlights (HILITE-01; bank questions only). */
+  readonly highlighting?: ExplanationHighlighting | null;
 }
 
 function AnswerBody({
@@ -93,6 +96,7 @@ function AnswerBody({
   selfGrade,
   error = null,
   resultRef,
+  highlighting = null,
 }: AnswerBodyProps) {
   return (
     <>
@@ -119,7 +123,7 @@ function AnswerBody({
           {error}
         </p>
       ) : null}
-      {outcome ? <Reveal outcome={outcome} /> : null}
+      {outcome ? <Reveal outcome={outcome} highlighting={highlighting} /> : null}
     </>
   );
 }
@@ -235,7 +239,13 @@ function OptionLabel({ index, text }: { readonly index: number; readonly text: s
 }
 
 /** Answers revealed by the submit result (never before submission). */
-function Reveal({ outcome }: { readonly outcome: RevealedAnswers }) {
+function Reveal({
+  outcome,
+  highlighting,
+}: {
+  readonly outcome: RevealedAnswers;
+  readonly highlighting: ExplanationHighlighting | null;
+}) {
   const accepted = outcome.accepted_answers ?? [];
   return (
     <div className={styles.reveal}>
@@ -254,7 +264,11 @@ function Reveal({ outcome }: { readonly outcome: RevealedAnswers }) {
       {outcome.explanation ? (
         <section aria-label="해설">
           <h3 className={styles.revealTitle}>해설</h3>
-          <p className={styles.revealText}>{outcome.explanation}</p>
+          <ExplanationText
+            text={outcome.explanation}
+            className={styles.revealText}
+            highlighting={highlighting}
+          />
         </section>
       ) : null}
     </div>
@@ -265,10 +279,12 @@ interface RevisionBodyProps {
   readonly revision: QuestionRevision;
   readonly type: QuestionType;
   readonly heading: string;
+  /** The explanation takes the reader's highlights (문제 상세 of a bank question, HILITE-01). */
+  readonly highlighting?: ExplanationHighlighting | null;
 }
 
 /** A revision with its answers (manage, read-only): not a grading result, so no result border. */
-function RevisionBody({ revision, type, heading }: RevisionBodyProps) {
+function RevisionBody({ revision, type, heading, highlighting = null }: RevisionBodyProps) {
   const correct = new Set(revision.correct_option_ids ?? []);
   return (
     <>
@@ -321,7 +337,11 @@ function RevisionBody({ revision, type, heading }: RevisionBodyProps) {
       {revision.explanation ? (
         <section className={styles.detailSection}>
           <h3 className={styles.detailHeading}>해설</h3>
-          <p className={styles.detailText}>{revision.explanation}</p>
+          <ExplanationText
+            text={revision.explanation}
+            className={styles.detailText}
+            highlighting={highlighting}
+          />
         </section>
       ) : null}
     </>

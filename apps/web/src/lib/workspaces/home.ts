@@ -124,13 +124,18 @@ export function isChapterNoteOpen(params: Params): boolean {
   return parsePanels(params).includes(CHAPTER_NOTE_PANEL);
 }
 
+/** `chapter=none`: the "챕터 없음" group's panel (`내 하이라이트` only, HILITE-01). */
+export const NO_CHAPTER_NOTE = 'none';
+
 /**
  * The chapter of the open 정리 노트 panel: `undefined` when the panel is closed, `null` when it is
- * open without a usable chapter id (the panel then says the chapter cannot be found).
+ * open without a usable chapter id (the panel then says the chapter cannot be found), and
+ * `NO_CHAPTER_NOTE` for the "챕터 없음" group.
  */
 export function noteChapterOf(params: Params): string | null | undefined {
   if (!isChapterNoteOpen(params)) return undefined;
   const id = all(params, CHAPTER_PARAM)[0];
+  if (id === NO_CHAPTER_NOTE) return NO_CHAPTER_NOTE;
   return id && UUID.test(id) ? id.toLowerCase() : null;
 }
 

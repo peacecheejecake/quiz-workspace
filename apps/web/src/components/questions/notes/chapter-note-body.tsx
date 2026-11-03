@@ -4,7 +4,9 @@
 // page's read-only panel (docs/screens/chapter-note-tools.md): the 노트에서 찾기 search row, the
 // answers notice (text, no fold — user decision C7), sections (`h3`) of items in a
 // HighlightableText "정리 노트 본문" whose footnote numbers open the cited question, the `각주` list
-// and (members) `내 하이라이트`. Footnote numbers and lines preview the question's stem and options
+// and (members) `내 하이라이트`. Members highlight the items with the shared tool (HILITE-01: the
+// selection menu creates, merges, recolors and removes their own highlights; offsets are kept in
+// the raw item text the API anchors). Footnote numbers and lines preview the question's stem and options
 // at the pointer (focus: at the element; touch: a tap shows the preview with `문제 열기`); the
 // preview never carries answers. Search results are drawn in the body, headings, footnote lines
 // and the explanation rows of 내 하이라이트; the query is screen state only (never in the URL).
@@ -18,6 +20,7 @@ import {
   Skeleton,
   type FindBlock,
   type PointerFloatingMode,
+  type RenderHighlightBlock,
   type TextBlock,
   type TextHighlight,
   type TextMatch,
@@ -36,16 +39,21 @@ import {
   footnoteLinks,
   footnoteText,
   NOTE_TEXT,
+  noteHighlightsOf,
   noteItemBlock,
   plainItemText,
+  plainRangeToRaw,
   previewHeading,
+  type PlainText,
   type MyHighlight,
   type NoteFootnote,
   type NoteSection,
   type QuestionPreview,
 } from '@/lib/notes/model';
+import { orderRows } from '@/lib/highlights/model';
 import { displayStem } from '@/lib/questions/display-stem';
 import styles from './chapter-note.module.css';
+import { useHighlightTool, type HighlightStore } from './highlight-tool';
 import { highlightRowBlock, MyHighlightsSection, searchesRow } from './my-highlights-section';
 
 export type LoadPreview = (questionId: string, signal?: AbortSignal) => Promise<QuestionPreview>;
@@ -62,12 +70,23 @@ export interface ChapterNoteBodyProps {
   readonly onOpenQuestion: (questionId: string, trigger: HTMLElement | null) => void;
   /** The footnote preview's data (stem and options only). */
   readonly loadPreview: LoadPreview;
-  /** The reader's highlights in this note version (drawn in the body). */
-  readonly highlights?: readonly TextHighlight[];
-  /** The reader's 내 하이라이트 rows (members); undefined: no section (share guests). */
-  readonly myHighlights?: readonly MyHighlight[] | null;
+  /** Members: their own highlights (drawn and edited in the body) and `내 하이라이트`. */
+  readonly highlighting?: NoteHighlighting;
+  /**
+   * `highlights`: no AI note on screen (the "챕터 없음" panel): only the search row and
+   * `내 하이라이트`.
+   */
+  readonly parts?: 'note' | 'highlights';
   /** A modal (the practice panel) covers the note: its content is hidden meanwhile. */
   readonly covered?: boolean;
+}
+
+export interface NoteHighlighting {
+  readonly store: HighlightStore;
+  /** The note version on screen; null without one. */
+  readonly noteId: string | null;
+  /** `내 하이라이트` › `위치로 이동`; `trigger` is the row's menu button. */
+  readonly onGoTo: (h: MyHighlight, trigger: HTMLElement | null) => void;
 }
 
 type PreviewState =
@@ -76,7 +95,7 @@ type PreviewState =
   | { readonly status: 'error' };
 
 /** One request per question for the panel's life (a failure is retried on the next open). */
-function usePreviewCache(load: LoadPreview) {
+export function usePreviewCache(load: LoadPreview) {
   const loadRef = useRef(load);
   useEffect(() => {
     loadRef.current = load;
@@ -210,7 +229,7 @@ export function useKeepTabInDialog(ref: RefObject<HTMLElement | null>): void {
 }
 
 /** A footnote link (number or line) that opens its question, with the preview floating on it. */
-function FootnoteLink({
+export function FootnoteLink({
   questionId,
   href,
   className,
@@ -272,10 +291,13 @@ export function ChapterNoteBody({
   questionHref,
   onOpenQuestion,
   loadPreview,
-  highlights = [],
-  myHighlights,
+  highlighting,
+  parts = 'note',
   covered = false,
 }: ChapterNoteBodyProps) {
+  const store = highlighting?.store;
+  const noteId = highlighting?.noteId ?? null;
+  const myHighlights = store?.items;
   const baseId = useId();
   const listTitleId = `${baseId}-footnotes`;
   const footnoteId = (n: number) => `${baseId}-fn-${n}`;
@@ -300,17 +322,33 @@ export function ChapterNoteBody({
     target.focus({ preventScroll: true });
   };
 
+  const plainTexts = useMemo(() => {
+    const out = new Map<string, PlainText>();
+    sections.forEach((section, s) =>
+      section.items.forEach((item, i) => out.set(noteItemBlock(s, i), plainItemText(item.text))),
+    );
+    return out;
+  }, [sections]);
   const itemBlocks = useMemo<TextBlock[]>(
     () =>
       sections.flatMap((section, s) =>
-        section.items.map((item, i) => {
-          const plain = plainItemText(item.text);
-          return { id: noteItemBlock(s, i), text: plain.text, emphasis: plain.emphasis };
+        section.items.map((_, i) => {
+          const id = noteItemBlock(s, i);
+          const plain = plainTexts.get(id) as PlainText;
+          return { id, text: plain.text, emphasis: plain.emphasis };
         }),
       ),
-    [sections],
+    [sections, plainTexts],
   );
-  const searchedRows = useMemo(() => (myHighlights ?? []).filter(searchesRow), [myHighlights]);
+  const drawn = useMemo<TextHighlight[]>(
+    () => (myHighlights && noteId ? noteHighlightsOf(myHighlights, noteId, sections) : []),
+    [myHighlights, noteId, sections],
+  );
+  // The explanation rows in the order 내 하이라이트 shows them.
+  const searchedRows = useMemo(
+    () => orderRows(myHighlights ?? []).filter(searchesRow),
+    [myHighlights],
+  );
   // Reading order: headings and items, the footnote lines, then the explanation rows.
   const findBlocks = useMemo<FindBlock[]>(() => {
     const out: FindBlock[] = [];
@@ -416,72 +454,174 @@ export function ChapterNoteBody({
         onNext={() => setCurrent(shownCurrent >= total ? 1 : shownCurrent + 1)}
         onPrevious={() => setCurrent(shownCurrent <= 1 ? total : shownCurrent - 1)}
       />
-      <p className={styles.hint}>{NOTE_TEXT.answersNotice}</p>
+      {parts === 'note' ? (
+        <>
+          <p className={styles.hint}>{NOTE_TEXT.answersNotice}</p>
+          <NoteArea
+            blocks={blocks}
+            drawn={drawn}
+            matches={matches}
+            highlighting={store && noteId ? { store, noteId, plainTexts } : null}
+            renderLayout={(renderBlock) =>
+              sections.map((section, s) => {
+                const first = sections.slice(0, s).reduce((n, x) => n + x.items.length, 0);
+                return (
+                  <section key={s} className={styles.section}>
+                    <h3 className={styles.heading}>
+                      <SearchMatchText
+                        text={section.heading}
+                        matches={matchesOf(headingBlock(s))}
+                      />
+                    </h3>
+                    <ul className={styles.items}>
+                      {section.items.map((_, i) =>
+                        renderBlock(itemBlocks[first + i]?.id ?? noteItemBlock(s, i), {
+                          as: 'li',
+                        }),
+                      )}
+                    </ul>
+                  </section>
+                );
+              })
+            }
+          />
+        </>
+      ) : null}
 
+      {parts === 'note' ? (
+        <div className={styles.footnotes}>
+          <p id={listTitleId} className={styles.footnotesTitle}>
+            각주
+          </p>
+          <ol className={styles.footnoteList} aria-labelledby={listTitleId}>
+            {footnotes.map((f) => {
+              const line = (
+                <SearchMatchText
+                  text={footnoteText(f)}
+                  matches={matchesOf(footnoteBlock(f.number))}
+                />
+              );
+              const questionId = linkedQuestion(f);
+              return (
+                <li key={f.number} id={footnoteId(f.number)} tabIndex={-1}>
+                  {questionId ? (
+                    <FootnoteLink
+                      questionId={questionId}
+                      href={questionHref(questionId)}
+                      className={styles.footnoteLink}
+                      read={read}
+                      onOpen={open}
+                    >
+                      {line}
+                    </FootnoteLink>
+                  ) : (
+                    <span className={styles.gone}>{line}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      ) : null}
+
+      {store && highlighting ? (
+        <MyHighlightsSection
+          store={store}
+          matchesOf={matchesOf}
+          onGoTo={highlighting.onGoTo}
+          renderFootnote={(h, line) => {
+            const questionId = h.question?.question_id ?? null;
+            if (!questionId) return line;
+            return (
+              <FootnoteLink
+                questionId={questionId}
+                href={questionHref(questionId)}
+                className={styles.footnoteLink}
+                read={read}
+                onOpen={open}
+              >
+                {line}
+              </FootnoteLink>
+            );
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+interface AreaHighlighting {
+  readonly store: HighlightStore;
+  readonly noteId: string;
+  readonly plainTexts: ReadonlyMap<string, PlainText>;
+}
+
+interface AreaProps {
+  readonly blocks: readonly TextBlock[];
+  readonly drawn: readonly TextHighlight[];
+  readonly matches: readonly TextMatch[];
+  readonly renderLayout: (renderBlock: RenderHighlightBlock) => ReactNode;
+}
+
+/**
+ * The note body area: read-only for share guests; members' selections open the highlight menu
+ * (the API anchors raw item text, so shown-text ranges are mapped back with `plainRangeToRaw`).
+ */
+function NoteArea({
+  highlighting,
+  ...props
+}: AreaProps & { readonly highlighting: AreaHighlighting | null }) {
+  if (!highlighting) {
+    return (
       <HighlightableText
         label={NOTE_TEXT.bodyLabel}
-        blocks={blocks}
-        highlights={highlights}
-        matches={matches}
+        blocks={props.blocks}
+        highlights={props.drawn}
+        matches={props.matches}
         scrollToCurrentMatch={false}
         readOnly
         className={styles.body}
-        renderLayout={(renderBlock) =>
-          sections.map((section, s) => {
-            const first = sections.slice(0, s).reduce((n, x) => n + x.items.length, 0);
-            return (
-              <section key={s} className={styles.section}>
-                <h3 className={styles.heading}>
-                  <SearchMatchText text={section.heading} matches={matchesOf(headingBlock(s))} />
-                </h3>
-                <ul className={styles.items}>
-                  {section.items.map((_, i) =>
-                    renderBlock(itemBlocks[first + i]?.id ?? noteItemBlock(s, i), { as: 'li' }),
-                  )}
-                </ul>
-              </section>
-            );
-          })
-        }
+        renderLayout={props.renderLayout}
       />
+    );
+  }
+  return <EditableNoteArea highlighting={highlighting} {...props} />;
+}
 
-      <div className={styles.footnotes}>
-        <p id={listTitleId} className={styles.footnotesTitle}>
-          각주
-        </p>
-        <ol className={styles.footnoteList} aria-labelledby={listTitleId}>
-          {footnotes.map((f) => {
-            const line = (
-              <SearchMatchText
-                text={footnoteText(f)}
-                matches={matchesOf(footnoteBlock(f.number))}
-              />
-            );
-            const questionId = linkedQuestion(f);
-            return (
-              <li key={f.number} id={footnoteId(f.number)} tabIndex={-1}>
-                {questionId ? (
-                  <FootnoteLink
-                    questionId={questionId}
-                    href={questionHref(questionId)}
-                    className={styles.footnoteLink}
-                    read={read}
-                    onOpen={open}
-                  >
-                    {line}
-                  </FootnoteLink>
-                ) : (
-                  <span className={styles.gone}>{line}</span>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      </div>
-
-      {myHighlights !== undefined ? (
-        <MyHighlightsSection items={myHighlights} matchesOf={matchesOf} />
-      ) : null}
-    </div>
+function EditableNoteArea({
+  blocks,
+  drawn,
+  matches,
+  highlighting,
+  renderLayout,
+}: AreaProps & { readonly highlighting: AreaHighlighting }) {
+  const { store, noteId, plainTexts } = highlighting;
+  const areaRef = useRef<HTMLDivElement>(null);
+  const { onSelectRange, menu } = useHighlightTool({
+    store,
+    areaRef,
+    drawn,
+    target: { kind: 'note', chapter_note_id: noteId },
+    toAnchor: (block, start, end) => {
+      const plain = plainTexts.get(block);
+      const raw = plain ? plainRangeToRaw(plain, start, end) : null;
+      return raw ? { block, ...raw } : null;
+    },
+  });
+  return (
+    <>
+      <HighlightableText
+        ref={areaRef}
+        label={NOTE_TEXT.bodyLabel}
+        blocks={blocks}
+        highlights={drawn}
+        matches={matches}
+        scrollToCurrentMatch={false}
+        onSelectRange={onSelectRange}
+        className={styles.body}
+        renderLayout={renderLayout}
+      />
+      {menu}
+    </>
   );
 }

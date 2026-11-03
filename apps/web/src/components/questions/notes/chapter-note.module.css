@@ -242,8 +242,101 @@
 }
 
 .highlightQuote {
+  margin: 0;
   padding-inline-start: var(--space-3);
   border-inline-start: 2px solid var(--color-border-strong);
+  white-space: pre-wrap;
+}
+
+/* A long quote starts folded to 3 lines (`더 보기`). */
+.highlightQuote[data-folded] {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.highlightHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.highlightMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rowRef {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label-sm);
+}
+
+.rowFootnote {
+  margin: 0;
+  font-size: var(--font-size-label);
+}
+
+.more {
+  justify-self: start;
+}
+
+/* Filters: two groups of toggle chips (aria-pressed is the state; the pressed one is also bold). */
+.filters {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.filterLabel {
+  min-width: 2.5rem;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--color-state-selected);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Color swatch (chips and rows): the color's highlight background; the name is always text. */
+.swatch {
+  display: inline-block;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-highlight-yellow);
+}
+
+.swatch[data-highlight-color='blue'] {
+  background: var(--color-highlight-blue);
+}
+
+.swatch[data-highlight-color='pink'] {
+  background: var(--color-highlight-pink);
+}
+
+@media (forced-colors: active) {
+  .swatch {
+    forced-color-adjust: none;
+    background: Mark;
+    border-color: CanvasText;
+  }
+
+  .chip[aria-pressed='true'] {
+    outline: 2px solid Highlight;
+  }
 }
 
 /* Heatmap chapter header: the 정리 노트 button and its "만드는 중" text. */

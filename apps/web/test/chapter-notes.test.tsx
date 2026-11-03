@@ -7,6 +7,7 @@
 import './dom-setup';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { ToastProvider } from '@quiz/ui';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventLabel, jobTypeLabel, targetLabel } from '../src/lib/history/model';
 import { classifyNoteFailure } from '../src/lib/notes/client';
@@ -46,6 +47,7 @@ const { ChapterNotePanel, notePollDelay } =
   await import('../src/components/questions/notes/chapter-note-panel');
 
 const CH = '11111111-1111-4111-8111-111111111111';
+const WS = '44444444-4444-4444-8444-444444444444';
 const Q1 = '22222222-2222-4222-8222-000000000001';
 const Q2 = '22222222-2222-4222-8222-000000000002';
 
@@ -266,6 +268,8 @@ describe('note URL state', () => {
     expect(withChapterNote(opened, null)).toBe('?status=wrong&panel=history');
     expect(noteChapterOf(new URLSearchParams(`?chapter=${CH}`))).toBeUndefined();
     expect(noteChapterOf(new URLSearchParams('?panel=chapter-note&chapter=x'))).toBeNull();
+    // HILITE-01: the "챕터 없음" group's panel.
+    expect(noteChapterOf(new URLSearchParams('?panel=chapter-note&chapter=none'))).toBe('none');
   });
 
   it('raises an open note panel for any chapter, under another dialog too (Codex P2)', () => {
@@ -366,6 +370,8 @@ describe('ChapterNotePanel', () => {
   function renderPanel(canEdit = true, onOpenQuestion = vi.fn()) {
     return render(
       <ChapterNotePanel
+        workspaceId={WS}
+        documents={[]}
         open
         onOpenChange={vi.fn()}
         container={document.body}
@@ -374,6 +380,7 @@ describe('ChapterNotePanel', () => {
         canEdit={canEdit}
         onOpenQuestion={onOpenQuestion}
       />,
+      { wrapper: ToastProvider },
     );
   }
 
@@ -483,6 +490,8 @@ describe('ChapterNotePanel', () => {
     search = new URLSearchParams(`panel=chapter-note&chapter=${CH}&question=${Q2}`);
     view.rerender(
       <ChapterNotePanel
+        workspaceId={WS}
+        documents={[]}
         open
         onOpenChange={vi.fn()}
         container={document.body}
@@ -530,6 +539,38 @@ describe('ChapterNotePanel', () => {
     expect(reason?.textContent).toBe('이 환경에서는 AI 정리 노트를 사용할 수 없습니다.');
     await userEvent.setup().click(create);
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+  });
+
+  it('lists 내 하이라이트 without an AI note, and alone in the "챕터 없음" panel (HILITE-01)', async () => {
+    responses = [state()];
+    const view = renderPanel();
+    let dialog = await screen.findByRole('dialog', { name: '정리 노트' });
+    expect(await within(dialog).findByText('아직 정리 노트가 없습니다.')).toBeTruthy();
+    expect(await within(dialog).findByRole('heading', { name: '내 하이라이트 (0)' })).toBeTruthy();
+    view.unmount();
+    search = new URLSearchParams('panel=chapter-note&chapter=none');
+    render(
+      <ChapterNotePanel
+        workspaceId={WS}
+        documents={[]}
+        open
+        onOpenChange={vi.fn()}
+        container={document.body}
+        chapterId="none"
+        canEdit
+        onOpenQuestion={vi.fn()}
+      />,
+      { wrapper: ToastProvider },
+    );
+    dialog = await screen.findByRole('dialog', { name: '정리 노트' });
+    expect(await within(dialog).findByRole('heading', { name: '내 하이라이트 (0)' })).toBeTruthy();
+    expect(within(dialog).getByRole('searchbox', { name: '노트에서 찾기' })).toBeTruthy();
+    expect(within(dialog).queryByRole('group', { name: '정리 노트 본문' })).toBeNull();
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes(`/api/workspaces/${WS}/my-highlights?chapter=none`),
+      ),
+    ).toBe(true);
   });
 
   it('says a chapter without confirmed questions has none, and an unknown one is not found', async () => {

@@ -20,6 +20,8 @@ export interface DetailTarget {
   readonly description?: string;
   /** Where focus goes back on close (the opener's button), when it is still on the page. */
   readonly returnFocus?: HTMLElement | null;
+  /** Focus this highlight in the explanation (`내 하이라이트` › `위치로 이동`, HILITE-01). */
+  readonly highlightId?: string | null;
 }
 
 export interface QuestionDetailDialogProps {
@@ -102,6 +104,7 @@ export function QuestionDetailDialog({
       load={current}
       onRetry={() => setAttempt((n) => n + 1)}
       documents={documents}
+      focusHighlight={target?.highlightId ?? null}
       {...(footer ? { footer } : {})}
     />
   );

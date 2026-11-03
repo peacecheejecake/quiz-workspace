@@ -922,6 +922,15 @@ function useSolveStep({
             selfGrade={work.selfGrade}
             error={work.error}
             resultRef={resultRef}
+            highlighting={
+              source === 'bank' && item.question_id
+                ? {
+                    questionId: item.question_id,
+                    revisionId: session?.question_revision_id ?? null,
+                    chapterTitle: item.chapter_title ?? null,
+                  }
+                : null
+            }
           />
         </form>
       </>
