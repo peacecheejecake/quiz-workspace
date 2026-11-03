@@ -89,6 +89,7 @@ export const SCREENS = [
     path: '/share/[shareId]',
     query: { param: 'panel', value: 'fork' },
   },
+  { id: 'SEARCH-02', name: '본문 검색 페이지', path: '/workspaces/[workspaceId]/search' },
 ] as const satisfies readonly ScreenSpec[];
 
 export type ScreenId = (typeof SCREENS)[number]['id'];

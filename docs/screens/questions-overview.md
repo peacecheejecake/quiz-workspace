@@ -85,7 +85,7 @@
 
 - **Given:** 로그인 사용자가 접근할 수 있는 Workspace(Owner, 그리고 Owner가 아닌 멤버)
 - **When:** `/workspaces/:workspaceId`를 열거나 이전 경로(`/documents`, `/search?q=…`, `/questions?…`, `/history`, `/settings/sharing`)로 접근
-- **Then:** Workspace 왼쪽 메뉴 없이 Workspace header(문제 검색 입력란과 "본문 검색" 펼치기 버튼 — UX9-SPEC부터 `본문 검색` 페이지 이동 버튼(SEARCH-02-AC01, UX9-SEARCH-W가 이 AC의 test를 고침), `문서 n`·`문제` 묶음 — `문제` 버튼은 보기 권한에도 보인다(UX7-DOCS-2, AC11), 별도의 `문제은행` 버튼 없음(UX6-PROGRESS), 오른쪽 정렬된 `이력`·Owner에게만 `공유하기` 아이콘 버튼 묶음) 바로 아래에 문제 Heatmap이 보이고, 화면 제목·설명 header와 문제 수 문구는 없다. `공유하기`는 `이력`처럼 글자 없는 흰색(secondary) 아이콘 버튼이며 접근성 이름은 "공유하기"다(UX4). `문서 n`의 n은 등록된 책 문서 수(문제 PDF 제외; UX6-UPLOAD부터 `교재`·`교재+문제`, DOC-01-AC06)다. 이전 경로는 홈으로 redirect되며 해당 dialog(`?panel=documents|history|share`)나 검색 상태(문제 검색 `q`, 본문 검색 `text`, 필터; 이전 `/search?q=`는 `text=`로)를 그대로 연다. Owner가 아닌 멤버가 `?panel=share`로 와도 공유 dialog는 열리지 않고 공유 API는 거부된다(UX3c).
+- **Then:** Workspace 왼쪽 메뉴 없이 Workspace header(문제 검색 입력란 — 그 아래의 이전 "본문 검색" 펼치기 버튼은 UX9부터 없고 자리는 비어 있다, `문서 n`·`문제` 묶음 — `문제` 버튼은 보기 권한에도 보인다(UX7-DOCS-2, AC11), 별도의 `문제은행` 버튼 없음(UX6-PROGRESS), 오른쪽 정렬된 `본문 검색`(본문 검색 페이지로 가는 아이콘 링크, SEARCH-02-AC01; UX9)·`이력`·Owner에게만 `공유하기` 아이콘 버튼 묶음) 바로 아래에 문제 Heatmap이 보이고, 화면 제목·설명 header와 문제 수 문구는 없다. `공유하기`는 `이력`처럼 글자 없는 흰색(secondary) 아이콘 버튼이며 접근성 이름은 "공유하기"다(UX4). `문서 n`의 n은 등록된 책 문서 수(문제 PDF 제외; UX6-UPLOAD부터 `교재`·`교재+문제`, DOC-01-AC06)다. 이전 경로는 홈으로 redirect되며 해당 dialog(`?panel=documents|history|share`)나 검색 상태(문제 검색 `q`, 본문 검색 `text`, 필터; 이전 `/search?q=`는 UX9부터 본문 검색 페이지의 `text=`로(SEARCH-02-AC03))를 그대로 연다. Owner가 아닌 멤버가 `?panel=share`로 와도 공유 dialog는 열리지 않고 공유 API는 거부된다(UX3c).
 
 ### QOV-01-AC08
 

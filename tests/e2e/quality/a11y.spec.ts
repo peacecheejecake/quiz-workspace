@@ -209,14 +209,15 @@ test(
     await page.goto(documentsPath(ws.id));
     await expect(docUi.emptyState(page)).toBeVisible();
     await expectAccessible(page, 'documents empty');
-    await page.goto(searchPath(ws.id));
-    await openContentSearch(page);
-    await expectAccessible(page, 'search without documents');
-    // The settings popovers of the 문제 search (filters) and the 본문 search (mode tooltips,
-    // filters), UX7-SEARCH.
+    // The settings popovers of the 문제 search (filters, on the home) and the 본문 search (mode
+    // tooltips, filters, on its own page since UX9 — SEARCH-02), UX7-SEARCH.
+    await page.goto(homePath(ws.id));
     await openSearchOptions(page, 'questions');
     await expectAccessible(page, 'question search settings popover');
     await closeSearchOptions(page, 'questions');
+    await page.goto(searchPath(ws.id));
+    await openContentSearch(page);
+    await expectAccessible(page, 'search without documents');
     await openSearchOptions(page, 'body');
     await expectAccessible(page, 'body search settings popover');
     await closeSearchOptions(page, 'body');

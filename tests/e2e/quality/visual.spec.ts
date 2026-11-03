@@ -189,11 +189,14 @@ test(
     await expect(overviewUi.dots(page)).toHaveCount(24);
     await page.mouse.move(0, 0);
     await snap(page, 'questions-overview');
-    // The 본문 search's settings popover over the home (UX7-SEARCH: the 본문 search is expanded).
+    // The 본문 search's settings popover, on the search page reached by the home header's link
+    // (SEARCH-02, UX9; before, the expanded 본문 search area of the home).
     await openSearchOptions(page, 'body');
     await page.mouse.move(0, 0);
     await snap(page, 'search-options');
     await page.keyboard.press('Escape');
+    await page.goto(overviewPath(ws.id));
+    await expect(overviewUi.dots(page)).toHaveCount(24);
 
     await overviewUi.dot(page, PANEL_QUESTION).click();
     const panel = panelUi.numbered(page, PANEL_QUESTION);

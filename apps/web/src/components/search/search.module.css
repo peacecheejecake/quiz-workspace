@@ -249,3 +249,10 @@
     transition: opacity var(--duration-panel-exit) ease;
   }
 }
+
+/* SEARCH-02 the 본문 search page: header, search form, then the results. */
+.page {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
