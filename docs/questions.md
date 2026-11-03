@@ -72,7 +72,7 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 - `retry`: 사용자 `needs_retry = true`; 이전 correct/incorrect를 색상에서 가리지만 이력은 변경하지 않음.
 - `is_favorite`: 완전히 독립된 boolean. 상태 색상은 유지하고 marker를 **rounded-square → rounded-star SVG**로 교체한다. 셀 크기와 기본 시각 크기는 유지하고 hover/focus-visible 시에만 scale을 키운다. 상세 화면에서도 별 아이콘 표시.
 - 서술형의 채점 대기는 `viewed` 또는 기존 마지막 채점 상태를 유지하고 tooltip에 `채점 대기` 안내. 미채점 제출을 정답/오답으로 간주하지 않음.
-- **정답을 맞혔다고 `needs_retry`를 자동 해제하지 않음.** 사용자가 직접 해제한다.
+- **정답을 맞혔다고 `needs_retry`를 자동 해제하지 않음.** 사용자가 직접 해제한다. (RETRY-CORRECT 2026-11-04: `retry`는 마지막 채점 결과가 정답인 문제에서만 켤 수 있고, 오답이 채점되면 자동으로 꺼진다 — §16.)
 - Overview tooltip, 단순 hover, 챕터 목록 열람은 `firstViewedAt`을 갱신하지 않는다. 문제 풀이 패널/연습 세션을 실제로 열었을 때만 기록한다.
 - 편집/관리자 보기 역시 학습 `viewed`로 취급하지 않는다.
 - 문제 원문 revision이 바뀌어도 기존 풀이 이력은 immutable. 내용상 변경된 이후 풀이가 없다면 '문제 변경됨' 알림을 상세 화면에 표시하며, 마지막 결과 상태를 조용히 지우지 않는다.
@@ -203,6 +203,7 @@ Confirmed question
 - 초안 10개를 생성한 시점에는 점 수 불변, 그중 3개 승인하면 점 103개.
 - Favorite 지정 전후 base status 색상 그대로, marker만 rounded-square에서 rounded-star로 전환되고 셀 크기는 불변. hover/focus-visible 때만 marker scale 확대.
 - 마지막 풀이 정답 + needs_retry=true인 문제는 노란 점. retry를 해제하면 초록으로 복귀.
+- 마지막 채점 결과가 정답이 아닌 문제에는 `다시 풀기` toggle이 없고, API는 켜기를 409 `retry-requires-correct`로 거절하며, 이후 오답이 채점되면 플래그가 꺼진다(§16).
 - hover만 10회 해도 unseen 유지, click으로 practice panel을 열면 viewed.
 - 선택지 랜덤 정렬 100회 후에도 정답 option ID 매핑과 채점 일치.
 - inverse 문제는 정답이 하나로 결정되지 않는 경우 DRAFT validation warning 및 등록 차단/수동 해결.
@@ -327,3 +328,15 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 - **정답·해설 비노출:** practice API·범위 풀이 item 응답에는 하이라이트가 없다. 풀이 화면은 해설이 보인 뒤(제출 후)에만 하이라이트를 불러온다. `내 하이라이트`는 사용자가 고른 인용만 보이고 그 주변의 지금 해설 글은 보이지 않는다 — 사용자가 이미 본 글이다(AI 해설을 다시 만들어도 사용자가 보지 않은 새 글은 `내 하이라이트`에 나타나지 않는다). 하이라이트 읽기 권한은 정답·해설을 이미 모든 구성원에게 주는 `GET /questions/{id}`와 같다. 노트 panel 자체는 원래 정답·해설 내용을 보이는 곳이다(§9).
 - **검색:** 노트 안 검색(CHNOTE-02)은 지금 버전 본문·각주 목록과 `내 하이라이트`의 해설 하이라이트 인용을 찾는다(노트 본문 하이라이트 행은 찾지 않음 — 같은 글을 두 번 세지 않음, 사용자 결정 2026-11-02).
 - **기록:** 하이라이트는 Workspace 활동 기록(`activity_events`, 이력 dialog)을 남기지 않는다(사용자 결정 2026-11-02). 행의 `created_at`·`updated_at`·`deleted_at`이 자기 기록이다. 인용 글은 로그·trace·URL에 넣지 않는다.
+
+## 16. `다시 풀기`는 정답을 맞춘 문제에만 (RETRY-CORRECT 2026-11-04)
+
+사용자 요청 "다시풀기 버튼은 정답을 맞춘 문제에만 보이도록"과 사용자 결정 2026-11-04(implementation-plan §7). 화면 명세는 [RETRY-01](screens/retry-correct.md).
+
+1. **판정.** 문제의 *마지막 채점 확정 결과가 정답*(Heatmap `정답` 상태와 같은 `last_graded_result = correct`)이면 `다시 풀기`를 켤 수 있다. 합쳐진 중복이 있으면 §10.2의 합친 상태로 판정한다. 채점 대기 제출은 채점 결과가 아니라서(§2.1) 이전 채점 결과가 판정을 유지한다.
+2. **UI.** 켤 수 없는 문제에는 `RetryToggle`을 렌더링하지 않는다(비활성이 아님). `practice` 풀이 panel은 정답 제출 직후 보이고 이후 오답이면 사라진다. `sequence(bank)`도 같다. `sequence(mock)`·`read-only`는 원래 없다. Heatmap marker 자체에는 `다시 풀기` 토글 조작이 없고(상태 표시만), 다른 곳에서 `RetryToggle`/my-state를 쓰는 경로도 이 규칙을 따른다.
+3. **API.** `PATCH /questions/{id}/my-state`는 마지막 채점 결과(합친 상태)가 정답이 아닌 문제의 `needs_retry: true`를 409 `retry-requires-correct`로 거절한다(요청 전체 거절, 아무것도 쓰지 않음). `needs_retry: false`는 늘 허용하며 합쳐진 중복의 행도 함께 끈다(§10.2).
+4. **자동 해제 — 규칙의 자리.** 새 채점 결과가 오답이면 `needs_retry`를 끈다. 이 규칙은 API 코드가 아니라 DB trigger(`question_user_states_retry_clear`, `last_graded_result`를 쓰는 insert/update, migration `20261104220000_retry_correct_only.sql`)에 있다. 자동 채점·직접 채점·이후의 모든 채점 경로가 `question_user_states.last_graded_result`를 쓰는 곳을 지나가므로 한 곳에서 보장되고, 합쳐진 중복 행도 같은 trigger가 끈다. 정답 채점은 플래그를 바꾸지 않는다.
+5. **기존 데이터.** 같은 migration이 마지막 채점 결과(합친 상태)가 정답이 아닌 문제의 기존 `needs_retry`를 모두 끈다(안 푼·본·오답·채점 대기만). 활동 이력은 만들지 않는다.
+6. **이력 불변.** attempt와 `last_graded_result`는 바뀌지 않는다. 플래그만 꺼진다.
+7. **알려진 가장자리.** 중복 정리(merge)·되돌리기로 합친 상태의 판정이 바뀌어 플래그가 정답이 아닌 문제에 남을 수 있다 — 그 문제는 toggle이 없고 Heatmap은 `retry`로 보이며, 다음 오답 채점 또는 끄기 PATCH가 정리한다(follow-up).

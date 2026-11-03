@@ -96,6 +96,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   // UX9-SPEC (2026-11-02): feedback batch — chapter redistribution, shared highlights, chapter note
   // reading tools, question PDF import two-pane layout, book-text search page, modal home dialogs.
   'UX9.0': ['CHREDIST-01', 'HILITE-01', 'CHNOTE-02', 'QIMPORT-02', 'SEARCH-02', 'HOMEDLG-01'],
+  // RETRY-CORRECT (2026-11-04): `다시 풀기` only on questions whose last graded result is correct.
+  'RETRY.0': ['RETRY-01'],
 };
 
 const LEADING_ID = new RegExp(
