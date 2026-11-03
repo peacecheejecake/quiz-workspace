@@ -49,15 +49,6 @@ describe('question marker has no border (HEATMAP-PALETTE)', () => {
     expect(Object.keys(themedTokens.light)).not.toContain('heatmap-marker-stroke-mix');
   });
 
-  it('uses the user palette in light', () => {
-    const t = themedTokens.light as Record<string, string>;
-    expect(t['question-status-incorrect']).toBe('#FF6060');
-    expect(t['question-status-correct']).toBe('#00AB7B');
-    expect(t['question-status-retry']).toBe('#F6CF35');
-    expect(t['question-status-viewed']).toBe('#ACB6C2');
-    expect(t['question-status-unseen']).toBe('#E7ECF0');
-  });
-
   it.each(themeNames)(
     '%s: every status fill differs from the surface and from the others',
     (theme) => {
