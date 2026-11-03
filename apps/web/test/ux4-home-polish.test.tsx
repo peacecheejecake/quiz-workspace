@@ -16,7 +16,7 @@ import type { QuestionMenuReadOnly } from '../src/components/workspaces/question
 
 const { QuestionMenu } = await import('../src/components/workspaces/question-menu');
 
-function menu(readOnly: QuestionMenuReadOnly) {
+function menu(readOnly: QuestionMenuReadOnly, askUnavailable: string | null = null) {
   const handlers = {
     onCreate: vi.fn(),
     onDuplicates: vi.fn(),
@@ -24,8 +24,9 @@ function menu(readOnly: QuestionMenuReadOnly) {
     onInactive: vi.fn(),
     onMockExams: vi.fn(),
     onPractice: vi.fn(),
+    onAsk: vi.fn(),
   };
-  render(<QuestionMenu readOnly={readOnly} {...handlers} />);
+  render(<QuestionMenu readOnly={readOnly} askUnavailable={askUnavailable} {...handlers} />);
   return handlers;
 }
 
@@ -45,6 +46,7 @@ describe('home `문제` menu', () => {
       '보관·초안 문제',
       '모의고사',
       '문제 풀기',
+      'AI 질문',
     ]);
     await user.click(screen.getByRole('menuitem', { name: '직접 추가' }));
     // UX7-BANK: the 문제 등록 dialog opens on the home once focus is back on the trigger.
@@ -76,7 +78,38 @@ describe('home `문제` menu', () => {
     await user.click(screen.getByRole('menuitem', { name: '문제 풀기' }));
     await waitFor(() => expect(handlers.onPractice).toHaveBeenCalledTimes(1));
     expect(trigger).toHaveFocus();
+
+    // ASK-01: AI 질문 (last) opens the AI 질문 panel for every member.
+    await user.click(trigger);
+    await user.click(screen.getByRole('menuitem', { name: 'AI 질문' }));
+    await waitFor(() => expect(handlers.onAsk).toHaveBeenCalledTimes(1));
   });
+
+  it.each([
+    [null, '이 환경에서는 AI 질문을 사용할 수 없습니다.'],
+    ['archived', '보관된 Workspace에서는 새 질문을 할 수 없습니다.'],
+  ] as const)(
+    'ASK-01-AC11 disables AI 질문 with its own reason text (read-only: %s)',
+    async (readOnly, reason) => {
+      const user = userEvent.setup();
+      const handlers = menu(readOnly, reason);
+      await user.click(screen.getByRole('button', { name: '문제' }));
+      const menuEl = await screen.findByRole('menu', { name: '문제' });
+      const item = screen.getByRole('menuitem', { name: 'AI 질문' });
+      expect(item).toHaveAttribute('aria-disabled', 'true');
+      expect(item).toHaveAccessibleDescription(reason);
+      expect(menuEl).toHaveTextContent(reason);
+      // The menu's own description stays the editor items' reason (or none).
+      expect(menuEl).not.toHaveAccessibleDescription(reason);
+      await user.click(item);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(handlers.onAsk).not.toHaveBeenCalled();
+      // The other read items stay enabled.
+      expect(screen.getByRole('menuitem', { name: '문제 풀기' })).not.toHaveAttribute(
+        'aria-disabled',
+      );
+    },
+  );
 
   it.each([
     ['viewer', '편집 권한이 있어야 사용할 수 있습니다'],
@@ -99,6 +132,7 @@ describe('home `문제` menu', () => {
         '보관·초안 문제',
         '모의고사',
         '문제 풀기',
+        'AI 질문',
       ]);
       const items = all.slice(0, 3);
       for (const item of items) {

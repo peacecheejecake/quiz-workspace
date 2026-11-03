@@ -7,10 +7,11 @@
 //                     its "설정" popover holds the heatmap's chapter/type filters), then two
 //                     button groups: `문서 n` · `문제` (직접 추가 / 중복 문제 정리 | 보관·초안 문제 /
 //                     모의고사 / 문제 풀기, UX4, MOCK-SYNC;
-//                     no 전체 문제 since UX7-BANK, no PDF 관리 since UX7-DOCS), and, aligned right,
-//                     `본문 검색` · `이력` · `공유하기` (icon buttons; share for the owner only).
-//                     `본문 검색` is a link to the 본문 search page (SEARCH-02, UX9: the home's
-//                     collapsed 본문 search area is gone, its place under the 문제 search left empty)
+//                     no 전체 문제 since UX7-BANK, no PDF 관리 since UX7-DOCS; AI 질문 last, ASK-01), and,
+//                     aligned right, `AI 질문` (icon + text, every member) · `본문 검색` · `이력` ·
+//                     `공유하기` (icon buttons; share for the owner only). `본문 검색` is a link to the
+//                     본문 search page (SEARCH-02, UX9: the home's collapsed 본문 search area is gone,
+//                     its place under the 문제 search left empty; its `AI에게 묻기` lives there now)
 //   문제 영역         the heatmap (QuestionsOverview)
 //   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 모의고사 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
 //                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): modal
@@ -37,6 +38,10 @@
 //   모의고사           `?panel=mock-exams[&mock=new|<id>]` (문제 › 모의고사, MOCK-01, every member): a
 //                     stacked floating dialog of the workspace's mock exams; list → 만들기 / 상세
 //                     pushes an entry. A mock exam's 풀기 opens the run panel with `source=mock`.
+//   AI 질문            `?panel=ask[&conversation=<id>]` (header `AI 질문`, 문제 › AI 질문, a question's
+//                     `질문하기`; ASK-01, every member): a stacked modal dialog (HOMEDLG-01); list → a
+//                     conversation pushes an entry, the first question of a new one replaces it.
+//                     It is unrelated to the practice/run exclusivity (QVIEW-01-AC09).
 //
 // State lives in the URL: heatmap filters (overview-filters.ts), the 문제 search `q`, `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
 // chapter header's `정리 노트` button opens it), and `question` (the practice panel). Dialogs and
@@ -79,6 +84,16 @@ import { useLiveQuery } from '@/components/search/use-live-query';
 import { listChapterNotes } from '@/lib/notes/client';
 import { generatingChapters, type ChapterNoteList } from '@/lib/notes/model';
 import { WorkspaceSharingPanel } from '@/components/sharing/workspace-sharing-panel';
+import { AskIcon } from '@/components/ask/ask-icons';
+import {
+  AskLauncherProvider,
+  useGuardedAskLaunch,
+  type AskLaunched,
+} from '@/components/ask/ask-launcher';
+import { AskPanel, type AskIntent } from '@/components/ask/ask-panel';
+import { useAskState } from '@/components/ask/use-ask-state';
+import { normalizeScope } from '@/lib/ask/client';
+import { EMPTY_SCOPE, unavailableReason, unavailableText } from '@/lib/ask/model';
 import { QuestionMenu } from './question-menu';
 import type { DocumentSummary } from '@/lib/documents/client-api';
 import type { ChapterChoice, QuestionOverview } from '@/lib/questions/overview-data';
@@ -92,7 +107,7 @@ import {
 } from '@/lib/questions/overview-filters';
 import { NO_CHAPTER_KEY, type PlacedQuestion } from '@/lib/questions/overview-placement';
 import type { QuestionFailureKind } from '@/lib/questions/problems';
-import { hasSearchableQuestions } from '@/lib/search/scope';
+import { hasSearchableQuestions, isSearchableBody } from '@/lib/search/scope';
 import {
   homeOpensBlocked,
   isChapterNoteOpen,
@@ -120,6 +135,7 @@ import {
   withPanel,
   withSummaryPanel,
   withoutPanels,
+  holdsPracticePanels,
   openDialogs,
   closeDialog,
   exclusiveClose,
@@ -130,6 +146,10 @@ import {
   withRunPanel,
   searchPagePath,
   type HomePanel,
+  ASK_PANEL,
+  askConversationOf,
+  withAskConversation,
+  withoutAsk,
 } from '@/lib/workspaces/home';
 import { withRunState, type RunUrlState } from '@/lib/questions/practice-runs';
 import { useManualScrollWhile, usePanelHistory } from './use-panel-history';
@@ -171,6 +191,7 @@ export interface WorkspaceHomeProps {
     readonly summary: string;
     readonly mockExams: string;
     readonly redistribution?: string;
+    readonly ask?: string;
   };
 }
 
@@ -234,7 +255,7 @@ export function WorkspaceHome({
   );
   const staged = useStagedDialogs(urlDialogs);
   const shows = (panel: HomePanel) => isOpen(panel) && staged.has(panel);
-  const holdPracticePanels = urlDialogs.some((dialog) => !staged.has(dialog));
+  const holdPracticePanels = holdsPracticePanels(urlDialogs, staged);
   useManualScrollWhile(urlDialogs.length > 0);
   const setPanel = (panel: HomePanel, open: boolean) => {
     if (open) {
@@ -250,7 +271,9 @@ export function WorkspaceHome({
         ? withSummaryPanel(window.location.search, null)
         : panel === MOCK_EXAMS_PANEL
           ? withoutMockExams(window.location.search)
-          : withPanel(window.location.search, panel, false);
+          : panel === ASK_PANEL
+            ? withoutAsk(window.location.search)
+            : withPanel(window.location.search, panel, false);
     closeTo(`${pathname}${search}`);
   };
   // DOCSUM-01: one summary panel; another row's 요약 switches its document (and raises it).
@@ -373,6 +396,67 @@ export function WorkspaceHome({
     );
   }, []);
 
+  // --- AI 질문 (ASK-01) -------------------------------------------------------------------------
+  // One panel: the header button and 문제 › AI 질문 open it; the 본문 search page's `AI에게 묻기`
+  // (SEARCH-02) has its own. Each opening starts it afresh (askSession): unsent input never
+  // survives a close. Like every home dialog it is modal (HOMEDLG-01, UX9). A question's
+  // `질문하기` (ASK-Q, the launcher below) opens it on a new conversation with that question
+  // attached, on top of the modal layers (practice, range run, 문제 상세, mock exam question); it is
+  // always the last of the URL's dialogs (openDialogs), so a deep link or reload stacks it on top.
+  const ask = useAskState(workspace.id);
+  const askConversation = askConversationOf(searchParams) ?? null;
+  const askOpen = isOpen(ASK_PANEL);
+  const askReason = unavailableReason(ask.state, workspace.archived);
+  const askUnavailable = askReason ? unavailableText(askReason) : null;
+  const [askSession, setAskSession] = useState(0);
+  const [askWasOpen, setAskWasOpen] = useState(askOpen);
+  if (askOpen !== askWasOpen) {
+    setAskWasOpen(askOpen);
+    if (askOpen) setAskSession((n) => n + 1);
+  }
+  const [askIntent, setAskIntent] = useState<AskIntent | null>(null);
+  const askIntentKey = useRef(0);
+  const [askOpener, setAskOpener] = useState<HTMLElement | null>(null);
+  function openAsk() {
+    if (!askOpen) {
+      setAskIntent(null);
+      setAskOpener(null);
+    }
+    setPanel(ASK_PANEL, true);
+  }
+  // A question's `질문하기`: a new conversation with it attached, on top. An AI 질문 panel open
+  // under the modal layer is closed first (its unsent input is dropped; neither Back nor Forward
+  // brings it back) and the new one opens on its own entry (ASK-SYNC (c)).
+  function showLaunched({ conversation, opener }: AskLaunched) {
+    askIntentKey.current += 1;
+    setAskIntent({
+      key: askIntentKey.current,
+      text: '',
+      scope: conversation ? normalizeScope(conversation.scope) : EMPTY_SCOPE,
+      conversation,
+      failure: conversation ? null : '문제를 첨부하지 못했습니다. 다시 시도하세요.',
+    });
+    setAskOpener(opener);
+    const search = window.location.search;
+    const target = `${pathname}${withAskConversation(withoutAsk(search), conversation?.id ?? null)}`;
+    if (isOpen(ASK_PANEL)) {
+      setAskSession((n) => n + 1);
+      panelHistory.close(`${pathname}${withoutAsk(search)}`, target);
+    } else {
+      panelHistory.push(target);
+    }
+  }
+  const askAvailable = ask.state?.available === true && !workspace.archived;
+  const askLauncher = useGuardedAskLaunch(
+    (attachment) => ask.client.create(workspace.id, { attachment }),
+    showLaunched,
+  );
+  function navigateAsk(conversationId: string | null, how: 'push' | 'replace') {
+    const target = `${pathname}${withAskConversation(window.location.search, conversationId)}`;
+    if (how === 'push') panelHistory.push(target);
+    else panelHistory.replace(target);
+  }
+
   // --- documents (문서 관리, with the question PDFs since UX7-DOCS) -------------------------------
   const library = useDocumentLibrary({
     workspaceId: workspace.id,
@@ -406,6 +490,10 @@ export function WorkspaceHome({
     chaptersStale.current = false;
     startNavigation(() => router.refresh());
   }, [redistributionOpen, router]);
+  // The published books: the AI 질문 panel's 질문 범위 choices and source titles (ASK-01).
+  const searchDocuments = library.documents
+    .filter(isSearchableBody)
+    .map((d) => ({ id: d.id, title: d.title }));
   // Source titles of the 문제 상세 dialog (UX7-BANK-2).
   const documentTitles = library.documents.map((d) => ({ id: d.id, title: d.title }));
 
@@ -499,7 +587,7 @@ export function WorkspaceHome({
     ...chapterChoices.map((c) => ({ value: c.value, label: c.title })),
   ];
 
-  return (
+  const page = (
     <div className={styles.home}>
       <h1 className="qz-visually-hidden">{workspace.name}</h1>
 
@@ -549,9 +637,15 @@ export function WorkspaceHome({
               onInactive={() => setPanel(INACTIVE_QUESTIONS_PANEL, true)}
               onMockExams={() => setPanel(MOCK_EXAMS_PANEL, true)}
               onPractice={openRun}
+              onAsk={openAsk}
+              askUnavailable={askUnavailable}
             />
           </div>
           <div className={styles.actionGroup} data-align="end">
+            <Button onClick={openAsk}>
+              <AskIcon width={16} height={16} />
+              AI 질문
+            </Button>
             {/* SEARCH-02: a link to the 본문 search page, styled as the icon buttons beside it. */}
             <Tooltip content="본문 검색">
               <Link
@@ -762,6 +856,23 @@ export function WorkspaceHome({
             returnFocusTo={() => summaryOpenerRef.current}
             onActivity={summaryActivity.report}
           />
+          <AskPanel
+            key={askSession}
+            open={shows(ASK_PANEL)}
+            onOpenChange={(open) => setPanel(ASK_PANEL, open)}
+            container={host}
+            workspaceId={workspace.id}
+            archived={workspace.archived}
+            askState={ask.state}
+            client={ask.client}
+            conversationId={askConversation}
+            onNavigate={navigateAsk}
+            documents={searchDocuments}
+            intent={askIntent}
+            screenId={screenIds.ask}
+            modal
+            returnFocus={askOpener}
+          />
           {isOwner && shows('share') ? (
             <WorkspaceSharingPanel
               workspaceId={workspace.id}
@@ -777,5 +888,8 @@ export function WorkspaceHome({
 
       <DocumentLibraryFeedback library={library} />
     </div>
+  );
+  return (
+    <AskLauncherProvider launcher={askAvailable ? askLauncher : null}>{page}</AskLauncherProvider>
   );
 }

@@ -9,7 +9,8 @@ both in sync). The `postgres` superuser is used for teardown and two documented 
 question revision (practice API arrives in M5).
 
 Jobs (`document.parse` for the uploaded paper, `question.import`, `mock_exam.generate` with the
-APP_ENV=test ScenarioLLMClient) run in this process (`JobWorker`, M4.4a): `wait_for_job` drives
+APP_ENV=test ScenarioLLMClient, `ask.answer` and `question.ai_explain` with their streaming
+fakes) run in this process (`JobWorker`, M4.4a): `wait_for_job` drives
 the job with the worker's `JobRunner` and real dependencies (Postgres as the least-privilege
 `quiz_worker` role from WORKER_DATABASE_URL, Supabase Storage, Qdrant under a per-module
 collection prefix, APP_ENV=test adapters: fixture-truth parser, fake embedder, the import fault
@@ -39,6 +40,7 @@ from fastapi.testclient import TestClient
 from qdrant_client import QdrantClient
 from qdrant_client import models as qm
 from quiz_worker.adapters import FailureInjectingEmbedder, build_parser
+from quiz_worker.ask_job import AskJobDeps, ask_answer_definition, ask_deps
 from quiz_worker.chapter_note_job import (
     ChapterNoteJobDeps,
     build_chapter_note_llm,
@@ -52,6 +54,7 @@ from quiz_worker.document_job import (
     index_sync_definition,
 )
 from quiz_worker.document_store import PostgresDocumentStore
+from quiz_worker.explain_job import ExplainJobDeps, explain_definition, explain_deps
 from quiz_worker.mock_exam_job import MockExamJobDeps, mock_exam_deps, mock_exam_generate_definition
 from quiz_worker.pg_store import PostgresJobStore, create_job_store_engine
 from quiz_worker.question_import_job import ImportJobDeps, question_import_definition
@@ -118,6 +121,8 @@ class JobWorker:
         self.summary_deps: SummaryJobDeps | None = None
         self.chapter_note_deps: ChapterNoteJobDeps | None = None
         self.mock_exam_deps: MockExamJobDeps | None = None
+        self.ask_deps: AskJobDeps | None = None
+        self.explain_deps: ExplainJobDeps | None = None
 
     def _build(self) -> tuple[PostgresJobStore, JobRunner, dict[str, JobDefinition[Any]]]:
         if self._built is not None:
@@ -182,6 +187,18 @@ class JobWorker:
         built = mock_exam_deps(env, engine)
         built.lock_wait_seconds = 30
         self.mock_exam_deps = built
+        # ASK-B: `ask.answer` with the APP_ENV=test streaming fake (`ask_deps.llm.calls`), the
+        # WORKER_ASK_* settings of the environment this worker is built in (on only in
+        # tests/integration/ask/) and the Redis Stream of REDIS_URL; `ask_deps.purge(now)` is one
+        # `ask.purge` pass.
+        asked = ask_deps(env, engine)
+        self.ask_deps = asked
+        # EXPL-B: `question.ai_explain` (bank and mock kinds) with the APP_ENV=test fake explainer
+        # (`explain_deps.llm.calls`), the WORKER_AI_EXPLANATIONS settings of the environment this
+        # worker is built in (on only in tests/integration/questions/ai_explanations/) and the
+        # Redis Stream of REDIS_URL.
+        explained = explain_deps(env, engine)
+        self.explain_deps = explained
         definitions: list[JobDefinition[Any]] = [
             document_parse_definition(lambda: document_deps),
             index_sync_definition(lambda: document_deps),
@@ -190,6 +207,8 @@ class JobWorker:
             document_summarize_definition(lambda: summary),
             chapter_note_definition(lambda: chapter_note_deps),
             mock_exam_generate_definition(lambda: built),
+            ask_answer_definition(lambda: asked),
+            explain_definition(lambda: explained),
         ]
         jobs = PostgresJobStore(engine)
         runner = JobRunner(jobs, worker_id="it-m44a", lease_seconds=600)

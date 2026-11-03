@@ -7,6 +7,7 @@
 //        |question-duplicates                                (중복 문제 정리, editors, UX7-DEDUP)
 //        |mock-exams                                         (모의고사, every member, MOCK-01)
 //        |chapter-redistribution                             (챕터 재분배, editors, CHREDIST-01)
+//        |ask                                                (AI 질문, every member, ASK-01)
 //        |question-create                                    the modal 문제 등록 editor (UX7-BANK;
 //                                                            not stacked, see FLOATING_PANELS)
 //   ?chapter=<id> (with panel=chapter-note)                  the chapter of the 정리 노트 panel
@@ -14,6 +15,8 @@
 //   &document=<id> (with panel=document-summary)             the summary panel's document (DOCSUM-01;
 //                                                            while that panel is open the key is
 //                                                            the panel's, not the content search's)
+//   &conversation=<id> (with panel=ask)                     the AI 질문 panel's open conversation
+//                                                            (ASK-01; none = the list / a new one)
 //   &mock=new|<id> (with panel=mock-exams)                   the 모의고사 dialog's 만들기 / detail view
 //                                                            (MOCK-01; see mockViewOf)
 //   ?practice=new&source=bank | ?practice=<run id>&i=<n>     the range run panel (QVIEW-01,
@@ -47,6 +50,7 @@ export const HOME_PANELS = [
   'question-duplicates',
   'mock-exams',
   'chapter-redistribution',
+  'ask',
 ] as const;
 export type HomePanel = (typeof HOME_PANELS)[number];
 
@@ -64,6 +68,14 @@ export const MOCK_EXAMS_PANEL = 'mock-exams' satisfies HomePanel;
 
 /** CHREDIST-01: `?panel=chapter-redistribution` opens the 챕터 재분배 dialog (editors only). */
 export const REDISTRIBUTION_PANEL = 'chapter-redistribution' satisfies HomePanel;
+
+/**
+ * ASK-01: `?panel=ask[&conversation=<id>]` opens the AI 질문 panel (every member). It is modal and
+ * stacks like the other home dialogs (HOMEDLG-01), always on top of them (openDialogs), and is
+ * unrelated to the practice/run exclusivity (QVIEW-01-AC09).
+ */
+export const ASK_PANEL = 'ask' satisfies HomePanel;
+export const ASK_CONVERSATION_PARAM = 'conversation';
 
 /** The floating side panels (modal since UX9, HOMEDLG-01): every home dialog but 문제 등록. */
 export function isFloatingPanel(panel: HomePanel): boolean {
@@ -277,6 +289,30 @@ export function withoutMockExams(search: string): string {
     : patchSearch(closed, { [MOCK_PARAM]: null });
 }
 
+// --- AI 질문 panel (ASK-01) --------------------------------------------------------------------
+// `?panel=ask` is the conversation list (or a new conversation), `&conversation=<id>` one
+// conversation. Opening one from the list pushes an entry; the first question of a new
+// conversation names it in place (workspace-home.tsx).
+
+/** The AI 질문 panel's conversation: `undefined` when the panel is closed, null for none. */
+export function askConversationOf(params: Params): string | null | undefined {
+  if (!parsePanels(params).includes(ASK_PANEL)) return undefined;
+  const id = all(params, ASK_CONVERSATION_PARAM)[0];
+  return id && UUID.test(id) ? id.toLowerCase() : null;
+}
+
+/** `search` with the AI 질문 panel open (on top) on `conversationId` (null: the list). */
+export function withAskConversation(search: string, conversationId: string | null): string {
+  return patchSearch(withPanel(search, ASK_PANEL, true), {
+    [ASK_CONVERSATION_PARAM]: conversationId,
+  });
+}
+
+/** `search` with the AI 질문 panel closed: its conversation goes with it. */
+export function withoutAsk(search: string): string {
+  return patchSearch(withPanel(search, ASK_PANEL, false), { [ASK_CONVERSATION_PARAM]: null });
+}
+
 /**
  * `search` with every dialog, the practice panel and the run panel closed (UX7-BACK: what the entry before the
  * first open gets when a dialog closes, panel-history.ts). The summary panel hands `document` and
@@ -292,6 +328,7 @@ export function withoutPanels(
   if (panels.includes(SUMMARY_PANEL)) out = withSummaryPanel(out, null, restore);
   if (panels.includes(CHAPTER_NOTE_PANEL)) out = withChapterNote(out, null);
   if (panels.includes(MOCK_EXAMS_PANEL)) out = withoutMockExams(out);
+  if (panels.includes(ASK_PANEL)) out = withoutAsk(out);
   out = withRunState(out, null);
   return patchSearch(out, { [PANEL_PARAM]: null, [QUESTION_PARAM]: null });
 }
@@ -312,10 +349,28 @@ export const RUN_DIALOG = 'practice';
  */
 export function openDialogs(search: string): string[] {
   const params = new URLSearchParams(search);
-  const out: string[] = parsePanels(params);
+  const panels = parsePanels(params);
+  const out: string[] = panels.filter((panel) => panel !== ASK_PANEL);
   if (params.get(QUESTION_PARAM)) out.push(PRACTICE_DIALOG);
   if (params.get(RUN_PARAM)) out.push(RUN_DIALOG);
+  // The AI 질문 panel is opened over the others (a question's 질문하기 above the practice panel,
+  // the run or 문제 상세; nothing opens over it from the inert home): a deep link stacks it last.
+  if (panels.includes(ASK_PANEL)) out.push(ASK_PANEL);
   return out;
+}
+
+/**
+ * Whether the practice and run panels (rendered by QuestionsOverview) still wait: each releases at
+ * its own staging position (after the dialogs listed before it), not once every dialog is staged.
+ * The AI 질문 panel is listed after them, so it mounts in a later commit than the panel under it.
+ */
+export function holdsPracticePanels(
+  dialogs: readonly string[],
+  staged: ReadonlySet<string>,
+): boolean {
+  return dialogs.some(
+    (dialog) => (dialog === PRACTICE_DIALOG || dialog === RUN_DIALOG) && !staged.has(dialog),
+  );
 }
 
 /**
@@ -386,6 +441,7 @@ export function closeDialog(
   if (dialog === SUMMARY_PANEL) return withSummaryPanel(search, null, restore);
   if (dialog === CHAPTER_NOTE_PANEL) return withChapterNote(search, null);
   if (dialog === MOCK_EXAMS_PANEL) return withoutMockExams(search);
+  if (dialog === ASK_PANEL) return withoutAsk(search);
   return isHomePanel(dialog) ? withPanel(search, dialog, false) : search;
 }
 

@@ -41,6 +41,7 @@ import {
   type StudyActionResult,
   type SubmitResult,
 } from '@/lib/questions/practice-actions';
+import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { PracticeSessionCache } from '@/lib/questions/practice-cache';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 import {
@@ -397,33 +398,50 @@ export function PracticeViewer({
               <QuestionStem stem={view.preview} />
             </>
           ) : ready ? (
-            <form
-              id={formId}
-              className={styles.form}
-              onSubmit={(e) => void submit(e)}
-              aria-busy={work.busy !== null || undefined}
-              noValidate
-            >
-              <QuestionBody
-                kind="answer"
-                stem={ready.stem}
-                question={ready}
-                answer={work.answer}
-                disabled={locked}
-                onAnswerChange={(answer) => {
-                  if (workId) updateWork(workId, () => ({ answer }));
-                }}
-                outcome={outcome}
-                selfGrade={work.selfGrade}
-                error={work.error}
-                resultRef={resultRef}
-                highlighting={{
-                  questionId: view.id,
-                  revisionId: ready.question_revision_id,
-                  chapterTitle: view.chapterTitle,
-                }}
-              />
-            </form>
+            <>
+              <form
+                id={formId}
+                className={styles.form}
+                onSubmit={(e) => void submit(e)}
+                aria-busy={work.busy !== null || undefined}
+                noValidate
+              >
+                <QuestionBody
+                  kind="answer"
+                  stem={ready.stem}
+                  question={ready}
+                  answer={work.answer}
+                  disabled={locked}
+                  onAnswerChange={(answer) => {
+                    if (workId) updateWork(workId, () => ({ answer }));
+                  }}
+                  outcome={outcome}
+                  selfGrade={work.selfGrade}
+                  error={work.error}
+                  resultRef={resultRef}
+                  highlighting={{
+                    questionId: view.id,
+                    revisionId: ready.question_revision_id,
+                    chapterTitle: view.chapterTitle,
+                  }}
+                />
+              </form>
+              {outcome ? (
+                // AIEXPL-01: only once this session was submitted (nothing is read before).
+                <AiExplanation
+                  workspaceId={workspaceId}
+                  target={{ kind: 'question', id: ready.question_id }}
+                  gate={{ practice_session_id: ready.id }}
+                  options={ready.options}
+                  askAttachment={{
+                    kind: 'question',
+                    view: 'practice',
+                    question_id: ready.question_id,
+                    practice_session_id: ready.id,
+                  }}
+                />
+              ) : null}
+            </>
           ) : state.status === 'error' ? (
             <div role="alert" className={styles.error}>
               <p>{state.message}</p>

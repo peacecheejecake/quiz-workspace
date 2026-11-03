@@ -5,11 +5,14 @@
 // it — type, status, version, the active revision with its correct options, accepted answers,
 // rubric and explanation, the source links into the PDF viewer and the revision history with a
 // preview of an older revision. No submit UI and nothing is recorded; the opener's own actions go
-// in `footer`. The opener reads the question (QuestionDetailDialog): its answers are never cached
-// here.
+// in `footer`, after `질문하기` (ASK-01 "문제 쪽 진입점": the question attached as `detail`, always
+// `full` — the dialog shows its answers already; only where the home's AI 질문 is available). The
+// opener reads the question (QuestionDetailDialog): its answers are never cached here.
 import { Badge, Button, ModalDialog } from '@quiz/ui';
 import Link from 'next/link';
 import { useRef, useState, type ReactNode } from 'react';
+import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher';
+import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { getQuestionRevisionAction, type QuestionRevision } from '@/lib/questions/actions';
 import {
   PUBLICATION_STATUS_LABELS,
@@ -62,6 +65,7 @@ export function ManageViewer({
 }: ManageViewerProps) {
   const historyRef = useRef<HTMLHeadingElement>(null);
   const question = load.status === 'ready' ? load.question : null;
+  const asks = useAskLauncher() !== null;
   return (
     <ModalDialog
       open={open}
@@ -82,7 +86,16 @@ export function ManageViewer({
           returnFocus.focus();
         }
       }}
-      footer={question && footer ? footer(question) : undefined}
+      footer={
+        question && (asks || footer) ? (
+          <>
+            <AskQuestionButton
+              attachment={{ kind: 'question', view: 'detail', question_id: question.id }}
+            />
+            {footer?.(question)}
+          </>
+        ) : undefined
+      }
     >
       <div className={styles.detail}>
         {load.status === 'error' ? (
@@ -116,6 +129,18 @@ export function ManageViewer({
                   : null
               }
             />
+            {question.publication_status !== 'DRAFT' ? (
+              // AIEXPL-01 문제 상세: the answers are on screen already, so no submission is needed
+              // (`view: detail`, the current revision); a draft has none (ASK-SYNC (b)).
+              <AiExplanation
+                workspaceId={workspaceId}
+                target={{ kind: 'question', id: question.id }}
+                gate={{ view: 'detail' }}
+                revisionId={question.revision.id}
+                options={question.revision.options}
+                askAttachment={{ kind: 'question', view: 'detail', question_id: question.id }}
+              />
+            ) : null}
           </>
         ) : (
           <p className={styles.text} role="status">

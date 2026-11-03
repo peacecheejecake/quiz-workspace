@@ -220,6 +220,220 @@
         "title": "AiExplanationTargetIn",
         "type": "object"
       },
+      "AskLimits": {
+        "properties": {
+          "max_question_chars": {
+            "title": "Max Question Chars",
+            "type": "integer"
+          },
+          "max_regenerations": {
+            "title": "Max Regenerations",
+            "type": "integer"
+          },
+          "max_turns": {
+            "title": "Max Turns",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_question_chars",
+          "max_turns",
+          "max_regenerations"
+        ],
+        "title": "AskLimits",
+        "type": "object"
+      },
+      "AskScope": {
+        "properties": {
+          "chapter_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Chapter Ids",
+            "type": "array"
+          },
+          "document_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Document Ids",
+            "type": "array"
+          }
+        },
+        "title": "AskScope",
+        "type": "object"
+      },
+      "AskState": {
+        "properties": {
+          "available": {
+            "description": "New questions can be asked here now.",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/AskLimits"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "disabled",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why not: the feature is off in this environment, or the workspace is archived (stored conversations stay readable either way).",
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "available",
+          "reason",
+          "limits"
+        ],
+        "title": "AskState",
+        "type": "object"
+      },
+      "Attachment": {
+        "properties": {
+          "available": {
+            "description": "False once the question, session or mock exam is gone (no context then).",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "disclosure": {
+            "description": "What the next message will use (from the DB).",
+            "enum": [
+              "hint",
+              "full"
+            ],
+            "title": "Disclosure",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "question",
+              "mock_exam_question"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "description": "`<n>장 <m>번 · <발문 앞 40자>` / `문제 k · …`.",
+            "title": "Label",
+            "type": "string"
+          },
+          "view": {
+            "enum": [
+              "practice",
+              "detail",
+              "manage"
+            ],
+            "title": "View",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "view",
+          "label",
+          "disclosure",
+          "available"
+        ],
+        "title": "Attachment",
+        "type": "object"
+      },
+      "AttachmentInput": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "question",
+              "mock_exam_question"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "mock_exam_question_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mock Exam Question Id"
+          },
+          "mock_practice_session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mock Practice Session Id"
+          },
+          "practice_session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practice Session Id"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Id"
+          },
+          "selected_option_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Selected Option Ids",
+            "type": "array"
+          },
+          "view": {
+            "enum": [
+              "practice",
+              "detail",
+              "manage"
+            ],
+            "title": "View",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "view"
+        ],
+        "title": "AttachmentInput",
+        "type": "object"
+      },
       "Attempt": {
         "properties": {
           "displayed_option_ids": {
@@ -1065,6 +1279,171 @@
           "version"
         ],
         "title": "ContentBlock",
+        "type": "object"
+      },
+      "Conversation": {
+        "properties": {
+          "attachment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Attachment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_message_at": {
+            "format": "date-time",
+            "title": "Last Message At",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/AskScope"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "title",
+          "scope",
+          "attachment",
+          "messages",
+          "created_at",
+          "last_message_at"
+        ],
+        "title": "Conversation",
+        "type": "object"
+      },
+      "ConversationCreate": {
+        "description": "Extra fields (e.g. a `disclosure` value) are ignored.",
+        "properties": {
+          "attachment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttachmentInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AskScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ConversationCreate",
+        "type": "object"
+      },
+      "ConversationPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "ConversationPage",
+        "type": "object"
+      },
+      "ConversationSummary": {
+        "properties": {
+          "attachment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Attachment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_message_at": {
+            "format": "date-time",
+            "title": "Last Message At",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "last_message_at",
+          "attachment"
+        ],
+        "title": "ConversationSummary",
         "type": "object"
       },
       "DependencyStatus": {
@@ -2182,6 +2561,160 @@
         "title": "DuplicateScan",
         "type": "object"
       },
+      "Explanation": {
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExplanationBody"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Succeeded only."
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "question_revision_id": {
+            "format": "uuid",
+            "title": "Question Revision Id",
+            "type": "string"
+          },
+          "sources": {
+            "description": "The cited sources (succeeded only).",
+            "items": {
+              "$ref": "#/components/schemas/ExplanationSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "job_id",
+          "status",
+          "version",
+          "error_code",
+          "created_at",
+          "finished_at",
+          "body",
+          "sources",
+          "truncated",
+          "question_revision_id"
+        ],
+        "title": "Explanation",
+        "type": "object"
+      },
+      "ExplanationBody": {
+        "properties": {
+          "concepts_md": {
+            "title": "Concepts Md",
+            "type": "string"
+          },
+          "correct_option_ids": {
+            "description": "The server's answer (MCQ); [] otherwise.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Correct Option Ids",
+            "type": "array"
+          },
+          "options": {
+            "description": "Every option exactly once, in stored order.",
+            "items": {
+              "$ref": "#/components/schemas/OptionWhy"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "points_md": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Short answer / essay: the rubric's core, common wrong answers.",
+            "title": "Points Md"
+          },
+          "summary_md": {
+            "title": "Summary Md",
+            "type": "string"
+          }
+        },
+        "required": [
+          "correct_option_ids",
+          "summary_md",
+          "options",
+          "concepts_md"
+        ],
+        "title": "ExplanationBody",
+        "type": "object"
+      },
       "ExplanationHighlightTarget": {
         "properties": {
           "kind": {
@@ -2207,6 +2740,154 @@
           "question_revision_id"
         ],
         "title": "ExplanationHighlightTarget",
+        "type": "object"
+      },
+      "ExplanationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "practice_session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The caller's submitted practice session of this question.",
+            "title": "Practice Session Id"
+          },
+          "view": {
+            "anyOf": [
+              {
+                "const": "detail",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`detail`: the 문제 상세 dialog (no submission needed).",
+            "title": "View"
+          }
+        },
+        "title": "ExplanationRequest",
+        "type": "object"
+      },
+      "ExplanationSource": {
+        "properties": {
+          "block_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first cited block (block_ids[0]).",
+            "title": "Block Id"
+          },
+          "block_ids": {
+            "description": "The cited blocks of the pinned revision.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Block Ids",
+            "type": "array"
+          },
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "n": {
+            "description": "The footnote number `[n]` in the body.",
+            "title": "N",
+            "type": "integer"
+          },
+          "outdated": {
+            "description": "The document was published again since.",
+            "title": "Outdated",
+            "type": "boolean"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "revision_id": {
+            "description": "The pinned document revision the passage was cited from (kept after a republish: open the excerpt and the PDF at this revision).",
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "n",
+          "document_id",
+          "document_title",
+          "chapter_title",
+          "page",
+          "block_id",
+          "block_ids",
+          "revision_id",
+          "outdated"
+        ],
+        "title": "ExplanationSource",
+        "type": "object"
+      },
+      "ExplanationState": {
+        "properties": {
+          "available": {
+            "description": "This environment can make AI explanations.",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "can_create": {
+            "description": "available, active workspace, none for this revision.",
+            "title": "Can Create",
+            "type": "boolean"
+          },
+          "can_regenerate": {
+            "description": "An owner/editor of an active workspace, a success.",
+            "title": "Can Regenerate",
+            "type": "boolean"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Explanation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest explanation of this revision that is not superseded (a current success over a later failed attempt), or null."
+          }
+        },
+        "required": [
+          "available",
+          "can_create",
+          "can_regenerate",
+          "explanation"
+        ],
+        "title": "ExplanationState",
         "type": "object"
       },
       "ExplanationTargetIn": {
@@ -2241,6 +2922,50 @@
           "question_id"
         ],
         "title": "ExplanationTargetIn",
+        "type": "object"
+      },
+      "Feedback": {
+        "properties": {
+          "message_id": {
+            "format": "uuid",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "source_mismatch",
+              "made_up",
+              "revealed_answer",
+              "other"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "reason"
+        ],
+        "title": "Feedback",
+        "type": "object"
+      },
+      "FeedbackInput": {
+        "properties": {
+          "reason": {
+            "enum": [
+              "source_mismatch",
+              "made_up",
+              "revealed_answer",
+              "other"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "FeedbackInput",
         "type": "object"
       },
       "Fork": {
@@ -3786,7 +4511,7 @@
                 "type": "null"
               }
             ],
-            "description": "Counts and code only, for `mock_exam.generate`: {created_count, skipped_count, usage: {llm_calls, batches, input_tokens, output_tokens}, error_code}; null for other job types.",
+            "description": "Counts and code only, for `mock_exam.generate`: {created_count, skipped_count, usage: {llm_calls, batches, input_tokens, output_tokens}, error_code}; for `ask.answer` (its creator only): {sources, dropped_citations, llm_calls, usage: {input_tokens, output_tokens, cache_read_tokens}, status, error_code}; null for other job types.",
             "title": "Result"
           },
           "stage": {
@@ -3976,6 +4701,247 @@
           "already_merged_question_ids"
         ],
         "title": "MergedGroup",
+        "type": "object"
+      },
+      "Message": {
+        "properties": {
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "degraded": {
+            "items": {
+              "enum": [
+                "dense_unavailable",
+                "attachment_only"
+              ],
+              "type": "string"
+            },
+            "title": "Degraded",
+            "type": "array"
+          },
+          "disclosure": {
+            "enum": [
+              "none",
+              "hint",
+              "full"
+            ],
+            "title": "Disclosure",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "enum": [
+                  "source_mismatch",
+                  "made_up",
+                  "revealed_answer",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "question_message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Message Id"
+          },
+          "regenerated_from_message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regenerated From Message Id"
+          },
+          "retry_of_message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry Of Message Id"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "searched_sources": {
+            "description": "The passages searched for a `no_sources` answer (\"검색한 구절\").",
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "title": "Searched Sources",
+            "type": "array"
+          },
+          "sources": {
+            "description": "Cited passages of a finished answer.",
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "retrieving",
+              "streaming",
+              "succeeded",
+              "no_sources",
+              "stopped",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "description": "Markdown: the finished, validated answer (footnotes `[1]`…), or the text streamed so far.",
+            "title": "Text",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "uncited": {
+            "title": "Uncited",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "conversation_id",
+          "role",
+          "status",
+          "text",
+          "sources",
+          "searched_sources",
+          "disclosure",
+          "error_code",
+          "uncited",
+          "truncated",
+          "degraded",
+          "question_message_id",
+          "retry_of_message_id",
+          "regenerated_from_message_id",
+          "feedback",
+          "created_at"
+        ],
+        "title": "Message",
+        "type": "object"
+      },
+      "MessageAccepted": {
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/Message"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "stream_url": {
+            "title": "Stream Url",
+            "type": "string"
+          },
+          "user_message": {
+            "$ref": "#/components/schemas/Message"
+          }
+        },
+        "required": [
+          "user_message",
+          "answer",
+          "stream_url",
+          "job_id"
+        ],
+        "title": "MessageAccepted",
+        "type": "object"
+      },
+      "MessageCreate": {
+        "properties": {
+          "question": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AskScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected_option_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Option Ids"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "MessageCreate",
         "type": "object"
       },
       "MockExam": {
@@ -4752,6 +5718,182 @@
         "title": "MockExamValidationNote",
         "type": "object"
       },
+      "MockExplanation": {
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExplanationBody"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Succeeded only."
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "mock_exam_question_revision_id": {
+            "format": "uuid",
+            "title": "Mock Exam Question Revision Id",
+            "type": "string"
+          },
+          "sources": {
+            "description": "The cited sources (succeeded only).",
+            "items": {
+              "$ref": "#/components/schemas/ExplanationSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "job_id",
+          "status",
+          "version",
+          "error_code",
+          "created_at",
+          "finished_at",
+          "body",
+          "sources",
+          "truncated",
+          "mock_exam_question_revision_id"
+        ],
+        "title": "MockExplanation",
+        "type": "object"
+      },
+      "MockExplanationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "mock_practice_session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The caller's submitted mock practice session of this question.",
+            "title": "Mock Practice Session Id"
+          },
+          "view": {
+            "anyOf": [
+              {
+                "const": "manage",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`manage`: 모의고사 문제 관리 (owner/editor, no submission).",
+            "title": "View"
+          }
+        },
+        "title": "MockExplanationRequest",
+        "type": "object"
+      },
+      "MockExplanationState": {
+        "properties": {
+          "available": {
+            "description": "This environment can make AI explanations.",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "can_create": {
+            "description": "available, active workspace, none for this revision.",
+            "title": "Can Create",
+            "type": "boolean"
+          },
+          "can_regenerate": {
+            "description": "An owner/editor of an active workspace, a success.",
+            "title": "Can Regenerate",
+            "type": "boolean"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MockExplanation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "available",
+          "can_create",
+          "can_regenerate",
+          "explanation"
+        ],
+        "title": "MockExplanationState",
+        "type": "object"
+      },
       "MockPracticeSession": {
         "description": "What a viewer needs to show a mock exam question. Never carries answers, explanations,\nrubrics or accepted answers (a new field here is a reviewed change).",
         "properties": {
@@ -4869,6 +6011,55 @@
           "opened_at"
         ],
         "title": "MockPracticeSession",
+        "type": "object"
+      },
+      "MockRelatedSources": {
+        "properties": {
+          "degraded": {
+            "items": {
+              "const": "dense_unavailable",
+              "type": "string"
+            },
+            "title": "Degraded",
+            "type": "array"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RelatedSource"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "mock_exam_question_revision_id": {
+            "format": "uuid",
+            "title": "Mock Exam Question Revision Id",
+            "type": "string"
+          },
+          "stored": {
+            "title": "Stored",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "mock_exam_question_revision_id",
+          "stored",
+          "degraded",
+          "items"
+        ],
+        "title": "MockRelatedSources",
         "type": "object"
       },
       "MockSubmitResult": {
@@ -5479,6 +6670,24 @@
           "question_count"
         ],
         "title": "NoteVersion",
+        "type": "object"
+      },
+      "OptionWhy": {
+        "properties": {
+          "option_id": {
+            "title": "Option Id",
+            "type": "string"
+          },
+          "why_md": {
+            "title": "Why Md",
+            "type": "string"
+          }
+        },
+        "required": [
+          "option_id",
+          "why_md"
+        ],
+        "title": "OptionWhy",
         "type": "object"
       },
       "Outline": {
@@ -8152,6 +9361,170 @@
         "title": "RedistributionTargetDocument",
         "type": "object"
       },
+      "RelatedSource": {
+        "properties": {
+          "block_id": {
+            "description": "The passage's first block (DOC-02 / excerpt panel).",
+            "title": "Block Id",
+            "type": "string"
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Top-level chapter of the passage.",
+            "title": "Chapter Id"
+          },
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "excerpt": {
+            "description": "At most 300 characters, whole paragraphs where possible.",
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "from_question_source": {
+            "description": "One of the question's own sources (문제 출처).",
+            "title": "From Question Source",
+            "type": "boolean"
+          },
+          "highlights": {
+            "description": "Query-term ranges in `excerpt` (<mark>).",
+            "items": {
+              "$ref": "#/components/schemas/TextSpan"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "page_end": {
+            "title": "Page End",
+            "type": "integer"
+          },
+          "page_start": {
+            "title": "Page Start",
+            "type": "integer"
+          },
+          "rank": {
+            "description": "1-based position in the list.",
+            "title": "Rank",
+            "type": "integer"
+          },
+          "revision_id": {
+            "description": "The document revision the passage is from.",
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Relevance (or fusion) score of a search hit; null for sources.",
+            "title": "Score"
+          },
+          "stale": {
+            "description": "The revision is no longer the document's published one.",
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "rank",
+          "document_id",
+          "document_title",
+          "chapter_id",
+          "chapter_title",
+          "block_id",
+          "page_start",
+          "page_end",
+          "excerpt",
+          "highlights",
+          "from_question_source",
+          "revision_id",
+          "stale"
+        ],
+        "title": "RelatedSource",
+        "type": "object"
+      },
+      "RelatedSources": {
+        "properties": {
+          "degraded": {
+            "description": "`dense_unavailable`: keyword (BM25) results only, not stored.",
+            "items": {
+              "const": "dense_unavailable",
+              "type": "string"
+            },
+            "title": "Degraded",
+            "type": "array"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The stored list (the same for every reader of the key); null when the list was computed but not stored (archived workspace, degraded search).",
+            "title": "Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RelatedSource"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "question_revision_id": {
+            "format": "uuid",
+            "title": "Question Revision Id",
+            "type": "string"
+          },
+          "stored": {
+            "title": "Stored",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "question_revision_id",
+          "stored",
+          "degraded",
+          "items"
+        ],
+        "title": "RelatedSources",
+        "type": "object"
+      },
       "RestoredDraft": {
         "properties": {
           "document_id": {
@@ -9696,6 +11069,32 @@
         "title": "SharedDocumentSummary",
         "type": "object"
       },
+      "SharedExplanation": {
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/ExplanationBody"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ExplanationSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "body",
+          "sources",
+          "created_at"
+        ],
+        "title": "SharedExplanation",
+        "type": "object"
+      },
       "SharedQuestion": {
         "description": "A published question with its answer and explanation; no per-user or owner fields.",
         "properties": {
@@ -9803,6 +11202,110 @@
           "next_cursor"
         ],
         "title": "SharedQuestionList",
+        "type": "object"
+      },
+      "SharedRelatedSource": {
+        "properties": {
+          "block_id": {
+            "description": "The passage's first block (DOC-02 / excerpt panel).",
+            "title": "Block Id",
+            "type": "string"
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Top-level chapter of the passage.",
+            "title": "Chapter Id"
+          },
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "excerpt": {
+            "description": "At most 300 characters, whole paragraphs where possible.",
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "from_question_source": {
+            "description": "One of the question's own sources (문제 출처).",
+            "title": "From Question Source",
+            "type": "boolean"
+          },
+          "highlights": {
+            "description": "Query-term ranges in `excerpt` (<mark>).",
+            "items": {
+              "$ref": "#/components/schemas/TextSpan"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "page_end": {
+            "title": "Page End",
+            "type": "integer"
+          },
+          "page_start": {
+            "title": "Page Start",
+            "type": "integer"
+          },
+          "rank": {
+            "description": "1-based position in the list.",
+            "title": "Rank",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rank",
+          "document_id",
+          "document_title",
+          "chapter_id",
+          "chapter_title",
+          "block_id",
+          "page_start",
+          "page_end",
+          "excerpt",
+          "highlights",
+          "from_question_source"
+        ],
+        "title": "SharedRelatedSource",
+        "type": "object"
+      },
+      "SharedRelatedSources": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SharedRelatedSource"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SharedRelatedSources",
         "type": "object"
       },
       "SharedSearchResponse": {
@@ -9985,6 +11488,92 @@
           "expires_at"
         ],
         "title": "SignedReadUrl",
+        "type": "object"
+      },
+      "Source": {
+        "properties": {
+          "block_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Block Ids",
+            "type": "array"
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Id"
+          },
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "document_type": {
+            "title": "Document Type",
+            "type": "string"
+          },
+          "number": {
+            "description": "The footnote number `[n]` in the answer text.",
+            "title": "Number",
+            "type": "integer"
+          },
+          "outdated": {
+            "description": "The revision is no longer the published one.",
+            "title": "Outdated",
+            "type": "boolean"
+          },
+          "page_from": {
+            "title": "Page From",
+            "type": "integer"
+          },
+          "page_to": {
+            "title": "Page To",
+            "type": "integer"
+          },
+          "revision_id": {
+            "description": "The published revision the passage was read in.",
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "document_id",
+          "document_title",
+          "revision_id",
+          "chapter_id",
+          "chapter_title",
+          "block_ids",
+          "page_from",
+          "page_to",
+          "document_type",
+          "outdated"
+        ],
+        "title": "Source",
         "type": "object"
       },
       "SubmitBody": {
@@ -10556,6 +12145,24 @@
           "end"
         ],
         "title": "TextRange",
+        "type": "object"
+      },
+      "TextSpan": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "TextSpan",
         "type": "object"
       },
       "UploadCompleted": {
@@ -11314,6 +12921,1076 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/ai-explanations/{explanation_id}/stream": {
+      "get": {
+        "description": "The explanation's text as it is written (same gate as GET …/ai-explanation).",
+        "operationId": "streamQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "explanation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Explanation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "practice_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Practice Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "detail",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Server-Sent Events: `delta {seq, text}` (seq counts deltas from 0, again from 0 after a `reset`; the SSE `id` is the event number: send `Last-Event-ID` to resume), `reset` (drop the text received so far), then one `done {explanation}` or `error {code}`. A finished explanation is a single `done`/`error`. Send the Bearer token in the Authorization header, never in the URL."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Stream Question Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      }
+    },
+    "/api/v1/ask/conversations/{conversation_id}": {
+      "delete": {
+        "description": "Deletes the conversation with its messages, sources and feedback (usage counts stay).",
+        "operationId": "deleteAskConversation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Delete Conversation",
+        "tags": [
+          "ask"
+        ]
+      },
+      "get": {
+        "operationId": "getAskConversation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Conversation",
+        "tags": [
+          "ask"
+        ]
+      }
+    },
+    "/api/v1/ask/conversations/{conversation_id}/attachment": {
+      "delete": {
+        "description": "Later messages carry no question context; earlier answers stay.",
+        "operationId": "detachAskQuestion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Detach Question",
+        "tags": [
+          "ask"
+        ]
+      }
+    },
+    "/api/v1/ask/conversations/{conversation_id}/messages": {
+      "post": {
+        "description": "Ask a question in the conversation; stream the answer from `stream_url`.",
+        "operationId": "askQuestion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageAccepted"
+                }
+              }
+            },
+            "description": "Accepted: the answer is being made."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Ask Question",
+        "tags": [
+          "ask"
+        ]
+      }
+    },
+    "/api/v1/ask/messages/{message_id}": {
+      "get": {
+        "description": "One message; while an answer streams, its text so far (the SSE fallback).",
+        "operationId": "getAskMessage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Message",
+        "tags": [
+          "ask"
+        ]
+      }
+    },
+    "/api/v1/ask/messages/{message_id}/cancel": {
+      "post": {
+        "description": "Stops an unfinished answer, keeping the text streamed so far (idempotent).",
+        "operationId": "cancelAskAnswer",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Cancel Answer",
+        "tags": [
+          "ask"
+        ]
+      }
+    },
+    "/api/v1/ask/messages/{message_id}/feedback": {
+      "put": {
+        "description": "\"도움이 안 됨\" with one reason code (no free text), for the caller's own answer.",
+        "operationId": "setAskFeedback",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Feedback"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Set Feedback",
+        "tags": [
+          "ask"
+        ]
+      }
+    },
+    "/api/v1/ask/messages/{message_id}/regenerate": {
+      "post": {
+        "description": "A new answer version of the conversation's last question (evidence searched again).",
+        "operationId": "regenerateAskAnswer",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageAccepted"
+                }
+              }
+            },
+            "description": "Accepted: the answer is being made."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Regenerate Answer",
+        "tags": [
+          "ask"
+        ]
+      }
+    },
+    "/api/v1/ask/messages/{message_id}/retry": {
+      "post": {
+        "description": "A new answer to the question of a failed or stopped answer (which stays).",
+        "operationId": "retryAskAnswer",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageAccepted"
+                }
+              }
+            },
+            "description": "Accepted: the answer is being made."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Retry Answer",
+        "tags": [
+          "ask"
+        ]
+      }
+    },
+    "/api/v1/ask/messages/{message_id}/stream": {
+      "get": {
+        "description": "The answer's text as it is written (re-authorized on every poll).",
+        "operationId": "streamAskAnswer",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Server-Sent Events: `delta {seq, text}` (the SSE `id` is `seq`; send `Last-Event-ID` to resume after it), `reset` (drop the text received so far), then one `done {message}` or `error {code}`. A finished answer is a single `done`/`error` from the database. Send the Bearer token in the Authorization header (fetch streaming, not EventSource); never in the URL."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Stream Answer",
+        "tags": [
+          "ask"
+        ]
+      }
+    },
     "/api/v1/chapters/{chapter_id}/my-highlights": {
       "get": {
         "description": "The caller's highlights of the chapter: those of every note version of the chapter (version\nnumber included) and the explanation highlights of the questions now in it (live CONFIRMED;\narchived, deleted, draft and moved-away questions are left out).",
@@ -13783,6 +16460,128 @@
         ]
       }
     },
+    "/api/v1/mock-ai-explanations/{mock_explanation_id}/stream": {
+      "get": {
+        "operationId": "streamMockExamQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_explanation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Explanation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mock_practice_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mock Practice Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "manage",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Server-Sent Events: `delta {seq, text}` (seq counts deltas from 0, again from 0 after a `reset`; the SSE `id` is the event number: send `Last-Event-ID` to resume), `reset` (drop the text received so far), then one `done {explanation}` or `error {code}`. A finished explanation is a single `done`/`error`. Send the Bearer token in the Authorization header, never in the URL."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Stream Mock Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      }
+    },
     "/api/v1/mock-exam-questions/{mock_exam_question_id}": {
       "delete": {
         "description": "이 모의고사에서 빼기: the question leaves the list and later 풀기 (attempts stay).",
@@ -13972,6 +16771,349 @@
         ]
       }
     },
+    "/api/v1/mock-exam-questions/{mock_exam_question_id}/ai-explanation": {
+      "get": {
+        "description": "The AI explanation of this mock exam question's revision (its own, never the source's).",
+        "operationId": "getMockExamQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mock_practice_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mock Practice Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "manage",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Mock Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      },
+      "post": {
+        "operationId": "createMockExamQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockExplanationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "description": "Accepted: the explanation is being made (stream it)."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Mock Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      }
+    },
+    "/api/v1/mock-exam-questions/{mock_exam_question_id}/ai-explanation/regenerate": {
+      "post": {
+        "operationId": "regenerateMockExamQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockExplanationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "description": "Accepted: the explanation is being made (stream it)."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Regenerate Mock Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      }
+    },
     "/api/v1/mock-exam-questions/{mock_exam_question_id}/practice-sessions": {
       "post": {
         "description": "Open a mock exam question: pins its active revision and shuffles MCQ options. No answers\nin the response, nothing recorded outside the mock exam tables. With a run position the\ncaller's mock run of this workspace must hold this question there; the position's open\nsession is resumed, a submitted one is 409 `already-submitted`.",
@@ -14104,6 +17246,143 @@
         "summary": "Start Mock Practice Session",
         "tags": [
           "mock-exams"
+        ]
+      }
+    },
+    "/api/v1/mock-exam-questions/{mock_exam_question_id}/related-sources": {
+      "get": {
+        "description": "Related passages of a mock exam question (its own list; evidence book blocks first).",
+        "operationId": "getMockExamQuestionRelatedSources",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's own submitted mock practice session of this question.",
+            "in": "query",
+            "name": "mock_practice_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The caller's own submitted mock practice session of this question.",
+              "title": "Mock Practice Session Id"
+            }
+          },
+          {
+            "description": "`manage`: 모의고사 문제 관리 (edit rights, active workspace).",
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "manage",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`manage`: 모의고사 문제 관리 (edit rights, active workspace).",
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockRelatedSources"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Mock Exam Question Related Sources",
+        "tags": [
+          "related-sources"
         ]
       }
     },
@@ -17052,6 +20331,351 @@
         ]
       }
     },
+    "/api/v1/questions/{question_id}/ai-explanation": {
+      "get": {
+        "description": "The AI explanation of this question's revision for a submitted session or `view=detail`.",
+        "operationId": "getQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "practice_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Practice Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "detail",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Question Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      },
+      "post": {
+        "description": "Make the explanation (202), or return the cached one (200) / the one being made (202).",
+        "operationId": "createQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplanationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "description": "Accepted: the explanation is being made (stream it)."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Question Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      }
+    },
+    "/api/v1/questions/{question_id}/ai-explanation/regenerate": {
+      "post": {
+        "description": "A new version of the explanation (owner/editor; 3 per revision per day).",
+        "operationId": "regenerateQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplanationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "description": "Accepted: the explanation is being made (stream it)."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Regenerate Question Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      }
+    },
     "/api/v1/questions/{question_id}/attempts": {
       "get": {
         "description": "The caller's own attempts on the question and on the duplicates merged into it\n(UX7-DEDUP), newest first, each pinned to the revision it was graded on (its content:\nGET /questions/{question_id}/revisions/{revision_id} of the item's `question_id`).",
@@ -17569,6 +21193,143 @@
         "summary": "Get Question Preview",
         "tags": [
           "questions"
+        ]
+      }
+    },
+    "/api/v1/questions/{question_id}/related-sources": {
+      "get": {
+        "description": "Related passages of a registered question after a submission or in its details.",
+        "operationId": "getQuestionRelatedSources",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's own submitted practice session of this question.",
+            "in": "query",
+            "name": "practice_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The caller's own submitted practice session of this question.",
+              "title": "Practice Session Id"
+            }
+          },
+          {
+            "description": "`detail`: the 문제 상세 dialog.",
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "detail",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`detail`: the 문제 상세 dialog.",
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelatedSources"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Question Related Sources",
+        "tags": [
+          "related-sources"
         ]
       }
     },
@@ -18681,6 +22442,102 @@
         ]
       }
     },
+    "/api/v1/shared/{share_id}/questions/{question_id}/ai-explanation": {
+      "get": {
+        "description": "The AI explanation of one published question, as members see it (read-only).",
+        "operationId": "getSharedQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedExplanation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Shared Question Explanation",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
     "/api/v1/shared/{share_id}/questions/{question_id}/preview": {
       "get": {
         "description": "The member preview's DTO for a question in the share's published scope (CHNOTE-02-C02);\nanything else is the same 404.",
@@ -18772,6 +22629,102 @@
           }
         },
         "summary": "Get Shared Question Preview",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/questions/{question_id}/related-sources": {
+      "get": {
+        "description": "The stored list of a published question's active revision and the current corpus;\nguests never compute (404 until a member's read stored one).",
+        "operationId": "getSharedQuestionRelatedSources",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedRelatedSources"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Shared Question Related Sources",
         "tags": [
           "shared"
         ]
@@ -19681,6 +23634,268 @@
         "summary": "Archive Workspace",
         "tags": [
           "workspaces"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/ask": {
+      "get": {
+        "description": "Whether new AI questions can be asked here, and the limits the panel shows.",
+        "operationId": "getAskState",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Ask State",
+        "tags": [
+          "ask"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/ask/conversations": {
+      "get": {
+        "description": "The caller's own conversations of this workspace, most recent first (30 per page).",
+        "operationId": "listAskConversations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "List Conversations",
+        "tags": [
+          "ask"
+        ]
+      },
+      "post": {
+        "description": "A new (personal) conversation, optionally with one attached question.",
+        "operationId": "createAskConversation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Conversation",
+        "tags": [
+          "ask"
         ]
       }
     },

@@ -146,7 +146,8 @@ type QuestionMenuItem =
   | 'redistribution'
   | 'inactive'
   | 'mockExams'
-  | 'practice';
+  | 'practice'
+  | 'ask';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   /** Retired by UX7-DOCS: only ever expected to be absent. */
   pdfs: /^(pdf 관리|manage pdfs?)$/i,
@@ -163,6 +164,8 @@ const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   mockExams: /^(모의고사|mock exams?)$/i,
   /** QVIEW-01: the range run (QuestionViewer sequence), usable by every member. */
   practice: /^(문제 풀기|practice questions?|start practice)$/i,
+  /** ASK-01: the AI 질문 panel, last; usable by every member (disabled when archived or off). */
+  ask: /^(AI 질문|ask ai)$/i,
 };
 
 /**
@@ -179,6 +182,7 @@ const QUESTION_MENU_ORDER = [
   QUESTION_MENU_ITEMS.inactive,
   QUESTION_MENU_ITEMS.mockExams,
   QUESTION_MENU_ITEMS.practice,
+  QUESTION_MENU_ITEMS.ask,
 ] as const;
 
 /** Why the `문제` menu's editor-only items are disabled (UX7-DOCS-2, QOV-01-AC11). */

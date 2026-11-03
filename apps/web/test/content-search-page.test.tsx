@@ -39,12 +39,16 @@ describe('ContentSearchPage', () => {
           headers: { 'content-type': 'application/json' },
         }),
     );
-    vi.stubGlobal('fetch', fetchSpy);
+    // The page also reads whether AI questions are available (`AI에게 묻기`, ASK-01).
+    const askState = vi.fn(async () => new Response('{}', { status: 503 }));
+    vi.stubGlobal('fetch', (input: RequestInfo | URL) =>
+      String(input).includes('/ask') ? askState() : fetchSpy(),
+    );
     window.history.replaceState(null, '', `/workspaces/${WS}/search?text=water&mode=keyword`);
 
     render(
       <ContentSearchPage
-        workspace={{ id: WS, name: '물' }}
+        workspace={{ id: WS, name: '물', archived: false }}
         documents={[]}
         documentsLoadFailed={false}
         searchable

@@ -49,7 +49,7 @@ from quiz_api.authz import (
 )
 from quiz_api.db import Database, get_db_session
 from quiz_api.errors import ProblemException
-from quiz_api.repositories.jobs import JobRepository, JobStatus, JobView
+from quiz_api.repositories.jobs import PERSONAL_JOB_TYPES, JobRepository, JobStatus, JobView
 
 router = APIRouter(tags=["jobs"])
 
@@ -85,7 +85,9 @@ class Job(JobBase):
         default=None,
         description="Counts and code only, for `mock_exam.generate`: {created_count, "
         "skipped_count, usage: {llm_calls, batches, input_tokens, output_tokens}, error_code}; "
-        "null for other job types.",
+        "for `ask.answer` (its creator only): {sources, dropped_citations, llm_calls, usage: "
+        "{input_tokens, output_tokens, cache_read_tokens}, status, error_code}; null for other "
+        "job types.",
     )
 
 
@@ -109,6 +111,13 @@ def _job_base(view: JobView) -> dict[str, Any]:
 
 def _job(view: JobView) -> Job:
     return Job(**_job_base(view), result=view.result)
+
+
+def visible_to(view: JobView | None, user_id: uuid.UUID) -> JobView | None:
+    """A personal job (`ask.answer`) exists only for its creator (ASK-01-C07)."""
+    if view is not None and view.job_type in PERSONAL_JOB_TYPES and view.created_by != user_id:
+        return None
+    return view
 
 
 # --- dependencies -------------------------------------------------------------------------------
@@ -136,7 +145,7 @@ def get_job_poller(request: Request) -> JobPoller:
                 )
             except (HTTPException, ProblemException):
                 return None
-            return JobRepository(session).get(job_id)
+            return visible_to(JobRepository(session).get(job_id), user_id)
 
     return poll
 
@@ -173,7 +182,7 @@ JobAccess = Annotated[
 @router.get("/jobs/{job_id}", operation_id="getJob")
 def get_job(access: JobAccess, repo: Annotated[JobRepository, Depends(get_job_repository)]) -> Job:
     """Current status of an async job (poll this, or stream `/jobs/{id}/events`)."""
-    view = repo.get(access.resource_id)
+    view = visible_to(repo.get(access.resource_id), access.workspace.user_id)
     if view is None:  # deleted between the authorization query and this read
         raise HTTPException(status_code=404, detail=JOB_NOT_FOUND)
     return _job(view)
@@ -206,6 +215,7 @@ async def stream_job_events(
     """Status transitions and progress of a job as Server-Sent Events."""
     job_id = access.resource_id
     release_session()
+    # Another member's personal job (`ask.answer`) polls as invisible: the stream ends `gone`.
     return StreamingResponse(
         _events(request, poller, config, user.id, job_id),
         media_type="text/event-stream",

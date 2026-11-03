@@ -844,6 +844,8 @@ test(
       // MOCK-01 (MOCK-W): mock exams; QVIEW-01 (QVIEW-W): the range run — both for every member.
       /^(모의고사|mock exams?)$/i,
       /^(문제 풀기|practice questions?|start practice)$/i,
+      // ASK-01 (ASK-W): the AI 질문 panel, last, for every member.
+      /^(AI 질문|ask ai)$/i,
     ]);
     await expect(
       homeUi.questionMenu(page).getByRole('menuitem', { name: /^(전체 문제|all questions)$/i }),

@@ -6,10 +6,14 @@
 // the 문제 상세 dialog — and get `편집` (the home 문제 편집 dialog's content fields; saving makes a
 // new revision, PATCH /mock-exam-questions/{id}) and `이 모의고사에서 빼기` (ConfirmDialog). Viewers,
 // and editors of an archived workspace, get an answer-free preview: the list they read carries no
-// answers (MOCK-01-C05), so nothing here can show one before a submission.
+// answers (MOCK-01-C05), so nothing here can show one before a submission. Editors also get
+// `질문하기` at the top (ASK-01 `manage(mock)`: the question attached as `manage`, with its
+// answers — only where the home's AI 질문 is available).
 import { Badge, Button, ConfirmDialog, ModalDialog, useUnsavedChanges } from '@quiz/ui';
 import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from 'react';
+import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher';
 import { FormNotice } from '@/components/auth/form-notice';
+import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { displayStem } from '@/lib/questions/display-stem';
 import {
   contentBody,
@@ -33,6 +37,8 @@ export interface MockQuestionTarget {
 
 export interface MockQuestionDialogProps {
   readonly target: MockQuestionTarget | null;
+  /** The workspace (AI 해설: its source links open this workspace's PDF viewer). */
+  readonly workspaceId?: string;
   /** Editors of an active workspace: answers, 편집 and 빼기. */
   readonly manage: boolean;
   readonly api: MockExamApi;
@@ -54,6 +60,7 @@ function warningCodes(question: MockExamQuestion): string {
 
 export function MockQuestionDialog({
   target,
+  workspaceId,
   manage,
   api,
   onClose,
@@ -66,6 +73,7 @@ export function MockQuestionDialog({
   if (target && target !== shown) setShown(target);
   const view = target ?? shown;
   const question = view?.question ?? null;
+  const asks = useAskLauncher() !== null;
 
   const [editing, setEditing] = useState<{ session: number; open: boolean }>({
     session: 0,
@@ -129,6 +137,17 @@ export function MockQuestionDialog({
           <div className={styles.preview}>
             {manage ? (
               <>
+                {asks ? (
+                  <div className={styles.askRow}>
+                    <AskQuestionButton
+                      attachment={{
+                        kind: 'mock_exam_question',
+                        view: 'manage',
+                        mock_exam_question_id: question.id,
+                      }}
+                    />
+                  </div>
+                ) : null}
                 {question.edited || needsReview(question) ? (
                   <div className={styles.badges}>
                     {question.edited ? <Badge>편집됨</Badge> : null}
@@ -158,6 +177,22 @@ export function MockQuestionDialog({
                     created_at: '',
                   }}
                 />
+                {workspaceId ? (
+                  // AIEXPL-01 `manage(mock)` (ASK-SYNC (a)): editors see the answers already, so no
+                  // submission is needed (`view: manage`); the mock question's own explanation.
+                  <AiExplanation
+                    workspaceId={workspaceId}
+                    target={{ kind: 'mock', id: question.id }}
+                    gate={{ view: 'manage' }}
+                    revisionId={question.revision.id}
+                    options={question.options}
+                    askAttachment={{
+                      kind: 'mock_exam_question',
+                      view: 'manage',
+                      mock_exam_question_id: question.id,
+                    }}
+                  />
+                ) : null}
               </>
             ) : (
               <>

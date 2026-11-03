@@ -148,6 +148,11 @@ export interface FloatingSidePanelProps {
    * folds when the practice panel opens (CHNOTE-01).
    */
   staysExposedUnderModal?: boolean;
+  /**
+   * Opened from inside a centered modal dialog (e.g. the AI 질문 panel over the 문제 상세 dialog):
+   * the panel, its backdrop and the layers opened after it sit above `--z-modal`.
+   */
+  aboveModals?: boolean;
   className?: string;
   children?: ReactNode;
 }
@@ -184,6 +189,7 @@ export function FloatingSidePanel({
   onCloseAutoFocus,
   raiseKey,
   staysExposedUnderModal = false,
+  aboveModals = false,
   className,
   children,
 }: FloatingSidePanelProps) {
@@ -221,7 +227,7 @@ export function FloatingSidePanel({
     if (open === undefined) setUncontrolledOpen(next);
     onOpenChange?.(next);
   };
-  const layer = useFloatingLayer(isOpen, raiseKey);
+  const layer = useFloatingLayer(isOpen, raiseKey, aboveModals);
   const registry = useDirtyRegistry();
   useModalStackEntry(modal && isOpen, () => handleOpenChange(false));
   useEffect(watchOpeners, []);

@@ -1,0 +1,43 @@
+// Decorative icons of the AI 질문 panel (ASK-01); always next to a visible or accessible name.
+import type { SVGProps } from 'react';
+
+type IconProps = SVGProps<SVGSVGElement>;
+
+function Base({ children, ...props }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      {...props}
+    >
+      {children}
+    </svg>
+  );
+}
+
+/** A speech bubble with a spark: the header's `AI 질문`. */
+export function AskIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12Z" />
+      <path d="M12 8.5v3M10.5 10h3" />
+    </Base>
+  );
+}
+
+/** An arrow up: `보내기`. */
+export function SendIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 19V5M5 12l7-7 7 7" />
+    </Base>
+  );
+}

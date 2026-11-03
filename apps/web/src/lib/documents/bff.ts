@@ -33,7 +33,7 @@ export function problemResponse(status: number, title: string, detail?: string):
 export const notFound = () => problemResponse(404, 'Not Found');
 
 export interface RelayOptions {
-  readonly method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  readonly method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   /** Request whose JSON body is forwarded (POST/PATCH). */
   readonly body?: Request;
   /** Body size limit in bytes (default 8 KiB). */
@@ -42,6 +42,8 @@ export interface RelayOptions {
   readonly idempotencyFrom?: Request;
   /** Forward a `text/event-stream` response as a stream. */
   readonly stream?: boolean;
+  /** SSE resume: forward the browser's `Last-Event-ID` header from this request (a number). */
+  readonly lastEventIdFrom?: Request;
   /** Ends the upstream request when the browser goes away. */
   readonly signal?: AbortSignal;
   /** Pass a successful file response through: its `Content-Disposition` (DOC-03 export). */
@@ -79,6 +81,11 @@ export async function relayToApi(path: string, options: RelayOptions): Promise<R
     return problemResponse(400, 'Bad Request', 'Malformed Idempotency-Key header.');
   }
 
+  const lastEventId = options.lastEventIdFrom?.headers.get('last-event-id') ?? null;
+  if (lastEventId !== null && !/^\d{1,12}$/.test(lastEventId)) {
+    return problemResponse(400, 'Bad Request', 'Malformed Last-Event-ID header.');
+  }
+
   const supabase = await createSupabaseServerClient();
   const token = await verifiedAccessToken(supabase);
   if (!token) return problemResponse(401, 'Unauthorized', 'Sign in again.');
@@ -96,6 +103,7 @@ export async function relayToApi(path: string, options: RelayOptions): Promise<R
             : 'application/json',
         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
         ...(idempotencyKey !== null ? { 'idempotency-key': idempotencyKey } : {}),
+        ...(lastEventId !== null ? { 'last-event-id': lastEventId } : {}),
       },
       body,
       cache: 'no-store',

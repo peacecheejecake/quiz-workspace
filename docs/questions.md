@@ -151,7 +151,7 @@ Confirmed question
 - 새롭게 등록된 의미적 변형은 **독립된 문제**로 점 하나와 독립적인 풀이 이력을 갖는다.
 - `parent_question_id`, `generation_run_id`, `generation_type`, `source_question_revision_id`, 사용한 LLM 모델/프롬프트 버전과 source block IDs를 저장한다.
 - 생성 LLM이 선언한 정답은 신뢰하지 않고 유효성 검사를 수행한다. 기계적 유효성 검사만으로 의미적 정답을 보장할 수 없어 사람 승인이 필수다.
-- 문제 생성에 검색된 책 원문을 근거로 제공할 수 있지만, 범용 RAG 챗봇이나 자동 답변 기능은 범위 밖이다.
+- 문제 생성에 검색된 책 원문을 근거로 제공할 수 있지만, 범용 RAG 챗봇이나 자동 답변 기능은 범위 밖이다. 예외(ASK-SPEC 2026-11-01, 사용자 요청): Workspace 문서에 근거한 AI 질문(ASK-01)과 제출 후 AI 해설(AIEXPL-01) — §13.
 - 원본 문제나 출처 문서를 변경해도 파생 문제는 자동 덮어쓰지 않는다. 출처 revision과의 차이·검토 필요 상태를 노출한다.
 
 ### 묶음 변형 출제 (QGEN-MULTI 2026-10-23)
@@ -228,6 +228,7 @@ Confirmed question
 - Fork된 Workspace는 published 문제·해설과 출처 문서를 새로운 ID로 복제한다. 문제별 개인 상태·풀이 이력은 복사하지 않으며 모두 UNSEEN으로 시작한다.
 - 문제 root/derived lineage의 Fork 내부 참조는 새 ID로 매핑한다. 외부 원본 참조는 노출하지 않는다.
 - 챕터 정리 노트(§9, DOCSUM-SPEC 2026-10-29): 링크 Viewer는 장마다 출처 일치인 최신 성공 노트만 읽을 수 있다(인용 문제가 삭제·보관·수정되면 다시 만들 때까지 본문 없음)(발행 문제의 정답·해설을 이미 볼 수 있으므로 같은 범위). 각주는 발행된 확정 문제만 링크·발문 앞부분을 보이고, 이전 버전·생성 상태·오류·비용은 보이지 않으며 만들기·다시 만들기는 할 수 없다.
+- AI 질문·AI 해설(§13, ASK-SPEC 2026-11-01 사용자 결정): 링크 Viewer는 AI 질문을 할 수 없다. 이미 만든 최신 AI 해설은 발행된 확정 문제에서 읽기 전용으로 볼 수 있다(사용자 결정 2026-11-01 — 정답·해설을 이미 볼 수 있으므로 같은 범위). 만들기·다시 만들기·상태·비용은 없다. 이미 저장된 관련 본문(RELSRC-01)도 읽기 전용으로 보인다(사용자 결정 2026-11-01). Fork는 AI 질문 대화를 복제하지 않고, snapshot 문제 revision의 최신 AI 해설은 복제한다(사용자 결정 2026-11-01). 관련 본문은 복제하지 않고 다시 계산한다(사용자 결정 2026-11-01).
 
 ## 10. 중복 문제 정리 (UX7-DEDUP 2026-11-01)
 
@@ -280,9 +281,29 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 - **순서:** 시작 전 `무작위 순서` checkbox. 꺼짐 = Heatmap 기본 정렬(§3.1), 켜짐 = 서버 seed shuffle. 순서는 묶음(`practice_run`)에 고정되어 새로 고침해도 같다.
 - **기록:** `bank` 범위 풀이는 §2.1·§4 그대로 `viewed`·attempt·`question_user_state`에 반영된다(풀이 panel을 연 것과 같음). `mock`은 §11.
 
-## 14. 챕터 재분배 (UX9-SPEC 2026-11-02)
+## 13. AI 질문 첨부·AI 문제 해설·관련 본문 (ASK-SPEC 2026-11-01 사용자 결정, ASK-SYNC 2026-11-02)
 
-(§13은 ASK-SPEC(AI 질문·AI 문제 해설, `task/ASK-SYNC`)이 쓰는 번호다 — 그 branch가 develop에 merge되기 전이라 이 문서에는 아직 없다.)
+화면·AC는 [ASK-01](screens/ask-llm.md) "문제 첨부와 정답 비노출"과 [AIEXPL-01](screens/ai-explanations.md). 두 기능 모두 §4의 "제출 전 정답·해설 비전송"을 **서버에서** 지킨다 — LLM에게 주는 지시는 보안 경계가 아니므로, 제출 전에는 정답·해설을 LLM 요청에 넣지 않는다.
+
+- **공개 수준(메시지마다 서버가 DB로 계산):**
+
+| 곳 | 판정 | LLM 입력 |
+|---|---|---|
+| `practice` 첨부 제출 전 (QuestionViewer `practice`·`sequence(bank)`의 session — 등록 문제에는 UI 경로 없음, 서버 규칙으로 유지; 모의고사 `sequence(mock)`의 제출 전 `질문하기`가 쓴다 — 사용자 결정 2026-11-01) | 첨부 session에 그 사용자의 제출 없음 → `hint` | 번호·장·유형·발문·보기 글(표시 순서; 정답 보기의 글도 보통 보기로 들어감)·고른 답(미제출). 어느 보기가 정답인지(정답 id·표시·순서)·허용 답안·모범답안·채점 기준·해설·`question_sources` 구절 없음 — 단답·서술형은 보기가 없으므로 허용 답안·모범답안·채점 기준 글이 요청 어디에도 없음(ASK-01-C03) |
+| 같은 곳 제출 후 | 제출 있음(채점 대기 포함) → `full` | 위 + 제출한 답·결과·정답·해설·출처 구절 |
+| 문제 상세 dialog(QuestionViewer `manage`, `detail`) | `GET /questions/{id}` 권한 → `full` | 현재 revision의 문제·정답·해설·출처 (이미 화면에 보이는 것) |
+| 모의고사 풀이(`sequence(mock)`)·관리(`manage(mock)`) | `mock_exam_practice_sessions`의 `mock_exam_attempts` 유무 / 편집 권한 | 같은 규칙. 내용은 `mock_exam_question_revisions` 행, 출처 구절은 그 revision의 `evidence` 중 현재 발행 `book` 블록(원본 문제의 `question_sources`가 아님) — ASK-01-C10 |
+| 공유 게스트 | 없음 | AI 질문 없음 |
+
+- `질문하기` 위치(사용자 결정 2026-11-01; ASK-SYNC에서 QuestionViewer 방식으로): 문제 상세(`manage`, `detail` → `full`)와 모의고사 문제(`sequence(mock)` 제출 전 `hint`·제출 후 `full`, `manage(mock)` `full`)만. 풀이 panel(`practice`)과 등록 문제 범위 풀이(`sequence(bank)`) header에는 없고, 그 둘의 유일한 경로는 제출 뒤 AI 해설 아래의 `이 문제로 질문하기`(`full`)다.
+- `hint`의 모델 지시(사용자 결정 2026-11-01): 정답·정답 보기를 말하지 말고 개념과 근거 구절로 돕는다. 교재 근거로 모델이 답을 추론할 수 있다는 한계는 저장된 정답이 새는 것이 아니다(교재는 열람 범위).
+- 질문·AI 해설은 풀이(attempt)·열람(viewed)이 아니다: 풀이 기록·`question_user_states`·Heatmap 상태를 바꾸지 않는다(§2.1). 문제 상세의 정답 보기와 같은 규칙.
+- **AI 해설:** 제출 후(그 session의 제출을 서버가 확인 — `practice`·`sequence(bank|mock)` 모두) 또는 문제 상세에서 만든다. 문제 revision마다 Workspace 공유 캐시 하나(사용자의 답은 입력이 아님; 모의고사 문제는 `mock_exam_question_revisions`마다 따로 — 원본 문제와 공유하지 않음), 정답은 서버의 정답이 기준(모델이 다른 정답을 말하면 버림). 사람이 쓴 `explanation`을 바꾸지 않고, 문제은행·정리 노트(§9) 입력·ASK 근거에 들어가지 않는다. 문제를 고치면(새 revision) 새로 만들어야 한다.
+- **관련 본문(RELSRC-01):** 제출 후(서버가 session 제출 확인) 또는 문제 상세에서, 그 문제의 출처 블록을 먼저 두고 발문 + 정답 글로 검색한 교재 구절을 최대 5개 보인다(LLM 없음 — 사용자 결정 2026-11-01 방식 A). 문제 revision과 교재 발행 상태(`corpus_fingerprint`)마다 Workspace 공유 하나를 저장한다. ASK와 같은 검색 범위 규칙(문제지·`mixed` 문제 구간·요약·노트·AI 해설 제외).
+- **보관·중복 정리 (§10):** 캐시는 문제 revision 하나에 묶인다. 중복 정리로 합친 남길 문제는 자기 revision의 AI 해설·자기 `question_sources`로 만든 관련 본문만 보이고, 보관된 중복의 해설·출처를 더하지 않는다(합침은 학습 상태만). 보관된 문제는 보관·초안 문제 dialog의 문제 상세에서 자기 것을 보인다. 초안 문제의 AI 해설·관련 본문은 두지 않는다(서버 409; `질문하기`는 둠 — 사용자 결정 2026-11-02, ASK-SYNC (b)). 모의고사 문제 관리(`manage(mock)`)는 문제 상세처럼 제출 없이 둘 다 보인다(사용자 결정 2026-11-02, ASK-SYNC (a)).
+- practice API(`practice-sessions`·`submit`, 모의고사 `mock-exam-questions/{id}/practice-sessions`·`mock-practice-sessions/{id}/submit`) 응답은 세 기능 때문에 바뀌지 않는다(AI 해설·관련 본문 필드 없음).
+
+## 14. 챕터 재분배 (UX9-SPEC 2026-11-02)
 
 화면·AC는 [CHREDIST-01](screens/chapter-redistribution.md). 사용자 피드백 "'챕터 재분배' 기능 필요 — 여러 문제를 한 번에 챕터에 할당 — 자동 챕터 분배 재시도 기능", 사용자 결정 2026-11-02 C1(`문제` 메뉴의 `챕터 재분배` dialog)·C2(추천 → 미리보기 → 적용, 사람이 정한 챕터는 기본 제외).
 

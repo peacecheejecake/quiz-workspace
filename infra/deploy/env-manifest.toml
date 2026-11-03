@@ -749,6 +749,198 @@ provider = "operator (⛔ user approval: sends source questions, answers, explan
 note = "false; true enables the AI variation types of mock exams (MOCK-01): needs LLM_API_KEY on the worker and LLM_MODEL on both (identical); 보기 섞기 mock exams work either way"
 
 [[var]]
+name = "WORKER_ASK_LLM"
+services = ["api", "worker"]
+kind = "config"
+check = "bool"
+same = true
+provider = "operator (⛔ user approval: sends questions, attached questions and published passages to the LLM provider)"
+note = "false; true enables AI questions (ASK-01): needs LLM_API_KEY on the worker and LLM_MODEL on both (identical); the API accepts questions (available, POST) only with the switch on and LLM_MODEL set; stored conversations stay readable"
+
+[[var]]
+name = "WORKER_QUEUE"
+services = ["worker"]
+kind = "config"
+provider = "operator"
+note = "default | interactive; a second worker process with WORKER_QUEUE=interactive runs ask.answer (ASK_WORKER_CONCURRENCY processes, no beat) so document jobs never delay answers"
+
+[[var]]
+name = "ASK_WORKER_CONCURRENCY"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "2; pool size of the interactive worker process"
+
+[[var]]
+name = "ASK_MAX_QUESTION_CHARS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "1000; longer questions are 422 question-too-long"
+
+[[var]]
+name = "ASK_MAX_TURNS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "20; questions per conversation (409 ask-turn-limit)"
+
+[[var]]
+name = "ASK_HISTORY_TURNS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "3; previous turns sent with a question (6,000 characters at most)"
+
+[[var]]
+name = "ASK_TOP_K"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "8; evidence passages pinned per answer"
+
+[[var]]
+name = "ASK_MAX_CONTEXT_CHARS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "16000; total characters of the passages of one answer (lower ranks dropped)"
+
+[[var]]
+name = "ASK_MIN_RELEVANCE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "0.3; candidates below this relevance are no evidence where a relevance scorer exists (APP_ENV=test fake; set by the ASK-X eval)"
+
+[[var]]
+name = "ASK_MAX_OUTPUT_TOKENS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "2000; output ceiling of one answer (cut answers end with a notice)"
+
+[[var]]
+name = "ASK_LLM_EFFORT"
+services = ["worker"]
+kind = "config"
+provider = "default"
+note = "low | medium | high | xhigh | max (low)"
+
+[[var]]
+name = "ASK_RATE_LIMIT_PER_MINUTE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "6; accepted questions (new, retry, regenerate) per user and minute (429 + Retry-After; 0 disables)"
+
+[[var]]
+name = "ASK_DAILY_LIMIT_PER_USER"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "50; answers per user and Asia/Seoul day (429 ask-daily-limit)"
+
+[[var]]
+name = "ASK_MONTHLY_TOKEN_CAP"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "operator"
+note = "0 = off; environment-wide AI question tokens per month (409 ask-budget-exceeded)"
+
+[[var]]
+name = "ASK_MAX_REGENERATIONS"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "5; answer versions per question (409 ask-regenerate-limit)"
+
+[[var]]
+name = "RELATED_SOURCES_LIMIT"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "5; related passages per list (RELSRC-01; always on, no switch)"
+
+[[var]]
+name = "RELATED_SOURCES_MIN_RELEVANCE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "0.1; search hits below this relevance are not related passages where a relevance scorer exists (APP_ENV=test fake; set by the ASK-X eval)"
+
+[[var]]
+name = "ASK_RETENTION_DAYS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "90; ask.purge deletes conversations idle this long (usage counts: 13 months)"
+
+[[var]]
+name = "WORKER_AI_EXPLANATIONS"
+services = ["api", "worker"]
+kind = "config"
+check = "bool"
+same = true
+provider = "operator (⛔ user approval: sends questions with their answers, explanations and published passages to the LLM provider)"
+note = "false; true enables AI explanations (AIEXPL-01), separate from WORKER_ASK_LLM: needs LLM_API_KEY on the worker and LLM_MODEL on both (identical); question.ai_explain runs on the interactive worker; stored explanations stay readable"
+
+[[var]]
+name = "AI_EXPLANATION_TOP_K"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "5; evidence passages pinned per explanation after the question's own sources (8,000 characters together)"
+
+[[var]]
+name = "AI_EXPLANATION_MAX_OUTPUT_TOKENS"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "1500; output ceiling of one explanation (cut ones end with a notice)"
+
+[[var]]
+name = "AI_EXPLANATION_RATE_LIMIT_PER_MINUTE"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "6; new explanations (create, regenerate; cached ones are free) per user and minute (429 + Retry-After; 0 disables)"
+
+[[var]]
+name = "AI_EXPLANATION_DAILY_LIMIT_PER_USER"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "30; new explanations per user and Asia/Seoul day (429 explanation-daily-limit)"
+
+[[var]]
+name = "AI_EXPLANATION_MONTHLY_TOKEN_CAP"
+services = ["api"]
+kind = "config"
+check = "number"
+provider = "operator"
+note = "0 = off; environment-wide AI explanation tokens per month (409 explanation-budget-exceeded)"
+
+[[var]]
 name = "MOCK_EXAM_MAX_PROMPT_TOKENS"
 services = ["worker"]
 kind = "config"
@@ -809,7 +1001,7 @@ name = "LLM_API_KEY"
 services = ["worker"]
 kind = "secret"
 check = "nonempty"
-required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true", "WORKER_MOCK_EXAMS=true"]
+required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true", "WORKER_MOCK_EXAMS=true", "WORKER_ASK_LLM=true", "WORKER_AI_EXPLANATIONS=true"]
 provider = "LLM provider console (Anthropic)"
 note = "optional; unset disables the LLM features (summaries, chapter notes, mock exam AI types) — a user decision (cost, data policy)"
 
@@ -818,7 +1010,7 @@ name = "LLM_MODEL"
 services = ["api", "worker"]
 kind = "config"
 requires = "LLM_API_KEY"
-required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true", "WORKER_MOCK_EXAMS=true"]
+required_when = ["WORKER_DOCUMENT_SUMMARY=true", "WORKER_CHAPTER_NOTES=true", "WORKER_MOCK_EXAMS=true", "WORKER_ASK_LLM=true", "WORKER_AI_EXPLANATIONS=true"]
 same = true
 provider = "operator: the approved model id (no default)"
 note = "required whenever LLM_API_KEY is set; with WORKER_DOCUMENT_SUMMARY=true or WORKER_CHAPTER_NOTES=true also on the API (identical), which offers summaries / chapter notes only when it is set (DOCSUM-01-AC05, CHNOTE-01-AC06; the API never gets LLM_API_KEY)"
@@ -958,11 +1150,46 @@ forbidden = true
 note = "APP_ENV=test E2E hold barrier of the batched mock exam fake (K6)"
 
 [[var]]
+name = "WORKER_ASK_FAKE_LOG_DIR"
+services = ["worker"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test call record of the AI question / explanation fake (ASK-01-C11)"
+
+[[var]]
+name = "WORKER_ASK_HOLD_DIR"
+services = ["worker"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test hold barrier of the AI question / explanation fake"
+
+[[var]]
 name = "WORKER_MOCK_EXAM_FAULT_DIR"
 services = ["worker"]
 kind = "config"
 forbidden = true
 note = "APP_ENV=test crash fault of the batched mock exam fake (K7, MockExamSimulatedCrash)"
+
+[[var]]
+name = "RELATED_SOURCES_HOLD_DIR"
+services = ["api"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test hold barrier of the related-passage computation (RELSRC-01 R5)"
+
+[[var]]
+name = "RELATED_SOURCES_FAULT_DIR"
+services = ["api"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test first-computation outage of the related-passage computation (RELSRC-01 R6)"
+
+[[var]]
+name = "RELATED_SOURCES_CALL_LOG_DIR"
+services = ["api"]
+kind = "config"
+forbidden = true
+note = "APP_ENV=test search-call record of the related-passage computation (RELSRC-01 R8)"
 
 [[var]]
 name = "FORWARDED_ALLOW_IPS"

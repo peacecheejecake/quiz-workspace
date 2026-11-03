@@ -57,6 +57,9 @@ const EVENT_LABELS: Readonly<Record<string, string>> = {
   'mock_exam.deleted': '모의고사 삭제',
   'mock_exam.question_edited': '모의고사 문제 편집',
   'mock_exam.question_removed': '모의고사 문제 빼기',
+  // AIEXPL-01-C06: an AI explanation made (ids and version only).
+  'question.ai_explanation_generated': 'AI 해설 만듦',
+  'mock_exam.ai_explanation_generated': 'AI 해설 만듦',
 };
 
 export function eventLabel(eventType: string): string {
@@ -103,6 +106,7 @@ const JOB_TYPE_LABELS: Readonly<Record<string, string>> = {
   'question.generate': '변형 문제 생성',
   'chapter_note.generate': '정리 노트',
   'mock_exam.generate': '모의고사 생성',
+  'question.ai_explain': 'AI 해설',
 };
 
 export function jobTypeLabel(jobType: string): string {
@@ -142,6 +146,8 @@ const ERROR_LABELS: Readonly<Record<string, string>> = {
   llm_invalid_output: 'AI 응답 오류',
   summary_too_large: '문서가 너무 커서 요약 불가',
   document_unavailable: '문서를 사용할 수 없음',
+  explanation_answer_mismatch: '정답과 맞지 않는 AI 해설',
+  explanation_incomplete: '보기 설명이 빠진 AI 해설',
 };
 
 /** The cause of a failed or cancelled job as text (indexing → "색인 실패"); null otherwise. */

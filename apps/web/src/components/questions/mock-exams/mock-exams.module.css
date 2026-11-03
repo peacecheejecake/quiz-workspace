@@ -186,6 +186,11 @@
   line-height: var(--line-height-normal);
 }
 
+.askRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .badges {
   display: flex;
   flex-wrap: wrap;

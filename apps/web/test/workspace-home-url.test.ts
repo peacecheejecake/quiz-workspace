@@ -3,7 +3,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   contentSearchRedirect,
+  askConversationOf,
+  closeDialog,
   exclusiveClose,
+  holdsPracticePanels,
+  openDialogs,
+  withAskConversation,
+  withoutAsk,
+  withoutPanels,
   isFloatingPanel,
   isLegacySearchUrl,
   homeRedirect,
@@ -295,5 +302,77 @@ describe('the practice panel and the range run panel are exclusive', () => {
     expect(url.searchParams.getAll('panel')).toEqual(['documents']);
     expect(homeRedirect(WS, { question: Q })).toBeNull();
     expect(homeRedirect(WS, { practice: RUN })).toBeNull();
+  });
+});
+
+// ASK-01 (ASK-SYNC 2026-11-02 "panel 쌓기·뒤로가기"): `?panel=ask[&conversation=<id>]` is a home
+// dialog like the others, and it lives beside the practice panel and the run panel (QVIEW-01-AC09
+// does not concern it).
+describe('the AI 질문 panel in the URL', () => {
+  const C = '77777777-7777-4777-8777-777777777777';
+  const RUN = '44444444-4444-4444-8444-444444444444';
+  const Q = '66666666-6666-4666-8666-666666666666';
+
+  it('opens on the list or a conversation, on top, and closes with its conversation', () => {
+    expect(withAskConversation('?q=x&panel=history', null)).toBe('?q=x&panel=history&panel=ask');
+    expect(withAskConversation('?panel=ask&panel=history', C)).toBe(
+      `?panel=history&panel=ask&conversation=${C}`,
+    );
+    expect(withAskConversation(`?panel=ask&conversation=${C}`, null)).toBe('?panel=ask');
+    expect(withoutAsk(`?q=x&panel=ask&conversation=${C}&panel=history`)).toBe('?q=x&panel=history');
+    expect(closeDialog(`?panel=ask&conversation=${C}`, 'ask')).toBe('');
+    expect(withoutPanels(`?q=x&panel=ask&conversation=${C}`)).toBe('?q=x');
+  });
+
+  it('reads the conversation only while the panel is open, and only a uuid', () => {
+    expect(askConversationOf(new URLSearchParams(`panel=ask&conversation=${C}`))).toBe(C);
+    expect(askConversationOf(new URLSearchParams('panel=ask&conversation=nope'))).toBeNull();
+    expect(askConversationOf(new URLSearchParams('panel=ask'))).toBeNull();
+    expect(askConversationOf(new URLSearchParams(`conversation=${C}`))).toBeUndefined();
+  });
+
+  it('stays open beside the practice panel and the run panel, whichever opens or closes', () => {
+    const withAsk = `?panel=ask&conversation=${C}`;
+    expect(openDialogs(`${withAsk}&question=${Q}`)).toEqual(['question', 'ask']);
+    expect(withPracticeQuestion(`${withAsk}&practice=${RUN}&i=2`, Q)).toBe(
+      `${withAsk}&question=${Q}`,
+    );
+    expect(
+      withRunPanel(`${withAsk}&question=${Q}`, {
+        step: 'picker',
+        source: 'bank',
+        mockExamId: null,
+      }),
+    ).toBe(`${withAsk}&practice=new&source=bank`);
+    // Swapping the practice panel for the run closes only the practice panel.
+    expect(exclusiveClose(`${withAsk}&question=${Q}`, `${withAsk}&practice=new&source=bank`)).toBe(
+      withAsk,
+    );
+    expect(closeDialog(`${withAsk}&question=${Q}`, 'question')).toBe(withAsk);
+    // A deep link with both panels keeps the run and the AI 질문 panel.
+    const url = new URL(
+      homeRedirect(WS, { panel: 'ask', conversation: C, question: Q, practice: RUN, i: '1' }) ?? '',
+      'http://x',
+    );
+    expect(url.searchParams.getAll('panel')).toEqual(['ask']);
+    expect(url.searchParams.get('conversation')).toBe(C);
+    expect(url.searchParams.get('practice')).toBe(RUN);
+    expect(url.searchParams.has('question')).toBe(false);
+  });
+});
+
+describe('holdsPracticePanels (ASK-01 deep link staging)', () => {
+  const dialogs = ['documents', 'question', 'ask'];
+  it('holds the practice panel until its own position is staged', () => {
+    expect(holdsPracticePanels(dialogs, new Set())).toBe(true);
+    expect(holdsPracticePanels(dialogs, new Set(['documents']))).toBe(true);
+  });
+  it('releases it before the later ask dialog is staged', () => {
+    expect(holdsPracticePanels(dialogs, new Set(['documents', 'question']))).toBe(false);
+  });
+  it('holds the run panel at its own position too and ignores a missing panel', () => {
+    expect(holdsPracticePanels(['practice', 'ask'], new Set())).toBe(true);
+    expect(holdsPracticePanels(['practice', 'ask'], new Set(['practice']))).toBe(false);
+    expect(holdsPracticePanels(['documents', 'ask'], new Set())).toBe(false);
   });
 });

@@ -32,7 +32,11 @@ export default async function Page({
     <div data-screen-id="SEARCH-02">
       <ContentSearchPage
         key={workspace.id}
-        workspace={{ id: workspace.id, name: workspace.name }}
+        workspace={{
+          id: workspace.id,
+          name: workspace.name,
+          archived: workspace.status === 'archived',
+        }}
         documents={docs.documents
           .filter(isSearchableBody)
           .map((d) => ({ id: d.id, title: d.title }))}

@@ -250,7 +250,7 @@ make deploy-prepare REF=main ENV=production ARGS="--db-url-env SUPABASE_DB_URL -
 - api 도메인(현재 Railway 기본 domain). (지역 Singapore, production web `quiz.red-10-proto.xyz`, SMTP Resend `mail.red-10-proto.xyz`는 결정됨.)
 - GHCR 이미지 공개 여부 vs Railway registry credential.
 - staging 도메인의 Vercel Deployment Protection.
-- LLM 사용 여부·모델·예산(`LLM_API_KEY`/`LLM_MODEL`; 미설정 시 문제 생성 비활성). 문서 요약·챕터 정리 노트(`WORKER_DOCUMENT_SUMMARY`·`WORKER_CHAPTER_NOTES`)를 staging·production에서 켤지와 그 예산(9장, ⛔ 사용자 승인). AI 모의고사(`WORKER_MOCK_EXAMS`)를 켤지와 그 예산·`MOCK_EXAM_*` 조정(11장, ⛔ 사용자 승인).
+- LLM 사용 여부·모델·예산(`LLM_API_KEY`/`LLM_MODEL`; 미설정 시 문제 생성 비활성). 문서 요약·챕터 정리 노트(`WORKER_DOCUMENT_SUMMARY`·`WORKER_CHAPTER_NOTES`)를 staging·production에서 켤지와 그 예산(9장, ⛔ 사용자 승인). AI 모의고사(`WORKER_MOCK_EXAMS`)를 켤지와 그 예산·`MOCK_EXAM_*` 조정(11장, ⛔ 사용자 승인). AI 질문·AI 해설(`WORKER_ASK_LLM`·`WORKER_AI_EXPLANATIONS`)을 켤지와 그 예산·`ASK_*`·`AI_EXPLANATION_*` 한도(12장, ⛔ 사용자 승인).
 - `/terms`, `/privacy` 실제 문구(현재 placeholder).
 - CAPTCHA(A4 구현 완료): staging을 기본값인 Turnstile 테스트 키 쌍으로 둘지, staging 전용 실제 widget을 쓸지(그 경우 DEP smoke 로그인 단계는 수동). production은 실제 widget 필수.
 - PR preview(10장): 켤지(`PR_PREVIEW_ENABLED`), preview project에 `RELAY_CLIENT_SECRET`을 넣을지(공유 링크 preview), staging이 실제 Turnstile widget을 쓸 때 preview 로그인을 어떻게 할지.
@@ -381,3 +381,28 @@ make deploy-prepare REF=main ENV=production ARGS="--db-url-env SUPABASE_DB_URL -
 5. 첫 주에는 provider 사용량과 job `usage` 합계를 예산과 비교한다.
 
 **끄기·롤백**: `api`·`worker`의 `WORKER_MOCK_EXAMS`를 `false`로(같은 값) 바꾸고 worker → api 순으로 Restart. AI 유형 checkbox가 이유 글자와 함께 비활성이 되고 새 AI 생성은 409로 거절된다. 이미 만든 모의고사와 그 풀이 기록은 그대로 보이고 풀 수 있으며, `보기 섞기` 모의고사는 계속 만들 수 있다. Restart로 중단된 진행 중 생성은 다시 전달될 때 `mock_llm_disabled`로 끝나고(이전 회차 문제는 남음) 다시 켠 뒤 사용자가 `다시 시도`할 수 있다. LLM 사용 자체를 끊으려면 worker의 `LLM_API_KEY`도 지운다(요약·정리 노트도 함께 꺼짐, 9장). 코드 롤백은 5장과 같다 — 모의고사 테이블은 additive라 이전 코드에서 그대로 남는다(drop migration 없음).
+
+## 12. AI 질문·AI 문제 해설 켜기 (ASK-X) — ⛔ 사용자 승인 후
+
+AI 질문(ASK-01)과 AI 문제 해설(AIEXPL-01)은 모든 환경에서 **기본 꺼짐**이다(ASK-SPEC 2026-11-01 — 변수 이름·기본값은 구현 Task가 env manifest에 넣을 때 확정). 9장과 같이 이 장은 방법만 적고, 저장소·CI·배포 workflow는 어떤 환경에서도 이 값을 켜지 않는다. 승인(환경, 모델, 월 예산, 데이터 정책 동의)은 `docs/implementation-plan.md` §7에 남긴 뒤 시작한다. CI·E2E는 `APP_ENV=test`의 결정적 fake만 쓴다.
+
+**무엇이 켜지나**
+
+| 변수 | 서비스 | 켜면 |
+|---|---|---|
+| `WORKER_ASK_LLM=true` | `api`·`worker` **같은 값** | 구성원이 header `AI 질문`과 문제의 `질문하기`(문제 상세·모의고사 문제)로 질문한다. **질문, 첨부 문제(등록 문제·모의고사 문제; 제출 전에는 발문·보기·고른 답만, 제출 후·문제 상세·모의고사 문제 관리에서는 정답·해설·출처 포함), 검색된 발행 교재 구절(질문마다 최대 16,000자)이 LLM 제공자로 전송된다.** |
+| `WORKER_AI_EXPLANATIONS=true` | `api`·`worker` **같은 값** | 제출 후 결과 아래(풀이 panel·범위 풀이·모의고사 풀이)·문제 상세의 `AI 해설 만들기`. **문제 revision(등록 문제 또는 모의고사 문제)의 발문·보기·정답·해설·출처와 교재 구절(최대 8,000자)이 전송된다.** 문제 revision마다 한 번 만들어 Workspace가 공유한다(모의고사 문제는 원본과 따로). |
+
+두 플래그는 독립이다. 관련 본문(RELSRC-01)은 LLM을 쓰지 않아 이 장의 승인 대상이 아니고 끄는 설정도 없다(언제나 켜짐). worker는 `interactive` queue를 읽는 process를 띄워야 한다(`ASK_WORKER_CONCURRENCY`, 기본 2; 플래그가 둘 다 꺼져 있으면 띄우지 않아도 됨). LLM 변수는 9장과 같다: worker `LLM_API_KEY`·`LLM_MODEL`, api 같은 `LLM_MODEL`(check-env `same`), 선택 `LLM_PRICE_*`(넣어야 `cost_usd`가 기록됨).
+
+**한도(기본값 유지 권장)** — `ASK_MAX_QUESTION_CHARS=1000`, `ASK_MAX_TURNS=20`, `ASK_HISTORY_TURNS=3`, `ASK_TOP_K=8`, `ASK_MAX_CONTEXT_CHARS=16000`, `ASK_MAX_OUTPUT_TOKENS=2000`, `ASK_LLM_EFFORT=low`, `ASK_RATE_LIMIT_PER_MINUTE=6`, `ASK_DAILY_LIMIT_PER_USER=50`, `ASK_MONTHLY_TOKEN_CAP=0`(끔; 켜려면 월 input+output token 합계), `ASK_RETENTION_DAYS=90`, `ASK_MAX_REGENERATIONS=5`(같은 질문의 답 버전 수; `다시 생성`은 분당·하루 한도에도 셈); `AI_EXPLANATION_TOP_K=5`, `AI_EXPLANATION_MAX_OUTPUT_TOKENS=1500`, `AI_EXPLANATION_RATE_LIMIT_PER_MINUTE=6`, `AI_EXPLANATION_DAILY_LIMIT_PER_USER=30`, `AI_EXPLANATION_MONTHLY_TOKEN_CAP=0`.
+
+**비용 가늠**(`claude-sonnet-5-5`, 입력 $2 · 출력 $10 / 1M token, 2026-10 공개 가격 — 켜기 전에 제공자 가격표로 다시 확인)
+
+- AI 질문 1개 ≈ 입력 1만~1.5만 token + 출력 0.5k~2k → **$0.03~0.05**. 하루 한도 50개를 매일 다 쓰는 사용자 1명 ≈ 월 $45~75 — 월 예산을 넘길 수 있으므로 `ASK_MONTHLY_TOKEN_CAP`이나 낮은 하루 한도를 함께 정한다.
+- AI 해설 1개 ≈ 입력 6k~9k + 출력 1k~1.5k → **$0.02~0.03**, 문제 revision마다 한 번(1,000문제를 모두 만들면 약 $20~30). 캐시 읽기는 비용이 없다.
+- 켜기 전 측정: `make eval-ask-llm`(합성 fixture만 전송: 인용 유효율·근거 지지율·찾지 못함 정확도·`hint` 정답 누설률·token·`cost_usd`), 연결만 확인할 때 `make test-llm`.
+
+**켜는 순서**(환경마다, staging 먼저): (1) 승인 기록, 제공자 console 예산 알림. (2) env 파일에 값 → `make check-env ENV=<env> ARGS="--check api=… --check worker=…"`. (3) Railway `worker`에 변수 + interactive process 설정 → Restart, 이어서 `api` → Restart. (4) 확인: 작은 교재에서 질문 하나 → 글자가 흘러나오고 `AI 생성`·각주가 보이는지, 첫 글자까지 시간(목표 p50 ≤ 3초), 풀이 panel 제출 전 `질문하기` 답에 정답이 없는지, 제출 후 `AI 해설 만들기` → 두 번째 사용자에게 캐시가 보이는지, `llm_feature_usage` 합계. worker 로그에는 본문·prompt·출력이 없고 counts·오류 코드만. (5) 첫 주 provider 사용량과 usage 합계를 예산과 비교.
+
+**끄기·롤백**: `api`·`worker`의 플래그를 `false`(같은 값)로 바꾸고 Restart. 저장된 대화·AI 해설은 그대로 읽히고 새 질문·생성만 멈춘다(이미 시작한 답·해설은 끝까지 진행된다). LLM 사용 자체를 끊으려면 `LLM_API_KEY`를 지운다(요약·노트·문제 생성도 함께 꺼짐).

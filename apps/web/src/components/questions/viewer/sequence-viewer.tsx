@@ -17,7 +17,8 @@
 // The URL is the screen's (`?practice=…`, practice-runs.ts): `시작`, `결과 보기` and `처음부터 다시`
 // replace the history entry, moving between positions pushes one (QOV-01-AC14). Closing (Escape,
 // 닫기) asks nothing: every submission is saved already. `bank` runs carry the study toggles and the
-// screen's 문제 관리 / 문제 정보 menu (`headerExtra`); `mock` runs carry neither.
+// screen's 문제 관리 / 문제 정보 menu (`headerExtra`); `mock` runs carry neither, but
+// `질문하기` (ASK-01, the question attached with its session).
 import { Button, Checkbox, FloatingSidePanel, ProgressBar, questionTypeLabels } from '@quiz/ui';
 import {
   useEffect,
@@ -29,6 +30,9 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
+import { AskQuestionButton } from '@/components/ask/ask-launcher';
+import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
+import type { AskAttachmentInput } from '@/lib/ask/client';
 import { displayStem } from '@/lib/questions/display-stem';
 import {
   lookupOverviewQuestionAction,
@@ -312,6 +316,7 @@ export function SequenceViewer({
     onStarted: (runId) => onNavigate({ step: 'solve', runId, position: 1 }, 'replace'),
   });
   const solve = useSolveStep({
+    workspaceId,
     view: view?.step === 'solve' ? view : null,
     runVersion,
     open,
@@ -347,7 +352,11 @@ export function SequenceViewer({
     body = solve.body;
     footer = solve.footer;
     const info = solve.question;
-    if (info && source === 'bank') {
+    if (solve.attachment) {
+      // ASK-01 "문제 쪽 진입점": a mock exam question's `질문하기` (hint before its submission,
+      // full after — the server decides from the session). The bank's run has none.
+      header = <AskQuestionButton attachment={solve.attachment} />;
+    } else if (info && source === 'bank') {
       header = (
         <>
           {!archived && solve.flags ? (
@@ -582,6 +591,7 @@ function itemQuestion(item: RunItem): AnswerQuestion {
 }
 
 function useSolveStep({
+  workspaceId,
   view,
   runVersion,
   open,
@@ -595,6 +605,7 @@ function useSolveStep({
   onFlagsFailed,
   onNavigate,
 }: {
+  readonly workspaceId: string;
   readonly view: Extract<RunUrlState, { step: 'solve' }> | null;
   /** Bumped when the run may have changed elsewhere (finished by its results step). */
   readonly runVersion: number;
@@ -813,6 +824,7 @@ function useSolveStep({
       body: null,
       footer: undefined,
       question: null,
+      attachment: null,
       flags: null,
       changeFlags: () => undefined,
     };
@@ -851,6 +863,39 @@ function useSolveStep({
           {progressText(position, total)}
         </p>
       </div>
+    ) : null;
+
+  // AIEXPL-01: under a submitted position's result (also one reopened read-only through 이전 or
+  // the results list), with that position's submitted session; never before a submission.
+  const answeredSessionId = answered ? (session?.id ?? item?.practice_session_id ?? null) : null;
+  const explained = item?.question_id ?? null;
+  const explanation =
+    answeredSessionId && explained && shownQuestion ? (
+      <AiExplanation
+        workspaceId={workspaceId}
+        target={{ kind: source === 'mock' ? 'mock' : 'question', id: explained }}
+        gate={
+          source === 'mock'
+            ? { mock_practice_session_id: answeredSessionId }
+            : { practice_session_id: answeredSessionId }
+        }
+        options={shownQuestion.options}
+        askAttachment={
+          source === 'mock'
+            ? {
+                kind: 'mock_exam_question',
+                view: 'practice',
+                mock_exam_question_id: explained,
+                mock_practice_session_id: answeredSessionId,
+              }
+            : {
+                kind: 'question',
+                view: 'practice',
+                question_id: explained,
+                practice_session_id: answeredSessionId,
+              }
+        }
+      />
     ) : null;
 
   let content: ReactNode;
@@ -933,6 +978,7 @@ function useSolveStep({
             }
           />
         </form>
+        {explanation}
       </>
     );
   }
@@ -992,6 +1038,19 @@ function useSolveStep({
           chapterTitle: item.chapter_title ?? '챕터 없음',
         }
       : null;
+  // The mock exam position's practice session (open, or the submitted one), with the answer chosen
+  // so far; a question no longer in the mock exam (or a deleted mock exam) has none.
+  const mockSessionId = session?.id ?? item?.practice_session_id ?? null;
+  const attachment: AskAttachmentInput | null =
+    source === 'mock' && question && mockSessionId
+      ? {
+          kind: 'mock_exam_question',
+          view: 'practice',
+          mock_exam_question_id: question.questionId,
+          mock_practice_session_id: mockSessionId,
+          selected_option_ids: answered ? [] : answer.selected.slice(0, 50),
+        }
+      : null;
   return {
     title,
     description: question
@@ -1005,6 +1064,7 @@ function useSolveStep({
     ),
     footer,
     question,
+    attachment,
     flags: shownFlags,
     changeFlags,
   };

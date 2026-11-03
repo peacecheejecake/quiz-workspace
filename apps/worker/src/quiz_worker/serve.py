@@ -14,19 +14,21 @@ from collections.abc import Sequence
 
 import billiard
 
-from quiz_worker.celery_app import DEFAULT_QUEUE, app_from_environment
+from quiz_worker.celery_app import DEFAULT_QUEUE, INTERACTIVE_QUEUE, app_from_environment
 from quiz_worker.resources import configure_threads
 from quiz_worker.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
 
-def build_worker_argv(concurrency: int, log_level: str, *, beat: bool = True) -> list[str]:
+def build_worker_argv(
+    concurrency: int, log_level: str, *, beat: bool = True, queue: str = DEFAULT_QUEUE
+) -> list[str]:
     argv = [
         "worker",
         f"--concurrency={concurrency}",
         f"--loglevel={log_level.upper()}",
-        f"--queues={DEFAULT_QUEUE}",
+        f"--queues={queue}",
         # No gossip/mingle broadcast traffic; a single small deployment does not need it.
         "--without-gossip",
         "--without-mingle",
@@ -59,13 +61,22 @@ def main(argv: Sequence[str] | None = None) -> None:
     threads = configure_threads(settings.num_threads)
     app = app_from_environment()
     logger.info(
-        "starting worker (env=%s, concurrency=%d, threads=%d)",
+        "starting worker (env=%s, queue=%s, concurrency=%d, threads=%d)",
         settings.app_env,
-        settings.concurrency,
+        settings.queue,
+        settings.ask_worker_concurrency
+        if settings.queue == "interactive"
+        else settings.concurrency,
         threads,
     )
+    # WORKER_QUEUE=interactive (ASK-B): a separate process for `ask.answer` with its own pool
+    # size (ASK_WORKER_CONCURRENCY) and no beat; the default process keeps the beat schedule.
+    interactive = settings.queue == "interactive"
     worker_argv = build_worker_argv(
-        settings.concurrency, settings.log_level, beat=settings.embedded_beat
+        settings.ask_worker_concurrency if interactive else settings.concurrency,
+        settings.log_level,
+        beat=settings.embedded_beat and not interactive,
+        queue=INTERACTIVE_QUEUE if interactive else DEFAULT_QUEUE,
     )
     app.worker_main([*worker_argv, *(argv or [])])
 
