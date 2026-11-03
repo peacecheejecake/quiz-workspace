@@ -599,9 +599,14 @@ test(
     const ws = await workspaceFactory.create(owner, '챕터 재분배');
     const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
     const ch1 = await outlineNodeId(owner, documentId, '1장 물의 순환');
+    const created: Question[] = [];
     for (const n of [1, 2, 3]) {
-      await createQuestion(owner, ws.id, visual10Mcq(n, ch1, documentId));
+      created.push(await createQuestion(owner, ws.id, visual10Mcq(n, ch1, documentId)));
     }
+    // The 다시 풀기 toggle only shows on a correctly answered question (RETRY-CORRECT).
+    const first = created[0];
+    if (!first) throw new Error('question 1');
+    await answerCorrectly(owner, first);
     await signInAs(page, owner.user);
     await page.goto(overviewPath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(3);
