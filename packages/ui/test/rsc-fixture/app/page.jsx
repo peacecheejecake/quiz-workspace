@@ -109,6 +109,10 @@ import {
   overlappingHighlights,
   POINTER_FLOATING_CLOSE_MS,
   PointerAnchoredFloating,
+  PREVIEW_CLOSE_MS,
+  PREVIEW_LONG_PRESS_MS,
+  PreviewTooltip,
+  usePairedSheet,
   SEARCH_DEBOUNCE_MS,
   SEARCH_FIELD_TEXT,
   SearchField,
@@ -116,7 +120,12 @@ import {
   TOUCH_SELECTION_REST_MS,
 } from '@quiz/ui';
 
-const hooks = [useTheme, useToast, useUnsavedChanges];
+// Constants must be real numbers on the server, not client references (a client module's export).
+for (const value of [PREVIEW_CLOSE_MS, PREVIEW_LONG_PRESS_MS, TOOLTIP_DELAY_MS]) {
+  if (typeof value !== 'number') throw new Error('kit constants must be plain numbers in RSC');
+}
+
+const hooks = [useTheme, useToast, useUnsavedChanges, usePairedSheet];
 // Need function props (onOpen / onPressedChange), so a Client Component has to render them.
 const interactive = [
   QuestionDot,
@@ -147,7 +156,11 @@ const readingSummary = [
   highlightColorLabels.pink,
   HIGHLIGHT_MENU_TEXT.label,
   SEARCH_FIELD_TEXT.none,
-  SEARCH_DEBOUNCE_MS + TOUCH_SELECTION_REST_MS + POINTER_FLOATING_CLOSE_MS,
+  SEARCH_DEBOUNCE_MS +
+    TOUCH_SELECTION_REST_MS +
+    POINTER_FLOATING_CLOSE_MS +
+    PREVIEW_CLOSE_MS +
+    PREVIEW_LONG_PRESS_MS,
 ].join(' · ');
 
 // The status helpers are plain functions and must be callable on the server.
@@ -321,6 +334,12 @@ export default function Page() {
           <PointerAnchoredFloating label="문제 미리보기" content="3장 12번 · 객관식">
             <a href="#q">[1]</a>
           </PointerAnchoredFloating>
+          <PreviewTooltip content="원문">
+            <button type="button">문제 원문 보기</button>
+          </PreviewTooltip>
+          <FloatingSidePanel paired title="문제 원문" trigger={<Button>짝 dialog</Button>}>
+            원문
+          </FloatingSidePanel>
         </AppShell>
       </ToastProvider>
     </ThemeProvider>

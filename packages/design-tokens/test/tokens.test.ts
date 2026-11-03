@@ -154,12 +154,21 @@ describe('generated TS module', () => {
   });
 
   it('exposes breakpoints and media queries derived from the breakpoint tokens', () => {
-    expect(breakpoints).toEqual({ md: 768, lg: 1024 });
+    expect(breakpoints).toEqual({ md: 768, lg: 1024, pairedPanel: 868 });
     expect(mediaQueries).toEqual({
       mobile: '(width < 768px)',
       tabletUp: '(width >= 768px)',
       desktop: '(width >= 1024px)',
+      pairedSheet: '(width < 868px)',
     });
+  });
+
+  it('the paired-dialog breakpoint fits panel + gaps + dialog minimum (design-system §5.6)', () => {
+    const px = (name: keyof typeof staticTokens) => Number.parseInt(staticTokens[name], 10);
+    // panel + right margin 16 + gap 16 + dialog minimum + left margin 16
+    expect(breakpoints.pairedPanel).toBe(
+      px('floating-panel-width') + 3 * 16 + px('paired-dialog-min-width'),
+    );
   });
 });
 
