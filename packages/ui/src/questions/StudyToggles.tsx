@@ -55,7 +55,7 @@ export function RetryToggle(props: StudyToggleProps) {
       {...props}
       onLabel="다시 풀기 해제"
       offLabel="다시 풀기 표시"
-      icon={<RetryIcon />}
+      icon={<RetryIcon filled={props.pressed} />}
     />
   );
 }
