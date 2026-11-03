@@ -508,10 +508,12 @@ export async function boxOf(locator: Locator): Promise<{
 }
 
 /**
- * Touch long-press, browser neutral: a primary `pointerdown` with `pointerType: 'touch'`, a wait of
- * `ms`, then `pointerup` (the contract of S6: the implementation listens to pointer events).
+ * Touch press, browser neutral, as a browser delivers it: a primary `pointerdown` with
+ * `pointerType: 'touch'`, a wait of `ms`, `pointerup`, then the follow-up `click` on the same target
+ * (S6: the implementation listens to pointer events and must suppress that click after a
+ * long-press). A short `ms` is a tap, 500 ms or more a long-press.
  */
-export async function longPress(page: Page, target: Locator, ms: number): Promise<void> {
+export async function touchPress(page: Page, target: Locator, ms: number): Promise<void> {
   const box = await boxOf(target);
   const init = {
     pointerType: 'touch',
@@ -527,6 +529,12 @@ export async function longPress(page: Page, target: Locator, ms: number): Promis
   await target.dispatchEvent('pointerdown', init);
   await page.waitForTimeout(ms);
   await target.dispatchEvent('pointerup', { ...init, buttons: 0 });
+  await target.dispatchEvent('click', { bubbles: true, cancelable: true, detail: 1 });
+}
+
+/** A touch long-press (see touchPress). */
+export function longPress(page: Page, target: Locator, ms: number): Promise<void> {
+  return touchPress(page, target, ms);
 }
 
 /**

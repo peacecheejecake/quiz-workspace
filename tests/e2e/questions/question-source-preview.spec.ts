@@ -26,6 +26,7 @@ import {
   importLocations,
   isInert,
   longPress,
+  touchPress,
   LONG_PRESS_MS,
   noHorizontalScroll,
   PAGE_HEIGHT_PT,
@@ -215,6 +216,9 @@ test(
     await page.mouse.move(5, 5);
     await longPress(page, button, LONG_PRESS_MS + 150);
     await expect(tooltip).toBeVisible();
+    // The release click that follows a long-press is suppressed: give a wrong dialog time to open.
+    await page.waitForTimeout(400);
+    await expect(tooltip).toBeVisible();
     await expect(sourceUi.dialog(page)).toHaveCount(0);
 
     // A tap outside the tooltip (inside the panel) closes it; the panel stays.
@@ -223,7 +227,7 @@ test(
     await expect(panel).toBeVisible();
 
     // A short tap is a click: the dialog opens.
-    await button.tap();
+    await touchPress(page, button, 60);
     await expect(sourceUi.dialog(page)).toBeVisible();
   },
 );
