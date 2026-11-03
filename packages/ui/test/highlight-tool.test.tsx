@@ -356,6 +356,25 @@ describe('HILITE-01-C09 HighlightableText', () => {
     expect(window.getSelection()?.toString()).toBe('의 순서');
   });
 
+  it('HILITE-01-C09 a tap on a highlight (no selection) opens its menu like a click', async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn();
+    render(<Harness highlights={[YELLOW]} onAction={onAction} />);
+    window.getSelection()?.removeAllRanges();
+    const mark = document.querySelector<HTMLElement>('mark[data-highlight-id="h1"]');
+    if (!mark) throw new Error('no mark');
+    fireEvent.pointerDown(mark, { pointerType: 'touch' });
+    fireEvent.pointerUp(mark, { pointerType: 'touch' });
+    const open = await menu();
+    expect(within(open).getByRole('menuitemradio', { name: '노랑' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(within(open).getByRole('menuitem', { name: '하이라이트 지우기' })).toBeVisible();
+    await user.click(within(open).getByRole('menuitemradio', { name: '파랑' }));
+    expect(onAction).toHaveBeenCalledWith({ type: 'recolor', id: 'h1', color: 'blue' });
+  });
+
   it('HILITE-01-C09 opens the menu for a touch selection only after it rests', async () => {
     vi.useFakeTimers();
     try {

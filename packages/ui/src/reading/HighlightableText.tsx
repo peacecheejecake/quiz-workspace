@@ -277,18 +277,18 @@ export function HighlightableText({
     const onPointerEnd = (event: globalThis.PointerEvent) => {
       if (!pointer.current.down) return;
       pointer.current.down = false;
-      if (pointer.current.type === 'touch') {
-        settleTouch();
-        return;
-      }
+      const touch = pointer.current.type === 'touch';
       const target = event.target instanceof Element ? event.target : null;
       // The selection settles after the pointerup (double click selects a word).
       window.setTimeout(() => {
-        const selection = readSelection(region, 'mouse');
+        const selection = readSelection(region, touch ? 'touch' : 'mouse');
         if (selection) {
-          emit(selection);
+          // A long-press selection opens once it rests; a mouse selection at once.
+          if (touch) settleTouch();
+          else emit(selection);
           return;
         }
+        // No selection: a click or a tap on a highlight opens its menu (touch parity).
         const mark = target?.closest<HTMLElement>('mark[data-highlight-id][data-pressable]');
         if (mark && region.contains(mark)) {
           const pressed = pressSelection(mark, 'press');
