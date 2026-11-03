@@ -203,7 +203,7 @@ Confirmed question
 - 초안 10개를 생성한 시점에는 점 수 불변, 그중 3개 승인하면 점 103개.
 - Favorite 지정 전후 base status 색상 그대로, marker만 rounded-square에서 rounded-star로 전환되고 셀 크기는 불변. hover/focus-visible 때만 marker scale 확대.
 - 마지막 풀이 정답 + needs_retry=true인 문제는 노란 점. retry를 해제하면 초록으로 복귀.
-- 마지막 채점 결과가 정답이 아닌 문제에는 `다시 풀기` toggle이 없고, API는 켜기를 409 `retry-requires-correct`로 거절하며, 이후 오답이 채점되면 플래그가 꺼진다(§16).
+- 마지막 채점 결과가 정답이 아닌 문제에는 `다시 풀기` toggle이 없고(기존에 켜진 플래그는 Heatmap·필터에 그대로 보임), API는 켜기를 409 `retry-requires-correct`로 거절하며, 이후 오답이 채점되면 플래그가 꺼진다(§16).
 - hover만 10회 해도 unseen 유지, click으로 practice panel을 열면 viewed.
 - 선택지 랜덤 정렬 100회 후에도 정답 option ID 매핑과 채점 일치.
 - inverse 문제는 정답이 하나로 결정되지 않는 경우 DRAFT validation warning 및 등록 차단/수동 해결.
@@ -336,7 +336,7 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 1. **판정.** 문제의 *마지막 채점 확정 결과가 정답*(Heatmap `정답` 상태와 같은 `last_graded_result = correct`)이면 `다시 풀기`를 켤 수 있다. 합쳐진 중복이 있으면 §10.2의 합친 상태로 판정한다. 채점 대기 제출은 채점 결과가 아니라서(§2.1) 이전 채점 결과가 판정을 유지한다.
 2. **UI.** 켤 수 없는 문제에는 `RetryToggle`을 렌더링하지 않는다(비활성이 아님). `practice` 풀이 panel은 정답 제출 직후 보이고 이후 오답이면 사라진다. `sequence(bank)`도 같다. `sequence(mock)`·`read-only`는 원래 없다. Heatmap marker 자체에는 `다시 풀기` 토글 조작이 없고(상태 표시만), 다른 곳에서 `RetryToggle`/my-state를 쓰는 경로도 이 규칙을 따른다.
 3. **API.** `PATCH /questions/{id}/my-state`는 마지막 채점 결과(합친 상태)가 정답이 아닌 문제의 `needs_retry: true`를 409 `retry-requires-correct`로 거절한다(요청 전체 거절, 아무것도 쓰지 않음). `needs_retry: false`는 늘 허용하며 합쳐진 중복의 행도 함께 끈다(§10.2).
-4. **자동 해제 — 규칙의 자리.** 새 채점 결과가 오답이면 `needs_retry`를 끈다. 이 규칙은 API 코드가 아니라 DB trigger(`question_user_states_retry_clear`, `last_graded_result`를 쓰는 insert/update, migration `20261104220000_retry_correct_only.sql`)에 있다. 자동 채점·직접 채점·이후의 모든 채점 경로가 `question_user_states.last_graded_result`를 쓰는 곳을 지나가므로 한 곳에서 보장되고, 합쳐진 중복 행도 같은 trigger가 끈다. 정답 채점은 플래그를 바꾸지 않는다.
-5. **기존 데이터.** 같은 migration이 마지막 채점 결과(합친 상태)가 정답이 아닌 문제의 기존 `needs_retry`를 모두 끈다(안 푼·본·오답·채점 대기만). 활동 이력은 만들지 않는다.
+4. **자동 해제 — 규칙의 자리.** 앞으로의 새 채점 결과가 오답이면 `needs_retry`를 끈다. 이 규칙은 API 코드가 아니라 DB trigger(`question_user_states_retry_clear`, `last_graded_result`를 쓰는 insert/update, migration `20261104220000_retry_correct_only.sql`)에 있다. 자동 채점·직접 채점·이후의 모든 채점 경로가 `question_user_states.last_graded_result`를 쓰는 곳을 지나가므로 한 곳에서 보장되고, 합쳐진 중복 행도 같은 trigger가 끈다. 정답 채점은 플래그를 바꾸지 않는다.
+5. **기존 데이터는 그대로 (사용자 결정 2026-11-04 변경).** 이미 켜져 있는 플래그는 migration이 끄지 않는다(데이터를 바꾸는 단계 없음). 마지막 채점 결과가 정답이 아닌 문제에 켜진 기존 플래그는 Heatmap `retry` 표시와 `다시 풀기` 필터에 그대로 나오지만, toggle은 보이지 않는다(1~2항) — 그 문제를 정답으로 맞힌 뒤에야 toggle로 끌 수 있다. 새 오답 채점이 오면 4항대로 꺼진다.
 6. **이력 불변.** attempt와 `last_graded_result`는 바뀌지 않는다. 플래그만 꺼진다.
 7. **알려진 가장자리.** 중복 정리(merge)·되돌리기로 합친 상태의 판정이 바뀌어 플래그가 정답이 아닌 문제에 남을 수 있다 — 그 문제는 toggle이 없고 Heatmap은 `retry`로 보이며, 다음 오답 채점 또는 끄기 PATCH가 정리한다(follow-up).
