@@ -6,7 +6,8 @@
 // disabled and the reason in text. UX7-BANK-2 adds 보관·초안 문제, enabled for every member.
 // UX7-DEDUP adds 중복 문제 정리, editor-only like 직접 추가 (QOV-01-AC16). QVIEW-W adds
 // 문제 풀기 (the range run, QVIEW-01), enabled for every member like 보관·초안 문제. MOCK-W adds
-// 모의고사 (MOCK-01) between them, enabled for every member too.
+// 모의고사 (MOCK-01) between them, enabled for every member too. UX9-REDIST-W adds 챕터 재분배
+// (CHREDIST-01) after 중복 문제 정리, editor-only too.
 import './dom-setup';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -19,6 +20,7 @@ function menu(readOnly: QuestionMenuReadOnly) {
   const handlers = {
     onCreate: vi.fn(),
     onDuplicates: vi.fn(),
+    onRedistribute: vi.fn(),
     onInactive: vi.fn(),
     onMockExams: vi.fn(),
     onPractice: vi.fn(),
@@ -28,7 +30,7 @@ function menu(readOnly: QuestionMenuReadOnly) {
 }
 
 describe('home `문제` menu', () => {
-  it('QOV-01-AC11 offers 직접 추가 and 중복 문제 정리 to editors, then 모의고사, and opens each', async () => {
+  it('QOV-01-AC11 offers 직접 추가, 중복 문제 정리 and 챕터 재분배 to editors, then 모의고사, and opens each', async () => {
     const user = userEvent.setup();
     const handlers = menu(null);
     const trigger = screen.getByRole('button', { name: '문제' });
@@ -39,6 +41,7 @@ describe('home `문제` menu', () => {
     expect(items).toEqual([
       '직접 추가',
       '중복 문제 정리',
+      '챕터 재분배',
       '보관·초안 문제',
       '모의고사',
       '문제 풀기',
@@ -56,6 +59,10 @@ describe('home `문제` menu', () => {
     await waitFor(() => expect(handlers.onDuplicates).toHaveBeenCalledTimes(1));
     // The dialog opens after the menu returned focus to its trigger.
     expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    await user.click(screen.getByRole('menuitem', { name: '챕터 재분배' }));
+    await waitFor(() => expect(handlers.onRedistribute).toHaveBeenCalledTimes(1));
 
     await user.click(trigger);
     await user.click(screen.getByRole('menuitem', { name: '보관·초안 문제' }));
@@ -88,11 +95,12 @@ describe('home `문제` menu', () => {
       expect(all.map((item) => item.textContent)).toEqual([
         '직접 추가',
         '중복 문제 정리',
+        '챕터 재분배',
         '보관·초안 문제',
         '모의고사',
         '문제 풀기',
       ]);
-      const items = all.slice(0, 2);
+      const items = all.slice(0, 3);
       for (const item of items) {
         expect(item).toHaveAttribute('aria-disabled', 'true');
         expect(item).toHaveAccessibleDescription(reason);
@@ -101,6 +109,7 @@ describe('home `문제` menu', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(handlers.onCreate).not.toHaveBeenCalled();
       expect(handlers.onDuplicates).not.toHaveBeenCalled();
+      expect(handlers.onRedistribute).not.toHaveBeenCalled();
       expect(screen.queryByRole('link', { name: '전체 문제' })).toBeNull();
       // UX7-BANK-2: 보관·초안 문제 is readable, so it stays enabled and opens the dialog.
       const inactive = screen.getByRole('menuitem', { name: '보관·초안 문제' });

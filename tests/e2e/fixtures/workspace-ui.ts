@@ -136,7 +136,14 @@ const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
 };
 
 type QuestionMenuItem =
-  'pdfs' | 'create' | 'generate' | 'duplicates' | 'inactive' | 'mockExams' | 'practice';
+  | 'pdfs'
+  | 'create'
+  | 'generate'
+  | 'duplicates'
+  | 'redistribution'
+  | 'inactive'
+  | 'mockExams'
+  | 'practice';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   /** Retired by UX7-DOCS: only ever expected to be absent. */
   pdfs: /^(pdf 관리|manage pdfs?)$/i,
@@ -145,6 +152,8 @@ const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   generate: /^(변형 출제|generate variants?)$/i,
   /** UX7-DEDUP: the 중복 문제 정리 dialog, editors only (QOV-01-AC16). */
   duplicates: /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
+  /** CHREDIST-01 (UX9-REDIST-W): the 챕터 재분배 dialog, editors only. */
+  redistribution: /^(챕터 재분배|redistribute chapters)$/i,
   /** UX7-BANK-2: the 보관·초안 문제 dialog, usable by every member. */
   inactive: /^(보관·초안 문제|archived and draft questions)$/i,
   /** MOCK-01: the 모의고사 dialog, usable by every member. */
@@ -153,13 +162,17 @@ const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   practice: /^(문제 풀기|practice questions?|start practice)$/i,
 };
 
-/** The `문제` menu's editor-only items (UX7-DOCS-2, UX7-DEDUP; 변형 출제 retired by QGEN-RM). */
-const EDITOR_ITEMS = ['create', 'duplicates'] as const;
+/**
+ * The `문제` menu's editor-only items (UX7-DOCS-2, UX7-DEDUP, CHREDIST-01; 변형 출제 retired by
+ * QGEN-RM).
+ */
+const EDITOR_ITEMS = ['create', 'duplicates', 'redistribution'] as const;
 
 /** Every `문제` menu item in order (MOCK-SYNC, QOV-01 7). */
 const QUESTION_MENU_ORDER = [
   QUESTION_MENU_ITEMS.create,
   QUESTION_MENU_ITEMS.duplicates,
+  QUESTION_MENU_ITEMS.redistribution,
   QUESTION_MENU_ITEMS.inactive,
   QUESTION_MENU_ITEMS.mockExams,
   QUESTION_MENU_ITEMS.practice,
@@ -222,6 +235,9 @@ export async function expectReadOnlyQuestionMenu(
     await el.click({ force: true });
     await expect(
       page.getByRole('dialog', { name: /^(중복 문제 정리|duplicate questions)$/i }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('dialog', { name: /^(챕터 재분배|redistribute chapters)$/i }),
     ).toHaveCount(0);
     await expect(
       page.getByRole('dialog', { name: /문제 (등록|추가)|(new|add) question/i }),

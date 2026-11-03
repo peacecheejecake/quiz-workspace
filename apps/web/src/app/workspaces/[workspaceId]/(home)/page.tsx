@@ -71,6 +71,7 @@ export default async function Page({
           chapterNote: 'CHNOTE-01',
           summary: 'DOCSUM-01',
           mockExams: 'MOCK-01',
+          redistribution: 'CHREDIST-01',
         }}
       />
     </div>

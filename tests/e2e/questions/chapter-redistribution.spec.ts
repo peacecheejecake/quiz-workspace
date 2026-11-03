@@ -37,6 +37,7 @@ import {
   tabTo,
 } from '../fixtures/chapter-redistribution.ts';
 import { rangePickerUi } from '../fixtures/range-picker.ts';
+import { homeBackgroundUi } from '../fixtures/ux9-pages.ts';
 import {
   answerCorrectly,
   archiveQuestion,
@@ -225,7 +226,8 @@ test(
         url.pathname === `/workspaces/${s.workspaceId}` &&
         url.searchParams.getAll('panel').includes(REDIST_PANEL),
     );
-    await expect(overviewUi.heatmap(page)).toBeAttached();
+    // The modal hides the home from the accessibility tree; it is still there behind it.
+    await expect(homeBackgroundUi.heatmap(page)).toBeAttached();
     await expectFocusTrapped(page, dialog, 40);
     await expectFocusTrapped(page, dialog, 10, 'Shift+Tab');
 
@@ -427,6 +429,11 @@ test(
     await page.goto(notePanelPath(s.workspaceId, s.ch1));
     const panel = noteUi.panel(page);
     await expect(noteUi.stale(panel)).toBeVisible();
+    // Until UX9-NOTE-W drops the folded note body (CHNOTE-02), unfold it to read the footnotes.
+    const fold = noteUi.disclosure(panel);
+    if ((await fold.count()) > 0 && (await fold.getAttribute('aria-expanded')) === 'false') {
+      await fold.click();
+    }
     await expect(
       noteUi.footnoteList(panel).getByRole('listitem').filter({ hasText: FOOTNOTE_GONE }),
     ).not.toHaveCount(0);
@@ -531,6 +538,14 @@ test(
     // Apply A only.
     await redistUi.applyRow(redistUi.previewRow(dialog, stemOf(2))).uncheck();
     await expect(redistUi.applyAll(dialog)).toHaveAttribute('aria-checked', 'mixed');
+    // The changed 적용 choices are unsaved input (no question selected, no target): a click on
+    // the backdrop keeps the dialog and the choices (HOMEDLG-01).
+    const panelBox = await dialog.boundingBox();
+    if (!panelBox || panelBox.x < 40) throw new Error('no backdrop beside the dialog');
+    await page.mouse.click(panelBox.x / 2, panelBox.y + panelBox.height / 2);
+    await expect(dialog).toBeVisible();
+    await expect(redistUi.applyRow(redistUi.previewRow(dialog, stemOf(2)))).not.toBeChecked();
+    await expect(redistUi.applyRow(redistUi.previewRow(dialog, stemOf(1)))).toBeChecked();
     const apply = redistUi.applySelected(dialog);
     await expect(apply).toHaveAccessibleName(/\(1\)$/);
     await apply.click();
@@ -650,16 +665,9 @@ test(
     // Keyboard only at 375px: move the 챕터 없음 question to 1장.
     await page.setViewportSize({ width: 375, height: 740 });
     await page.goto(overviewPath(s.workspaceId));
-    const button = homeUi.questionMenuButton(page);
-    await button.focus();
-    await page.keyboard.press('Enter');
-    const item = redistUi.menuItem(page);
-    for (let i = 0; i < 8 && !(await item.evaluate((el) => el === document.activeElement)); i++) {
-      await page.keyboard.press('ArrowDown');
-    }
-    await page.keyboard.press('Enter');
-    dialog = redistUi.dialog(page);
-    await expect(dialog).toBeVisible();
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    // Enter, arrows to 챕터 재분배 (asserted focused), Enter.
+    dialog = await openRedistributionByKeyboard(page);
     await expectNoHorizontalScroll(page, dialog);
     const noChapter = rangePickerUi.chapter(dialog, NO_CHAPTER);
     await tabTo(page, noChapter);

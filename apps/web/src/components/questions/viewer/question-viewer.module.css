@@ -472,6 +472,15 @@
   padding-block: var(--space-1);
 }
 
+/* A row with a text badge (CHREDIST-01 "직접 정함"): the badge wraps under a long label. */
+.badgedRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+}
+
 .selectedCount {
   margin: 0;
   font-variant-numeric: tabular-nums;
