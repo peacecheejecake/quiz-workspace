@@ -19,7 +19,7 @@ import {
   type BadgeTone,
 } from '@quiz/ui';
 import Link from 'next/link';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import type { DocumentKind } from '@/lib/documents/client-api';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
 import { formatBytes } from '@/lib/documents/validation';
@@ -42,9 +42,10 @@ export interface DocumentRowProps {
   readonly row: DocumentRow;
   readonly workspaceId: string;
   readonly canEdit: boolean;
-  readonly onCancel: (localId: string) => void;
-  readonly onRetry: (localId: string) => void;
-  readonly onDelete: (row: DocumentRow) => void;
+  /** Upload cancel / retry and deletion (문서 관리); absent = no such button. */
+  readonly onCancel?: (localId: string) => void;
+  readonly onRetry?: (localId: string) => void;
+  readonly onDelete?: (row: DocumentRow) => void;
   /** Extra actions before the row's own (e.g. 문제 추출 / 문제 검토). */
   readonly actions?: ReactNode;
   /** `종류 변경` for editors on a ready row (문서 관리, DOC-01-AC08); absent = no menu. */
@@ -58,6 +59,23 @@ export interface DocumentRowProps {
   readonly textExport?: boolean;
   /** `요약` on ready 교재 / 교재+문제 rows for every member (문서 관리, DOCSUM-01). */
   readonly summary?: RowSummaryAction;
+  /**
+   * The title links here instead of the PDF's viewer (the import page's `검토할 PDF` list,
+   * QIMPORT-02): the current row is `aria-current="page"`; the full title is its tooltip.
+   */
+  readonly titleLink?: {
+    readonly href: string;
+    readonly current: boolean;
+    readonly onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
+  };
+  /** Replaces the status badge (and, with `detail`, its progress line): QIMPORT-02 row state. */
+  readonly state?: {
+    readonly label: string;
+    readonly tone: BadgeTone;
+    readonly detail?: ReactNode;
+  };
+  /** A narrow column (QIMPORT-02): no date · size line, the title shortened with an ellipsis. */
+  readonly compact?: boolean;
 }
 
 export interface RowSummaryAction {
@@ -85,15 +103,29 @@ export function DocumentRowItem({
   kindChange,
   textExport = false,
   summary,
+  titleLink,
+  state,
+  compact = false,
 }: DocumentRowProps) {
   const { localId } = row;
   const href =
     row.documentId && row.status === 'ready'
       ? `/workspaces/${workspaceId}/documents/${row.documentId}`
       : undefined;
-  const badge = statusBadge(row);
+  const badge = state ?? statusBadge(row);
   const kind = kindBadgeLabel(row);
-  const title = href ? (
+  const title = titleLink ? (
+    <Link
+      href={titleLink.href}
+      className={styles.title}
+      aria-current={titleLink.current ? 'page' : undefined}
+      // Each row is another PDF's review: never read ahead (only the chosen PDF's, QIMPORT-02).
+      prefetch={false}
+      onClick={titleLink.onClick}
+    >
+      {row.title}
+    </Link>
+  ) : href ? (
     <Link href={href} className={styles.title}>
       {row.title}
     </Link>
@@ -101,23 +133,30 @@ export function DocumentRowItem({
     <span className={styles.title}>{row.title}</span>
   );
   return (
-    <li className={styles.row} data-status={row.status}>
+    <li
+      className={styles.row}
+      data-status={row.status}
+      data-variant={compact ? 'compact' : undefined}
+      data-current={titleLink?.current || undefined}
+    >
       <div className={styles.rowMain}>
         <div className={styles.titleLine}>
-          <Tooltip content={row.filename}>{title}</Tooltip>
+          <Tooltip content={titleLink ? row.title : row.filename}>{title}</Tooltip>
           {kind ? <Badge tone="neutral">{kind}</Badge> : null}
           <Badge tone={badge.tone}>{badge.label}</Badge>
         </div>
-        <p className={styles.meta}>
-          {row.updatedAt ? (
-            <>
-              <time dateTime={row.updatedAt}>{formatUpdatedAt(row.updatedAt)}</time>
-              <span aria-hidden="true">·</span>
-            </>
-          ) : null}
-          <span>{formatBytes(row.size)}</span>
-        </p>
-        <RowDetail row={row} />
+        {compact ? null : (
+          <p className={styles.meta}>
+            {row.updatedAt ? (
+              <>
+                <time dateTime={row.updatedAt}>{formatUpdatedAt(row.updatedAt)}</time>
+                <span aria-hidden="true">·</span>
+              </>
+            ) : null}
+            <span>{formatBytes(row.size)}</span>
+          </p>
+        )}
+        {state?.detail !== undefined ? state.detail : <RowDetail row={row} />}
         {kindChange?.failure ? (
           <p role="alert" className={styles.rowAlert}>
             {kindChange.failure}
@@ -134,12 +173,12 @@ export function DocumentRowItem({
             onChange={(next) => kindChange.onChange(row, next)}
           />
         ) : null}
-        {row.retryable && localId ? (
+        {onRetry && row.retryable && localId ? (
           <Button size="sm" variant="primary" onClick={() => onRetry(localId)}>
             다시 시도
           </Button>
         ) : null}
-        {row.cancellable && localId ? (
+        {onCancel && row.cancellable && localId ? (
           <Button size="sm" onClick={() => onCancel(localId)}>
             업로드 취소
           </Button>
@@ -150,7 +189,7 @@ export function DocumentRowItem({
         {textExport && row.documentId && row.status === 'ready' ? (
           <TextExportMenu documentId={row.documentId} title={row.title} variant="row" />
         ) : null}
-        {canEdit && row.documentId && !row.cancellable ? (
+        {onDelete && canEdit && row.documentId && !row.cancellable ? (
           <IconButton
             size="sm"
             label={`${row.title} 삭제`}

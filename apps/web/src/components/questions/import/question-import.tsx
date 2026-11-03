@@ -19,18 +19,18 @@
 //
 // The server starts the import itself once the PDF is processed (QIMPORT-01-AC06): a visit (or
 // `?document=<id>` from a row's 문제 검토) shows the run's progress and drafts. One review per PDF
-// (its newest run); with two or more extracted PDFs `검토할 PDF` switches between them.
+// (its newest run); since UX9 this is the right pane of the import page, whose left `검토할 PDF`
+// list switches between them (QIMPORT-02, import-review-layout.tsx; the page header lives there).
 //
 // Nothing reaches the bank before a human approves it; a failed extraction keeps the drafts it
 // already persisted and "다시 시도" retries the same run (the API reconciles, no duplicates);
 // a registration whose response was lost is retried with the same Idempotency-Key.
 // Drafts the server refuses (changed since, or not confirmable) stay selected and are named.
-import { Badge, Button, Checkbox, EmptyState, PageHeader, ProgressBar, Select } from '@quiz/ui';
+import { Badge, Button, Checkbox, EmptyState, ProgressBar } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loginRedirectPath } from '@/lib/auth/routes';
-import { DOCUMENT_KIND_LABELS } from '@/components/documents/labels';
 import type { Job } from '@/lib/documents/client-api';
 import { watchJob } from '@/lib/documents/job-events';
 import { duplicateReason } from '@/lib/questions/duplicates';
@@ -77,9 +77,7 @@ import {
   type DraftContents,
 } from '@/lib/questions/draft-pages';
 import { createImportClient, ImportApiError, importPath } from '@/lib/questions/import-client';
-import type { ReviewPdf } from '@/lib/questions/review-pdfs';
 import { workspaceHomePath } from '@/lib/workspaces/home';
-import { WorkspaceBackLink, WorkspaceBreadcrumb } from '@/components/workspaces/sub-page-nav';
 import { DraftEditor, type DraftSaveResult } from '../drafts/draft-editor';
 import { DraftPager } from '../drafts/draft-pager';
 import { QuestionDraftReview, type DraftReviewState } from '../drafts/question-draft-review';
@@ -92,8 +90,6 @@ export type ImportReadOnly = 'viewer' | 'archived' | null;
 
 export interface QuestionImportProps {
   readonly workspaceId: string;
-  /** Breadcrumb root; defaults to a generic label (unit tests). */
-  readonly workspaceName?: string;
   readonly readOnly: ImportReadOnly;
   readonly initialRun: ImportRun | null;
   /**
@@ -107,9 +103,16 @@ export interface QuestionImportProps {
   readonly initialChapters?: readonly BookChapterOption[];
   /** The PDF the page was opened for (`?document=`), if any. */
   readonly documentId?: string;
-  /** The PDFs with an extraction, newest first (`검토할 PDF`, UX6-UPLOAD). */
-  readonly reviewPdfs?: readonly ReviewPdf[];
   readonly loadFailed: boolean;
+  /**
+   * The checked drafts and whether a registration runs, after every change (QIMPORT-02: switching
+   * PDFs asks first while drafts are checked). Kept off the render path (UX6-SELECT).
+   */
+  readonly onSelectionChange?: (selected: number, registering: boolean) => void;
+  /** Each state of a registration followed here, its last one included (the list's row status). */
+  readonly onRegistration?: (registration: ImportRegistration) => void;
+  /** The run as this pane last read it (a retried extraction starts and ends here: the row). */
+  readonly onRunChange?: (run: ImportRun) => void;
   /** How often a running registration is re-read (ms); tests shorten it. */
   readonly registrationPollMs?: number;
   /**
@@ -119,7 +122,7 @@ export interface QuestionImportProps {
   readonly loadedAt?: string;
 }
 
-const READ_ONLY_TEXT: Readonly<Record<Exclude<ImportReadOnly, null>, string>> = {
+export const READ_ONLY_TEXT: Readonly<Record<Exclude<ImportReadOnly, null>, string>> = {
   viewer: '읽기 전용: 보기 권한으로는 문제를 가져오거나 승인할 수 없습니다.',
   archived: '읽기 전용: 보관된 Workspace에서는 문제를 가져오거나 승인할 수 없습니다.',
 };
@@ -138,16 +141,6 @@ type Activity =
 interface ImportFailure {
   readonly message: string;
   readonly retryable: boolean;
-}
-
-/** `검토할 PDF` option text: the PDF's title and kind. */
-export function reviewPdfLabel(pdf: ReviewPdf): string {
-  return pdf.kind ? `${pdf.title} · ${DOCUMENT_KIND_LABELS[pdf.kind]}` : pdf.title;
-}
-
-/** `검토할 PDF` is offered once two or more PDFs have an extraction. */
-export function showsPdfSwitcher(pdfs: readonly ReviewPdf[]): boolean {
-  return pdfs.length >= 2;
 }
 
 function extractFailureMessage(errorCode: string | null): string {
@@ -170,17 +163,18 @@ function isAbort(error: unknown, signal: AbortSignal): boolean {
 
 export function QuestionImport({
   workspaceId,
-  workspaceName = 'Workspace',
   readOnly,
   initialRun,
   initialDrafts,
   initialSummaries,
   initialChapters = [],
   documentId,
-  reviewPdfs = [],
   loadFailed,
   registrationPollMs = 1000,
   loadedAt,
+  onSelectionChange,
+  onRegistration,
+  onRunChange,
 }: QuestionImportProps) {
   const router = useRouter();
   const client = useMemo(() => createImportClient(), []);
@@ -584,6 +578,7 @@ export function QuestionImport({
     setPublishing(true);
     let current = first;
     setRegistration(current);
+    onRegistration?.(current);
     let misses = 0;
     while (isRegistrationActive(current)) {
       try {
@@ -591,6 +586,7 @@ export function QuestionImport({
         current = await client.getRegistration(importId, current.job_id, signal);
         misses = 0;
         setRegistration(current);
+        onRegistration?.(current);
       } catch (error) {
         if (isAbort(error, signal)) return;
         if (onUnauthenticated(error)) return;
@@ -773,45 +769,22 @@ export function QuestionImport({
   const busy = activity !== null;
   const registered = drafts.filter((d) => d.publishedQuestionId !== null).length;
   const selectedCount = selection.length;
+  useEffect(
+    () => onSelectionChange?.(selectedCount, publishing),
+    [onSelectionChange, publishing, selectedCount],
+  );
+  useEffect(() => {
+    if (run) onRunChange?.(run);
+  }, [onRunChange, run]);
+  // Gone (another PDF chosen): nothing is checked any more. A PDF without an extraction renders
+  // no pane to say so; a new pane's own report runs after this cleanup.
+  useEffect(() => () => onSelectionChange?.(0, false), [onSelectionChange]);
 
   const documentsHref = workspaceHomePath(workspaceId, 'panel=documents');
-  const shownPdf = run?.source_document_id ?? documentId ?? null;
   const step: ImportStep | null = activity?.step ?? null;
 
   return (
     <div className={styles.screen}>
-      <PageHeader
-        back={<WorkspaceBackLink workspaceId={workspaceId} />}
-        breadcrumb={
-          <WorkspaceBreadcrumb
-            workspace={{ id: workspaceId, name: workspaceName }}
-            trail={[{ label: '문제 PDF 가져오기' }]}
-          />
-        }
-        title="문제 PDF 가져오기"
-        description="문서 관리에서 올린 PDF에서 추출한 문제를 검토합니다. 원본과 비교해 승인한 문제만 문제은행에 등록됩니다. 정답지에 없는 정답은 만들지 않습니다."
-      />
-
-      {readOnly ? <p className={styles.readOnly}>{READ_ONLY_TEXT[readOnly]}</p> : null}
-
-      {showsPdfSwitcher(reviewPdfs) ? (
-        <Select
-          fieldClassName={styles.pdfSwitcher}
-          label="검토할 PDF"
-          options={reviewPdfs.map((pdf) => ({
-            value: pdf.documentId,
-            label: reviewPdfLabel(pdf),
-          }))}
-          value={
-            shownPdf && reviewPdfs.some((pdf) => pdf.documentId === shownPdf) ? shownPdf : undefined
-          }
-          placeholder="PDF를 고르세요"
-          onValueChange={(next) => {
-            if (next && next !== shownPdf) router.push(importPath(workspaceId, next));
-          }}
-        />
-      ) : null}
-
       {activity && step ? (
         <ImportJobProgress
           step={step}

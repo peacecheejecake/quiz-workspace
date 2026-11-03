@@ -60,7 +60,7 @@ import {
   type Draft,
   type TruthQuestion,
 } from '../fixtures/test.ts';
-import { isBlocked } from '../fixtures/ux9-pages.ts';
+import { isBlocked, reviewListUi } from '../fixtures/ux9-pages.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 test.describe.configure({ timeout: 2 * JOB_TIMEOUT_MS + 60_000 });
@@ -578,27 +578,33 @@ test(
     );
     await expect(homeUi.documentsDialog(page)).toBeVisible();
 
-    // Two extracted PDFs: `검토할 PDF` switches between their reviews (one per PDF).
+    // Two extracted PDFs: the `검토할 PDF` list switches between their reviews (one per PDF; UX9:
+    // the list replaced the combobox, QIMPORT-02-AC01·AC02).
     const mixedRun = await startImport(owner, ws.id, mixed);
     await waitForImportStatus(owner, mixedRun.id, 'succeeded');
     await page.goto(importPath(ws.id));
-    const switcher = importUi.pdfSwitcher(page);
-    await expect(switcher).toContainText(/book-en/); // the newest extraction
+    const pdfList = reviewListUi.nav(page);
+    const pdfLink = (title: RegExp) =>
+      reviewListUi.rows(pdfList).getByRole('link', { name: title });
+    await expect(importUi.pdfSwitcher(page)).toHaveCount(0);
+    // The newest extraction is chosen; the plain 교재 is not listed.
+    await expect(pdfLink(/book-en/)).toHaveAttribute('aria-current', 'page');
+    await expect(reviewListUi.rows(pdfList)).toHaveCount(2);
+    await expect(reviewListUi.rows(pdfList).filter({ hasText: /book-ko/ })).toHaveCount(0);
     await expect(
       main(page).getByRole('button', { name: /pdf (업로드|선택)|upload|choose/i }),
     ).toHaveCount(0);
-    await switcher.click();
-    const options = page.getByRole('option');
-    await expect(options).toHaveCount(2);
-    await expect(options.filter({ hasText: /book-en/ })).toContainText('교재+문제');
-    await options.filter({ hasText: /questions-ko/ }).click();
+    await expect(
+      reviewListUi.rows(pdfList).filter({ has: page.getByRole('link', { name: /book-en/ }) }),
+    ).toContainText('교재+문제');
+    await pdfLink(/questions-ko/).click();
     await expect(page).toHaveURL(
       (url) =>
         url.pathname === importPath(ws.id) &&
         url.searchParams.get('document') === uploaded.documentId,
     );
     await expect(importUi.draftItems(page)).toHaveCount(PAPER.questions.length);
-    await expect(importUi.pdfSwitcher(page)).toContainText(/questions-ko/);
+    await expect(pdfLink(/questions-ko/)).toHaveAttribute('aria-current', 'page');
   },
 );
 
