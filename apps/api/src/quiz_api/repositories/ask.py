@@ -362,7 +362,10 @@ class AskRepository:
         rows = self._session.execute(
             text(
                 f"select {_MESSAGE_COLUMNS} from public.ask_messages m "  # noqa: S608
-                "where m.conversation_id = :c order by m.created_at, m.id"
+                # A question and its answer share `created_at` (one transaction): the question
+                # comes first, whatever their ids.
+                "where m.conversation_id = :c "
+                "order by m.created_at, (m.role = 'assistant'), m.id"
             ),
             {"c": conversation_id},
         )
