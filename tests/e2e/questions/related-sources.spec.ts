@@ -180,28 +180,9 @@ async function expectClosedToHome(page: Page, panel: Locator): Promise<void> {
   await expect(page).toHaveURL((url) => url.search === '');
 }
 
-/**
- * `page.goto` that survives the home's own late navigation. Closing a practice or run panel that
- * saw a submission makes the Heatmap `router.refresh()` the bare home (questions-overview.tsx),
- * which WebKit reports as a navigation that can land after the URL is already empty and
- * interrupt the next goto. There is no observable signal for it, so retry only that error;
- * callers still assert the panel opened.
- */
-async function gotoSettled(page: Page, url: string): Promise<void> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      await page.goto(url);
-      return;
-    } catch (error) {
-      const interrupted = /interrupted by another navigation/i.test(String(error));
-      if (!interrupted || attempt >= 3) throw error;
-    }
-  }
-}
-
 /** Re-opens `question` with `?question=` (a submitted question opens a new session) and answers. */
 async function reanswer(page: Page, workspaceId: string, question: Question): Promise<Locator> {
-  await gotoSettled(page, overviewPath(workspaceId, question.id));
+  await page.goto(overviewPath(workspaceId, question.id));
   const panel = panelUi.panel(page);
   await expect(panel).toBeVisible();
   await panelUi.option(panel, correctText(question)).check();
