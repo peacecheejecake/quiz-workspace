@@ -695,6 +695,12 @@ def test_c04_answer_mismatch_fails_unsaved_and_option_coverage_is_rerequested_on
     assert good["body"]["correct_option_ids"] == ok["revision"]["correct_option_ids"]
     assert good["sources"]
     assert good["sources"][0]["page"] == SOURCE_PAGE
+    # The pinned passage: the document revision the explanation was made from, and its blocks
+    # (none for the question's own page-range source).
+    active = db("select active_revision_id::text from public.documents where id = %s", (book.doc,))
+    for source in good["sources"]:
+        assert source["revision_id"] == active[0][0]
+        assert source["block_id"] == (source["block_ids"][0] if source["block_ids"] else None)
 
 
 # ---------------------------------------------------------------------------------------------

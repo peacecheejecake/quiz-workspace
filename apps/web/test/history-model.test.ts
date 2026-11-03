@@ -79,6 +79,9 @@ describe('history labels', () => {
   it('labels events and targets with Korean fallbacks', () => {
     expect(eventLabel('document.block_corrected')).toBe('문서 교정');
     expect(eventLabel('question.updated')).toBe('문제 수정');
+    // AIEXPL-01-C06: "AI 해설 만듦" for a bank or a mock exam question.
+    expect(eventLabel('question.ai_explanation_generated')).toBe('AI 해설 만듦');
+    expect(eventLabel('mock_exam.ai_explanation_generated')).toBe('AI 해설 만듦');
     expect(eventLabel('custom.event')).toBe('custom.event');
     expect(targetLabel('question', '1번 문제')).toBe('1번 문제');
     expect(targetLabel('question', null)).toBe('번호 없는 문제');

@@ -46,6 +46,9 @@ const apiEnv = {
   // ASK-01: API and worker answer AI questions (APP_ENV=test fake); ASK-01-AC05/AC08/AC11 start
   // their own WORKER_ASK_LLM=false stack.
   WORKER_ASK_LLM: process.env.WORKER_ASK_LLM?.trim() || 'true',
+  // AIEXPL-01: API and worker make AI explanations (APP_ENV=test fake explainer); AIEXPL-01-AC05
+  // starts its own feature-off and rate-limited stacks.
+  WORKER_AI_EXPLANATIONS: process.env.WORKER_AI_EXPLANATIONS?.trim() || 'true',
 };
 
 // Mirrors TEST_SITE_KEY in tests/e2e/fixtures/turnstile.ts (the config does not import fixtures).

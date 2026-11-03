@@ -9,6 +9,7 @@
 import { Button, type FloatingSidePanelProps, type PanelSteps } from '@quiz/ui';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { SharedAiExplanation } from '@/components/questions/ai-explanation/shared-ai-explanation';
 import { NO_CHAPTER_TITLE, pageText } from '@/components/questions/labels';
 import { QuestionViewer } from '@/components/questions/viewer/question-viewer';
 import { QUESTION_TYPE_LABELS } from '@/lib/questions/form';
@@ -211,35 +212,43 @@ export function SharedQuestionPanel({
       className={styles.panelBody}
       sources={
         question ? (
-          <section className={styles.panelSection} aria-labelledby="shared-question-sources">
-            <h3 id="shared-question-sources" className={styles.panelHeading}>
-              출처
-            </h3>
-            {question.sources.length === 0 ? (
-              <p className={styles.note}>연결된 출처가 없습니다.</p>
-            ) : (
-              <ul className={styles.sourceList}>
-                {question.sources.map((source, i) => {
-                  const doc = documents.find((d) => d.id === source.document_id);
-                  const text = `${doc?.title ?? '출처 문서'} ${pageText(source) ?? ''}`.trim();
-                  return (
-                    <li key={`${source.document_id ?? 'none'}-${i}`}>
-                      {doc ? (
-                        <Link
-                          href={sharedDocumentHref(shareId, doc.id, { page: source.page_start })}
-                          className={`${styles.sourceLink} qz-focus-ring`}
-                        >
-                          {text}
-                        </Link>
-                      ) : (
-                        text
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+          <>
+            {/* AIEXPL-01: an AI explanation a member already made (read-only), under the answers. */}
+            <SharedAiExplanation
+              shareId={shareId}
+              questionId={question.id}
+              options={question.revision.options}
+            />
+            <section className={styles.panelSection} aria-labelledby="shared-question-sources">
+              <h3 id="shared-question-sources" className={styles.panelHeading}>
+                출처
+              </h3>
+              {question.sources.length === 0 ? (
+                <p className={styles.note}>연결된 출처가 없습니다.</p>
+              ) : (
+                <ul className={styles.sourceList}>
+                  {question.sources.map((source, i) => {
+                    const doc = documents.find((d) => d.id === source.document_id);
+                    const text = `${doc?.title ?? '출처 문서'} ${pageText(source) ?? ''}`.trim();
+                    return (
+                      <li key={`${source.document_id ?? 'none'}-${i}`}>
+                        {doc ? (
+                          <Link
+                            href={sharedDocumentHref(shareId, doc.id, { page: source.page_start })}
+                            className={`${styles.sourceLink} qz-focus-ring`}
+                          >
+                            {text}
+                          </Link>
+                        ) : (
+                          text
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </>
         ) : null
       }
     />

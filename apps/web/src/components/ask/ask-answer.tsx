@@ -250,8 +250,11 @@ function FeedbackButton({
   );
 }
 
-/** The answer's Markdown subset with its footnotes (or streaming tags) in place of `[n]`. */
-function AnswerMarkdown({
+/**
+ * The answer's Markdown subset with its footnotes (or streaming tags) in place of `[n]`; also the
+ * AI 해설 body (AIEXPL-01, components/questions/ai-explanation).
+ */
+export function AnswerMarkdown({
   text,
   sourceNumbers,
   renderCite,

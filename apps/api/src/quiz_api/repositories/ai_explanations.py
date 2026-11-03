@@ -110,6 +110,8 @@ class SourceView:
     chapter_title: str | None
     page: int
     block_id: str | None
+    block_ids: tuple[str, ...]
+    revision_id: uuid.UUID
     outdated: bool
 
 
@@ -530,7 +532,7 @@ class ExplanationRepository:
     ) -> list[SourceView]:
         """The cited sources (with `number`) in number order, of live documents of the workspace
         (and, for a guest, the shared ones in `visible`)."""
-        cited: list[tuple[int, uuid.UUID, uuid.UUID | None, uuid.UUID | None, Mapping[str, Any]]]
+        cited: list[tuple[int, uuid.UUID, uuid.UUID, uuid.UUID | None, Mapping[str, Any]]]
         cited = []
         for s in sources:
             number = s.get("number")
@@ -586,6 +588,8 @@ class ExplanationRepository:
                     chapter_title=chapters.get(chapter) if chapter else None,
                     page=page if isinstance(page, int) else 1,
                     block_id=blocks[0] if blocks else None,
+                    block_ids=tuple(blocks),
+                    revision_id=pinned_revision,
                     outdated=doc.active_revision_id != pinned_revision,
                 )
             )

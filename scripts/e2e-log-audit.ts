@@ -202,6 +202,9 @@ async function main(): Promise<number> {
     // ASK-01: API and worker answer AI questions (APP_ENV=test fake answerer, on the
     // `interactive` queue's own worker); ASK-01-AC05/AC08/AC11 start a WORKER_ASK_LLM=false stack.
     WORKER_ASK_LLM: process.env.WORKER_ASK_LLM?.trim() || 'true',
+    // AIEXPL-01: API and worker make AI explanations (APP_ENV=test fake explainer, also on the
+    // `interactive` queue); AIEXPL-01-AC05 starts feature-off and rate-limited stacks.
+    WORKER_AI_EXPLANATIONS: process.env.WORKER_AI_EXPLANATIONS?.trim() || 'true',
   };
 
   if (options.build) {
@@ -251,12 +254,12 @@ async function main(): Promise<number> {
         workerLog,
       )
     : null;
-  // ASK-01: `ask.answer` runs on the `interactive` queue, consumed by its own worker process
-  // (WORKER_QUEUE=interactive, quiz_worker.serve); started with the default one when AI
-  // questions are on.
+  // ASK-01 / AIEXPL-01: `ask.answer` and `question.ai_explain` run on the `interactive` queue,
+  // consumed by its own worker process (WORKER_QUEUE=interactive, quiz_worker.serve); started with
+  // the default one when AI questions or AI explanations are on.
   const interactiveLog = join(dir, 'worker-interactive.log');
   const interactive =
-    options.worker && env.WORKER_ASK_LLM === 'true'
+    options.worker && (env.WORKER_ASK_LLM === 'true' || env.WORKER_AI_EXPLANATIONS === 'true')
       ? startLogged(
           'uv',
           ['run', 'python', '-m', 'quiz_worker.serve'],

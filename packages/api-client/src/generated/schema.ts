@@ -3284,8 +3284,16 @@ export type components = {
     };
     /** ExplanationSource */
     ExplanationSource: {
-      /** Block Id */
+      /**
+       * Block Id
+       * @description The first cited block (block_ids[0]).
+       */
       block_id: string | null;
+      /**
+       * Block Ids
+       * @description The cited blocks of the pinned revision.
+       */
+      block_ids: string[];
       /** Chapter Title */
       chapter_title: string | null;
       /**
@@ -3307,6 +3315,12 @@ export type components = {
       outdated: boolean;
       /** Page */
       page: number;
+      /**
+       * Revision Id
+       * Format: uuid
+       * @description The pinned document revision the passage was cited from (kept after a republish: open the excerpt and the PDF at this revision).
+       */
+      revision_id: string;
     };
     /** ExplanationState */
     ExplanationState: {
