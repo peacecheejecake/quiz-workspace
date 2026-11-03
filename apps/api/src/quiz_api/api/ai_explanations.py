@@ -129,7 +129,12 @@ class ExplanationSource(BaseModel):
     document_title: str
     chapter_title: str | None
     page: int
-    block_id: str | None
+    block_id: str | None = Field(description="The first cited block (block_ids[0]).")
+    block_ids: list[str] = Field(description="The cited blocks of the pinned revision.")
+    revision_id: uuid.UUID = Field(
+        description="The pinned document revision the passage was cited from (kept after a "
+        "republish: open the excerpt and the PDF at this revision)."
+    )
     outdated: bool = Field(description="The document was published again since.")
 
 
@@ -361,6 +366,8 @@ def _explanation_out(
                 chapter_title=s.chapter_title,
                 page=s.page,
                 block_id=s.block_id,
+                block_ids=list(s.block_ids),
+                revision_id=s.revision_id,
                 outdated=s.outdated,
             )
             for s in repo.source_views(row.workspace_id, row.sources)

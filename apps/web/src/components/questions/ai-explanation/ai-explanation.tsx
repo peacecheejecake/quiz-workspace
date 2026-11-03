@@ -275,26 +275,27 @@ function AiExplanationArea({
     const requestId = ++excerptRequest.current;
     setExcerpt({ item: sourceItem(source, '발췌를 불러오는 중…'), outdated: source.outdated });
     setExcerptOpen(true);
-    if (!source.block_id) {
+    // The pinned passage: the cited blocks of the revision the explanation was made from (kept
+    // after a republish; `outdated` says so above the excerpt).
+    const ids = [...new Set(source.block_ids)].slice(0, 12);
+    const failed = () => {
+      if (requestId !== excerptRequest.current) return;
       setExcerpt({
         item: sourceItem(source, '발췌를 불러오지 못했습니다. PDF에서 보세요.'),
         outdated: source.outdated,
       });
+    };
+    if (ids.length === 0) {
+      failed();
       return;
     }
-    search.block(source.document_id, source.block_id, 'active').then(
-      (block) => {
-        if (requestId !== excerptRequest.current) return;
-        setExcerpt({ item: sourceItem(source, block.text), outdated: source.outdated });
-      },
-      () => {
-        if (requestId !== excerptRequest.current) return;
-        setExcerpt({
-          item: sourceItem(source, '발췌를 불러오지 못했습니다. PDF에서 보세요.'),
-          outdated: source.outdated,
-        });
-      },
-    );
+    Promise.all(
+      ids.map((blockId) => search.block(source.document_id, blockId, source.revision_id)),
+    ).then((blocks) => {
+      if (requestId !== excerptRequest.current) return;
+      const text = blocks.map((b) => b.text).join('\n\n');
+      setExcerpt({ item: sourceItem(source, text), outdated: source.outdated });
+    }, failed);
   };
 
   let content: ReactNode;
@@ -558,21 +559,21 @@ export function ExplanationView({
   );
 }
 
-/** The excerpt panel's hit for a cited source (its block of the document's published revision). */
+/** The excerpt panel's hit for a cited source (its blocks of the pinned document revision). */
 function sourceItem(source: ExplanationSource, text: string): SearchItem {
-  const blockId = source.block_id ?? '';
+  const blockId = source.block_id ?? source.block_ids[0] ?? '';
   return {
     document_id: source.document_id,
     document_title: source.document_title,
     document_type: 'book',
-    revision_id: 'active',
+    revision_id: source.revision_id,
     chunk_id: `ai-explanation:${source.n}:${source.document_id}:${blockId}`,
     chapter_id: null,
     section_id: null,
     breadcrumb: [source.document_title, ...(source.chapter_title ? [source.chapter_title] : [])],
     block_id: blockId,
-    block_ids: blockId ? [blockId] : [],
-    context_block_ids: blockId ? [blockId] : [],
+    block_ids: [...source.block_ids],
+    context_block_ids: [...source.block_ids],
     page: source.page,
     bbox: null,
     locations: [],

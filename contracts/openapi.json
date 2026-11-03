@@ -2621,7 +2621,16 @@
                 "type": "null"
               }
             ],
+            "description": "The first cited block (block_ids[0]).",
             "title": "Block Id"
+          },
+          "block_ids": {
+            "description": "The cited blocks of the pinned revision.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Block Ids",
+            "type": "array"
           },
           "chapter_title": {
             "anyOf": [
@@ -2656,6 +2665,12 @@
           "page": {
             "title": "Page",
             "type": "integer"
+          },
+          "revision_id": {
+            "description": "The pinned document revision the passage was cited from (kept after a republish: open the excerpt and the PDF at this revision).",
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
           }
         },
         "required": [
@@ -2665,6 +2680,8 @@
           "chapter_title",
           "page",
           "block_id",
+          "block_ids",
+          "revision_id",
           "outdated"
         ],
         "title": "ExplanationSource",

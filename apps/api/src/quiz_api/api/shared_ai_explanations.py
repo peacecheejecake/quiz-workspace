@@ -84,6 +84,8 @@ def get_shared_question_explanation(
                 chapter_title=s.chapter_title,
                 page=s.page,
                 block_id=s.block_id,
+                block_ids=list(s.block_ids),
+                revision_id=s.revision_id,
                 outdated=s.outdated,
             )
             for s in repo.source_views(link.workspace_id, row.sources, visible)

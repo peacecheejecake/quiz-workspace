@@ -64,6 +64,16 @@ def test_aiexpl_01_c02_the_shared_explanation_has_no_state_or_ids(spec: dict[str
     assert keys == {"body", "sources", "created_at"}
 
 
+def test_aiexpl_01_ac01_a_source_names_its_pinned_revision_and_blocks(
+    spec: dict[str, Any],
+) -> None:
+    # The cited passage stays the one the explanation was made from (the excerpt and PDF link
+    # open that revision, not the document's newer one).
+    schema = spec["components"]["schemas"]["ExplanationSource"]
+    assert {"revision_id", "block_ids"} <= set(schema["properties"])
+    assert {"revision_id", "block_ids"} <= set(schema["required"])
+
+
 @pytest.mark.parametrize(
     ("app_env", "switch", "model", "available", "key_model"),
     [

@@ -27,6 +27,7 @@ vi.mock('../src/lib/questions/actions', () => ({
   getQuestionAction: vi.fn(),
   getQuestionRevisionAction: vi.fn(),
 }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const { AiExplanation } = await import('../src/components/questions/ai-explanation/ai-explanation');
 const { SharedAiExplanation } =
@@ -39,6 +40,7 @@ const WS = '55555555-5555-4555-8555-555555555555';
 const QID = '22222222-2222-4222-8222-000000000001';
 const SESSION = '99999999-9999-4999-8999-000000000001';
 const RUN = '33333333-3333-4333-8333-000000000001';
+const PINNED = '88888888-8888-4888-8888-000000000009';
 const OPTIONS = [
   { id: 'o1', text: '증발' },
   { id: 'o2', text: '응결' },
@@ -71,7 +73,9 @@ function explanation(overrides: Partial<Explanation> = {}): Explanation {
         chapter_title: '1장 물의 순환',
         page: 2,
         block_id: 'b-1',
-        outdated: false,
+        block_ids: ['b-1', 'b-2'],
+        revision_id: PINNED,
+        outdated: true,
       },
     ],
     truncated: false,
@@ -304,6 +308,42 @@ describe('AIEXPL-01 area states', () => {
       />,
     );
     expect(await within(area()).findByText(model.EXPL_TEXT.archived)).toBeInTheDocument();
+  });
+});
+
+describe('AIEXPL-01 sources keep the pinned revision', () => {
+  it('the excerpt reads the cited blocks of that revision and PDF에서 보기 opens it', async () => {
+    const user = userEvent.setup();
+    const api = fakeClient(stateOf({ can_create: false, explanation: explanation() }));
+    const block = vi.fn(async (_doc: string, blockId: string, _revision: string) => ({
+      block_id: blockId,
+      text: `원래 구절 ${blockId}`,
+      page: 2,
+      locations: [],
+    }));
+    render(
+      <AiExplanation
+        workspaceId={WS}
+        target={target}
+        gate={gate}
+        options={OPTIONS}
+        client={api}
+        searchClient={{ block } as never}
+      />,
+    );
+    await user.click(await within(area()).findByRole('button', { name: 'AI 해설 보기' }));
+    await user.click(within(area()).getByRole('button', { name: '출처 1' }));
+    const doc = '66666666-6666-4666-8666-000000000001';
+    await waitFor(() => expect(block).toHaveBeenCalledWith(doc, 'b-1', PINNED));
+    expect(block).toHaveBeenCalledWith(doc, 'b-2', PINNED);
+    expect(block.mock.calls.every(([, , revision]) => revision === PINNED)).toBe(true);
+    const excerpt = await screen.findByRole('dialog', { name: '본문 발췌' });
+    expect(await within(excerpt).findByText(/원래 구절 b-1/)).toBeInTheDocument();
+    expect(within(excerpt).getByText(model.EXPL_TEXT.outdated)).toBeInTheDocument();
+    const link = within(excerpt).getByRole('link', { name: 'PDF에서 보기' });
+    expect(
+      new URL(link.getAttribute('href') ?? '', 'http://web.test').searchParams.get('revision'),
+    ).toBe(PINNED);
   });
 });
 
