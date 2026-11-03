@@ -195,6 +195,9 @@ RULES: dict[str, Rule | str] = {
     # any member (computed, not stored, when archived); `view=manage` needs edit rights and an
     # active workspace (403 workspace-archived), like an edit.
     "getQuestionRelatedSources": READ,
+    # QSRC-01-C03: any member, viewer included
+    "getQuestionSourceRegion": READ,
+    "getMockExamQuestionSourceRegion": READ,
     "getMockExamQuestionRelatedSources": EDIT,
     # workspace lifecycle and sharing
     "getWorkspace": READ,

@@ -766,6 +766,26 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/mock-exam-questions/{mock_exam_question_id}/source-region': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Mock Exam Question Source Region
+     * @description The origin question's regions for a `보기 섞기` mock question (QSRC-01-C04).
+     */
+    get: operations['getMockExamQuestionSourceRegion'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/mock-exams/{mock_exam_id}': {
     parameters: {
       query?: never;
@@ -1500,6 +1520,26 @@ export type paths = {
      * @description One immutable revision of the question (history; attempts point at these).
      */
     get: operations['getQuestionRevision'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/source-region': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Question Source Region
+     * @description Where the question sits in its import PDF (QSRC-01-C01); 404 when it has no region.
+     */
+    get: operations['getQuestionSourceRegion'];
     put?: never;
     post?: never;
     delete?: never;
@@ -5070,6 +5110,16 @@ export type components = {
        */
       workspace_id: string;
     };
+    /** MockQuestionSourceRegion */
+    MockQuestionSourceRegion: {
+      /**
+       * Mock Exam Question Id
+       * Format: uuid
+       */
+      mock_exam_question_id: string;
+      /** Regions */
+      regions: components['schemas']['SourceRegionItem'][];
+    };
     /** MockRelatedSources */
     MockRelatedSources: {
       /** Degraded */
@@ -6220,6 +6270,16 @@ export type components = {
       /** Page Start */
       page_start?: number | null;
     };
+    /** QuestionSourceRegion */
+    QuestionSourceRegion: {
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /** Regions */
+      regions: components['schemas']['SourceRegionItem'][];
+    };
     /**
      * QuestionUpdate
      * @description Partial update: omitted fields are kept, `null` clears a nullable field.
@@ -6500,6 +6560,17 @@ export type components = {
       document_id: string;
       /** Document Title */
       document_title: string;
+    };
+    /** RegionBox */
+    RegionBox: {
+      /** X0 */
+      x0: number;
+      /** X1 */
+      x1: number;
+      /** Y0 */
+      y0: number;
+      /** Y1 */
+      y1: number;
     };
     /** RelatedSource */
     RelatedSource: {
@@ -7480,6 +7551,19 @@ export type components = {
        * @description The published revision the passage was read in.
        */
       revision_id: string;
+    };
+    /** SourceRegionItem */
+    SourceRegionItem: {
+      bbox: components['schemas']['RegionBox'];
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Document Revision Id */
+      document_revision_id: string | null;
+      /** Page */
+      page: number;
     };
     /**
      * SubmitBody
@@ -11107,6 +11191,73 @@ export interface operations {
       };
     };
   };
+  getMockExamQuestionSourceRegion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mock_exam_question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockQuestionSourceRegion'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getMockExam: {
     parameters: {
       query?: never;
@@ -13901,6 +14052,73 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['QuestionRevision'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getQuestionSourceRegion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QuestionSourceRegion'];
         };
       };
       /** @description Unauthorized */
