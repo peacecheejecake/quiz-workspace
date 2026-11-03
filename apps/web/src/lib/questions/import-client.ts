@@ -136,6 +136,8 @@ export interface ImportClient {
     documentId?: string,
   ): Promise<ImportRun | null>;
   getRun(importId: string, signal?: AbortSignal): Promise<ImportRun>;
+  /** The workspace's newest runs, newest first (`검토할 PDF`, QIMPORT-02). */
+  listRuns(workspaceId: string, limit: number, signal?: AbortSignal): Promise<ImportRun[]>;
   /**
    * Every draft without its content, and the workspace's book chapters (the chapter picker,
    * CHAPTER-MAP) (QIMP-PAGING).
@@ -225,6 +227,13 @@ export function createImportClient(fetchImpl: FetchLike = (...a) => fetch(...a))
         idempotencyKey,
       }),
     getRun: (importId, signal) => call(IMPORT_BFF_PATHS.run(importId), { signal }),
+    listRuns: async (workspaceId, limit, signal) =>
+      (
+        await call<{ items: ImportRun[] }>(
+          `${IMPORT_BFF_PATHS.imports(workspaceId)}?limit=${limit}`,
+          { signal },
+        )
+      ).items,
     draftSummaries: async (importId, signal) => {
       const body = await call<{ items: ImportDraftSummary[]; chapters?: BookChapterOption[] }>(
         IMPORT_BFF_PATHS.draftSummaries(importId),

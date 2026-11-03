@@ -208,11 +208,6 @@
   color: var(--color-text-secondary);
 }
 
-/* `검토할 PDF` (UX6-UPLOAD). */
-.pdfSwitcher {
-  max-width: 32rem;
-}
-
 .sectionTitle:focus:not(:focus-visible) {
   outline: none;
 }

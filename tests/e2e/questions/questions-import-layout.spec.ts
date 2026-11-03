@@ -126,7 +126,7 @@ test(
 test(
   'QIMPORT-02-AC02 choosing a row pushes ?document= (Back and Forward walk the PDFs), no ?document= replaces it with the newest extraction, a foreign id is not found',
   { tag: '@infra' },
-  async ({ page, workspaceFactory }, testInfo) => {
+  async ({ page, browserName, workspaceFactory }, testInfo) => {
     await page.setViewportSize(DESKTOP);
     const owner = await workspaceFactory.member('qimport02-ac02');
     const ws = await workspaceFactory.create(owner);
@@ -159,10 +159,11 @@ test(
     await expect(importUi.draftItems(page)).toHaveCount(pdfs.b.run.draft_count);
     await expect(reviewListUi.link(nav, pdfs.b.title)).toHaveAttribute('aria-current', 'page');
 
-    // Keyboard: Tab onto A's row link, Enter.
+    // Keyboard: Tab onto A's row link, Enter (WebKit, like Safari, reaches links with Option+Tab).
+    const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
     const aLink = reviewListUi.link(nav, pdfs.a.title);
     for (let i = 0; i < 40 && !(await aLink.evaluate((el) => el === document.activeElement)); i++)
-      await page.keyboard.press('Tab');
+      await page.keyboard.press(tab);
     await expect(aLink).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(atDocument(pdfs.a.id));
@@ -246,7 +247,8 @@ test(
     await expect(page.getByRole('option')).toHaveCount(0);
 
     // Three checked drafts (1, 2, 4 have answers in the paper).
-    const pick = (n: number) => main(page).getByRole('checkbox', { name: `${n}번 문제 선택` });
+    const pick = (n: number) =>
+      main(page).getByRole('checkbox', { name: `${n}번 문제 선택`, exact: true });
     for (const n of [1, 2, 4]) await pick(n).check();
     await expect(importUi.publish(page)).toContainText('(3)');
 

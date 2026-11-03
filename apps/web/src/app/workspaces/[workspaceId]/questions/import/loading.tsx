@@ -1,6 +1,7 @@
-// QOV-01-AC09 (UX3c): 문제 PDF 가져오기 skeleton while the latest import loads.
-import { SubPageSkeleton } from '@/components/workspaces/route-skeletons';
+// QOV-01-AC09 (UX3c): 문제 PDF 가져오기 skeleton while the list and the review load (QIMPORT-02:
+// both panes).
+import { ImportSkeleton } from '@/components/questions/import/import-skeleton';
 
 export default function Loading() {
-  return <SubPageSkeleton label="문제 PDF 가져오기를 불러오는 중입니다." />;
+  return <ImportSkeleton />;
 }

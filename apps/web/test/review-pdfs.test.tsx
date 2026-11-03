@@ -1,27 +1,38 @@
 // @vitest-environment jsdom
-// QIMPORT-01 `검토할 PDF` (UX6-UPLOAD): one review per PDF, newest extraction first, and the import
-// page uploads nothing — without an extraction it points at 문서 관리.
+// QIMPORT-02 `검토할 PDF` (docs/screens/questions-import-layout.md): the PDFs to review — every PDF
+// with an extraction and every 문제지 / 교재+문제 waiting for one, newest extraction first — their
+// state as text, and the import page's two panes: the list replaces UX6-UPLOAD's switcher, a row
+// pushes `?document=`, a switch with checked drafts asks first.
 import './dom-setup';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { DocumentSummary } from '../src/lib/documents/client-api';
-import type { ImportRun } from '../src/lib/questions/drafts';
-import { reviewPdfs } from '../src/lib/questions/review-pdfs';
+import {
+  reviewDraftFromImport,
+  type ImportDraft,
+  type ImportRegistration,
+  type ImportRun,
+} from '../src/lib/questions/drafts';
+import {
+  reviewPdfs,
+  reviewPdfsInProgress,
+  reviewPdfState,
+  reviewPdfStateText,
+} from '../src/lib/questions/review-pdfs';
 
-const push = vi.fn();
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push, replace: vi.fn(), refresh: vi.fn() }),
-}));
+const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => router }));
 vi.mock('../src/components/questions/import/source-compare-panel', () => ({
   SourceComparePanel: () => null,
 }));
-const { QuestionImport, reviewPdfLabel, showsPdfSwitcher } =
-  await import('../src/components/questions/import/question-import');
+const { ImportReviewLayout } =
+  await import('../src/components/questions/import/import-review-layout');
 
 const WS = '55555555-5555-4555-8555-555555555555';
 const A = '33333333-3333-4333-8333-333333333331';
 const B = '33333333-3333-4333-8333-333333333332';
+const C = '33333333-3333-4333-8333-333333333333';
 const AT = '2026-10-28T00:00:00Z';
 
 const doc = (
@@ -34,6 +45,7 @@ const doc = (
   workspace_id: WS,
   document_type: kind === 'question_paper' ? 'question_paper' : 'book',
   kind,
+  kind_source: 'auto',
   title,
   filename: `${title}.pdf`,
   size_bytes: 1,
@@ -44,52 +56,73 @@ const doc = (
   created_at: AT,
   updated_at: AT,
   latest_import_id: `run-${id}`,
+  processing_job: null,
+  question_count: 0,
   ...extra,
 });
 
-const RUN: ImportRun = {
-  id: '22222222-2222-4222-8222-222222222222',
+const run = (documentId: string, extra: Partial<ImportRun> = {}): ImportRun => ({
+  id: `run-${documentId}`,
   workspace_id: WS,
   status: 'succeeded',
   job_id: null,
   error_code: null,
-  source_document_id: B,
+  source_document_id: documentId,
   source_document_revision_id: null,
-  document_title: '교재 B',
-  draft_count: 0,
-  published_count: 0,
+  document_title: null,
+  draft_count: 3,
+  published_count: 1,
   registration_job_id: null,
   created_at: AT,
   updated_at: AT,
   finished_at: AT,
-};
+  ...extra,
+});
+
+function nth<T>(list: readonly T[], index: number): T {
+  const item = list[index];
+  if (item === undefined) throw new Error(`no item ${index}`);
+  return item;
+}
+
+const first = <T,>(list: readonly T[]): T => nth(list, 0);
 
 describe('reviewPdfs', () => {
-  it('keeps one entry per PDF in the order of its newest run and skips PDFs that are gone', () => {
+  it('lists extracted PDFs by their newest run, then PDFs with questions waiting, never a plain 교재', () => {
     const runs = [
-      { source_document_id: B },
-      { source_document_id: A },
-      { source_document_id: B },
+      run(B),
+      run(A),
+      run(B, { id: 'older-b' }),
       { source_document_id: 'deleted' },
       { source_document_id: null },
     ];
     const pdfs = reviewPdfs(runs, [
       doc(A, '문제지 A', 'question_paper'),
       doc(B, '교재 B', 'mixed'),
+      doc(C, '교재+문제 C', 'mixed', {
+        latest_import_id: null,
+        created_at: '2026-10-29T00:00:00Z',
+      }),
+      doc('d', '처리 중 D', 'question_paper', {
+        latest_import_id: null,
+        status: 'processing',
+        created_at: '2026-10-30T00:00:00Z',
+      }),
+      doc('e', '교재 E', 'book', { latest_import_id: null }),
     ]);
-    expect(pdfs).toEqual([
-      { documentId: B, title: '교재 B', kind: 'mixed' },
-      { documentId: A, title: '문제지 A', kind: 'question_paper' },
+    expect(pdfs.map((p) => p.title)).toEqual(['교재 B', '문제지 A', '처리 중 D', '교재+문제 C']);
+    expect(pdfs[0]?.run?.id).toBe(`run-${B}`);
+    expect(pdfs.map((p) => reviewPdfStateText(reviewPdfState(p)))).toEqual([
+      '초안 3개 · 등록 1개',
+      '초안 3개 · 등록 1개',
+      '처리 중',
+      '추출 전',
     ]);
-    expect(pdfs.map(reviewPdfLabel)).toEqual(['교재 B · 교재+문제', '문제지 A · 문제지']);
-    expect(showsPdfSwitcher(pdfs)).toBe(true);
-    expect(showsPdfSwitcher(pdfs.slice(0, 1))).toBe(false);
+    expect(reviewPdfsInProgress(pdfs)).toBe(true);
+    expect(reviewPdfsInProgress(pdfs.slice(0, 2))).toBe(false);
   });
-});
 
-describe('reviewPdfs beyond one page of runs (Codex P2)', () => {
-  it('offers every PDF whose document has an extraction, older ones after the page, never a PDF without one', () => {
-    // 200 runs (the page the server reads) all belong to newer PDFs; OLD's run is not among them.
+  it('offers every PDF whose document has an extraction, older ones after the page of runs (Codex P2)', () => {
     const newer = Array.from({ length: 200 }, (_, i) =>
       doc(`n${i}`, `새 문제지 ${i}`, 'question_paper', {
         created_at: `2026-10-28T01:${String(i % 60).padStart(2, '0')}:00Z`,
@@ -99,93 +132,224 @@ describe('reviewPdfs beyond one page of runs (Codex P2)', () => {
     const old = doc('old', '오래된 문제지', 'question_paper', {
       created_at: '2026-01-01T00:00:00Z',
     });
-    const plain = doc('plain', '교재', 'book', { latest_import_id: null });
-    const pdfs = reviewPdfs(runs, [old, plain, ...newer]);
-    expect(pdfs).toHaveLength(201);
-    expect(pdfs.slice(0, 200).map((p) => p.documentId)).toEqual(newer.map((d) => d.id));
-    expect(pdfs[200]).toEqual({
-      documentId: 'old',
-      title: '오래된 문제지',
-      kind: 'question_paper',
+    const waiting = doc('wait', '추출 전 문제지', 'question_paper', {
+      latest_import_id: null,
+      created_at: '2026-12-01T00:00:00Z',
     });
-    expect(pdfs.some((p) => p.documentId === 'plain')).toBe(false);
-    // Without the runs (their read failed) the extracted PDFs are still all offered.
-    expect(reviewPdfs([], [old, plain, ...newer])).toHaveLength(201);
+    const pdfs = reviewPdfs(runs, [waiting, old, ...newer]);
+    expect(pdfs).toHaveLength(202);
+    expect(pdfs.slice(0, 200).map((p) => p.documentId)).toEqual(newer.map((d) => d.id));
+    expect(pdfs[200]?.documentId).toBe('old');
+    expect(reviewPdfStateText(reviewPdfState(nth(pdfs, 200)))).toBe('추출 완료');
+    expect(pdfs[201]?.documentId).toBe('wait');
+    // Without the runs (their read failed) every PDF is still listed.
+    expect(reviewPdfs([], [waiting, old, ...newer])).toHaveLength(202);
   });
 
-  it('keeps the opened PDF selected in `검토할 PDF` even when its run is not in the newest page', () => {
-    render(
-      <QuestionImport
-        workspaceId={WS}
-        readOnly={null}
-        initialRun={{ ...RUN, source_document_id: A, document_title: '오래된 문제지' }}
-        initialDrafts={[]}
-        documentId={A}
-        reviewPdfs={reviewPdfs(
-          [{ source_document_id: B }],
-          [doc(B, '교재 B', 'mixed'), doc(A, '오래된 문제지', 'question_paper')],
-        )}
-        loadFailed={false}
-      />,
+  it('says what a row is doing: extracting, registering, failed', () => {
+    const extracting = first(
+      reviewPdfs([run(A, { status: 'running', job_id: 'job-a' })], [doc(A, 'A', 'question_paper')]),
     );
-    expect(screen.getByRole('combobox', { name: '검토할 PDF' }).textContent).toContain(
-      '오래된 문제지 · 문제지',
+    expect(reviewPdfStateText(reviewPdfState(extracting))).toBe('문제 추출 중');
+    expect(
+      reviewPdfStateText(reviewPdfState(extracting, { extraction: new Map([[`run-${A}`, 40]]) })),
+    ).toBe('문제 추출 중 40%');
+    const done = first(reviewPdfs([run(A)], [doc(A, 'A', 'question_paper')]));
+    const registering: ImportRegistration = {
+      import_id: `run-${A}`,
+      job_id: 'reg',
+      status: 'running',
+      total: 5,
+      processed: 2,
+      registered: 2,
+      skipped: 0,
+      refused: [],
+      error_code: null,
+      created_at: AT,
+      finished_at: null,
+    };
+    expect(
+      reviewPdfStateText(
+        reviewPdfState(done, { registrations: new Map([[`run-${A}`, registering]]) }),
+      ),
+    ).toBe('등록 중 2/5');
+    const failed = first(
+      reviewPdfs([run(A, { status: 'failed' })], [doc(A, 'A', 'question_paper')]),
     );
+    expect(reviewPdfStateText(reviewPdfState(failed))).toBe('추출 실패');
+    const broken = first(
+      reviewPdfs([], [doc(A, 'A', 'question_paper', { status: 'failed', latest_import_id: null })]),
+    );
+    expect(reviewPdfStateText(reviewPdfState(broken))).toBe('처리 실패');
   });
 });
 
-describe('QuestionImport without uploads', () => {
-  it('switches the reviewed PDF with `검토할 PDF` (two extracted PDFs) and has no upload', async () => {
-    push.mockClear();
-    const user = userEvent.setup();
-    render(
-      <QuestionImport
-        workspaceId={WS}
-        readOnly={null}
-        initialRun={RUN}
-        initialDrafts={[]}
-        reviewPdfs={[
-          { documentId: B, title: '교재 B', kind: 'mixed' },
-          { documentId: A, title: '문제지 A', kind: 'question_paper' },
-        ]}
-        loadFailed={false}
-      />,
+function draft(i: number): ImportDraft {
+  return {
+    id: `d-${i}`,
+    import_id: `run-${A}`,
+    position: i,
+    question_number: i + 1,
+    question_type: 'SHORT_ANSWER',
+    is_multi_answer: false,
+    rubric: null,
+    review_status: 'pending',
+    published_question_id: null,
+    validations: [],
+    answer_missing: false,
+    pages: [1],
+    publishable: true,
+    publish_errors: [],
+    version: `v-${i}`,
+    reviewed_at: null,
+    created_at: AT,
+    updated_at: AT,
+    chapter: null,
+    chapter_choice: 'auto',
+    chapter_match: 'no_match',
+    source_chapter_title: null,
+    payload: {
+      schema_version: 1,
+      id: `${A}-q${i}`,
+      origin: 'pdf_import',
+      question_type: 'SHORT_ANSWER',
+      stem: `문제 본문 ${i}`,
+      options: [],
+      correct_option_ids: null,
+      accepted_answers: ['답'],
+      evidence: [{ document_id: A, locations: [{ page: 1 }] }],
+      validations: [],
+      review_status: 'pending',
+    },
+  } as ImportDraft;
+}
+
+function layout(readOnly: 'viewer' | null = null) {
+  const drafts = [0, 1].map((i) => reviewDraftFromImport(draft(i)));
+  return (
+    <ImportReviewLayout
+      workspaceId={WS}
+      workspaceName="연습 Workspace"
+      readOnly={readOnly}
+      documents={[
+        doc(A, '문제지 A', 'question_paper'),
+        doc(B, '교재 B', 'mixed'),
+        doc(C, '교재+문제 C', 'mixed', { latest_import_id: null }),
+      ]}
+      runs={[run(A, { draft_count: 2, published_count: 0 }), run(B)]}
+      listFailed={false}
+      documentId={A}
+      review={{
+        run: run(A, { draft_count: 2, published_count: 0 }),
+        drafts,
+        summaries: drafts,
+        chapters: [],
+        loadedAt: AT,
+        loadFailed: false,
+      }}
+    />
+  );
+}
+
+describe('ImportReviewLayout (QIMPORT-02)', () => {
+  it('shows the list in a nav beside the review titled by the PDF, without the old switcher', () => {
+    render(layout());
+    expect(screen.getByRole('heading', { level: 1, name: '문제 PDF 가져오기' })).toBeTruthy();
+    const nav = screen.getByRole('navigation', { name: '검토할 PDF' });
+    expect(within(nav).getByRole('heading', { level: 2, name: '검토할 PDF (3)' })).toBeTruthy();
+    const rows = within(nav).getAllByRole('listitem');
+    expect(rows.map((r) => r.textContent)).toEqual([
+      expect.stringContaining('문제지 A'),
+      expect.stringContaining('교재 B'),
+      expect.stringContaining('교재+문제 C'),
+    ]);
+    expect(rows[0]?.textContent).toContain('초안 2개 · 등록 0개');
+    expect(rows[2]?.textContent).toContain('추출 전');
+    expect(
+      within(nth(rows, 2)).getByRole('button', { name: '교재+문제 C 문제 추출' }),
+    ).toBeTruthy();
+    const current = within(nav).getByRole('link', { name: '문제지 A' });
+    expect(current.getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getByRole('link', { name: '교재 B' }).getAttribute('href')).toBe(
+      `/workspaces/${WS}/questions/import?document=${B}`,
     );
-    expect(screen.queryByRole('button', { name: /PDF (업로드|선택)/ })).toBeNull();
+    const review = screen.getByRole('region', { name: '문제지 A' });
+    expect(within(review).getByRole('heading', { level: 2, name: '문제지 A' })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: '검토할 PDF' })).toBeNull();
     expect(document.querySelector('input[type="file"]')).toBeNull();
-    const switcher = screen.getByRole('combobox', { name: '검토할 PDF' });
-    expect(switcher.textContent).toContain('교재 B · 교재+문제');
-    await user.click(switcher);
-    await user.click(await screen.findByRole('option', { name: '문제지 A · 문제지' }));
-    expect(push).toHaveBeenCalledWith(`/workspaces/${WS}/questions/import?document=${A}`);
   });
 
-  it('without an extraction it says so and offers editors 문서 관리 열기; no switcher for one PDF', () => {
+  it('a row pushes ?document=; with checked drafts it asks first and 취소 keeps the PDF', async () => {
+    router.push.mockClear();
+    const user = userEvent.setup();
+    render(layout());
+    const nav = screen.getByRole('navigation', { name: '검토할 PDF' });
+    await user.click(within(nav).getByRole('link', { name: '교재 B' }));
+    expect(router.push).toHaveBeenCalledWith(`/workspaces/${WS}/questions/import?document=${B}`, {
+      scroll: false,
+    });
+    router.push.mockClear();
+
+    await user.click(screen.getByRole('checkbox', { name: '1번 문제 선택' }));
+    await user.click(within(nav).getByRole('link', { name: '교재 B' }));
+    const confirm = await screen.findByRole('alertdialog');
+    expect(confirm.textContent).toContain(
+      '선택한 초안 1개의 선택이 사라집니다. 다른 PDF로 바꿀까요?',
+    );
+    await user.click(within(confirm).getByRole('button', { name: '취소' }));
+    expect(router.push).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole('checkbox', { name: '1번 문제 선택' }).getAttribute('aria-checked'),
+    ).toBe('true');
+    await user.click(within(nav).getByRole('link', { name: '교재 B' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '바꾸기' }),
+    );
+    expect(router.push).toHaveBeenCalledWith(`/workspaces/${WS}/questions/import?document=${B}`, {
+      scroll: false,
+    });
+  });
+
+  it('a viewer sees the list and the review without 문제 추출 or registering', () => {
+    render(layout('viewer'));
+    expect(screen.getAllByRole('listitem').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /문제 추출/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /선택한 문제 승인 및 등록/ })).toBeNull();
+  });
+
+  it('a PDF not on the list is not found; no PDF to review shows the empty state only', () => {
     const { unmount } = render(
-      <QuestionImport
+      <ImportReviewLayout
         workspaceId={WS}
+        workspaceName="연습 Workspace"
         readOnly={null}
-        initialRun={null}
-        initialDrafts={[]}
-        loadFailed={false}
+        documents={[doc(A, '문제지 A', 'question_paper')]}
+        runs={[run(A)]}
+        listFailed={false}
+        documentId={B}
+        notFound
+        review={null}
       />,
     );
-    expect(screen.getByRole('heading', { name: '추출된 문제가 없습니다' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'PDF를 찾을 수 없습니다.' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: '검토할 PDF' })).toBeTruthy();
+    unmount();
+    render(
+      <ImportReviewLayout
+        workspaceId={WS}
+        workspaceName="연습 Workspace"
+        readOnly={null}
+        documents={[doc('e', '교재 E', 'book', { latest_import_id: null })]}
+        runs={[]}
+        listFailed={false}
+        documentId={null}
+        review={null}
+      />,
+    );
+    expect(screen.getByRole('heading', { name: '추출된 문제가 없습니다' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '문서 관리 열기' }).getAttribute('href')).toBe(
       `/workspaces/${WS}?panel=documents`,
     );
-    unmount();
-    render(
-      <QuestionImport
-        workspaceId={WS}
-        readOnly="viewer"
-        initialRun={RUN}
-        initialDrafts={[]}
-        reviewPdfs={[{ documentId: B, title: '교재 B', kind: 'mixed' }]}
-        loadFailed={false}
-      />,
-    );
-    expect(screen.queryByRole('combobox', { name: '검토할 PDF' })).toBeNull();
-    expect(screen.queryByRole('link', { name: '문서 관리 열기' })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: '검토할 PDF' })).toBeNull();
   });
 });

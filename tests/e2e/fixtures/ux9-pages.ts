@@ -225,7 +225,8 @@ export const reviewListUi = {
     reviewListUi
       .nav(page)
       .getByRole('heading', { level: 2, name: /^(검토할 pdf|pdfs to review) \(\d+\)$/i }),
-  rows: (scope: Locator) => scope.getByRole('list').first().getByRole('listitem'),
+  /** The rows: the list's own items (a processing row's step list has items of its own). */
+  rows: (scope: Locator) => scope.getByRole('list').first().locator(':scope > li'),
   row: (scope: Locator, title: string) =>
     reviewListUi
       .rows(scope)
