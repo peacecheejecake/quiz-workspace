@@ -665,16 +665,9 @@ test(
     // Keyboard only at 375px: move the 챕터 없음 question to 1장.
     await page.setViewportSize({ width: 375, height: 740 });
     await page.goto(overviewPath(s.workspaceId));
-    const button = homeUi.questionMenuButton(page);
-    await button.focus();
-    await page.keyboard.press('Enter');
-    const item = redistUi.menuItem(page);
-    for (let i = 0; i < 8 && !(await item.evaluate((el) => el === document.activeElement)); i++) {
-      await page.keyboard.press('ArrowDown');
-    }
-    await page.keyboard.press('Enter');
-    dialog = redistUi.dialog(page);
-    await expect(dialog).toBeVisible();
+    await expect(overviewUi.heatmap(page)).toBeVisible();
+    // Enter, arrows to 챕터 재분배 (asserted focused), Enter.
+    dialog = await openRedistributionByKeyboard(page);
     await expectNoHorizontalScroll(page, dialog);
     const noChapter = rangePickerUi.chapter(dialog, NO_CHAPTER);
     await tabTo(page, noChapter);
