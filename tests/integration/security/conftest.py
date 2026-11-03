@@ -202,6 +202,20 @@ def build_world(seed: Any, label: str) -> World:
         "select import_run_id::text from public.question_drafts where id = %s", (draft_id,)
     )
     import_id = str(rows[0][0])
+    # QSRC-API: an import-provenance region on the question (and so on its 보기 섞기 mock
+    # question), so the source-region reads have a 2xx to protect.
+    seed._admin(
+        "insert into public.question_sources (workspace_id, question_id, document_id, "
+        "document_revision_id, page_start, page_end, locations, import_run_id) "
+        "select q.workspace_id, q.id, d.id, d.active_revision_id, 1, 1, %s::jsonb, %s "
+        "from public.questions q join public.documents d on d.id = %s where q.id = %s",
+        (
+            json.dumps([{"page": 1, "bbox": {"x0": 10.0, "y0": 20.0, "x1": 200.0, "y1": 80.0}}]),
+            import_id,
+            doc_id,
+            qid,
+        ),
+    )
     # The shared S0 seed stores a bare payload; give the draft a complete QuestionDraft so the
     # draft routes can render it.
     payload = QuestionDraft(

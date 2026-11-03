@@ -8,8 +8,7 @@ origin question (C04); nothing else changes (C05).
 
 Shapes and files are assumptions S1-S7 in tests/e2e/fixtures/question-source.ts. Jobs run in this
 process (conftest.py). Every test first proves the route exists with a positive read, so a missing
-route fails as "not implemented" and never passes a 404 assertion. RED: `red` marker, removed by
-QSRC-API.
+route fails as "not implemented" and never passes a 404 assertion.
 """
 
 from __future__ import annotations
@@ -25,7 +24,7 @@ import httpx
 import psycopg
 import pytest
 
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = [pytest.mark.infra]
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PDFS = REPO_ROOT / "tests" / "fixtures" / "pdfs"
