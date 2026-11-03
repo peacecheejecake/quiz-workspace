@@ -10,7 +10,12 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Tabs,
   TabsContent,
@@ -100,6 +105,64 @@ describe('DropdownMenu', () => {
     await user.keyboard('{ArrowDown}');
     expect(within(menu).getByRole('menuitem', { name: '모두 보기' })).toHaveFocus();
     expect(await axeViolations()).toEqual([]);
+  });
+});
+
+describe('DropdownMenu submenu', () => {
+  function ColorMenu({ onColor }: { onColor: (color: string) => void }) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button>메뉴</Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent aria-label="메뉴">
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>색 바꾸기</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent aria-label="색 바꾸기">
+              <DropdownMenuRadioGroup value="yellow" onValueChange={onColor}>
+                <DropdownMenuRadioItem value="yellow">노랑</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="blue">파랑</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuItem>삭제</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
+  it('opens with ArrowRight, checks the current radio item and chooses another', async () => {
+    const user = userEvent.setup();
+    const onColor = vi.fn();
+    render(<ColorMenu onColor={onColor} />);
+    screen.getByRole('button', { name: '메뉴' }).focus();
+    await user.keyboard('{Enter}');
+    const trigger = await screen.findByRole('menuitem', { name: '색 바꾸기' });
+    await waitFor(() => expect(trigger).toHaveFocus());
+    await user.keyboard('{ArrowRight}');
+    const sub = await screen.findByRole('menu', { name: '색 바꾸기' });
+    expect(within(sub).getByRole('menuitemradio', { name: '노랑' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await waitFor(() => expect(sub.contains(document.activeElement)).toBe(true));
+    await user.keyboard('{ArrowDown}');
+    expect(within(sub).getByRole('menuitemradio', { name: '파랑' })).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onColor).toHaveBeenCalledWith('blue');
+  });
+
+  it('ArrowDown on the trigger of the open submenu goes into it, not along the menu', async () => {
+    const user = userEvent.setup();
+    render(<ColorMenu onColor={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: '메뉴' }));
+    const trigger = await screen.findByRole('menuitem', { name: '색 바꾸기' });
+    await user.click(trigger);
+    const sub = await screen.findByRole('menu', { name: '색 바꾸기' });
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+    expect(within(sub).getByRole('menuitemradio', { name: '노랑' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: '삭제' })).not.toHaveFocus();
   });
 });
 

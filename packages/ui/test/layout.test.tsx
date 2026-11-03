@@ -148,6 +148,44 @@ describe('Toast', () => {
   });
 });
 
+describe('Toast in a modal (HILITE-01 되돌리기)', () => {
+  function Deleted() {
+    const { toast } = useToast();
+    return (
+      <Button
+        onClick={() =>
+          toast({
+            title: '하이라이트를 지웠습니다',
+            action: { label: '되돌리기', altText: '되돌리려면 F8', onClick: () => undefined },
+          })
+        }
+      >
+        삭제
+      </Button>
+    );
+  }
+
+  it('keeps focus in the notification region while a modal is open; Tab from it reaches the action', async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <ModalDialog open title="정리 노트">
+          <Deleted />
+        </ModalDialog>
+      </ToastProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: '삭제' }));
+    const undo = await screen.findByRole('button', { name: '되돌리기' });
+    // F8 focuses the toast list inside the region.
+    const list = screen.getByRole('region', { name: /알림/ }).querySelector('ol') as HTMLElement;
+    list.focus();
+    expect(list).toHaveFocus();
+    // Tab from the region itself (F8): the newest toast, which hands focus to its action.
+    (undo.closest('li') as HTMLElement).focus();
+    expect(undo).toHaveFocus();
+  });
+});
+
 describe('Toast stylesheet', () => {
   it('draws no left accent border on any tone', () => {
     const css = readFileSync(resolve(import.meta.dirname, '../src/styles/overlays.css'), 'utf8');

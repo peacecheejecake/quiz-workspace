@@ -6,6 +6,7 @@ import { cx } from '../internal/cx';
 import { useLayerStyle } from '../internal/layer';
 import { useMergedRefs } from '../internal/merge-refs';
 import { useOverscrollGuard } from '../internal/overscroll-guard';
+import { CheckIcon, ChevronRightIcon } from './icons';
 
 export const DropdownMenu = RadixDropdownMenu.Root;
 export const DropdownMenuTrigger = RadixDropdownMenu.Trigger;
@@ -73,4 +74,99 @@ export function DropdownMenuSeparator({
   ...rest
 }: ComponentProps<typeof RadixDropdownMenu.Separator>) {
   return <RadixDropdownMenu.Separator className={cx('separator', className)} {...rest} />;
+}
+
+export const DropdownMenuSub = RadixDropdownMenu.Sub;
+
+/**
+ * Item that opens a submenu (ArrowRight / Enter / click / hover); shows a trailing chevron. The
+ * submenu stays open when the pointer leaves the trigger and closes when another item of the menu
+ * takes the pointer or focus: Radix's "moving towards the submenu" guess reads the pointer's last
+ * direction, which is wrong when the submenu flipped to the other side (a menu at the screen edge).
+ */
+export function DropdownMenuSubTrigger({
+  className,
+  children,
+  onPointerLeave,
+  onKeyDown,
+  ...rest
+}: ComponentProps<typeof RadixDropdownMenu.SubTrigger>) {
+  return (
+    <RadixDropdownMenu.SubTrigger
+      className={cx('item', className)}
+      onPointerLeave={(event) => {
+        onPointerLeave?.(event);
+        // Only an open submenu is kept (a passing pointer still cancels a pending open).
+        if (event.currentTarget.getAttribute('data-state') === 'open') event.preventDefault();
+      }}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        // ArrowDown / ArrowUp on the trigger of an open submenu (focus has not moved into it yet,
+        // e.g. right after ArrowRight) go into the submenu instead of moving along the parent menu,
+        // which would close it.
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        const trigger = event.currentTarget;
+        if (trigger.getAttribute('data-state') !== 'open') return;
+        event.preventDefault();
+        const id = trigger.getAttribute('aria-controls');
+        const content = id ? trigger.ownerDocument.getElementById(id) : null;
+        const items = [
+          ...(content?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not([data-disabled])') ??
+            []),
+        ];
+        (event.key === 'ArrowDown' ? items[0] : items[items.length - 1])?.focus();
+      }}
+      {...rest}
+    >
+      <span className="text">{children}</span>
+      <ChevronRightIcon width={16} height={16} aria-hidden="true" />
+    </RadixDropdownMenu.SubTrigger>
+  );
+}
+
+/** The submenu of a `DropdownMenuSubTrigger` (same surface as `DropdownMenuContent`). */
+export function DropdownMenuSubContent({
+  className,
+  sideOffset = 4,
+  style,
+  ref,
+  ...rest
+}: ComponentProps<typeof RadixDropdownMenu.SubContent>) {
+  const layerStyle = useLayerStyle();
+  const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
+  const contentRef = useMergedRefs(ref, guardOverscroll);
+  return (
+    <RadixDropdownMenu.Portal>
+      <RadixDropdownMenu.SubContent
+        ref={contentRef}
+        sideOffset={sideOffset}
+        className={cx('qz-menu', 'glass-surface', className)}
+        style={{ ...layerStyle, ...style }}
+        {...rest}
+      />
+    </RadixDropdownMenu.Portal>
+  );
+}
+
+/** One-of-many items (`menuitemradio` with `aria-checked`); the chosen one shows a check. */
+export function DropdownMenuRadioGroup({
+  className,
+  ...rest
+}: ComponentProps<typeof RadixDropdownMenu.RadioGroup>) {
+  return <RadixDropdownMenu.RadioGroup className={cx('group', className)} {...rest} />;
+}
+
+export function DropdownMenuRadioItem({
+  className,
+  children,
+  ...rest
+}: ComponentProps<typeof RadixDropdownMenu.RadioItem>) {
+  return (
+    <RadixDropdownMenu.RadioItem className={cx('item', className)} {...rest}>
+      <span className="text">{children}</span>
+      <RadixDropdownMenu.ItemIndicator className="check">
+        <CheckIcon width={16} height={16} aria-hidden="true" />
+      </RadixDropdownMenu.ItemIndicator>
+    </RadixDropdownMenu.RadioItem>
+  );
 }

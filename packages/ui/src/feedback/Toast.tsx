@@ -5,6 +5,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -84,6 +85,8 @@ export function ToastProvider({
   }, []);
 
   const value = useMemo(() => ({ toast, dismiss }), [toast, dismiss]);
+  const viewportRef = useRef<HTMLOListElement>(null);
+  useToastsReachableFromModals(viewportRef);
 
   return (
     <ToastContext.Provider value={value}>
@@ -133,6 +136,7 @@ export function ToastProvider({
                 className="qz-button qz-focus-ring"
                 data-variant="secondary"
                 data-size="sm"
+                data-toast-action=""
                 onClick={item.action.onClick}
               >
                 {item.action.label}
@@ -148,6 +152,7 @@ export function ToastProvider({
             landmark) reachable while a modal is open without adding announcements — each toast
             announces itself. */}
         <RadixToast.Viewport
+          ref={viewportRef}
           label={`${label} ({hotkey})`}
           className="qz-toast-viewport"
           aria-live="off"
@@ -155,6 +160,42 @@ export function ToastProvider({
       </RadixToast.Provider>
     </ToastContext.Provider>
   );
+}
+
+/**
+ * F8 (and Tab from the region) must reach the notifications while a modal dialog or panel is open
+ * (HILITE-01 `되돌리기`): a modal's focus trap pulls any focus that leaves it back in. Focus moving
+ * into the notification region is therefore not reported to the page above the region (the trap
+ * listens on the document); everything inside the region keeps its own handling. From the region
+ * itself (F8), Tab goes to the newest toast's action when it has one, else to the toast.
+ */
+function useToastsReachableFromModals(viewportRef: { readonly current: HTMLOListElement | null }) {
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return undefined;
+    const doc = viewport.ownerDocument;
+    const inRegion = (node: EventTarget | null) => node instanceof Node && viewport.contains(node);
+    const onFocusOut = (event: FocusEvent) => {
+      if (inRegion(event.relatedTarget)) event.stopPropagation();
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      event.stopPropagation();
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target.matches('.qz-toast') &&
+        event.relatedTarget === viewport
+      ) {
+        target.querySelector<HTMLElement>('[data-toast-action]')?.focus();
+      }
+    };
+    doc.addEventListener('focusout', onFocusOut, true);
+    viewport.addEventListener('focusin', onFocusIn);
+    return () => {
+      doc.removeEventListener('focusout', onFocusOut, true);
+      viewport.removeEventListener('focusin', onFocusIn);
+    };
+  }, [viewportRef]);
 }
 
 export function useToast(): ToastContextValue {

@@ -52,6 +52,15 @@
     cursor: pointer;
   }
 
+  /* The hidden start/end labels stay in the line (net zero width) instead of being positioned
+     out of it: an out-of-flow 1px box would make the mark's first box a point outside its text,
+     where a pointer (or automation aiming at the mark) hits the paragraph instead. */
+  > .qz-visually-hidden {
+    position: static !important;
+    display: inline-block;
+    vertical-align: baseline;
+  }
+
   &:focus-visible,
   &:focus {
     outline: 2px solid var(--color-focus);
