@@ -176,8 +176,13 @@ async function main(): Promise<number> {
     '',
   );
   const dir = mkdtempSync(join(tmpdir(), 'quiz-log-audit-'));
+  // Celery prefers CELERY_BROKER_URL / CELERY_RESULT_BACKEND from the environment over the
+  // REDIS_URL the API and worker configure. A shell that exports them would split the broker
+  // from the Redis the answer streams use (and from the feature-off stacks' claimed DBs, which
+  // set REDIS_URL only): REDIS_URL alone names this stack's Redis.
+  const { CELERY_BROKER_URL: _broker, CELERY_RESULT_BACKEND: _backend, ...inherited } = process.env;
   const env = {
-    ...process.env,
+    ...inherited,
     NEXT_PUBLIC_API_BASE_URL: apiUrl,
     E2E_BASE_URL: webUrl,
     // Same as playwright.config.ts: the E2E web build has the auth CAPTCHA on with Cloudflare's

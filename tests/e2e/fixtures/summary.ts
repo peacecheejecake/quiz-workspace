@@ -435,6 +435,12 @@ export async function startSummaryOffStack(
     WORKER_DOCUMENT_SUMMARY: 'false',
     ...overrides,
     REDIS_URL: broker,
+    // Celery prefers CELERY_BROKER_URL / CELERY_RESULT_BACKEND from the environment over the
+    // REDIS_URL the API and worker configure: inherited from the shell they would put this
+    // stack's jobs on the main stack's broker, where the other stack's workers take them and
+    // write an answer's stream (REDIS_URL) where this stack's API never reads it.
+    CELERY_BROKER_URL: broker,
+    CELERY_RESULT_BACKEND: broker,
     LOG_LEVEL: 'INFO',
     PYTHONUNBUFFERED: '1',
   };
