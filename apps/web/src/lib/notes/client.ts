@@ -1,7 +1,13 @@
 // Browser side of CHNOTE-01 for members: calls this app's own `/api/...` relay routes, which add
 // the session's access token server-side (no JWT in the browser). FastAPI decides everything
 // (membership, role, archived workspace, feature switch).
-import { NOTE_PROBLEMS, type ChapterNoteList, type ChapterNoteState } from './model';
+import {
+  NOTE_PROBLEMS,
+  type ChapterNoteList,
+  type ChapterNoteState,
+  type MyHighlight,
+  type QuestionPreview,
+} from './model';
 
 export type NoteFailureKind =
   'notFound' | 'forbidden' | 'running' | 'noQuestions' | 'disabled' | 'unauthenticated' | 'failed';
@@ -94,4 +100,27 @@ export function listChapterNotes(
   return call(fetchImpl, `/api/workspaces/${encodeURIComponent(workspaceId)}/chapter-notes`, {
     signal,
   });
+}
+
+/** A footnote's question preview: stem and options only, never answers (CHNOTE-02-C01). */
+export function getQuestionPreview(
+  questionId: string,
+  signal?: AbortSignal,
+  fetchImpl: FetchLike = (...a) => fetch(...a),
+): Promise<QuestionPreview> {
+  return call(fetchImpl, `/api/questions/${encodeURIComponent(questionId)}/preview`, { signal });
+}
+
+/** The reader's own highlights of a chapter (its note versions and explanations, HILITE-01). */
+export async function getChapterHighlights(
+  chapterId: string,
+  signal?: AbortSignal,
+  fetchImpl: FetchLike = (...a) => fetch(...a),
+): Promise<readonly MyHighlight[]> {
+  const list = await call<{ items: MyHighlight[] }>(
+    fetchImpl,
+    `/api/chapters/${encodeURIComponent(chapterId)}/my-highlights`,
+    { signal },
+  );
+  return list.items;
 }

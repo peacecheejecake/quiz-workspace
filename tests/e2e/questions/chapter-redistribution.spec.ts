@@ -451,11 +451,7 @@ test(
     await gotoSettled(page, notePanelPath(s.workspaceId, s.ch1));
     const panel = noteUi.panel(page);
     await expect(noteUi.stale(panel)).toBeVisible();
-    // Until UX9-NOTE-W drops the folded note body (CHNOTE-02), unfold it to read the footnotes.
-    const fold = noteUi.disclosure(panel);
-    if ((await fold.count()) > 0 && (await fold.getAttribute('aria-expanded')) === 'false') {
-      await fold.click();
-    }
+    // The body is always open (UX9-NOTE-W, CHNOTE-02): the footnotes are read at once.
     await expect(
       noteUi.footnoteList(panel).getByRole('listitem').filter({ hasText: FOOTNOTE_GONE }),
     ).not.toHaveCount(0);

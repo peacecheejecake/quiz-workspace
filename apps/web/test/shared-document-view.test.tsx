@@ -48,6 +48,7 @@ function fakeClient(pdfError: unknown): SharedClient {
     questions: vi.fn(),
     search: vi.fn(),
     question: vi.fn(),
+    questionPreview: vi.fn(),
     chapterNotes: vi.fn(),
     chapterNote: vi.fn(),
     pdf: vi.fn(async () => {

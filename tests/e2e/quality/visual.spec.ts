@@ -260,7 +260,7 @@ test(
 );
 
 test(
-  'VISUAL-06 text export menu, document summary panel and chapter note panel (body folded)',
+  'VISUAL-06 text export menu, document summary panel and chapter note panel (body masked)',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('visual06');
@@ -302,12 +302,21 @@ test(
     await page.mouse.move(0, 0);
     await snap(page, 'document-summary', [summaryUi.meta(summary)]);
 
-    // CHNOTE-01: the note with its body folded behind "정답·해설 포함" (answers never captured).
+    // CHNOTE-01 / CHNOTE-02: the always-open note with its body, footnote lines and 내 하이라이트
+    // masked (answers never captured; layout, the search row and the actions are compared).
     await page.goto(notePanelPath(ws.id, chapter));
     const note = noteUi.panel(page);
-    await expect(noteUi.disclosure(note)).toHaveAttribute('aria-expanded', 'false');
+    await expect(noteUi.body(note)).toBeVisible();
+    await expect(
+      note.getByRole('region', { name: /^(내 하이라이트|my highlights)/i }),
+    ).toBeVisible();
     await page.mouse.move(0, 0);
-    await snap(page, 'chapter-note', [noteUi.meta(note)]);
+    await snap(page, 'chapter-note', [
+      noteUi.meta(note),
+      noteUi.body(note),
+      noteUi.footnoteList(note),
+      note.getByRole('region', { name: /^(내 하이라이트|my highlights)/i }),
+    ]);
   },
 );
 

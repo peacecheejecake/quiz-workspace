@@ -94,6 +94,7 @@ import { NO_CHAPTER_KEY, type PlacedQuestion } from '@/lib/questions/overview-pl
 import type { QuestionFailureKind } from '@/lib/questions/problems';
 import { hasSearchableQuestions } from '@/lib/search/scope';
 import {
+  homeOpensBlocked,
   isChapterNoteOpen,
   keepNoteChapter,
   noteChapterOf,
@@ -236,8 +237,9 @@ export function WorkspaceHome({
   useManualScrollWhile(urlDialogs.length > 0);
   const setPanel = (panel: HomePanel, open: boolean) => {
     if (open) {
-      // A home dialog's button is behind the open dialog (inert): an open one is never reopened.
-      if (isOpen(panel)) return;
+      // A home dialog's button is behind the open dialog (inert): an open one is never reopened,
+      // and nothing opens from the home while the note is open (CHNOTE-02-C05).
+      if (isOpen(panel) || homeOpensBlocked(new URLSearchParams(window.location.search))) return;
       panelHistory.push(`${pathname}${withPanel(window.location.search, panel, true)}`);
       return;
     }
@@ -284,7 +286,7 @@ export function WorkspaceHome({
     if (!isOpen('chapter-note')) return;
     closeTo(`${pathname}${withChapterNote(window.location.search, null)}`);
   }
-  // Practice opened from a footnote returns focus to the note's disclosure when it closes.
+  // Practice opened from a footnote (stacked over the note) returns focus to that footnote.
   const practiceReturnFocusRef = useRef<HTMLElement | null>(null);
   function openNoteQuestion(questionId: string, returnFocus: HTMLElement | null) {
     practiceReturnFocusRef.current = returnFocus;
@@ -293,6 +295,7 @@ export function WorkspaceHome({
   // The range run panel (QVIEW-01): opened from the 문제 menu on a new entry; its range → run →
   // results steps rewrite that entry, its positions push entries, closing drops them (QOV-01-AC14).
   function openRun() {
+    if (homeOpensBlocked(new URLSearchParams(window.location.search))) return;
     const picker: RunUrlState = { step: 'picker', source: 'bank', mockExamId: null };
     openPanelAt(`${pathname}${withRunPanel(window.location.search, picker)}`);
   }
@@ -583,45 +586,49 @@ export function WorkspaceHome({
         </div>
       </div>
 
-      <QuestionsOverview
-        workspaceId={workspace.id}
-        readOnly={readOnly}
-        filters={filters}
-        view={view}
-        navigating={navigating}
-        onFiltersChange={changeFilters}
-        onResetFilters={resetAll}
-        overview={overview}
-        failure={failure}
-        requested={requested}
-        panelScreenId={screenIds.practice}
-        practiceReturnFocusRef={practiceReturnFocusRef}
-        onQuestionChange={changeQuestion}
-        onRunNavigate={navigateRun}
-        onRunClose={closeRun}
-        createOpen={shows(QUESTION_CREATE_PANEL)}
-        holdPanels={holdPracticePanels}
-        dialogContainer={host}
-        onCreateOpenChange={(open) => setPanel(QUESTION_CREATE_PANEL, open)}
-        documents={documentTitles}
-        onQuestionsChanged={() => setQuestionsVersion((n) => n + 1)}
-        chapterActions={(chapter) =>
-          chapter.id === NO_CHAPTER_KEY ? null : (
-            <>
-              {generating.has(chapter.id) ? <span>만드는 중</span> : null}
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-label={`${chapter.title} 정리 노트`}
-                aria-haspopup="dialog"
-                onClick={() => openNote(chapter.id)}
-              >
-                정리 노트
-              </Button>
-            </>
-          )
-        }
-      />
+      {/* CHNOTE-02: while the modal note is open the Heatmap is inert (no focus, no hit-testing); a
+          backdrop click closes the note only. The practice panels are portalled outside. */}
+      <div className={styles.contents} inert={isOpen('chapter-note') || undefined}>
+        <QuestionsOverview
+          workspaceId={workspace.id}
+          readOnly={readOnly}
+          filters={filters}
+          view={view}
+          navigating={navigating}
+          onFiltersChange={changeFilters}
+          onResetFilters={resetAll}
+          overview={overview}
+          failure={failure}
+          requested={requested}
+          panelScreenId={screenIds.practice}
+          practiceReturnFocusRef={practiceReturnFocusRef}
+          onQuestionChange={changeQuestion}
+          onRunNavigate={navigateRun}
+          onRunClose={closeRun}
+          createOpen={shows(QUESTION_CREATE_PANEL)}
+          holdPanels={holdPracticePanels}
+          dialogContainer={host}
+          onCreateOpenChange={(open) => setPanel(QUESTION_CREATE_PANEL, open)}
+          documents={documentTitles}
+          onQuestionsChanged={() => setQuestionsVersion((n) => n + 1)}
+          chapterActions={(chapter) =>
+            chapter.id === NO_CHAPTER_KEY ? null : (
+              <>
+                {generating.has(chapter.id) ? <span>만드는 중</span> : null}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`${chapter.title} 정리 노트`}
+                  aria-haspopup="dialog"
+                  onClick={() => openNote(chapter.id)}
+                >
+                  정리 노트
+                </Button>
+              </>
+            )
+          }
+        />
+      </div>
 
       {/* Dialogs are portalled here so they stay inside the main landmark. */}
       <div ref={setHost} />

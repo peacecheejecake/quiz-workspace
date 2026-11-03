@@ -6,15 +6,18 @@
 // at once with a skeleton, then shows the note state: none yet (editors: the send notice and
 // `정리 노트 만들기`), generating (polled; the previous note stays), failed (alert + reason,
 // editors `다시 시도`), or the note — `AI 생성`, "문제 n개 기준 · <시각>", the stale badge, `버전`,
-// `다시 만들기` — with its body folded behind "정답·해설 포함". Every state is text, never color
-// alone. Opening a question (a footnote here or a Heatmap dot) folds the body again; the
+// `다시 만들기` — with its body always open (CHNOTE-02: search, footnote previews, the reader's
+// highlights). Every state is text, never color alone. A footnote opens its question in the
+// practice panel stacked over the note, which hides the note's content until it closes; the
 // practice panel never carries the note.
 import { Badge, Button, FloatingSidePanel, Select, Skeleton } from '@quiz/ui';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   createChapterNote,
+  getChapterHighlights,
   getChapterNote,
+  getQuestionPreview,
   NOTE_FAILURE_MESSAGES,
   NoteApiError,
   type NoteFailureKind,
@@ -25,15 +28,17 @@ import {
   isActive,
   metaLine,
   NOTE_TEXT,
+  noteHighlightsOf,
   noteView,
   sendNotice,
   versionLabel,
   type ChapterNoteState,
+  type MyHighlight,
 } from '@/lib/notes/model';
-import { openQuestionId, QUESTION_PARAM } from '@/lib/questions/overview-filters';
-import { patchSearch } from '@/lib/workspaces/home';
+import { QUESTION_PARAM } from '@/lib/questions/overview-filters';
+import { noteCovered, patchSearch } from '@/lib/workspaces/home';
 import { newIdempotencyKey } from '@/lib/workspaces/idempotency';
-import { ChapterNoteBody } from './chapter-note-body';
+import { ChapterNoteBody, dropStrayFocus, useKeepTabInDialog } from './chapter-note-body';
 import styles from './chapter-note.module.css';
 
 /** How often a queued/running generation is re-read. */
@@ -58,8 +63,8 @@ export interface ChapterNotePanelProps {
   readonly canEdit: boolean;
   readonly screenId?: string;
   /**
-   * Opens a cited question in the practice panel (`?question=`); `returnFocus` is where focus goes
-   * when that panel closes (the disclosure: the footnote itself is folded away by then).
+   * Opens a cited question in the practice panel (`?question=`) over the note; `returnFocus` (the
+   * pressed footnote) gets focus back when that panel closes.
    */
   readonly onOpenQuestion: (questionId: string, returnFocus: HTMLElement | null) => void;
   /** The chapter's generation started or ended (the Heatmap header's "만드는 중"). */
@@ -90,10 +95,11 @@ export function ChapterNotePanel({
       description={title ?? chapterTitle ?? undefined}
       closeLabel="정리 노트 닫기"
       mobileLayout="full"
+      onCloseAutoFocus={dropStrayFocus}
     >
       <div data-screen-id={screenId}>
         {chapterId ? (
-          // A new chapter starts over (folded body, newest version).
+          // A new chapter starts over (empty search, newest version).
           <NoteContent
             key={chapterId}
             chapterId={chapterId}
@@ -139,19 +145,28 @@ function NoteContent({
   const [reload, setReload] = useState(0);
   // Failed background re-reads in a row (the poll backs off and keeps going).
   const [pollFailures, setPollFailures] = useState(0);
-  const [expanded, setExpanded] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const requestingRef = useRef(false);
-  const disclosureRef = useRef<HTMLButtonElement>(null);
-
-  // A practice panel opening (from a footnote or a Heatmap dot) folds the body again.
-  const questionOpen = openQuestionId(searchParams);
-  const [seenQuestion, setSeenQuestion] = useState(questionOpen);
-  if (seenQuestion !== questionOpen) {
-    setSeenQuestion(questionOpen);
-    if (questionOpen) setExpanded(false);
-  }
+  const contentRef = useRef<HTMLDivElement>(null);
+  useKeepTabInDialog(contentRef);
+  // The practice panel (or a range run) over the note hides its content (answers stay out of
+  // sight while solving); scroll, search and version are kept.
+  const covered = noteCovered(searchParams);
+  // The reader's own highlights of the chapter (HILITE-01); null when they could not be read.
+  const [myHighlights, setMyHighlights] = useState<readonly MyHighlight[] | null | undefined>(
+    undefined,
+  );
+  useEffect(() => {
+    const controller = new AbortController();
+    getChapterHighlights(chapterId, controller.signal).then(
+      (items) => setMyHighlights(items),
+      () => {
+        if (!controller.signal.aborted) setMyHighlights(null);
+      },
+    );
+    return () => controller.abort();
+  }, [chapterId, refreshKey]);
 
   const data = load.status === 'ready' ? load.data : null;
   const generating = isActive(data?.generation);
@@ -221,10 +236,6 @@ function NoteContent({
 
   const questionHref = (questionId: string) =>
     `${pathname}${patchSearch(searchParams.toString(), { [QUESTION_PARAM]: questionId })}`;
-  const openQuestion = (questionId: string) => {
-    setExpanded(false);
-    onOpenQuestion(questionId, disclosureRef.current);
-  };
 
   if (load.status === 'loading') {
     return (
@@ -291,7 +302,12 @@ function NoteContent({
     ) : null;
 
   return (
-    <div className={styles.content}>
+    <div
+      className={styles.content}
+      inert={covered || undefined}
+      data-covered={covered || undefined}
+      ref={contentRef}
+    >
       {note ? (
         <div className={styles.head}>
           <div className={styles.badges}>
@@ -315,10 +331,6 @@ function NoteContent({
             />
           ) : null}
           {view.previous ? <p className={styles.previous}>{NOTE_TEXT.previous}</p> : null}
-          {view.canRegenerate ? (
-            <div className={styles.actions}>{actionButton('다시 만들기', 'secondary')}</div>
-          ) : null}
-          {view.canRegenerate ? offReason : null}
         </div>
       ) : view.kind === 'noQuestions' ? (
         <p className={styles.note}>{NOTE_TEXT.noQuestions}</p>
@@ -363,14 +375,25 @@ function NoteContent({
 
       {note ? (
         <ChapterNoteBody
+          // Another version starts the search over.
+          key={note.id}
           sections={note.sections}
           footnotes={note.footnotes}
-          expanded={expanded}
-          onExpandedChange={setExpanded}
-          disclosureRef={disclosureRef}
           questionHref={questionHref}
-          onOpenQuestion={openQuestion}
+          onOpenQuestion={onOpenQuestion}
+          loadPreview={getQuestionPreview}
+          highlights={myHighlights ? noteHighlightsOf(myHighlights, note.id, note.sections) : []}
+          myHighlights={myHighlights === undefined ? [] : myHighlights}
+          covered={covered}
         />
+      ) : null}
+
+      {/* The actions come last (CHNOTE-02 "panel 순서"). */}
+      {note && view.canRegenerate ? (
+        <div className={styles.state}>
+          <div className={styles.actions}>{actionButton('다시 만들기', 'secondary')}</div>
+          {offReason}
+        </div>
       ) : null}
     </div>
   );

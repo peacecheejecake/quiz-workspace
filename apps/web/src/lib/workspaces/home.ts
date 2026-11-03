@@ -313,6 +313,26 @@ export function openDialogs(search: string): string[] {
   return out;
 }
 
+/**
+ * CHNOTE-02-C05: while the modal 정리 노트 is open the home behind it is inert, so no home-level
+ * open happens (a Heatmap marker's `question`, a header button's other `panel=`); the note is
+ * closed first. A question opened from a footnote inside the note stacks over it instead.
+ */
+export function homeOpensBlocked(params: Params): boolean {
+  return isChapterNoteOpen(params);
+}
+
+/**
+ * Whether a modal opened over the note (a footnote's practice panel, a range run) covers it: the
+ * note's content is hidden meanwhile (CHNOTE-02 "풀이와 분리는 그대로").
+ */
+export function noteCovered(params: Params): boolean {
+  return (
+    isChapterNoteOpen(params) &&
+    (all(params, QUESTION_PARAM).length > 0 || all(params, RUN_PARAM).length > 0)
+  );
+}
+
 // The practice panel and the range run panel are never open together (QVIEW-01-AC09, user
 // decision 2026-11-02): both are modal, and opening one closes the other first.
 

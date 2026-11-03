@@ -1,11 +1,17 @@
 // design-system §5.4 PointerAnchoredFloating (CHNOTE-02 footnote preview): hover opens after the
 // tooltip delay as a role=tooltip describing the trigger, keyboard focus opens at once, a touch tap
 // opens a named dialog instead of activating the trigger, and it closes after the pointer leaves,
-// on Escape and on scroll.
+// on Escape and on scroll. Inside a modal dialog (CHNOTE-02 note panel) the keyboard preview stays
+// open on the focused trigger.
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { POINTER_FLOATING_CLOSE_MS, PointerAnchoredFloating, TOOLTIP_DELAY_MS } from '../src';
+import {
+  FloatingSidePanel,
+  POINTER_FLOATING_CLOSE_MS,
+  PointerAnchoredFloating,
+  TOOLTIP_DELAY_MS,
+} from '../src';
 
 function Footnote({ onClick }: { onClick?: () => void }) {
   return (
@@ -113,5 +119,20 @@ describe('PointerAnchoredFloating', () => {
     fireEvent.pointerDown(link, { pointerType: 'mouse' });
     fireEvent.click(link);
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('inside a modal dialog, keyboard focus on the trigger keeps the preview open', async () => {
+    const user = userEvent.setup();
+    render(
+      <FloatingSidePanel defaultOpen title="정리 노트" closeLabel="닫기">
+        <button type="button">처음</button>
+        <Footnote />
+      </FloatingSidePanel>,
+    );
+    const link = screen.getByRole('link', { name: '[1]' });
+    for (let i = 0; i < 4 && document.activeElement !== link; i++) await user.tab();
+    expect(link).toHaveFocus();
+    const tip = screen.getByRole('tooltip');
+    expect(link).toHaveAttribute('aria-describedby', tip.id);
   });
 });

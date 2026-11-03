@@ -17,6 +17,7 @@ export type ContentBlock = Schemas['ContentBlock'];
 export type OutlineItem = Schemas['OutlineItem'];
 export type SharedChapterNote = Schemas['SharedChapterNote'];
 export type SharedChapterNoteList = Schemas['SharedChapterNoteList'];
+export type SharedQuestionPreview = Schemas['QuestionPreview'];
 
 export const SHARE_UNAVAILABLE = 'urn:quiz-workspace:problem:share-unavailable';
 export const SHARE_SESSION_REQUIRED = 'urn:quiz-workspace:problem:share-session-required';
@@ -99,6 +100,8 @@ export interface SharedClient {
   search(query: string, signal?: AbortSignal): Promise<SharedSearchResponse>;
   /** One published question (the read-only question panel, e.g. from a note's footnote). */
   question(questionId: string, signal?: AbortSignal): Promise<SharedQuestion>;
+  /** A note footnote's preview of a published question: stem and options only (CHNOTE-02-C02). */
+  questionPreview(questionId: string, signal?: AbortSignal): Promise<SharedQuestionPreview>;
   /** Chapters whose newest 정리 노트 can be shown (CHNOTE-01). */
   chapterNotes(signal?: AbortSignal): Promise<SharedChapterNoteList>;
   /** A chapter's newest 정리 노트; `notFound` while it does not match its source questions. */
@@ -205,6 +208,10 @@ export function createSharedClient(
       }),
     question: (questionId, signal) =>
       json<SharedQuestion>(`/questions/${encodeURIComponent(questionId)}`, { signal }),
+    questionPreview: (questionId, signal) =>
+      json<SharedQuestionPreview>(`/questions/${encodeURIComponent(questionId)}/preview`, {
+        signal,
+      }),
     chapterNotes: (signal) => json<SharedChapterNoteList>('/chapter-notes', { signal }),
     chapterNote: (chapterId, signal) =>
       json<SharedChapterNote>(`/chapters/${encodeURIComponent(chapterId)}/note`, { signal }),

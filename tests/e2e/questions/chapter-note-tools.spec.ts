@@ -38,11 +38,12 @@ import {
   JOB_TIMEOUT_MS,
   overviewItem,
   overviewPath,
-  overviewUi,
   panelUi,
+  questionNumberName,
   signInAs,
   type Question,
 } from '../fixtures/test.ts';
+import { homeBackgroundUi } from '../fixtures/ux9-pages.ts';
 
 test.use({
   storageState: { cookies: [], origins: [] },
@@ -166,8 +167,12 @@ test(
     const pbox = await preview.boundingBox();
     expect(pbox, 'the preview is laid out').not.toBeNull();
     if (pbox) {
-      // Anchored at the pointer: 8px below/right of it, or flipped/pushed at a viewport edge.
-      const vw = page.viewportSize()?.width ?? 1280;
+      // Anchored at the pointer: 8px below/right of it, or flipped/pushed at a viewport edge — the
+      // visible width: while a modal is open the page keeps its scrollbar's room (`scrollbar-gutter:
+      // stable`, HOMEDLG-01-AC03), which the floating stays clear of.
+      const vw = await page.evaluate(() =>
+        Math.min(document.documentElement.clientWidth, document.body.clientWidth),
+      );
       const near = (a: number, b: number) => Math.abs(a - b) <= 6;
       const xOk =
         near(pbox.x, point.x + 8) ||
@@ -338,8 +343,11 @@ test(
           JSON.stringify([...url.searchParams.entries()]) === JSON.stringify(homeParams),
       );
 
-    // The Heatmap is inert: no focus, no hit-testing; Tab stays in the note.
-    const marker = overviewUi.dot(page, 1);
+    // The Heatmap is inert: no focus, no hit-testing; Tab stays in the note. The marker is out of
+    // the accessibility tree meanwhile, so it is located hidden-inclusively.
+    const marker = homeBackgroundUi
+      .heatmap(page)
+      .getByRole('button', { name: questionNumberName(1), includeHidden: true });
     expect(await marker.evaluate((el) => el.closest('[inert]') !== null)).toBe(true);
     await expectFocusTrapped(page, panel, 40);
     await expect(marker).not.toBeFocused();
@@ -400,15 +408,34 @@ test(
     // Scroll the panel's scroll container a little.
     const scroller = panel
       .locator('*')
-      .filter({ has: body(panel) })
+      .filter({
+        has: page.getByRole('group', { name: /^(정리 노트 본문|chapter note body|note body)$/i }),
+      })
       .last();
+    const readScroll = () =>
+      scroller.evaluate((el) => {
+        let node: HTMLElement | null = el as HTMLElement;
+        while (node && node.scrollHeight <= node.clientHeight) node = node.parentElement;
+        return node?.scrollTop ?? 0;
+      });
+    /** The scroll position once a (smooth) scroll has come to rest. */
+    const restingScroll = async () => {
+      let last = -1;
+      await expect
+        .poll(async () => {
+          const now = await readScroll();
+          const rested = now === last;
+          last = now;
+          return rested;
+        })
+        .toBe(true);
+      return last;
+    };
+    await restingScroll();
     await body(panel).hover();
     await page.mouse.wheel(0, 60);
-    const scrollTop = await scroller.evaluate((el) => {
-      let node: HTMLElement | null = el as HTMLElement;
-      while (node && node.scrollHeight <= node.clientHeight) node = node.parentElement;
-      return node?.scrollTop ?? 0;
-    });
+    await expect.poll(readScroll).toBeGreaterThan(0);
+    const scrollTop = await restingScroll();
 
     const ref = footnoteRef(panel, 1);
     await ref.click();
@@ -451,11 +478,6 @@ test(
     await expect(search).toHaveValue('주의');
     await expect(noteToolsUi.count(panel, 3, 5)).toBeVisible();
     await expect(ref).toBeFocused();
-    const after = await scroller.evaluate((el) => {
-      let node: HTMLElement | null = el as HTMLElement;
-      while (node && node.scrollHeight <= node.clientHeight) node = node.parentElement;
-      return node?.scrollTop ?? 0;
-    });
-    expect(after).toBe(scrollTop);
+    expect(await restingScroll()).toBe(scrollTop);
   },
 );
