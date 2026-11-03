@@ -31,6 +31,8 @@ import {
 
 /** A touch selection must rest this long before the menu opens (HILITE-01 "터치"). */
 export const TOUCH_SELECTION_REST_MS = 300;
+/** A press may move this far (px) between pointerdown and pointerup; more is a swipe. */
+const PRESS_SLOP_PX = 10;
 
 const SKIP = { [SKIP_ATTR]: '' } as const;
 
@@ -227,7 +229,12 @@ export function HighlightableText({
     press.current = onHighlightPress;
   });
 
-  const pointer = useRef<{ down: boolean; type: SelectionSource }>({ down: false, type: 'mouse' });
+  const pointer = useRef<{ down: boolean; type: SelectionSource; x: number; y: number }>({
+    down: false,
+    type: 'mouse',
+    x: 0,
+    y: 0,
+  });
   const reported = useRef<HighlightSelection | null>(null);
   const touchTimer = useRef<number | undefined>(undefined);
 
@@ -279,6 +286,13 @@ export function HighlightableText({
       pointer.current.down = false;
       const touch = pointer.current.type === 'touch';
       const target = event.target instanceof Element ? event.target : null;
+      // A press is a pointerup close to where it went down; a cancelled gesture (the browser took
+      // it over to scroll) or a swipe is never one.
+      const moved = Math.hypot(
+        event.clientX - pointer.current.x,
+        event.clientY - pointer.current.y,
+      );
+      const pressable = event.type === 'pointerup' && moved <= PRESS_SLOP_PX;
       // The selection settles after the pointerup (double click selects a word).
       window.setTimeout(() => {
         const selection = readSelection(region, touch ? 'touch' : 'mouse');
@@ -290,7 +304,7 @@ export function HighlightableText({
         }
         // No selection: a click or a tap on a highlight opens its menu (touch parity).
         const mark = target?.closest<HTMLElement>('mark[data-highlight-id][data-pressable]');
-        if (mark && region.contains(mark)) {
+        if (pressable && mark && region.contains(mark)) {
           const pressed = pressSelection(mark, 'press');
           if (pressed) {
             press.current?.(pressed.highlightId ?? '');
@@ -342,6 +356,8 @@ export function HighlightableText({
     pointer.current = {
       down: true,
       type: event.pointerType === 'touch' ? 'touch' : 'mouse',
+      x: event.clientX,
+      y: event.clientY,
     };
     const blockEl = (event.target as Element).closest(`[${BLOCK_ATTR}]`);
     const index = blocks.findIndex((b) => b.id === blockEl?.getAttribute(BLOCK_ATTR));

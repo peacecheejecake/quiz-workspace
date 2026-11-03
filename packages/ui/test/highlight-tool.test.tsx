@@ -375,6 +375,23 @@ describe('HILITE-01-C09 HighlightableText', () => {
     expect(onAction).toHaveBeenCalledWith({ type: 'recolor', id: 'h1', color: 'blue' });
   });
 
+  it('HILITE-01-C09 a cancelled or moving touch on a highlight (scrolling) opens no menu', async () => {
+    const onSelection = vi.fn();
+    render(<Harness highlights={[YELLOW]} onSelection={onSelection} />);
+    window.getSelection()?.removeAllRanges();
+    const mark = document.querySelector<HTMLElement>('mark[data-highlight-id="h1"]');
+    if (!mark) throw new Error('no mark');
+    // The browser takes the gesture over to scroll.
+    fireEvent.pointerDown(mark, { pointerType: 'touch', clientX: 10, clientY: 10 });
+    fireEvent.pointerCancel(mark, { pointerType: 'touch', clientX: 10, clientY: 40 });
+    // A swipe that ends with pointerup far from where it started.
+    fireEvent.pointerDown(mark, { pointerType: 'touch', clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(mark, { pointerType: 'touch', clientX: 10, clientY: 60 });
+    await act(async () => new Promise((r) => setTimeout(r, 400)));
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(onSelection.mock.calls.filter(([s]) => s !== null)).toHaveLength(0);
+  });
+
   it('HILITE-01-C09 opens the menu for a touch selection only after it rests', async () => {
     vi.useFakeTimers();
     try {
