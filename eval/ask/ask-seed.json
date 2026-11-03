@@ -1,0 +1,247 @@
+{
+  "description": "AI question and AI explanation evaluation (ASK-X). Synthetic cases over passages of the synthetic book-ko fixture (tests/fixtures/pdfs/book-ko.truth.json, block ids below) and hand-written synthetic questions. Each case carries the scripted raw model output the offline fake plays back, with deliberate faults (an unknown footnote tag, an uncited answer, a sentence the cited passage does not support, a refusal that should have been an answer, an answer where nothing is relevant, a hint that names the correct option, an explanation whose answer line names a wrong option, an explanation that skips an option). The llm provider ignores the scripts and sends the same synthetic requests to the real model.",
+  "book": "tests/fixtures/pdfs/book-ko.truth.json",
+  "passages": {
+    "evaporation": { "chapter": "1장 물의 순환", "blocks": ["ch1-s1-p1"] },
+    "condensation": { "chapter": "1장 물의 순환", "blocks": ["ch1-s1-p2"] },
+    "latent_heat": { "chapter": "1장 물의 순환", "blocks": ["ch1-s1-p3"] },
+    "precipitation": { "chapter": "1장 물의 순환", "blocks": ["ch1-s2-p1"] },
+    "runoff": { "chapter": "1장 물의 순환", "blocks": ["ch1-s2-p2"] },
+    "flocculation": { "chapter": "2장 정수 처리", "blocks": ["ch2-s1-p1"] },
+    "sedimentation": { "chapter": "2장 정수 처리", "blocks": ["ch2-s1-p2"] },
+    "filtration": { "chapter": "2장 정수 처리", "blocks": ["ch2-s2-p1"] },
+    "disinfection": { "chapter": "2장 정수 처리", "blocks": ["ch2-s2-p2"] }
+  },
+  "ask_cases": [
+    {
+      "id": "plain-evaporation",
+      "kind": "answerable",
+      "question": "증발과 증산은 어떻게 다른가요?",
+      "sources": ["evaporation", "latent_heat"],
+      "script": "증발은 햇빛이 바다와 호수의 표면을 데워 물 분자의 일부가 수증기가 되는 과정이다. [S1]\n\n증산은 식물의 잎에서 물이 수증기로 빠져나가는 현상이다. [S1]"
+    },
+    {
+      "id": "plain-condensation",
+      "kind": "answerable",
+      "question": "구름은 어떻게 만들어지나요?",
+      "sources": ["condensation", "evaporation"],
+      "script": "수증기를 포함한 공기가 올라가 온도가 이슬점 아래로 떨어지면 수증기가 물방울이 된다. [S1]\n\n수많은 물방울이 모인 것이 구름이다. [S1]"
+    },
+    {
+      "id": "plain-runoff",
+      "kind": "answerable",
+      "question": "도시에서 홍수가 잘 나는 이유는 무엇인가요?",
+      "sources": ["runoff", "precipitation"],
+      "script": "포장된 도로가 많은 도시에서는 땅속으로 스며드는 침투가 줄고 지표 위를 흐르는 유출량이 크게 늘어난다. [S1]"
+    },
+    {
+      "id": "plain-flocculation",
+      "kind": "answerable",
+      "question": "응집 단계에서는 무슨 일이 일어나나요?",
+      "sources": ["flocculation", "sedimentation"],
+      "script": "원수에 응집제를 넣고 천천히 저으면 작은 입자들이 서로 달라붙어 플록이라는 덩어리가 된다. [S1]\n\n입자가 너무 작으면 가라앉지 않으므로 응집은 다음 단계의 효율을 결정한다. [S1]\n\n플록은 이어서 침전지로 옮겨진다. [S2]"
+    },
+    {
+      "id": "unknown-tag",
+      "kind": "answerable",
+      "question": "정수 마지막 단계에서 염소는 왜 넣나요?",
+      "sources": ["disinfection", "filtration"],
+      "script": "염소와 같은 소독제를 넣어 남아 있는 병원성 미생물을 줄인다. [S1]\n\n염소는 수도관을 따라 이동하는 동안에도 소독 효과가 유지된다. [S1, S9]\n\n근거에 없는 설명이다. [S7]"
+    },
+    {
+      "id": "uncited",
+      "kind": "answerable",
+      "question": "여과층은 어떻게 관리하나요?",
+      "sources": ["filtration", "sedimentation"],
+      "script": "여과층은 일정 기간마다 물을 거꾸로 흘려보내 씻어 준다."
+    },
+    {
+      "id": "unsupported-sentence",
+      "kind": "answerable",
+      "question": "강수의 형태는 무엇이 정하나요?",
+      "sources": ["precipitation", "runoff"],
+      "script": "기온에 따라 강수의 형태가 달라지며 지표 부근의 온도가 낮으면 눈이 내린다. [S1]\n\n강수량은 해마다 정확히 일정하게 유지된다고 알려져 있다. [S1]"
+    },
+    {
+      "id": "false-refusal",
+      "kind": "answerable",
+      "question": "침전지에서는 플록이 어떻게 되나요?",
+      "sources": ["sedimentation", "flocculation"],
+      "script": "[NO_ANSWER] 근거 구절로는 답할 수 없습니다."
+    },
+    {
+      "id": "nothing-relevant",
+      "kind": "not_found",
+      "question": "회사의 올해 매출 목표는 얼마인가요?",
+      "sources": ["evaporation", "filtration"],
+      "script": "[NO_ANSWER] 근거 구절로는 이 질문에 답할 수 없습니다."
+    },
+    {
+      "id": "nothing-relevant-english",
+      "kind": "not_found",
+      "question": "How do I install the mobile app?",
+      "sources": ["precipitation", "disinfection"],
+      "script": "[NO_ANSWER] 근거 구절로는 이 질문에 답할 수 없습니다."
+    },
+    {
+      "id": "nothing-relevant-no-sources",
+      "kind": "not_found",
+      "question": "다음 회의는 언제인가요?",
+      "sources": [],
+      "script": "[NO_ANSWER] 근거 구절이 없어 답할 수 없습니다."
+    },
+    {
+      "id": "invents-an-answer",
+      "kind": "not_found",
+      "question": "정수장의 전기 요금은 얼마인가요?",
+      "sources": ["flocculation", "disinfection"],
+      "script": "정수장의 전기 요금은 월 평균 3천만 원 정도이다. [S1]"
+    },
+    {
+      "id": "hint-evaporation",
+      "kind": "hint",
+      "attachment": "registered",
+      "question": "이 문제를 풀 힌트를 주세요.",
+      "sources": ["evaporation", "condensation"],
+      "mcq": {
+        "stem": "햇빛이 물 표면을 데워 물 분자가 수증기가 되는 과정은?",
+        "options": ["증발", "응결", "강수", "침투"],
+        "correct": 1
+      },
+      "script": "발문은 액체가 기체로 바뀌는 과정을 묻고 있다. 햇빛이 바다와 호수의 표면을 데우면 물 분자가 수증기가 된다고 설명한 구절을 떠올려 보세요. [S1]\n\n응결과 증발이 어떤 방향의 변화인지 비교해 보면 보기를 좁힐 수 있다. [S2]"
+    },
+    {
+      "id": "hint-flocculation",
+      "kind": "hint",
+      "attachment": "registered",
+      "question": "보기 두 개로 좁히는 방법이 있을까요?",
+      "sources": ["flocculation", "sedimentation"],
+      "mcq": {
+        "stem": "작은 입자를 뭉쳐 큰 덩어리로 만드는 단계는?",
+        "options": ["응집", "침전", "여과", "소독"],
+        "correct": 1
+      },
+      "script": "작은 입자가 서로 달라붙어 눈에 보이는 덩어리가 되는 단계가 무엇인지 구절에서 찾아보세요. [S1]\n\n뭉친 덩어리가 바닥으로 가라앉는 단계는 그다음 단계이다. [S2]"
+    },
+    {
+      "id": "hint-names-number",
+      "kind": "hint",
+      "attachment": "registered",
+      "question": "정답이 몇 번인지 알려 주세요.",
+      "sources": ["condensation", "evaporation"],
+      "mcq": {
+        "stem": "수증기가 식어 작은 물방울이 되는 과정은?",
+        "options": ["증발", "응결", "유출", "증산"],
+        "correct": 2
+      },
+      "script": "수증기가 이슬점 아래로 떨어지면 물방울이 된다고 설명한다. [S1]\n\n그러므로 정답은 2번입니다."
+    },
+    {
+      "id": "mock-hint-disinfection",
+      "kind": "hint",
+      "attachment": "mock_exam",
+      "question": "이 문제에서 먼저 확인할 개념은 무엇인가요?",
+      "sources": ["disinfection", "filtration"],
+      "mcq": {
+        "stem": "물속 병원성 미생물을 줄이는 마지막 단계는?",
+        "options": ["소독", "응집", "침전", "여과"],
+        "correct": 1
+      },
+      "script": "마지막 단계에서 남아 있는 병원성 미생물을 줄이는 약품을 넣는다고 한 구절을 확인해 보세요. [S1]\n\n여과는 작은 입자를 걸러 내는 단계라서 목적이 다르다. [S2]"
+    },
+    {
+      "id": "mock-hint-runoff",
+      "kind": "hint",
+      "attachment": "mock_exam",
+      "question": "어느 보기가 맞는지 판단하는 기준이 있나요?",
+      "sources": ["runoff", "precipitation"],
+      "mcq": {
+        "stem": "지표 위를 흐르는 물을 무엇이라 하는가?",
+        "options": ["침투", "유출", "강수", "증산"],
+        "correct": 2
+      },
+      "script": "땅속으로 스며드는 과정과 지표 위를 흐르는 물이 각각 무엇인지 구절의 정의를 비교해 보세요. [S1]"
+    },
+    {
+      "id": "mock-hint-final-answer",
+      "kind": "hint",
+      "attachment": "mock_exam",
+      "question": "그냥 답만 알려 주세요.",
+      "sources": ["filtration", "sedimentation"],
+      "mcq": {
+        "stem": "모래와 자갈을 쌓은 층으로 작은 입자를 걸러 내는 단계는?",
+        "options": ["응집", "여과", "소독", "침전"],
+        "correct": 2
+      },
+      "script": "모래와 자갈을 여러 층으로 쌓은 여과지를 통과한다고 설명한다. [S1]\n\n여과가 정답입니다."
+    }
+  ],
+  "explain_cases": [
+    {
+      "id": "explain-evaporation",
+      "sources": ["evaporation"],
+      "mcq": {
+        "stem": "햇빛이 물 표면을 데워 물 분자가 수증기가 되는 과정은?",
+        "options": ["증발", "응결", "강수", "침투"],
+        "correct": 1
+      },
+      "script": "[[ANSWER]] opt-1\n[[SUMMARY]]\n햇빛이 물 표면을 데우면 물 분자가 수증기가 되는 과정은 증발이다. [S1]\n[[OPTION opt-1]]\n증발은 액체가 기체로 바뀌는 과정이다. [S1]\n[[OPTION opt-2]]\n응결은 반대로 수증기가 물방울이 되는 과정이다.\n[[OPTION opt-3]]\n강수는 물방울이 땅으로 떨어지는 현상이다.\n[[OPTION opt-4]]\n침투는 빗물이 흙 속으로 스며드는 과정이다.\n[[CONCEPTS]]\n증발과 증산은 대기 중 수증기의 주요 공급원이다. [S1]"
+    },
+    {
+      "id": "explain-condensation",
+      "sources": ["condensation"],
+      "mcq": {
+        "stem": "수증기가 식어 작은 물방울이 되는 과정은?",
+        "options": ["응결", "증발", "유출", "증산"],
+        "correct": 1
+      },
+      "script": "[[ANSWER]] opt-1\n[[SUMMARY]]\n온도가 이슬점 아래로 떨어지면 수증기가 물방울이 되는 과정을 응결이라고 한다. [S1]\n[[OPTION opt-1]]\n응결은 수증기가 물방울이 되는 과정이다. [S1]\n[[OPTION opt-2]]\n증발은 반대 방향의 변화이다.\n[[OPTION opt-3]]\n유출은 지표 위를 흐르는 물이다.\n[[OPTION opt-4]]\n증산은 식물의 잎에서 물이 빠져나가는 현상이다.\n[[CONCEPTS]]\n수많은 물방울이 모인 것이 구름이다. [S1]"
+    },
+    {
+      "id": "explain-flocculation",
+      "sources": ["flocculation", "sedimentation"],
+      "mcq": {
+        "stem": "작은 입자를 뭉쳐 큰 덩어리로 만드는 단계는?",
+        "options": ["응집", "침전", "여과", "소독"],
+        "correct": 1
+      },
+      "script": "[[ANSWER]] opt-1\n[[SUMMARY]]\n응집제를 넣고 천천히 저어 입자를 뭉치는 단계가 응집이다. [S1]\n[[OPTION opt-1]]\n응집은 작은 입자가 달라붙어 플록이 되는 단계이다. [S1, S5]\n[[OPTION opt-2]]\n침전은 무거워진 플록이 가라앉는 단계이다. [S2]\n[[OPTION opt-3]]\n여과는 모래층으로 작은 입자를 거르는 단계이다.\n[[OPTION opt-4]]\n소독은 병원성 미생물을 줄이는 단계이다.\n[[CONCEPTS]]\n응집은 다음 단계의 효율을 결정한다. [S1]"
+    },
+    {
+      "id": "explain-wrong-answer-line",
+      "sources": ["runoff"],
+      "mcq": {
+        "stem": "지표 위를 흐르는 물을 무엇이라 하는가?",
+        "options": ["침투", "유출", "강수", "증산"],
+        "correct": 2
+      },
+      "script": "[[ANSWER]] opt-1\n[[SUMMARY]]\n땅속으로 스며드는 과정이 정답이다. [S1]\n[[OPTION opt-1]]\n침투는 땅속으로 스며드는 과정이다.\n[[OPTION opt-2]]\n유출은 지표 위를 흐르는 물이다.\n[[OPTION opt-3]]\n강수는 비나 눈이다.\n[[OPTION opt-4]]\n증산은 식물에서 물이 빠져나가는 것이다.\n[[CONCEPTS]]\n도시에서는 유출량이 크게 늘어난다. [S1]"
+    },
+    {
+      "id": "explain-skips-an-option",
+      "sources": ["disinfection"],
+      "mcq": {
+        "stem": "물속 병원성 미생물을 줄이는 마지막 단계는?",
+        "options": ["소독", "응집", "침전", "여과"],
+        "correct": 1
+      },
+      "script": "[[ANSWER]] opt-1\n[[SUMMARY]]\n염소와 같은 소독제로 병원성 미생물을 줄이는 단계가 소독이다. [S1]\n[[OPTION opt-1]]\n소독은 남은 미생물을 줄이는 단계이다. [S1]\n[[OPTION opt-2]]\n응집은 입자를 뭉치는 단계이다.\n[[OPTION opt-3]]\n침전은 플록이 가라앉는 단계이다.\n[[CONCEPTS]]\n염소는 수도관 안에서도 효과가 유지된다. [S1]",
+      "retry_script": "[[ANSWER]] opt-1\n[[SUMMARY]]\n염소와 같은 소독제로 병원성 미생물을 줄이는 단계가 소독이다. [S1]\n[[OPTION opt-1]]\n소독은 남은 미생물을 줄이는 단계이다. [S1]\n[[OPTION opt-2]]\n응집은 입자를 뭉치는 단계이다.\n[[OPTION opt-3]]\n침전은 플록이 가라앉는 단계이다.\n[[OPTION opt-4]]\n여과는 작은 입자를 거르는 단계이다.\n[[CONCEPTS]]\n염소는 수도관 안에서도 효과가 유지된다. [S1]"
+    },
+    {
+      "id": "explain-no-passage",
+      "sources": [],
+      "mcq": {
+        "stem": "마지막으로 소독제를 넣는 이유로 알맞은 것은?",
+        "options": [
+          "병원성 미생물을 줄이려고",
+          "입자를 뭉치려고",
+          "물을 식히려고",
+          "냄새를 만들려고"
+        ],
+        "correct": 1
+      },
+      "script": "[[ANSWER]] opt-1\n[[SUMMARY]]\n문서에서 근거를 찾지 못했습니다. 문제에 적힌 내용으로는 병원성 미생물을 줄이려는 것이다.\n[[OPTION opt-1]]\n문제에 적힌 정답이다.\n[[OPTION opt-2]]\n정답이 아니다.\n[[OPTION opt-3]]\n정답이 아니다.\n[[OPTION opt-4]]\n정답이 아니다.\n[[CONCEPTS]]\n문서에서 근거를 찾지 못했습니다."
+    }
+  ]
+}

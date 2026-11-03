@@ -1,0 +1,173 @@
+{
+  "eval": "related-sources",
+  "dataset": "eval/related_sources/related-seed.json",
+  "embedder": "fake-embedder",
+  "limit": 5,
+  "summary": {
+    "cases": 9,
+    "source_block_inclusion": 1.0,
+    "own_sources_first": true,
+    "recall_at_5": 0.7273,
+    "cases_with_every_gold": 6,
+    "rows_per_list": 4.0,
+    "excluded_rows": {
+      "question_paper": 0,
+      "question_part": 0,
+      "imported_source": 0
+    },
+    "repeated_pages": 0,
+    "control_without_the_rules": {
+      "paper_hits": 61,
+      "question_part_hits": 10,
+      "imported_refs_dropped": 1
+    }
+  },
+  "cases": [
+    {
+      "case": "evaporation",
+      "rows": 4,
+      "own_sources": 1,
+      "own_sources_in_list": 1,
+      "own_sources_first": true,
+      "gold": 1,
+      "gold_in_list": 1,
+      "paper_rows": 0,
+      "question_part_rows": 0,
+      "imported_rows": 0,
+      "repeated_pages": 0,
+      "gold_ranks": [
+        1
+      ]
+    },
+    {
+      "case": "condensation",
+      "rows": 4,
+      "own_sources": 1,
+      "own_sources_in_list": 1,
+      "own_sources_first": true,
+      "gold": 2,
+      "gold_in_list": 1,
+      "paper_rows": 0,
+      "question_part_rows": 0,
+      "imported_rows": 0,
+      "repeated_pages": 0,
+      "gold_ranks": [
+        1,
+        null
+      ]
+    },
+    {
+      "case": "precipitation",
+      "rows": 4,
+      "own_sources": 0,
+      "own_sources_in_list": 0,
+      "own_sources_first": true,
+      "gold": 1,
+      "gold_in_list": 1,
+      "paper_rows": 0,
+      "question_part_rows": 0,
+      "imported_rows": 0,
+      "repeated_pages": 0,
+      "gold_ranks": [
+        1
+      ]
+    },
+    {
+      "case": "runoff",
+      "rows": 4,
+      "own_sources": 1,
+      "own_sources_in_list": 1,
+      "own_sources_first": true,
+      "gold": 1,
+      "gold_in_list": 1,
+      "paper_rows": 0,
+      "question_part_rows": 0,
+      "imported_rows": 0,
+      "repeated_pages": 0,
+      "gold_ranks": [
+        1
+      ]
+    },
+    {
+      "case": "flocculation",
+      "rows": 4,
+      "own_sources": 0,
+      "own_sources_in_list": 0,
+      "own_sources_first": true,
+      "gold": 1,
+      "gold_in_list": 0,
+      "paper_rows": 0,
+      "question_part_rows": 0,
+      "imported_rows": 0,
+      "repeated_pages": 0,
+      "gold_ranks": [
+        null
+      ]
+    },
+    {
+      "case": "sedimentation",
+      "rows": 4,
+      "own_sources": 1,
+      "own_sources_in_list": 1,
+      "own_sources_first": true,
+      "gold": 2,
+      "gold_in_list": 1,
+      "paper_rows": 0,
+      "question_part_rows": 0,
+      "imported_rows": 0,
+      "repeated_pages": 0,
+      "gold_ranks": [
+        1,
+        null
+      ]
+    },
+    {
+      "case": "filtration",
+      "rows": 4,
+      "own_sources": 0,
+      "own_sources_in_list": 0,
+      "own_sources_first": true,
+      "gold": 1,
+      "gold_in_list": 1,
+      "paper_rows": 0,
+      "question_part_rows": 0,
+      "imported_rows": 0,
+      "repeated_pages": 0,
+      "gold_ranks": [
+        1
+      ]
+    },
+    {
+      "case": "disinfection",
+      "rows": 4,
+      "own_sources": 1,
+      "own_sources_in_list": 1,
+      "own_sources_first": true,
+      "gold": 1,
+      "gold_in_list": 1,
+      "paper_rows": 0,
+      "question_part_rows": 0,
+      "imported_rows": 0,
+      "repeated_pages": 0,
+      "gold_ranks": [
+        1
+      ]
+    },
+    {
+      "case": "imported-source",
+      "rows": 4,
+      "own_sources": 0,
+      "own_sources_in_list": 0,
+      "own_sources_first": true,
+      "gold": 1,
+      "gold_in_list": 1,
+      "paper_rows": 0,
+      "question_part_rows": 0,
+      "imported_rows": 0,
+      "repeated_pages": 0,
+      "gold_ranks": [
+        1
+      ]
+    }
+  ]
+}
