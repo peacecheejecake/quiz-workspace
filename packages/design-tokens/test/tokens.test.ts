@@ -84,13 +84,12 @@ describe('spec extraction (guards against a vacuous comparison)', () => {
     // + 4 v1.2 additions (glass-solid, state-hover/pressed/selected)
     // + 3 v1.2.1 additions (accent-hover/pressed, state-selected-hover)
     // + 4 v1.2.2 switch track colors (track, track-hover, track-border, track-checked-border)
-    // + UX9-STROKE heatmap-marker-stroke-mix (themed percentage, not a color)
     // + UX9-HL-UI 3 highlight backgrounds and the search match background/border.
-    expect(Object.keys(docLight)).toHaveLength(38);
-    expect(Object.keys(docDark)).toHaveLength(38);
+    expect(Object.keys(docLight)).toHaveLength(37);
+    expect(Object.keys(docDark)).toHaveLength(37);
     // 32 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 12 typography
-    // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width + UX9-STROKE stroke mix.
-    expect(Object.keys(docRoot)).toHaveLength(75);
+    // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width.
+    expect(Object.keys(docRoot)).toHaveLength(74);
   });
 });
 
@@ -123,6 +122,15 @@ describe('generated tokens.css', () => {
       Object.keys(followDark).map((k) => [k, genLight[k]] as const),
     );
     expect(explicitLight).toEqual(themedLight);
+  });
+
+  // HEATMAP-PALETTE (2026-11-04): the light palette is the user's exact choice.
+  it('light question status tokens are the HEATMAP-PALETTE values', () => {
+    expect(themedTokens.light['question-status-incorrect']).toBe('#FF6060');
+    expect(themedTokens.light['question-status-correct']).toBe('#00AB7B');
+    expect(themedTokens.light['question-status-retry']).toBe('#F6CF35');
+    expect(themedTokens.light['question-status-viewed']).toBe('#ACB6C2');
+    expect(themedTokens.light['question-status-unseen']).toBe('#E7ECF0');
   });
 
   it.each(['light', 'dark'] as const)('every question status token exists in %s', (theme) => {

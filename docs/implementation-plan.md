@@ -317,6 +317,12 @@ PR #43(이 계획의 "DOCVIEW", DOC-02-AC06–AC11)과 병렬로 만든 DOCVIEW-
 - 병렬: `UX9-SCROLL ∥ UX9-HL-UI ∥ UX9-RETRY-ICON ∥ UX9.0`(서로 다른 파일), 그 뒤 **`UX9-MODAL`을 먼저**(다른 UX9 web Task가 dialog 종류에 기댐; UX9-SCROLL merge 뒤), 그 뒤 `UX9-REDIST-B ∥ UX9-HL-B ∥ UX9-NOTE-B ∥ UX9-IMPORT-W ∥ UX9-SEARCH-W`, `UX9-REDIST-W ∥ UX9-NOTE-W`, 그 뒤 `UX9-HL-W`, 마지막 `UX9-X`. `UX9-HL-AIEXPL`은 AIEXPL이 develop에 들어온 뒤 별도. 공유 파일(`apps/api` router 등록, migration timestamp, `contracts/openapi.json`, `packages/api-client`, `문제` 메뉴 파일, home dialog 상태 파일, `packages/ui/src/index.ts`)은 충돌이 예상되며 orchestrator가 merge 후 `make contracts`로 재생성한다. `UX9-NOTE-W`와 `UX9-HL-W`는 같은 `ChapterNotePanel`을 고치므로 순서대로만.
 - `UX9-SEARCH-W`는 SEARCH-01-AC10을 폐기하므로 화면 AC 수가 205 → 204가 된다(그 Task가 index·trace test를 고침).
 
+### HEATMAP-PALETTE — Heatmap 색 palette·marker 테두리 삭제 (사용자 요청 2026-11-04)
+
+| Task | 범위 | 산출물 |
+|---|---|---|
+| HEATMAP-PALETTE | `--question-status-*` 5개 light/dark 값 교체, marker 윤곽(`--heatmap-marker-stroke-mix`) 삭제, 영향 VISUAL·Storybook baseline 재생성 | `docs/questions.md` §2.2, `docs/design-system.md`, `packages/design-tokens`, `packages/ui/src/styles/questions.css`, `question-marker-contrast.test.ts` |
+
 ## 4. Task 의존 그래프
 
 ```mermaid
@@ -802,6 +808,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-11-04 | QSRC-SPEC 해석(가져오기 출처만): `import_run_id`가 있고 bbox가 있는 위치만 쓴다. 교재 근거·`evidence`·직접 만든 문제의 쪽 출처는 정답이 든 쪽을 가리킬 수 있어 쓰지 않는다. bbox가 없는 위치만 있으면 쪽 전체로 대체하지 않고 영역 없음(404, 버튼 숨김)으로 한다 — 쪽 전체는 정답을 보일 수 있다(명세에 없던 세부, 사용자 결정 1의 보수적 적용). 이전에 가져온 draft에 bbox가 없다면 버튼이 나타나지 않는다. |
 | 2026-11-04 | QSRC-SPEC 해석(modal 층·Back): 풀이 panel·범위 풀이가 modal이므로 원문 dialog도 같은 modal 층의 맨 위에 쌓이고(문제 panel은 보이되 `inert`) Escape·backdrop은 원문 dialog만 닫는다(design-system §5.5 규칙). 좁은 화면의 Back은 sheet만 닫는다(history 항목 하나, URL 불변). 문제 위치를 바꾸면 dialog는 닫힌다. 사용자 결정에 명시되지 않은 세부 — 사용자 확인 대상으로 남긴다. |
 | 2026-11-04 | **QSRC-SPEC 사용자 결정 2차 (열린 질문 해소 + 새 경우)**: (5) 출처 PDF 문서가 삭제(`documents.deleted_at`, `DELETE /documents/{id}`)되면 source-region API는 "출처 없음" 404 → 버튼 숨김(문제는 남음; C02·C04, AC01). 해석: 문서 원본 PDF는 불변(documents.sql: 모든 revision이 같은 `source_object_key`)이라 저장된 `document_revision_id`의 쪽·bbox는 지금 원본에 그대로 맞으므로 revision이 바뀌어도 영역을 그대로 보이고 revision 일치 검사는 하지 않는다. (6) 문제 panel 왼쪽에 dialog가 들어갈 자리가 없으면(viewport < 868px = panel 500 + 여백 16 + 간격 16 + dialog 최소 320 + 여백 16) 좁은 화면과 같은 전체 화면 sheet(AC04에 820px 추가). (7) 모의고사는 `보기 섞기`(`OPTION_SHUFFLE`) 문제만, 원본이 가져온 문제일 때 버튼; AI 변형 문제는 절대 없음(C04, AC06). 열린 질문 없음. |
+| 2026-11-04 | **사용자 결정(HEATMAP-PALETTE)**: 요청 "색상 palette 재조정 — red: #FF6060; green: #00AB7B; yellow: #F6CF35; gray: #ACB6C2; empty: #E7ECF0 — border 삭제". (1) light: incorrect `#FF6060`·correct `#00AB7B`·retry `#F6CF35`·viewed `#ACB6C2`·unseen `#E7ECF0` 그대로. (2) dark는 같은 색상 계열에서 명도만 조정: incorrect `#FF7A7A`·correct `#2CC79A`·retry `#F7D45A`·viewed `#8591A1`·unseen `#3A4554`(표면에 가깝지만 구분되는 회색). (3) UX9-STROKE의 `0.5px` marker 윤곽·`--heatmap-marker-stroke-mix` 삭제(heatmap 점과 장식용 marker·필터 색 견본 모두 같은 `MarkerShape`라 함께). 별만 둥근 꼭짓점 기하를 위해 채움과 같은 색 stroke를 유지(보이는 테두리 아님). 윤곽이 없어 light unseen(`#E7ECF0`)은 표면 대비 약 1.2:1이며 상태 텍스트가 의미를 맡는다 — 테두리를 되돌리지 않는다. `question-marker-contrast.test.ts`의 윤곽 3:1 검사는 폐기. |
 
 ## 8. 진행 현황
 
@@ -978,5 +985,6 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | UX9-SPEC-3 노트 검색 범위·노트 backdrop 닫기 | ✅ | 이 커밋 | 2026-11-02. 사용자 결정 2건(§7 UX9-SPEC-3). AC 수 변화 없음. |
 | QSRC-SPEC 문제 원문 보기 명세 | ✅ | 이 커밋 | 2026-11-04. 사용자 결정 5건(§7 QSRC-SPEC). 신규 화면 QSRC-01(AC 6개, 계약 C01~C05), 열린 질문 2건. 구현 Task QSRC.0·API·UI·W는 §3 QSRC. |
 | QSRC-W 문제 원문 보기 연결·CI | 🔶 구현됨, Codex review 대기 | 3ea595b6 · 93dcbd02 · f631a5d0 (+ 문서 커밋) | 2026-11-04. `task/QSRC-W`. QSRC.0 AC01~AC06 전부 GREEN, `E2E_PHASES`에 `QSRC.0`. 구현: `PdfRegions`(bbox 영역만 canvas, text layer 없음)·`QuestionSourcePreview`(영역 요청→버튼, PDF는 첫 사용 때만, 짝 dialog, 좁은 화면 history 1개), BFF relay 2개, practice·sequence(bank|mock)·manage·manage(mock) 연결. 킷 보정: 좁은 sheet `width: 100vw`(scrollbar gutter). 후속: (1) `FloatingSidePanel`의 declined-Escape 경로는 React 트리로 중첩된 panel을 같은 키 입력에 함께 닫음 — 짝 dialog는 window capture Escape로 우회, 킷 수정은 별도 Task. (2) 짝 dialog의 host `inert`는 킷이 아니라 `QuestionSourcePreview`가 설정 — 킷으로 옮길 후속. (2b) 좁은 sheet의 `width: 100vw` 보정(overlays.css)도 킷 후속으로 재검토. Codex P2 2건(viewport가 열린 채 좁아질 때 history 항목, tooltip 높이 예산)은 8d68e153 · 5c55b5ea에서 수정. (3) 좁은 화면에서 sheet를 연 채 위치가 바뀌면(Back 외 경로) history 항목 하나가 남음. |
+| HEATMAP-PALETTE Heatmap palette·테두리 삭제 | ✅ | 이 branch(`task/HEATMAP-PALETTE`) | 2026-11-04. 사용자 결정(§7 HEATMAP-PALETTE). AC 수 변화 없음. |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.
