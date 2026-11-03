@@ -546,13 +546,15 @@ test(
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(main(page).getByText(/문제 하나가 점 하나입니다/)).toHaveCount(0);
 
-    // Header: the 문제 search and the collapsed "본문 검색" disclosure (UX7-SEARCH), then 문서 n ·
-    // 문제 and the icon buttons 이력 · 공유하기 (UX4). No 문제은행 button (UX6-PROGRESS) and no
-    // 전체 문제 page (UX7-BANK).
+    // Header: the 문제 search (UX7-SEARCH; no 본문 search disclosure under it since UX9), then
+    // 문서 n · 문제 and the icon buttons 본문 검색 (a link to the search page, SEARCH-02) · 이력 ·
+    // 공유하기 (UX4). No 문제은행 button (UX6-PROGRESS) and no 전체 문제 page (UX7-BANK).
     await expect(homeUi.header(page)).toBeVisible();
     await expect(homeUi.questionSearch(page)).toBeVisible();
-    await expect(homeUi.contentSearchToggle(page)).toHaveAttribute('aria-expanded', 'false');
-    await expect(searchUi.box(page)).toBeHidden();
+    await expect(homeUi.contentSearchToggle(page)).toHaveCount(0);
+    await expect(searchUi.box(page)).toHaveCount(0);
+    await expect(homeUi.contentSearchLink(page)).toHaveAttribute('href', `${home}/search`);
+    await expect(homeUi.contentSearchLink(page)).toHaveText(''); // icon only, named "본문 검색"
     await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*1$/); // the book; not the paper
     await expect(main(page).getByRole('link', { name: /^(문제은행|question bank)$/i })).toHaveCount(
       0,
@@ -569,6 +571,7 @@ test(
       [
         homeUi.documentsButton(page),
         homeUi.questionMenuButton(page),
+        homeUi.contentSearchLink(page),
         homeUi.historyButton(page),
         homeUi.shareButton(page),
       ].map(async (l) => (await l.boundingBox())?.x ?? 0),
@@ -604,10 +607,11 @@ test(
       (url) => url.pathname === home && url.searchParams.get('favorite') === 'true',
     );
     await expect(overviewUi.heatmap(page)).toHaveCount(0); // no favorites yet: filtered empty state
+    // The old 검색 route is the 본문 search page now (SEARCH-02): `q` becomes its `text`.
     await page.goto(`${home}/search?q=chlorine&mode=keyword`);
     await expect(page).toHaveURL(
       (url) =>
-        url.pathname === home &&
+        url.pathname === `${home}/search` &&
         url.searchParams.get('text') === 'chlorine' &&
         !url.searchParams.has('q') &&
         !url.searchParams.has('scope'),
