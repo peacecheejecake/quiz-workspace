@@ -5543,6 +5543,55 @@
         "title": "MockPracticeSession",
         "type": "object"
       },
+      "MockRelatedSources": {
+        "properties": {
+          "degraded": {
+            "items": {
+              "const": "dense_unavailable",
+              "type": "string"
+            },
+            "title": "Degraded",
+            "type": "array"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RelatedSource"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "mock_exam_question_revision_id": {
+            "format": "uuid",
+            "title": "Mock Exam Question Revision Id",
+            "type": "string"
+          },
+          "stored": {
+            "title": "Stored",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "mock_exam_question_revision_id",
+          "stored",
+          "degraded",
+          "items"
+        ],
+        "title": "MockRelatedSources",
+        "type": "object"
+      },
       "MockSubmitResult": {
         "description": "The graded (or pending) submission with the pinned revision's answers revealed.",
         "properties": {
@@ -8301,6 +8350,170 @@
         "title": "ReadinessReport",
         "type": "object"
       },
+      "RelatedSource": {
+        "properties": {
+          "block_id": {
+            "description": "The passage's first block (DOC-02 / excerpt panel).",
+            "title": "Block Id",
+            "type": "string"
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Top-level chapter of the passage.",
+            "title": "Chapter Id"
+          },
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "excerpt": {
+            "description": "At most 300 characters, whole paragraphs where possible.",
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "from_question_source": {
+            "description": "One of the question's own sources (문제 출처).",
+            "title": "From Question Source",
+            "type": "boolean"
+          },
+          "highlights": {
+            "description": "Query-term ranges in `excerpt` (<mark>).",
+            "items": {
+              "$ref": "#/components/schemas/TextSpan"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "page_end": {
+            "title": "Page End",
+            "type": "integer"
+          },
+          "page_start": {
+            "title": "Page Start",
+            "type": "integer"
+          },
+          "rank": {
+            "description": "1-based position in the list.",
+            "title": "Rank",
+            "type": "integer"
+          },
+          "revision_id": {
+            "description": "The document revision the passage is from.",
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Relevance (or fusion) score of a search hit; null for sources.",
+            "title": "Score"
+          },
+          "stale": {
+            "description": "The revision is no longer the document's published one.",
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "rank",
+          "document_id",
+          "document_title",
+          "chapter_id",
+          "chapter_title",
+          "block_id",
+          "page_start",
+          "page_end",
+          "excerpt",
+          "highlights",
+          "from_question_source",
+          "revision_id",
+          "stale"
+        ],
+        "title": "RelatedSource",
+        "type": "object"
+      },
+      "RelatedSources": {
+        "properties": {
+          "degraded": {
+            "description": "`dense_unavailable`: keyword (BM25) results only, not stored.",
+            "items": {
+              "const": "dense_unavailable",
+              "type": "string"
+            },
+            "title": "Degraded",
+            "type": "array"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The stored list (the same for every reader of the key); null when the list was computed but not stored (archived workspace, degraded search).",
+            "title": "Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RelatedSource"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "question_revision_id": {
+            "format": "uuid",
+            "title": "Question Revision Id",
+            "type": "string"
+          },
+          "stored": {
+            "title": "Stored",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "question_revision_id",
+          "stored",
+          "degraded",
+          "items"
+        ],
+        "title": "RelatedSources",
+        "type": "object"
+      },
       "RestoredDraft": {
         "properties": {
           "document_id": {
@@ -9980,6 +10193,110 @@
         "title": "SharedQuestionList",
         "type": "object"
       },
+      "SharedRelatedSource": {
+        "properties": {
+          "block_id": {
+            "description": "The passage's first block (DOC-02 / excerpt panel).",
+            "title": "Block Id",
+            "type": "string"
+          },
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Top-level chapter of the passage.",
+            "title": "Chapter Id"
+          },
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
+          "excerpt": {
+            "description": "At most 300 characters, whole paragraphs where possible.",
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "from_question_source": {
+            "description": "One of the question's own sources (문제 출처).",
+            "title": "From Question Source",
+            "type": "boolean"
+          },
+          "highlights": {
+            "description": "Query-term ranges in `excerpt` (<mark>).",
+            "items": {
+              "$ref": "#/components/schemas/TextSpan"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "page_end": {
+            "title": "Page End",
+            "type": "integer"
+          },
+          "page_start": {
+            "title": "Page Start",
+            "type": "integer"
+          },
+          "rank": {
+            "description": "1-based position in the list.",
+            "title": "Rank",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rank",
+          "document_id",
+          "document_title",
+          "chapter_id",
+          "chapter_title",
+          "block_id",
+          "page_start",
+          "page_end",
+          "excerpt",
+          "highlights",
+          "from_question_source"
+        ],
+        "title": "SharedRelatedSource",
+        "type": "object"
+      },
+      "SharedRelatedSources": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SharedRelatedSource"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SharedRelatedSources",
+        "type": "object"
+      },
       "SharedSearchResponse": {
         "properties": {
           "degraded": {
@@ -10817,6 +11134,24 @@
           "end"
         ],
         "title": "TextRange",
+        "type": "object"
+      },
+      "TextSpan": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "TextSpan",
         "type": "object"
       },
       "UploadCompleted": {
@@ -15824,6 +16159,143 @@
         ]
       }
     },
+    "/api/v1/mock-exam-questions/{mock_exam_question_id}/related-sources": {
+      "get": {
+        "description": "Related passages of a mock exam question (its own list; evidence book blocks first).",
+        "operationId": "getMockExamQuestionRelatedSources",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's own submitted mock practice session of this question.",
+            "in": "query",
+            "name": "mock_practice_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The caller's own submitted mock practice session of this question.",
+              "title": "Mock Practice Session Id"
+            }
+          },
+          {
+            "description": "`manage`: 모의고사 문제 관리 (edit rights, active workspace).",
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "manage",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`manage`: 모의고사 문제 관리 (edit rights, active workspace).",
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockRelatedSources"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Mock Exam Question Related Sources",
+        "tags": [
+          "related-sources"
+        ]
+      }
+    },
     "/api/v1/mock-exams/{mock_exam_id}": {
       "delete": {
         "description": "Soft delete: the mock exam leaves the list (attempts stay); a running generation is\ncancelled.",
@@ -19100,6 +19572,143 @@
         ]
       }
     },
+    "/api/v1/questions/{question_id}/related-sources": {
+      "get": {
+        "description": "Related passages of a registered question after a submission or in its details.",
+        "operationId": "getQuestionRelatedSources",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's own submitted practice session of this question.",
+            "in": "query",
+            "name": "practice_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The caller's own submitted practice session of this question.",
+              "title": "Practice Session Id"
+            }
+          },
+          {
+            "description": "`detail`: the 문제 상세 dialog.",
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "detail",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`detail`: the 문제 상세 dialog.",
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelatedSources"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Question Related Sources",
+        "tags": [
+          "related-sources"
+        ]
+      }
+    },
     "/api/v1/questions/{question_id}/revisions/{revision_id}": {
       "get": {
         "description": "One immutable revision of the question (history; attempts point at these).",
@@ -20300,6 +20909,102 @@
           }
         },
         "summary": "Get Shared Question Explanation",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/questions/{question_id}/related-sources": {
+      "get": {
+        "description": "The stored list of a published question's active revision and the current corpus;\nguests never compute (404 until a member's read stored one).",
+        "operationId": "getSharedQuestionRelatedSources",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedRelatedSources"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Shared Question Related Sources",
         "tags": [
           "shared"
         ]

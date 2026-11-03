@@ -3,8 +3,6 @@
 **상태:** 화면 요구사항 v1.0 (모든 제안 사용자 결정 2026-11-01) · ASK-SPEC 추가 2026-11-01 (사용자 요청 "문제 답 제출 후 문서에서 관련된 부분 제시 -- 이것도 생성 후 저장"). [AIEXPL-01](ai-explanations.md) 옆의 별도 기능이다. 검색 범위 규칙은 [ASK-01](ask-llm.md) "검색 범위"와 같고, 제출 확인·공유 캐시·동시성은 AIEXPL-01과 같은 방식이다. 모든 설계 선택은 사용자가 확인했다(implementation-plan §7 ASK-SPEC 사용자 결정 행).
 **Route:** 별도 route 없음. QuestionViewer(QVIEW-01) 결과 영역 안(AI 해설 아래): `practice`(풀이 panel, `?question=`)·`sequence(bank|mock)`(범위 풀이, `?practice=`)의 제출 결과, `manage`("문제 상세" dialog), `read-only`(공유 게스트 미리보기 — 저장된 목록만).
 **테스트:** `tests/e2e/questions/related-sources.spec.ts` (계약: `tests/integration/questions/related_sources/test_related_sources_contract.py`, `packages/core` unit test, `supabase/tests` pgTAP)
-**Phase:** RELSRC.0 (RED) → RELSRC-B (계약) → RELSRC-W (AC01~AC05, CI phase 켬) → ASK-QM (모의고사 문제, C07)
-**연계:** [AIEXPL-01](ai-explanations.md), [ASK-01](ask-llm.md), [SEARCH-01](search.md), [QPLAY-01](questions-practice.md), [DOC-02](documents-editor.md), [Questions 명세](../questions.md) §11, [공유 명세](../workspace-sharing.md) §10, [E2E 규칙](../e2e-strategy.md)
 **Phase:** RELSRC.0 (RED) → RELSRC-B (계약 C01~C07, 모의고사 C07 포함) → RELSRC-W (AC01~AC06, CI phase 켬). 이전 ASK-QM은 ASK-SYNC 2026-11-02에 RELSRC-B·RELSRC-W로 합쳤다.
 **연계:** [AIEXPL-01](ai-explanations.md), [ASK-01](ask-llm.md), [SEARCH-01](search.md), [QPLAY-01](questions-practice.md), [QVIEW-01](question-viewer.md), [MOCK-01](mock-exams.md), [DOC-02](documents-editor.md), [Questions 명세](../questions.md) §13, [공유 명세](../workspace-sharing.md) §10, [E2E 규칙](../e2e-strategy.md)
 

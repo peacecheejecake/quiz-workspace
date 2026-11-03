@@ -3,8 +3,6 @@
 **상태:** 화면 요구사항 v1.0 (모든 제안 사용자 결정 2026-11-01) · ASK-SPEC 신규 2026-11-01 · 사용자 결정 반영 2026-11-01(공유 해설·모든 보기, 구성원 생성·편집 권한 다시 만들기, 공유 게스트 읽기·Fork 복제) (사용자 요청 "LLM 문제 해설 — 문제 제출 후 버튼 노출 -> 해당 버튼 누르면 하단에 llm이 생성한 해설 생성 — 같은 문제에 대한 답변은 캐싱"). [ASK-01](ask-llm.md)과 따로 켜고 끌 수 있는 별도 기능이며 LLM 호출 경로·fake·인용 검증·usage 기록을 ASK와 함께 쓴다. 모든 설계 선택은 사용자가 확인했다(implementation-plan §7 ASK-SPEC 사용자 결정 행).
 **Route:** 별도 route 없음 — QuestionViewer(QVIEW-01)의 결과 영역 안의 영역: `practice`(풀이 panel, `?question=:questionId`)·`sequence(bank|mock)`(범위 풀이, `?practice=:runId&i=`)의 제출 결과 아래, `manage`("문제 상세" dialog)의 해설 아래, `read-only`(공유 게스트 미리보기)의 해설 아래(있는 해설만).
 **테스트:** `tests/e2e/questions/ai-explanations.spec.ts` (계약: `tests/integration/questions/ai_explanations/test_ai_explanations_contract.py`, `apps/worker` · `packages/core` unit test, `supabase/tests` pgTAP)
-**Phase:** EXPL.0 (RED) → EXPL-B (계약) → EXPL-W (AC01~AC06, CI phase 켬) → ASK-QM (모의고사 문제, C09)
-**연계:** [ASK-01](ask-llm.md), [RELSRC-01](related-sources.md), [QPLAY-01](questions-practice.md), [QVIEW-01 (MOCK-SPEC 브랜치)](question-viewer.md), [WS-VIEW-01](workspace-shared-view.md), [Questions 명세](../questions.md) §11, [공유 명세](../workspace-sharing.md) §10, [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
 **Phase:** EXPL.0 (RED) → EXPL-B (계약 C01~C09, 모의고사 C09 포함) → EXPL-W (AC01~AC07, CI phase 켬). 이전 ASK-QM은 ASK-SYNC 2026-11-02에 EXPL-B·EXPL-W로 합쳤다.
 **연계:** [ASK-01](ask-llm.md), [RELSRC-01](related-sources.md), [QPLAY-01](questions-practice.md), [QVIEW-01](question-viewer.md), [MOCK-01](mock-exams.md), [WS-VIEW-01](workspace-shared-view.md), [Questions 명세](../questions.md) §13, [공유 명세](../workspace-sharing.md) §10, [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
 

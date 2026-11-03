@@ -724,6 +724,26 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/mock-exam-questions/{mock_exam_question_id}/related-sources': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Mock Exam Question Related Sources
+     * @description Related passages of a mock exam question (its own list; evidence book blocks first).
+     */
+    get: operations['getMockExamQuestionRelatedSources'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/mock-exams/{mock_exam_id}': {
     parameters: {
       query?: never;
@@ -1317,6 +1337,26 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/questions/{question_id}/related-sources': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Question Related Sources
+     * @description Related passages of a registered question after a submission or in its details.
+     */
+    get: operations['getQuestionRelatedSources'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/questions/{question_id}/revisions/{revision_id}': {
     parameters: {
       query?: never;
@@ -1544,6 +1584,27 @@ export type paths = {
      * @description The AI explanation of one published question, as members see it (read-only).
      */
     get: operations['getSharedQuestionAiExplanation'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/questions/{question_id}/related-sources': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Shared Question Related Sources
+     * @description The stored list of a published question's active revision and the current corpus;
+     *     guests never compute (404 until a member's read stored one).
+     */
+    get: operations['getSharedQuestionRelatedSources'];
     put?: never;
     post?: never;
     delete?: never;
@@ -4541,6 +4602,22 @@ export type components = {
        */
       workspace_id: string;
     };
+    /** MockRelatedSources */
+    MockRelatedSources: {
+      /** Degraded */
+      degraded: 'dense_unavailable'[];
+      /** Id */
+      id: string | null;
+      /** Items */
+      items: components['schemas']['RelatedSource'][];
+      /**
+       * Mock Exam Question Revision Id
+       * Format: uuid
+       */
+      mock_exam_question_revision_id: string;
+      /** Stored */
+      stored: boolean;
+    };
     /**
      * MockSubmitResult
      * @description The graded (or pending) submission with the pinned revision's answers revealed.
@@ -5691,6 +5768,90 @@ export type components = {
        */
       status: 'ok' | 'unavailable';
     };
+    /** RelatedSource */
+    RelatedSource: {
+      /**
+       * Block Id
+       * @description The passage's first block (DOC-02 / excerpt panel).
+       */
+      block_id: string;
+      /**
+       * Chapter Id
+       * @description Top-level chapter of the passage.
+       */
+      chapter_id: string | null;
+      /** Chapter Title */
+      chapter_title: string | null;
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Document Title */
+      document_title: string;
+      /**
+       * Excerpt
+       * @description At most 300 characters, whole paragraphs where possible.
+       */
+      excerpt: string;
+      /**
+       * From Question Source
+       * @description One of the question's own sources (문제 출처).
+       */
+      from_question_source: boolean;
+      /**
+       * Highlights
+       * @description Query-term ranges in `excerpt` (<mark>).
+       */
+      highlights: components['schemas']['TextSpan'][];
+      /** Page End */
+      page_end: number;
+      /** Page Start */
+      page_start: number;
+      /**
+       * Rank
+       * @description 1-based position in the list.
+       */
+      rank: number;
+      /**
+       * Revision Id
+       * Format: uuid
+       * @description The document revision the passage is from.
+       */
+      revision_id: string;
+      /**
+       * Score
+       * @description Relevance (or fusion) score of a search hit; null for sources.
+       */
+      score?: number | null;
+      /**
+       * Stale
+       * @description The revision is no longer the document's published one.
+       */
+      stale: boolean;
+    };
+    /** RelatedSources */
+    RelatedSources: {
+      /**
+       * Degraded
+       * @description `dense_unavailable`: keyword (BM25) results only, not stored.
+       */
+      degraded: 'dense_unavailable'[];
+      /**
+       * Id
+       * @description The stored list (the same for every reader of the key); null when the list was computed but not stored (archived workspace, degraded search).
+       */
+      id: string | null;
+      /** Items */
+      items: components['schemas']['RelatedSource'][];
+      /**
+       * Question Revision Id
+       * Format: uuid
+       */
+      question_revision_id: string;
+      /** Stored */
+      stored: boolean;
+    };
     /** RestoredDraft */
     RestoredDraft: {
       /**
@@ -6325,6 +6486,57 @@ export type components = {
       /** Next Cursor */
       next_cursor: string | null;
     };
+    /** SharedRelatedSource */
+    SharedRelatedSource: {
+      /**
+       * Block Id
+       * @description The passage's first block (DOC-02 / excerpt panel).
+       */
+      block_id: string;
+      /**
+       * Chapter Id
+       * @description Top-level chapter of the passage.
+       */
+      chapter_id: string | null;
+      /** Chapter Title */
+      chapter_title: string | null;
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /** Document Title */
+      document_title: string;
+      /**
+       * Excerpt
+       * @description At most 300 characters, whole paragraphs where possible.
+       */
+      excerpt: string;
+      /**
+       * From Question Source
+       * @description One of the question's own sources (문제 출처).
+       */
+      from_question_source: boolean;
+      /**
+       * Highlights
+       * @description Query-term ranges in `excerpt` (<mark>).
+       */
+      highlights: components['schemas']['TextSpan'][];
+      /** Page End */
+      page_end: number;
+      /** Page Start */
+      page_start: number;
+      /**
+       * Rank
+       * @description 1-based position in the list.
+       */
+      rank: number;
+    };
+    /** SharedRelatedSources */
+    SharedRelatedSources: {
+      /** Items */
+      items: components['schemas']['SharedRelatedSource'][];
+    };
     /** SharedSearchResponse */
     SharedSearchResponse: {
       /**
@@ -6741,6 +6953,13 @@ export type components = {
        * Start
        * @description Offset in `text` (characters), inclusive.
        */
+      start: number;
+    };
+    /** TextSpan */
+    TextSpan: {
+      /** End */
+      end: number;
+      /** Start */
       start: number;
     };
     /** UploadCompleted */
@@ -10006,6 +10225,87 @@ export interface operations {
       };
     };
   };
+  getMockExamQuestionRelatedSources: {
+    parameters: {
+      query?: {
+        /** @description The caller's own submitted mock practice session of this question. */
+        mock_practice_session_id?: string | null;
+        /** @description `manage`: 모의고사 문제 관리 (edit rights, active workspace). */
+        view?: 'manage' | null;
+      };
+      header?: never;
+      path: {
+        mock_exam_question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockRelatedSources'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getMockExam: {
     parameters: {
       query?: never;
@@ -12309,6 +12609,87 @@ export interface operations {
       };
     };
   };
+  getQuestionRelatedSources: {
+    parameters: {
+      query?: {
+        /** @description The caller's own submitted practice session of this question. */
+        practice_session_id?: string | null;
+        /** @description `detail`: the 문제 상세 dialog. */
+        view?: 'detail' | null;
+      };
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RelatedSources'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   getQuestionRevision: {
     parameters: {
       query?: never;
@@ -13052,6 +13433,75 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SharedExplanation'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getSharedQuestionRelatedSources: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedRelatedSources'];
         };
       };
       /** @description Unauthorized */

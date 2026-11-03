@@ -114,6 +114,8 @@ workspace
  │             ├── question_attempt     (채점 이력)
  │             ├── question_lineage     (변형 관계)
  │             └── question_chapter_change (챕터 변경 이력, UX9 챕터 재분배)
+ │             ├── question_ai_explanation (revision별 공유 AI 해설, AIEXPL)
+ │             └── question_related_sources (revision·교재 fingerprint별 공유 관련 본문, RELSRC)
  ├── question_draft ── generation_run(QGEN, MOCK-SPEC부터 새 행 없음) / pdf_import_run
  ├── mock_exam ── mock_exam_revision (이름·설정·범위 이력)
  │             └── mock_exam_generation (회차) ── mock_exam_question ── mock_exam_question_revision
@@ -241,13 +243,19 @@ workspace
 | POST | `/api/v1/workspaces/{id}/practice-runs` | 범위 풀이 묶음 만들기(`source bank\|mock`, `range`, `random_order`, `seed`; 서버가 범위 확정, 최대 5,000; QVIEW-01) |
 | GET | `/api/v1/practice-runs/{id}` · `/items/{position}` · `/results` | 묶음 진행·결과 집계(내용 없음) · 위치의 문제 하나(정답 비노출, 이미 제출했으면 그 결과·정답·해설) · 결과 목록 페이지(`offset`/`limit` ≤200) |
 | POST | `/api/v1/practice-runs/{id}/finish` | 묶음 끝내기(`finished_at`, 요약 고정) |
-| GET/POST | `/api/v1/questions/{id}/ai-explanation` | 제출 후 AI 해설 읽기 / 만들기(`practice_session_id` 제출 확인 또는 `view=detail`; 캐시 있으면 생성 없음, AIEXPL-01) |
+| GET | `/api/v1/workspaces/{id}/ask` | AI 질문 사용 가능 여부(`available`)·한도·오늘 남은 수(ASK-01) |
+| GET/POST | `/api/v1/workspaces/{id}/ask/conversations` | 내 대화 목록 / 새 대화(첨부 문제·범위, 첫 질문) |
 | GET/DELETE | `/api/v1/ask/conversations/{id}` | 대화(메시지·인용) / 삭제 — 주인만 |
 | DELETE | `/api/v1/ask/conversations/{id}/attachment` | 첨부 문제 빼기 |
+| POST | `/api/v1/ask/conversations/{id}/messages` | 질문(`Idempotency-Key`; API가 근거 검색·고정 후 `ask.answer` job, 202 + `stream_url`) |
+| GET | `/api/v1/ask/messages/{id}` · `/stream` | 답 상태(polling) · SSE(`delta`·`reset`·`done`·`error`, `Last-Event-ID`) |
+| POST | `/api/v1/ask/messages/{id}/cancel` · `/retry` · `/regenerate` | 답변 중지 · 실패·중지 답 다시 시도 · 마지막 답 다시 생성(새 버전, 이전 답 유지, 한도에 셈) |
 | PUT | `/api/v1/ask/messages/{id}/feedback` | `도움이 안 됨`(이유 code) |
-| GET/POST | `/api/v1/mock-exam-questions/{id}/ai-explanation` · `/ai-explanation/regenerate` · `/related-sources`, GET `/api/v1/mock-ai-explanations/{id}/stream` | 모의고사 문제의 AI 해설·SSE·관련 본문(`mock_practice_session_id` 제출 확인; 삭제된 모의고사·빠진 문제 404; 공유 API 없음 — AIEXPL-01-C09·RELSRC-01-C07, ASK-SYNC) |
+| GET/POST | `/api/v1/questions/{id}/ai-explanation` | 제출 후 AI 해설 읽기 / 만들기(`practice_session_id` 제출 확인 또는 `view=detail`; 캐시 있으면 생성 없음, AIEXPL-01) |
 | POST | `/api/v1/questions/{id}/ai-explanation/regenerate` | 다시 만들기(편집 권한, revision당 하루 3번) |
+| GET | `/api/v1/ai-explanations/{id}/stream` | AI 해설 SSE |
 | GET | `/api/v1/questions/{id}/related-sources` | 제출 후 관련 본문(`practice_session_id` 제출 확인 또는 `view=detail`; 없으면 API 안에서 검색해 저장, LLM 없음 — RELSRC-01) |
+| GET/POST | `/api/v1/mock-exam-questions/{id}/ai-explanation` · `/ai-explanation/regenerate` · `/related-sources`, GET `/api/v1/mock-ai-explanations/{id}/stream` | 모의고사 문제의 AI 해설·SSE·관련 본문(`mock_practice_session_id` 제출 확인; 삭제된 모의고사·빠진 문제 404; 공유 API 없음 — AIEXPL-01-C09·RELSRC-01-C07, ASK-SYNC) |
 | GET | `/api/v1/jobs/{id}` | 비동기 작업 상태 |
 | GET | `/api/v1/jobs/{id}/events` | SSE 진행 상황 |
 | GET | `/api/v1/workspaces/{id}/activities` | 변경 이력 |
@@ -257,8 +265,6 @@ workspace
 Worker job(DOCSUM-SPEC 2026-10-29): `document.summarize {run_id}` — 문서별 advisory lock, 장 map(입력 hash가 같은 unit 재사용)·문서 reduce, 결과 쓰기 직전 run·현재 발행 revision 재확인(대체되면 쓰지 않음), 결과는 개수·usage·오류 코드(`llm_unavailable`·`llm_timeout`·`llm_invalid_output`·`summary_too_large`·`document_unavailable`)만. `chapter_note.generate {note_id}` — 노트 행에 고정된 `question_refs`만 읽고 인용 검증(1회 재요청), 큰 장은 묶음 생성·병합, 결과는 항목 수·버린 항목 수·usage·오류 코드(`note_citation_invalid` 포함)만. 둘 다 `WORKER_DOCUMENT_SUMMARY`·`WORKER_CHAPTER_NOTES`와 LLM 설정(`LLM_API_KEY`·`LLM_MODEL`)이 있을 때만 시작하며, 테스트(`APP_ENV=test`)는 결정적 fake/scenario LLM을 쓴다. 공유 게스트용 읽기 API는 [workspace-sharing.md](workspace-sharing.md) §5·§8.
 
 Worker job(MOCK-SPEC 2026-11-01): `mock_exam.generate {generation_id}` — 모의고사별 advisory lock, 회차에 고정된 `plan`만 읽음(원본 revision 고정), `OPTION_SHUFFLE`은 LLM 없이 복사·섞기, LLM 유형은 기존 `question.generate`의 원본 읽기·근거 passage 검색·근거 좁히기 helper(공용 모듈 `quiz_worker.question_sources`)로 passage를 모은 뒤 `book_core.mock_exam.pack_batches`로 **호출 수가 최소가 되게** 묶어(`MOCK_EXAM_MAX_PROMPT_TOKENS` 기본 60,000·`MOCK_EXAM_MAX_OUTPUT_TOKENS` 기본 16,000·상한 `MOCK_EXAM_SOURCES_PER_CALL` 기본 40) `MOCK_EXAM_GENERATION_CONCURRENCY`(기본 2)개까지 동시에 부르고, 항목별 검증 통과분만 저장, 실패 항목은 모아 재요청 1회, 해석 불가 묶음은 반으로 나눔, 묶음마다 checkpoint(`mock_exam_generation_items`) — 재전달·시간 한도 뒤 재시작해도 끝난 묶음은 다시 부르지 않음, 진행(`progress` 원본 수·묶음 수)과 결과 쓰기 직전 회차·모의고사 상태 재확인(삭제·취소되면 쓰지 않음). 결과는 개수·usage·오류 코드(`llm_unavailable`·`llm_timeout`·`no_valid_questions`·`mock_exam_unavailable`)만. `WORKER_MOCK_EXAMS`와 LLM 설정이 있을 때만 LLM 유형을 시작하며 테스트(`APP_ENV=test`)는 결정적 fake/scenario LLM을 쓴다. `question.generate` job 등록은 QGEN-RM에서 뺀다.
-Worker job(ASK-SPEC 2026-11-01, 초안): `ask.answer {message_id}`와 `question.ai_explain {explanation_id}`는 **API가 LLM 키를 갖지 않으므로** worker가 LLM을 streaming으로 부른다. 둘 다 새 Celery queue `interactive`(전용 process, `ASK_WORKER_CONCURRENCY`)에서 돌아 `document.parse` 같은 긴 job에 막히지 않는다. job은 고정된 근거 참조로 Postgres 블록을 읽고, LLM 호출 전·결과 쓰기 직전(행 잠금)에 메시지/해설 상태·Workspace 활성·멤버십·근거 revision이 현재 발행본인지 다시 확인한다. 받은 글자는 약 100ms 단위로 Redis Stream `ask:msg:<id>` / `explain:<id>`(TTL 10분, 최대 길이 제한)에 쓰고, API의 SSE endpoint가 연결마다 인가를 다시 확인하고 그 stream을 relay한다(브라우저 → Next.js route handler → FastAPI, token은 header로만). 끝나면 검증된 결과·usage를 Postgres에 쓰고 Redis에는 `done`만 남긴다. job 결과는 개수·usage·오류 코드(`llm_unavailable`·`llm_timeout`·`llm_refused`·`sources_unavailable`·`workspace_unavailable`·`explanation_answer_mismatch`·`ask_failed`)만이고 `ask.answer`는 이력 작업 목록에 나오지 않는다. `ask.purge`(beat 하루 1회)는 보존 기간이 지난 대화와 13개월 넘은 usage를 지운다. 둘 다 `WORKER_ASK_LLM`·`WORKER_AI_EXPLANATIONS`(api·worker 같은 값, 기본 off)와 LLM 설정이 있을 때만 시작하고, 테스트(`APP_ENV=test`)는 결정적 streaming fake를 쓴다.
-Worker job(MOCK-SPEC 2026-11-01): `mock_exam.generate {generation_id}` — 모의고사별 advisory lock, 회차에 고정된 `plan`만 읽음(원본 revision 고정), `OPTION_SHUFFLE`은 LLM 없이 복사·섞기, LLM 유형은 기존 `question.generate`의 원본 읽기·근거 passage 검색·근거 좁히기 helper(공용 모듈로 이동)로 passage를 모은 뒤 `book_core.mock_exam.pack_batches`로 **호출 수가 최소가 되게** 묶어(`MOCK_EXAM_MAX_PROMPT_TOKENS` 기본 60,000·`MOCK_EXAM_MAX_OUTPUT_TOKENS` 기본 16,000·상한 `MOCK_EXAM_SOURCES_PER_CALL` 기본 40) `MOCK_EXAM_GENERATION_CONCURRENCY`(기본 2)개까지 동시에 부르고, 항목별 검증 통과분만 저장, 실패 항목은 모아 재요청 1회, 해석 불가 묶음은 반으로 나눔, 묶음마다 checkpoint(`mock_exam_generation_items`) — 재전달·시간 한도 뒤 재시작해도 끝난 묶음은 다시 부르지 않음, 진행(`progress` 원본 수·묶음 수)과 결과 쓰기 직전 회차·모의고사 상태 재확인(삭제·취소되면 쓰지 않음). 결과는 개수·usage·오류 코드(`llm_unavailable`·`llm_timeout`·`no_valid_questions`·`mock_exam_unavailable`)만. `WORKER_MOCK_EXAMS`와 LLM 설정이 있을 때만 LLM 유형을 시작하며 테스트(`APP_ENV=test`)는 결정적 fake/scenario LLM을 쓴다. `question.generate` job 등록은 QGEN-RM에서 뺀다.
 Worker job(ASK-SPEC 2026-11-01): `ask.answer {message_id}`와 `question.ai_explain {explanation_id}`는 **API가 LLM 키를 갖지 않으므로** worker가 LLM을 streaming으로 부른다. 둘 다 새 Celery queue `interactive`(전용 process, `ASK_WORKER_CONCURRENCY`)에서 돌아 `document.parse` 같은 긴 job에 막히지 않는다. job은 고정된 근거 참조로 Postgres 블록을 읽고, LLM 호출 전·결과 쓰기 직전(행 잠금)에 메시지/해설 상태·Workspace 활성·멤버십·근거 revision이 현재 발행본인지 다시 확인한다. 받은 글자는 약 100ms 단위로 Redis Stream `ask:msg:<id>` / `explain:<id>`(TTL 10분, 최대 길이 제한)에 쓰고, API의 SSE endpoint가 연결마다 인가를 다시 확인하고 그 stream을 relay한다(브라우저 → Next.js route handler → FastAPI, token은 header로만). 끝나면 검증된 결과·usage를 Postgres에 쓰고 Redis에는 `done`만 남긴다. job 결과는 개수·usage·오류 코드(`llm_unavailable`·`llm_timeout`·`llm_refused`·`sources_unavailable`·`workspace_unavailable`·`explanation_answer_mismatch`·`ask_failed`)만이고 `ask.answer`는 이력 작업 목록에 나오지 않는다. `ask.purge`(beat 하루 1회)는 보존 기간이 지난 대화와 13개월 넘은 usage를 지운다. 둘 다 `WORKER_ASK_LLM`·`WORKER_AI_EXPLANATIONS`(api·worker 같은 값, 기본 off)와 LLM 설정이 있을 때만 시작하고, 테스트(`APP_ENV=test`)는 결정적 streaming fake를 쓴다.
 
 ## 7. Frontend 기능 범위
