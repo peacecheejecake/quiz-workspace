@@ -10,8 +10,10 @@
 //   asserted as "every touchmove of the gesture was cancelled" and "the overlay still scrolls" as
 //   "none was". WebKit has no Touch constructor (like Safari), so the touch points are plain
 //   objects on the event's touch lists.
-// - in Chromium also as a real touch gesture (CDP Input.synthesizeScrollGesture), asserting the
-//   page's and the overlay scroller's actual offsets.
+// - in Chromium also as a real touch gesture (CDP Input.dispatchTouchEvent: touchStart, timed
+//   touchMoves, touchEnd), asserting the page's and the overlay scroller's actual offsets.
+//   Input.synthesizeScrollGesture is not used: on Linux Chromium (CI) it fires pointermoves but
+//   never starts a scroll, so the "overlay still scrolls" half could not pass there.
 // Wheel (desktop): real `mouse.wheel` scrolling in both engines.
 //
 // Data-independent scroll ranges: the page gets a tall spacer after its content and the overlay
@@ -97,6 +99,9 @@ interface Swipe {
   scrollerMoved: number | null;
 }
 
+/** Frames of the real touch gesture (Chromium): one touchMove per ~16 ms. */
+const TOUCH_STEPS = 10;
+
 /**
  * Swipes vertically on the middle of `target`: `dy` is the finger travel (negative = finger moves
  * up, which scrolls content down).
@@ -150,13 +155,15 @@ async function swipe(
     );
   const before = await offsets();
   const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Input.synthesizeScrollGesture', {
-    x,
-    y,
-    yDistance: dy,
-    gestureSourceType: 'touch',
-    speed: 1200,
-  });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  for (let i = 1; i <= TOUCH_STEPS; i += 1) {
+    await page.waitForTimeout(16);
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x, y: y + (dy * i) / TOUCH_STEPS }],
+    });
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await cdp.detach();
   // Let the compositor's last scroll frame land before reading the offsets.
   await page.evaluate(
