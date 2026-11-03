@@ -4,15 +4,13 @@
 // 레이아웃", UX3c): the single page of a workspace, without a sidebar.
 //
 //   Workspace header  the 문제 search (SEARCH-01-AC12: filters the heatmap as you type, no button;
-//                     its "설정" popover holds the heatmap's chapter/type filters) with the
-//                     "본문 검색" disclosure under it (AC10, collapsed by default), then two
+//                     its "설정" popover holds the heatmap's chapter/type filters), then two
 //                     button groups: `문서 n` · `문제` (직접 추가 / 중복 문제 정리 | 보관·초안 문제 /
 //                     모의고사 / 문제 풀기, UX4, MOCK-SYNC;
 //                     no 전체 문제 since UX7-BANK, no PDF 관리 since UX7-DOCS), and, aligned right,
-//                     `이력` · `공유하기` (icon
-//                     buttons; share for the owner only)
-//   본문 search       when expanded: its form (box, icon submit, "본문 설정") and the results
-//                     (AC09; clicking a result opens the excerpt panel, AC11)
+//                     `본문 검색` · `이력` · `공유하기` (icon buttons; share for the owner only).
+//                     `본문 검색` is a link to the 본문 search page (SEARCH-02, UX9: the home's
+//                     collapsed 본문 search area is gone, its place under the 문제 search left empty)
 //   문제 영역         the heatmap (QuestionsOverview)
 //   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 모의고사 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
 //                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): modal
@@ -40,28 +38,27 @@
 //                     stacked floating dialog of the workspace's mock exams; list → 만들기 / 상세
 //                     pushes an entry. A mock exam's 풀기 opens the run panel with `source=mock`.
 //
-// State lives in the URL: heatmap filters (overview-filters.ts), the 문제 search `q`, the 본문
-// search `text` and its options (search/state.ts), `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
+// State lives in the URL: heatmap filters (overview-filters.ts), the 문제 search `q`, `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
 // chapter header's `정리 노트` button opens it), and `question` (the practice panel). Dialogs and
 // panels open on a new history entry and closing one (its button or Back) drops those entries
 // (usePanelHistory, UX7-BACK/UX7-BACK-2: neither Back nor Forward reopens it; Next syncs
 // useSearchParams, no server round trip); filter and 문제 search changes write the URL at once and use router.replace (the server
-// re-reads the overview, rereadHeatmap; the 문제 search only once typing pauses). The 본문 search
-// writes its keys in place (replace).
+// re-reads the overview, rereadHeatmap; the 문제 search only once typing pauses).
 import {
   Button,
-  ChevronDownIcon,
-  ChevronUpIcon,
   FloatingSidePanel,
   HistoryIcon,
   IconButton,
   questionTypeLabels,
+  SearchIcon,
   Select,
   ShareIcon,
+  Tooltip,
   type QuestionType,
 } from '@quiz/ui';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useId, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { DocumentLibraryFeedback } from '@/components/documents/document-library-feedback';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { DocumentSummaryPanel } from '@/components/documents/summary/document-summary-panel';
@@ -75,13 +72,8 @@ import { MockExamsPanel } from '@/components/questions/mock-exams/mock-exams-pan
 import { ChapterNotePanel } from '@/components/questions/notes/chapter-note-panel';
 import { ChapterRedistributionDialog } from '@/components/questions/redistribution/chapter-redistribution-dialog';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
-import {
-  ContentSearchOptions,
-  ContentSearchResults,
-  useContentSearch,
-} from '@/components/search/content-search';
-import { ContentSearchForm } from '@/components/search/content-search-form';
 import { QuestionSearch } from '@/components/search/question-search';
+import { isPlainClick, markSearchEntryFromHome } from '@/components/search/search-entry';
 import searchStyles from '@/components/search/search-forms.module.css';
 import { useLiveQuery } from '@/components/search/use-live-query';
 import { listChapterNotes } from '@/lib/notes/client';
@@ -100,14 +92,7 @@ import {
 } from '@/lib/questions/overview-filters';
 import { NO_CHAPTER_KEY, type PlacedQuestion } from '@/lib/questions/overview-placement';
 import type { QuestionFailureKind } from '@/lib/questions/problems';
-import type { SearchQuery } from '@/lib/search/client';
-import {
-  addressBarContentKey,
-  hasSearchableBody,
-  hasSearchableQuestions,
-  isSearchableBody,
-} from '@/lib/search/scope';
-import { CONTENT_QUERY_PARAM, MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
+import { hasSearchableQuestions } from '@/lib/search/scope';
 import {
   isChapterNoteOpen,
   keepNoteChapter,
@@ -118,7 +103,6 @@ import {
   patchSearch,
   withChapterNote,
   summaryDocumentId,
-  contentSearchParams,
   DUPLICATES_PANEL,
   INACTIVE_QUESTIONS_PANEL,
   MOCK_EXAMS_PANEL,
@@ -131,7 +115,6 @@ import {
   type MockView,
   ownSummaryDocument,
   QUESTION_CREATE_PANEL,
-  type ContentDocumentFilter,
   withPanel,
   withSummaryPanel,
   withoutPanels,
@@ -143,6 +126,7 @@ import {
   RUN_DIALOG,
   withPracticeQuestion,
   withRunPanel,
+  searchPagePath,
   type HomePanel,
 } from '@/lib/workspaces/home';
 import { withRunState, type RunUrlState } from '@/lib/questions/practice-runs';
@@ -174,8 +158,6 @@ export interface WorkspaceHomeProps {
   readonly hasQuestions?: boolean | null;
   readonly documents: readonly DocumentSummary[];
   readonly documentsLoadFailed: boolean;
-  /** The content search in the URL on arrival. */
-  readonly initialSearch: SearchQuery;
   /** Screen ids of the parts of this page (`data-screen-id`, docs/screens/index.md). */
   readonly screenIds: {
     readonly documents: string;
@@ -201,7 +183,6 @@ export function WorkspaceHome({
   hasQuestions = null,
   documents,
   documentsLoadFailed,
-  initialSearch,
   screenIds,
 }: WorkspaceHomeProps) {
   const router = useRouter();
@@ -219,10 +200,10 @@ export function WorkspaceHome({
     open: openDialogs,
     // Closing the run (its button or Back) hands `mock` back to the 모의고사 dialog's view.
     close: (search, dialog) => {
-      const closed = closeDialog(search, dialog, executedFilter());
+      const closed = closeDialog(search, dialog);
       return dialog === RUN_DIALOG ? keepMockView(closed) : closed;
     },
-    closeAll: (search) => withoutPanels(search, executedFilter()),
+    closeAll: (search) => withoutPanels(search),
     read: (url) => router.replace(url, { scroll: false }),
   });
   function closeTo(url: string) {
@@ -261,10 +242,9 @@ export function WorkspaceHome({
       return;
     }
     if (!isOpen(panel)) return;
-    // Closing the summary panel hands `document`/`section` back to the executed content search.
     const search =
       panel === 'document-summary'
-        ? withSummaryPanel(window.location.search, null, executedFilter())
+        ? withSummaryPanel(window.location.search, null)
         : panel === MOCK_EXAMS_PANEL
           ? withoutMockExams(window.location.search)
           : withPanel(window.location.search, panel, false);
@@ -402,9 +382,6 @@ export function WorkspaceHome({
   // Only this workspace's documents: another workspace's id (even one the user can read) is
   // "문서를 찾을 수 없습니다." and is never loaded here (DOCSUM-01-AC07).
   const summaryDocument = ownSummaryDocument(summaryDocId, library.documents);
-  const searchDocuments = library.documents
-    .filter(isSearchableBody)
-    .map((d) => ({ id: d.id, title: d.title }));
   // Bumped when the heatmap's panel changes a question: an open 보관·초안 문제 list re-reads.
   const [questionsVersion, setQuestionsVersion] = useState(0);
   // Bumped when 챕터 재분배 moved questions: an open 정리 노트 panel reads its note again.
@@ -513,82 +490,6 @@ export function WorkspaceHome({
     rereadHeatmap(patchSearch(merged, { q: null }));
   }
 
-  // --- 본문 search (SEARCH-01-AC09/AC10: collapsed by default; `text` + options) ---------------
-  const hasBody = hasSearchableBody(library.documents, library.listFailed);
-  const content = useContentSearch({
-    workspaceId: workspace.id,
-    initial: initialSearch,
-    runInitial: hasBody,
-  });
-  const urlText = searchParams.get(CONTENT_QUERY_PARAM) ?? '';
-  const [contentDraft, setContentDraft] = useState(urlText);
-  // Open on arrival with a 본문 search in the URL, and whenever the address bar brings one back.
-  const [contentOpen, setContentOpen] = useState(urlText !== '');
-  const [seenText, setSeenText] = useState(urlText);
-  if (seenText !== urlText) {
-    setSeenText(urlText);
-    setContentDraft(urlText);
-    if (urlText) setContentOpen(true);
-  }
-  const contentRegionId = useId();
-  const contentInputRef = useRef<HTMLInputElement | null>(null);
-  const focusContentRef = useRef(false);
-  useEffect(() => {
-    if (!contentOpen || !focusContentRef.current) return;
-    focusContentRef.current = false;
-    contentInputRef.current?.focus();
-  }, [contentOpen]);
-  function toggleContent() {
-    if (contentOpen) content.closeHit();
-    else focusContentRef.current = true;
-    setContentOpen(!contentOpen);
-  }
-
-  // The address bar can change under us (browser Back/Forward restores an earlier search): the
-  // executed content search follows it. Our own updates write the same state they already show,
-  // so following them is a no-op. While the summary panel owns `document`/`section`, the content
-  // search reads its own executed filter there (contentSearchParams): opening or closing the
-  // panel never re-runs a search.
-  const executedFilter = (): ContentDocumentFilter | null =>
-    content.submitted
-      ? { documentId: content.submitted.documentId, chapterId: content.submitted.chapterId }
-      : null;
-  const contentKey = hasBody
-    ? addressBarContentKey(Object.fromEntries(contentSearchParams(searchParams, executedFilter())))
-    : '';
-  const syncedContentKey = useRef(contentKey);
-  const syncContent = content.sync;
-  useEffect(() => {
-    if (syncedContentKey.current === contentKey) return;
-    syncedContentKey.current = contentKey;
-    const q = contentKey
-      ? parseSearchParams(Object.fromEntries(new URLSearchParams(contentKey)))
-      : null;
-    void Promise.resolve().then(() => syncContent(q));
-  }, [contentKey, syncContent]);
-
-  /** Runs the 본문 search for `query` (empty: clears it and its `text`). */
-  function applyContentSearch(query: string) {
-    const q = query.trim().slice(0, MAX_QUERY_CHARS);
-    let search: string;
-    if (q && hasBody) {
-      // Writes the search into the address bar at once (keeping Next's history state)…
-      content.search(q);
-      search = window.location.search;
-    } else {
-      content.clear();
-      search = patchSearch(window.location.search, { [CONTENT_QUERY_PARAM]: null });
-    }
-    // …and this write, without Next's state, makes useSearchParams follow it, so a later
-    // Back/Forward to another `text` is seen as a change.
-    panelHistory.replace(`${pathname}${search}`);
-  }
-
-  function closeContentResults() {
-    setContentDraft('');
-    applyContentSearch('');
-  }
-
   const chapterOptions = [
     { value: ALL, label: '전체 챕터' },
     ...chapterChoices.map((c) => ({ value: c.value, label: c.title })),
@@ -629,20 +530,6 @@ export function WorkspaceHome({
               </div>
             }
           />
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-expanded={contentOpen}
-            aria-controls={contentRegionId}
-            onClick={toggleContent}
-          >
-            본문 검색
-            {contentOpen ? (
-              <ChevronUpIcon width={16} height={16} aria-hidden="true" />
-            ) : (
-              <ChevronDownIcon width={16} height={16} aria-hidden="true" />
-            )}
-          </Button>
         </div>
 
         <div className={styles.actions}>
@@ -661,6 +548,23 @@ export function WorkspaceHome({
             />
           </div>
           <div className={styles.actionGroup} data-align="end">
+            {/* SEARCH-02: a link to the 본문 search page, styled as the icon buttons beside it. */}
+            <Tooltip content="본문 검색">
+              <Link
+                href={searchPagePath(workspace.id)}
+                aria-label="본문 검색"
+                className="qz-icon-button qz-focus-ring"
+                data-variant="secondary"
+                data-size="md"
+                onClick={(event) => {
+                  if (isPlainClick(event)) markSearchEntryFromHome();
+                }}
+              >
+                <span className="icon" aria-hidden="true">
+                  <SearchIcon />
+                </span>
+              </Link>
+            </Tooltip>
             <IconButton
               label="이력"
               icon={<HistoryIcon />}
@@ -677,30 +581,6 @@ export function WorkspaceHome({
             ) : null}
           </div>
         </div>
-      </div>
-
-      <div id={contentRegionId} className={searchStyles.contentArea} hidden={!contentOpen}>
-        <ContentSearchForm
-          inputRef={contentInputRef}
-          draft={contentDraft}
-          onDraftChange={setContentDraft}
-          onSearch={() => applyContentSearch(contentDraft)}
-          searchable={hasBody}
-          settings={
-            <ContentSearchOptions
-              search={content}
-              documents={searchDocuments}
-              documentsLoadFailed={library.listFailed}
-            />
-          }
-        />
-        {hasBody ? (
-          <ContentSearchResults
-            workspaceId={workspace.id}
-            search={content}
-            onClose={closeContentResults}
-          />
-        ) : null}
       </div>
 
       <QuestionsOverview

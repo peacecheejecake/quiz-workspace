@@ -20,9 +20,11 @@
 //                                                            QuestionViewer sequence; keys in
 //                                                            lib/questions/practice-runs.ts)
 //   ?q=<text>                                               the 문제 search (heatmap, UX7-SEARCH)
-//   ?text=<text>&mode=&document=&section=                    the 본문 search and its options
-//                                                            (search/state.ts); the UX6 `scope`
-//                                                            key is migrated by legacyScopeRedirect
+//   ?text=<text>&mode=&document=&section=                    retired here: the 본문 search lives
+//                                                            on its own page since UX9 (SEARCH-02,
+//                                                            contentSearchRedirect); the UX6
+//                                                            `scope` key is migrated first by
+//                                                            legacyScopeRedirect
 // Pure helpers, plus the redirects of the pre-UX3c routes onto the home and of retired URL
 // state (`scope`, UX7-SEARCH; `question-pdfs` → `documents`, UX7-DOCS; `generate` → `mock-exams`,
 // QGEN-RM): homeRedirect.
@@ -476,11 +478,26 @@ export function legacyQuestionsRedirect(workspaceId: string, params: RawParams):
   return workspaceHomePath(workspaceId, toSearchParams(params).toString());
 }
 
+/** The 본문 search page (SEARCH-02, UX9), optionally with its query string. */
+export function searchPagePath(workspaceId: string, search = ''): string {
+  const query = search.startsWith('?') || search === '' ? search : `?${search}`;
+  return `/workspaces/${workspaceId}/search${query}`;
+}
+
+/**
+ * Whether the search page's URL is the pre-UX7 one (`?q=`, SEARCH-01 before UX3c) that
+ * legacySearchRedirect rewrites.
+ */
+export function isLegacySearchUrl(params: RawParams): boolean {
+  return toSearchParams(params).has('q');
+}
+
 /**
  * `/workspaces/:id/search?q=&mode=&document=&chapter=` (SEARCH-01 before UX3c): the same 본문
- * search on the home, its query as `text` (UX7-SEARCH). Its chapter filter is a document section,
- * renamed `section` there (the home's `chapter` is the heatmap's question chapter). The old
- * `papers` flag is dropped: the 본문 search never covers question papers (UX7-SEARCH-2).
+ * search on the search page (SEARCH-02-AC03, UX9), its query as `text` and its chapter filter (a
+ * document section) as `section` (UX7-SEARCH names: the home's `q` is the 문제 search and its
+ * `chapter` the heatmap's). The old `papers` flag is dropped: the 본문 search never covers question
+ * papers (UX7-SEARCH-2).
  */
 export function legacySearchRedirect(workspaceId: string, params: RawParams): string {
   const source = toSearchParams(params);
@@ -492,8 +509,30 @@ export function legacySearchRedirect(workspaceId: string, params: RawParams): st
     if (value) out.set(key, value);
   }
   const chapter = source.get('chapter');
-  if (chapter && out.has('document')) out.set('section', chapter);
-  return workspaceHomePath(workspaceId, out.toString());
+  if (chapter) out.set('section', chapter);
+  return searchPagePath(workspaceId, out.toString());
+}
+
+/**
+ * A home URL carrying a 본문 search (`text`, UX7-SEARCH), moved to the search page (SEARCH-02-AC03,
+ * UX9): only the search keys go along (`text`, `mode`, and `document`/`section` unless an open
+ * 문서 요약 panel owns them); the home's other keys (`q`, filters, `panel`, `question`) are dropped
+ * (user decision 2026-11-02). Null without a 본문 query.
+ */
+export function contentSearchRedirect(workspaceId: string, params: RawParams): string | null {
+  const source = toSearchParams(params);
+  const text = source.get('text');
+  if (!text?.trim()) return null;
+  const out = new URLSearchParams({ text });
+  const mode = source.get('mode');
+  if (mode) out.set('mode', mode);
+  if (!summaryOwnsDocumentKey(source)) {
+    for (const key of ['document', 'section']) {
+      const value = source.get(key);
+      if (value) out.set(key, value);
+    }
+  }
+  return searchPagePath(workspaceId, out.toString());
 }
 
 /**
@@ -573,7 +612,8 @@ export function exclusivePanelRedirect(workspaceId: string, params: RawParams): 
  * Every migration of retired or conflicting home URL state, applied together so a link takes a
  * single redirect: the UX6 search `scope` (legacyScopeRedirect, UX7-SEARCH), retired `?panel=`
  * values (retiredPanelRedirect, UX7-DOCS and QGEN-RM), then a practice panel beside a run
- * (exclusivePanelRedirect, QVIEW-01-AC09). Null when the URL is current.
+ * (exclusivePanelRedirect, QVIEW-01-AC09). A 본문 search in the result sends the home to the
+ * search page instead (contentSearchRedirect, UX9). Null when the URL is current.
  */
 export function homeRedirect(workspaceId: string, params: RawParams): string | null {
   let current = params;
@@ -588,7 +628,7 @@ export function homeRedirect(workspaceId: string, params: RawParams): string | n
     }
     current = parsed;
   }
-  return out;
+  return contentSearchRedirect(workspaceId, current) ?? out;
 }
 
 /**

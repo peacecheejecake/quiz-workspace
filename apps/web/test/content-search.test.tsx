@@ -483,13 +483,13 @@ describe("content search (the home's 본문 search)", () => {
 });
 
 describe('closing the content results', () => {
-  it('forgets the results when "검색 결과 닫기" is pressed', async () => {
+  it('forgets the results when "검색 결과 지우기" is pressed', async () => {
     const user = userEvent.setup();
     const client = makeClient(async () => response([hit()]));
     render(<SearchScreen workspaceId={WS} documents={[]} initial={INITIAL} client={client} />);
     await submit(user, 'water');
     expect(await screen.findByRole('list', { name: '검색 결과' })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: '검색 결과 닫기' }));
+    await user.click(screen.getByRole('button', { name: '검색 결과 지우기' }));
     expect(screen.queryByRole('heading', { name: '본문 검색 결과' })).toBeNull();
     expect(screen.queryByRole('list', { name: '검색 결과' })).toBeNull();
   });
