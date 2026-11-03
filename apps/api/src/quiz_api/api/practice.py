@@ -749,7 +749,8 @@ def update_my_state(
     ws = access.workspace
     before = practice.lock_state(ws.workspace_id, access.resource_id, ws.user_id)
     changed = {k: v for k, v in flags.items() if getattr(before, k) != v}
-    if changed.get("needs_retry") is True and before.last_graded_result != "correct":
+    # The request is judged, not the diff: a legacy flag already on does not let it through.
+    if flags.get("needs_retry") is True and before.last_graded_result != "correct":
         raise ProblemException(
             409,
             ProblemType.RETRY_REQUIRES_CORRECT,

@@ -168,3 +168,22 @@ def test_retry_01_c02_merged_duplicates_follow_the_merged_state(seed: Any) -> No
     assert (state["needs_retry"], state["status"]) == (False, "incorrect")
     # Turning on is refused on the merged (incorrect) state.
     _refused(_my_state(owner, keep["id"], {"needs_retry": True}))
+
+
+def test_retry_01_c01_a_legacy_flag_does_not_let_a_retry_on_request_through(seed: Any) -> None:
+    alice = seed.client("retry01-c01-legacy")
+    ws = alice.create_workspace()
+    q = alice.create_question(ws["id"], seed.mcq(_stem("기존 플래그"), ["a", "b"], 0))
+    assert _my_state(alice, q["id"], {"is_favorite": True}).status_code == 200
+    with psycopg.connect(DB_ADMIN_URL, autocommit=True) as conn:  # a flag from before the rule
+        conn.execute(
+            "update public.question_user_states set needs_retry = true "
+            "where user_id = %s and question_id = %s",
+            (alice.user.id, q["id"]),
+        )
+    # Asking for retry-on is refused although the stored flag already is on; nothing is written.
+    _refused(_my_state(alice, q["id"], {"needs_retry": True, "is_favorite": False}))
+    state = _item(alice, ws["id"], q["id"])
+    assert (state["needs_retry"], state["is_favorite"]) == (True, True)
+    # Off is allowed, and the flag stays off.
+    assert _my_state(alice, q["id"], {"needs_retry": False}).json()["needs_retry"] is False
