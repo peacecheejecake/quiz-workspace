@@ -1289,7 +1289,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
     expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
   });
 
-  it('RETRY-01-C04 the state re-read after a refused retry does not overwrite a newer press', async () => {
+  it('RETRY-01-C04 the state re-read after a refused retry keeps a newer press but still hides the toggle', async () => {
     let release!: (value: unknown) => void;
     lookupOverviewQuestionAction.mockImplementation(
       () => new Promise((resolve) => (release = resolve)),
@@ -1313,7 +1313,10 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
       'data-state',
       'on',
     );
-    expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeInTheDocument();
+    // The refused retry still refreshed the eligibility: the toggle is gone.
+    await waitFor(() =>
+      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+    );
   });
 
   it('a rejected request after a saved change keeps the saved change', async () => {

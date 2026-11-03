@@ -482,9 +482,32 @@ export function QuestionsOverview({
     const stamp = mutationSeq.current.get(questionId) ?? 0;
     const found = await lookupOverviewQuestionAction(workspaceId, questionId);
     if (!found.ok || !found.data) return;
-    if ((mutationSeq.current.get(questionId) ?? 0) !== stamp) return;
     const { item } = found.data;
     staleOverview.current = true;
+    const seq = mutationSeq.current.get(questionId) ?? 0;
+    if (seq !== stamp) {
+      // Changed meanwhile (a favorite press, a submission): the server's grading and retry
+      // eligibility still apply, but the fields changed here stay as they are now.
+      const local = overridesRef.current.get(questionId);
+      if (!local) return;
+      putOverride(questionId, seq, {
+        patch: flagsPatch(
+          {
+            status: item.status,
+            is_favorite: local.patch.is_favorite ?? item.is_favorite,
+            needs_retry: item.needs_retry,
+            last_graded_result: item.last_graded_result,
+          },
+          // A submission made meanwhile is newer than the lookup; otherwise the server's grading.
+          gradings.current.get(questionId) ?? {
+            last_graded_result: item.last_graded_result,
+            is_pending_grading: item.is_pending_grading,
+          },
+        ),
+        settledOn: local.settledOn,
+      });
+      return;
+    }
     putOverride(questionId, nextSeq(questionId), {
       patch: {
         status: item.status,
