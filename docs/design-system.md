@@ -229,6 +229,8 @@
   --breakpoint-md: 768px;
   --breakpoint-lg: 1024px;
   --floating-panel-width: 500px;
+  --paired-dialog-min-width: 320px; /* QSRC-UI: 짝 dialog(`paired`)의 최소 폭 */
+  --breakpoint-paired-panel: 868px; /* QSRC-UI: floating-panel-width + 3×16px + paired-dialog-min-width; 미만이면 짝 dialog는 전체 화면 sheet */
   --outline-panel-width: 20rem; /* v1.2.7 (DOCVIEW-PORT): 탐색 panel(size="narrow")·docked 목차 panel 폭 */
   --heatmap-cell: 24px;        /* v1.2.3 (UX5-UI): 28px → 24px */
   --heatmap-cell-touch: 24px;  /* UX9-STROKE (2026-11-02, 사용자 요청): 32px → 24px */
