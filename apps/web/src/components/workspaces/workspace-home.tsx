@@ -4,23 +4,29 @@
 // 레이아웃", UX3c): the single page of a workspace, without a sidebar.
 //
 //   Workspace header  the 문제 search (SEARCH-01-AC12: filters the heatmap as you type, no button;
-//                     its "설정" popover holds the heatmap's chapter/type filters) with the
-//                     "본문 검색" disclosure under it (AC10, collapsed by default), then two
+//                     its "설정" popover holds the heatmap's chapter/type filters), then two
 //                     button groups: `문서 n` · `문제` (직접 추가 / 중복 문제 정리 | 보관·초안 문제 /
 //                     모의고사 / 문제 풀기, UX4, MOCK-SYNC;
 //                     no 전체 문제 since UX7-BANK, no PDF 관리 since UX7-DOCS; AI 질문 last, ASK-01), and,
-//                     aligned right, `AI 질문` (icon + text, every member) · `이력` · `공유하기` (icon
-//                     buttons; share for the owner only)
-//   본문 search       when expanded: its form (box, icon submit, "본문 설정") and the results
-//                     (AC09; clicking a result opens the excerpt panel, AC11)
+//                     aligned right, `AI 질문` (icon + text, every member) · `본문 검색` · `이력` ·
+//                     `공유하기` (icon buttons; share for the owner only). `본문 검색` is a link to the
+//                     본문 search page (SEARCH-02, UX9: the home's collapsed 본문 search area is gone,
+//                     its place under the 문제 search left empty; its `AI에게 묻기` lives there now)
 //   문제 영역         the heatmap (QuestionsOverview)
 //   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 모의고사 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
-//                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): non-modal
-//                     FloatingSidePanels portalled into this page (inside <main>), opened at once
-//                     and listed in the URL (`?panel=`, repeatable); the most recently opened is
-//                     on top (UX3b stacking).
+//                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): modal
+//                     FloatingSidePanels (HOMEDLG-01, UX9) portalled into this page (inside <main>)
+//                     and listed in the URL (`?panel=`, repeatable). While one is open the home
+//                     behind it is inert, so buttons open one home dialog at a time; dialogs opened
+//                     inside one (요약, 문제 상세, a footnote's question) and those of a deep link stack
+//                     in opening order, the top one active (useStagedDialogs). The home never steps
+//                     aside for them: opening or closing a dialog moves nothing.
 //   문제 등록 editor  `?panel=question-create` (문제 › 직접 추가 and the empty heatmap, UX7-BANK): the
 //                     modal question editor, rendered by QuestionsOverview; not a stacked panel.
+//   챕터 재분배        `?panel=chapter-redistribution` (문제 › 챕터 재분배, CHREDIST-01, editors of an
+//                     active workspace): a stacked floating dialog that moves confirmed questions
+//                     between chapters (직접 옮기기, 자동 추천 미리보기); a move re-reads the heatmap
+//                     and an open 정리 노트. Others' deep links to it are dropped from the URL.
 //   중복 문제 정리     `?panel=question-duplicates` (문제 › 중복 문제 정리, UX7-DEDUP, editors of an active
 //                     workspace): a stacked floating dialog that scans for identical confirmed
 //                     questions and merges each group into the question kept (QOV-01-AC16).
@@ -32,33 +38,32 @@
 //   모의고사           `?panel=mock-exams[&mock=new|<id>]` (문제 › 모의고사, MOCK-01, every member): a
 //                     stacked floating dialog of the workspace's mock exams; list → 만들기 / 상세
 //                     pushes an entry. A mock exam's 풀기 opens the run panel with `source=mock`.
-//   AI 질문            `?panel=ask[&conversation=<id>]` (header `AI 질문`, 문제 › AI 질문, the 본문 search's
-//                     `AI에게 묻기`; ASK-01, every member): a stacked non-modal dialog; list → a
+//   AI 질문            `?panel=ask[&conversation=<id>]` (header `AI 질문`, 문제 › AI 질문, a question's
+//                     `질문하기`; ASK-01, every member): a stacked modal dialog (HOMEDLG-01); list → a
 //                     conversation pushes an entry, the first question of a new one replaces it.
 //                     It is unrelated to the practice/run exclusivity (QVIEW-01-AC09).
 //
-// State lives in the URL: heatmap filters (overview-filters.ts), the 문제 search `q`, the 본문
-// search `text` and its options (search/state.ts), `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
+// State lives in the URL: heatmap filters (overview-filters.ts), the 문제 search `q`, `panel` (+ `chapter` of the 정리 노트 panel, CHNOTE-01: a Heatmap
 // chapter header's `정리 노트` button opens it), and `question` (the practice panel). Dialogs and
 // panels open on a new history entry and closing one (its button or Back) drops those entries
 // (usePanelHistory, UX7-BACK/UX7-BACK-2: neither Back nor Forward reopens it; Next syncs
 // useSearchParams, no server round trip); filter and 문제 search changes write the URL at once and use router.replace (the server
-// re-reads the overview, rereadHeatmap; the 문제 search only once typing pauses). The 본문 search
-// writes its keys in place (replace).
+// re-reads the overview, rereadHeatmap; the 문제 search only once typing pauses).
 import {
   Button,
-  ChevronDownIcon,
-  ChevronUpIcon,
   FloatingSidePanel,
   HistoryIcon,
   IconButton,
   questionTypeLabels,
+  SearchIcon,
   Select,
   ShareIcon,
+  Tooltip,
   type QuestionType,
 } from '@quiz/ui';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useId, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { DocumentLibraryFeedback } from '@/components/documents/document-library-feedback';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { DocumentSummaryPanel } from '@/components/documents/summary/document-summary-panel';
@@ -70,14 +75,10 @@ import { QuestionDuplicates } from '@/components/questions/duplicates/question-d
 import { InactiveQuestions } from '@/components/questions/inactive/inactive-questions';
 import { MockExamsPanel } from '@/components/questions/mock-exams/mock-exams-panel';
 import { ChapterNotePanel } from '@/components/questions/notes/chapter-note-panel';
+import { ChapterRedistributionDialog } from '@/components/questions/redistribution/chapter-redistribution-dialog';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
-import {
-  ContentSearchOptions,
-  ContentSearchResults,
-  useContentSearch,
-} from '@/components/search/content-search';
-import { ContentSearchForm } from '@/components/search/content-search-form';
 import { QuestionSearch } from '@/components/search/question-search';
+import { isPlainClick, markSearchEntryFromHome } from '@/components/search/search-entry';
 import searchStyles from '@/components/search/search-forms.module.css';
 import { useLiveQuery } from '@/components/search/use-live-query';
 import { listChapterNotes } from '@/lib/notes/client';
@@ -90,7 +91,6 @@ import {
   type AskLaunched,
 } from '@/components/ask/ask-launcher';
 import { AskPanel, type AskIntent } from '@/components/ask/ask-panel';
-import { AskSearchButton } from '@/components/ask/ask-search-button';
 import { useAskState } from '@/components/ask/use-ask-state';
 import { normalizeScope } from '@/lib/ask/client';
 import { EMPTY_SCOPE, unavailableReason, unavailableText } from '@/lib/ask/model';
@@ -107,28 +107,23 @@ import {
 } from '@/lib/questions/overview-filters';
 import { NO_CHAPTER_KEY, type PlacedQuestion } from '@/lib/questions/overview-placement';
 import type { QuestionFailureKind } from '@/lib/questions/problems';
-import type { SearchQuery } from '@/lib/search/client';
+import { hasSearchableQuestions, isSearchableBody } from '@/lib/search/scope';
 import {
-  addressBarContentKey,
-  hasSearchableBody,
-  hasSearchableQuestions,
-  isSearchableBody,
-} from '@/lib/search/scope';
-import { CONTENT_QUERY_PARAM, MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
-import {
+  homeOpensBlocked,
   isChapterNoteOpen,
   keepNoteChapter,
+  NO_CHAPTER_NOTE,
   noteChapterOf,
   openChapterNote,
   parsePanels,
+  isHomePanel,
   patchSearch,
   withChapterNote,
   summaryDocumentId,
-  contentSearchParams,
   DUPLICATES_PANEL,
   INACTIVE_QUESTIONS_PANEL,
-  isFloatingPanel,
   MOCK_EXAMS_PANEL,
+  REDISTRIBUTION_PANEL,
   mockParamOf,
   mockViewOf,
   runOwnsMockParam,
@@ -137,10 +132,10 @@ import {
   type MockView,
   ownSummaryDocument,
   QUESTION_CREATE_PANEL,
-  type ContentDocumentFilter,
   withPanel,
   withSummaryPanel,
   withoutPanels,
+  holdsPracticePanels,
   openDialogs,
   closeDialog,
   exclusiveClose,
@@ -149,15 +144,16 @@ import {
   RUN_DIALOG,
   withPracticeQuestion,
   withRunPanel,
+  searchPagePath,
   type HomePanel,
   ASK_PANEL,
-  PRACTICE_DIALOG,
   askConversationOf,
   withAskConversation,
   withoutAsk,
 } from '@/lib/workspaces/home';
 import { withRunState, type RunUrlState } from '@/lib/questions/practice-runs';
-import { usePanelHistory } from './use-panel-history';
+import { useManualScrollWhile, usePanelHistory } from './use-panel-history';
+import { useStagedDialogs } from './use-staged-dialogs';
 import styles from './workspace-home.module.css';
 
 const ALL = '__all__';
@@ -184,8 +180,6 @@ export interface WorkspaceHomeProps {
   readonly hasQuestions?: boolean | null;
   readonly documents: readonly DocumentSummary[];
   readonly documentsLoadFailed: boolean;
-  /** The content search in the URL on arrival. */
-  readonly initialSearch: SearchQuery;
   /** Screen ids of the parts of this page (`data-screen-id`, docs/screens/index.md). */
   readonly screenIds: {
     readonly documents: string;
@@ -196,6 +190,7 @@ export interface WorkspaceHomeProps {
     readonly chapterNote: string;
     readonly summary: string;
     readonly mockExams: string;
+    readonly redistribution?: string;
     readonly ask?: string;
   };
 }
@@ -211,7 +206,6 @@ export function WorkspaceHome({
   hasQuestions = null,
   documents,
   documentsLoadFailed,
-  initialSearch,
   screenIds,
 }: WorkspaceHomeProps) {
   const router = useRouter();
@@ -229,10 +223,10 @@ export function WorkspaceHome({
     open: openDialogs,
     // Closing the run (its button or Back) hands `mock` back to the 모의고사 dialog's view.
     close: (search, dialog) => {
-      const closed = closeDialog(search, dialog, executedFilter());
+      const closed = closeDialog(search, dialog);
       return dialog === RUN_DIALOG ? keepMockView(closed) : closed;
     },
-    closeAll: (search) => withoutPanels(search, executedFilter()),
+    closeAll: (search) => withoutPanels(search),
     read: (url) => router.replace(url, { scroll: false }),
   });
   function closeTo(url: string) {
@@ -248,24 +242,33 @@ export function WorkspaceHome({
   }
   const allowed = (panel: HomePanel) =>
     (panel !== 'share' || isOwner) &&
-    ((panel !== QUESTION_CREATE_PANEL && panel !== DUPLICATES_PANEL) || canEdit);
+    ((panel !== QUESTION_CREATE_PANEL &&
+      panel !== DUPLICATES_PANEL &&
+      panel !== REDISTRIBUTION_PANEL) ||
+      canEdit);
   const panels = parsePanels(searchParams).filter(allowed);
   const isOpen = (panel: HomePanel) => panels.includes(panel);
-  // Pressing the button of a dialog that is already open (maybe under another one) raises it.
-  const [raised, setRaised] = useState<Partial<Record<HomePanel, number>>>({});
+  // The dialogs on screen: the URL's, mounted one per commit in opening order (HOMEDLG-01). The
+  // practice and run panels (rendered by QuestionsOverview) wait for the dialogs listed before them.
+  const urlDialogs = openDialogs(`?${searchParams.toString()}`).filter(
+    (dialog) => !isHomePanel(dialog) || allowed(dialog),
+  );
+  const staged = useStagedDialogs(urlDialogs);
+  const shows = (panel: HomePanel) => isOpen(panel) && staged.has(panel);
+  const holdPracticePanels = holdsPracticePanels(urlDialogs, staged);
+  useManualScrollWhile(urlDialogs.length > 0);
   const setPanel = (panel: HomePanel, open: boolean) => {
-    if (open && isOpen(panel)) {
-      setRaised((r) => ({ ...r, [panel]: (r[panel] ?? 0) + 1 }));
-    }
     if (open) {
+      // A home dialog's button is behind the open dialog (inert): an open one is never reopened,
+      // and nothing opens from the home while the note is open (CHNOTE-02-C05).
+      if (isOpen(panel) || homeOpensBlocked(new URLSearchParams(window.location.search))) return;
       panelHistory.push(`${pathname}${withPanel(window.location.search, panel, true)}`);
       return;
     }
     if (!isOpen(panel)) return;
-    // Closing the summary panel hands `document`/`section` back to the executed content search.
     const search =
       panel === 'document-summary'
-        ? withSummaryPanel(window.location.search, null, executedFilter())
+        ? withSummaryPanel(window.location.search, null)
         : panel === MOCK_EXAMS_PANEL
           ? withoutMockExams(window.location.search)
           : panel === ASK_PANEL
@@ -278,22 +281,23 @@ export function WorkspaceHome({
   const summaryOpenerRef = useRef<HTMLElement | null>(null);
   const openSummary = (documentId: string, opener: HTMLElement) => {
     summaryOpenerRef.current = opener;
-    if (isOpen('document-summary')) {
-      setRaised((r) => ({ ...r, 'document-summary': (r['document-summary'] ?? 0) + 1 }));
-    }
     panelHistory.push(`${pathname}${withSummaryPanel(window.location.search, documentId)}`);
   };
   const [host, setHost] = useState<HTMLDivElement | null>(null);
+  // CHREDIST-01: without edit rights the dialog's deep link opens nothing and leaves the URL.
+  const deniedRedistribution = !canEdit && parsePanels(searchParams).includes(REDISTRIBUTION_PANEL);
+  useEffect(() => {
+    if (!deniedRedistribution) return;
+    panelHistory.replace(
+      `${pathname}${withPanel(window.location.search, REDISTRIBUTION_PANEL, false)}`,
+    );
+  }, [deniedRedistribution, panelHistory, pathname]);
 
   // --- 정리 노트 (CHNOTE-01) ---------------------------------------------------------------------
   // `chapter` names the note's chapter while its panel is open (home.ts noteChapterOf).
   const noteChapter = noteChapterOf(searchParams);
   function openNote(chapterId: string) {
-    // An open note panel (maybe under another one) comes to the top, whichever chapter it shows.
     const next = openChapterNote(window.location.search, chapterId);
-    if (next.raise) {
-      setRaised((r) => ({ ...r, 'chapter-note': (r['chapter-note'] ?? 0) + 1 }));
-    }
     const target = `${pathname}${next.search}`;
     panelHistory.push(target);
     if (view.chapter !== null) {
@@ -306,7 +310,7 @@ export function WorkspaceHome({
     if (!isOpen('chapter-note')) return;
     closeTo(`${pathname}${withChapterNote(window.location.search, null)}`);
   }
-  // Practice opened from a footnote returns focus to the note's disclosure when it closes.
+  // Practice opened from a footnote (stacked over the note) returns focus to that footnote.
   const practiceReturnFocusRef = useRef<HTMLElement | null>(null);
   function openNoteQuestion(questionId: string, returnFocus: HTMLElement | null) {
     practiceReturnFocusRef.current = returnFocus;
@@ -315,6 +319,7 @@ export function WorkspaceHome({
   // The range run panel (QVIEW-01): opened from the 문제 menu on a new entry; its range → run →
   // results steps rewrite that entry, its positions push entries, closing drops them (QOV-01-AC14).
   function openRun() {
+    if (homeOpensBlocked(new URLSearchParams(window.location.search))) return;
     const picker: RunUrlState = { step: 'picker', source: 'bank', mockExamId: null };
     openPanelAt(`${pathname}${withRunPanel(window.location.search, picker)}`);
   }
@@ -392,33 +397,22 @@ export function WorkspaceHome({
   }, []);
 
   // --- AI 질문 (ASK-01) -------------------------------------------------------------------------
-  // One panel: the header button and 문제 › AI 질문 open it (or raise it), the 본문 search's
-  // `AI에게 묻기` opens it on a new conversation prefilled with the search text and filter. Each
-  // opening starts it afresh (askSession): unsent input never survives a close.
-  // A question's `질문하기` (ASK-Q, the launcher below) opens it on a new conversation with that
-  // question attached, modal on top of the modal layers (practice, range run, 문제 상세, mock exam
-  // question); a deep link or reload with a modal layer and `panel=ask` opens it that way too.
+  // One panel: the header button and 문제 › AI 질문 open it; the 본문 search page's `AI에게 묻기`
+  // (SEARCH-02) has its own. Each opening starts it afresh (askSession): unsent input never
+  // survives a close. Like every home dialog it is modal (HOMEDLG-01, UX9). A question's
+  // `질문하기` (ASK-Q, the launcher below) opens it on a new conversation with that question
+  // attached, on top of the modal layers (practice, range run, 문제 상세, mock exam question); it is
+  // always the last of the URL's dialogs (openDialogs), so a deep link or reload stacks it on top.
   const ask = useAskState(workspace.id);
-  const askReason = unavailableReason(ask.state, workspace.archived);
-  const askUnavailable = askReason ? unavailableText(askReason) : null;
   const askConversation = askConversationOf(searchParams) ?? null;
   const askOpen = isOpen(ASK_PANEL);
-  const underModalLayer = () => {
-    const dialogs = openDialogs(searchParams.toString());
-    return dialogs.includes(PRACTICE_DIALOG) || dialogs.includes(RUN_DIALOG);
-  };
+  const askReason = unavailableReason(ask.state, workspace.archived);
+  const askUnavailable = askReason ? unavailableText(askReason) : null;
   const [askSession, setAskSession] = useState(0);
   const [askWasOpen, setAskWasOpen] = useState(askOpen);
-  const [askModal, setAskModal] = useState(() => askOpen && underModalLayer());
-  // How the next opening shows the panel (null: as the URL says, see above).
-  const [askModalNext, setAskModalNext] = useState<boolean | null>(null);
   if (askOpen !== askWasOpen) {
     setAskWasOpen(askOpen);
-    if (askOpen) {
-      setAskSession((n) => n + 1);
-      setAskModal(askModalNext ?? underModalLayer());
-      setAskModalNext(null);
-    }
+    if (askOpen) setAskSession((n) => n + 1);
   }
   const [askIntent, setAskIntent] = useState<AskIntent | null>(null);
   const askIntentKey = useRef(0);
@@ -427,7 +421,6 @@ export function WorkspaceHome({
     if (!askOpen) {
       setAskIntent(null);
       setAskOpener(null);
-      setAskModalNext(false);
     }
     setPanel(ASK_PANEL, true);
   }
@@ -444,8 +437,6 @@ export function WorkspaceHome({
       failure: conversation ? null : '문제를 첨부하지 못했습니다. 다시 시도하세요.',
     });
     setAskOpener(opener);
-    setAskModal(true);
-    setAskModalNext(true);
     const search = window.location.search;
     const target = `${pathname}${withAskConversation(withoutAsk(search), conversation?.id ?? null)}`;
     if (isOpen(ASK_PANEL)) {
@@ -460,22 +451,6 @@ export function WorkspaceHome({
     (attachment) => ask.client.create(workspace.id, { attachment }),
     showLaunched,
   );
-  function askFromSearch() {
-    if (askUnavailable) return;
-    setAskOpener(null);
-    if (!askOpen) setAskModalNext(false);
-    askIntentKey.current += 1;
-    setAskIntent({
-      key: askIntentKey.current,
-      text: contentDraft.trim(),
-      scope: {
-        document_ids: content.documentId ? [content.documentId] : [],
-        chapter_ids: content.documentId && content.chapterId ? [content.chapterId] : [],
-      },
-    });
-    if (askOpen) setRaised((r) => ({ ...r, [ASK_PANEL]: (r[ASK_PANEL] ?? 0) + 1 }));
-    panelHistory.push(`${pathname}${withAskConversation(window.location.search, null)}`);
-  }
   function navigateAsk(conversationId: string | null, how: 'push' | 'replace') {
     const target = `${pathname}${withAskConversation(window.location.search, conversationId)}`;
     if (how === 'push') panelHistory.push(target);
@@ -495,11 +470,30 @@ export function WorkspaceHome({
   // Only this workspace's documents: another workspace's id (even one the user can read) is
   // "문서를 찾을 수 없습니다." and is never loaded here (DOCSUM-01-AC07).
   const summaryDocument = ownSummaryDocument(summaryDocId, library.documents);
+  // Bumped when the heatmap's panel changes a question: an open 보관·초안 문제 list re-reads.
+  const [questionsVersion, setQuestionsVersion] = useState(0);
+  // Bumped when 챕터 재분배 moved questions: an open 정리 노트 panel reads its note again.
+  const [notesVersion, setNotesVersion] = useState(0);
+  // A move (or a move refused because questions changed) re-reads the heatmap and the notes. The
+  // dialog's close replaces the URL, which can drop a refresh still in flight: it is redone then.
+  const chaptersStale = useRef(false);
+  const onChaptersChanged = () => {
+    chaptersStale.current = true;
+    setQuestionsVersion((n) => n + 1);
+    setNotesVersion((n) => n + 1);
+    setNoteListRead((n) => n + 1);
+    startNavigation(() => router.refresh());
+  };
+  const redistributionOpen = isOpen(REDISTRIBUTION_PANEL);
+  useEffect(() => {
+    if (redistributionOpen || !chaptersStale.current) return;
+    chaptersStale.current = false;
+    startNavigation(() => router.refresh());
+  }, [redistributionOpen, router]);
+  // The published books: the AI 질문 panel's 질문 범위 choices and source titles (ASK-01).
   const searchDocuments = library.documents
     .filter(isSearchableBody)
     .map((d) => ({ id: d.id, title: d.title }));
-  // Bumped when the heatmap's panel changes a question: an open 보관·초안 문제 list re-reads.
-  const [questionsVersion, setQuestionsVersion] = useState(0);
   // Source titles of the 문제 상세 dialog (UX7-BANK-2).
   const documentTitles = library.documents.map((d) => ({ id: d.id, title: d.title }));
 
@@ -588,89 +582,13 @@ export function WorkspaceHome({
     rereadHeatmap(patchSearch(merged, { q: null }));
   }
 
-  // --- 본문 search (SEARCH-01-AC09/AC10: collapsed by default; `text` + options) ---------------
-  const hasBody = hasSearchableBody(library.documents, library.listFailed);
-  const content = useContentSearch({
-    workspaceId: workspace.id,
-    initial: initialSearch,
-    runInitial: hasBody,
-  });
-  const urlText = searchParams.get(CONTENT_QUERY_PARAM) ?? '';
-  const [contentDraft, setContentDraft] = useState(urlText);
-  // Open on arrival with a 본문 search in the URL, and whenever the address bar brings one back.
-  const [contentOpen, setContentOpen] = useState(urlText !== '');
-  const [seenText, setSeenText] = useState(urlText);
-  if (seenText !== urlText) {
-    setSeenText(urlText);
-    setContentDraft(urlText);
-    if (urlText) setContentOpen(true);
-  }
-  const contentRegionId = useId();
-  const contentInputRef = useRef<HTMLInputElement | null>(null);
-  const focusContentRef = useRef(false);
-  useEffect(() => {
-    if (!contentOpen || !focusContentRef.current) return;
-    focusContentRef.current = false;
-    contentInputRef.current?.focus();
-  }, [contentOpen]);
-  function toggleContent() {
-    if (contentOpen) content.closeHit();
-    else focusContentRef.current = true;
-    setContentOpen(!contentOpen);
-  }
-
-  // The address bar can change under us (browser Back/Forward restores an earlier search): the
-  // executed content search follows it. Our own updates write the same state they already show,
-  // so following them is a no-op. While the summary panel owns `document`/`section`, the content
-  // search reads its own executed filter there (contentSearchParams): opening or closing the
-  // panel never re-runs a search.
-  const executedFilter = (): ContentDocumentFilter | null =>
-    content.submitted
-      ? { documentId: content.submitted.documentId, chapterId: content.submitted.chapterId }
-      : null;
-  const contentKey = hasBody
-    ? addressBarContentKey(Object.fromEntries(contentSearchParams(searchParams, executedFilter())))
-    : '';
-  const syncedContentKey = useRef(contentKey);
-  const syncContent = content.sync;
-  useEffect(() => {
-    if (syncedContentKey.current === contentKey) return;
-    syncedContentKey.current = contentKey;
-    const q = contentKey
-      ? parseSearchParams(Object.fromEntries(new URLSearchParams(contentKey)))
-      : null;
-    void Promise.resolve().then(() => syncContent(q));
-  }, [contentKey, syncContent]);
-
-  /** Runs the 본문 search for `query` (empty: clears it and its `text`). */
-  function applyContentSearch(query: string) {
-    const q = query.trim().slice(0, MAX_QUERY_CHARS);
-    let search: string;
-    if (q && hasBody) {
-      // Writes the search into the address bar at once (keeping Next's history state)…
-      content.search(q);
-      search = window.location.search;
-    } else {
-      content.clear();
-      search = patchSearch(window.location.search, { [CONTENT_QUERY_PARAM]: null });
-    }
-    // …and this write, without Next's state, makes useSearchParams follow it, so a later
-    // Back/Forward to another `text` is seen as a change.
-    panelHistory.replace(`${pathname}${search}`);
-  }
-
-  function closeContentResults() {
-    setContentDraft('');
-    applyContentSearch('');
-  }
-
   const chapterOptions = [
     { value: ALL, label: '전체 챕터' },
     ...chapterChoices.map((c) => ({ value: c.value, label: c.title })),
   ];
 
   const page = (
-    <div className={styles.home} data-panel-open={panels.some(isFloatingPanel) || undefined}>
+    <div className={styles.home}>
       <h1 className="qz-visually-hidden">{workspace.name}</h1>
 
       <div className={styles.header}>
@@ -704,20 +622,6 @@ export function WorkspaceHome({
               </div>
             }
           />
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-expanded={contentOpen}
-            aria-controls={contentRegionId}
-            onClick={toggleContent}
-          >
-            본문 검색
-            {contentOpen ? (
-              <ChevronUpIcon width={16} height={16} aria-hidden="true" />
-            ) : (
-              <ChevronDownIcon width={16} height={16} aria-hidden="true" />
-            )}
-          </Button>
         </div>
 
         <div className={styles.actions}>
@@ -729,6 +633,7 @@ export function WorkspaceHome({
               readOnly={readOnly}
               onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
               onDuplicates={() => setPanel(DUPLICATES_PANEL, true)}
+              onRedistribute={() => setPanel(REDISTRIBUTION_PANEL, true)}
               onInactive={() => setPanel(INACTIVE_QUESTIONS_PANEL, true)}
               onMockExams={() => setPanel(MOCK_EXAMS_PANEL, true)}
               onPractice={openRun}
@@ -741,6 +646,23 @@ export function WorkspaceHome({
               <AskIcon width={16} height={16} />
               AI 질문
             </Button>
+            {/* SEARCH-02: a link to the 본문 search page, styled as the icon buttons beside it. */}
+            <Tooltip content="본문 검색">
+              <Link
+                href={searchPagePath(workspace.id)}
+                aria-label="본문 검색"
+                className="qz-icon-button qz-focus-ring"
+                data-variant="secondary"
+                data-size="md"
+                onClick={(event) => {
+                  if (isPlainClick(event)) markSearchEntryFromHome();
+                }}
+              >
+                <span className="icon" aria-hidden="true">
+                  <SearchIcon />
+                </span>
+              </Link>
+            </Tooltip>
             <IconButton
               label="이력"
               icon={<HistoryIcon />}
@@ -759,78 +681,67 @@ export function WorkspaceHome({
         </div>
       </div>
 
-      <div id={contentRegionId} className={searchStyles.contentArea} hidden={!contentOpen}>
-        <ContentSearchForm
-          inputRef={contentInputRef}
-          draft={contentDraft}
-          onDraftChange={setContentDraft}
-          onSearch={() => applyContentSearch(contentDraft)}
-          searchable={hasBody}
-          extraAction={<AskSearchButton unavailable={askUnavailable} onAsk={askFromSearch} />}
-          settings={
-            <ContentSearchOptions
-              search={content}
-              documents={searchDocuments}
-              documentsLoadFailed={library.listFailed}
-            />
-          }
-        />
-        {hasBody ? (
-          <ContentSearchResults
-            workspaceId={workspace.id}
-            search={content}
-            onClose={closeContentResults}
-          />
-        ) : null}
-      </div>
-
-      <QuestionsOverview
-        workspaceId={workspace.id}
-        readOnly={readOnly}
-        filters={filters}
-        view={view}
-        navigating={navigating}
-        onFiltersChange={changeFilters}
-        onResetFilters={resetAll}
-        overview={overview}
-        failure={failure}
-        requested={requested}
-        panelScreenId={screenIds.practice}
-        practiceReturnFocusRef={practiceReturnFocusRef}
-        onQuestionChange={changeQuestion}
-        onRunNavigate={navigateRun}
-        onRunClose={closeRun}
-        createOpen={isOpen(QUESTION_CREATE_PANEL)}
-        onCreateOpenChange={(open) => setPanel(QUESTION_CREATE_PANEL, open)}
-        documents={documentTitles}
-        onQuestionsChanged={() => setQuestionsVersion((n) => n + 1)}
-        chapterActions={(chapter) =>
-          chapter.id === NO_CHAPTER_KEY ? null : (
-            <>
-              {generating.has(chapter.id) ? <span>만드는 중</span> : null}
+      {/* CHNOTE-02: while the modal note is open the Heatmap is inert (no focus, no hit-testing); a
+          backdrop click closes the note only. The practice panels are portalled outside. */}
+      <div className={styles.contents} inert={isOpen('chapter-note') || undefined}>
+        <QuestionsOverview
+          workspaceId={workspace.id}
+          readOnly={readOnly}
+          filters={filters}
+          view={view}
+          navigating={navigating}
+          onFiltersChange={changeFilters}
+          onResetFilters={resetAll}
+          overview={overview}
+          failure={failure}
+          requested={requested}
+          panelScreenId={screenIds.practice}
+          practiceReturnFocusRef={practiceReturnFocusRef}
+          onQuestionChange={changeQuestion}
+          onRunNavigate={navigateRun}
+          onRunClose={closeRun}
+          createOpen={shows(QUESTION_CREATE_PANEL)}
+          holdPanels={holdPracticePanels}
+          dialogContainer={host}
+          onCreateOpenChange={(open) => setPanel(QUESTION_CREATE_PANEL, open)}
+          documents={documentTitles}
+          onQuestionsChanged={() => setQuestionsVersion((n) => n + 1)}
+          chapterActions={(chapter) =>
+            chapter.id === NO_CHAPTER_KEY ? (
+              // HILITE-01: the "챕터 없음" group's explanation highlights (no AI note there).
               <Button
                 size="sm"
                 variant="ghost"
-                aria-label={`${chapter.title} 정리 노트`}
                 aria-haspopup="dialog"
-                onClick={() => openNote(chapter.id)}
+                onClick={() => openNote(NO_CHAPTER_NOTE)}
               >
-                정리 노트
+                내 하이라이트
               </Button>
-            </>
-          )
-        }
-      />
+            ) : (
+              <>
+                {generating.has(chapter.id) ? <span>만드는 중</span> : null}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`${chapter.title} 정리 노트`}
+                  aria-haspopup="dialog"
+                  onClick={() => openNote(chapter.id)}
+                >
+                  정리 노트
+                </Button>
+              </>
+            )
+          }
+        />
+      </div>
 
       {/* Dialogs are portalled here so they stay inside the main landmark. */}
       <div ref={setHost} />
       {host ? (
         <>
           <FloatingSidePanel
-            open={isOpen('documents')}
+            open={shows('documents')}
             onOpenChange={(open) => setPanel('documents', open)}
-            raiseKey={raised.documents}
-            modal={false}
             container={host}
             title="문서 관리"
             closeLabel="문서 관리 닫기"
@@ -852,16 +763,14 @@ export function WorkspaceHome({
           </FloatingSidePanel>
           {canEdit ? (
             <FloatingSidePanel
-              open={isOpen(DUPLICATES_PANEL)}
+              open={shows(DUPLICATES_PANEL)}
               onOpenChange={(open) => setPanel(DUPLICATES_PANEL, open)}
-              raiseKey={raised[DUPLICATES_PANEL]}
-              modal={false}
               container={host}
               title="중복 문제 정리"
               closeLabel="중복 문제 정리 닫기"
               mobileLayout="full"
             >
-              {isOpen(DUPLICATES_PANEL) ? (
+              {shows(DUPLICATES_PANEL) ? (
                 <QuestionDuplicates
                   workspaceId={workspace.id}
                   onMerged={() => setQuestionsVersion((n) => n + 1)}
@@ -869,11 +778,19 @@ export function WorkspaceHome({
               ) : null}
             </FloatingSidePanel>
           ) : null}
+          {canEdit ? (
+            <ChapterRedistributionDialog
+              open={shows(REDISTRIBUTION_PANEL)}
+              onOpenChange={(open) => setPanel(REDISTRIBUTION_PANEL, open)}
+              container={host}
+              workspaceId={workspace.id}
+              onChanged={onChaptersChanged}
+              screenId={screenIds.redistribution}
+            />
+          ) : null}
           <FloatingSidePanel
-            open={isOpen(INACTIVE_QUESTIONS_PANEL)}
+            open={shows(INACTIVE_QUESTIONS_PANEL)}
             onOpenChange={(open) => setPanel(INACTIVE_QUESTIONS_PANEL, open)}
-            raiseKey={raised[INACTIVE_QUESTIONS_PANEL]}
-            modal={false}
             container={host}
             title="보관·초안 문제"
             closeLabel="보관·초안 문제 닫기"
@@ -887,9 +804,8 @@ export function WorkspaceHome({
             />
           </FloatingSidePanel>
           <MockExamsPanel
-            open={isOpen(MOCK_EXAMS_PANEL)}
+            open={shows(MOCK_EXAMS_PANEL)}
             onOpenChange={(open) => setPanel(MOCK_EXAMS_PANEL, open)}
-            raiseKey={raised[MOCK_EXAMS_PANEL]}
             container={host}
             workspaceId={workspace.id}
             canEdit={canEdit}
@@ -899,10 +815,8 @@ export function WorkspaceHome({
             screenId={screenIds.mockExams}
           />
           <FloatingSidePanel
-            open={isOpen('history')}
+            open={shows('history')}
             onOpenChange={(open) => setPanel('history', open)}
-            raiseKey={raised.history}
-            modal={false}
             container={host}
             title="이력"
             closeLabel="이력 닫기"
@@ -913,9 +827,10 @@ export function WorkspaceHome({
             </div>
           </FloatingSidePanel>
           <ChapterNotePanel
-            open={isOpen('chapter-note')}
+            workspaceId={workspace.id}
+            documents={documentTitles}
+            open={shows('chapter-note')}
             onOpenChange={(open) => (open ? undefined : closeNote())}
-            raiseKey={raised['chapter-note']}
             container={host}
             chapterId={noteChapter ?? null}
             chapterTitle={overview.chapters.find((c) => c.id === noteChapter)?.title}
@@ -923,11 +838,11 @@ export function WorkspaceHome({
             screenId={screenIds.chapterNote}
             onOpenQuestion={openNoteQuestion}
             onGeneratingChange={onNoteGenerating}
+            refreshKey={notesVersion}
           />
           <DocumentSummaryPanel
-            open={isOpen('document-summary')}
+            open={shows('document-summary')}
             onOpenChange={(open) => setPanel('document-summary', open)}
-            raiseKey={raised['document-summary']}
             container={host}
             workspaceId={workspace.id}
             documentId={summaryDocument?.id ?? null}
@@ -943,9 +858,8 @@ export function WorkspaceHome({
           />
           <AskPanel
             key={askSession}
-            open={askOpen}
+            open={shows(ASK_PANEL)}
             onOpenChange={(open) => setPanel(ASK_PANEL, open)}
-            raiseKey={raised[ASK_PANEL]}
             container={host}
             workspaceId={workspace.id}
             archived={workspace.archived}
@@ -956,16 +870,15 @@ export function WorkspaceHome({
             documents={searchDocuments}
             intent={askIntent}
             screenId={screenIds.ask}
-            modal={askModal}
+            modal
             returnFocus={askOpener}
           />
-          {isOwner && isOpen('share') ? (
+          {isOwner && shows('share') ? (
             <WorkspaceSharingPanel
               workspaceId={workspace.id}
               archived={workspace.archived}
               open
               onOpenChange={(open) => setPanel('share', open)}
-              raiseKey={raised.share}
               container={host}
               screenId={screenIds.share}
             />

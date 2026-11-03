@@ -2,14 +2,17 @@
 // redirects of the pre-UX3c section routes and the UX6 search scope onto the home.
 import { describe, expect, it } from 'vitest';
 import {
+  contentSearchRedirect,
   askConversationOf,
   closeDialog,
   exclusiveClose,
+  holdsPracticePanels,
   openDialogs,
   withAskConversation,
   withoutAsk,
   withoutPanels,
   isFloatingPanel,
+  isLegacySearchUrl,
   homeRedirect,
   legacyBankRedirect,
   legacyGenerateRedirect,
@@ -138,7 +141,9 @@ describe('pre-UX3c routes redirect onto the home', () => {
     expect(legacyQuestionsRedirect(WS, {})).toBe(`/workspaces/${WS}`);
   });
 
-  it('search becomes a 본문 search (text=) and its chapter a section (UX7-SEARCH)', () => {
+  it('the old search URL becomes the search page with text= and section= (SEARCH-02-AC03)', () => {
+    expect(isLegacySearchUrl({ q: 'water' })).toBe(true);
+    expect(isLegacySearchUrl({ text: 'water', section: SECTION })).toBe(false);
     const target = legacySearchRedirect(WS, {
       q: 'water',
       mode: 'keyword',
@@ -148,15 +153,53 @@ describe('pre-UX3c routes redirect onto the home', () => {
       other: 'dropped',
     });
     const url = new URL(target, 'http://x');
-    expect(url.pathname).toBe(`/workspaces/${WS}`);
+    expect(url.pathname).toBe(`/workspaces/${WS}/search`);
     expect(Object.fromEntries(url.searchParams)).toEqual({
       text: 'water',
       mode: 'keyword',
       document: DOC,
       section: SECTION,
     });
-    // A chapter without its document is meaningless.
-    expect(legacySearchRedirect(WS, { chapter: SECTION })).toBe(`/workspaces/${WS}`);
+    // A chapter alone stays a chapter filter (the API takes chapter_ids without document_ids).
+    expect(legacySearchRedirect(WS, { q: '주의', chapter: SECTION })).toBe(
+      `/workspaces/${WS}/search?text=%EC%A3%BC%EC%9D%98&section=${SECTION}`,
+    );
+    expect(legacySearchRedirect(WS, { q: '' })).toBe(`/workspaces/${WS}/search`);
+  });
+
+  it('a home 본문 search (text=) moves to the search page with its search keys only (SEARCH-02-AC03)', () => {
+    const page = (target: string | null) => {
+      const url = new URL(target ?? '', 'http://x');
+      expect(url.pathname).toBe(`/workspaces/${WS}/search`);
+      return Object.fromEntries(url.searchParams);
+    };
+    expect(contentSearchRedirect(WS, { q: 'x', panel: 'history' })).toBeNull();
+    expect(contentSearchRedirect(WS, { text: '  ' })).toBeNull();
+    expect(
+      page(
+        contentSearchRedirect(WS, {
+          text: '주의',
+          mode: 'keyword',
+          q: '개요',
+          panel: 'history',
+          question: 'x',
+          status: 'retry',
+        }),
+      ),
+    ).toEqual({ text: '주의', mode: 'keyword' });
+    expect(page(contentSearchRedirect(WS, { text: 'w', document: DOC, section: SECTION }))).toEqual(
+      { text: 'w', document: DOC, section: SECTION },
+    );
+    // An open 문서 요약 panel owns `document`/`section`: not the search's.
+    expect(
+      page(contentSearchRedirect(WS, { text: 'w', panel: 'document-summary', document: DOC })),
+    ).toEqual({ text: 'w' });
+    // Through homeRedirect, after the UX6 scope migration.
+    expect(page(homeRedirect(WS, { scope: 'content', q: '주의' }))).toEqual({ text: '주의' });
+    expect(page(homeRedirect(WS, { text: '주의', mode: 'keyword', q: '개요' }))).toEqual({
+      text: '주의',
+      mode: 'keyword',
+    });
   });
 
   it('UX6 unified-search URLs (scope=) move to the split searches (UX7-SEARCH)', () => {
@@ -188,13 +231,13 @@ describe('pre-UX3c routes redirect onto the home', () => {
       `/workspaces/${WS}?q=%EC%97%BC%EC%86%8C`,
     );
     const both = homeRedirect(WS, {
-      scope: 'content',
+      scope: 'questions',
       q: 'water',
       panel: ['history', 'question-pdfs'],
     });
     const url = new URL(both ?? '', 'http://x');
-    expect(url.searchParams.get('text')).toBe('water');
-    expect(url.searchParams.has('q') || url.searchParams.has('scope')).toBe(false);
+    expect(url.searchParams.get('q')).toBe('water');
+    expect(url.searchParams.has('scope')).toBe(false);
     expect(url.searchParams.getAll('panel')).toEqual(['history', 'documents']);
   });
 
@@ -290,7 +333,7 @@ describe('the AI 질문 panel in the URL', () => {
 
   it('stays open beside the practice panel and the run panel, whichever opens or closes', () => {
     const withAsk = `?panel=ask&conversation=${C}`;
-    expect(openDialogs(`${withAsk}&question=${Q}`)).toEqual(['ask', 'question']);
+    expect(openDialogs(`${withAsk}&question=${Q}`)).toEqual(['question', 'ask']);
     expect(withPracticeQuestion(`${withAsk}&practice=${RUN}&i=2`, Q)).toBe(
       `${withAsk}&question=${Q}`,
     );
@@ -315,5 +358,21 @@ describe('the AI 질문 panel in the URL', () => {
     expect(url.searchParams.get('conversation')).toBe(C);
     expect(url.searchParams.get('practice')).toBe(RUN);
     expect(url.searchParams.has('question')).toBe(false);
+  });
+});
+
+describe('holdsPracticePanels (ASK-01 deep link staging)', () => {
+  const dialogs = ['documents', 'question', 'ask'];
+  it('holds the practice panel until its own position is staged', () => {
+    expect(holdsPracticePanels(dialogs, new Set())).toBe(true);
+    expect(holdsPracticePanels(dialogs, new Set(['documents']))).toBe(true);
+  });
+  it('releases it before the later ask dialog is staged', () => {
+    expect(holdsPracticePanels(dialogs, new Set(['documents', 'question']))).toBe(false);
+  });
+  it('holds the run panel at its own position too and ignores a missing panel', () => {
+    expect(holdsPracticePanels(['practice', 'ask'], new Set())).toBe(true);
+    expect(holdsPracticePanels(['practice', 'ask'], new Set(['practice']))).toBe(false);
+    expect(holdsPracticePanels(['documents', 'ask'], new Set())).toBe(false);
   });
 });

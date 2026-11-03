@@ -1266,6 +1266,7 @@ test.describe('ASK-01-AC10 touch', () => {
 const MENU_ORDER = [
   /^(직접 추가|add question)$/i,
   /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
+  /^(챕터 재분배|redistribute chapters)$/i,
   /^(보관·초안 문제|archived and draft questions)$/i,
   /^(모의고사|mock exams?)$/i,
   /^(문제 풀기|practice questions?|start practice)$/i,
@@ -1295,7 +1296,10 @@ async function expectMenuItemDisabled(page: Page, reason: RegExp): Promise<void>
   await page.keyboard.press('Escape');
 }
 
-/** The 본문 search's `AI에게 묻기` is aria-disabled, focusable and described by `reason`. */
+/**
+ * The 본문 search page's `AI에게 묻기` (SEARCH-02, UX9) is aria-disabled, focusable and described by
+ * `reason`; then back to the home the search page was opened from.
+ */
 async function expectSearchButtonDisabled(page: Page, reason: RegExp): Promise<void> {
   await openContentSearch(page);
   const button = askUi.searchButton(page);
@@ -1305,6 +1309,8 @@ async function expectSearchButtonDisabled(page: Page, reason: RegExp): Promise<v
   await expect(button).toHaveAccessibleDescription(reason);
   await button.click({ force: true });
   await expect(askUi.panel(page)).toHaveCount(0);
+  await page.goBack();
+  await expect(homeUi.questionMenuButton(page)).toBeVisible();
 }
 
 test(
@@ -1341,10 +1347,13 @@ test(
     await expect(askUi.userMessages(panel)).toHaveCount(0);
     await expect(askUi.scopeText(panel)).toContainText(s.book.title);
     expect((await listConversations(viewer, s.workspaceId)).body?.items ?? []).toEqual([]);
+    expect(new URL(page.url()).searchParams.get('text')).toBe(textParam);
+    await askUi.close(panel).click();
+    // The modal panel hides the page from assistive technology: the search is checked once closed.
+    await expect(panel).toHaveCount(0);
     await expect(searchUi.box(page)).toHaveValue(PASSAGES.book);
     await expect(searchUi.resultItems(page).first()).toBeVisible();
     expect(new URL(page.url()).searchParams.get('text')).toBe(textParam);
-    await askUi.close(panel).click();
 
     // Feature off: both disabled with the environment reason; the header button still opens.
     const off = await startAskOffStack();

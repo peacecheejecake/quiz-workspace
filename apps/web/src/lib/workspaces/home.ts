@@ -6,6 +6,7 @@
 //        |inactive-questions                                 (보관·초안 문제, UX7-BANK-2)
 //        |question-duplicates                                (중복 문제 정리, editors, UX7-DEDUP)
 //        |mock-exams                                         (모의고사, every member, MOCK-01)
+//        |chapter-redistribution                             (챕터 재분배, editors, CHREDIST-01)
 //        |ask                                                (AI 질문, every member, ASK-01)
 //        |question-create                                    the modal 문제 등록 editor (UX7-BANK;
 //                                                            not stacked, see FLOATING_PANELS)
@@ -22,9 +23,11 @@
 //                                                            QuestionViewer sequence; keys in
 //                                                            lib/questions/practice-runs.ts)
 //   ?q=<text>                                               the 문제 search (heatmap, UX7-SEARCH)
-//   ?text=<text>&mode=&document=&section=                    the 본문 search and its options
-//                                                            (search/state.ts); the UX6 `scope`
-//                                                            key is migrated by legacyScopeRedirect
+//   ?text=<text>&mode=&document=&section=                    retired here: the 본문 search lives
+//                                                            on its own page since UX9 (SEARCH-02,
+//                                                            contentSearchRedirect); the UX6
+//                                                            `scope` key is migrated first by
+//                                                            legacyScopeRedirect
 // Pure helpers, plus the redirects of the pre-UX3c routes onto the home and of retired URL
 // state (`scope`, UX7-SEARCH; `question-pdfs` → `documents`, UX7-DOCS; `generate` → `mock-exams`,
 // QGEN-RM): homeRedirect.
@@ -46,6 +49,7 @@ export const HOME_PANELS = [
   'inactive-questions',
   'question-duplicates',
   'mock-exams',
+  'chapter-redistribution',
   'ask',
 ] as const;
 export type HomePanel = (typeof HOME_PANELS)[number];
@@ -62,14 +66,18 @@ export const DUPLICATES_PANEL = 'question-duplicates' satisfies HomePanel;
 /** MOCK-01: `?panel=mock-exams` opens the 모의고사 dialog (every member). */
 export const MOCK_EXAMS_PANEL = 'mock-exams' satisfies HomePanel;
 
+/** CHREDIST-01: `?panel=chapter-redistribution` opens the 챕터 재분배 dialog (editors only). */
+export const REDISTRIBUTION_PANEL = 'chapter-redistribution' satisfies HomePanel;
+
 /**
- * ASK-01: `?panel=ask[&conversation=<id>]` opens the AI 질문 panel (every member). It stacks like
- * the other non-modal home dialogs and is unrelated to the practice/run exclusivity (QVIEW-01-AC09).
+ * ASK-01: `?panel=ask[&conversation=<id>]` opens the AI 질문 panel (every member). It is modal and
+ * stacks like the other home dialogs (HOMEDLG-01), always on top of them (openDialogs), and is
+ * unrelated to the practice/run exclusivity (QVIEW-01-AC09).
  */
 export const ASK_PANEL = 'ask' satisfies HomePanel;
 export const ASK_CONVERSATION_PARAM = 'conversation';
 
-/** The non-modal side panels: they stack and move the home content aside (UX3b). */
+/** The floating side panels (modal since UX9, HOMEDLG-01): every home dialog but 문제 등록. */
 export function isFloatingPanel(panel: HomePanel): boolean {
   return panel !== QUESTION_CREATE_PANEL;
 }
@@ -128,13 +136,18 @@ export function isChapterNoteOpen(params: Params): boolean {
   return parsePanels(params).includes(CHAPTER_NOTE_PANEL);
 }
 
+/** `chapter=none`: the "챕터 없음" group's panel (`내 하이라이트` only, HILITE-01). */
+export const NO_CHAPTER_NOTE = 'none';
+
 /**
  * The chapter of the open 정리 노트 panel: `undefined` when the panel is closed, `null` when it is
- * open without a usable chapter id (the panel then says the chapter cannot be found).
+ * open without a usable chapter id (the panel then says the chapter cannot be found), and
+ * `NO_CHAPTER_NOTE` for the "챕터 없음" group.
  */
 export function noteChapterOf(params: Params): string | null | undefined {
   if (!isChapterNoteOpen(params)) return undefined;
   const id = all(params, CHAPTER_PARAM)[0];
+  if (id === NO_CHAPTER_NOTE) return NO_CHAPTER_NOTE;
   return id && UUID.test(id) ? id.toLowerCase() : null;
 }
 
@@ -336,10 +349,48 @@ export const RUN_DIALOG = 'practice';
  */
 export function openDialogs(search: string): string[] {
   const params = new URLSearchParams(search);
-  const out: string[] = parsePanels(params);
+  const panels = parsePanels(params);
+  const out: string[] = panels.filter((panel) => panel !== ASK_PANEL);
   if (params.get(QUESTION_PARAM)) out.push(PRACTICE_DIALOG);
   if (params.get(RUN_PARAM)) out.push(RUN_DIALOG);
+  // The AI 질문 panel is opened over the others (a question's 질문하기 above the practice panel,
+  // the run or 문제 상세; nothing opens over it from the inert home): a deep link stacks it last.
+  if (panels.includes(ASK_PANEL)) out.push(ASK_PANEL);
   return out;
+}
+
+/**
+ * Whether the practice and run panels (rendered by QuestionsOverview) still wait: each releases at
+ * its own staging position (after the dialogs listed before it), not once every dialog is staged.
+ * The AI 질문 panel is listed after them, so it mounts in a later commit than the panel under it.
+ */
+export function holdsPracticePanels(
+  dialogs: readonly string[],
+  staged: ReadonlySet<string>,
+): boolean {
+  return dialogs.some(
+    (dialog) => (dialog === PRACTICE_DIALOG || dialog === RUN_DIALOG) && !staged.has(dialog),
+  );
+}
+
+/**
+ * CHNOTE-02-C05: while the modal 정리 노트 is open the home behind it is inert, so no home-level
+ * open happens (a Heatmap marker's `question`, a header button's other `panel=`); the note is
+ * closed first. A question opened from a footnote inside the note stacks over it instead.
+ */
+export function homeOpensBlocked(params: Params): boolean {
+  return isChapterNoteOpen(params);
+}
+
+/**
+ * Whether a modal opened over the note (a footnote's practice panel, a range run) covers it: the
+ * note's content is hidden meanwhile (CHNOTE-02 "풀이와 분리는 그대로").
+ */
+export function noteCovered(params: Params): boolean {
+  return (
+    isChapterNoteOpen(params) &&
+    (all(params, QUESTION_PARAM).length > 0 || all(params, RUN_PARAM).length > 0)
+  );
 }
 
 // The practice panel and the range run panel are never open together (QVIEW-01-AC09, user
@@ -508,11 +559,26 @@ export function legacyQuestionsRedirect(workspaceId: string, params: RawParams):
   return workspaceHomePath(workspaceId, toSearchParams(params).toString());
 }
 
+/** The 본문 search page (SEARCH-02, UX9), optionally with its query string. */
+export function searchPagePath(workspaceId: string, search = ''): string {
+  const query = search.startsWith('?') || search === '' ? search : `?${search}`;
+  return `/workspaces/${workspaceId}/search${query}`;
+}
+
+/**
+ * Whether the search page's URL is the pre-UX7 one (`?q=`, SEARCH-01 before UX3c) that
+ * legacySearchRedirect rewrites.
+ */
+export function isLegacySearchUrl(params: RawParams): boolean {
+  return toSearchParams(params).has('q');
+}
+
 /**
  * `/workspaces/:id/search?q=&mode=&document=&chapter=` (SEARCH-01 before UX3c): the same 본문
- * search on the home, its query as `text` (UX7-SEARCH). Its chapter filter is a document section,
- * renamed `section` there (the home's `chapter` is the heatmap's question chapter). The old
- * `papers` flag is dropped: the 본문 search never covers question papers (UX7-SEARCH-2).
+ * search on the search page (SEARCH-02-AC03, UX9), its query as `text` and its chapter filter (a
+ * document section) as `section` (UX7-SEARCH names: the home's `q` is the 문제 search and its
+ * `chapter` the heatmap's). The old `papers` flag is dropped: the 본문 search never covers question
+ * papers (UX7-SEARCH-2).
  */
 export function legacySearchRedirect(workspaceId: string, params: RawParams): string {
   const source = toSearchParams(params);
@@ -524,8 +590,30 @@ export function legacySearchRedirect(workspaceId: string, params: RawParams): st
     if (value) out.set(key, value);
   }
   const chapter = source.get('chapter');
-  if (chapter && out.has('document')) out.set('section', chapter);
-  return workspaceHomePath(workspaceId, out.toString());
+  if (chapter) out.set('section', chapter);
+  return searchPagePath(workspaceId, out.toString());
+}
+
+/**
+ * A home URL carrying a 본문 search (`text`, UX7-SEARCH), moved to the search page (SEARCH-02-AC03,
+ * UX9): only the search keys go along (`text`, `mode`, and `document`/`section` unless an open
+ * 문서 요약 panel owns them); the home's other keys (`q`, filters, `panel`, `question`) are dropped
+ * (user decision 2026-11-02). Null without a 본문 query.
+ */
+export function contentSearchRedirect(workspaceId: string, params: RawParams): string | null {
+  const source = toSearchParams(params);
+  const text = source.get('text');
+  if (!text?.trim()) return null;
+  const out = new URLSearchParams({ text });
+  const mode = source.get('mode');
+  if (mode) out.set('mode', mode);
+  if (!summaryOwnsDocumentKey(source)) {
+    for (const key of ['document', 'section']) {
+      const value = source.get(key);
+      if (value) out.set(key, value);
+    }
+  }
+  return searchPagePath(workspaceId, out.toString());
 }
 
 /**
@@ -605,7 +693,8 @@ export function exclusivePanelRedirect(workspaceId: string, params: RawParams): 
  * Every migration of retired or conflicting home URL state, applied together so a link takes a
  * single redirect: the UX6 search `scope` (legacyScopeRedirect, UX7-SEARCH), retired `?panel=`
  * values (retiredPanelRedirect, UX7-DOCS and QGEN-RM), then a practice panel beside a run
- * (exclusivePanelRedirect, QVIEW-01-AC09). Null when the URL is current.
+ * (exclusivePanelRedirect, QVIEW-01-AC09). A 본문 search in the result sends the home to the
+ * search page instead (contentSearchRedirect, UX9). Null when the URL is current.
  */
 export function homeRedirect(workspaceId: string, params: RawParams): string | null {
   let current = params;
@@ -620,7 +709,7 @@ export function homeRedirect(workspaceId: string, params: RawParams): string | n
     }
     current = parsed;
   }
-  return out;
+  return contentSearchRedirect(workspaceId, current) ?? out;
 }
 
 /**

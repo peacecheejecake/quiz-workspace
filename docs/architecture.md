@@ -113,9 +113,9 @@ workspace
  │             ├── question_user_state  (user별 학습 상태·플래그)
  │             ├── question_attempt     (채점 이력)
  │             ├── question_lineage     (변형 관계)
- │             └── question_chapter_change (챕터 변경 이력, UX9 챕터 재분배)
  │             ├── question_ai_explanation (revision별 공유 AI 해설, AIEXPL)
- │             └── question_related_sources (revision·교재 fingerprint별 공유 관련 본문, RELSRC)
+ │             ├── question_related_sources (revision·교재 fingerprint별 공유 관련 본문, RELSRC)
+ │             └── question_chapter_change (챕터 변경 이력, UX9 챕터 재분배)
  ├── question_draft ── generation_run(QGEN, MOCK-SPEC부터 새 행 없음) / pdf_import_run
  ├── mock_exam ── mock_exam_revision (이름·설정·범위 이력)
  │             └── mock_exam_generation (회차) ── mock_exam_question ── mock_exam_question_revision
@@ -123,10 +123,6 @@ workspace
  │                                                              └── mock_exam_attempt (모의고사 풀이, Heatmap과 무관)
  ├── practice_run (사용자별 범위 풀이 묶음, bank|mock; QVIEW)
  ├── user_highlight (사용자별 하이라이트: 노트 버전·문제 해설·AI 해설; UX9, 공유·Fork 제외)
- │             └── question_lineage     (변형 관계)
- │             ├── question_ai_explanation (revision별 공유 AI 해설, AIEXPL)
- │             └── question_related_sources (revision·교재 fingerprint별 공유 관련 본문, RELSRC)
- ├── question_draft ── generation_run / pdf_import_run
  ├── ask_conversation ── ask_message ── ask_message_source (사용자별, ASK)
  ├── llm_feature_usage (ASK·AIEXPL 호출 usage, 내용 없음)
  ├── activity_event
@@ -223,8 +219,8 @@ workspace
 | GET | `/api/v1/workspaces/{id}/chapter-notes` | 장별 최신 정리 노트 상태(진행·stale·버전 수; Heatmap header 표시, CHNOTE-01) |
 | GET | `/api/v1/chapters/{chapterId}/note` | 장 정리 노트(`version=` 이전 버전, `question_refs` 각주, `stale`) |
 | POST | `/api/v1/chapters/{chapterId}/note` | 정리 노트 만들기·다시 만들기(새 버전, 편집 권한, `Idempotency-Key`; 확정 문제 없음 409 `no-chapter-questions`, 진행 중 409 `note-generation-running`, 꺼짐 409 `note-generation-disabled`) |
-| GET | `/api/v1/questions/{id}/related-sources` | 제출 후 관련 본문(`practice_session_id` 제출 확인 또는 `view=detail`; 없으면 API 안에서 검색해 저장, LLM 없음 — RELSRC-01) |
-| POST | `/api/v1/questions/{id}/ai-explanation/regenerate` | 다시 만들기(편집 권한, revision당 하루 3번) |
+| GET | `/api/v1/workspaces/{id}/chapter-redistribution/questions` | 챕터 재분배 목록: 장 그룹별 살아 있는 확정 문제(번호·발문 앞 40자·유형·`chapter_source`, 정답 없음)와 옮길 수 있는 장 목록(편집 권한, 활성 Workspace; CHREDIST-01) |
+| POST | `/api/v1/workspaces/{id}/chapter-redistribution/preview` | 추천 다시 계산(읽기 전용: `question_ids`\|`all`, `include_manual`; 바뀔 문제만 `현재 → 추천`과 개수; CHREDIST-01-C05·C06) |
 | POST | `/api/v1/workspaces/{id}/questions/chapter-assignments` | 여러 문제의 챕터를 한 번에 바꿈(`source manual\|recommendation`, 항목마다 `expected_chapter_id`, ≤ 5,000, 원자적, `Idempotency-Key`; 409 `chapter-changed`·`question-not-confirmed`, 422 `chapter-invalid`; CHREDIST-01-C02) |
 | GET | `/api/v1/questions/{id}/preview` | 정리 노트 각주 미리보기(발문·보기만 — 정답·해설·채점 기준 없음, 열람 기록 없음; CHNOTE-02-C01). 공유: `/api/v1/shared/{shareId}/questions/{questionId}/preview` |
 | GET | `/api/v1/chapters/{chapterId}/my-highlights` | 그 장의 내 하이라이트(모든 노트 버전 + 지금 그 장 확정 문제의 해설·AI 해설, 다시 찾은 위치; HILITE-01-C06). "챕터 없음"은 `GET /api/v1/workspaces/{id}/my-highlights?chapter=none` |

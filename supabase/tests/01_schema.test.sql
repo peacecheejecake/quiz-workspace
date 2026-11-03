@@ -34,9 +34,15 @@ select tables_are(
         'mock_exams', 'mock_exam_revisions', 'mock_exam_generations',
         'mock_exam_generation_items', 'mock_exam_questions', 'mock_exam_question_revisions',
         'mock_exam_practice_sessions', 'mock_exam_attempts',
+        -- UX9-HL-B personal highlights
+        'user_highlights',
+        -- UX9-REDIST-B chapter history
+        'question_chapter_changes',
         -- ASK-B AI questions
         'ask_conversations', 'ask_messages', 'ask_message_sources', 'ask_message_feedback',
         'llm_feature_usage', 'ask_daily_counts',
+        -- RELSRC-B related passages
+        'question_related_sources', 'mock_exam_question_related_sources',
         -- EXPL-B AI explanations
         'question_ai_explanations', 'mock_exam_question_ai_explanations'],
   'public schema contains exactly the expected tables'
@@ -112,8 +118,8 @@ select is(
         'mock_exam_questions', 'mock_exams',
         'practice_sessions', 'profiles', 'question_ai_explanations', 'question_drafts',
         'question_generation_runs',
-        'question_import_runs', 'question_user_states', 'questions', 'workspace_forks',
-        'workspace_memberships', 'workspace_share_links', 'workspaces'],
+        'question_import_runs', 'question_user_states', 'questions', 'user_highlights',
+        'workspace_forks', 'workspace_memberships', 'workspace_share_links', 'workspaces'],
   'updated_at trigger exists on every mutable table'
 );
 

@@ -31,6 +31,7 @@ UX9 전에는 non-modal이던 Workspace 홈 dialog — 코드 `apps/web/src/comp
 | 챕터 재분배(새) | `?panel=chapter-redistribution` | CHREDIST-01 |
 | 정리 노트 | `?panel=chapter-note&chapter=` | CHNOTE-01·CHNOTE-02 (사용자 결정 "정리 노트도 모달로 변경") |
 | 문서 요약 | `?panel=document-summary&document=` | DOCSUM-01 — modal, 문서 관리 행의 `요약`에서 열리면 문서 관리 위에 쌓임(사용자 결정 2026-11-02) |
+| AI 질문 | `?panel=ask[&conversation=]` | ASK-01 — ASK-INTEG(2026-11-03)에서 합침: modal, 홈 dialog 중 늘 맨 위(문제의 `질문하기`로 풀이·범위 풀이·문제 상세 위에 열림). 이 화면의 AC test 대상은 아님(ASK-01-AC10·AC11) |
 
 이미 modal이던 것(풀이 panel `?question=`, 범위 풀이 `?practice=`, 문제 등록 `?panel=question-create`, 문제 상세, 확인 dialog)은 그대로다. **홈 밖의 floating panel도 모두 modal이다**(사용자 결정 2026-11-02 — 처음 제안(non-modal 유지)과 다름): 본문 검색 페이지의 "본문 발췌"(SEARCH-02), 가져오기 페이지의 원본 비교(`source-compare-panel`, "원본 PDF", QIMPORT-01), 공유 게스트 화면의 문제 미리보기·문서 요약·정리 노트 panel(WS-VIEW-01). 그 뒤의 목록(검색 결과·초안 목록·공유 목록)은 panel이 열린 동안 `inert`이고, 같은 배치 고정 규칙이 적용된다(그 페이지들에서 데스크톱 panel 옆으로 목록이 비켜서던 동작도 없어짐). 목록의 다른 항목으로 옮기는 길은 panel header의 `이전`·`다음` 버튼과 Alt+↑/Alt+↓(목록 순서)이고, 다른 항목을 고르려면 닫고 고른다(사용자 결정 2026-11-03). DOC-02의 docked 목차(DOCVIEW-01)만 페이지 배치의 일부라 non-modal로 남는다.
 

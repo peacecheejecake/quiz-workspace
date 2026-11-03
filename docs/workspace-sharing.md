@@ -154,18 +154,7 @@ AC 5+6+6=17개를 각각 Playwright로 먼저 RED 테스트로 작성한다. 검
 
 ## 10. AI 질문·AI 문제 해설·관련 본문 (ASK-SPEC 2026-11-01 사용자 결정, ASK-SYNC 2026-11-02)
 
-## 11. 하이라이트·챕터 재분배·정리 노트 읽기 도구 (UX9-SPEC 2026-11-02)
-
-(§10은 ASK-SPEC(AI 질문·AI 문제 해설, `task/ASK-SYNC`)이 쓰는 번호다 — develop에 merge되기 전.)
-
-| 기능 | 구성원 | 공유 링크 게스트 | Fork |
-|---|---|---|---|
-| 하이라이트·`내 하이라이트` ([HILITE-01](screens/highlights.md)) | 자기 것만(다른 구성원 것은 보이지 않음) | ❌ — 공유 API 응답에 하이라이트 필드 없음, 선택 메뉴 없음 | ❌ — `user_highlights`를 복제하지 않음(개인 기록, `question_user_states`와 같은 범위) |
-| 챕터 재분배 ([CHREDIST-01](screens/chapter-redistribution.md)) | 편집 권한 | ❌ (공유 router에 없음, 404) | 사본의 문제는 `chapter_id`·`chapter_source`를 그대로(재매핑) 가짐, 이력 행(`question_chapter_changes`)은 복제하지 않음 |
-| 정리 노트 검색·각주 미리보기 ([CHNOTE-02](screens/chapter-note-tools.md)) | ✅ | ✅ — 미리보기는 `GET /shared/{shareId}/questions/{questionId}/preview`(발문·보기만, 발행 범위 문제만) | 사본 노트에 같은 도구 |
-
-- 챕터를 옮겨도 공유 정리 노트의 출처 일치 판정(§8)은 바뀌지 않는다(인용 문제의 상태·revision이 그대로).
-## 10. AI 질문·AI 문제 해설 (ASK-SPEC 2026-11-01, 초안)
+| 기능 | Owner·editor | viewer(멤버) | 링크 게스트 |
 |:--|:---:|:---:|:---:|
 | AI 질문(ASK-01) | ✅ 자기 대화만, 활성 Workspace에서 질문 | ✅ 같음 | ❌ (버튼 없음, API 401/404) |
 | 남의 AI 질문 대화 보기 | ❌ (Owner도 404, 사용자 결정 2026-11-01) | ❌ | ❌ |
@@ -178,3 +167,13 @@ AC 5+6+6=17개를 각각 Playwright로 먼저 RED 테스트로 작성한다. 검
 - **결정(사용자 결정 2026-11-01):** AI 질문은 비용이 들고 질문이 개인 기록이라 게스트에게 열지 않는다. AI 해설은 발행 문제의 정답·해설에서 나온 파생물이라 이미 만든 것은 게스트에게도 같은 범위로 보이고, 게스트 요청으로는 생성(비용)이 일어나지 않는다. 공유 응답에는 상태·버전·오류·usage·job id가 없고 §2 header를 따른다.
 - **Fork:** AI 질문 대화·usage는 개인 데이터라 복제하지 않는다(§6). AI 해설은 snapshot 문제 revision의 최신 성공 해설만 새 id로 복제하고(문제·revision·출처 블록 id 재매핑) 이전 버전·실패·usage는 뺀다(사용자 결정 2026-11-01). 관련 본문은 복제하지 않는다 — 사본의 문서 id가 달라 교재 fingerprint가 바뀌므로 처음 읽을 때 다시 계산된다(LLM 비용 없음; 사용자 결정 2026-11-01).
 - **모의고사 문제 (ASK-SYNC 2026-11-02):** 모의고사는 공유 링크 게스트에게 보이지 않고 Fork에 복제되지 않으므로(§9), 모의고사 문제의 AI 해설(`mock_exam_question_ai_explanations`)·관련 본문(`mock_exam_question_related_sources`)·그 문제를 첨부한 대화도 공유 API가 없고 복제되지 않는다. 공유 세션으로 `/mock-exam-questions/{id}/ai-explanation`·`/related-sources`를 부르면 401/404다.
+
+## 11. 하이라이트·챕터 재분배·정리 노트 읽기 도구 (UX9-SPEC 2026-11-02)
+
+| 기능 | 구성원 | 공유 링크 게스트 | Fork |
+|---|---|---|---|
+| 하이라이트·`내 하이라이트` ([HILITE-01](screens/highlights.md)) | 자기 것만(다른 구성원 것은 보이지 않음) | ❌ — 공유 API 응답에 하이라이트 필드 없음, 선택 메뉴 없음 | ❌ — `user_highlights`를 복제하지 않음(개인 기록, `question_user_states`와 같은 범위) |
+| 챕터 재분배 ([CHREDIST-01](screens/chapter-redistribution.md)) | 편집 권한 | ❌ (공유 router에 없음, 404) | 사본의 문제는 `chapter_id`·`chapter_source`를 그대로(재매핑) 가짐, 이력 행(`question_chapter_changes`)은 복제하지 않음 |
+| 정리 노트 검색·각주 미리보기 ([CHNOTE-02](screens/chapter-note-tools.md)) | ✅ | ✅ — 미리보기는 `GET /shared/{shareId}/questions/{questionId}/preview`(발문·보기만, 발행 범위 문제만) | 사본 노트에 같은 도구 |
+
+- 챕터를 옮겨도 공유 정리 노트의 출처 일치 판정(§8)은 바뀌지 않는다(인용 문제의 상태·revision이 그대로).

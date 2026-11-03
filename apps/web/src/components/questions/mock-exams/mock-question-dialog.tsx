@@ -9,7 +9,7 @@
 // answers (MOCK-01-C05), so nothing here can show one before a submission. Editors also get
 // `질문하기` at the top (ASK-01 `manage(mock)`: the question attached as `manage`, with its
 // answers — only where the home's AI 질문 is available).
-import { Badge, Button, ConfirmDialog, ModalDialog } from '@quiz/ui';
+import { Badge, Button, ConfirmDialog, ModalDialog, useUnsavedChanges } from '@quiz/ui';
 import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from 'react';
 import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher';
 import { FormNotice } from '@/components/auth/form-notice';
@@ -288,6 +288,8 @@ function MockQuestionEditor({
 }) {
   const stemId = useId();
   const [values, setValues] = useState(() => formOf(question));
+  const [opening] = useState(() => JSON.stringify(values));
+  useUnsavedChanges(JSON.stringify(values) !== opening);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [notice, setNotice] = useState<{ text: string; attempt: number } | null>(null);
   const [pending, setPending] = useState(false);

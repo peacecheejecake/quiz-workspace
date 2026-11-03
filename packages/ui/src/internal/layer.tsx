@@ -127,12 +127,3 @@ export function useFloatingLayer(
       : `min(calc(var(--z-side-panel) + ${step}), calc(var(--z-modal) - 2))`,
   };
 }
-
-/**
- * z-index of a centered modal (ConfirmDialog) opened from inside a floating layer: `--z-modal`,
- * or just above that layer when the layer sits above the modal layers.
- */
-export function useModalLayerZIndex(): string {
-  const layer = useContext(LayerContext);
-  return layer ? `max(var(--z-modal), calc(${layer} + 1))` : 'var(--z-modal)';
-}

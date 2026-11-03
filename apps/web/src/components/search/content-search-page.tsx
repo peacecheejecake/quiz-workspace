@@ -7,12 +7,19 @@
 // (`text`, `mode`, `document`, `section`), written in place. The search on arrival comes from the
 // address bar, not the server render: Back from the PDF viewer restores this page under the URL
 // the search wrote. Without a query in the URL the box takes focus; with one, the results do the
-// talking.
+// talking. Beside the search button, `AI에게 묻기` (ASK-01) opens the AI 질문 panel on this page, over
+// the search, on a new conversation with the search text in its input (not sent) and the document
+// filter as its 질문 범위; the panel is modal like this page's excerpt panel (HOMEDLG-01) and, like
+// it, outside the URL — the home's `?panel=ask` is where saved conversations are reopened.
 import { BackLink, PageHeader } from '@quiz/ui';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { AskPanel, type AskIntent } from '@/components/ask/ask-panel';
+import { AskSearchButton } from '@/components/ask/ask-search-button';
+import { useAskState } from '@/components/ask/use-ask-state';
 import { WorkspaceBreadcrumb, type WorkspaceCrumb } from '@/components/workspaces/sub-page-nav';
+import { unavailableReason, unavailableText } from '@/lib/ask/model';
 import { CONTENT_QUERY_PARAM, MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
 import { workspaceHomePath } from '@/lib/workspaces/home';
 import {
@@ -27,7 +34,7 @@ import { adoptSearchEntry, enteredFromHome, isPlainClick } from './search-entry'
 import styles from './search.module.css';
 
 export interface ContentSearchPageProps {
-  readonly workspace: WorkspaceCrumb;
+  readonly workspace: WorkspaceCrumb & { readonly archived: boolean };
   /** The published books of the document filter (question papers are never searched). */
   readonly documents: readonly SearchDocumentOption[];
   readonly documentsLoadFailed: boolean;
@@ -75,6 +82,30 @@ export function ContentSearchPage({
     replaceAddress(`${url.pathname}${url.search}`);
   }
 
+  // --- AI에게 묻기 (ASK-01) ---------------------------------------------------------------------
+  const ask = useAskState(workspace.id);
+  const askReason = unavailableReason(ask.state, workspace.archived);
+  const askUnavailable = askReason ? unavailableText(askReason) : null;
+  const [askOpen, setAskOpen] = useState(false);
+  // Each opening starts the panel afresh: unsent input never survives a close.
+  const [askSession, setAskSession] = useState(0);
+  const [askConversation, setAskConversation] = useState<string | null>(null);
+  const [askIntent, setAskIntent] = useState<AskIntent | null>(null);
+  function askFromSearch() {
+    if (askUnavailable) return;
+    setAskIntent({
+      key: askSession + 1,
+      text: draft.trim(),
+      scope: {
+        document_ids: content.documentId ? [content.documentId] : [],
+        chapter_ids: content.documentId && content.chapterId ? [content.chapterId] : [],
+      },
+    });
+    setAskConversation(null);
+    setAskSession((n) => n + 1);
+    setAskOpen(true);
+  }
+
   /** Entered from the home: back to the home entry it came from, as the browser's Back does. */
   function back(event: MouseEvent<HTMLAnchorElement>) {
     if (!isPlainClick(event) || !enteredFromHome()) return;
@@ -102,6 +133,7 @@ export function ContentSearchPage({
         onDraftChange={setDraft}
         onSearch={search}
         searchable={searchable}
+        extraAction={<AskSearchButton unavailable={askUnavailable} onAsk={askFromSearch} />}
         settings={
           <ContentSearchOptions
             search={content}
@@ -116,6 +148,22 @@ export function ContentSearchPage({
       {searchable ? (
         <ContentSearchResults workspaceId={workspace.id} search={content} onClose={clear} />
       ) : null}
+      <AskPanel
+        key={askSession}
+        open={askOpen}
+        onOpenChange={setAskOpen}
+        container={null}
+        workspaceId={workspace.id}
+        archived={workspace.archived}
+        askState={ask.state}
+        client={ask.client}
+        conversationId={askConversation}
+        onNavigate={(conversationId) => setAskConversation(conversationId)}
+        documents={documents}
+        intent={askIntent}
+        screenId="ASK-01"
+        modal
+      />
     </div>
   );
 }

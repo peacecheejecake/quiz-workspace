@@ -118,6 +118,7 @@ def random_ids() -> dict[str, str]:
         "mock_exam_id",
         "mock_exam_question_id",
         "mock_practice_session_id",
+        "highlight_id",
         "conversation_id",
         "message_id",
         "explanation_id",
@@ -245,6 +246,19 @@ def build_world(seed: Any, label: str) -> World:
         "POST", f"/mock-exam-questions/{mock_question_id}/practice-sessions", None, (201,)
     )
 
+    # UX9-HL-B: the owner's highlight of the question's explanation (personal: other
+    # members get the unknown-id 404).
+    highlight = owner.ok(
+        "POST",
+        "/my-highlights",
+        {
+            "target": {"kind": "explanation", "question_id": qid},
+            "anchor": {"block": "p0", "start": 0, "end": 1},
+            "color": "yellow",
+        },
+        (201,),
+    )
+
     # ASK-B: the owner's conversation with one finished answer (direct seed: asking needs the
     # feature on, which this stack leaves off; the routes check ownership before the switch).
     conversation = owner.ok("POST", f"/workspaces/{wid}/ask/conversations", {}, (201,))
@@ -314,6 +328,7 @@ def build_world(seed: Any, label: str) -> World:
         "mock_exam_id": mock_exam_id,
         "mock_exam_question_id": mock_question_id,
         "mock_practice_session_id": str(mock_session["id"]),
+        "highlight_id": str(highlight["id"]),
         "conversation_id": str(conversation["id"]),
         "message_id": answer_message,
         "explanation_id": explanation_id,
