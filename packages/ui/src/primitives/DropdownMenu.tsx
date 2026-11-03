@@ -1,7 +1,7 @@
 'use client';
 
 import { DropdownMenu as RadixDropdownMenu } from 'radix-ui';
-import type { ComponentProps } from 'react';
+import { useRef, type ComponentProps } from 'react';
 import { cx } from '../internal/cx';
 import { useLayerStyle } from '../internal/layer';
 import { useMergedRefs } from '../internal/merge-refs';
@@ -27,12 +27,14 @@ export function DropdownMenuContent({
   align = 'end',
   style,
   ref,
+  onFocusOutside,
   ...rest
 }: DropdownMenuContentProps) {
   const layerStyle = useLayerStyle();
   // Scrolling a list inside the popper never scrolls the page under it (UX9-SCROLL).
   const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
-  const contentRef = useMergedRefs(ref, guardOverscroll);
+  const ownRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useMergedRefs(useMergedRefs(ref, guardOverscroll), ownRef);
   return (
     <RadixDropdownMenu.Portal>
       <RadixDropdownMenu.Content
@@ -41,6 +43,20 @@ export function DropdownMenuContent({
         align={align}
         className={cx('qz-menu', 'glass-surface', className)}
         style={{ ...layerStyle, ...style }}
+        onFocusOutside={(event) => {
+          onFocusOutside?.(event);
+          if (event.defaultPrevented) return;
+          // A late focus return to the menu's own trigger (a dialog or menu that just closed
+          // hands focus back after a tick) does not close the menu just opened from it: focus
+          // goes back into the menu.
+          const content = ownRef.current;
+          const trigger = content?.getAttribute('aria-labelledby');
+          const target = event.target;
+          if (content && trigger && target instanceof Element && target.id === trigger) {
+            event.preventDefault();
+            content.focus({ preventScroll: true });
+          }
+        }}
         {...rest}
       />
     </RadixDropdownMenu.Portal>
@@ -91,6 +107,8 @@ export function DropdownMenuSubTrigger({
   onKeyDown,
   ...rest
 }: ComponentProps<typeof RadixDropdownMenu.SubTrigger>) {
+  // The submenu was just opened from the keyboard (ArrowRight / Enter / Space) on this trigger.
+  const openedByKey = useRef(false);
   return (
     <RadixDropdownMenu.SubTrigger
       className={cx('item', className)}
@@ -101,10 +119,13 @@ export function DropdownMenuSubTrigger({
       }}
       onKeyDown={(event) => {
         onKeyDown?.(event);
-        // ArrowDown / ArrowUp on the trigger of an open submenu (focus has not moved into it yet,
-        // e.g. right after ArrowRight) go into the submenu instead of moving along the parent menu,
-        // which would close it.
-        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        // ArrowDown / ArrowUp on the trigger right after opening its submenu from the keyboard
+        // (focus has not moved into it yet) go into the submenu instead of moving along the parent
+        // menu, which would close it. A submenu opened by hovering does not hold the arrows.
+        const vertical = event.key === 'ArrowDown' || event.key === 'ArrowUp';
+        const byKey = openedByKey.current;
+        openedByKey.current = ['ArrowRight', 'Enter', ' '].includes(event.key);
+        if (!vertical || !byKey) return;
         const trigger = event.currentTarget;
         if (trigger.getAttribute('data-state') !== 'open') return;
         event.preventDefault();

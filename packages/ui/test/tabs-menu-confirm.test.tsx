@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -108,6 +108,33 @@ describe('DropdownMenu', () => {
   });
 });
 
+describe('DropdownMenu focus return', () => {
+  it('a late focus return to its trigger does not close the menu just opened (HILITE-01-AC04)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button>행 메뉴</Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent aria-label="행 메뉴">
+          <DropdownMenuItem>위치로 이동</DropdownMenuItem>
+          <DropdownMenuItem>삭제</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole('button', { name: '행 메뉴' });
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    const menu = await screen.findByRole('menu', { name: '행 메뉴' });
+    // A dialog that closed a moment ago hands focus back to the trigger.
+    act(() => trigger.focus());
+    expect(screen.getByRole('menu', { name: '행 메뉴' })).toBe(menu);
+    expect(menu.contains(document.activeElement)).toBe(true);
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+    expect(within(menu).getByRole('menuitem', { name: '삭제' })).toHaveFocus();
+  });
+});
+
 describe('DropdownMenu submenu', () => {
   function ColorMenu({ onColor }: { onColor: (color: string) => void }) {
     return (
@@ -152,17 +179,32 @@ describe('DropdownMenu submenu', () => {
     expect(onColor).toHaveBeenCalledWith('blue');
   });
 
-  it('ArrowDown on the trigger of the open submenu goes into it, not along the menu', async () => {
+  it('ArrowDown right after ArrowRight goes into the submenu, not along the menu', async () => {
+    const user = userEvent.setup();
+    render(<ColorMenu onColor={vi.fn()} />);
+    screen.getByRole('button', { name: '메뉴' }).focus();
+    await user.keyboard('{Enter}');
+    const trigger = await screen.findByRole('menuitem', { name: '색 바꾸기' });
+    await waitFor(() => expect(trigger).toHaveFocus());
+    await user.keyboard('{ArrowRight}');
+    const sub = await screen.findByRole('menu', { name: '색 바꾸기' });
+    // Focus has not moved into the submenu yet when the next key comes.
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+    expect(within(sub).getByRole('menuitemradio', { name: '노랑' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: '삭제' })).not.toHaveFocus();
+  });
+
+  it('a submenu opened by hovering does not hold ArrowDown on its trigger', async () => {
     const user = userEvent.setup();
     render(<ColorMenu onColor={vi.fn()} />);
     await user.click(screen.getByRole('button', { name: '메뉴' }));
     const trigger = await screen.findByRole('menuitem', { name: '색 바꾸기' });
     await user.click(trigger);
-    const sub = await screen.findByRole('menu', { name: '색 바꾸기' });
+    await screen.findByRole('menu', { name: '색 바꾸기' });
     trigger.focus();
     await user.keyboard('{ArrowDown}');
-    expect(within(sub).getByRole('menuitemradio', { name: '노랑' })).toHaveFocus();
-    expect(screen.getByRole('menuitem', { name: '삭제' })).not.toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: '삭제' })).toHaveFocus();
   });
 });
 
