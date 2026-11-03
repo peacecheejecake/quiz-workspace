@@ -17,7 +17,7 @@
 | LLM calls (generation + judge) | 28 (28 + 0) |
 | input / output tokens | 12989 / 1627 |
 | cost (USD, LLM_PRICE_*) | - |
-| first text p50 / p95 (ms, answer and explanation generation only, judges excluded; this process, queue wait and worker RAM are measured on the stack) | 0.002 / 0.025 |
+| first text p50 / p95 (ms, answer and explanation generation only, judges excluded; this process, queue wait and worker RAM are measured on the stack) | 0.002 / 0.005 |
 
 | ask case | kind | answer | tags (known) | cited paragraphs (supported) | leaked |
 |---|---|---|---|---|---|

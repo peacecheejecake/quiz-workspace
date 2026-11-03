@@ -10,10 +10,10 @@ Runs the product's own request builders and output checks over the synthetic cas
   containment >= 0.3; with ``--provider llm`` an LLM judge is added);
 - not-found accuracy: ``[NO_ANSWER]`` exactly when nothing relevant was given (and false refusals);
 - ``hint`` answer leakage: the share of answers to a not-yet-submitted attached question (registered
-  and mock exam questions) that assert the correct option as the answer (number / option-text
-  patterns nominate a clause; a clause that refuses or negates is no assertion, and mentioning an
-  option's text alone is no leak, ASK-01-C03; with ``--provider llm`` a judge confirms each
-  nominated answer);
+  and mock exam questions) that assert the correct option as the answer (offline the number /
+  option-text patterns decide; a clause whose telling is negated is no assertion, and mentioning
+  an option's text alone is no leak, ASK-01-C03; with ``--provider llm`` the judge reads every hint
+  answer and decides, the patterns are a diagnostic);
 - AI explanation answer agreement: the explanation's ``[[ANSWER]]`` line equals the stored correct
   ids (``book_core.explain.finish_explanation`` rejects the rest), plus how many are valid at once
   and after the one coverage re-request;
@@ -241,8 +241,8 @@ def raw_tags(raw: str) -> list[str]:
 
 
 _REFUSAL = re.compile(
-    r"알려\s*(?:드릴|줄|주지)|말씀\s*드릴\s*수|않겠|않습니다|없습니다|수\s*없|못\s*합니다|"
-    r"스스로|직접\s*찾|직접\s*풀|아닙니다|아니다"
+    r"(?:알려|말씀)\s*(?:드릴|드리지|줄|주지)\S*\s*(?:수\s*없|못|않)|"
+    r"않겠|스스로\s*(?:찾|풀)|직접\s*(?:찾|풀)"
 )
 
 
@@ -259,9 +259,11 @@ def leak_patterns(number: int, correct_text: str) -> list[re.Pattern[str]]:
 
 
 def leaks(answer: str, number: int, correct_text: str) -> bool:
-    """Candidate leak: a clause asserts the correct option as the answer. A clause that refuses
-    or negates (`정답은 알려드릴 수 없습니다`) is skipped; with a judge the candidate is
-    confirmed by it (see ``run_ask_case``)."""
+    """Regex verdict: a clause asserts the correct option as the answer. Only a clause whose
+    telling is itself negated (`정답은 알려드릴 수 없습니다`, `직접 알려주지는 않겠습니다`) is
+    skipped; `정답은 2번이라고 알려드릴게요` and `정답은 2번이며 다른 가능성은 없습니다` are
+    leaks. Offline this decides; with the real provider it is a diagnostic next to the judge
+    (see ``run_ask_case``)."""
     patterns = leak_patterns(number, correct_text)
     for clause in re.split(r"(?<=[.!?。])\s+|\n+", answer):
         if _REFUSAL.search(clause):
@@ -371,8 +373,11 @@ def run_ask_case(
         number = mcq["correct"]
         pattern_leak = leaks(result.text, number, mcq["options"][number - 1])
         leaked = pattern_leak
-        if use_judge and pattern_leak:
-            # The patterns only nominate; the judge confirms (a failed judge keeps the candidate).
+        entry["regex_leak"] = pattern_leak
+        if use_judge:
+            # With the real provider the judge reads every hint answer and is the authority (it
+            # catches paraphrases the patterns miss and clears false hits); the regex result stays
+            # in the report as a diagnostic. A failed judge falls back to the regex.
             verdict = judge(
                 meter,
                 "Does the answer assert which option is correct or state the final answer? "
@@ -380,7 +385,8 @@ def run_ask_case(
                 f"Options: {mcq['options']}\nAnswer:\n{result.text}",
             )
             entry["judge_leak"] = verdict
-            leaked = verdict is not False
+            if verdict is not None:
+                leaked = verdict
         entry["leaked"] = leaked
         entry["attachment"] = case["attachment"]
         entry["disclosure"] = request.disclosure

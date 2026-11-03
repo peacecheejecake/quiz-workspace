@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 from book_core.ask import ASK_FIELDS_FORBIDDEN_IN_HINT
@@ -82,6 +83,9 @@ def test_hint_requests_carry_no_answer_field() -> None:
         ("2번이 정답인지는 말씀드릴 수 없고 스스로 찾아보셔야 합니다.", False),
         ("정답은 스스로 찾아보세요.", False),
         ("정답: 응결", True),
+        ("정답은 2번이라고 알려드릴게요.", True),
+        ("정답은 2번이며 다른 가능성은 없습니다.", True),
+        ("최종 답을 말하면 응결이다.", False),  # a paraphrase only the judge catches
     ],
 )
 def test_the_leak_patterns(answer: str, leaked: bool) -> None:
@@ -102,6 +106,39 @@ def test_the_llm_provider_gets_the_same_requests_without_scripts() -> None:
     assert report["provider"] == "llm"
     assert all(c.task in {"ask.answer", "question.ai_explain", "eval.judge"} for c in client.calls)
     assert sum(1 for c in client.calls if c.task == "ask.answer") == 21
+
+
+def test_the_judge_catches_a_paraphrase_the_regex_misses() -> None:
+    case = {
+        "id": "paraphrase",
+        "kind": "hint",
+        "attachment": "registered",
+        "question": "답이 뭐죠?",
+        "sources": [],
+        "mcq": {
+            "stem": "수증기가 물방울이 되는 과정은?",
+            "options": ["증발", "응결"],
+            "correct": 2,
+        },
+    }
+    dataset = ask_eval.load_dataset(ask_eval.DEFAULT_DATASET)
+
+    def answer(verdict: str | None) -> dict[str, Any]:
+        class Client:
+            model_name = "x"
+
+            def stream_text(self, request):  # type: ignore[no-untyped-def]
+                text = verdict if request.task == "eval.judge" else "최종 답을 말하면 응결이다."
+                end = TextStreamEnd(model="x", stop_reason="end_turn")
+                return iter([TextDelta(text or ""), end])
+
+        meter = ask_eval.Meter(Client())
+        return ask_eval.run_ask_case(dataset, case, meter, use_judge=verdict is not None)
+
+    offline = answer(None)
+    assert (offline["regex_leak"], offline["leaked"]) == (False, False)
+    judged = answer("YES")
+    assert (judged["regex_leak"], judged["leaked"]) == (False, True)
 
 
 def test_a_provider_outage_is_not_swallowed() -> None:
@@ -129,7 +166,7 @@ def test_the_judge_confirms_a_nominated_leak_and_can_clear_it() -> None:
             )
 
     dataset = ask_eval.load_dataset(ask_eval.DEFAULT_DATASET)
-    for verdict, leaked in (("YES", 2), ("NO", 0)):
+    for verdict, leaked in (("YES", 9), ("NO", 0)):
         client = Judged(dataset, verdict)
         report = ask_eval.run(provider="llm", client=client)
         s = report["summary"]
@@ -139,6 +176,9 @@ def test_the_judge_confirms_a_nominated_leak_and_can_clear_it() -> None:
         assert s["llm_calls"] == s["generation_calls"] + s["judge_calls"]
         assert s["first_text_ms"]["count"] == s["generation_calls"]
         assert s["judge_first_text_ms"]["count"] == s["judge_calls"]
-        # The judge is asked only about nominated answers, never about refusals.
+        # The judge reads every hint answer and decides: YES on the 7 regex-clean answers (a
+        # paraphrase the patterns miss) is a leak, NO on the 2 regex hits is not. The regex result
+        # stays in the report as a diagnostic.
         hints = [e for e in report["ask"] if e["kind"] == "hint"]
-        assert sum(1 for e in hints if "judge_leak" in e) == 2
+        assert sum(1 for e in hints if "judge_leak" in e) == 9
+        assert sum(1 for e in hints if e["regex_leak"]) == 2
