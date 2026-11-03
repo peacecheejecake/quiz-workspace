@@ -710,8 +710,10 @@ test(
     await expect(reviewListUi.rows(nav)).toHaveCount(2);
     await expect(reviewListUi.reviewTitle(page, 'questions-ko')).toBeVisible();
     // A CSS selector: under the 375px sheet the list is hidden from the accessibility tree and a
-    // role locator would leave its answers unmasked.
-    const drafts = page.locator('ul[aria-label="가져온 초안"]');
+    // role locator would leave its answers unmasked. `:visible`: while the page streams in, Next
+    // briefly also holds the list in a `hidden` Suspense template next to the swapped-in one, and a
+    // strict locator over both fails the test.
+    const drafts = page.locator('ul[aria-label="가져온 초안"]:visible');
     await expect(drafts).toBeVisible();
     await snapEveryMasked(page, 'question-import-panes', () => [drafts]);
     if (test.info().project.name === 'visual-desktop') {
