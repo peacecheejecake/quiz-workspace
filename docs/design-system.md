@@ -65,12 +65,11 @@
 | `--color-glass` | `rgba(246,248,252,.97)` | floating glass surface(아주 옅은 tint, 거의 불투명) |
 | `--color-glass-solid` | `#F6F8FC` | glass의 불투명 대응색(reduced transparency·blur 미지원 fallback, 모바일 sheet) |
 | `--color-glass-stroke` | `rgba(255,255,255,.66)` | inset/translucent border |
-| `--question-status-unseen` | `#D9DEE5` | 보지 않은 문제 |
-| `--question-status-viewed` | `#858E9B` | 보기만 한 문제 |
-| `--question-status-incorrect` | `#E0525E` | 틀린 문제 |
-| `--question-status-correct` | `#26865C` | 맞은 문제 |
-| `--question-status-retry` | `#E9B447` | 다시 풀기 |
-| `--heatmap-marker-stroke-mix` | `57%` | heatmap marker 윤곽의 status 색 비율(나머지는 `--color-text-primary`). 상태 색이 표면 대비 3:1 미만이어도 윤곽이 3:1 이상이 되는 테마별 가장 연한 값(dark `79%`; UX9-STROKE, §6) |
+| `--question-status-unseen` | `#E7ECF0` | 보지 않은 문제 |
+| `--question-status-viewed` | `#ACB6C2` | 보기만 한 문제 |
+| `--question-status-incorrect` | `#FF6060` | 틀린 문제 |
+| `--question-status-correct` | `#00AB7B` | 맞은 문제 |
+| `--question-status-retry` | `#F6CF35` | 다시 풀기 |
 | `--color-border-strong` | `#7D8799` | 입력 컨트롤 경계(표면 대비 3:1 이상) |
 | `--color-on-accent` | `#FFFFFF` | accent 채움 위 텍스트·아이콘 |
 | `--color-danger` | `#C42B3A` | 오류·파괴적 동작 피드백(텍스트 대비 4.5:1 이상) |
@@ -105,7 +104,7 @@
 
 **v1.2.6 (UX7-QDISPLAY, 2026-11-01 사용자 피드백):** 객관식 제출 뒤 보기 행 테두리(§4.1 "채점 결과 테두리")는 새 토큰 없이 기존 의미 토큰을 쓴다: 맞힌 보기 `--color-success`, 오답일 때 고른 보기 `--color-border-strong`(회색), 오답일 때 정답 보기 `--color-danger`(사용자 결정: 정답 보기를 빨간 테두리로). 셋 모두 풀이 panel이 놓이는 표면(surface·canvas·surface-muted·glass-solid) 대비 비텍스트 3:1 이상이다(light/dark 최저: success 4.76/6.45, danger 5.03/5.84, border-strong 3.25/3.61 — muted 위; `contrast.test.ts`). 테두리 색은 의미를 보강할 뿐이고 각 행의 "정답"·"내 선택" 글자가 의미를 전달한다.
 
-**상태 점은 기본 표면과 충분히 구분되도록** 최소 얇은 outline을 갖고, 상태 필터(색 견본 + 상태 텍스트)가 범례 역할을 한다(UX3c 2026-10-20: 상시 범례·상태 요약 삭제, 사용자 결정). 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
+**상태 점은 테두리(stroke)를 두지 않는다**(HEATMAP-PALETTE 2026-11-04, 사용자 요청 "border 삭제"; 채움 색만으로 그리고, 가장 연한 light `unseen`(`#E7ECF0`)은 표면 대비 약 1.2:1이지만 그대로 둔다 — 사용자 결정). 상태 필터(색 견본 + 상태 텍스트)가 범례 역할을 한다(UX3c 2026-10-20: 상시 범례·상태 요약 삭제, 사용자 결정). 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
 
 ### 3.2 Dark theme (초안)
 
@@ -124,12 +123,11 @@
   --color-glass: rgba(30, 38, 51, 0.97);
   --color-glass-solid: #1E2633;
   --color-glass-stroke: rgba(255,255,255,.12);
-  --question-status-unseen: #4E5967;
-  --question-status-viewed: #9EA7B4;
-  --question-status-incorrect: #F17B84;
-  --question-status-correct: #4BC68E;
-  --question-status-retry: #F4C763;
-  --heatmap-marker-stroke-mix: 79%;
+  --question-status-unseen: #3A4554;
+  --question-status-viewed: #8591A1;
+  --question-status-incorrect: #FF7A7A;
+  --question-status-correct: #2CC79A;
+  --question-status-retry: #F7D45A;
   --color-border-strong: #7A8799;
   --color-on-accent: #11151D;
   --color-danger: #FF8A93;
@@ -172,12 +170,11 @@
   --color-glass: rgba(246,248,252,.97);
   --color-glass-solid: #F6F8FC;
   --color-glass-stroke: rgba(255,255,255,.66);
-  --question-status-unseen: #D9DEE5;
-  --question-status-viewed: #858E9B;
-  --question-status-incorrect: #E0525E;
-  --question-status-correct: #26865C;
-  --question-status-retry: #E9B447;
-  --heatmap-marker-stroke-mix: 57%;
+  --question-status-unseen: #E7ECF0;
+  --question-status-viewed: #ACB6C2;
+  --question-status-incorrect: #FF6060;
+  --question-status-correct: #00AB7B;
+  --question-status-retry: #F6CF35;
   --color-border-strong: #7D8799;
   --color-on-accent: #FFFFFF;
   --color-danger: #C42B3A;
@@ -402,7 +399,7 @@ type QuestionDotProps = {
 };
 ```
 
-- 기본 marker는 **rounded square**, 즐겨찾기는 **rounded five-point star SVG**(부드러운 꼭짓점: `stroke-linejoin="round"`, 넉넉한 stroke width 또는 rounded SVG path); 두 모양 모두 semantic status color를 채우고 subtle stroke를 적용한다. stroke는 모든 marker 크기에서 `--heatmap-marker-stroke-width` = `0.5px`(CSS px, `vector-effect: non-scaling-stroke`)이고 색은 `color-mix(in srgb, currentColor var(--heatmap-marker-stroke-mix), var(--color-text-primary))`, 즉 light `57%`·dark `79%` status 색이다(UX9-STROKE 2026-11-02, 사용자 요청 "heatmap shape의 stroke-width를 0.5px로, 색은 좀 더 연하게"와 dark 테마별 값 사용자 결정: 이전 viewBox 1.5 단위 ≈ 셀 크기 기준 1.5px, 두 테마 mix 50%). light unseen·retry와 dark unseen 채움은 표면 대비 3:1 미만이라 outline이 경계를 맡으므로, 두 값은 각 테마에서 outline이 surface·canvas·surface-muted 대비 비텍스트 3:1 이상을 지키는 가장 연한 정수 %다(최저 light unseen/surface-muted 3.03:1, dark unseen 3.02:1; 한 칸 더 연하면 2.96·2.94로 미달, `question-marker-contrast.test.ts`). 별의 둥근 꼭짓점은 stroke 두께가 아니라 `stroke-linejoin="round"`에만 기댄다. forced-colors에서는 같은 두께의 `CanvasText` stroke다.
+- 기본 marker는 **rounded square**, 즐겨찾기는 **rounded five-point star SVG**(부드러운 꼭짓점: `stroke-linejoin="round"`, rounded SVG path); 두 모양 모두 semantic status color를 채운다. **marker에는 테두리가 없다**(HEATMAP-PALETTE 2026-11-04, 사용자 요청 "border 삭제"; UX9-STROKE의 `0.5px` 윤곽과 `--heatmap-marker-stroke-mix` 토큰을 없앴다). 사각형은 stroke가 없고, 별만 채움과 같은 색(`currentColor`)의 `--heatmap-marker-stroke-width` = `0.5px` non-scaling stroke를 꼭짓점을 둥글리는 기하로 쓴다 — 눈에 보이는 윤곽이 아니다. 이 규칙은 heatmap 점과 장식용 marker(상태 필터 색 견본·preview) 모두에 같다. 상태 색이 표면 대비 3:1 미만일 수 있으므로(light unseen·viewed·retry) 의미는 늘 텍스트(label·필터·tooltip)로도 준다. forced-colors에서는 채움(`currentColor`)이 시스템 색이 되고 CanvasText 윤곽은 더 두지 않으므로 상태는 텍스트로 구분한다.
 - 셀 `24×24px`, mobile·coarse pointer도 `24×24px`(`--heatmap-cell-touch`; UX9-STROKE 2026-11-02 사용자 요청으로 `32px`→`24px`, WCAG 2.2 target size 최소 24×24 CSS px 충족), 셀 간 grid gap `0`. heatmap 점의 marker SVG box는 셀과 같은 크기라 그려진 사각형은 viewBox 18/24 = `18px`(모서리 반경 `4.5px`, 셀 안쪽 `3px`)이고, 이웃 marker 사이 보이는 간격은 `6px` = **marker 폭의 1/3 이하**(v1.2.3, UX5-UI 사용자 요청 "점 사이 간격을 점 width의 1/3 이하로"). 장식용 marker(legend·상태 요약·preview)는 `--heatmap-dot` 16px box. favorite는 **크기 확대가 아니라 사각형→별 모양 전환**이다. hover 및 `:focus-visible` 시 marker만 `scale(var(--heatmap-marker-hover-scale))`; transition은 transform 150ms, reduced-motion시 즉시 변경한다.
 - favorite는 별 silhouette로 표시하며 상세 텍스트에서도 별 아이콘을 제공. hover/focus scale을 적용해도 고정 셀과 grid 위치는 바꾸지 않는다.
 - 현재 문제 dot(풀이 panel에 열린 문제, `aria-current="true"`)는 상태 색을 그대로 두고 2px `--color-text-primary` ring(light 거의 검정 `#172033`, dark 거의 흰색 `#F2F5F9`)을 사각형에 **틈 없이** 붙여 그린다(`outline-offset` = −셀/8 = `−3px`, 셀 `border-radius` = 셀×7.5/24 = `7.5px`라 ring 안쪽 반경이 사각형의 `4.5px`와 같다; UX9-STROKE 2026-11-02, 사용자 요청 "cell 내부 공간 제거, current일 때 outline을 black에 가까운 색으로"; 이전: accent ring을 셀 가장자리에 그려 사각형과 `3px` 띄움). `:focus-visible`은 셀 가장자리의 2px `--color-focus` ring + marker 확대로, 현재 표시와 색뿐 아니라 위치·크기로도 구분된다. focus된 현재 dot는 focus ring 하나만 보인다. forced-colors에서는 둘 다 `Highlight`이고 위치로 구분한다.
