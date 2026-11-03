@@ -303,6 +303,51 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     expect(client.getItem).toHaveBeenCalledTimes(1);
   });
 
+  it('RETRY-01-C04 sequence(bank): after a local correct grading, the refresh of a refused retry shows the server state', async () => {
+    const user = userEvent.setup();
+    const flags = vi
+      .fn()
+      .mockResolvedValueOnce({ is_favorite: false, needs_retry: false, last_graded_result: null })
+      .mockResolvedValue({
+        is_favorite: false,
+        needs_retry: false,
+        last_graded_result: 'incorrect',
+      });
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={fakeClient({
+          flags: flags as unknown as RunClient['flags'],
+          submit: vi.fn(async () => ({
+            ok: true as const,
+            data: { ...graded, result: 'correct' as const },
+          })),
+          setFlags: vi.fn(async () => ({
+            ok: false as const,
+            kind: 'retryNotAllowed' as const,
+            message: '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.',
+          })) as unknown as RunClient['setFlags'],
+        })}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('radio', { name: '증발' }));
+    await user.click(within(panel).getByRole('button', { name: SUBMIT_UI }));
+    // Graded correct here: the toggle shows (it beats the older lookup that knew no result).
+    await user.click(await within(panel).findByRole('button', { name: '다시 풀기 표시' }));
+    // Another tab graded it incorrect meanwhile: the refresh started after the local grading
+    // is the newer truth and hides the toggle.
+    await waitFor(() => expect(flags).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+    );
+  });
+
   it('RETRY-01-C04 sequence(bank): a refused retry (409) shows the message, reads the state again and hides the toggle', async () => {
     const user = userEvent.setup();
     const message = '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.';

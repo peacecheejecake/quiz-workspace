@@ -713,6 +713,8 @@ function useSolveStep({
   // Re-reads only the study flags / eligibility (a refused `다시 풀기`), never the position: the
   // answer being typed and the open session stay.
   const [flagsSeq, setFlagsSeq] = useState(0);
+  // Counts gradings made in this panel: a lookup started before one must not undo it.
+  const gradeGen = useRef(0);
   const flagSync = useFlagSync<MyState>(
     (qid, patch) =>
       client.setFlags
@@ -743,9 +745,12 @@ function useSolveStep({
     pending: boolean;
     /** Graded in this panel (true) or read from the server (false). */
     local: boolean;
+    /** `gradeGen` when it was graded here; a lookup started at or after it is newer. */
+    gen: number;
   } | null>(null);
   function gradedHere(qid: string, result: 'correct' | 'incorrect') {
-    setLastGraded({ questionId: qid, result, pending: false, local: true });
+    gradeGen.current += 1;
+    setLastGraded({ questionId: qid, result, pending: false, local: true, gen: gradeGen.current });
     if (result === 'incorrect') {
       setFlags((prev) =>
         prev?.questionId === qid
@@ -755,20 +760,24 @@ function useSolveStep({
     }
   }
   function pendingHere(qid: string) {
+    gradeGen.current += 1;
+    const gen = gradeGen.current;
     setLastGraded((prev) => ({
       questionId: qid,
       result: prev?.questionId === qid ? prev.result : null,
       pending: true,
       local: true,
+      gen,
     }));
   }
   const flagsWanted = source === 'bank' && !archived && client.flags ? questionId : null;
   const flagsLoad = useKeyedLoad(
     flagsWanted ? `${flagsWanted}:${itemSeq}:${flagsSeq}` : null,
     async () => {
+      const started = gradeGen.current;
       const found = (await client.flags?.(flagsWanted ?? '')) ?? null;
       return found
-        ? { ok: true as const, data: found }
+        ? { ok: true as const, data: { ...found, started } }
         : { ok: false as const, kind: 'unavailable' as const, message: '' };
     },
   );
@@ -778,9 +787,15 @@ function useSolveStep({
     if (flagsLoad?.status === 'ready' && flagsWanted) {
       // A change still being saved wins over a read made before it.
       const active = flagSync.active(flagsWanted) ?? flagsLoad.data;
-      // A grading made here is newer than any lookup that may have started before it (a delayed
-      // first response must not bring back an older result): it wins over the lookup's.
-      const local = lastGraded?.questionId === flagsWanted && lastGraded.local ? lastGraded : null;
+      // A grading made here is newer than a lookup that started before it (a delayed first
+      // response must not bring back an older result): it wins over that lookup's. A lookup
+      // started after it (the refresh of a refused `다시 풀기`) is the server's newer truth.
+      const local =
+        lastGraded?.questionId === flagsWanted &&
+        lastGraded.local &&
+        lastGraded.gen > flagsLoad.data.started
+          ? lastGraded
+          : null;
       setFlags({
         questionId: flagsWanted,
         flags: {
@@ -794,6 +809,7 @@ function useSolveStep({
           result: flagsLoad.data.last_graded_result ?? null,
           pending: flagsLoad.data.is_pending_grading ?? false,
           local: false,
+          gen: 0,
         },
       );
     }
