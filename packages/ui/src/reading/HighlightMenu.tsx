@@ -175,8 +175,10 @@ export function HighlightMenu({
                 />
               </RadixDropdownMenu.Trigger>
               {/* The copy announcement lives outside the menu: a `menu` may own only items,
-                  groups and separators (axe aria-required-children, A11Y-19). */}
-              <span role="status" className="qz-visually-hidden">
+                  groups and separators (axe aria-required-children, A11Y-19). An explicit
+                  aria-live keeps it out of a modal's hideOthers (the 정리 노트 modal), which
+                  exempts [aria-live] but not an implicit role=status. */}
+              <span role="status" aria-live="polite" className="qz-visually-hidden">
                 {copied ? HIGHLIGHT_MENU_TEXT.copied : ''}
               </span>
             </>,
