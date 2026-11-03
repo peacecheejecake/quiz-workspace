@@ -268,7 +268,11 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     const panel = screen.getByRole('dialog');
     expect(panel).toHaveAttribute('aria-modal', 'true');
     expect(await within(panel).findByRole('heading', { name: '3장 12번' })).toBeInTheDocument();
-    expect(await within(panel).findByText(SHOWN_STEM)).toBeInTheDocument();
+    // The stem is on screen already while the run and the session still load (a placeholder that
+    // the loaded body then replaces): a findByText match on it can be detached by the next render
+    // before the assertion runs. Wait for the loaded body (the 제출 button) first, then read it.
+    await within(panel).findByRole('button', { name: SUBMIT_UI });
+    expect(within(panel).getByText(SHOWN_STEM)).toBeInTheDocument();
     expect(within(panel).getByRole('progressbar')).toHaveAttribute(
       'aria-valuetext',
       '2문제 중 1번째',
