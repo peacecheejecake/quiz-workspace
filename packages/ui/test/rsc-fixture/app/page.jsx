@@ -32,7 +32,12 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   EmptyState,
   FavoriteToggle,
@@ -272,6 +277,14 @@ export default function Page() {
                 <DropdownMenuLabel>작업</DropdownMenuLabel>
                 <DropdownMenuItem>보관</DropdownMenuItem>
               </DropdownMenuGroup>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>색 바꾸기</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent aria-label="색 바꾸기">
+                  <DropdownMenuRadioGroup value="yellow">
+                    <DropdownMenuRadioItem value="yellow">노랑</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
               <DropdownMenuSeparator />
               <DropdownMenuItem tone="danger">삭제</DropdownMenuItem>
             </DropdownMenuContent>

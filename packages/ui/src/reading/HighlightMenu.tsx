@@ -190,6 +190,11 @@ export function HighlightMenu({
           onInteractOutside={() => {
             closing.current = 'outside';
           }}
+          onPointerDownOutside={() => {
+            // The kept selection goes with the menu: a press on the selected text then starts a
+            // new selection instead of dragging the old one.
+            window.getSelection()?.removeAllRanges();
+          }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             const reason = closing.current;

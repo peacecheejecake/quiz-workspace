@@ -417,6 +417,11 @@ export function PracticeViewer({
                 selfGrade={work.selfGrade}
                 error={work.error}
                 resultRef={resultRef}
+                highlighting={{
+                  questionId: view.id,
+                  revisionId: ready.question_revision_id,
+                  chapterTitle: view.chapterTitle,
+                }}
               />
             </form>
           ) : state.status === 'error' ? (

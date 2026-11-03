@@ -43,6 +43,8 @@ export interface ManageViewerProps {
   readonly documents: readonly { readonly id: string; readonly title: string }[];
   /** Opener actions for the loaded question (the 보관·초안 문제 dialog's editor actions). */
   readonly footer?: (question: QuestionDetail) => ReactNode;
+  /** Focus this highlight's mark in the explanation (`내 하이라이트` › `위치로 이동`). */
+  readonly focusHighlight?: string | null;
 }
 
 export function ManageViewer({
@@ -56,6 +58,7 @@ export function ManageViewer({
   onRetry,
   documents,
   footer,
+  focusHighlight = null,
 }: ManageViewerProps) {
   const historyRef = useRef<HTMLHeadingElement>(null);
   const question = load.status === 'ready' ? load.question : null;
@@ -68,6 +71,7 @@ export function ManageViewer({
       title="문제 상세"
       description={description}
       onOpenAutoFocus={(event) => {
+        // A highlight to go to takes focus once it is drawn (ExplanationText).
         if (focus !== 'history') return;
         event.preventDefault();
         historyRef.current?.focus();
@@ -100,6 +104,17 @@ export function ManageViewer({
               revision={question.revision}
               type={question.question_type}
               heading="문제"
+              highlighting={
+                // HILITE-01: the reader's highlights of the current explanation (not of drafts).
+                question.publication_status !== 'DRAFT'
+                  ? {
+                      questionId: question.id,
+                      revisionId: question.revision.id,
+                      chapterTitle: question.chapter?.title ?? null,
+                      focusId: focusHighlight,
+                    }
+                  : null
+              }
             />
           </>
         ) : (

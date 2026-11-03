@@ -97,6 +97,7 @@ import {
   homeOpensBlocked,
   isChapterNoteOpen,
   keepNoteChapter,
+  NO_CHAPTER_NOTE,
   noteChapterOf,
   openChapterNote,
   parsePanels,
@@ -612,7 +613,17 @@ export function WorkspaceHome({
           documents={documentTitles}
           onQuestionsChanged={() => setQuestionsVersion((n) => n + 1)}
           chapterActions={(chapter) =>
-            chapter.id === NO_CHAPTER_KEY ? null : (
+            chapter.id === NO_CHAPTER_KEY ? (
+              // HILITE-01: the "챕터 없음" group's explanation highlights (no AI note there).
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-haspopup="dialog"
+                onClick={() => openNote(NO_CHAPTER_NOTE)}
+              >
+                내 하이라이트
+              </Button>
+            ) : (
               <>
                 {generating.has(chapter.id) ? <span>만드는 중</span> : null}
                 <Button
@@ -722,6 +733,8 @@ export function WorkspaceHome({
             </div>
           </FloatingSidePanel>
           <ChapterNotePanel
+            workspaceId={workspace.id}
+            documents={documentTitles}
             open={shows('chapter-note')}
             onOpenChange={(open) => (open ? undefined : closeNote())}
             container={host}
