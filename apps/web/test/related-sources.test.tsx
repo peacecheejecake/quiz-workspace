@@ -40,6 +40,7 @@ function source(overrides: Partial<RelatedSource> = {}): RelatedSource {
     chapter_id: null,
     chapter_title: '1장',
     block_id: 'b-1',
+    block_ids: ['b-1', 'b-2'],
     page_start: 2,
     page_end: 2,
     excerpt: '가나다 원리: 물이 증발한다.',
@@ -58,8 +59,13 @@ function fake(list: () => ReturnType<RelatedClient['list']>): RelatedClient {
 
 const target = { kind: 'question', id: ID } as const;
 const gate = { practice_session_id: SESSION };
+
+const BLOCKS: Record<string, string> = {
+  'b-1': '가나다 원리: 물이 증발한다.',
+  'b-2': '둘째 블록: 전체 구절의 뒷부분.',
+};
 const search = {
-  block: vi.fn().mockResolvedValue({ text: '가나다 원리: 물이 증발한다. 전체 구절.' }),
+  block: vi.fn(async (_doc: string, id: string) => ({ text: BLOCKS[id] ?? '' }) as never),
 };
 
 describe('RELSRC-01 relays', () => {
@@ -257,8 +263,11 @@ describe('RELSRC-01 area', () => {
     const list = await screen.findByRole('list', { name: '관련 본문' });
     await userEvent.click(within(list).getByRole('button', { name: /가나다/ }));
     const dialog = await screen.findByRole('dialog', { name: '본문 발췌' });
-    await waitFor(() => expect(dialog).toHaveTextContent('전체 구절'));
+    // Every block of the passage, in order — not only the first.
+    await waitFor(() => expect(dialog).toHaveTextContent('전체 구절의 뒷부분'));
+    expect(dialog).toHaveTextContent(/물이 증발한다\.\s*둘째 블록/);
     expect(search.block).toHaveBeenCalledWith(DOC, 'b-1', REV);
+    expect(search.block).toHaveBeenCalledWith(DOC, 'b-2', REV);
   });
 });
 

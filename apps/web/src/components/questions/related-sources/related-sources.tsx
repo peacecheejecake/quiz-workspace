@@ -95,17 +95,22 @@ function RelatedSourcesArea({
 
   const openSource = (source: RelatedSource) => {
     const requestId = ++excerptRequest.current;
-    // The listed excerpt first; the whole passage (its first block of the pinned revision) after.
+    // The listed excerpt first; the whole passage (all its blocks of the pinned revision, in
+    // reading order) after.
     setExcerpt({
       item: sourceItem(source, source.excerpt, source.highlights),
       stale: source.stale,
     });
     setExcerptOpen(true);
-    search.block(source.document_id, source.block_id, source.revision_id).then(
-      (block) => {
+    const ids = [...new Set(source.block_ids.length > 0 ? source.block_ids : [source.block_id])];
+    Promise.all(
+      ids.slice(0, 12).map((id) => search.block(source.document_id, id, source.revision_id)),
+    ).then(
+      (blocks) => {
         if (requestId !== excerptRequest.current || !mounted.current) return;
-        const terms = termRangesIn(block.text, source.excerpt, source.highlights);
-        setExcerpt({ item: sourceItem(source, block.text, terms), stale: source.stale });
+        const text = blocks.map((b) => b.text).join('\n\n');
+        const terms = termRangesIn(text, source.excerpt, source.highlights);
+        setExcerpt({ item: sourceItem(source, text, terms), stale: source.stale });
       },
       () => undefined, // the listed excerpt stays; "PDF에서 보기" still works
     );
@@ -321,8 +326,8 @@ function sourceItem(
     section_id: null,
     breadcrumb: [source.document_title, ...(source.chapter_title ? [source.chapter_title] : [])],
     block_id: source.block_id,
-    block_ids: [source.block_id],
-    context_block_ids: [source.block_id],
+    block_ids: [...source.block_ids],
+    context_block_ids: [...source.block_ids],
     page: source.page_start,
     bbox: null,
     locations: [],
