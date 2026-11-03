@@ -1268,6 +1268,27 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
     expect(dotStatus(1)).not.toBe('retry');
   });
 
+  it('RETRY-01-C04 a refused retry (409) shows the dedicated message and hides the toggle', async () => {
+    lookupOverviewQuestionAction.mockResolvedValue({ ok: true, data: outsidePlaced(1) });
+    const { user, panel } = await openPanel();
+    await user.click(toggles(panel).retry);
+    await act(async () =>
+      held[0]?.resolve({
+        ok: false,
+        kind: 'retryNotAllowed',
+        message: '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.',
+      }),
+    );
+    expect(
+      await screen.findByText('정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.'),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+    );
+    expect(lookupOverviewQuestionAction).toHaveBeenCalledWith(WS, id(1));
+    expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
+  });
+
   it('a rejected request after a saved change keeps the saved change', async () => {
     const { user, panel } = await openPanel();
     const { favorite, retry } = toggles(panel);

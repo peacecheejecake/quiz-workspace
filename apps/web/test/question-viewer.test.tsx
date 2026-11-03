@@ -258,6 +258,50 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     ).toBeInTheDocument();
   });
 
+  it('RETRY-01-C04 sequence(bank): a refused retry (409) shows the message, reads the state again and hides the toggle', async () => {
+    const user = userEvent.setup();
+    const message = '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.';
+    const onFlagsFailed = vi.fn();
+    const flags = vi
+      .fn()
+      .mockResolvedValueOnce({
+        is_favorite: false,
+        needs_retry: false,
+        last_graded_result: 'correct',
+      })
+      .mockResolvedValue({
+        is_favorite: false,
+        needs_retry: false,
+        last_graded_result: 'incorrect',
+      });
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        onFlagsFailed={onFlagsFailed}
+        client={fakeClient({
+          flags: flags as unknown as RunClient['flags'],
+          setFlags: vi.fn(async () => ({
+            ok: false as const,
+            kind: 'retryNotAllowed' as const,
+            message,
+          })) as unknown as RunClient['setFlags'],
+        })}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('button', { name: '다시 풀기 표시' }));
+    await waitFor(() => expect(onFlagsFailed).toHaveBeenCalledWith(message));
+    await waitFor(() => expect(flags).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+    );
+  });
+
   it('RETRY-01-C04 sequence(bank): no 다시 풀기 while the latest submission is pending grading', async () => {
     render(
       <QuestionViewer

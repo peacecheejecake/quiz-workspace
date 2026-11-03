@@ -22,6 +22,7 @@ linked_tests: [RETRY-01-AC01 … RETRY-01-AC04]
 - **보이지 않음:** toggle은 비활성이 아니라 **렌더링하지 않는다**(`즐겨찾기` toggle은 그대로). 풀이 panel에서는 정답 제출 직후 나타나고, 이후 제출이 오답이면 사라진다.
 - **자동 해제:** 앞으로의 새 채점 결과가 오답이면 `다시 풀기` 플래그가 꺼진다(합쳐진 중복 행 포함). **기존 플래그는 끄지 않는다**(사용자 결정 2026-11-04 변경): 정답이 아닌 문제에 이미 켜진 플래그는 Heatmap `retry` 표시와 `다시 풀기` 필터에 그대로 나오고 toggle만 보이지 않으며, 정답으로 맞힌 뒤에야 toggle로 끌 수 있다. 정답 채점은 플래그를 바꾸지 않는다(questions.md §2.1의 "정답을 맞혔다고 자동 해제하지 않음"은 그대로).
 - **API:** `PATCH /questions/{id}/my-state`가 마지막 채점 결과가 정답이 아닌 문제의 `needs_retry: true`를 거절한다 — 409 `retry-requires-correct`. 끄기(`false`)는 늘 허용한다.
+- **오래된 화면의 409 (사용자 결정 2026-11-04 D2):** 오래된 화면에서 toggle을 눌러 409 `retry-requires-correct`를 받으면 기존 toggle 실패 알림(error 알림)에 전용 문구 "정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다."를 보이고, 켠 값은 되돌리며, 문제 상태를 다시 읽어 toggle을 숨긴다(풀이 panel은 overview 조회, 범위 풀이는 위치의 `flags` 다시 읽기).
 - `sequence(mock)`·`read-only`·보관 Workspace에는 원래 toggle이 없다.
 
 ## 수용 기준
@@ -57,4 +58,4 @@ linked_tests: [RETRY-01-AC01 … RETRY-01-AC04]
 | RETRY-01-C01 | **API 거절:** 마지막 채점 결과가 정답이 아니거나 가장 최근 제출이 채점 대기인 문제의 `needs_retry: true` → 409 `retry-requires-correct`(problem type `urn:quiz-workspace:problem:retry-requires-correct`)이고 같은 요청의 다른 flag도 쓰이지 않는다. 요청한 켜기를 판정하므로 이미 켜져 있는 기존 플래그(마지막 결과 정답 아님)도 `{needs_retry: true, …}` 요청은 409다. 정답 뒤에는 200. 끄기는 어떤 상태에서도 200. 보관 Workspace는 그대로 403 `workspace-archived`가 먼저다. |
 | RETRY-01-C02 | **자동 해제:** 자동 채점 오답·직접 채점 `incorrect`가 `needs_retry`를 끄고(합쳐진 중복 행 포함, 다른 사용자·다른 문제는 그대로), 정답 채점과 채점 대기 제출은 플래그를 바꾸지 않는다. API가 아닌 어떤 쓰기 경로로 오답을 기록해도 같다(pgTAP trigger). |
 | RETRY-01-C03 | **migration은 기존 데이터를 바꾸지 않는다:** `20261104220000_retry_correct_only.sql`은 함수와 trigger만 더하고 기존 `question_user_states` 행을 하나도 바꾸지 않는다(정답이 아닌 문제의 기존 `needs_retry`도 그대로). |
-| RETRY-01-C04 | **컴포넌트(Vitest):** `StudyToggles`는 `retryAvailable=false`이면 `RetryToggle`을 렌더링하지 않고, 풀이 panel(`PracticeViewer`)과 범위 풀이는 마지막 채점 결과가 `correct`이고 가장 최근 제출이 채점 대기가 아닐 때만 `retryAvailable`이다. 범위 풀이의 첫 `flags` 조회 응답이 늦게 와도 그 사이 이 panel에서 한 채점을 되돌리지 않는다. 낙관적 상태(`gradedPatch`)는 오답이면 `needs_retry`를 끈다. |
+| RETRY-01-C04 | **컴포넌트(Vitest):** `StudyToggles`는 `retryAvailable=false`이면 `RetryToggle`을 렌더링하지 않고, 풀이 panel(`PracticeViewer`)과 범위 풀이는 마지막 채점 결과가 `correct`이고 가장 최근 제출이 채점 대기가 아닐 때만 `retryAvailable`이다. 범위 풀이의 첫 `flags` 조회 응답이 늦게 와도 그 사이 이 panel에서 한 채점을 되돌리지 않는다. 낙관적 상태(`gradedPatch`)는 오답이면 `needs_retry`를 끈다. 409 `retry-requires-correct`는 실패 kind `retryNotAllowed`와 위 전용 문구로 분류되고, 풀이 panel·범위 풀이 모두 그 문구를 알리고 상태를 다시 읽어 toggle을 숨긴다. |

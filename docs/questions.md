@@ -339,4 +339,5 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 4. **자동 해제 — 규칙의 자리.** 앞으로의 새 채점 결과가 오답이면 `needs_retry`를 끈다. 이 규칙은 API 코드가 아니라 DB trigger(`question_user_states_retry_clear`, `last_graded_result`를 쓰는 insert/update, migration `20261104220000_retry_correct_only.sql`)에 있다. 자동 채점·직접 채점·이후의 모든 채점 경로가 `question_user_states.last_graded_result`를 쓰는 곳을 지나가므로 한 곳에서 보장되고, 합쳐진 중복 행도 같은 trigger가 끈다. 정답 채점은 플래그를 바꾸지 않는다.
 5. **기존 데이터는 그대로 (사용자 결정 2026-11-04 변경).** 이미 켜져 있는 플래그는 migration이 끄지 않는다(데이터를 바꾸는 단계 없음). 마지막 채점 결과가 정답이 아닌 문제에 켜진 기존 플래그는 Heatmap `retry` 표시와 `다시 풀기` 필터에 그대로 나오지만, toggle은 보이지 않는다(1~2항) — 그 문제를 정답으로 맞힌 뒤에야 toggle로 끌 수 있다. 새 오답 채점이 오면 4항대로 꺼진다.
 6. **이력 불변.** attempt와 `last_graded_result`는 바뀌지 않는다. 플래그만 꺼진다.
+6a. **오래된 화면의 409 (D2).** 켜기가 409 `retry-requires-correct`로 거절되면 화면은 전용 문구 "정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다."를 알리고, 문제 상태를 다시 읽어 toggle을 숨긴다.
 7. **알려진 가장자리.** 중복 정리(merge)·되돌리기로 합친 상태의 판정이 바뀌어 플래그가 정답이 아닌 문제에 남을 수 있다 — 그 문제는 toggle이 없고 Heatmap은 `retry`로 보이며, 다음 오답 채점 또는 끄기 PATCH가 정리한다(follow-up).

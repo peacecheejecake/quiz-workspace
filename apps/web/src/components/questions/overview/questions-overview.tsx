@@ -436,6 +436,10 @@ export function QuestionsOverview({
     (questionId, patch) => setMyStateAction(workspaceId, questionId, patch),
     (questionId, event) => {
       if (event.type === 'failed') toast({ tone: 'error', title: event.message });
+      // A stale screen offered `다시 풀기`: read the question's state again (hides the toggle).
+      if (event.type === 'failed' && event.message === QUESTION_FAILURE_MESSAGES.retryNotAllowed) {
+        void rereadState(questionId);
+      }
       const item = currentItem(questionId) ?? savingItems.current.get(questionId);
       if (!item) return;
       const saved =
@@ -469,6 +473,24 @@ export function QuestionsOverview({
       });
     },
   );
+
+  /** RETRY-CORRECT: the server refused `다시 풀기`; show the question's real state. */
+  async function rereadState(questionId: string) {
+    const found = await lookupOverviewQuestionAction(workspaceId, questionId);
+    if (!found.ok || !found.data) return;
+    const { item } = found.data;
+    staleOverview.current = true;
+    putOverride(questionId, nextSeq(questionId), {
+      patch: {
+        status: item.status,
+        is_favorite: item.is_favorite,
+        needs_retry: item.needs_retry,
+        last_graded_result: item.last_graded_result,
+        is_pending_grading: item.is_pending_grading,
+      },
+      settledOn: latestItems.current,
+    });
+  }
 
   function changeFlags(
     questionId: string,

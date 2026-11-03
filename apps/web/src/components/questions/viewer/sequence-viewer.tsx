@@ -721,7 +721,11 @@ function useSolveStep({
       if (saved) {
         onFlagsSaved?.(qid, { is_favorite: saved.is_favorite, needs_retry: saved.needs_retry });
       }
-      if (event.type === 'failed') onFlagsFailed?.(event.message);
+      if (event.type === 'failed') {
+        onFlagsFailed?.(event.message);
+        // A stale panel offered `다시 풀기`: read the question's state again (hides the toggle).
+        if (event.message === QUESTION_FAILURE_MESSAGES.retryNotAllowed) setItemSeq((n) => n + 1);
+      }
       setFlags((prev) =>
         prev?.questionId !== qid ? prev : { questionId: qid, flags: event.flags },
       );
