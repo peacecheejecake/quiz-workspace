@@ -347,6 +347,60 @@ describe('AIEXPL-01 sources keep the pinned revision', () => {
   });
 });
 
+describe('AIEXPL-01 a failed stream ends the progress', () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function sse(text: string) {
+    return vi.fn<typeof fetch>(
+      async () => new Response(text, { headers: { 'content-type': 'text/event-stream' } }),
+    );
+  }
+
+  it('an error whose state cannot be read again shows the reason and 다시 시도', async () => {
+    const user = userEvent.setup();
+    const live = explanation({ status: 'running', body: null, sources: [], finished_at: null });
+    globalThis.fetch = sse('id: 1\nevent: error\ndata: {"code":"llm_unavailable"}\n\n');
+    const api = fakeClient(stateOf({ can_create: false, explanation: live }));
+    api.state
+      .mockResolvedValueOnce(stateOf({ can_create: false, explanation: live }))
+      .mockRejectedValue(new client.ExplanationApiError('network'));
+    render(
+      <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
+    );
+    const region = area();
+    expect(await within(region).findByRole('alert')).toHaveTextContent(
+      model.explanationErrorText('llm_unavailable'),
+    );
+    expect(within(region).queryByText(model.EXPL_TEXT.working)).toBeNull();
+    expect(region.querySelector('[aria-busy="true"]')).toBeNull();
+    api.create.mockResolvedValueOnce(stateOf({ can_create: false, explanation: explanation() }));
+    await user.click(within(region).getByRole('button', { name: '다시 시도' }));
+    expect(api.create).toHaveBeenCalledTimes(1);
+    expect(await within(region).findByText('AI 생성')).toBeInTheDocument();
+  });
+
+  it('access lost mid-stream (not_found, then 404) shows the not-found reason, no retry', async () => {
+    const live = explanation({ status: 'running', body: null, sources: [], finished_at: null });
+    globalThis.fetch = sse('event: error\ndata: {"code":"not_found"}\n\n');
+    const api = fakeClient(stateOf({ can_create: false, explanation: live }));
+    api.state
+      .mockResolvedValueOnce(stateOf({ can_create: false, explanation: live }))
+      .mockRejectedValue(new client.ExplanationApiError('notFound', 404));
+    render(
+      <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
+    );
+    const region = area();
+    expect(await within(region).findByRole('alert')).toHaveTextContent(
+      model.explanationFailureText('notFound'),
+    );
+    expect(within(region).queryByText(model.EXPL_TEXT.working)).toBeNull();
+    expect(within(region).queryByRole('button', { name: '다시 시도' })).toBeNull();
+  });
+});
+
 describe('AIEXPL-01 streaming', () => {
   const originalFetch = globalThis.fetch;
   afterEach(() => {

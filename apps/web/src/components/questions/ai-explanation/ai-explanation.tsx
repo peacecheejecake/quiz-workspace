@@ -121,6 +121,15 @@ function AiExplanationArea({
   const [refusal, setRefusal] = useState<string | null>(null);
   /** How the last generation followed here failed (shown while another one is current). */
   const [streamFailure, setStreamFailure] = useState<{ id: string; text: string } | null>(null);
+  /**
+   * A followed generation ended (an `error`, or `done` without its result) and its state could not
+   * be read again (access lost, network): it is shown as ended, never as still running.
+   */
+  const [ended, setEnded] = useState<{
+    readonly id: string;
+    readonly text: string;
+    readonly action: 'create' | 'reload' | null;
+  } | null>(null);
   const busy = useRef(false);
   const [pending, setPending] = useState(false);
   const mounted = useRef(true);
@@ -150,7 +159,8 @@ function AiExplanationArea({
 
   const state = load.status === 'ready' ? load.state : null;
   const explanation = state?.explanation ?? null;
-  const liveId = isLive(explanation) ? (explanation?.id ?? null) : null;
+  const endedHere = ended !== null && explanation?.id === ended.id ? ended : null;
+  const liveId = isLive(explanation) && !endedHere ? (explanation?.id ?? null) : null;
 
   // An explanation being made (started here or by someone else) shows open, with its text from
   // the start, and is announced once.
@@ -183,7 +193,22 @@ function AiExplanationArea({
       setAnnouncement(failure ? '' : EXPL_TEXT.ready);
       // A regeneration that failed leaves the current success shown: it says why (below).
       setStreamFailure(failure ? { id: liveId, text: failure } : null);
-      setReload((n) => n + 1);
+      // Read the state again (fresh permissions, the stored result). Not tied to this stream's
+      // signal: showing the result ends the stream.
+      client.state(targetRef.current, gateRef.current).then(
+        (next) => {
+          if (mounted.current) setLoad({ status: 'ready', state: next });
+        },
+        (error: unknown) => {
+          if (!mounted.current || done) return;
+          const lost = error instanceof ExplanationApiError && error.kind === 'notFound';
+          setEnded({
+            id: liveId,
+            text: lost ? explanationFailureText('notFound') : (failure ?? EXPL_TEXT.loadFailed),
+            action: lost ? null : failure ? 'create' : 'reload',
+          });
+        },
+      );
     };
     void (async () => {
       try {
@@ -250,6 +275,8 @@ function AiExplanationArea({
           : await client.regenerate(target, gate);
       if (!mounted.current) return;
       setExpanded(true);
+      // Only now: clearing an ended one earlier would follow its stream again meanwhile.
+      setEnded(null);
       setLoad({ status: 'ready', state: next });
     } catch (error) {
       if (!mounted.current) return;
@@ -333,6 +360,32 @@ function AiExplanationArea({
           {mode === 'disabled' ? EXPL_TEXT.disabled : EXPL_TEXT.archived}
         </p>
       );
+  } else if (endedHere) {
+    content = (
+      <>
+        <div role="alert" className={styles.alert}>
+          <p className={styles.text}>{endedHere.text}</p>
+        </div>
+        {endedHere.action ? (
+          <div className={styles.row}>
+            <Button
+              size="sm"
+              loading={pending}
+              onClick={() => {
+                if (endedHere.action === 'create') {
+                  void request('create');
+                } else {
+                  setEnded(null);
+                  setReload((n) => n + 1);
+                }
+              }}
+            >
+              {EXPL_TEXT.retry}
+            </Button>
+          </div>
+        ) : null}
+      </>
+    );
   } else if (isLive(explanation)) {
     const text = live?.id === explanation.id ? live.text : '';
     content = (
