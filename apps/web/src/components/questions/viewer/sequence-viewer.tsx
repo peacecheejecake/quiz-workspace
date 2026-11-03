@@ -82,6 +82,7 @@ import {
   type RevealedAnswers,
 } from './question-body';
 import { QuestionRangePicker } from './question-range-picker';
+import { QuestionSourcePreview } from './question-source-preview';
 import {
   EMPTY_RANGE_FILTERS,
   allIds,
@@ -960,6 +961,12 @@ function useSolveStep({
             <p>{sessionLoad.message}</p>
             <Button onClick={() => setSessionRetry((n) => n + 1)}>다시 시도</Button>
           </div>
+        ) : null}
+        {item.question_id ? (
+          // QSRC-01: bank questions and `보기 섞기` mock questions with an imported source.
+          <QuestionSourcePreview
+            target={{ kind: source === 'mock' ? 'mock' : 'question', id: item.question_id }}
+          />
         ) : null}
         <form
           id={formId}

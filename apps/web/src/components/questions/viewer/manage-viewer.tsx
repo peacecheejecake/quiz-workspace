@@ -22,6 +22,7 @@ import {
 } from '@/lib/questions/form';
 import { documentTitle, formatDateTime, pageText, sourceHref } from '../labels';
 import { QuestionBody } from './question-body';
+import { QuestionSourcePreview } from './question-source-preview';
 import styles from './question-viewer.module.css';
 
 /** Which part the opener asked for: focus goes to its heading. */
@@ -113,6 +114,10 @@ export function ManageViewer({
               </Badge>
               <span>버전 {question.revision.version}</span>
             </div>
+            {question.publication_status !== 'DRAFT' ? (
+              // QSRC-01 `manage`: a registered question's imported source (a draft has none).
+              <QuestionSourcePreview target={{ kind: 'question', id: question.id }} aboveModals />
+            ) : null}
             <QuestionBody
               kind="revision"
               revision={question.revision}
