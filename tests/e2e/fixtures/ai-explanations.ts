@@ -95,7 +95,7 @@
 //   The area is a `region` named by its h3 "AI 해설" inside the QuestionViewer result (practice
 //   panel "n번 문제", range/mock run modal, "문제 상세" dialog, `manage(mock)` "문제 k", share
 //   panel), after the result/explanation and before the footer. Never before a submission in
-//   practice/sequence. States: button "AI 해설 만들기" + text "문제와 정답, 관련 교재 구절이 AI
+//   practice/sequence. States: button "AI 해설" + text "문제와 정답, 관련 교재 구절이 AI
 //   서비스로 전송됩니다."; cached: disclosure button "AI 해설 보기" (aria-expanded, collapsed);
 //   running: text "AI 해설을 만드는 중" with [aria-busy="true"]; one status announcement "AI 해설을
 //   만드는 중입니다" at the start and one "AI 해설이 준비되었습니다" at the end; done: badge text "AI
@@ -103,7 +103,7 @@
 //   (each option's text with its why line), footnote button "[1]" (name "[1]" or "출처 1"), list
 //   "출처" with rows "[1] <문서> · <장> · p.<n>" (each a button opening the "본문 발췌" panel with
 //   "PDF에서 보기" → DOC-02 at that page), meta "<시각> · 버전 k" (k ≥ 2), button "다시 만들기"
-//   (editors of active workspaces), button "이 문제로 질문하기" (ASK on); failure: role=alert with
+//   (editors of active workspaces), button "AI 질문하기" (ASK on); failure: role=alert with
 //   the reason + button "다시 시도"; reasons: llm_unavailable → "AI 서비스에 연결하지 못했습니다.
 //   잠시 후 다시 시도하세요.", explanation_answer_mismatch → "정답과 맞지 않는 해설이 나와 보여 주지
 //   않았습니다. 다시 시도하세요.", 429 → "잠시 후 다시 시도하세요 (n초)", regenerate cap → "오늘은 이
@@ -563,11 +563,14 @@ export function versionText(k: number): RegExp {
 }
 
 export const explUi = {
-  area: (scope: Locator) => scope.getByRole('region', { name: /^(AI 해설|AI explanation)$/i }),
+  // The group holds the toolbar (AI 해설 / AI 질문하기) and, once there is content, the region.
+  area: (scope: Locator) => scope.getByRole('group', { name: /^(AI 해설|AI explanation)$/i }),
+  /** The content region: absent while no explanation exists. */
+  region: (scope: Locator) => scope.getByRole('region', { name: /^(AI 해설|AI explanation)$/i }),
   heading: (scope: Locator) =>
     scope.getByRole('heading', { name: /^(AI 해설|AI explanation)$/i, level: 3 }),
   create: (scope: Locator) =>
-    scope.getByRole('button', { name: /^(AI 해설 만들기|make (an )?AI explanation)$/i }),
+    scope.getByRole('button', { name: /^(AI 해설|make (an )?AI explanation)$/i }),
   show: (scope: Locator) =>
     scope.getByRole('button', { name: /^(AI 해설 보기|show (the )?AI explanation)$/i }),
   /** The share panel's read-only disclosure. */
@@ -581,8 +584,7 @@ export const explUi = {
   sources: (area: Locator) =>
     area.getByRole('list', { name: /^(출처|sources)$/i }).getByRole('listitem'),
   regenerate: (area: Locator) => area.getByRole('button', { name: /^(다시 만들기|regenerate)$/i }),
-  askAbout: (area: Locator) =>
-    area.getByRole('button', { name: /^(이 문제로 질문하기|ask about this question)$/i }),
+  askAbout: (area: Locator) => area.getByRole('button', { name: /^(AI 질문하기|ask (the )?AI)$/i }),
   alert: (area: Locator) => area.getByRole('alert'),
   retry: (area: Locator) => area.getByRole('button', { name: /^(다시 시도|try again)$/i }),
 };

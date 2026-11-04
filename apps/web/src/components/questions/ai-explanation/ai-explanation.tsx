@@ -4,14 +4,15 @@
 // QuestionViewer result — `practice` / `sequence(bank|mock)` once the position was submitted (the
 // caller mounts it only then: nothing is fetched before a submission), `manage` (문제 상세,
 // `view: detail`) and `manage(mock)` (`view: manage`) without one. A region named by its h3.
-//   none      `AI 해설 만들기` + the send notice; feature off / archived: the reason instead
+//   layout    a group `AI 해설`: a toolbar (`AI 해설` generate button + `AI 질문하기`) and, only when
+//             there is something to show, the region below (none: no region at all)
+//   none      the `AI 해설` button + the send notice; feature off / archived: the reason instead
 //   cached    a collapsed disclosure `AI 해설 보기` (the result stays in view); opening it reads
 //             the stored one, no generation
 //   making    "AI 해설을 만드는 중" and the text so far (SSE, ASK-W's Markdown and number chips),
 //             aria-busy; also joined when someone else started it (the same stream from seq 0)
 //   done      `AI 생성` badge, the notice, the body (every option), footnotes `[n]` and the `출처`
-//             list (→ 본문 발췌 → PDF에서 보기), "<시각> · 버전 k", `다시 만들기` (editors) and
-//             `이 문제로 질문하기` (ASK-01, where the home's AI 질문 is available)
+//             list (→ 본문 발췌 → PDF에서 보기), "<시각> · 버전 k" and `다시 만들기` (editors)
 //   failed    role=alert with the reason + `다시 시도` (a new generation)
 // One status region announces the start and the end once each. Making one moves focus to the
 // heading; finishing never moves it. The shared, guest version is SharedAiExplanation.
@@ -58,7 +59,7 @@ export interface AiExplanationProps {
   readonly gate: ExplanationGate;
   /** The question's options (any order): the body names each by its text. */
   readonly options: readonly QuestionOption[];
-  /** `이 문제로 질문하기` attaches this (null: no button). */
+  /** `AI 질문하기` attaches this (null: no button). */
   readonly askAttachment?: AskAttachmentInput | null;
   /** The revision shown (manage views): an edit starts the area over. */
   readonly revisionId?: string;
@@ -108,6 +109,9 @@ function AiExplanationArea({
   const headingId = useId();
   const bodyId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // The area (and its heading) appears only once there is something to show: focus moves to it
+  // after the render that mounts it.
+  const focusHeading = useRef(false);
 
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [reload, setReload] = useState(0);
@@ -267,7 +271,7 @@ function AiExplanationArea({
     setRefusal(null);
     setStreamFailure(null);
     setAnnouncer(true);
-    headingRef.current?.focus();
+    focusHeading.current = true;
     try {
       const next =
         action === 'create'
@@ -279,6 +283,7 @@ function AiExplanationArea({
       setEnded(null);
       setLoad({ status: 'ready', state: next });
     } catch (error) {
+      focusHeading.current = false;
       if (!mounted.current) return;
       const failure =
         error instanceof ExplanationApiError
@@ -344,22 +349,8 @@ function AiExplanationArea({
       </div>
     );
   } else if (explanation === null) {
-    const mode = emptyMode(state);
-    content =
-      mode === 'create' ? (
-        <>
-          <div className={styles.row}>
-            <Button size="sm" loading={pending} onClick={() => void request('create')}>
-              {EXPL_TEXT.create}
-            </Button>
-          </div>
-          <p className={styles.hint}>{EXPL_TEXT.sendNotice}</p>
-        </>
-      ) : (
-        <p className={styles.hint}>
-          {mode === 'disabled' ? EXPL_TEXT.disabled : EXPL_TEXT.archived}
-        </p>
-      );
+    // Nothing to show: no area, only the toolbar's button (or the reason).
+    content = null;
   } else if (endedHere) {
     content = (
       <>
@@ -440,24 +431,11 @@ function AiExplanationArea({
               onSource={openSource}
               meta={metaText(explanation, formatDateTime)}
               actions={
-                state.can_regenerate || askAttachment ? (
+                state.can_regenerate ? (
                   <div className={styles.row}>
-                    {state.can_regenerate ? (
-                      <Button
-                        size="sm"
-                        loading={pending}
-                        onClick={() => void request('regenerate')}
-                      >
-                        {EXPL_TEXT.regenerate}
-                      </Button>
-                    ) : null}
-                    <AskQuestionButton
-                      attachment={askAttachment}
-                      label={EXPL_TEXT.ask}
-                      variant="ghost"
-                    >
-                      {EXPL_TEXT.ask}
-                    </AskQuestionButton>
+                    <Button size="sm" loading={pending} onClick={() => void request('regenerate')}>
+                      {EXPL_TEXT.regenerate}
+                    </Button>
                   </div>
                 ) : null
               }
@@ -468,23 +446,53 @@ function AiExplanationArea({
     );
   }
 
+  const mode = state && explanation === null ? emptyMode(state) : null;
+  const showArea = content !== null && load.status === 'ready';
+  useEffect(() => {
+    if (focusHeading.current && headingRef.current) {
+      focusHeading.current = false;
+      headingRef.current.focus();
+    }
+  });
+
   return (
-    <section className={styles.area} aria-labelledby={headingId}>
-      <h3 id={headingId} ref={headingRef} tabIndex={-1} className={styles.heading}>
-        {EXPL_TEXT.title}
-      </h3>
-      {content}
+    <div role="group" aria-label={EXPL_TEXT.title} className={styles.root}>
+      <div className={styles.row}>
+        {mode === 'create' ? (
+          <Button size="sm" loading={pending} onClick={() => void request('create')}>
+            {EXPL_TEXT.create}
+          </Button>
+        ) : null}
+        <AskQuestionButton attachment={askAttachment} label={EXPL_TEXT.ask} variant="secondary">
+          {EXPL_TEXT.ask}
+        </AskQuestionButton>
+      </div>
+      {mode === 'create' ? <p className={styles.hint}>{EXPL_TEXT.sendNotice}</p> : null}
+      {mode === 'disabled' || mode === 'archived' ? (
+        <p className={styles.hint}>
+          {mode === 'disabled' ? EXPL_TEXT.disabled : EXPL_TEXT.archived}
+        </p>
+      ) : null}
+      {load.status === 'loading' || load.status === 'error' || !state ? content : null}
+      {showArea ? (
+        <section className={styles.area} aria-labelledby={headingId}>
+          <h3 id={headingId} ref={headingRef} tabIndex={-1} className={styles.heading}>
+            {EXPL_TEXT.title}
+          </h3>
+          {content}
+          {streamFailure &&
+          !refusal &&
+          explanation?.status === 'succeeded' &&
+          explanation.id !== streamFailure.id ? (
+            <p role="alert" className={styles.alert}>
+              {streamFailure.text}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
       {refusal ? (
         <p role="alert" className={styles.alert}>
           {refusal}
-        </p>
-      ) : null}
-      {streamFailure &&
-      !refusal &&
-      explanation?.status === 'succeeded' &&
-      explanation.id !== streamFailure.id ? (
-        <p role="alert" className={styles.alert}>
-          {streamFailure.text}
         </p>
       ) : null}
       {announcer ? (
@@ -492,7 +500,7 @@ function AiExplanationArea({
           {announcement}
         </p>
       ) : null}
-      {/* Inside the area, so over a modal panel or dialog it is that layer's own child layer. */}
+      {/* Inside the group, so over a modal panel or dialog it is that layer's own child layer. */}
       {excerpt ? (
         <DocumentExcerptPanel
           workspaceId={workspaceId}
@@ -503,7 +511,7 @@ function AiExplanationArea({
           notice={excerpt.outdated ? EXPL_TEXT.outdated : null}
         />
       ) : null}
-    </section>
+    </div>
   );
 }
 
