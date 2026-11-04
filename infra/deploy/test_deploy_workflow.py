@@ -83,6 +83,7 @@ def test_order_preflight_images_migrations_rollout_web_smoke() -> None:
         _index("supabase db push"),
         _index("--service api"),
         _index("--service worker"),
+        _index("--service worker-interactive"),
         _index("Deploy web (Vercel)"),
         _index("smoke-staging"),
     ]
@@ -497,3 +498,21 @@ def test_bootstrap_skips_only_account_smoke_and_only_on_staging() -> None:
         < run.index("make smoke-staging")
     )
     assert "::warning::" in run
+
+
+def test_interactive_worker_rollout_is_optional_and_uses_the_worker_digest() -> None:
+    steps = _steps()
+    step = steps[_index("--service worker-interactive")]
+    assert step["if"] == "${{ env.RAILWAY_WORKER_INTERACTIVE_SERVICE_ID != '' }}"
+    assert step["env"]["IMAGE"] == "${{ steps.images.outputs.worker }}"
+    assert _index("--service worker-interactive") == _index("--service worker") + 1
+    skipped = steps[_index("Note skipped interactive worker")]
+    assert skipped["if"] == "${{ env.RAILWAY_WORKER_INTERACTIVE_SERVICE_ID == '' }}"
+    assert "GITHUB_STEP_SUMMARY" in skipped["run"]
+    job_env = _workflow()["jobs"]["deploy"]["env"]
+    assert job_env["RAILWAY_WORKER_INTERACTIVE_SERVICE_ID"] == (
+        "${{ vars.RAILWAY_WORKER_INTERACTIVE_SERVICE_ID }}"
+    )
+    # Optional: never part of the preflight's required list.
+    preflight = str(steps[_index("Preflight")]["run"])
+    assert "RAILWAY_WORKER_INTERACTIVE_SERVICE_ID" not in preflight

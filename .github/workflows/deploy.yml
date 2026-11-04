@@ -92,6 +92,7 @@ jobs:
       RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
       RAILWAY_API_SERVICE_ID: ${{ vars.RAILWAY_API_SERVICE_ID }}
       RAILWAY_WORKER_SERVICE_ID: ${{ vars.RAILWAY_WORKER_SERVICE_ID }}
+      RAILWAY_WORKER_INTERACTIVE_SERVICE_ID: ${{ vars.RAILWAY_WORKER_INTERACTIVE_SERVICE_ID }}
       WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
       SMOKE_API_URL: ${{ vars.SMOKE_API_URL }}
       SMOKE_SUPABASE_URL: ${{ vars.SMOKE_SUPABASE_URL }}
@@ -304,6 +305,17 @@ jobs:
         env:
           IMAGE: ${{ steps.images.outputs.worker }}
         run: uv run --no-sync python scripts/deploy/railway_deploy.py --service worker --image "$IMAGE"
+      # Optional second worker (AI 질문, runbook §12): same image digest, WORKER_QUEUE=interactive
+      # is set by the operator on that Railway service; this workflow never changes its env vars.
+      - name: Roll out interactive worker (Railway, optional)
+        if: ${{ env.RAILWAY_WORKER_INTERACTIVE_SERVICE_ID != '' }}
+        env:
+          IMAGE: ${{ steps.images.outputs.worker }}
+        run: uv run --no-sync python scripts/deploy/railway_deploy.py --service worker-interactive --image "$IMAGE"
+      - name: Note skipped interactive worker rollout
+        if: ${{ env.RAILWAY_WORKER_INTERACTIVE_SERVICE_ID == '' }}
+        run: |
+          echo '- Interactive worker rollout skipped (RAILWAY_WORKER_INTERACTIVE_SERVICE_ID is not set; runbook §12).' >> "$GITHUB_STEP_SUMMARY"
 
       # --- web (Vercel) -------------------------------------------------------------------------
       # Project settings (Root Directory apps/web, env values incl. NEXT_PUBLIC_*) live in Vercel;
