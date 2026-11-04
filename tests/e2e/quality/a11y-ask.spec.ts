@@ -44,7 +44,7 @@ import {
 import {
   ANSWER,
   FAIL_MARKER,
-  relatedBody,
+  expandRelated,
   relatedUi,
   relsrcInput,
   seedRelsrcBook,
@@ -400,7 +400,10 @@ test(
     await panelUi.option(panel, ANSWER).check();
     await panelUi.submit(panel).click();
     await expect(panel.getByRole('status').filter({ hasText: RESULT_TEXT.correct })).toBeVisible();
-    let body = await relatedBody(panel);
+    // Collapsed after the submission: nothing is requested until the expand.
+    await expect(relatedUi.toggle(panel)).toHaveAttribute('aria-expanded', 'false');
+    await expectAccessible(page, '관련 본문 collapsed (practice panel)');
+    let body = await expandRelated(panel);
     await expect(relatedUi.status(body, UI_TEXT.loading)).toBeVisible();
     await expectAccessible(page, '관련 본문 loading (practice panel)');
     await gate.release();
@@ -422,7 +425,7 @@ test(
     await choosePanelMenu(page, panel, 'answers');
     const detail = detailUi.dialog(page);
     await expect(detail).toBeVisible();
-    await expect(relatedUi.rows(await relatedBody(detail)).first()).toBeVisible();
+    await expect(relatedUi.rows(await expandRelated(detail)).first()).toBeVisible();
     // The shared explanation is cached: 문제 상세 offers `AI 해설 보기`.
     await explUi.show(explUi.area(detail)).click();
     await expectDone(explUi.area(detail));
@@ -433,7 +436,7 @@ test(
 
     // 2: both areas fail; 다시 시도 on each.
     panel = await answerInPanel(page, 2, ANSWER);
-    body = await relatedBody(panel);
+    body = await expandRelated(panel);
     await expect(relatedUi.alert(body)).toBeVisible();
     const failing = explUi.area(panel);
     await explUi.create(failing).click();
@@ -451,7 +454,7 @@ test(
 
     // 3: nothing related anywhere.
     panel = await answerInPanel(page, 3, 'zqxjv-보기-1');
-    await expect(relatedUi.status(await relatedBody(panel), UI_TEXT.empty)).toBeVisible();
+    await expect(relatedUi.status(await expandRelated(panel), UI_TEXT.empty)).toBeVisible();
     await settle(page);
     await expectAccessible(page, '관련 본문 empty (practice panel)');
   },
@@ -483,7 +486,7 @@ test(
     await runUi.option(run, ANSWER).check();
     await runUi.submit(run).click();
     await expect(runUi.result(run)).toContainText(RESULT_TEXT.correct);
-    const body = await relatedBody(run);
+    const body = await expandRelated(run);
     await expect(relatedUi.rows(body).first()).toBeVisible();
     const area = explUi.area(run);
     await expect(explUi.create(area)).toBeVisible();
@@ -502,7 +505,7 @@ test(
     await questionRow(detail, 1).click();
     const manage = mockUi.viewer(page, 1);
     await expect(manage).toBeVisible();
-    await expect(relatedUi.rows(await relatedBody(manage)).first()).toBeVisible();
+    await expect(relatedUi.rows(await expandRelated(manage)).first()).toBeVisible();
     const manageArea = explUi.area(manage);
     const action = explUi.show(manageArea).or(explUi.create(manageArea));
     await keyTo(page, action);
