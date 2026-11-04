@@ -21,6 +21,7 @@ from quiz_worker.celery_app import (
 )
 from quiz_worker.document_job import JOB_TYPE as DOCUMENT_PARSE_JOB_TYPE
 from quiz_worker.jobs import EchoPayloadV1
+from quiz_worker.question_import_store import JOB_TYPE as QUESTION_IMPORT_JOB_TYPE
 from quiz_worker.runner import JobContext, JobDefinition, JobResult
 from quiz_worker.settings import WorkerSettings, get_settings
 from quiz_worker.store import InMemoryJobStore
@@ -267,3 +268,13 @@ def test_serve_sets_threads_before_the_pool_starts(monkeypatch: pytest.MonkeyPat
 
     assert seen == {"omp": "3"}
     assert parser_options(_settings(WORKER_NUM_THREADS="3")).num_threads == 3
+
+
+def test_question_import_runs_under_the_document_limits(eager_settings: WorkerSettings) -> None:
+    settings = _settings()
+    limits = job_time_limits(settings, QUESTION_IMPORT_JOB_TYPE)
+    assert (limits.soft_seconds, limits.hard_seconds) == (6900, 7200)
+
+    app = create_celery_app(eager_settings, job_store=InMemoryJobStore())
+    task = app.tasks[task_name(QUESTION_IMPORT_JOB_TYPE)]
+    assert (task.soft_time_limit, task.time_limit) == (6900, 7200)
