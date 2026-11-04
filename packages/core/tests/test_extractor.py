@@ -1645,6 +1645,7 @@ def test_progress_callback_reports_done_and_total_after_each_question() -> None:
     assert total > 1
     assert calls == [(n, total) for n in range(1, total + 1)]
 
+
 # ------------------------------------------------------------------------------------------
 # QPARSE-FIX: spaced answer labels and lettered stem lists
 
@@ -1737,7 +1738,14 @@ def test_llm_cannot_resplit_a_stem_list_into_extra_options() -> None:
 
 def test_dot_numbered_letter_options_keep_their_blocks_as_source_evidence() -> None:
     result = _extract(
-        ["1. 옳은 것은?", "(가) 갑은 을이다.", "(나) 병은 정이다.", "1. (가)", "2. (나)", "3. (가), (나)"]
+        [
+            "1. 옳은 것은?",
+            "(가) 갑은 을이다.",
+            "(나) 병은 정이다.",
+            "1. (가)",
+            "2. (나)",
+            "3. (가), (나)",
+        ]
     )
     (draft,) = result.drafts
     block_ids = {b for e in draft.evidence for b in e.block_ids}
