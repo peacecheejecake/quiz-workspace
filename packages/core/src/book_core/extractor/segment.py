@@ -80,6 +80,7 @@ _INLINE_ANSWER = re.compile(
 _QUESTION_END_CUES = re.compile(
     r"[?\uff1f]\s*(?:\(\s*\)\s*)?$|시오\.?\s*$|하라\.?\s*$|\b(?:is|are|which)\b.*$"
 )
+_LETTER_ITEM = re.compile(r"^\s*\(\s*[가나다라마바사아자차A-Ea-e]\s*\)")
 _INLINE_CIRCLED = re.compile(r"(?<=\s)①")
 _MAX_ANSWER_KEY_BODY = 40
 _ANSWER_AREA_MIN_GAP = 60.0
@@ -397,6 +398,34 @@ def _inline_answer(text: str) -> str | None:
     return answer if answer and len(answer) <= _MAX_ANSWER_KEY_BODY else None
 
 
+def _numbered_option_of_letter_list(
+    current: RawQuestion | None, number: int, body: str
+) -> bool:
+    """``1. (가)`` printed under a stem that lists ``(가) ...`` items: the next numbered option
+    (not a new question) when the numbers continue the options printed so far."""
+    return (
+        current is not None
+        and not current.answered
+        and number == len(current.options) + 1
+        and _LETTER_ITEM.match(body) is not None
+        and any(_LETTER_ITEM.match(part) for part in current.stem_parts[1:])
+    )
+
+
+def _letter_list_back_to_stem(question: RawQuestion) -> None:
+    """Lettered / digit items ``(A) ...`` printed before circled options belong to the stem,
+    not to the options (``(A) ...`` ``(B) ...`` then ``① (A) ② (B)``)."""
+    labels = [o.label for o in question.options]
+    first = next((i for i, label in enumerate(labels) if label in CIRCLED_DIGITS), None)
+    if not first:
+        return
+    for option in question.options[:first]:
+        for line in option.lines:
+            question.stem_parts.append(line.text)
+            question.stem_lines.append(line)
+    del question.options[:first]
+
+
 @dataclass(frozen=True, slots=True)
 class _Event:
     """A printed line (``text``) or a non-text block (``text is None``) in reading order."""
@@ -542,6 +571,16 @@ def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmenta
                 # unless what it opens asks something; either way the lines then take the
                 # normal path (explanation, or a new question).
                 start = None
+            if start is not None and _numbered_option_of_letter_list(
+                current, int(start.group("num")), start.group("body")
+            ):
+                assert current is not None
+                current.options.append(
+                    RawOption(
+                        label=start.group("num"), text=start.group("body").strip(), lines=[line]
+                    )
+                )
+                continue
             if start is not None:
                 number = int(start.group("num"))
                 body = start.group("body")
@@ -624,6 +663,8 @@ def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmenta
                 current.stem_lines.append(line)
                 current.options += [RawOption(label=lb, text=t, lines=[line]) for lb, t in inline]
 
+    for question in questions:
+        _letter_list_back_to_stem(question)
     return Segmentation(
         questions=[q for q in questions if q.is_question()],
         answer_key=answer_key,

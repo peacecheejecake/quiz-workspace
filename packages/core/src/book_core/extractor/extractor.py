@@ -1,7 +1,7 @@
 """``QuestionExtractor``: question PDF (``ParsedDocument``) -> ``QuestionDraft``s (Task M4.3).
 
 Pipeline (questions.md §6): rule-based pre-extraction (numbering, options, figures, answer key,
-page/bbox provenance) -> optional LLM refinement per question (``questions.extract/v1``,
+page/bbox provenance) -> optional LLM refinement per question (``questions.extract/v2``,
 structured output, own source text only) -> structural validation -> drafts with
 ``review_status=pending``, ``origin=pdf_import`` and validation issues.
 

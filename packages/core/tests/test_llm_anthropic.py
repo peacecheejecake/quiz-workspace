@@ -30,7 +30,7 @@ SECRET_KEY = "sk-test-SECRET-KEY-0000"  # noqa: S105 (fake key for a mock transp
 BOOK_TEXT = "PRIVATE BOOK PASSAGE 비공개 본문"
 REQUEST = LLMRequest(
     task="questions.extract",
-    prompt_version="questions.extract/v1",
+    prompt_version="questions.extract/v2",
     system="system rules",
     prompt=f"QUESTION: {BOOK_TEXT}",
 )
@@ -125,7 +125,7 @@ def test_records_provenance_usage_and_cost() -> None:
     info = client.complete(REQUEST, _Out).info
 
     assert info.model == "test-model"
-    assert info.prompt_version == "questions.extract/v1"
+    assert info.prompt_version == "questions.extract/v2"
     assert info.task == "questions.extract"
     assert info.request_fingerprint == REQUEST.fingerprint()
     assert info.provider_request_id == "msg_test_1"
@@ -270,7 +270,7 @@ def test_logs_metadata_never_prompt_or_output(caplog: pytest.LogCaptureFixture) 
     client, _, _ = _client(_ok(json.dumps({"stem": BOOK_TEXT, "option_count": 1})))
     with caplog.at_level(logging.DEBUG):
         client.complete(REQUEST, _Out)
-    assert "questions.extract/v1" in caplog.text
+    assert "questions.extract/v2" in caplog.text
     assert "PRIVATE" not in caplog.text
     assert "비공개" not in caplog.text
     assert SECRET_KEY not in caplog.text
