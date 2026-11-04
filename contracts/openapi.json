@@ -1081,6 +1081,20 @@
         "title": "ChapterRef",
         "type": "object"
       },
+      "ChapterRematchResult": {
+        "properties": {
+          "moved": {
+            "description": "Questions that got a chapter (0 for viewers or when idle).",
+            "title": "Moved",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "moved"
+        ],
+        "title": "ChapterRematchResult",
+        "type": "object"
+      },
       "ChapterSummary": {
         "properties": {
           "key_points": {
@@ -9219,10 +9233,11 @@
             "type": "string"
           },
           "reason": {
-            "description": "source_in_book (출처 교재의 장) | matched (문제지 장 제목과 일치).",
+            "description": "source_in_book (출처 교재의 장) | matched (문제지 장 제목과 일치) | paper_chapter (일치하는 교재 장이 없어 문제지 자신의 최상위 장).",
             "enum": [
               "source_in_book",
-              "matched"
+              "matched",
+              "paper_chapter"
             ],
             "title": "Reason",
             "type": "string"
@@ -26297,6 +26312,95 @@
           }
         ],
         "summary": "Assign Question Chapters",
+        "tags": [
+          "questions"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/questions/chapter-rematch": {
+      "post": {
+        "description": "Give the questions the matcher left without a chapter their chapter now (a book may have\nbecome ready since): `auto` questions with no chapter or only a question-paper chapter, by the\nredistribution rule. `manual` chapters are never touched. Idempotent and cheap when nothing\nis eligible. Members who cannot edit, and archived workspaces, get `moved: 0`.",
+        "operationId": "rematchQuestionChapters",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterRematchResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Rematch Question Chapters",
         "tags": [
           "questions"
         ]

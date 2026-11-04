@@ -12,14 +12,22 @@ node's ancestors) is matched to the chapters of the workspace's books by normali
 So "제1장 수신제도", "1장 수신 제도" and "1. 수신제도" have the same title key. The deepest node of
 the question's chain whose key is non-empty and found among the book chapters decides: exactly one
 book chapter with that key is the suggestion; several are narrowed by the chapter number (`제1장`
-vs `제3장`), and still several is `ambiguous` (no suggestion: never a guess). No node found is
-`no_match`; a question whose source block has no chapter is `no_source_chapter`.
+vs `제3장`), then by outline level (CHAP-MATCH: the one candidate with the smallest `level`, i.e.
+the highest in its outline, wins), and still several is `ambiguous` (no suggestion: never a
+guess). No node found is `no_match`; a question whose source block has no chapter is
+`no_source_chapter`.
 
 Registered questions (chapter redistribution, docs/questions.md §14.2) use the same matcher on
 their first source block (`recommend`): a block of a book is already in a book chapter
 (`source_in_book`: that section in the book's current revision); a block of a question paper (or
 of the question part of a `mixed` document) is matched by title exactly like an import draft; a
 question without a source is `no_source`.
+
+Fallback (CHAP-MATCH, registered questions only): when the title match is `no_match` or
+`ambiguous`, the question paper's own chapter is used, i.e. the top-level (level-1) outline
+ancestor of the start block (`StartBlock.paper_chapter`; never the deepest node, workbook outlines
+contain bogus headings such as `01 ...?`). Import drafts do not use it (they register under book
+chapters only; the fallback is applied to the registered question).
 """
 
 from __future__ import annotations
@@ -107,11 +115,15 @@ class ChapterMatcher:
                     return Suggestion(narrowed[0], "matched", title)
             if len(candidates) == 1:
                 return Suggestion(candidates[0][0], "matched", title)
+            top = min(c.level for c, _ in candidates)
+            highest = [c for c, _ in candidates if c.level == top]
+            if len(highest) == 1:
+                return Suggestion(highest[0], "matched", title)
             return Suggestion(None, "ambiguous", title)
         return Suggestion(None, "no_match", chain[0])
 
 
-RecommendationReason = Literal["source_in_book", "matched"]
+RecommendationReason = Literal["source_in_book", "matched", "paper_chapter"]
 NoRecommendation = Literal["no_source", "no_source_chapter", "no_match", "ambiguous"]
 
 
@@ -128,6 +140,9 @@ class StartBlock:
     in_book: bool
     book_chapter: BookChapter | None = None
     chain: tuple[str, ...] = ()
+    # The top-level outline chapter of the block in its own document, in that document's current
+    # revision (the fallback when no book chapter matches).
+    paper_chapter: BookChapter | None = None
 
 
 @dataclass(frozen=True)
@@ -146,4 +161,7 @@ def recommend(start: StartBlock | None, matcher: ChapterMatcher) -> Recommendati
             return Recommendation(None, "no_source_chapter")
         return Recommendation(start.book_chapter, "source_in_book")
     found = matcher.suggest(start.chain)
+    fallback = found.chapter is None and found.match in ("no_match", "ambiguous")
+    if fallback and start.paper_chapter is not None:
+        return Recommendation(start.paper_chapter, "paper_chapter")
     return Recommendation(found.chapter, found.match)
