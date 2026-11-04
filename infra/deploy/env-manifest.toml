@@ -1297,6 +1297,14 @@ required = true
 check = "uuid"
 provider = "Railway service `worker` id"
 
+[[var]]
+name = "RAILWAY_WORKER_INTERACTIVE_SERVICE_ID"
+services = ["deploy"]
+kind = "config"
+required = false
+check = "uuid"
+provider = "Railway service `worker-interactive` id (optional; AI 질문, runbook §12)"
+
 # ------------------------------------------------------------------------------------------------
 # Staging smoke (tests/smoke, `make smoke-staging`)
 # ------------------------------------------------------------------------------------------------
