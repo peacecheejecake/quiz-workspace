@@ -134,14 +134,17 @@ describe('generated tokens.css', () => {
     expect(themedTokens.light['question-status-unseen']).toBe('#E7ECF0');
   });
 
-  it.each(['light', 'dark'] as const)('PALETTE-UNIFY fill tokens equal the palette in %s', (theme) => {
-    const t = themedTokens[theme];
-    expect(t['color-danger-fill']).toBe(t['question-status-incorrect']);
-    expect(t['color-success-fill']).toBe(t['question-status-correct']);
-    expect(t['color-warning-fill']).toBe(t['question-status-retry']);
-    expect(t['color-neutral-fill']).toBe(t['question-status-viewed']);
-    expect(t['color-neutral-fill-subtle']).toBe(t['question-status-unseen']);
-  });
+  it.each(['light', 'dark'] as const)(
+    'PALETTE-UNIFY fill tokens equal the palette in %s',
+    (theme) => {
+      const t = themedTokens[theme];
+      expect(t['color-danger-fill']).toBe(t['question-status-incorrect']);
+      expect(t['color-success-fill']).toBe(t['question-status-correct']);
+      expect(t['color-warning-fill']).toBe(t['question-status-retry']);
+      expect(t['color-neutral-fill']).toBe(t['question-status-viewed']);
+      expect(t['color-neutral-fill-subtle']).toBe(t['question-status-unseen']);
+    },
+  );
 
   it.each(['light', 'dark'] as const)('every question status token exists in %s', (theme) => {
     const decls = theme === 'light' ? genLight : genDark;
