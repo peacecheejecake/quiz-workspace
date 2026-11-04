@@ -208,6 +208,10 @@ class WorkerSettings(BaseSettings):
     # Opt-in LLM refinement of extracted questions (needs LLM_API_KEY / LLM_MODEL; sends
     # question text to the provider, docs/deployment.md §6). Never used in APP_ENV=test.
     question_import_llm: bool = Field(default=False, validation_alias="WORKER_QUESTION_IMPORT_LLM")
+    # Questions refined by the LLM at once within one import (the client is shared).
+    question_import_llm_concurrency: int = Field(
+        default=4, ge=1, le=16, validation_alias="QUESTION_IMPORT_LLM_CONCURRENCY"
+    )
 
     # -- scripted LLM (APP_ENV=test) -------------------------------------------------------------
     # APP_ENV=test only: scripted LLM outputs (chapter notes, mock exams); defaults to the
