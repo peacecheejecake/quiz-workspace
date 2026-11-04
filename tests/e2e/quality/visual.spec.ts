@@ -55,7 +55,7 @@ import { chooseTarget, redistUi } from '../fixtures/chapter-redistribution.ts';
 import {
   ANSWER as RELATED_ANSWER,
   createSourcedQuestion,
-  relatedBody,
+  expandRelated,
   relatedUi,
   relsrcInput,
   seedRelsrcBook,
@@ -801,7 +801,7 @@ test.describe('VISUAL-09 completed answer with AI 해설 and 관련 본문', () 
       await expect(
         panel.getByRole('status').filter({ hasText: RESULT_TEXT.correct }),
       ).toBeVisible();
-      const related = await relatedBody(panel);
+      const related = await expandRelated(panel);
       await expect(relatedUi.rows(related).first()).toBeVisible();
       const area = explUi.area(panel);
       await explUi.create(area).click();
