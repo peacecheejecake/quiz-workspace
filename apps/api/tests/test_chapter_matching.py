@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-from quiz_api.chapter_matching import BookChapter, ChapterMatcher, title_key
+from book_core.chapter_matching import BookChapter, ChapterMatcher, title_key
 from quiz_api.draft_chapters import DraftChapter, draft_chapters, source_ref
 from quiz_api.repositories.draft_chapters import SourceRef
 from quiz_api.repositories.question_imports import DraftRecord

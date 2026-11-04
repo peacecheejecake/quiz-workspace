@@ -15,17 +15,17 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from quiz_api.api import chapter_redistribution as redist
-from quiz_api.api.questions import get_idempotency_store
-from quiz_api.authz import Action, Role, WorkspaceAccess
-from quiz_api.chapter_matching import (
+from book_core.chapter_matching import (
     BookChapter,
     ChapterMatcher,
     StartBlock,
     recommend,
 )
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from quiz_api.api import chapter_redistribution as redist
+from quiz_api.api.questions import get_idempotency_store
+from quiz_api.authz import Action, Role, WorkspaceAccess
 from quiz_api.draft_chapters import draft_chapters
 from quiz_api.errors import ProblemType
 from quiz_api.idempotency import request_hash
