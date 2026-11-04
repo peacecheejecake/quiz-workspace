@@ -290,6 +290,9 @@ def _pipeline(
         classification=classification,
         summary=deps.summary,
     )
+    if document_type != QUESTION_PAPER:
+        # CHAP-MATCH: a newly active book can match questions that had no chapter; never fails.
+        deps.documents.rematch_chapters(ctx.workspace_id)
     # From here on the job cannot fail: the Qdrant mirror is synced inline when possible, else
     # by the obligation (retried with backoff, published by the reconciler).
     synced = sync_index(deps, document, revision)

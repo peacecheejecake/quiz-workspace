@@ -2328,29 +2328,6 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/workspaces/{workspace_id}/questions/chapter-rematch': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Rematch Question Chapters
-     * @description Give the questions the matcher left without a chapter their chapter now (a book may have
-     *     become ready since): `auto` questions with no chapter or only a question-paper chapter, by the
-     *     redistribution rule. `manual` chapters are never touched. Idempotent and cheap when nothing
-     *     is eligible. Members who cannot edit, and archived workspaces, get `moved: 0`.
-     */
-    post: operations['rematchQuestionChapters'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/v1/workspaces/{workspace_id}/questions/overview': {
     parameters: {
       query?: never;
@@ -3008,14 +2985,6 @@ export type components = {
       id: string;
       /** Title */
       title: string;
-    };
-    /** ChapterRematchResult */
-    ChapterRematchResult: {
-      /**
-       * Moved
-       * @description Questions that got a chapter (0 for viewers or when idle).
-       */
-      moved: number;
     };
     /** ChapterSummary */
     ChapterSummary: {
@@ -17212,73 +17181,6 @@ export interface operations {
       };
       /** @description Conflict */
       409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Unprocessable Content */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Service Unavailable */
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-    };
-  };
-  rematchQuestionChapters: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        workspace_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ChapterRematchResult'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Forbidden */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/problem+json': components['schemas']['Problem'];
-        };
-      };
-      /** @description Not Found */
-      404: {
         headers: {
           [name: string]: unknown;
         };

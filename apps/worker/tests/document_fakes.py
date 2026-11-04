@@ -75,6 +75,7 @@ class FakeDocumentStore:
     # started (revision -> (run id, job id)).
     opted_in: set[uuid.UUID] = field(default_factory=set)
     summary_flags: list[bool] = field(default_factory=list)
+    rematched: list[uuid.UUID] = field(default_factory=list)
     summary_starts: dict[uuid.UUID, tuple[uuid.UUID, uuid.UUID, uuid.UUID | None]] = field(
         default_factory=dict
     )
@@ -193,6 +194,10 @@ class FakeDocumentStore:
         return revision_from_rows(
             document, revision, self.chapters[revision.id], self.blocks[revision.id]
         )
+
+    def rematch_chapters(self, workspace_id: uuid.UUID) -> int:
+        self.rematched.append(workspace_id)
+        return 0
 
     def workspace_writable(self, workspace_id: uuid.UUID, user_id: uuid.UUID | None) -> bool:
         self.access_checks += 1
