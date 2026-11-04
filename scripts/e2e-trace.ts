@@ -104,6 +104,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'QSRC.0': ['QSRC-01'],
   // RETRY-CORRECT (2026-11-04): `다시 풀기` only on questions whose last graded result is correct.
   'RETRY.0': ['RETRY-01'],
+  // STEM-ITEMS (2026-11-05): stem item lists one per line in a 제시 항목 box (QPLAY-01-AC14).
+  'STEM.0': ['QPLAY-01'],
 };
 
 const LEADING_ID = new RegExp(
