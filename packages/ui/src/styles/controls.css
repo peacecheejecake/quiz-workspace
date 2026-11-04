@@ -189,7 +189,7 @@
   > .error > svg {
     flex: none;
     margin-top: 1px;
-    color: var(--color-danger);
+    color: var(--color-danger-fill);
   }
 }
 

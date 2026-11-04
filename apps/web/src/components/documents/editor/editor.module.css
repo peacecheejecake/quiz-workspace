@@ -18,7 +18,7 @@
 .inlineAlert {
   margin: 0;
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-danger);
+  border: 1px solid var(--color-danger-fill);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text-primary);
