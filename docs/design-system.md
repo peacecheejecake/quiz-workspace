@@ -72,9 +72,14 @@
 | `--question-status-retry` | `#F6CF35` | 다시 풀기 |
 | `--color-border-strong` | `#7D8799` | 입력 컨트롤 경계(표면 대비 3:1 이상) |
 | `--color-on-accent` | `#FFFFFF` | accent 채움 위 텍스트·아이콘 |
-| `--color-danger` | `#C42B3A` | 오류·파괴적 동작 피드백(텍스트 대비 4.5:1 이상) |
-| `--color-success` | `#1E7A52` | 성공 피드백(텍스트 대비 4.5:1 이상) |
-| `--color-warning` | `#8F5F00` | 경고 피드백(텍스트 대비 4.5:1 이상) |
+| `--color-danger` | `#C22A2A` | 오류·파괴적 동작 피드백 **글자**(palette red의 어두운 같은 색조, 4.5:1 이상) |
+| `--color-success` | `#007A58` | 성공 피드백 **글자**(palette green의 어두운 같은 색조, 4.5:1 이상) |
+| `--color-warning` | `#856400` | 경고 피드백 **글자**(palette yellow의 어두운 같은 색조, 4.5:1 이상) |
+| `--color-danger-fill` | `#FF6060` | 오류 채움·점·아이콘·알림 테두리(= `--question-status-incorrect`) |
+| `--color-success-fill` | `#00AB7B` | 성공 채움·점·아이콘·알림 테두리(= `--question-status-correct`) |
+| `--color-warning-fill` | `#F6CF35` | 경고 채움·점·아이콘·알림 테두리(= `--question-status-retry`) |
+| `--color-neutral-fill` | `#ACB6C2` | 중립 회색 채움(= `--question-status-viewed`) |
+| `--color-neutral-fill-subtle` | `#E7ECF0` | 옅은 회색 채움: 기본 badge·skeleton·progress track(= `--question-status-unseen`) |
 | `--color-scrim` | `rgba(247,248,250,.64)` | modal·drawer backdrop |
 | `--color-state-hover` | `#ECEFF4` | 버튼·메뉴 항목·탭 hover 배경 |
 | `--color-state-pressed` | `#E3E7EE` | 누르는 동안(`:active`) 배경 |
@@ -90,7 +95,9 @@
 | `--color-search-match-bg` | `#FFE2C7` | 노트 안 검색 결과 배경(CHNOTE-02) |
 | `--color-search-match` | `#B45309` | 검색 결과 테두리(2px, 현재 결과 3px; 표면·하이라이트 배경 대비 3:1 이상) |
 
-**v1.1.1 추가:** `--color-border-strong`, `--color-on-accent`, `--color-danger`/`success`/`warning`, `--color-scrim`, typography scale(`--font-size-*`, `--line-height-*`, `--font-weight-*`), breakpoint(`--breakpoint-*`). feedback 색은 question-status 토큰을 재사용하지 않으며(의미가 다름), canvas·surface 위 텍스트로 4.5:1 이상을 만족한다.
+**v1.1.1 추가:** `--color-border-strong`, `--color-on-accent`, `--color-danger`/`success`/`warning`, `--color-scrim`, typography scale(`--font-size-*`, `--line-height-*`, `--font-weight-*`), breakpoint(`--breakpoint-*`). feedback 글자색은 canvas·surface 위 텍스트로 4.5:1 이상을 만족한다.
+
+**v1.3 (PALETTE-UNIFY, 2026-11-04 사용자 요청):** Heatmap palette(red `#FF6060`, green `#00AB7B`, yellow `#F6CF35`, gray `#ACB6C2`, light gray `#E7ECF0`)를 앱 전체 feedback·중립 색에 쓴다. (1) 채움·점·아이콘·badge·알림 박스 테두리는 palette 값 그대로인 `--color-{danger,success,warning}-fill`, `--color-neutral-fill`, `--color-neutral-fill-subtle`(값이 `--question-status-*`와 같고 `tokens.test.ts`가 일치를 고정)을 쓴다. (2) 글자(오류·성공·경고 문구)는 같은 색조의 어두운 `--color-danger/success/warning`(light 4.5:1 이상, dark는 palette dark 값). (3) 비텍스트 3:1이 필요한 곳은 palette를 쓰지 않고 어두운 토큰을 유지한다: `--color-border-strong`, switch track, `aria-invalid` 입력 테두리, 객관식 채점 결과 테두리(v1.2.6)·정답 보기 2px 테두리. palette red/green은 표면 위 약 2.8:1, yellow는 약 1.4:1이라 이 용도에 부족하다. 하이라이트 색은 범위 밖이다.
 
 **v1.1.2 (M7.2):** `--color-text-secondary` light `#667085` → `#636D82`. 보조 텍스트가 선택·현재 항목, 메타 정보 등 `--color-surface-muted` 위에도 쓰여 4.47:1로 AA에 미달했다(axe 전 화면 검사). 같은 색조로 4.67:1(muted)·4.89:1(canvas)·5.2:1(surface)을 만족한다. 앱은 별도 선택이 없으면 OS `prefers-color-scheme`을 따라 Dark token을 적용한다(`[data-theme]`가 있으면 그 값이 우선).
 
@@ -102,7 +109,7 @@
 
 **v1.2.5 (UX-GLASS, 2026-11-01 사용자 피드백):** floating 계층(side panel·popover·menu·select·toast·top bar)의 glass를 아래 내용이 거의 보이지 않을 만큼 더 불투명하게 했다(light·dark 모두 `.9`→`.97`). tint와 blur(`--glass-blur` 16px)는 그대로이고, reduced transparency·blur 미지원·모바일 sheet fallback은 계속 같은 색의 `--color-glass-solid`다. 대비: 반투명 glass를 가장 나쁜 배경(순흑·순백) 위에 합성해도 text-primary·text-secondary가 4.5:1 이상이다(light text-secondary 최저 4.59:1; `.96`은 4.47:1로 미달, `contrast.test.ts`).
 
-**v1.2.6 (UX7-QDISPLAY, 2026-11-01 사용자 피드백):** 객관식 제출 뒤 보기 행 테두리(§4.1 "채점 결과 테두리")는 새 토큰 없이 기존 의미 토큰을 쓴다: 맞힌 보기 `--color-success`, 오답일 때 고른 보기 `--color-border-strong`(회색), 오답일 때 정답 보기 `--color-danger`(사용자 결정: 정답 보기를 빨간 테두리로). 셋 모두 풀이 panel이 놓이는 표면(surface·canvas·surface-muted·glass-solid) 대비 비텍스트 3:1 이상이다(light/dark 최저: success 4.76/6.45, danger 5.03/5.84, border-strong 3.25/3.61 — muted 위; `contrast.test.ts`). 테두리 색은 의미를 보강할 뿐이고 각 행의 "정답"·"내 선택" 글자가 의미를 전달한다.
+**v1.2.6 (UX7-QDISPLAY, 2026-11-01 사용자 피드백):** 객관식 제출 뒤 보기 행 테두리(§4.1 "채점 결과 테두리")는 새 토큰 없이 기존 의미 토큰을 쓴다: 맞힌 보기 `--color-success`, 오답일 때 고른 보기 `--color-border-strong`(회색), 오답일 때 정답 보기 `--color-danger`(사용자 결정: 정답 보기를 빨간 테두리로). 셋 모두 풀이 panel이 놓이는 표면(surface·canvas·surface-muted·glass-solid) 대비 비텍스트 3:1 이상이다(PALETTE-UNIFY 이후 light/dark 최저는 `contrast.test.ts` 참고; success 4.81+, danger 5.16+, border-strong 3.25/3.61 — muted 위; `contrast.test.ts`). 테두리 색은 의미를 보강할 뿐이고 각 행의 "정답"·"내 선택" 글자가 의미를 전달한다.
 
 **상태 점은 테두리(stroke)를 두지 않는다**(HEATMAP-PALETTE 2026-11-04, 사용자 요청 "border 삭제"; 채움 색만으로 그리고, 가장 연한 light `unseen`(`#E7ECF0`)은 표면 대비 약 1.2:1이지만 그대로 둔다 — 사용자 결정). 상태 필터(색 견본 + 상태 텍스트)가 범례 역할을 한다(UX3c 2026-10-20: 상시 범례·상태 요약 삭제, 사용자 결정). 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
 
@@ -130,9 +137,14 @@
   --question-status-retry: #F7D45A;
   --color-border-strong: #7A8799;
   --color-on-accent: #11151D;
-  --color-danger: #FF8A93;
-  --color-success: #4FCB92;
-  --color-warning: #F2C14E;
+  --color-danger: #FF7A7A;
+  --color-success: #2CC79A;
+  --color-warning: #F7D45A;
+  --color-danger-fill: #FF7A7A;
+  --color-success-fill: #2CC79A;
+  --color-warning-fill: #F7D45A;
+  --color-neutral-fill: #8591A1;
+  --color-neutral-fill-subtle: #3A4554;
   --color-scrim: rgba(17, 21, 29, 0.64);
   --color-state-hover: #2A3442;
   --color-state-pressed: #334051;
@@ -177,9 +189,14 @@
   --question-status-retry: #F6CF35;
   --color-border-strong: #7D8799;
   --color-on-accent: #FFFFFF;
-  --color-danger: #C42B3A;
-  --color-success: #1E7A52;
-  --color-warning: #8F5F00;
+  --color-danger: #C22A2A;
+  --color-success: #007A58;
+  --color-warning: #856400;
+  --color-danger-fill: #FF6060;
+  --color-success-fill: #00AB7B;
+  --color-warning-fill: #F6CF35;
+  --color-neutral-fill: #ACB6C2;
+  --color-neutral-fill-subtle: #E7ECF0;
   --color-scrim: rgba(247,248,250,.64);
   --color-state-hover: #ECEFF4;
   --color-state-pressed: #E3E7EE;

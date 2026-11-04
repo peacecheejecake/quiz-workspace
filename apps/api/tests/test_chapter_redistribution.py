@@ -15,17 +15,17 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from quiz_api.api import chapter_redistribution as redist
-from quiz_api.api.questions import get_idempotency_store
-from quiz_api.authz import Action, Role, WorkspaceAccess
-from quiz_api.chapter_matching import (
+from book_core.chapter_matching import (
     BookChapter,
     ChapterMatcher,
     StartBlock,
     recommend,
 )
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from quiz_api.api import chapter_redistribution as redist
+from quiz_api.api.questions import get_idempotency_store
+from quiz_api.authz import Action, Role, WorkspaceAccess
 from quiz_api.draft_chapters import draft_chapters
 from quiz_api.errors import ProblemType
 from quiz_api.idempotency import request_hash
@@ -66,6 +66,27 @@ def test_question_paper_sources_match_titles_never_numbers() -> None:
     assert recommend(StartBlock(False), matcher).reason == "no_source_chapter"
     twins = ChapterMatcher([chapter("1장 개요"), chapter("1장 개요", OTHER)])
     assert recommend(StartBlock(False, chain=("개요",)), twins).reason == "ambiguous"
+
+
+def test_chap_match_paper_chapter_is_the_fallback_for_no_match_and_ambiguous() -> None:
+    paper = chapter("제1회 모의평가", OTHER, 1)
+    matcher = ChapterMatcher([chapter("1장 물의 순환")])
+    start = StartBlock(False, chain=("01 이것은?", "제1회 모의평가"), paper_chapter=paper)
+    miss = recommend(start, matcher)
+    assert (miss.chapter, miss.reason) == (paper, "paper_chapter")
+    twins = ChapterMatcher([chapter("1장 개요"), chapter("1장 개요", OTHER)])
+    both = recommend(StartBlock(False, chain=("개요",), paper_chapter=paper), twins)
+    assert (both.chapter, both.reason) == (paper, "paper_chapter")
+
+
+def test_chap_match_a_book_match_wins_over_the_fallback_and_no_chain_has_none() -> None:
+    paper, hit = chapter("제1회 모의평가", OTHER, 1), chapter("2장 정수 처리")
+    matcher = ChapterMatcher([hit])
+    found = recommend(StartBlock(False, chain=("정수 처리",), paper_chapter=paper), matcher)
+    assert (found.chapter, found.reason) == (hit, "matched")
+    empty = recommend(StartBlock(False, paper_chapter=None), matcher)
+    assert (empty.chapter, empty.reason) == (None, "no_source_chapter")
+    assert recommend(StartBlock(False, chain=("기타",)), matcher).reason == "no_match"
 
 
 TITLES = ["개요", "주의 집중", "물의 순환", "정수 처리", "기출", "요약"]

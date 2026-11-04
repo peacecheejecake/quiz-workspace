@@ -153,6 +153,12 @@ export function revisionCount(questionId: string): number {
   );
 }
 
+/** Test-only: put questions back under "no chapter" (a book upload re-matches chapterless auto questions). */
+export function clearQuestionChapters(questionIds: string[]): void {
+  const ids = questionIds.map((id) => uuid(id)).join(', ');
+  psqlValue(`update public.questions set chapter_id = null where id in (${ids}) returning id`);
+}
+
 // ---------------------------------------------------------------------------------------------
 // UI
 // ---------------------------------------------------------------------------------------------

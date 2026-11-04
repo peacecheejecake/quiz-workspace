@@ -195,7 +195,9 @@ describe.each(themeNames)('%s theme contrast', (theme) => {
     expect(t['color-search-match'].toLowerCase()).not.toBe(t['color-focus'].toLowerCase());
   });
 
-  it('feedback colors are distinct from question status colors', () => {
+  // PALETTE-UNIFY: dark text tokens are the palette dark values; only light text is a darker hue.
+  it('light feedback text colors are darker than the palette fills', () => {
+    if (theme !== 'light') return;
     const t = themedTokens[theme];
     const statuses = [
       t['question-status-incorrect'],

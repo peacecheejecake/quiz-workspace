@@ -260,7 +260,9 @@ test(
     await expect(panel).toContainText(question.revision.explanation ?? '');
     const area = explUi.area(panel);
     await expect(area).toBeVisible();
-    await expect(explUi.heading(area)).toBeVisible();
+    // No explanation yet: the button and notice only, no area (region / heading).
+    await expect(explUi.region(panel)).toHaveCount(0);
+    await expect(explUi.heading(area)).toHaveCount(0);
     await expect(area.getByText(EXPL_TEXT.sendNotice)).toBeVisible();
     // The area sits below the result and the human explanation.
     const resultBox = await result(panel).boundingBox();
@@ -582,7 +584,7 @@ test(
       await sharedUi.question(guest.page, withExpl.revision.stem).click();
       let shared = sharedUi.questionPanel(guest.page);
       await expect(shared).toBeVisible();
-      const sArea = explUi.area(shared);
+      const sArea = explUi.sharedArea(shared);
       await explUi.sharedToggle(sArea).click();
       await expect(explUi.badge(sArea)).toBeVisible();
       await expect(sArea).toContainText(nth(withExpl.revision.options, 0).text);
@@ -598,7 +600,7 @@ test(
       await sharedUi.question(guest.page, unexplained.revision.stem).click();
       shared = sharedUi.questionPanel(guest.page);
       await expect(shared).toContainText(unexplained.revision.stem);
-      await expect(explUi.area(shared)).toHaveCount(0);
+      await expect(explUi.sharedArea(shared)).toHaveCount(0);
     } finally {
       await guest.context.close();
     }
@@ -741,7 +743,7 @@ test(
     await openHome(page, viewer, s.workspaceId);
     const panel = await openPanel(page, 1);
     await panelUi.option(panel, wrongText(question)).check();
-    // Keyboard only: 문제 정보 › 정답·해설 보기, then AI 해설 만들기.
+    // Keyboard only: 문제 정보 › 정답·해설 보기, then AI 해설.
     const menuButton = panelUi.info(panel);
     await menuButton.focus();
     await page.keyboard.press('Enter');

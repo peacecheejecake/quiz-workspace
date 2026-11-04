@@ -14,11 +14,11 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
-from sqlalchemy import and_, func, insert, select
+from book_core.chapter_matching import BookChapter, StartBlock
+from sqlalchemy import and_, func, insert, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
-from quiz_api.chapter_matching import BookChapter, StartBlock
 from quiz_api.question_rules import PublicationStatus, QuestionType
 from quiz_api.repositories.draft_chapters import BOOK, DraftChapterRepository, SourceRef
 from quiz_api.repositories.question_overview import (
@@ -63,7 +63,7 @@ class LockedQuestion:
 @dataclass(frozen=True)
 class TargetChapter:
     """A chapter of this workspace named as a move target, and whether it may be one: an outline
-    node of the active revision of a live book (`document_type = book`)."""
+    node of the active revision of a live book, or a level-1 node of a live question paper."""
 
     id: uuid.UUID
     valid: bool
@@ -113,6 +113,11 @@ class ChapterRedistributionRepository:
     def book_chapters(self, workspace_id: uuid.UUID) -> list[BookChapter]:
         """Move targets: the current revision's outline of every live book, in outline order."""
         return DraftChapterRepository(self._session).book_chapters(workspace_id)
+
+    def paper_chapters(self, workspace_id: uuid.UUID) -> list[BookChapter]:
+        """Move targets of the question-paper kind (CHAP-MATCH): the level-1 outline nodes of
+        the current revision of every live question paper, in outline order."""
+        return DraftChapterRepository(self._session).paper_chapters(workspace_id)
 
     def start_blocks(
         self, workspace_id: uuid.UUID, question_ids: Sequence[uuid.UUID]
@@ -172,8 +177,18 @@ class ChapterRedistributionRepository:
             if in_book:
                 book_nodes.update(draft_repo.source_chapters(workspace_id, revision_id, refs))
             else:
-                for qid, chain in draft_repo.source_chains(workspace_id, revision_id, refs).items():
-                    out[qid] = StartBlock(in_book=False, chain=tuple(chain))
+                chains = draft_repo.source_chains(workspace_id, revision_id, refs)
+                tops = draft_repo.source_top_levels(workspace_id, revision_id, refs)
+                top_current = draft_repo.current_chapters(
+                    workspace_id, set(tops.values()), book_only=False
+                )
+                for qid, chain in chains.items():
+                    top = top_current.get(tops[qid]) if qid in tops else None
+                    out[qid] = StartBlock(
+                        in_book=False,
+                        chain=tuple(chain),
+                        paper_chapter=top if top is not None and top.level == 1 else None,
+                    )
         current = draft_repo.current_book_chapters(
             workspace_id, [n for n in book_nodes.values() if n is not None]
         )
@@ -216,8 +231,9 @@ class ChapterRedistributionRepository:
                 chapters.c.id,
                 and_(
                     documents.c.deleted_at.is_(None),
-                    documents.c.document_type == BOOK,
                     documents.c.active_revision_id == chapters.c.document_revision_id,
+                    # CHAP-MATCH: a book's chapter, or a top-level chapter of a question paper.
+                    or_(documents.c.document_type == BOOK, chapters.c.level == 1),
                 ).label("valid"),
             )
             .select_from(

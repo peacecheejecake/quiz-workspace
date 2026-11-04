@@ -241,6 +241,12 @@ class DocumentStore(Protocol):
         WORKER_DOCUMENT_SUMMARY) start an opted-in book's summary run (DOCSUM-B)."""
         ...
 
+    def rematch_chapters(self, workspace_id: uuid.UUID) -> int:
+        """CHAP-MATCH: give the workspace's matcher-decided questions without a chapter (or with
+        only a question-paper fallback) their chapter now that a book is active. Idempotent,
+        never touches a chapter a person set, never raises."""
+        ...
+
     def previous_published(self, document_id: uuid.UUID, exclude: uuid.UUID) -> uuid.UUID | None:
         """The newest published revision other than `exclude` (the rollback target to keep)."""
         ...
@@ -819,6 +825,11 @@ class PostgresDocumentStore:
             values,
         ).scalar_one()
         return uuid.UUID(str(existing))
+
+    def rematch_chapters(self, workspace_id: uuid.UUID) -> int:
+        from quiz_worker.chapter_rematch import SqlRematchStore, rematch_quietly
+
+        return rematch_quietly(SqlRematchStore(self._engine), workspace_id)
 
     def previous_published(self, document_id: uuid.UUID, exclude: uuid.UUID) -> uuid.UUID | None:
         with self._engine.begin() as conn:

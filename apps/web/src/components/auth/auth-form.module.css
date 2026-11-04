@@ -46,19 +46,19 @@
 }
 
 .notice[data-tone='danger']:not(:focus-visible) {
-  border-color: var(--color-danger);
+  border-color: var(--color-danger-fill);
 }
 
 .notice[data-tone='danger'] svg {
-  color: var(--color-danger);
+  color: var(--color-danger-fill);
 }
 
 .notice[data-tone='success']:not(:focus-visible) {
-  border-color: var(--color-success);
+  border-color: var(--color-success-fill);
 }
 
 .notice[data-tone='success'] svg {
-  color: var(--color-success);
+  color: var(--color-success-fill);
 }
 
 .notice a {

@@ -9,7 +9,7 @@ import type {
 
 export const EXPL_TEXT = {
   title: 'AI 해설',
-  create: 'AI 해설 만들기',
+  create: 'AI 해설',
   show: 'AI 해설 보기',
   sendNotice: '문제와 정답, 관련 교재 구절이 AI 서비스로 전송됩니다.',
   working: 'AI 해설을 만드는 중',
@@ -21,7 +21,7 @@ export const EXPL_TEXT = {
   archived: '보관된 Workspace에서는 새 AI 해설을 만들 수 없습니다.',
   regenerate: '다시 만들기',
   retry: '다시 시도',
-  ask: '이 문제로 질문하기',
+  ask: 'AI 질문하기',
   truncated: '(해설이 길어 잘렸습니다)',
   outdated: '이 출처는 이전 발행본입니다.',
   loading: 'AI 해설을 불러오는 중입니다.',

@@ -3,7 +3,7 @@
 // ASK-01 문제 쪽 진입점 (docs/screens/ask-llm.md "문제 쪽 진입점", ASK-Q): the "open AI 질문 with
 // this question attached" API of the workspace home. The home provides it (WorkspaceHome); the
 // question screens read it — QuestionViewer `manage` (문제 상세 footer), `sequence(mock)` and
-// `manage(mock)` (headers) through `AskQuestionButton`, and AIEXPL-01's `이 문제로 질문하기`
+// `manage(mock)` (headers) through `AskQuestionButton`, and AIEXPL-01's `AI 질문하기`
 // (EXPL-W) through `useAskLauncher`. Without a provider (the shared view, stories) or where new
 // questions are not possible (feature off, archived workspace) there is no launcher: no button.
 //

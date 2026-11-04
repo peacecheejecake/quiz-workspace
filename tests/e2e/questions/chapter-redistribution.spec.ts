@@ -28,11 +28,11 @@ import {
   PAPER_CHAPTER,
   reassignedActivityCount,
   REDIST_PANEL,
-  REDIST_PROBLEMS,
   redistributionList,
   redistributionPreview,
   redistUi,
   revisionCount,
+  clearQuestionChapters,
   summaryText,
   tabTo,
 } from '../fixtures/chapter-redistribution.ts';
@@ -349,7 +349,7 @@ async function expectDisabledItem(
 }
 
 test(
-  'CHREDIST-01-AC02 moving questions to another chapter keeps their records, marks both notes stale and refuses foreign or question-paper chapters',
+  'CHREDIST-01-AC02 moving questions to another chapter keeps their records, marks both notes stale and refuses foreign chapters and allows a question-paper level-1 chapter',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await bookWorkspace(workspaceFactory, 'chredist01-ac02');
@@ -367,7 +367,7 @@ test(
     await generateNote(s.owner, s.ch1);
     await generateNote(s.owner, s.ch2);
     const revisionsBefore = revisionCount(q1.id);
-    // A chapter of another workspace and a chapter of a question paper of this one.
+    // A chapter of another workspace and a level-1 chapter of a question paper of this one.
     const other = await bookWorkspace(workspaceFactory, 'chredist01-ac02-other', s.owner);
     const paper = await uploadPdf(s.owner, s.workspaceId, PAPER, 'question_paper');
     await waitForJob(s.owner, paper.jobId);
@@ -443,19 +443,19 @@ test(
     await page.goto(notePanelPath(s.workspaceId, s.ch2));
     await expect(noteUi.stale(noteUi.panel(page))).toBeVisible();
 
-    // Foreign chapter → 404; question-paper chapter → 422 chapter-invalid; nothing moved.
+    // Foreign chapter → 404 and nothing moved; a question paper's level-1 chapter is a valid target.
     const foreign = await assignChapters(s.owner, s.workspaceId, {
       source: 'manual',
       items: [{ question_id: q3.id, chapter_id: other.ch1, expected_chapter_id: s.ch1 }],
     });
     expect(foreign.status).toBe(404);
-    const invalid = await assignChapters(s.owner, s.workspaceId, {
+    expect((await getQuestion(s.owner, q3.id)).chapter_id).toBe(s.ch1);
+    const allowed = await assignChapters(s.owner, s.workspaceId, {
       source: 'manual',
       items: [{ question_id: q3.id, chapter_id: paperChapter, expected_chapter_id: s.ch1 }],
     });
-    expect(invalid.status).toBe(422);
-    expect(problemType(invalid)).toBe(REDIST_PROBLEMS.chapterInvalid);
-    expect((await getQuestion(s.owner, q3.id)).chapter_id).toBe(s.ch1);
+    expect(allowed.status).toBe(200);
+    expect((await getQuestion(s.owner, q3.id)).chapter_id).toBe(paperChapter);
     expect((await getQuestion(s.owner, q4.id)).chapter_id).toBe(s.ch2);
     for (const q of [q1, q2, q5]) {
       expect((await getQuestion(s.owner, q.id)).chapter_id).toBe(s.ch2);
@@ -500,6 +500,8 @@ test(
       (await listDrafts(s.owner, run.id)).map((d) => [d.id, d.published_question_id ?? '']),
     );
     const id = (d: { id: string }) => registered.get(d.id) ?? '';
+    // CHAP-MATCH: the titled book's parse already re-matched A and B (auto, no chapter); put them back.
+    clearQuestionChapters([id(dA), id(dB)]);
     const chapterOf = async (questionId: string) =>
       (await getQuestion(s.owner, questionId)).chapter_id;
     expect(await chapterOf(id(dA))).toBeNull();

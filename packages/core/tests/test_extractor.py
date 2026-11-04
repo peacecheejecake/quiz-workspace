@@ -1644,3 +1644,134 @@ def test_progress_callback_reports_done_and_total_after_each_question() -> None:
     total = len(result.questions)
     assert total > 1
     assert calls == [(n, total) for n in range(1, total + 1)]
+
+
+# ------------------------------------------------------------------------------------------
+# QPARSE-FIX: spaced answer labels and lettered stem lists
+
+
+def test_spaced_answer_label_below_options_is_the_inline_answer_not_an_option() -> None:
+    result = _extract(
+        [
+            "1. 다음 중 옳은 것은?",
+            "① 갑 ② 을 ③ 병",
+            "(정  답) ③",
+            "(출제원) 1권 5page",
+            "(해  설) 갑은 틀림",
+            "2. 다음 중 틀린 것은?",
+            "① 가",
+            "② 나",
+            "정 답 ①",
+        ]
+    )
+    q1, q2 = result.drafts
+    assert [o.text for o in q1.options] == ["갑", "을", "병"]
+    assert q1.correct_option_ids == ("opt-3",)
+    assert [o.text for o in q2.options] == ["가", "나"]
+    assert q2.correct_option_ids == ("opt-1",)
+
+
+# QPARSE-FIX: lettered stem lists
+
+
+@pytest.mark.parametrize(
+    "option_lines",
+    [
+        ["① (가)", "② (나)", "③ (가), (나)"],
+        ["① (가) ② (나) ③ (가), (나)"],
+        ["1. (가)", "2. (나)", "3. (가), (나)"],
+        ["1) (가)", "2) (나)", "3) (가), (나)"],
+    ],
+    ids=["circled-lines", "circled-inline", "dot-numbered", "paren-numbered"],
+)
+def test_lettered_stem_list_belongs_to_the_stem_and_numbered_markers_are_the_options(
+    option_lines: list[str],
+) -> None:
+    result = _extract(
+        [
+            "1. 다음 중 옳은 것은?",
+            "(가) 갑은 을이다.",
+            "(나) 병은 정이다.",
+            *option_lines,
+            "(정  답) ③",
+        ]
+    )
+    (draft,) = result.drafts
+    assert "(가) 갑은 을이다." in draft.stem
+    assert "(나) 병은 정이다." in draft.stem
+    assert [o.text for o in draft.options] == ["(가)", "(나)", "(가), (나)"]
+    assert draft.correct_option_ids == ("opt-3",)
+
+
+def test_latin_stem_list_before_circled_options_stays_in_the_stem() -> None:
+    result = _extract(
+        ["1. 옳은 것은?", "(A) 갑은 을이다.", "(B) 병은 정이다.", "① (A)", "② (B)", "(정  답) ②"]
+    )
+    (draft,) = result.drafts
+    assert "(B) 병은 정이다." in draft.stem
+    assert [o.text for o in draft.options] == ["(A)", "(B)"]
+
+
+def test_llm_cannot_resplit_a_stem_list_into_extra_options() -> None:
+    client = FakeLLMClient()
+    client.script(
+        "questions.extract",
+        LLMQuestion(
+            question_type="MCQ",
+            multi_select=False,
+            stem="옳은 것은?",
+            options=[
+                LLMOption(label="(가)", text="갑은 을이다."),
+                LLMOption(label="(나)", text="병은 정이다."),
+                LLMOption(label="①", text="(가)"),
+                LLMOption(label="②", text="(나)"),
+            ],
+            answer=None,
+        ),
+    )
+    doc = _doc(["1. 옳은 것은?", "(가) 갑은 을이다.", "(나) 병은 정이다.", "① (가)", "② (나)"])
+    (draft,) = QuestionExtractor(client).extract(doc, document_id="d").drafts
+    assert [o.text for o in draft.options] == ["(가)", "(나)"]
+    assert "(나) 병은 정이다." in draft.stem
+    assert "llm_text_rejected" in _codes(draft.validations)
+
+
+def test_dot_numbered_letter_options_keep_their_blocks_as_source_evidence() -> None:
+    result = _extract(
+        [
+            "1. 옳은 것은?",
+            "(가) 갑은 을이다.",
+            "(나) 병은 정이다.",
+            "1. (가)",
+            "2. (나)",
+            "3. (가), (나)",
+        ]
+    )
+    (draft,) = result.drafts
+    block_ids = {b for e in draft.evidence for b in e.block_ids}
+    assert len(block_ids) == 6
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        ["① 갑", "② 을", "③ 병"],
+        ["1. (가)", "2. (나)", "3. (다)"],
+    ],
+    ids=["circled-so-far", "dot-numbered-so-far"],
+)
+def test_following_question_with_letter_reference_is_not_swallowed_as_option(
+    options: list[str],
+) -> None:
+    result = _extract(
+        [
+            "1. 옳은 것은?",
+            "(가) 갑은 을이다.",
+            "(나) 병은 정이다.",
+            *options,
+            "4. (가)에 대한 설명으로 옳은 것은?",
+            "① 갑 ② 을",
+        ]
+    )
+    assert len(result.drafts) == 2
+    assert len(result.drafts[0].options) == 3

@@ -40,7 +40,7 @@ _QUESTION_START = re.compile(
     r"^\s*(?:문(?:제)?\s*|Q\s*)?(?P<num>\d{1,3})\s*(?:\.|번[.)]?)(?!\d)\s*(?P<body>\S.*)$"
 )
 _ANSWER_KEY_HEADING = re.compile(
-    r"^\s*[\[<(]?\s*(?:정답(?:\s*(?:및|과)\s*해설)?|정답표|빠른\s*정답|답안|"
+    r"^\s*[\[<(]?\s*(?:정\s*답(?:\s*(?:및|과)\s*해\s*설)?|정\s*답\s*표|빠른\s*정\s*답|답\s*안|"
     r"answer\s*key|answers)\s*[\]>)]?\s*:?\s*$",
     re.IGNORECASE,
 )
@@ -71,12 +71,17 @@ _ESSAY_CUES = re.compile(
 _BARE_QUESTION_START = re.compile(r"^\s*(?P<num>\d{1,3})\s+(?P<body>\S.*)$")
 _QUESTION_CUE = re.compile(r"[?\uff1f]|시오|하라|\(\s*\)\s*$")
 _INLINE_ANSWER = re.compile(
-    r"^\s*(?:[\[<(]\s*정답\s*[\]>)]\s*[:\uff1a]?|정답\s*[:\uff1a]|answer\s*[:\uff1a])\s*(?P<ans>\S.*)$",
+    r"^\s*(?:[\[<(]\s*정\s*답\s*[\]>)]\s*[:\uff1a]?"
+    r"|정\s*답(?:\s*[:\uff1a]|\s+(?=[①-⑩\dA-Ea-e(]))"  # bare ``정 답 ③`` needs a label after it
+    r"|answer\s*[:\uff1a])"
+    r"\s*(?P<ans>\S.*)$",
     re.IGNORECASE,
 )
 _QUESTION_END_CUES = re.compile(
     r"[?\uff1f]\s*(?:\(\s*\)\s*)?$|시오\.?\s*$|하라\.?\s*$|\b(?:is|are|which)\b.*$"
 )
+_LETTER_ITEM = re.compile(r"^\s*\(\s*[가나다라마바사아자차A-Ea-e]\s*\)")
+_ASKING = re.compile(r"것은|것을|고르|묶인|몇 개")
 _INLINE_CIRCLED = re.compile(r"(?<=\s)①")
 _MAX_ANSWER_KEY_BODY = 40
 _ANSWER_AREA_MIN_GAP = 60.0
@@ -394,6 +399,34 @@ def _inline_answer(text: str) -> str | None:
     return answer if answer and len(answer) <= _MAX_ANSWER_KEY_BODY else None
 
 
+def _numbered_option_of_letter_list(current: RawQuestion, number: int, body: str) -> bool:
+    """``1. (가)`` printed under a stem that lists ``(가) ...`` items: the next numbered option
+    (not a new question) when the numbers continue the options printed so far."""
+    return (
+        not current.answered
+        and number == len(current.options) + 1
+        and not any(o.label in CIRCLED_DIGITS for o in current.options)
+        and _QUESTION_CUE.search(body) is None
+        and _ASKING.search(body) is None
+        and _LETTER_ITEM.match(body) is not None
+        and any(_LETTER_ITEM.match(part) for part in current.stem_parts[1:])
+    )
+
+
+def _letter_list_back_to_stem(question: RawQuestion) -> None:
+    """Lettered / digit items ``(A) ...`` printed before circled options belong to the stem,
+    not to the options (``(A) ...`` ``(B) ...`` then ``① (A) ② (B)``)."""
+    labels = [o.label for o in question.options]
+    first = next((i for i, label in enumerate(labels) if label in CIRCLED_DIGITS), None)
+    if not first:
+        return
+    for option in question.options[:first]:
+        for line in option.lines:
+            question.stem_parts.append(line.text)
+            question.stem_lines.append(line)
+    del question.options[:first]
+
+
 @dataclass(frozen=True, slots=True)
 class _Event:
     """A printed line (``text``) or a non-text block (``text is None``) in reading order."""
@@ -539,6 +572,21 @@ def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmenta
                 # unless what it opens asks something; either way the lines then take the
                 # normal path (explanation, or a new question).
                 start = None
+            if (
+                start is not None
+                and current is not None
+                and _numbered_option_of_letter_list(
+                    current, int(start.group("num")), start.group("body")
+                )
+            ):
+                current.options.append(
+                    RawOption(
+                        label=start.group("num"), text=start.group("body").strip(), lines=[line]
+                    )
+                )
+                if index not in current.block_indices:
+                    current.block_indices.append(index)
+                continue
             if start is not None:
                 number = int(start.group("num"))
                 body = start.group("body")
@@ -621,6 +669,8 @@ def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmenta
                 current.stem_lines.append(line)
                 current.options += [RawOption(label=lb, text=t, lines=[line]) for lb, t in inline]
 
+    for question in questions:
+        _letter_list_back_to_stem(question)
     return Segmentation(
         questions=[q for q in questions if q.is_question()],
         answer_key=answer_key,
