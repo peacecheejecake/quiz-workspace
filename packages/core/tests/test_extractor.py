@@ -1732,3 +1732,28 @@ def test_dot_numbered_letter_options_keep_their_blocks_as_source_evidence() -> N
     (draft,) = result.drafts
     block_ids = {b for e in draft.evidence for b in e.block_ids}
     assert len(block_ids) == 6
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        ["① 갑", "② 을", "③ 병"],
+        ["1. (가)", "2. (나)", "3. (다)"],
+    ],
+    ids=["circled-so-far", "dot-numbered-so-far"],
+)
+def test_following_question_with_letter_reference_is_not_swallowed_as_option(
+    options: list[str],
+) -> None:
+    result = _extract(
+        [
+            "1. 옳은 것은?",
+            "(가) 갑은 을이다.",
+            "(나) 병은 정이다.",
+            *options,
+            "4. (가)에 대한 설명으로 옳은 것은?",
+            "① 갑 ② 을",
+        ]
+    )
+    assert len(result.drafts) == 2
+    assert len(result.drafts[0].options) == 3

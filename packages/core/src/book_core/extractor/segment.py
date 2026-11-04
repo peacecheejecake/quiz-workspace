@@ -81,6 +81,7 @@ _QUESTION_END_CUES = re.compile(
     r"[?\uff1f]\s*(?:\(\s*\)\s*)?$|시오\.?\s*$|하라\.?\s*$|\b(?:is|are|which)\b.*$"
 )
 _LETTER_ITEM = re.compile(r"^\s*\(\s*[가나다라마바사아자차A-Ea-e]\s*\)")
+_ASKING = re.compile(r"것은|것을|고르|묶인|몇 개")
 _INLINE_CIRCLED = re.compile(r"(?<=\s)①")
 _MAX_ANSWER_KEY_BODY = 40
 _ANSWER_AREA_MIN_GAP = 60.0
@@ -404,6 +405,9 @@ def _numbered_option_of_letter_list(current: RawQuestion, number: int, body: str
     return (
         not current.answered
         and number == len(current.options) + 1
+        and not any(o.label in CIRCLED_DIGITS for o in current.options)
+        and _QUESTION_CUE.search(body) is None
+        and _ASKING.search(body) is None
         and _LETTER_ITEM.match(body) is not None
         and any(_LETTER_ITEM.match(part) for part in current.stem_parts[1:])
     )
