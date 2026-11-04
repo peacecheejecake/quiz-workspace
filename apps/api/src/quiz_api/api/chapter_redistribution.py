@@ -45,6 +45,13 @@ import uuid
 from collections import Counter
 from typing import Annotated, Any, Literal, cast
 
+from book_core.chapter_matching import (
+    BookChapter,
+    ChapterMatcher,
+    NoRecommendation,
+    RecommendationReason,
+    recommend,
+)
 from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -62,19 +69,10 @@ from quiz_api.auth import CurrentUser
 from quiz_api.authz import (
     AccessRepository,
     Action,
-    Role,
     WorkspaceAccess,
     authorize_workspace,
     get_access_repository,
 )
-from quiz_api.chapter_matching import (
-    BookChapter,
-    ChapterMatcher,
-    NoRecommendation,
-    RecommendationReason,
-    recommend,
-)
-from quiz_api.chapter_rematch import rematch_empty_chapters
 from quiz_api.db import get_db_session
 from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.idempotency import REPLAYED_HEADER, IdempotencyKey, request_hash
@@ -204,10 +202,6 @@ class ChapterAssignmentRequest(BaseModel):
         description="manual (직접 옮기기 -> `manual`) | recommendation (applied -> `auto`)."
     )
     items: list[ChapterAssignmentItem] = Field(min_length=1, max_length=MAX_ITEMS)
-
-
-class ChapterRematchResult(BaseModel):
-    moved: int = Field(description="Questions that got a chapter (0 for viewers or when idle).")
 
 
 class ChapterAssignmentResult(BaseModel):
@@ -391,40 +385,6 @@ def preview_redistribution(
         no_recommendation=dict(missing),
         skipped_manual=skipped,
     )
-
-
-@router.post(
-    "/workspaces/{workspace_id}/questions/chapter-rematch",
-    operation_id="rematchQuestionChapters",
-)
-def rematch_question_chapters(
-    workspace_id: Annotated[uuid.UUID, Path()],
-    user: CurrentUser,
-    access_repo: Annotated[AccessRepository, Depends(get_access_repository)],
-    repo: RedistRepo,
-    questions: QuestionRepo,
-) -> ChapterRematchResult:
-    """Give the questions the matcher left without a chapter their chapter now (a book may have
-    become ready since): `auto` questions with no chapter or only a question-paper chapter, by the
-    redistribution rule. `manual` chapters are never touched. Idempotent and cheap when nothing
-    is eligible. Members who cannot edit, and archived workspaces, get `moved: 0`."""
-    read = authorize_workspace(
-        access_repo, user.id, workspace_id, Action.READ, not_found_detail=NOT_FOUND
-    )
-    if read.role not in (Role.OWNER, Role.EDITOR) or read.status != "active":
-        return ChapterRematchResult(moved=0)
-    access = authorize_workspace(
-        access_repo, user.id, workspace_id, Action.QUESTION_EDIT, not_found_detail=NOT_FOUND
-    )
-    try:
-        moved = _with_lock_retry(
-            questions,
-            lambda: rematch_empty_chapters(repo, questions, access.workspace_id, access.user_id),
-        )
-        questions.commit()
-    except (IntegrityError, DataError):
-        raise _constraint_violation(questions) from None
-    return ChapterRematchResult(moved=moved)
 
 
 def _scope(workspace_id: uuid.UUID) -> str:

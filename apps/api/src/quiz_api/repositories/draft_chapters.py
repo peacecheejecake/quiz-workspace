@@ -9,10 +9,10 @@ import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
+from book_core.chapter_matching import BookChapter
 from sqlalchemy import ColumnElement, and_, func, select
 from sqlalchemy.orm import Session, aliased
 
-from quiz_api.chapter_matching import BookChapter
 from quiz_api.repositories.tables import chapters, content_blocks, documents
 
 BOOK = "book"

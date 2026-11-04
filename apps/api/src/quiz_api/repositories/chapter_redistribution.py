@@ -14,11 +14,11 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
+from book_core.chapter_matching import BookChapter, StartBlock
 from sqlalchemy import and_, func, insert, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
-from quiz_api.chapter_matching import BookChapter, StartBlock
 from quiz_api.question_rules import PublicationStatus, QuestionType
 from quiz_api.repositories.draft_chapters import BOOK, DraftChapterRepository, SourceRef
 from quiz_api.repositories.question_overview import (
@@ -58,7 +58,6 @@ class LockedQuestion:
     id: uuid.UUID
     chapter_id: uuid.UUID | None
     publication_status: PublicationStatus
-    chapter_source: ChapterSource = "manual"
 
 
 @dataclass(frozen=True)
@@ -114,27 +113,6 @@ class ChapterRedistributionRepository:
     def book_chapters(self, workspace_id: uuid.UUID) -> list[BookChapter]:
         """Move targets: the current revision's outline of every live book, in outline order."""
         return DraftChapterRepository(self._session).book_chapters(workspace_id)
-
-    def rematch_candidates(
-        self, workspace_id: uuid.UUID
-    ) -> list[tuple[uuid.UUID, uuid.UUID | None]]:
-        """(question id, chapter id) of the CONFIRMED live questions whose chapter was decided
-        by the matcher (`auto`) and is empty or only a question-paper fallback (CHAP-MATCH).
-        Chapters a person set (`manual`) are never candidates."""
-        rows = self._session.execute(
-            select(questions.c.id, questions.c.chapter_id)
-            .select_from(heatmap_source())
-            .where(
-                *heatmap_conditions(workspace_id),
-                questions.c.chapter_source == "auto",
-                or_(
-                    questions.c.chapter_id.is_(None),
-                    and_(chapters.c.id.is_not(None), documents.c.document_type != BOOK),
-                ),
-            )
-            .order_by(questions.c.id)
-        )
-        return [(r.id, r.chapter_id) for r in rows]
 
     def paper_chapters(self, workspace_id: uuid.UUID) -> list[BookChapter]:
         """Move targets of the question-paper kind (CHAP-MATCH): the level-1 outline nodes of
@@ -226,12 +204,7 @@ class ChapterRedistributionRepository:
         """FOR UPDATE on the live questions of this workspace among `question_ids`, in id order;
         their chapter is read under the lock."""
         rows = self._session.execute(
-            select(
-                questions.c.id,
-                questions.c.chapter_id,
-                questions.c.publication_status,
-                questions.c.chapter_source,
-            )
+            select(questions.c.id, questions.c.chapter_id, questions.c.publication_status)
             .where(
                 questions.c.workspace_id == workspace_id,
                 questions.c.id.in_(sorted(set(question_ids))),
@@ -241,12 +214,7 @@ class ChapterRedistributionRepository:
             .with_for_update()
         )
         return {
-            r.id: LockedQuestion(
-                r.id,
-                r.chapter_id,
-                cast(PublicationStatus, r.publication_status),
-                cast(ChapterSource, r.chapter_source),
-            )
+            r.id: LockedQuestion(r.id, r.chapter_id, cast(PublicationStatus, r.publication_status))
             for r in rows
         }
 
