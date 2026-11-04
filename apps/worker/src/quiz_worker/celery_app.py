@@ -57,6 +57,7 @@ from quiz_worker.pg_store import (
     dispose_inherited_engines,
 )
 from quiz_worker.question_import_job import LazyImportDeps, question_import_definition
+from quiz_worker.question_import_store import JOB_TYPE as QUESTION_IMPORT_JOB_TYPE
 from quiz_worker.question_register_job import LazyRegisterDeps, question_register_definition
 from quiz_worker.reconcile import ReconcileReport, reconcile_jobs
 from quiz_worker.recycle import POOL_CLS, job_task_finished
@@ -89,8 +90,9 @@ def queue_for(job_type: str) -> str:
     return INTERACTIVE_QUEUE if job_type in INTERACTIVE_JOB_TYPES else DEFAULT_QUEUE
 
 
-# Job types that run under the document task time limits (whole-book parse + embedding).
-DOCUMENT_LIMIT_JOB_TYPES = frozenset({DOCUMENT_PARSE_JOB_TYPE})
+# Job types that run under the document task time limits (whole-book parse + embedding, and
+# question import: one sequential LLM call per question).
+DOCUMENT_LIMIT_JOB_TYPES = frozenset({DOCUMENT_PARSE_JOB_TYPE, QUESTION_IMPORT_JOB_TYPE})
 
 
 @dataclass(frozen=True)
