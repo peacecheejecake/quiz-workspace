@@ -584,7 +584,7 @@ test(
       await sharedUi.question(guest.page, withExpl.revision.stem).click();
       let shared = sharedUi.questionPanel(guest.page);
       await expect(shared).toBeVisible();
-      const sArea = explUi.area(shared);
+      const sArea = explUi.sharedArea(shared);
       await explUi.sharedToggle(sArea).click();
       await expect(explUi.badge(sArea)).toBeVisible();
       await expect(sArea).toContainText(nth(withExpl.revision.options, 0).text);
@@ -600,7 +600,7 @@ test(
       await sharedUi.question(guest.page, unexplained.revision.stem).click();
       shared = sharedUi.questionPanel(guest.page);
       await expect(shared).toContainText(unexplained.revision.stem);
-      await expect(explUi.area(shared)).toHaveCount(0);
+      await expect(explUi.sharedArea(shared)).toHaveCount(0);
     } finally {
       await guest.context.close();
     }
