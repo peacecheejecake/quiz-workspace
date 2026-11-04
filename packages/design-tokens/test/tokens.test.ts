@@ -84,12 +84,13 @@ describe('spec extraction (guards against a vacuous comparison)', () => {
     // + 4 v1.2 additions (glass-solid, state-hover/pressed/selected)
     // + 3 v1.2.1 additions (accent-hover/pressed, state-selected-hover)
     // + 4 v1.2.2 switch track colors (track, track-hover, track-border, track-checked-border)
+    // + PALETTE-UNIFY 5 fill tokens (danger/success/warning/neutral/neutral-subtle)
     // + UX9-HL-UI 3 highlight backgrounds and the search match background/border.
-    expect(Object.keys(docLight)).toHaveLength(37);
-    expect(Object.keys(docDark)).toHaveLength(37);
-    // 32 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 12 typography
+    expect(Object.keys(docLight)).toHaveLength(42);
+    expect(Object.keys(docDark)).toHaveLength(42);
+    // 37 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 12 typography
     // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width.
-    expect(Object.keys(docRoot)).toHaveLength(74);
+    expect(Object.keys(docRoot)).toHaveLength(79);
   });
 });
 
@@ -131,6 +132,15 @@ describe('generated tokens.css', () => {
     expect(themedTokens.light['question-status-retry']).toBe('#F6CF35');
     expect(themedTokens.light['question-status-viewed']).toBe('#ACB6C2');
     expect(themedTokens.light['question-status-unseen']).toBe('#E7ECF0');
+  });
+
+  it.each(['light', 'dark'] as const)('PALETTE-UNIFY fill tokens equal the palette in %s', (theme) => {
+    const t = themedTokens[theme];
+    expect(t['color-danger-fill']).toBe(t['question-status-incorrect']);
+    expect(t['color-success-fill']).toBe(t['question-status-correct']);
+    expect(t['color-warning-fill']).toBe(t['question-status-retry']);
+    expect(t['color-neutral-fill']).toBe(t['question-status-viewed']);
+    expect(t['color-neutral-fill-subtle']).toBe(t['question-status-unseen']);
   });
 
   it.each(['light', 'dark'] as const)('every question status token exists in %s', (theme) => {
