@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -35,7 +37,7 @@ from book_core.extractor import (
     QuestionExtractor,
     llm_requests,
 )
-from book_core.llm import FakeLLMClient, LLMProviderError
+from book_core.llm import FakeLLMClient, LLMProviderError, LLMRequest, LLMResult
 from book_core.parser import FakeParser, document_from_pages
 from book_core.question import (
     answer_option_keys,
@@ -46,6 +48,7 @@ from book_core.question import (
 )
 from fixture_truth import QuestionsTruth, TruthQuestion
 from make_fixture_pdfs import OUT_DIR
+from pydantic import BaseModel
 
 TRUTH_PATH = OUT_DIR / "questions-ko.truth.json"
 PDF_PATH = OUT_DIR / "questions-ko.pdf"
@@ -1644,3 +1647,107 @@ def test_progress_callback_reports_done_and_total_after_each_question() -> None:
     total = len(result.questions)
     assert total > 1
     assert calls == [(n, total) for n in range(1, total + 1)]
+
+
+# -- bounded-concurrency refinement and soft-stop partial result ------------------------
+
+
+class _SlowClient:
+    """Delegates to a scripted fake, sleeping per call and recording the in-flight peak."""
+
+    def __init__(self, inner: FakeLLMClient, delay: float = 0.03) -> None:
+        self._inner = inner
+        self._delay = delay
+        self._lock = threading.Lock()
+        self._running = 0
+        self.peak = 0
+
+    @property
+    def model_name(self) -> str:
+        return self._inner.model_name
+
+    def complete[T: BaseModel](self, request: LLMRequest, schema: type[T]) -> LLMResult[T]:
+        with self._lock:
+            self._running += 1
+            self.peak = max(self.peak, self._running)
+        try:
+            time.sleep(self._delay)
+            return self._inner.complete(request, schema)
+        finally:
+            with self._lock:
+                self._running -= 1
+
+
+class _SoftStop(BaseException):
+    """Stands in for celery's SoftTimeLimitExceeded."""
+
+
+def test_concurrent_refinement_equals_sequential_output() -> None:
+    sequential = QuestionExtractor(_scripted()).extract(_document(), document_id=DOC_ID)
+    concurrent = QuestionExtractor(_SlowClient(_scripted())).extract(  # type: ignore[arg-type]
+        _document(), document_id=DOC_ID, concurrency=4
+    )
+    assert [q.draft.id for q in concurrent.questions] == [q.draft.id for q in sequential.questions]
+    assert concurrent.questions == sequential.questions
+    assert concurrent.warnings == sequential.warnings
+    assert [c.request_fingerprint for c in concurrent.llm_calls] == [
+        c.request_fingerprint for c in sequential.llm_calls
+    ]
+    assert not concurrent.refinement_incomplete
+
+
+@pytest.mark.parametrize("limit", [1, 3])
+def test_concurrency_bound_is_respected(limit: int) -> None:
+    client = _SlowClient(_scripted())
+    QuestionExtractor(client).extract(  # type: ignore[arg-type]
+        _document(), document_id=DOC_ID, concurrency=limit
+    )
+    assert client.peak <= limit
+    if limit > 1:
+        assert client.peak > 1
+
+
+def test_progress_is_monotonic_and_ends_at_total() -> None:
+    seen: list[tuple[int, int]] = []
+    QuestionExtractor(_SlowClient(_scripted())).extract(  # type: ignore[arg-type]
+        _document(), document_id=DOC_ID, concurrency=4, progress=lambda d, t: seen.append((d, t))
+    )
+    dones = [d for d, _ in seen]
+    assert dones == sorted(dones)
+    assert {t for _, t in seen} == {8}
+    assert dones[-1] == 8
+
+
+def test_soft_stop_keeps_refined_questions_and_saves_the_rest_rule_based() -> None:
+    full = QuestionExtractor(_scripted()).extract(_document(), document_id=DOC_ID)
+    plain = QuestionExtractor(None).extract(_document(), document_id=DOC_ID)
+
+    def stop_after_three(done: int, total: int) -> None:
+        if done >= 3:
+            raise _SoftStop
+
+    result = QuestionExtractor(_SlowClient(_scripted(), delay=0.05)).extract(  # type: ignore[arg-type]
+        _document(),
+        document_id=DOC_ID,
+        concurrency=1,
+        progress=stop_after_three,
+        stop_on=(_SoftStop,),
+    )
+    assert result.refinement_incomplete
+    assert [q.draft.id for q in result.questions] == [q.draft.id for q in full.questions]
+    refined = [q for q in result.questions if q.refined_by_llm]
+    assert 3 <= len(refined) < 8
+    for got, ref, pre in zip(result.questions, full.questions, plain.questions, strict=True):
+        if got.refined_by_llm:
+            assert got == ref
+        else:
+            assert got.draft.stem == pre.draft.stem
+            assert "llm_unavailable" in {v.code for v in got.draft.validations}
+
+
+def test_soft_stop_not_in_stop_on_propagates() -> None:
+    def boom(done: int, total: int) -> None:
+        raise _SoftStop
+
+    with pytest.raises(_SoftStop):
+        QuestionExtractor(_scripted()).extract(_document(), document_id=DOC_ID, progress=boom)
