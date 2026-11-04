@@ -332,6 +332,7 @@ PR #43(이 계획의 "DOCVIEW", DOC-02-AC06–AC11)과 병렬로 만든 DOCVIEW-
 | Task | 범위 | 파일 | 의존 | DoD |
 |---|---|---|---|---|
 | RELSRC-COLLAPSE | `RelatedSources`/`SharedRelatedSources`: 기본 `aria-expanded=false`, 처음 펼칠 때만 `GET …/related-sources`(서버가 없으면 계산·저장), 접었다 펼치면 불러온 목록 재사용, 위치(sequence)·session이 바뀌면 다시 접힘, `read-only`·`manage`도 같음 | `docs/screens/related-sources.md` 외 문구, `apps/web/src/components/questions/related-sources`, `apps/web/test/related-sources.test.tsx`, `tests/e2e/questions/related-sources.spec.ts`, `tests/e2e/fixtures/related-sources.ts`, `tests/e2e/quality/a11y-ask.spec.ts`(A11Y-18), `tests/e2e/quality/visual.spec.ts`(VISUAL-09) | RELSRC-W | 영향 AC가 "접힘 + 펼치기 전 요청 0" 단언 후 기존 동작 단언, 제출 전 요청 없음·상태 5종·`다시 시도`·status·키보드 유지, VISUAL-09 baseline 변경 시 재생성 |
+| AIEXPL-LAYOUT AI 해설 버튼·내용 영역 분리, `AI 질문하기` 나란히 | 🔄 진행 중 | 이 branch(`feature/aiexp-layout`) | 2026-11-04. 사용자 결정(§7 AIEXPL-LAYOUT). AC 수 변화 없음. E2E는 PR CI에서 확인. |
 
 ## 4. Task 의존 그래프
 
@@ -825,6 +826,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-11-04 | **사용자 결정(DEPLOY-INTERACTIVE) — interactive worker는 workflow가 롤아웃**: AI 질문의 두 번째 Railway worker(`WORKER_QUEUE=interactive`, beat 없음)를 수동 운영이 아니라 deploy workflow가 관리한다. 선택 변수 `RAILWAY_WORKER_INTERACTIVE_SERVICE_ID`가 있으면 `worker` 바로 뒤에 같은 worker image digest로 롤아웃하고, 없으면 step summary 메모와 함께 건너뛴다(preflight 필수 목록은 그대로). env 변수(`WORKER_QUEUE`)는 운영자가 Railway에서 설정하고 workflow는 바꾸지 않는다. volume은 만들지 않는다(ask job은 로컬 모델을 읽지 않음). 변경: deploy.yml, `railway_deploy.py --service worker-interactive`, `railway-services.toml`, env-manifest, runbook §3·§6·§12. | 사용자 결정 2026-11-04 |
 | 2026-11-04 | **사용자 결정(RELSRC-COLLAPSE) — 관련 본문은 접힌 채로, 펼칠 때 생성**: 요청 "문제 풀었을 때 '관련 본문'은 접은 상태가 기본, 펼칠 때 생성". 2026-11-01의 "기본 펼침 — 접힘 제안 기각" 결정을 바꾼다(설계 문서: related-sources.md 규칙·AC01·AC03~AC06 Then/When 문구, questions.md §13, question-viewer.md, ai-explanations.md; AC ID·개수 변화 없음). 규칙: 제출 후 `aria-expanded="false"`, 펼치기 전 `/related-sources` 요청 0(제출 전 요청 없음 규칙은 그대로), 첫 펼침이 요청하고 서버가 저장된 목록이 없으면 그때 계산·저장, 접었다 펼치면 불러온 목록을 재사용(오류는 `다시 시도`로만 다시), 위치·session이 바뀌면 다시 접힘, `read-only`·`manage`도 같음. 해석: 게스트(`read-only`)는 저장된 목록이 있는지 펼치기 전에는 알 수 없으므로 영역을 항상 접힌 채로 보이고, 펼쳤을 때 목록이 없으면(공유 API 404) "관련 본문을 찾지 못했습니다."를 보인다(예전: 목록 없는 문제는 영역 없음). 게스트는 계속 계산하지 않는다. |
 | 2026-11-04 | **IMPORT-TIMEOUT**: 운영에서 문제 PDF 추출이 40%에서 멈췄다 실패. LLM 정제는 문제마다 순차 호출(약 2.5 s)이라 600문제가 넘으면 일반 soft limit 1500 s를 넘는다. 결정: `question.import`는 `document.parse`와 같은 document task 한도(soft 6900 s / hard 7200 s, lease 포함)로 돌리고, 추출기는 문제마다 `progress(done, total)`을 호출해 job이 40→79%(단계 이름 `extracting` 그대로, 화면 spec 변경 없음)로 보고한다. DB 쓰기는 5% 이상 변하거나 5 s 이상 지났을 때만. |
+| 2026-11-04 | **사용자 결정(AIEXPL-LAYOUT) — AI 해설 버튼과 내용 영역 분리**: 요청 "문제 보기에서 답을 낸 뒤 `AI 해설 만들기` → `AI 해설`로 이름 변경, 버튼과 해설 내용 영역 분리(해설이 없으면 영역 자체를 그리지 않음), AI 질문하기를 AI 해설 옆에 나란히". 설계 문서(ai-explanations.md 구성·상태·화면 상태 표, ask-llm.md·question-viewer.md·questions.md의 버튼 이름)를 고침: 영역 전체는 group "AI 해설"(도구 줄 `AI 해설` + `AI 질문하기`, 내용 region은 보일 내용이 있을 때만), `이 문제로 질문하기` → `AI 질문하기`(해설 유무와 무관하게 항상, ASK 켜진 환경). AC ID·개수 변화 없음; AIEXPL-01 AC 문구의 버튼 이름만 바뀜. E2E 도우미 `explUi.area`는 group, 내용은 `explUi.region`. |
 
 ## 8. 진행 현황
 

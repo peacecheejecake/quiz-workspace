@@ -298,7 +298,7 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 | 모의고사 풀이(`sequence(mock)`)·관리(`manage(mock)`) | `mock_exam_practice_sessions`의 `mock_exam_attempts` 유무 / 편집 권한 | 같은 규칙. 내용은 `mock_exam_question_revisions` 행, 출처 구절은 그 revision의 `evidence` 중 현재 발행 `book` 블록(원본 문제의 `question_sources`가 아님) — ASK-01-C10 |
 | 공유 게스트 | 없음 | AI 질문 없음 |
 
-- `질문하기` 위치(사용자 결정 2026-11-01; ASK-SYNC에서 QuestionViewer 방식으로): 문제 상세(`manage`, `detail` → `full`)와 모의고사 문제(`sequence(mock)` 제출 전 `hint`·제출 후 `full`, `manage(mock)` `full`)만. 풀이 panel(`practice`)과 등록 문제 범위 풀이(`sequence(bank)`) header에는 없고, 그 둘의 유일한 경로는 제출 뒤 AI 해설 아래의 `이 문제로 질문하기`(`full`)다.
+- `질문하기` 위치(사용자 결정 2026-11-01; ASK-SYNC에서 QuestionViewer 방식으로): 문제 상세(`manage`, `detail` → `full`)와 모의고사 문제(`sequence(mock)` 제출 전 `hint`·제출 후 `full`, `manage(mock)` `full`)만. 풀이 panel(`practice`)과 등록 문제 범위 풀이(`sequence(bank)`) header에는 없고, 그 둘의 유일한 경로는 제출 뒤 AI 해설 아래의 `AI 질문하기`(`full`)다.
 - `hint`의 모델 지시(사용자 결정 2026-11-01): 정답·정답 보기를 말하지 말고 개념과 근거 구절로 돕는다. 교재 근거로 모델이 답을 추론할 수 있다는 한계는 저장된 정답이 새는 것이 아니다(교재는 열람 범위).
 - 질문·AI 해설은 풀이(attempt)·열람(viewed)이 아니다: 풀이 기록·`question_user_states`·Heatmap 상태를 바꾸지 않는다(§2.1). 문제 상세의 정답 보기와 같은 규칙.
 - **AI 해설:** 제출 후(그 session의 제출을 서버가 확인 — `practice`·`sequence(bank|mock)` 모두) 또는 문제 상세에서 만든다. 문제 revision마다 Workspace 공유 캐시 하나(사용자의 답은 입력이 아님; 모의고사 문제는 `mock_exam_question_revisions`마다 따로 — 원본 문제와 공유하지 않음), 정답은 서버의 정답이 기준(모델이 다른 정답을 말하면 버림). 사람이 쓴 `explanation`을 바꾸지 않고, 문제은행·정리 노트(§9) 입력·ASK 근거에 들어가지 않는다. 문제를 고치면(새 revision) 새로 만들어야 한다.
