@@ -15,7 +15,7 @@ import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher
 import { FormNotice } from '@/components/auth/form-notice';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
-import { displayStem } from '@/lib/questions/display-stem';
+import { StemText } from '@/components/questions/stem/stem-text';
 import {
   contentBody,
   errorSummary,
@@ -209,7 +209,7 @@ export function MockQuestionDialog({
               </>
             ) : (
               <>
-                <p className={styles.previewStem}>{displayStem(question.stem)}</p>
+                <StemText stem={question.stem} className={styles.previewStem} />
                 {question.question_type === 'MCQ' ? (
                   <ol className={styles.previewOptions} aria-label="보기">
                     {question.options.map((o) => (
