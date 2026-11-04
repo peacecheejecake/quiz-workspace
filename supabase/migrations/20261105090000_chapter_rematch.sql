@@ -28,8 +28,6 @@ as $$
 declare
   v_move record;
   v_moved integer := 0;
-  v_doc uuid;
-  v_cur uuid;
   v_ok boolean;
 begin
   if p_workspace_id is null or p_moves is null or jsonb_typeof(p_moves) <> 'array' then
@@ -43,8 +41,7 @@ begin
   end if;
 
   -- Documents first, in id order.
-  for v_doc in
-    select d.id
+  perform d.id
       from public.documents d
      where d.workspace_id = p_workspace_id
        and d.id in (
@@ -56,10 +53,7 @@ begin
           where c.workspace_id = p_workspace_id
        )
      order by d.id
-       for share
-  loop
-    null;
-  end loop;
+       for share;
 
   for v_move in
     select r.question_id, r.expected_chapter_id as expected, r.chapter_id as target
